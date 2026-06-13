@@ -54,6 +54,23 @@ Configured entirely through Worker vars (see `wrangler.toml`): `SPEND_MONTHLY_LI
 overrides per 1M tokens). The simulator/stub agents report no usage, so a pure-simulation
 deployment never accrues spend.
 
+## GitHub integration (optional)
+
+Connects each workspace to a GitHub org/account via a **GitHub App** so agents and
+blocks can read and write real repos, with local D1 **projections** (repos/branches,
+PRs/issues, commits/checks) kept fresh by **webhooks**, an on-demand resync endpoint,
+and the cron reconciliation pass. It is **opt-in** (default-off, like the agents):
+the core `github` module and worker adapters are wired only when a GitHub App is
+configured. See [`docs/github-integration.md`](./docs/github-integration.md),
+[`docs/github-operations.md`](./docs/github-operations.md), and
+[`docs/adr/0001-github-app-integration.md`](./docs/adr/0001-github-app-integration.md).
+
+Auth uses Web Crypto (`crypto.subtle`) — a thin `fetch` `GitHubClient`, no Octokit:
+an RS256 app JWT mints short-lived installation tokens (cached in D1), and webhook
+deliveries are HMAC-verified over the raw body before a fast `202` ack. New schema is
+in migration `0004_github_projections.sql`. Configure via `GITHUB_APP_ID/SLUG` vars
+and `GITHUB_APP_PRIVATE_KEY` (PKCS#8) + `GITHUB_WEBHOOK_SECRET` secrets.
+
 ## HTTP API (selected)
 
 ```
@@ -83,6 +100,24 @@ POST   /workspaces/:ws/executions/:exec/decisions/:dec        resolve a human de
 
 GET    /workspaces/:ws/spend                                  current spend vs budget for the period
 POST   /workspaces/:ws/spend/resume                           resume runs paused by the spend cap
+
+# GitHub integration (only when a GitHub App is configured)
+POST   /github/webhooks                                       verified webhook receiver (GitHub-facing)
+GET    /github/setup/callback                                 App install callback (browser-facing)
+GET    /workspaces/:ws/github/install-url                     signed App install URL
+GET    /workspaces/:ws/github/connection                      current connection (or null)
+POST   /workspaces/:ws/github/connect                         bind an installation { installationId }
+DELETE /workspaces/:ws/github/connection                      disconnect
+POST   /workspaces/:ws/github/resync                          resync { repoGithubId?, full? }
+GET    /workspaces/:ws/github/repos                           projected repos
+GET    /workspaces/:ws/github/repos/:repoId/branches          projected branches
+GET    /workspaces/:ws/github/pulls                           projected pull requests
+GET    /workspaces/:ws/github/issues                          projected issues
+POST   /workspaces/:ws/github/repos/:repoId/branches          create a branch
+POST   /workspaces/:ws/github/repos/:repoId/commits           commit files (Git Data API)
+POST   /workspaces/:ws/github/repos/:repoId/pulls             open a pull request
+PUT    /workspaces/:ws/github/repos/:repoId/pulls/:n/merge    merge a pull request
+POST   /workspaces/:ws/github/repos/:repoId/issues/:n/comments  comment on an issue/PR
 ```
 
 ## Develop & test

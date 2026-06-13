@@ -59,4 +59,16 @@ export {
 } from './modules/agents/agent-routing'
 export { systemPromptFor, userPromptFor } from './modules/agents/agent-catalog'
 
-export { type Core, type CoreDependencies, createCore } from './container'
+export { type Core, type CoreDependencies, type GitHubModule, createCore } from './container'
+
+export {
+  GitHubInstallationService,
+  type GitHubInstallationServiceDependencies,
+} from './modules/github/GitHubInstallationService'
+export { GitHubService, type GitHubServiceDependencies } from './modules/github/GitHubService'
+export {
+  GitHubSyncService,
+  type GitHubSyncServiceDependencies,
+} from './modules/github/GitHubSyncService'
+export { WebhookService, type WebhookServiceDependencies } from './modules/github/WebhookService'
+export * as githubProjection from './modules/github/projection.logic'

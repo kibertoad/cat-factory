@@ -18,4 +18,17 @@ export type {
   SpendStatus,
   Workspace,
   WorkspaceSnapshot,
+  // GitHub integration projections + I/O shapes.
+  GitHubBranch,
+  GitHubCheckRun,
+  GitHubCommit,
+  GitHubConnection,
+  GitHubIssue,
+  GitHubIssueState,
+  GitHubPullRequest,
+  GitHubPullRequestState,
+  GitHubRepo,
+  CommitFilesInput,
+  OpenPullRequestInput,
+  MergePullRequestInput,
 } from '@cat-factory/contracts'

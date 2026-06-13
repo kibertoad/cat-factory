@@ -24,6 +24,35 @@ binding = "EXECUTION_WORKFLOW"
 name = "cat-factory-execution"
 class_name = "ExecutionWorkflow"
 
+# Durable full-repo backfill for the GitHub integration (initial connect and
+# explicit `full` resyncs). Only used when a GitHub App is configured.
+[[workflows]]
+binding = "GITHUB_BACKFILL_WORKFLOW"
+name = "cat-factory-github-backfill"
+class_name = "GitHubBackfillWorkflow"
+
+# GitHub sync queue: the webhook endpoint verifies + acks fast, enqueuing each
+# delivery here for async projection. The consumer also handles targeted repo
+# resyncs from the cron reconciler and the on-demand resync endpoint. When the
+# binding is absent (as below, and in tests) the worker applies webhook/resync
+# work inline — fine for local dev. To enable the fast-ack async path in
+# production, create the queues and uncomment both blocks:
+#   wrangler queues create cat-factory-github-sync
+#   wrangler queues create cat-factory-github-dlq
+# (queue consumers are left commented because the test pool registers one
+# consumer per test file, which collides on a shared queue — same reason
+# EXECUTION_QUEUE above is opt-in.)
+# [[queues.producers]]
+# binding = "GITHUB_SYNC_QUEUE"
+# queue = "cat-factory-github-sync"
+#
+# [[queues.consumers]]
+# queue = "cat-factory-github-sync"
+# max_batch_size = 10
+# max_concurrency = 5           # bounds concurrent GitHub API usage per batch
+# max_retries = 5
+# dead_letter_queue = "cat-factory-github-dlq"
+
 # Optional admission queue. By default runs are created directly by
 # WorkflowsWorkRunner and bounded by Workflows' own concurrency. To instead cap
 # how fast runs are *started*, create the queues and uncomment both blocks (and
@@ -65,3 +94,14 @@ SPEND_CURRENCY = "EUR"
 # Optional per-model price overrides (per 1M tokens), merged over the built-in
 # defaults. Keys are "provider:model" or a bare "provider".
 # SPEND_MODEL_PRICES = '{"openai:gpt-4o":{"inputPerMillion":2.3,"outputPerMillion":9.2}}'
+
+# GitHub App integration (see src/infrastructure/config.ts and
+# docs/github-operations.md). Off until an App is configured: set the App id/slug
+# here and the private key (PKCS#8 PEM) + webhook secret as secrets:
+#   wrangler secret put GITHUB_APP_PRIVATE_KEY
+#   wrangler secret put GITHUB_WEBHOOK_SECRET
+GITHUB_APP_ID = ""
+GITHUB_APP_SLUG = ""
+GITHUB_API_BASE = "https://api.github.com"
+# Where to send the browser after a successful install:
+# GITHUB_SETUP_REDIRECT_URL = "https://app.example.com/settings/github"

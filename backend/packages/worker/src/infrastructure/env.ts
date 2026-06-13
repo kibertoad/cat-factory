@@ -6,6 +6,16 @@ export interface ExecutionStartMessage {
   executionId: string
 }
 
+/**
+ * Work enqueued on GITHUB_SYNC_QUEUE so the webhook endpoint can ack fast and
+ * apply projection updates asynchronously. A discriminated union: verified
+ * webhook deliveries, and targeted repo resyncs (from the cron reconciler / the
+ * on-demand resync endpoint).
+ */
+export type GitHubSyncMessage =
+  | { kind: 'webhook'; eventName: string; payload: unknown }
+  | { kind: 'resync-repo'; workspaceId: string; repoGithubId: number }
+
 /** Bindings and vars available to the Worker (declared in wrangler.toml). */
 export interface Env {
   DB: D1Database
@@ -47,6 +57,24 @@ export interface Env {
   // ---- Provider credentials -----------------------------------------------
   OPENAI_API_KEY?: string
   ANTHROPIC_API_KEY?: string
+
+  // ---- GitHub integration (see config.ts; opt-in) -------------------------
+  /** GitHub App id (numeric). Presence enables the integration. */
+  GITHUB_APP_ID?: string
+  /** GitHub App slug, used to build the install URL. */
+  GITHUB_APP_SLUG?: string
+  /** GitHub REST API base; defaults to https://api.github.com. */
+  GITHUB_API_BASE?: string
+  /** Where to redirect the browser after a successful connect. */
+  GITHUB_SETUP_REDIRECT_URL?: string
+  /** App private key in PKCS#8 PEM (secret). */
+  GITHUB_APP_PRIVATE_KEY?: string
+  /** Webhook signing secret (secret). */
+  GITHUB_WEBHOOK_SECRET?: string
+  /** Queue carrying webhook deliveries / resync jobs to the async consumer. */
+  GITHUB_SYNC_QUEUE?: Queue<GitHubSyncMessage>
+  /** Workflow that performs durable full-repo backfills. */
+  GITHUB_BACKFILL_WORKFLOW?: Workflow
 
   /** When set, seeds a deterministic RNG (used by integration tests). */
   RNG_SEED?: string

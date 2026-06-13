@@ -1,7 +1,22 @@
-import type { AgentExecutor, CoreDependencies, WorkspaceSnapshot } from '@cat-factory/core'
+import type {
+  AgentExecutor,
+  CoreDependencies,
+  GitHubClient,
+  WebhookVerifier,
+  WorkspaceSnapshot,
+} from '@cat-factory/core'
 import { env } from 'cloudflare:test'
 import { createApp } from '../src/app'
 import { FakeAgentExecutor } from './fakes/FakeAgentExecutor'
+import { FakeGitHubClient } from './fakes/FakeGitHubClient'
+import { FakeWebhookVerifier } from './fakes/FakeWebhookVerifier'
+import { D1GitHubInstallationRepository } from '../src/infrastructure/repositories/D1GitHubInstallationRepository'
+import { D1RepoProjectionRepository } from '../src/infrastructure/repositories/D1RepoProjectionRepository'
+import { D1BranchProjectionRepository } from '../src/infrastructure/repositories/D1BranchProjectionRepository'
+import { D1PullRequestProjectionRepository } from '../src/infrastructure/repositories/D1PullRequestProjectionRepository'
+import { D1IssueProjectionRepository } from '../src/infrastructure/repositories/D1IssueProjectionRepository'
+import { D1CommitProjectionRepository } from '../src/infrastructure/repositories/D1CommitProjectionRepository'
+import { D1CheckRunProjectionRepository } from '../src/infrastructure/repositories/D1CheckRunProjectionRepository'
 
 const BASE = 'https://cat-factory.test'
 
@@ -46,4 +61,32 @@ export function makeApp(
   }
 
   return { call, createWorkspace }
+}
+
+/**
+ * Build GitHub-module core overrides backed by the real local D1 plus a fake
+ * GitHubClient and webhook verifier. Spread into `makeApp`'s overrides to make
+ * `container.github` available in tests (the module assembles whenever all its
+ * deps are present, independent of the GITHUB_APP_ID env gate).
+ */
+export function githubDeps(
+  opts: { client?: GitHubClient; verifier?: WebhookVerifier } = {},
+): Partial<CoreDependencies> {
+  const db = env.DB
+  return {
+    githubClient: opts.client ?? new FakeGitHubClient(),
+    githubInstallationRepository: new D1GitHubInstallationRepository({ db }),
+    repoProjectionRepository: new D1RepoProjectionRepository({ db }),
+    branchProjectionRepository: new D1BranchProjectionRepository({ db }),
+    pullRequestProjectionRepository: new D1PullRequestProjectionRepository({ db }),
+    issueProjectionRepository: new D1IssueProjectionRepository({ db }),
+    commitProjectionRepository: new D1CommitProjectionRepository({ db }),
+    checkRunProjectionRepository: new D1CheckRunProjectionRepository({ db }),
+    webhookVerifier: opts.verifier ?? new FakeWebhookVerifier(true),
+  }
+}
+
+/** A fresh installation id per test so the global installations table stays isolated. */
+export function uniqueInstallationId(): number {
+  return Math.floor(Math.random() * 2_000_000_000) + 1
 }
