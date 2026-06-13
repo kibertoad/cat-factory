@@ -17,8 +17,5 @@ export function handleError(error: unknown, c: Context): Response {
     )
   }
   console.error('Unhandled error', error)
-  return c.json(
-    { error: { code: 'internal', message: 'Internal server error' } },
-    500,
-  )
+  return c.json({ error: { code: 'internal', message: 'Internal server error' } }, 500)
 }

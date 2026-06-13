@@ -1,6 +1,11 @@
 <script setup lang="ts">
 import type { Block, BlockStatus } from '~/types/domain'
-import { AGENT_BY_KIND, BLOCK_TYPE_META, STATUS_META, DEFAULT_CONFIDENCE_THRESHOLD } from '~/utils/catalog'
+import {
+  AGENT_BY_KIND,
+  BLOCK_TYPE_META,
+  STATUS_META,
+  DEFAULT_CONFIDENCE_THRESHOLD,
+} from '~/utils/catalog'
 
 const board = useBoardStore()
 const pipelines = usePipelinesStore()
@@ -69,9 +74,7 @@ function removeFeature(f: string) {
 
 // ---- task: dependencies (cross-frame) --------------------------------------
 const deps = computed(() =>
-  (block.value?.dependsOn ?? [])
-    .map((id) => board.getBlock(id))
-    .filter((b): b is Block => !!b),
+  (block.value?.dependsOn ?? []).map((id) => board.getBlock(id)).filter((b): b is Block => !!b),
 )
 const runnable = computed(() => (block.value ? board.isRunnable(block.value.id) : false))
 
@@ -104,7 +107,10 @@ function removeDep(depId: string) {
 const thresholdPct = computed({
   get: () => Math.round((block.value?.confidenceThreshold ?? DEFAULT_CONFIDENCE_THRESHOLD) * 100),
   set: (v: number) => {
-    if (block.value) board.updateBlock(block.value.id, { confidenceThreshold: Math.min(100, Math.max(0, v)) / 100 })
+    if (block.value)
+      board.updateBlock(block.value.id, {
+        confidenceThreshold: Math.min(100, Math.max(0, v)) / 100,
+      })
   },
 })
 const confidencePct = computed(() =>
@@ -168,7 +174,13 @@ function remove() {
             </div>
           </div>
         </div>
-        <UButton icon="i-lucide-x" color="neutral" variant="ghost" size="xs" @click="ui.select(null)" />
+        <UButton
+          icon="i-lucide-x"
+          color="neutral"
+          variant="ghost"
+          size="xs"
+          @click="ui.select(null)"
+        />
       </div>
 
       <UTextarea
@@ -182,10 +194,22 @@ function remove() {
 
       <!-- external links (placeholder integrations) -->
       <div class="flex flex-wrap gap-2">
-        <UButton color="neutral" variant="soft" size="xs" icon="i-lucide-ticket" @click="placeholder('Link JIRA ticket')">
+        <UButton
+          color="neutral"
+          variant="soft"
+          size="xs"
+          icon="i-lucide-ticket"
+          @click="placeholder('Link JIRA ticket')"
+        >
           Link JIRA ticket
         </UButton>
-        <UButton color="neutral" variant="soft" size="xs" icon="i-lucide-file-text" @click="placeholder('Link context documents')">
+        <UButton
+          color="neutral"
+          variant="soft"
+          size="xs"
+          icon="i-lucide-file-text"
+          @click="placeholder('Link context documents')"
+        >
           Link context documents
         </UButton>
       </div>
@@ -206,7 +230,9 @@ function remove() {
             >
               <UIcon name="i-lucide-package" class="h-3.5 w-3.5 text-violet-400" />
               <span class="truncate text-xs text-slate-200">{{ m.title }}</span>
-              <span class="ml-auto text-[10px] text-slate-500">{{ board.tasksOf(m.id).length }} task(s)</span>
+              <span class="ml-auto text-[10px] text-slate-500"
+                >{{ board.tasksOf(m.id).length }} task(s)</span
+              >
             </li>
           </ul>
         </div>
@@ -227,15 +253,21 @@ function remove() {
               class="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1 hover:bg-slate-800/60"
               @click="ui.select(t.id)"
             >
-              <span class="h-2 w-2 shrink-0 rounded-full" :style="{ backgroundColor: STATUS_META[t.status].color }" />
+              <span
+                class="h-2 w-2 shrink-0 rounded-full"
+                :style="{ backgroundColor: STATUS_META[t.status].color }"
+              />
               <span class="truncate text-xs text-slate-200">{{ t.title }}</span>
-              <span class="ml-auto text-[10px] text-slate-500">{{ STATUS_META[t.status].label }}</span>
+              <span class="ml-auto text-[10px] text-slate-500">{{
+                STATUS_META[t.status].label
+              }}</span>
             </li>
           </ul>
           <div v-else class="text-[11px] text-slate-500">No tasks yet — add one to start work.</div>
         </div>
         <p v-if="isFrame" class="text-[11px] text-slate-500">
-          Services are long-lived — they don't "complete". Work happens in their tasks &amp; modules.
+          Services are long-lived — they don't "complete". Work happens in their tasks &amp;
+          modules.
         </p>
       </template>
 
@@ -248,7 +280,13 @@ function remove() {
               Depends on
             </span>
             <UDropdownMenu v-if="depMenu.length" :items="depMenu">
-              <UButton size="xs" variant="ghost" color="neutral" icon="i-lucide-plus" trailing-icon="i-lucide-chevron-down" />
+              <UButton
+                size="xs"
+                variant="ghost"
+                color="neutral"
+                icon="i-lucide-plus"
+                trailing-icon="i-lucide-chevron-down"
+              />
             </UDropdownMenu>
           </div>
           <div v-if="deps.length" class="flex flex-wrap gap-1">
@@ -320,12 +358,25 @@ function remove() {
             Auto-merge threshold
           </div>
           <div class="flex items-center gap-2">
-            <UInput v-model.number="thresholdPct" type="number" min="0" max="100" size="sm" class="w-20" />
+            <UInput
+              v-model.number="thresholdPct"
+              type="number"
+              min="0"
+              max="100"
+              size="sm"
+              class="w-20"
+            />
             <span class="text-[11px] text-slate-400">% confidence</span>
           </div>
           <div v-if="confidencePct != null" class="mt-1 text-[11px]">
             Last run scored
-            <span :class="block.confidence! >= (block.confidenceThreshold ?? 0.8) ? 'text-emerald-400' : 'text-amber-400'">
+            <span
+              :class="
+                block.confidence! >= (block.confidenceThreshold ?? 0.8)
+                  ? 'text-emerald-400'
+                  : 'text-amber-400'
+              "
+            >
               {{ confidencePct }}%
             </span>
           </div>
@@ -337,7 +388,13 @@ function remove() {
             <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
               {{ instance.pipelineName }}
             </span>
-            <UButton icon="i-lucide-square" color="error" variant="ghost" size="xs" @click="execution.cancel(block.id)">
+            <UButton
+              icon="i-lucide-square"
+              color="error"
+              variant="ghost"
+              size="xs"
+              @click="execution.cancel(block.id)"
+            >
               Stop
             </UButton>
           </div>
@@ -348,7 +405,11 @@ function remove() {
               class="flex items-center gap-2 rounded-md px-2 py-1"
               :class="i === instance.currentStep ? 'bg-slate-800/70' : ''"
             >
-              <UIcon :name="AGENT_BY_KIND[s.agentKind].icon" class="h-4 w-4" :style="{ color: AGENT_BY_KIND[s.agentKind].color }" />
+              <UIcon
+                :name="AGENT_BY_KIND[s.agentKind].icon"
+                class="h-4 w-4"
+                :style="{ color: AGENT_BY_KIND[s.agentKind].color }"
+              />
               <span class="text-xs text-slate-200">{{ AGENT_BY_KIND[s.agentKind].label }}</span>
               <span class="ml-auto text-[10px] text-slate-400">{{ stepLabel[s.state] }}</span>
               <UButton
@@ -393,10 +454,24 @@ function remove() {
             {{ instance ? 'Re-run' : 'Run' }}
           </UButton>
         </UDropdownMenu>
-        <UButton v-if="isTask" color="neutral" variant="soft" size="sm" icon="i-lucide-maximize-2" @click="ui.focus(block.id)">
+        <UButton
+          v-if="isTask"
+          color="neutral"
+          variant="soft"
+          size="sm"
+          icon="i-lucide-maximize-2"
+          @click="ui.focus(block.id)"
+        >
           Focus
         </UButton>
-        <UButton color="error" variant="ghost" size="sm" icon="i-lucide-trash-2" class="ml-auto" @click="remove" />
+        <UButton
+          color="error"
+          variant="ghost"
+          size="sm"
+          icon="i-lucide-trash-2"
+          class="ml-auto"
+          @click="remove"
+        />
       </div>
     </div>
   </div>

@@ -12,9 +12,7 @@ const step = computed(() =>
   instance.value?.steps.find((s) => s.decision?.id === ctx.value?.decisionId),
 )
 const decision = computed(() => step.value?.decision ?? null)
-const block = computed(() =>
-  instance.value ? board.getBlock(instance.value.blockId) : undefined,
-)
+const block = computed(() => (instance.value ? board.getBlock(instance.value.blockId) : undefined))
 const agent = computed(() => (step.value ? AGENT_BY_KIND[step.value.agentKind] : null))
 
 const open = computed({

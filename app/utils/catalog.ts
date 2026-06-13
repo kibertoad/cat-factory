@@ -1,9 +1,4 @@
-import type {
-  AgentArchetype,
-  AgentKind,
-  BlockStatus,
-  BlockType,
-} from '~/types/domain'
+import type { AgentArchetype, AgentKind, BlockStatus, BlockType } from '~/types/domain'
 
 /** Simple unique id helper (fine for a client-only prototype). */
 export function uid(prefix = 'id'): string {
@@ -68,10 +63,7 @@ export const AGENT_BY_KIND: Record<AgentKind, AgentArchetype> = Object.fromEntri
 ) as Record<AgentKind, AgentArchetype>
 
 /** Visual metadata for each architecture block type. */
-export const BLOCK_TYPE_META: Record<
-  BlockType,
-  { label: string; icon: string; accent: string }
-> = {
+export const BLOCK_TYPE_META: Record<BlockType, { label: string; icon: string; accent: string }> = {
   frontend: { label: 'Frontend', icon: 'i-lucide-monitor', accent: '#60a5fa' },
   service: { label: 'Service', icon: 'i-lucide-server', accent: '#a78bfa' },
   api: { label: 'API', icon: 'i-lucide-route', accent: '#22d3ee' },
@@ -150,47 +142,46 @@ export const TASK_NAME_BANK = [
 ]
 
 /** Candidate decisions an agent kind might surface (visualization only). */
-export const DECISION_BANK: Partial<
-  Record<AgentKind, { question: string; options: string[] }[]>
-> = {
-  architect: [
-    {
-      question: 'Which persistence approach should this block use?',
-      options: ['Relational (Postgres)', 'Document (Mongo)', 'Event-sourced'],
-    },
-    {
-      question: 'Synchronous request or async event-driven?',
-      options: ['Synchronous REST', 'Async via queue'],
-    },
-  ],
-  researcher: [
-    {
-      question: 'Adopt an existing library or build in-house?',
-      options: ['Use library', 'Build in-house', 'Defer decision'],
-    },
-  ],
-  coder: [
-    {
-      question: 'Found an ambiguous edge case — how should we handle it?',
-      options: ['Fail fast', 'Fallback to default', 'Ask product'],
-    },
-  ],
-  tester: [
-    {
-      question: 'A flaky test keeps failing. Block or proceed?',
-      options: ['Block on fix', 'Quarantine & proceed'],
-    },
-  ],
-  reviewer: [
-    {
-      question: 'Review found a design smell. Refactor now or ticket it?',
-      options: ['Refactor now', 'Create follow-up ticket'],
-    },
-  ],
-  integrator: [
-    {
-      question: 'Downstream contract changed. How to roll out?',
-      options: ['Versioned endpoint', 'Breaking change + migration'],
-    },
-  ],
-}
+export const DECISION_BANK: Partial<Record<AgentKind, { question: string; options: string[] }[]>> =
+  {
+    architect: [
+      {
+        question: 'Which persistence approach should this block use?',
+        options: ['Relational (Postgres)', 'Document (Mongo)', 'Event-sourced'],
+      },
+      {
+        question: 'Synchronous request or async event-driven?',
+        options: ['Synchronous REST', 'Async via queue'],
+      },
+    ],
+    researcher: [
+      {
+        question: 'Adopt an existing library or build in-house?',
+        options: ['Use library', 'Build in-house', 'Defer decision'],
+      },
+    ],
+    coder: [
+      {
+        question: 'Found an ambiguous edge case — how should we handle it?',
+        options: ['Fail fast', 'Fallback to default', 'Ask product'],
+      },
+    ],
+    tester: [
+      {
+        question: 'A flaky test keeps failing. Block or proceed?',
+        options: ['Block on fix', 'Quarantine & proceed'],
+      },
+    ],
+    reviewer: [
+      {
+        question: 'Review found a design smell. Refactor now or ticket it?',
+        options: ['Refactor now', 'Create follow-up ticket'],
+      },
+    ],
+    integrator: [
+      {
+        question: 'Downstream contract changed. How to roll out?',
+        options: ['Versioned endpoint', 'Breaking change + migration'],
+      },
+    ],
+  }

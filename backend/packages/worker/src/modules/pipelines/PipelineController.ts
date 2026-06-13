@@ -9,9 +9,7 @@ export function pipelineController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
 
   app.get('/pipelines', async (c) => {
-    return c.json(
-      await c.get('container').pipelineService.list(param(c, 'workspaceId')),
-    )
+    return c.json(await c.get('container').pipelineService.list(param(c, 'workspaceId')))
   })
 
   app.post('/pipelines', jsonBody(createPipelineSchema), async (c) => {
@@ -22,9 +20,7 @@ export function pipelineController(): Hono<AppEnv> {
   })
 
   app.delete('/pipelines/:pipelineId', async (c) => {
-    await c
-      .get('container')
-      .pipelineService.remove(param(c, 'workspaceId'), param(c, 'pipelineId'))
+    await c.get('container').pipelineService.remove(param(c, 'workspaceId'), param(c, 'pipelineId'))
     return c.body(null, 204)
   })
 

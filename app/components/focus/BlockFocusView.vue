@@ -16,9 +16,7 @@ const statusMeta = computed(() => (block.value ? STATUS_META[block.value.status]
 const typeMeta = computed(() => (block.value ? BLOCK_TYPE_META[block.value.type] : null))
 
 const deps = computed(() =>
-  (block.value?.dependsOn ?? [])
-    .map((id) => board.getBlock(id))
-    .filter((b): b is Block => !!b),
+  (block.value?.dependsOn ?? []).map((id) => board.getBlock(id)).filter((b): b is Block => !!b),
 )
 
 const runMenu = computed(() =>
@@ -98,7 +96,9 @@ function openDecisionFor(decisionId: string) {
 
       <div class="grid flex-1 grid-cols-[1fr_300px] gap-6 overflow-hidden p-6">
         <!-- main: pipeline flow -->
-        <section class="flex flex-col overflow-auto rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
+        <section
+          class="flex flex-col overflow-auto rounded-2xl border border-slate-800 bg-slate-900/60 p-6"
+        >
           <h2 class="mb-4 text-sm font-semibold uppercase tracking-wide text-slate-400">
             {{ instance ? instance.pipelineName : 'No pipeline running' }}
           </h2>
@@ -107,7 +107,11 @@ function openDecisionFor(decisionId: string) {
             <template v-for="(s, i) in instance.steps" :key="i">
               <div
                 class="relative w-44 rounded-xl border bg-slate-900 p-4 transition"
-                :class="i === instance.currentStep ? 'border-indigo-500 shadow-lg shadow-indigo-500/10' : 'border-slate-700'"
+                :class="
+                  i === instance.currentStep
+                    ? 'border-indigo-500 shadow-lg shadow-indigo-500/10'
+                    : 'border-slate-700'
+                "
               >
                 <div
                   v-if="s.decision && !s.decision.chosen"
@@ -152,10 +156,7 @@ function openDecisionFor(decisionId: string) {
                   ✓ {{ s.decision.chosen }}
                 </p>
               </div>
-              <div
-                v-if="i < instance.steps.length - 1"
-                class="flex items-center"
-              >
+              <div v-if="i < instance.steps.length - 1" class="flex items-center">
                 <UIcon name="i-lucide-chevron-right" class="h-6 w-6 text-slate-600" />
               </div>
             </template>
@@ -170,7 +171,9 @@ function openDecisionFor(decisionId: string) {
         </section>
 
         <!-- side: details -->
-        <aside class="space-y-4 overflow-auto rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
+        <aside
+          class="space-y-4 overflow-auto rounded-2xl border border-slate-800 bg-slate-900/60 p-5"
+        >
           <div>
             <div class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
               Description
@@ -182,7 +185,9 @@ function openDecisionFor(decisionId: string) {
               Overall progress
             </div>
             <UProgress :model-value="Math.round(block.progress * 100)" />
-            <div class="mt-1 text-[11px] text-slate-400">{{ Math.round(block.progress * 100) }}%</div>
+            <div class="mt-1 text-[11px] text-slate-400">
+              {{ Math.round(block.progress * 100) }}%
+            </div>
           </div>
           <div>
             <div class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">

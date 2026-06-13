@@ -1,12 +1,7 @@
 import type { BlockPatch, BlockRepository } from '@cat-factory/core'
 import type { Block } from '@cat-factory/contracts'
 import type { D1Database } from '@cloudflare/workers-types'
-import {
-  type BlockRow,
-  blockInsertValues,
-  blockPatchToColumns,
-  rowToBlock,
-} from './mappers'
+import { type BlockRow, blockInsertValues, blockPatchToColumns, rowToBlock } from './mappers'
 
 export class D1BlockRepository implements BlockRepository {
   private readonly db: D1Database

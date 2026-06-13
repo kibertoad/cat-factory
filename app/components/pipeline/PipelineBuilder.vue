@@ -167,13 +167,22 @@ async function save() {
     <template #body>
       <div class="space-y-3">
         <div>
-          <label class="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+          <label
+            class="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-400"
+          >
             Name
           </label>
-          <UInput v-model="newAgentName" placeholder="e.g. Security Auditor" size="sm" class="w-full" />
+          <UInput
+            v-model="newAgentName"
+            placeholder="e.g. Security Auditor"
+            size="sm"
+            class="w-full"
+          />
         </div>
         <div>
-          <label class="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+          <label
+            class="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-400"
+          >
             Description
           </label>
           <UTextarea

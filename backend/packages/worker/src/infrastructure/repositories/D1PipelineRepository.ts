@@ -28,9 +28,7 @@ export class D1PipelineRepository implements PipelineRepository {
 
   async insert(workspaceId: string, pipeline: Pipeline): Promise<void> {
     await this.db
-      .prepare(
-        'INSERT INTO pipelines (workspace_id, id, name, agent_kinds) VALUES (?, ?, ?, ?)',
-      )
+      .prepare('INSERT INTO pipelines (workspace_id, id, name, agent_kinds) VALUES (?, ?, ?, ?)')
       .bind(workspaceId, pipeline.id, pipeline.name, JSON.stringify(pipeline.agentKinds))
       .run()
   }

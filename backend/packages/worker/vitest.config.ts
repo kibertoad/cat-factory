@@ -1,7 +1,4 @@
-import {
-  defineWorkersConfig,
-  readD1Migrations,
-} from '@cloudflare/vitest-pool-workers/config'
+import { defineWorkersConfig, readD1Migrations } from '@cloudflare/vitest-pool-workers/config'
 
 // Integration tests run inside the real Workers runtime (workerd, the same
 // engine Wrangler uses) against a real local D1 database — not mocks. The D1

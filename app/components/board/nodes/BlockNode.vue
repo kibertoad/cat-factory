@@ -117,12 +117,20 @@ const pulseClass = computed(() => {
       <div class="h-1.5 w-full" :style="{ backgroundColor: accent }" />
       <div class="space-y-2 p-3">
         <div class="flex items-center gap-2">
-          <UIcon :name="typeMeta!.icon" class="h-4 w-4 shrink-0" :style="{ color: typeMeta!.accent }" />
+          <UIcon
+            :name="typeMeta!.icon"
+            class="h-4 w-4 shrink-0"
+            :style="{ color: typeMeta!.accent }"
+          />
           <span class="truncate text-sm font-semibold text-white">{{ block.title }}</span>
         </div>
         <div class="flex items-center justify-between">
-          <UBadge :color="statusMeta.chip as any" variant="subtle" size="sm">{{ statusLabel }}</UBadge>
-          <span class="text-[11px] text-slate-400">{{ taskCount }} task{{ taskCount === 1 ? '' : 's' }}</span>
+          <UBadge :color="statusMeta.chip as any" variant="subtle" size="sm">{{
+            statusLabel
+          }}</UBadge>
+          <span class="text-[11px] text-slate-400"
+            >{{ taskCount }} task{{ taskCount === 1 ? '' : 's' }}</span
+          >
         </div>
         <button
           type="button"
@@ -165,15 +173,35 @@ const pulseClass = computed(() => {
             </div>
           </div>
           <div class="flex items-center gap-1">
-            <UBadge :color="statusMeta.chip as any" variant="subtle" size="sm">{{ statusLabel }}</UBadge>
-            <UButton class="nodrag" size="xs" variant="ghost" color="neutral" icon="i-lucide-plus" title="Add task" @click.stop="addTask" />
-            <UButton class="nodrag" size="xs" variant="ghost" color="neutral" icon="i-lucide-chevron-up" title="Collapse" @click.stop="toggleExpand" />
+            <UBadge :color="statusMeta.chip as any" variant="subtle" size="sm">{{
+              statusLabel
+            }}</UBadge>
+            <UButton
+              class="nodrag"
+              size="xs"
+              variant="ghost"
+              color="neutral"
+              icon="i-lucide-plus"
+              title="Add task"
+              @click.stop="addTask"
+            />
+            <UButton
+              class="nodrag"
+              size="xs"
+              variant="ghost"
+              color="neutral"
+              icon="i-lucide-chevron-up"
+              title="Collapse"
+              @click.stop="toggleExpand"
+            />
           </div>
         </div>
 
         <div class="flex items-center gap-2 text-[10px] uppercase tracking-wide text-slate-500">
           <span>{{ mergedTasks }}/{{ taskCount }} implemented</span>
-          <span v-if="modules.length">· {{ modules.length }} module{{ modules.length === 1 ? '' : 's' }}</span>
+          <span v-if="modules.length"
+            >· {{ modules.length }} module{{ modules.length === 1 ? '' : 's' }}</span
+          >
           <span v-if="prTasks" class="text-emerald-400">· {{ prTasks }} PR ready</span>
         </div>
 

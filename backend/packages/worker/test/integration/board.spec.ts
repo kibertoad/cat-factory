@@ -56,11 +56,9 @@ describe('board', () => {
   })
 
   it('reparents a task into a module and rejects illegal moves', async () => {
-    const moduleRes = await app.call<Block>(
-      'POST',
-      `/workspaces/${wsId}/blocks/blk_auth/modules`,
-      { name: 'Tokens' },
-    )
+    const moduleRes = await app.call<Block>('POST', `/workspaces/${wsId}/blocks/blk_auth/modules`, {
+      name: 'Tokens',
+    })
     const moduleId = moduleRes.body.id
 
     const ok = await app.call<Block>('POST', `/workspaces/${wsId}/blocks/task_login/reparent`, {

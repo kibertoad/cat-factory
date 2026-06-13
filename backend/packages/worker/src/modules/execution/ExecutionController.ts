@@ -43,7 +43,7 @@ export function executionController(): Hono<AppEnv> {
     // work — it just reports the current state (kept for back-compat with older
     // clients and the simulator/demo experience, which still drives it).
     const ticks =
-      container.config.execution.mode === 'workflow' ? 0 : c.req.valid('json').ticks ?? 1
+      container.config.execution.mode === 'workflow' ? 0 : (c.req.valid('json').ticks ?? 1)
     const instances = await container.executionService.tick(param(c, 'workspaceId'), ticks)
     return c.json(instances)
   })

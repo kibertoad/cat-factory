@@ -7,9 +7,7 @@ import { DEFAULT_CONFIDENCE_THRESHOLD } from './catalog'
 // these ids across workspaces is safe.
 
 export function seedBlocks(): Block[] {
-  const base = (
-    b: Partial<Block> & Pick<Block, 'id' | 'title' | 'type' | 'position'>,
-  ): Block => ({
+  const base = (b: Partial<Block> & Pick<Block, 'id' | 'title' | 'type' | 'position'>): Block => ({
     description: '',
     status: 'planned',
     progress: 0,

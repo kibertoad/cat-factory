@@ -36,7 +36,11 @@ function onHandle(e: PointerEvent) {
         class="inline-flex items-center gap-1 rounded-md border border-emerald-500/25 bg-emerald-500/10 px-2 py-1 text-[10px] text-emerald-100"
         :title="`Feature: ${f}`"
       >
-        <UIcon :name="FEATURE_META.icon" class="h-3 w-3 shrink-0" :style="{ color: FEATURE_META.color }" />
+        <UIcon
+          :name="FEATURE_META.icon"
+          class="h-3 w-3 shrink-0"
+          :style="{ color: FEATURE_META.color }"
+        />
         <span class="truncate">{{ f }}</span>
       </span>
     </div>
@@ -45,7 +49,11 @@ function onHandle(e: PointerEvent) {
     <div
       v-else-if="!merged"
       class="absolute w-[180px]"
-      :style="{ left: task.position.x + 'px', top: task.position.y + 'px', zIndex: draggingId === taskId ? 60 : 10 }"
+      :style="{
+        left: task.position.x + 'px',
+        top: task.position.y + 'px',
+        zIndex: draggingId === taskId ? 60 : 10,
+      }"
     >
       <!-- drag handle -->
       <div

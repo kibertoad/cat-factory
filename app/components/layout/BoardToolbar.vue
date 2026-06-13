@@ -35,7 +35,13 @@ async function resetBoard() {
     class="absolute left-1/2 top-4 z-20 flex -translate-x-1/2 items-center gap-1 rounded-full border border-slate-700 bg-slate-900/90 px-2 py-1.5 shadow-xl backdrop-blur"
   >
     <!-- zoom controls -->
-    <UButton icon="i-lucide-zoom-out" color="neutral" variant="ghost" size="sm" @click="zoomOut()" />
+    <UButton
+      icon="i-lucide-zoom-out"
+      color="neutral"
+      variant="ghost"
+      size="sm"
+      @click="zoomOut()"
+    />
     <div class="w-20 text-center text-xs tabular-nums text-slate-300">
       {{ zoomPct }}%
       <div class="text-[9px] uppercase tracking-wide text-slate-500">{{ lodLabel }}</div>
@@ -65,7 +71,9 @@ async function resetBoard() {
     <!-- decisions queue -->
     <UDropdownMenu v-if="execution.pendingDecisionCount" :items="decisionItems">
       <UButton color="warning" variant="soft" size="sm" icon="i-lucide-circle-help">
-        {{ execution.pendingDecisionCount }} decision{{ execution.pendingDecisionCount === 1 ? '' : 's' }}
+        {{ execution.pendingDecisionCount }} decision{{
+          execution.pendingDecisionCount === 1 ? '' : 's'
+        }}
       </UButton>
     </UDropdownMenu>
 

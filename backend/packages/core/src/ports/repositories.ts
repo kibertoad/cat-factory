@@ -1,9 +1,4 @@
-import type {
-  Block,
-  ExecutionInstance,
-  Pipeline,
-  Workspace,
-} from '../domain/types'
+import type { Block, ExecutionInstance, Pipeline, Workspace } from '../domain/types'
 
 // ---------------------------------------------------------------------------
 // Repository ports: persistence interfaces the domain layer depends on. The

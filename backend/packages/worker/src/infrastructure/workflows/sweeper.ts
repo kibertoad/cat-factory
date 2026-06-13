@@ -15,8 +15,9 @@ export class WorkflowsLookup implements WorkflowLookup {
       const instance = await this.workflow.get(executionId)
       const { status } = await instance.status()
       // Running/queued/paused/waiting count as alive; terminal states do not.
-      return status === 'running' || status === 'queued' || status === 'waiting' ||
-        status === 'paused'
+      return (
+        status === 'running' || status === 'queued' || status === 'waiting' || status === 'paused'
+      )
     } catch {
       // No such instance → not alive (needs re-driving).
       return false

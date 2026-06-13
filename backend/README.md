@@ -6,11 +6,11 @@ infrastructure/domain layering and module grouping of `node-service-template`.
 
 ## Packages
 
-| Package                  | Role                                                                                          |
-| ------------------------ | --------------------------------------------------------------------------------------------- |
-| `@cat-factory/contracts` | Valibot wire contract (entities + request bodies). Shared by the frontend and the backend.    |
-| `@cat-factory/core`      | Domain layer: module services, pure logic, ports. No framework, no Cloudflare, no LLM SDK.    |
-| `@cat-factory/worker`    | Infrastructure + API layer: Hono controllers, D1 repositories, composition root, the Worker.  |
+| Package                  | Role                                                                                         |
+| ------------------------ | -------------------------------------------------------------------------------------------- |
+| `@cat-factory/contracts` | Valibot wire contract (entities + request bodies). Shared by the frontend and the backend.   |
+| `@cat-factory/core`      | Domain layer: module services, pure logic, ports. No framework, no Cloudflare, no LLM SDK.   |
+| `@cat-factory/worker`    | Infrastructure + API layer: Hono controllers, D1 repositories, composition root, the Worker. |
 
 ### Layering (per the template's architecture doc)
 

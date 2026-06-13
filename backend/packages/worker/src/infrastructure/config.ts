@@ -27,7 +27,9 @@ function num(value: string | undefined): number | undefined {
   return Number.isFinite(n) ? n : undefined
 }
 
-function parseModelOverrides(raw: string | undefined): Partial<Record<AgentKind, AgentModelConfig>> {
+function parseModelOverrides(
+  raw: string | undefined,
+): Partial<Record<AgentKind, AgentModelConfig>> {
   if (!raw || raw.trim() === '') return {}
   let parsed: unknown
   try {

@@ -1,6 +1,11 @@
 <script setup lang="ts">
 import type { Block } from '~/types/domain'
-import { STATUS_META, FEATURE_META, MODULE_META, DEFAULT_CONFIDENCE_THRESHOLD } from '~/utils/catalog'
+import {
+  STATUS_META,
+  FEATURE_META,
+  MODULE_META,
+  DEFAULT_CONFIDENCE_THRESHOLD,
+} from '~/utils/catalog'
 
 const props = defineProps<{ taskId: string }>()
 
@@ -17,9 +22,7 @@ const selected = computed(() => ui.selectedBlockId === props.taskId)
 
 // ---- dependencies (gate execution order; may point across frames) ----------
 const deps = computed(() =>
-  (task.value?.dependsOn ?? [])
-    .map((id) => board.getBlock(id))
-    .filter((b): b is Block => !!b),
+  (task.value?.dependsOn ?? []).map((id) => board.getBlock(id)).filter((b): b is Block => !!b),
 )
 /** Deps that haven't merged yet — these block this task from running. */
 const unmet = computed(() => board.unmetDeps(props.taskId))
@@ -32,9 +35,7 @@ function depLabel(dep: Block) {
   return crossFrame ? `${frame!.title} / ${dep.title}` : dep.title
 }
 
-const threshold = computed(
-  () => task.value?.confidenceThreshold ?? DEFAULT_CONFIDENCE_THRESHOLD,
-)
+const threshold = computed(() => task.value?.confidenceThreshold ?? DEFAULT_CONFIDENCE_THRESHOLD)
 /** The pipeline a plain "Start" will use (first defined pipeline). */
 const defaultPipeline = computed(() => pipelines.pipelines[0])
 const confidencePct = computed(() =>
@@ -147,21 +148,40 @@ function selectTask() {
           size="xs"
           :icon="runnable ? 'i-lucide-play' : 'i-lucide-lock'"
           :disabled="!runnable"
-          :title="runnable ? `Start ${defaultPipeline?.name ?? 'pipeline'}` : `Waiting on: ${unmet.map((d) => d.title).join(', ')}`"
+          :title="
+            runnable
+              ? `Start ${defaultPipeline?.name ?? 'pipeline'}`
+              : `Waiting on: ${unmet.map((d) => d.title).join(', ')}`
+          "
           @click.stop="run"
         >
           {{ runnable ? 'Start' : 'Blocked' }}
         </UButton>
-        <span v-if="runnable && defaultPipeline" class="inline-flex items-center gap-0.5 text-[9px] text-slate-500">
+        <span
+          v-if="runnable && defaultPipeline"
+          class="inline-flex items-center gap-0.5 text-[9px] text-slate-500"
+        >
           <UIcon name="i-lucide-workflow" class="h-2.5 w-2.5" />{{ defaultPipeline.name }}
         </span>
       </template>
 
       <template v-if="task.status === 'pr_ready'">
-        <UButton color="neutral" variant="soft" size="xs" icon="i-lucide-scan-eye" @click.stop="review">
+        <UButton
+          color="neutral"
+          variant="soft"
+          size="xs"
+          icon="i-lucide-scan-eye"
+          @click.stop="review"
+        >
           Review
         </UButton>
-        <UButton color="success" variant="solid" size="xs" icon="i-lucide-git-merge" @click.stop="merge">
+        <UButton
+          color="success"
+          variant="solid"
+          size="xs"
+          icon="i-lucide-git-merge"
+          @click.stop="merge"
+        >
           Merge
         </UButton>
       </template>
