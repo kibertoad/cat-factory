@@ -114,9 +114,9 @@ describe('execution engine', () => {
     })
     await app.call('POST', `/workspaces/${wsId}/tick`, { ticks: 10 })
 
-    const block = (await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)).body.blocks.find(
-      (b) => b.id === 'blk_api',
-    )!
+    const block = (
+      await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+    ).body.blocks.find((b) => b.id === 'blk_api')!
     expect(block.status).toBe('done')
   })
 

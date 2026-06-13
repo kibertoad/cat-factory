@@ -1,9 +1,9 @@
 {
   "name": "@cat-factory/worker",
   "version": "0.1.0",
+  "private": true,
   "description": "Cloudflare Worker facade (Hono + D1) exposing the Agent Architecture Board core.",
   "type": "module",
-  "private": true,
   "main": "./src/index.ts",
   "scripts": {
     "dev": "wrangler dev",

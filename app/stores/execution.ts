@@ -51,7 +51,12 @@ export const useExecutionStore = defineStore('execution', () => {
     for (const e of instances.value) {
       for (const s of e.steps) {
         if (s.decision && !s.decision.chosen) {
-          out.push({ instanceId: e.id, blockId: e.blockId, decision: s.decision, agentKind: s.agentKind })
+          out.push({
+            instanceId: e.id,
+            blockId: e.blockId,
+            decision: s.decision,
+            agentKind: s.agentKind,
+          })
         }
       }
     }

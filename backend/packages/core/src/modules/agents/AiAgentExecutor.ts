@@ -1,9 +1,5 @@
 import { generateText } from 'ai'
-import type {
-  AgentExecutor,
-  AgentRunContext,
-  AgentRunResult,
-} from '../../ports/agent-executor'
+import type { AgentExecutor, AgentRunContext, AgentRunResult } from '../../ports/agent-executor'
 import type { ModelProvider } from '../../ports/model-provider'
 import { systemPromptFor, userPromptFor } from './agent-catalog'
 import { type AgentRouting, resolveAgentConfig } from './agent-routing'

@@ -5,14 +5,7 @@ import type { Block, BlockLevel, Position } from '../../domain/types'
 // by the BoardService and the execution engine.
 
 /** Simple grid layout for the Nth child inside a container. */
-export function gridSlot(
-  n: number,
-  cols = 2,
-  cw = 200,
-  ch = 170,
-  x0 = 16,
-  y0 = 12,
-): Position {
+export function gridSlot(n: number, cols = 2, cw = 200, ch = 170, x0 = 16, y0 = 12): Position {
   return { x: x0 + (n % cols) * cw, y: y0 + Math.floor(n / cols) * ch }
 }
 

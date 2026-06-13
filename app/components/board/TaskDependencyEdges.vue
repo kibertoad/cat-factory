@@ -22,7 +22,8 @@ const taskDeps = computed(() => {
   for (const t of board.allTasks) {
     for (const depId of t.dependsOn) {
       const dep = board.getBlock(depId)
-      if (dep && dep.level === 'task') out.push({ id: `${depId}__${t.id}`, source: depId, target: t.id })
+      if (dep && dep.level === 'task')
+        out.push({ id: `${depId}__${t.id}`, source: depId, target: t.id })
     }
   }
   return out
@@ -88,15 +89,28 @@ onBeforeUnmount(pause)
 </script>
 
 <template>
-  <svg
-    ref="svg"
-    class="pointer-events-none absolute inset-0 z-10 h-full w-full overflow-visible"
-  >
+  <svg ref="svg" class="pointer-events-none absolute inset-0 z-10 h-full w-full overflow-visible">
     <defs>
-      <marker id="task-arrow-pending" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <marker
+        id="task-arrow-pending"
+        viewBox="0 0 10 10"
+        refX="8"
+        refY="5"
+        markerWidth="6"
+        markerHeight="6"
+        orient="auto-start-reverse"
+      >
         <path d="M0,0 L10,5 L0,10 z" fill="#f59e0b" />
       </marker>
-      <marker id="task-arrow-done" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <marker
+        id="task-arrow-done"
+        viewBox="0 0 10 10"
+        refX="8"
+        refY="5"
+        markerWidth="6"
+        markerHeight="6"
+        orient="auto-start-reverse"
+      >
         <path d="M0,0 L10,5 L0,10 z" fill="#64748b" />
       </marker>
     </defs>

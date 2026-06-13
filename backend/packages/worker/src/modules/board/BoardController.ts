@@ -29,33 +29,21 @@ export function boardController(): Hono<AppEnv> {
   app.post('/blocks/:blockId/tasks', jsonBody(addTaskSchema), async (c) => {
     const block = await c
       .get('container')
-      .boardService.addTask(
-        param(c, 'workspaceId'),
-        param(c, 'blockId'),
-        c.req.valid('json'),
-      )
+      .boardService.addTask(param(c, 'workspaceId'), param(c, 'blockId'), c.req.valid('json'))
     return c.json(block, 201)
   })
 
   app.post('/blocks/:blockId/modules', jsonBody(addModuleSchema), async (c) => {
     const block = await c
       .get('container')
-      .boardService.addModule(
-        param(c, 'workspaceId'),
-        param(c, 'blockId'),
-        c.req.valid('json'),
-      )
+      .boardService.addModule(param(c, 'workspaceId'), param(c, 'blockId'), c.req.valid('json'))
     return c.json(block, 201)
   })
 
   app.patch('/blocks/:blockId', jsonBody(updateBlockSchema), async (c) => {
     const block = await c
       .get('container')
-      .boardService.updateBlock(
-        param(c, 'workspaceId'),
-        param(c, 'blockId'),
-        c.req.valid('json'),
-      )
+      .boardService.updateBlock(param(c, 'workspaceId'), param(c, 'blockId'), c.req.valid('json'))
     return c.json(block)
   })
 
@@ -73,18 +61,12 @@ export function boardController(): Hono<AppEnv> {
   app.post('/blocks/:blockId/reparent', jsonBody(reparentSchema), async (c) => {
     const block = await c
       .get('container')
-      .boardService.reparent(
-        param(c, 'workspaceId'),
-        param(c, 'blockId'),
-        c.req.valid('json'),
-      )
+      .boardService.reparent(param(c, 'workspaceId'), param(c, 'blockId'), c.req.valid('json'))
     return c.json(block)
   })
 
   app.delete('/blocks/:blockId', async (c) => {
-    await c
-      .get('container')
-      .boardService.removeBlock(param(c, 'workspaceId'), param(c, 'blockId'))
+    await c.get('container').boardService.removeBlock(param(c, 'workspaceId'), param(c, 'blockId'))
     return c.body(null, 204)
   })
 

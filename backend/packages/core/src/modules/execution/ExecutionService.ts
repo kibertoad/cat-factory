@@ -1,8 +1,4 @@
-import type {
-  Block,
-  ExecutionInstance,
-  PipelineStep,
-} from '../../domain/types'
+import type { Block, ExecutionInstance, PipelineStep } from '../../domain/types'
 import { assertFound, ConflictError, NotFoundError } from '../../domain/errors'
 import { DEFAULT_CONFIDENCE_THRESHOLD } from '../../domain/catalog'
 import type {
@@ -315,10 +311,7 @@ export class ExecutionService {
    * Implementing a task assigned to a module materialises that module: create it
    * in the service if missing, then move the task inside it.
    */
-  private async applyModuleAssignment(
-    workspaceId: string,
-    taskId: string,
-  ): Promise<void> {
+  private async applyModuleAssignment(workspaceId: string, taskId: string): Promise<void> {
     const task = await this.blockRepository.get(workspaceId, taskId)
     if (!task || !task.moduleName) return
     const blocks = await this.blockRepository.listByWorkspace(workspaceId)
@@ -326,8 +319,7 @@ export class ExecutionService {
     if (!service) return
 
     let module = blocks.find(
-      (b) =>
-        b.parentId === service.id && b.level === 'module' && b.title === task.moduleName,
+      (b) => b.parentId === service.id && b.level === 'module' && b.title === task.moduleName,
     )
     if (!module) {
       module = await this.board.addModule(workspaceId, service.id, {
@@ -335,9 +327,7 @@ export class ExecutionService {
       })
     }
     if (module.id !== task.parentId) {
-      const n = blocks.filter(
-        (b) => b.parentId === module!.id && b.level === 'task',
-      ).length
+      const n = blocks.filter((b) => b.parentId === module!.id && b.level === 'task').length
       await this.board.reparent(workspaceId, taskId, {
         parentId: module.id,
         position: { x: 16 + (n % 2) * 190, y: 40 + Math.floor(n / 2) * 130 },

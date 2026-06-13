@@ -1,9 +1,5 @@
 import { DECISION_BANK, DECISION_CHANCE } from '../../domain/catalog'
-import type {
-  AgentExecutor,
-  AgentRunContext,
-  AgentRunResult,
-} from '../../ports/agent-executor'
+import type { AgentExecutor, AgentRunContext, AgentRunResult } from '../../ports/agent-executor'
 import type { Rng } from '../../ports/runtime'
 
 export interface SimulatorAgentExecutorDependencies {
@@ -35,9 +31,7 @@ export class SimulatorAgentExecutor implements AgentExecutor {
       }
     }
 
-    const decided = context.resolvedDecision
-      ? ` (decided: ${context.resolvedDecision.chosen})`
-      : ''
+    const decided = context.resolvedDecision ? ` (decided: ${context.resolvedDecision.chosen})` : ''
     return {
       output: `[${context.agentKind}] completed work on "${context.block.title}"${decided}`,
       model: 'simulator',

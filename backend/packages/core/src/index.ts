@@ -31,10 +31,7 @@ export {
   type WorkspaceServiceDependencies,
 } from './modules/workspaces/WorkspaceService'
 
-export {
-  AiAgentExecutor,
-  type AiAgentExecutorDependencies,
-} from './modules/agents/AiAgentExecutor'
+export { AiAgentExecutor, type AiAgentExecutorDependencies } from './modules/agents/AiAgentExecutor'
 export {
   SimulatorAgentExecutor,
   type SimulatorAgentExecutorDependencies,

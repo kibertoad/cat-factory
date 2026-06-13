@@ -28,12 +28,7 @@ export type BlockStatus = v.InferOutput<typeof blockStatusSchema>
 export const blockLevelSchema = v.picklist(['frame', 'module', 'task'])
 export type BlockLevel = v.InferOutput<typeof blockLevelSchema>
 
-export const agentStateSchema = v.picklist([
-  'pending',
-  'working',
-  'waiting_decision',
-  'done',
-])
+export const agentStateSchema = v.picklist(['pending', 'working', 'waiting_decision', 'done'])
 export type AgentState = v.InferOutput<typeof agentStateSchema>
 
 /** Agent kinds are an open set — custom agents get free-form ids. */

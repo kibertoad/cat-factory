@@ -11,11 +11,7 @@ export interface TestResponse<T = unknown> {
 }
 
 export interface TestApp {
-  call<T = unknown>(
-    method: string,
-    path: string,
-    body?: unknown,
-  ): Promise<TestResponse<T>>
+  call<T = unknown>(method: string, path: string, body?: unknown): Promise<TestResponse<T>>
   createWorkspace(options?: { name?: string; seed?: boolean }): Promise<WorkspaceSnapshot>
 }
 

@@ -34,7 +34,13 @@ function onHandle(e: PointerEvent) {
     :data-block-id="mod.id"
     class="absolute rounded-xl border border-violet-500/40 bg-violet-500/[0.06]"
     :class="{ 'ring-1 ring-white': selected }"
-    :style="{ left: mod.position.x + 'px', top: mod.position.y + 'px', width: size.w + 'px', height: size.h + 'px', zIndex: draggingId === moduleId ? 50 : 5 }"
+    :style="{
+      left: mod.position.x + 'px',
+      top: mod.position.y + 'px',
+      width: size.w + 'px',
+      height: size.h + 'px',
+      zIndex: draggingId === moduleId ? 50 : 5,
+    }"
   >
     <!-- module header / drag handle -->
     <div
@@ -42,7 +48,11 @@ function onHandle(e: PointerEvent) {
       @pointerdown="onHandle"
       @click.stop="ui.select(moduleId)"
     >
-      <UIcon :name="MODULE_META.icon" class="h-3.5 w-3.5 shrink-0" :style="{ color: MODULE_META.color }" />
+      <UIcon
+        :name="MODULE_META.icon"
+        class="h-3.5 w-3.5 shrink-0"
+        :style="{ color: MODULE_META.color }"
+      />
       <span class="truncate text-[11px] font-semibold text-violet-100">{{ mod.title }}</span>
       <span v-if="featureCount" class="ml-auto shrink-0 text-[9px] text-violet-300/70">
         {{ featureCount }} feature{{ featureCount === 1 ? '' : 's' }}

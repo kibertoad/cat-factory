@@ -30,11 +30,9 @@ export function useApi() {
     createWorkspace: (body: { name?: string; seed?: boolean } = {}) =>
       http<WorkspaceSnapshot>('/workspaces', { method: 'POST', body }),
 
-    getWorkspace: (workspaceId: string) =>
-      http<WorkspaceSnapshot>(ws(workspaceId)),
+    getWorkspace: (workspaceId: string) => http<WorkspaceSnapshot>(ws(workspaceId)),
 
-    deleteWorkspace: (workspaceId: string) =>
-      http(ws(workspaceId), { method: 'DELETE' }),
+    deleteWorkspace: (workspaceId: string) => http(ws(workspaceId), { method: 'DELETE' }),
 
     // ---- blocks -----------------------------------------------------------
     addFrame: (workspaceId: string, body: { type: BlockType; position: Position }) =>
@@ -68,8 +66,7 @@ export function useApi() {
       http<Block>(`${ws(workspaceId)}/blocks/${blockId}/dependencies`, { method: 'POST', body }),
 
     // ---- pipelines --------------------------------------------------------
-    listPipelines: (workspaceId: string) =>
-      http<Pipeline[]>(`${ws(workspaceId)}/pipelines`),
+    listPipelines: (workspaceId: string) => http<Pipeline[]>(`${ws(workspaceId)}/pipelines`),
 
     createPipeline: (workspaceId: string, body: { name: string; agentKinds: string[] }) =>
       http<Pipeline>(`${ws(workspaceId)}/pipelines`, { method: 'POST', body }),
@@ -105,4 +102,3 @@ export function useApi() {
       ),
   }
 }
-

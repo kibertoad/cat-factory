@@ -83,7 +83,11 @@ async function onDrop(event: DragEvent) {
       const block = await board.addBlock(payload.blockType, position)
       ui.select(block.id)
     } catch {
-      toast.add({ title: 'Could not add block', description: 'The backend rejected the request.', color: 'error' })
+      toast.add({
+        title: 'Could not add block',
+        description: 'The backend rejected the request.',
+        color: 'error',
+      })
     }
     return
   }
@@ -96,7 +100,10 @@ async function onDrop(event: DragEvent) {
     const pipeline = pipelines.getPipeline(payload.pipelineId)
     if (!target || !pipeline) return
     if (target.level !== 'task') {
-      toast.add({ title: 'Drop onto a task', description: 'Pipelines run against tasks, not services.' })
+      toast.add({
+        title: 'Drop onto a task',
+        description: 'Pipelines run against tasks, not services.',
+      })
       return
     }
     if (!board.isRunnable(target.id)) {

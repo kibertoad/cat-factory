@@ -1,8 +1,4 @@
-import type {
-  ExecutionContext,
-  MessageBatch,
-  ScheduledController,
-} from '@cloudflare/workers-types'
+import type { ExecutionContext, MessageBatch, ScheduledController } from '@cloudflare/workers-types'
 import { createApp } from './app'
 import type { Env, ExecutionStartMessage } from './infrastructure/env'
 import { D1ExecutionRepository } from './infrastructure/repositories/D1ExecutionRepository'
@@ -24,7 +20,11 @@ const SWEEP_LEASE_MS = 5 * 60 * 1000
 export default {
   fetch: app.fetch,
 
-  async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+  async scheduled(
+    _controller: ScheduledController,
+    env: Env,
+    ctx: ExecutionContext,
+  ): Promise<void> {
     if (!env.EXECUTION_WORKFLOW) return
     const workflow = env.EXECUTION_WORKFLOW
     const clock = new SystemClock()

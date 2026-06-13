@@ -1,8 +1,4 @@
-import type {
-  AgentExecutor,
-  AgentRunContext,
-  AgentRunResult,
-} from '@cat-factory/core'
+import type { AgentExecutor, AgentRunContext, AgentRunResult } from '@cat-factory/core'
 
 export interface FakeAgentOptions {
   /** Confidence reported on the final step (drives auto-merge vs PR). Default 1. */

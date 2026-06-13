@@ -84,11 +84,7 @@ export class BoardService {
   }
 
   /** Add a task inside a container (a service frame or a module). */
-  async addTask(
-    workspaceId: string,
-    containerId: string,
-    input: AddTaskInput,
-  ): Promise<Block> {
+  async addTask(workspaceId: string, containerId: string, input: AddTaskInput): Promise<Block> {
     await this.requireWorkspace(workspaceId)
     const container = await this.requireBlock(workspaceId, containerId)
     if (container.level === 'task') {
@@ -117,11 +113,7 @@ export class BoardService {
   }
 
   /** Add a module (sub-frame) inside a service. */
-  async addModule(
-    workspaceId: string,
-    serviceId: string,
-    input: AddModuleInput,
-  ): Promise<Block> {
+  async addModule(workspaceId: string, serviceId: string, input: AddModuleInput): Promise<Block> {
     await this.requireWorkspace(workspaceId)
     const service = await this.requireBlock(workspaceId, serviceId)
     if (service.level !== 'frame') {
@@ -153,11 +145,7 @@ export class BoardService {
     return this.requireBlock(workspaceId, id)
   }
 
-  async updateBlock(
-    workspaceId: string,
-    id: string,
-    patch: UpdateBlockInput,
-  ): Promise<Block> {
+  async updateBlock(workspaceId: string, id: string, patch: UpdateBlockInput): Promise<Block> {
     await this.requireWorkspace(workspaceId)
     await this.requireBlock(workspaceId, id)
     await this.blockRepository.update(workspaceId, id, patch)
@@ -200,11 +188,7 @@ export class BoardService {
   }
 
   /** Toggle a dependency edge: target dependsOn source. */
-  async toggleDependency(
-    workspaceId: string,
-    targetId: string,
-    sourceId: string,
-  ): Promise<Block> {
+  async toggleDependency(workspaceId: string, targetId: string, sourceId: string): Promise<Block> {
     await this.requireWorkspace(workspaceId)
     if (targetId === sourceId) {
       throw new ValidationError('A block cannot depend on itself')
@@ -213,9 +197,7 @@ export class BoardService {
     await this.requireBlock(workspaceId, sourceId)
     const i = target.dependsOn.indexOf(sourceId)
     const next =
-      i >= 0
-        ? target.dependsOn.filter((d) => d !== sourceId)
-        : [...target.dependsOn, sourceId]
+      i >= 0 ? target.dependsOn.filter((d) => d !== sourceId) : [...target.dependsOn, sourceId]
     await this.blockRepository.update(workspaceId, targetId, { dependsOn: next })
     return this.requireBlock(workspaceId, targetId)
   }
