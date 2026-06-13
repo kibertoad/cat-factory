@@ -1,0 +1,41 @@
+import type {
+  AgentExecutor,
+  AgentRunContext,
+  AgentRunResult,
+} from '@cat-factory/core'
+
+export interface FakeAgentOptions {
+  /** Confidence reported on the final step (drives auto-merge vs PR). Default 1. */
+  confidence?: number
+  /** Step indices that should raise a decision (once) before completing. */
+  decisionOnSteps?: number[]
+}
+
+/**
+ * Deterministic agent for integration tests. It performs no network calls and
+ * behaves predictably, so the engine's orchestration (step advancement,
+ * decisions, finalisation) can be asserted exactly — without the randomness of
+ * the SimulatorAgentExecutor or the cost of a real LLM.
+ */
+export class FakeAgentExecutor implements AgentExecutor {
+  constructor(private readonly options: FakeAgentOptions = {}) {}
+
+  async run(context: AgentRunContext): Promise<AgentRunResult> {
+    const raisesDecision =
+      this.options.decisionOnSteps?.includes(context.stepIndex) && !context.resolvedDecision
+    if (raisesDecision) {
+      return {
+        decision: {
+          question: `Decision for ${context.agentKind}?`,
+          options: ['Option A', 'Option B'],
+        },
+      }
+    }
+
+    return {
+      output: `[${context.agentKind}] processed "${context.block.title}"`,
+      model: 'fake',
+      confidence: context.isFinalStep ? (this.options.confidence ?? 1) : undefined,
+    }
+  }
+}

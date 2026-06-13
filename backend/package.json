@@ -1,0 +1,19 @@
+{
+  "name": "cat-factory-backend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Backend for the Agent Architecture Board — framework-agnostic core + Cloudflare Worker facade.",
+  "packageManager": "pnpm@9.12.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "pnpm -r --filter ./packages/* run build",
+    "typecheck": "pnpm -r run typecheck",
+    "dev": "pnpm --filter @cat-factory/worker run dev",
+    "test": "pnpm --filter @cat-factory/worker run test",
+    "test:run": "pnpm --filter @cat-factory/worker run test:run",
+    "deploy": "pnpm --filter @cat-factory/worker run deploy"
+  }
+}

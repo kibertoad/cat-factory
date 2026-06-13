@@ -1,0 +1,92 @@
+@import "tailwindcss";
+@import "@nuxt/ui";
+
+/* ---- Agent Architecture Board: shared visual language ---------------------- */
+
+:root {
+  --board-bg: #0b1020;
+}
+
+html,
+body,
+#__nuxt {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  overflow: hidden;
+}
+
+/* Vue Flow surface tuned to a dark "design board" look */
+.vue-flow__background {
+  background-color: var(--board-bg);
+}
+
+/* Status-pulse used by blocked / decision-needed blocks */
+@keyframes board-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.55);
+  }
+  50% {
+    box-shadow: 0 0 0 10px rgba(245, 158, 11, 0);
+  }
+}
+
+.board-pulse {
+  animation: board-pulse 1.4s ease-in-out infinite;
+}
+
+/* Green pulse used when a block reaches the "PR ready" state */
+@keyframes board-pulse-green {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.6);
+  }
+  50% {
+    box-shadow: 0 0 0 12px rgba(34, 197, 94, 0);
+  }
+}
+
+.board-pulse-green {
+  animation: board-pulse-green 1.2s ease-in-out infinite;
+}
+
+/* Marching-ants on edges feeding an in-progress block */
+.vue-flow__edge.is-live .vue-flow__edge-path {
+  stroke-dasharray: 6 4;
+  animation: board-dash 0.6s linear infinite;
+}
+
+/* A selected edge: highlight it so the user knows what Delete/Backspace removes */
+.vue-flow__edge.selected .vue-flow__edge-path {
+  stroke: #f43f5e !important;
+  stroke-width: 2.5 !important;
+}
+
+/* Fatter invisible hit area so thin edges are easy to click */
+.vue-flow__edge .vue-flow__edge-interaction {
+  stroke-width: 18;
+}
+
+@keyframes board-dash {
+  to {
+    stroke-dashoffset: -20;
+  }
+}
+
+/* Custom block node should not show the default node chrome */
+.vue-flow__node-block {
+  padding: 0;
+  border: none;
+  background: transparent;
+  width: auto;
+}
+
+/* Make palette drag images feel intentional. Scoped to a dedicated class so it
+ * never collides with Vue Flow's own `dragging` class, which it applies to the
+ * pane while panning (a bare `.dragging` rule would dim the whole board). */
+.palette-dragging {
+  opacity: 0.5;
+}

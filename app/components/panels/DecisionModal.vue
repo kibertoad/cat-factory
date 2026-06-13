@@ -1,0 +1,73 @@
+<script setup lang="ts">
+import { AGENT_BY_KIND } from '~/utils/catalog'
+
+const execution = useExecutionStore()
+const board = useBoardStore()
+const ui = useUiStore()
+
+const ctx = computed(() => ui.decisionContext)
+
+const instance = computed(() => execution.getInstance(ctx.value?.instanceId))
+const step = computed(() =>
+  instance.value?.steps.find((s) => s.decision?.id === ctx.value?.decisionId),
+)
+const decision = computed(() => step.value?.decision ?? null)
+const block = computed(() =>
+  instance.value ? board.getBlock(instance.value.blockId) : undefined,
+)
+const agent = computed(() => (step.value ? AGENT_BY_KIND[step.value.agentKind] : null))
+
+const open = computed({
+  get: () => !!ctx.value && !!decision.value,
+  set: (v: boolean) => {
+    if (!v) ui.closeDecision()
+  },
+})
+
+function choose(option: string) {
+  if (!ctx.value) return
+  execution.resolveDecision(ctx.value.instanceId, ctx.value.decisionId, option)
+  ui.closeDecision()
+}
+</script>
+
+<template>
+  <UModal v-model:open="open" title="Decision required">
+    <template #body>
+      <div v-if="decision && agent" class="space-y-4">
+        <div class="flex items-center gap-2 text-sm text-slate-400">
+          <div
+            class="flex h-8 w-8 items-center justify-center rounded-lg"
+            :style="{ backgroundColor: agent.color + '22' }"
+          >
+            <UIcon :name="agent.icon" class="h-4 w-4" :style="{ color: agent.color }" />
+          </div>
+          <div>
+            <span class="font-medium text-slate-200">{{ agent.label }}</span>
+            <span v-if="block"> on </span>
+            <span v-if="block" class="font-medium text-slate-200">{{ block.title }}</span>
+          </div>
+        </div>
+
+        <p class="text-base font-medium text-white">{{ decision.question }}</p>
+
+        <div class="grid gap-2">
+          <UButton
+            v-for="opt in decision.options"
+            :key="opt"
+            color="primary"
+            variant="soft"
+            block
+            class="justify-start"
+            @click="choose(opt)"
+          >
+            {{ opt }}
+          </UButton>
+        </div>
+        <p class="text-[11px] text-slate-500">
+          This is a visualization — any choice simply resumes the pipeline.
+        </p>
+      </div>
+    </template>
+  </UModal>
+</template>

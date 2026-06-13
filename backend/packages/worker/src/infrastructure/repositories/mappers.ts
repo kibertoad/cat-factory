@@ -1,0 +1,150 @@
+import type { BlockPatch } from '@cat-factory/core'
+import type {
+  Block,
+  BlockLevel,
+  BlockStatus,
+  BlockType,
+  ExecutionInstance,
+  ExecutionStatus,
+  Pipeline,
+  PipelineStep,
+  Workspace,
+} from '@cat-factory/contracts'
+
+// Row <-> domain mapping for the D1 (SQLite) tables. JSON-shaped columns are
+// (de)serialised here so the repositories stay focused on SQL.
+
+export interface WorkspaceRow {
+  id: string
+  name: string
+  created_at: number
+}
+
+export function rowToWorkspace(row: WorkspaceRow): Workspace {
+  return { id: row.id, name: row.name, createdAt: row.created_at }
+}
+
+export interface BlockRow {
+  id: string
+  title: string
+  type: string
+  description: string
+  pos_x: number
+  pos_y: number
+  status: string
+  progress: number
+  depends_on: string
+  execution_id: string | null
+  level: string
+  parent_id: string | null
+  confidence: number | null
+  confidence_threshold: number | null
+  module_name: string | null
+  features: string | null
+}
+
+export function rowToBlock(row: BlockRow): Block {
+  const block: Block = {
+    id: row.id,
+    title: row.title,
+    type: row.type as BlockType,
+    description: row.description,
+    position: { x: row.pos_x, y: row.pos_y },
+    status: row.status as BlockStatus,
+    progress: row.progress,
+    dependsOn: JSON.parse(row.depends_on) as string[],
+    executionId: row.execution_id,
+    level: row.level as BlockLevel,
+    parentId: row.parent_id,
+  }
+  if (row.confidence !== null) block.confidence = row.confidence
+  if (row.confidence_threshold !== null) block.confidenceThreshold = row.confidence_threshold
+  if (row.module_name !== null) block.moduleName = row.module_name
+  if (row.features !== null) block.features = JSON.parse(row.features) as string[]
+  return block
+}
+
+/** Full column tuple for inserting a block. */
+export function blockInsertValues(block: Block): Record<string, unknown> {
+  return {
+    id: block.id,
+    title: block.title,
+    type: block.type,
+    description: block.description,
+    pos_x: block.position.x,
+    pos_y: block.position.y,
+    status: block.status,
+    progress: block.progress,
+    depends_on: JSON.stringify(block.dependsOn),
+    execution_id: block.executionId,
+    level: block.level,
+    parent_id: block.parentId,
+    confidence: block.confidence ?? null,
+    confidence_threshold: block.confidenceThreshold ?? null,
+    module_name: block.moduleName ?? null,
+    features: block.features ? JSON.stringify(block.features) : null,
+  }
+}
+
+/** Map a domain patch onto `{ column: value }` pairs for an UPDATE. */
+export function blockPatchToColumns(patch: BlockPatch): Record<string, unknown> {
+  const set: Record<string, unknown> = {}
+  if (patch.title !== undefined) set.title = patch.title
+  if (patch.type !== undefined) set.type = patch.type
+  if (patch.description !== undefined) set.description = patch.description
+  if (patch.position !== undefined) {
+    set.pos_x = patch.position.x
+    set.pos_y = patch.position.y
+  }
+  if (patch.status !== undefined) set.status = patch.status
+  if (patch.progress !== undefined) set.progress = patch.progress
+  if (patch.dependsOn !== undefined) set.depends_on = JSON.stringify(patch.dependsOn)
+  if (patch.executionId !== undefined) set.execution_id = patch.executionId
+  if (patch.level !== undefined) set.level = patch.level
+  if (patch.parentId !== undefined) set.parent_id = patch.parentId
+  if (patch.confidence !== undefined) set.confidence = patch.confidence
+  if (patch.confidenceThreshold !== undefined) {
+    set.confidence_threshold = patch.confidenceThreshold
+  }
+  if (patch.moduleName !== undefined) set.module_name = patch.moduleName
+  if (patch.features !== undefined) {
+    set.features = patch.features ? JSON.stringify(patch.features) : null
+  }
+  return set
+}
+
+export interface PipelineRow {
+  id: string
+  name: string
+  agent_kinds: string
+}
+
+export function rowToPipeline(row: PipelineRow): Pipeline {
+  return {
+    id: row.id,
+    name: row.name,
+    agentKinds: JSON.parse(row.agent_kinds) as string[],
+  }
+}
+
+export interface ExecutionRow {
+  id: string
+  block_id: string
+  pipeline_id: string
+  pipeline_name: string
+  steps: string
+  current_step: number
+  status: string
+}
+
+export function rowToExecution(row: ExecutionRow): ExecutionInstance {
+  return {
+    id: row.id,
+    blockId: row.block_id,
+    pipelineId: row.pipeline_id,
+    pipelineName: row.pipeline_name,
+    steps: JSON.parse(row.steps) as PipelineStep[],
+    currentStep: row.current_step,
+    status: row.status as ExecutionStatus,
+  }
+}

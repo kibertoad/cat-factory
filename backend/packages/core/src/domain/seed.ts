@@ -1,0 +1,146 @@
+import type { Block, Pipeline } from './types'
+import { DEFAULT_CONFIDENCE_THRESHOLD } from './catalog'
+
+// Sample architecture used to populate a workspace on creation. Mirrors the
+// frontend's `app/utils/seed.ts`. Block ids are stable strings; because blocks
+// are keyed by (workspace_id, id) every workspace gets its own copy, so reusing
+// these ids across workspaces is safe.
+
+export function seedBlocks(): Block[] {
+  const base = (
+    b: Partial<Block> & Pick<Block, 'id' | 'title' | 'type' | 'position'>,
+  ): Block => ({
+    description: '',
+    status: 'planned',
+    progress: 0,
+    dependsOn: [],
+    executionId: null,
+    level: 'frame',
+    parentId: null,
+    ...b,
+  })
+
+  return [
+    base({
+      id: 'blk_frontend',
+      title: 'Web Frontend',
+      type: 'frontend',
+      position: { x: 80, y: 80 },
+      description: 'Customer-facing SPA consuming the API gateway.',
+      status: 'planned',
+    }),
+    base({
+      id: 'blk_api',
+      title: 'API Gateway',
+      type: 'api',
+      position: { x: 620, y: 80 },
+      description: 'Single entrypoint; routing, rate limiting, auth checks.',
+      status: 'planned',
+    }),
+    base({
+      id: 'blk_payments',
+      title: 'Payments (External)',
+      type: 'external',
+      position: { x: 1160, y: 80 },
+      description: 'Third-party payment provider integration.',
+      status: 'planned',
+    }),
+    base({
+      id: 'blk_auth',
+      title: 'Auth Service',
+      type: 'service',
+      position: { x: 80, y: 580 },
+      description: 'Issues and validates sessions and access tokens.',
+      status: 'ready',
+    }),
+    base({
+      id: 'blk_db',
+      title: 'Core Database',
+      type: 'database',
+      position: { x: 620, y: 580 },
+      description: 'Primary relational store for users, accounts and orders.',
+      status: 'done',
+      progress: 1,
+    }),
+    base({
+      id: 'blk_queue',
+      title: 'Notification Queue',
+      type: 'queue',
+      position: { x: 1160, y: 580 },
+      description: 'Async fan-out for emails and push notifications.',
+      status: 'planned',
+    }),
+
+    // Tasks (draggable) inside the Auth Service.
+    base({
+      id: 'task_login',
+      title: 'Login endpoint',
+      type: 'service',
+      position: { x: 24, y: 96 },
+      description: 'Issue a session on valid credentials.',
+      status: 'planned',
+      level: 'task',
+      parentId: 'blk_auth',
+      moduleName: 'Sessions',
+      features: ['Credential check', 'Session issue'],
+      confidenceThreshold: DEFAULT_CONFIDENCE_THRESHOLD,
+    }),
+    base({
+      id: 'task_refresh',
+      title: 'Token refresh',
+      type: 'service',
+      position: { x: 230, y: 96 },
+      description: 'Rotate access tokens against a refresh token.',
+      status: 'planned',
+      level: 'task',
+      parentId: 'blk_auth',
+      moduleName: 'Sessions',
+      features: ['Token rotation'],
+      dependsOn: ['task_login'],
+      confidenceThreshold: DEFAULT_CONFIDENCE_THRESHOLD,
+    }),
+
+    // A module that already exists, with an implemented task living inside it.
+    base({
+      id: 'mod_sessions',
+      title: 'Sessions',
+      type: 'service',
+      position: { x: 24, y: 250 },
+      description: 'Session lifecycle module.',
+      level: 'module',
+      parentId: 'blk_auth',
+    }),
+    base({
+      id: 'task_session',
+      title: 'Session store',
+      type: 'service',
+      position: { x: 16, y: 40 },
+      description: 'Persist and look up active sessions.',
+      status: 'done',
+      progress: 1,
+      level: 'task',
+      parentId: 'mod_sessions',
+      moduleName: 'Sessions',
+      features: ['Sliding expiry', 'Session repository'],
+      confidence: 0.92,
+      confidenceThreshold: DEFAULT_CONFIDENCE_THRESHOLD,
+    }),
+  ]
+}
+
+/** Reusable pipelines shown in the pipeline palette on first load. */
+export function seedPipelines(): Pipeline[] {
+  return [
+    {
+      id: 'pl_full',
+      name: 'Full build',
+      agentKinds: ['architect', 'researcher', 'coder', 'tester', 'reviewer'],
+    },
+    { id: 'pl_quick', name: 'Quick implement', agentKinds: ['coder', 'tester'] },
+    {
+      id: 'pl_integrate',
+      name: 'Integrate & ship',
+      agentKinds: ['integrator', 'tester', 'documenter'],
+    },
+  ]
+}

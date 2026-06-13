@@ -1,0 +1,24 @@
+name = "cat-factory-backend"
+main = "src/index.ts"
+compatibility_date = "2025-06-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Local D1 database. `database_id` is a placeholder for local/test use; replace
+# it with the id printed by `wrangler d1 create cat_factory` before deploying.
+[[d1_databases]]
+binding = "DB"
+database_name = "cat_factory"
+database_id = "00000000-0000-0000-0000-000000000000"
+migrations_dir = "migrations"
+
+# Cloudflare Workers AI binding — one of the providers the agent executor can
+# route to. Optional: leave agents disabled and this is unused.
+[ai]
+binding = "AI"
+
+[vars]
+# Agent LLM configuration (see src/infrastructure/config.ts). Agents are off by
+# default so the service runs as a pure simulation until an operator opts in.
+AGENTS_ENABLED = "false"
+AGENT_DEFAULT_PROVIDER = "workers-ai"
+AGENT_DEFAULT_MODEL = "@cf/meta/llama-3.1-8b-instruct"
