@@ -3,6 +3,7 @@ export type {
   BlockRepository,
   ExecutionRepository,
   PipelineRepository,
+  RunRef,
   WorkspaceRepository,
 } from './repositories'
 export type { Clock, IdGenerator, Rng } from './runtime'
@@ -13,3 +14,4 @@ export type {
   AgentRunContext,
   AgentRunResult,
 } from './agent-executor'
+export { type WorkRunner, NoopWorkRunner } from './work-runner'

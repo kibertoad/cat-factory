@@ -13,9 +13,11 @@ import type {
 } from '../../ports/repositories'
 import type { IdGenerator } from '../../ports/runtime'
 import type { AgentExecutor, AgentRunContext } from '../../ports/agent-executor'
+import type { WorkRunner } from '../../ports/work-runner'
 import { serviceOf } from '../board/board.logic'
 import type { BoardService } from '../board/BoardService'
 import { requireWorkspace } from '../workspaces/WorkspaceService'
+import type { AdvanceOptions, AdvanceResult } from './advance'
 
 export interface ExecutionServiceDependencies {
   workspaceRepository: WorkspaceRepository
@@ -24,6 +26,7 @@ export interface ExecutionServiceDependencies {
   executionRepository: ExecutionRepository
   idGenerator: IdGenerator
   agentExecutor: AgentExecutor
+  workRunner: WorkRunner
   boardService: BoardService
 }
 
@@ -42,6 +45,7 @@ export class ExecutionService {
   private readonly executionRepository: ExecutionRepository
   private readonly idGenerator: IdGenerator
   private readonly agentExecutor: AgentExecutor
+  private readonly workRunner: WorkRunner
   private readonly board: BoardService
 
   constructor({
@@ -51,6 +55,7 @@ export class ExecutionService {
     executionRepository,
     idGenerator,
     agentExecutor,
+    workRunner,
     boardService,
   }: ExecutionServiceDependencies) {
     this.workspaceRepository = workspaceRepository
@@ -59,6 +64,7 @@ export class ExecutionService {
     this.executionRepository = executionRepository
     this.idGenerator = idGenerator
     this.agentExecutor = agentExecutor
+    this.workRunner = workRunner
     this.board = boardService
   }
 
@@ -107,7 +113,27 @@ export class ExecutionService {
       progress: 0,
       executionId: instance.id,
     })
+    // Hand the run off to the durable runner so it progresses without a browser
+    // driving `tick`. With the no-op runner (tick/simulator mode) this does
+    // nothing and progress is driven by `tick` as before.
+    await this.workRunner.startRun(workspaceId, instance.id)
     return instance
+  }
+
+  /**
+   * Advance a single run by exactly one step and report what happened. This is
+   * the durable driver's entry point: it reloads the run from storage (so it is
+   * safe under replay/retry), no-ops unless the run is actively running, and
+   * otherwise performs one agent step via the shared {@link stepInstance} logic.
+   */
+  async advanceInstance(
+    workspaceId: string,
+    executionId: string,
+    options: AdvanceOptions = {},
+  ): Promise<AdvanceResult> {
+    const instance = await this.executionRepository.get(workspaceId, executionId)
+    if (!instance || instance.status !== 'running') return { kind: 'noop' }
+    return this.stepInstance(workspaceId, instance, options)
   }
 
   /**
@@ -130,20 +156,21 @@ export class ExecutionService {
   private async stepInstance(
     workspaceId: string,
     instance: ExecutionInstance,
-  ): Promise<void> {
+    options: AdvanceOptions = {},
+  ): Promise<AdvanceResult> {
     const step = instance.steps[instance.currentStep]
-    if (!step) return
+    if (!step) return { kind: 'noop' }
     if (step.state === 'waiting_decision') {
       instance.status = 'blocked'
       await this.executionRepository.upsert(workspaceId, instance)
-      return
+      return { kind: 'awaiting_decision', decisionId: step.decision!.id }
     }
     step.state = 'working'
 
     const block = await this.blockRepository.get(workspaceId, instance.blockId)
-    if (!block) return
+    if (!block) return { kind: 'noop' }
     const isFinalStep = instance.currentStep === instance.steps.length - 1
-    const result = await this.runAgent(instance, step, isFinalStep, block)
+    const result = await this.runAgent(instance, step, isFinalStep, block, options)
 
     // The agent asked for a human decision and this step hasn't resolved one yet.
     if (result.decision && !step.decision?.chosen) {
@@ -157,7 +184,7 @@ export class ExecutionService {
       instance.status = 'blocked'
       await this.updateBlockProgress(workspaceId, instance, 'blocked')
       await this.executionRepository.upsert(workspaceId, instance)
-      return
+      return { kind: 'awaiting_decision', decisionId: step.decision.id }
     }
 
     // The step completed.
@@ -169,21 +196,29 @@ export class ExecutionService {
     if (isFinalStep) {
       instance.status = 'done'
       await this.finalizeBlock(workspaceId, instance, result.confidence)
-    } else {
-      instance.currentStep += 1
-      const next = instance.steps[instance.currentStep]
-      if (next) next.state = 'working'
-      await this.updateBlockProgress(workspaceId, instance, 'in_progress')
+      await this.executionRepository.upsert(workspaceId, instance)
+      return { kind: 'done' }
     }
+    instance.currentStep += 1
+    const next = instance.steps[instance.currentStep]
+    if (next) next.state = 'working'
+    await this.updateBlockProgress(workspaceId, instance, 'in_progress')
     await this.executionRepository.upsert(workspaceId, instance)
+    return { kind: 'continue' }
   }
 
-  /** Build the agent context and invoke the agent, swallowing failures. */
+  /**
+   * Build the agent context and invoke the agent. Failures are swallowed into
+   * the step output so the simulation never wedges — unless `rethrowAgentErrors`
+   * is set (the durable path), in which case the error propagates so the
+   * driver's per-step retry can take over.
+   */
   private async runAgent(
     instance: ExecutionInstance,
     step: PipelineStep,
     isFinalStep: boolean,
     block: Block,
+    options: AdvanceOptions = {},
   ) {
     const context: AgentRunContext = {
       agentKind: step.agentKind,
@@ -211,7 +246,10 @@ export class ExecutionService {
     try {
       return await this.agentExecutor.run(context)
     } catch (error) {
-      // A failed agent must not wedge the simulation; record and complete.
+      // The durable driver wants real failures to surface so its per-step retry
+      // can kick in (and the error gets persisted after retries are exhausted).
+      if (options.rethrowAgentErrors) throw error
+      // Otherwise a failed agent must not wedge the simulation; record and complete.
       return {
         output: `Agent error: ${error instanceof Error ? error.message : String(error)}`,
       }
@@ -328,6 +366,10 @@ export class ExecutionService {
     if (instance.status === 'blocked') instance.status = 'running'
     await this.updateBlockProgress(workspaceId, instance, 'in_progress')
     await this.executionRepository.upsert(workspaceId, instance)
+    // Wake the parked durable run, if any. The DB write above remains the source
+    // of truth (so tick mode and the sweeper still work); the signal is an
+    // optimisation that lets a workflow continue immediately.
+    await this.workRunner.signalDecision(workspaceId, instance.id, decisionId, choice)
     return instance
   }
 
@@ -342,10 +384,28 @@ export class ExecutionService {
     return this.requireBlock(workspaceId, blockId)
   }
 
+  /**
+   * Record a terminal agent failure: persist the error, stop the run, and open
+   * the block for human review (`pr_ready`). Called by the durable driver once a
+   * step has exhausted its retries.
+   */
+  async failRun(workspaceId: string, executionId: string, message: string): Promise<void> {
+    const instance = await this.executionRepository.get(workspaceId, executionId)
+    if (!instance) return
+    await this.executionRepository.markError(workspaceId, executionId, message)
+    await this.blockRepository.update(workspaceId, instance.blockId, {
+      status: 'pr_ready',
+      progress: 1,
+    })
+  }
+
   /** Cancel the run on a block, returning it to `planned`. */
   async cancel(workspaceId: string, blockId: string): Promise<Block> {
     await this.requireWorkspace(workspaceId)
     await this.requireBlock(workspaceId, blockId)
+    // Tear down the durable run (if any) before removing its record.
+    const existing = await this.executionRepository.getByBlock(workspaceId, blockId)
+    if (existing) await this.workRunner.cancelRun(workspaceId, existing.id)
     await this.executionRepository.deleteByBlock(workspaceId, blockId)
     await this.blockRepository.update(workspaceId, blockId, {
       status: 'planned',

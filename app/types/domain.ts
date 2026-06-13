@@ -148,6 +148,11 @@ export interface WorkspaceSnapshot {
   blocks: Block[]
   pipelines: Pipeline[]
   executions: ExecutionInstance[]
+  /**
+   * How the server advances runs: 'workflow' (durable, server-driven) or 'tick'
+   * (this client drives progress by polling). Absent on older servers → 'tick'.
+   */
+  executionMode?: 'workflow' | 'tick'
 }
 
 /** Level-of-detail buckets driven by the canvas zoom level. */

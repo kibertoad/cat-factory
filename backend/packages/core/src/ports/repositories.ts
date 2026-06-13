@@ -40,10 +40,24 @@ export interface PipelineRepository {
   delete(workspaceId: string, id: string): Promise<void>
 }
 
+/** A lightweight reference to a run, used by the cron sweeper. */
+export interface RunRef {
+  workspaceId: string
+  id: string
+}
+
 export interface ExecutionRepository {
   listByWorkspace(workspaceId: string): Promise<ExecutionInstance[]>
   get(workspaceId: string, id: string): Promise<ExecutionInstance | null>
   getByBlock(workspaceId: string, blockId: string): Promise<ExecutionInstance | null>
   upsert(workspaceId: string, execution: ExecutionInstance): Promise<void>
   deleteByBlock(workspaceId: string, blockId: string): Promise<void>
+  /**
+   * Runs still marked `running` whose lease (`updated_at`) is older than the
+   * given epoch-ms cutoff — i.e. candidates the durable driver may have dropped.
+   * Spans all workspaces so a single cron pass can repair the whole system.
+   */
+  listStale(olderThanEpochMs: number): Promise<RunRef[]>
+  /** Record a terminal agent failure: store `error` and stop the run. */
+  markError(workspaceId: string, id: string, error: string): Promise<void>
 }

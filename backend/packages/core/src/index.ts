@@ -24,6 +24,7 @@ export {
   ExecutionService,
   type ExecutionServiceDependencies,
 } from './modules/execution/ExecutionService'
+export type { AdvanceOptions, AdvanceResult } from './modules/execution/advance'
 export {
   WorkspaceService,
   requireWorkspace,

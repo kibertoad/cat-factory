@@ -87,5 +87,11 @@ export const workspaceSnapshotSchema = v.object({
   blocks: v.array(blockSchema),
   pipelines: v.array(pipelineSchema),
   executions: v.array(executionInstanceSchema),
+  /**
+   * How runs advance: 'workflow' (durable, server-driven) or 'tick' (the client
+   * drives progress by polling). Attached by the worker; optional so the core
+   * snapshot builder need not know the deployment's execution mode.
+   */
+  executionMode: v.optional(v.picklist(['workflow', 'tick'])),
 })
 export type WorkspaceSnapshot = v.InferOutput<typeof workspaceSnapshotSchema>
