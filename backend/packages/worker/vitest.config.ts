@@ -14,14 +14,21 @@ export default defineWorkersConfig(async () => {
       setupFiles: ['./test/apply-migrations.ts'],
       poolOptions: {
         workers: {
+          // Workflows are declared in wrangler.toml; the pool requires shared
+          // (non-isolated) storage to run them. Tests stay independent by
+          // scoping every aggregate under a freshly-created workspace id.
+          isolatedStorage: false,
           wrangler: { configPath: './wrangler.toml' },
           miniflare: {
             // Surface the parsed migrations to the setup file, and force a
             // deterministic seed so the simulator path is reproducible if used.
+            // EXECUTION_MODE stays 'tick' so the engine behaves deterministically
+            // and the durable Workflows path isn't exercised in-pool.
             bindings: {
               TEST_MIGRATIONS: migrations,
               RNG_SEED: '42',
               AGENTS_ENABLED: 'false',
+              EXECUTION_MODE: 'tick',
             },
           },
         },

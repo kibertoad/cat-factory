@@ -16,9 +16,43 @@ migrations_dir = "migrations"
 [ai]
 binding = "AI"
 
+# Durable execution engine. Each pipeline run becomes one Workflows instance
+# (see src/infrastructure/workflows/ExecutionWorkflow.ts). Only used when
+# EXECUTION_MODE = "workflow"; tick mode leaves it unused.
+[[workflows]]
+binding = "EXECUTION_WORKFLOW"
+name = "cat-factory-execution"
+class_name = "ExecutionWorkflow"
+
+# Optional admission queue. By default runs are created directly by
+# WorkflowsWorkRunner and bounded by Workflows' own concurrency. To instead cap
+# how fast runs are *started*, create the queues and uncomment both blocks (and
+# the EXECUTION_QUEUE binding becomes active automatically):
+#   wrangler queues create cat-factory-execution-starts
+#   wrangler queues create cat-factory-execution-dlq
+# [[queues.producers]]
+# binding = "EXECUTION_QUEUE"
+# queue = "cat-factory-execution-starts"
+#
+# [[queues.consumers]]
+# queue = "cat-factory-execution-starts"
+# max_batch_size = 1
+# max_concurrency = 10          # bounds concurrent run starts (1-250)
+# max_retries = 3
+# dead_letter_queue = "cat-factory-execution-dlq"
+
+# Backstop sweeper: re-drives runs whose Workflows instance died (see
+# src/index.ts `scheduled`).
+[triggers]
+crons = ["*/2 * * * *"]
+
 [vars]
 # Agent LLM configuration (see src/infrastructure/config.ts). Agents are off by
 # default so the service runs as a pure simulation until an operator opts in.
 AGENTS_ENABLED = "false"
 AGENT_DEFAULT_PROVIDER = "workers-ai"
 AGENT_DEFAULT_MODEL = "@cf/meta/llama-3.1-8b-instruct"
+# Execution engine: "tick" (legacy browser-driven polling, default) or
+# "workflow" (durable, server-driven via Cloudflare Workflows).
+EXECUTION_MODE = "tick"
+DECISION_TIMEOUT = "24 hours"

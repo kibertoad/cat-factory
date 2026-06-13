@@ -6,10 +6,18 @@ import type { Env } from './env'
 // config — in particular the agent model routing ("which LLM, with what config,
 // for what"). Operators tune behaviour entirely through wrangler vars / secrets.
 
+export type ExecutionMode = 'workflow' | 'tick'
+
 export interface AppConfig {
   agents: {
     enabled: boolean
     routing: AgentRouting
+  }
+  execution: {
+    /** 'workflow' drives runs durably; 'tick' keeps the legacy polling engine. */
+    mode: ExecutionMode
+    /** Human-decision park timeout passed to the workflow's waitForEvent. */
+    decisionTimeout: string
   }
 }
 
@@ -64,6 +72,12 @@ export function loadConfig(env: Env): AppConfig {
         default: defaultConfig,
         byKind: parseModelOverrides(env.AGENT_MODELS),
       },
+    },
+    execution: {
+      // Default to 'tick' so behaviour is unchanged until an operator opts in,
+      // mirroring the AGENTS_ENABLED default-off convention.
+      mode: env.EXECUTION_MODE === 'workflow' ? 'workflow' : 'tick',
+      decisionTimeout: env.DECISION_TIMEOUT?.trim() || '24 hours',
     },
   }
 }

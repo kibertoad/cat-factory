@@ -135,6 +135,10 @@ export interface ExecutionRow {
   steps: string
   current_step: number
   status: string
+  // Added in migration 0002 for durable execution; not surfaced on the entity.
+  updated_at: number
+  error: string | null
+  workflow_instance_id: string | null
 }
 
 export function rowToExecution(row: ExecutionRow): ExecutionInstance {

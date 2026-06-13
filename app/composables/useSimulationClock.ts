@@ -1,25 +1,29 @@
 import { useIntervalFn } from '@vueuse/core'
 
-/** Drives the agent simulation by polling the backend's tick endpoint. Mount
- * once (e.g. on the board page). Each tick advances every running pipeline on
- * the server; honours the UI play/pause toggle and skips when idle. */
+/** Keeps the board in sync with the backend's running pipelines. Mount once
+ * (e.g. on the board page). In 'tick' mode each interval advances every running
+ * pipeline on the server; in 'workflow' mode runs progress durably server-side,
+ * so the interval only polls the latest state. Honours the UI play/pause toggle
+ * and skips when idle. */
 export function useSimulationClock(intervalMs = 850) {
   const execution = useExecutionStore()
   const ui = useUiStore()
   const workspace = useWorkspaceStore()
 
-  // Guard against overlapping ticks if a round-trip outlasts the interval.
+  // Guard against overlapping requests if a round-trip outlasts the interval.
   let inFlight = false
 
   const { pause, resume, isActive } = useIntervalFn(async () => {
     if (!ui.simRunning || !workspace.ready || inFlight) return
-    // Nothing to advance until a human resolves a decision (which refreshes).
+    // Nothing to do until something is running (a resolved decision refreshes).
     if (!execution.instances.some((e) => e.status === 'running')) return
     inFlight = true
     try {
-      await execution.tick()
+      // In workflow mode the server drives progress; we only poll fresh state.
+      if (workspace.executionMode === 'workflow') await workspace.refresh()
+      else await execution.tick()
     } catch (e) {
-      console.error('simulation tick failed', e)
+      console.error('simulation clock poll failed', e)
     } finally {
       inFlight = false
     }

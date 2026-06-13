@@ -3,13 +3,16 @@ import {
   type AgentExecutor,
   type Core,
   type CoreDependencies,
+  NoopWorkRunner,
   type Rng,
   SimulatorAgentExecutor,
+  type WorkRunner,
   createCore,
 } from '@cat-factory/core'
 import { type AppConfig, loadConfig } from './config'
 import type { Env } from './env'
 import { CloudflareModelProvider } from './ai/CloudflareModelProvider'
+import { WorkflowsWorkRunner } from './workflows/WorkflowsWorkRunner'
 import { D1BlockRepository } from './repositories/D1BlockRepository'
 import { D1ExecutionRepository } from './repositories/D1ExecutionRepository'
 import { D1PipelineRepository } from './repositories/D1PipelineRepository'
@@ -41,19 +44,37 @@ function selectAgentExecutor(env: Env, config: AppConfig, rng: Rng): AgentExecut
   return new SimulatorAgentExecutor({ rng })
 }
 
+/**
+ * Pick how runs are driven:
+ *   - workflow mode + a Workflows binding → durable, server-driven execution
+ *   - otherwise                            → no-op (progress driven by `tick`)
+ * Tests override `workRunner` with a fake.
+ */
+function selectWorkRunner(env: Env, config: AppConfig): WorkRunner {
+  if (config.execution.mode === 'workflow' && env.EXECUTION_WORKFLOW) {
+    return new WorkflowsWorkRunner({
+      workflow: env.EXECUTION_WORKFLOW,
+      queue: env.EXECUTION_QUEUE,
+    })
+  }
+  return new NoopWorkRunner()
+}
+
 export function buildContainer(env: Env, overrides: Partial<CoreDependencies> = {}): Container {
   const config = loadConfig(env)
   const db = env.DB
+  const clock = new SystemClock()
   const rng: Rng = env.RNG_SEED ? new SeededRng(Number(env.RNG_SEED)) : new CryptoRng()
 
   const dependencies: CoreDependencies = {
     workspaceRepository: new D1WorkspaceRepository({ db }),
     blockRepository: new D1BlockRepository({ db }),
     pipelineRepository: new D1PipelineRepository({ db }),
-    executionRepository: new D1ExecutionRepository({ db }),
+    executionRepository: new D1ExecutionRepository({ db, clock }),
     idGenerator: new CryptoIdGenerator(),
-    clock: new SystemClock(),
+    clock,
     agentExecutor: selectAgentExecutor(env, config, rng),
+    workRunner: selectWorkRunner(env, config),
     ...overrides,
   }
 
