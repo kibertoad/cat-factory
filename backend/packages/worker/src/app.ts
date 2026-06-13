@@ -8,6 +8,8 @@ import { boardController } from './modules/board/BoardController'
 import { executionController } from './modules/execution/ExecutionController'
 import { pipelineController } from './modules/pipelines/PipelineController'
 import { workspaceController } from './modules/workspaces/WorkspaceController'
+import { githubController } from './modules/github/GitHubController'
+import { githubWebhookController } from './modules/github/GitHubWebhookController'
 
 export interface CreateAppOptions {
   /** Override core dependencies — used by tests (e.g. a fake agent executor). */
@@ -35,6 +37,9 @@ export function createApp(options: CreateAppOptions = {}): Hono<AppEnv> {
   app.route('/workspaces/:workspaceId', boardController())
   app.route('/workspaces/:workspaceId', pipelineController())
   app.route('/workspaces/:workspaceId', executionController())
+  app.route('/workspaces/:workspaceId', githubController())
+  // GitHub-facing (webhooks + setup callback); not workspace-scoped.
+  app.route('/github', githubWebhookController())
 
   app.onError(handleError)
 

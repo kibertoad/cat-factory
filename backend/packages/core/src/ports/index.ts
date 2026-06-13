@@ -17,3 +17,27 @@ export type {
   AgentTokenUsage,
 } from './agent-executor'
 export { type WorkRunner, NoopWorkRunner } from './work-runner'
+export type {
+  CommitFilesResult,
+  GitHubClient,
+  GitHubRepoRef,
+  InstallationMeta,
+  ListOptions,
+  Paged,
+  RateLimitSnapshot,
+} from './github-client'
+export type {
+  BranchProjectionRepository,
+  CheckRunProjectionRepository,
+  CommitProjectionRepository,
+  GitHubInstallation,
+  GitHubInstallationRepository,
+  IssueProjectionRepository,
+  PullRequestProjectionRepository,
+  RateLimitRepository,
+  RepoProjectionRepository,
+  StaleRepoRef,
+  SyncCursor,
+  SyncCursorKind,
+} from './github-repositories'
+export type { WebhookVerifier } from './webhook-verifier'

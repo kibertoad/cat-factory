@@ -28,6 +28,17 @@ export interface AppConfig {
   }
   /** Pricing + budget for the spend safeguard. */
   spend: SpendPricing
+  /** GitHub integration config; `enabled` is false unless a GitHub App is set up. */
+  github: GitHubConfig
+}
+
+export interface GitHubConfig {
+  enabled: boolean
+  appId: string
+  appSlug: string
+  apiBase: string
+  /** Browser redirect target after a successful connect (falls back to '/'). */
+  setupRedirectUrl: string
 }
 
 function num(value: string | undefined): number | undefined {
@@ -90,6 +101,20 @@ function parsePriceOverrides(raw: string | undefined): Record<string, ModelPrice
   return out
 }
 
+function loadGitHubConfig(env: Env): GitHubConfig {
+  // Enabled when the App id and both secrets are present; the integration is
+  // entirely opt-in, matching the AGENTS_ENABLED default-off convention.
+  const appId = env.GITHUB_APP_ID?.trim() ?? ''
+  const enabled = appId !== '' && !!env.GITHUB_APP_PRIVATE_KEY && !!env.GITHUB_WEBHOOK_SECRET
+  return {
+    enabled,
+    appId,
+    appSlug: env.GITHUB_APP_SLUG?.trim() ?? '',
+    apiBase: env.GITHUB_API_BASE?.trim() || 'https://api.github.com',
+    setupRedirectUrl: env.GITHUB_SETUP_REDIRECT_URL?.trim() || '/',
+  }
+}
+
 function loadSpendPricing(env: Env): SpendPricing {
   const limit = num(env.SPEND_MONTHLY_LIMIT)
   return {
@@ -126,5 +151,6 @@ export function loadConfig(env: Env): AppConfig {
       decisionTimeout: env.DECISION_TIMEOUT?.trim() || '24 hours',
     },
     spend: loadSpendPricing(env),
+    github: loadGitHubConfig(env),
   }
 }

@@ -15,6 +15,10 @@ export default defineWorkersConfig(async () => {
           // (non-isolated) storage to run them. Tests stay independent by
           // scoping every aggregate under a freshly-created workspace id.
           isolatedStorage: false,
+          // Run all test files in one worker, sequentially. With shared storage
+          // they target the same D1, so applying migrations per file in parallel
+          // races on CREATE TABLE; serialising removes that race.
+          singleWorker: true,
           wrangler: { configPath: './wrangler.toml' },
           miniflare: {
             // Surface the parsed migrations to the setup file, and force a
@@ -26,6 +30,10 @@ export default defineWorkersConfig(async () => {
               RNG_SEED: '42',
               AGENTS_ENABLED: 'false',
               EXECUTION_MODE: 'tick',
+              // A non-empty secret so the GitHub connect-state HMAC signer works
+              // in tests. GITHUB_APP_ID stays unset, so the integration is still
+              // "disabled" by config and tests wire the module via overrides.
+              GITHUB_WEBHOOK_SECRET: 'test-state-secret',
             },
           },
         },
