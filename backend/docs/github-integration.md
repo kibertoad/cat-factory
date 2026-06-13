@@ -16,11 +16,11 @@ For the design rationale see [adr/0001-github-app-integration.md](./adr/0001-git
 
 ## Why a GitHub App (and not OAuth / PAT)
 
-| Option | Identity / isolation | Webhooks | Rate limits | Verdict |
-|---|---|---|---|---|
-| **GitHub App** (chosen) | Per-**installation** tokens → one credential scope per workspace | Built in, one secret | Scale per installation | ✅ Multi-tenant read/write/webhooks |
-| OAuth App | User-scoped tokens; no per-install isolation | Configured per repo | Per user | ✖ No clean tenant isolation |
-| PAT (classic / fine-grained) | Single user; manual rotation | None | Per user | ✖ Not multi-tenant |
+| Option                       | Identity / isolation                                             | Webhooks             | Rate limits            | Verdict                             |
+| ---------------------------- | ---------------------------------------------------------------- | -------------------- | ---------------------- | ----------------------------------- |
+| **GitHub App** (chosen)      | Per-**installation** tokens → one credential scope per workspace | Built in, one secret | Scale per installation | ✅ Multi-tenant read/write/webhooks |
+| OAuth App                    | User-scoped tokens; no per-install isolation                     | Configured per repo  | Per user               | ✖ No clean tenant isolation         |
+| PAT (classic / fine-grained) | Single user; manual rotation                                     | None                 | Per user               | ✖ Not multi-tenant                  |
 
 A GitHub App is the only model that cleanly satisfies all three requirements at
 once: **multi-tenant**, **read + write**, and **webhooks**. Each cat-factory
@@ -58,6 +58,7 @@ secrets). With it unconfigured, nothing about the existing system changes.
 ```
 
 ### Core ports (`backend/packages/core/src/ports`)
+
 - **`GitHubClient`** (`github-client.ts`) — the narrow REST surface we use
   (installation discovery, reads, and writes incl. the Git Data API). Read methods
   return projection-shaped entities.
@@ -67,11 +68,12 @@ secrets). With it unconfigured, nothing about the existing system changes.
 - **`WebhookVerifier`** (`webhook-verifier.ts`) — HMAC verification of deliveries.
 
 ### Core services (`backend/packages/core/src/modules/github`)
+
 - **`GitHubInstallationService`** — connect/disconnect, the workspace↔installation
   binding, and `requireInstallation`.
-- **`GitHubSyncService`** — the *pull* side: fetch from `GitHubClient`, persist
+- **`GitHubSyncService`** — the _pull_ side: fetch from `GitHubClient`, persist
   projections, advance per-repo cursors. Drives incremental resync and full backfill.
-- **`WebhookService`** — the *push* side: apply the resource embedded in a verified
+- **`WebhookService`** — the _push_ side: apply the resource embedded in a verified
   delivery directly to the projection (no extra API call) and handle install lifecycle.
 - **`GitHubService`** — the read/write facade for the API controller (reads from D1;
   writes via `GitHubClient`, then opportunistically refresh the projection).
@@ -79,6 +81,7 @@ secrets). With it unconfigured, nothing about the existing system changes.
   the fetch client and the webhook consumer.
 
 ### Worker adapters (`backend/packages/worker/src/infrastructure/github`)
+
 - **`GitHubAppAuth`** — RS256 app JWT + installation-token mint/cache, all on Web Crypto.
 - **`FetchGitHubClient`** — the only code that calls `api.github.com`; auth,
   rate-limit accounting, conditional requests, pagination, Git Data API writes.
@@ -156,16 +159,16 @@ delta listing.
 
 ## HTTP endpoints
 
-| Method | Path | Purpose |
-|---|---|---|
-| `POST` | `/github/webhooks` | Verified webhook receiver (GitHub-facing) |
-| `GET`  | `/github/setup/callback` | App install callback (browser-facing) |
-| `GET`  | `/workspaces/:id/github/install-url` | Signed install URL |
-| `GET`/`POST`/`DELETE` | `/workspaces/:id/github/connection` (+ `/connect`) | Manage the binding |
-| `POST` | `/workspaces/:id/github/resync` | Trigger resync (incremental / repo / full) |
-| `GET`  | `/workspaces/:id/github/repos` · `…/repos/:repoId/branches` · `…/pulls` · `…/issues` | Projection reads |
-| `POST` | `…/repos/:repoId/branches` · `…/commits` · `…/pulls` | Writes |
-| `PUT`  | `…/repos/:repoId/pulls/:number/merge` | Merge a PR |
-| `POST` | `…/repos/:repoId/issues/:number/comments` | Comment |
+| Method                | Path                                                                                 | Purpose                                    |
+| --------------------- | ------------------------------------------------------------------------------------ | ------------------------------------------ |
+| `POST`                | `/github/webhooks`                                                                   | Verified webhook receiver (GitHub-facing)  |
+| `GET`                 | `/github/setup/callback`                                                             | App install callback (browser-facing)      |
+| `GET`                 | `/workspaces/:id/github/install-url`                                                 | Signed install URL                         |
+| `GET`/`POST`/`DELETE` | `/workspaces/:id/github/connection` (+ `/connect`)                                   | Manage the binding                         |
+| `POST`                | `/workspaces/:id/github/resync`                                                      | Trigger resync (incremental / repo / full) |
+| `GET`                 | `/workspaces/:id/github/repos` · `…/repos/:repoId/branches` · `…/pulls` · `…/issues` | Projection reads                           |
+| `POST`                | `…/repos/:repoId/branches` · `…/commits` · `…/pulls`                                 | Writes                                     |
+| `PUT`                 | `…/repos/:repoId/pulls/:number/merge`                                                | Merge a PR                                 |
+| `POST`                | `…/repos/:repoId/issues/:number/comments`                                            | Comment                                    |
 
 All workspace-scoped endpoints return `503` when the integration is not configured.

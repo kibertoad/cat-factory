@@ -12,15 +12,18 @@ Create an App at **Settings → Developer settings → GitHub Apps → New GitHu
 (org-level for an org installation).
 
 **Webhook**
+
 - Active: ✅
 - Webhook URL: `https://<your-worker-host>/github/webhooks`
 - Webhook secret: generate a strong random string — this is `GITHUB_WEBHOOK_SECRET`.
 
 **Callback / Setup**
+
 - Setup URL: `https://<your-worker-host>/github/setup/callback`
 - "Redirect on update": ✅ (so re-installs hit the callback too)
 
 **Repository permissions** (minimum for current features)
+
 - Contents: **Read & write** (branches, commits via Git Data API)
 - Pull requests: **Read & write**
 - Issues: **Read & write**
@@ -29,6 +32,7 @@ Create an App at **Settings → Developer settings → GitHub Apps → New GitHu
 - Commit statuses: **Read-only** (optional, alongside checks)
 
 **Subscribe to events**
+
 - `Push`, `Pull request`, `Issues`, `Check run`
 - (Installation lifecycle events are delivered automatically.)
 
@@ -117,16 +121,16 @@ pnpm --filter @cat-factory/worker run deploy
 
 ## Troubleshooting
 
-| Symptom | Likely cause | Fix |
-|---|---|---|
-| `503` from every `/github/*` endpoint | Integration disabled | Set `GITHUB_APP_ID` + both secrets; redeploy |
-| Key import error mentioning PKCS#1 | Key is `BEGIN RSA PRIVATE KEY` | Convert with `openssl pkcs8` (step 2) |
-| Webhooks return `401` | Wrong `GITHUB_WEBHOOK_SECRET`, or a proxy mutated the body | Ensure the secret matches the App's; verify the raw body isn't re-encoded |
-| `setup/callback` returns `401` | Invalid/expired `state` | Start from `install-url` (don't hand-craft the URL); ensure `GITHUB_WEBHOOK_SECRET` is stable |
-| `Failed to mint installation token (HTTP 401)` | App JWT invalid (wrong App ID / key / clock skew) | Confirm `GITHUB_APP_ID` and the PKCS#8 key; the JWT backdates `iat` 60s for skew |
-| Projections look stale | Missed webhook | The `*/2` cron reconciles stale repos; or `POST …/github/resync` (optionally `{ "full": true }`) |
-| Writes 403 / "Resource not accessible by integration" | Missing App permission | Grant the needed permission and **accept the permission update** on the installation |
-| Hitting rate limits | Too much polling | Prefer webhooks; check the `github_rate_limits` ledger; the client honours `Retry-After` |
+| Symptom                                               | Likely cause                                               | Fix                                                                                              |
+| ----------------------------------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `503` from every `/github/*` endpoint                 | Integration disabled                                       | Set `GITHUB_APP_ID` + both secrets; redeploy                                                     |
+| Key import error mentioning PKCS#1                    | Key is `BEGIN RSA PRIVATE KEY`                             | Convert with `openssl pkcs8` (step 2)                                                            |
+| Webhooks return `401`                                 | Wrong `GITHUB_WEBHOOK_SECRET`, or a proxy mutated the body | Ensure the secret matches the App's; verify the raw body isn't re-encoded                        |
+| `setup/callback` returns `401`                        | Invalid/expired `state`                                    | Start from `install-url` (don't hand-craft the URL); ensure `GITHUB_WEBHOOK_SECRET` is stable    |
+| `Failed to mint installation token (HTTP 401)`        | App JWT invalid (wrong App ID / key / clock skew)          | Confirm `GITHUB_APP_ID` and the PKCS#8 key; the JWT backdates `iat` 60s for skew                 |
+| Projections look stale                                | Missed webhook                                             | The `*/2` cron reconciles stale repos; or `POST …/github/resync` (optionally `{ "full": true }`) |
+| Writes 403 / "Resource not accessible by integration" | Missing App permission                                     | Grant the needed permission and **accept the permission update** on the installation             |
+| Hitting rate limits                                   | Too much polling                                           | Prefer webhooks; check the `github_rate_limits` ledger; the client honours `Retry-After`         |
 
 **Rotating the webhook secret:** update it in the App settings and
 `wrangler secret put GITHUB_WEBHOOK_SECRET`, then redeploy. **Rotating the private
