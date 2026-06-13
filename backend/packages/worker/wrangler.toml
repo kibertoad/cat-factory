@@ -119,3 +119,12 @@ GITHUB_OAUTH_CLIENT_ID = ""
 # AUTH_SESSION_TTL_HOURS = "168"
 # Restrict sign-in to specific GitHub users (comma-separated; empty = anyone):
 # AUTH_ALLOWED_LOGINS = "octocat,hubot"
+
+# Confluence integration (see src/infrastructure/config.ts). Off by default. Turn
+# it on to let workspaces link requirements/RFCs/PRDs and spawn board structure
+# from them. Per-workspace site credentials (base URL, account email, API token)
+# are entered in the app and stored in D1 — there are no Confluence secrets here.
+# The planner extracts structure with the configured agent model when set to
+# "llm"; otherwise it uses a deterministic heading parser.
+CONFLUENCE_ENABLED = "false"
+CONFLUENCE_PLANNER = "llm"

@@ -59,7 +59,13 @@ export {
 } from './modules/agents/agent-routing'
 export { systemPromptFor, userPromptFor } from './modules/agents/agent-catalog'
 
-export { type Core, type CoreDependencies, type GitHubModule, createCore } from './container'
+export {
+  type Core,
+  type CoreDependencies,
+  type GitHubModule,
+  type ConfluenceModule,
+  createCore,
+} from './container'
 
 export {
   GitHubInstallationService,
@@ -72,3 +78,23 @@ export {
 } from './modules/github/GitHubSyncService'
 export { WebhookService, type WebhookServiceDependencies } from './modules/github/WebhookService'
 export * as githubProjection from './modules/github/projection.logic'
+
+export {
+  ConfluenceConnectionService,
+  type ConfluenceConnectionServiceDependencies,
+} from './modules/confluence/ConfluenceConnectionService'
+export {
+  ConfluenceImportService,
+  type ConfluenceImportServiceDependencies,
+  toConfluenceDocument,
+} from './modules/confluence/ConfluenceImportService'
+export {
+  ConfluencePlannerService,
+  type ConfluencePlannerServiceDependencies,
+} from './modules/confluence/ConfluencePlannerService'
+export {
+  ConfluenceLinkService,
+  type ConfluenceLinkServiceDependencies,
+  type SpawnResult,
+} from './modules/confluence/ConfluenceLinkService'
+export * as confluenceLogic from './modules/confluence/confluence.logic'

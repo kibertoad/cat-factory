@@ -10,6 +10,7 @@ import type {
 import type { IdGenerator } from '../../ports/runtime'
 import type { AgentExecutor, AgentRunContext } from '../../ports/agent-executor'
 import type { WorkRunner } from '../../ports/work-runner'
+import type { ConfluenceDocumentRepository } from '../../ports/confluence-repositories'
 import { serviceOf } from '../board/board.logic'
 import type { BoardService } from '../board/BoardService'
 import type { SpendService } from '../spend/SpendService'
@@ -26,6 +27,11 @@ export interface ExecutionServiceDependencies {
   workRunner: WorkRunner
   boardService: BoardService
   spendService: SpendService
+  /**
+   * Optional: when the Confluence integration is configured, documents linked to
+   * a block are resolved here and fed to the agent as extra context.
+   */
+  confluenceDocumentRepository?: ConfluenceDocumentRepository
 }
 
 /**
@@ -46,6 +52,7 @@ export class ExecutionService {
   private readonly workRunner: WorkRunner
   private readonly board: BoardService
   private readonly spend: SpendService
+  private readonly confluenceDocuments?: ConfluenceDocumentRepository
 
   constructor({
     workspaceRepository,
@@ -57,6 +64,7 @@ export class ExecutionService {
     workRunner,
     boardService,
     spendService,
+    confluenceDocumentRepository,
   }: ExecutionServiceDependencies) {
     this.workspaceRepository = workspaceRepository
     this.blockRepository = blockRepository
@@ -67,6 +75,7 @@ export class ExecutionService {
     this.workRunner = workRunner
     this.board = boardService
     this.spend = spendService
+    this.confluenceDocuments = confluenceDocumentRepository
   }
 
   private requireWorkspace(workspaceId: string) {
@@ -190,7 +199,7 @@ export class ExecutionService {
     const block = await this.blockRepository.get(workspaceId, instance.blockId)
     if (!block) return { kind: 'noop' }
     const isFinalStep = instance.currentStep === instance.steps.length - 1
-    const result = await this.runAgent(instance, step, isFinalStep, block, options)
+    const result = await this.runAgent(workspaceId, instance, step, isFinalStep, block, options)
 
     // Meter the LLM call against the spend budget. Recorded whether the step
     // completed or raised a decision — both consumed tokens.
@@ -246,12 +255,14 @@ export class ExecutionService {
    * driver's per-step retry can take over.
    */
   private async runAgent(
+    workspaceId: string,
     instance: ExecutionInstance,
     step: PipelineStep,
     isFinalStep: boolean,
     block: Block,
     options: AdvanceOptions = {},
   ) {
+    const contextDocs = await this.resolveContextDocs(workspaceId, block.id)
     const context: AgentRunContext = {
       agentKind: step.agentKind,
       pipelineName: instance.pipelineName,
@@ -262,6 +273,7 @@ export class ExecutionService {
         type: block.type,
         description: block.description,
         features: block.features,
+        ...(contextDocs.length ? { contextDocs } : {}),
       },
       priorOutputs: instance.steps
         .slice(0, instance.currentStep)
@@ -286,6 +298,20 @@ export class ExecutionService {
         output: `Agent error: ${error instanceof Error ? error.message : String(error)}`,
       }
     }
+  }
+
+  /**
+   * Resolve Confluence documents linked to the running block into compact agent
+   * context. A no-op unless the Confluence integration is wired (the repository
+   * is an optional dependency), so the engine stays unchanged when it is off.
+   */
+  private async resolveContextDocs(
+    workspaceId: string,
+    blockId: string,
+  ): Promise<{ title: string; url: string; excerpt: string }[]> {
+    if (!this.confluenceDocuments) return []
+    const docs = await this.confluenceDocuments.listByBlock(workspaceId, blockId)
+    return docs.map((d) => ({ title: d.title, url: d.url, excerpt: d.excerpt }))
   }
 
   /** Set the block's in-progress/blocked status and step-completion progress. */

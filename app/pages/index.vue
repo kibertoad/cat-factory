@@ -7,6 +7,9 @@ import PipelineBuilder from '~/components/pipeline/PipelineBuilder.vue'
 import InspectorPanel from '~/components/panels/InspectorPanel.vue'
 import DecisionModal from '~/components/panels/DecisionModal.vue'
 import BlockFocusView from '~/components/focus/BlockFocusView.vue'
+import ConfluenceConnectModal from '~/components/confluence/ConfluenceConnectModal.vue'
+import ConfluenceImportModal from '~/components/confluence/ConfluenceImportModal.vue'
+import SpawnPreviewModal from '~/components/confluence/SpawnPreviewModal.vue'
 
 const workspace = useWorkspaceStore()
 
@@ -31,6 +34,9 @@ useSimulationClock()
 
       <PipelineBuilder />
       <DecisionModal />
+      <ConfluenceConnectModal />
+      <ConfluenceImportModal />
+      <SpawnPreviewModal />
     </template>
 
     <!-- Backend unreachable / bootstrap failed -->

@@ -6,15 +6,24 @@ import {
   STATUS_META,
   DEFAULT_CONFIDENCE_THRESHOLD,
 } from '~/utils/catalog'
+import TaskContextDocs from '~/components/confluence/TaskContextDocs.vue'
 
 const board = useBoardStore()
 const pipelines = usePipelinesStore()
 const execution = useExecutionStore()
 const ui = useUiStore()
+const confluence = useConfluenceStore()
 const toast = useToast()
 
 function placeholder(what: string) {
   toast.add({ title: 'Placeholder', description: what, icon: 'i-lucide-construction' })
+}
+
+/** Open the Confluence import/spawn flow, targeting this container's frame. */
+function spawnFromConfluence() {
+  if (!block.value) return
+  const frameId = isFrame.value ? block.value.id : (board.serviceOf(block.value)?.id ?? null)
+  ui.openConfluenceImport(frameId)
 }
 
 const block = computed<Block | undefined>(() =>
@@ -192,7 +201,7 @@ function remove() {
         placeholder="Describe this block…"
       />
 
-      <!-- external links (placeholder integrations) -->
+      <!-- external links -->
       <div class="flex flex-wrap gap-2">
         <UButton
           color="neutral"
@@ -204,15 +213,19 @@ function remove() {
           Link JIRA ticket
         </UButton>
         <UButton
+          v-if="isContainer && confluence.available"
           color="neutral"
           variant="soft"
           size="xs"
-          icon="i-lucide-file-text"
-          @click="placeholder('Link context documents')"
+          icon="i-lucide-wand-sparkles"
+          @click="spawnFromConfluence"
         >
-          Link context documents
+          Spawn from Confluence
         </UButton>
       </div>
+
+      <!-- task: Confluence context documents -->
+      <TaskContextDocs v-if="isTask" :block="block" />
 
       <!-- ============ SERVICE / MODULE: tasks summary ============ -->
       <template v-if="isContainer">

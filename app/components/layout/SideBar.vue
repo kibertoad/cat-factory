@@ -2,6 +2,13 @@
 import BlockPalette from '~/components/palettes/BlockPalette.vue'
 import PipelinePalette from '~/components/palettes/PipelinePalette.vue'
 import UserMenu from '~/components/auth/UserMenu.vue'
+
+const confluence = useConfluenceStore()
+const ui = useUiStore()
+
+// Resolve whether the Confluence integration is enabled on the backend, so the
+// section is hidden entirely when it is off (mirrors how auth gates its UI).
+onMounted(() => confluence.probe())
 </script>
 
 <template>
@@ -31,6 +38,44 @@ import UserMenu from '~/components/auth/UserMenu.vue'
       </h2>
       <PipelinePalette />
     </section>
+
+    <template v-if="confluence.available">
+      <USeparator />
+      <section>
+        <h2 class="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+          Confluence
+        </h2>
+        <div class="space-y-1.5">
+          <UButton
+            block
+            color="neutral"
+            variant="soft"
+            size="sm"
+            icon="i-lucide-plug"
+            class="justify-start"
+            @click="ui.openConfluenceConnect()"
+          >
+            <span class="truncate">
+              {{
+                confluence.connected ? confluence.connection?.accountEmail : 'Connect Confluence'
+              }}
+            </span>
+          </UButton>
+          <UButton
+            v-if="confluence.connected"
+            block
+            color="neutral"
+            variant="soft"
+            size="sm"
+            icon="i-lucide-file-down"
+            class="justify-start"
+            @click="ui.openConfluenceImport(null)"
+          >
+            Import &amp; spawn
+          </UButton>
+        </div>
+      </section>
+    </template>
 
     <UserMenu class="mt-auto" />
   </aside>

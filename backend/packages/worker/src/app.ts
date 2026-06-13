@@ -12,6 +12,7 @@ import { pipelineController } from './modules/pipelines/PipelineController'
 import { workspaceController } from './modules/workspaces/WorkspaceController'
 import { githubController } from './modules/github/GitHubController'
 import { githubWebhookController } from './modules/github/GitHubWebhookController'
+import { confluenceController } from './modules/confluence/ConfluenceController'
 
 export interface CreateAppOptions {
   /** Override core dependencies — used by tests (e.g. a fake agent executor). */
@@ -48,6 +49,7 @@ export function createApp(options: CreateAppOptions = {}): Hono<AppEnv> {
   app.route('/workspaces/:workspaceId', pipelineController())
   app.route('/workspaces/:workspaceId', executionController())
   app.route('/workspaces/:workspaceId', githubController())
+  app.route('/workspaces/:workspaceId', confluenceController())
   // GitHub-facing (webhooks + setup callback); not workspace-scoped.
   app.route('/github', githubWebhookController())
 

@@ -9,6 +9,13 @@ export const useUiStore = defineStore('ui', () => {
   const builderOpen = ref(false)
   const decisionContext = ref<{ instanceId: string; decisionId: string } | null>(null)
 
+  // Confluence integration modals. `confluenceImport` and `spawnPreview` carry an
+  // optional target frame, so structure spawned from a frame's inspector lands
+  // inside that frame rather than creating new top-level frames.
+  const confluenceConnectOpen = ref(false)
+  const confluenceImport = ref<{ targetFrameId: string | null } | null>(null)
+  const spawnPreview = ref<{ pageId: string; targetFrameId: string | null } | null>(null)
+
   /** Simulation clock running? */
   const simRunning = ref(true)
 
@@ -65,11 +72,33 @@ export const useUiStore = defineStore('ui', () => {
     simRunning.value = !simRunning.value
   }
 
+  function openConfluenceConnect() {
+    confluenceConnectOpen.value = true
+  }
+  function closeConfluenceConnect() {
+    confluenceConnectOpen.value = false
+  }
+  function openConfluenceImport(targetFrameId: string | null = null) {
+    confluenceImport.value = { targetFrameId }
+  }
+  function closeConfluenceImport() {
+    confluenceImport.value = null
+  }
+  function openSpawnPreview(pageId: string, targetFrameId: string | null = null) {
+    spawnPreview.value = { pageId, targetFrameId }
+  }
+  function closeSpawnPreview() {
+    spawnPreview.value = null
+  }
+
   return {
     selectedBlockId,
     focusBlockId,
     builderOpen,
     decisionContext,
+    confluenceConnectOpen,
+    confluenceImport,
+    spawnPreview,
     simRunning,
     zoom,
     lod,
@@ -82,6 +111,12 @@ export const useUiStore = defineStore('ui', () => {
     openBuilder,
     openDecision,
     closeDecision,
+    openConfluenceConnect,
+    closeConfluenceConnect,
+    openConfluenceImport,
+    closeConfluenceImport,
+    openSpawnPreview,
+    closeSpawnPreview,
     toggleSim,
   }
 })

@@ -31,4 +31,11 @@ export type {
   CommitFilesInput,
   OpenPullRequestInput,
   MergePullRequestInput,
+  // Confluence integration projections + planning shapes.
+  ConfluenceConnection,
+  ConfluenceDocument,
+  ConfluenceBoardPlan,
+  PlanFrame,
+  PlanModule,
+  PlanTask,
 } from '@cat-factory/contracts'

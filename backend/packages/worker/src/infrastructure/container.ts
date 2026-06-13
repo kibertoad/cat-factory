@@ -26,9 +26,12 @@ import { D1IssueProjectionRepository } from './repositories/D1IssueProjectionRep
 import { D1CommitProjectionRepository } from './repositories/D1CommitProjectionRepository'
 import { D1CheckRunProjectionRepository } from './repositories/D1CheckRunProjectionRepository'
 import { D1RateLimitRepository } from './repositories/D1RateLimitRepository'
+import { D1ConfluenceConnectionRepository } from './repositories/D1ConfluenceConnectionRepository'
+import { D1ConfluenceDocumentRepository } from './repositories/D1ConfluenceDocumentRepository'
 import { GitHubAppAuth } from './github/GitHubAppAuth'
 import { FetchGitHubClient } from './github/FetchGitHubClient'
 import { WebCryptoWebhookVerifier } from './github/WebCryptoWebhookVerifier'
+import { FetchConfluenceClient } from './confluence/FetchConfluenceClient'
 import { CryptoIdGenerator, CryptoRng, SeededRng, SystemClock } from './runtime'
 import type { Clock, IdGenerator } from '@cat-factory/core'
 import type { D1Database } from '@cloudflare/workers-types'
@@ -116,6 +119,32 @@ function selectGitHubDeps(
   }
 }
 
+/**
+ * Build the Confluence integration's concrete ports when opted in. The model
+ * provider is wired only in 'llm' planner mode and independently of
+ * AGENTS_ENABLED (it just needs a provider credential); the planner degrades to
+ * its deterministic parser if no model is usable. Returns `{}` when disabled, so
+ * `createCore` leaves the `confluence` module unassembled.
+ */
+function selectConfluenceDeps(
+  env: Env,
+  config: AppConfig,
+  db: D1Database,
+): Partial<CoreDependencies> {
+  if (!config.confluence.enabled) return {}
+  return {
+    confluenceClient: new FetchConfluenceClient(),
+    confluenceConnectionRepository: new D1ConfluenceConnectionRepository({ db }),
+    confluenceDocumentRepository: new D1ConfluenceDocumentRepository({ db }),
+    ...(config.confluence.planner === 'llm'
+      ? {
+          modelProvider: new CloudflareModelProvider({ env }),
+          confluencePlannerModel: config.agents.routing.default.ref,
+        }
+      : {}),
+  }
+}
+
 export function buildContainer(env: Env, overrides: Partial<CoreDependencies> = {}): Container {
   const config = loadConfig(env)
   const db = env.DB
@@ -135,6 +164,7 @@ export function buildContainer(env: Env, overrides: Partial<CoreDependencies> = 
     workRunner: selectWorkRunner(env, config),
     spendPricing: config.spend,
     ...selectGitHubDeps(env, config, db, clock, idGenerator),
+    ...selectConfluenceDeps(env, config, db),
     ...overrides,
   }
 
