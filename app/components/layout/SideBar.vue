@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import BlockPalette from '~/components/palettes/BlockPalette.vue'
 import PipelinePalette from '~/components/palettes/PipelinePalette.vue'
+import UserMenu from '~/components/auth/UserMenu.vue'
 </script>
 
 <template>
@@ -30,5 +31,7 @@ import PipelinePalette from '~/components/palettes/PipelinePalette.vue'
       </h2>
       <PipelinePalette />
     </section>
+
+    <UserMenu class="mt-auto" />
   </aside>
 </template>

@@ -180,3 +180,12 @@ export interface WorkspaceSnapshot {
 
 /** Level-of-detail buckets driven by the canvas zoom level. */
 export type LodLevel = 'far' | 'mid' | 'close'
+
+/** The signed-in GitHub user, as returned by the backend's /auth/me. */
+export interface AuthUser {
+  /** GitHub user id (stable across renames). */
+  id: number
+  login: string
+  name: string | null
+  avatarUrl: string | null
+}
