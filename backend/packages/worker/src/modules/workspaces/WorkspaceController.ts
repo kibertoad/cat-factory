@@ -15,13 +15,15 @@ export function workspaceController(): Hono<AppEnv> {
   app.post('/workspaces', jsonBody(createWorkspaceSchema), async (c) => {
     const container = c.get('container')
     const snapshot = await container.workspaceService.create(c.req.valid('json'))
-    return c.json({ ...snapshot, executionMode: container.config.execution.mode }, 201)
+    const spend = await container.spendService.status()
+    return c.json({ ...snapshot, executionMode: container.config.execution.mode, spend }, 201)
   })
 
   app.get('/workspaces/:workspaceId', async (c) => {
     const container = c.get('container')
     const snapshot = await container.workspaceService.snapshot(param(c, 'workspaceId'))
-    return c.json({ ...snapshot, executionMode: container.config.execution.mode })
+    const spend = await container.spendService.status()
+    return c.json({ ...snapshot, executionMode: container.config.execution.mode, spend })
   })
 
   app.delete('/workspaces/:workspaceId', async (c) => {

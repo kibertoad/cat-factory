@@ -32,6 +32,18 @@ export interface Env {
   /** JSON: per-kind overrides, e.g. {"architect":{"provider":"openai","model":"gpt-4o"}}. */
   AGENT_MODELS?: string
 
+  // ---- Spend safeguard (see config.ts) ------------------------------------
+  /** Monthly token budget, in SPEND_CURRENCY. Default ~100. */
+  SPEND_MONTHLY_LIMIT?: string
+  /** ISO 4217 currency for the budget and prices. Default 'EUR'. */
+  SPEND_CURRENCY?: string
+  /**
+   * JSON map of `provider:model` (or bare `provider`) → per-1M-token price,
+   * e.g. {"openai:gpt-4o":{"inputPerMillion":2.3,"outputPerMillion":9.2}}.
+   * Merged over the built-in defaults.
+   */
+  SPEND_MODEL_PRICES?: string
+
   // ---- Provider credentials -----------------------------------------------
   OPENAI_API_KEY?: string
   ANTHROPIC_API_KEY?: string

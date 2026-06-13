@@ -10,6 +10,23 @@ const { fitView, zoomIn, zoomOut } = useBoardFlow()
 const zoomPct = computed(() => Math.round(ui.zoom * 100))
 const lodLabel = computed(() => ({ far: 'Overview', mid: 'Summary', close: 'Detail' })[ui.lod])
 
+// Live spend indicator: shown once any tokens have been metered this period.
+const spend = computed(() => workspace.spend)
+const showSpend = computed(() => !!spend.value && spend.value.costSpent > 0)
+const spendLabel = computed(() => {
+  const s = spend.value
+  if (!s) return ''
+  const fmt = (n: number) => {
+    try {
+      return new Intl.NumberFormat(undefined, { style: 'currency', currency: s.currency }).format(n)
+    } catch {
+      return `${n.toFixed(2)} ${s.currency}`
+    }
+  }
+  return `${fmt(s.costSpent)} / ${fmt(s.costLimit)}`
+})
+const spendColor = computed(() => (spend.value?.exceeded ? 'error' : 'neutral'))
+
 const decisionItems = computed(() =>
   execution.openDecisions.map((d) => {
     const b = board.getBlock(d.blockId)
@@ -76,6 +93,18 @@ async function resetBoard() {
         }}
       </UButton>
     </UDropdownMenu>
+
+    <!-- spend safeguard usage -->
+    <UButton
+      v-if="showSpend"
+      :color="spendColor"
+      variant="soft"
+      size="sm"
+      icon="i-lucide-wallet"
+      :title="spend?.exceeded ? 'Spend limit reached — runs paused' : 'Token spend this month'"
+    >
+      {{ spendLabel }}
+    </UButton>
 
     <USeparator orientation="vertical" class="mx-1 h-6" />
 

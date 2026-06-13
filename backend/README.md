@@ -37,6 +37,23 @@ Each pipeline step is performed by an `AgentExecutor` (a port). Implementations:
 The engine itself (`ExecutionService`) is deterministic and contains no randomness: a `tick`
 advances each running pipeline by one agent-performed step.
 
+## Spend safeguards
+
+Every LLM call's token usage (input + output) is metered into a `token_usage` ledger (D1) by
+the `SpendService`. Each call is priced into a single currency via a configurable price table
+and summed over the current calendar month — the budget is **org-wide**, across all workspaces.
+Before each agent step the engine checks `SpendService.isOverBudget()`; when the month's spend
+reaches the limit it **pauses** the run (execution status `paused`) instead of incurring more
+cost. The current status (`tokens`, `costSpent`, `costLimit`, `exceeded`) is attached to every
+workspace snapshot, and the frontend shows a large warning and a "Resume anyway" action
+(`POST /workspaces/:ws/spend/resume`) when the budget is exceeded. Paused runs also resume
+automatically once the period rolls over.
+
+Configured entirely through Worker vars (see `wrangler.toml`): `SPEND_MONTHLY_LIMIT`
+(default ~100), `SPEND_CURRENCY` (default `EUR`), and `SPEND_MODEL_PRICES` (JSON per-model price
+overrides per 1M tokens). The simulator/stub agents report no usage, so a pure-simulation
+deployment never accrues spend.
+
 ## HTTP API (selected)
 
 ```
@@ -63,6 +80,9 @@ DELETE /workspaces/:ws/blocks/:id/executions                 cancel
 POST   /workspaces/:ws/blocks/:id/merge                       merge an open PR
 POST   /workspaces/:ws/tick                                   advance the simulation { ticks }
 POST   /workspaces/:ws/executions/:exec/decisions/:dec        resolve a human decision
+
+GET    /workspaces/:ws/spend                                  current spend vs budget for the period
+POST   /workspaces/:ws/spend/resume                           resume runs paused by the spend cap
 ```
 
 ## Develop & test

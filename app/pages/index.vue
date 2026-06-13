@@ -2,6 +2,7 @@
 import BoardCanvas from '~/components/board/BoardCanvas.vue'
 import SideBar from '~/components/layout/SideBar.vue'
 import BoardToolbar from '~/components/layout/BoardToolbar.vue'
+import SpendWarningBanner from '~/components/layout/SpendWarningBanner.vue'
 import PipelineBuilder from '~/components/pipeline/PipelineBuilder.vue'
 import InspectorPanel from '~/components/panels/InspectorPanel.vue'
 import DecisionModal from '~/components/panels/DecisionModal.vue'
@@ -23,6 +24,7 @@ useSimulationClock()
       <main class="relative min-w-0 flex-1">
         <BoardCanvas />
         <BoardToolbar />
+        <SpendWarningBanner />
         <InspectorPanel />
         <BlockFocusView />
       </main>

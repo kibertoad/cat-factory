@@ -50,7 +50,9 @@ export class ExecutionWorkflow extends WorkflowEntrypoint<Env, ExecutionWorkflow
         return
       }
 
-      if (result.kind === 'done' || result.kind === 'noop') return
+      // 'paused' means the spend budget is exhausted: stop driving this run.
+      // The /spend/resume endpoint re-creates the workflow once it frees up.
+      if (result.kind === 'done' || result.kind === 'noop' || result.kind === 'paused') return
 
       if (result.kind === 'awaiting_decision') {
         const decisionId = result.decisionId

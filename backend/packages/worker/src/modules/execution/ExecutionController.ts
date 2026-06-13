@@ -37,6 +37,19 @@ export function executionController(): Hono<AppEnv> {
     return c.json(block)
   })
 
+  // Current spend-safeguard status (token usage vs budget for this period).
+  app.get('/spend', async (c) => {
+    return c.json(await c.get('container').spendService.status())
+  })
+
+  // Resume runs paused by the spend safeguard in this workspace.
+  app.post('/spend/resume', async (c) => {
+    const instances = await c
+      .get('container')
+      .executionService.resumePaused(param(c, 'workspaceId'))
+    return c.json(instances)
+  })
+
   app.post('/tick', jsonBody(tickSchema), async (c) => {
     const container = c.get('container')
     // In workflow mode runs advance durably in the background, so `tick` does no
