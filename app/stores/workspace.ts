@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import type { WorkspaceSnapshot } from '~/types/domain'
+import type { SpendStatus, WorkspaceSnapshot } from '~/types/domain'
 import { useBoardStore } from '~/stores/board'
 import { usePipelinesStore } from '~/stores/pipelines'
 import { useExecutionStore } from '~/stores/execution'
@@ -29,11 +29,14 @@ export const useWorkspaceStore = defineStore(
      * drives progress. Defaults to 'tick' for older servers.
      */
     const executionMode = ref<'workflow' | 'tick'>('tick')
+    /** Latest spend-safeguard status from the server (null until first load). */
+    const spend = ref<SpendStatus | null>(null)
 
     /** Push a snapshot into the data stores. */
     function hydrate(snapshot: WorkspaceSnapshot) {
       workspaceId.value = snapshot.workspace.id
       executionMode.value = snapshot.executionMode ?? 'tick'
+      spend.value = snapshot.spend ?? null
       useBoardStore().hydrate(snapshot.blocks)
       usePipelinesStore().hydrate(snapshot.pipelines)
       useExecutionStore().hydrate(snapshot.executions)
@@ -87,7 +90,24 @@ export const useWorkspaceStore = defineStore(
       return workspaceId.value
     }
 
-    return { workspaceId, ready, error, executionMode, init, refresh, reset, requireId }
+    /** Resume runs paused by the spend safeguard, then refresh the snapshot. */
+    async function resumeSpend() {
+      await api.resumeSpend(requireId())
+      await refresh()
+    }
+
+    return {
+      workspaceId,
+      ready,
+      error,
+      executionMode,
+      spend,
+      init,
+      refresh,
+      reset,
+      requireId,
+      resumeSpend,
+    }
   },
   { persist: { pick: ['workspaceId'] } },
 )

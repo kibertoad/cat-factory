@@ -29,7 +29,7 @@ export class AiAgentExecutor implements AgentExecutor {
     const config = resolveAgentConfig(this.agentRouting, context.agentKind)
     const model = this.modelProvider.resolve(config.ref)
 
-    const { text } = await generateText({
+    const { text, usage } = await generateText({
       model,
       system: config.system ?? systemPromptFor(context.agentKind),
       prompt: userPromptFor(context),
@@ -40,6 +40,12 @@ export class AiAgentExecutor implements AgentExecutor {
     return {
       output: text.trim(),
       model: `${config.ref.provider}:${config.ref.model}`,
+      // Report metered tokens so the spend safeguard can price this call. The
+      // AI SDK leaves either field undefined when a provider omits it.
+      usage: {
+        inputTokens: usage.inputTokens ?? 0,
+        outputTokens: usage.outputTokens ?? 0,
+      },
     }
   }
 }

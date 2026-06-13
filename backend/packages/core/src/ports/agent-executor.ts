@@ -39,6 +39,12 @@ export interface AgentDecisionRequest {
   options: string[]
 }
 
+/** Token usage reported by the model for a single agent call. */
+export interface AgentTokenUsage {
+  inputTokens: number
+  outputTokens: number
+}
+
 export interface AgentRunResult {
   /** The agent's work product. Required unless `decision` is set. */
   output?: string
@@ -48,6 +54,12 @@ export interface AgentRunResult {
   decision?: AgentDecisionRequest
   /** Confidence in the result (0..1); used at task completion to auto-merge. */
   confidence?: number
+  /**
+   * Tokens the model consumed for this call. Reported by real LLM executors so
+   * the spend safeguard can meter usage; absent for the simulator/stub, which
+   * incur no real cost.
+   */
+  usage?: AgentTokenUsage
 }
 
 export interface AgentExecutor {

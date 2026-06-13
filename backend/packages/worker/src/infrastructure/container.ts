@@ -16,6 +16,7 @@ import { WorkflowsWorkRunner } from './workflows/WorkflowsWorkRunner'
 import { D1BlockRepository } from './repositories/D1BlockRepository'
 import { D1ExecutionRepository } from './repositories/D1ExecutionRepository'
 import { D1PipelineRepository } from './repositories/D1PipelineRepository'
+import { D1TokenUsageRepository } from './repositories/D1TokenUsageRepository'
 import { D1WorkspaceRepository } from './repositories/D1WorkspaceRepository'
 import { CryptoIdGenerator, CryptoRng, SeededRng, SystemClock } from './runtime'
 
@@ -71,10 +72,12 @@ export function buildContainer(env: Env, overrides: Partial<CoreDependencies> = 
     blockRepository: new D1BlockRepository({ db }),
     pipelineRepository: new D1PipelineRepository({ db }),
     executionRepository: new D1ExecutionRepository({ db, clock }),
+    tokenUsageRepository: new D1TokenUsageRepository({ db }),
     idGenerator: new CryptoIdGenerator(),
     clock,
     agentExecutor: selectAgentExecutor(env, config, rng),
     workRunner: selectWorkRunner(env, config),
+    spendPricing: config.spend,
     ...overrides,
   }
 

@@ -100,5 +100,9 @@ export function useApi() {
         `${ws(workspaceId)}/executions/${executionId}/decisions/${decisionId}`,
         { method: 'POST', body },
       ),
+
+    // ---- spend safeguard --------------------------------------------------
+    resumeSpend: (workspaceId: string) =>
+      http<ExecutionInstance[]>(`${ws(workspaceId)}/spend/resume`, { method: 'POST' }),
   }
 }

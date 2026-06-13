@@ -132,7 +132,28 @@ export interface ExecutionInstance {
   steps: PipelineStep[]
   /** index into steps of the currently active step */
   currentStep: number
-  status: 'running' | 'blocked' | 'done'
+  /** 'paused' = halted by the spend safeguard until the budget frees up. */
+  status: 'running' | 'blocked' | 'done' | 'paused'
+}
+
+/**
+ * Spend-safeguard status for the current billing period (a calendar month).
+ * Token usage is priced into a single currency and gated by a budget; once
+ * `exceeded`, runs are paused and the frontend shows a large warning.
+ */
+export interface SpendStatus {
+  /** Start of the current billing period (epoch ms). */
+  periodStart: number
+  inputTokens: number
+  outputTokens: number
+  /** Estimated spend this period, in `currency`. */
+  costSpent: number
+  /** Configured budget for one period, in `currency`. */
+  costLimit: number
+  /** ISO 4217 currency (e.g. 'EUR'). */
+  currency: string
+  /** True once the budget is reached: execution is paused. */
+  exceeded: boolean
 }
 
 /** A board/project container owned by the backend. */
@@ -153,6 +174,8 @@ export interface WorkspaceSnapshot {
    * (this client drives progress by polling). Absent on older servers → 'tick'.
    */
   executionMode?: 'workflow' | 'tick'
+  /** Current spend-safeguard status; absent on older servers. */
+  spend?: SpendStatus
 }
 
 /** Level-of-detail buckets driven by the canvas zoom level. */

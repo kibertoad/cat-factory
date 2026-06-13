@@ -61,7 +61,7 @@ export const pipelineStepSchema = v.object({
 })
 export type PipelineStep = v.InferOutput<typeof pipelineStepSchema>
 
-export const executionStatusSchema = v.picklist(['running', 'blocked', 'done'])
+export const executionStatusSchema = v.picklist(['running', 'blocked', 'done', 'paused'])
 export type ExecutionStatus = v.InferOutput<typeof executionStatusSchema>
 
 export const executionInstanceSchema = v.object({
@@ -82,6 +82,31 @@ export const workspaceSchema = v.object({
 })
 export type Workspace = v.InferOutput<typeof workspaceSchema>
 
+/**
+ * The spend safeguard's view of the current billing period. Token usage is
+ * tracked per LLM call and priced into a single currency; once `costSpent`
+ * reaches `costLimit` the engine pauses runs and the frontend shows a warning.
+ * Global across all workspaces (an operator's budget is org-wide), attached to
+ * every snapshot by the worker so the client can render the warning anywhere.
+ */
+export const spendStatusSchema = v.object({
+  /** Start of the current billing period (epoch ms; calendar month, UTC). */
+  periodStart: v.number(),
+  /** Input (prompt) tokens consumed this period. */
+  inputTokens: v.number(),
+  /** Output (completion) tokens produced this period. */
+  outputTokens: v.number(),
+  /** Estimated cost of this period's usage, in `currency`. */
+  costSpent: v.number(),
+  /** Configured budget for one period, in `currency`. */
+  costLimit: v.number(),
+  /** ISO 4217 currency the costs are expressed in (e.g. `EUR`). */
+  currency: v.string(),
+  /** True once `costSpent >= costLimit`: runs are paused until the period rolls over. */
+  exceeded: v.boolean(),
+})
+export type SpendStatus = v.InferOutput<typeof spendStatusSchema>
+
 export const workspaceSnapshotSchema = v.object({
   workspace: workspaceSchema,
   blocks: v.array(blockSchema),
@@ -93,5 +118,10 @@ export const workspaceSnapshotSchema = v.object({
    * snapshot builder need not know the deployment's execution mode.
    */
   executionMode: v.optional(v.picklist(['workflow', 'tick'])),
+  /**
+   * The current spend-safeguard status. Attached by the worker (it depends on
+   * deployment-wide pricing/budget config), so it is optional on the wire.
+   */
+  spend: v.optional(spendStatusSchema),
 })
 export type WorkspaceSnapshot = v.InferOutput<typeof workspaceSnapshotSchema>

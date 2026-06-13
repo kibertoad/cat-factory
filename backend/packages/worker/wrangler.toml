@@ -56,3 +56,12 @@ AGENT_DEFAULT_MODEL = "@cf/meta/llama-3.1-8b-instruct"
 # "workflow" (durable, server-driven via Cloudflare Workflows).
 EXECUTION_MODE = "tick"
 DECISION_TIMEOUT = "24 hours"
+
+# Spend safeguard (see src/infrastructure/config.ts). Token usage is metered per
+# LLM call into a ledger, priced into SPEND_CURRENCY, and gated by a monthly
+# budget; when reached, runs pause and the frontend shows a warning.
+SPEND_MONTHLY_LIMIT = "100"
+SPEND_CURRENCY = "EUR"
+# Optional per-model price overrides (per 1M tokens), merged over the built-in
+# defaults. Keys are "provider:model" or a bare "provider".
+# SPEND_MODEL_PRICES = '{"openai:gpt-4o":{"inputPerMillion":2.3,"outputPerMillion":9.2}}'

@@ -8,6 +8,8 @@ export type AdvanceResult =
   | { kind: 'awaiting_decision'; decisionId: string }
   /** The final step completed; the run is finished. */
   | { kind: 'done' }
+  /** The spend budget is exhausted; the run is paused until it frees up. */
+  | { kind: 'paused' }
   /** Nothing to do — the run is absent or not running (replay/idempotent). */
   | { kind: 'noop' }
 

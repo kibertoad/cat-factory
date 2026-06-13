@@ -1,4 +1,4 @@
-import type { AgentExecutor, WorkspaceSnapshot } from '@cat-factory/core'
+import type { AgentExecutor, CoreDependencies, WorkspaceSnapshot } from '@cat-factory/core'
 import { env } from 'cloudflare:test'
 import { createApp } from '../src/app'
 import { FakeAgentExecutor } from './fakes/FakeAgentExecutor'
@@ -20,8 +20,11 @@ export interface TestApp {
  * deterministic agent so tests assert exact engine behaviour. Requests go
  * through `app.fetch` — the actual Worker fetch handler — inside workerd.
  */
-export function makeApp(agentExecutor: AgentExecutor = new FakeAgentExecutor()): TestApp {
-  const app = createApp({ overrides: { agentExecutor } })
+export function makeApp(
+  agentExecutor: AgentExecutor = new FakeAgentExecutor(),
+  overrides: Partial<CoreDependencies> = {},
+): TestApp {
+  const app = createApp({ overrides: { agentExecutor, ...overrides } })
 
   async function call<T>(method: string, path: string, body?: unknown): Promise<TestResponse<T>> {
     const hasBody = body !== undefined

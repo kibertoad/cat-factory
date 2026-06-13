@@ -5,6 +5,8 @@ export interface FakeAgentOptions {
   confidence?: number
   /** Step indices that should raise a decision (once) before completing. */
   decisionOnSteps?: number[]
+  /** Token usage reported per call, so the spend safeguard can be exercised. */
+  usage?: { inputTokens: number; outputTokens: number }
 }
 
 /**
@@ -25,6 +27,7 @@ export class FakeAgentExecutor implements AgentExecutor {
           question: `Decision for ${context.agentKind}?`,
           options: ['Option A', 'Option B'],
         },
+        usage: this.options.usage,
       }
     }
 
@@ -32,6 +35,7 @@ export class FakeAgentExecutor implements AgentExecutor {
       output: `[${context.agentKind}] processed "${context.block.title}"`,
       model: 'fake',
       confidence: context.isFinalStep ? (this.options.confidence ?? 1) : undefined,
+      usage: this.options.usage,
     }
   }
 }

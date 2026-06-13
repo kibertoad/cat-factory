@@ -1,0 +1,37 @@
+// Persistence port for the spend safeguard. Every LLM call's token usage is
+// recorded here; the SpendService aggregates it over the current billing period
+// to decide whether the configured budget has been exhausted. The domain
+// depends only on this interface — the worker implements it against D1.
+
+/** One metered LLM call. `costEstimate` is in the deployment's spend currency. */
+export interface TokenUsageRecord {
+  id: string
+  workspaceId: string
+  executionId: string | null
+  agentKind: string
+  provider: string
+  model: string
+  inputTokens: number
+  outputTokens: number
+  /** Estimated cost of this call, priced at record time so history is stable. */
+  costEstimate: number
+  /** When the call was metered (epoch ms). */
+  createdAt: number
+}
+
+/** Aggregated usage over a time window, used to evaluate the budget. */
+export interface TokenUsageTotals {
+  inputTokens: number
+  outputTokens: number
+  costEstimate: number
+}
+
+export interface TokenUsageRepository {
+  /** Append a metered call. */
+  record(usage: TokenUsageRecord): Promise<void>
+  /**
+   * Sum usage across all workspaces since `epochMs` (inclusive). The budget is
+   * org-wide, so this deliberately spans every workspace.
+   */
+  totalsSince(epochMs: number): Promise<TokenUsageTotals>
+}

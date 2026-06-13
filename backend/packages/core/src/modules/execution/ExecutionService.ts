@@ -12,6 +12,7 @@ import type { AgentExecutor, AgentRunContext } from '../../ports/agent-executor'
 import type { WorkRunner } from '../../ports/work-runner'
 import { serviceOf } from '../board/board.logic'
 import type { BoardService } from '../board/BoardService'
+import type { SpendService } from '../spend/SpendService'
 import { requireWorkspace } from '../workspaces/WorkspaceService'
 import type { AdvanceOptions, AdvanceResult } from './advance'
 
@@ -24,6 +25,7 @@ export interface ExecutionServiceDependencies {
   agentExecutor: AgentExecutor
   workRunner: WorkRunner
   boardService: BoardService
+  spendService: SpendService
 }
 
 /**
@@ -43,6 +45,7 @@ export class ExecutionService {
   private readonly agentExecutor: AgentExecutor
   private readonly workRunner: WorkRunner
   private readonly board: BoardService
+  private readonly spend: SpendService
 
   constructor({
     workspaceRepository,
@@ -53,6 +56,7 @@ export class ExecutionService {
     agentExecutor,
     workRunner,
     boardService,
+    spendService,
   }: ExecutionServiceDependencies) {
     this.workspaceRepository = workspaceRepository
     this.blockRepository = blockRepository
@@ -62,6 +66,7 @@ export class ExecutionService {
     this.agentExecutor = agentExecutor
     this.workRunner = workRunner
     this.board = boardService
+    this.spend = spendService
   }
 
   private requireWorkspace(workspaceId: string) {
@@ -128,7 +133,11 @@ export class ExecutionService {
     options: AdvanceOptions = {},
   ): Promise<AdvanceResult> {
     const instance = await this.executionRepository.get(workspaceId, executionId)
-    if (!instance || instance.status !== 'running') return { kind: 'noop' }
+    // A paused run is still drivable: the spend gate in stepInstance resumes it
+    // once the budget frees up (or re-pauses it otherwise).
+    if (!instance || (instance.status !== 'running' && instance.status !== 'paused')) {
+      return { kind: 'noop' }
+    }
     return this.stepInstance(workspaceId, instance, options)
   }
 
@@ -141,9 +150,11 @@ export class ExecutionService {
     await this.requireWorkspace(workspaceId)
     for (let i = 0; i < ticks; i++) {
       const instances = await this.executionRepository.listByWorkspace(workspaceId)
-      const running = instances.filter((e) => e.status === 'running')
-      if (running.length === 0) break
-      for (const instance of running) await this.stepInstance(workspaceId, instance)
+      // Paused runs are advanced too: stepInstance resumes them automatically
+      // once the spend budget frees up (e.g. a new billing period).
+      const active = instances.filter((e) => e.status === 'running' || e.status === 'paused')
+      if (active.length === 0) break
+      for (const instance of active) await this.stepInstance(workspaceId, instance)
     }
     return this.executionRepository.listByWorkspace(workspaceId)
   }
@@ -156,6 +167,19 @@ export class ExecutionService {
   ): Promise<AdvanceResult> {
     const step = instance.steps[instance.currentStep]
     if (!step) return { kind: 'noop' }
+
+    // Spend gate: don't incur LLM cost once the budget is exhausted. Pause the
+    // run (so the frontend can flag it) and stop here. A previously-paused run
+    // that finds the budget has freed up resumes and proceeds.
+    if (await this.spend.isOverBudget()) {
+      if (instance.status !== 'paused') {
+        instance.status = 'paused'
+        await this.executionRepository.upsert(workspaceId, instance)
+      }
+      return { kind: 'paused' }
+    }
+    if (instance.status === 'paused') instance.status = 'running'
+
     if (step.state === 'waiting_decision') {
       instance.status = 'blocked'
       await this.executionRepository.upsert(workspaceId, instance)
@@ -167,6 +191,18 @@ export class ExecutionService {
     if (!block) return { kind: 'noop' }
     const isFinalStep = instance.currentStep === instance.steps.length - 1
     const result = await this.runAgent(instance, step, isFinalStep, block, options)
+
+    // Meter the LLM call against the spend budget. Recorded whether the step
+    // completed or raised a decision — both consumed tokens.
+    if (result.usage) {
+      await this.spend.record({
+        workspaceId,
+        executionId: instance.id,
+        agentKind: step.agentKind,
+        model: result.model ?? 'unknown',
+        usage: result.usage,
+      })
+    }
 
     // The agent asked for a human decision and this step hasn't resolved one yet.
     if (result.decision && !step.decision?.chosen) {
@@ -387,6 +423,24 @@ export class ExecutionService {
       status: 'pr_ready',
       progress: 1,
     })
+  }
+
+  /**
+   * Resume every run paused by the spend safeguard in this workspace. Flips them
+   * back to `running` and re-drives the durable runner (a no-op in tick mode,
+   * where the next tick picks them up). If the budget is still exhausted the
+   * spend gate will simply pause them again on their next step.
+   */
+  async resumePaused(workspaceId: string): Promise<ExecutionInstance[]> {
+    await this.requireWorkspace(workspaceId)
+    const instances = await this.executionRepository.listByWorkspace(workspaceId)
+    const paused = instances.filter((e) => e.status === 'paused')
+    for (const instance of paused) {
+      instance.status = 'running'
+      await this.executionRepository.upsert(workspaceId, instance)
+      await this.workRunner.startRun(workspaceId, instance.id)
+    }
+    return this.executionRepository.listByWorkspace(workspaceId)
   }
 
   /** Cancel the run on a block, returning it to `planned`. */

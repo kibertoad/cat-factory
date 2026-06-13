@@ -1,5 +1,12 @@
 import type { AgentKind } from '@cat-factory/contracts'
-import type { AgentModelConfig, AgentRouting } from '@cat-factory/core'
+import {
+  type AgentModelConfig,
+  type AgentRouting,
+  DEFAULT_MODEL_PRICES,
+  DEFAULT_MONTHLY_LIMIT_EUR,
+  type ModelPrice,
+  type SpendPricing,
+} from '@cat-factory/core'
 import type { Env } from './env'
 
 // Translates the flat, string-typed Worker environment into a structured app
@@ -19,6 +26,8 @@ export interface AppConfig {
     /** Human-decision park timeout passed to the workflow's waitForEvent. */
     decisionTimeout: string
   }
+  /** Pricing + budget for the spend safeguard. */
+  spend: SpendPricing
 }
 
 function num(value: string | undefined): number | undefined {
@@ -57,6 +66,41 @@ function parseModelOverrides(
   return out
 }
 
+function parsePriceOverrides(raw: string | undefined): Record<string, ModelPrice> {
+  if (!raw || raw.trim() === '') return {}
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(raw)
+  } catch {
+    throw new Error('SPEND_MODEL_PRICES is not valid JSON')
+  }
+  if (typeof parsed !== 'object' || parsed === null) return {}
+
+  const out: Record<string, ModelPrice> = {}
+  for (const [key, value] of Object.entries(parsed as Record<string, Record<string, unknown>>)) {
+    const input = value.inputPerMillion
+    const output = value.outputPerMillion
+    if (typeof input !== 'number' || typeof output !== 'number') {
+      throw new Error(
+        `SPEND_MODEL_PRICES.${key} requires numeric "inputPerMillion" and "outputPerMillion"`,
+      )
+    }
+    out[key] = { inputPerMillion: input, outputPerMillion: output }
+  }
+  return out
+}
+
+function loadSpendPricing(env: Env): SpendPricing {
+  const limit = num(env.SPEND_MONTHLY_LIMIT)
+  return {
+    currency: env.SPEND_CURRENCY?.trim() || 'EUR',
+    monthlyLimit: limit !== undefined && limit >= 0 ? limit : DEFAULT_MONTHLY_LIMIT_EUR,
+    // Operator overrides win over the built-in defaults, per key.
+    prices: { ...DEFAULT_MODEL_PRICES, ...parsePriceOverrides(env.SPEND_MODEL_PRICES) },
+    defaultPrice: { inputPerMillion: 0.14, outputPerMillion: 0.55 },
+  }
+}
+
 export function loadConfig(env: Env): AppConfig {
   const defaultConfig: AgentModelConfig = {
     ref: {
@@ -81,5 +125,6 @@ export function loadConfig(env: Env): AppConfig {
       mode: env.EXECUTION_MODE === 'workflow' ? 'workflow' : 'tick',
       decisionTimeout: env.DECISION_TIMEOUT?.trim() || '24 hours',
     },
+    spend: loadSpendPricing(env),
   }
 }

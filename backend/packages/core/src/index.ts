@@ -31,6 +31,22 @@ export {
   type WorkspaceServiceDependencies,
 } from './modules/workspaces/WorkspaceService'
 
+export {
+  SpendService,
+  type SpendServiceDependencies,
+  type RecordUsageInput,
+} from './modules/spend/SpendService'
+export {
+  type ModelPrice,
+  type SpendPricing,
+  DEFAULT_MODEL_PRICES,
+  DEFAULT_MONTHLY_LIMIT_EUR,
+  DEFAULT_SPEND_PRICING,
+  priceFor,
+  estimateCost,
+  startOfMonthUtc,
+} from './modules/spend/pricing'
+
 export { AiAgentExecutor, type AiAgentExecutorDependencies } from './modules/agents/AiAgentExecutor'
 export {
   SimulatorAgentExecutor,

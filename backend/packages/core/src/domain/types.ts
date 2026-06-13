@@ -15,6 +15,7 @@ export type {
   Pipeline,
   PipelineStep,
   Position,
+  SpendStatus,
   Workspace,
   WorkspaceSnapshot,
 } from '@cat-factory/contracts'
