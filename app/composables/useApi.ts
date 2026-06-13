@@ -1,4 +1,5 @@
 import type {
+  AuthUser,
   Block,
   BlockType,
   ExecutionInstance,
@@ -19,11 +20,34 @@ type Position = { x: number; y: number }
  */
 export function useApi() {
   const apiBase = useRuntimeConfig().public.apiBase
-  const http = $fetch.create({ baseURL: apiBase })
+  const http = $fetch.create({
+    baseURL: apiBase,
+    // Attach the session token (when signed in) so the backend's auth gate lets
+    // the request through. Read lazily from the store so a fresh token applies
+    // without rebuilding the client.
+    onRequest({ options }) {
+      const token = useAuthStore().token
+      if (!token) return
+      const headers = new Headers(options.headers)
+      headers.set('Authorization', `Bearer ${token}`)
+      options.headers = headers
+    },
+    // A 401 means our token lapsed or was revoked — drop it so the UI re-gates.
+    onResponseError({ response }) {
+      if (response?.status === 401) useAuthStore().handleUnauthorized()
+    },
+  })
 
   const ws = (workspaceId: string) => `/workspaces/${encodeURIComponent(workspaceId)}`
 
   return {
+    // ---- auth -------------------------------------------------------------
+    getAuthConfig: () => http<{ enabled: boolean }>('/auth/config'),
+
+    getMe: () => http<{ user: AuthUser | null; enabled: boolean }>('/auth/me'),
+
+    logout: () => http('/auth/logout', { method: 'POST' }),
+
     // ---- workspaces -------------------------------------------------------
     listWorkspaces: () => http<Workspace[]>('/workspaces'),
 

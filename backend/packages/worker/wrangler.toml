@@ -105,3 +105,17 @@ GITHUB_APP_SLUG = ""
 GITHUB_API_BASE = "https://api.github.com"
 # Where to send the browser after a successful install:
 # GITHUB_SETUP_REDIRECT_URL = "https://app.example.com/settings/github"
+
+# "Login with GitHub" (see src/infrastructure/config.ts and docs/auth.md). Off
+# until an OAuth app is configured: set the client id here and the secrets via
+#   wrangler secret put GITHUB_OAUTH_CLIENT_SECRET
+#   wrangler secret put AUTH_SESSION_SECRET   # any high-entropy random string
+# The client id/secret may be a GitHub App's OAuth credentials or a classic
+# OAuth App's. Register the callback URL as <worker-origin>/auth/callback.
+GITHUB_OAUTH_CLIENT_ID = ""
+# Fixed SPA landing URL after login (strongly recommended in production):
+# AUTH_SUCCESS_REDIRECT_URL = "https://app.example.com"
+# Session lifetime in hours (default 168 = 7 days):
+# AUTH_SESSION_TTL_HOURS = "168"
+# Restrict sign-in to specific GitHub users (comma-separated; empty = anyone):
+# AUTH_ALLOWED_LOGINS = "octocat,hubot"

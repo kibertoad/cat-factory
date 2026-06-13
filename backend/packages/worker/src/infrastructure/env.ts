@@ -76,6 +76,24 @@ export interface Env {
   /** Workflow that performs durable full-repo backfills. */
   GITHUB_BACKFILL_WORKFLOW?: Workflow
 
+  // ---- Authentication (see config.ts; opt-in "Login with GitHub") ---------
+  /** OAuth client id (a GitHub App's or a classic OAuth App's). Enables login. */
+  GITHUB_OAUTH_CLIENT_ID?: string
+  /** OAuth client secret (secret). */
+  GITHUB_OAUTH_CLIENT_SECRET?: string
+  /** OAuth host; defaults to https://github.com (override for GitHub Enterprise). */
+  GITHUB_OAUTH_BASE?: string
+  /** HMAC secret used to sign session tokens + the OAuth state nonce (secret). */
+  AUTH_SESSION_SECRET?: string
+  /** Session lifetime in hours; defaults to 168 (7 days). */
+  AUTH_SESSION_TTL_HOURS?: string
+  /** Fixed post-login landing URL (the SPA). Recommended in production. */
+  AUTH_SUCCESS_REDIRECT_URL?: string
+  /** Override the OAuth redirect_uri when the public URL differs from the origin. */
+  AUTH_CALLBACK_URL?: string
+  /** Optional comma-separated allowlist of GitHub logins permitted to sign in. */
+  AUTH_ALLOWED_LOGINS?: string
+
   /** When set, seeds a deterministic RNG (used by integration tests). */
   RNG_SEED?: string
 }
