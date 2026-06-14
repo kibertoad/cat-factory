@@ -1,0 +1,181 @@
+import type {
+  EnvironmentAccessHandle,
+  EnvironmentHandle,
+  EnvironmentStatus,
+} from '../../domain/types'
+import type { EnvironmentRecord } from '../../ports/environment-repositories'
+import { ValidationError } from '../../domain/errors'
+
+// Pure helpers for the ephemeral-environment integration: SSRF validation of the
+// URLs we fetch/expose, `{{var}}` interpolation over a bounded scope, dot-path
+// extraction from an arbitrary self-rolled response, status mapping and expiry
+// coercion. Keeping these pure makes the generic provider deterministic and
+// testable without a live management API.
+
+/** The agent kind that triggers deterministic provisioning. */
+export const DEPLOYER_AGENT_KIND = 'deployer'
+/** Board category for environment blocks (a deployer pipeline typically runs here). */
+export const ENVIRONMENT_BLOCK_TYPE = 'environment'
+
+/**
+ * Whether a pipeline step should provision an environment deterministically.
+ * Keyed strictly on the `deployer` agent kind so that other steps in a pipeline
+ * on an `environment` block (e.g. a following `tester`) still run normally.
+ */
+export function isDeployStep(agentKind: string): boolean {
+  return agentKind === DEPLOYER_AGENT_KIND
+}
+
+/**
+ * Reject hostnames that point at the worker's own network rather than a public
+ * host. The generic provider fetches org-supplied URLs (and we surface the
+ * provisioned env URL to agents), so an unvalidated URL turns the worker into an
+ * SSRF proxy. Host-literal defence-in-depth: blocks loopback, link-local
+ * (incl. cloud metadata 169.254.x.x) and the RFC1918 private ranges.
+ */
+function isBlockedHost(hostname: string): boolean {
+  const host = hostname.toLowerCase().replace(/^\[|\]$/g, '')
+  if (host === 'localhost' || host.endsWith('.localhost')) return true
+  if (host.endsWith('.internal') || host.endsWith('.local')) return true
+
+  if (host === '::1' || host === '::') return true
+  if (host.startsWith('fe80:') || host.startsWith('fc') || host.startsWith('fd')) return true
+
+  const v4 = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/)
+  if (v4) {
+    const [a, b] = [Number(v4[1]), Number(v4[2])]
+    if (a === 127 || a === 0 || a === 10) return true
+    if (a === 169 && b === 254) return true
+    if (a === 192 && b === 168) return true
+    if (a === 172 && b >= 16 && b <= 31) return true
+  }
+  return false
+}
+
+/**
+ * Validate a URL before it is stored, fetched, or exposed: requires `https`,
+ * forbids embedded credentials, and rejects internal/private hosts. Parsed by
+ * hand (no `URL` global) so this stays in the platform-agnostic core.
+ */
+export function assertSafeEnvironmentUrl(url: string, label = 'URL'): void {
+  const invalid = () => new ValidationError(`Environment ${label} is not a valid URL: '${url}'`)
+  const match = url.match(/^([a-zA-Z][a-zA-Z0-9+.-]*):\/\/([^/?#]*)/)
+  if (!match) throw invalid()
+
+  if (match[1]!.toLowerCase() !== 'https') {
+    throw new ValidationError(`Environment ${label} must use https`)
+  }
+  const authority = match[2]!
+  if (authority.includes('@')) {
+    throw new ValidationError(`Environment ${label} must not contain credentials`)
+  }
+  let host: string
+  if (authority.startsWith('[')) {
+    const end = authority.indexOf(']')
+    if (end === -1) throw invalid()
+    host = authority.slice(1, end)
+  } else {
+    host = authority.split(':')[0]!
+  }
+  if (host === '') throw invalid()
+  if (isBlockedHost(host)) {
+    throw new ValidationError(`Environment ${label} must be a public host`)
+  }
+}
+
+/** Variables available to manifest templates, in a bounded namespace. */
+export interface InterpolationScope {
+  input: Record<string, string>
+  provision: Record<string, string>
+}
+
+/**
+ * Replace `{{ namespace.key }}` placeholders from the given scope. Unknown
+ * namespaces and missing keys resolve to an empty string, so a template can
+ * never reference arbitrary host state.
+ */
+export function interpolateTemplate(template: string, scope: InterpolationScope): string {
+  return template.replace(/\{\{\s*([a-zA-Z0-9_.]+)\s*\}\}/g, (_match, expr: string) => {
+    const dot = expr.indexOf('.')
+    if (dot === -1) return ''
+    const ns = expr.slice(0, dot)
+    const key = expr.slice(dot + 1)
+    const bag = ns === 'input' ? scope.input : ns === 'provision' ? scope.provision : undefined
+    if (!bag) return ''
+    const value = bag[key]
+    return value === undefined ? '' : value
+  })
+}
+
+/** Read a value from parsed JSON by a dot-path (e.g. `data.url`, `items.0.id`). */
+export function extractByPath(json: unknown, path: string): unknown {
+  if (!path) return undefined
+  let current: unknown = json
+  for (const segment of path.split('.')) {
+    if (current === null || current === undefined) return undefined
+    if (typeof current !== 'object') return undefined
+    current = (current as Record<string, unknown>)[segment]
+  }
+  return current
+}
+
+/** Extract a scalar as a string, or undefined if absent/non-scalar. */
+export function extractString(json: unknown, path: string | undefined): string | undefined {
+  if (!path) return undefined
+  const value = extractByPath(json, path)
+  if (value === null || value === undefined) return undefined
+  if (typeof value === 'string') return value
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value)
+  return undefined
+}
+
+/**
+ * Map a provider status string onto our lifecycle states using the manifest's
+ * `statusMap`. Falls back to `fallback` (caller decides, e.g. 'ready' for a
+ * synchronous provisioner with no status polling).
+ */
+export function mapStatus(
+  raw: string | undefined,
+  statusMap: { from: string; to: EnvironmentStatus }[] | undefined,
+  fallback: EnvironmentStatus,
+): EnvironmentStatus {
+  if (raw !== undefined && statusMap) {
+    const hit = statusMap.find((m) => m.from.toLowerCase() === raw.toLowerCase())
+    if (hit) return hit.to
+  }
+  return fallback
+}
+
+/** Project a stored record onto the wire handle, optionally with decrypted access. */
+export function recordToHandle(
+  record: EnvironmentRecord,
+  access?: EnvironmentAccessHandle | null,
+): EnvironmentHandle {
+  return {
+    id: record.id,
+    workspaceId: record.workspaceId,
+    blockId: record.blockId,
+    executionId: record.executionId,
+    providerId: record.providerId,
+    externalId: record.externalId,
+    url: record.url,
+    status: record.status,
+    ...(access ? { access } : {}),
+    createdAt: record.createdAt,
+    expiresAt: record.expiresAt,
+    lastError: record.lastError,
+  }
+}
+
+/** Coerce an extracted expiry (epoch-ms number, numeric string, or ISO) to ms. */
+export function coerceExpiresAt(value: unknown): number | null {
+  if (value === null || value === undefined) return null
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (/^\d+$/.test(trimmed)) return Number(trimmed)
+    const parsed = Date.parse(trimmed)
+    if (!Number.isNaN(parsed)) return parsed
+  }
+  return null
+}

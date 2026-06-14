@@ -34,6 +34,11 @@ export default defineWorkersConfig(async () => {
               // in tests. GITHUB_APP_ID stays unset, so the integration is still
               // "disabled" by config and tests wire the module via overrides.
               GITHUB_WEBHOOK_SECRET: 'test-state-secret',
+              // Enable the environment integration with a fixed 32-byte master
+              // key so the real HttpEnvironmentProvider + WebCryptoSecretCipher
+              // wire up; env specs stub global `fetch` to act as the provider.
+              ENVIRONMENTS_ENABLED: 'true',
+              ENVIRONMENTS_ENCRYPTION_KEY: 'MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=',
             },
           },
         },

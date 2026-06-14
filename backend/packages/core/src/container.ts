@@ -16,6 +16,12 @@ import type {
   ConfluenceConnectionRepository,
   ConfluenceDocumentRepository,
 } from './ports/confluence-repositories'
+import type { EnvironmentProvider } from './ports/environment-provider'
+import type {
+  EnvironmentConnectionRepository,
+  EnvironmentRegistryRepository,
+} from './ports/environment-repositories'
+import type { SecretCipher } from './ports/secret-cipher'
 import type {
   BranchProjectionRepository,
   CheckRunProjectionRepository,
@@ -39,6 +45,9 @@ import { ConfluenceConnectionService } from './modules/confluence/ConfluenceConn
 import { ConfluenceImportService } from './modules/confluence/ConfluenceImportService'
 import { ConfluencePlannerService } from './modules/confluence/ConfluencePlannerService'
 import { ConfluenceLinkService } from './modules/confluence/ConfluenceLinkService'
+import { EnvironmentConnectionService } from './modules/environments/EnvironmentConnectionService'
+import { EnvironmentProvisioningService } from './modules/environments/EnvironmentProvisioningService'
+import { EnvironmentTeardownService } from './modules/environments/EnvironmentTeardownService'
 
 // Composition root for the domain layer. The worker's infrastructure builds the
 // concrete ports (D1 repositories, crypto id/rng, the AI agent executor) and
@@ -106,6 +115,16 @@ export interface CoreDependencies {
   confluenceClient?: ConfluenceClient
   confluenceConnectionRepository?: ConfluenceConnectionRepository
   confluenceDocumentRepository?: ConfluenceDocumentRepository
+
+  // ---- Ephemeral environment integration (optional; wired when configured) -
+  // Mirrors the GitHub/Confluence default-off convention. The module assembles
+  // only when the provider, both repositories and the secret cipher are present,
+  // so the engine (deterministic deployer step + env discovery) stays unchanged
+  // when the feature is off. Per-tenant secrets are encrypted via `secretCipher`.
+  environmentProvider?: EnvironmentProvider
+  environmentConnectionRepository?: EnvironmentConnectionRepository
+  environmentRegistryRepository?: EnvironmentRegistryRepository
+  secretCipher?: SecretCipher
 }
 
 /** The GitHub integration's services, present only when the app is configured. */
@@ -125,6 +144,13 @@ export interface ConfluenceModule {
   linkService: ConfluenceLinkService
 }
 
+/** The environment integration's services, present only when configured. */
+export interface EnvironmentsModule {
+  connectionService: EnvironmentConnectionService
+  provisioningService: EnvironmentProvisioningService
+  teardownService: EnvironmentTeardownService
+}
+
 export interface Core {
   workspaceService: WorkspaceService
   boardService: BoardService
@@ -135,6 +161,8 @@ export interface Core {
   github?: GitHubModule
   /** Present only when the Confluence integration is configured (see CoreDependencies). */
   confluence?: ConfluenceModule
+  /** Present only when the environment integration is configured (see CoreDependencies). */
+  environments?: EnvironmentsModule
 }
 
 /**
@@ -245,6 +273,52 @@ function createConfluenceModule(
   return { connectionService, importService, plannerService, linkService }
 }
 
+/**
+ * Assemble the environment integration when its provider, both repositories and
+ * the secret cipher are present; otherwise return undefined so the feature stays
+ * cleanly opt-in (the deterministic deployer and env discovery in the engine are
+ * gated on the provisioning service being wired).
+ */
+function createEnvironmentsModule(deps: CoreDependencies): EnvironmentsModule | undefined {
+  const {
+    environmentProvider,
+    environmentConnectionRepository,
+    environmentRegistryRepository,
+    secretCipher,
+  } = deps
+  if (
+    !environmentProvider ||
+    !environmentConnectionRepository ||
+    !environmentRegistryRepository ||
+    !secretCipher
+  ) {
+    return undefined
+  }
+
+  const connectionService = new EnvironmentConnectionService({
+    environmentConnectionRepository,
+    workspaceRepository: deps.workspaceRepository,
+    secretCipher,
+    clock: deps.clock,
+  })
+  const provisioningService = new EnvironmentProvisioningService({
+    connectionService,
+    environmentProvider,
+    environmentRegistryRepository,
+    secretCipher,
+    idGenerator: deps.idGenerator,
+    clock: deps.clock,
+  })
+  const teardownService = new EnvironmentTeardownService({
+    connectionService,
+    environmentProvider,
+    environmentRegistryRepository,
+    secretCipher,
+    clock: deps.clock,
+  })
+  return { connectionService, provisioningService, teardownService }
+}
+
 export function createCore(dependencies: CoreDependencies): Core {
   const workRunner = dependencies.workRunner ?? new NoopWorkRunner()
   const boardService = new BoardService(dependencies)
@@ -256,11 +330,14 @@ export function createCore(dependencies: CoreDependencies): Core {
     clock: dependencies.clock,
     pricing: dependencies.spendPricing ?? DEFAULT_SPEND_PRICING,
   })
+  const environments = createEnvironmentsModule(dependencies)
+
   const executionService = new ExecutionService({
     ...dependencies,
     workRunner,
     boardService,
     spendService,
+    environmentProvisioning: environments?.provisioningService,
   })
 
   const github = createGitHubModule(dependencies)
@@ -274,5 +351,6 @@ export function createCore(dependencies: CoreDependencies): Core {
     spendService,
     ...(github ? { github } : {}),
     ...(confluence ? { confluence } : {}),
+    ...(environments ? { environments } : {}),
   }
 }

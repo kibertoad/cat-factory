@@ -1,4 +1,9 @@
-import type { AgentKind, BlockType } from '../domain/types'
+import type {
+  AgentKind,
+  BlockType,
+  EnvironmentAccessHandle,
+  EnvironmentStatus,
+} from '../domain/types'
 
 // Port for "an agent doing its work". The execution engine calls this to perform
 // each pipeline step. An agent either produces a work product or asks for a
@@ -36,6 +41,18 @@ export interface AgentRunContext {
   priorOutputs: { agentKind: AgentKind; output: string }[]
   /** Decisions resolved earlier in this run, for context. */
   decisions: { question: string; chosen: string }[]
+  /**
+   * A live ephemeral environment a deployer step provisioned earlier in this run
+   * (resolved from the run's block). Present only when the environment
+   * integration is wired and a deployer step has produced a ready environment —
+   * this is how a downstream tester agent discovers the URL and how to reach it.
+   */
+  environment?: {
+    url: string | null
+    status: EnvironmentStatus
+    access: EnvironmentAccessHandle | null
+    expiresAt: number | null
+  }
   /**
    * If this step previously raised a decision that a human has now resolved,
    * the resolved decision — so the agent can finish instead of re-raising it.

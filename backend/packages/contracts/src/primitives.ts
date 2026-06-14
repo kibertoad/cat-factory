@@ -12,6 +12,7 @@ export const blockTypeSchema = v.picklist([
   'queue',
   'integration',
   'external',
+  'environment',
 ])
 export type BlockType = v.InferOutput<typeof blockTypeSchema>
 

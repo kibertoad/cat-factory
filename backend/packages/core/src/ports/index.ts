@@ -52,3 +52,20 @@ export type {
   ConfluenceDocumentRecord,
   ConfluenceDocumentRepository,
 } from './confluence-repositories'
+export type { SecretCipher } from './secret-cipher'
+export type {
+  EnvironmentProvider,
+  ProvisionEnvironmentRequest,
+  EnvironmentStatusRequest,
+  EnvironmentTeardownRequest,
+  ProvisionedEnvironment,
+  ProvisionFields,
+  SecretResolver,
+} from './environment-provider'
+export type {
+  EnvironmentConnectionRecord,
+  EnvironmentConnectionRepository,
+  EnvironmentRecord,
+  EnvironmentRecordPatch,
+  EnvironmentRegistryRepository,
+} from './environment-repositories'

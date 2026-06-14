@@ -20,6 +20,7 @@ export const BLOCK_TYPE_LABEL: Record<BlockType, string> = {
   queue: 'Queue',
   integration: 'Integration',
   external: 'External',
+  environment: 'Environment',
 }
 
 /** Sample task names used to seed / quick-add tasks inside a frame. */

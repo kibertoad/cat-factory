@@ -1,0 +1,149 @@
+# Ephemeral environment provider integration
+
+Let a workspace plug in its **own** ephemeral/preview-environment tooling so a
+`deployer` agent can provision an environment and a `tester` agent can run against
+it. The integration is declarative and **API-only**: you describe your self-rolled
+management API as an HTTP manifest — there are no provider presets and no code to
+write. It is **opt-in** and wired exactly like the GitHub/Confluence modules.
+
+See also [ADR 0003](./adr/0003-ephemeral-environment-provider.md).
+
+## Enabling it
+
+The feature is off unless enabled **and** a service-level encryption key is set
+(per-tenant credentials are always stored encrypted — there is no plaintext
+fallback):
+
+```sh
+# wrangler.toml
+ENVIRONMENTS_ENABLED = "true"
+
+# service-level master key (≥32 bytes, base64) — required when enabled, a secret:
+openssl rand -base64 32 | wrangler secret put ENVIRONMENTS_ENCRYPTION_KEY
+```
+
+That master key encrypts, at rest in D1, both the per-tenant provider credentials
+and each provisioned environment's own access credentials (AES-256-GCM, per-record
+salt + IV, HKDF-derived key, versioned `v1.…` envelope for rotation).
+
+## The manifest
+
+A manifest describes your management API. The worker's single generic
+`HttpEnvironmentProvider` interprets it; nothing about your endpoints is assumed.
+
+```jsonc
+{
+  "providerId": "acme-envs", // [a-z0-9-]
+  "label": "Acme Ephemeral Envs",
+  "baseUrl": "https://envs.acme.internal-is-blocked.example", // https, public host
+  "auth": { "type": "bearer", "secretRef": { "key": "API_TOKEN" } },
+
+  // provision/status/teardown: arbitrary method + path + body, with templating.
+  "provision": {
+    "method": "POST",
+    "pathTemplate": "/environments",
+    "bodyTemplate": "{\"ref\":\"{{input.blockId}}\",\"title\":\"{{input.title}}\"}",
+  },
+  "status": { "method": "GET", "pathTemplate": "/environments/{{provision.externalId}}" },
+  "teardown": { "method": "DELETE", "pathTemplate": "/environments/{{provision.externalId}}" },
+
+  // Map YOUR response shape onto the canonical handle via dot-paths.
+  "response": {
+    "urlPath": "data.url",
+    "statusPath": "data.state",
+    "statusMap": [
+      { "from": "running", "to": "ready" },
+      { "from": "building", "to": "provisioning" },
+      { "from": "error", "to": "failed" },
+    ],
+    "externalIdPath": "data.id",
+    "expiresAtPath": "data.expires_at", // epoch-ms, numeric string, or ISO
+    // How the *provisioned env* itself is reached by the tester (per-env creds,
+    // read from the provision response — distinct from the management-API auth):
+    "access": { "scheme": "bearer", "tokenPath": "data.access_token" },
+  },
+
+  "defaultTtlMs": 3600000, // fallback TTL when no expiry returned
+}
+```
+
+### Templating
+
+- `{{input.*}}` — provision inputs. On a pipeline `deployer` step these are derived
+  from the block (`blockId`, `title`, `type`, `description`, `features`); on a manual
+  provision they come from the request `inputs` (plus `blockId`).
+- `{{provision.*}}` — fields captured from the provision response (`externalId`,
+  `url`), available to `status`/`teardown`.
+- Unknown references resolve to empty — a manifest can't reach arbitrary state.
+
+### Auth schemes (calling the management API)
+
+Each references its secret(s) by **logical key**; values are supplied separately
+(see below) and never appear in the manifest.
+
+| `auth.type`                 | fields                                                                          | effect                                 |
+| --------------------------- | ------------------------------------------------------------------------------- | -------------------------------------- |
+| `none`                      | —                                                                               | no auth header                         |
+| `api_key`                   | `headerName`, `secretRef`, `valuePrefix?`                                       | `headerName: <prefix><secret>`         |
+| `bearer`                    | `secretRef`                                                                     | `Authorization: Bearer <secret>`       |
+| `basic`                     | `usernameSecretRef`, `passwordSecretRef`                                        | `Authorization: Basic base64(u:p)`     |
+| `oauth2_client_credentials` | `tokenUrl`, `clientIdSecretRef`, `clientSecretSecretRef`, `scope?`, `audience?` | POST token → `Authorization: Bearer …` |
+| `custom_headers`            | `headers: [{ name, secretRef }]`                                                | each header set from its secret        |
+
+## Registering a provider
+
+Supply the manifest and the **actual secret values** for every `secretRef.key` it
+references. The values are encrypted and stored; they are never returned.
+
+```sh
+curl -X POST $API/workspaces/$WS/environments/connection \
+  -H 'content-type: application/json' \
+  -d '{
+        "manifest": { ... },
+        "secrets": { "API_TOKEN": "real-token-value" }
+      }'
+```
+
+- `GET /workspaces/:ws/environments/connection` → safe metadata + `secretKeys`
+  (names only).
+- `PUT /workspaces/:ws/environments/connection/secrets` → rotate the secret bundle.
+- `DELETE /workspaces/:ws/environments/connection` → unregister.
+
+## Provisioning & discovery
+
+The intended flow is a pipeline on an `environment` block with agent kinds
+`["deployer", "tester"]`:
+
+1. The **`deployer`** step runs deterministically (no LLM, no token spend): the
+   engine calls the provider, persists the environment, and writes a summary to the
+   step output.
+2. The **`tester`** step (and any later step) receives the live environment in its
+   prompt context — the URL and how to authenticate — so it tests the real build.
+
+You can also drive it directly:
+
+- `POST /workspaces/:ws/environments/provision` `{ blockId?, inputs? }` → handle
+- `GET  /workspaces/:ws/environments` → handles (no credentials)
+- `GET  /workspaces/:ws/environments/:id` → one handle (no credentials)
+- `GET  /workspaces/:ws/environments/:id/access` → the **decrypted** access creds
+  (the only endpoint that returns them; over TLS)
+- `POST /workspaces/:ws/environments/:id/teardown` → tear down now
+
+## TTL & teardown
+
+If a provisioned environment has an expiry (from `expiresAtPath`, or `defaultTtlMs`),
+the cron sweep (every 2 min) calls the manifest's `teardown` and tombstones the
+record once it elapses. Teardown is best-effort: a transient provider failure is
+retried on the next pass rather than wedging the registry.
+
+## Security notes
+
+- **Encryption at rest.** The per-tenant secret bundle and every env's access creds
+  are AES-256-GCM ciphertext in D1; only the service-level master key lives in env.
+- **No secret leakage.** Secrets are placed only in outgoing request headers — never
+  in logs, error bodies (which are length-capped and carry no auth headers), list
+  responses, or the LLM prompt (the tester prompt names the auth _scheme_, not the
+  token).
+- **SSRF guard.** Every URL the worker fetches or exposes (manifest `baseUrl`, OAuth
+  `tokenUrl`, the extracted env URL) must be https, carry no embedded credentials,
+  and resolve to a public host (loopback/link-local/RFC1918 are rejected).

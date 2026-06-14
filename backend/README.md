@@ -74,6 +74,33 @@ deliveries are HMAC-verified over the raw body before a fast `202` ack. New sche
 in migration `0004_github_projections.sql`. Configure via `GITHUB_APP_ID/SLUG` vars
 and `GITHUB_APP_PRIVATE_KEY` (PKCS#8) + `GITHUB_WEBHOOK_SECRET` secrets.
 
+## Ephemeral environments + the Deployer agent (optional)
+
+Lets a workspace plug in its **own** self-rolled ephemeral/preview-environment
+tooling so a `deployer` agent can provision an environment and a `tester` agent can
+run against it. It is **API-only and declarative**: an org registers a
+Valibot-validated **manifest** describing its management API as HTTP request
+templates for provision/status/teardown, an auth scheme (none / api-key / bearer /
+basic / OAuth2 client-credentials / custom headers), and a dot-path mapping from its
+arbitrary response onto a canonical environment handle. A single generic
+`HttpEnvironmentProvider` interprets any manifest — no presets, no per-org code.
+
+The `deployer` step is executed **deterministically by the engine** (it calls the
+provider directly — no LLM, no token spend); the resulting handle is persisted in a
+registry keyed by block and injected into downstream steps' `AgentRunContext`, so a
+`tester` step discovers the live URL and how to authenticate. Like GitHub/Confluence
+it is **opt-in** (the core `environments` module and worker adapters wire only when
+configured).
+
+Per-tenant provider credentials are supplied at registration and stored **encrypted
+at rest** in D1 (AES-256-GCM via `SecretCipher`, per-record salt + IV, HKDF-derived
+key); the manifest references them by logical key only. The single env secret is the
+service-level master key. Configure via `ENVIRONMENTS_ENABLED=true` and the
+`ENVIRONMENTS_ENCRYPTION_KEY` secret (required when enabled). New schema is in
+migration `0008_environments.sql`. See
+[`docs/environments-integration.md`](./docs/environments-integration.md) and
+[`docs/adr/0003-ephemeral-environment-provider.md`](./docs/adr/0003-ephemeral-environment-provider.md).
+
 ## HTTP API (selected)
 
 ```
@@ -123,6 +150,17 @@ POST   /workspaces/:ws/github/repos/:repoId/commits           commit files (Git 
 POST   /workspaces/:ws/github/repos/:repoId/pulls             open a pull request
 PUT    /workspaces/:ws/github/repos/:repoId/pulls/:n/merge    merge a pull request
 POST   /workspaces/:ws/github/repos/:repoId/issues/:n/comments  comment on an issue/PR
+
+# Ephemeral environments (only when ENVIRONMENTS_ENABLED + encryption key are set)
+GET    /workspaces/:ws/environments/connection                  registered provider (safe metadata)
+POST   /workspaces/:ws/environments/connection                  register manifest + secret bundle
+PUT    /workspaces/:ws/environments/connection/secrets          rotate the secret bundle
+DELETE /workspaces/:ws/environments/connection                  unregister
+GET    /workspaces/:ws/environments                             list provisioned environments
+GET    /workspaces/:ws/environments/:id                         one environment (no creds)
+GET    /workspaces/:ws/environments/:id/access                  decrypted access creds (TLS only)
+POST   /workspaces/:ws/environments/provision                   manually provision { blockId?, inputs? }
+POST   /workspaces/:ws/environments/:id/teardown                tear down now
 ```
 
 ## Develop & test
