@@ -74,7 +74,8 @@ function selectAgentExecutor(
   })
 
   // When container implementation is opted in and its prerequisites are wired,
-  // route the `coder` step to a real sandbox; every other step stays inline.
+  // route the repo-operating steps (`coder`, `mocker`, `playwright`) to a real
+  // sandbox; every other step stays inline (see CompositeAgentExecutor).
   if (config.agents.containerImpl) {
     const container = buildContainerExecutor(env, config, db, clock)
     if (container) return new CompositeAgentExecutor(inline, container)
