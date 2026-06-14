@@ -3,6 +3,12 @@ import { num } from './utils'
 
 export interface AuthConfig {
   enabled: boolean
+  /**
+   * Local-dev/test ONLY: permit running with auth unconfigured (open API). Never
+   * set in production, so a misconfigured prod deployment fails closed rather
+   * than serving protected data without a session. See `requireAuth`.
+   */
+  devOpen: boolean
   clientId: string
   clientSecret: string
   sessionSecret: string
@@ -34,6 +40,7 @@ export function loadAuthConfig(env: Env): AuthConfig {
   const ttlHours = num(env.AUTH_SESSION_TTL_HOURS)
   return {
     enabled: clientId !== '' && clientSecret !== '' && sessionSecret !== '',
+    devOpen: env.AUTH_DEV_OPEN?.trim() === 'true',
     clientId,
     clientSecret,
     sessionSecret,

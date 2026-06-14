@@ -30,6 +30,10 @@ export default defineWorkersConfig(async () => {
               RNG_SEED: '42',
               AGENTS_ENABLED: 'false',
               EXECUTION_MODE: 'tick',
+              // The auth gate fails closed when unconfigured; tests send no
+              // credentials, so opt into the local/dev-open path (mirrors
+              // `.dev.vars` for `wrangler dev`). Production never sets this.
+              AUTH_DEV_OPEN: 'true',
               // A non-empty secret so the GitHub connect-state HMAC signer works
               // in tests. GITHUB_APP_ID stays unset, so the integration is still
               // "disabled" by config and tests wire the module via overrides.

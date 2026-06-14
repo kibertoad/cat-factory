@@ -45,10 +45,17 @@ credentialed CORS.
 
 ## Configuration
 
-Auth is **opt-in**, mirroring the agents / GitHub-integration feature gates: it
-activates only when the OAuth credentials _and_ a session secret are present.
-When unset, the API is open (local dev, the test suite) and the SPA renders
-without a login screen.
+The login flow **activates** only when the OAuth credentials _and_ a session
+secret are present. But the gate **fails closed**: every route except a small
+public allowlist (`/health`, `/auth/*`, the `/v1` container proxy, and `/github`
+webhooks) requires a valid session, and when auth is unconfigured those routes
+return `503 auth_not_configured` rather than serving data openly. **Production is
+therefore always authenticated** — an unconfigured deployment is locked, not open.
+
+The only way to run open is the explicit local-dev/test escape hatch
+`AUTH_DEV_OPEN=true`. It lives in `.dev.vars` (gitignored, for `wrangler dev`)
+and the vitest bindings, and must **never** be set in the deployed
+`wrangler.toml` — doing so would re-open production.
 
 Register an OAuth app (a GitHub App's OAuth credentials work, or a classic OAuth
 App) with the callback URL `<worker-origin>/auth/callback`, then:
@@ -71,6 +78,7 @@ Optional vars:
 | `AUTH_SESSION_TTL_HOURS`    | Session lifetime in hours                                       | `168` (7 days)           |
 | `AUTH_ALLOWED_LOGINS`       | Comma-separated GitHub logins permitted to sign in              | any user                 |
 | `GITHUB_OAUTH_BASE`         | OAuth host (set for GitHub Enterprise)                          | `https://github.com`     |
+| `AUTH_DEV_OPEN`             | Local/test ONLY: `true` runs the API open while unconfigured    | unset (prod fails closed) |
 
 > **Production note:** set `AUTH_SUCCESS_REDIRECT_URL` to your SPA's URL. Without
 > it the post-login landing comes from the request's `redirect` query (dev

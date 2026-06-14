@@ -139,9 +139,20 @@ describe('auth', () => {
       expect(await res.json()).toEqual({ enabled: true })
     })
 
-    it('leaves the API open when auth is unconfigured', async () => {
+    it('leaves the API open when auth is unconfigured but AUTH_DEV_OPEN is set', async () => {
+      // The base test env sets AUTH_DEV_OPEN=true (mirrors local `.dev.vars`).
       const res = await fetchWith(env, { path: '/workspaces' })
       expect(res.status).toBe(200)
+    })
+
+    it('fails closed (503) when auth is unconfigured and AUTH_DEV_OPEN is unset', async () => {
+      // Production shape: no OAuth creds, no dev-open hatch. The gate must refuse
+      // rather than serve protected data openly.
+      const closedEnv = { ...env, AUTH_DEV_OPEN: undefined } as typeof env
+      const res = await fetchWith(closedEnv, { path: '/workspaces' })
+      expect(res.status).toBe(503)
+      const body = (await res.json()) as { error: { code: string } }
+      expect(body.error.code).toBe('auth_not_configured')
     })
 
     it('keeps /health public even with auth enabled', async () => {

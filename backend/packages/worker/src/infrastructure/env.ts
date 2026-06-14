@@ -139,6 +139,13 @@ export interface Env {
   AUTH_CALLBACK_URL?: string
   /** Optional comma-separated allowlist of GitHub logins permitted to sign in. */
   AUTH_ALLOWED_LOGINS?: string
+  /**
+   * Local-dev/test ONLY escape hatch: set to 'true' to allow the API to run with
+   * auth unconfigured (open). It lives in `.dev.vars` (gitignored) and the test
+   * bindings, never in the deployed `wrangler.toml`. In production this is unset,
+   * so an unconfigured deployment fails closed instead of serving data openly.
+   */
+  AUTH_DEV_OPEN?: string
 
   // ---- Confluence integration (see config.ts; opt-in) ---------------------
   /** Enables the Confluence integration ('true'). Per-workspace creds live in D1. */

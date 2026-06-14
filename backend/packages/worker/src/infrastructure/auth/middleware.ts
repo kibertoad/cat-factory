@@ -4,8 +4,13 @@ import { HmacSigner, type SessionPayload } from './signing'
 
 // Bearer-token auth for the API. The session token is minted by the OAuth
 // callback (see AuthController) and carried by the SPA as `Authorization:
-// Bearer <token>`. When auth is unconfigured the gate is a no-op, so local dev
-// and the test suite — which send no credentials — behave exactly as before.
+// Bearer <token>`.
+//
+// The gate FAILS CLOSED: if auth is unconfigured, protected routes are refused
+// (503) rather than served openly — production must always have auth present.
+// The only way to run open is the explicit local-dev/test escape hatch
+// `AUTH_DEV_OPEN=true` (config.auth.devOpen), set in `.dev.vars` and the test
+// bindings but never in the deployed wrangler.toml.
 
 /** Extract the bearer token from the Authorization header, if present. */
 export function bearerToken(c: Context<AppEnv>): string | null {
@@ -23,15 +28,29 @@ export function verifySession(c: Context<AppEnv>): Promise<SessionPayload | null
 }
 
 /**
- * Gate a route group: when auth is enabled, require a valid session and stash
- * the user on the context; otherwise pass through. Preflight (OPTIONS) is always
- * allowed so CORS isn't broken by the gate.
+ * Gate a route group. Preflight (OPTIONS) is always allowed so CORS isn't broken.
+ * When auth is enabled, require a valid session and stash the user on the
+ * context. When it is NOT configured, fail closed (503) — unless the local-dev
+ * escape hatch `AUTH_DEV_OPEN` is set, which passes through (dev + tests).
  */
 export function requireAuth(): MiddlewareHandler<AppEnv> {
   return async (c, next) => {
     if (c.req.method === 'OPTIONS') return next()
     const cfg = c.get('container').config.auth
-    if (!cfg.enabled) return next()
+    if (!cfg.enabled) {
+      if (cfg.devOpen) return next()
+      return c.json(
+        {
+          error: {
+            code: 'auth_not_configured',
+            message:
+              'Authentication is required but not configured. Set the GitHub OAuth ' +
+              'credentials and AUTH_SESSION_SECRET, or AUTH_DEV_OPEN=true for local dev.',
+          },
+        },
+        503,
+      )
+    }
 
     const user = await verifySession(c)
     if (!user) {

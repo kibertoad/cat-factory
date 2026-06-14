@@ -39,26 +39,40 @@ export function createApp(options: CreateAppOptions = {}): Hono<AppEnv> {
 
   app.get('/health', (c) => c.json({ status: 'ok' }))
 
-  // Read-only best-practice fragment catalog (public, build-static reference data).
+  // Default-deny: every route requires a valid session EXCEPT the prefixes below,
+  // which are either public by necessity or carry their own authentication. The
+  // gate fails closed when auth is unconfigured (503) unless AUTH_DEV_OPEN is set
+  // for local dev — so production is always authenticated, and any new route is
+  // protected unless it is explicitly added to this allowlist.
+  //   /health   — liveness probe (no data).
+  //   /auth     — the login flow itself; can't require a session to obtain one.
+  //   /v1       — container LLM proxy; authenticated by a model-locked session
+  //               token (ContainerSessionService), not the workspace session.
+  //   /github   — GitHub webhooks + setup callback; verified by HMAC signature.
+  const PUBLIC_PREFIXES = ['/health', '/auth', '/v1', '/github']
+  const gate = requireAuth()
+  app.use('*', (c, next) => {
+    if (c.req.method === 'OPTIONS') return next()
+    const path = c.req.path
+    if (PUBLIC_PREFIXES.some((p) => path === p || path.startsWith(`${p}/`))) return next()
+    return gate(c, next)
+  })
+
+  // Read-only best-practice fragment catalog (gated).
   app.route('/', promptFragmentController())
 
-  // Read-only model picker catalog (public; resolved to each model's active flavour).
+  // Read-only model picker catalog (gated; resolved to each model's active flavour).
   app.route('/', modelController())
 
   // OpenAI-compatible LLM proxy for implementation containers. Authenticated by a
-  // signed, model-locked session token (not the workspace session), so it sits
-  // outside requireAuth; it injects the real provider key and meters spend.
+  // signed, model-locked session token (not the workspace session); on the
+  // /v1 public-prefix allowlist above so requireAuth doesn't double-gate it.
   app.route('/', llmProxyController())
 
   // "Login with GitHub" (public; no-op endpoints when auth is unconfigured).
   app.route('/auth', authController())
 
-  // Gate the workspace-scoped API behind a valid session when auth is enabled.
-  // A no-op otherwise, so local dev and the test suite are unaffected.
-  app.use('/workspaces', requireAuth())
-  app.use('/workspaces/*', requireAuth())
-
-  // API layer — controllers grouped by module.
+  // API layer — controllers grouped by module (all behind the default-deny gate).
   app.route('/', workspaceController())
   app.route('/workspaces/:workspaceId', boardController())
   app.route('/workspaces/:workspaceId', pipelineController())
