@@ -5,7 +5,16 @@
 // payload returned by the backend drops straight into the Pinia stores without
 // translation. The board and its agent pipelines are owned by the backend; the
 // frontend renders and mutates that state over the REST API.
+//
+// This module holds the core board vocabulary. Adjacent concerns live in
+// sibling modules and are re-exported below so `~/types/domain` stays the single
+// import surface:
+//   - execution model  → ./execution
+//   - models/fragments  → ./models
+//   - Confluence import → ./confluence
 // ---------------------------------------------------------------------------
+
+import type { ExecutionInstance } from './execution'
 
 /** Lifecycle of an architecture building block. */
 export type BlockStatus =
@@ -69,40 +78,6 @@ export interface Block {
   modelId?: string
 }
 
-/**
- * A curated best-practice "prompt fragment" served read-only by the backend
- * (`GET /prompt-fragments`). Users pick which apply to a block; the backend folds
- * the selected fragments' bodies into the agent system prompt at run time.
- */
-export interface PromptFragment {
-  id: string
-  version: string
-  title: string
-  category: string
-  summary: string
-  body: string
-  appliesTo?: {
-    blockTypes?: BlockType[]
-    agentKinds?: AgentKind[]
-  }
-}
-
-/**
- * A selectable LLM model, resolved to the flavour actually in use for this
- * deployment (served by `GET /models`). `flavor` is `direct` when the model's
- * own provider key is configured, else `cloudflare`. Mirrors `ModelOption` in
- * `@cat-factory/contracts`.
- */
-export interface ModelOption {
-  id: string
-  label: string
-  description: string
-  flavor: 'cloudflare' | 'direct'
-  providerLabel: string
-  provider: string
-  model: string
-}
-
 /** The kinds of agents available in the agent palette. */
 export type AgentKind =
   | 'architect'
@@ -130,48 +105,6 @@ export interface Pipeline {
   name: string
   /** ordered agent kinds — the chain executes left to right */
   agentKinds: AgentKind[]
-}
-
-/** Runtime state of a single agent within a running execution. */
-export type AgentState =
-  | 'pending' // not started
-  | 'working' // actively (visually) working
-  | 'waiting_decision' // paused, needs a human decision
-  | 'done' // finished
-
-/** A decision an agent surfaces mid-step that a human must resolve. */
-export interface Decision {
-  id: string
-  question: string
-  options: string[]
-  chosen: string | null
-}
-
-/** One agent's slot in a running pipeline. */
-export interface PipelineStep {
-  agentKind: AgentKind
-  state: AgentState
-  /** 0..1 progress of this individual step */
-  progress: number
-  /** present + unresolved => the step (and block) is blocked */
-  decision: Decision | null
-  /** text the agent produced for this step (when LLM execution is enabled). */
-  output?: string
-  /** identifier of the model that produced `output`, for transparency. */
-  model?: string
-}
-
-/** A pipeline instance running against one block. */
-export interface ExecutionInstance {
-  id: string
-  blockId: string
-  pipelineId: string
-  pipelineName: string
-  steps: PipelineStep[]
-  /** index into steps of the currently active step */
-  currentStep: number
-  /** 'paused' = halted by the spend safeguard until the budget frees up. */
-  status: 'running' | 'blocked' | 'done' | 'paused'
 }
 
 /**
@@ -228,67 +161,8 @@ export interface AuthUser {
   avatarUrl: string | null
 }
 
-// ---------------------------------------------------------------------------
-// Confluence integration. Requirements / RFCs / PRDs imported from Confluence
-// can be expanded into board structure or attached to a task as agent context.
-// These mirror the `@cat-factory/contracts` Confluence schemas.
-// ---------------------------------------------------------------------------
-
-/** A workspace's connection to a Confluence Cloud site (never carries the token). */
-export interface ConfluenceConnection {
-  baseUrl: string
-  accountEmail: string
-  /** When the connection was established (epoch ms). */
-  connectedAt: number
-}
-
-/** A Confluence page imported into the workspace. */
-export interface ConfluenceDocument {
-  pageId: string
-  spaceKey: string
-  title: string
-  url: string
-  version: number
-  /** Short plain-text preview of the page body. */
-  excerpt: string
-  /** The board block this document is attached to as context, if any. */
-  linkedBlockId: string | null
-  syncedAt: number
-}
-
-/** A proposed task within a planned frame/module. */
-export interface PlanTask {
-  title: string
-  description?: string
-  features?: string[]
-}
-
-/** A proposed module grouping tasks within a planned frame. */
-export interface PlanModule {
-  name: string
-  tasks: PlanTask[]
-}
-
-/** A proposed top-level frame with its modules and loose tasks. */
-export interface PlanFrame {
-  type: BlockType
-  title: string
-  description?: string
-  modules: PlanModule[]
-  tasks: PlanTask[]
-}
-
-/** A board structure extracted from a Confluence document. */
-export interface ConfluenceBoardPlan {
-  pageId: string
-  /** Whether an LLM produced the plan or the deterministic heading parser did. */
-  source: 'llm' | 'headings'
-  frames: PlanFrame[]
-}
-
-/** Counts of blocks created by spawning a plan onto the board. */
-export interface SpawnResult {
-  frames: number
-  modules: number
-  tasks: number
-}
+// Re-export the adjacent domain modules so `~/types/domain` remains the single
+// import surface for the whole frontend.
+export type * from './execution'
+export type * from './models'
+export type * from './confluence'

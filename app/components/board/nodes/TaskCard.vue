@@ -29,11 +29,8 @@ const unmet = computed(() => board.unmetDeps(props.taskId))
 const runnable = computed(() => board.isRunnable(props.taskId))
 
 /** Label a dependency, noting its frame when it lives in another one. */
-function depLabel(dep: Block) {
-  const frame = dep.parentId ? board.getBlock(dep.parentId) : undefined
-  const crossFrame = frame && frame.id !== task.value?.parentId
-  return crossFrame ? `${frame!.title} / ${dep.title}` : dep.title
-}
+const { depLabel: labelDep } = useDepLabels()
+const depLabel = (dep: Block) => labelDep(dep, task.value?.parentId)
 
 const threshold = computed(() => task.value?.confidenceThreshold ?? DEFAULT_CONFIDENCE_THRESHOLD)
 /** The pipeline a plain "Start" will use (first defined pipeline). */
