@@ -3,8 +3,8 @@
   "comment": "Self-contained (does not extend the monorepo base) so the Docker build context can be just this package directory.",
   "compilerOptions": {
     "target": "ES2022",
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
     "lib": ["ES2023"],
     "types": ["node"],
     "strict": true,
