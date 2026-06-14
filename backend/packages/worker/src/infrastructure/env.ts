@@ -90,6 +90,13 @@ export interface Env {
   /** Moonshot AI key (provider `moonshot`, direct Kimi; OpenAI-compatible). */
   MOONSHOT_API_KEY?: string
 
+  // Optional base-URL overrides for the OpenAI-compatible providers (self-hosted
+  // gateway, regional endpoint, or a stub in tests). Default to the public APIs.
+  QWEN_BASE_URL?: string
+  DEEPSEEK_BASE_URL?: string
+  MOONSHOT_BASE_URL?: string
+  OPENAI_BASE_URL?: string
+
   // ---- GitHub integration (see config.ts; opt-in) -------------------------
   /** GitHub App id (numeric). Presence enables the integration. */
   GITHUB_APP_ID?: string
