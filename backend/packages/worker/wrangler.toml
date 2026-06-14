@@ -70,10 +70,12 @@ class_name = "GitHubBackfillWorkflow"
 # max_retries = 3
 # dead_letter_queue = "cat-factory-execution-dlq"
 
-# Backstop sweeper: re-drives runs whose Workflows instance died (see
-# src/index.ts `scheduled`).
+# Scheduled work (routed by cron in src/index.ts `scheduled`):
+#   */2 * * * *  — backstop sweeper (re-drive dead runs) + GitHub reconcile.
+#   0 3 * * *    — daily storage-retention sweep (windows are days-to-months,
+#                  so it doesn't belong on the 2-min cadence).
 [triggers]
-crons = ["*/2 * * * *"]
+crons = ["*/2 * * * *", "0 3 * * *"]
 
 [vars]
 # Agent LLM configuration (see src/infrastructure/config.ts). Agents are off by

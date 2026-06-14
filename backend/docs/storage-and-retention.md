@@ -15,13 +15,16 @@ disruptive once they aren't.
 
 ## How the retention sweep is wired
 
-The every-2-min cron (`src/index.ts` `scheduled`) now also runs
-`sweepRetention` (`src/infrastructure/workflows/retention.ts`), which prunes each
+`sweepRetention` (`src/infrastructure/workflows/retention.ts`) prunes each
 unbounded table to a configurable age window. The windows are set via
 `wrangler.toml` vars (parsed in `src/infrastructure/config.ts`), default to the
-values noted per item below, and a window of `0` disables that table's pass. The
-deletes are range scans on indexed columns and usually reclaim nothing, so they
-are cheap to run on every tick.
+values noted per item below, and a window of `0` disables that table's pass.
+
+It runs on its **own daily cron** (`0 3 * * *`), separate from the 2-min
+run-sweeper cron; `src/index.ts` `scheduled` routes by `controller.cron`. The
+windows are days-to-months long, so a daily pass is plenty — running the same
+boundary `DELETE`s every two minutes would just add pointless write load on the
+single D1 primary (the very contention §4 warns about).
 
 ## Background: the relevant D1 constraints
 
