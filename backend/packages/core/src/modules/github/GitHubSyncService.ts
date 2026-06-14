@@ -8,6 +8,8 @@ import type {
   IssueProjectionRepository,
   PullRequestProjectionRepository,
   RepoProjectionRepository,
+  SyncCursor,
+  SyncCursorKind,
 } from '../../ports/github-repositories'
 import type { GitHubRepo } from '../../domain/types'
 
@@ -63,96 +65,133 @@ export class GitHubSyncService {
     return repos
   }
 
+  /**
+   * Run one incremental fetch→upsert→cursor cycle for a single resource kind.
+   * Reads the prior cursor, fetches (conditionally, via the prior ETag/`since`),
+   * upserts when there's anything new, then advances the cursor. The differences
+   * between resources (how the request is shaped and how the next cursor is
+   * derived) are supplied by the callbacks; the cursor bookkeeping is shared.
+   */
+  private async syncResource<T>(
+    workspaceId: string,
+    repoGithubId: number,
+    kind: SyncCursorKind,
+    fetch: (
+      cursor: SyncCursor | null,
+    ) => Promise<{ items: T[]; etag?: string | null; notModified?: boolean }>,
+    upsert: (items: T[]) => Promise<void>,
+    nextCursor: (
+      prev: SyncCursor | null,
+      etag: string | null | undefined,
+      now: number,
+    ) => SyncCursor,
+  ): Promise<{ items: T[]; etag?: string | null; notModified?: boolean }> {
+    const repos = this.deps.repoProjectionRepository
+    const cursor = await repos.getCursor(workspaceId, repoGithubId, kind)
+    const res = await fetch(cursor)
+    if (!res.notModified && res.items.length > 0) await upsert(res.items)
+    await repos.setCursor(
+      workspaceId,
+      repoGithubId,
+      kind,
+      nextCursor(cursor, res.etag, this.deps.clock.now()),
+    )
+    return res
+  }
+
   /** Incrementally resync one repo's branches, PRs, issues, commits and checks. */
   async syncRepo(workspaceId: string, repo: GitHubRepo): Promise<void> {
     const ref: GitHubRepoRef = { owner: repo.owner, repo: repo.name }
     const id = repo.githubId
     const installationId = repo.installationId
-    const repos = this.deps.repoProjectionRepository
-    const now = () => this.deps.clock.now()
+    const client = this.deps.githubClient
+
+    // ETag-conditional cursor: carry the prior ETag forward when the fetch
+    // returns none. PRs/issues (`stampSince`) additionally record a fresh
+    // `sinceIso` lower bound for the next delta; branches don't paginate by date.
+    const etagCursor =
+      (stampSince: boolean) =>
+      (prev: SyncCursor | null, etag: string | null | undefined, now: number): SyncCursor => ({
+        etag: etag ?? prev?.etag ?? null,
+        lastSyncedAt: now,
+        sinceIso: stampSince ? new Date(now).toISOString() : null,
+      })
 
     // Branches — conditional GET via ETag.
-    const branchCursor = await repos.getCursor(workspaceId, id, 'branches')
-    const branches = await this.deps.githubClient.listBranches(
-      installationId,
-      ref,
-      branchCursor?.etag ?? undefined,
+    const branches = await this.syncResource(
+      workspaceId,
+      id,
+      'branches',
+      (cursor) => client.listBranches(installationId, ref, cursor?.etag ?? undefined),
+      (items) => this.deps.branchProjectionRepository.upsertMany(workspaceId, items),
+      etagCursor(false),
     )
-    if (!branches.notModified && branches.items.length > 0) {
-      await this.deps.branchProjectionRepository.upsertMany(workspaceId, branches.items)
-    }
     const defaultBranchSha =
       branches.items.find((b) => b.name === repo.defaultBranch)?.headSha ?? null
-    await repos.setCursor(workspaceId, id, 'branches', {
-      etag: branches.etag ?? branchCursor?.etag ?? null,
-      lastSyncedAt: now(),
-      sinceIso: null,
-    })
 
     // Pull requests — delta by `since` (GitHub's updated_at lower bound).
-    const prCursor = await repos.getCursor(workspaceId, id, 'pulls')
-    const pulls = await this.deps.githubClient.listPullRequests(installationId, ref, {
-      since: prCursor?.sinceIso ?? undefined,
-      etag: prCursor?.etag ?? undefined,
-    })
-    if (!pulls.notModified && pulls.items.length > 0) {
-      await this.deps.pullRequestProjectionRepository.upsertMany(workspaceId, pulls.items)
-    }
-    await repos.setCursor(workspaceId, id, 'pulls', {
-      etag: pulls.etag ?? prCursor?.etag ?? null,
-      lastSyncedAt: now(),
-      sinceIso: new Date(now()).toISOString(),
-    })
+    await this.syncResource(
+      workspaceId,
+      id,
+      'pulls',
+      (cursor) =>
+        client.listPullRequests(installationId, ref, {
+          since: cursor?.sinceIso ?? undefined,
+          etag: cursor?.etag ?? undefined,
+        }),
+      (items) => this.deps.pullRequestProjectionRepository.upsertMany(workspaceId, items),
+      etagCursor(true),
+    )
 
     // Issues — delta by `since`.
-    const issueCursor = await repos.getCursor(workspaceId, id, 'issues')
-    const issues = await this.deps.githubClient.listIssues(installationId, ref, {
-      since: issueCursor?.sinceIso ?? undefined,
-      etag: issueCursor?.etag ?? undefined,
-    })
-    if (!issues.notModified && issues.items.length > 0) {
-      await this.deps.issueProjectionRepository.upsertMany(workspaceId, issues.items)
-    }
-    await repos.setCursor(workspaceId, id, 'issues', {
-      etag: issues.etag ?? issueCursor?.etag ?? null,
-      lastSyncedAt: now(),
-      sinceIso: new Date(now()).toISOString(),
-    })
+    await this.syncResource(
+      workspaceId,
+      id,
+      'issues',
+      (cursor) =>
+        client.listIssues(installationId, ref, {
+          since: cursor?.sinceIso ?? undefined,
+          etag: cursor?.etag ?? undefined,
+        }),
+      (items) => this.deps.issueProjectionRepository.upsertMany(workspaceId, items),
+      etagCursor(true),
+    )
 
     // Commits — delta by `since` on the default branch. On the first sync there
     // is no cursor, so fall back to the backfill horizon (if configured) instead
     // of fetching the repo's entire commit history in one step.
-    const commitCursor = await repos.getCursor(workspaceId, id, 'commits')
     const commitBackfillSince =
       this.deps.commitBackfillHorizonMs !== undefined
-        ? new Date(now() - this.deps.commitBackfillHorizonMs).toISOString()
+        ? new Date(this.deps.clock.now() - this.deps.commitBackfillHorizonMs).toISOString()
         : undefined
-    const commits = await this.deps.githubClient.listCommits(installationId, ref, {
-      since: commitCursor?.sinceIso ?? commitBackfillSince,
-    })
-    if (commits.items.length > 0) {
-      await this.deps.commitProjectionRepository.upsertMany(workspaceId, commits.items)
-    }
-    await repos.setCursor(workspaceId, id, 'commits', {
-      etag: null,
-      lastSyncedAt: now(),
-      sinceIso: new Date(now()).toISOString(),
-    })
+    await this.syncResource(
+      workspaceId,
+      id,
+      'commits',
+      (cursor) =>
+        client.listCommits(installationId, ref, {
+          since: cursor?.sinceIso ?? commitBackfillSince,
+        }),
+      (items) => this.deps.commitProjectionRepository.upsertMany(workspaceId, items),
+      (_prev, _etag, now) => ({
+        etag: null,
+        lastSyncedAt: now,
+        sinceIso: new Date(now).toISOString(),
+      }),
+    )
 
-    // Check runs for the default-branch head (CI gating signal).
+    // Check runs for the default-branch head (CI gating signal). Not cursor-based.
     if (defaultBranchSha) {
-      const checks = await this.deps.githubClient.listCheckRuns(
-        installationId,
-        ref,
-        defaultBranchSha,
-      )
+      const checks = await client.listCheckRuns(installationId, ref, defaultBranchSha)
       if (checks.items.length > 0) {
         await this.deps.checkRunProjectionRepository.upsertMany(workspaceId, checks.items)
       }
     }
 
     // Stamp the repo row as freshly synced.
-    await repos.upsertMany(workspaceId, [{ ...repo, syncedAt: now() }])
+    await this.deps.repoProjectionRepository.upsertMany(workspaceId, [
+      { ...repo, syncedAt: this.deps.clock.now() },
+    ])
   }
 
   /** Resync a single tracked repo by its GitHub id (used by the queue consumer). */
