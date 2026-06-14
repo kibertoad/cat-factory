@@ -5,14 +5,12 @@ import type { ModelProvider, ModelRef } from '@cat-factory/core'
 import type { LanguageModel } from 'ai'
 import { createWorkersAI } from 'workers-ai-provider'
 import type { Env } from '../env'
+import { baseUrlFor } from './providerEndpoints'
 
 // DashScope (Alibaba), DeepSeek and Moonshot (Kimi) all expose OpenAI-compatible
 // chat APIs, so they resolve through the openai-compatible provider with just a
-// base URL and a key. DashScope's international endpoint is used (the mainland
-// host differs).
-const QWEN_BASE_URL = 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1'
-const DEEPSEEK_BASE_URL = 'https://api.deepseek.com/v1'
-const MOONSHOT_BASE_URL = 'https://api.moonshot.ai/v1'
+// base URL and a key (see ./providerEndpoints for the shared base URLs).
+// DashScope's international endpoint is used (the mainland host differs).
 
 /**
  * Resolves a provider-agnostic {@link ModelRef} into a concrete Vercel AI SDK
@@ -44,7 +42,7 @@ export class CloudflareModelProvider implements ModelProvider {
         return createOpenAICompatible({
           name: 'qwen',
           apiKey: this.env.QWEN_API_KEY,
-          baseURL: QWEN_BASE_URL,
+          baseURL: baseUrlFor('qwen', this.env)!,
         })(ref.model)
       }
       case 'deepseek': {
@@ -54,7 +52,7 @@ export class CloudflareModelProvider implements ModelProvider {
         return createOpenAICompatible({
           name: 'deepseek',
           apiKey: this.env.DEEPSEEK_API_KEY,
-          baseURL: DEEPSEEK_BASE_URL,
+          baseURL: baseUrlFor('deepseek', this.env)!,
         })(ref.model)
       }
       case 'moonshot': {
@@ -64,7 +62,7 @@ export class CloudflareModelProvider implements ModelProvider {
         return createOpenAICompatible({
           name: 'moonshot',
           apiKey: this.env.MOONSHOT_API_KEY,
-          baseURL: MOONSHOT_BASE_URL,
+          baseURL: baseUrlFor('moonshot', this.env)!,
         })(ref.model)
       }
       case 'workers-ai': {

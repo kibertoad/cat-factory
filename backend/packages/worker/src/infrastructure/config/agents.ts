@@ -10,6 +10,12 @@ import { num } from './utils'
 
 export interface AgentsConfig {
   enabled: boolean
+  /**
+   * Route the implementation (`coder`) step to a per-run Cloudflare Container
+   * running the Pi coding agent, rather than a single inline LLM call. Requires
+   * `enabled` plus the container binding / GitHub / proxy wiring (see container.ts).
+   */
+  containerImpl: boolean
   routing: AgentRouting
   /**
    * Resolve a block's selected model id to a concrete ref, honouring the
@@ -67,6 +73,7 @@ export function loadAgentsConfig(
 
   return {
     enabled: env.AGENTS_ENABLED === 'true',
+    containerImpl: env.CONTAINER_IMPL_ENABLED === 'true',
     routing: {
       default: defaultConfig,
       byKind: parseModelOverrides(env.AGENT_MODELS),

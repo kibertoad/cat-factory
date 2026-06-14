@@ -16,6 +16,7 @@ import { confluenceController } from './modules/confluence/ConfluenceController'
 import { environmentController } from './modules/environments/EnvironmentController'
 import { promptFragmentController } from './modules/promptFragments/PromptFragmentController'
 import { modelController } from './modules/models/ModelController'
+import { llmProxyController } from './modules/llmProxy/LlmProxyController'
 
 export interface CreateAppOptions {
   /** Override core dependencies — used by tests (e.g. a fake agent executor). */
@@ -43,6 +44,11 @@ export function createApp(options: CreateAppOptions = {}): Hono<AppEnv> {
 
   // Read-only model picker catalog (public; resolved to each model's active flavour).
   app.route('/', modelController())
+
+  // OpenAI-compatible LLM proxy for implementation containers. Authenticated by a
+  // signed, model-locked session token (not the workspace session), so it sits
+  // outside requireAuth; it injects the real provider key and meters spend.
+  app.route('/', llmProxyController())
 
   // "Login with GitHub" (public; no-op endpoints when auth is unconfigured).
   app.route('/auth', authController())

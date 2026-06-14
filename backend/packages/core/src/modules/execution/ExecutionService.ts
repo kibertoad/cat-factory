@@ -331,9 +331,12 @@ export class ExecutionService {
     const context: AgentRunContext = {
       agentKind: step.agentKind,
       pipelineName: instance.pipelineName,
+      workspaceId,
+      executionId: instance.id,
       stepIndex: instance.currentStep,
       isFinalStep,
       block: {
+        id: block.id,
         title: block.title,
         type: block.type,
         description: block.description,
