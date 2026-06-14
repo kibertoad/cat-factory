@@ -1,9 +1,14 @@
 import type { ExecutionContext, MessageBatch, ScheduledController } from '@cloudflare/workers-types'
 import { createApp } from './app'
+import { loadConfig } from './infrastructure/config'
 import type { Env, ExecutionStartMessage, GitHubSyncMessage } from './infrastructure/env'
+import { D1CommitProjectionRepository } from './infrastructure/repositories/D1CommitProjectionRepository'
 import { D1ExecutionRepository } from './infrastructure/repositories/D1ExecutionRepository'
-import { SystemClock } from './infrastructure/runtime'
+import { D1RateLimitRepository } from './infrastructure/repositories/D1RateLimitRepository'
+import { D1TokenUsageRepository } from './infrastructure/repositories/D1TokenUsageRepository'
+import { CryptoIdGenerator, SystemClock } from './infrastructure/runtime'
 import { WorkflowsWorkRunner } from './infrastructure/workflows/WorkflowsWorkRunner'
+import { sweepRetention } from './infrastructure/workflows/retention'
 import { WorkflowsLookup, sweepStuckRuns } from './infrastructure/workflows/sweeper'
 import { handleGitHubSyncBatch, reconcileStaleRepos } from './infrastructure/github/sync-consumer'
 
@@ -25,17 +30,41 @@ const GITHUB_RECONCILE_STALE_MS = 30 * 60 * 1000
 /** Queue name for GitHub webhook deliveries / resync jobs (see wrangler.toml). */
 const GITHUB_SYNC_QUEUE_NAME = 'cat-factory-github-sync'
 
+/**
+ * Cron schedule (see wrangler.toml `triggers.crons`) that drives the retention
+ * sweep. Retention windows are days-to-months long, so a daily pass is plenty —
+ * running it on the 2-min run-sweeper cron would just re-issue the same boundary
+ * DELETEs ~720×/day against the single D1 writer. Routed by `controller.cron`.
+ */
+const RETENTION_CRON = '0 3 * * *'
+
 export default {
   fetch: app.fetch,
 
-  async scheduled(
-    _controller: ScheduledController,
-    env: Env,
-    ctx: ExecutionContext,
-  ): Promise<void> {
+  async scheduled(controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
     const clock = new SystemClock()
 
-    // Backstop: re-drive durable runs whose Workflows instance died.
+    // Daily pass: prune the unbounded ledgers/projections to their retention
+    // windows. The tables exist regardless of whether GitHub/agents are
+    // configured, so this runs unconditionally; an unused table reclaims nothing.
+    if (controller.cron === RETENTION_CRON) {
+      ctx.waitUntil(
+        sweepRetention({
+          tokenUsageRepository: new D1TokenUsageRepository({ db: env.DB }),
+          rateLimitRepository: new D1RateLimitRepository({
+            db: env.DB,
+            idGenerator: new CryptoIdGenerator(),
+          }),
+          commitRepository: new D1CommitProjectionRepository({ db: env.DB }),
+          clock,
+          policy: loadConfig(env).retention,
+        }).then(() => undefined),
+      )
+      return
+    }
+
+    // Frequent pass (every 2 min): time-sensitive backstops.
+    // Re-drive durable runs whose Workflows instance died.
     if (env.EXECUTION_WORKFLOW) {
       const workflow = env.EXECUTION_WORKFLOW
       ctx.waitUntil(

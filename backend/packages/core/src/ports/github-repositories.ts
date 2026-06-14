@@ -110,6 +110,14 @@ export interface IssueProjectionRepository {
 export interface CommitProjectionRepository {
   upsertMany(workspaceId: string, commits: GitHubCommit[]): Promise<void>
   listByRepo(workspaceId: string, repoGithubId: number, limit?: number): Promise<GitHubCommit[]>
+  /**
+   * Retention: delete commits authored before `epochMs` (exclusive), returning
+   * how many were removed. Unlike the other projections this table has no
+   * `deleted_at` tombstone and grows step-wise during backfills, so a periodic
+   * pass reclaims old rows (the backfill is bounded to the same horizon, so it
+   * won't re-fetch what this prunes). Rows with no `authored_at` are kept.
+   */
+  deleteOlderThan(epochMs: number): Promise<number>
 }
 
 export interface CheckRunProjectionRepository {
@@ -120,4 +128,10 @@ export interface CheckRunProjectionRepository {
 export interface RateLimitRepository {
   /** Append one observed rate-limit snapshot (best-effort; never throws fatally). */
   record(snapshot: RateLimitSnapshot): Promise<void>
+  /**
+   * Retention: delete snapshots observed before `epochMs` (exclusive), returning
+   * how many were removed. This is pure operational telemetry whose only consumer
+   * cares about recent headroom, so it gets the most aggressive retention window.
+   */
+  deleteOlderThan(epochMs: number): Promise<number>
 }

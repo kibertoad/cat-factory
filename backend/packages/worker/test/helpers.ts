@@ -83,6 +83,8 @@ export function githubDeps(
     commitProjectionRepository: new D1CommitProjectionRepository({ db }),
     checkRunProjectionRepository: new D1CheckRunProjectionRepository({ db }),
     webhookVerifier: opts.verifier ?? new FakeWebhookVerifier(true),
+    // Mirror production's default commit retention/backfill horizon (90 days).
+    commitBackfillHorizonMs: 90 * 24 * 60 * 60 * 1000,
   }
 }
 

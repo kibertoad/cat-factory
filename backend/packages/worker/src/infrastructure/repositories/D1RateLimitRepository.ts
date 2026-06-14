@@ -33,4 +33,13 @@ export class D1RateLimitRepository implements RateLimitRepository {
       )
       .run()
   }
+
+  async deleteOlderThan(epochMs: number): Promise<number> {
+    // Range delete on idx_gh_ratelimit_observed; this telemetry retains the least.
+    const { meta } = await this.db
+      .prepare('DELETE FROM github_rate_limits WHERE observed_at < ?')
+      .bind(epochMs)
+      .run()
+    return meta.changes ?? 0
+  }
 }

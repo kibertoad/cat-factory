@@ -70,10 +70,12 @@ class_name = "GitHubBackfillWorkflow"
 # max_retries = 3
 # dead_letter_queue = "cat-factory-execution-dlq"
 
-# Backstop sweeper: re-drives runs whose Workflows instance died (see
-# src/index.ts `scheduled`).
+# Scheduled work (routed by cron in src/index.ts `scheduled`):
+#   */2 * * * *  — backstop sweeper (re-drive dead runs) + GitHub reconcile.
+#   0 3 * * *    — daily storage-retention sweep (windows are days-to-months,
+#                  so it doesn't belong on the 2-min cadence).
 [triggers]
-crons = ["*/2 * * * *"]
+crons = ["*/2 * * * *", "0 3 * * *"]
 
 [vars]
 # Agent LLM configuration (see src/infrastructure/config.ts). Agents are off by
@@ -94,6 +96,17 @@ SPEND_CURRENCY = "EUR"
 # Optional per-model price overrides (per 1M tokens), merged over the built-in
 # defaults. Keys are "provider:model" or a bare "provider".
 # SPEND_MODEL_PRICES = '{"openai:gpt-4o":{"inputPerMillion":2.3,"outputPerMillion":9.2}}'
+
+# Storage retention (see src/infrastructure/config.ts and
+# docs/storage-and-retention.md). The cron sweeper prunes the tables that don't
+# self-limit to these age windows (in days); 0 disables a table's pass. Defaults
+# are applied when unset, so these are shown only for visibility/tuning.
+# token_usage: generous — the spend budget only reads the current period.
+# TOKEN_USAGE_RETENTION_DAYS = "395"
+# github_rate_limits: aggressive — pure telemetry, only recent headroom matters.
+# GITHUB_RATE_LIMIT_RETENTION_DAYS = "7"
+# github_commits: also bounds the initial backfill window to the same age.
+# GITHUB_COMMIT_RETENTION_DAYS = "90"
 
 # GitHub App integration (see src/infrastructure/config.ts and
 # docs/github-operations.md). Off until an App is configured: set the App id/slug

@@ -76,6 +76,12 @@ export interface CoreDependencies {
   commitProjectionRepository?: CommitProjectionRepository
   checkRunProjectionRepository?: CheckRunProjectionRepository
   webhookVerifier?: WebhookVerifier
+  /**
+   * Bounds the initial commit backfill window (see GitHubSyncService). The worker
+   * sets this from the commit retention horizon so backfill and retention agree;
+   * undefined backfills the full history.
+   */
+  commitBackfillHorizonMs?: number
 }
 
 /** The GitHub integration's services, present only when the app is configured. */
@@ -143,6 +149,7 @@ function createGitHubModule(deps: CoreDependencies): GitHubModule | undefined {
     commitProjectionRepository,
     checkRunProjectionRepository,
     clock: deps.clock,
+    commitBackfillHorizonMs: deps.commitBackfillHorizonMs,
   })
   const webhookService = new WebhookService({
     githubInstallationRepository,

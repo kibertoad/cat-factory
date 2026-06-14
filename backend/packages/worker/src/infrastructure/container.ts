@@ -113,6 +113,8 @@ function selectGitHubDeps(
     commitProjectionRepository: new D1CommitProjectionRepository({ db }),
     checkRunProjectionRepository: new D1CheckRunProjectionRepository({ db }),
     webhookVerifier: new WebCryptoWebhookVerifier(env.GITHUB_WEBHOOK_SECRET!),
+    // Bound the initial backfill to the commit retention horizon (0 = full).
+    commitBackfillHorizonMs: config.retention.commitMs || undefined,
   }
 }
 

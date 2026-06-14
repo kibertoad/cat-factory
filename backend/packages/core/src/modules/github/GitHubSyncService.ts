@@ -33,6 +33,14 @@ export interface GitHubSyncServiceDependencies {
   commitProjectionRepository: CommitProjectionRepository
   checkRunProjectionRepository: CheckRunProjectionRepository
   clock: Clock
+  /**
+   * Bounds the initial commit backfill: when a repo has no commit cursor yet
+   * (its first sync), commits are listed only from `now - commitBackfillHorizonMs`
+   * rather than from the dawn of the repo. This keeps a large/monorepo connect
+   * from inserting its entire history in one step. Subsequent syncs use the
+   * (more recent) cursor. Undefined means backfill the full history (legacy).
+   */
+  commitBackfillHorizonMs?: number
 }
 
 export class GitHubSyncService {
@@ -111,10 +119,16 @@ export class GitHubSyncService {
       sinceIso: new Date(now()).toISOString(),
     })
 
-    // Commits — delta by `since` on the default branch.
+    // Commits — delta by `since` on the default branch. On the first sync there
+    // is no cursor, so fall back to the backfill horizon (if configured) instead
+    // of fetching the repo's entire commit history in one step.
     const commitCursor = await repos.getCursor(workspaceId, id, 'commits')
+    const commitBackfillSince =
+      this.deps.commitBackfillHorizonMs !== undefined
+        ? new Date(now() - this.deps.commitBackfillHorizonMs).toISOString()
+        : undefined
     const commits = await this.deps.githubClient.listCommits(installationId, ref, {
-      since: commitCursor?.sinceIso ?? undefined,
+      since: commitCursor?.sinceIso ?? commitBackfillSince,
     })
     if (commits.items.length > 0) {
       await this.deps.commitProjectionRepository.upsertMany(workspaceId, commits.items)

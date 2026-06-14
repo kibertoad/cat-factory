@@ -32,6 +32,19 @@ export interface AppConfig {
   github: GitHubConfig
   /** "Login with GitHub" config; `enabled` is false unless an OAuth app is set up. */
   auth: AuthConfig
+  /** Retention windows for the unbounded ledgers/projections (epoch-ms ages). */
+  retention: RetentionConfig
+}
+
+/**
+ * Retention windows in milliseconds for the tables that don't self-limit. A
+ * window of 0 disables pruning for that table (and, for commits, disables the
+ * backfill horizon too). See docs/storage-and-retention.md.
+ */
+export interface RetentionConfig {
+  tokenUsageMs: number
+  rateLimitMs: number
+  commitMs: number
 }
 
 export interface AuthConfig {
@@ -171,6 +184,25 @@ function loadSpendPricing(env: Env): SpendPricing {
   }
 }
 
+const DAY_MS = 24 * 60 * 60 * 1000
+
+/** Parse a non-negative retention-day var into ms, falling back to `defaultDays`. */
+function retentionMs(raw: string | undefined, defaultDays: number): number {
+  const days = num(raw)
+  return (days !== undefined && days >= 0 ? days : defaultDays) * DAY_MS
+}
+
+function loadRetentionConfig(env: Env): RetentionConfig {
+  return {
+    // ~13 months: generous, since the spend budget only reads the current period.
+    tokenUsageMs: retentionMs(env.TOKEN_USAGE_RETENTION_DAYS, 395),
+    // Aggressive: pure telemetry whose only consumer cares about recent headroom.
+    rateLimitMs: retentionMs(env.GITHUB_RATE_LIMIT_RETENTION_DAYS, 7),
+    // Caps the commits projection and bounds the initial backfill to the same age.
+    commitMs: retentionMs(env.GITHUB_COMMIT_RETENTION_DAYS, 90),
+  }
+}
+
 export function loadConfig(env: Env): AppConfig {
   const defaultConfig: AgentModelConfig = {
     ref: {
@@ -198,5 +230,6 @@ export function loadConfig(env: Env): AppConfig {
     spend: loadSpendPricing(env),
     github: loadGitHubConfig(env),
     auth: loadAuthConfig(env),
+    retention: loadRetentionConfig(env),
   }
 }
