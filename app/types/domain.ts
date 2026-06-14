@@ -87,6 +87,22 @@ export interface PromptFragment {
   }
 }
 
+/**
+ * A selectable LLM model, resolved to the flavour actually in use for this
+ * deployment (served by `GET /models`). `flavor` is `direct` when the model's
+ * own provider key is configured, else `cloudflare`. Mirrors `ModelOption` in
+ * `@cat-factory/contracts`.
+ */
+export interface ModelOption {
+  id: string
+  label: string
+  description: string
+  flavor: 'cloudflare' | 'direct'
+  providerLabel: string
+  provider: string
+  model: string
+}
+
 /** The kinds of agents available in the agent palette. */
 export type AgentKind =
   | 'architect'

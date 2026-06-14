@@ -13,6 +13,7 @@ import { workspaceController } from './modules/workspaces/WorkspaceController'
 import { githubController } from './modules/github/GitHubController'
 import { githubWebhookController } from './modules/github/GitHubWebhookController'
 import { promptFragmentController } from './modules/promptFragments/PromptFragmentController'
+import { modelController } from './modules/models/ModelController'
 
 export interface CreateAppOptions {
   /** Override core dependencies — used by tests (e.g. a fake agent executor). */
@@ -37,6 +38,9 @@ export function createApp(options: CreateAppOptions = {}): Hono<AppEnv> {
 
   // Read-only best-practice fragment catalog (public, build-static reference data).
   app.route('/', promptFragmentController())
+
+  // Read-only model picker catalog (public; resolved to each model's active flavour).
+  app.route('/', modelController())
 
   // "Login with GitHub" (public; no-op endpoints when auth is unconfigured).
   app.route('/auth', authController())

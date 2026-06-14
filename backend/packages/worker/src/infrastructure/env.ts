@@ -61,6 +61,8 @@ export interface Env {
   QWEN_API_KEY?: string
   /** DeepSeek API key (provider `deepseek`; OpenAI-compatible endpoint). */
   DEEPSEEK_API_KEY?: string
+  /** Moonshot AI key (provider `moonshot`, direct Kimi; OpenAI-compatible). */
+  MOONSHOT_API_KEY?: string
 
   // ---- GitHub integration (see config.ts; opt-in) -------------------------
   /** GitHub App id (numeric). Presence enables the integration. */

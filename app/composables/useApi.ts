@@ -3,6 +3,7 @@ import type {
   Block,
   BlockType,
   ExecutionInstance,
+  ModelOption,
   Pipeline,
   PromptFragment,
   Workspace,
@@ -51,6 +52,9 @@ export function useApi() {
 
     // ---- prompt fragments (best-practice catalog) -------------------------
     getPromptFragments: () => http<PromptFragment[]>('/prompt-fragments'),
+
+    // ---- model picker catalog (effective per-deployment flavours) ---------
+    getModels: () => http<ModelOption[]>('/models'),
 
     // ---- workspaces -------------------------------------------------------
     listWorkspaces: () => http<Workspace[]>('/workspaces'),

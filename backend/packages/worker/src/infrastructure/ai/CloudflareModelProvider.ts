@@ -6,11 +6,13 @@ import type { LanguageModel } from 'ai'
 import { createWorkersAI } from 'workers-ai-provider'
 import type { Env } from '../env'
 
-// DashScope (Alibaba) and DeepSeek both expose OpenAI-compatible chat APIs, so
-// they resolve through the openai-compatible provider with just a base URL and a
-// key. DashScope's international endpoint is used (the mainland host differs).
+// DashScope (Alibaba), DeepSeek and Moonshot (Kimi) all expose OpenAI-compatible
+// chat APIs, so they resolve through the openai-compatible provider with just a
+// base URL and a key. DashScope's international endpoint is used (the mainland
+// host differs).
 const QWEN_BASE_URL = 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1'
 const DEEPSEEK_BASE_URL = 'https://api.deepseek.com/v1'
+const MOONSHOT_BASE_URL = 'https://api.moonshot.ai/v1'
 
 /**
  * Resolves a provider-agnostic {@link ModelRef} into a concrete Vercel AI SDK
@@ -18,8 +20,9 @@ const DEEPSEEK_BASE_URL = 'https://api.deepseek.com/v1'
  * `{ provider: 'openai', model: 'gpt-4o-mini' }` and gets back something
  * `generateText` can call, while API keys and the Workers AI binding stay here.
  *
- * Llama and Kimi run on Cloudflare Workers AI (`workers-ai`); Qwen and DeepSeek
- * integrate directly with their own provider APIs.
+ * `workers-ai` is the Cloudflare flavour (used as the fallback for every model);
+ * `qwen`, `deepseek` and `moonshot` are the direct-provider flavours, selected
+ * automatically when their API key is configured.
  */
 export class CloudflareModelProvider implements ModelProvider {
   private readonly env: Env
@@ -52,6 +55,16 @@ export class CloudflareModelProvider implements ModelProvider {
           name: 'deepseek',
           apiKey: this.env.DEEPSEEK_API_KEY,
           baseURL: DEEPSEEK_BASE_URL,
+        })(ref.model)
+      }
+      case 'moonshot': {
+        if (!this.env.MOONSHOT_API_KEY) {
+          throw new Error('MOONSHOT_API_KEY is not configured')
+        }
+        return createOpenAICompatible({
+          name: 'moonshot',
+          apiKey: this.env.MOONSHOT_API_KEY,
+          baseURL: MOONSHOT_BASE_URL,
         })(ref.model)
       }
       case 'workers-ai': {

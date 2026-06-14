@@ -123,45 +123,6 @@ export const STATUS_META: Record<
 /** Default confidence threshold for a new task (auto-merge at/above this). */
 export const DEFAULT_CONFIDENCE_THRESHOLD = 0.8
 
-/**
- * A selectable LLM model for a block. Mirrors MODEL_CATALOG in @cat-factory/core
- * (the backend resolves the chosen `id` to a concrete provider/model at run
- * time). A block without a selection uses the backend's default routing.
- */
-export interface SelectableModel {
-  id: string
-  label: string
-  description: string
-}
-
-/** Models a user can pick per block (Llama & Kimi via Cloudflare; Qwen & DeepSeek direct). */
-export const MODEL_CATALOG: SelectableModel[] = [
-  {
-    id: 'cloudflare-llama',
-    label: 'Llama 3.1 (Cloudflare default)',
-    description: "Meta's fast 8B instruct model — Cloudflare's default.",
-  },
-  {
-    id: 'qwen',
-    label: 'Qwen3 Max',
-    description: "Alibaba's flagship Qwen3-Max, direct via DashScope.",
-  },
-  {
-    id: 'kimi',
-    label: 'Kimi K2.6',
-    description: "Moonshot AI's frontier-scale model, via Cloudflare.",
-  },
-  {
-    id: 'deepseek',
-    label: 'DeepSeek V3.2',
-    description: "DeepSeek's flagship chat model, direct via the DeepSeek API.",
-  },
-]
-
-export const MODEL_BY_ID: Record<string, SelectableModel> = Object.fromEntries(
-  MODEL_CATALOG.map((m) => [m.id, m]),
-)
-
 /** Visual metadata for module sub-frames. */
 export const MODULE_META = { icon: 'i-lucide-package', color: '#a78bfa' }
 

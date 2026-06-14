@@ -1,10 +1,13 @@
-import type { AgentKind } from '@cat-factory/contracts'
+import type { AgentKind, ModelOption } from '@cat-factory/contracts'
 import {
   type AgentModelConfig,
   type AgentRouting,
   DEFAULT_MODEL_PRICES,
   DEFAULT_MONTHLY_LIMIT_EUR,
+  effectiveCatalog,
   type ModelPrice,
+  type ModelRef,
+  resolveModelRef,
   type SpendPricing,
 } from '@cat-factory/core'
 import type { Env } from './env'
@@ -19,7 +22,14 @@ export interface AppConfig {
   agents: {
     enabled: boolean
     routing: AgentRouting
+    /**
+     * Resolve a block's selected model id to a concrete ref, honouring the
+     * direct/Cloudflare fallback based on which provider keys are configured.
+     */
+    resolveBlockModel: (modelId: string | undefined) => ModelRef | undefined
   }
+  /** The effective model picker catalog (each model's active flavour). */
+  models: ModelOption[]
   execution: {
     /** 'workflow' drives runs durably; 'tick' keeps the legacy polling engine. */
     mode: ExecutionMode
@@ -73,6 +83,18 @@ export interface GitHubConfig {
   apiBase: string
   /** Browser redirect target after a successful connect (falls back to '/'). */
   setupRedirectUrl: string
+}
+
+/**
+ * A model's direct flavour activates when its API key env var is present and
+ * non-empty. Keys are looked up by name (from the catalog's `keyEnv`).
+ */
+function directKeyAvailable(env: Env): (keyEnv: string) => boolean {
+  const bag = env as unknown as Record<string, string | undefined>
+  return (keyEnv) => {
+    const value = bag[keyEnv]
+    return typeof value === 'string' && value.trim() !== ''
+  }
 }
 
 function num(value: string | undefined): number | undefined {
@@ -204,10 +226,16 @@ function loadRetentionConfig(env: Env): RetentionConfig {
 }
 
 export function loadConfig(env: Env): AppConfig {
+  const isDirectAvailable = directKeyAvailable(env)
+
+  // Default unpinned agents/blocks to the Qwen model (its active flavour: direct
+  // DashScope when QWEN_API_KEY is set, else the Cloudflare Workers AI variant).
+  // An operator can still pin a specific provider/model via the env vars.
+  const qwenDefault = resolveModelRef('qwen', isDirectAvailable)
   const defaultConfig: AgentModelConfig = {
     ref: {
-      provider: env.AGENT_DEFAULT_PROVIDER ?? 'workers-ai',
-      model: env.AGENT_DEFAULT_MODEL ?? '@cf/meta/llama-3.1-8b-instruct',
+      provider: env.AGENT_DEFAULT_PROVIDER ?? qwenDefault?.provider ?? 'workers-ai',
+      model: env.AGENT_DEFAULT_MODEL ?? qwenDefault?.model ?? '@cf/qwen/qwen3-30b-a3b-fp8',
     },
     temperature: num(env.AGENT_DEFAULT_TEMPERATURE) ?? 0.4,
     maxOutputTokens: num(env.AGENT_MAX_OUTPUT_TOKENS) ?? 512,
@@ -220,7 +248,9 @@ export function loadConfig(env: Env): AppConfig {
         default: defaultConfig,
         byKind: parseModelOverrides(env.AGENT_MODELS),
       },
+      resolveBlockModel: (modelId) => resolveModelRef(modelId, isDirectAvailable),
     },
+    models: effectiveCatalog(isDirectAvailable),
     execution: {
       // Default to 'tick' so behaviour is unchanged until an operator opts in,
       // mirroring the AGENTS_ENABLED default-off convention.

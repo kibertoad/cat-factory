@@ -78,6 +78,34 @@ export type PromptFragment = v.InferOutput<typeof promptFragmentSchema>
 export const promptFragmentCatalogSchema = v.array(promptFragmentSchema)
 export type PromptFragmentCatalog = v.InferOutput<typeof promptFragmentCatalogSchema>
 
+/**
+ * A selectable LLM model, resolved to the flavour actually in use for this
+ * deployment (`GET /models`). `flavor` is `direct` when the model's own provider
+ * API key is configured, else `cloudflare`. `provider`/`model` are the effective
+ * {@link ModelRef} parts the agent will run with; the picker stores only `id`.
+ */
+export const modelOptionSchema = v.object({
+  /** Stable id persisted on a block (`Block.modelId`). */
+  id: v.string(),
+  /** Model-family label, e.g. `Qwen3`. */
+  label: v.string(),
+  /** One-line description shown in the picker. */
+  description: v.string(),
+  /** Which flavour is active for this deployment. */
+  flavor: v.picklist(['cloudflare', 'direct']),
+  /** Short provider label for the active flavour, e.g. `Cloudflare`, `DashScope`. */
+  providerLabel: v.string(),
+  /** Effective provider id the agent runs with. */
+  provider: v.string(),
+  /** Effective model id within the provider. */
+  model: v.string(),
+})
+export type ModelOption = v.InferOutput<typeof modelOptionSchema>
+
+/** The full catalog as served by `GET /models`. */
+export const modelCatalogSchema = v.array(modelOptionSchema)
+export type ModelCatalog = v.InferOutput<typeof modelCatalogSchema>
+
 export const pipelineSchema = v.object({
   id: v.string(),
   name: v.string(),

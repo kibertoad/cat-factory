@@ -81,8 +81,11 @@ crons = ["*/2 * * * *", "0 3 * * *"]
 # Agent LLM configuration (see src/infrastructure/config.ts). Agents are off by
 # default so the service runs as a pure simulation until an operator opts in.
 AGENTS_ENABLED = "false"
-AGENT_DEFAULT_PROVIDER = "workers-ai"
-AGENT_DEFAULT_MODEL = "@cf/meta/llama-3.1-8b-instruct"
+# Default model for unpinned blocks/agents. Left unset so it tracks the Qwen
+# model from the picker catalog (its Cloudflare flavour, or direct DashScope when
+# QWEN_API_KEY is configured). Uncomment to pin a specific provider/model:
+# AGENT_DEFAULT_PROVIDER = "workers-ai"
+# AGENT_DEFAULT_MODEL = "@cf/qwen/qwen3-30b-a3b-fp8"
 # Execution engine: "tick" (legacy browser-driven polling, default) or
 # "workflow" (durable, server-driven via Cloudflare Workflows).
 EXECUTION_MODE = "tick"
@@ -98,10 +101,12 @@ SPEND_CURRENCY = "EUR"
 # SPEND_MODEL_PRICES = '{"openai:gpt-4o":{"inputPerMillion":2.3,"outputPerMillion":9.2}}'
 
 # Per-block model picker (see src/infrastructure/ai/CloudflareModelProvider.ts and
-# MODEL_CATALOG in @cat-factory/core). Llama and Kimi run on the Workers AI binding
-# above; Qwen and DeepSeek integrate directly and need API keys set as secrets:
-#   wrangler secret put QWEN_API_KEY       # Alibaba DashScope (intl endpoint)
-#   wrangler secret put DEEPSEEK_API_KEY   # DeepSeek API
+# MODEL_CATALOG in @cat-factory/core). Every model runs on the Workers AI binding
+# above by default; setting a provider key below switches that model to its direct
+# API instead (Llama has no direct variant). Set the keys as secrets:
+#   wrangler secret put QWEN_API_KEY       # Qwen → Alibaba DashScope (intl endpoint)
+#   wrangler secret put DEEPSEEK_API_KEY   # DeepSeek → DeepSeek API
+#   wrangler secret put MOONSHOT_API_KEY   # Kimi → Moonshot AI
 
 # Storage retention (see src/infrastructure/config.ts and
 # docs/storage-and-retention.md). The cron sweeper prunes the tables that don't

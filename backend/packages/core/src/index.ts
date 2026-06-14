@@ -12,9 +12,12 @@ export {
 export { DEFAULT_CONFIDENCE_THRESHOLD, DECISION_CHANCE } from './domain/catalog'
 export {
   type SelectableModel,
+  type ModelVariant,
+  type DirectKeyAvailable,
   MODEL_CATALOG,
   getSelectableModel,
-  modelRefForId,
+  effectiveCatalog,
+  resolveModelRef,
 } from './domain/models'
 export { seedBlocks, seedPipelines } from './domain/seed'
 
