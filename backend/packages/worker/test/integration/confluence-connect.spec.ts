@@ -66,6 +66,32 @@ describe('confluence connect', () => {
     expect(reconnect.body.accountEmail).toBe('other@acme.io')
   })
 
+  it('rejects an SSRF-prone base URL (private host / non-https)', async () => {
+    const app = makeApp(new FakeAgentExecutor(), confluenceDeps())
+    const { workspace } = await app.createWorkspace({ seed: false })
+
+    for (const baseUrl of [
+      'http://acme.atlassian.net', // not https
+      'https://localhost', // loopback host
+      'https://169.254.169.254', // cloud metadata / link-local
+      'https://192.168.0.10', // RFC1918 private
+      'https://10.1.2.3', // RFC1918 private
+    ]) {
+      const res = await app.call('POST', `/workspaces/${workspace.id}/confluence/connect`, {
+        ...creds,
+        baseUrl,
+      })
+      expect(res.status, baseUrl).toBe(422)
+    }
+
+    // Nothing should have been persisted by the rejected attempts.
+    const read = await app.call<{ connection: ConfluenceConnection | null }>(
+      'GET',
+      `/workspaces/${workspace.id}/confluence/connection`,
+    )
+    expect(read.body.connection).toBeNull()
+  })
+
   it('returns 503 when the integration is not configured', async () => {
     const app = makeApp(new FakeAgentExecutor())
     const { workspace } = await app.createWorkspace({ seed: false })

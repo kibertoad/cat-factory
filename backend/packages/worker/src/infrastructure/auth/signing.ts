@@ -41,7 +41,15 @@ export class HmacSigner {
     const dot = token.indexOf('.')
     if (dot <= 0 || dot === token.length - 1) return null
     const body = token.slice(0, dot)
-    const provided = base64urlToBytes(token.slice(dot + 1))
+
+    // Decode the signature segment defensively: a malformed base64url tail must
+    // fail closed (null → 401), never throw out of `atob` into a 500.
+    let provided: Uint8Array
+    try {
+      provided = base64urlToBytes(token.slice(dot + 1))
+    } catch {
+      return null
+    }
     const expected = new Uint8Array(await this.mac(body))
     if (!timingSafeEqual(provided, expected)) return null
 

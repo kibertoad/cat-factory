@@ -2,6 +2,7 @@ import { env } from 'cloudflare:test'
 import { describe, expect, it } from 'vitest'
 import { createApp } from '../../src/app'
 import { HmacSigner, type SessionPayload } from '../../src/infrastructure/auth/signing'
+import { pickPostLoginRedirect } from '../../src/modules/auth/AuthController'
 
 // Auth is opt-in: it only activates when the OAuth credentials + session secret
 // are present in the Worker env. We exercise both states by passing a tailored
@@ -65,6 +66,64 @@ describe('auth', () => {
       const signer = new HmacSigner(SECRET)
       const token = await signer.sign({ id: 1, exp: Date.now() - 1000 })
       expect(await signer.verify(token)).toBeNull()
+    })
+
+    it('returns null (never throws) on a malformed base64url signature', async () => {
+      const signer = new HmacSigner(SECRET)
+      // The tail after the dot is not valid base64url; decoding must fail closed.
+      expect(await signer.verify('eyJpZCI6MX0.@@not-base64@@')).toBeNull()
+    })
+  })
+
+  describe('pickPostLoginRedirect', () => {
+    const origin = 'https://cat-factory.test'
+
+    it('returns a fixed success URL when configured, ignoring the query', () => {
+      const url = pickPostLoginRedirect('https://evil.example', origin, {
+        successRedirectUrl: 'https://app.example.com/board',
+        allowedRedirectOrigins: [],
+      })
+      expect(url).toBe('https://app.example.com/board')
+    })
+
+    it('honours a same-origin redirect', () => {
+      const url = pickPostLoginRedirect(`${origin}/board`, origin, {
+        successRedirectUrl: '',
+        allowedRedirectOrigins: [],
+      })
+      expect(url).toBe(`${origin}/board`)
+    })
+
+    it('honours an allowlisted cross-origin redirect', () => {
+      const url = pickPostLoginRedirect('https://app.example.com/x', origin, {
+        successRedirectUrl: '',
+        allowedRedirectOrigins: ['https://app.example.com'],
+      })
+      expect(url).toBe('https://app.example.com/x')
+    })
+
+    it('rejects an unlisted cross-origin redirect (no token leak)', () => {
+      const url = pickPostLoginRedirect('https://evil.example/steal', origin, {
+        successRedirectUrl: '',
+        allowedRedirectOrigins: ['https://app.example.com'],
+      })
+      expect(url).toBe(`${origin}/`)
+    })
+
+    it('rejects a non-http(s) redirect scheme', () => {
+      const url = pickPostLoginRedirect('javascript:alert(1)', origin, {
+        successRedirectUrl: '',
+        allowedRedirectOrigins: [],
+      })
+      expect(url).toBe(`${origin}/`)
+    })
+
+    it('falls back to the request origin for a malformed redirect', () => {
+      const url = pickPostLoginRedirect('not a url', origin, {
+        successRedirectUrl: '',
+        allowedRedirectOrigins: [],
+      })
+      expect(url).toBe(`${origin}/`)
     })
   })
 

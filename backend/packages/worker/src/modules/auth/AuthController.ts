@@ -44,24 +44,42 @@ function callbackUrl(c: Context<AppEnv>, cfg: AuthConfig): string {
 }
 
 /**
- * Resolve where to land the browser after login. A fixed `AUTH_SUCCESS_REDIRECT_URL`
- * wins (the safe production setting); otherwise we honour the SPA-provided
- * `redirect` query (dev convenience), falling back to the request origin. The
- * chosen value is sealed into the signed state, so it can't be tampered with
- * between the two legs of the flow.
+ * Choose the post-login landing URL from the (untrusted) `redirect` query.
+ *
+ * The session token is appended to this URL as a fragment, so an unrestricted
+ * redirect is a token-exfiltration primitive: a crafted
+ * `/auth/login?redirect=https://evil.example` would hand a victim's freshly
+ * minted session to the attacker. We therefore only honour redirects whose
+ * origin is the request's own origin or an explicitly allowlisted one; anything
+ * else falls back to the request origin. A fixed `AUTH_SUCCESS_REDIRECT_URL`
+ * short-circuits all of this (the recommended production setting).
+ */
+export function pickPostLoginRedirect(
+  requested: string | undefined,
+  requestOrigin: string,
+  cfg: Pick<AuthConfig, 'successRedirectUrl' | 'allowedRedirectOrigins'>,
+): string {
+  if (cfg.successRedirectUrl) return cfg.successRedirectUrl
+  const fallback = `${requestOrigin}/`
+  if (!requested) return fallback
+  try {
+    const url = new URL(requested)
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return fallback
+    if (url.origin === requestOrigin || cfg.allowedRedirectOrigins.includes(url.origin)) {
+      return requested
+    }
+  } catch {
+    // fall through to the safe origin-relative default
+  }
+  return fallback
+}
+
+/**
+ * Resolve where to land the browser after login. The chosen value is sealed into
+ * the signed state, so it can't be tampered with between the two legs of the flow.
  */
 function resolveRedirect(c: Context<AppEnv>, cfg: AuthConfig): string {
-  if (cfg.successRedirectUrl) return cfg.successRedirectUrl
-  const requested = c.req.query('redirect')
-  if (requested) {
-    try {
-      const url = new URL(requested)
-      if (url.protocol === 'http:' || url.protocol === 'https:') return requested
-    } catch {
-      // fall through to origin
-    }
-  }
-  return `${new URL(c.req.url).origin}/`
+  return pickPostLoginRedirect(c.req.query('redirect'), new URL(c.req.url).origin, cfg)
 }
 
 /** Append the session token as a URL fragment on the landing URL. */
