@@ -31,8 +31,46 @@ export const blockSchema = v.object({
   confidenceThreshold: v.optional(v.number()),
   moduleName: v.optional(v.string()),
   features: v.optional(v.array(v.string())),
+  /**
+   * Ids of curated best-practice prompt fragments selected for this block. Their
+   * bodies are composed into the agent system prompt at run time. The catalog
+   * itself lives in @cat-factory/prompt-fragments and is served separately.
+   */
+  fragmentIds: v.optional(v.array(v.string())),
 })
 export type Block = v.InferOutput<typeof blockSchema>
+
+/**
+ * A curated best-practice "prompt fragment" (e.g. Node performance, React state
+ * management). The catalog is authored in @cat-factory/prompt-fragments and
+ * surfaced to the frontend read-only so a user can pick which apply to a block.
+ */
+export const promptFragmentSchema = v.object({
+  /** Stable id, e.g. `node.performance`. Selection persists this. */
+  id: v.string(),
+  /** Semver of the body content, for display and future version pinning. */
+  version: v.string(),
+  /** Human title shown in the picker, e.g. `Node.js performance`. */
+  title: v.string(),
+  /** Grouping label for the picker, e.g. `Node`, `React`. */
+  category: v.string(),
+  /** One-line description shown in the picker. */
+  summary: v.string(),
+  /** The guidance injected into the agent system prompt. */
+  body: v.string(),
+  /** Optional hints for filtering which blocks/agents a fragment suits. */
+  appliesTo: v.optional(
+    v.object({
+      blockTypes: v.optional(v.array(blockTypeSchema)),
+      agentKinds: v.optional(v.array(agentKindSchema)),
+    }),
+  ),
+})
+export type PromptFragment = v.InferOutput<typeof promptFragmentSchema>
+
+/** The full catalog as served by `GET /prompt-fragments`. */
+export const promptFragmentCatalogSchema = v.array(promptFragmentSchema)
+export type PromptFragmentCatalog = v.InferOutput<typeof promptFragmentCatalogSchema>
 
 export const pipelineSchema = v.object({
   id: v.string(),

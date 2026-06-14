@@ -63,6 +63,26 @@ export interface Block {
   moduleName?: string
   /** task-only: the features this task implements (definition metadata). */
   features?: string[]
+  /** ids of best-practice prompt fragments folded into this block's agent prompts. */
+  fragmentIds?: string[]
+}
+
+/**
+ * A curated best-practice "prompt fragment" served read-only by the backend
+ * (`GET /prompt-fragments`). Users pick which apply to a block; the backend folds
+ * the selected fragments' bodies into the agent system prompt at run time.
+ */
+export interface PromptFragment {
+  id: string
+  version: string
+  title: string
+  category: string
+  summary: string
+  body: string
+  appliesTo?: {
+    blockTypes?: BlockType[]
+    agentKinds?: AgentKind[]
+  }
 }
 
 /** The kinds of agents available in the agent palette. */

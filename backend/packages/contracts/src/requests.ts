@@ -37,6 +37,7 @@ export const updateBlockSchema = v.partial(
     confidenceThreshold: v.pipe(v.number(), v.minValue(0), v.maxValue(1)),
     moduleName: v.pipe(v.string(), v.trim(), v.maxLength(120)),
     features: v.array(v.pipe(v.string(), v.maxLength(120))),
+    fragmentIds: v.array(v.pipe(v.string(), v.maxLength(120))),
   }),
 )
 export type UpdateBlockInput = v.InferOutput<typeof updateBlockSchema>

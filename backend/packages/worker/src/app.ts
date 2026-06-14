@@ -12,6 +12,7 @@ import { pipelineController } from './modules/pipelines/PipelineController'
 import { workspaceController } from './modules/workspaces/WorkspaceController'
 import { githubController } from './modules/github/GitHubController'
 import { githubWebhookController } from './modules/github/GitHubWebhookController'
+import { promptFragmentController } from './modules/promptFragments/PromptFragmentController'
 
 export interface CreateAppOptions {
   /** Override core dependencies — used by tests (e.g. a fake agent executor). */
@@ -33,6 +34,9 @@ export function createApp(options: CreateAppOptions = {}): Hono<AppEnv> {
   })
 
   app.get('/health', (c) => c.json({ status: 'ok' }))
+
+  // Read-only best-practice fragment catalog (public, build-static reference data).
+  app.route('/', promptFragmentController())
 
   // "Login with GitHub" (public; no-op endpoints when auth is unconfigured).
   app.route('/auth', authController())
