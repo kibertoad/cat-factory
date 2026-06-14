@@ -34,6 +34,12 @@ RUN --mount=type=secret,id=extra_ca,target=/tmp/extra_ca.crt \
     sh -eu -c 'apt-get update && apt-get install -y --no-install-recommends git ca-certificates && rm -rf /var/lib/apt/lists/*; \
     if [ -s /tmp/extra_ca.crt ]; then export NODE_EXTRA_CA_CERTS=/tmp/extra_ca.crt; fi; \
     npm install -g --ignore-scripts @earendil-works/pi-coding-agent'
+# This ephemeral container runs as root and only ever operates on repositories we
+# hand it (a fresh clone, or a mounted repo in tests). Disable git's
+# dubious-ownership guard system-wide so a repo owned by another uid (e.g. a
+# bind-mounted host repo) doesn't block clone/push. NB: git only honours
+# safe.directory from system/global config, never from env or -c.
+RUN git config --system --add safe.directory '*'
 WORKDIR /app
 COPY --from=build /app/dist ./dist
 EXPOSE 8080

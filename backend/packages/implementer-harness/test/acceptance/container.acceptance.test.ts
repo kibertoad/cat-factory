@@ -245,6 +245,9 @@ describe.skipIf(!docker)('implementer container acceptance', () => {
     const name = `cf-acc-${Date.now()}`
     containers.push(name)
 
+    // The bind-mounted repo is owned by another uid (esp. on CI's non-root
+    // runner); the image sets safe.directory=* system-wide so git won't reject it
+    // for "dubious ownership" (git ignores that setting from env, only system/global).
     execFileSync(
       'docker',
       [
@@ -257,13 +260,6 @@ describe.skipIf(!docker)('implementer container acceptance', () => {
         `${hostPort}:8080`,
         '-v',
         `${bare}:/srv/repo`,
-        // The bind-mounted repo is owned by another uid; allow git to use it.
-        '-e',
-        'GIT_CONFIG_COUNT=1',
-        '-e',
-        'GIT_CONFIG_KEY_0=safe.directory',
-        '-e',
-        'GIT_CONFIG_VALUE_0=*',
         IMAGE,
       ],
       { stdio: 'ignore' },
