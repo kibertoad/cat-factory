@@ -78,15 +78,17 @@ export class ContainerAgentExecutor implements AgentExecutor {
       throw new Error('ContainerAgentExecutor requires workspaceId, executionId and block.id')
     }
 
-    // Lock the model to a direct OpenAI-compatible provider — the proxy only
-    // forwards those, and locking it here stops the container choosing another.
+    // Lock the model to a provider the proxy can serve — either a direct
+    // OpenAI-compatible provider or Cloudflare Workers AI (served in-Worker via
+    // the AI binding) — and locking it here stops the container choosing another.
     const config = resolveAgentConfig(this.deps.agentRouting, context.agentKind)
     const ref = this.deps.resolveBlockModel(context.block.modelId) ?? config.ref
     if (!isProxyableProvider(ref.provider)) {
       throw new Error(
-        `Container implementation needs a direct OpenAI-compatible model; ` +
-          `'${ref.provider}' is not supported. Configure a provider key ` +
-          `(QWEN_API_KEY / DEEPSEEK_API_KEY / MOONSHOT_API_KEY) and pick that model on the block.`,
+        `Container implementation needs a model the LLM proxy can serve ` +
+          `(Workers AI, or a direct OpenAI-compatible provider); ` +
+          `'${ref.provider}' is not supported. Pick a Workers AI model, or configure a ` +
+          `provider key (QWEN_API_KEY / DEEPSEEK_API_KEY / MOONSHOT_API_KEY) and pick that model.`,
       )
     }
 
@@ -156,9 +158,14 @@ export class ContainerAgentExecutor implements AgentExecutor {
   }
 }
 
-/** Providers the LLM proxy can forward to (OpenAI Chat Completions-compatible). */
+/**
+ * Providers the LLM proxy can serve: the direct OpenAI Chat Completions-compatible
+ * upstreams it forwards to, plus `workers-ai`, which it runs in-Worker through the
+ * AI binding (no provider key required).
+ */
 function isProxyableProvider(provider: string): boolean {
   return (
+    provider === 'workers-ai' ||
     provider === 'qwen' ||
     provider === 'deepseek' ||
     provider === 'moonshot' ||

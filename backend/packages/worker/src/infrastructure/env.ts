@@ -47,8 +47,9 @@ export interface Env {
    */
   IMPL_CONTAINER?: DurableObjectNamespace<ImplementationContainer>
   /**
-   * Routes the implementation (`coder`) step to a real sandbox container instead
-   * of a single inline LLM call ('true'). Requires the IMPL_CONTAINER binding, a
+   * Routes the repo-operating steps (`coder`, `mocker`, `playwright`) to a real
+   * sandbox container instead of a single inline LLM call ('true'). Requires the
+   * IMPL_CONTAINER binding, a
    * configured GitHub App, a direct OpenAI-compatible provider key, and
    * WORKER_PUBLIC_URL. Best used with EXECUTION_MODE = "workflow" (runs are long).
    */

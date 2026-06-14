@@ -113,11 +113,12 @@ describe('ContainerAgentExecutor', () => {
     await expect(executor.run(context())).rejects.toThrow(/no file changes/)
   })
 
-  it('rejects a non-OpenAI-compatible provider (workers-ai)', async () => {
+  it('accepts workers-ai (served by the proxy via the AI binding, no key)', async () => {
+    let dispatched: Dispatched | undefined
     const executor = new ContainerAgentExecutor({
       container: fakeContainer(
-        () => ({}),
-        () => {},
+        () => ({ prUrl: 'https://github.com/octo/app/pull/7', summary: 'done' }),
+        (d) => (dispatched = d),
       ),
       agentRouting: routing('workers-ai', '@cf/qwen/qwen3-30b-a3b-fp8'),
       resolveBlockModel: () => undefined,
@@ -126,7 +127,30 @@ describe('ContainerAgentExecutor', () => {
       sessionService: new ContainerSessionService({ secret: 'secret' }),
       proxyBaseUrl: 'https://worker.example/v1',
     })
-    await expect(executor.run(context())).rejects.toThrow(/OpenAI-compatible/)
+
+    const result = await executor.run(context())
+    expect(result.model).toBe('workers-ai:@cf/qwen/qwen3-30b-a3b-fp8')
+    // The session token is locked to the Workers AI model the proxy will serve.
+    const session = await new ContainerSessionService({ secret: 'secret' }).verify(
+      dispatched!.body.sessionToken as string,
+    )
+    expect(session).toMatchObject({ provider: 'workers-ai', model: '@cf/qwen/qwen3-30b-a3b-fp8' })
+  })
+
+  it('rejects a provider the proxy cannot serve (anthropic)', async () => {
+    const executor = new ContainerAgentExecutor({
+      container: fakeContainer(
+        () => ({}),
+        () => {},
+      ),
+      agentRouting: routing('anthropic', 'claude-3-5-sonnet'),
+      resolveBlockModel: () => undefined,
+      resolveRepoTarget: () => Promise.resolve(repo),
+      mintInstallationToken: () => Promise.resolve('gh-token'),
+      sessionService: new ContainerSessionService({ secret: 'secret' }),
+      proxyBaseUrl: 'https://worker.example/v1',
+    })
+    await expect(executor.run(context())).rejects.toThrow(/is not supported/)
   })
 
   it('fails when no repo is connected', async () => {

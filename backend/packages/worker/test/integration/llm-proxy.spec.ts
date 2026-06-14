@@ -115,4 +115,25 @@ describe('llm proxy /v1/chat/completions', () => {
     const res = await app.fetch(chatRequest(token), testEnv({ QWEN_API_KEY: '' }))
     expect(res.status).toBe(502)
   })
+
+  it('serves workers-ai via the AI binding, not an upstream fetch or provider key', async () => {
+    // workers-ai has no external upstream: it must run through the Worker's AI
+    // binding (no key, no fetch). Drop the binding to assert the routing without
+    // hitting the real Workers AI network in tests.
+    const fetchSpy = vi.fn()
+    vi.stubGlobal('fetch', fetchSpy)
+
+    const app = createApp()
+    const token = await mint({ provider: 'workers-ai', model: '@cf/meta/llama-3.1-8b-instruct' })
+    // No QWEN_API_KEY needed; AI binding removed → guarded 502 (not 502 "no key").
+    const noBinding = { ...testEnv({ QWEN_API_KEY: '' }), AI: undefined }
+    const res = await app.fetch(chatRequest(token), noBinding as Parameters<typeof app.fetch>[1])
+
+    expect(res.status).toBe(502)
+    expect(((await res.json()) as { error: { message: string } }).error.message).toMatch(
+      /Workers AI binding/,
+    )
+    // The workers-ai path never reaches the OpenAI-compatible fetch upstream.
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
 })
