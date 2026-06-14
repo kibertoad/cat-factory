@@ -38,16 +38,16 @@ and is never returned on the wire.
 All endpoints are workspace-scoped under `/workspaces/:workspaceId` and return
 `503` when the integration is unconfigured.
 
-| Method & path | Purpose |
-| --- | --- |
-| `GET /confluence/connection` | Current connection (no token), or null |
-| `POST /confluence/connect` | Connect: `{ baseUrl, accountEmail, apiToken }` |
-| `DELETE /confluence/connection` | Disconnect |
-| `POST /confluence/import` | Fetch + persist a page: `{ page }` (id or URL) |
-| `GET /confluence/documents` | List imported documents |
-| `POST /confluence/plan` | Preview the board plan for `{ pageId }` (no writes) |
-| `POST /confluence/spawn` | Apply structure: `{ pageId, frameId? }` |
-| `POST /confluence/documents/:pageId/link` | Attach a doc to a block: `{ blockId }` |
+| Method & path                             | Purpose                                             |
+| ----------------------------------------- | --------------------------------------------------- |
+| `GET /confluence/connection`              | Current connection (no token), or null              |
+| `POST /confluence/connect`                | Connect: `{ baseUrl, accountEmail, apiToken }`      |
+| `DELETE /confluence/connection`           | Disconnect                                          |
+| `POST /confluence/import`                 | Fetch + persist a page: `{ page }` (id or URL)      |
+| `GET /confluence/documents`               | List imported documents                             |
+| `POST /confluence/plan`                   | Preview the board plan for `{ pageId }` (no writes) |
+| `POST /confluence/spawn`                  | Apply structure: `{ pageId, frameId? }`             |
+| `POST /confluence/documents/:pageId/link` | Attach a doc to a block: `{ blockId }`              |
 
 `spawn` without `frameId` creates new top-level frames; with it, the plan's
 modules and tasks are added inside that existing service frame. A document linked
