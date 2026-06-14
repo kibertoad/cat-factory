@@ -273,6 +273,8 @@ export class ExecutionService {
         type: block.type,
         description: block.description,
         features: block.features,
+        fragmentIds: block.fragmentIds,
+        modelId: block.modelId,
         ...(contextDocs.length ? { contextDocs } : {}),
       },
       priorOutputs: instance.steps

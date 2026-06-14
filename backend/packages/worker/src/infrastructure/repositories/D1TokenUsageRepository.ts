@@ -50,4 +50,13 @@ export class D1TokenUsageRepository implements TokenUsageRepository {
       costEstimate: row?.cost_estimate ?? 0,
     }
   }
+
+  async deleteOlderThan(epochMs: number): Promise<number> {
+    // Range delete on idx_token_usage_created; bounded by the rows being pruned.
+    const { meta } = await this.db
+      .prepare('DELETE FROM token_usage WHERE created_at < ?')
+      .bind(epochMs)
+      .run()
+    return meta.changes ?? 0
+  }
 }

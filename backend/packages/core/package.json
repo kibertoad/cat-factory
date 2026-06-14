@@ -11,11 +11,14 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "precompile:templates": "node scripts/precompile-prompts.mjs"
   },
   "dependencies": {
     "@cat-factory/contracts": "workspace:*",
-    "ai": "^5.0.0"
+    "@cat-factory/prompt-fragments": "workspace:*",
+    "ai": "^5.0.0",
+    "handlebars": "^4.7.8"
   },
   "devDependencies": {
     "typescript": "^5.6.0"

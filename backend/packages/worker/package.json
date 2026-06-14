@@ -17,8 +17,10 @@
   "dependencies": {
     "@ai-sdk/anthropic": "^2.0.0",
     "@ai-sdk/openai": "^2.0.0",
+    "@ai-sdk/openai-compatible": "^1.0.0",
     "@cat-factory/contracts": "workspace:*",
     "@cat-factory/core": "workspace:*",
+    "@cat-factory/prompt-fragments": "workspace:*",
     "@hono/valibot-validator": "^0.5.2",
     "ai": "^5.0.0",
     "hono": "^4.6.0",

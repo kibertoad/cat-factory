@@ -56,6 +56,7 @@ function selectAgentExecutor(env: Env, config: AppConfig, rng: Rng): AgentExecut
     return new AiAgentExecutor({
       modelProvider: new CloudflareModelProvider({ env }),
       agentRouting: config.agents.routing,
+      resolveBlockModel: config.agents.resolveBlockModel,
     })
   }
   return new SimulatorAgentExecutor({ rng })
@@ -116,6 +117,8 @@ function selectGitHubDeps(
     commitProjectionRepository: new D1CommitProjectionRepository({ db }),
     checkRunProjectionRepository: new D1CheckRunProjectionRepository({ db }),
     webhookVerifier: new WebCryptoWebhookVerifier(env.GITHUB_WEBHOOK_SECRET!),
+    // Bound the initial backfill to the commit retention horizon (0 = full).
+    commitBackfillHorizonMs: config.retention.commitMs || undefined,
   }
 }
 

@@ -86,6 +86,12 @@ export interface CoreDependencies {
   commitProjectionRepository?: CommitProjectionRepository
   checkRunProjectionRepository?: CheckRunProjectionRepository
   webhookVerifier?: WebhookVerifier
+  /**
+   * Bounds the initial commit backfill window (see GitHubSyncService). The worker
+   * sets this from the commit retention horizon so backfill and retention agree;
+   * undefined backfills the full history.
+   */
+  commitBackfillHorizonMs?: number
 
   // ---- Confluence integration (optional; wired only when configured) ------
   // Mirrors the GitHub default-off convention. The Confluence module assembles
@@ -177,6 +183,7 @@ function createGitHubModule(deps: CoreDependencies): GitHubModule | undefined {
     commitProjectionRepository,
     checkRunProjectionRepository,
     clock: deps.clock,
+    commitBackfillHorizonMs: deps.commitBackfillHorizonMs,
   })
   const webhookService = new WebhookService({
     githubInstallationRepository,

@@ -10,6 +10,15 @@ export {
   type DomainErrorCode,
 } from './domain/errors'
 export { DEFAULT_CONFIDENCE_THRESHOLD, DECISION_CHANCE } from './domain/catalog'
+export {
+  type SelectableModel,
+  type ModelVariant,
+  type DirectKeyAvailable,
+  MODEL_CATALOG,
+  getSelectableModel,
+  effectiveCatalog,
+  resolveModelRef,
+} from './domain/models'
 export { seedBlocks, seedPipelines } from './domain/seed'
 
 export * from './ports'
@@ -58,6 +67,15 @@ export {
   resolveAgentConfig,
 } from './modules/agents/agent-routing'
 export { systemPromptFor, userPromptFor } from './modules/agents/agent-catalog'
+export { composeSystemPrompt } from './modules/agents/prompt-fragments'
+export {
+  type StandardPhase,
+  STANDARD_PHASES,
+  STANDARD_PHASE_BY_KIND,
+  phaseForKind,
+  standardSystemPrompt,
+  renderStandardUserPrompt,
+} from './modules/agents/standard-prompts'
 
 export {
   type Core,

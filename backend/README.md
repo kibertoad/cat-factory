@@ -28,7 +28,10 @@ Each pipeline step is performed by an `AgentExecutor` (a port). Implementations:
 - **`AiAgentExecutor`** (core) — real work through the Vercel AI SDK (`generateText`). The model
   is chosen per agent kind via `AgentRouting` ("which LLM, with what config, for what"),
   configured from Worker env vars (`AGENT_DEFAULT_PROVIDER/MODEL`, `AGENT_MODELS` JSON overrides).
-  Concrete models are resolved by `CloudflareModelProvider` (OpenAI / Anthropic / Workers AI).
+  Concrete models are resolved by `CloudflareModelProvider` (Workers AI / OpenAI / Anthropic, plus
+  the direct DashScope / DeepSeek / Moonshot providers). A block may also pick a specific model
+  (`Block.modelId`) from the catalog in `core/src/domain/models.ts`; each model runs on Cloudflare
+  Workers AI by default and switches to its direct provider API when that key is configured.
 - **`SimulatorAgentExecutor`** (core) — the playful, randomised experience the frontend prototype
   used to hardcode (occasional human decisions, random confidence). Used for **local / mock
   runtime only**, never in tests.
@@ -74,6 +77,8 @@ and `GITHUB_APP_PRIVATE_KEY` (PKCS#8) + `GITHUB_WEBHOOK_SECRET` secrets.
 ## HTTP API (selected)
 
 ```
+GET    /models                                               model picker catalog (effective flavours)
+
 POST   /workspaces                                            create board (optionally seeded)
 GET    /workspaces                                            list boards
 GET    /workspaces/:ws                                        full snapshot (blocks, pipelines, executions)
@@ -142,3 +147,27 @@ against a real local D1 database with the real migrations applied. Only the LLM 
 Set a real `database_id` in `wrangler.toml` (`wrangler d1 create cat_factory`), apply migrations
 with `db:migrate:remote`, set provider secrets (`wrangler secret put OPENAI_API_KEY`), flip
 `AGENTS_ENABLED=true`, and `pnpm deploy`.
+
+#### Model picker and provider keys
+
+The inspector's "Model" picker lets each block choose a model; the default is **Qwen**. Every model
+has two flavours and resolves automatically:
+
+- **No key set →** the model runs on **Cloudflare Workers AI** (the `AI` binding) and the picker
+  shows it as the _Cloudflare_ flavour.
+- **Provider key set →** the same model is transparently replaced by its **direct** provider API and
+  shown as the _direct_ flavour (Llama has no direct variant and always runs on Cloudflare).
+
+Set the direct-provider keys as secrets in production to enable the direct flavours:
+
+```sh
+wrangler secret put QWEN_API_KEY       # Qwen → Alibaba DashScope (intl endpoint)
+wrangler secret put DEEPSEEK_API_KEY   # DeepSeek → DeepSeek API
+wrangler secret put MOONSHOT_API_KEY   # Kimi → Moonshot AI
+# Optional first-party providers used by AGENT_MODELS overrides:
+wrangler secret put OPENAI_API_KEY
+wrangler secret put ANTHROPIC_API_KEY
+```
+
+The effective catalog (which flavour is active) is served read-only at `GET /models`; it exposes
+only labels and provider/model ids, never the keys.

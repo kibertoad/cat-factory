@@ -31,8 +31,80 @@ export const blockSchema = v.object({
   confidenceThreshold: v.optional(v.number()),
   moduleName: v.optional(v.string()),
   features: v.optional(v.array(v.string())),
+  /**
+   * Ids of curated best-practice prompt fragments selected for this block. Their
+   * bodies are composed into the agent system prompt at run time. The catalog
+   * itself lives in @cat-factory/prompt-fragments and is served separately.
+   */
+  fragmentIds: v.optional(v.array(v.string())),
+  /**
+   * Id of the LLM model selected for this block from the shared model catalog
+   * (see MODEL_CATALOG in @cat-factory/core). When set it overrides the agent
+   * routing's default model at run time; absent means "use the routing default".
+   */
+  modelId: v.optional(v.string()),
 })
 export type Block = v.InferOutput<typeof blockSchema>
+
+/**
+ * A curated best-practice "prompt fragment" (e.g. Node performance, React state
+ * management). The catalog is authored in @cat-factory/prompt-fragments and
+ * surfaced to the frontend read-only so a user can pick which apply to a block.
+ */
+export const promptFragmentSchema = v.object({
+  /** Stable id, e.g. `node.performance`. Selection persists this. */
+  id: v.string(),
+  /** Semver of the body content, for display and future version pinning. */
+  version: v.string(),
+  /** Human title shown in the picker, e.g. `Node.js performance`. */
+  title: v.string(),
+  /** Grouping label for the picker, e.g. `Node`, `React`. */
+  category: v.string(),
+  /** One-line description shown in the picker. */
+  summary: v.string(),
+  /** The guidance injected into the agent system prompt. */
+  body: v.string(),
+  /** Optional hints for filtering which blocks/agents a fragment suits. */
+  appliesTo: v.optional(
+    v.object({
+      blockTypes: v.optional(v.array(blockTypeSchema)),
+      agentKinds: v.optional(v.array(agentKindSchema)),
+    }),
+  ),
+})
+export type PromptFragment = v.InferOutput<typeof promptFragmentSchema>
+
+/** The full catalog as served by `GET /prompt-fragments`. */
+export const promptFragmentCatalogSchema = v.array(promptFragmentSchema)
+export type PromptFragmentCatalog = v.InferOutput<typeof promptFragmentCatalogSchema>
+
+/**
+ * A selectable LLM model, resolved to the flavour actually in use for this
+ * deployment (`GET /models`). `flavor` is `direct` when the model's own provider
+ * API key is configured, else `cloudflare`. `provider`/`model` are the effective
+ * {@link ModelRef} parts the agent will run with; the picker stores only `id`.
+ */
+export const modelOptionSchema = v.object({
+  /** Stable id persisted on a block (`Block.modelId`). */
+  id: v.string(),
+  /** Model-family label, e.g. `Qwen3`. */
+  label: v.string(),
+  /** One-line description shown in the picker. */
+  description: v.string(),
+  /** Which flavour is active for this deployment. */
+  flavor: v.picklist(['cloudflare', 'direct']),
+  /** Short provider label for the active flavour, e.g. `Cloudflare`, `DashScope`. */
+  providerLabel: v.string(),
+  /** Effective provider id the agent runs with. */
+  provider: v.string(),
+  /** Effective model id within the provider. */
+  model: v.string(),
+})
+export type ModelOption = v.InferOutput<typeof modelOptionSchema>
+
+/** The full catalog as served by `GET /models`. */
+export const modelCatalogSchema = v.array(modelOptionSchema)
+export type ModelCatalog = v.InferOutput<typeof modelCatalogSchema>
 
 export const pipelineSchema = v.object({
   id: v.string(),

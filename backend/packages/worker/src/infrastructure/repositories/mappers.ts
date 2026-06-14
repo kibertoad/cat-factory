@@ -41,6 +41,8 @@ export interface BlockRow {
   confidence_threshold: number | null
   module_name: string | null
   features: string | null
+  fragment_ids: string | null
+  model_id: string | null
 }
 
 export function rowToBlock(row: BlockRow): Block {
@@ -61,6 +63,8 @@ export function rowToBlock(row: BlockRow): Block {
   if (row.confidence_threshold !== null) block.confidenceThreshold = row.confidence_threshold
   if (row.module_name !== null) block.moduleName = row.module_name
   if (row.features !== null) block.features = JSON.parse(row.features) as string[]
+  if (row.fragment_ids !== null) block.fragmentIds = JSON.parse(row.fragment_ids) as string[]
+  if (row.model_id !== null) block.modelId = row.model_id
   return block
 }
 
@@ -83,6 +87,8 @@ export function blockInsertValues(block: Block): Record<string, unknown> {
     confidence_threshold: block.confidenceThreshold ?? null,
     module_name: block.moduleName ?? null,
     features: block.features ? JSON.stringify(block.features) : null,
+    fragment_ids: block.fragmentIds ? JSON.stringify(block.fragmentIds) : null,
+    model_id: block.modelId ?? null,
   }
 }
 
@@ -110,6 +116,11 @@ export function blockPatchToColumns(patch: BlockPatch): Record<string, unknown> 
   if (patch.features !== undefined) {
     set.features = patch.features ? JSON.stringify(patch.features) : null
   }
+  if (patch.fragmentIds !== undefined) {
+    set.fragment_ids = patch.fragmentIds ? JSON.stringify(patch.fragmentIds) : null
+  }
+  // An empty string clears the selection (back to the routing default).
+  if (patch.modelId !== undefined) set.model_id = patch.modelId ? patch.modelId : null
   return set
 }
 

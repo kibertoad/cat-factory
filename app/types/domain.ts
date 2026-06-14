@@ -63,6 +63,44 @@ export interface Block {
   moduleName?: string
   /** task-only: the features this task implements (definition metadata). */
   features?: string[]
+  /** ids of best-practice prompt fragments folded into this block's agent prompts. */
+  fragmentIds?: string[]
+  /** id of the model (from MODEL_CATALOG) to run this block's agents with; absent = default. */
+  modelId?: string
+}
+
+/**
+ * A curated best-practice "prompt fragment" served read-only by the backend
+ * (`GET /prompt-fragments`). Users pick which apply to a block; the backend folds
+ * the selected fragments' bodies into the agent system prompt at run time.
+ */
+export interface PromptFragment {
+  id: string
+  version: string
+  title: string
+  category: string
+  summary: string
+  body: string
+  appliesTo?: {
+    blockTypes?: BlockType[]
+    agentKinds?: AgentKind[]
+  }
+}
+
+/**
+ * A selectable LLM model, resolved to the flavour actually in use for this
+ * deployment (served by `GET /models`). `flavor` is `direct` when the model's
+ * own provider key is configured, else `cloudflare`. Mirrors `ModelOption` in
+ * `@cat-factory/contracts`.
+ */
+export interface ModelOption {
+  id: string
+  label: string
+  description: string
+  flavor: 'cloudflare' | 'direct'
+  providerLabel: string
+  provider: string
+  model: string
 }
 
 /** The kinds of agents available in the agent palette. */

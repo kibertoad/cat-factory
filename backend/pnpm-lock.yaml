@@ -23,9 +23,25 @@ importers:
       '@cat-factory/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@cat-factory/prompt-fragments':
+        specifier: workspace:*
+        version: link:../prompt-fragments
       ai:
         specifier: ^5.0.0
         version: 5.0.200(zod@3.25.76)
+      handlebars:
+        specifier: ^4.7.8
+        version: 4.7.9
+    devDependencies:
+      typescript:
+        specifier: ^5.6.0
+        version: 5.9.3
+
+  packages/prompt-fragments:
+    dependencies:
+      '@cat-factory/contracts':
+        specifier: workspace:*
+        version: link:../contracts
     devDependencies:
       typescript:
         specifier: ^5.6.0
@@ -39,12 +55,18 @@ importers:
       '@ai-sdk/openai':
         specifier: ^2.0.0
         version: 2.0.107(zod@3.25.76)
+      '@ai-sdk/openai-compatible':
+        specifier: ^1.0.0
+        version: 1.0.40(zod@3.25.76)
       '@cat-factory/contracts':
         specifier: workspace:*
         version: link:../contracts
       '@cat-factory/core':
         specifier: workspace:*
         version: link:../core
+      '@cat-factory/prompt-fragments':
+        specifier: workspace:*
+        version: link:../prompt-fragments
       '@hono/valibot-validator':
         specifier: ^0.5.2
         version: 0.5.3(hono@4.12.25)(valibot@1.4.1(typescript@5.9.3))
@@ -87,6 +109,12 @@ packages:
 
   '@ai-sdk/gateway@2.0.99':
     resolution: {integrity: sha512-ygKz4ov2B7BqG9KiFZK1AGBtMZIIPcSA2DTz/4TjIQPhLzFF40Q4/jSa5gzg3pAOranB1OvKSqL7VEP5m6cfWg==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      zod: ^3.25.76 || ^4.1.8
+
+  '@ai-sdk/openai-compatible@1.0.40':
+    resolution: {integrity: sha512-K8SzN+Hpr25Fx23VurW9rtg8dmUgqX+rDI7LKJFCIJcM3TIu3PfknxYlRGivDIrmsmgzH3PjvMGuCq+E8ZW7rA==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -1267,6 +1295,11 @@ packages:
   glob-to-regexp@0.4.1:
     resolution: {integrity: sha512-lkX1HJXwyMcprw/5YUZc2s7DrpAiHB21/V+E1rHUrVNokkvB6bqMzT0VfV6/86ZNabt1k14YOIaT7nDvOX3Iiw==}
 
+  handlebars@4.7.9:
+    resolution: {integrity: sha512-4E71E0rpOaQuJR2A3xDZ+GM1HyWYv1clR58tC8emQNeQe3RH7MAzSbat+V0wG78LQBo6m6bzSG/L4pBuCsgnUQ==}
+    engines: {node: '>=0.4.7'}
+    hasBin: true
+
   hono@4.12.25:
     resolution: {integrity: sha512-2NFaIyNVgJmBs/ecmtGzlmluTFs5cHEWGTdu0t1HBwYzoGXOL5nUQBRMXsXWla5i4KkG//QMzVP88m1+I3fdAQ==}
     engines: {node: '>=16.9.0'}
@@ -1305,6 +1338,9 @@ packages:
     engines: {node: '>=22.0.0'}
     hasBin: true
 
+  minimist@1.2.8:
+    resolution: {integrity: sha512-2yyAR8qBkN3YuheJanUpWC5U3bb5osDywNB8RzDVlDwDHbocAJveqqj1u8+SVD7jkWT4yvsHCpWqqWqAxb0zCA==}
+
   ms@2.1.3:
     resolution: {integrity: sha512-6FlzubTLZG3J2a/NVCAleEhjzq5oxgHyaCU9yYXvcLsvoVaHJq/s5xXI6/XXP6tz7R9xAOtHnSO/tXtF3WRTlA==}
 
@@ -1312,6 +1348,9 @@ packages:
     resolution: {integrity: sha512-ZB9RH/39qpq5Vu6Y+NmUaFhQR6pp+M2Xt76XBnEwDaGcVAqhlvxrl3B2bKS5D3NH3QR76v3aSrKaF/Kiy7lEtQ==}
     engines: {node: ^10 || ^12 || ^13.7 || ^14 || >=15.0.1}
     hasBin: true
+
+  neo-async@2.6.2:
+    resolution: {integrity: sha512-Yd3UES5mWCSqR+qNT93S3UoYUkqAZ9lLg8a7g9rimsWmYGK8cVToA4/sF3RrshdyV3sAGMXVUmpMYOw+dLpOuw==}
 
   ohash@2.0.11:
     resolution: {integrity: sha512-RdR9FQrFwNBNXAr4GixM8YaRZRJ5PUWbKYbE5eOsrwAjJW0q2REGcf79oYPsLyskQCZG1PLN+S/K1V00joZAoQ==}
@@ -1368,6 +1407,10 @@ packages:
     resolution: {integrity: sha512-UXWMKhLOwVKb728IUtQPXxfYU+usdybtUrK/8uGE8CQMvrhOpwvzDBwj0QhSL7MQc7vIsISBG8VQ8+IDQxpfQA==}
     engines: {node: '>=0.10.0'}
 
+  source-map@0.6.1:
+    resolution: {integrity: sha512-UjgapumWlbMhkBgzT7Ykc5YXUT46F0iKu8SGXq0bcwP5dz/h0Plj6enJqjz1Zbq2l5WaqYnrVbwWOWMyF3F47g==}
+    engines: {node: '>=0.10.0'}
+
   stackback@0.0.2:
     resolution: {integrity: sha512-1XMJE5fQo1jGH6Y/7ebnwPOBEkIEnT4QF32d5R1+VXdXveM0IBMJt8zfaxX1P3QhVwrYe+576+jkANtSS2mBbw==}
 
@@ -1417,6 +1460,11 @@ packages:
 
   ufo@1.6.4:
     resolution: {integrity: sha512-JFNbkD1Svwe0KvGi8GOeLcP4kAWQ609twvCdcHxq1oSL8svv39ZuSvajcD8B+5D0eL4+s1Is2D/O6KN3qcTeRA==}
+
+  uglify-js@3.19.3:
+    resolution: {integrity: sha512-v3Xu+yuwBXisp6QYTcH4UbH+xYJXqnq2m/LtQVWKWzYc1iehYnLixoQDN9FH6/j9/oybfd6W9Ghwkl8+UMKTKQ==}
+    engines: {node: '>=0.8.0'}
+    hasBin: true
 
   undici@7.24.8:
     resolution: {integrity: sha512-6KQ/+QxK49Z/p3HO6E5ZCZWNnCasyZLa5ExaVYyvPxUwKtbCPMKELJOqh7EqOle0t9cH/7d2TaaTRRa6Nhs4YQ==}
@@ -1518,6 +1566,9 @@ packages:
     engines: {node: '>=8'}
     hasBin: true
 
+  wordwrap@1.0.0:
+    resolution: {integrity: sha512-gvVzJFlPycKc5dZN4yPkP8w7Dc37BtP1yczEneOb4uq34pXZcvrtRTmWV8W+Ume+XCxKgbjM+nevkyFPMybd4Q==}
+
   workerd@1.20250906.0:
     resolution: {integrity: sha512-ryVyEaqXPPsr/AxccRmYZZmDAkfQVjhfRqrNTlEeN8aftBk6Ca1u7/VqmfOayjCXrA+O547TauebU+J3IpvFXw==}
     engines: {node: '>=16'}
@@ -1600,6 +1651,12 @@ snapshots:
       '@ai-sdk/provider': 2.0.3
       '@ai-sdk/provider-utils': 3.0.26(zod@3.25.76)
       '@vercel/oidc': 3.1.0
+      zod: 3.25.76
+
+  '@ai-sdk/openai-compatible@1.0.40(zod@3.25.76)':
+    dependencies:
+      '@ai-sdk/provider': 2.0.3
+      '@ai-sdk/provider-utils': 3.0.26(zod@3.25.76)
       zod: 3.25.76
 
   '@ai-sdk/openai@2.0.107(zod@3.25.76)':
@@ -2443,6 +2500,15 @@ snapshots:
 
   glob-to-regexp@0.4.1: {}
 
+  handlebars@4.7.9:
+    dependencies:
+      minimist: 1.2.8
+      neo-async: 2.6.2
+      source-map: 0.6.1
+      wordwrap: 1.0.0
+    optionalDependencies:
+      uglify-js: 3.19.3
+
   hono@4.12.25: {}
 
   is-arrayish@0.3.4: {}
@@ -2491,9 +2557,13 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
+  minimist@1.2.8: {}
+
   ms@2.1.3: {}
 
   nanoid@3.3.12: {}
+
+  neo-async@2.6.2: {}
 
   ohash@2.0.11: {}
 
@@ -2613,6 +2683,8 @@ snapshots:
 
   source-map-js@1.2.1: {}
 
+  source-map@0.6.1: {}
+
   stackback@0.0.2: {}
 
   std-env@3.10.0: {}
@@ -2646,6 +2718,9 @@ snapshots:
   typescript@5.9.3: {}
 
   ufo@1.6.4: {}
+
+  uglify-js@3.19.3:
+    optional: true
 
   undici@7.24.8: {}
 
@@ -2742,6 +2817,8 @@ snapshots:
     dependencies:
       siginfo: 2.0.0
       stackback: 0.0.2
+
+  wordwrap@1.0.0: {}
 
   workerd@1.20250906.0:
     optionalDependencies:

@@ -5,6 +5,7 @@
     "correctness": "error"
   },
   "rules": {},
+  "ignorePatterns": ["**/*.generated.ts"],
   "env": {
     "builtin": true
   }

@@ -146,6 +146,28 @@ describe('github sync', () => {
     expect(single.body.status).toBe('synced')
   })
 
+  it('bounds the initial commit backfill to the retention horizon', async () => {
+    const installationId = uniqueInstallationId()
+    const client = seededClient(installationId)
+    const app = makeApp(new FakeAgentExecutor(), githubDeps({ client }))
+    const { workspace } = await app.createWorkspace()
+    const ws = workspace.id
+
+    await app.call('POST', `/workspaces/${ws}/github/connect`, { installationId })
+    await app.call('POST', `/workspaces/${ws}/github/resync`, {})
+
+    // The first sync has no commit cursor, so it must pass a `since` floor (the
+    // default 90-day horizon) rather than fetching the repo's full history.
+    expect(client.commitListOpts.length).toBeGreaterThanOrEqual(1)
+    const firstSince = client.commitListOpts[0]!.since
+    expect(firstSince).toBeTruthy()
+    const horizonMs = Date.now() - Date.parse(firstSince!)
+    const ninetyDaysMs = 90 * 24 * 60 * 60 * 1000
+    // Roughly 90 days back, allowing slack for test execution time.
+    expect(horizonMs).toBeGreaterThan(ninetyDaysMs - 60_000)
+    expect(horizonMs).toBeLessThan(ninetyDaysMs + 60_000)
+  })
+
   it('returns 503 from read endpoints when GitHub is not configured', async () => {
     const app = makeApp() // no github deps → no github module
     const { workspace } = await app.createWorkspace()

@@ -6,7 +6,9 @@ import type {
   ConfluenceConnection,
   ConfluenceDocument,
   ExecutionInstance,
+  ModelOption,
   Pipeline,
+  PromptFragment,
   SpawnResult,
   Workspace,
   WorkspaceSnapshot,
@@ -51,6 +53,12 @@ export function useApi() {
     getMe: () => http<{ user: AuthUser | null; enabled: boolean }>('/auth/me'),
 
     logout: () => http('/auth/logout', { method: 'POST' }),
+
+    // ---- prompt fragments (best-practice catalog) -------------------------
+    getPromptFragments: () => http<PromptFragment[]>('/prompt-fragments'),
+
+    // ---- model picker catalog (effective per-deployment flavours) ---------
+    getModels: () => http<ModelOption[]>('/models'),
 
     // ---- workspaces -------------------------------------------------------
     listWorkspaces: () => http<Workspace[]>('/workspaces'),

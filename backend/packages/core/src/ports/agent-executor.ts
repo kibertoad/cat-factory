@@ -21,6 +21,10 @@ export interface AgentRunContext {
     type: BlockType
     description: string
     features?: string[]
+    /** Ids of selected best-practice fragments to fold into the system prompt. */
+    fragmentIds?: string[]
+    /** Id of the model picked for this block (overrides the agent routing), if any. */
+    modelId?: string
     /**
      * Requirements/RFC/PRD pages linked to this block from Confluence, supplied
      * as extra context. Present only when the Confluence integration is wired and

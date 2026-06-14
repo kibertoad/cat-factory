@@ -1,10 +1,13 @@
-import type { AgentKind } from '@cat-factory/contracts'
+import type { AgentKind, ModelOption } from '@cat-factory/contracts'
 import {
   type AgentModelConfig,
   type AgentRouting,
   DEFAULT_MODEL_PRICES,
   DEFAULT_MONTHLY_LIMIT_EUR,
+  effectiveCatalog,
   type ModelPrice,
+  type ModelRef,
+  resolveModelRef,
   type SpendPricing,
 } from '@cat-factory/core'
 import type { Env } from './env'
@@ -19,7 +22,14 @@ export interface AppConfig {
   agents: {
     enabled: boolean
     routing: AgentRouting
+    /**
+     * Resolve a block's selected model id to a concrete ref, honouring the
+     * direct/Cloudflare fallback based on which provider keys are configured.
+     */
+    resolveBlockModel: (modelId: string | undefined) => ModelRef | undefined
   }
+  /** The effective model picker catalog (each model's active flavour). */
+  models: ModelOption[]
   execution: {
     /** 'workflow' drives runs durably; 'tick' keeps the legacy polling engine. */
     mode: ExecutionMode
@@ -34,6 +44,19 @@ export interface AppConfig {
   auth: AuthConfig
   /** Confluence integration config; `enabled` is false unless opted in. */
   confluence: ConfluenceConfig
+  /** Retention windows for the unbounded ledgers/projections (epoch-ms ages). */
+  retention: RetentionConfig
+}
+
+/**
+ * Retention windows in milliseconds for the tables that don't self-limit. A
+ * window of 0 disables pruning for that table (and, for commits, disables the
+ * backfill horizon too). See docs/storage-and-retention.md.
+ */
+export interface RetentionConfig {
+  tokenUsageMs: number
+  rateLimitMs: number
+  commitMs: number
 }
 
 export interface AuthConfig {
@@ -69,6 +92,18 @@ export interface ConfluenceConfig {
   enabled: boolean
   /** 'llm' uses the agent model to plan structure; 'headings' forces the parser. */
   planner: 'llm' | 'headings'
+}
+
+/**
+ * A model's direct flavour activates when its API key env var is present and
+ * non-empty. Keys are looked up by name (from the catalog's `keyEnv`).
+ */
+function directKeyAvailable(env: Env): (keyEnv: string) => boolean {
+  const bag = env as unknown as Record<string, string | undefined>
+  return (keyEnv) => {
+    const value = bag[keyEnv]
+    return typeof value === 'string' && value.trim() !== ''
+  }
 }
 
 function num(value: string | undefined): number | undefined {
@@ -191,11 +226,36 @@ function loadSpendPricing(env: Env): SpendPricing {
   }
 }
 
+const DAY_MS = 24 * 60 * 60 * 1000
+
+/** Parse a non-negative retention-day var into ms, falling back to `defaultDays`. */
+function retentionMs(raw: string | undefined, defaultDays: number): number {
+  const days = num(raw)
+  return (days !== undefined && days >= 0 ? days : defaultDays) * DAY_MS
+}
+
+function loadRetentionConfig(env: Env): RetentionConfig {
+  return {
+    // ~13 months: generous, since the spend budget only reads the current period.
+    tokenUsageMs: retentionMs(env.TOKEN_USAGE_RETENTION_DAYS, 395),
+    // Aggressive: pure telemetry whose only consumer cares about recent headroom.
+    rateLimitMs: retentionMs(env.GITHUB_RATE_LIMIT_RETENTION_DAYS, 7),
+    // Caps the commits projection and bounds the initial backfill to the same age.
+    commitMs: retentionMs(env.GITHUB_COMMIT_RETENTION_DAYS, 90),
+  }
+}
+
 export function loadConfig(env: Env): AppConfig {
+  const isDirectAvailable = directKeyAvailable(env)
+
+  // Default unpinned agents/blocks to the Qwen model (its active flavour: direct
+  // DashScope when QWEN_API_KEY is set, else the Cloudflare Workers AI variant).
+  // An operator can still pin a specific provider/model via the env vars.
+  const qwenDefault = resolveModelRef('qwen', isDirectAvailable)
   const defaultConfig: AgentModelConfig = {
     ref: {
-      provider: env.AGENT_DEFAULT_PROVIDER ?? 'workers-ai',
-      model: env.AGENT_DEFAULT_MODEL ?? '@cf/meta/llama-3.1-8b-instruct',
+      provider: env.AGENT_DEFAULT_PROVIDER ?? qwenDefault?.provider ?? 'workers-ai',
+      model: env.AGENT_DEFAULT_MODEL ?? qwenDefault?.model ?? '@cf/qwen/qwen3-30b-a3b-fp8',
     },
     temperature: num(env.AGENT_DEFAULT_TEMPERATURE) ?? 0.4,
     maxOutputTokens: num(env.AGENT_MAX_OUTPUT_TOKENS) ?? 512,
@@ -208,7 +268,9 @@ export function loadConfig(env: Env): AppConfig {
         default: defaultConfig,
         byKind: parseModelOverrides(env.AGENT_MODELS),
       },
+      resolveBlockModel: (modelId) => resolveModelRef(modelId, isDirectAvailable),
     },
+    models: effectiveCatalog(isDirectAvailable),
     execution: {
       // Default to 'tick' so behaviour is unchanged until an operator opts in,
       // mirroring the AGENTS_ENABLED default-off convention.
@@ -219,5 +281,6 @@ export function loadConfig(env: Env): AppConfig {
     github: loadGitHubConfig(env),
     auth: loadAuthConfig(env),
     confluence: loadConfluenceConfig(env),
+    retention: loadRetentionConfig(env),
   }
 }

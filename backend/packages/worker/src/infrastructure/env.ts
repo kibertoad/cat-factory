@@ -57,6 +57,12 @@ export interface Env {
   // ---- Provider credentials -----------------------------------------------
   OPENAI_API_KEY?: string
   ANTHROPIC_API_KEY?: string
+  /** Alibaba DashScope key (provider `qwen`; OpenAI-compatible endpoint). */
+  QWEN_API_KEY?: string
+  /** DeepSeek API key (provider `deepseek`; OpenAI-compatible endpoint). */
+  DEEPSEEK_API_KEY?: string
+  /** Moonshot AI key (provider `moonshot`, direct Kimi; OpenAI-compatible). */
+  MOONSHOT_API_KEY?: string
 
   // ---- GitHub integration (see config.ts; opt-in) -------------------------
   /** GitHub App id (numeric). Presence enables the integration. */
@@ -102,6 +108,25 @@ export interface Env {
    * extract structure; 'headings' forces the deterministic heading parser.
    */
   CONFLUENCE_PLANNER?: string
+
+  // ---- Storage retention (see config.ts and docs/storage-and-retention.md) -
+  /**
+   * Days of `token_usage` ledger history to keep. The spend budget only reads the
+   * current period, so this is generous by default for reporting. Default ~395
+   * (13 months, for year-over-year). 0 disables pruning.
+   */
+  TOKEN_USAGE_RETENTION_DAYS?: string
+  /**
+   * Days of `github_rate_limits` telemetry to keep. Only recent headroom matters,
+   * so this is aggressive. Default 7. 0 disables pruning.
+   */
+  GITHUB_RATE_LIMIT_RETENTION_DAYS?: string
+  /**
+   * Days of `github_commits` projection history to keep. Also bounds the initial
+   * backfill window so a large/monorepo connect can't insert full history in one
+   * step. Default 90. 0 disables pruning and backfills the full history.
+   */
+  GITHUB_COMMIT_RETENTION_DAYS?: string
 
   /** When set, seeds a deterministic RNG (used by integration tests). */
   RNG_SEED?: string

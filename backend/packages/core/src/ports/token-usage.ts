@@ -34,4 +34,10 @@ export interface TokenUsageRepository {
    * org-wide, so this deliberately spans every workspace.
    */
   totalsSince(epochMs: number): Promise<TokenUsageTotals>
+  /**
+   * Retention: delete rows older than `epochMs` (exclusive), returning how many
+   * were removed. The budget query only reads the current period, so pruning old
+   * history caps this append-only ledger without affecting spend gating.
+   */
+  deleteOlderThan(epochMs: number): Promise<number>
 }
