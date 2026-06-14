@@ -24,12 +24,12 @@ Kimi / DeepSeek) and meters spend. The provider key never enters the container.
 
 ## Layout
 
-| File | Responsibility |
-| --- | --- |
+| File            | Responsibility                                                 |
+| --------------- | -------------------------------------------------------------- |
 | `src/server.ts` | HTTP entry point; orchestrates clone → Pi → commit → push → PR |
-| `src/job.ts` | `/run` request type + validator |
-| `src/pi.ts` | Pi provider config + non-interactive run + output parsing |
-| `src/git.ts` | clone / branch / commit / push + GitHub PR creation |
+| `src/job.ts`    | `/run` request type + validator                                |
+| `src/pi.ts`     | Pi provider config + non-interactive run + output parsing      |
+| `src/git.ts`    | clone / branch / commit / push + GitHub PR creation            |
 
 ## Build / test
 
