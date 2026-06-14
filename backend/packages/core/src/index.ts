@@ -59,6 +59,14 @@ export {
 } from './modules/agents/agent-routing'
 export { systemPromptFor, userPromptFor } from './modules/agents/agent-catalog'
 export { composeSystemPrompt } from './modules/agents/prompt-fragments'
+export {
+  type StandardPhase,
+  STANDARD_PHASES,
+  STANDARD_PHASE_BY_KIND,
+  phaseForKind,
+  standardSystemPrompt,
+  renderStandardUserPrompt,
+} from './modules/agents/standard-prompts'
 
 export { type Core, type CoreDependencies, type GitHubModule, createCore } from './container'
 
