@@ -1,9 +1,14 @@
 import type { ExecutionContext, MessageBatch, ScheduledController } from '@cloudflare/workers-types'
 import { createApp } from './app'
+import { loadConfig } from './infrastructure/config'
 import type { Env, ExecutionStartMessage, GitHubSyncMessage } from './infrastructure/env'
+import { D1CommitProjectionRepository } from './infrastructure/repositories/D1CommitProjectionRepository'
 import { D1ExecutionRepository } from './infrastructure/repositories/D1ExecutionRepository'
-import { SystemClock } from './infrastructure/runtime'
+import { D1RateLimitRepository } from './infrastructure/repositories/D1RateLimitRepository'
+import { D1TokenUsageRepository } from './infrastructure/repositories/D1TokenUsageRepository'
+import { CryptoIdGenerator, SystemClock } from './infrastructure/runtime'
 import { WorkflowsWorkRunner } from './infrastructure/workflows/WorkflowsWorkRunner'
+import { sweepRetention } from './infrastructure/workflows/retention'
 import { WorkflowsLookup, sweepStuckRuns } from './infrastructure/workflows/sweeper'
 import { handleGitHubSyncBatch, reconcileStaleRepos } from './infrastructure/github/sync-consumer'
 
@@ -52,6 +57,22 @@ export default {
     // Reconcile GitHub projections that may have missed a webhook (no-op unless
     // the integration is configured).
     ctx.waitUntil(reconcileStaleRepos(env, clock, GITHUB_RECONCILE_STALE_MS).then(() => undefined))
+
+    // Prune the unbounded ledgers/projections to their retention windows. The
+    // tables exist regardless of whether GitHub/agents are configured, so this
+    // runs unconditionally; an unused table simply reclaims nothing.
+    ctx.waitUntil(
+      sweepRetention({
+        tokenUsageRepository: new D1TokenUsageRepository({ db: env.DB }),
+        rateLimitRepository: new D1RateLimitRepository({
+          db: env.DB,
+          idGenerator: new CryptoIdGenerator(),
+        }),
+        commitRepository: new D1CommitProjectionRepository({ db: env.DB }),
+        clock,
+        policy: loadConfig(env).retention,
+      }).then(() => undefined),
+    )
   },
 
   async queue(

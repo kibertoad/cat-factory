@@ -9,6 +9,7 @@ import type {
   GitHubRepo,
   GitHubRepoRef,
   InstallationMeta,
+  ListOptions,
   MergePullRequestInput,
   OpenPullRequestInput,
   Paged,
@@ -30,6 +31,8 @@ export class FakeGitHubClient implements GitHubClient {
   checks: GitHubCheckRun[] = []
 
   readonly writes: { method: string; ref: GitHubRepoRef; args: unknown }[] = []
+  /** Options passed to each listCommits call, for asserting backfill bounds. */
+  readonly commitListOpts: (ListOptions & { sha?: string })[] = []
 
   async getInstallation(): Promise<InstallationMeta> {
     return this.installation
@@ -57,7 +60,12 @@ export class FakeGitHubClient implements GitHubClient {
     return { items: this.issues }
   }
 
-  async listCommits(): Promise<Paged<GitHubCommit>> {
+  async listCommits(
+    _installationId: number,
+    _ref: GitHubRepoRef,
+    opts?: ListOptions & { sha?: string },
+  ): Promise<Paged<GitHubCommit>> {
+    this.commitListOpts.push(opts ?? {})
     return { items: this.commits }
   }
 
