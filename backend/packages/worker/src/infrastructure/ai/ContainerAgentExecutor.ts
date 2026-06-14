@@ -43,6 +43,8 @@ export interface ContainerAgentExecutorDependencies {
    * `/v1` suffix — Pi posts to `${proxyBaseUrl}/chat/completions`.
    */
   proxyBaseUrl: string
+  /** GitHub REST base for opening the PR (GitHub Enterprise / api.github.com). */
+  githubApiBase?: string
 }
 
 /** The result the harness returns from `POST /run`. */
@@ -129,6 +131,7 @@ export class ContainerAgentExecutor implements AgentExecutor {
         title: `${context.block.title} (${context.pipelineName})`,
         body: prBody(context),
       },
+      ...(this.deps.githubApiBase ? { githubApiBase: this.deps.githubApiBase } : {}),
     }
 
     // Address the container instance dedicated to this run (one Durable Object id

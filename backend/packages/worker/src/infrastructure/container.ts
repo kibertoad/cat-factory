@@ -136,6 +136,7 @@ function buildContainerExecutor(
     mintInstallationToken: (id) => auth.installationToken(id),
     sessionService: new ContainerSessionService({ secret: env.AUTH_SESSION_SECRET }),
     proxyBaseUrl: `${env.WORKER_PUBLIC_URL.replace(/\/+$/, '')}/v1`,
+    githubApiBase: config.github.apiBase,
   })
 }
 

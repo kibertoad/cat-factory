@@ -5,6 +5,8 @@ import { defineConfig } from 'vitest/config'
 export default defineConfig({
   test: {
     environment: 'node',
-    include: ['test/**/*.test.ts'],
+    // Fast unit tests only. The Docker-based acceptance suite has its own config
+    // (vitest.acceptance.config.ts) so `pnpm test` never needs a Docker daemon.
+    include: ['test/*.test.ts'],
   },
 })

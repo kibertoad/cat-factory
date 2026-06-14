@@ -42,6 +42,7 @@ export async function handleRun(job: Job): Promise<RunResult> {
       head: job.headBranch,
       base: job.repo.baseBranch,
       pr: job.pr,
+      apiBase: job.githubApiBase,
     })
     return { prUrl, branch: job.headBranch, summary }
   } finally {

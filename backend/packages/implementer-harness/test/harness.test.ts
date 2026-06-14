@@ -43,22 +43,35 @@ describe('authenticatedCloneUrl', () => {
 })
 
 describe('parsePiOutput', () => {
-  it('collects assistant text from JSON-lines events', () => {
+  it('returns the last assistant message from the agent_end transcript', () => {
     const stdout = [
-      '{"type":"tool","name":"bash"}',
-      '{"type":"assistant","text":"Implemented the limiter."}',
-      '{"type":"assistant","content":[{"text":" Added tests."}]}',
+      '{"type":"turn_start"}',
+      '{"type":"message_end","message":{"role":"assistant","content":[{"type":"toolCall","name":"write"}]}}',
       'not json',
+      '{"type":"agent_end","messages":[' +
+        '{"role":"user","content":[{"type":"text","text":"do it"}]},' +
+        '{"role":"assistant","content":[{"type":"toolCall","name":"write"}]},' +
+        '{"role":"toolResult","content":[{"type":"text","text":"wrote 14 bytes"}]},' +
+        '{"role":"assistant","content":[{"type":"text","text":"Created IMPLEMENTED.md."}]}' +
+        ']}',
     ].join('\n')
-    expect(parsePiOutput(stdout)).toBe('Implemented the limiter.\n Added tests.')
+    expect(parsePiOutput(stdout)).toBe('Created IMPLEMENTED.md.')
+  })
+
+  it('falls back to message_end assistant text when there is no agent_end', () => {
+    const stdout = [
+      '{"type":"message_end","message":{"role":"user","content":[{"type":"text","text":"hi"}]}}',
+      '{"type":"message_end","message":{"role":"assistant","content":[{"type":"text","text":"done"}]}}',
+    ].join('\n')
+    expect(parsePiOutput(stdout)).toBe('done')
+  })
+
+  it('reads string message content', () => {
+    const stdout = '{"type":"message_end","message":{"role":"assistant","content":"plain answer"}}'
+    expect(parsePiOutput(stdout)).toBe('plain answer')
   })
 
   it('falls back to the raw tail when nothing structured matches', () => {
     expect(parsePiOutput('plain text only')).toBe('plain text only')
-  })
-
-  it('reads message.content shape', () => {
-    const stdout = '{"type":"message","message":{"content":"done"}}'
-    expect(parsePiOutput(stdout)).toBe('done')
   })
 })

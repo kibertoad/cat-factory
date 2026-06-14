@@ -9,7 +9,8 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "start": "node dist/server.js",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:acceptance": "vitest run --config vitest.acceptance.config.ts"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

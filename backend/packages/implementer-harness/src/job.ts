@@ -32,6 +32,8 @@ export interface Job {
   /** Branch Pi's work is pushed to. */
   headBranch: string
   pr: PrSpec
+  /** GitHub REST base (override for GitHub Enterprise / tests). Defaults to api.github.com. */
+  githubApiBase?: string
 }
 
 /** The /run response. `error` (when set) marks a job-level failure. */
@@ -75,5 +77,6 @@ export function parseJob(input: unknown): Job {
       title: str(pr.title, 'pr.title'),
       body: typeof pr.body === 'string' ? pr.body : '',
     },
+    ...(typeof o.githubApiBase === 'string' ? { githubApiBase: o.githubApiBase } : {}),
   }
 }
