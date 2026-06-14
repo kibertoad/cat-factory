@@ -1,0 +1,266 @@
+import { execFileSync } from 'node:child_process'
+import { createServer, type Server } from 'node:http'
+import { existsSync, mkdtempSync, writeFileSync } from 'node:fs'
+import type { AddressInfo } from 'node:net'
+import net from 'node:net'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+// Shared plumbing for the Docker-based acceptance tests: build/launch the image,
+// stand up local stub servers (LLM upstream + GitHub API), seed a bind-mounted
+// bare repo, and talk to the container. Used by both the dummy-proxy E2E and the
+// real-proxy (in-process LlmProxyController) E2E.
+
+export const PKG_DIR = fileURLToPath(new URL('../../', import.meta.url))
+export const IMAGE = 'cat-factory-impl-acceptance'
+
+export function dockerAvailable(): boolean {
+  try {
+    execFileSync('docker', ['info'], { stdio: 'ignore' })
+    return true
+  } catch {
+    return false
+  }
+}
+
+export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
+export async function listen(server: Server): Promise<number> {
+  await new Promise<void>((resolve) => server.listen(0, '0.0.0.0', resolve))
+  return (server.address() as AddressInfo).port
+}
+
+export async function freePort(): Promise<number> {
+  const s = net.createServer()
+  await new Promise<void>((resolve) => s.listen(0, resolve))
+  const port = (s.address() as AddressInfo).port
+  await new Promise<void>((resolve) => s.close(() => resolve()))
+  return port
+}
+
+/** Build the implementer image. Passes the sandbox proxy CA as a build secret when present. */
+export function buildImage(): void {
+  const ca = process.env.NODE_EXTRA_CA_CERTS
+  const caArgs = ca && existsSync(ca) ? ['--secret', `id=extra_ca,src=${ca}`] : []
+  execFileSync('docker', ['build', ...caArgs, '-f', 'Dockerfile', '-t', IMAGE, '.'], {
+    cwd: PKG_DIR,
+    stdio: 'inherit',
+  })
+}
+
+/** Create a local bare repo with a seeded `main` branch; returns its paths. */
+export function seedBareRepo(): { work: string; bare: string } {
+  const work = mkdtempSync(join(tmpdir(), 'cf-acc-'))
+  const bare = join(work, 'repo.git')
+  const seed = join(work, 'seed')
+  execFileSync('git', ['init', '--bare', '-b', 'main', bare])
+  execFileSync('git', ['clone', bare, seed], { stdio: 'ignore' })
+  writeFileSync(join(seed, 'README.md'), '# seed\n')
+  const g = (...args: string[]) => execFileSync('git', ['-C', seed, ...args], { stdio: 'ignore' })
+  g('-c', 'user.email=seed@test', '-c', 'user.name=seed', 'add', '-A')
+  g('-c', 'user.email=seed@test', '-c', 'user.name=seed', 'commit', '-m', 'init')
+  g('push', 'origin', 'main')
+  return { work, bare }
+}
+
+/** The container (root) wrote git objects into the mount; chown them back, then the caller removes the dir. */
+export function reclaimMount(work: string): void {
+  try {
+    execFileSync(
+      'docker',
+      [
+        'run',
+        '--rm',
+        '--entrypoint',
+        'chown',
+        '-v',
+        `${work}:/w`,
+        IMAGE,
+        '-R',
+        `${process.getuid?.() ?? 0}:${process.getgid?.() ?? 0}`,
+        '/w',
+      ],
+      { stdio: 'ignore', timeout: 60_000 },
+    )
+  } catch {
+    // best effort
+  }
+}
+
+/** Start a detached container with the bare repo bind-mounted and the harness port published. */
+export function startContainer(name: string, hostPort: number, bare: string): void {
+  execFileSync(
+    'docker',
+    [
+      'run',
+      '-d',
+      '--name',
+      name,
+      '--add-host=host.docker.internal:host-gateway',
+      '-p',
+      `${hostPort}:8080`,
+      '-v',
+      `${bare}:/srv/repo`,
+      IMAGE,
+    ],
+    { stdio: 'ignore' },
+  )
+}
+
+export function removeContainer(name: string): void {
+  try {
+    execFileSync('docker', ['rm', '-f', name], { stdio: 'ignore' })
+  } catch {
+    // already gone
+  }
+}
+
+export async function waitForHealth(port: number, timeoutMs = 30_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs
+  for (;;) {
+    try {
+      const r = await fetch(`http://127.0.0.1:${port}/health`)
+      if (r.ok) return
+    } catch {
+      // not up yet
+    }
+    if (Date.now() > deadline) throw new Error('container did not become healthy')
+    await sleep(500)
+  }
+}
+
+/** A single chat-completions request the LLM stub observed. */
+export interface StubRequest {
+  auth?: string
+  model?: string
+  hasTools: boolean
+}
+
+/**
+ * A canned OpenAI-compatible streaming endpoint: on the first turn it streams a
+ * `write` tool call that creates IMPLEMENTED.md; on the next turn (after the tool
+ * result) it streams a final assistant message + stop + a usage chunk. This is
+ * the "dummy adapter with hardcoded responses".
+ */
+export function streamingLlmStub(summary = 'Created IMPLEMENTED.md as requested.') {
+  const requests: StubRequest[] = []
+  const server = createServer((req, res) => {
+    let body = ''
+    req.on('data', (c) => (body += c))
+    req.on('end', () => {
+      const json = JSON.parse(body || '{}') as {
+        model?: string
+        tools?: unknown[]
+        messages?: { role?: string }[]
+      }
+      requests.push({
+        auth: req.headers.authorization,
+        model: json.model,
+        hasTools: Array.isArray(json.tools),
+      })
+      const sawToolResult = (json.messages ?? []).some((m) => m.role === 'tool')
+      res.writeHead(200, { 'content-type': 'text/event-stream' })
+      const base = {
+        id: 'chatcmpl-x',
+        object: 'chat.completion.chunk',
+        created: 0,
+        model: json.model,
+      }
+      const sse = (o: unknown) => res.write(`data: ${JSON.stringify(o)}\n\n`)
+      if (!sawToolResult) {
+        sse({
+          ...base,
+          choices: [
+            {
+              index: 0,
+              delta: {
+                role: 'assistant',
+                content: null,
+                tool_calls: [
+                  {
+                    index: 0,
+                    id: 'call_1',
+                    type: 'function',
+                    function: { name: 'write', arguments: '' },
+                  },
+                ],
+              },
+              finish_reason: null,
+            },
+          ],
+        })
+        sse({
+          ...base,
+          choices: [
+            {
+              index: 0,
+              delta: {
+                tool_calls: [
+                  {
+                    index: 0,
+                    function: {
+                      arguments: JSON.stringify({
+                        path: 'IMPLEMENTED.md',
+                        content: 'hello from pi\n',
+                      }),
+                    },
+                  },
+                ],
+              },
+              finish_reason: null,
+            },
+          ],
+        })
+        sse({ ...base, choices: [{ index: 0, delta: {}, finish_reason: 'tool_calls' }] })
+      } else {
+        sse({
+          ...base,
+          choices: [
+            { index: 0, delta: { role: 'assistant', content: summary }, finish_reason: null },
+          ],
+        })
+        sse({ ...base, choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] })
+        sse({
+          ...base,
+          choices: [],
+          usage: { prompt_tokens: 12, completion_tokens: 4, total_tokens: 16 },
+        })
+      }
+      res.write('data: [DONE]\n\n')
+      res.end()
+    })
+  })
+  return { server, requests }
+}
+
+/** A captured pull-request creation. */
+export interface StubPull {
+  url: string
+  body: Record<string, unknown>
+  auth?: string
+}
+
+/** A stub GitHub API that captures POST .../pulls and returns a fixed html_url. */
+export function githubStub() {
+  const pulls: StubPull[] = []
+  const server = createServer((req, res) => {
+    let body = ''
+    req.on('data', (c) => (body += c))
+    req.on('end', () => {
+      if (req.method === 'POST' && (req.url ?? '').endsWith('/pulls')) {
+        pulls.push({
+          url: req.url ?? '',
+          body: JSON.parse(body || '{}') as Record<string, unknown>,
+          auth: req.headers.authorization,
+        })
+        res.writeHead(201, { 'content-type': 'application/json' })
+        res.end(JSON.stringify({ html_url: 'http://gh.test/octo/app/pull/1', number: 1 }))
+        return
+      }
+      res.writeHead(404, { 'content-type': 'application/json' })
+      res.end('{}')
+    })
+  })
+  return { server, pulls }
+}

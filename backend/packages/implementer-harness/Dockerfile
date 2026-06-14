@@ -16,13 +16,17 @@
 # With no secret the build behaves normally (public registries, default trust).
 
 # ---- build: compile the TypeScript wrapper -------------------------------
+# Only tsconfig + src are needed to compile. The package.json is deliberately NOT
+# copied: the image's runtime uses only Node built-ins + the global Pi CLI, and
+# the package's dev/test deps (incl. pnpm `workspace:*` entries npm can't parse)
+# are irrelevant here. typescript/@types/node are installed standalone.
 FROM node:26-trixie-slim AS build
 WORKDIR /app
-COPY package.json tsconfig.json ./
+COPY tsconfig.json ./
 COPY src ./src
 RUN --mount=type=secret,id=extra_ca,target=/tmp/extra_ca.crt \
     sh -eu -c 'if [ -s /tmp/extra_ca.crt ]; then export NODE_EXTRA_CA_CERTS=/tmp/extra_ca.crt; fi; \
-    npm install --no-save typescript@^5.6.0 @types/node@^22.0.0 && npx tsc -p tsconfig.json'
+    npm install --no-save --no-package-lock typescript@^5.6.0 @types/node@^22.0.0 && npx tsc -p tsconfig.json'
 
 # ---- runtime: git + the Pi CLI + the compiled wrapper --------------------
 FROM node:26-trixie-slim AS runtime
