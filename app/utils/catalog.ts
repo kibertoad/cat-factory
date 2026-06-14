@@ -70,6 +70,13 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
     color: '#e879f9',
     description: 'Generates Playwright e2e tests from scenarios; adds only new ones.',
   },
+  {
+    kind: 'mocker',
+    label: 'Mock Builder',
+    icon: 'i-lucide-server-cog',
+    color: '#fb7185',
+    description: 'Builds WireMock mocks for external services and wires them into local/CI runs.',
+  },
 ]
 
 export const AGENT_BY_KIND: Record<AgentKind, AgentArchetype> = Object.fromEntries(
