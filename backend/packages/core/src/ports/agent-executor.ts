@@ -17,11 +17,22 @@ import type {
 export interface AgentRunContext {
   agentKind: AgentKind
   pipelineName: string
+  /**
+   * The workspace and execution the step belongs to. The engine always sets
+   * these; they are optional on the type so existing fakes that hand-build a
+   * context stay valid. Executors that reach beyond the LLM — e.g. the container
+   * executor that clones the workspace's repo and meters spend through a proxy —
+   * require them and fail fast when absent.
+   */
+  workspaceId?: string
+  executionId?: string
   /** Index of this step within the pipeline. */
   stepIndex: number
   /** Whether this is the pipeline's last step (drives task finalisation). */
   isFinalStep: boolean
   block: {
+    /** Stable block id (set by the engine; used by repo-aware executors). */
+    id?: string
     title: string
     type: BlockType
     description: string

@@ -12,6 +12,9 @@ import {
 import { type AppConfig, loadConfig } from './config'
 import type { Env } from './env'
 import { CloudflareModelProvider } from './ai/CloudflareModelProvider'
+import { ContainerAgentExecutor, type ResolveRepoTarget } from './ai/ContainerAgentExecutor'
+import { CompositeAgentExecutor } from './ai/CompositeAgentExecutor'
+import { ContainerSessionService } from './containers/ContainerSessionService'
 import { WorkflowsWorkRunner } from './workflows/WorkflowsWorkRunner'
 import { D1BlockRepository } from './repositories/D1BlockRepository'
 import { D1ExecutionRepository } from './repositories/D1ExecutionRepository'
@@ -55,15 +58,85 @@ export interface Container extends Core {
  *   - otherwise       → the playful randomised simulator (local / mock runtime)
  * Tests bypass this entirely by overriding `agentExecutor` with a fake.
  */
-function selectAgentExecutor(env: Env, config: AppConfig, rng: Rng): AgentExecutor {
-  if (config.agents.enabled) {
-    return new AiAgentExecutor({
-      modelProvider: new CloudflareModelProvider({ env }),
-      agentRouting: config.agents.routing,
-      resolveBlockModel: config.agents.resolveBlockModel,
-    })
+function selectAgentExecutor(
+  env: Env,
+  config: AppConfig,
+  rng: Rng,
+  db: D1Database,
+  clock: Clock,
+): AgentExecutor {
+  if (!config.agents.enabled) return new SimulatorAgentExecutor({ rng })
+
+  const inline = new AiAgentExecutor({
+    modelProvider: new CloudflareModelProvider({ env }),
+    agentRouting: config.agents.routing,
+    resolveBlockModel: config.agents.resolveBlockModel,
+  })
+
+  // When container implementation is opted in and its prerequisites are wired,
+  // route the `coder` step to a real sandbox; every other step stays inline.
+  if (config.agents.containerImpl) {
+    const container = buildContainerExecutor(env, config, db, clock)
+    if (container) return new CompositeAgentExecutor(inline, container)
   }
-  return new SimulatorAgentExecutor({ rng })
+  return inline
+}
+
+/**
+ * Build the container-based implementation executor, or return null when its
+ * prerequisites are missing (the binding, a configured GitHub App, the proxy's
+ * public URL and signing secret) — the caller then falls back to inline work.
+ */
+function buildContainerExecutor(
+  env: Env,
+  config: AppConfig,
+  db: D1Database,
+  clock: Clock,
+): AgentExecutor | null {
+  if (
+    !env.IMPL_CONTAINER ||
+    !config.github.enabled ||
+    !env.GITHUB_APP_PRIVATE_KEY ||
+    !env.WORKER_PUBLIC_URL ||
+    !env.AUTH_SESSION_SECRET
+  ) {
+    return null
+  }
+
+  const installationRepository = new D1GitHubInstallationRepository({ db })
+  const repoRepository = new D1RepoProjectionRepository({ db })
+  const auth = new GitHubAppAuth({
+    appId: config.github.appId,
+    privateKeyPem: env.GITHUB_APP_PRIVATE_KEY,
+    installationRepository,
+    clock,
+    apiBase: config.github.apiBase,
+  })
+
+  // Pick the repo linked to the running block, else the workspace's first repo.
+  const resolveRepoTarget: ResolveRepoTarget = async (workspaceId, blockId) => {
+    const installation = await installationRepository.getByWorkspace(workspaceId)
+    if (!installation) return null
+    const repos = await repoRepository.list(workspaceId)
+    const repo = repos.find((r) => r.blockId === blockId) ?? repos[0]
+    if (!repo) return null
+    return {
+      installationId: installation.installationId,
+      owner: repo.owner,
+      name: repo.name,
+      baseBranch: repo.defaultBranch ?? 'main',
+    }
+  }
+
+  return new ContainerAgentExecutor({
+    container: env.IMPL_CONTAINER,
+    agentRouting: config.agents.routing,
+    resolveBlockModel: config.agents.resolveBlockModel,
+    resolveRepoTarget,
+    mintInstallationToken: (id) => auth.installationToken(id),
+    sessionService: new ContainerSessionService({ secret: env.AUTH_SESSION_SECRET }),
+    proxyBaseUrl: `${env.WORKER_PUBLIC_URL.replace(/\/+$/, '')}/v1`,
+  })
 }
 
 /**
@@ -190,7 +263,7 @@ export function buildContainer(env: Env, overrides: Partial<CoreDependencies> = 
     tokenUsageRepository: new D1TokenUsageRepository({ db }),
     idGenerator,
     clock,
-    agentExecutor: selectAgentExecutor(env, config, rng),
+    agentExecutor: selectAgentExecutor(env, config, rng, db, clock),
     workRunner: selectWorkRunner(env, config),
     spendPricing: config.spend,
     ...selectGitHubDeps(env, config, db, clock, idGenerator),

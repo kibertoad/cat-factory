@@ -1,0 +1,147 @@
+import { describe, expect, it } from 'vitest'
+import type { AgentRouting, AgentRunContext } from '@cat-factory/core'
+import type { DurableObjectNamespace } from '@cloudflare/workers-types'
+import {
+  ContainerAgentExecutor,
+  type RepoTarget,
+} from '../../src/infrastructure/ai/ContainerAgentExecutor'
+import { ContainerSessionService } from '../../src/infrastructure/containers/ContainerSessionService'
+import type { ImplementationContainer } from '../../src/infrastructure/containers/ImplementationContainer'
+
+// ContainerAgentExecutor must compose the block's fragments into Pi's context,
+// lock the model, dispatch a well-formed job to the per-run container, and report
+// the PR — without leaking usage (the proxy meters that).
+
+interface Dispatched {
+  url: string
+  body: Record<string, unknown>
+}
+
+function fakeContainer(
+  respond: () => unknown,
+  capture: (d: Dispatched) => void,
+): DurableObjectNamespace<ImplementationContainer> {
+  const stub = {
+    fetch(url: string, init: { body: string }) {
+      capture({ url, body: JSON.parse(init.body) as Record<string, unknown> })
+      return Promise.resolve(new Response(JSON.stringify(respond())))
+    },
+  }
+  return {
+    idFromName: (name: string) => ({ name }),
+    get: () => stub,
+  } as unknown as DurableObjectNamespace<ImplementationContainer>
+}
+
+const routing = (provider: string, model: string): AgentRouting => ({
+  default: { ref: { provider, model } },
+  byKind: {},
+})
+
+const repo: RepoTarget = { installationId: 7, owner: 'octo', name: 'app', baseBranch: 'main' }
+
+function context(): AgentRunContext {
+  return {
+    agentKind: 'coder',
+    pipelineName: 'Build it',
+    workspaceId: 'ws-1',
+    executionId: 'ex-1',
+    stepIndex: 1,
+    isFinalStep: true,
+    block: {
+      id: 'blk-1',
+      title: 'Rate limiter',
+      type: 'service',
+      description: 'Token bucket limiter',
+      fragmentIds: ['node.performance'],
+    },
+    priorOutputs: [],
+    decisions: [],
+    resolvedDecision: null,
+  }
+}
+
+describe('ContainerAgentExecutor', () => {
+  it('dispatches a composed job and returns the PR', async () => {
+    let dispatched: Dispatched | undefined
+    const executor = new ContainerAgentExecutor({
+      container: fakeContainer(
+        () => ({ prUrl: 'https://github.com/octo/app/pull/42', summary: 'Added limiter' }),
+        (d) => (dispatched = d),
+      ),
+      agentRouting: routing('qwen', 'qwen3-max'),
+      resolveBlockModel: () => undefined,
+      resolveRepoTarget: () => Promise.resolve(repo),
+      mintInstallationToken: () => Promise.resolve('gh-token'),
+      sessionService: new ContainerSessionService({ secret: 'secret' }),
+      proxyBaseUrl: 'https://worker.example/v1',
+    })
+
+    const result = await executor.run(context())
+
+    expect(result.model).toBe('qwen:qwen3-max')
+    expect(result.output).toContain('Added limiter')
+    expect(result.output).toContain('https://github.com/octo/app/pull/42')
+    expect(result.usage).toBeUndefined() // proxy meters; no double-count
+
+    const body = dispatched!.body
+    expect(body.model).toBe('qwen3-max')
+    expect(body.proxyBaseUrl).toBe('https://worker.example/v1')
+    expect((body.repo as Record<string, unknown>).cloneUrl).toBe('https://github.com/octo/app.git')
+    // The selected fragment was folded into the system prompt handed to Pi.
+    expect(body.systemPrompt as string).toContain('Follow these standards')
+    // The session token is model-locked to what the executor resolved.
+    const session = await new ContainerSessionService({ secret: 'secret' }).verify(
+      body.sessionToken as string,
+    )
+    expect(session).toMatchObject({ provider: 'qwen', model: 'qwen3-max', executionId: 'ex-1' })
+  })
+
+  it('surfaces a job-level error from the container', async () => {
+    const executor = new ContainerAgentExecutor({
+      container: fakeContainer(
+        () => ({ error: 'Pi produced no file changes' }),
+        () => {},
+      ),
+      agentRouting: routing('deepseek', 'deepseek-chat'),
+      resolveBlockModel: () => undefined,
+      resolveRepoTarget: () => Promise.resolve(repo),
+      mintInstallationToken: () => Promise.resolve('gh-token'),
+      sessionService: new ContainerSessionService({ secret: 'secret' }),
+      proxyBaseUrl: 'https://worker.example/v1',
+    })
+    await expect(executor.run(context())).rejects.toThrow(/no file changes/)
+  })
+
+  it('rejects a non-OpenAI-compatible provider (workers-ai)', async () => {
+    const executor = new ContainerAgentExecutor({
+      container: fakeContainer(
+        () => ({}),
+        () => {},
+      ),
+      agentRouting: routing('workers-ai', '@cf/qwen/qwen3-30b-a3b-fp8'),
+      resolveBlockModel: () => undefined,
+      resolveRepoTarget: () => Promise.resolve(repo),
+      mintInstallationToken: () => Promise.resolve('gh-token'),
+      sessionService: new ContainerSessionService({ secret: 'secret' }),
+      proxyBaseUrl: 'https://worker.example/v1',
+    })
+    await expect(executor.run(context())).rejects.toThrow(/OpenAI-compatible/)
+  })
+
+  it('fails when no repo is connected', async () => {
+    const executor = new ContainerAgentExecutor({
+      container: fakeContainer(
+        () => ({}),
+        () => {},
+      ),
+      agentRouting: routing('qwen', 'qwen3-max'),
+      resolveBlockModel: () => undefined,
+      resolveRepoTarget: () => Promise.resolve(null),
+      mintInstallationToken: () => Promise.resolve('gh-token'),
+      sessionService: new ContainerSessionService({ secret: 'secret' }),
+      proxyBaseUrl: 'https://worker.example/v1',
+    })
+    await expect(executor.run(context())).rejects.toThrow(/No connected GitHub repository/)
+  })
+})

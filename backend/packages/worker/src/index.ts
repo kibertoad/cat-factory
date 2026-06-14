@@ -20,6 +20,8 @@ import { sweepExpiredEnvironments } from './infrastructure/environments/sweep'
 // classes to be exported by name.
 export { ExecutionWorkflow } from './infrastructure/workflows/ExecutionWorkflow'
 export { GitHubBackfillWorkflow } from './infrastructure/workflows/GitHubBackfillWorkflow'
+// Container-enabled Durable Object backing per-run implementation containers.
+export { ImplementationContainer } from './infrastructure/containers/ImplementationContainer'
 
 const app = createApp()
 

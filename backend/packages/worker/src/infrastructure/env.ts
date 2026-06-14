@@ -1,4 +1,11 @@
-import type { Ai, D1Database, Queue, Workflow } from '@cloudflare/workers-types'
+import type {
+  Ai,
+  D1Database,
+  DurableObjectNamespace,
+  Queue,
+  Workflow,
+} from '@cloudflare/workers-types'
+import type { ImplementationContainer } from './containers/ImplementationContainer'
 
 /** Message enqueued to bound the rate at which durable runs are started. */
 export interface ExecutionStartMessage {
@@ -32,6 +39,25 @@ export interface Env {
   EXECUTION_MODE?: string
   /** How long a run may park on a human decision before expiring, e.g. "24h". */
   DECISION_TIMEOUT?: string
+
+  // ---- Container-based implementation (see config.ts; opt-in) --------------
+  /**
+   * Durable Object namespace backing per-run implementation containers. Each run
+   * addresses its own instance; the container runs the Pi coding-agent harness.
+   */
+  IMPL_CONTAINER?: DurableObjectNamespace<ImplementationContainer>
+  /**
+   * Routes the implementation (`coder`) step to a real sandbox container instead
+   * of a single inline LLM call ('true'). Requires the IMPL_CONTAINER binding, a
+   * configured GitHub App, a direct OpenAI-compatible provider key, and
+   * WORKER_PUBLIC_URL. Best used with EXECUTION_MODE = "workflow" (runs are long).
+   */
+  CONTAINER_IMPL_ENABLED?: string
+  /**
+   * Public origin of this Worker, e.g. https://cat-factory.example.workers.dev.
+   * Handed to the container so Pi can reach the LLM proxy at `${url}/v1`.
+   */
+  WORKER_PUBLIC_URL?: string
 
   // ---- Agent LLM configuration (see config.ts) ----------------------------
   AGENTS_ENABLED?: string
