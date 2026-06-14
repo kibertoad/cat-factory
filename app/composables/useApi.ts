@@ -2,10 +2,14 @@ import type {
   AuthUser,
   Block,
   BlockType,
+  ConfluenceBoardPlan,
+  ConfluenceConnection,
+  ConfluenceDocument,
   ExecutionInstance,
   ModelOption,
   Pipeline,
   PromptFragment,
+  SpawnResult,
   Workspace,
   WorkspaceSnapshot,
 } from '~/types/domain'
@@ -136,5 +140,45 @@ export function useApi() {
     // ---- spend safeguard --------------------------------------------------
     resumeSpend: (workspaceId: string) =>
       http<ExecutionInstance[]>(`${ws(workspaceId)}/spend/resume`, { method: 'POST' }),
+
+    // ---- confluence -------------------------------------------------------
+    getConfluenceConnection: (workspaceId: string) =>
+      http<{ connection: ConfluenceConnection | null }>(`${ws(workspaceId)}/confluence/connection`),
+
+    connectConfluence: (
+      workspaceId: string,
+      body: { baseUrl: string; accountEmail: string; apiToken: string },
+    ) =>
+      http<ConfluenceConnection>(`${ws(workspaceId)}/confluence/connect`, {
+        method: 'POST',
+        body,
+      }),
+
+    disconnectConfluence: (workspaceId: string) =>
+      http(`${ws(workspaceId)}/confluence/connection`, { method: 'DELETE' }),
+
+    listConfluenceDocs: (workspaceId: string) =>
+      http<ConfluenceDocument[]>(`${ws(workspaceId)}/confluence/documents`),
+
+    importConfluenceDoc: (workspaceId: string, body: { page: string }) =>
+      http<ConfluenceDocument>(`${ws(workspaceId)}/confluence/import`, { method: 'POST', body }),
+
+    planConfluence: (workspaceId: string, pageId: string) =>
+      http<ConfluenceBoardPlan>(`${ws(workspaceId)}/confluence/plan`, {
+        method: 'POST',
+        body: { pageId },
+      }),
+
+    spawnConfluence: (workspaceId: string, body: { pageId: string; frameId?: string }) =>
+      http<{ plan: ConfluenceBoardPlan; result: SpawnResult }>(
+        `${ws(workspaceId)}/confluence/spawn`,
+        { method: 'POST', body },
+      ),
+
+    linkConfluenceDoc: (workspaceId: string, pageId: string, body: { blockId: string }) =>
+      http<ConfluenceDocument>(`${ws(workspaceId)}/confluence/documents/${pageId}/link`, {
+        method: 'POST',
+        body,
+      }),
   }
 }

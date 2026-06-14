@@ -41,3 +41,14 @@ export type {
   SyncCursorKind,
 } from './github-repositories'
 export type { WebhookVerifier } from './webhook-verifier'
+export type {
+  ConfluenceClient,
+  ConfluenceCredentials,
+  ConfluencePageContent,
+} from './confluence-client'
+export type {
+  ConfluenceConnectionRecord,
+  ConfluenceConnectionRepository,
+  ConfluenceDocumentRecord,
+  ConfluenceDocumentRepository,
+} from './confluence-repositories'

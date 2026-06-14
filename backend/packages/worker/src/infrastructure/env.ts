@@ -100,6 +100,15 @@ export interface Env {
   /** Optional comma-separated allowlist of GitHub logins permitted to sign in. */
   AUTH_ALLOWED_LOGINS?: string
 
+  // ---- Confluence integration (see config.ts; opt-in) ---------------------
+  /** Enables the Confluence integration ('true'). Per-workspace creds live in D1. */
+  CONFLUENCE_ENABLED?: string
+  /**
+   * Doc → board planner: 'llm' (default) uses the configured agent model to
+   * extract structure; 'headings' forces the deterministic heading parser.
+   */
+  CONFLUENCE_PLANNER?: string
+
   // ---- Storage retention (see config.ts and docs/storage-and-retention.md) -
   /**
    * Days of `token_usage` ledger history to keep. The spend budget only reads the

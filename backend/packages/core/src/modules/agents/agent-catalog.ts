@@ -42,6 +42,12 @@ export function userPromptFor(context: AgentRunContext): string {
   if (block.features?.length) {
     lines.push(`Target features: ${block.features.join(', ')}`)
   }
+  if (block.contextDocs?.length) {
+    lines.push('', 'Linked context documents (requirements / RFCs / PRDs):')
+    for (const doc of block.contextDocs) {
+      lines.push(`### ${doc.title} (${doc.url})`, doc.excerpt)
+    }
+  }
   const allDecisions = resolvedDecision ? [...decisions, resolvedDecision] : decisions
   if (allDecisions.length) {
     lines.push('', 'Resolved decisions:')

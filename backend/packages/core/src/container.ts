@@ -10,6 +10,12 @@ import type { TokenUsageRepository } from './ports/token-usage'
 import { type WorkRunner, NoopWorkRunner } from './ports/work-runner'
 import type { GitHubClient } from './ports/github-client'
 import type { WebhookVerifier } from './ports/webhook-verifier'
+import type { ModelProvider, ModelRef } from './ports/model-provider'
+import type { ConfluenceClient } from './ports/confluence-client'
+import type {
+  ConfluenceConnectionRepository,
+  ConfluenceDocumentRepository,
+} from './ports/confluence-repositories'
 import type {
   BranchProjectionRepository,
   CheckRunProjectionRepository,
@@ -29,6 +35,10 @@ import { GitHubInstallationService } from './modules/github/GitHubInstallationSe
 import { GitHubService } from './modules/github/GitHubService'
 import { GitHubSyncService } from './modules/github/GitHubSyncService'
 import { WebhookService } from './modules/github/WebhookService'
+import { ConfluenceConnectionService } from './modules/confluence/ConfluenceConnectionService'
+import { ConfluenceImportService } from './modules/confluence/ConfluenceImportService'
+import { ConfluencePlannerService } from './modules/confluence/ConfluencePlannerService'
+import { ConfluenceLinkService } from './modules/confluence/ConfluenceLinkService'
 
 // Composition root for the domain layer. The worker's infrastructure builds the
 // concrete ports (D1 repositories, crypto id/rng, the AI agent executor) and
@@ -82,6 +92,20 @@ export interface CoreDependencies {
    * undefined backfills the full history.
    */
   commitBackfillHorizonMs?: number
+
+  // ---- Confluence integration (optional; wired only when configured) ------
+  // Mirrors the GitHub default-off convention. The Confluence module assembles
+  // when the client + both repositories are present. `modelProvider` is wired
+  // independently of AGENTS_ENABLED and is *optional within* the module: when
+  // absent the planner uses its deterministic heading-based fallback, so import,
+  // link and spawn still work. `confluenceDocumentRepository` is additionally
+  // consumed by the execution engine to feed linked docs to agents as context.
+  modelProvider?: ModelProvider
+  /** Model the Confluence planner uses (the agents' default model ref). */
+  confluencePlannerModel?: ModelRef
+  confluenceClient?: ConfluenceClient
+  confluenceConnectionRepository?: ConfluenceConnectionRepository
+  confluenceDocumentRepository?: ConfluenceDocumentRepository
 }
 
 /** The GitHub integration's services, present only when the app is configured. */
@@ -93,6 +117,14 @@ export interface GitHubModule {
   webhookVerifier: WebhookVerifier
 }
 
+/** The Confluence integration's services, present only when configured. */
+export interface ConfluenceModule {
+  connectionService: ConfluenceConnectionService
+  importService: ConfluenceImportService
+  plannerService: ConfluencePlannerService
+  linkService: ConfluenceLinkService
+}
+
 export interface Core {
   workspaceService: WorkspaceService
   boardService: BoardService
@@ -101,6 +133,8 @@ export interface Core {
   spendService: SpendService
   /** Present only when the GitHub integration is configured (see CoreDependencies). */
   github?: GitHubModule
+  /** Present only when the Confluence integration is configured (see CoreDependencies). */
+  confluence?: ConfluenceModule
 }
 
 /**
@@ -172,6 +206,45 @@ function createGitHubModule(deps: CoreDependencies): GitHubModule | undefined {
   return { installationService, syncService, webhookService, service, webhookVerifier }
 }
 
+/**
+ * Assemble the Confluence module when its client + both repositories are
+ * present. The model provider is optional: with it the planner uses an LLM, and
+ * without it the deterministic heading parser — so the module stays usable for
+ * import/link/spawn even when no LLM is configured.
+ */
+function createConfluenceModule(
+  deps: CoreDependencies,
+  boardService: BoardService,
+): ConfluenceModule | undefined {
+  const { confluenceClient, confluenceConnectionRepository, confluenceDocumentRepository } = deps
+  if (!confluenceClient || !confluenceConnectionRepository || !confluenceDocumentRepository) {
+    return undefined
+  }
+
+  const connectionService = new ConfluenceConnectionService({
+    confluenceConnectionRepository,
+    workspaceRepository: deps.workspaceRepository,
+    clock: deps.clock,
+  })
+  const importService = new ConfluenceImportService({
+    confluenceClient,
+    confluenceDocumentRepository,
+    connectionService,
+    workspaceRepository: deps.workspaceRepository,
+    clock: deps.clock,
+  })
+  const plannerService = new ConfluencePlannerService({
+    modelProvider: deps.modelProvider,
+    modelRef: deps.confluencePlannerModel,
+  })
+  const linkService = new ConfluenceLinkService({
+    boardService,
+    blockRepository: deps.blockRepository,
+    confluenceDocumentRepository,
+  })
+  return { connectionService, importService, plannerService, linkService }
+}
+
 export function createCore(dependencies: CoreDependencies): Core {
   const workRunner = dependencies.workRunner ?? new NoopWorkRunner()
   const boardService = new BoardService(dependencies)
@@ -191,6 +264,7 @@ export function createCore(dependencies: CoreDependencies): Core {
   })
 
   const github = createGitHubModule(dependencies)
+  const confluence = createConfluenceModule(dependencies, boardService)
 
   return {
     workspaceService,
@@ -199,5 +273,6 @@ export function createCore(dependencies: CoreDependencies): Core {
     executionService,
     spendService,
     ...(github ? { github } : {}),
+    ...(confluence ? { confluence } : {}),
   }
 }

@@ -42,6 +42,8 @@ export interface AppConfig {
   github: GitHubConfig
   /** "Login with GitHub" config; `enabled` is false unless an OAuth app is set up. */
   auth: AuthConfig
+  /** Confluence integration config; `enabled` is false unless opted in. */
+  confluence: ConfluenceConfig
   /** Retention windows for the unbounded ledgers/projections (epoch-ms ages). */
   retention: RetentionConfig
 }
@@ -83,6 +85,13 @@ export interface GitHubConfig {
   apiBase: string
   /** Browser redirect target after a successful connect (falls back to '/'). */
   setupRedirectUrl: string
+}
+
+export interface ConfluenceConfig {
+  /** Opt-in flag; per-workspace site credentials are stored in D1, not here. */
+  enabled: boolean
+  /** 'llm' uses the agent model to plan structure; 'headings' forces the parser. */
+  planner: 'llm' | 'headings'
 }
 
 /**
@@ -168,6 +177,17 @@ function loadGitHubConfig(env: Env): GitHubConfig {
     appSlug: env.GITHUB_APP_SLUG?.trim() ?? '',
     apiBase: env.GITHUB_API_BASE?.trim() || 'https://api.github.com',
     setupRedirectUrl: env.GITHUB_SETUP_REDIRECT_URL?.trim() || '/',
+  }
+}
+
+function loadConfluenceConfig(env: Env): ConfluenceConfig {
+  // Opt-in, matching the GitHub/AGENTS_ENABLED default-off convention. The
+  // planner defaults to LLM mode; the worker only wires a model provider when a
+  // provider credential is present, so absent that the planner still degrades to
+  // its deterministic heading parser.
+  return {
+    enabled: env.CONFLUENCE_ENABLED === 'true',
+    planner: env.CONFLUENCE_PLANNER?.trim() === 'headings' ? 'headings' : 'llm',
   }
 }
 
@@ -260,6 +280,7 @@ export function loadConfig(env: Env): AppConfig {
     spend: loadSpendPricing(env),
     github: loadGitHubConfig(env),
     auth: loadAuthConfig(env),
+    confluence: loadConfluenceConfig(env),
     retention: loadRetentionConfig(env),
   }
 }

@@ -25,6 +25,12 @@ export interface AgentRunContext {
     fragmentIds?: string[]
     /** Id of the model picked for this block (overrides the agent routing), if any. */
     modelId?: string
+    /**
+     * Requirements/RFC/PRD pages linked to this block from Confluence, supplied
+     * as extra context. Present only when the Confluence integration is wired and
+     * the block has linked documents.
+     */
+    contextDocs?: { title: string; url: string; excerpt: string }[]
   }
   /** Outputs produced by earlier steps in the same run, in order. */
   priorOutputs: { agentKind: AgentKind; output: string }[]
