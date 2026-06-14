@@ -82,6 +82,7 @@ export {
   type CoreDependencies,
   type GitHubModule,
   type ConfluenceModule,
+  type EnvironmentsModule,
   createCore,
 } from './container'
 
@@ -116,3 +117,21 @@ export {
   type SpawnResult,
 } from './modules/confluence/ConfluenceLinkService'
 export * as confluenceLogic from './modules/confluence/confluence.logic'
+
+export {
+  EnvironmentConnectionService,
+  type EnvironmentConnectionServiceDependencies,
+  type ResolvedConnection,
+  referencedSecretKeys,
+} from './modules/environments/EnvironmentConnectionService'
+export {
+  EnvironmentProvisioningService,
+  type EnvironmentProvisioningServiceDependencies,
+  type ProvisionArgs,
+  type ResolvedEnvironment,
+} from './modules/environments/EnvironmentProvisioningService'
+export {
+  EnvironmentTeardownService,
+  type EnvironmentTeardownServiceDependencies,
+} from './modules/environments/EnvironmentTeardownService'
+export * as environmentsLogic from './modules/environments/environments.logic'

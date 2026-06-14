@@ -152,3 +152,14 @@ GITHUB_OAUTH_CLIENT_ID = ""
 # "llm"; otherwise it uses a deterministic heading parser.
 CONFLUENCE_ENABLED = "false"
 CONFLUENCE_PLANNER = "llm"
+
+# Ephemeral environment provider integration (see src/infrastructure/config.ts).
+# Off by default. Turn it on to let a workspace register its own self-rolled
+# environment management API (a declarative HTTP manifest) so a `deployer` agent
+# can provision ephemeral environments a `tester` then runs against. The
+# per-tenant provider credentials are entered in the app and stored ENCRYPTED in
+# D1 — there are no provider secrets here. The one secret this feature needs is
+# the service-level master key used to encrypt them at rest, required when
+# enabled; set it as a secret (never commit it):
+#   openssl rand -base64 32 | wrangler secret put ENVIRONMENTS_ENCRYPTION_KEY
+ENVIRONMENTS_ENABLED = "false"

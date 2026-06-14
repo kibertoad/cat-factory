@@ -8,6 +8,7 @@ import { loadSpendPricing } from './spending'
 import { type GitHubConfig, loadGitHubConfig } from './github'
 import { type AuthConfig, loadAuthConfig } from './auth'
 import { type ConfluenceConfig, loadConfluenceConfig } from './confluence'
+import { type EnvironmentsConfig, loadEnvironmentsConfig } from './environments'
 import { type RetentionConfig, loadRetentionConfig } from './retention'
 
 // Translates the flat, string-typed Worker environment into a structured app
@@ -22,6 +23,7 @@ export type {
   GitHubConfig,
   AuthConfig,
   ConfluenceConfig,
+  EnvironmentsConfig,
   RetentionConfig,
 }
 
@@ -38,6 +40,8 @@ export interface AppConfig {
   auth: AuthConfig
   /** Confluence integration config; `enabled` is false unless opted in. */
   confluence: ConfluenceConfig
+  /** Environment provider integration config; `enabled` is false unless opted in. */
+  environments: EnvironmentsConfig
   /** Retention windows for the unbounded ledgers/projections (epoch-ms ages). */
   retention: RetentionConfig
 }
@@ -52,6 +56,7 @@ export function loadConfig(env: Env): AppConfig {
     github: loadGitHubConfig(env),
     auth: loadAuthConfig(env),
     confluence: loadConfluenceConfig(env),
+    environments: loadEnvironmentsConfig(env),
     retention: loadRetentionConfig(env),
   }
 }

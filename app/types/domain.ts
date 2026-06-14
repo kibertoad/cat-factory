@@ -34,6 +34,7 @@ export type BlockType =
   | 'queue'
   | 'integration'
   | 'external'
+  | 'environment'
 
 /**
  * Where a block sits in the granularity hierarchy. Both `frame` and `module`

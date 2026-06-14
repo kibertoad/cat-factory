@@ -1,6 +1,11 @@
 import type { AgentKind } from '../../domain/types'
 import type { AgentRunContext } from '../../ports/agent-executor'
-import { phaseForKind, renderStandardUserPrompt, standardSystemPrompt } from './standard-prompts'
+import {
+  environmentSection,
+  phaseForKind,
+  renderStandardUserPrompt,
+  standardSystemPrompt,
+} from './standard-prompts'
 
 // Role definitions and prompt construction for the built-in agent kinds. These
 // turn an agent kind + block context into the system/user prompts handed to the
@@ -48,6 +53,8 @@ export function userPromptFor(context: AgentRunContext): string {
       lines.push(`### ${doc.title} (${doc.url})`, doc.excerpt)
     }
   }
+  const envSection = environmentSection(context)
+  if (envSection) lines.push(envSection)
   const allDecisions = resolvedDecision ? [...decisions, resolvedDecision] : decisions
   if (allDecisions.length) {
     lines.push('', 'Resolved decisions:')

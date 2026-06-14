@@ -28,6 +28,10 @@ import { D1CheckRunProjectionRepository } from './repositories/D1CheckRunProject
 import { D1RateLimitRepository } from './repositories/D1RateLimitRepository'
 import { D1ConfluenceConnectionRepository } from './repositories/D1ConfluenceConnectionRepository'
 import { D1ConfluenceDocumentRepository } from './repositories/D1ConfluenceDocumentRepository'
+import { D1EnvironmentConnectionRepository } from './repositories/D1EnvironmentConnectionRepository'
+import { D1EnvironmentRegistryRepository } from './repositories/D1EnvironmentRegistryRepository'
+import { HttpEnvironmentProvider } from './environments/HttpEnvironmentProvider'
+import { WebCryptoSecretCipher } from './environments/WebCryptoSecretCipher'
 import { GitHubAppAuth } from './github/GitHubAppAuth'
 import { FetchGitHubClient } from './github/FetchGitHubClient'
 import { WebCryptoWebhookVerifier } from './github/WebCryptoWebhookVerifier'
@@ -148,6 +152,29 @@ function selectConfluenceDeps(
   }
 }
 
+/**
+ * Build the ephemeral environment integration's concrete ports when opted in.
+ * Requires the encryption key (the config gate already enforces this), so the
+ * generic HTTP provider, the D1 repositories and the Web Crypto cipher are wired
+ * together. Returns `{}` when disabled, so `createCore` leaves the `environments`
+ * module unassembled and the deterministic deployer / env discovery stay off.
+ */
+function selectEnvironmentsDeps(
+  env: Env,
+  config: AppConfig,
+  db: D1Database,
+): Partial<CoreDependencies> {
+  if (!config.environments.enabled) return {}
+  return {
+    environmentProvider: new HttpEnvironmentProvider(),
+    environmentConnectionRepository: new D1EnvironmentConnectionRepository({ db }),
+    environmentRegistryRepository: new D1EnvironmentRegistryRepository({ db }),
+    secretCipher: new WebCryptoSecretCipher({
+      masterKeyBase64: config.environments.encryptionKey!,
+    }),
+  }
+}
+
 export function buildContainer(env: Env, overrides: Partial<CoreDependencies> = {}): Container {
   const config = loadConfig(env)
   const db = env.DB
@@ -168,6 +195,7 @@ export function buildContainer(env: Env, overrides: Partial<CoreDependencies> = 
     spendPricing: config.spend,
     ...selectGitHubDeps(env, config, db, clock, idGenerator),
     ...selectConfluenceDeps(env, config, db),
+    ...selectEnvironmentsDeps(env, config, db),
     ...overrides,
   }
 

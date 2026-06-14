@@ -157,9 +157,38 @@ function toView(context: AgentRunContext): UserPromptView {
   }
 }
 
+/**
+ * Render the "ephemeral environment under test" section from the run context, or
+ * an empty string when no environment is attached. The auth scheme is described
+ * so the agent knows how to reach the env, but the raw access token/password is
+ * deliberately NOT placed in the prompt — it must not be sent to the LLM
+ * provider; programmatic consumers read it from `context.environment.access`.
+ */
+export function environmentSection(context: AgentRunContext): string {
+  const env = context.environment
+  if (!env) return ''
+  const lines = [
+    '',
+    'Ephemeral environment under test:',
+    `- URL: ${env.url ?? '(pending)'}`,
+    `- Status: ${env.status}`,
+  ]
+  const access = env.access
+  if (access && access.scheme !== 'none') {
+    if (access.scheme === 'bearer') {
+      lines.push('- Auth: Bearer token (provided to the test harness out of band)')
+    } else if (access.scheme === 'basic') {
+      lines.push('- Auth: HTTP Basic credentials (provided to the test harness out of band)')
+    } else if (access.scheme === 'custom_header' && access.headerName) {
+      lines.push(`- Auth: \`${access.headerName}\` header (value provided out of band)`)
+    }
+  }
+  return lines.join('\n')
+}
+
 /** Render the built-out user prompt for a standard phase from the run context. */
 export function renderStandardUserPrompt(phase: StandardPhase, context: AgentRunContext): string {
-  const rendered = USER_TEMPLATES[phase](toView(context))
+  const rendered = USER_TEMPLATES[phase](toView(context)) + environmentSection(context)
   // Collapse the blank lines that conditionals leave behind, then trim.
   return rendered.replace(/\n{3,}/g, '\n\n').trim()
 }

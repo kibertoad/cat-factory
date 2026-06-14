@@ -115,6 +115,19 @@ export interface Env {
    */
   CONFLUENCE_PLANNER?: string
 
+  // ---- Ephemeral environment integration (see config.ts; opt-in) ----------
+  /**
+   * Enables the environment provider integration ('true'). Per-workspace provider
+   * manifests and their (encrypted) secret bundles live in D1, not here.
+   */
+  ENVIRONMENTS_ENABLED?: string
+  /**
+   * Service-level master key (base64, ≥32 bytes decoded) for encrypting the
+   * per-tenant provider secrets and provisioned-env access creds at rest. The
+   * only env secret this feature needs; required when enabled (secret).
+   */
+  ENVIRONMENTS_ENCRYPTION_KEY?: string
+
   // ---- Storage retention (see config.ts and docs/storage-and-retention.md) -
   /**
    * Days of `token_usage` ledger history to keep. The spend budget only reads the

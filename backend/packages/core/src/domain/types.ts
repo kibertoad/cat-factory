@@ -38,4 +38,17 @@ export type {
   PlanFrame,
   PlanModule,
   PlanTask,
+  // Ephemeral environment provider shapes.
+  EnvironmentSecretRef,
+  EnvironmentAuthScheme,
+  EnvironmentHttpMethod,
+  EnvironmentRequestTemplate,
+  EnvironmentStatus,
+  EnvironmentAccessScheme,
+  EnvironmentAccessMapping,
+  EnvironmentResponseMapping,
+  EnvironmentManifest,
+  EnvironmentAccessHandle,
+  EnvironmentHandle,
+  EnvironmentConnection,
 } from '@cat-factory/contracts'

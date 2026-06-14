@@ -8,9 +8,11 @@ import type {
   WorkspaceRepository,
 } from '../../ports/repositories'
 import type { IdGenerator } from '../../ports/runtime'
-import type { AgentExecutor, AgentRunContext } from '../../ports/agent-executor'
+import type { AgentExecutor, AgentRunContext, AgentRunResult } from '../../ports/agent-executor'
 import type { WorkRunner } from '../../ports/work-runner'
 import type { ConfluenceDocumentRepository } from '../../ports/confluence-repositories'
+import type { EnvironmentProvisioningService } from '../environments/EnvironmentProvisioningService'
+import { isDeployStep } from '../environments/environments.logic'
 import { serviceOf } from '../board/board.logic'
 import type { BoardService } from '../board/BoardService'
 import type { SpendService } from '../spend/SpendService'
@@ -32,6 +34,12 @@ export interface ExecutionServiceDependencies {
    * a block are resolved here and fed to the agent as extra context.
    */
   confluenceDocumentRepository?: ConfluenceDocumentRepository
+  /**
+   * Optional: when the environment integration is configured, a `deployer` step
+   * provisions an ephemeral environment deterministically through this service
+   * (no LLM), and downstream steps discover the resulting env via it.
+   */
+  environmentProvisioning?: EnvironmentProvisioningService
 }
 
 /**
@@ -53,6 +61,7 @@ export class ExecutionService {
   private readonly board: BoardService
   private readonly spend: SpendService
   private readonly confluenceDocuments?: ConfluenceDocumentRepository
+  private readonly environmentProvisioning?: EnvironmentProvisioningService
 
   constructor({
     workspaceRepository,
@@ -65,6 +74,7 @@ export class ExecutionService {
     boardService,
     spendService,
     confluenceDocumentRepository,
+    environmentProvisioning,
   }: ExecutionServiceDependencies) {
     this.workspaceRepository = workspaceRepository
     this.blockRepository = blockRepository
@@ -76,6 +86,7 @@ export class ExecutionService {
     this.board = boardService
     this.spend = spendService
     this.confluenceDocuments = confluenceDocumentRepository
+    this.environmentProvisioning = environmentProvisioning
   }
 
   private requireWorkspace(workspaceId: string) {
@@ -199,7 +210,14 @@ export class ExecutionService {
     const block = await this.blockRepository.get(workspaceId, instance.blockId)
     if (!block) return { kind: 'noop' }
     const isFinalStep = instance.currentStep === instance.steps.length - 1
-    const result = await this.runAgent(workspaceId, instance, step, isFinalStep, block, options)
+    // A `deployer` step provisions an ephemeral environment deterministically via
+    // the provider — no LLM, no token usage — when the integration is wired.
+    // Otherwise it falls through to the normal agent path so the simulator still
+    // yields a plausible output.
+    const result =
+      this.environmentProvisioning && isDeployStep(step.agentKind)
+        ? await this.runDeployer(workspaceId, instance, block, options)
+        : await this.runAgent(workspaceId, instance, step, isFinalStep, block, options)
 
     // Meter the LLM call against the spend budget. Recorded whether the step
     // completed or raised a decision — both consumed tokens.
@@ -254,6 +272,52 @@ export class ExecutionService {
    * is set (the durable path), in which case the error propagates so the
    * driver's per-step retry can take over.
    */
+  /**
+   * Deterministically provision an ephemeral environment for a deployer step.
+   * Produces a human-readable summary as the step output and reports no token
+   * usage (it incurs no LLM cost). Errors are swallowed into the output unless
+   * the durable driver wants them surfaced for its per-step retry.
+   */
+  private async runDeployer(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    block: Block,
+    options: AdvanceOptions = {},
+  ): Promise<AgentRunResult> {
+    try {
+      const handle = await this.environmentProvisioning!.provision({
+        workspaceId,
+        blockId: block.id,
+        executionId: instance.id,
+        inputs: this.deployInputs(block),
+      })
+      const lines = [
+        `Provisioned ephemeral environment via '${handle.providerId}'.`,
+        `Status: ${handle.status}`,
+        `URL: ${handle.url ?? '(pending)'}`,
+      ]
+      if (handle.expiresAt) lines.push(`Expires: ${new Date(handle.expiresAt).toISOString()}`)
+      return { output: lines.join('\n'), model: `environment:${handle.providerId}` }
+    } catch (error) {
+      if (options.rethrowAgentErrors) throw error
+      return {
+        output: `Deployer error: ${error instanceof Error ? error.message : String(error)}`,
+      }
+    }
+  }
+
+  /** Provision inputs (`{{input.*}}`) derived from the block under deployment. */
+  private deployInputs(block: Block): Record<string, string> {
+    const inputs: Record<string, string> = {
+      blockId: block.id,
+      title: block.title,
+      type: block.type,
+      description: block.description,
+    }
+    if (block.features?.length) inputs.features = block.features.join(',')
+    return inputs
+  }
+
   private async runAgent(
     workspaceId: string,
     instance: ExecutionInstance,
@@ -261,8 +325,9 @@ export class ExecutionService {
     isFinalStep: boolean,
     block: Block,
     options: AdvanceOptions = {},
-  ) {
+  ): Promise<AgentRunResult> {
     const contextDocs = await this.resolveContextDocs(workspaceId, block.id)
+    const environment = await this.resolveEnvironment(workspaceId, block.id)
     const context: AgentRunContext = {
       agentKind: step.agentKind,
       pipelineName: instance.pipelineName,
@@ -277,6 +342,7 @@ export class ExecutionService {
         modelId: block.modelId,
         ...(contextDocs.length ? { contextDocs } : {}),
       },
+      ...(environment ? { environment } : {}),
       priorOutputs: instance.steps
         .slice(0, instance.currentStep)
         .filter((s) => s.output)
@@ -314,6 +380,17 @@ export class ExecutionService {
     if (!this.confluenceDocuments) return []
     const docs = await this.confluenceDocuments.listByBlock(workspaceId, blockId)
     return docs.map((d) => ({ title: d.title, url: d.url, excerpt: d.excerpt }))
+  }
+
+  /**
+   * Resolve the live ephemeral environment provisioned for the running block
+   * into compact agent context. A no-op unless the environment integration is
+   * wired (the provisioning service is an optional dependency), so the engine
+   * stays unchanged when it is off.
+   */
+  private async resolveEnvironment(workspaceId: string, blockId: string) {
+    if (!this.environmentProvisioning) return null
+    return this.environmentProvisioning.resolveForBlock(workspaceId, blockId)
   }
 
   /** Set the block's in-progress/blocked status and step-completion progress. */

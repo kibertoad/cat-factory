@@ -11,6 +11,7 @@ import { WorkflowsWorkRunner } from './infrastructure/workflows/WorkflowsWorkRun
 import { sweepRetention } from './infrastructure/workflows/retention'
 import { WorkflowsLookup, sweepStuckRuns } from './infrastructure/workflows/sweeper'
 import { handleGitHubSyncBatch, reconcileStaleRepos } from './infrastructure/github/sync-consumer'
+import { sweepExpiredEnvironments } from './infrastructure/environments/sweep'
 
 // Cloudflare Worker entry. In addition to the Hono `fetch` handler, we expose a
 // `scheduled` handler (the cron sweeper, now also reconciling GitHub
@@ -81,6 +82,10 @@ export default {
     // Reconcile GitHub projections that may have missed a webhook (no-op unless
     // the integration is configured).
     ctx.waitUntil(reconcileStaleRepos(env, clock, GITHUB_RECONCILE_STALE_MS).then(() => undefined))
+
+    // Tear down ephemeral environments whose TTL has elapsed (no-op unless the
+    // environment integration is configured).
+    ctx.waitUntil(sweepExpiredEnvironments(env, clock).then(() => undefined))
   },
 
   async queue(
