@@ -8,6 +8,8 @@
     "generate": "nuxt generate",
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare",
+    "test": "vitest",
+    "test:run": "vitest run",
     "typecheck": "nuxt typecheck",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
@@ -29,9 +31,11 @@
     "vue": "^3.5.38"
   },
   "devDependencies": {
+    "happy-dom": "^15.11.7",
     "oxfmt": "^0.54.0",
     "oxlint": "^1.69.0",
     "typescript": "^6.0.3",
+    "vitest": "^3.2.6",
     "vue-tsc": "^3.3.4"
   }
 }

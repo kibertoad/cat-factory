@@ -44,6 +44,9 @@ jobs:
       - name: Check formatting (oxfmt)
         run: pnpm format:check
 
+      - name: Frontend unit tests
+        run: pnpm test:run
+
   test:
     name: Test
     runs-on: ubuntu-latest
