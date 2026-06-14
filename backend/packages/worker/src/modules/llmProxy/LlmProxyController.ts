@@ -163,9 +163,7 @@ async function runWorkersAi(args: WorkersAiArgs): Promise<Response> {
   // workers-ai-provider pins a slightly older @ai-sdk/provider than `ai` v5; the
   // runtime is compatible, so bridge the type-only skew with a cast (as the
   // inline CloudflareModelProvider does).
-  const model = workersai(
-    modelId as Parameters<typeof workersai>[0],
-  ) as unknown as LanguageModel
+  const model = workersai(modelId as Parameters<typeof workersai>[0]) as unknown as LanguageModel
   const messages = (Array.isArray(payload.messages) ? payload.messages : []) as ModelMessage[]
   const temperature = typeof payload.temperature === 'number' ? payload.temperature : undefined
   const maxOutputTokens = typeof payload.max_tokens === 'number' ? payload.max_tokens : undefined
@@ -204,14 +202,25 @@ async function runWorkersAi(args: WorkersAiArgs): Promise<Response> {
     created,
     model: modelId,
     choices,
-    ...(usage ? { usage: { ...usage, total_tokens: (usage.prompt_tokens ?? 0) + (usage.completion_tokens ?? 0) } } : {}),
+    ...(usage
+      ? {
+          usage: {
+            ...usage,
+            total_tokens: (usage.prompt_tokens ?? 0) + (usage.completion_tokens ?? 0),
+          },
+        }
+      : {}),
   })
 
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
-      controller.enqueue(sse(chunk([{ index: 0, delta: { role: 'assistant' }, finish_reason: null }])))
+      controller.enqueue(
+        sse(chunk([{ index: 0, delta: { role: 'assistant' }, finish_reason: null }])),
+      )
       for await (const delta of result.textStream) {
-        controller.enqueue(sse(chunk([{ index: 0, delta: { content: delta }, finish_reason: null }])))
+        controller.enqueue(
+          sse(chunk([{ index: 0, delta: { content: delta }, finish_reason: null }])),
+        )
       }
       controller.enqueue(sse(chunk([{ index: 0, delta: {}, finish_reason: 'stop' }])))
       const usage = usageOf(await result.usage)

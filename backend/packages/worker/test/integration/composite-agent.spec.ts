@@ -37,7 +37,14 @@ describe('CompositeAgentExecutor', () => {
   })
 
   it('routes other kinds to the inline executor', async () => {
-    for (const kind of ['architect', 'reviewer', 'tester', 'acceptance', 'documenter', 'custom-x']) {
+    for (const kind of [
+      'architect',
+      'reviewer',
+      'tester',
+      'acceptance',
+      'documenter',
+      'custom-x',
+    ]) {
       expect((await composite.run(ctx(kind))).output).toBe('inline')
     }
   })
