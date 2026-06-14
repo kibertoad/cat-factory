@@ -1,5 +1,5 @@
 import * as v from 'valibot'
-import { agentKindSchema, blockTypeSchema, positionSchema } from './primitives'
+import { agentKindSchema, blockTypeSchema, positionSchema, testTargetSchema } from './primitives'
 
 // Request body schemas. The Hono facade validates inbound JSON against these via
 // @hono/valibot-validator; the frontend API client can import the inferred input
@@ -40,6 +40,8 @@ export const updateBlockSchema = v.partial(
     fragmentIds: v.array(v.pipe(v.string(), v.maxLength(120))),
     // The selected model's catalog id; an empty string resets to the default.
     modelId: v.pipe(v.string(), v.maxLength(120)),
+    // Where this block's acceptance / Playwright tests run.
+    testTarget: testTargetSchema,
   }),
 )
 export type UpdateBlockInput = v.InferOutput<typeof updateBlockSchema>

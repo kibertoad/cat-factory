@@ -17,6 +17,8 @@ const AGENT_KINDS: AgentKind[] = [
   'reviewer',
   'documenter',
   'integrator',
+  'acceptance',
+  'playwright',
 ]
 const BLOCK_TYPES: BlockType[] = [
   'frontend',

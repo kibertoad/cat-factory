@@ -1,5 +1,6 @@
 import type { AgentKind } from '../../domain/types'
 import type { AgentRunContext } from '../../ports/agent-executor'
+import { acceptanceSystemPrompt, testTargetSection } from './acceptance-prompts'
 import {
   environmentSection,
   phaseForKind,
@@ -11,8 +12,10 @@ import {
 // turn an agent kind + block context into the system/user prompts handed to the
 // LLM. The four standard solution phases — design (architect), build (coder),
 // review (reviewer) and test (tester) — use the built-out prompts in
-// ./standard-prompts; the remaining kinds use the thin roles below, and custom
-// agent kinds (free-form ids) fall back to a generic role.
+// ./standard-prompts; the acceptance-testing track (acceptance, playwright) uses
+// the built-out prompts in ./acceptance-prompts; the remaining kinds use the
+// thin roles below, and custom agent kinds (free-form ids) fall back to a
+// generic role.
 
 const ROLES: Partial<Record<AgentKind, string>> = {
   researcher:
@@ -26,6 +29,8 @@ const ROLES: Partial<Record<AgentKind, string>> = {
 export function systemPromptFor(kind: AgentKind): string {
   const phase = phaseForKind(kind)
   if (phase) return standardSystemPrompt(phase)
+  const acceptance = acceptanceSystemPrompt(kind)
+  if (acceptance) return acceptance
   return (
     ROLES[kind] ??
     `You are the "${kind}" agent. Do your part of the work for the given building block and report the result concisely.`
@@ -55,6 +60,8 @@ export function userPromptFor(context: AgentRunContext): string {
   }
   const envSection = environmentSection(context)
   if (envSection) lines.push(envSection)
+  const targetSection = testTargetSection(context)
+  if (targetSection) lines.push(targetSection)
   const allDecisions = resolvedDecision ? [...decisions, resolvedDecision] : decisions
   if (allDecisions.length) {
     lines.push('', 'Resolved decisions:')
