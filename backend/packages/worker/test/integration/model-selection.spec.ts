@@ -5,10 +5,19 @@ import { makeApp, type TestApp } from '../helpers'
 
 describe('per-block model selection', () => {
   describe('catalog', () => {
-    it('resolves catalog ids to concrete workers-ai model refs', () => {
-      const qwen = modelRefForId('qwen')
-      expect(qwen).toEqual({ provider: 'workers-ai', model: '@cf/qwen/qwen3-30b-a3b-fp8' })
-      // The four advertised models are all present.
+    it('resolves catalog ids to concrete model refs', () => {
+      // Llama and Kimi run on Cloudflare Workers AI; Qwen and DeepSeek go direct.
+      expect(modelRefForId('cloudflare-llama')).toEqual({
+        provider: 'workers-ai',
+        model: '@cf/meta/llama-3.1-8b-instruct',
+      })
+      expect(modelRefForId('kimi')).toEqual({
+        provider: 'workers-ai',
+        model: '@cf/moonshotai/kimi-k2.6',
+      })
+      expect(modelRefForId('qwen')).toEqual({ provider: 'qwen', model: 'qwen3-max' })
+      expect(modelRefForId('deepseek')).toEqual({ provider: 'deepseek', model: 'deepseek-chat' })
+      // The four advertised models are all present, in order.
       expect(MODEL_CATALOG.map((m) => m.id)).toEqual([
         'cloudflare-llama',
         'qwen',

@@ -6,10 +6,11 @@ import type { ModelRef } from '../ports/model-provider'
 // the agent routing's default. A block without a selection falls back to the
 // operator-configured routing, so this is purely an opt-in per-block override.
 //
-// The current set are all Cloudflare Workers AI text models (latest generation as
-// of mid-2026): the platform-default Llama, plus Qwen, Kimi and DeepSeek. Because
-// they share the `workers-ai` provider they resolve through the existing
-// CloudflareModelProvider with no extra wiring.
+// The current set (latest generation as of mid-2026): Llama and Kimi run on
+// Cloudflare Workers AI (the `workers-ai` provider), while Qwen and DeepSeek
+// integrate directly with their own provider APIs (`qwen` via Alibaba DashScope,
+// `deepseek` via the DeepSeek API). The worker's CloudflareModelProvider maps each
+// provider id to a concrete SDK client and the matching credentials.
 
 export interface SelectableModel {
   /** Stable id stored on a block, e.g. `qwen`. */
@@ -34,24 +35,24 @@ export const MODEL_CATALOG: SelectableModel[] = [
   },
   {
     id: 'qwen',
-    label: 'Qwen3 30B',
-    description: "Alibaba's Qwen3 30B-A3B mixture-of-experts model (3B active params).",
-    provider: 'workers-ai',
-    model: '@cf/qwen/qwen3-30b-a3b-fp8',
+    label: 'Qwen3 Max',
+    description: "Alibaba's flagship Qwen3-Max, direct via the DashScope API.",
+    provider: 'qwen',
+    model: 'qwen3-max',
   },
   {
     id: 'kimi',
     label: 'Kimi K2.6',
-    description: "Moonshot AI's frontier-scale agentic model with a long context window.",
+    description: "Moonshot AI's frontier-scale agentic model, via Cloudflare Workers AI.",
     provider: 'workers-ai',
     model: '@cf/moonshotai/kimi-k2.6',
   },
   {
     id: 'deepseek',
-    label: 'DeepSeek R1',
-    description: "DeepSeek's R1 reasoning, distilled into Qwen 32B.",
-    provider: 'workers-ai',
-    model: '@cf/deepseek-ai/deepseek-r1-distill-qwen-32b',
+    label: 'DeepSeek V3.2',
+    description: "DeepSeek's flagship chat model, direct via the DeepSeek API.",
+    provider: 'deepseek',
+    model: 'deepseek-chat',
   },
 ]
 

@@ -134,7 +134,7 @@ export interface SelectableModel {
   description: string
 }
 
-/** Models a user can pick per block — all Cloudflare Workers AI text models. */
+/** Models a user can pick per block (Llama & Kimi via Cloudflare; Qwen & DeepSeek direct). */
 export const MODEL_CATALOG: SelectableModel[] = [
   {
     id: 'cloudflare-llama',
@@ -143,18 +143,18 @@ export const MODEL_CATALOG: SelectableModel[] = [
   },
   {
     id: 'qwen',
-    label: 'Qwen3 30B',
-    description: "Alibaba's Qwen3 30B-A3B mixture-of-experts model.",
+    label: 'Qwen3 Max',
+    description: "Alibaba's flagship Qwen3-Max, direct via DashScope.",
   },
   {
     id: 'kimi',
     label: 'Kimi K2.6',
-    description: "Moonshot AI's frontier-scale agentic model.",
+    description: "Moonshot AI's frontier-scale model, via Cloudflare.",
   },
   {
     id: 'deepseek',
-    label: 'DeepSeek R1',
-    description: "DeepSeek's R1 reasoning, distilled into Qwen 32B.",
+    label: 'DeepSeek V3.2',
+    description: "DeepSeek's flagship chat model, direct via the DeepSeek API.",
   },
 ]
 

@@ -142,3 +142,7 @@ against a real local D1 database with the real migrations applied. Only the LLM 
 Set a real `database_id` in `wrangler.toml` (`wrangler d1 create cat_factory`), apply migrations
 with `db:migrate:remote`, set provider secrets (`wrangler secret put OPENAI_API_KEY`), flip
 `AGENTS_ENABLED=true`, and `pnpm deploy`.
+
+Per-block model selection (the inspector's "Model" picker) runs Llama and Kimi on the Workers AI
+binding, and Qwen and DeepSeek directly against their own APIs — set `QWEN_API_KEY` (Alibaba
+DashScope) and `DEEPSEEK_API_KEY` as secrets to enable those.

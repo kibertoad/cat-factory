@@ -97,6 +97,12 @@ SPEND_CURRENCY = "EUR"
 # defaults. Keys are "provider:model" or a bare "provider".
 # SPEND_MODEL_PRICES = '{"openai:gpt-4o":{"inputPerMillion":2.3,"outputPerMillion":9.2}}'
 
+# Per-block model picker (see src/infrastructure/ai/CloudflareModelProvider.ts and
+# MODEL_CATALOG in @cat-factory/core). Llama and Kimi run on the Workers AI binding
+# above; Qwen and DeepSeek integrate directly and need API keys set as secrets:
+#   wrangler secret put QWEN_API_KEY       # Alibaba DashScope (intl endpoint)
+#   wrangler secret put DEEPSEEK_API_KEY   # DeepSeek API
+
 # Storage retention (see src/infrastructure/config.ts and
 # docs/storage-and-retention.md). The cron sweeper prunes the tables that don't
 # self-limit to these age windows (in days); 0 disables a table's pass. Defaults
