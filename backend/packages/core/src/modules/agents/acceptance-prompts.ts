@@ -1,4 +1,4 @@
-import type { AgentKind, TestTarget } from '../../domain/types'
+import type { AgentKind, BlockType, TestTarget } from '../../domain/types'
 import type { AgentRunContext } from '../../ports/agent-executor'
 
 // Built-out role prompts for the acceptance-testing agents. These two kinds turn
@@ -6,8 +6,11 @@ import type { AgentRunContext } from '../../ports/agent-executor'
 //
 //   - `acceptance` reads the block intent and any linked requirements / PRDs and
 //     writes black-box acceptance test SCENARIOS in Given / When / Then form.
-//   - `playwright` reads those scenarios and emits Playwright end-to-end TESTS,
-//     committed to the repository, adding only tests that do not exist yet.
+//   - `playwright` reads those scenarios and emits runnable acceptance TESTS,
+//     committed to the repository, adding only tests that do not exist yet. It
+//     reaches for Playwright only when the block has a user-facing UI; for
+//     backend behaviour it writes the tests with the project's own test
+//     framework, which `testApproachSection` selects from the block type.
 //
 // Like the standard solution phases, "what the agent should do" lives here and
 // "which extra standards apply" stays in @cat-factory/prompt-fragments: each
@@ -41,16 +44,21 @@ const SYSTEM_PROMPTS: Record<AcceptanceAgentKind, string> = {
     STANDARDS_FOOTER,
   ].join('\n'),
   playwright: [
-    'You are a test automation engineer owning the PLAYWRIGHT end-to-end tests for a building block.',
-    'Translate the agreed acceptance scenarios into runnable Playwright tests that live in the repository.',
+    'You are a test automation engineer owning the runnable ACCEPTANCE TESTS for a building block.',
+    'Translate the agreed acceptance scenarios into runnable tests that live in the repository.',
+    '',
+    'Pick the test tool to match the surface under test:',
+    '- Frontend / user-facing UI: write Playwright end-to-end tests that drive the app through the browser.',
+    "- Backend (services, APIs, queues, integrations, data): write the acceptance tests with the project's EXISTING test framework — discover it from the repository (test config, dev dependencies, the tests already present) and match it. Do not pull in Playwright or a browser for behaviour that has no UI.",
+    'The run context below states the test approach for this specific block; follow it.',
     '',
     'Approach:',
-    '- Treat the acceptance scenarios above as the source of truth: one `test` per scenario, named after the scenario so the mapping is obvious.',
+    '- Treat the acceptance scenarios above as the source of truth: one test per scenario, named after the scenario so the mapping is obvious.',
     '- Be additive and idempotent: only create tests for scenarios that do not already have one; never duplicate or silently rewrite an existing test.',
-    '- Drive the app through user-facing locators (roles, labels, text) — not brittle CSS or XPath — and assert on what the user observes.',
-    '- Keep tests isolated and deterministic: no shared mutable state, await every action, and rely on web-first assertions instead of fixed sleeps.',
-    '- Reach the system under test at the ephemeral environment URL from the run context; read any access credentials from the harness, never hard-code secrets.',
-    '- Output the test files to commit, each under the e2e/Playwright test directory, ready to run in CI.',
+    '- Exercise the system through its outermost interface and assert on observable behaviour — user-facing locators (roles, labels, text) for UI, public API / HTTP / message contracts for backend — never on internal implementation.',
+    '- Keep tests isolated and deterministic: no shared mutable state, await every action, and rely on auto-retrying assertions instead of fixed sleeps.',
+    '- Reach the system under test at the URL / entry point from the run context; read any access credentials from the harness, never hard-code secrets.',
+    '- Output the test files to commit, each in the conventional test directory for its tool (e.g. the e2e/Playwright directory for UI tests), ready to run in CI.',
     '',
     STANDARDS_FOOTER,
   ].join('\n'),
@@ -97,4 +105,36 @@ export function testTargetSection(context: AgentRunContext): string {
   const target = context.block.testTarget
   if (!isAcceptanceKind(context.agentKind) || !target) return ''
   return `\n${TEST_TARGET_GUIDANCE[target]}`
+}
+
+// Block types whose behaviour is exercised through a browser UI, so the runnable
+// tests should be Playwright e2e. Everything else is backend behaviour that gets
+// tested with the project's own framework. Mirrors how the `playwright.e2e`
+// best-practice fragment is scoped in @cat-factory/prompt-fragments.
+const UI_BLOCK_TYPES: readonly BlockType[] = ['frontend', 'environment']
+
+const UI_TEST_APPROACH = [
+  'Test approach for this block: Playwright end-to-end tests.',
+  '- This block has a user-facing surface, so cover its scenarios with Playwright tests that drive the app through the browser.',
+  '- Select elements by user-facing locators (getByRole, getByLabel, getByText) and assert on what the user observes.',
+].join('\n')
+
+const BACKEND_TEST_APPROACH = [
+  "Test approach for this block: the project's existing test framework (do NOT use Playwright).",
+  '- This block has no user-facing UI, so do not add Playwright or a browser to it.',
+  "- Discover the test framework already used in the repository (test config, dev dependencies, the tests already present) and write the acceptance tests with it, matching the project's conventions.",
+  '- Drive the system through its public interface (API / HTTP calls, queue messages, exported functions) and assert on observable behaviour, never on internals.',
+].join('\n')
+
+/**
+ * The "how should these tests be written" section for the runnable-tests step
+ * (`playwright` kind), chosen from the block type: Playwright for user-facing
+ * blocks, the project's own test framework for backend blocks. Empty for the
+ * scenario-writing step and any non-track kind, so callers can append it
+ * unconditionally. The scenario author stays framework-agnostic by design.
+ */
+export function testApproachSection(context: AgentRunContext): string {
+  if (context.agentKind !== 'playwright') return ''
+  const isUi = UI_BLOCK_TYPES.includes(context.block.type)
+  return `\n${isUi ? UI_TEST_APPROACH : BACKEND_TEST_APPROACH}`
 }

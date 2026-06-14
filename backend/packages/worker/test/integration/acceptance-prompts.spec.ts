@@ -12,8 +12,10 @@ import { FRAGMENTS } from '@cat-factory/prompt-fragments'
 import { describe, expect, it } from 'vitest'
 
 // The acceptance-testing track adds two built-out agent kinds — `acceptance`
-// (scenarios from requirements) and `playwright` (e2e tests from scenarios) —
-// that sit alongside the four standard solution phases.
+// (scenarios from requirements) and `playwright` (runnable tests from
+// scenarios) — that sit alongside the four standard solution phases. The
+// runnable-tests step uses Playwright only for user-facing blocks and the
+// project's own test framework for backend blocks.
 
 function ctx(overrides: Partial<AgentRunContext> = {}): AgentRunContext {
   return {
@@ -55,6 +57,13 @@ describe('acceptance-testing agent prompts', () => {
 
     it('tells the playwright agent to add only missing tests (idempotent)', () => {
       expect(systemPromptFor('playwright')).toMatch(/only create tests for scenarios that do not/i)
+    })
+
+    it('tells the runnable-tests agent to use Playwright only for UI and the project framework for backend', () => {
+      const prompt = systemPromptFor('playwright')
+      expect(prompt).toMatch(/Frontend \/ user-facing UI: write Playwright/i)
+      expect(prompt).toMatch(/project's EXISTING test framework/i)
+      expect(prompt).toMatch(/Do not pull in Playwright or a browser for behaviour that has no UI/i)
     })
 
     it('defers to the appended best-practice standards', () => {
@@ -149,6 +158,56 @@ describe('acceptance-testing agent prompts', () => {
         }),
       )
       expect(prompt).not.toContain('Test execution target')
+    })
+
+    it('tells the runnable-tests agent to use Playwright for a frontend block', () => {
+      const prompt = userPromptFor(
+        ctx({
+          agentKind: 'playwright',
+          block: { title: 'Login', type: 'frontend', description: 'Auth' },
+        }),
+      )
+      expect(prompt).toContain('Test approach for this block: Playwright end-to-end tests.')
+      expect(prompt).toContain('getByRole')
+    })
+
+    it("tells the runnable-tests agent to use the project's framework (not Playwright) for a backend block", () => {
+      const prompt = userPromptFor(
+        ctx({
+          agentKind: 'playwright',
+          block: { title: 'Login endpoint', type: 'api', description: 'Auth API' },
+        }),
+      )
+      expect(prompt).toMatch(/project's existing test framework \(do NOT use Playwright\)/i)
+      expect(prompt).toMatch(/do not add Playwright or a browser/i)
+      expect(prompt).not.toContain('Playwright end-to-end tests.')
+    })
+
+    it('omits the test-approach section for the scenario-writing (acceptance) kind', () => {
+      const prompt = userPromptFor(
+        ctx({
+          agentKind: 'acceptance',
+          block: { title: 'Login', type: 'frontend', description: 'Auth' },
+        }),
+      )
+      expect(prompt).not.toContain('Test approach for this block')
+    })
+  })
+
+  describe('best-practice fragments', () => {
+    it('offers a Playwright fragment for user-facing blocks only', () => {
+      const fragment = FRAGMENTS.find((f) => f.id === 'playwright.e2e')!
+      expect(fragment.appliesTo?.blockTypes).toEqual(['frontend', 'environment'])
+      expect(fragment.appliesTo?.agentKinds).toEqual(['playwright'])
+    })
+
+    it('offers a backend acceptance-test fragment for backend blocks only', () => {
+      const fragment = FRAGMENTS.find((f) => f.id === 'acceptance.backend-tests')!
+      expect(fragment).toBeDefined()
+      expect(fragment.appliesTo?.blockTypes).not.toContain('frontend')
+      expect(fragment.appliesTo?.blockTypes).toContain('api')
+      expect(fragment.appliesTo?.agentKinds).toEqual(['playwright'])
+      expect(fragment.body).toMatch(/existing test framework/i)
     })
   })
 })

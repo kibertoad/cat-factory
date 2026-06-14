@@ -65,10 +65,11 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
   },
   {
     kind: 'playwright',
-    label: 'Playwright Author',
+    label: 'Acceptance Test Author',
     icon: 'i-lucide-theater',
     color: '#e879f9',
-    description: 'Generates Playwright e2e tests from scenarios; adds only new ones.',
+    description:
+      "Turns scenarios into runnable tests — Playwright for frontend, the project's own framework for backend; adds only new ones.",
   },
   {
     kind: 'mocker',
