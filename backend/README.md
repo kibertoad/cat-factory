@@ -209,3 +209,28 @@ wrangler secret put ANTHROPIC_API_KEY
 
 The effective catalog (which flavour is active) is served read-only at `GET /models`; it exposes
 only labels and provider/model ids, never the keys.
+
+#### Container implementation (running agents on a real checkout)
+
+The phases that must operate on the repository — `coder` (implementation), `mocker` (WireMock
+mocks) and `playwright` (end-to-end tests) — can run inside a per-run Cloudflare Container that
+clones the repo, edits files and opens a PR, instead of as a single inline LLM call. Every other
+phase (architect, reviewer, tester, the `acceptance` scenario writer, …) stays inline. Enable it
+with:
+
+```sh
+wrangler secret put CONTAINER_IMPL_ENABLED   # set to: true
+wrangler secret put WORKER_PUBLIC_URL        # e.g. https://cat-factory.example.workers.dev
+# Requires the IMPL_CONTAINER binding (wrangler.toml) and the GitHub App configured.
+# Best paired with EXECUTION_MODE = "workflow" since container runs are long-lived.
+```
+
+The container never holds a provider key: it reaches models only through this Worker's LLM proxy
+(`/v1/chat/completions`) using a short-lived, model-locked session token, and the proxy is the
+single spend-metering point.
+
+**No extra LLM secret is required.** With no direct-provider key set, blocks resolve to their
+**Workers AI** flavour, and the proxy serves those in-process through the Worker's `AI` binding —
+so container runs work out of the box on Workers AI. Setting a direct-provider key (above) simply
+upgrades the same blocks to that provider; the proxy then forwards to its OpenAI-compatible
+endpoint instead. Either way the container is unchanged and holds no credentials.
