@@ -38,6 +38,8 @@ export const updateBlockSchema = v.partial(
     moduleName: v.pipe(v.string(), v.trim(), v.maxLength(120)),
     features: v.array(v.pipe(v.string(), v.maxLength(120))),
     fragmentIds: v.array(v.pipe(v.string(), v.maxLength(120))),
+    // The selected model's catalog id; an empty string resets to the default.
+    modelId: v.pipe(v.string(), v.maxLength(120)),
   }),
 )
 export type UpdateBlockInput = v.InferOutput<typeof updateBlockSchema>

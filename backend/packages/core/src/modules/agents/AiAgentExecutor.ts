@@ -1,6 +1,6 @@
 import { generateText } from 'ai'
 import type { AgentExecutor, AgentRunContext, AgentRunResult } from '../../ports/agent-executor'
-import type { ModelProvider } from '../../ports/model-provider'
+import type { ModelProvider, ModelRef } from '../../ports/model-provider'
 import { systemPromptFor, userPromptFor } from './agent-catalog'
 import { type AgentRouting, resolveAgentConfig } from './agent-routing'
 import { composeSystemPrompt } from './prompt-fragments'
@@ -8,6 +8,13 @@ import { composeSystemPrompt } from './prompt-fragments'
 export interface AiAgentExecutorDependencies {
   modelProvider: ModelProvider
   agentRouting: AgentRouting
+  /**
+   * Resolve a block's selected model id to a concrete ref. Deployment-aware (it
+   * honours the direct/Cloudflare fallback based on configured keys), so the
+   * worker supplies it; absent/unknown ids return undefined to fall back to the
+   * agent routing. Defaults to "no per-block override".
+   */
+  resolveBlockModel?: (modelId: string | undefined) => ModelRef | undefined
 }
 
 /**
@@ -20,15 +27,20 @@ export interface AiAgentExecutorDependencies {
 export class AiAgentExecutor implements AgentExecutor {
   private readonly modelProvider: ModelProvider
   private readonly agentRouting: AgentRouting
+  private readonly resolveBlockModel: (modelId: string | undefined) => ModelRef | undefined
 
-  constructor({ modelProvider, agentRouting }: AiAgentExecutorDependencies) {
+  constructor({ modelProvider, agentRouting, resolveBlockModel }: AiAgentExecutorDependencies) {
     this.modelProvider = modelProvider
     this.agentRouting = agentRouting
+    this.resolveBlockModel = resolveBlockModel ?? (() => undefined)
   }
 
   async run(context: AgentRunContext): Promise<AgentRunResult> {
     const config = resolveAgentConfig(this.agentRouting, context.agentKind)
-    const model = this.modelProvider.resolve(config.ref)
+    // A model picked for the block overrides the routing default; an unknown or
+    // absent selection falls back to the configured routing for the agent kind.
+    const ref = this.resolveBlockModel(context.block.modelId) ?? config.ref
+    const model = this.modelProvider.resolve(ref)
 
     // Base role prompt, then fold in any best-practice fragments selected for the block.
     const baseSystem = config.system ?? systemPromptFor(context.agentKind)
@@ -44,7 +56,7 @@ export class AiAgentExecutor implements AgentExecutor {
 
     return {
       output: text.trim(),
-      model: `${config.ref.provider}:${config.ref.model}`,
+      model: `${ref.provider}:${ref.model}`,
       // Report metered tokens so the spend safeguard can price this call. The
       // AI SDK leaves either field undefined when a provider omits it.
       usage: {

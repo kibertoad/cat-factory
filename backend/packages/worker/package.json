@@ -17,6 +17,7 @@
   "dependencies": {
     "@ai-sdk/anthropic": "^2.0.0",
     "@ai-sdk/openai": "^2.0.0",
+    "@ai-sdk/openai-compatible": "^1.0.0",
     "@cat-factory/contracts": "workspace:*",
     "@cat-factory/core": "workspace:*",
     "@cat-factory/prompt-fragments": "workspace:*",

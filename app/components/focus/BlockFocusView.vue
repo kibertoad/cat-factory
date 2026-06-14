@@ -7,6 +7,9 @@ const board = useBoardStore()
 const pipelines = usePipelinesStore()
 const execution = useExecutionStore()
 const ui = useUiStore()
+const models = useModelsStore()
+
+onMounted(() => models.ensureLoaded())
 
 const block = computed<Block | undefined>(() =>
   ui.focusBlockId ? board.getBlock(ui.focusBlockId) : undefined,
@@ -148,6 +151,14 @@ function openDecisionFor(decisionId: string) {
                   :model-value="Math.round((s.state === 'done' ? 1 : s.progress) * 100)"
                   size="xs"
                 />
+                <p
+                  v-if="s.model"
+                  class="mt-2 flex items-center gap-1 truncate text-[10px] text-slate-500"
+                  :title="s.model"
+                >
+                  <UIcon name="i-lucide-cpu" class="h-3 w-3 shrink-0" />
+                  {{ models.labelForRef(s.model) }}
+                </p>
                 <p
                   v-if="s.decision?.chosen"
                   class="mt-2 truncate text-[10px] text-slate-400"

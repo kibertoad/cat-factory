@@ -44,6 +44,15 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
   openai: { inputPerMillion: 0.14, outputPerMillion: 0.55 },
   // Cloudflare Workers AI is billed per "neuron"; treat it as roughly free.
   'workers-ai': { inputPerMillion: 0.1, outputPerMillion: 0.1 },
+  // DeepSeek API (approximate list prices for deepseek-chat, USD→EUR ~0.92).
+  'deepseek:deepseek-chat': { inputPerMillion: 0.26, outputPerMillion: 1.01 },
+  deepseek: { inputPerMillion: 0.26, outputPerMillion: 1.01 },
+  // Alibaba DashScope (approximate qwen3-max list prices, USD→EUR ~0.92).
+  'qwen:qwen3-max': { inputPerMillion: 1.1, outputPerMillion: 5.5 },
+  qwen: { inputPerMillion: 1.1, outputPerMillion: 5.5 },
+  // Moonshot AI direct (approximate kimi-k2.6 list prices, USD→EUR ~0.92).
+  'moonshot:kimi-k2.6': { inputPerMillion: 0.55, outputPerMillion: 2.3 },
+  moonshot: { inputPerMillion: 0.55, outputPerMillion: 2.3 },
 }
 
 /** Default budget: roughly 100 EUR of tokens per calendar month. */

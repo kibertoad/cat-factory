@@ -23,6 +23,8 @@ export interface AgentRunContext {
     features?: string[]
     /** Ids of selected best-practice fragments to fold into the system prompt. */
     fragmentIds?: string[]
+    /** Id of the model picked for this block (overrides the agent routing), if any. */
+    modelId?: string
   }
   /** Outputs produced by earlier steps in the same run, in order. */
   priorOutputs: { agentKind: AgentKind; output: string }[]

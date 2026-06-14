@@ -36,16 +36,16 @@ Run the entire backend as a **Cloudflare Worker** and lean on Cloudflare's
 first-party primitives for everything the app needs, rather than assembling
 independent ecosystem pieces inside a container:
 
-| Need | Cloudflare primitive | Traditional-stack equivalent it replaces |
-| --- | --- | --- |
-| HTTP API | Worker + Hono (`src/index.ts`, `src/app.ts`) | Node + Express/Fastify in a container |
-| Relational store | **D1** (binding `DB`, `migrations/`) | managed Postgres/MySQL + connection pool |
-| Durable, long-running runs | **Workflows** (`ExecutionWorkflow`, `GitHubBackfillWorkflow`) | a separate worker process + a job/state store |
-| Async work / fast-ack webhooks | **Queues** (`GITHUB_SYNC_QUEUE`, `EXECUTION_QUEUE`) | Redis/SQS/RabbitMQ + consumer process |
-| Scheduling | **Cron triggers** (sweeper, every 2 min) | a cron container or scheduler service |
-| LLM inference | **Workers AI** binding (`AI`) + AI SDK providers | a separately hosted inference endpoint |
-| Config & secrets | `wrangler.toml` `[vars]` + `wrangler secret put` | env files / a secrets manager |
-| Deploy artifact | `wrangler deploy` (no image) | build, push and run a Docker image |
+| Need                           | Cloudflare primitive                                          | Traditional-stack equivalent it replaces      |
+| ------------------------------ | ------------------------------------------------------------- | --------------------------------------------- |
+| HTTP API                       | Worker + Hono (`src/index.ts`, `src/app.ts`)                  | Node + Express/Fastify in a container         |
+| Relational store               | **D1** (binding `DB`, `migrations/`)                          | managed Postgres/MySQL + connection pool      |
+| Durable, long-running runs     | **Workflows** (`ExecutionWorkflow`, `GitHubBackfillWorkflow`) | a separate worker process + a job/state store |
+| Async work / fast-ack webhooks | **Queues** (`GITHUB_SYNC_QUEUE`, `EXECUTION_QUEUE`)           | Redis/SQS/RabbitMQ + consumer process         |
+| Scheduling                     | **Cron triggers** (sweeper, every 2 min)                      | a cron container or scheduler service         |
+| LLM inference                  | **Workers AI** binding (`AI`) + AI SDK providers              | a separately hosted inference endpoint        |
+| Config & secrets               | `wrangler.toml` `[vars]` + `wrangler secret put`              | env files / a secrets manager                 |
+| Deploy artifact                | `wrangler deploy` (no image)                                  | build, push and run a Docker image            |
 
 The frontend is a Nuxt **SPA** (`ssr: false`) that talks to the Worker over its
 public API base — naturally hostable on Cloudflare Pages, so the same platform and
@@ -108,13 +108,13 @@ add-on.
 
 - **Node + Express/Fastify + Postgres in Docker on a PaaS/Kubernetes.** The
   industry default and the most flexible (full Node API surface, any npm package,
-  any database). Rejected as the *primary* runtime because it reintroduces exactly
+  any database). Rejected as the _primary_ runtime because it reintroduces exactly
   the assembly-and-operate burden this decision avoids: an image pipeline, a
   managed database, a separate broker and durable-job worker, a scheduler, and the
   monitoring/scaling/patching of each. The product gains nothing from owning that
   glue.
 - **Serverless functions (AWS Lambda et al.) + managed Postgres + SQS +
-  Step Functions.** Removes the container but not the *fragmentation* — durable
+  Step Functions.** Removes the container but not the _fragmentation_ — durable
   execution, queueing, scheduling, data and secrets are still distinct services
   stitched together with IAM, and Lambda's connection model fights relational
   pools. Cloudflare offers the same capabilities as one cohesive, binding-based

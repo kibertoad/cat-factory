@@ -57,6 +57,12 @@ export interface Env {
   // ---- Provider credentials -----------------------------------------------
   OPENAI_API_KEY?: string
   ANTHROPIC_API_KEY?: string
+  /** Alibaba DashScope key (provider `qwen`; OpenAI-compatible endpoint). */
+  QWEN_API_KEY?: string
+  /** DeepSeek API key (provider `deepseek`; OpenAI-compatible endpoint). */
+  DEEPSEEK_API_KEY?: string
+  /** Moonshot AI key (provider `moonshot`, direct Kimi; OpenAI-compatible). */
+  MOONSHOT_API_KEY?: string
 
   // ---- GitHub integration (see config.ts; opt-in) -------------------------
   /** GitHub App id (numeric). Presence enables the integration. */

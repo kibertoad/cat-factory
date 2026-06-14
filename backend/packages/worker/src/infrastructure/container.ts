@@ -53,6 +53,7 @@ function selectAgentExecutor(env: Env, config: AppConfig, rng: Rng): AgentExecut
     return new AiAgentExecutor({
       modelProvider: new CloudflareModelProvider({ env }),
       agentRouting: config.agents.routing,
+      resolveBlockModel: config.agents.resolveBlockModel,
     })
   }
   return new SimulatorAgentExecutor({ rng })

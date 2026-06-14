@@ -12,9 +12,13 @@ const pipelines = usePipelinesStore()
 const execution = useExecutionStore()
 const ui = useUiStore()
 const fragments = useFragmentsStore()
+const models = useModelsStore()
 const toast = useToast()
 
-onMounted(() => fragments.ensureLoaded())
+onMounted(() => {
+  fragments.ensureLoaded()
+  models.ensureLoaded()
+})
 
 function placeholder(what: string) {
   toast.add({ title: 'Placeholder', description: what, icon: 'i-lucide-construction' })
@@ -110,6 +114,32 @@ function removeFragment(id: string) {
   board.updateBlock(block.value.id, {
     fragmentIds: block.value.fragmentIds.filter((x) => x !== id),
   })
+}
+
+// ---- task: model selection -------------------------------------------------
+// The model picked for this block (resolved against the deployment's effective
+// catalog); when none is selected the backend runs it with the default model.
+const selectedModel = computed(() => models.getModel(block.value?.modelId))
+
+// Picker menu: a "Default" reset plus each catalog model. Each label shows the
+// active flavour (Cloudflare vs the direct provider) so it's clear what will run.
+const modelMenu = computed(() => [
+  [
+    {
+      label: 'Default (Qwen)',
+      icon: 'i-lucide-rotate-ccw',
+      onSelect: () => setModel(''),
+    },
+    ...models.models.map((m) => ({
+      label: `${m.label} · ${m.providerLabel}`,
+      icon: m.flavor === 'direct' ? 'i-lucide-zap' : 'i-lucide-cloud',
+      onSelect: () => setModel(m.id),
+    })),
+  ],
+])
+
+function setModel(id: string) {
+  if (block.value) board.updateBlock(block.value.id, { modelId: id })
 }
 
 // ---- task: dependencies (cross-frame) --------------------------------------
@@ -427,6 +457,53 @@ function remove() {
           </div>
         </div>
 
+        <!-- model selection -->
+        <div>
+          <div class="mb-1 flex items-center justify-between">
+            <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+              Model
+            </span>
+            <UDropdownMenu :items="modelMenu">
+              <UButton
+                size="xs"
+                variant="ghost"
+                color="neutral"
+                icon="i-lucide-cpu"
+                trailing-icon="i-lucide-chevron-down"
+              />
+            </UDropdownMenu>
+          </div>
+          <div v-if="selectedModel" class="flex items-center gap-1">
+            <UBadge
+              color="primary"
+              variant="subtle"
+              size="sm"
+              class="cursor-pointer"
+              :title="selectedModel.description"
+              @click="setModel('')"
+            >
+              {{ selectedModel.label }}<UIcon name="i-lucide-x" class="ml-0.5 h-3 w-3" />
+            </UBadge>
+            <UBadge
+              :color="selectedModel.flavor === 'direct' ? 'success' : 'neutral'"
+              variant="subtle"
+              size="sm"
+              :title="
+                selectedModel.flavor === 'direct'
+                  ? `Direct via ${selectedModel.providerLabel}`
+                  : 'Cloudflare Workers AI'
+              "
+            >
+              {{ selectedModel.providerLabel }}
+            </UBadge>
+          </div>
+          <div v-else class="text-[11px] text-slate-500">
+            Default — runs the Qwen model ({{
+              models.getModel('qwen')?.providerLabel ?? 'Cloudflare'
+            }}).
+          </div>
+        </div>
+
         <!-- confidence threshold -->
         <div>
           <div class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
@@ -477,26 +554,36 @@ function remove() {
             <li
               v-for="(s, i) in instance.steps"
               :key="i"
-              class="flex items-center gap-2 rounded-md px-2 py-1"
+              class="rounded-md px-2 py-1"
               :class="i === instance.currentStep ? 'bg-slate-800/70' : ''"
             >
-              <UIcon
-                :name="AGENT_BY_KIND[s.agentKind].icon"
-                class="h-4 w-4"
-                :style="{ color: AGENT_BY_KIND[s.agentKind].color }"
-              />
-              <span class="text-xs text-slate-200">{{ AGENT_BY_KIND[s.agentKind].label }}</span>
-              <span class="ml-auto text-[10px] text-slate-400">{{ stepLabel[s.state] }}</span>
-              <UButton
-                v-if="s.decision && !s.decision.chosen"
-                color="warning"
-                variant="soft"
-                size="xs"
-                icon="i-lucide-circle-help"
-                @click="openDecisionFor(s.decision.id)"
+              <div class="flex items-center gap-2">
+                <UIcon
+                  :name="AGENT_BY_KIND[s.agentKind].icon"
+                  class="h-4 w-4"
+                  :style="{ color: AGENT_BY_KIND[s.agentKind].color }"
+                />
+                <span class="text-xs text-slate-200">{{ AGENT_BY_KIND[s.agentKind].label }}</span>
+                <span class="ml-auto text-[10px] text-slate-400">{{ stepLabel[s.state] }}</span>
+                <UButton
+                  v-if="s.decision && !s.decision.chosen"
+                  color="warning"
+                  variant="soft"
+                  size="xs"
+                  icon="i-lucide-circle-help"
+                  @click="openDecisionFor(s.decision.id)"
+                >
+                  Resolve
+                </UButton>
+              </div>
+              <div
+                v-if="s.model"
+                class="mt-0.5 flex items-center gap-1 pl-6 text-[10px] text-slate-500"
+                :title="s.model"
               >
-                Resolve
-              </UButton>
+                <UIcon name="i-lucide-cpu" class="h-3 w-3" />
+                {{ models.labelForRef(s.model) }}
+              </div>
             </li>
           </ul>
         </div>
