@@ -10,6 +10,12 @@ export {
   type DomainErrorCode,
 } from './domain/errors'
 export { DEFAULT_CONFIDENCE_THRESHOLD, DECISION_CHANCE } from './domain/catalog'
+export {
+  type SelectableModel,
+  MODEL_CATALOG,
+  getSelectableModel,
+  modelRefForId,
+} from './domain/models'
 export { seedBlocks, seedPipelines } from './domain/seed'
 
 export * from './ports'

@@ -263,6 +263,7 @@ export class ExecutionService {
         description: block.description,
         features: block.features,
         fragmentIds: block.fragmentIds,
+        modelId: block.modelId,
       },
       priorOutputs: instance.steps
         .slice(0, instance.currentStep)

@@ -65,6 +65,8 @@ export interface Block {
   features?: string[]
   /** ids of best-practice prompt fragments folded into this block's agent prompts. */
   fragmentIds?: string[]
+  /** id of the model (from MODEL_CATALOG) to run this block's agents with; absent = default. */
+  modelId?: string
 }
 
 /**

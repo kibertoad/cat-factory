@@ -1,4 +1,5 @@
 import { generateText } from 'ai'
+import { modelRefForId } from '../../domain/models'
 import type { AgentExecutor, AgentRunContext, AgentRunResult } from '../../ports/agent-executor'
 import type { ModelProvider } from '../../ports/model-provider'
 import { systemPromptFor, userPromptFor } from './agent-catalog'
@@ -28,7 +29,10 @@ export class AiAgentExecutor implements AgentExecutor {
 
   async run(context: AgentRunContext): Promise<AgentRunResult> {
     const config = resolveAgentConfig(this.agentRouting, context.agentKind)
-    const model = this.modelProvider.resolve(config.ref)
+    // A model picked for the block overrides the routing default; an unknown or
+    // absent selection falls back to the configured routing for the agent kind.
+    const ref = modelRefForId(context.block.modelId) ?? config.ref
+    const model = this.modelProvider.resolve(ref)
 
     // Base role prompt, then fold in any best-practice fragments selected for the block.
     const baseSystem = config.system ?? systemPromptFor(context.agentKind)
@@ -44,7 +48,7 @@ export class AiAgentExecutor implements AgentExecutor {
 
     return {
       output: text.trim(),
-      model: `${config.ref.provider}:${config.ref.model}`,
+      model: `${ref.provider}:${ref.model}`,
       // Report metered tokens so the spend safeguard can price this call. The
       // AI SDK leaves either field undefined when a provider omits it.
       usage: {

@@ -37,6 +37,12 @@ export const blockSchema = v.object({
    * itself lives in @cat-factory/prompt-fragments and is served separately.
    */
   fragmentIds: v.optional(v.array(v.string())),
+  /**
+   * Id of the LLM model selected for this block from the shared model catalog
+   * (see MODEL_CATALOG in @cat-factory/core). When set it overrides the agent
+   * routing's default model at run time; absent means "use the routing default".
+   */
+  modelId: v.optional(v.string()),
 })
 export type Block = v.InferOutput<typeof blockSchema>
 

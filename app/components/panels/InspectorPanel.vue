@@ -5,6 +5,8 @@ import {
   BLOCK_TYPE_META,
   STATUS_META,
   DEFAULT_CONFIDENCE_THRESHOLD,
+  MODEL_CATALOG,
+  MODEL_BY_ID,
 } from '~/utils/catalog'
 
 const board = useBoardStore()
@@ -110,6 +112,33 @@ function removeFragment(id: string) {
   board.updateBlock(block.value.id, {
     fragmentIds: block.value.fragmentIds.filter((x) => x !== id),
   })
+}
+
+// ---- task: model selection -------------------------------------------------
+// The model picked for this block (resolved against the catalog); when none is
+// selected the backend runs the block with its default routing.
+const selectedModel = computed(() =>
+  block.value?.modelId ? MODEL_BY_ID[block.value.modelId] : undefined,
+)
+
+// Picker menu: a "Default" reset plus each catalog model (empty id clears it).
+const modelMenu = computed(() => [
+  [
+    {
+      label: 'Default (workspace routing)',
+      icon: 'i-lucide-rotate-ccw',
+      onSelect: () => setModel(''),
+    },
+    ...MODEL_CATALOG.map((m) => ({
+      label: m.label,
+      icon: 'i-lucide-cpu',
+      onSelect: () => setModel(m.id),
+    })),
+  ],
+])
+
+function setModel(id: string) {
+  if (block.value) board.updateBlock(block.value.id, { modelId: id })
 }
 
 // ---- task: dependencies (cross-frame) --------------------------------------
@@ -424,6 +453,39 @@ function remove() {
           </div>
           <div v-else class="text-[11px] text-slate-500">
             None — agents follow their default guidance.
+          </div>
+        </div>
+
+        <!-- model selection -->
+        <div>
+          <div class="mb-1 flex items-center justify-between">
+            <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+              Model
+            </span>
+            <UDropdownMenu :items="modelMenu">
+              <UButton
+                size="xs"
+                variant="ghost"
+                color="neutral"
+                icon="i-lucide-cpu"
+                trailing-icon="i-lucide-chevron-down"
+              />
+            </UDropdownMenu>
+          </div>
+          <div v-if="selectedModel" class="flex items-start gap-1">
+            <UBadge
+              color="primary"
+              variant="subtle"
+              size="sm"
+              class="cursor-pointer"
+              :title="selectedModel.description"
+              @click="setModel('')"
+            >
+              {{ selectedModel.label }}<UIcon name="i-lucide-x" class="ml-0.5 h-3 w-3" />
+            </UBadge>
+          </div>
+          <div v-else class="text-[11px] text-slate-500">
+            Default — uses the workspace's configured model.
           </div>
         </div>
 
