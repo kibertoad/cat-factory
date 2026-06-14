@@ -16,7 +16,6 @@ import { type RetentionConfig, loadRetentionConfig } from './retention'
 // for what"). Operators tune behaviour entirely through wrangler vars / secrets.
 // Each concern lives in a sibling module; this barrel composes them.
 
-export type { ExecutionMode } from './execution'
 export type {
   AgentsConfig,
   ExecutionConfig,

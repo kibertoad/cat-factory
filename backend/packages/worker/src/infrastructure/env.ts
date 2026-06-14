@@ -6,6 +6,7 @@ import type {
   Workflow,
 } from '@cloudflare/workers-types'
 import type { ImplementationContainer } from './containers/ImplementationContainer'
+import type { WorkspaceEventsHub } from './durable-objects/WorkspaceEventsHub'
 
 /** Message enqueued to bound the rate at which durable runs are started. */
 export interface ExecutionStartMessage {
@@ -30,15 +31,19 @@ export interface Env {
   /** Cloudflare Workers AI binding (optional; used when provider = workers-ai). */
   AI?: Ai
 
-  // ---- Durable execution (see config.ts; only used in workflow mode) ------
-  /** Workflows binding that durably drives each run. */
+  // ---- Durable execution (see config.ts) ----------------------------------
+  /** Workflows binding that durably drives each run (the only execution path). */
   EXECUTION_WORKFLOW?: Workflow
   /** Optional admission queue; its consumer creates the Workflow instance. */
   EXECUTION_QUEUE?: Queue<ExecutionStartMessage>
-  /** 'workflow' = durable, server-driven runs; 'tick' (default) = legacy polling. */
-  EXECUTION_MODE?: string
   /** How long a run may park on a human decision before expiring, e.g. "24h". */
   DECISION_TIMEOUT?: string
+  /**
+   * Per-workspace WebSocket fan-out hub (Durable Object). Pushes execution/board
+   * changes to subscribed browsers in real time. When absent, the engine pushes
+   * nothing (clients still get state on connect / refresh).
+   */
+  WORKSPACE_EVENTS?: DurableObjectNamespace<WorkspaceEventsHub>
 
   // ---- Container-based implementation (see config.ts; opt-in) --------------
   /**
@@ -49,9 +54,9 @@ export interface Env {
   /**
    * Routes the repo-operating steps (`coder`, `mocker`, `playwright`) to a real
    * sandbox container instead of a single inline LLM call ('true'). Requires the
-   * IMPL_CONTAINER binding, a
-   * configured GitHub App, a direct OpenAI-compatible provider key, and
-   * WORKER_PUBLIC_URL. Best used with EXECUTION_MODE = "workflow" (runs are long).
+   * IMPL_CONTAINER binding, a configured GitHub App, a direct OpenAI-compatible
+   * provider key, and WORKER_PUBLIC_URL. (Container runs are long; the durable
+   * Workflows driver carries them.)
    */
   CONTAINER_IMPL_ENABLED?: string
   /**
@@ -61,7 +66,6 @@ export interface Env {
   WORKER_PUBLIC_URL?: string
 
   // ---- Agent LLM configuration (see config.ts) ----------------------------
-  AGENTS_ENABLED?: string
   AGENT_DEFAULT_PROVIDER?: string
   AGENT_DEFAULT_MODEL?: string
   AGENT_DEFAULT_TEMPERATURE?: string
@@ -187,7 +191,4 @@ export interface Env {
    * step. Default 90. 0 disables pruning and backfills the full history.
    */
   GITHUB_COMMIT_RETENTION_DAYS?: string
-
-  /** When set, seeds a deterministic RNG (used by integration tests). */
-  RNG_SEED?: string
 }

@@ -192,12 +192,6 @@ export const workspaceSnapshotSchema = v.object({
   pipelines: v.array(pipelineSchema),
   executions: v.array(executionInstanceSchema),
   /**
-   * How runs advance: 'workflow' (durable, server-driven) or 'tick' (the client
-   * drives progress by polling). Attached by the worker; optional so the core
-   * snapshot builder need not know the deployment's execution mode.
-   */
-  executionMode: v.optional(v.picklist(['workflow', 'tick'])),
-  /**
    * The current spend-safeguard status. Attached by the worker (it depends on
    * deployment-wide pricing/budget config), so it is optional on the wire.
    */

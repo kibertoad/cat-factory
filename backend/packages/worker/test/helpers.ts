@@ -2,12 +2,15 @@ import type {
   AgentExecutor,
   ConfluenceClient,
   CoreDependencies,
+  ExecutionInstance,
   GitHubClient,
   WebhookVerifier,
   WorkspaceSnapshot,
 } from '@cat-factory/core'
+import { NoopWorkRunner } from '@cat-factory/core'
 import { env } from 'cloudflare:test'
 import { createApp } from '../src/app'
+import { buildContainer } from '../src/infrastructure/container'
 import { FakeAgentExecutor } from './fakes/FakeAgentExecutor'
 import { FakeGitHubClient } from './fakes/FakeGitHubClient'
 import { FakeWebhookVerifier } from './fakes/FakeWebhookVerifier'
@@ -32,6 +35,14 @@ export interface TestResponse<T = unknown> {
 export interface TestApp {
   call<T = unknown>(method: string, path: string, body?: unknown): Promise<TestResponse<T>>
   createWorkspace(options?: { name?: string; seed?: boolean }): Promise<WorkspaceSnapshot>
+  /**
+   * Drive every active run in a workspace to a standstill (done, or parked on a
+   * decision / the spend gate), then return the latest executions. Reproduces the
+   * old `tick` loop over the durable `advanceInstance` entry point — in production
+   * the Cloudflare Workflows driver does this; tests drive it directly. Uses the
+   * same agent/overrides this app was built with, against the shared `env.DB`.
+   */
+  drive(workspaceId: string, maxRounds?: number): Promise<ExecutionInstance[]>
 }
 
 /**
@@ -43,7 +54,16 @@ export function makeApp(
   agentExecutor: AgentExecutor = new FakeAgentExecutor(),
   overrides: Partial<CoreDependencies> = {},
 ): TestApp {
-  const app = createApp({ overrides: { agentExecutor, ...overrides } })
+  // Default to a no-op work runner so starting a run doesn't spawn a real
+  // Cloudflare Workflows instance in the test pool (the wrangler.toml binding is
+  // present). Tests drive runs deterministically via `drive`; specs that exercise
+  // the durable runner pass their own `workRunner` in `overrides`.
+  const coreOverrides: Partial<CoreDependencies> = {
+    agentExecutor,
+    workRunner: new NoopWorkRunner(),
+    ...overrides,
+  }
+  const app = createApp({ overrides: coreOverrides })
 
   async function call<T>(method: string, path: string, body?: unknown): Promise<TestResponse<T>> {
     const hasBody = body !== undefined
@@ -64,7 +84,20 @@ export function makeApp(
     return res.body
   }
 
-  return { call, createWorkspace }
+  async function drive(workspaceId: string, maxRounds = 50): Promise<ExecutionInstance[]> {
+    const c = buildContainer(env, coreOverrides)
+    for (let round = 0; round < maxRounds; round++) {
+      const { executions } = await c.workspaceService.snapshot(workspaceId)
+      // Mirror the old tick: advance running/paused runs; a run parked on a
+      // decision stays put until it is resolved (then it is running again).
+      const active = executions.filter((e) => e.status === 'running' || e.status === 'paused')
+      if (active.length === 0) break
+      for (const e of active) await c.executionService.advanceInstance(workspaceId, e.id)
+    }
+    return (await c.workspaceService.snapshot(workspaceId)).executions
+  }
+
+  return { call, createWorkspace, drive }
 }
 
 /**

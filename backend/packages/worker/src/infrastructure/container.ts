@@ -3,9 +3,8 @@ import {
   type AgentExecutor,
   type Core,
   type CoreDependencies,
+  type ExecutionEventPublisher,
   NoopWorkRunner,
-  type Rng,
-  SimulatorAgentExecutor,
   type WorkRunner,
   createCore,
 } from '@cat-factory/core'
@@ -15,6 +14,7 @@ import { CloudflareModelProvider } from './ai/CloudflareModelProvider'
 import { ContainerAgentExecutor, type ResolveRepoTarget } from './ai/ContainerAgentExecutor'
 import { CompositeAgentExecutor } from './ai/CompositeAgentExecutor'
 import { ContainerSessionService } from './containers/ContainerSessionService'
+import { DurableObjectEventPublisher } from './events/DurableObjectEventPublisher'
 import { WorkflowsWorkRunner } from './workflows/WorkflowsWorkRunner'
 import { D1BlockRepository } from './repositories/D1BlockRepository'
 import { D1ExecutionRepository } from './repositories/D1ExecutionRepository'
@@ -39,7 +39,7 @@ import { GitHubAppAuth } from './github/GitHubAppAuth'
 import { FetchGitHubClient } from './github/FetchGitHubClient'
 import { WebCryptoWebhookVerifier } from './github/WebCryptoWebhookVerifier'
 import { FetchConfluenceClient } from './confluence/FetchConfluenceClient'
-import { CryptoIdGenerator, CryptoRng, SeededRng, SystemClock } from './runtime'
+import { CryptoIdGenerator, SystemClock } from './runtime'
 import type { Clock, IdGenerator } from '@cat-factory/core'
 import type { D1Database } from '@cloudflare/workers-types'
 
@@ -53,20 +53,17 @@ export interface Container extends Core {
 }
 
 /**
- * Pick the agent that performs pipeline steps:
- *   - agents enabled  → real LLM work via the Vercel AI SDK
- *   - otherwise       → the playful randomised simulator (local / mock runtime)
- * Tests bypass this entirely by overriding `agentExecutor` with a fake.
+ * Pick the agent that performs pipeline steps: real LLM work via the Vercel AI
+ * SDK, optionally composed with a per-run sandbox container for the repo-operating
+ * steps (`coder`, `mocker`, `playwright`) when container implementation is opted
+ * in and wired. Tests bypass this entirely by overriding `agentExecutor` with a fake.
  */
 function selectAgentExecutor(
   env: Env,
   config: AppConfig,
-  rng: Rng,
   db: D1Database,
   clock: Clock,
 ): AgentExecutor {
-  if (!config.agents.enabled) return new SimulatorAgentExecutor({ rng })
-
   const inline = new AiAgentExecutor({
     modelProvider: new CloudflareModelProvider({ env }),
     agentRouting: config.agents.routing,
@@ -143,18 +140,29 @@ function buildContainerExecutor(
 
 /**
  * Pick how runs are driven:
- *   - workflow mode + a Workflows binding → durable, server-driven execution
- *   - otherwise                            → no-op (progress driven by `tick`)
- * Tests override `workRunner` with a fake.
+ *   - a Workflows binding present → durable, server-driven execution
+ *   - otherwise                   → no-op (e.g. tests, which override this anyway)
+ * Tests override `workRunner` with a fake and drive the engine via advanceInstance.
  */
-function selectWorkRunner(env: Env, config: AppConfig): WorkRunner {
-  if (config.execution.mode === 'workflow' && env.EXECUTION_WORKFLOW) {
+function selectWorkRunner(env: Env): WorkRunner {
+  if (env.EXECUTION_WORKFLOW) {
     return new WorkflowsWorkRunner({
       workflow: env.EXECUTION_WORKFLOW,
       queue: env.EXECUTION_QUEUE,
     })
   }
   return new NoopWorkRunner()
+}
+
+/**
+ * Pick how execution/board changes are pushed to clients:
+ *   - WORKSPACE_EVENTS binding present → fan out via the per-workspace hub DO
+ *   - otherwise                        → undefined (core falls back to a no-op)
+ * Tests leave the binding unset; the engine simply pushes nothing.
+ */
+function selectEventPublisher(env: Env): ExecutionEventPublisher | undefined {
+  if (!env.WORKSPACE_EVENTS) return undefined
+  return new DurableObjectEventPublisher(env.WORKSPACE_EVENTS)
 }
 
 /**
@@ -203,10 +211,10 @@ function selectGitHubDeps(
 
 /**
  * Build the Confluence integration's concrete ports when opted in. The model
- * provider is wired only in 'llm' planner mode and independently of
- * AGENTS_ENABLED (it just needs a provider credential); the planner degrades to
- * its deterministic parser if no model is usable. Returns `{}` when disabled, so
- * `createCore` leaves the `confluence` module unassembled.
+ * provider is wired only in 'llm' planner mode (it just needs a provider
+ * credential); the planner degrades to its deterministic parser if no model is
+ * usable. Returns `{}` when disabled, so `createCore` leaves the `confluence`
+ * module unassembled.
  */
 function selectConfluenceDeps(
   env: Env,
@@ -255,7 +263,6 @@ export function buildContainer(env: Env, overrides: Partial<CoreDependencies> = 
   const db = env.DB
   const clock = new SystemClock()
   const idGenerator = new CryptoIdGenerator()
-  const rng: Rng = env.RNG_SEED ? new SeededRng(Number(env.RNG_SEED)) : new CryptoRng()
 
   const dependencies: CoreDependencies = {
     workspaceRepository: new D1WorkspaceRepository({ db }),
@@ -265,8 +272,9 @@ export function buildContainer(env: Env, overrides: Partial<CoreDependencies> = 
     tokenUsageRepository: new D1TokenUsageRepository({ db }),
     idGenerator,
     clock,
-    agentExecutor: selectAgentExecutor(env, config, rng, db, clock),
-    workRunner: selectWorkRunner(env, config),
+    agentExecutor: selectAgentExecutor(env, config, db, clock),
+    workRunner: selectWorkRunner(env),
+    executionEventPublisher: selectEventPublisher(env),
     spendPricing: config.spend,
     ...selectGitHubDeps(env, config, db, clock, idGenerator),
     ...selectConfluenceDeps(env, config, db),

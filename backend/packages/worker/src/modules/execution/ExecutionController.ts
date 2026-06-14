@@ -1,13 +1,14 @@
-import { resolveDecisionSchema, startExecutionSchema, tickSchema } from '@cat-factory/contracts'
+import { resolveDecisionSchema, startExecutionSchema } from '@cat-factory/contracts'
 import { Hono } from 'hono'
 import type { AppEnv } from '../../infrastructure/http/types'
 import { param } from '../../infrastructure/http/params'
 import { jsonBody } from '../../infrastructure/http/validation'
 
 /**
- * The simulation engine endpoints — starting/cancelling runs, advancing the
- * clock, resolving decisions and merging PRs. Mounted under
- * `/workspaces/:workspaceId`.
+ * The execution engine endpoints — starting/cancelling runs, resolving decisions
+ * and merging PRs. Runs advance durably server-side via Cloudflare Workflows;
+ * progress reaches the browser over the WebSocket events stream, not by polling.
+ * Mounted under `/workspaces/:workspaceId`.
  */
 export function executionController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
@@ -47,17 +48,6 @@ export function executionController(): Hono<AppEnv> {
     const instances = await c
       .get('container')
       .executionService.resumePaused(param(c, 'workspaceId'))
-    return c.json(instances)
-  })
-
-  app.post('/tick', jsonBody(tickSchema), async (c) => {
-    const container = c.get('container')
-    // In workflow mode runs advance durably in the background, so `tick` does no
-    // work — it just reports the current state (kept for back-compat with older
-    // clients and the simulator/demo experience, which still drives it).
-    const ticks =
-      container.config.execution.mode === 'workflow' ? 0 : (c.req.valid('json').ticks ?? 1)
-    const instances = await container.executionService.tick(param(c, 'workspaceId'), ticks)
     return c.json(instances)
   })
 

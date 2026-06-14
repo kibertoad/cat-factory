@@ -9,7 +9,7 @@ export {
   assertFound,
   type DomainErrorCode,
 } from './domain/errors'
-export { DEFAULT_CONFIDENCE_THRESHOLD, DECISION_CHANCE } from './domain/catalog'
+export { DEFAULT_CONFIDENCE_THRESHOLD } from './domain/catalog'
 export {
   type SelectableModel,
   type ModelVariant,
@@ -57,10 +57,6 @@ export {
 } from './modules/spend/pricing'
 
 export { AiAgentExecutor, type AiAgentExecutorDependencies } from './modules/agents/AiAgentExecutor'
-export {
-  SimulatorAgentExecutor,
-  type SimulatorAgentExecutorDependencies,
-} from './modules/agents/SimulatorAgentExecutor'
 export {
   type AgentModelConfig,
   type AgentRouting,

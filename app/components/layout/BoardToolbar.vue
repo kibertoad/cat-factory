@@ -74,17 +74,6 @@ async function resetBoard() {
 
     <USeparator orientation="vertical" class="mx-1 h-6" />
 
-    <!-- simulation -->
-    <UButton
-      :icon="ui.simRunning ? 'i-lucide-pause' : 'i-lucide-play'"
-      :color="ui.simRunning ? 'primary' : 'neutral'"
-      variant="soft"
-      size="sm"
-      @click="ui.toggleSim()"
-    >
-      {{ ui.simRunning ? 'Simulating' : 'Paused' }}
-    </UButton>
-
     <!-- decisions queue -->
     <UDropdownMenu v-if="execution.pendingDecisionCount" :items="decisionItems">
       <UButton color="warning" variant="soft" size="sm" icon="i-lucide-circle-help">

@@ -55,7 +55,7 @@ describe('deployer agent + environment discovery', () => {
     await app.call('POST', `/workspaces/${ws}/blocks/${task.body.id}/executions`, {
       pipelineId: pipeline.body.id,
     })
-    await app.call('POST', `/workspaces/${ws}/tick`, { ticks: 3 })
+    await app.drive(ws)
 
     // The deployer step ran deterministically (not through the agent executor),
     // so the recorder only saw the tester step.

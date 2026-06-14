@@ -6,10 +6,10 @@ the bounded commit backfill). Item 4 remains a watch item. Companion to
 records why the backend runs on Cloudflare D1.
 
 This is a working list of storage-related improvements to make before the
-database becomes large enough for any of them to bite. None is urgent today: in
-the default configuration (`AGENTS_ENABLED=false`, GitHub off, `EXECUTION_MODE=
-tick`) the unbounded tables receive no writes, and at ~0.2 KB/row the 10 GB D1
-ceiling is tens of millions of rows away. The point of writing them down now is
+database becomes large enough for any of them to bite. None is urgent today: with
+GitHub off the unbounded projection tables receive no writes, the `token_usage`
+ledger only grows with real agent runs, and at ~0.2 KB/row the 10 GB D1 ceiling is
+tens of millions of rows away. The point of writing them down now is
 that every fix here is cheap while the tables are small and progressively more
 disruptive once they aren't.
 

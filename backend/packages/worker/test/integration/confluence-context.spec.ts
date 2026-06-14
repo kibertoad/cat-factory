@@ -45,7 +45,7 @@ describe('confluence context injection', () => {
     })
     expect(linked.status).toBe(201)
 
-    // Run a one-step pipeline on the task and let the engine tick it.
+    // Run a one-step pipeline on the task and drive it to completion.
     const pipeline = await app.call<{ id: string }>('POST', `/workspaces/${ws}/pipelines`, {
       name: 'Build',
       agentKinds: ['coder'],
@@ -53,7 +53,7 @@ describe('confluence context injection', () => {
     await app.call('POST', `/workspaces/${ws}/blocks/${task.body.id}/executions`, {
       pipelineId: pipeline.body.id,
     })
-    await app.call('POST', `/workspaces/${ws}/tick`, { ticks: 2 })
+    await app.drive(ws)
 
     const ctx = recorder.contexts.find((c) => c.block.title === 'Implement limiter')
     expect(ctx).toBeDefined()

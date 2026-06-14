@@ -71,9 +71,9 @@ and can block on a human decision for ~24h. On a container stack that means a
 durable workflow/job engine (Temporal, BullMQ + Redis, a state machine in
 Postgres) plus a worker process to run it. **Cloudflare Workflows** gives us
 durable, server-driven execution as a platform primitive: each pipeline run is one
-Workflow instance (`EXECUTION_MODE = "workflow"`), with the cron sweeper as a
-backstop that re-drives instances whose execution died. No broker, no standing
-worker fleet, no separate scaling axis.
+Workflow instance (the only execution path), with the cron sweeper as a backstop
+that re-drives instances whose execution died. No broker, no standing worker
+fleet, no separate scaling axis.
 
 ### 3. Data and queues as bindings, not network services
 

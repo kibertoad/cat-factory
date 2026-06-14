@@ -18,8 +18,8 @@ migrations_dir = "migrations"
 binding = "AI"
 
 # Durable execution engine. Each pipeline run becomes one Workflows instance
-# (see src/infrastructure/workflows/ExecutionWorkflow.ts). Only used when
-# EXECUTION_MODE = "workflow"; tick mode leaves it unused.
+# (see src/infrastructure/workflows/ExecutionWorkflow.ts) — the only path that
+# drives runs, so this binding is always used in a real deployment.
 [[workflows]]
 binding = "EXECUTION_WORKFLOW"
 name = "cat-factory-execution"
@@ -46,9 +46,21 @@ max_instances = 10
 name = "IMPL_CONTAINER"
 class_name = "ImplementationContainer"
 
+# Per-workspace WebSocket fan-out hub (see
+# src/infrastructure/durable-objects/WorkspaceEventsHub.ts). One instance per
+# workspace, addressed by idFromName(workspaceId); it holds subscribers' sockets
+# (hibernatable) and broadcasts execution/board events pushed by the engine.
+[[durable_objects.bindings]]
+name = "WORKSPACE_EVENTS"
+class_name = "WorkspaceEventsHub"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["ImplementationContainer"]
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["WorkspaceEventsHub"]
 
 # GitHub sync queue: the webhook endpoint verifies + acks fast, enqueuing each
 # delivery here for async projection. The consumer also handles targeted repo
@@ -97,26 +109,24 @@ new_sqlite_classes = ["ImplementationContainer"]
 crons = ["*/2 * * * *", "0 3 * * *"]
 
 [vars]
-# Agent LLM configuration (see src/infrastructure/config.ts). Agents are off by
-# default so the service runs as a pure simulation until an operator opts in.
-AGENTS_ENABLED = "false"
-# Default model for unpinned blocks/agents. Left unset so it tracks the Qwen
-# model from the picker catalog (its Cloudflare flavour, or direct DashScope when
-# QWEN_API_KEY is configured). Uncomment to pin a specific provider/model:
+# Agent LLM configuration (see src/infrastructure/config.ts). Agents always perform
+# real work: unpinned blocks/agents default to the Qwen model from the picker
+# catalog (its Cloudflare Workers AI flavour, or direct DashScope when QWEN_API_KEY
+# is configured). Uncomment to pin a specific provider/model:
 # AGENT_DEFAULT_PROVIDER = "workers-ai"
 # AGENT_DEFAULT_MODEL = "@cf/qwen/qwen3-30b-a3b-fp8"
-# Execution engine: "tick" (legacy browser-driven polling, default) or
-# "workflow" (durable, server-driven via Cloudflare Workflows).
-EXECUTION_MODE = "tick"
+# Runs are driven durably and server-side by Cloudflare Workflows (the
+# EXECUTION_WORKFLOW binding below). How long a run may park on a human decision
+# before expiring:
 DECISION_TIMEOUT = "24 hours"
 
 # Container-based implementation (see src/infrastructure/containers and
-# src/infrastructure/ai/ContainerAgentExecutor.ts). When "true" (and AGENTS_ENABLED,
-# a GitHub App, a direct OpenAI-compatible provider key and WORKER_PUBLIC_URL are
-# all set), the `coder` step runs in a per-run Pi container that clones the repo,
-# implements the block and opens a PR. Best paired with EXECUTION_MODE = "workflow"
-# since a container run is long. The container reaches the LLM only via this
-# Worker's proxy at ${WORKER_PUBLIC_URL}/v1, so no provider key enters the image.
+# src/infrastructure/ai/ContainerAgentExecutor.ts). When "true" (and a GitHub App,
+# a direct OpenAI-compatible provider key and WORKER_PUBLIC_URL are all set), the
+# repo-operating steps (`coder`, `mocker`, `playwright`) run in a per-run Pi
+# container that clones the repo, implements the block and opens a PR. The
+# container reaches the LLM only via this Worker's proxy at ${WORKER_PUBLIC_URL}/v1,
+# so no provider key enters the image.
 CONTAINER_IMPL_ENABLED = "false"
 # Public origin of this Worker; required for container implementation.
 # WORKER_PUBLIC_URL = "https://cat-factory-backend.<account>.workers.dev"

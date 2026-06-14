@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { LodLevel } from '~/types/domain'
 
-/** Transient UI state: selection, panels, simulation play/pause, zoom level. */
+/** Transient UI state: selection, panels, zoom level. */
 export const useUiStore = defineStore('ui', () => {
   const selectedBlockId = ref<string | null>(null)
   const focusBlockId = ref<string | null>(null)
@@ -15,9 +15,6 @@ export const useUiStore = defineStore('ui', () => {
   const confluenceConnectOpen = ref(false)
   const confluenceImport = ref<{ targetFrameId: string | null } | null>(null)
   const spawnPreview = ref<{ pageId: string; targetFrameId: string | null } | null>(null)
-
-  /** Simulation clock running? */
-  const simRunning = ref(true)
 
   /** Current canvas zoom (driven by Vue Flow viewport). */
   const zoom = ref(1)
@@ -68,10 +65,6 @@ export const useUiStore = defineStore('ui', () => {
     decisionContext.value = null
   }
 
-  function toggleSim() {
-    simRunning.value = !simRunning.value
-  }
-
   function openConfluenceConnect() {
     confluenceConnectOpen.value = true
   }
@@ -99,7 +92,6 @@ export const useUiStore = defineStore('ui', () => {
     confluenceConnectOpen,
     confluenceImport,
     spawnPreview,
-    simRunning,
     zoom,
     lod,
     expandedFrames,
@@ -117,6 +109,5 @@ export const useUiStore = defineStore('ui', () => {
     closeConfluenceImport,
     openSpawnPreview,
     closeSpawnPreview,
-    toggleSim,
   }
 })

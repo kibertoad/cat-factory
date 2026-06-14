@@ -18,6 +18,13 @@ export const useExecutionStore = defineStore('execution', () => {
     instances.value = next
   }
 
+  /** Insert or replace a single execution instance pushed by the event stream. */
+  function upsert(instance: ExecutionInstance) {
+    const i = instances.value.findIndex((e) => e.id === instance.id)
+    if (i >= 0) instances.value[i] = instance
+    else instances.value.push(instance)
+  }
+
   const byId = computed(() => {
     const map = new Map<string, ExecutionInstance>()
     for (const e of instances.value) map.set(e.id, e)
@@ -70,13 +77,6 @@ export const useExecutionStore = defineStore('execution', () => {
     await ws.refresh()
   }
 
-  /** Advance every running execution one tick on the server. */
-  async function tick() {
-    const ws = useWorkspaceStore()
-    await api.tick(ws.requireId(), { ticks: 1 })
-    await ws.refresh()
-  }
-
   async function resolveDecision(instanceId: string, decisionId: string, choice: string) {
     const ws = useWorkspaceStore()
     await api.resolveDecision(ws.requireId(), instanceId, decisionId, { choice })
@@ -101,13 +101,13 @@ export const useExecutionStore = defineStore('execution', () => {
   return {
     instances,
     hydrate,
+    upsert,
     byId,
     getInstance,
     getByBlock,
     pendingDecisionCount,
     openDecisions,
     start,
-    tick,
     resolveDecision,
     mergePr,
     cancel,

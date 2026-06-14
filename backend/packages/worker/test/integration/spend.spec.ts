@@ -22,7 +22,7 @@ describe('spend safeguards', () => {
     await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
       pipelineId: 'pl_quick', // two steps
     })
-    await app.call('POST', `/workspaces/${wsId}/tick`, { ticks: 10 })
+    await app.drive(wsId)
 
     const snap = (await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)).body
     expect(snap.spend).toBeTruthy()
@@ -44,11 +44,9 @@ describe('spend safeguards', () => {
     await app.call('POST', `/workspaces/${wsId}/blocks/blk_api/executions`, {
       pipelineId: 'pl_full', // five steps
     })
-    const ticked = await app.call<ExecutionInstance[]>('POST', `/workspaces/${wsId}/tick`, {
-      ticks: 10,
-    })
+    const ticked = await app.drive(wsId)
 
-    const exec = ticked.body.find((e) => e.blockId === 'blk_api')!
+    const exec = ticked.find((e) => e.blockId === 'blk_api')!
     // Once the budget is exhausted the run pauses with steps still outstanding.
     // (Exactly when it pauses depends on prior spend in the shared org-wide
     // ledger, so we only assert it paused without finishing.)
@@ -69,7 +67,7 @@ describe('spend safeguards', () => {
     await pausingApp.call('POST', `/workspaces/${wsId}/blocks/blk_api/executions`, {
       pipelineId: 'pl_full',
     })
-    await pausingApp.call('POST', `/workspaces/${wsId}/tick`, { ticks: 10 })
+    await pausingApp.drive(wsId)
 
     // A second app over the same DB has a generous budget, so it can resume.
     const freeAgent = new FakeAgentExecutor({ usage: { inputTokens: 1, outputTokens: 1 } })
@@ -82,8 +80,8 @@ describe('spend safeguards', () => {
     expect(resumed.status).toBe(200)
     expect(resumed.body.find((e) => e.blockId === 'blk_api')!.status).toBe('running')
 
-    // Ticking now drives the resumed run to completion.
-    await freeApp.call('POST', `/workspaces/${wsId}/tick`, { ticks: 10 })
+    // Driving now advances the resumed run to completion.
+    await freeApp.drive(wsId)
     const block = (
       await freeApp.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
     ).body.blocks.find((b) => b.id === 'blk_api')!

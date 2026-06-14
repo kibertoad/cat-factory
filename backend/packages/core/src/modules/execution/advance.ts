@@ -17,8 +17,8 @@ export type AdvanceResult =
 export interface AdvanceOptions {
   /**
    * When true, an agent failure is rethrown instead of being swallowed into the
-   * step output. The durable driver sets this so a failed `step.do` retries; the
-   * tick/simulator path leaves it false to preserve the "never wedge" behaviour.
+   * step output. The durable driver sets this so a failed `step.do` retries; tests
+   * leave it false to preserve the "never wedge" behaviour.
    */
   rethrowAgentErrors?: boolean
 }

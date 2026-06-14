@@ -1,5 +1,6 @@
 export * from './primitives'
 export * from './entities'
+export * from './events'
 export * from './requests'
 export * from './github'
 export * from './confluence'

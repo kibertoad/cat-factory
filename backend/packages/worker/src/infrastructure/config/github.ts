@@ -11,7 +11,7 @@ export interface GitHubConfig {
 
 export function loadGitHubConfig(env: Env): GitHubConfig {
   // Enabled when the App id and both secrets are present; the integration is
-  // entirely opt-in, matching the AGENTS_ENABLED default-off convention.
+  // entirely opt-in (a default-off convention shared by the optional integrations).
   const appId = env.GITHUB_APP_ID?.trim() ?? ''
   const enabled = appId !== '' && !!env.GITHUB_APP_PRIVATE_KEY && !!env.GITHUB_WEBHOOK_SECRET
   return {

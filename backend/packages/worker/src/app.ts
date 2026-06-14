@@ -8,6 +8,7 @@ import { requireAuth } from './infrastructure/auth/middleware'
 import { authController } from './modules/auth/AuthController'
 import { boardController } from './modules/board/BoardController'
 import { executionController } from './modules/execution/ExecutionController'
+import { eventsController } from './modules/events/EventsController'
 import { pipelineController } from './modules/pipelines/PipelineController'
 import { workspaceController } from './modules/workspaces/WorkspaceController'
 import { githubController } from './modules/github/GitHubController'
@@ -54,6 +55,16 @@ export function createApp(options: CreateAppOptions = {}): Hono<AppEnv> {
   app.use('*', (c, next) => {
     if (c.req.method === 'OPTIONS') return next()
     const path = c.req.path
+    // The WebSocket event stream authenticates via ?token= inside its handler (a
+    // browser can't set Authorization on a WS handshake). Bypass ONLY the exact
+    // GET upgrade for /workspaces/:id/events; everything else stays default-deny.
+    if (
+      c.req.method === 'GET' &&
+      c.req.header('Upgrade')?.toLowerCase() === 'websocket' &&
+      /^\/workspaces\/[^/]+\/events$/.test(path)
+    ) {
+      return next()
+    }
     if (PUBLIC_PREFIXES.some((p) => path === p || path.startsWith(`${p}/`))) return next()
     return gate(c, next)
   })
@@ -77,6 +88,9 @@ export function createApp(options: CreateAppOptions = {}): Hono<AppEnv> {
   app.route('/workspaces/:workspaceId', boardController())
   app.route('/workspaces/:workspaceId', pipelineController())
   app.route('/workspaces/:workspaceId', executionController())
+  // Real-time WebSocket event stream (self-authenticates via ?token=; the gate
+  // above bypasses only its exact upgrade shape).
+  app.route('/', eventsController())
   app.route('/workspaces/:workspaceId', githubController())
   app.route('/workspaces/:workspaceId', confluenceController())
   app.route('/workspaces/:workspaceId', environmentController())

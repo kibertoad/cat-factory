@@ -6,7 +6,7 @@ export type {
   RunRef,
   WorkspaceRepository,
 } from './repositories'
-export type { Clock, IdGenerator, Rng } from './runtime'
+export type { Clock, IdGenerator } from './runtime'
 export type { ModelProvider, ModelRef } from './model-provider'
 export type { TokenUsageRecord, TokenUsageRepository, TokenUsageTotals } from './token-usage'
 export type {
@@ -17,6 +17,7 @@ export type {
   AgentTokenUsage,
 } from './agent-executor'
 export { type WorkRunner, NoopWorkRunner } from './work-runner'
+export { type ExecutionEventPublisher, NoopEventPublisher } from './execution-events'
 export type {
   CommitFilesResult,
   GitHubClient,

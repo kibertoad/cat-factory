@@ -21,15 +21,11 @@ export default defineWorkersConfig(async () => {
           singleWorker: true,
           wrangler: { configPath: './wrangler.toml' },
           miniflare: {
-            // Surface the parsed migrations to the setup file, and force a
-            // deterministic seed so the simulator path is reproducible if used.
-            // EXECUTION_MODE stays 'tick' so the engine behaves deterministically
-            // and the durable Workflows path isn't exercised in-pool.
+            // Surface the parsed migrations to the setup file. Tests drive the
+            // engine directly via advanceInstance (no durable Workflows in-pool)
+            // and inject a FakeAgentExecutor, so no agent/provider env is needed.
             bindings: {
               TEST_MIGRATIONS: migrations,
-              RNG_SEED: '42',
-              AGENTS_ENABLED: 'false',
-              EXECUTION_MODE: 'tick',
               // The auth gate fails closed when unconfigured; tests send no
               // credentials, so opt into the local/dev-open path (mirrors
               // `.dev.vars` for `wrangler dev`). Production never sets this.

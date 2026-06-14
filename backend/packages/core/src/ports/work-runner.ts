@@ -1,9 +1,9 @@
 // Port for driving a run *durably* outside the request that started it. The
 // execution engine calls this to hand a run off to a background worker (in the
-// Cloudflare facade, a Workflows instance) so progress no longer depends on a
-// browser polling `/tick`. Modelling it as a port keeps the engine free of any
+// Cloudflare facade, a Workflows instance) so progress proceeds server-side
+// without a browser open. Modelling it as a port keeps the engine free of any
 // Cloudflare/Workflows concern. Concrete implementations:
-//   - NoopWorkRunner       — the default; does nothing (tick/simulator mode, tests)
+//   - NoopWorkRunner       — the default; does nothing (tests advance runs directly)
 //   - WorkflowsWorkRunner  — creates/signals a Cloudflare Workflows instance
 // All methods must be idempotent on `executionId` so a retry or replay is safe.
 
@@ -22,9 +22,9 @@ export interface WorkRunner {
 }
 
 /**
- * The default runner: it does nothing. With it wired, the engine behaves exactly
- * as before (progress is driven by `tick`), which is what tick/simulator mode and
- * the integration tests rely on.
+ * The default runner: it does nothing. With it wired, starting a run hands off to
+ * nobody — the integration tests rely on this and advance runs directly via
+ * `advanceInstance`.
  */
 export class NoopWorkRunner implements WorkRunner {
   async startRun(): Promise<void> {}

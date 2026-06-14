@@ -32,13 +32,31 @@ Each pipeline step is performed by an `AgentExecutor` (a port). Implementations:
   the direct DashScope / DeepSeek / Moonshot providers). A block may also pick a specific model
   (`Block.modelId`) from the catalog in `core/src/domain/models.ts`; each model runs on Cloudflare
   Workers AI by default and switches to its direct provider API when that key is configured.
-- **`SimulatorAgentExecutor`** (core) — the playful, randomised experience the frontend prototype
-  used to hardcode (occasional human decisions, random confidence). Used for **local / mock
-  runtime only**, never in tests.
+- **`ContainerAgentExecutor`** (worker) — runs the repo-operating steps (`coder`, `mocker`,
+  `playwright`) in a per-run Cloudflare Container (the Pi coding-agent harness) that clones the
+  repo, implements the block and opens a PR. Composed with the inline executor by
+  `CompositeAgentExecutor` when `CONTAINER_IMPL_ENABLED` and its prerequisites are set.
 - **`FakeAgentExecutor`** (worker tests) — deterministic; used by the integration tests.
 
-The engine itself (`ExecutionService`) is deterministic and contains no randomness: a `tick`
-advances each running pipeline by one agent-performed step.
+The engine itself (`ExecutionService`) is deterministic: `advanceInstance` moves one run forward
+by exactly one agent-performed step. In production the durable Cloudflare Workflows driver calls
+it in a loop (see "Execution & real-time events" below); the integration tests call it directly.
+
+## Execution & real-time events
+
+Runs are driven **durably and server-side**: starting a pipeline creates one Cloudflare Workflows
+instance per run (`ExecutionWorkflow`, addressed by execution id), which loops calling
+`advanceInstance` — one retriable, checkpointed step at a time — and parks on `waitForEvent` while
+a human decision is outstanding. Progress no longer depends on a browser being open. A cron
+"sweeper" re-drives any run whose Workflows instance died (eviction, a missed event).
+
+Progress reaches the browser by **push, not polling**: each persisted transition is published to a
+per-workspace `WorkspaceEventsHub` Durable Object (one instance per workspace, hibernatable
+WebSockets), which fans the event out to subscribed clients. The SPA opens one WebSocket to
+`GET /workspaces/:ws/events?token=<session>` (a browser can't set `Authorization` on a handshake,
+so the token rides the query string, verified with the same HMAC signer as the REST gate) and
+patches its stores from the events, refreshing on (re)connect to reconcile anything missed. When
+the `WORKSPACE_EVENTS` binding is absent the engine simply pushes nothing.
 
 ## Spend safeguards
 
@@ -54,8 +72,8 @@ automatically once the period rolls over.
 
 Configured entirely through Worker vars (see `wrangler.toml`): `SPEND_MONTHLY_LIMIT`
 (default ~100), `SPEND_CURRENCY` (default `EUR`), and `SPEND_MODEL_PRICES` (JSON per-model price
-overrides per 1M tokens). The simulator/stub agents report no usage, so a pure-simulation
-deployment never accrues spend.
+overrides per 1M tokens). The container executor reports no usage directly (its LLM proxy meters
+tokens itself, to avoid double-counting), and test fakes report none.
 
 ## GitHub integration (optional)
 
@@ -127,8 +145,8 @@ DELETE /workspaces/:ws/pipelines/:id
 POST   /workspaces/:ws/blocks/:id/executions                 start a pipeline run
 DELETE /workspaces/:ws/blocks/:id/executions                 cancel
 POST   /workspaces/:ws/blocks/:id/merge                       merge an open PR
-POST   /workspaces/:ws/tick                                   advance the simulation { ticks }
 POST   /workspaces/:ws/executions/:exec/decisions/:dec        resolve a human decision
+GET    /workspaces/:ws/events                                 WebSocket: live execution/board events
 
 GET    /workspaces/:ws/spend                                  current spend vs budget for the period
 POST   /workspaces/:ws/spend/resume                           resume runs paused by the spend cap
@@ -183,8 +201,42 @@ against a real local D1 database with the real migrations applied. Only the LLM 
 ### Deploying
 
 Set a real `database_id` in `wrangler.toml` (`wrangler d1 create cat_factory`), apply migrations
-with `db:migrate:remote`, set provider secrets (`wrangler secret put OPENAI_API_KEY`), flip
-`AGENTS_ENABLED=true`, and `pnpm deploy`.
+with `db:migrate:remote`, configure authentication (see below — **required in production**), set
+provider secrets (`wrangler secret put OPENAI_API_KEY`), and `pnpm deploy`. Agents always perform
+real work (unpinned ones default to the Qwen model on the Workers AI binding), so make sure at
+least one provider is reachable.
+
+#### Authentication (required in production)
+
+The API **fails closed**: every route except a small public allowlist (`/health`, `/auth/*`, the
+`/v1` container proxy, and `/github` webhooks) requires a signed-in session, and when auth is
+unconfigured those routes return `503 auth_not_configured` rather than serving data. **A production
+deployment without auth configured is locked, not open** — so this is a required setup step, not an
+optional one.
+
+Register a GitHub OAuth app (a GitHub App's OAuth credentials or a classic OAuth App) with the
+callback URL `<worker-origin>/auth/callback`, then:
+
+```sh
+# wrangler.toml [vars]
+GITHUB_OAUTH_CLIENT_ID = "Iv1.abc123…"
+
+# secrets
+wrangler secret put GITHUB_OAUTH_CLIENT_SECRET
+wrangler secret put AUTH_SESSION_SECRET            # any high-entropy random string
+
+# recommended in production (see docs/auth.md):
+#   AUTH_SUCCESS_REDIRECT_URL = "https://<your-spa>"   # fixed post-login landing
+#   AUTH_ALLOWED_LOGINS       = "octocat,hubot"        # restrict to specific users
+```
+
+Local dev and the test suite run open via the `AUTH_DEV_OPEN=true` escape hatch (in `.dev.vars`,
+gitignored, and the vitest bindings) — **never set it in the deployed `wrangler.toml`**, as that
+would re-open production. Full details, the OAuth flow, and all optional vars are in
+[`docs/auth.md`](./docs/auth.md).
+
+> Note: this "Login with GitHub" user authentication is distinct from the optional **GitHub App
+> integration** below (how a workspace acts on repos); they use different credentials.
 
 #### Model picker and provider keys
 
@@ -222,7 +274,7 @@ with:
 wrangler secret put CONTAINER_IMPL_ENABLED   # set to: true
 wrangler secret put WORKER_PUBLIC_URL        # e.g. https://cat-factory.example.workers.dev
 # Requires the IMPL_CONTAINER binding (wrangler.toml) and the GitHub App configured.
-# Best paired with EXECUTION_MODE = "workflow" since container runs are long-lived.
+# Container runs are long-lived; the durable Workflows driver carries them.
 ```
 
 The container never holds a provider key: it reaches models only through this Worker's LLM proxy

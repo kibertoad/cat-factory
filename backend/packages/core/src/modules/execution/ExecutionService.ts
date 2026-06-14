@@ -10,6 +10,7 @@ import type {
 import type { IdGenerator } from '../../ports/runtime'
 import type { AgentExecutor, AgentRunContext, AgentRunResult } from '../../ports/agent-executor'
 import type { WorkRunner } from '../../ports/work-runner'
+import type { ExecutionEventPublisher } from '../../ports/execution-events'
 import type { ConfluenceDocumentRepository } from '../../ports/confluence-repositories'
 import type { EnvironmentProvisioningService } from '../environments/EnvironmentProvisioningService'
 import { isDeployStep } from '../environments/environments.logic'
@@ -27,6 +28,7 @@ export interface ExecutionServiceDependencies {
   idGenerator: IdGenerator
   agentExecutor: AgentExecutor
   workRunner: WorkRunner
+  executionEventPublisher: ExecutionEventPublisher
   boardService: BoardService
   spendService: SpendService
   /**
@@ -44,10 +46,11 @@ export interface ExecutionServiceDependencies {
 
 /**
  * The execution engine. It orchestrates a pipeline of agent-performed steps and
- * is fully deterministic: a `tick` advances every running pipeline by exactly
- * one step, delegating the actual work — and the choice of whether to pause for
- * a human decision — to the injected {@link AgentExecutor}. All randomness and
- * LLM behaviour live behind that port, so the engine here can be tested with a
+ * is fully deterministic: `advanceInstance` moves one run forward by exactly one
+ * step, delegating the actual work — and the choice of whether to pause for a
+ * human decision — to the injected {@link AgentExecutor}. The durable workflow
+ * driver calls it in a loop. All LLM behaviour lives behind that port, so the
+ * engine here can be tested with a
  * deterministic fake and no timing/delays.
  */
 export class ExecutionService {
@@ -58,6 +61,7 @@ export class ExecutionService {
   private readonly idGenerator: IdGenerator
   private readonly agentExecutor: AgentExecutor
   private readonly workRunner: WorkRunner
+  private readonly events: ExecutionEventPublisher
   private readonly board: BoardService
   private readonly spend: SpendService
   private readonly confluenceDocuments?: ConfluenceDocumentRepository
@@ -71,6 +75,7 @@ export class ExecutionService {
     idGenerator,
     agentExecutor,
     workRunner,
+    executionEventPublisher,
     boardService,
     spendService,
     confluenceDocumentRepository,
@@ -83,6 +88,7 @@ export class ExecutionService {
     this.idGenerator = idGenerator
     this.agentExecutor = agentExecutor
     this.workRunner = workRunner
+    this.events = executionEventPublisher
     this.board = boardService
     this.spend = spendService
     this.confluenceDocuments = confluenceDocumentRepository
@@ -134,10 +140,11 @@ export class ExecutionService {
       progress: 0,
       executionId: instance.id,
     })
-    // Hand the run off to the durable runner so it progresses without a browser
-    // driving `tick`. With the no-op runner (tick/simulator mode) this does
-    // nothing and progress is driven by `tick` as before.
+    // Hand the run off to the durable runner so it progresses server-side without
+    // a browser open. With the no-op runner (tests) this does nothing and the run
+    // is advanced directly via advanceInstance.
     await this.workRunner.startRun(workspaceId, instance.id)
+    await this.emitInstance(workspaceId, instance)
     return instance
   }
 
@@ -161,24 +168,6 @@ export class ExecutionService {
     return this.stepInstance(workspaceId, instance, options)
   }
 
-  /**
-   * Advance the workspace by up to `ticks` steps. Each tick advances every
-   * running instance by one agent-performed step; it stops early once nothing is
-   * running (everything is done or blocked on a decision).
-   */
-  async tick(workspaceId: string, ticks = 1): Promise<ExecutionInstance[]> {
-    await this.requireWorkspace(workspaceId)
-    for (let i = 0; i < ticks; i++) {
-      const instances = await this.executionRepository.listByWorkspace(workspaceId)
-      // Paused runs are advanced too: stepInstance resumes them automatically
-      // once the spend budget frees up (e.g. a new billing period).
-      const active = instances.filter((e) => e.status === 'running' || e.status === 'paused')
-      if (active.length === 0) break
-      for (const instance of active) await this.stepInstance(workspaceId, instance)
-    }
-    return this.executionRepository.listByWorkspace(workspaceId)
-  }
-
   /** Advance a single running instance by one step, persisting the result. */
   private async stepInstance(
     workspaceId: string,
@@ -195,6 +184,7 @@ export class ExecutionService {
       if (instance.status !== 'paused') {
         instance.status = 'paused'
         await this.executionRepository.upsert(workspaceId, instance)
+        await this.emitInstance(workspaceId, instance)
       }
       return { kind: 'paused' }
     }
@@ -203,6 +193,7 @@ export class ExecutionService {
     if (step.state === 'waiting_decision') {
       instance.status = 'blocked'
       await this.executionRepository.upsert(workspaceId, instance)
+      await this.emitInstance(workspaceId, instance)
       return { kind: 'awaiting_decision', decisionId: step.decision!.id }
     }
     step.state = 'working'
@@ -212,8 +203,7 @@ export class ExecutionService {
     const isFinalStep = instance.currentStep === instance.steps.length - 1
     // A `deployer` step provisions an ephemeral environment deterministically via
     // the provider — no LLM, no token usage — when the integration is wired.
-    // Otherwise it falls through to the normal agent path so the simulator still
-    // yields a plausible output.
+    // Otherwise it falls through to the normal agent path.
     const result =
       this.environmentProvisioning && isDeployStep(step.agentKind)
         ? await this.runDeployer(workspaceId, instance, block, options)
@@ -243,6 +233,7 @@ export class ExecutionService {
       instance.status = 'blocked'
       await this.updateBlockProgress(workspaceId, instance, 'blocked')
       await this.executionRepository.upsert(workspaceId, instance)
+      await this.emitInstance(workspaceId, instance)
       return { kind: 'awaiting_decision', decisionId: step.decision.id }
     }
 
@@ -256,6 +247,7 @@ export class ExecutionService {
       instance.status = 'done'
       await this.finalizeBlock(workspaceId, instance, result.confidence)
       await this.executionRepository.upsert(workspaceId, instance)
+      await this.emitInstance(workspaceId, instance)
       return { kind: 'done' }
     }
     instance.currentStep += 1
@@ -263,15 +255,10 @@ export class ExecutionService {
     if (next) next.state = 'working'
     await this.updateBlockProgress(workspaceId, instance, 'in_progress')
     await this.executionRepository.upsert(workspaceId, instance)
+    await this.emitInstance(workspaceId, instance)
     return { kind: 'continue' }
   }
 
-  /**
-   * Build the agent context and invoke the agent. Failures are swallowed into
-   * the step output so the simulation never wedges — unless `rethrowAgentErrors`
-   * is set (the durable path), in which case the error propagates so the
-   * driver's per-step retry can take over.
-   */
   /**
    * Deterministically provision an ephemeral environment for a deployer step.
    * Produces a human-readable summary as the step output and reports no token
@@ -318,6 +305,12 @@ export class ExecutionService {
     return inputs
   }
 
+  /**
+   * Build the agent context and invoke the agent. Failures are swallowed into the
+   * step output so a run never wedges — unless `rethrowAgentErrors` is set (the
+   * durable path), in which case the error propagates so the driver's per-step
+   * retry can take over.
+   */
   private async runAgent(
     workspaceId: string,
     instance: ExecutionInstance,
@@ -365,7 +358,7 @@ export class ExecutionService {
       // The durable driver wants real failures to surface so its per-step retry
       // can kick in (and the error gets persisted after retries are exhausted).
       if (options.rethrowAgentErrors) throw error
-      // Otherwise a failed agent must not wedge the simulation; record and complete.
+      // Otherwise a failed agent must not wedge the run; record and complete.
       return {
         output: `Agent error: ${error instanceof Error ? error.message : String(error)}`,
       }
@@ -395,6 +388,16 @@ export class ExecutionService {
   private async resolveEnvironment(workspaceId: string, blockId: string) {
     if (!this.environmentProvisioning) return null
     return this.environmentProvisioning.resolveForBlock(workspaceId, blockId)
+  }
+
+  /**
+   * Push the run's latest state to subscribed clients, alongside its rolled-up
+   * block so the board updates without a refetch. Best-effort: the publisher
+   * swallows its own errors, and the persisted run remains the source of truth.
+   */
+  private async emitInstance(workspaceId: string, instance: ExecutionInstance): Promise<void> {
+    const block = await this.blockRepository.get(workspaceId, instance.blockId)
+    await this.events.executionChanged(workspaceId, instance, block)
   }
 
   /** Set the block's in-progress/blocked status and step-completion progress. */
@@ -478,9 +481,12 @@ export class ExecutionService {
         position: { x: 16 + (n % 2) * 190, y: 40 + Math.floor(n / 2) * 130 },
       })
     }
+    // A module node appeared and/or a task changed parent — the per-block event
+    // can't express that hierarchy change, so signal a coarse board refresh.
+    await this.events.boardChanged(workspaceId, 'module')
   }
 
-  /** Resolve a pending decision; the next tick lets the agent finish the step. */
+  /** Resolve a pending decision; the run's next step lets the agent finish it. */
   async resolveDecision(
     workspaceId: string,
     executionId: string,
@@ -502,9 +508,10 @@ export class ExecutionService {
     await this.updateBlockProgress(workspaceId, instance, 'in_progress')
     await this.executionRepository.upsert(workspaceId, instance)
     // Wake the parked durable run, if any. The DB write above remains the source
-    // of truth (so tick mode and the sweeper still work); the signal is an
-    // optimisation that lets a workflow continue immediately.
+    // of truth (so the backstop sweeper can still re-drive it); the signal is an
+    // optimisation that lets the workflow continue immediately.
     await this.workRunner.signalDecision(workspaceId, instance.id, decisionId, choice)
+    await this.emitInstance(workspaceId, instance)
     return instance
   }
 
@@ -532,13 +539,14 @@ export class ExecutionService {
       status: 'pr_ready',
       progress: 1,
     })
+    const failed = await this.executionRepository.get(workspaceId, executionId)
+    if (failed) await this.emitInstance(workspaceId, failed)
   }
 
   /**
    * Resume every run paused by the spend safeguard in this workspace. Flips them
-   * back to `running` and re-drives the durable runner (a no-op in tick mode,
-   * where the next tick picks them up). If the budget is still exhausted the
-   * spend gate will simply pause them again on their next step.
+   * back to `running` and re-drives the durable runner. If the budget is still
+   * exhausted the spend gate will simply pause them again on their next step.
    */
   async resumePaused(workspaceId: string): Promise<ExecutionInstance[]> {
     await this.requireWorkspace(workspaceId)
@@ -548,6 +556,7 @@ export class ExecutionService {
       instance.status = 'running'
       await this.executionRepository.upsert(workspaceId, instance)
       await this.workRunner.startRun(workspaceId, instance.id)
+      await this.emitInstance(workspaceId, instance)
     }
     return this.executionRepository.listByWorkspace(workspaceId)
   }
@@ -565,6 +574,9 @@ export class ExecutionService {
       progress: 0,
       executionId: null,
     })
+    // The run record is gone and the block is back to planned; the client can't
+    // reconstruct that from a per-instance event, so signal a coarse refresh.
+    await this.events.boardChanged(workspaceId, 'cancel')
     return this.requireBlock(workspaceId, blockId)
   }
 }

@@ -33,7 +33,7 @@ export interface AuthConfig {
 
 export function loadAuthConfig(env: Env): AuthConfig {
   // Enabled when the OAuth credentials and the session secret are all present,
-  // mirroring the GitHub-integration / AGENTS_ENABLED default-off convention.
+  // mirroring the GitHub-integration default-off convention.
   const clientId = env.GITHUB_OAUTH_CLIENT_ID?.trim() ?? ''
   const clientSecret = env.GITHUB_OAUTH_CLIENT_SECRET?.trim() ?? ''
   const sessionSecret = env.AUTH_SESSION_SECRET?.trim() ?? ''

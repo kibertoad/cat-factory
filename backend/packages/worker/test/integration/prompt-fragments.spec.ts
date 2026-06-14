@@ -66,7 +66,7 @@ describe('prompt fragments', () => {
       await capturingApp.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
         pipelineId: 'pl_quick',
       })
-      await capturingApp.call('POST', `/workspaces/${wsId}/tick`, { ticks: 10 })
+      await capturingApp.drive(wsId)
 
       expect(seen.length).toBeGreaterThan(0)
       expect(seen[0]!.block.fragmentIds).toEqual(['node.performance'])

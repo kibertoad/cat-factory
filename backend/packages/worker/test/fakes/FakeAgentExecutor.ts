@@ -12,8 +12,8 @@ export interface FakeAgentOptions {
 /**
  * Deterministic agent for integration tests. It performs no network calls and
  * behaves predictably, so the engine's orchestration (step advancement,
- * decisions, finalisation) can be asserted exactly — without the randomness of
- * the SimulatorAgentExecutor or the cost of a real LLM.
+ * decisions, finalisation) can be asserted exactly — without the cost or
+ * nondeterminism of a real LLM.
  */
 export class FakeAgentExecutor implements AgentExecutor {
   constructor(private readonly options: FakeAgentOptions = {}) {}

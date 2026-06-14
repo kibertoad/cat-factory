@@ -23,9 +23,9 @@ CONFLUENCE_PLANNER = "llm"
 
 In `llm` mode the planner reuses the agents' default model
 (`AGENT_DEFAULT_PROVIDER` / `AGENT_DEFAULT_MODEL`) via the provider-agnostic
-`ModelProvider` port — independent of `AGENTS_ENABLED`. If no provider credential
-is usable, or a response can't be parsed, it degrades to the deterministic
-heading parser, so import/plan/spawn always work.
+`ModelProvider` port. If no provider credential is usable, or a response can't be
+parsed, it degrades to the deterministic heading parser, so import/plan/spawn
+always work.
 
 Each workspace owner connects their own site with an Atlassian **API token**
 (`id.atlassian.com → Security → API tokens`); the backend authenticates to

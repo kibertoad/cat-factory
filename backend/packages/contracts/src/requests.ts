@@ -75,9 +75,3 @@ export const resolveDecisionSchema = v.object({
   choice: v.pipe(v.string(), v.minLength(1)),
 })
 export type ResolveDecisionInput = v.InferOutput<typeof resolveDecisionSchema>
-
-export const tickSchema = v.object({
-  /** Number of simulation ticks to advance (default 1). */
-  ticks: v.optional(v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(100))),
-})
-export type TickInput = v.InferOutput<typeof tickSchema>

@@ -9,7 +9,6 @@ import type { Env } from '../env'
 import { num } from './utils'
 
 export interface AgentsConfig {
-  enabled: boolean
   /**
    * Route the repo-operating steps (`coder`, plus the `mocker` mock builder and
    * `playwright` e2e writer) to a per-run Cloudflare Container running the Pi
@@ -73,7 +72,6 @@ export function loadAgentsConfig(
   }
 
   return {
-    enabled: env.AGENTS_ENABLED === 'true',
     containerImpl: env.CONTAINER_IMPL_ENABLED === 'true',
     routing: {
       default: defaultConfig,

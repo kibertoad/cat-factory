@@ -16,8 +16,18 @@ const workspace = useWorkspaceStore()
 // Load the board from the backend before rendering it.
 onMounted(() => workspace.init())
 
-// Clock that polls the backend to advance the agent pipelines.
-useSimulationClock()
+// Subscribe to the backend's real-time event stream and (re)connect whenever the
+// active workspace changes. Runs advance durably server-side; progress arrives as
+// pushed events rather than by polling.
+const stream = useWorkspaceStream()
+watch(
+  () => workspace.workspaceId,
+  (id) => {
+    stream.stop()
+    if (id) stream.start()
+  },
+  { immediate: true },
+)
 </script>
 
 <template>

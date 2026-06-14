@@ -64,9 +64,9 @@ is bound (local/tests) the worker applies work inline.
 
 All GitHub core dependencies are optional in `CoreDependencies`; `createCore`
 assembles the `github` module only when they're all present, and the worker wires
-them only when `GITHUB_APP_ID` + secrets are set. This mirrors the existing
-`AGENTS_ENABLED` / `EXECUTION_MODE` default-off convention, so the existing system
-and tests are unaffected when GitHub is unconfigured.
+them only when `GITHUB_APP_ID` + secrets are set. This follows the optional
+integrations' default-off convention, so the existing system and tests are
+unaffected when GitHub is unconfigured.
 
 ## Consequences
 

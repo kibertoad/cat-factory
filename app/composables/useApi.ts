@@ -123,9 +123,6 @@ export function useApi() {
     mergeBlock: (workspaceId: string, blockId: string) =>
       http<Block>(`${ws(workspaceId)}/blocks/${blockId}/merge`, { method: 'POST' }),
 
-    tick: (workspaceId: string, body: { ticks?: number } = {}) =>
-      http<ExecutionInstance[]>(`${ws(workspaceId)}/tick`, { method: 'POST', body }),
-
     resolveDecision: (
       workspaceId: string,
       executionId: string,

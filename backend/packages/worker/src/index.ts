@@ -22,6 +22,8 @@ export { ExecutionWorkflow } from './infrastructure/workflows/ExecutionWorkflow'
 export { GitHubBackfillWorkflow } from './infrastructure/workflows/GitHubBackfillWorkflow'
 // Container-enabled Durable Object backing per-run implementation containers.
 export { ImplementationContainer } from './infrastructure/containers/ImplementationContainer'
+// Per-workspace WebSocket fan-out hub (real-time execution/board events).
+export { WorkspaceEventsHub } from './infrastructure/durable-objects/WorkspaceEventsHub'
 
 const app = createApp()
 

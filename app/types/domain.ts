@@ -153,14 +153,17 @@ export interface WorkspaceSnapshot {
   blocks: Block[]
   pipelines: Pipeline[]
   executions: ExecutionInstance[]
-  /**
-   * How the server advances runs: 'workflow' (durable, server-driven) or 'tick'
-   * (this client drives progress by polling). Absent on older servers → 'tick'.
-   */
-  executionMode?: 'workflow' | 'tick'
   /** Current spend-safeguard status; absent on older servers. */
   spend?: SpendStatus
 }
+
+/**
+ * Real-time events pushed over the workspace WebSocket stream (see
+ * `useWorkspaceStream`). Mirrors `WorkspaceEvent` in `@cat-factory/contracts`.
+ */
+export type WorkspaceEvent =
+  | { type: 'execution'; instance: ExecutionInstance; block: Block | null; at: number }
+  | { type: 'board'; reason: string; at: number }
 
 /** Level-of-detail buckets driven by the canvas zoom level. */
 export type LodLevel = 'far' | 'mid' | 'close'

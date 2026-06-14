@@ -23,19 +23,12 @@ export const useWorkspaceStore = defineStore(
     const ready = ref(false)
     /** Set when bootstrap fails so the UI can show a retry. */
     const error = ref<string | null>(null)
-    /**
-     * How the server advances runs. In 'workflow' mode runs progress durably on
-     * the server, so the client only polls state; in 'tick' mode the client
-     * drives progress. Defaults to 'tick' for older servers.
-     */
-    const executionMode = ref<'workflow' | 'tick'>('tick')
     /** Latest spend-safeguard status from the server (null until first load). */
     const spend = ref<SpendStatus | null>(null)
 
     /** Push a snapshot into the data stores. */
     function hydrate(snapshot: WorkspaceSnapshot) {
       workspaceId.value = snapshot.workspace.id
-      executionMode.value = snapshot.executionMode ?? 'tick'
       spend.value = snapshot.spend ?? null
       useBoardStore().hydrate(snapshot.blocks)
       usePipelinesStore().hydrate(snapshot.pipelines)
@@ -70,7 +63,7 @@ export const useWorkspaceStore = defineStore(
       }
     }
 
-    /** Re-fetch the snapshot and re-hydrate (used after server-side ticks). */
+    /** Re-fetch the snapshot and re-hydrate (after mutations and on stream (re)connect). */
     async function refresh() {
       if (!workspaceId.value) return
       hydrate(await api.getWorkspace(workspaceId.value))
@@ -100,7 +93,6 @@ export const useWorkspaceStore = defineStore(
       workspaceId,
       ready,
       error,
-      executionMode,
       spend,
       init,
       refresh,

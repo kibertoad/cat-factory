@@ -8,6 +8,7 @@ import type { Clock, IdGenerator } from './ports/runtime'
 import type { AgentExecutor } from './ports/agent-executor'
 import type { TokenUsageRepository } from './ports/token-usage'
 import { type WorkRunner, NoopWorkRunner } from './ports/work-runner'
+import { type ExecutionEventPublisher, NoopEventPublisher } from './ports/execution-events'
 import type { GitHubClient } from './ports/github-client'
 import type { WebhookVerifier } from './ports/webhook-verifier'
 import type { ModelProvider, ModelRef } from './ports/model-provider'
@@ -63,17 +64,25 @@ export interface CoreDependencies {
   idGenerator: IdGenerator
   clock: Clock
   /**
-   * Performs each pipeline step. Wire AiAgentExecutor for real work,
-   * SimulatorAgentExecutor for the playful local experience, or a fake in tests.
+   * Performs each pipeline step. Wire AiAgentExecutor (optionally composed with
+   * the container executor for repo-operating steps) for real work, or a fake in
+   * tests.
    */
   agentExecutor: AgentExecutor
   /** Ledger backing the spend safeguard (per-call token usage). */
   tokenUsageRepository: TokenUsageRepository
   /**
-   * Drives runs durably outside the starting request. Defaults to a no-op (tick
-   * mode); the worker wires WorkflowsWorkRunner when execution mode is workflow.
+   * Drives runs durably outside the starting request. Defaults to a no-op (tests);
+   * the worker wires WorkflowsWorkRunner when the Workflows binding is present.
    */
   workRunner?: WorkRunner
+  /**
+   * Pushes execution/board changes to connected clients in real time, replacing
+   * the browser's `tick` polling. Defaults to a no-op (tests, or any deployment
+   * without the WORKSPACE_EVENTS binding); the worker wires
+   * DurableObjectEventPublisher when that binding is present.
+   */
+  executionEventPublisher?: ExecutionEventPublisher
   /**
    * Pricing and budget for the spend safeguard. Defaults to the built-in
    * approximate EUR prices and a ~100 EUR/month limit; the worker overrides
@@ -82,7 +91,7 @@ export interface CoreDependencies {
   spendPricing?: SpendPricing
 
   // ---- GitHub integration (optional; wired only when configured) ----------
-  // These mirror the AGENTS_ENABLED/EXECUTION_MODE "default-off" convention: the
+  // These follow the integrations' "default-off" convention: the
   // worker wires them only when the GitHub App secrets/bindings are present, so
   // the existing core and tests are untouched when GitHub is unconfigured. When
   // all of them are supplied, `createCore` assembles the `github` module.
@@ -104,8 +113,8 @@ export interface CoreDependencies {
 
   // ---- Confluence integration (optional; wired only when configured) ------
   // Mirrors the GitHub default-off convention. The Confluence module assembles
-  // when the client + both repositories are present. `modelProvider` is wired
-  // independently of AGENTS_ENABLED and is *optional within* the module: when
+  // when the client + both repositories are present. `modelProvider` is
+  // *optional within* the module: when
   // absent the planner uses its deterministic heading-based fallback, so import,
   // link and spawn still work. `confluenceDocumentRepository` is additionally
   // consumed by the execution engine to feed linked docs to agents as context.
@@ -321,6 +330,7 @@ function createEnvironmentsModule(deps: CoreDependencies): EnvironmentsModule | 
 
 export function createCore(dependencies: CoreDependencies): Core {
   const workRunner = dependencies.workRunner ?? new NoopWorkRunner()
+  const executionEventPublisher = dependencies.executionEventPublisher ?? new NoopEventPublisher()
   const boardService = new BoardService(dependencies)
   const workspaceService = new WorkspaceService(dependencies)
   const pipelineService = new PipelineService(dependencies)
@@ -335,6 +345,7 @@ export function createCore(dependencies: CoreDependencies): Core {
   const executionService = new ExecutionService({
     ...dependencies,
     workRunner,
+    executionEventPublisher,
     boardService,
     spendService,
     environmentProvisioning: environments?.provisioningService,

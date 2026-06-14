@@ -17,10 +17,8 @@ describe('execution engine', () => {
     expect(start.status).toBe(201)
     expect(start.body.status).toBe('running')
 
-    const ticked = await app.call<ExecutionInstance[]>('POST', `/workspaces/${wsId}/tick`, {
-      ticks: 10,
-    })
-    const exec = ticked.body.find((e) => e.blockId === 'task_login')!
+    const ticked = await app.drive(wsId)
+    const exec = ticked.find((e) => e.blockId === 'task_login')!
     expect(exec.status).toBe('done')
     expect(exec.steps.every((s) => s.state === 'done')).toBe(true)
     expect(exec.steps[0]!.output).toContain('[coder]')
@@ -42,7 +40,7 @@ describe('execution engine', () => {
     await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
       pipelineId: 'pl_quick',
     })
-    await app.call('POST', `/workspaces/${wsId}/tick`, { ticks: 10 })
+    await app.drive(wsId)
 
     let task = (await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)).body.blocks.find(
       (b) => b.id === 'task_login',
@@ -74,10 +72,8 @@ describe('execution engine', () => {
       pipelineId: 'pl_quick',
     })
 
-    const blocked = await app.call<ExecutionInstance[]>('POST', `/workspaces/${wsId}/tick`, {
-      ticks: 5,
-    })
-    const exec = blocked.body.find((e) => e.blockId === 'task_login')!
+    const blocked = await app.drive(wsId)
+    const exec = blocked.find((e) => e.blockId === 'task_login')!
     expect(exec.status).toBe('blocked')
     const step = exec.steps[0]!
     expect(step.state).toBe('waiting_decision')
@@ -96,10 +92,8 @@ describe('execution engine', () => {
     )
     expect(resolve.status).toBe(200)
 
-    const resumed = await app.call<ExecutionInstance[]>('POST', `/workspaces/${wsId}/tick`, {
-      ticks: 5,
-    })
-    const finished = resumed.body.find((e) => e.blockId === 'task_login')!
+    const resumed = await app.drive(wsId)
+    const finished = resumed.find((e) => e.blockId === 'task_login')!
     expect(finished.status).toBe('done')
     expect(finished.steps[0]!.decision!.chosen).toBe(choice)
   })
@@ -112,7 +106,7 @@ describe('execution engine', () => {
     await app.call('POST', `/workspaces/${wsId}/blocks/blk_api/executions`, {
       pipelineId: 'pl_quick',
     })
-    await app.call('POST', `/workspaces/${wsId}/tick`, { ticks: 10 })
+    await app.drive(wsId)
 
     const block = (
       await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)

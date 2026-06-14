@@ -10,10 +10,10 @@ import type {
 // each pipeline step. An agent either produces a work product or asks for a
 // human decision before it can finish. Concrete implementations:
 //   - AiAgentExecutor         — real work via an LLM (Vercel AI SDK)
-//   - SimulatorAgentExecutor  — the randomised, playful experience for local/mock runs
+//   - ContainerAgentExecutor  — repo-operating steps in a per-run sandbox container
 //   - a test fake             — deterministic, used by the integration tests
-// Modelling the work as a port is what keeps the engine deterministic and free
-// of both randomness and LLM concerns.
+// Modelling the work as a port keeps the engine free of LLM/infra concerns and
+// lets the integration tests drive it with a deterministic fake.
 
 export interface AgentRunContext {
   agentKind: AgentKind
@@ -100,9 +100,9 @@ export interface AgentRunResult {
   /** Confidence in the result (0..1); used at task completion to auto-merge. */
   confidence?: number
   /**
-   * Tokens the model consumed for this call. Reported by real LLM executors so
-   * the spend safeguard can meter usage; absent for the simulator/stub, which
-   * incur no real cost.
+   * Tokens the model consumed for this call. Reported by inline LLM executors so
+   * the spend safeguard can meter usage; absent for the container executor (whose
+   * proxy meters tokens itself, to avoid double-counting) and test fakes.
    */
   usage?: AgentTokenUsage
 }

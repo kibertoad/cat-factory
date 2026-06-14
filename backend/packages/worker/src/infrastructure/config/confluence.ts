@@ -8,7 +8,7 @@ export interface ConfluenceConfig {
 }
 
 export function loadConfluenceConfig(env: Env): ConfluenceConfig {
-  // Opt-in, matching the GitHub/AGENTS_ENABLED default-off convention. The
+  // Opt-in, matching the GitHub-integration default-off convention. The
   // planner defaults to LLM mode; the worker only wires a model provider when a
   // provider credential is present, so absent that the planner still degrades to
   // its deterministic heading parser.

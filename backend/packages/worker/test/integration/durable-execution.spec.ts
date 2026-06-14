@@ -19,7 +19,10 @@ async function seedWorkspace() {
 describe('durable execution: advanceInstance', () => {
   it('advances a task run one step at a time to done', async () => {
     const wsId = await seedWorkspace()
-    const c = buildContainer(env, { agentExecutor: new FakeAgentExecutor({ confidence: 1 }) })
+    const c = buildContainer(env, {
+      agentExecutor: new FakeAgentExecutor({ confidence: 1 }),
+      workRunner: new FakeWorkRunner(),
+    })
     const instance = await c.executionService.start(wsId, 'task_login', 'pl_quick')
 
     let result: AdvanceResult = { kind: 'continue' }
@@ -43,6 +46,7 @@ describe('durable execution: advanceInstance', () => {
     const wsId = await seedWorkspace()
     const c = buildContainer(env, {
       agentExecutor: new FakeAgentExecutor({ decisionOnSteps: [0], confidence: 1 }),
+      workRunner: new FakeWorkRunner(),
     })
     const instance = await c.executionService.start(wsId, 'task_login', 'pl_quick')
 
@@ -56,21 +60,15 @@ describe('durable execution: advanceInstance', () => {
     const c = buildContainer(env)
     expect((await c.executionService.advanceInstance(wsId, 'exec_nope')).kind).toBe('noop')
   })
-
-  it('advertises the execution mode on the snapshot', async () => {
-    const app = makeApp()
-    const created = await app.call<{ executionMode?: string }>('POST', '/workspaces', {})
-    expect(created.body.executionMode).toBe('tick')
-    const wsId = (created.body as { workspace: { id: string } }).workspace.id
-    const snap = await app.call<{ executionMode?: string }>('GET', `/workspaces/${wsId}`)
-    expect(snap.body.executionMode).toBe('tick')
-  })
 })
 
 describe('durable execution: agent failure handling', () => {
   it('rethrows when rethrowAgentErrors is set (so a step can retry)', async () => {
     const wsId = await seedWorkspace()
-    const c = buildContainer(env, { agentExecutor: new ThrowingAgentExecutor() })
+    const c = buildContainer(env, {
+      agentExecutor: new ThrowingAgentExecutor(),
+      workRunner: new FakeWorkRunner(),
+    })
     const instance = await c.executionService.start(wsId, 'task_login', 'pl_quick')
 
     await expect(
@@ -78,9 +76,12 @@ describe('durable execution: agent failure handling', () => {
     ).rejects.toThrow('boom')
   })
 
-  it('swallows the error into step output by default (tick behaviour)', async () => {
+  it('swallows the error into step output by default', async () => {
     const wsId = await seedWorkspace()
-    const c = buildContainer(env, { agentExecutor: new ThrowingAgentExecutor() })
+    const c = buildContainer(env, {
+      agentExecutor: new ThrowingAgentExecutor(),
+      workRunner: new FakeWorkRunner(),
+    })
     const instance = await c.executionService.start(wsId, 'task_login', 'pl_quick')
 
     const result = await c.executionService.advanceInstance(wsId, instance.id)
@@ -123,7 +124,10 @@ describe('durable execution: WorkRunner signalling', () => {
 describe('durable execution: sweeper', () => {
   it('re-drives a stale run whose workflow is not alive', async () => {
     const wsId = await seedWorkspace()
-    const starter = buildContainer(env, { agentExecutor: new FakeAgentExecutor() })
+    const starter = buildContainer(env, {
+      agentExecutor: new FakeAgentExecutor(),
+      workRunner: new FakeWorkRunner(),
+    })
     const instance = await starter.executionService.start(wsId, 'task_login', 'pl_quick')
 
     const repo = new D1ExecutionRepository({ db: env.DB, clock })
@@ -143,7 +147,10 @@ describe('durable execution: sweeper', () => {
 
   it('leaves runs alone while their workflow is alive', async () => {
     const wsId = await seedWorkspace()
-    const starter = buildContainer(env, { agentExecutor: new FakeAgentExecutor() })
+    const starter = buildContainer(env, {
+      agentExecutor: new FakeAgentExecutor(),
+      workRunner: new FakeWorkRunner(),
+    })
     await starter.executionService.start(wsId, 'task_login', 'pl_quick')
 
     const repo = new D1ExecutionRepository({ db: env.DB, clock })
