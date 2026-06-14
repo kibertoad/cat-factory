@@ -23,9 +23,22 @@ importers:
       '@cat-factory/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@cat-factory/prompt-fragments':
+        specifier: workspace:*
+        version: link:../prompt-fragments
       ai:
         specifier: ^5.0.0
         version: 5.0.200(zod@3.25.76)
+    devDependencies:
+      typescript:
+        specifier: ^5.6.0
+        version: 5.9.3
+
+  packages/prompt-fragments:
+    dependencies:
+      '@cat-factory/contracts':
+        specifier: workspace:*
+        version: link:../contracts
     devDependencies:
       typescript:
         specifier: ^5.6.0
@@ -45,6 +58,9 @@ importers:
       '@cat-factory/core':
         specifier: workspace:*
         version: link:../core
+      '@cat-factory/prompt-fragments':
+        specifier: workspace:*
+        version: link:../prompt-fragments
       '@hono/valibot-validator':
         specifier: ^0.5.2
         version: 0.5.3(hono@4.12.25)(valibot@1.4.1(typescript@5.9.3))

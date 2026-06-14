@@ -3,6 +3,7 @@ import type { AgentExecutor, AgentRunContext, AgentRunResult } from '../../ports
 import type { ModelProvider } from '../../ports/model-provider'
 import { systemPromptFor, userPromptFor } from './agent-catalog'
 import { type AgentRouting, resolveAgentConfig } from './agent-routing'
+import { composeSystemPrompt } from './prompt-fragments'
 
 export interface AiAgentExecutorDependencies {
   modelProvider: ModelProvider
@@ -29,9 +30,13 @@ export class AiAgentExecutor implements AgentExecutor {
     const config = resolveAgentConfig(this.agentRouting, context.agentKind)
     const model = this.modelProvider.resolve(config.ref)
 
+    // Base role prompt, then fold in any best-practice fragments selected for the block.
+    const baseSystem = config.system ?? systemPromptFor(context.agentKind)
+    const system = composeSystemPrompt(baseSystem, context.block.fragmentIds)
+
     const { text, usage } = await generateText({
       model,
-      system: config.system ?? systemPromptFor(context.agentKind),
+      system,
       prompt: userPromptFor(context),
       temperature: config.temperature,
       maxOutputTokens: config.maxOutputTokens,

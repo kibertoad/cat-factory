@@ -21,6 +21,8 @@ export interface AgentRunContext {
     type: BlockType
     description: string
     features?: string[]
+    /** Ids of selected best-practice fragments to fold into the system prompt. */
+    fragmentIds?: string[]
   }
   /** Outputs produced by earlier steps in the same run, in order. */
   priorOutputs: { agentKind: AgentKind; output: string }[]

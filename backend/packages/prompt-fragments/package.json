@@ -1,7 +1,7 @@
 {
-  "name": "@cat-factory/core",
+  "name": "@cat-factory/prompt-fragments",
   "version": "0.1.0",
-  "description": "Framework-agnostic domain logic for the Agent Architecture Board.",
+  "description": "Curated, versioned best-practice prompt fragments injected into agent system prompts.",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
@@ -14,9 +14,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@cat-factory/contracts": "workspace:*",
-    "@cat-factory/prompt-fragments": "workspace:*",
-    "ai": "^5.0.0"
+    "@cat-factory/contracts": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.6.0"

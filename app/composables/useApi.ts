@@ -4,6 +4,7 @@ import type {
   BlockType,
   ExecutionInstance,
   Pipeline,
+  PromptFragment,
   Workspace,
   WorkspaceSnapshot,
 } from '~/types/domain'
@@ -47,6 +48,9 @@ export function useApi() {
     getMe: () => http<{ user: AuthUser | null; enabled: boolean }>('/auth/me'),
 
     logout: () => http('/auth/logout', { method: 'POST' }),
+
+    // ---- prompt fragments (best-practice catalog) -------------------------
+    getPromptFragments: () => http<PromptFragment[]>('/prompt-fragments'),
 
     // ---- workspaces -------------------------------------------------------
     listWorkspaces: () => http<Workspace[]>('/workspaces'),

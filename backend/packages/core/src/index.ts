@@ -58,6 +58,7 @@ export {
   resolveAgentConfig,
 } from './modules/agents/agent-routing'
 export { systemPromptFor, userPromptFor } from './modules/agents/agent-catalog'
+export { composeSystemPrompt } from './modules/agents/prompt-fragments'
 
 export { type Core, type CoreDependencies, type GitHubModule, createCore } from './container'
 
