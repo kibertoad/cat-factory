@@ -95,6 +95,12 @@ export interface Env {
   AUTH_SESSION_TTL_HOURS?: string
   /** Fixed post-login landing URL (the SPA). Recommended in production. */
   AUTH_SUCCESS_REDIRECT_URL?: string
+  /**
+   * Comma-separated allowlist of extra origins the post-login `redirect` query
+   * may target (e.g. a separately-hosted SPA). The request's own origin is
+   * always allowed; anything else is rejected to stop token-leaking redirects.
+   */
+  AUTH_ALLOWED_REDIRECT_ORIGINS?: string
   /** Override the OAuth redirect_uri when the public URL differs from the origin. */
   AUTH_CALLBACK_URL?: string
   /** Optional comma-separated allowlist of GitHub logins permitted to sign in. */

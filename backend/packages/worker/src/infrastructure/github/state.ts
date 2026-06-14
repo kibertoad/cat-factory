@@ -23,7 +23,13 @@ export class StateSigner {
     const dot = state.lastIndexOf('.')
     if (dot <= 0) return null
     const workspaceId = state.slice(0, dot)
-    const provided = base64urlToBytes(state.slice(dot + 1))
+    // A malformed base64url signature must fail closed, not throw out of `atob`.
+    let provided: Uint8Array
+    try {
+      provided = base64urlToBytes(state.slice(dot + 1))
+    } catch {
+      return null
+    }
     const expected = new Uint8Array(await this.mac(workspaceId))
     return timingSafeEqual(provided, expected) ? workspaceId : null
   }

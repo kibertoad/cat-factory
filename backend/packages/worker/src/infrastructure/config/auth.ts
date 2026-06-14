@@ -18,6 +18,11 @@ export interface AuthConfig {
   callbackUrl: string
   /** Lowercased GitHub logins permitted to sign in; empty means allow any. */
   allowedLogins: string[]
+  /**
+   * Extra origins the post-login `redirect` query may target, beyond the request
+   * origin (which is always allowed). Empty means same-origin only.
+   */
+  allowedRedirectOrigins: string[]
 }
 
 export function loadAuthConfig(env: Env): AuthConfig {
@@ -41,5 +46,16 @@ export function loadAuthConfig(env: Env): AuthConfig {
       .split(',')
       .map((login) => login.trim().toLowerCase())
       .filter(Boolean),
+    allowedRedirectOrigins: (env.AUTH_ALLOWED_REDIRECT_ORIGINS ?? '')
+      .split(',')
+      .map((origin) => origin.trim())
+      .filter(Boolean)
+      .map((origin) => {
+        try {
+          return new URL(origin).origin
+        } catch {
+          return origin
+        }
+      }),
   }
 }

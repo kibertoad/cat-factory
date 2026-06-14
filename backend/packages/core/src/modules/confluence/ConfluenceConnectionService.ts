@@ -7,6 +7,7 @@ import type { ConfluenceConnection } from '../../domain/types'
 import { ConflictError } from '../../domain/errors'
 import { requireWorkspace } from '../workspaces/WorkspaceService'
 import type { WorkspaceRepository } from '../../ports/repositories'
+import { assertSafeConfluenceBaseUrl } from './confluence.logic'
 
 // ConfluenceConnectionService: owns the binding between a cat-factory workspace
 // and a Confluence Cloud site. The connect flow stores the site URL, account
@@ -44,10 +45,14 @@ export class ConfluenceConnectionService {
     input: { baseUrl: string; accountEmail: string; apiToken: string },
   ): Promise<ConfluenceConnection> {
     await requireWorkspace(this.deps.workspaceRepository, workspaceId)
+    const baseUrl = normalizeBaseUrl(input.baseUrl)
+    // Guard against SSRF: the stored base URL is later fetched with the
+    // workspace's Confluence credentials, so it must be a public https host.
+    assertSafeConfluenceBaseUrl(baseUrl)
     const existing = await this.deps.confluenceConnectionRepository.getByWorkspace(workspaceId)
     const record: ConfluenceConnectionRecord = {
       workspaceId,
-      baseUrl: normalizeBaseUrl(input.baseUrl),
+      baseUrl,
       accountEmail: input.accountEmail.trim(),
       apiToken: input.apiToken,
       createdAt: existing?.createdAt ?? this.deps.clock.now(),
