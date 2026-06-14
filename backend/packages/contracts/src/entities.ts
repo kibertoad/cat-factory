@@ -6,6 +6,7 @@ import {
   blockStatusSchema,
   blockTypeSchema,
   positionSchema,
+  testTargetSchema,
 } from './primitives'
 
 // ---------------------------------------------------------------------------
@@ -43,6 +44,12 @@ export const blockSchema = v.object({
    * routing's default model at run time; absent means "use the routing default".
    */
   modelId: v.optional(v.string()),
+  /**
+   * Where this block's acceptance / Playwright tests run — in project CI via
+   * GitHub Actions, or against the provisioned ephemeral environment. Drives the
+   * acceptance-testing agents' prompt. Absent means no preference recorded.
+   */
+  testTarget: v.optional(testTargetSchema),
 })
 export type Block = v.InferOutput<typeof blockSchema>
 

@@ -1,4 +1,5 @@
 import type { PromptFragment } from '@cat-factory/contracts'
+import { acceptanceFragments } from './collections/acceptance'
 import { nodeFragments } from './collections/node'
 import { reactFragments } from './collections/react'
 
@@ -13,7 +14,11 @@ import { reactFragments } from './collections/react'
 
 export type { PromptFragment } from '@cat-factory/contracts'
 
-export const FRAGMENTS: PromptFragment[] = [...nodeFragments, ...reactFragments]
+export const FRAGMENTS: PromptFragment[] = [
+  ...nodeFragments,
+  ...reactFragments,
+  ...acceptanceFragments,
+]
 
 /** Fragments keyed by id for O(1) lookup during prompt composition. */
 export const FRAGMENTS_BY_ID: ReadonlyMap<string, PromptFragment> = new Map(

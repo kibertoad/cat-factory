@@ -16,6 +16,7 @@ export type {
   PipelineStep,
   Position,
   SpendStatus,
+  TestTarget,
   Workspace,
   WorkspaceSnapshot,
   // GitHub integration projections + I/O shapes.

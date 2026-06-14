@@ -3,6 +3,7 @@ import type {
   BlockType,
   EnvironmentAccessHandle,
   EnvironmentStatus,
+  TestTarget,
 } from '../domain/types'
 
 // Port for "an agent doing its work". The execution engine calls this to perform
@@ -47,6 +48,12 @@ export interface AgentRunContext {
      * the block has linked documents.
      */
     contextDocs?: { title: string; url: string; excerpt: string }[]
+    /**
+     * Where this block's acceptance / Playwright tests should run. Folded into
+     * the acceptance-testing agents' prompt so generated tests target the right
+     * harness. Absent when no preference is recorded.
+     */
+    testTarget?: TestTarget
   }
   /** Outputs produced by earlier steps in the same run, in order. */
   priorOutputs: { agentKind: AgentKind; output: string }[]

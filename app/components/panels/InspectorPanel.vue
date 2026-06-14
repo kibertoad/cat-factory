@@ -2,6 +2,7 @@
 import type { Block, BlockStatus } from '~/types/domain'
 import { BLOCK_TYPE_META, STATUS_META } from '~/utils/catalog'
 import TaskContextDocs from '~/components/confluence/TaskContextDocs.vue'
+import FeatureScenarios from '~/components/scenarios/FeatureScenarios.vue'
 import ContainerSummary from '~/components/panels/inspector/ContainerSummary.vue'
 import TaskDependencies from '~/components/panels/inspector/TaskDependencies.vue'
 import TaskStructure from '~/components/panels/inspector/TaskStructure.vue'
@@ -152,10 +153,11 @@ function remove() {
       <!-- service / module: tasks summary -->
       <ContainerSummary v-if="isContainer" :block="block" />
 
-      <!-- task: dependencies, structure, run settings, execution -->
+      <!-- task: dependencies, structure, scenarios, run settings, execution -->
       <template v-else-if="isTask">
         <TaskDependencies :block="block" />
         <TaskStructure :block="block" />
+        <FeatureScenarios :block="block" />
         <TaskModelSettings :block="block" />
         <TaskExecution :block="block" />
       </template>

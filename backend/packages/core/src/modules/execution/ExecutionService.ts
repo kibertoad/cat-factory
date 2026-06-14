@@ -343,6 +343,7 @@ export class ExecutionService {
         features: block.features,
         fragmentIds: block.fragmentIds,
         modelId: block.modelId,
+        ...(block.testTarget ? { testTarget: block.testTarget } : {}),
         ...(contextDocs.length ? { contextDocs } : {}),
       },
       ...(environment ? { environment } : {}),

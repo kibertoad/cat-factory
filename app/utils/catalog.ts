@@ -56,6 +56,20 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
     color: '#fb923c',
     description: 'Wires the block into the surrounding system.',
   },
+  {
+    kind: 'acceptance',
+    label: 'Acceptance Author',
+    icon: 'i-lucide-clipboard-check',
+    color: '#2dd4bf',
+    description: 'Turns requirements / PRDs into Given/When/Then acceptance scenarios.',
+  },
+  {
+    kind: 'playwright',
+    label: 'Playwright Author',
+    icon: 'i-lucide-theater',
+    color: '#e879f9',
+    description: 'Generates Playwright e2e tests from scenarios; adds only new ones.',
+  },
 ]
 
 export const AGENT_BY_KIND: Record<AgentKind, AgentArchetype> = Object.fromEntries(

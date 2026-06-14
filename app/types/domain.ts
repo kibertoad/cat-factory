@@ -77,7 +77,16 @@ export interface Block {
   fragmentIds?: string[]
   /** id of the model (from MODEL_CATALOG) to run this block's agents with; absent = default. */
   modelId?: string
+  /** where this block's acceptance / Playwright tests run; absent = no preference. */
+  testTarget?: TestTarget
 }
+
+/**
+ * Where a block's acceptance / Playwright tests run:
+ *  - `github_actions`  in the project's CI, against a service spun up in the run
+ *  - `ephemeral_env`   against the provisioned ephemeral environment for the run
+ */
+export type TestTarget = 'github_actions' | 'ephemeral_env'
 
 /** The kinds of agents available in the agent palette. */
 export type AgentKind =
@@ -88,6 +97,8 @@ export type AgentKind =
   | 'reviewer'
   | 'documenter'
   | 'integrator'
+  | 'acceptance'
+  | 'playwright'
 
 /** A draggable agent definition shown in the agent palette. */
 export interface AgentArchetype {
@@ -167,3 +178,4 @@ export interface AuthUser {
 export type * from './execution'
 export type * from './models'
 export type * from './confluence'
+export type * from './scenarios'

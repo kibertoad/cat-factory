@@ -76,6 +76,12 @@ export {
   standardSystemPrompt,
   renderStandardUserPrompt,
 } from './modules/agents/standard-prompts'
+export {
+  type AcceptanceAgentKind,
+  ACCEPTANCE_AGENT_KINDS,
+  acceptanceSystemPrompt,
+  isAcceptanceKind,
+} from './modules/agents/acceptance-prompts'
 
 export {
   type Core,

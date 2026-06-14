@@ -8,6 +8,7 @@ import type {
   ExecutionStatus,
   Pipeline,
   PipelineStep,
+  TestTarget,
   Workspace,
 } from '@cat-factory/contracts'
 
@@ -43,6 +44,7 @@ export interface BlockRow {
   features: string | null
   fragment_ids: string | null
   model_id: string | null
+  test_target: string | null
 }
 
 export function rowToBlock(row: BlockRow): Block {
@@ -65,6 +67,7 @@ export function rowToBlock(row: BlockRow): Block {
   if (row.features !== null) block.features = JSON.parse(row.features) as string[]
   if (row.fragment_ids !== null) block.fragmentIds = JSON.parse(row.fragment_ids) as string[]
   if (row.model_id !== null) block.modelId = row.model_id
+  if (row.test_target !== null) block.testTarget = row.test_target as TestTarget
   return block
 }
 
@@ -89,6 +92,7 @@ export function blockInsertValues(block: Block): Record<string, unknown> {
     features: block.features ? JSON.stringify(block.features) : null,
     fragment_ids: block.fragmentIds ? JSON.stringify(block.fragmentIds) : null,
     model_id: block.modelId ?? null,
+    test_target: block.testTarget ?? null,
   }
 }
 
@@ -121,6 +125,7 @@ export function blockPatchToColumns(patch: BlockPatch): Record<string, unknown> 
   }
   // An empty string clears the selection (back to the routing default).
   if (patch.modelId !== undefined) set.model_id = patch.modelId ? patch.modelId : null
+  if (patch.testTarget !== undefined) set.test_target = patch.testTarget ?? null
   return set
 }
 
