@@ -88,6 +88,7 @@ export {
   type ConfluenceModule,
   type EnvironmentsModule,
   type BootstrapModule,
+  type BoardScanModule,
   createCore,
 } from './container'
 
@@ -145,3 +146,9 @@ export {
   BootstrapService,
   type BootstrapServiceDependencies,
 } from './modules/bootstrap/BootstrapService'
+
+export {
+  BoardScanService,
+  type BoardScanServiceDependencies,
+} from './modules/boardScan/BoardScanService'
+export * as boardScanLogic from './modules/boardScan/board-scan.logic'

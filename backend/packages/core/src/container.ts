@@ -27,6 +27,8 @@ import type {
   ReferenceArchitectureRepository,
 } from './ports/bootstrap-repositories'
 import type { RepoBootstrapper } from './ports/repo-bootstrapper'
+import type { RepoBlueprintRepository } from './ports/board-scan-repositories'
+import type { RepoScanner } from './ports/repo-scanner'
 import type { SecretCipher } from './ports/secret-cipher'
 import type {
   BranchProjectionRepository,
@@ -55,6 +57,7 @@ import { EnvironmentConnectionService } from './modules/environments/Environment
 import { EnvironmentProvisioningService } from './modules/environments/EnvironmentProvisioningService'
 import { EnvironmentTeardownService } from './modules/environments/EnvironmentTeardownService'
 import { BootstrapService } from './modules/bootstrap/BootstrapService'
+import { BoardScanService } from './modules/boardScan/BoardScanService'
 
 // Composition root for the domain layer. The worker's infrastructure builds the
 // concrete ports (D1 repositories, crypto id/rng, the AI agent executor) and
@@ -150,6 +153,15 @@ export interface CoreDependencies {
   referenceArchitectureRepository?: ReferenceArchitectureRepository
   bootstrapJobRepository?: BootstrapJobRepository
   repoBootstrapper?: RepoBootstrapper
+
+  // ---- Board scan ("scan repository" → blueprint) -------------------------
+  // Blueprint reads assemble whenever the repository is present (the worker wires
+  // it unconditionally). Actually *running* a scan also needs `repoScanner` — the
+  // GitHub + sandbox-container machinery — which the worker wires only when those
+  // prerequisites are met; without it the module still serves the persisted
+  // blueprints but reports the scan path as unavailable.
+  repoBlueprintRepository?: RepoBlueprintRepository
+  repoScanner?: RepoScanner
 }
 
 /** The GitHub integration's services, present only when the app is configured. */
@@ -181,6 +193,11 @@ export interface BootstrapModule {
   service: BootstrapService
 }
 
+/** The board-scan feature's service, present only when its repository is wired. */
+export interface BoardScanModule {
+  service: BoardScanService
+}
+
 export interface Core {
   workspaceService: WorkspaceService
   boardService: BoardService
@@ -195,6 +212,8 @@ export interface Core {
   environments?: EnvironmentsModule
   /** Present only when the repo-bootstrap repositories are wired (see CoreDependencies). */
   bootstrap?: BootstrapModule
+  /** Present only when the board-scan repository is wired (see CoreDependencies). */
+  boardScan?: BoardScanModule
 }
 
 /**
@@ -372,6 +391,30 @@ function createBootstrapModule(deps: CoreDependencies): BootstrapModule | undefi
   return { service }
 }
 
+/**
+ * Assemble the board-scan module when its blueprint repository is present (the
+ * worker wires it unconditionally). The `repoScanner` is passed through but
+ * optional: the service serves the persisted blueprints regardless and only gates
+ * the scan path on its presence.
+ */
+function createBoardScanModule(
+  deps: CoreDependencies,
+  boardService: BoardService,
+): BoardScanModule | undefined {
+  const { repoBlueprintRepository } = deps
+  if (!repoBlueprintRepository) return undefined
+
+  const service = new BoardScanService({
+    repoBlueprintRepository,
+    workspaceRepository: deps.workspaceRepository,
+    boardService,
+    idGenerator: deps.idGenerator,
+    clock: deps.clock,
+    repoScanner: deps.repoScanner,
+  })
+  return { service }
+}
+
 export function createCore(dependencies: CoreDependencies): Core {
   const workRunner = dependencies.workRunner ?? new NoopWorkRunner()
   const executionEventPublisher = dependencies.executionEventPublisher ?? new NoopEventPublisher()
@@ -398,6 +441,7 @@ export function createCore(dependencies: CoreDependencies): Core {
   const github = createGitHubModule(dependencies)
   const confluence = createConfluenceModule(dependencies, boardService)
   const bootstrap = createBootstrapModule(dependencies)
+  const boardScan = createBoardScanModule(dependencies, boardService)
 
   return {
     workspaceService,
@@ -409,5 +453,6 @@ export function createCore(dependencies: CoreDependencies): Core {
     ...(confluence ? { confluence } : {}),
     ...(environments ? { environments } : {}),
     ...(bootstrap ? { bootstrap } : {}),
+    ...(boardScan ? { boardScan } : {}),
   }
 }

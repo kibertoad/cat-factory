@@ -84,3 +84,5 @@ export type {
   BootstrapRepoRequest,
   RepoBootstrapper,
 } from './repo-bootstrapper'
+export type { RepoBlueprintRecord, RepoBlueprintRepository } from './board-scan-repositories'
+export type { RepoScanner, ScanRepoRequest, ScannedBlueprint } from './repo-scanner'
