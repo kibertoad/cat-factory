@@ -60,6 +60,13 @@ describe('standard solution-phase prompts', () => {
       }
     })
 
+    it('gates the build phase on a green PR before it is done', () => {
+      const build = standardSystemPrompt('build')
+      expect(build).toMatch(/NOT complete until CI on the pull request is green/i)
+      expect(build).toMatch(/push the fix, and wait for CI again/i)
+      expect(build).toMatch(/until every required check passes/i)
+    })
+
     it('composes selected fragments onto the phase system prompt', () => {
       const node = FRAGMENTS.find((f) => f.id === 'node.performance')!
       const composed = composeSystemPrompt(systemPromptFor('coder'), ['node.performance'])

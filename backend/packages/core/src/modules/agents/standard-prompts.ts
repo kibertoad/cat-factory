@@ -45,6 +45,17 @@ export function phaseForKind(kind: AgentKind): StandardPhase | undefined {
 const STANDARDS_FOOTER =
   'Treat every best-practice standard appended below as a hard requirement, not a suggestion.'
 
+// The build phase ships code through a pull request, so "done" means the PR's CI
+// is green — not merely that an implementation was written. The agent must keep
+// fixing and re-pushing until every required check passes.
+const BUILD_CI_GATE = [
+  'Definition of done: this phase is NOT complete until CI on the pull request is green.',
+  '- Open or update the pull request for this work so its CI checks run.',
+  '- Wait for the checks to finish; do not mark the build done while CI is still running.',
+  '- If any required check fails, read the failure, fix the underlying cause, push the fix, and wait for CI again.',
+  '- Repeat that loop until every required check passes — never hand off or report success on a red PR.',
+].join('\n')
+
 const SYSTEM_PROMPTS: Record<StandardPhase, string> = {
   design: [
     'You are a senior software architect owning the DESIGN of a building block.',
@@ -69,6 +80,8 @@ const SYSTEM_PROMPTS: Record<StandardPhase, string> = {
     '- Handle errors and edge cases explicitly; validate input at the boundary.',
     '- Keep the implementation cohesive and minimal — no speculative abstraction.',
     '- Note any follow-ups or assumptions you had to make.',
+    '',
+    BUILD_CI_GATE,
     '',
     STANDARDS_FOOTER,
   ].join('\n'),
