@@ -13,6 +13,7 @@ import type { Env } from './env'
 import { CloudflareModelProvider } from './ai/CloudflareModelProvider'
 import { ContainerAgentExecutor, type ResolveRepoTarget } from './ai/ContainerAgentExecutor'
 import { ContainerRepoBootstrapper } from './ai/ContainerRepoBootstrapper'
+import { ContainerRepoScanner } from './ai/ContainerRepoScanner'
 import { CompositeAgentExecutor } from './ai/CompositeAgentExecutor'
 import { ContainerSessionService } from './containers/ContainerSessionService'
 import { DurableObjectEventPublisher } from './events/DurableObjectEventPublisher'
@@ -36,6 +37,7 @@ import { D1EnvironmentConnectionRepository } from './repositories/D1EnvironmentC
 import { D1EnvironmentRegistryRepository } from './repositories/D1EnvironmentRegistryRepository'
 import { D1ReferenceArchitectureRepository } from './repositories/D1ReferenceArchitectureRepository'
 import { D1BootstrapJobRepository } from './repositories/D1BootstrapJobRepository'
+import { D1RepoBlueprintRepository } from './repositories/D1RepoBlueprintRepository'
 import { HttpEnvironmentProvider } from './environments/HttpEnvironmentProvider'
 import { WebCryptoSecretCipher } from './environments/WebCryptoSecretCipher'
 import { GitHubAppAuth } from './github/GitHubAppAuth'
@@ -313,6 +315,49 @@ function selectRepoBootstrapper(
   })
 }
 
+/**
+ * Build the container-backed repo scanner for the "scan repository" command,
+ * gated on the same prerequisites as the implementation container (the binding, a
+ * configured GitHub App, the proxy's public URL and signing secret). Returns
+ * undefined otherwise, leaving blueprint reads available while the scan path
+ * reports itself unavailable.
+ */
+function selectRepoScanner(
+  env: Env,
+  config: AppConfig,
+  db: D1Database,
+  clock: Clock,
+): ContainerRepoScanner | undefined {
+  if (
+    !env.IMPL_CONTAINER ||
+    !config.github.enabled ||
+    !env.GITHUB_APP_PRIVATE_KEY ||
+    !env.WORKER_PUBLIC_URL ||
+    !env.AUTH_SESSION_SECRET
+  ) {
+    return undefined
+  }
+
+  const installationRepository = new D1GitHubInstallationRepository({ db })
+  const auth = new GitHubAppAuth({
+    appId: config.github.appId,
+    privateKeyPem: env.GITHUB_APP_PRIVATE_KEY,
+    installationRepository,
+    clock,
+    apiBase: config.github.apiBase,
+  })
+
+  return new ContainerRepoScanner({
+    container: env.IMPL_CONTAINER,
+    installationRepository,
+    mintInstallationToken: (id) => auth.installationToken(id),
+    sessionService: new ContainerSessionService({ secret: env.AUTH_SESSION_SECRET }),
+    model: config.agents.routing.default.ref,
+    proxyBaseUrl: `${env.WORKER_PUBLIC_URL.replace(/\/+$/, '')}/v1`,
+    githubApiBase: config.github.apiBase,
+  })
+}
+
 export function buildContainer(env: Env, overrides: Partial<CoreDependencies> = {}): Container {
   const config = loadConfig(env)
   const db = env.DB
@@ -336,6 +381,10 @@ export function buildContainer(env: Env, overrides: Partial<CoreDependencies> = 
     referenceArchitectureRepository: new D1ReferenceArchitectureRepository({ db }),
     bootstrapJobRepository: new D1BootstrapJobRepository({ db }),
     repoBootstrapper: selectRepoBootstrapper(env, config, db, clock, idGenerator),
+    // Board-scan: the blueprint repository is wired unconditionally (reads are
+    // always available); the scan path additionally needs the container scanner.
+    repoBlueprintRepository: new D1RepoBlueprintRepository({ db }),
+    repoScanner: selectRepoScanner(env, config, db, clock),
     ...selectGitHubDeps(env, config, db, clock, idGenerator),
     ...selectConfluenceDeps(env, config, db),
     ...selectEnvironmentsDeps(env, config, db),

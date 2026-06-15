@@ -60,4 +60,13 @@ export type {
   BootstrapStatus,
   BootstrapJob,
   BootstrapRepoInput,
+  // Board-scan (repository decomposition) shapes.
+  BlueprintFeature,
+  BlueprintModule,
+  BlueprintService,
+  BlueprintSource,
+  RepoBlueprint,
+  ScanRepoInput,
+  ScanRepoResult,
+  BoardScanSpawnResult,
 } from '@cat-factory/contracts'
