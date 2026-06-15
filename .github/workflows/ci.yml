@@ -33,12 +33,20 @@ jobs:
       - id: filter
         uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
         with:
-          # The acceptance suite drives the whole backend (the harness image
-          # plus its workspace deps, which all live under backend/). Re-run it
-          # whenever the backend or this workflow changes.
+          # The acceptance suite builds the implementer image (whose context is
+          # just implementer-harness/) and drives it from host-side scaffolding
+          # that imports @cat-factory/core and @cat-factory/worker. Gate on
+          # those packages, the backend manifests/lockfile (dep or build
+          # changes), and this workflow.
           filters: |
             backend:
-              - 'backend/**'
+              - 'backend/packages/implementer-harness/**'
+              - 'backend/packages/core/**'
+              - 'backend/packages/worker/**'
+              - 'backend/package.json'
+              - 'backend/pnpm-lock.yaml'
+              - 'backend/pnpm-workspace.yaml'
+              - 'backend/tsconfig*.json'
               - '.github/workflows/ci.yml'
 
   lint:
