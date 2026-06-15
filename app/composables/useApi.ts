@@ -2,14 +2,19 @@ import type {
   AuthUser,
   Block,
   BlockType,
+  BootstrapJob,
+  BootstrapRepoInput,
   ConfluenceBoardPlan,
   ConfluenceConnection,
   ConfluenceDocument,
+  CreateReferenceArchitectureInput,
   ExecutionInstance,
   ModelOption,
   Pipeline,
   PromptFragment,
+  ReferenceArchitecture,
   SpawnResult,
+  UpdateReferenceArchitectureInput,
   Workspace,
   WorkspaceSnapshot,
 } from '~/types/domain'
@@ -177,5 +182,34 @@ export function useApi() {
         method: 'POST',
         body,
       }),
+
+    // ---- repo bootstrap ---------------------------------------------------
+    listReferenceArchitectures: (workspaceId: string) =>
+      http<ReferenceArchitecture[]>(`${ws(workspaceId)}/bootstrap/reference-architectures`),
+
+    createReferenceArchitecture: (workspaceId: string, body: CreateReferenceArchitectureInput) =>
+      http<ReferenceArchitecture>(`${ws(workspaceId)}/bootstrap/reference-architectures`, {
+        method: 'POST',
+        body,
+      }),
+
+    updateReferenceArchitecture: (
+      workspaceId: string,
+      id: string,
+      body: UpdateReferenceArchitectureInput,
+    ) =>
+      http<ReferenceArchitecture>(`${ws(workspaceId)}/bootstrap/reference-architectures/${id}`, {
+        method: 'PATCH',
+        body,
+      }),
+
+    deleteReferenceArchitecture: (workspaceId: string, id: string) =>
+      http(`${ws(workspaceId)}/bootstrap/reference-architectures/${id}`, { method: 'DELETE' }),
+
+    listBootstrapJobs: (workspaceId: string) =>
+      http<BootstrapJob[]>(`${ws(workspaceId)}/bootstrap/jobs`),
+
+    bootstrapRepo: (workspaceId: string, body: BootstrapRepoInput) =>
+      http<BootstrapJob>(`${ws(workspaceId)}/bootstrap/jobs`, { method: 'POST', body }),
   }
 }

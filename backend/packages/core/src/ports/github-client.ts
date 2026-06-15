@@ -67,6 +67,19 @@ export interface InstallationMeta {
   targetType: 'Organization' | 'User'
 }
 
+/** Parameters for creating a brand-new repository (used by repo bootstrapping). */
+export interface CreateRepoInput {
+  /** The account the repo is created under — an org login, or the user's own login. */
+  owner: string
+  /** Whether `owner` is an organization or the installation's own user account. */
+  ownerType: 'Organization' | 'User'
+  name: string
+  description?: string
+  private: boolean
+  /** Seed the repo with an initial commit so it has a default branch to push to. */
+  autoInit?: boolean
+}
+
 export interface GitHubClient {
   // ---- installation-level (app JWT) --------------------------------------
   /** Fetch an installation's account login + type (used by the connect flow). */
@@ -103,6 +116,8 @@ export interface GitHubClient {
   ): Promise<Paged<GitHubCheckRun>>
 
   // ---- writes -------------------------------------------------------------
+  /** Create a new repository under an org or the installation's user account. */
+  createRepo(installationId: number, input: CreateRepoInput): Promise<GitHubRepo>
   createBranch(
     installationId: number,
     ref: GitHubRepoRef,

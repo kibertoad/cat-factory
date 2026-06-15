@@ -53,4 +53,11 @@ export type {
   EnvironmentAccessHandle,
   EnvironmentHandle,
   EnvironmentConnection,
+  // Repo-bootstrap shapes.
+  ReferenceArchitecture,
+  CreateReferenceArchitectureInput,
+  UpdateReferenceArchitectureInput,
+  BootstrapStatus,
+  BootstrapJob,
+  BootstrapRepoInput,
 } from '@cat-factory/contracts'

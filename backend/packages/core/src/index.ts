@@ -87,6 +87,7 @@ export {
   type GitHubModule,
   type ConfluenceModule,
   type EnvironmentsModule,
+  type BootstrapModule,
   createCore,
 } from './container'
 
@@ -139,3 +140,8 @@ export {
   type EnvironmentTeardownServiceDependencies,
 } from './modules/environments/EnvironmentTeardownService'
 export * as environmentsLogic from './modules/environments/environments.logic'
+
+export {
+  BootstrapService,
+  type BootstrapServiceDependencies,
+} from './modules/bootstrap/BootstrapService'

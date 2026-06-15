@@ -39,6 +39,24 @@ onMounted(() => confluence.probe())
       <PipelinePalette />
     </section>
 
+    <USeparator />
+    <section>
+      <h2 class="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+        Repositories
+      </h2>
+      <UButton
+        block
+        color="neutral"
+        variant="soft"
+        size="sm"
+        icon="i-lucide-git-branch-plus"
+        class="justify-start"
+        @click="ui.openBootstrap()"
+      >
+        Bootstrap repo
+      </UButton>
+    </section>
+
     <template v-if="confluence.available">
       <USeparator />
       <section>

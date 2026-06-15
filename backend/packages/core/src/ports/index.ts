@@ -20,6 +20,7 @@ export { type WorkRunner, NoopWorkRunner } from './work-runner'
 export { type ExecutionEventPublisher, NoopEventPublisher } from './execution-events'
 export type {
   CommitFilesResult,
+  CreateRepoInput,
   GitHubClient,
   GitHubRepoRef,
   InstallationMeta,
@@ -70,3 +71,16 @@ export type {
   EnvironmentRecordPatch,
   EnvironmentRegistryRepository,
 } from './environment-repositories'
+export type {
+  BootstrapJobRecord,
+  BootstrapJobRecordPatch,
+  BootstrapJobRepository,
+  ReferenceArchitectureRecord,
+  ReferenceArchitectureRecordPatch,
+  ReferenceArchitectureRepository,
+} from './bootstrap-repositories'
+export type {
+  BootstrapRepoOutcome,
+  BootstrapRepoRequest,
+  RepoBootstrapper,
+} from './repo-bootstrapper'

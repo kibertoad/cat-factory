@@ -10,6 +10,7 @@ import BlockFocusView from '~/components/focus/BlockFocusView.vue'
 import ConfluenceConnectModal from '~/components/confluence/ConfluenceConnectModal.vue'
 import ConfluenceImportModal from '~/components/confluence/ConfluenceImportModal.vue'
 import SpawnPreviewModal from '~/components/confluence/SpawnPreviewModal.vue'
+import BootstrapModal from '~/components/bootstrap/BootstrapModal.vue'
 
 const workspace = useWorkspaceStore()
 
@@ -47,6 +48,7 @@ watch(
       <ConfluenceConnectModal />
       <ConfluenceImportModal />
       <SpawnPreviewModal />
+      <BootstrapModal />
     </template>
 
     <!-- Backend unreachable / bootstrap failed -->

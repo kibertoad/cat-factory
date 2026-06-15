@@ -22,6 +22,11 @@ import type {
   EnvironmentConnectionRepository,
   EnvironmentRegistryRepository,
 } from './ports/environment-repositories'
+import type {
+  BootstrapJobRepository,
+  ReferenceArchitectureRepository,
+} from './ports/bootstrap-repositories'
+import type { RepoBootstrapper } from './ports/repo-bootstrapper'
 import type { SecretCipher } from './ports/secret-cipher'
 import type {
   BranchProjectionRepository,
@@ -49,6 +54,7 @@ import { ConfluenceLinkService } from './modules/confluence/ConfluenceLinkServic
 import { EnvironmentConnectionService } from './modules/environments/EnvironmentConnectionService'
 import { EnvironmentProvisioningService } from './modules/environments/EnvironmentProvisioningService'
 import { EnvironmentTeardownService } from './modules/environments/EnvironmentTeardownService'
+import { BootstrapService } from './modules/bootstrap/BootstrapService'
 
 // Composition root for the domain layer. The worker's infrastructure builds the
 // concrete ports (D1 repositories, crypto id/rng, the AI agent executor) and
@@ -134,6 +140,16 @@ export interface CoreDependencies {
   environmentConnectionRepository?: EnvironmentConnectionRepository
   environmentRegistryRepository?: EnvironmentRegistryRepository
   secretCipher?: SecretCipher
+
+  // ---- Repo bootstrap (reference architectures + "bootstrap repo" task) ----
+  // Reference-architecture CRUD assembles whenever both repositories are present
+  // (the worker wires them unconditionally). Actually *running* a bootstrap also
+  // needs `repoBootstrapper` — the GitHub + sandbox-container machinery — which
+  // the worker wires only when those prerequisites are met; without it the module
+  // still serves CRUD but reports the run path as unavailable.
+  referenceArchitectureRepository?: ReferenceArchitectureRepository
+  bootstrapJobRepository?: BootstrapJobRepository
+  repoBootstrapper?: RepoBootstrapper
 }
 
 /** The GitHub integration's services, present only when the app is configured. */
@@ -160,6 +176,11 @@ export interface EnvironmentsModule {
   teardownService: EnvironmentTeardownService
 }
 
+/** The repo-bootstrap feature's service, present only when its repositories exist. */
+export interface BootstrapModule {
+  service: BootstrapService
+}
+
 export interface Core {
   workspaceService: WorkspaceService
   boardService: BoardService
@@ -172,6 +193,8 @@ export interface Core {
   confluence?: ConfluenceModule
   /** Present only when the environment integration is configured (see CoreDependencies). */
   environments?: EnvironmentsModule
+  /** Present only when the repo-bootstrap repositories are wired (see CoreDependencies). */
+  bootstrap?: BootstrapModule
 }
 
 /**
@@ -328,6 +351,27 @@ function createEnvironmentsModule(deps: CoreDependencies): EnvironmentsModule | 
   return { connectionService, provisioningService, teardownService }
 }
 
+/**
+ * Assemble the repo-bootstrap module when both its repositories are present (the
+ * worker wires them unconditionally). The `repoBootstrapper` is passed through
+ * but optional: the service exposes CRUD regardless and only gates the run path
+ * on its presence.
+ */
+function createBootstrapModule(deps: CoreDependencies): BootstrapModule | undefined {
+  const { referenceArchitectureRepository, bootstrapJobRepository } = deps
+  if (!referenceArchitectureRepository || !bootstrapJobRepository) return undefined
+
+  const service = new BootstrapService({
+    referenceArchitectureRepository,
+    bootstrapJobRepository,
+    workspaceRepository: deps.workspaceRepository,
+    idGenerator: deps.idGenerator,
+    clock: deps.clock,
+    repoBootstrapper: deps.repoBootstrapper,
+  })
+  return { service }
+}
+
 export function createCore(dependencies: CoreDependencies): Core {
   const workRunner = dependencies.workRunner ?? new NoopWorkRunner()
   const executionEventPublisher = dependencies.executionEventPublisher ?? new NoopEventPublisher()
@@ -353,6 +397,7 @@ export function createCore(dependencies: CoreDependencies): Core {
 
   const github = createGitHubModule(dependencies)
   const confluence = createConfluenceModule(dependencies, boardService)
+  const bootstrap = createBootstrapModule(dependencies)
 
   return {
     workspaceService,
@@ -363,5 +408,6 @@ export function createCore(dependencies: CoreDependencies): Core {
     ...(github ? { github } : {}),
     ...(confluence ? { confluence } : {}),
     ...(environments ? { environments } : {}),
+    ...(bootstrap ? { bootstrap } : {}),
   }
 }

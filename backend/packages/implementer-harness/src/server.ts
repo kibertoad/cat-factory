@@ -2,8 +2,15 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { type Job, parseJob, type RunResult } from './job.js'
+import {
+  type BootstrapResult,
+  type Job,
+  parseBootstrapJob,
+  parseJob,
+  type RunResult,
+} from './job.js'
 import { cloneRepo, commitAll, createBranch, openPullRequest, pushBranch } from './git.js'
+import { handleBootstrap } from './bootstrap.js'
 import { runPi, writeAgentsContext, writePiModelsConfig } from './pi.js'
 
 // The container's HTTP entry point. The Worker addresses one instance per run and
@@ -66,6 +73,16 @@ const server = createServer((req, res) => {
   void (async () => {
     if (req.method === 'GET' && req.url === '/health') {
       return send(res, 200, { status: 'ok' })
+    }
+    if (req.method === 'POST' && req.url === '/bootstrap') {
+      try {
+        const job = parseBootstrapJob(JSON.parse(await readBody(req)))
+        const result = await handleBootstrap(job)
+        return send(res, 200, result)
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        return send(res, 500, { error: message } satisfies BootstrapResult)
+      }
     }
     if (req.method !== 'POST' || req.url !== '/run') {
       return send(res, 404, { error: 'not found' })

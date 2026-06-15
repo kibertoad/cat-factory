@@ -1,6 +1,7 @@
 import {
   type Clock,
   type CommitFilesResult,
+  type CreateRepoInput,
   type GitHubBranch,
   type GitHubCheckRun,
   type GitHubClient,
@@ -198,6 +199,23 @@ export class FetchGitHubClient implements GitHubClient {
   }
 
   // ---- writes -------------------------------------------------------------
+
+  async createRepo(installationId: number, input: CreateRepoInput): Promise<GitHubRepo> {
+    // Orgs create under `/orgs/{org}/repos`; a user installation creates under
+    // `/user/repos` (the authenticated installation account is the owner).
+    const path = input.ownerType === 'Organization' ? `/orgs/${input.owner}/repos` : '/user/repos'
+    const { json } = await this.request(path, {
+      installationId,
+      method: 'POST',
+      body: {
+        name: input.name,
+        description: input.description ?? '',
+        private: input.private,
+        auto_init: input.autoInit ?? true,
+      },
+    })
+    return gp.toRepoProjection(json as gp.GhRepoPayload, installationId, this.deps.clock.now())
+  }
 
   async createBranch(
     installationId: number,
