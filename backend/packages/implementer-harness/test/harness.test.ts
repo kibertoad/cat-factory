@@ -1,7 +1,46 @@
 import { describe, expect, it } from 'vitest'
-import { parseJob } from '../src/job.js'
+import { parseBootstrapJob, parseJob } from '../src/job.js'
 import { parsePiOutput } from '../src/pi.js'
 import { authenticatedCloneUrl } from '../src/git.js'
+
+const validBootstrapBody = {
+  systemPrompt: 'You are a bootstrapper.',
+  instructions: 'Rename the service.',
+  model: 'qwen3-max',
+  proxyBaseUrl: 'https://w/v1',
+  sessionToken: 'sess',
+  ghToken: 'ght',
+  reference: {
+    owner: 'acme',
+    name: 'service-template',
+    baseBranch: 'main',
+    cloneUrl: 'https://github.com/acme/service-template.git',
+  },
+  target: {
+    owner: 'acme',
+    name: 'new-service',
+    cloneUrl: 'https://github.com/acme/new-service.git',
+    defaultBranch: 'main',
+  },
+}
+
+describe('parseBootstrapJob', () => {
+  it('accepts a well-formed bootstrap job', () => {
+    const job = parseBootstrapJob(validBootstrapBody)
+    expect(job.reference.name).toBe('service-template')
+    expect(job.target.name).toBe('new-service')
+    expect(job.instructions).toBe('Rename the service.')
+  })
+
+  it('rejects missing required fields', () => {
+    expect(() => parseBootstrapJob({ ...validBootstrapBody, instructions: '' })).toThrow(
+      /instructions/,
+    )
+    expect(() => parseBootstrapJob({ ...validBootstrapBody, target: { owner: 'acme' } })).toThrow(
+      /target\.name/,
+    )
+  })
+})
 
 const validBody = {
   systemPrompt: 'You are a builder.',

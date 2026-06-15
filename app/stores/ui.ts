@@ -16,6 +16,9 @@ export const useUiStore = defineStore('ui', () => {
   const confluenceImport = ref<{ targetFrameId: string | null } | null>(null)
   const spawnPreview = ref<{ pageId: string; targetFrameId: string | null } | null>(null)
 
+  // Repo-bootstrap modal (manage reference architectures + launch a bootstrap).
+  const bootstrapOpen = ref(false)
+
   /** Current canvas zoom (driven by Vue Flow viewport). */
   const zoom = ref(1)
 
@@ -83,6 +86,12 @@ export const useUiStore = defineStore('ui', () => {
   function closeSpawnPreview() {
     spawnPreview.value = null
   }
+  function openBootstrap() {
+    bootstrapOpen.value = true
+  }
+  function closeBootstrap() {
+    bootstrapOpen.value = false
+  }
 
   return {
     selectedBlockId,
@@ -92,6 +101,7 @@ export const useUiStore = defineStore('ui', () => {
     confluenceConnectOpen,
     confluenceImport,
     spawnPreview,
+    bootstrapOpen,
     zoom,
     lod,
     expandedFrames,
@@ -109,5 +119,7 @@ export const useUiStore = defineStore('ui', () => {
     closeConfluenceImport,
     openSpawnPreview,
     closeSpawnPreview,
+    openBootstrap,
+    closeBootstrap,
   }
 })

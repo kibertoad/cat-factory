@@ -1,5 +1,6 @@
 import type {
   CommitFilesResult,
+  CreateRepoInput,
   GitHubBranch,
   GitHubCheckRun,
   GitHubClient,
@@ -71,6 +72,26 @@ export class FakeGitHubClient implements GitHubClient {
 
   async listCheckRuns(): Promise<Paged<GitHubCheckRun>> {
     return { items: this.checks }
+  }
+
+  async createRepo(_installationId: number, input: CreateRepoInput): Promise<GitHubRepo> {
+    this.writes.push({
+      method: 'createRepo',
+      ref: { owner: input.owner, repo: input.name },
+      args: input,
+    })
+    const repo: GitHubRepo = {
+      githubId: 7000 + this.repos.length,
+      installationId: _installationId,
+      owner: input.owner,
+      name: input.name,
+      defaultBranch: 'main',
+      private: input.private,
+      blockId: null,
+      syncedAt: 0,
+    }
+    this.repos.push(repo)
+    return repo
   }
 
   async createBranch(

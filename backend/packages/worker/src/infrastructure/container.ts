@@ -12,6 +12,7 @@ import { type AppConfig, loadConfig } from './config'
 import type { Env } from './env'
 import { CloudflareModelProvider } from './ai/CloudflareModelProvider'
 import { ContainerAgentExecutor, type ResolveRepoTarget } from './ai/ContainerAgentExecutor'
+import { ContainerRepoBootstrapper } from './ai/ContainerRepoBootstrapper'
 import { CompositeAgentExecutor } from './ai/CompositeAgentExecutor'
 import { ContainerSessionService } from './containers/ContainerSessionService'
 import { DurableObjectEventPublisher } from './events/DurableObjectEventPublisher'
@@ -33,6 +34,8 @@ import { D1ConfluenceConnectionRepository } from './repositories/D1ConfluenceCon
 import { D1ConfluenceDocumentRepository } from './repositories/D1ConfluenceDocumentRepository'
 import { D1EnvironmentConnectionRepository } from './repositories/D1EnvironmentConnectionRepository'
 import { D1EnvironmentRegistryRepository } from './repositories/D1EnvironmentRegistryRepository'
+import { D1ReferenceArchitectureRepository } from './repositories/D1ReferenceArchitectureRepository'
+import { D1BootstrapJobRepository } from './repositories/D1BootstrapJobRepository'
 import { HttpEnvironmentProvider } from './environments/HttpEnvironmentProvider'
 import { WebCryptoSecretCipher } from './environments/WebCryptoSecretCipher'
 import { GitHubAppAuth } from './github/GitHubAppAuth'
@@ -258,6 +261,58 @@ function selectEnvironmentsDeps(
   }
 }
 
+/**
+ * Build the container-backed repo bootstrapper for the "bootstrap repo" task,
+ * gated on the same prerequisites as the implementation container (the binding, a
+ * configured GitHub App, the proxy's public URL and signing secret). Returns
+ * undefined otherwise, leaving reference-architecture CRUD available while the run
+ * path reports itself unavailable.
+ */
+function selectRepoBootstrapper(
+  env: Env,
+  config: AppConfig,
+  db: D1Database,
+  clock: Clock,
+  idGenerator: IdGenerator,
+): ContainerRepoBootstrapper | undefined {
+  if (
+    !env.IMPL_CONTAINER ||
+    !config.github.enabled ||
+    !env.GITHUB_APP_PRIVATE_KEY ||
+    !env.WORKER_PUBLIC_URL ||
+    !env.AUTH_SESSION_SECRET
+  ) {
+    return undefined
+  }
+
+  const installationRepository = new D1GitHubInstallationRepository({ db })
+  const auth = new GitHubAppAuth({
+    appId: config.github.appId,
+    privateKeyPem: env.GITHUB_APP_PRIVATE_KEY,
+    installationRepository,
+    clock,
+    apiBase: config.github.apiBase,
+  })
+  const githubClient = new FetchGitHubClient({
+    auth,
+    rateLimitRepository: new D1RateLimitRepository({ db, idGenerator }),
+    idGenerator,
+    clock,
+    apiBase: config.github.apiBase,
+  })
+
+  return new ContainerRepoBootstrapper({
+    container: env.IMPL_CONTAINER,
+    installationRepository,
+    githubClient,
+    mintInstallationToken: (id) => auth.installationToken(id),
+    sessionService: new ContainerSessionService({ secret: env.AUTH_SESSION_SECRET }),
+    model: config.agents.routing.default.ref,
+    proxyBaseUrl: `${env.WORKER_PUBLIC_URL.replace(/\/+$/, '')}/v1`,
+    githubApiBase: config.github.apiBase,
+  })
+}
+
 export function buildContainer(env: Env, overrides: Partial<CoreDependencies> = {}): Container {
   const config = loadConfig(env)
   const db = env.DB
@@ -276,6 +331,11 @@ export function buildContainer(env: Env, overrides: Partial<CoreDependencies> = 
     workRunner: selectWorkRunner(env),
     executionEventPublisher: selectEventPublisher(env),
     spendPricing: config.spend,
+    // Repo-bootstrap repositories are wired unconditionally (reference-architecture
+    // CRUD is always available); the run path additionally needs the bootstrapper.
+    referenceArchitectureRepository: new D1ReferenceArchitectureRepository({ db }),
+    bootstrapJobRepository: new D1BootstrapJobRepository({ db }),
+    repoBootstrapper: selectRepoBootstrapper(env, config, db, clock, idGenerator),
     ...selectGitHubDeps(env, config, db, clock, idGenerator),
     ...selectConfluenceDeps(env, config, db),
     ...selectEnvironmentsDeps(env, config, db),

@@ -51,6 +51,77 @@ function str(value: unknown, path: string): string {
   return value
 }
 
+// ---- Bootstrap job (POST /bootstrap) --------------------------------------
+
+/** The reference architecture clone source. */
+export interface BootstrapReferenceSpec {
+  owner: string
+  name: string
+  baseBranch: string
+  cloneUrl: string
+}
+
+/** The new repository the bootstrapped contents are pushed to. */
+export interface BootstrapTargetSpec {
+  owner: string
+  name: string
+  cloneUrl: string
+  defaultBranch: string
+}
+
+/** The job the Worker's ContainerRepoBootstrapper POSTs to /bootstrap. */
+export interface BootstrapJob {
+  /** Bootstrapper role prompt; written to AGENTS.md for Pi. */
+  systemPrompt: string
+  /** Free-form instructions handed to Pi as the task prompt. */
+  instructions: string
+  model: string
+  proxyBaseUrl: string
+  sessionToken: string
+  ghToken: string
+  reference: BootstrapReferenceSpec
+  target: BootstrapTargetSpec
+  githubApiBase?: string
+}
+
+/** The /bootstrap response. `error` (when set) marks a job-level failure. */
+export interface BootstrapResult {
+  defaultBranch?: string
+  summary?: string
+  error?: string
+}
+
+/** Validate + narrow an untrusted body into a {@link BootstrapJob}, throwing on bad input. */
+export function parseBootstrapJob(input: unknown): BootstrapJob {
+  if (typeof input !== 'object' || input === null) {
+    throw new Error('Invalid job: body must be an object')
+  }
+  const o = input as Record<string, unknown>
+  const reference = (o.reference ?? {}) as Record<string, unknown>
+  const target = (o.target ?? {}) as Record<string, unknown>
+  return {
+    systemPrompt: str(o.systemPrompt, 'systemPrompt'),
+    instructions: str(o.instructions, 'instructions'),
+    model: str(o.model, 'model'),
+    proxyBaseUrl: str(o.proxyBaseUrl, 'proxyBaseUrl'),
+    sessionToken: str(o.sessionToken, 'sessionToken'),
+    ghToken: str(o.ghToken, 'ghToken'),
+    reference: {
+      owner: str(reference.owner, 'reference.owner'),
+      name: str(reference.name, 'reference.name'),
+      baseBranch: str(reference.baseBranch, 'reference.baseBranch'),
+      cloneUrl: str(reference.cloneUrl, 'reference.cloneUrl'),
+    },
+    target: {
+      owner: str(target.owner, 'target.owner'),
+      name: str(target.name, 'target.name'),
+      cloneUrl: str(target.cloneUrl, 'target.cloneUrl'),
+      defaultBranch: str(target.defaultBranch, 'target.defaultBranch'),
+    },
+    ...(typeof o.githubApiBase === 'string' ? { githubApiBase: o.githubApiBase } : {}),
+  }
+}
+
 /** Validate + narrow an untrusted body into a {@link Job}, throwing on bad input. */
 export function parseJob(input: unknown): Job {
   if (typeof input !== 'object' || input === null) {

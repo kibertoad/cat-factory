@@ -15,6 +15,7 @@ import { githubController } from './modules/github/GitHubController'
 import { githubWebhookController } from './modules/github/GitHubWebhookController'
 import { confluenceController } from './modules/confluence/ConfluenceController'
 import { environmentController } from './modules/environments/EnvironmentController'
+import { bootstrapController } from './modules/bootstrap/BootstrapController'
 import { promptFragmentController } from './modules/promptFragments/PromptFragmentController'
 import { modelController } from './modules/models/ModelController'
 import { llmProxyController } from './modules/llmProxy/LlmProxyController'
@@ -94,6 +95,7 @@ export function createApp(options: CreateAppOptions = {}): Hono<AppEnv> {
   app.route('/workspaces/:workspaceId', githubController())
   app.route('/workspaces/:workspaceId', confluenceController())
   app.route('/workspaces/:workspaceId', environmentController())
+  app.route('/workspaces/:workspaceId', bootstrapController())
   // GitHub-facing (webhooks + setup callback); not workspace-scoped.
   app.route('/github', githubWebhookController())
 

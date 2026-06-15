@@ -1,6 +1,8 @@
 import { execFile } from 'node:child_process'
+import { rm } from 'node:fs/promises'
+import { join } from 'node:path'
 import { promisify } from 'node:util'
-import type { PrSpec, RepoSpec } from './job.js'
+import type { BootstrapTargetSpec, PrSpec, RepoSpec } from './job.js'
 
 const exec = promisify(execFile)
 
@@ -51,6 +53,31 @@ export async function commitAll(dir: string, message: string): Promise<boolean> 
 /** Push the work branch to origin (already authenticated from the clone URL). */
 export async function pushBranch(dir: string, branch: string): Promise<void> {
   await git(dir, ['push', '-u', 'origin', branch])
+}
+
+/**
+ * Reset the working tree's git history to a single bootstrap commit and push it
+ * to the (initially empty) target repository's default branch. Wiping `.git`
+ * before re-initialising means the new repo starts clean — it inherits the
+ * bootstrapped *contents* of the reference architecture, not its commit history.
+ */
+export async function reinitAndPush(opts: {
+  dir: string
+  target: BootstrapTargetSpec
+  ghToken: string
+  message: string
+}): Promise<void> {
+  await rm(join(opts.dir, '.git'), { recursive: true, force: true })
+  await git(opts.dir, ['init'])
+  // Start the history on the target's default branch (init may default to master).
+  await git(opts.dir, ['checkout', '-b', opts.target.defaultBranch])
+  await git(opts.dir, ['config', 'user.name', GIT_AUTHOR])
+  await git(opts.dir, ['config', 'user.email', GIT_EMAIL])
+  await git(opts.dir, ['add', '-A'])
+  await git(opts.dir, ['commit', '-m', opts.message])
+  const url = authenticatedCloneUrl(opts.target.cloneUrl, opts.ghToken)
+  await git(opts.dir, ['remote', 'add', 'origin', url])
+  await git(opts.dir, ['push', '-u', 'origin', opts.target.defaultBranch])
 }
 
 /** Open a PR via the GitHub REST API; returns its html_url. */
