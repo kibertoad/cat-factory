@@ -1,6 +1,10 @@
 import type { AgentKind } from '../../domain/types'
 import type { AgentRunContext } from '../../ports/agent-executor'
-import { acceptanceSystemPrompt, testTargetSection } from './acceptance-prompts'
+import {
+  acceptanceSystemPrompt,
+  testApproachSection,
+  testTargetSection,
+} from './acceptance-prompts'
 import { mockSystemPrompt } from './mock-prompts'
 import {
   environmentSection,
@@ -63,6 +67,8 @@ export function userPromptFor(context: AgentRunContext): string {
   }
   const envSection = environmentSection(context)
   if (envSection) lines.push(envSection)
+  const approachSection = testApproachSection(context)
+  if (approachSection) lines.push(approachSection)
   const targetSection = testTargetSection(context)
   if (targetSection) lines.push(targetSection)
   const allDecisions = resolvedDecision ? [...decisions, resolvedDecision] : decisions

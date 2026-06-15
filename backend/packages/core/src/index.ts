@@ -77,6 +77,7 @@ export {
   ACCEPTANCE_AGENT_KINDS,
   acceptanceSystemPrompt,
   isAcceptanceKind,
+  testApproachSection,
 } from './modules/agents/acceptance-prompts'
 export { MOCK_AGENT_KIND, isMockKind, mockSystemPrompt } from './modules/agents/mock-prompts'
 
