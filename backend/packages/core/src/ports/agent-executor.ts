@@ -3,6 +3,7 @@ import type {
   BlockType,
   EnvironmentAccessHandle,
   EnvironmentStatus,
+  PullRequestRef,
   TestTarget,
 } from '../domain/types'
 
@@ -99,6 +100,12 @@ export interface AgentRunResult {
   decision?: AgentDecisionRequest
   /** Confidence in the result (0..1); used at task completion to auto-merge. */
   confidence?: number
+  /**
+   * A pull request the agent opened for its work. Reported by repo-operating
+   * executors (the container "implementer" agent, which pushes a branch and opens
+   * a PR); the engine records it on the block so the board can link to it.
+   */
+  pullRequest?: PullRequestRef
   /**
    * Tokens the model consumed for this call. Reported by inline LLM executors so
    * the spend safeguard can meter usage; absent for the container executor (whose

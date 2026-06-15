@@ -66,7 +66,11 @@ describe('ContainerAgentExecutor', () => {
     let dispatched: Dispatched | undefined
     const executor = new ContainerAgentExecutor({
       container: fakeContainer(
-        () => ({ prUrl: 'https://github.com/octo/app/pull/42', summary: 'Added limiter' }),
+        () => ({
+          prUrl: 'https://github.com/octo/app/pull/42',
+          branch: 'cat-factory/blk-1-abcd1234',
+          summary: 'Added limiter',
+        }),
         (d) => (dispatched = d),
       ),
       agentRouting: routing('qwen', 'qwen3-max'),
@@ -83,6 +87,12 @@ describe('ContainerAgentExecutor', () => {
     expect(result.output).toContain('Added limiter')
     expect(result.output).toContain('https://github.com/octo/app/pull/42')
     expect(result.usage).toBeUndefined() // proxy meters; no double-count
+    // The opened PR is surfaced structurally so the engine can record it on the block.
+    expect(result.pullRequest).toEqual({
+      url: 'https://github.com/octo/app/pull/42',
+      number: 42,
+      branch: 'cat-factory/blk-1-abcd1234',
+    })
 
     const body = dispatched!.body
     expect(body.model).toBe('qwen3-max')

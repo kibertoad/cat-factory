@@ -10,6 +10,14 @@ const models = useModelsStore()
 
 const instance = computed(() => execution.getInstance(props.block.executionId))
 
+const pr = computed(() => props.block.pullRequest)
+/** A PR is merged once the block is `done`; otherwise it is open awaiting merge. */
+const prMerged = computed(() => props.block.status === 'done')
+const prLabel = computed(() => {
+  const number = pr.value?.number
+  return number ? `PR #${number}` : 'Pull request'
+})
+
 const stepLabel: Record<string, string> = {
   pending: 'Pending',
   working: 'Working',
@@ -76,6 +84,36 @@ function openDecisionFor(decisionId: string) {
           </div>
         </li>
       </ul>
+    </div>
+
+    <!-- Open PR: link straight to it on GitHub -->
+    <div v-if="pr" class="space-y-2">
+      <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+        Pull request
+      </span>
+      <UButton
+        :to="pr.url"
+        target="_blank"
+        rel="noopener"
+        external
+        color="neutral"
+        variant="soft"
+        size="sm"
+        icon="i-lucide-git-pull-request"
+        trailing-icon="i-lucide-external-link"
+        block
+      >
+        <span class="flex w-full items-center gap-2">
+          {{ prLabel }}
+          <UBadge :color="prMerged ? 'success' : 'info'" variant="subtle" size="sm" class="ml-auto">
+            {{ prMerged ? 'Merged' : 'Open' }}
+          </UBadge>
+        </span>
+      </UButton>
+      <p v-if="pr.branch" class="flex items-center gap-1 truncate text-[10px] text-slate-500">
+        <UIcon name="i-lucide-git-branch" class="h-3 w-3 shrink-0" />
+        <span class="truncate" :title="pr.branch">{{ pr.branch }}</span>
+      </p>
     </div>
 
     <!-- PR ready: merge -->

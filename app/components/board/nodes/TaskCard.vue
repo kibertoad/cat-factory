@@ -39,6 +39,10 @@ const confidencePct = computed(() =>
   task.value?.confidence != null ? Math.round(task.value.confidence * 100) : null,
 )
 
+/** The PR the implementer agent opened for this task, if any. */
+const pr = computed(() => task.value?.pullRequest)
+const prLabel = computed(() => (pr.value?.number ? `PR #${pr.value.number}` : 'PR'))
+
 function run() {
   if (!runnable.value) {
     toast.add({
@@ -163,6 +167,21 @@ function selectTask() {
       </template>
 
       <template v-if="task.status === 'pr_ready'">
+        <UButton
+          v-if="pr"
+          :to="pr.url"
+          target="_blank"
+          rel="noopener"
+          external
+          color="neutral"
+          variant="soft"
+          size="xs"
+          icon="i-lucide-git-pull-request"
+          :title="`Open ${prLabel} on GitHub`"
+          @click.stop
+        >
+          {{ prLabel }}
+        </UButton>
         <UButton
           color="neutral"
           variant="soft"

@@ -243,6 +243,15 @@ export class ExecutionService {
     step.progress = 1
     step.state = 'done'
 
+    // A repo-operating step (the container "implementer" agent) opened a PR for
+    // its work. Record it on the block so the board can surface and link to it,
+    // regardless of whether this is the final step.
+    if (result.pullRequest) {
+      await this.blockRepository.update(workspaceId, instance.blockId, {
+        pullRequest: result.pullRequest,
+      })
+    }
+
     if (isFinalStep) {
       instance.status = 'done'
       await this.finalizeBlock(workspaceId, instance, result.confidence)

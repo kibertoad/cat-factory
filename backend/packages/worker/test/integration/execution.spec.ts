@@ -56,6 +56,28 @@ describe('execution engine', () => {
     expect(merge.body.status).toBe('done')
   })
 
+  it('records the PR the implementer agent opened on the block', async () => {
+    const pullRequest = {
+      url: 'https://github.com/octo/app/pull/7',
+      number: 7,
+      branch: 'cat-factory/task_login-abcd1234',
+    }
+    const app = makeApp(new FakeAgentExecutor({ confidence: 0.5, pullRequest }))
+    const { workspace } = await app.createWorkspace()
+    const wsId = workspace.id
+
+    await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+      pipelineId: 'pl_quick',
+    })
+    await app.drive(wsId)
+
+    const task = (await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)).body.blocks.find(
+      (b) => b.id === 'task_login',
+    )!
+    expect(task.status).toBe('pr_ready')
+    expect(task.pullRequest).toEqual(pullRequest)
+  })
+
   it('rejects merging a block with no open PR', async () => {
     const app = makeApp()
     const { workspace } = await app.createWorkspace()

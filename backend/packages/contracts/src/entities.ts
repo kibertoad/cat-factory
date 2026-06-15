@@ -16,6 +16,23 @@ import {
 // never silently drift apart.
 // ---------------------------------------------------------------------------
 
+/**
+ * A lightweight link from a block to the pull request an implementation agent
+ * opened for it. Distinct from the richer {@link GitHubPullRequest} projection
+ * (synced from GitHub): this is just enough to display the PR on the board and
+ * navigate to it. Recorded on a task when its container ("implementer") agent
+ * pushes a branch and opens a PR.
+ */
+export const pullRequestRefSchema = v.object({
+  /** The PR's web URL, opened when the user clicks through from the board. */
+  url: v.string(),
+  /** The PR number within the repo, shown as `#<number>` when known. */
+  number: v.optional(v.number()),
+  /** The head branch the agent pushed its work to, when known. */
+  branch: v.optional(v.string()),
+})
+export type PullRequestRef = v.InferOutput<typeof pullRequestRefSchema>
+
 export const blockSchema = v.object({
   id: v.string(),
   title: v.string(),
@@ -50,6 +67,12 @@ export const blockSchema = v.object({
    * acceptance-testing agents' prompt. Absent means no preference recorded.
    */
   testTarget: v.optional(testTargetSchema),
+  /**
+   * The pull request the block's implementation ("implementer") agent opened for
+   * its work. Set on a task once its container agent pushes a branch and opens a
+   * PR; surfaced on the board so the PR can be opened from the selected task.
+   */
+  pullRequest: v.optional(pullRequestRefSchema),
 })
 export type Block = v.InferOutput<typeof blockSchema>
 

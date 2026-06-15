@@ -8,6 +8,7 @@ import type {
   ExecutionStatus,
   Pipeline,
   PipelineStep,
+  PullRequestRef,
   TestTarget,
   Workspace,
 } from '@cat-factory/contracts'
@@ -45,6 +46,7 @@ export interface BlockRow {
   fragment_ids: string | null
   model_id: string | null
   test_target: string | null
+  pull_request: string | null
 }
 
 export function rowToBlock(row: BlockRow): Block {
@@ -68,6 +70,7 @@ export function rowToBlock(row: BlockRow): Block {
   if (row.fragment_ids !== null) block.fragmentIds = JSON.parse(row.fragment_ids) as string[]
   if (row.model_id !== null) block.modelId = row.model_id
   if (row.test_target !== null) block.testTarget = row.test_target as TestTarget
+  if (row.pull_request !== null) block.pullRequest = JSON.parse(row.pull_request) as PullRequestRef
   return block
 }
 
@@ -93,6 +96,7 @@ export function blockInsertValues(block: Block): Record<string, unknown> {
     fragment_ids: block.fragmentIds ? JSON.stringify(block.fragmentIds) : null,
     model_id: block.modelId ?? null,
     test_target: block.testTarget ?? null,
+    pull_request: block.pullRequest ? JSON.stringify(block.pullRequest) : null,
   }
 }
 
@@ -126,6 +130,9 @@ export function blockPatchToColumns(patch: BlockPatch): Record<string, unknown> 
   // An empty string clears the selection (back to the routing default).
   if (patch.modelId !== undefined) set.model_id = patch.modelId ? patch.modelId : null
   if (patch.testTarget !== undefined) set.test_target = patch.testTarget ?? null
+  if (patch.pullRequest !== undefined) {
+    set.pull_request = patch.pullRequest ? JSON.stringify(patch.pullRequest) : null
+  }
   return set
 }
 
