@@ -72,6 +72,21 @@ describe('acceptance-testing agent prompts', () => {
       }
     })
 
+    it('makes the runnable-tests agent wire its tests into CI before it is done', () => {
+      const prompt = systemPromptFor('playwright')
+      expect(prompt).toMatch(/hooked into CI/i)
+      expect(prompt).toMatch(/add or update the CI configuration if it does not yet run them/i)
+    })
+
+    it('gates the runnable-tests phase on a green PR with the tests running', () => {
+      const prompt = systemPromptFor('playwright')
+      expect(prompt).toMatch(
+        /NOT complete until these tests run in CI and CI on the pull request is green/i,
+      )
+      expect(prompt).toMatch(/push the fix, and wait for CI again/i)
+      expect(prompt).toMatch(/until every required check passes/i)
+    })
+
     it('composes the acceptance fragments onto the role prompt', () => {
       const fragment = FRAGMENTS.find((f) => f.id === 'playwright.e2e')!
       const composed = composeSystemPrompt(systemPromptFor('playwright'), ['playwright.e2e'])
