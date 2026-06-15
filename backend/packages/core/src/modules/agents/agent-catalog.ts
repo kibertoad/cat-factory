@@ -5,6 +5,7 @@ import {
   testApproachSection,
   testTargetSection,
 } from './acceptance-prompts'
+import { businessLogicSystemPrompt } from './business-logic-prompts'
 import { mockSystemPrompt } from './mock-prompts'
 import {
   environmentSection,
@@ -19,8 +20,10 @@ import {
 // review (reviewer) and test (tester) — use the built-out prompts in
 // ./standard-prompts; the acceptance-testing track (acceptance, playwright) uses
 // the built-out prompts in ./acceptance-prompts; the mock builder (mocker) uses
-// the built-out prompt in ./mock-prompts; the remaining kinds use the thin roles
-// below, and custom agent kinds (free-form ids) fall back to a generic role.
+// the built-out prompt in ./mock-prompts; the business-logic / domain-rules track
+// (business-documenter, business-reviewer) uses the built-out prompts in
+// ./business-logic-prompts; the remaining kinds use the thin roles below, and
+// custom agent kinds (free-form ids) fall back to a generic role.
 
 const ROLES: Partial<Record<AgentKind, string>> = {
   researcher:
@@ -38,6 +41,8 @@ export function systemPromptFor(kind: AgentKind): string {
   if (acceptance) return acceptance
   const mock = mockSystemPrompt(kind)
   if (mock) return mock
+  const businessLogic = businessLogicSystemPrompt(kind)
+  if (businessLogic) return businessLogic
   return (
     ROLES[kind] ??
     `You are the "${kind}" agent. Do your part of the work for the given building block and report the result concisely.`

@@ -78,6 +78,22 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
     color: '#fb7185',
     description: 'Builds WireMock mocks for external services and wires them into local/CI runs.',
   },
+  {
+    kind: 'business-documenter',
+    label: 'Domain Rules Documenter',
+    icon: 'i-lucide-scroll-text',
+    color: '#84cc16',
+    description:
+      'Reads the implementation and writes/updates business-logic & domain-rule docs in the repo, weaving in linked context documents.',
+  },
+  {
+    kind: 'business-reviewer',
+    label: 'Domain Rules Reviewer',
+    icon: 'i-lucide-shield-alert',
+    color: '#ef4444',
+    description:
+      'Reviews a change against the documented domain rules and reports violations, undocumented changes and unexpected drift.',
+  },
 ]
 
 export const AGENT_BY_KIND: Record<AgentKind, AgentArchetype> = Object.fromEntries(
