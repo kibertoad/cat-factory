@@ -1,7 +1,9 @@
 import type { DocumentConnection, DocumentSourceDescriptor } from '@cat-factory/core'
+import { env } from 'cloudflare:test'
 import { describe, expect, it } from 'vitest'
 import { documentsDeps, makeApp } from '../helpers'
 import { FakeAgentExecutor } from '../fakes/FakeAgentExecutor'
+import { FakeDocumentSourceProvider } from '../fakes/FakeDocumentSourceProvider'
 
 const confluenceCreds = {
   baseUrl: 'https://acme.atlassian.net',
@@ -71,6 +73,31 @@ describe('document source connect', () => {
       `/workspaces/${ws}/document-sources/connections`,
     )
     expect(after.body.connections.map((c) => c.source)).toEqual(['confluence'])
+  })
+
+  it('stores source credentials encrypted at rest and round-trips them on import', async () => {
+    const notion = new FakeDocumentSourceProvider('notion')
+    const app = makeApp(new FakeAgentExecutor(), documentsDeps({ providers: [notion] }))
+    const { workspace } = await app.createWorkspace({ seed: false })
+    const ws = workspace.id
+
+    await app.call('POST', `/workspaces/${ws}/document-sources/notion/connect`, {
+      credentials: { apiToken: 'ntn_super_secret_value' },
+    })
+
+    // The credential bag is ciphertext at rest — never the raw token.
+    const row = await env.DB.prepare(
+      'SELECT credentials FROM document_connections WHERE workspace_id = ? AND source = ?',
+    )
+      .bind(ws, 'notion')
+      .first<{ credentials: string }>()
+    expect(row?.credentials).toBeTruthy()
+    expect(row!.credentials).not.toContain('ntn_super_secret_value')
+    expect(row!.credentials.startsWith('v1.')).toBe(true)
+
+    // …and decrypts cleanly on the import path, so the provider sees the token.
+    await app.call('POST', `/workspaces/${ws}/document-sources/notion/import`, { ref: 'page-1' })
+    expect(notion.calls.at(-1)?.credentials.apiToken).toBe('ntn_super_secret_value')
   })
 
   it('rejects an unknown source', async () => {

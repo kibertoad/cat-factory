@@ -13,22 +13,32 @@ import { base64url, base64urlToBytes } from '../github/encoding'
 const VERSION = 'v1'
 const SALT_BYTES = 16
 const IV_BYTES = 12
-const HKDF_INFO = new TextEncoder().encode('cat-factory:environments')
+/** Default HKDF domain-separation tag (used by the environments integration). */
+const DEFAULT_INFO = 'cat-factory:environments'
 
 export interface WebCryptoSecretCipherOptions {
   /** Service-level master key, base64 (≥32 bytes decoded). */
   masterKeyBase64: string
+  /**
+   * HKDF `info` string, separating the keys derived for distinct uses of the
+   * same (or a shared) master key — e.g. environment secrets vs document-source
+   * credentials. Defaults to the environments tag for backward compatibility.
+   * Ciphertext is only decryptable by a cipher built with the same `info`.
+   */
+  info?: string
 }
 
 export class WebCryptoSecretCipher implements SecretCipher {
   private readonly masterKey: Uint8Array
+  private readonly info: Uint8Array
   private baseKeyPromise?: Promise<CryptoKey>
 
-  constructor({ masterKeyBase64 }: WebCryptoSecretCipherOptions) {
+  constructor({ masterKeyBase64, info }: WebCryptoSecretCipherOptions) {
     this.masterKey = base64urlToBytes(masterKeyBase64.trim())
     if (this.masterKey.length < 32) {
-      throw new Error('ENVIRONMENTS_ENCRYPTION_KEY must decode to at least 32 bytes')
+      throw new Error('encryption key must decode to at least 32 bytes')
     }
+    this.info = new TextEncoder().encode(info ?? DEFAULT_INFO)
   }
 
   async encrypt(plaintext: string): Promise<string> {
@@ -67,7 +77,7 @@ export class WebCryptoSecretCipher implements SecretCipher {
 
   private async deriveKey(salt: Uint8Array): Promise<CryptoKey> {
     return crypto.subtle.deriveKey(
-      { name: 'HKDF', hash: 'SHA-256', salt, info: HKDF_INFO },
+      { name: 'HKDF', hash: 'SHA-256', salt, info: this.info },
       await this.baseKey(),
       { name: 'AES-GCM', length: 256 },
       false,

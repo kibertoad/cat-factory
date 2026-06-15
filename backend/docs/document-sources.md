@@ -24,9 +24,11 @@ configured — the existing core and tests are untouched when it is off.
 
 ## Enabling it
 
-Per-workspace credentials are entered in the app and stored in D1; there are no
-source secrets in `wrangler.toml`. Only the feature flag and a couple of knobs
-are global:
+Per-workspace credentials are entered in the app and stored (encrypted) in D1;
+there are no source secrets in `wrangler.toml`. The feature flag and a couple of
+knobs are global, plus one secret — the master key used to encrypt the
+per-workspace source credentials at rest. The integration refuses to assemble
+without the key, so credentials are never persisted in plaintext:
 
 ```toml
 # wrangler.toml [vars]
@@ -38,14 +40,24 @@ DOCUMENT_SOURCES = "confluence,notion"
 DOCUMENT_PLANNER = "llm"
 ```
 
+```sh
+# Service-level master key for credential encryption at rest (required when
+# enabled; set as a secret, never commit it):
+openssl rand -base64 32 | wrangler secret put DOCUMENTS_ENCRYPTION_KEY
+```
+
 In `llm` mode the planner reuses the agents' default model
 (`AGENT_DEFAULT_PROVIDER` / `AGENT_DEFAULT_MODEL`) via the provider-agnostic
 `ModelProvider` port. If no provider credential is usable, or a response can't be
 parsed, it degrades to the deterministic heading parser, so import/plan/spawn
 always work.
 
-Credentials are stored plaintext-at-rest in D1 (same posture as the cached GitHub
-installation token) as a per-source JSON bag and are never returned on the wire.
+Credentials are stored encrypted at rest in D1 — the per-source JSON bag is
+sealed with AES-256-GCM (the same `WebCryptoSecretCipher` envelope the
+environments integration uses, under a documents-scoped HKDF `info`) before it
+is written, and decrypted only on the import path. They are never returned on the
+wire. Rows written before encryption was introduced are read back as legacy
+plaintext and re-encrypted on the next write.
 
 - **Confluence**: each workspace owner connects their own site with an Atlassian
   **API token** (`id.atlassian.com → Security → API tokens`); the backend

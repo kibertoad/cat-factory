@@ -202,10 +202,14 @@ GITHUB_OAUTH_CLIENT_ID = ""
 # Document-source integration (see src/infrastructure/config.ts). Off by default.
 # Turn it on to let workspaces link requirements/RFCs/PRDs from Confluence, Notion
 # and the like, and spawn board structure from them. Per-workspace credentials are
-# entered in the app and stored in D1 — there are no source secrets here.
+# entered in the app and stored ENCRYPTED in D1 — there are no source secrets here.
 # DOCUMENT_SOURCES is an optional comma-separated allow-list (default: all known
 # sources). The planner extracts structure with the configured agent model when
 # set to "llm"; otherwise it uses a deterministic heading parser.
+# The one secret this feature needs is the service-level master key used to encrypt
+# the per-workspace source credentials at rest, required when enabled; set it as a
+# secret (never commit it):
+#   openssl rand -base64 32 | wrangler secret put DOCUMENTS_ENCRYPTION_KEY
 DOCUMENTS_ENABLED = "false"
 DOCUMENT_SOURCES = "confluence,notion"
 DOCUMENT_PLANNER = "llm"

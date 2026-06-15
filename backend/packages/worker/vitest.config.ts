@@ -45,6 +45,10 @@ export default defineConfig(async () => {
             // wire up; env specs stub global `fetch` to act as the provider.
             ENVIRONMENTS_ENABLED: 'true',
             ENVIRONMENTS_ENCRYPTION_KEY: 'MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=',
+            // Master key so the document-source integration's credential
+            // encryption-at-rest wires up; `documentsDeps()` builds the cipher
+            // from it. Production sets this as a secret.
+            DOCUMENTS_ENCRYPTION_KEY: 'ZG9jdW1lbnRzLXRlc3Qta2V5LTAxMjM0NTY3ODlhYmM=',
           },
         },
       }),
