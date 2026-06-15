@@ -116,6 +116,8 @@ export type AgentKind =
   | 'acceptance'
   | 'playwright'
   | 'mocker'
+  | 'business-documenter'
+  | 'business-reviewer'
 
 /** A draggable agent definition shown in the agent palette. */
 export interface AgentArchetype {

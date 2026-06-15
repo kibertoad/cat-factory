@@ -10,10 +10,11 @@ import { num } from './utils'
 
 export interface AgentsConfig {
   /**
-   * Route the repo-operating steps (`coder`, plus the `mocker` mock builder and
-   * `playwright` e2e writer) to a per-run Cloudflare Container running the Pi
-   * coding agent, rather than a single inline LLM call. Requires `enabled` plus
-   * the container binding / GitHub / proxy wiring (see container.ts).
+   * Route the repo-operating steps (`coder`, plus the `mocker` mock builder, the
+   * `playwright` e2e writer and the `business-documenter` domain-rules documenter)
+   * to a per-run Cloudflare Container running the Pi coding agent, rather than a
+   * single inline LLM call. Requires `enabled` plus the container binding / GitHub
+   * / proxy wiring (see container.ts).
    */
   containerImpl: boolean
   routing: AgentRouting

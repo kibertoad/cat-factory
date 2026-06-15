@@ -80,6 +80,15 @@ export {
   testApproachSection,
 } from './modules/agents/acceptance-prompts'
 export { MOCK_AGENT_KIND, isMockKind, mockSystemPrompt } from './modules/agents/mock-prompts'
+export {
+  type BusinessLogicAgentKind,
+  BUSINESS_LOGIC_AGENT_KINDS,
+  BUSINESS_DOCUMENTER_KIND,
+  BUSINESS_REVIEWER_KIND,
+  BUSINESS_LOGIC_DOCS_DIR,
+  isBusinessLogicKind,
+  businessLogicSystemPrompt,
+} from './modules/agents/business-logic-prompts'
 
 export {
   type Core,
