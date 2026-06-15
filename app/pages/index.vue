@@ -11,6 +11,7 @@ import DocumentSourceConnectModal from '~/components/documents/DocumentSourceCon
 import DocumentImportModal from '~/components/documents/DocumentImportModal.vue'
 import SpawnPreviewModal from '~/components/documents/SpawnPreviewModal.vue'
 import BootstrapModal from '~/components/bootstrap/BootstrapModal.vue'
+import GitHubPanel from '~/components/github/GitHubPanel.vue'
 
 const workspace = useWorkspaceStore()
 
@@ -49,6 +50,7 @@ watch(
       <DocumentImportModal />
       <SpawnPreviewModal />
       <BootstrapModal />
+      <GitHubPanel />
     </template>
 
     <!-- Backend unreachable / bootstrap failed -->

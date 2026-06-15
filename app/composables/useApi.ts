@@ -11,10 +11,20 @@ import type {
   SourceDocument,
   CreateReferenceArchitectureInput,
   ExecutionInstance,
+  CommitFilesInput,
+  CreateBranchInput,
+  GitHubBranch,
+  GitHubConnection,
+  GitHubIssue,
+  GitHubPullRequest,
+  GitHubRepo,
+  MergePullRequestInput,
   ModelOption,
+  OpenPullRequestInput,
   Pipeline,
   PromptFragment,
   ReferenceArchitecture,
+  ResyncRequest,
   SpawnResult,
   UpdateReferenceArchitectureInput,
   Workspace,
@@ -197,6 +207,83 @@ export function useApi() {
       workspaceId: string,
       body: { source: DocumentSourceKind; externalId: string; blockId: string },
     ) => http<SourceDocument>(`${ws(workspaceId)}/documents/link`, { method: 'POST', body }),
+
+    // ---- github integration ----------------------------------------------
+    // Connection management, projection reads (served from D1 — fast and
+    // rate-limit-free) and repo writes. A 503 from `getGitHubConnection` means
+    // the integration is off (the store hides its UI on any error there).
+    getGitHubInstallUrl: (workspaceId: string) =>
+      http<{ url: string }>(`${ws(workspaceId)}/github/install-url`),
+
+    getGitHubConnection: (workspaceId: string) =>
+      http<{ connection: GitHubConnection | null }>(`${ws(workspaceId)}/github/connection`),
+
+    connectGitHub: (workspaceId: string, installationId: number) =>
+      http<GitHubConnection>(`${ws(workspaceId)}/github/connect`, {
+        method: 'POST',
+        body: { installationId },
+      }),
+
+    disconnectGitHub: (workspaceId: string) =>
+      http(`${ws(workspaceId)}/github/connection`, { method: 'DELETE' }),
+
+    resyncGitHub: (workspaceId: string, body: ResyncRequest = {}) =>
+      http<{ status: string }>(`${ws(workspaceId)}/github/resync`, { method: 'POST', body }),
+
+    listGitHubRepos: (workspaceId: string) => http<GitHubRepo[]>(`${ws(workspaceId)}/github/repos`),
+
+    listGitHubBranches: (workspaceId: string, repoGithubId: number) =>
+      http<GitHubBranch[]>(`${ws(workspaceId)}/github/repos/${repoGithubId}/branches`),
+
+    listGitHubPullRequests: (workspaceId: string) =>
+      http<GitHubPullRequest[]>(`${ws(workspaceId)}/github/pulls`),
+
+    listGitHubIssues: (workspaceId: string) =>
+      http<GitHubIssue[]>(`${ws(workspaceId)}/github/issues`),
+
+    createGitHubBranch: (workspaceId: string, repoGithubId: number, body: CreateBranchInput) =>
+      http<GitHubBranch>(`${ws(workspaceId)}/github/repos/${repoGithubId}/branches`, {
+        method: 'POST',
+        body,
+      }),
+
+    commitGitHubFiles: (workspaceId: string, repoGithubId: number, body: CommitFilesInput) =>
+      http<{ sha: string }>(`${ws(workspaceId)}/github/repos/${repoGithubId}/commits`, {
+        method: 'POST',
+        body,
+      }),
+
+    openGitHubPullRequest: (
+      workspaceId: string,
+      repoGithubId: number,
+      body: OpenPullRequestInput,
+    ) =>
+      http<GitHubPullRequest>(`${ws(workspaceId)}/github/repos/${repoGithubId}/pulls`, {
+        method: 'POST',
+        body,
+      }),
+
+    mergeGitHubPullRequest: (
+      workspaceId: string,
+      repoGithubId: number,
+      number: number,
+      body: MergePullRequestInput = {},
+    ) =>
+      http(`${ws(workspaceId)}/github/repos/${repoGithubId}/pulls/${number}/merge`, {
+        method: 'PUT',
+        body,
+      }),
+
+    commentGitHubIssue: (
+      workspaceId: string,
+      repoGithubId: number,
+      number: number,
+      bodyText: string,
+    ) =>
+      http(`${ws(workspaceId)}/github/repos/${repoGithubId}/issues/${number}/comments`, {
+        method: 'POST',
+        body: { body: bodyText },
+      }),
 
     // ---- repo bootstrap ---------------------------------------------------
     listReferenceArchitectures: (workspaceId: string) =>

@@ -28,6 +28,9 @@ export const useUiStore = defineStore('ui', () => {
   // Repo-bootstrap modal (manage reference architectures + launch a bootstrap).
   const bootstrapOpen = ref(false)
 
+  // GitHub integration panel (connection management + repo/PR/issue browsing).
+  const githubOpen = ref(false)
+
   /** Current canvas zoom (driven by Vue Flow viewport). */
   const zoom = ref(1)
 
@@ -108,6 +111,12 @@ export const useUiStore = defineStore('ui', () => {
   function closeBootstrap() {
     bootstrapOpen.value = false
   }
+  function openGitHub() {
+    githubOpen.value = true
+  }
+  function closeGitHub() {
+    githubOpen.value = false
+  }
 
   return {
     selectedBlockId,
@@ -118,6 +127,7 @@ export const useUiStore = defineStore('ui', () => {
     documentImport,
     spawnPreview,
     bootstrapOpen,
+    githubOpen,
     zoom,
     lod,
     expandedFrames,
@@ -137,5 +147,7 @@ export const useUiStore = defineStore('ui', () => {
     closeSpawnPreview,
     openBootstrap,
     closeBootstrap,
+    openGitHub,
+    closeGitHub,
   }
 })

@@ -4,11 +4,16 @@ import PipelinePalette from '~/components/palettes/PipelinePalette.vue'
 import UserMenu from '~/components/auth/UserMenu.vue'
 
 const documents = useDocumentsStore()
+const github = useGitHubStore()
 const ui = useUiStore()
 
-// Resolve whether the document-source integration is enabled on the backend, so
-// the section is hidden entirely when it is off (mirrors how auth gates its UI).
-onMounted(() => documents.probe())
+// Resolve whether the document-source / GitHub integrations are enabled on the
+// backend, so each section is hidden entirely when it is off (mirrors how auth
+// gates its UI). A 503 from either probe flips its `available` to false.
+onMounted(() => {
+  void documents.probe()
+  void github.probe()
+})
 </script>
 
 <template>
@@ -56,6 +61,28 @@ onMounted(() => documents.probe())
         Bootstrap repo
       </UButton>
     </section>
+
+    <template v-if="github.available">
+      <USeparator />
+      <section>
+        <h2 class="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+          GitHub
+        </h2>
+        <UButton
+          block
+          color="neutral"
+          variant="soft"
+          size="sm"
+          icon="i-lucide-github"
+          class="justify-start"
+          @click="ui.openGitHub()"
+        >
+          <span class="truncate">
+            {{ github.connected ? github.connection?.accountLogin : 'Connect GitHub' }}
+          </span>
+        </UButton>
+      </section>
+    </template>
 
     <template v-if="documents.available && documents.sources.length">
       <USeparator />
