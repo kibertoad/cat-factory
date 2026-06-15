@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { LodLevel } from '~/types/domain'
+import type { DocumentSourceKind, LodLevel } from '~/types/domain'
 
 /** Transient UI state: selection, panels, zoom level. */
 export const useUiStore = defineStore('ui', () => {
@@ -9,12 +9,21 @@ export const useUiStore = defineStore('ui', () => {
   const builderOpen = ref(false)
   const decisionContext = ref<{ instanceId: string; decisionId: string } | null>(null)
 
-  // Confluence integration modals. `confluenceImport` and `spawnPreview` carry an
-  // optional target frame, so structure spawned from a frame's inspector lands
-  // inside that frame rather than creating new top-level frames.
-  const confluenceConnectOpen = ref(false)
-  const confluenceImport = ref<{ targetFrameId: string | null } | null>(null)
-  const spawnPreview = ref<{ pageId: string; targetFrameId: string | null } | null>(null)
+  // Document-source integration modals, keyed by source. `documentImport` and
+  // `spawnPreview` carry an optional target frame, so structure spawned from a
+  // frame's inspector lands inside that frame rather than creating new top-level
+  // frames. `documentConnect` carries the source whose connect form to show;
+  // `documentImport`'s source may be null to let the modal pick a connected one.
+  const documentConnect = ref<{ source: DocumentSourceKind } | null>(null)
+  const documentImport = ref<{
+    source: DocumentSourceKind | null
+    targetFrameId: string | null
+  } | null>(null)
+  const spawnPreview = ref<{
+    source: DocumentSourceKind
+    externalId: string
+    targetFrameId: string | null
+  } | null>(null)
 
   // Repo-bootstrap modal (manage reference architectures + launch a bootstrap).
   const bootstrapOpen = ref(false)
@@ -68,20 +77,27 @@ export const useUiStore = defineStore('ui', () => {
     decisionContext.value = null
   }
 
-  function openConfluenceConnect() {
-    confluenceConnectOpen.value = true
+  function openDocumentConnect(source: DocumentSourceKind) {
+    documentConnect.value = { source }
   }
-  function closeConfluenceConnect() {
-    confluenceConnectOpen.value = false
+  function closeDocumentConnect() {
+    documentConnect.value = null
   }
-  function openConfluenceImport(targetFrameId: string | null = null) {
-    confluenceImport.value = { targetFrameId }
+  function openDocumentImport(
+    targetFrameId: string | null = null,
+    source: DocumentSourceKind | null = null,
+  ) {
+    documentImport.value = { source, targetFrameId }
   }
-  function closeConfluenceImport() {
-    confluenceImport.value = null
+  function closeDocumentImport() {
+    documentImport.value = null
   }
-  function openSpawnPreview(pageId: string, targetFrameId: string | null = null) {
-    spawnPreview.value = { pageId, targetFrameId }
+  function openSpawnPreview(
+    source: DocumentSourceKind,
+    externalId: string,
+    targetFrameId: string | null = null,
+  ) {
+    spawnPreview.value = { source, externalId, targetFrameId }
   }
   function closeSpawnPreview() {
     spawnPreview.value = null
@@ -98,8 +114,8 @@ export const useUiStore = defineStore('ui', () => {
     focusBlockId,
     builderOpen,
     decisionContext,
-    confluenceConnectOpen,
-    confluenceImport,
+    documentConnect,
+    documentImport,
     spawnPreview,
     bootstrapOpen,
     zoom,
@@ -113,10 +129,10 @@ export const useUiStore = defineStore('ui', () => {
     openBuilder,
     openDecision,
     closeDecision,
-    openConfluenceConnect,
-    closeConfluenceConnect,
-    openConfluenceImport,
-    closeConfluenceImport,
+    openDocumentConnect,
+    closeDocumentConnect,
+    openDocumentImport,
+    closeDocumentImport,
     openSpawnPreview,
     closeSpawnPreview,
     openBootstrap,

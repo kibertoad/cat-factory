@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { Block, BlockStatus } from '~/types/domain'
 import { BLOCK_TYPE_META, STATUS_META } from '~/utils/catalog'
-import TaskContextDocs from '~/components/confluence/TaskContextDocs.vue'
+import TaskContextDocs from '~/components/documents/TaskContextDocs.vue'
 import FeatureScenarios from '~/components/scenarios/FeatureScenarios.vue'
 import ContainerSummary from '~/components/panels/inspector/ContainerSummary.vue'
 import TaskDependencies from '~/components/panels/inspector/TaskDependencies.vue'
@@ -13,7 +13,7 @@ const board = useBoardStore()
 const pipelines = usePipelinesStore()
 const execution = useExecutionStore()
 const ui = useUiStore()
-const confluence = useConfluenceStore()
+const documents = useDocumentsStore()
 const fragments = useFragmentsStore()
 const models = useModelsStore()
 const toast = useToast()
@@ -27,11 +27,11 @@ function placeholder(what: string) {
   toast.add({ title: 'Placeholder', description: what, icon: 'i-lucide-construction' })
 }
 
-/** Open the Confluence import/spawn flow, targeting this container's frame. */
-function spawnFromConfluence() {
+/** Open the document import/spawn flow, targeting this container's frame. */
+function spawnFromDocument() {
   if (!block.value) return
   const frameId = isFrame.value ? block.value.id : (board.serviceOf(block.value)?.id ?? null)
-  ui.openConfluenceImport(frameId)
+  ui.openDocumentImport(frameId)
 }
 
 const block = computed<Block | undefined>(() =>
@@ -136,18 +136,18 @@ function remove() {
           Link JIRA ticket
         </UButton>
         <UButton
-          v-if="isContainer && confluence.available"
+          v-if="isContainer && documents.available && documents.anyConnected"
           color="neutral"
           variant="soft"
           size="xs"
           icon="i-lucide-wand-sparkles"
-          @click="spawnFromConfluence"
+          @click="spawnFromDocument"
         >
-          Spawn from Confluence
+          Spawn from document
         </UButton>
       </div>
 
-      <!-- task: Confluence context documents -->
+      <!-- task: context documents -->
       <TaskContextDocs v-if="isTask" :block="block" />
 
       <!-- service / module: tasks summary -->

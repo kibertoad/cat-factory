@@ -1,25 +1,25 @@
 <script setup lang="ts">
 import type { DropdownMenuItem } from '@nuxt/ui'
-import type { Block } from '~/types/domain'
+import type { Block, DocumentSourceKind } from '~/types/domain'
 
-// Confluence documents attached to a task as agent context, shown inside the
-// InspectorPanel. Linked docs are fed to agents during execution (see the
+// Documents (from any source) attached to a task as agent context, shown inside
+// the InspectorPanel. Linked docs are fed to agents during execution (see the
 // backend's userPromptFor). Rendered only when the integration is available.
 const props = defineProps<{ block: Block }>()
 
-const confluence = useConfluenceStore()
+const documents = useDocumentsStore()
 const ui = useUiStore()
 const toast = useToast()
 
 onMounted(() => {
-  confluence.loadDocuments().catch(() => {})
+  documents.loadDocuments().catch(() => {})
 })
 
-const linked = computed(() => confluence.docsForBlock(props.block.id))
+const linked = computed(() => documents.docsForBlock(props.block.id))
 
-async function attach(pageId: string) {
+async function attach(source: DocumentSourceKind, externalId: string) {
   try {
-    await confluence.linkToBlock(props.block.id, pageId)
+    await documents.linkToBlock(props.block.id, source, externalId)
     toast.add({ title: 'Document attached', icon: 'i-lucide-link' })
   } catch (e) {
     toast.add({
@@ -32,25 +32,25 @@ async function attach(pageId: string) {
 }
 
 const attachMenu = computed<DropdownMenuItem[][]>(() => {
-  const linkedIds = new Set(linked.value.map((d) => d.pageId))
-  const items: DropdownMenuItem[] = confluence.documents
-    .filter((d) => !linkedIds.has(d.pageId))
+  const linkedKeys = new Set(linked.value.map((d) => `${d.source}:${d.externalId}`))
+  const items: DropdownMenuItem[] = documents.documents
+    .filter((d) => !linkedKeys.has(`${d.source}:${d.externalId}`))
     .map((d) => ({
       label: d.title,
-      icon: 'i-lucide-file-text',
-      onSelect: () => attach(d.pageId),
+      icon: documents.descriptorFor(d.source)?.icon ?? 'i-lucide-file-text',
+      onSelect: () => attach(d.source, d.externalId),
     }))
   items.push({
     label: 'Import a page…',
     icon: 'i-lucide-file-down',
-    onSelect: () => ui.openConfluenceImport(null),
+    onSelect: () => ui.openDocumentImport(null),
   })
   return [items]
 })
 </script>
 
 <template>
-  <div v-if="confluence.available" class="space-y-2">
+  <div v-if="documents.available" class="space-y-2">
     <div class="flex items-center justify-between">
       <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
         Context documents
@@ -63,13 +63,16 @@ const attachMenu = computed<DropdownMenuItem[][]>(() => {
     <div v-if="linked.length" class="space-y-1">
       <a
         v-for="doc in linked"
-        :key="doc.pageId"
+        :key="`${doc.source}:${doc.externalId}`"
         :href="doc.url"
         target="_blank"
         rel="noopener"
         class="flex items-center gap-1.5 rounded-md border border-slate-800 bg-slate-900/60 px-2 py-1.5 text-xs text-slate-300 hover:bg-slate-800/60"
       >
-        <UIcon name="i-lucide-file-text" class="h-3.5 w-3.5 shrink-0 text-indigo-400" />
+        <UIcon
+          :name="documents.descriptorFor(doc.source)?.icon ?? 'i-lucide-file-text'"
+          class="h-3.5 w-3.5 shrink-0 text-indigo-400"
+        />
         <span class="truncate">{{ doc.title }}</span>
       </a>
     </div>

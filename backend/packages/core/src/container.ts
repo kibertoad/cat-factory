@@ -12,11 +12,11 @@ import { type ExecutionEventPublisher, NoopEventPublisher } from './ports/execut
 import type { GitHubClient } from './ports/github-client'
 import type { WebhookVerifier } from './ports/webhook-verifier'
 import type { ModelProvider, ModelRef } from './ports/model-provider'
-import type { ConfluenceClient } from './ports/confluence-client'
+import type { DocumentSourceProvider } from './ports/document-source'
 import type {
-  ConfluenceConnectionRepository,
-  ConfluenceDocumentRepository,
-} from './ports/confluence-repositories'
+  DocumentConnectionRepository,
+  DocumentRepository,
+} from './ports/document-repositories'
 import type { EnvironmentProvider } from './ports/environment-provider'
 import type {
   EnvironmentConnectionRepository,
@@ -49,10 +49,11 @@ import { GitHubInstallationService } from './modules/github/GitHubInstallationSe
 import { GitHubService } from './modules/github/GitHubService'
 import { GitHubSyncService } from './modules/github/GitHubSyncService'
 import { WebhookService } from './modules/github/WebhookService'
-import { ConfluenceConnectionService } from './modules/confluence/ConfluenceConnectionService'
-import { ConfluenceImportService } from './modules/confluence/ConfluenceImportService'
-import { ConfluencePlannerService } from './modules/confluence/ConfluencePlannerService'
-import { ConfluenceLinkService } from './modules/confluence/ConfluenceLinkService'
+import { DocumentConnectionService } from './modules/documents/DocumentConnectionService'
+import { DocumentImportService } from './modules/documents/DocumentImportService'
+import { DocumentPlannerService } from './modules/documents/DocumentPlannerService'
+import { DocumentLinkService } from './modules/documents/DocumentLinkService'
+import { MapDocumentSourceRegistry } from './modules/documents/documents.logic'
 import { EnvironmentConnectionService } from './modules/environments/EnvironmentConnectionService'
 import { EnvironmentProvisioningService } from './modules/environments/EnvironmentProvisioningService'
 import { EnvironmentTeardownService } from './modules/environments/EnvironmentTeardownService'
@@ -120,19 +121,21 @@ export interface CoreDependencies {
    */
   commitBackfillHorizonMs?: number
 
-  // ---- Confluence integration (optional; wired only when configured) ------
-  // Mirrors the GitHub default-off convention. The Confluence module assembles
-  // when the client + both repositories are present. `modelProvider` is
-  // *optional within* the module: when
-  // absent the planner uses its deterministic heading-based fallback, so import,
-  // link and spawn still work. `confluenceDocumentRepository` is additionally
-  // consumed by the execution engine to feed linked docs to agents as context.
+  // ---- Document-source integration (optional; wired only when configured) --
+  // Mirrors the GitHub default-off convention. The documents module assembles
+  // when at least one source provider + both repositories are present. Each
+  // provider (Confluence, Notion, …) encapsulates one source's specifics behind
+  // the DocumentSourceProvider port. `modelProvider` is *optional within* the
+  // module: when absent the planner uses its deterministic heading-based
+  // fallback, so import, link and spawn still work. `documentRepository` is
+  // additionally consumed by the execution engine to feed linked docs to agents
+  // as context.
   modelProvider?: ModelProvider
-  /** Model the Confluence planner uses (the agents' default model ref). */
-  confluencePlannerModel?: ModelRef
-  confluenceClient?: ConfluenceClient
-  confluenceConnectionRepository?: ConfluenceConnectionRepository
-  confluenceDocumentRepository?: ConfluenceDocumentRepository
+  /** Model the document planner uses (the agents' default model ref). */
+  documentPlannerModel?: ModelRef
+  documentSourceProviders?: DocumentSourceProvider[]
+  documentConnectionRepository?: DocumentConnectionRepository
+  documentRepository?: DocumentRepository
 
   // ---- Ephemeral environment integration (optional; wired when configured) -
   // Mirrors the GitHub/Confluence default-off convention. The module assembles
@@ -173,12 +176,12 @@ export interface GitHubModule {
   webhookVerifier: WebhookVerifier
 }
 
-/** The Confluence integration's services, present only when configured. */
-export interface ConfluenceModule {
-  connectionService: ConfluenceConnectionService
-  importService: ConfluenceImportService
-  plannerService: ConfluencePlannerService
-  linkService: ConfluenceLinkService
+/** The document-source integration's services, present only when configured. */
+export interface DocumentsModule {
+  connectionService: DocumentConnectionService
+  importService: DocumentImportService
+  plannerService: DocumentPlannerService
+  linkService: DocumentLinkService
 }
 
 /** The environment integration's services, present only when configured. */
@@ -206,8 +209,8 @@ export interface Core {
   spendService: SpendService
   /** Present only when the GitHub integration is configured (see CoreDependencies). */
   github?: GitHubModule
-  /** Present only when the Confluence integration is configured (see CoreDependencies). */
-  confluence?: ConfluenceModule
+  /** Present only when the document-source integration is configured (see CoreDependencies). */
+  documents?: DocumentsModule
   /** Present only when the environment integration is configured (see CoreDependencies). */
   environments?: EnvironmentsModule
   /** Present only when the repo-bootstrap repositories are wired (see CoreDependencies). */
@@ -286,40 +289,47 @@ function createGitHubModule(deps: CoreDependencies): GitHubModule | undefined {
 }
 
 /**
- * Assemble the Confluence module when its client + both repositories are
- * present. The model provider is optional: with it the planner uses an LLM, and
- * without it the deterministic heading parser — so the module stays usable for
- * import/link/spawn even when no LLM is configured.
+ * Assemble the document-source module when at least one provider + both
+ * repositories are present. The model provider is optional: with it the planner
+ * uses an LLM, and without it the deterministic heading parser — so the module
+ * stays usable for import/link/spawn even when no LLM is configured.
  */
-function createConfluenceModule(
+function createDocumentsModule(
   deps: CoreDependencies,
   boardService: BoardService,
-): ConfluenceModule | undefined {
-  const { confluenceClient, confluenceConnectionRepository, confluenceDocumentRepository } = deps
-  if (!confluenceClient || !confluenceConnectionRepository || !confluenceDocumentRepository) {
+): DocumentsModule | undefined {
+  const { documentSourceProviders, documentConnectionRepository, documentRepository } = deps
+  if (
+    !documentSourceProviders ||
+    documentSourceProviders.length === 0 ||
+    !documentConnectionRepository ||
+    !documentRepository
+  ) {
     return undefined
   }
 
-  const connectionService = new ConfluenceConnectionService({
-    confluenceConnectionRepository,
+  const registry = new MapDocumentSourceRegistry(documentSourceProviders)
+  const connectionService = new DocumentConnectionService({
+    documentConnectionRepository,
+    registry,
     workspaceRepository: deps.workspaceRepository,
     clock: deps.clock,
   })
-  const importService = new ConfluenceImportService({
-    confluenceClient,
-    confluenceDocumentRepository,
+  const importService = new DocumentImportService({
+    registry,
+    documentRepository,
     connectionService,
     workspaceRepository: deps.workspaceRepository,
     clock: deps.clock,
   })
-  const plannerService = new ConfluencePlannerService({
+  const plannerService = new DocumentPlannerService({
     modelProvider: deps.modelProvider,
-    modelRef: deps.confluencePlannerModel,
+    modelRef: deps.documentPlannerModel,
   })
-  const linkService = new ConfluenceLinkService({
+  const linkService = new DocumentLinkService({
     boardService,
     blockRepository: deps.blockRepository,
-    confluenceDocumentRepository,
+    documentRepository,
   })
   return { connectionService, importService, plannerService, linkService }
 }
@@ -439,7 +449,7 @@ export function createCore(dependencies: CoreDependencies): Core {
   })
 
   const github = createGitHubModule(dependencies)
-  const confluence = createConfluenceModule(dependencies, boardService)
+  const documents = createDocumentsModule(dependencies, boardService)
   const bootstrap = createBootstrapModule(dependencies)
   const boardScan = createBoardScanModule(dependencies, boardService)
 
@@ -450,7 +460,7 @@ export function createCore(dependencies: CoreDependencies): Core {
     executionService,
     spendService,
     ...(github ? { github } : {}),
-    ...(confluence ? { confluence } : {}),
+    ...(documents ? { documents } : {}),
     ...(environments ? { environments } : {}),
     ...(bootstrap ? { bootstrap } : {}),
     ...(boardScan ? { boardScan } : {}),

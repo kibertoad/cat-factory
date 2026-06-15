@@ -13,7 +13,7 @@ import { pipelineController } from './modules/pipelines/PipelineController'
 import { workspaceController } from './modules/workspaces/WorkspaceController'
 import { githubController } from './modules/github/GitHubController'
 import { githubWebhookController } from './modules/github/GitHubWebhookController'
-import { confluenceController } from './modules/confluence/ConfluenceController'
+import { documentSourceController } from './modules/documents/DocumentSourceController'
 import { environmentController } from './modules/environments/EnvironmentController'
 import { bootstrapController } from './modules/bootstrap/BootstrapController'
 import { boardScanController } from './modules/boardScan/BoardScanController'
@@ -94,7 +94,7 @@ export function createApp(options: CreateAppOptions = {}): Hono<AppEnv> {
   // above bypasses only its exact upgrade shape).
   app.route('/', eventsController())
   app.route('/workspaces/:workspaceId', githubController())
-  app.route('/workspaces/:workspaceId', confluenceController())
+  app.route('/workspaces/:workspaceId', documentSourceController())
   app.route('/workspaces/:workspaceId', environmentController())
   app.route('/workspaces/:workspaceId', bootstrapController())
   app.route('/workspaces/:workspaceId', boardScanController())

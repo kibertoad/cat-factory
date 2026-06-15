@@ -94,7 +94,7 @@ export {
   type Core,
   type CoreDependencies,
   type GitHubModule,
-  type ConfluenceModule,
+  type DocumentsModule,
   type EnvironmentsModule,
   type BootstrapModule,
   type BoardScanModule,
@@ -114,24 +114,29 @@ export { WebhookService, type WebhookServiceDependencies } from './modules/githu
 export * as githubProjection from './modules/github/projection.logic'
 
 export {
-  ConfluenceConnectionService,
-  type ConfluenceConnectionServiceDependencies,
-} from './modules/confluence/ConfluenceConnectionService'
+  DocumentConnectionService,
+  type DocumentConnectionServiceDependencies,
+} from './modules/documents/DocumentConnectionService'
 export {
-  ConfluenceImportService,
-  type ConfluenceImportServiceDependencies,
-  toConfluenceDocument,
-} from './modules/confluence/ConfluenceImportService'
+  DocumentImportService,
+  type DocumentImportServiceDependencies,
+  toSourceDocument,
+} from './modules/documents/DocumentImportService'
 export {
-  ConfluencePlannerService,
-  type ConfluencePlannerServiceDependencies,
-} from './modules/confluence/ConfluencePlannerService'
+  DocumentPlannerService,
+  type DocumentPlannerServiceDependencies,
+} from './modules/documents/DocumentPlannerService'
 export {
-  ConfluenceLinkService,
-  type ConfluenceLinkServiceDependencies,
+  DocumentLinkService,
+  type DocumentLinkServiceDependencies,
   type SpawnResult,
-} from './modules/confluence/ConfluenceLinkService'
-export * as confluenceLogic from './modules/confluence/confluence.logic'
+} from './modules/documents/DocumentLinkService'
+export { MapDocumentSourceRegistry } from './modules/documents/documents.logic'
+export * as documentsLogic from './modules/documents/documents.logic'
+export * as confluenceLogic from './modules/documents/confluence.logic'
+export * as notionLogic from './modules/documents/notion.logic'
+export { CONFLUENCE_DESCRIPTOR } from './modules/documents/confluence.logic'
+export { NOTION_DESCRIPTOR } from './modules/documents/notion.logic'
 
 export {
   EnvironmentConnectionService,

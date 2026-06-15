@@ -10,7 +10,7 @@ import ScenarioCard from '~/components/scenarios/ScenarioCard.vue'
 const props = defineProps<{ block: Block }>()
 
 const scenarios = useScenariosStore()
-const confluence = useConfluenceStore()
+const documents = useDocumentsStore()
 const board = useBoardStore()
 const toast = useToast()
 
@@ -29,7 +29,7 @@ function setTarget(value: Block['testTarget']) {
 
 /** Requirement context fed to scenario generation: the block intent + PRD titles. */
 function requirementsFor(): string[] {
-  const docs = confluence.available ? confluence.docsForBlock(props.block.id) : []
+  const docs = documents.available ? documents.docsForBlock(props.block.id) : []
   return docs.map((d) => d.title)
 }
 

@@ -162,14 +162,19 @@ export interface Env {
    */
   AUTH_DEV_OPEN?: string
 
-  // ---- Confluence integration (see config.ts; opt-in) ---------------------
-  /** Enables the Confluence integration ('true'). Per-workspace creds live in D1. */
-  CONFLUENCE_ENABLED?: string
+  // ---- Document-source integration (see config.ts; opt-in) ----------------
+  /** Enables the document-source integration ('true'). Per-workspace creds live in D1. */
+  DOCUMENTS_ENABLED?: string
+  /**
+   * Comma-separated allow-list of sources to register (e.g. `confluence,notion`).
+   * Defaults to all known sources when unset.
+   */
+  DOCUMENT_SOURCES?: string
   /**
    * Doc → board planner: 'llm' (default) uses the configured agent model to
    * extract structure; 'headings' forces the deterministic heading parser.
    */
-  CONFLUENCE_PLANNER?: string
+  DOCUMENT_PLANNER?: string
 
   // ---- Ephemeral environment integration (see config.ts; opt-in) ----------
   /**

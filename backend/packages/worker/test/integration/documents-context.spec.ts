@@ -1,13 +1,7 @@
 import type { AgentExecutor, AgentRunContext, AgentRunResult, Block } from '@cat-factory/core'
 import { describe, expect, it } from 'vitest'
-import { confluenceDeps, makeApp } from '../helpers'
-import { FakeConfluenceClient } from '../fakes/FakeConfluenceClient'
-
-const creds = {
-  baseUrl: 'https://acme.atlassian.net',
-  accountEmail: 'dev@acme.io',
-  apiToken: 'secret-token',
-}
+import { documentsDeps, makeApp } from '../helpers'
+import { FakeDocumentSourceProvider } from '../fakes/FakeDocumentSourceProvider'
 
 /** Captures every context the engine hands it, so we can assert what agents see. */
 class RecordingAgentExecutor implements AgentExecutor {
@@ -18,13 +12,13 @@ class RecordingAgentExecutor implements AgentExecutor {
   }
 }
 
-describe('confluence context injection', () => {
+describe('document context injection', () => {
   it('feeds a linked document to the agent running the block', async () => {
-    const client = new FakeConfluenceClient({
-      '4242': { title: 'Rate Limiter RFC', body: '<p>Token bucket, 100 rps per tenant.</p>' },
+    const notion = new FakeDocumentSourceProvider('notion', {
+      '4242': { title: 'Rate Limiter RFC', body: 'Token bucket, 100 rps per tenant.' },
     })
     const recorder = new RecordingAgentExecutor()
-    const app = makeApp(recorder, confluenceDeps({ client }))
+    const app = makeApp(recorder, documentsDeps({ providers: [notion] }))
     const { workspace } = await app.createWorkspace({ seed: false })
     const ws = workspace.id
 
@@ -38,9 +32,13 @@ describe('confluence context injection', () => {
     })
 
     // Connect, import the RFC and attach it to the task as context.
-    await app.call('POST', `/workspaces/${ws}/confluence/connect`, creds)
-    await app.call('POST', `/workspaces/${ws}/confluence/import`, { page: '4242' })
-    const linked = await app.call('POST', `/workspaces/${ws}/confluence/documents/4242/link`, {
+    await app.call('POST', `/workspaces/${ws}/document-sources/notion/connect`, {
+      credentials: { apiToken: 'ntn_secret' },
+    })
+    await app.call('POST', `/workspaces/${ws}/document-sources/notion/import`, { ref: '4242' })
+    const linked = await app.call('POST', `/workspaces/${ws}/documents/link`, {
+      source: 'notion',
+      externalId: '4242',
       blockId: task.body.id,
     })
     expect(linked.status).toBe(201)
