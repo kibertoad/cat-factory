@@ -1,4 +1,5 @@
 import type { AgentKind } from '../../domain/types'
+import { CI_RETRY_SANITY_CHECK } from './ci-gate'
 
 // Built-out role prompts for the business-logic / domain-rules track. Two kinds
 // keep a service's encoded business rules honest and documented:
@@ -54,13 +55,15 @@ const STANDARDS_FOOTER =
 
 // The documenter commits files through a pull request, so "done" means the docs
 // are written and the PR is open and green — mirroring the build / mock / e2e
-// kinds that also operate on the repo.
+// kinds that also operate on the repo. The retry loop is bounded by
+// CI_RETRY_SANITY_CHECK so it can't spin forever on a check it cannot make pass.
 const DOCS_CI_GATE = [
   'Definition of done: this phase is NOT complete until the documentation is committed and CI on the pull request is green.',
   '- Open or update the pull request carrying the documentation so its CI checks run.',
   '- Wait for the checks to finish; do not mark the phase done while CI is still running.',
   '- If any required check fails (e.g. a docs linter / link check), read the failure, fix it, push, and wait for CI again.',
   '- Repeat that loop until every required check passes — never hand off on a red PR.',
+  CI_RETRY_SANITY_CHECK,
 ].join('\n')
 
 const SYSTEM_PROMPTS: Record<BusinessLogicAgentKind, string> = {

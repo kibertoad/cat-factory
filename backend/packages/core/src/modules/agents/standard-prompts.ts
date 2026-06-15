@@ -1,6 +1,7 @@
 import Handlebars from 'handlebars/runtime'
 import type { AgentKind } from '../../domain/types'
 import type { AgentRunContext } from '../../ports/agent-executor'
+import { CI_RETRY_SANITY_CHECK } from './ci-gate'
 import * as templateSpecs from './standard-prompt-templates.generated'
 
 // Standard, built-out prompts for the four core phases of delivering a solution:
@@ -47,13 +48,16 @@ const STANDARDS_FOOTER =
 
 // The build phase ships code through a pull request, so "done" means the PR's CI
 // is green — not merely that an implementation was written. The agent must keep
-// fixing and re-pushing until every required check passes.
+// fixing and re-pushing until every required check passes, but the retry loop is
+// bounded by CI_RETRY_SANITY_CHECK so it can't spin forever on a check it cannot
+// make pass.
 const BUILD_CI_GATE = [
   'Definition of done: this phase is NOT complete until CI on the pull request is green.',
   '- Open or update the pull request for this work so its CI checks run.',
   '- Wait for the checks to finish; do not mark the build done while CI is still running.',
   '- If any required check fails, read the failure, fix the underlying cause, push the fix, and wait for CI again.',
   '- Repeat that loop until every required check passes — never hand off or report success on a red PR.',
+  CI_RETRY_SANITY_CHECK,
 ].join('\n')
 
 const SYSTEM_PROMPTS: Record<StandardPhase, string> = {

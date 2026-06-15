@@ -87,6 +87,15 @@ describe('business-logic agent prompts', () => {
       expect(prompt).toMatch(/stable[, ].*id/i)
     })
 
+    it('bounds the documenter CI-retry loop so it cannot spin forever', () => {
+      const prompt = systemPromptFor(BUSINESS_DOCUMENTER_KIND)
+      expect(prompt).toMatch(/this loop MUST terminate/i)
+      expect(prompt).toMatch(/number of attempts/i)
+      expect(prompt).toMatch(/time or token budget/i)
+      expect(prompt).toMatch(/STOP iterating/i)
+      expect(prompt).toMatch(/hand off for human review/i)
+    })
+
     it('has the reviewer classify findings into violations, undocumented and drift', () => {
       const prompt = systemPromptFor(BUSINESS_REVIEWER_KIND)
       expect(prompt).toMatch(/VIOLATION/)
