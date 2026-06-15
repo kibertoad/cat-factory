@@ -1,4 +1,4 @@
-import type { D1Migration } from '@cloudflare/vitest-pool-workers/config'
+import type { D1Migration } from '@cloudflare/vitest-pool-workers'
 import type { Env } from '../src/infrastructure/env'
 
 // Augment the `cloudflare:test` module's env with our Worker bindings plus the
