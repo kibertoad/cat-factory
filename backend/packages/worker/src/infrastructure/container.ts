@@ -3,6 +3,7 @@ import {
   type AgentExecutor,
   type Core,
   type CoreDependencies,
+  type DocumentSourceProvider,
   type ExecutionEventPublisher,
   NoopWorkRunner,
   type WorkRunner,
@@ -31,8 +32,8 @@ import { D1IssueProjectionRepository } from './repositories/D1IssueProjectionRep
 import { D1CommitProjectionRepository } from './repositories/D1CommitProjectionRepository'
 import { D1CheckRunProjectionRepository } from './repositories/D1CheckRunProjectionRepository'
 import { D1RateLimitRepository } from './repositories/D1RateLimitRepository'
-import { D1ConfluenceConnectionRepository } from './repositories/D1ConfluenceConnectionRepository'
-import { D1ConfluenceDocumentRepository } from './repositories/D1ConfluenceDocumentRepository'
+import { D1DocumentConnectionRepository } from './repositories/D1DocumentConnectionRepository'
+import { D1DocumentRepository } from './repositories/D1DocumentRepository'
 import { D1EnvironmentConnectionRepository } from './repositories/D1EnvironmentConnectionRepository'
 import { D1EnvironmentRegistryRepository } from './repositories/D1EnvironmentRegistryRepository'
 import { D1ReferenceArchitectureRepository } from './repositories/D1ReferenceArchitectureRepository'
@@ -43,7 +44,8 @@ import { WebCryptoSecretCipher } from './environments/WebCryptoSecretCipher'
 import { GitHubAppAuth } from './github/GitHubAppAuth'
 import { FetchGitHubClient } from './github/FetchGitHubClient'
 import { WebCryptoWebhookVerifier } from './github/WebCryptoWebhookVerifier'
-import { FetchConfluenceClient } from './confluence/FetchConfluenceClient'
+import { ConfluenceProvider } from './documents/ConfluenceProvider'
+import { NotionProvider } from './documents/NotionProvider'
 import { CryptoIdGenerator, SystemClock } from './runtime'
 import type { Clock, IdGenerator } from '@cat-factory/core'
 import type { D1Database } from '@cloudflare/workers-types'
@@ -215,26 +217,31 @@ function selectGitHubDeps(
 }
 
 /**
- * Build the Confluence integration's concrete ports when opted in. The model
- * provider is wired only in 'llm' planner mode (it just needs a provider
- * credential); the planner degrades to its deterministic parser if no model is
- * usable. Returns `{}` when disabled, so `createCore` leaves the `confluence`
- * module unassembled.
+ * Build the document-source integration's concrete ports when opted in: the
+ * configured source providers (Confluence, Notion, …) plus the two D1
+ * repositories. The model provider is wired only in 'llm' planner mode (it just
+ * needs a provider credential); the planner degrades to its deterministic parser
+ * if no model is usable. Returns `{}` when disabled, so `createCore` leaves the
+ * `documents` module unassembled.
  */
-function selectConfluenceDeps(
+function selectDocumentsDeps(
   env: Env,
   config: AppConfig,
   db: D1Database,
 ): Partial<CoreDependencies> {
-  if (!config.confluence.enabled) return {}
+  if (!config.documents.enabled) return {}
+  const providers: DocumentSourceProvider[] = []
+  if (config.documents.sources.includes('confluence')) providers.push(new ConfluenceProvider())
+  if (config.documents.sources.includes('notion')) providers.push(new NotionProvider())
+  if (providers.length === 0) return {}
   return {
-    confluenceClient: new FetchConfluenceClient(),
-    confluenceConnectionRepository: new D1ConfluenceConnectionRepository({ db }),
-    confluenceDocumentRepository: new D1ConfluenceDocumentRepository({ db }),
-    ...(config.confluence.planner === 'llm'
+    documentSourceProviders: providers,
+    documentConnectionRepository: new D1DocumentConnectionRepository({ db }),
+    documentRepository: new D1DocumentRepository({ db }),
+    ...(config.documents.planner === 'llm'
       ? {
           modelProvider: new CloudflareModelProvider({ env }),
-          confluencePlannerModel: config.agents.routing.default.ref,
+          documentPlannerModel: config.agents.routing.default.ref,
         }
       : {}),
   }
@@ -386,7 +393,7 @@ export function buildContainer(env: Env, overrides: Partial<CoreDependencies> = 
     repoBlueprintRepository: new D1RepoBlueprintRepository({ db }),
     repoScanner: selectRepoScanner(env, config, db, clock),
     ...selectGitHubDeps(env, config, db, clock, idGenerator),
-    ...selectConfluenceDeps(env, config, db),
+    ...selectDocumentsDeps(env, config, db),
     ...selectEnvironmentsDeps(env, config, db),
     ...overrides,
   }

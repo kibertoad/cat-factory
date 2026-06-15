@@ -1,7 +1,7 @@
 import type {
   AgentExecutor,
-  ConfluenceClient,
   CoreDependencies,
+  DocumentSourceProvider,
   ExecutionInstance,
   GitHubClient,
   WebhookVerifier,
@@ -14,7 +14,7 @@ import { buildContainer } from '../src/infrastructure/container'
 import { FakeAgentExecutor } from './fakes/FakeAgentExecutor'
 import { FakeGitHubClient } from './fakes/FakeGitHubClient'
 import { FakeWebhookVerifier } from './fakes/FakeWebhookVerifier'
-import { FakeConfluenceClient } from './fakes/FakeConfluenceClient'
+import { FakeDocumentSourceProvider } from './fakes/FakeDocumentSourceProvider'
 import { D1GitHubInstallationRepository } from '../src/infrastructure/repositories/D1GitHubInstallationRepository'
 import { D1RepoProjectionRepository } from '../src/infrastructure/repositories/D1RepoProjectionRepository'
 import { D1BranchProjectionRepository } from '../src/infrastructure/repositories/D1BranchProjectionRepository'
@@ -22,8 +22,8 @@ import { D1PullRequestProjectionRepository } from '../src/infrastructure/reposit
 import { D1IssueProjectionRepository } from '../src/infrastructure/repositories/D1IssueProjectionRepository'
 import { D1CommitProjectionRepository } from '../src/infrastructure/repositories/D1CommitProjectionRepository'
 import { D1CheckRunProjectionRepository } from '../src/infrastructure/repositories/D1CheckRunProjectionRepository'
-import { D1ConfluenceConnectionRepository } from '../src/infrastructure/repositories/D1ConfluenceConnectionRepository'
-import { D1ConfluenceDocumentRepository } from '../src/infrastructure/repositories/D1ConfluenceDocumentRepository'
+import { D1DocumentConnectionRepository } from '../src/infrastructure/repositories/D1DocumentConnectionRepository'
+import { D1DocumentRepository } from '../src/infrastructure/repositories/D1DocumentRepository'
 
 const BASE = 'https://cat-factory.test'
 
@@ -131,20 +131,23 @@ export function uniqueInstallationId(): number {
 }
 
 /**
- * Build Confluence-module core overrides backed by the real local D1 plus a fake
- * client. No model provider is wired, so the planner uses its deterministic
+ * Build document-source core overrides backed by the real local D1 plus fake
+ * providers. No model provider is wired, so the planner uses its deterministic
  * heading parser — letting tests assert exact spawned structure without an LLM.
- * Spread into `makeApp`'s overrides to make `container.confluence` available
- * (the module assembles whenever its deps are present, independent of the
- * CONFLUENCE_ENABLED env gate).
+ * Spread into `makeApp`'s overrides to make `container.documents` available (the
+ * module assembles whenever its deps are present, independent of the
+ * DOCUMENTS_ENABLED env gate). Defaults to a Confluence + Notion fake pair.
  */
-export function confluenceDeps(
-  opts: { client?: ConfluenceClient } = {},
+export function documentsDeps(
+  opts: { providers?: DocumentSourceProvider[] } = {},
 ): Partial<CoreDependencies> {
   const db = env.DB
   return {
-    confluenceClient: opts.client ?? new FakeConfluenceClient(),
-    confluenceConnectionRepository: new D1ConfluenceConnectionRepository({ db }),
-    confluenceDocumentRepository: new D1ConfluenceDocumentRepository({ db }),
+    documentSourceProviders: opts.providers ?? [
+      new FakeDocumentSourceProvider('confluence'),
+      new FakeDocumentSourceProvider('notion'),
+    ],
+    documentConnectionRepository: new D1DocumentConnectionRepository({ db }),
+    documentRepository: new D1DocumentRepository({ db }),
   }
 }

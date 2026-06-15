@@ -7,7 +7,7 @@ import { type ExecutionConfig, loadExecutionConfig } from './execution'
 import { loadSpendPricing } from './spending'
 import { type GitHubConfig, loadGitHubConfig } from './github'
 import { type AuthConfig, loadAuthConfig } from './auth'
-import { type ConfluenceConfig, loadConfluenceConfig } from './confluence'
+import { type DocumentsConfig, loadDocumentsConfig } from './documents'
 import { type EnvironmentsConfig, loadEnvironmentsConfig } from './environments'
 import { type RetentionConfig, loadRetentionConfig } from './retention'
 
@@ -21,7 +21,7 @@ export type {
   ExecutionConfig,
   GitHubConfig,
   AuthConfig,
-  ConfluenceConfig,
+  DocumentsConfig,
   EnvironmentsConfig,
   RetentionConfig,
 }
@@ -37,8 +37,8 @@ export interface AppConfig {
   github: GitHubConfig
   /** "Login with GitHub" config; `enabled` is false unless an OAuth app is set up. */
   auth: AuthConfig
-  /** Confluence integration config; `enabled` is false unless opted in. */
-  confluence: ConfluenceConfig
+  /** Document-source integration config; `enabled` is false unless opted in. */
+  documents: DocumentsConfig
   /** Environment provider integration config; `enabled` is false unless opted in. */
   environments: EnvironmentsConfig
   /** Retention windows for the unbounded ledgers/projections (epoch-ms ages). */
@@ -54,7 +54,7 @@ export function loadConfig(env: Env): AppConfig {
     spend: loadSpendPricing(env),
     github: loadGitHubConfig(env),
     auth: loadAuthConfig(env),
-    confluence: loadConfluenceConfig(env),
+    documents: loadDocumentsConfig(env),
     environments: loadEnvironmentsConfig(env),
     retention: loadRetentionConfig(env),
   }

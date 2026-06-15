@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import type { ConfluenceBoardPlan } from '~/types/domain'
+import type { DocumentBoardPlan } from '~/types/domain'
 
-// Preview the structure a Confluence page expands into, then spawn it. The plan
-// is fetched fresh on open; a badge makes clear whether an LLM or the
+// Preview the structure an imported document expands into, then spawn it. The
+// plan is fetched fresh on open; a badge makes clear whether an LLM or the
 // deterministic heading parser produced it.
 const ui = useUiStore()
-const confluence = useConfluenceStore()
+const documents = useDocumentsStore()
 const board = useBoardStore()
 const toast = useToast()
 
@@ -21,18 +21,19 @@ const targetFrameTitle = computed(() =>
   targetFrameId.value ? board.getBlock(targetFrameId.value)?.title : null,
 )
 
-const plan = ref<ConfluenceBoardPlan | null>(null)
+const plan = ref<DocumentBoardPlan | null>(null)
 const loadingPlan = ref(false)
 const spawning = ref(false)
 
 watch(
-  () => ui.spawnPreview?.pageId,
-  async (pageId) => {
+  () => ui.spawnPreview?.externalId,
+  async (externalId) => {
     plan.value = null
-    if (!pageId) return
+    const preview = ui.spawnPreview
+    if (!externalId || !preview) return
     loadingPlan.value = true
     try {
-      plan.value = await confluence.plan(pageId)
+      plan.value = await documents.plan(preview.source, externalId)
     } catch (e) {
       toast.add({
         title: 'Could not build a plan',
@@ -48,11 +49,15 @@ watch(
 )
 
 async function spawn() {
-  const pageId = ui.spawnPreview?.pageId
-  if (!pageId) return
+  const preview = ui.spawnPreview
+  if (!preview) return
   spawning.value = true
   try {
-    const result = await confluence.spawn(pageId, targetFrameId.value ?? undefined)
+    const result = await documents.spawn(
+      preview.source,
+      preview.externalId,
+      targetFrameId.value ?? undefined,
+    )
     toast.add({
       title: 'Structure spawned',
       description: `${result.frames} frames · ${result.modules} modules · ${result.tasks} tasks`,
@@ -60,7 +65,7 @@ async function spawn() {
       color: 'success',
     })
     ui.closeSpawnPreview()
-    ui.closeConfluenceImport()
+    ui.closeDocumentImport()
   } catch (e) {
     toast.add({
       title: 'Spawn failed',
@@ -79,8 +84,12 @@ async function spawn() {
     <template #body>
       <div class="space-y-4">
         <div v-if="plan" class="flex items-center justify-between gap-2">
-          <UBadge :color="plan.source === 'llm' ? 'primary' : 'neutral'" variant="subtle" size="sm">
-            {{ plan.source === 'llm' ? 'AI-generated' : 'From headings' }}
+          <UBadge
+            :color="plan.planner === 'llm' ? 'primary' : 'neutral'"
+            variant="subtle"
+            size="sm"
+          >
+            {{ plan.planner === 'llm' ? 'AI-generated' : 'From headings' }}
           </UBadge>
           <span v-if="targetFrameTitle" class="text-xs text-slate-400">
             into <span class="font-medium text-slate-200">{{ targetFrameTitle }}</span>

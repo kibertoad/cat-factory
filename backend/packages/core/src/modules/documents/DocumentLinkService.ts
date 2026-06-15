@@ -1,20 +1,26 @@
-import type { Block, ConfluenceBoardPlan, ConfluenceDocument, PlanFrame } from '../../domain/types'
+import type {
+  Block,
+  DocumentBoardPlan,
+  SourceDocument,
+  DocumentSourceKind,
+  PlanFrame,
+} from '../../domain/types'
 import { assertFound, ValidationError } from '../../domain/errors'
 import type { BlockRepository } from '../../ports/repositories'
-import type { ConfluenceDocumentRepository } from '../../ports/confluence-repositories'
+import type { DocumentRepository } from '../../ports/document-repositories'
 import type { BoardService } from '../board/BoardService'
-import { toConfluenceDocument } from './ConfluenceImportService'
+import { toSourceDocument } from './DocumentImportService'
 
-// ConfluenceLinkService: the write side that connects a Confluence document to
-// the board. `spawn` materialises a planned structure into real frames, modules
-// and tasks via the existing BoardService operations; `linkToBlock` attaches an
+// DocumentLinkService: the write side that connects an imported document to the
+// board. `spawn` materialises a planned structure into real frames, modules and
+// tasks via the existing BoardService operations; `linkToBlock` attaches an
 // imported document to a block so the execution engine feeds it to agents as
-// extra context.
+// extra context. Source-agnostic — it works on the projected document records.
 
-export interface ConfluenceLinkServiceDependencies {
+export interface DocumentLinkServiceDependencies {
   boardService: BoardService
   blockRepository: BlockRepository
-  confluenceDocumentRepository: ConfluenceDocumentRepository
+  documentRepository: DocumentRepository
 }
 
 /** Counts of blocks created by a spawn, for the API response. */
@@ -24,8 +30,8 @@ export interface SpawnResult {
   tasks: number
 }
 
-export class ConfluenceLinkService {
-  constructor(private readonly deps: ConfluenceLinkServiceDependencies) {}
+export class DocumentLinkService {
+  constructor(private readonly deps: DocumentLinkServiceDependencies) {}
 
   /**
    * Apply a board plan to a workspace. Without `frameId` each planned frame
@@ -34,7 +40,7 @@ export class ConfluenceLinkService {
    */
   async spawn(
     workspaceId: string,
-    plan: ConfluenceBoardPlan,
+    plan: DocumentBoardPlan,
     frameId?: string,
   ): Promise<SpawnResult> {
     const result: SpawnResult = { frames: 0, modules: 0, tasks: 0 }
@@ -46,7 +52,7 @@ export class ConfluenceLinkService {
         frameId,
       )
       if (target.level !== 'frame') {
-        throw new ValidationError('Confluence structure can only be spawned into a service frame')
+        throw new ValidationError('Document structure can only be spawned into a service frame')
       }
       for (const frame of plan.frames) {
         await this.spawnInto(workspaceId, target.id, frame, result)
@@ -114,19 +120,20 @@ export class ConfluenceLinkService {
   async linkToBlock(
     workspaceId: string,
     blockId: string,
-    pageId: string,
-  ): Promise<ConfluenceDocument> {
+    source: DocumentSourceKind,
+    externalId: string,
+  ): Promise<SourceDocument> {
     const block: Block = assertFound(
       await this.deps.blockRepository.get(workspaceId, blockId),
       'Block',
       blockId,
     )
     const document = assertFound(
-      await this.deps.confluenceDocumentRepository.get(workspaceId, pageId),
-      'ConfluenceDocument',
-      pageId,
+      await this.deps.documentRepository.get(workspaceId, source, externalId),
+      'Document',
+      externalId,
     )
-    await this.deps.confluenceDocumentRepository.linkBlock(workspaceId, pageId, block.id)
-    return toConfluenceDocument({ ...document, linkedBlockId: block.id })
+    await this.deps.documentRepository.linkBlock(workspaceId, source, externalId, block.id)
+    return toSourceDocument({ ...document, linkedBlockId: block.id })
   }
 }

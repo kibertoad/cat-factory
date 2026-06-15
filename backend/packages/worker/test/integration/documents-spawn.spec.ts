@@ -1,42 +1,49 @@
-import type { Block, ConfluenceBoardPlan, WorkspaceSnapshot } from '@cat-factory/core'
+import type { Block, DocumentBoardPlan, WorkspaceSnapshot } from '@cat-factory/core'
 import { describe, expect, it } from 'vitest'
-import { confluenceDeps, makeApp } from '../helpers'
+import { documentsDeps, makeApp } from '../helpers'
 import { FakeAgentExecutor } from '../fakes/FakeAgentExecutor'
-import { FakeConfluenceClient } from '../fakes/FakeConfluenceClient'
+import { FakeDocumentSourceProvider } from '../fakes/FakeDocumentSourceProvider'
 
-const creds = {
-  baseUrl: 'https://acme.atlassian.net',
-  accountEmail: 'dev@acme.io',
-  apiToken: 'secret-token',
-}
+const notionCreds = { apiToken: 'ntn_secret' }
 
-// A page whose heading outline maps to one service, two modules and three tasks.
-const BILLING_BODY =
-  '<h1>Billing Service</h1>' +
-  '<h2>Invoices</h2><h3>Create invoice</h3><h3>Void invoice</h3>' +
-  '<h2>Payments</h2><h3>Charge card</h3>'
+// A page whose Markdown heading outline maps to one service, two modules and
+// three tasks. Providers normalize bodies to Markdown, so the planner is
+// source-agnostic — this exercises a Notion document.
+const BILLING_BODY = [
+  '# Billing Service',
+  '## Invoices',
+  '### Create invoice',
+  '### Void invoice',
+  '## Payments',
+  '### Charge card',
+].join('\n')
 
 async function setup() {
-  const client = new FakeConfluenceClient({
+  const notion = new FakeDocumentSourceProvider('notion', {
     '777': { title: 'Billing PRD', body: BILLING_BODY },
   })
-  const app = makeApp(new FakeAgentExecutor(), confluenceDeps({ client }))
+  const app = makeApp(new FakeAgentExecutor(), documentsDeps({ providers: [notion] }))
   const { workspace } = await app.createWorkspace({ seed: false })
-  await app.call('POST', `/workspaces/${workspace.id}/confluence/connect`, creds)
-  await app.call('POST', `/workspaces/${workspace.id}/confluence/import`, { page: '777' })
+  await app.call('POST', `/workspaces/${workspace.id}/document-sources/notion/connect`, {
+    credentials: notionCreds,
+  })
+  await app.call('POST', `/workspaces/${workspace.id}/document-sources/notion/import`, {
+    ref: '777',
+  })
   return { app, workspaceId: workspace.id }
 }
 
-describe('confluence spawn', () => {
+describe('document spawn', () => {
   it('plans the heading outline deterministically when no LLM is configured', async () => {
     const { app, workspaceId } = await setup()
-    const planned = await app.call<ConfluenceBoardPlan>(
+    const planned = await app.call<DocumentBoardPlan>(
       'POST',
-      `/workspaces/${workspaceId}/confluence/plan`,
-      { pageId: '777' },
+      `/workspaces/${workspaceId}/document-sources/notion/plan`,
+      { externalId: '777' },
     )
     expect(planned.status).toBe(200)
-    expect(planned.body.source).toBe('headings')
+    expect(planned.body.source).toBe('notion')
+    expect(planned.body.planner).toBe('headings')
     expect(planned.body.frames).toHaveLength(1)
     const frame = planned.body.frames[0]!
     expect(frame.title).toBe('Billing Service')
@@ -48,8 +55,8 @@ describe('confluence spawn', () => {
     const { app, workspaceId } = await setup()
     const spawned = await app.call<{ result: { frames: number; modules: number; tasks: number } }>(
       'POST',
-      `/workspaces/${workspaceId}/confluence/spawn`,
-      { pageId: '777' },
+      `/workspaces/${workspaceId}/document-sources/notion/spawn`,
+      { externalId: '777' },
     )
     expect(spawned.status).toBe(201)
     expect(spawned.body.result).toEqual({ frames: 1, modules: 2, tasks: 3 })
@@ -75,10 +82,14 @@ describe('confluence spawn', () => {
       position: { x: 0, y: 0 },
     })
 
-    const spawned = await app.call('POST', `/workspaces/${workspaceId}/confluence/spawn`, {
-      pageId: '777',
-      frameId: frame.body.id,
-    })
+    const spawned = await app.call(
+      'POST',
+      `/workspaces/${workspaceId}/document-sources/notion/spawn`,
+      {
+        externalId: '777',
+        frameId: frame.body.id,
+      },
+    )
     expect(spawned.status).toBe(201)
 
     const snapshot = await app.call<WorkspaceSnapshot>('GET', `/workspaces/${workspaceId}`)

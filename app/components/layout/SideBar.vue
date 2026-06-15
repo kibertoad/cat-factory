@@ -3,12 +3,12 @@ import BlockPalette from '~/components/palettes/BlockPalette.vue'
 import PipelinePalette from '~/components/palettes/PipelinePalette.vue'
 import UserMenu from '~/components/auth/UserMenu.vue'
 
-const confluence = useConfluenceStore()
+const documents = useDocumentsStore()
 const ui = useUiStore()
 
-// Resolve whether the Confluence integration is enabled on the backend, so the
-// section is hidden entirely when it is off (mirrors how auth gates its UI).
-onMounted(() => confluence.probe())
+// Resolve whether the document-source integration is enabled on the backend, so
+// the section is hidden entirely when it is off (mirrors how auth gates its UI).
+onMounted(() => documents.probe())
 </script>
 
 <template>
@@ -57,37 +57,37 @@ onMounted(() => confluence.probe())
       </UButton>
     </section>
 
-    <template v-if="confluence.available">
+    <template v-if="documents.available && documents.sources.length">
       <USeparator />
       <section>
         <h2 class="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-          Confluence
+          Document sources
         </h2>
         <div class="space-y-1.5">
           <UButton
+            v-for="src in documents.sources"
+            :key="src.source"
             block
             color="neutral"
             variant="soft"
             size="sm"
-            icon="i-lucide-plug"
+            :icon="src.icon"
             class="justify-start"
-            @click="ui.openConfluenceConnect()"
+            @click="ui.openDocumentConnect(src.source)"
           >
             <span class="truncate">
-              {{
-                confluence.connected ? confluence.connection?.accountEmail : 'Connect Confluence'
-              }}
+              {{ documents.isConnected(src.source) ? src.label : `Connect ${src.label}` }}
             </span>
           </UButton>
           <UButton
-            v-if="confluence.connected"
+            v-if="documents.anyConnected"
             block
             color="neutral"
             variant="soft"
             size="sm"
             icon="i-lucide-file-down"
             class="justify-start"
-            @click="ui.openConfluenceImport(null)"
+            @click="ui.openDocumentImport(null)"
           >
             Import &amp; spawn
           </UButton>

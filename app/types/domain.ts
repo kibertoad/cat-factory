@@ -11,7 +11,7 @@
 // import surface:
 //   - execution model  → ./execution
 //   - models/fragments  → ./models
-//   - Confluence import → ./confluence
+//   - document sources  → ./documents
 // ---------------------------------------------------------------------------
 
 import type { ExecutionInstance } from './execution'
@@ -199,6 +199,6 @@ export interface AuthUser {
 // import surface for the whole frontend.
 export type * from './execution'
 export type * from './models'
-export type * from './confluence'
+export type * from './documents'
 export type * from './scenarios'
 export type * from './bootstrap'

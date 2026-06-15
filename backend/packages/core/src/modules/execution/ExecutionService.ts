@@ -12,7 +12,7 @@ import type { AgentExecutor, AgentRunContext, AgentRunResult } from '../../ports
 import { isAsyncAgentExecutor } from '../../ports/agent-executor'
 import type { WorkRunner } from '../../ports/work-runner'
 import type { ExecutionEventPublisher } from '../../ports/execution-events'
-import type { ConfluenceDocumentRepository } from '../../ports/confluence-repositories'
+import type { DocumentRepository } from '../../ports/document-repositories'
 import type { EnvironmentProvisioningService } from '../environments/EnvironmentProvisioningService'
 import { isDeployStep } from '../environments/environments.logic'
 import { serviceOf } from '../board/board.logic'
@@ -33,10 +33,10 @@ export interface ExecutionServiceDependencies {
   boardService: BoardService
   spendService: SpendService
   /**
-   * Optional: when the Confluence integration is configured, documents linked to
-   * a block are resolved here and fed to the agent as extra context.
+   * Optional: when the document-source integration is configured, documents
+   * linked to a block are resolved here and fed to the agent as extra context.
    */
-  confluenceDocumentRepository?: ConfluenceDocumentRepository
+  documentRepository?: DocumentRepository
   /**
    * Optional: when the environment integration is configured, a `deployer` step
    * provisions an ephemeral environment deterministically through this service
@@ -65,7 +65,7 @@ export class ExecutionService {
   private readonly events: ExecutionEventPublisher
   private readonly board: BoardService
   private readonly spend: SpendService
-  private readonly confluenceDocuments?: ConfluenceDocumentRepository
+  private readonly documents?: DocumentRepository
   private readonly environmentProvisioning?: EnvironmentProvisioningService
 
   constructor({
@@ -79,7 +79,7 @@ export class ExecutionService {
     executionEventPublisher,
     boardService,
     spendService,
-    confluenceDocumentRepository,
+    documentRepository,
     environmentProvisioning,
   }: ExecutionServiceDependencies) {
     this.workspaceRepository = workspaceRepository
@@ -92,7 +92,7 @@ export class ExecutionService {
     this.events = executionEventPublisher
     this.board = boardService
     this.spend = spendService
-    this.confluenceDocuments = confluenceDocumentRepository
+    this.documents = documentRepository
     this.environmentProvisioning = environmentProvisioning
   }
 
@@ -456,16 +456,17 @@ export class ExecutionService {
   }
 
   /**
-   * Resolve Confluence documents linked to the running block into compact agent
-   * context. A no-op unless the Confluence integration is wired (the repository
-   * is an optional dependency), so the engine stays unchanged when it is off.
+   * Resolve documents (from any source) linked to the running block into compact
+   * agent context. A no-op unless the document-source integration is wired (the
+   * repository is an optional dependency), so the engine stays unchanged when it
+   * is off.
    */
   private async resolveContextDocs(
     workspaceId: string,
     blockId: string,
   ): Promise<{ title: string; url: string; excerpt: string }[]> {
-    if (!this.confluenceDocuments) return []
-    const docs = await this.confluenceDocuments.listByBlock(workspaceId, blockId)
+    if (!this.documents) return []
+    const docs = await this.documents.listByBlock(workspaceId, blockId)
     return docs.map((d) => ({ title: d.title, url: d.url, excerpt: d.excerpt }))
   }
 

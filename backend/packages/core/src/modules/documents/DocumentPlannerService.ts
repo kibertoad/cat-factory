@@ -1,19 +1,20 @@
 import { generateText } from 'ai'
 import type { ModelProvider, ModelRef } from '../../ports/model-provider'
-import type { ConfluenceDocumentRecord } from '../../ports/confluence-repositories'
-import type { ConfluenceBoardPlan } from '../../domain/types'
-import { coercePlan, htmlToText, planFromHeadings } from './confluence.logic'
+import type { DocumentRecord } from '../../ports/document-repositories'
+import type { DocumentBoardPlan } from '../../domain/types'
+import { coercePlan, markdownToText, planFromHeadings } from './documents.logic'
 
-// ConfluencePlannerService: turns an imported document into a proposed board
+// DocumentPlannerService: turns an imported document into a proposed board
 // structure (frames → modules → tasks). When a model is configured it asks an
 // LLM, via the provider-agnostic ModelProvider port, to extract the structure;
 // otherwise — or if the LLM response can't be parsed — it falls back to the
-// deterministic heading parser. The LLM is therefore optional within the
-// Confluence module: import, link and spawn all work without it.
+// deterministic heading parser. The LLM is therefore optional: import, link and
+// spawn all work without it. Source-agnostic, because providers normalize bodies
+// to Markdown before they reach here.
 
 const MAX_BODY_CHARS = 6000
 
-export interface ConfluencePlannerServiceDependencies {
+export interface DocumentPlannerServiceDependencies {
   /** Resolves the planner model; absent when no provider is configured. */
   modelProvider?: ModelProvider
   /** Which model to use for planning (the agents' default model ref). */
@@ -26,7 +27,7 @@ const SYSTEM_PROMPT =
   'and tasks (units of work). Respond with ONLY a JSON object, no prose, no code fences.'
 
 function buildUserPrompt(title: string, body: string): string {
-  const text = htmlToText(body).slice(0, MAX_BODY_CHARS)
+  const text = markdownToText(body).slice(0, MAX_BODY_CHARS)
   return [
     `Document title: ${title}`,
     '',
@@ -62,8 +63,8 @@ function extractJson(text: string): unknown {
   }
 }
 
-export class ConfluencePlannerService {
-  constructor(private readonly deps: ConfluencePlannerServiceDependencies) {}
+export class DocumentPlannerService {
+  constructor(private readonly deps: DocumentPlannerServiceDependencies) {}
 
   /** Whether LLM planning is available (a model provider + ref are configured). */
   get llmEnabled(): boolean {
@@ -71,8 +72,9 @@ export class ConfluencePlannerService {
   }
 
   /** Propose a board structure for an imported document. */
-  async plan(record: ConfluenceDocumentRecord): Promise<ConfluenceBoardPlan> {
-    const fallback = () => planFromHeadings(record.pageId, record.title, record.body)
+  async plan(record: DocumentRecord): Promise<DocumentBoardPlan> {
+    const fallback = () =>
+      planFromHeadings(record.source, record.externalId, record.title, record.body)
     if (!this.deps.modelProvider || !this.deps.modelRef) return fallback()
 
     try {
@@ -84,7 +86,7 @@ export class ConfluencePlannerService {
         temperature: 0.2,
         maxOutputTokens: 1500,
       })
-      const plan = coercePlan(record.pageId, extractJson(text))
+      const plan = coercePlan(record.source, record.externalId, extractJson(text))
       return plan ?? fallback()
     } catch {
       // Any provider/parse failure degrades gracefully to the deterministic plan.

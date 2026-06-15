@@ -4,9 +4,11 @@ import type {
   BlockType,
   BootstrapJob,
   BootstrapRepoInput,
-  ConfluenceBoardPlan,
-  ConfluenceConnection,
-  ConfluenceDocument,
+  DocumentBoardPlan,
+  DocumentConnection,
+  DocumentSourceDescriptor,
+  DocumentSourceKind,
+  SourceDocument,
   CreateReferenceArchitectureInput,
   ExecutionInstance,
   ModelOption,
@@ -143,45 +145,58 @@ export function useApi() {
     resumeSpend: (workspaceId: string) =>
       http<ExecutionInstance[]>(`${ws(workspaceId)}/spend/resume`, { method: 'POST' }),
 
-    // ---- confluence -------------------------------------------------------
-    getConfluenceConnection: (workspaceId: string) =>
-      http<{ connection: ConfluenceConnection | null }>(`${ws(workspaceId)}/confluence/connection`),
+    // ---- document sources (Confluence, Notion, …) -------------------------
+    // The configured sources + their connect/import metadata. A 503 means the
+    // integration is off (the store hides its UI on any error here).
+    listDocumentSources: (workspaceId: string) =>
+      http<{ sources: DocumentSourceDescriptor[] }>(`${ws(workspaceId)}/document-sources`),
 
-    connectConfluence: (
+    listDocumentConnections: (workspaceId: string) =>
+      http<{ connections: DocumentConnection[] }>(
+        `${ws(workspaceId)}/document-sources/connections`,
+      ),
+
+    connectDocumentSource: (
       workspaceId: string,
-      body: { baseUrl: string; accountEmail: string; apiToken: string },
+      source: DocumentSourceKind,
+      credentials: Record<string, string>,
     ) =>
-      http<ConfluenceConnection>(`${ws(workspaceId)}/confluence/connect`, {
+      http<DocumentConnection>(`${ws(workspaceId)}/document-sources/${source}/connect`, {
+        method: 'POST',
+        body: { credentials },
+      }),
+
+    disconnectDocumentSource: (workspaceId: string, source: DocumentSourceKind) =>
+      http(`${ws(workspaceId)}/document-sources/${source}/connection`, { method: 'DELETE' }),
+
+    listDocuments: (workspaceId: string) => http<SourceDocument[]>(`${ws(workspaceId)}/documents`),
+
+    importDocument: (workspaceId: string, source: DocumentSourceKind, body: { ref: string }) =>
+      http<SourceDocument>(`${ws(workspaceId)}/document-sources/${source}/import`, {
         method: 'POST',
         body,
       }),
 
-    disconnectConfluence: (workspaceId: string) =>
-      http(`${ws(workspaceId)}/confluence/connection`, { method: 'DELETE' }),
-
-    listConfluenceDocs: (workspaceId: string) =>
-      http<ConfluenceDocument[]>(`${ws(workspaceId)}/confluence/documents`),
-
-    importConfluenceDoc: (workspaceId: string, body: { page: string }) =>
-      http<ConfluenceDocument>(`${ws(workspaceId)}/confluence/import`, { method: 'POST', body }),
-
-    planConfluence: (workspaceId: string, pageId: string) =>
-      http<ConfluenceBoardPlan>(`${ws(workspaceId)}/confluence/plan`, {
+    planDocument: (workspaceId: string, source: DocumentSourceKind, externalId: string) =>
+      http<DocumentBoardPlan>(`${ws(workspaceId)}/document-sources/${source}/plan`, {
         method: 'POST',
-        body: { pageId },
+        body: { externalId },
       }),
 
-    spawnConfluence: (workspaceId: string, body: { pageId: string; frameId?: string }) =>
-      http<{ plan: ConfluenceBoardPlan; result: SpawnResult }>(
-        `${ws(workspaceId)}/confluence/spawn`,
+    spawnDocument: (
+      workspaceId: string,
+      source: DocumentSourceKind,
+      body: { externalId: string; frameId?: string },
+    ) =>
+      http<{ plan: DocumentBoardPlan; result: SpawnResult }>(
+        `${ws(workspaceId)}/document-sources/${source}/spawn`,
         { method: 'POST', body },
       ),
 
-    linkConfluenceDoc: (workspaceId: string, pageId: string, body: { blockId: string }) =>
-      http<ConfluenceDocument>(`${ws(workspaceId)}/confluence/documents/${pageId}/link`, {
-        method: 'POST',
-        body,
-      }),
+    linkDocument: (
+      workspaceId: string,
+      body: { source: DocumentSourceKind; externalId: string; blockId: string },
+    ) => http<SourceDocument>(`${ws(workspaceId)}/documents/link`, { method: 'POST', body }),
 
     // ---- repo bootstrap ---------------------------------------------------
     listReferenceArchitectures: (workspaceId: string) =>

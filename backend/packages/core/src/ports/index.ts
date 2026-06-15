@@ -48,16 +48,18 @@ export type {
 } from './github-repositories'
 export type { WebhookVerifier } from './webhook-verifier'
 export type {
-  ConfluenceClient,
-  ConfluenceCredentials,
-  ConfluencePageContent,
-} from './confluence-client'
+  DocumentCredentials,
+  DocumentContent,
+  NormalizedConnection,
+  DocumentSourceProvider,
+  DocumentSourceRegistry,
+} from './document-source'
 export type {
-  ConfluenceConnectionRecord,
-  ConfluenceConnectionRepository,
-  ConfluenceDocumentRecord,
-  ConfluenceDocumentRepository,
-} from './confluence-repositories'
+  DocumentConnectionRecord,
+  DocumentConnectionRepository,
+  DocumentRecord,
+  DocumentRepository,
+} from './document-repositories'
 export type { SecretCipher } from './secret-cipher'
 export type {
   EnvironmentProvider,

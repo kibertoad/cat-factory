@@ -33,10 +33,13 @@ export type {
   CommitFilesInput,
   OpenPullRequestInput,
   MergePullRequestInput,
-  // Confluence integration projections + planning shapes.
-  ConfluenceConnection,
-  ConfluenceDocument,
-  ConfluenceBoardPlan,
+  // Document-source integration projections + planning shapes.
+  DocumentSourceKind,
+  DocumentSourceDescriptor,
+  CredentialField,
+  DocumentConnection,
+  SourceDocument,
+  DocumentBoardPlan,
   PlanFrame,
   PlanModule,
   PlanTask,
