@@ -1,4 +1,12 @@
-import type { AgentExecutor, AgentRunContext, AgentRunResult } from '@cat-factory/core'
+import {
+  type AgentExecutor,
+  type AgentJobHandle,
+  type AgentJobUpdate,
+  type AgentRunContext,
+  type AgentRunResult,
+  type AsyncAgentExecutor,
+  isAsyncAgentExecutor,
+} from '@cat-factory/core'
 
 // Routes each pipeline step to the right executor by agent kind. The kinds that
 // produce and commit files against a real checkout — implementation (`coder`),
@@ -21,14 +29,40 @@ import type { AgentExecutor, AgentRunContext, AgentRunResult } from '@cat-factor
  */
 const CONTAINER_KINDS = new Set(['coder', 'mocker', 'playwright', 'business-documenter'])
 
-export class CompositeAgentExecutor implements AgentExecutor {
+export class CompositeAgentExecutor implements AsyncAgentExecutor {
   constructor(
     private readonly inline: AgentExecutor,
     private readonly container: AgentExecutor,
   ) {}
 
+  /** The executor that handles a given step's kind. */
+  private pick(context: AgentRunContext): AgentExecutor {
+    return CONTAINER_KINDS.has(context.agentKind) ? this.container : this.inline
+  }
+
   run(context: AgentRunContext): Promise<AgentRunResult> {
-    const executor = CONTAINER_KINDS.has(context.agentKind) ? this.container : this.inline
-    return executor.run(context)
+    return this.pick(context).run(context)
+  }
+
+  /** Async only for container kinds whose executor actually supports polling. */
+  runsAsync(context: AgentRunContext): boolean {
+    const executor = this.pick(context)
+    return isAsyncAgentExecutor(executor) && executor.runsAsync(context)
+  }
+
+  startJob(context: AgentRunContext): Promise<AgentJobHandle> {
+    const executor = this.pick(context)
+    if (!isAsyncAgentExecutor(executor)) {
+      throw new Error(`No async executor for agent kind '${context.agentKind}'`)
+    }
+    return executor.startJob(context)
+  }
+
+  pollJob(handle: AgentJobHandle): Promise<AgentJobUpdate> {
+    // Only the container executor runs async jobs, so polls route there.
+    if (!isAsyncAgentExecutor(this.container)) {
+      throw new Error('Container executor does not support async jobs')
+    }
+    return this.container.pollJob(handle)
   }
 }

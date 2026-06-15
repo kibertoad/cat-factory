@@ -43,6 +43,7 @@ describe('parseBootstrapJob', () => {
 })
 
 const validBody = {
+  jobId: 'exec-1',
   systemPrompt: 'You are a builder.',
   userPrompt: 'Implement the thing.',
   model: 'qwen3-max',
@@ -57,8 +58,13 @@ const validBody = {
 describe('parseJob', () => {
   it('accepts a well-formed job', () => {
     const job = parseJob(validBody)
+    expect(job.jobId).toBe('exec-1')
     expect(job.repo.owner).toBe('o')
     expect(job.pr.title).toBe('T')
+  })
+
+  it('requires a jobId (the durable driver keys/polls the job by it)', () => {
+    expect(() => parseJob({ ...validBody, jobId: '' })).toThrow(/jobId/)
   })
 
   it('defaults an absent pr body to empty', () => {

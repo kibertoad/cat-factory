@@ -130,6 +130,17 @@ DECISION_TIMEOUT = "24 hours"
 CONTAINER_IMPL_ENABLED = "false"
 # Public origin of this Worker; required for container implementation.
 # WORKER_PUBLIC_URL = "https://cat-factory-backend.<account>.workers.dev"
+# Container coding jobs run asynchronously: the driver dispatches the job and
+# then polls it on this cadence between durable sleeps, so a job can run far
+# longer than one Workflows step while each step stays short. JOB_MAX_POLLS is a
+# backstop in case a container never reports a terminal state (the container's own
+# max-duration watchdog should fire first).
+# JOB_POLL_INTERVAL = "15 seconds"
+# JOB_MAX_POLLS = "280"
+# The container-side watchdogs that bound every coding job (read by the harness,
+# so they live on the container, not here): JOB_MAX_DURATION_MS force-fails a job
+# after this long (default 3600000 = 60 min); JOB_INACTIVITY_MS kills the agent
+# if it produces no output for this long, i.e. it's hung (default 600000 = 10 min).
 
 # Spend safeguard (see src/infrastructure/config.ts). Token usage is metered per
 # LLM call into a ledger, priced into SPEND_CURRENCY, and gated by a monthly

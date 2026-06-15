@@ -10,6 +10,11 @@ import type { DurableObjectNamespace } from '@cloudflare/workers-types'
 import type { ImplementationContainer } from '../containers/ImplementationContainer'
 import type { ContainerSessionService } from '../containers/ContainerSessionService'
 
+// Synchronous request/response (unlike `/run`); cap the Worker's wait so a wedged
+// container can't block forever. The harness's shared git timeouts bound the
+// underlying git operations too.
+const CONTAINER_SYNC_TIMEOUT_MS = 30 * 60_000
+
 export interface ContainerRepoBootstrapperDependencies {
   /** The Durable Object namespace backing the per-run container instances. */
   container: DurableObjectNamespace<ImplementationContainer>
@@ -130,6 +135,7 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(CONTAINER_SYNC_TIMEOUT_MS),
     })
     if (!res.ok) {
       throw new Error(`Bootstrap container failed (HTTP ${res.status}): ${await safeText(res)}`)

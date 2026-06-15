@@ -59,6 +59,7 @@ describe.skipIf(!docker)('implementer container acceptance', () => {
     await waitForHealth(hostPort)
 
     const job = {
+      jobId: 'acc-1',
       systemPrompt: 'You are a builder. Create exactly the file the user asks for.',
       userPrompt: 'Create IMPLEMENTED.md containing "hello from pi".',
       model: 'dummy-model',
@@ -71,20 +72,29 @@ describe.skipIf(!docker)('implementer container acceptance', () => {
       githubApiBase: `http://host.docker.internal:${ghPort}`,
     }
 
-    const ac = new AbortController()
-    const timer = setTimeout(() => ac.abort(), 180_000)
     let result: { prUrl?: string; branch?: string; summary?: string; error?: string }
     try {
-      const res = await fetch(`http://127.0.0.1:${hostPort}/run`, {
+      // Start the async job, then poll until it reaches a terminal state.
+      const start = await fetch(`http://127.0.0.1:${hostPort}/run`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(job),
-        signal: ac.signal,
       })
-      expect(res.status).toBe(200)
-      result = (await res.json()) as typeof result
+      expect(start.status).toBe(202)
+      expect(((await start.json()) as { jobId: string }).jobId).toBe('acc-1')
+
+      const deadline = Date.now() + 180_000
+      let view: { state: string; result?: typeof result; error?: string }
+      do {
+        await new Promise((r) => setTimeout(r, 1000))
+        const poll = await fetch(`http://127.0.0.1:${hostPort}/jobs/acc-1`)
+        expect(poll.status).toBe(200)
+        view = (await poll.json()) as typeof view
+      } while (view.state === 'running' && Date.now() < deadline)
+
+      expect(view.state).toBe('done')
+      result = view.result ?? { error: view.error }
     } finally {
-      clearTimeout(timer)
       proxy.server.close()
       github.server.close()
     }

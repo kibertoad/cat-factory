@@ -18,13 +18,21 @@ interface Dispatched {
 }
 
 function fakeContainer(
-  respond: () => unknown,
+  respond: () => { error?: string } & Record<string, unknown>,
   capture: (d: Dispatched) => void,
 ): DurableObjectNamespace<ImplementationContainer> {
+  // Speaks the async harness protocol: POST /run starts a job (returns its id),
+  // GET /jobs/{id} reports it as already finished with `respond()` as the result.
   const stub = {
-    fetch(url: string, init: { body: string }) {
-      capture({ url, body: JSON.parse(init.body) as Record<string, unknown> })
-      return Promise.resolve(new Response(JSON.stringify(respond())))
+    fetch(url: string, init?: { method?: string; body?: string }) {
+      if (init?.method === 'GET' || url.includes('/jobs/')) {
+        return Promise.resolve(new Response(JSON.stringify({ state: 'done', result: respond() })))
+      }
+      const body = JSON.parse(init!.body!) as Record<string, unknown>
+      capture({ url, body })
+      return Promise.resolve(
+        new Response(JSON.stringify({ jobId: body.jobId, state: 'running' }), { status: 202 }),
+      )
     },
   }
   return {

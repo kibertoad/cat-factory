@@ -12,6 +12,7 @@ import { sweepRetention } from './infrastructure/workflows/retention'
 import { WorkflowsLookup, sweepStuckRuns } from './infrastructure/workflows/sweeper'
 import { handleGitHubSyncBatch, reconcileStaleRepos } from './infrastructure/github/sync-consumer'
 import { sweepExpiredEnvironments } from './infrastructure/environments/sweep'
+import { logger } from './infrastructure/observability/logger'
 
 // Cloudflare Worker entry. In addition to the Hono `fetch` handler, we expose a
 // `scheduled` handler (the cron sweeper, now also reconciling GitHub
@@ -26,6 +27,14 @@ export { ImplementationContainer } from './infrastructure/containers/Implementat
 export { WorkspaceEventsHub } from './infrastructure/durable-objects/WorkspaceEventsHub'
 
 const app = createApp()
+
+/** Compact, log-friendly shape for an unknown caught value. */
+function errInfo(error: unknown): { message: string; stack?: string } {
+  if (error instanceof Error) {
+    return { message: error.message, ...(error.stack ? { stack: error.stack } : {}) }
+  }
+  return { message: String(error) }
+}
 
 /** A run is treated as orphaned if its lease is older than this. */
 const SWEEP_LEASE_MS = 5 * 60 * 1000
@@ -63,7 +72,13 @@ export default {
           commitRepository: new D1CommitProjectionRepository({ db: env.DB }),
           clock,
           policy: loadConfig(env).retention,
-        }).then(() => undefined),
+        })
+          .then((result) =>
+            logger.info({ cron: 'retention', ...result }, 'retention sweep complete'),
+          )
+          .catch((error) =>
+            logger.error({ cron: 'retention', err: errInfo(error) }, 'retention sweep failed'),
+          ),
       )
       return
     }
@@ -79,17 +94,41 @@ export default {
           workRunner: new WorkflowsWorkRunner({ workflow, queue: env.EXECUTION_QUEUE }),
           clock,
           leaseMs: SWEEP_LEASE_MS,
-        }).then(() => undefined),
+        })
+          // Surface how many orphaned runs were re-driven — the key signal for
+          // "are runs getting stuck?" Only log when it actually did something.
+          .then((redriven) => {
+            if (redriven > 0) logger.warn({ cron: 'run-sweeper', redriven }, 're-drove stuck runs')
+          })
+          .catch((error) =>
+            logger.error({ cron: 'run-sweeper', err: errInfo(error) }, 'run sweep failed'),
+          ),
       )
     }
 
     // Reconcile GitHub projections that may have missed a webhook (no-op unless
     // the integration is configured).
-    ctx.waitUntil(reconcileStaleRepos(env, clock, GITHUB_RECONCILE_STALE_MS).then(() => undefined))
+    ctx.waitUntil(
+      reconcileStaleRepos(env, clock, GITHUB_RECONCILE_STALE_MS)
+        .then((scheduled) => {
+          if (scheduled > 0)
+            logger.info({ cron: 'github-reconcile', scheduled }, 'scheduled repo resyncs')
+        })
+        .catch((error) =>
+          logger.error(
+            { cron: 'github-reconcile', err: errInfo(error) },
+            'github reconcile failed',
+          ),
+        ),
+    )
 
     // Tear down ephemeral environments whose TTL has elapsed (no-op unless the
     // environment integration is configured).
-    ctx.waitUntil(sweepExpiredEnvironments(env, clock).then(() => undefined))
+    ctx.waitUntil(
+      sweepExpiredEnvironments(env, clock).catch((error) =>
+        logger.error({ cron: 'env-sweeper', err: errInfo(error) }, 'environment sweep failed'),
+      ),
+    )
   },
 
   async queue(

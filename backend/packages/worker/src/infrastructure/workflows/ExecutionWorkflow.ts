@@ -9,6 +9,7 @@ import type { AdvanceResult } from '@cat-factory/core'
 import type { Env } from '../env'
 import { buildContainer } from '../container'
 import { loadConfig } from '../config'
+import { logger } from '../observability/logger'
 import type { ExecutionWorkflowParams } from './WorkflowsWorkRunner'
 
 /** Per-step retry policy: failures retry a few times before the run is failed. */
@@ -31,7 +32,16 @@ export class ExecutionWorkflow extends WorkflowEntrypoint<Env, ExecutionWorkflow
     step: WorkflowStep,
   ): Promise<void> {
     const { workspaceId, executionId } = event.payload
-    const decisionTimeout = loadConfig(this.env).execution.decisionTimeout as WorkflowSleepDuration
+    const execConfig = loadConfig(this.env).execution
+    const decisionTimeout = execConfig.decisionTimeout as WorkflowSleepDuration
+    const jobPollInterval = execConfig.jobPollInterval as WorkflowSleepDuration
+
+    const failRun = async (i: number, message: string): Promise<void> => {
+      logger.warn({ workspaceId, executionId, step: i }, `failing run: ${message}`)
+      await step.do(`fail-${i}`, () =>
+        buildContainer(this.env).executionService.failRun(workspaceId, executionId, message),
+      )
+    }
 
     for (let i = 0; ; i++) {
       let result: AdvanceResult
@@ -43,10 +53,41 @@ export class ExecutionWorkflow extends WorkflowEntrypoint<Env, ExecutionWorkflow
         )) as AdvanceResult
       } catch (error) {
         // Retries exhausted: persist the failure and open the block for review.
-        const message = error instanceof Error ? error.message : String(error)
-        await step.do(`fail-${i}`, () =>
-          buildContainer(this.env).executionService.failRun(workspaceId, executionId, message),
-        )
+        await failRun(i, error instanceof Error ? error.message : String(error))
+        return
+      }
+
+      // An async step (a container coding job) dispatched and parked. Poll it
+      // between durable sleeps until it finishes — each poll is its own short,
+      // retriable step, so the job can run far longer than one step's timeout
+      // while the driver stays cheap and survives eviction. The job's bound is
+      // enforced container-side (inactivity + max-duration watchdogs); `jobMaxPolls`
+      // is only a backstop in case it never reports a terminal state.
+      if (result.kind === 'awaiting_job') {
+        let polled = false
+        for (let p = 0; p < execConfig.jobMaxPolls; p++) {
+          await step.sleep(`poll-wait-${i}-${p}`, jobPollInterval)
+          try {
+            result = (await step.do(`poll-${i}-${p}`, STEP_CONFIG, () =>
+              buildContainer(this.env).executionService.pollAgentJob(workspaceId, executionId),
+            )) as AdvanceResult
+          } catch (error) {
+            await failRun(i, error instanceof Error ? error.message : String(error))
+            return
+          }
+          if (result.kind !== 'awaiting_job') {
+            polled = true
+            break
+          }
+        }
+        if (!polled && result.kind === 'awaiting_job') {
+          await failRun(i, 'Implementation job did not finish within its polling budget')
+          return
+        }
+      }
+
+      if (result.kind === 'job_failed') {
+        await failRun(i, result.error)
         return
       }
 

@@ -9,6 +9,7 @@ import type {
 } from '../../ports/repositories'
 import type { IdGenerator } from '../../ports/runtime'
 import type { AgentExecutor, AgentRunContext, AgentRunResult } from '../../ports/agent-executor'
+import { isAsyncAgentExecutor } from '../../ports/agent-executor'
 import type { WorkRunner } from '../../ports/work-runner'
 import type { ExecutionEventPublisher } from '../../ports/execution-events'
 import type { ConfluenceDocumentRepository } from '../../ports/confluence-repositories'
@@ -201,14 +202,89 @@ export class ExecutionService {
     const block = await this.blockRepository.get(workspaceId, instance.blockId)
     if (!block) return { kind: 'noop' }
     const isFinalStep = instance.currentStep === instance.steps.length - 1
+
     // A `deployer` step provisions an ephemeral environment deterministically via
     // the provider — no LLM, no token usage — when the integration is wired.
     // Otherwise it falls through to the normal agent path.
-    const result =
-      this.environmentProvisioning && isDeployStep(step.agentKind)
-        ? await this.runDeployer(workspaceId, instance, block, options)
-        : await this.runAgent(workspaceId, instance, step, isFinalStep, block, options)
+    if (this.environmentProvisioning && isDeployStep(step.agentKind)) {
+      const result = await this.runDeployer(workspaceId, instance, block, options)
+      return this.recordStepResult(workspaceId, instance, step, isFinalStep, result)
+    }
 
+    // Async (container) steps don't block: dispatch the job and park. The durable
+    // driver polls `pollAgentJob` between sleeps so the run can span far longer
+    // than a single durable step's timeout, while each step stays short. A set
+    // `jobId` means a prior (possibly replayed) dispatch already started the job,
+    // so we re-attach instead of starting a duplicate.
+    const context = await this.buildAgentContext(workspaceId, instance, step, isFinalStep, block)
+    const executor = this.agentExecutor
+    if (isAsyncAgentExecutor(executor) && executor.runsAsync(context)) {
+      if (!step.jobId) {
+        const handle = await executor.startJob(context)
+        step.jobId = handle.jobId
+        // Record the model at dispatch — the poll site can't resolve it later.
+        if (handle.model) step.model = handle.model
+        await this.executionRepository.upsert(workspaceId, instance)
+        await this.emitInstance(workspaceId, instance)
+      }
+      return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
+    }
+
+    const result = await this.runAgent(context, options)
+    return this.recordStepResult(workspaceId, instance, step, isFinalStep, result)
+  }
+
+  /**
+   * Poll the asynchronous job a parked step dispatched. Returns `awaiting_job`
+   * while it runs (the driver keeps polling), records the result and advances on
+   * success, or reports `job_failed` so the driver can fail the run. Reading run
+   * state from storage on every call keeps it safe under Workflows replay/retry:
+   * once a job's result is recorded the step's `jobId` is cleared, so a re-poll
+   * simply lets the driver advance the now-current step.
+   */
+  async pollAgentJob(workspaceId: string, executionId: string): Promise<AdvanceResult> {
+    const instance = await this.executionRepository.get(workspaceId, executionId)
+    if (!instance || (instance.status !== 'running' && instance.status !== 'paused')) {
+      return { kind: 'noop' }
+    }
+    const step = instance.steps[instance.currentStep]
+    if (!step) return { kind: 'noop' }
+    // No job in flight: a prior poll already recorded it (and advanced). Let the
+    // driver loop and advance whatever step is now current.
+    if (!step.jobId) return { kind: 'continue' }
+
+    const executor = this.agentExecutor
+    if (!isAsyncAgentExecutor(executor)) return { kind: 'noop' }
+
+    const update = await executor.pollJob({ jobId: step.jobId })
+    if (update.state === 'running') {
+      return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
+    }
+    if (update.state === 'failed') {
+      return { kind: 'job_failed', error: update.error }
+    }
+
+    const block = await this.blockRepository.get(workspaceId, instance.blockId)
+    if (!block) return { kind: 'noop' }
+    const isFinalStep = instance.currentStep === instance.steps.length - 1
+    // Clear the handle before recording so a replay re-attaches to nothing.
+    step.jobId = undefined
+    return this.recordStepResult(workspaceId, instance, step, isFinalStep, update.result)
+  }
+
+  /**
+   * Record a completed agent step's result and report what the driver should do
+   * next: meter token usage, park on a raised decision, or persist the output
+   * (and any opened PR) and either finish the run or advance to the next step.
+   * Shared by the inline path and the async-job poll path.
+   */
+  private async recordStepResult(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    step: PipelineStep,
+    isFinalStep: boolean,
+    result: AgentRunResult,
+  ): Promise<AdvanceResult> {
     // Meter the LLM call against the spend budget. Recorded whether the step
     // completed or raised a decision — both consumed tokens.
     if (result.usage) {
@@ -315,22 +391,39 @@ export class ExecutionService {
   }
 
   /**
-   * Build the agent context and invoke the agent. Failures are swallowed into the
+   * Invoke the agent for an already-built context. Failures are swallowed into the
    * step output so a run never wedges — unless `rethrowAgentErrors` is set (the
    * durable path), in which case the error propagates so the driver's per-step
    * retry can take over.
    */
   private async runAgent(
+    context: AgentRunContext,
+    options: AdvanceOptions = {},
+  ): Promise<AgentRunResult> {
+    try {
+      return await this.agentExecutor.run(context)
+    } catch (error) {
+      // The durable driver wants real failures to surface so its per-step retry
+      // can kick in (and the error gets persisted after retries are exhausted).
+      if (options.rethrowAgentErrors) throw error
+      // Otherwise a failed agent must not wedge the run; record and complete.
+      return {
+        output: `Agent error: ${error instanceof Error ? error.message : String(error)}`,
+      }
+    }
+  }
+
+  /** Assemble the {@link AgentRunContext} for a step from the run + block state. */
+  private async buildAgentContext(
     workspaceId: string,
     instance: ExecutionInstance,
     step: PipelineStep,
     isFinalStep: boolean,
     block: Block,
-    options: AdvanceOptions = {},
-  ): Promise<AgentRunResult> {
+  ): Promise<AgentRunContext> {
     const contextDocs = await this.resolveContextDocs(workspaceId, block.id)
     const environment = await this.resolveEnvironment(workspaceId, block.id)
-    const context: AgentRunContext = {
+    return {
       agentKind: step.agentKind,
       pipelineName: instance.pipelineName,
       workspaceId,
@@ -359,18 +452,6 @@ export class ExecutionService {
       resolvedDecision: step.decision?.chosen
         ? { question: step.decision.question, chosen: step.decision.chosen }
         : null,
-    }
-
-    try {
-      return await this.agentExecutor.run(context)
-    } catch (error) {
-      // The durable driver wants real failures to surface so its per-step retry
-      // can kick in (and the error gets persisted after retries are exhausted).
-      if (options.rethrowAgentErrors) throw error
-      // Otherwise a failed agent must not wedge the run; record and complete.
-      return {
-        output: `Agent error: ${error instanceof Error ? error.message : String(error)}`,
-      }
     }
   }
 
