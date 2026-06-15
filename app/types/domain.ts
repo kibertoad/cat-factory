@@ -79,6 +79,22 @@ export interface Block {
   modelId?: string
   /** where this block's acceptance / Playwright tests run; absent = no preference. */
   testTarget?: TestTarget
+  /** the PR the block's implementer agent opened for its work; absent = none yet. */
+  pullRequest?: PullRequestRef
+}
+
+/**
+ * A lightweight link from a block to the pull request its implementer agent
+ * opened. Just enough to display the PR on the board and navigate to it; mirrors
+ * `PullRequestRef` in `@cat-factory/contracts`.
+ */
+export interface PullRequestRef {
+  /** The PR's web URL, opened when the user clicks through from the board. */
+  url: string
+  /** The PR number within the repo, shown as `#<number>` when known. */
+  number?: number
+  /** The head branch the agent pushed its work to, when known. */
+  branch?: string
 }
 
 /**

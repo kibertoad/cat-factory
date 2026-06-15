@@ -15,6 +15,7 @@ export type {
   Pipeline,
   PipelineStep,
   Position,
+  PullRequestRef,
   SpendStatus,
   TestTarget,
   Workspace,

@@ -1,4 +1,9 @@
-import type { AgentExecutor, AgentRunContext, AgentRunResult } from '@cat-factory/core'
+import type {
+  AgentExecutor,
+  AgentRunContext,
+  AgentRunResult,
+  PullRequestRef,
+} from '@cat-factory/core'
 
 export interface FakeAgentOptions {
   /** Confidence reported on the final step (drives auto-merge vs PR). Default 1. */
@@ -7,6 +12,8 @@ export interface FakeAgentOptions {
   decisionOnSteps?: number[]
   /** Token usage reported per call, so the spend safeguard can be exercised. */
   usage?: { inputTokens: number; outputTokens: number }
+  /** A PR the (container-flavoured) agent reports opening, so persistence can be exercised. */
+  pullRequest?: PullRequestRef
 }
 
 /**
@@ -36,6 +43,8 @@ export class FakeAgentExecutor implements AgentExecutor {
       model: 'fake',
       confidence: context.isFinalStep ? (this.options.confidence ?? 1) : undefined,
       usage: this.options.usage,
+      // Mimic the container "implementer" agent opening a PR for repo-operating work.
+      ...(this.options.pullRequest ? { pullRequest: this.options.pullRequest } : {}),
     }
   }
 }

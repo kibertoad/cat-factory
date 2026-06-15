@@ -154,8 +154,31 @@ export class ContainerAgentExecutor implements AgentExecutor {
 
     const summary = result.summary?.trim() || 'Implementation complete.'
     const output = result.prUrl ? `${summary}\n\nPR: ${result.prUrl}` : summary
-    return { output, model: `${ref.provider}:${ref.model}` }
+    // Surface the opened PR structurally (not just in the output text) so the
+    // engine can record it on the block and the board can link straight to it.
+    const pullRequest = result.prUrl
+      ? {
+          url: result.prUrl,
+          ...(prNumberFromUrl(result.prUrl) !== undefined
+            ? { number: prNumberFromUrl(result.prUrl) }
+            : {}),
+          branch: result.branch ?? headBranch,
+        }
+      : undefined
+    return {
+      output,
+      model: `${ref.provider}:${ref.model}`,
+      ...(pullRequest ? { pullRequest } : {}),
+    }
   }
+}
+
+/** Extract the PR number from a GitHub pull-request URL (`.../pull/42`). */
+function prNumberFromUrl(url: string): number | undefined {
+  const match = /\/pull\/(\d+)/.exec(url)
+  if (!match) return undefined
+  const n = Number(match[1])
+  return Number.isFinite(n) ? n : undefined
 }
 
 /**
