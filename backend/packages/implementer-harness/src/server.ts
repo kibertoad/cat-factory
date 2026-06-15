@@ -1,61 +1,26 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
-import { mkdtemp, rm } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-import {
-  type BootstrapResult,
-  type Job,
-  parseBootstrapJob,
-  parseJob,
-  type RunResult,
-} from './job.js'
-import { cloneRepo, commitAll, createBranch, openPullRequest, pushBranch } from './git.js'
+import { type BootstrapResult, parseBootstrapJob, parseJob, type RunResult } from './job.js'
 import { handleBootstrap } from './bootstrap.js'
-import { runPi, writeAgentsContext, writePiModelsConfig } from './pi.js'
+import { JobRegistry, loadRunnerLimits } from './runner.js'
+import { handleRun } from './runner.js'
+import { log } from './logger.js'
 
 // The container's HTTP entry point. The Worker addresses one instance per run and
-// POSTs a job to /run; this orchestrates: clone → Pi implements → commit → push
-// → open PR, and returns the PR url. Nothing here holds long-lived secrets — the
+// POSTs a job to /run; the harness starts that job in the background (bounded by
+// an inactivity + max-duration watchdog) and returns a job id, which the Worker
+// then polls via GET /jobs/{id}. Nothing here holds long-lived secrets — the
 // per-job GitHub + proxy tokens arrive in the request body and live only for the
 // duration of the job in an ephemeral workspace.
 
 const PORT = Number(process.env.PORT ?? 8080)
 
-/** Run one implementation job end to end. */
-export async function handleRun(job: Job): Promise<RunResult> {
-  const dir = await mkdtemp(join(tmpdir(), 'impl-'))
-  try {
-    await cloneRepo({ repo: job.repo, ghToken: job.ghToken, dir })
-    await createBranch(dir, job.headBranch)
-    await writeAgentsContext(dir, job.systemPrompt)
-    await writePiModelsConfig({ model: job.model, proxyBaseUrl: job.proxyBaseUrl })
+// One registry per container process. Each run addresses its own container
+// instance (one Durable Object id per execution), so this tracks that run's job.
+const jobs = new JobRegistry(loadRunnerLimits())
 
-    const summary = await runPi({
-      cwd: dir,
-      model: job.model,
-      userPrompt: job.userPrompt,
-      sessionToken: job.sessionToken,
-    })
-
-    const committed = await commitAll(dir, job.pr.title)
-    if (!committed) {
-      return { summary, branch: job.headBranch, error: 'Pi produced no file changes' }
-    }
-    await pushBranch(dir, job.headBranch)
-    const prUrl = await openPullRequest({
-      owner: job.repo.owner,
-      name: job.repo.name,
-      ghToken: job.ghToken,
-      head: job.headBranch,
-      base: job.repo.baseBranch,
-      pr: job.pr,
-      apiBase: job.githubApiBase,
-    })
-    return { prUrl, branch: job.headBranch, summary }
-  } finally {
-    await rm(dir, { recursive: true, force: true })
-  }
-}
+// Re-exported so the acceptance suite (and any direct caller) can run a job
+// synchronously without going through the async job API.
+export { handleRun }
 
 async function readBody(req: IncomingMessage): Promise<string> {
   const chunks: Buffer[] = []
@@ -84,19 +49,29 @@ const server = createServer((req, res) => {
         return send(res, 500, { error: message } satisfies BootstrapResult)
       }
     }
-    if (req.method !== 'POST' || req.url !== '/run') {
-      return send(res, 404, { error: 'not found' })
+    // Poll a running/finished job: GET /jobs/{id}.
+    if (req.method === 'GET' && req.url?.startsWith('/jobs/')) {
+      const id = decodeURIComponent(req.url.slice('/jobs/'.length))
+      const view = jobs.get(id)
+      if (!view) return send(res, 404, { error: 'job not found' })
+      return send(res, 200, view)
     }
-    try {
-      const job = parseJob(JSON.parse(await readBody(req)))
-      const result = await handleRun(job)
-      // Job-level failures are returned as 200 + { error } so the Worker can read
-      // the structured reason; unexpected faults fall through to 500 below.
-      return send(res, 200, result)
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      return send(res, 500, { error: message } satisfies RunResult)
+    // Start (or re-attach to) an implementation job: POST /run. Returns
+    // immediately with the job id; the Worker polls GET /jobs/{id} for the result.
+    if (req.method === 'POST' && req.url === '/run') {
+      try {
+        const job = parseJob(JSON.parse(await readBody(req)))
+        // Idempotent: a re-dispatched /run (Workflows replay) re-attaches to the
+        // job already running for this id rather than starting a duplicate.
+        const view = jobs.start(job.jobId, job)
+        return send(res, 202, { jobId: view.id, state: view.state })
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        log.error('failed to start run', { error: message })
+        return send(res, 400, { error: message } satisfies RunResult)
+      }
     }
+    return send(res, 404, { error: 'not found' })
   })()
 })
 

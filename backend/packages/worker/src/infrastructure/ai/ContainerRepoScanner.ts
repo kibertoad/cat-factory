@@ -10,6 +10,11 @@ import type { DurableObjectNamespace } from '@cloudflare/workers-types'
 import type { ImplementationContainer } from '../containers/ImplementationContainer'
 import type { ContainerSessionService } from '../containers/ContainerSessionService'
 
+// Unlike `/run`, scan/bootstrap stay synchronous request/response. This caps how
+// long the Worker will wait so a wedged container can't block the caller forever;
+// the harness's shared git timeouts bound the underlying git operations too.
+const CONTAINER_SYNC_TIMEOUT_MS = 30 * 60_000
+
 export interface ContainerRepoScannerDependencies {
   /** The Durable Object namespace backing the per-run container instances. */
   container: DurableObjectNamespace<ImplementationContainer>
@@ -109,6 +114,7 @@ export class ContainerRepoScanner implements RepoScanner {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(CONTAINER_SYNC_TIMEOUT_MS),
     })
     if (!res.ok) {
       throw new Error(`Scan container failed (HTTP ${res.status}): ${await safeText(res)}`)

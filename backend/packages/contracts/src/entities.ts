@@ -160,6 +160,13 @@ export const pipelineStepSchema = v.object({
   output: v.optional(v.string()),
   /** Identifier of the model that produced `output`, for transparency. */
   model: v.optional(v.string()),
+  /**
+   * Identifier of an in-flight asynchronous agent job (a container run polled by
+   * the durable driver). Set while the step is dispatched-but-not-yet-finished so
+   * a Workflows replay re-attaches to the running job instead of starting a new
+   * one; cleared once the job's result is recorded.
+   */
+  jobId: v.optional(v.string()),
 })
 export type PipelineStep = v.InferOutput<typeof pipelineStepSchema>
 

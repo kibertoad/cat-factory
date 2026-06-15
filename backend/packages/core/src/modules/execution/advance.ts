@@ -6,6 +6,14 @@ export type AdvanceResult =
   | { kind: 'continue' }
   /** The step raised a decision; the run is parked until it is resolved. */
   | { kind: 'awaiting_decision'; decisionId: string }
+  /**
+   * The step dispatched an asynchronous agent job (a container run). The run is
+   * parked: the durable driver polls {@link ExecutionService.pollAgentJob} between
+   * sleeps until the job finishes, then records its result and continues.
+   */
+  | { kind: 'awaiting_job'; jobId: string; stepIndex: number }
+  /** A polled async job finished with a failure; the driver should fail the run. */
+  | { kind: 'job_failed'; error: string }
   /** The final step completed; the run is finished. */
   | { kind: 'done' }
   /** The spend budget is exhausted; the run is paused until it frees up. */

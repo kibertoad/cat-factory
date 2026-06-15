@@ -117,3 +117,58 @@ export interface AgentRunResult {
 export interface AgentExecutor {
   run(context: AgentRunContext): Promise<AgentRunResult>
 }
+
+/** A handle to an asynchronous agent job (e.g. a long-running container run). */
+export interface AgentJobHandle {
+  /** Opaque identifier the executor uses to address the running job when polled. */
+  jobId: string
+  /**
+   * The model the job runs (`provider:model`), known at dispatch. Recorded on the
+   * step immediately so the board shows it even though the poll site — which maps
+   * the eventual result — has no access to the resolved model ref.
+   */
+  model?: string
+}
+
+/** The outcome of polling an {@link AgentJobHandle}. */
+export type AgentJobUpdate =
+  /** Still working — the durable driver should keep polling. */
+  | { state: 'running' }
+  /** Finished successfully; `result` carries the work product. */
+  | { state: 'done'; result: AgentRunResult }
+  /** Finished with a failure (agent error, inactivity/max-duration watchdog, …). */
+  | { state: 'failed'; error: string }
+
+/**
+ * An executor whose work can outlive a single request. Instead of `run()`
+ * blocking until the work finishes — which would cap the work at one durable
+ * step's timeout — the driver {@link startJob}s it and then {@link pollJob}s for
+ * completion between durable sleeps. This lets a long coding job run for many
+ * minutes while every individual driver step stays short and cheaply retriable.
+ *
+ * Implemented by the container executor (whose Pi coding run can take a long
+ * time); inline LLM executors stay plain {@link AgentExecutor}s and run in one
+ * shot. `run()` remains available (it dispatches then polls internally) for
+ * non-durable callers and tests.
+ */
+export interface AsyncAgentExecutor extends AgentExecutor {
+  /** Whether `context` should be driven as a polled job rather than run inline. */
+  runsAsync(context: AgentRunContext): boolean
+  /**
+   * Start the job for `context`, or re-attach to one already running for it. Must
+   * be idempotent per execution so a replayed dispatch never starts a duplicate.
+   */
+  startJob(context: AgentRunContext): Promise<AgentJobHandle>
+  /** Poll a previously-started job for its current state. */
+  pollJob(handle: AgentJobHandle): Promise<AgentJobUpdate>
+}
+
+/** Narrow an executor to the async-capable interface. */
+export function isAsyncAgentExecutor(executor: AgentExecutor): executor is AsyncAgentExecutor {
+  const candidate = executor as Partial<AsyncAgentExecutor>
+  return (
+    typeof candidate.runsAsync === 'function' &&
+    typeof candidate.startJob === 'function' &&
+    typeof candidate.pollJob === 'function'
+  )
+}

@@ -12,10 +12,14 @@ export type { TokenUsageRecord, TokenUsageRepository, TokenUsageTotals } from '.
 export type {
   AgentDecisionRequest,
   AgentExecutor,
+  AgentJobHandle,
+  AgentJobUpdate,
   AgentRunContext,
   AgentRunResult,
   AgentTokenUsage,
+  AsyncAgentExecutor,
 } from './agent-executor'
+export { isAsyncAgentExecutor } from './agent-executor'
 export { type WorkRunner, NoopWorkRunner } from './work-runner'
 export { type ExecutionEventPublisher, NoopEventPublisher } from './execution-events'
 export type {

@@ -39,6 +39,17 @@ export interface Env {
   /** How long a run may park on a human decision before expiring, e.g. "24h". */
   DECISION_TIMEOUT?: string
   /**
+   * Durable driver poll cadence for async container jobs (a Workflows sleep
+   * duration, e.g. "15 seconds"). Default "15 seconds".
+   */
+  JOB_POLL_INTERVAL?: string
+  /**
+   * Safety cap on how many times the driver polls one container job before
+   * failing the run (the container's own max-duration watchdog should fire
+   * first). Default 280 (≈70 min at the default 15s cadence).
+   */
+  JOB_MAX_POLLS?: string
+  /**
    * Per-workspace WebSocket fan-out hub (Durable Object). Pushes execution/board
    * changes to subscribed browsers in real time. When absent, the engine pushes
    * nothing (clients still get state on connect / refresh).

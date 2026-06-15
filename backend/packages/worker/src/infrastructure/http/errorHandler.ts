@@ -1,6 +1,7 @@
 import { DomainError } from '@cat-factory/core'
 import type { Context } from 'hono'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
+import { logger } from '../observability/logger'
 
 const STATUS_BY_CODE: Record<DomainError['code'], ContentfulStatusCode> = {
   not_found: 404,
@@ -16,6 +17,18 @@ export function handleError(error: unknown, c: Context): Response {
       STATUS_BY_CODE[error.code],
     )
   }
-  console.error('Unhandled error', error)
+  // Unexpected fault: log it with request context so it's traceable, but never
+  // leak internals to the client.
+  logger.error(
+    {
+      err:
+        error instanceof Error
+          ? { message: error.message, stack: error.stack }
+          : { message: String(error) },
+      method: c.req.method,
+      path: new URL(c.req.url).pathname,
+    },
+    'unhandled request error',
+  )
   return c.json({ error: { code: 'internal', message: 'Internal server error' } }, 500)
 }

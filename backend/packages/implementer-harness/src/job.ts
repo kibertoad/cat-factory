@@ -16,6 +16,13 @@ export interface PrSpec {
 }
 
 export interface Job {
+  /**
+   * Stable identifier for this run's job, supplied by the Worker (the execution
+   * id). The harness keys the background job on it so a re-dispatched `/run`
+   * (a Workflows replay) re-attaches to the running job instead of starting a
+   * duplicate, and the Worker polls `GET /jobs/{jobId}` with the same value.
+   */
+  jobId: string
   /** Composed role + best-practice fragments; written to AGENTS.md for Pi. */
   systemPrompt: string
   /** The concrete task prompt handed to Pi. */
@@ -131,6 +138,7 @@ export function parseJob(input: unknown): Job {
   const repo = (o.repo ?? {}) as Record<string, unknown>
   const pr = (o.pr ?? {}) as Record<string, unknown>
   return {
+    jobId: str(o.jobId, 'jobId'),
     systemPrompt: str(o.systemPrompt, 'systemPrompt'),
     userPrompt: str(o.userPrompt, 'userPrompt'),
     model: str(o.model, 'model'),

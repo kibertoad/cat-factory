@@ -52,8 +52,16 @@ export function runPi(opts: {
   model: string
   userPrompt: string
   sessionToken: string
+  /** Aborting this kills Pi (the job's inactivity/max-duration watchdog). */
+  signal?: AbortSignal
+  /** Called on every chunk of Pi output, so the watchdog sees the agent is alive. */
+  onActivity?: () => void
 }): Promise<string> {
   return new Promise((resolve, reject) => {
+    if (opts.signal?.aborted) {
+      reject(new Error('pi aborted before start'))
+      return
+    }
     const child = spawn(
       'pi',
       ['-p', '--mode', 'json', '--model', `proxy/${opts.model}`, '--approve', opts.userPrompt],
@@ -65,11 +73,40 @@ export function runPi(opts: {
     )
     let stdout = ''
     let stderr = ''
-    child.stdout.on('data', (chunk: Buffer) => (stdout += chunk.toString()))
-    child.stderr.on('data', (chunk: Buffer) => (stderr += chunk.toString()))
-    child.on('error', reject)
+    let aborted = false
+
+    // When the watchdog aborts, terminate Pi: SIGTERM first, then SIGKILL if it
+    // ignores it. The `close` handler then rejects with the abort reason.
+    const onAbort = (): void => {
+      aborted = true
+      child.kill('SIGTERM')
+      setTimeout(() => {
+        if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL')
+      }, 5_000).unref()
+    }
+    opts.signal?.addEventListener('abort', onAbort, { once: true })
+
+    const onChunk = (chunk: Buffer, sink: 'out' | 'err'): void => {
+      if (sink === 'out') stdout += chunk.toString()
+      else stderr += chunk.toString()
+      // Any output means progress: reset the inactivity watchdog.
+      opts.onActivity?.()
+    }
+    child.stdout.on('data', (chunk: Buffer) => onChunk(chunk, 'out'))
+    child.stderr.on('data', (chunk: Buffer) => onChunk(chunk, 'err'))
+    child.on('error', (error) => {
+      opts.signal?.removeEventListener('abort', onAbort)
+      reject(error)
+    })
     child.on('close', (code) => {
-      if (code === 0) {
+      opts.signal?.removeEventListener('abort', onAbort)
+      if (aborted) {
+        reject(
+          new Error(
+            opts.signal?.reason instanceof Error ? opts.signal.reason.message : 'pi aborted',
+          ),
+        )
+      } else if (code === 0) {
         resolve(parsePiOutput(stdout))
       } else {
         reject(new Error(`pi exited with code ${code}: ${(stderr || stdout).slice(-500)}`))

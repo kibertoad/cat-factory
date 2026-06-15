@@ -13,7 +13,10 @@ import type { Env } from '../env'
 export class ImplementationContainer extends Container<Env> {
   // The harness HTTP server port (matches the Dockerfile ENTRYPOINT).
   override defaultPort = 8080
-  // A run is one request; let the instance sleep (and be reclaimed) shortly after
-  // it goes idle so containers stay effectively ephemeral and per-run.
-  override sleepAfter = '5m'
+  // A run is dispatched, then polled every ~15s while its background job runs, so
+  // the instance stays warm for the job's duration without holding a single
+  // request open. This idle window only elapses once polling stops (the job has
+  // finished); the headroom tolerates a transient gap between polls without the
+  // instance being reclaimed mid-job.
+  override sleepAfter = '10m'
 }
