@@ -67,6 +67,17 @@ describe('standard solution-phase prompts', () => {
       expect(build).toMatch(/until every required check passes/i)
     })
 
+    it('bounds the build CI-retry loop so it cannot spin forever', () => {
+      const build = standardSystemPrompt('build')
+      // The loop must terminate on an attempt / time / token budget...
+      expect(build).toMatch(/this loop MUST terminate/i)
+      expect(build).toMatch(/number of attempts/i)
+      expect(build).toMatch(/time or token budget/i)
+      // ...and end on a hand-off rather than endless speculative pushes.
+      expect(build).toMatch(/STOP iterating/i)
+      expect(build).toMatch(/hand off for human review/i)
+    })
+
     it('composes selected fragments onto the phase system prompt', () => {
       const node = FRAGMENTS.find((f) => f.id === 'node.performance')!
       const composed = composeSystemPrompt(systemPromptFor('coder'), ['node.performance'])

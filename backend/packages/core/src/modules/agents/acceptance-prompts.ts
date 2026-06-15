@@ -1,5 +1,6 @@
 import type { AgentKind, BlockType, TestTarget } from '../../domain/types'
 import type { AgentRunContext } from '../../ports/agent-executor'
+import { CI_RETRY_SANITY_CHECK } from './ci-gate'
 
 // Built-out role prompts for the acceptance-testing agents. These two kinds turn
 // requirements into executable end-to-end coverage in two steps:
@@ -31,7 +32,9 @@ const STANDARDS_FOOTER =
 // The runnable-tests step commits tests through a pull request. Tests only earn
 // their keep once they actually run in CI, so "done" means the PR's CI executes
 // these tests AND is green — the agent first wires the suite into CI, then keeps
-// fixing and re-pushing until every required check passes.
+// fixing and re-pushing until every required check passes. The retry loop is
+// bounded by CI_RETRY_SANITY_CHECK so building out the e2e suite can't spin
+// forever on a check it cannot make pass.
 const PLAYWRIGHT_CI_GATE = [
   'Definition of done: this phase is NOT complete until these tests run in CI and CI on the pull request is green.',
   '- First make sure the tests are hooked into CI: confirm the project workflow actually executes this suite on the pull request, and add or update the CI configuration if it does not yet run them.',
@@ -39,6 +42,7 @@ const PLAYWRIGHT_CI_GATE = [
   '- Wait for the checks to finish; do not mark the testing phase done while CI is still running.',
   '- If any required check fails (including a test you just added), read the failure, fix the underlying cause, push the fix, and wait for CI again.',
   '- Repeat that loop until every required check passes — never hand off or report success while the tests are not running in CI, or while the PR is red.',
+  CI_RETRY_SANITY_CHECK,
 ].join('\n')
 
 const SYSTEM_PROMPTS: Record<AcceptanceAgentKind, string> = {

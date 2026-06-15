@@ -87,6 +87,15 @@ describe('acceptance-testing agent prompts', () => {
       expect(prompt).toMatch(/until every required check passes/i)
     })
 
+    it('bounds the e2e CI-retry loop so building it out cannot spin forever', () => {
+      const prompt = systemPromptFor('playwright')
+      expect(prompt).toMatch(/this loop MUST terminate/i)
+      expect(prompt).toMatch(/number of attempts/i)
+      expect(prompt).toMatch(/time or token budget/i)
+      expect(prompt).toMatch(/STOP iterating/i)
+      expect(prompt).toMatch(/hand off for human review/i)
+    })
+
     it('composes the acceptance fragments onto the role prompt', () => {
       const fragment = FRAGMENTS.find((f) => f.id === 'playwright.e2e')!
       const composed = composeSystemPrompt(systemPromptFor('playwright'), ['playwright.e2e'])
