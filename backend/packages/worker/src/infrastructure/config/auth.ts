@@ -22,8 +22,18 @@ export interface AuthConfig {
   successRedirectUrl: string
   /** Explicit OAuth redirect_uri; '' means derive it from the request origin. */
   callbackUrl: string
-  /** Lowercased GitHub logins permitted to sign in; empty means allow any. */
+  /**
+   * Lowercased GitHub logins permitted to sign in. Combined with `allowedOrgs`
+   * as an OR allowlist; when BOTH are empty, nobody may sign in (fail closed).
+   */
   allowedLogins: string[]
+  /**
+   * Lowercased GitHub org logins whose members may sign in. A user is admitted
+   * when they belong to any of these orgs (resolved from GitHub at login).
+   * Combined with `allowedLogins` as an OR allowlist; when BOTH are empty,
+   * nobody may sign in (fail closed). See AuthController's callback.
+   */
+  allowedOrgs: string[]
   /**
    * Extra origins the post-login `redirect` query may target, beyond the request
    * origin (which is always allowed). Empty means same-origin only.
@@ -70,6 +80,10 @@ export function loadAuthConfig(env: Env): AuthConfig {
     allowedLogins: (env.AUTH_ALLOWED_LOGINS ?? '')
       .split(',')
       .map((login) => login.trim().toLowerCase())
+      .filter(Boolean),
+    allowedOrgs: (env.AUTH_ALLOWED_ORGS ?? '')
+      .split(',')
+      .map((org) => org.trim().toLowerCase())
       .filter(Boolean),
     allowedRedirectOrigins: (env.AUTH_ALLOWED_REDIRECT_ORIGINS ?? '')
       .split(',')

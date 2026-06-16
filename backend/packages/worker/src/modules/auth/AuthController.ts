@@ -103,6 +103,29 @@ function withToken(redirect: string, token: string): string {
   return url.toString()
 }
 
+/**
+ * Decide whether a freshly-authenticated GitHub user is permitted to sign in.
+ *
+ * The deployment is private: a user is admitted only if their login is in
+ * `allowedLogins` OR they belong to an org in `allowedOrgs` (the two lists OR
+ * together). Org membership is read from GitHub on demand — but only when the
+ * login check has already failed and an org allowlist actually exists, so the
+ * common case costs no extra request. When BOTH lists are empty this returns
+ * `false` for everyone: auth fails closed, matching the gate's posture, so an
+ * operator must explicitly name who may enter before anyone gets in.
+ */
+async function isSignInAllowed(
+  oauth: GitHubOAuth,
+  accessToken: string,
+  user: { login: string },
+  cfg: Pick<AuthConfig, 'allowedLogins' | 'allowedOrgs'>,
+): Promise<boolean> {
+  if (cfg.allowedLogins.includes(user.login.toLowerCase())) return true
+  if (cfg.allowedOrgs.length === 0) return false
+  const orgs = await oauth.fetchUserOrgs(accessToken)
+  return orgs.some((org) => cfg.allowedOrgs.includes(org))
+}
+
 export function authController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
 
@@ -134,6 +157,9 @@ export function authController(): Hono<AppEnv> {
     const url = oauthClient(cfg).authorizeUrl({
       redirectUri: callbackUrl(c, cfg),
       state: signedState,
+      // Ask for org visibility only when an org allowlist must be checked at
+      // callback; otherwise stay at read:user (least privilege).
+      scope: cfg.allowedOrgs.length > 0 ? 'read:user read:org' : 'read:user',
     })
     return c.redirect(url)
   })
@@ -160,8 +186,9 @@ export function authController(): Hono<AppEnv> {
     const accessToken = await oauth.exchangeCode(code, callbackUrl(c, cfg))
     const user = await oauth.fetchUser(accessToken)
 
-    // Optional allowlist — keeps the deployment private to known GitHub users.
-    if (cfg.allowedLogins.length > 0 && !cfg.allowedLogins.includes(user.login.toLowerCase())) {
+    // Allowlist gate — the deployment is private to named users and org members.
+    // With both lists empty this denies everyone (fail closed).
+    if (!(await isSignInAllowed(oauth, accessToken, user, cfg))) {
       return c.json(
         { error: { code: 'forbidden', message: `@${user.login} is not allowed to sign in` } },
         403,

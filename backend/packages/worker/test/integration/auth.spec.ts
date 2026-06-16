@@ -198,6 +198,21 @@ describe('auth', () => {
       expect(location.searchParams.get('redirect_uri')).toBe(`${BASE}/auth/callback`)
     })
 
+    it('requests only read:user scope when no org allowlist is set', async () => {
+      const res = await fetchWith(authEnv, { path: '/auth/login' })
+      const location = new URL(res.headers.get('location')!)
+      expect(location.searchParams.get('scope')).toBe('read:user')
+    })
+
+    it('requests read:org scope when an org allowlist is set', async () => {
+      // Org membership must be read from GitHub at callback, which needs the
+      // read:org scope to be granted on the user token.
+      const orgEnv = { ...authEnv, AUTH_ALLOWED_ORGS: 'my-org' } as typeof env
+      const res = await fetchWith(orgEnv, { path: '/auth/login' })
+      const location = new URL(res.headers.get('location')!)
+      expect(location.searchParams.get('scope')).toBe('read:user read:org')
+    })
+
     it('returns the user for /auth/me with a valid token', async () => {
       const token = await session()
       const res = await fetchWith(authEnv, { path: '/auth/me', token })

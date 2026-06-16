@@ -196,8 +196,16 @@ GITHUB_OAUTH_CLIENT_ID = "Iv23liSy37MggMK0afZL"
 AUTH_SUCCESS_REDIRECT_URL = "https://catfactory.kiberion.com"
 # Session lifetime in hours (default 168 = 7 days):
 # AUTH_SESSION_TTL_HOURS = "168"
-# Restrict sign-in to specific GitHub users (comma-separated; empty = anyone):
-# AUTH_ALLOWED_LOGINS = "octocat,hubot"
+#
+# Sign-in allowlist (fail closed). Login is restricted to the GitHub users named
+# in AUTH_ALLOWED_LOGINS OR the members of the organizations named in
+# AUTH_ALLOWED_ORGS — the two lists combine as an OR. Both empty => NOBODY can
+# sign in. At least one MUST be set or the deployment locks everyone out, so
+# AUTH_ALLOWED_LOGINS is seeded with the deploy owner below; adjust to taste.
+# Listing an org needs the OAuth app to be allowed the `read:org` scope (the
+# login flow requests it automatically when AUTH_ALLOWED_ORGS is set).
+AUTH_ALLOWED_LOGINS = "kibertoad"
+# AUTH_ALLOWED_ORGS = "my-org,another-org"
 
 # CORS allowlist (see src/infrastructure/config/cors.ts). Comma-separated browser
 # Origins the API answers cross-origin — set this to YOUR frontend origin(s) when

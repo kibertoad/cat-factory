@@ -26,9 +26,10 @@ uses the GitHub **OAuth web flow**.
    CSRF protection) that also carries where to land the browser afterwards, then
    redirects to GitHub's authorize page.
 2. **`GET /auth/callback`** — verifies `state`, exchanges `code` for a GitHub
-   user token, reads the user, optionally checks the allowlist, then mints a
-   signed **session token** and redirects to the SPA with the token in the URL
-   **fragment** (`#token=…`, kept out of server logs / `Referer`).
+   user token, reads the user, enforces the [sign-in allowlist](#access-control)
+   (named users and/or org members), then mints a signed **session token** and
+   redirects to the SPA with the token in the URL **fragment** (`#token=…`, kept
+   out of server logs / `Referer`).
 3. The SPA pulls the token out of the fragment, persists it, and replays it as a
    bearer header. **`GET /auth/me`** validates a stored token on boot.
 
@@ -76,14 +77,56 @@ Optional vars:
 | `AUTH_SUCCESS_REDIRECT_URL` | Fixed SPA landing URL after login (recommended in production)   | request-provided          |
 | `AUTH_CALLBACK_URL`         | Override `redirect_uri` when the public URL differs from origin | `<origin>/auth/callback`  |
 | `AUTH_SESSION_TTL_HOURS`    | Session lifetime in hours                                       | `168` (7 days)            |
-| `AUTH_ALLOWED_LOGINS`       | Comma-separated GitHub logins permitted to sign in              | any user                  |
+| `AUTH_ALLOWED_LOGINS`       | Comma-separated GitHub logins permitted to sign in              | none (see access control) |
+| `AUTH_ALLOWED_ORGS`         | Comma-separated GitHub orgs whose members may sign in           | none (see access control) |
 | `GITHUB_OAUTH_BASE`         | OAuth host (set for GitHub Enterprise)                          | `https://github.com`      |
 | `AUTH_DEV_OPEN`             | Local/test ONLY: `true` runs the API open while unconfigured    | unset (prod fails closed) |
 
 > **Production note:** set `AUTH_SUCCESS_REDIRECT_URL` to your SPA's URL. Without
 > it the post-login landing comes from the request's `redirect` query (dev
-> convenience), which is an open-redirect surface. Combine with
-> `AUTH_ALLOWED_LOGINS` to keep a deployment private.
+> convenience), which is an open-redirect surface.
+
+---
+
+## Access control
+
+Authentication answers _who is signing in_; **access control** answers _who is
+allowed_. Once login is enabled the deployment is **private and fails closed**: a
+user may obtain a session only if they are on at least one allowlist.
+
+| Allowlist             | A user passes when…                                       |
+| --------------------- | --------------------------------------------------------- |
+| `AUTH_ALLOWED_LOGINS` | their GitHub login is listed (comma-separated, any case)  |
+| `AUTH_ALLOWED_ORGS`   | they are a member of any listed GitHub organization       |
+
+The two lists combine with **OR** — being on either admits the user. The check
+runs in `/auth/callback`; anyone who matches neither gets `403 forbidden`, so
+they reach neither the API (BE) nor, with no session minted, the SPA (FE) past
+its login gate.
+
+> ⚠️ **Both empty ⇒ nobody can sign in.** This is deliberate (fail closed): an
+> enabled-but-unconfigured allowlist locks the deployment rather than admitting
+> the whole world. **You must set at least one of the two** before anyone —
+> including you — can log in.
+
+**Org membership** is read live from GitHub during callback via `GET /user/orgs`.
+That endpoint only returns a user's private org memberships when the token holds
+the `read:org` scope, so the login flow requests `read:user read:org` whenever
+`AUTH_ALLOWED_ORGS` is non-empty (and plain `read:user` otherwise — least
+privilege). For a GitHub App, ensure the app is permitted that scope; a classic
+OAuth App needs no pre-registration of scopes.
+
+Sessions are stateless and bounded by expiry (`AUTH_SESSION_TTL_HOURS`), so
+removing a user or org from an allowlist blocks **new** logins immediately but
+does not revoke a session already minted — it lapses at its own expiry.
+
+Example (`wrangler.toml [vars]`):
+
+```toml
+# Admit two named users plus every member of two orgs:
+AUTH_ALLOWED_LOGINS = "octocat,hubot"
+AUTH_ALLOWED_ORGS   = "acme-inc,acme-labs"
+```
 
 ---
 

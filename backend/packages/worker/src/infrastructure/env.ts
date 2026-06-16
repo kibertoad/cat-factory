@@ -152,8 +152,20 @@ export interface Env {
   AUTH_ALLOWED_REDIRECT_ORIGINS?: string
   /** Override the OAuth redirect_uri when the public URL differs from the origin. */
   AUTH_CALLBACK_URL?: string
-  /** Optional comma-separated allowlist of GitHub logins permitted to sign in. */
+  /**
+   * Comma-separated allowlist of GitHub logins permitted to sign in. Combined
+   * with AUTH_ALLOWED_ORGS as an OR allowlist. When BOTH are empty, sign-in is
+   * denied to everyone (fail closed) — an operator must name who may enter.
+   */
   AUTH_ALLOWED_LOGINS?: string
+  /**
+   * Comma-separated allowlist of GitHub organization logins whose members may
+   * sign in. A user is admitted when they belong to any listed org (membership
+   * is read from GitHub at login via the `read:org` scope, requested only when
+   * this is set). Combined with AUTH_ALLOWED_LOGINS as an OR allowlist; when
+   * BOTH are empty, sign-in is denied to everyone (fail closed).
+   */
+  AUTH_ALLOWED_ORGS?: string
   /**
    * Local-dev/test ONLY escape hatch: set to 'true' to allow the API to run with
    * auth unconfigured (open). It lives in `.dev.vars` (gitignored) and the test
