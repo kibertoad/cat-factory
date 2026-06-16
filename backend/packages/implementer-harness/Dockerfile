@@ -34,10 +34,14 @@ ENV NODE_ENV=production
 # git for clone/commit/push; the Pi coding-agent CLI (bring-your-own key at
 # runtime — none is installed here). --ignore-scripts avoids running untrusted
 # install hooks.
+# Pi is pinned to an exact version so the image is reproducible and a bad
+# upstream release can't silently break a build — bump deliberately. node:26 is
+# well past Pi's `legacy-node20` floor, so the default `latest` line applies.
+ARG PI_VERSION=0.79.4
 RUN --mount=type=secret,id=extra_ca,target=/tmp/extra_ca.crt \
     sh -eu -c 'apt-get update && apt-get install -y --no-install-recommends git ca-certificates && rm -rf /var/lib/apt/lists/*; \
     if [ -s /tmp/extra_ca.crt ]; then export NODE_EXTRA_CA_CERTS=/tmp/extra_ca.crt; fi; \
-    npm install -g --ignore-scripts @earendil-works/pi-coding-agent'
+    npm install -g --ignore-scripts "@earendil-works/pi-coding-agent@${PI_VERSION}"'
 # This ephemeral container runs as root and only ever operates on repositories we
 # hand it (a fresh clone, or a mounted repo in tests). Disable git's
 # dubious-ownership guard system-wide so a repo owned by another uid (e.g. a
