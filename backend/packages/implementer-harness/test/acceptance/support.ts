@@ -61,6 +61,16 @@ export function seedBareRepo(): { work: string; bare: string } {
   g('-c', 'user.email=seed@test', '-c', 'user.name=seed', 'add', '-A')
   g('-c', 'user.email=seed@test', '-c', 'user.name=seed', 'commit', '-m', 'init')
   g('push', 'origin', 'main')
+  // The image now runs as an unprivileged `harness` user (uid 999) whose uid
+  // differs from the host uid that owns this bind-mounted bare repo (e.g. 1001 on
+  // CI). Clone only reads it, but `git push file:///srv/repo` writes objects/refs
+  // back, and `git init --bare` leaves the repo mode 0755/0644 — so the push
+  // fails with "Permission denied". Make the repo group/other-writable so the
+  // container user can push. (Production never bind-mounts: it clones/pushes over
+  // HTTPS into a harness-owned tmpdir.) reclaimMount() chowns the harness-created
+  // objects back to the host uid afterwards. Skipped on Windows (no chmod / no
+  // POSIX perms; Docker Desktop bind mounts are writable regardless of uid).
+  if (process.platform !== 'win32') execFileSync('chmod', ['-R', 'a+rwX', bare])
   return { work, bare }
 }
 
