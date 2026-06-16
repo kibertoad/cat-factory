@@ -1,6 +1,12 @@
 import type { BlockType, DocumentSourceKind } from '../../domain/types'
 import type { DocumentBoardPlan, PlanFrame, PlanModule, PlanTask } from '../../domain/types'
 import type { DocumentSourceProvider, DocumentSourceRegistry } from '../../ports/document-source'
+import { buildExcerpt, markdownToText } from '../../shared/markdown.logic'
+
+// `markdownToText`/`buildExcerpt` now live in the shared markdown helpers (also
+// used by the task-source integration); re-exported here so existing
+// `documentsLogic.*` consumers are unchanged.
+export { buildExcerpt, markdownToText }
 
 // Source-agnostic helpers shared by every document source: deriving a plain-text
 // excerpt from a Markdown body, the deterministic heading-based planner, and
@@ -34,24 +40,6 @@ export class MapDocumentSourceRegistry implements DocumentSourceRegistry {
   list(): DocumentSourceProvider[] {
     return [...this.byKind.values()]
   }
-}
-
-/** Strip lightweight Markdown markers into collapsed plain text. */
-export function markdownToText(markdown: string): string {
-  return markdown
-    .replace(/`{1,3}/g, '')
-    .replace(/^[ \t]*#{1,6}[ \t]+/gm, '')
-    .replace(/^[ \t]*[-*+][ \t]+/gm, '')
-    .replace(/[*_~>]/g, '')
-    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
-    .replace(/\s+/g, ' ')
-    .trim()
-}
-
-/** A short plain-text excerpt of a Markdown body, for list/preview rendering. */
-export function buildExcerpt(markdown: string, max = 280): string {
-  const text = markdownToText(markdown)
-  return text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text
 }
 
 interface Heading {

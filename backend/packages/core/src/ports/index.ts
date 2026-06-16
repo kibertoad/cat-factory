@@ -60,6 +60,19 @@ export type {
   DocumentRecord,
   DocumentRepository,
 } from './document-repositories'
+export type {
+  TaskCredentials,
+  TaskContent,
+  NormalizedTaskConnection,
+  TaskSourceProvider,
+  TaskSourceRegistry,
+} from './task-source'
+export type {
+  TaskConnectionRecord,
+  TaskConnectionRepository,
+  TaskRecord,
+  TaskRepository,
+} from './task-repositories'
 export type { SecretCipher } from './secret-cipher'
 export type {
   EnvironmentProvider,

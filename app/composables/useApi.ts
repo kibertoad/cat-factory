@@ -26,6 +26,10 @@ import type {
   ReferenceArchitecture,
   ResyncRequest,
   SpawnResult,
+  TaskConnection,
+  TaskSourceDescriptor,
+  TaskSourceKind,
+  SourceTask,
   UpdateReferenceArchitectureInput,
   Workspace,
   WorkspaceSnapshot,
@@ -207,6 +211,41 @@ export function useApi() {
       workspaceId: string,
       body: { source: DocumentSourceKind; externalId: string; blockId: string },
     ) => http<SourceDocument>(`${ws(workspaceId)}/documents/link`, { method: 'POST', body }),
+
+    // ---- task sources (Jira, …) ------------------------------------------
+    // The configured trackers + their connect/import metadata. A 503 means the
+    // integration is off (the store hides its UI on any error here).
+    listTaskSources: (workspaceId: string) =>
+      http<{ sources: TaskSourceDescriptor[] }>(`${ws(workspaceId)}/task-sources`),
+
+    listTaskConnections: (workspaceId: string) =>
+      http<{ connections: TaskConnection[] }>(`${ws(workspaceId)}/task-sources/connections`),
+
+    connectTaskSource: (
+      workspaceId: string,
+      source: TaskSourceKind,
+      credentials: Record<string, string>,
+    ) =>
+      http<TaskConnection>(`${ws(workspaceId)}/task-sources/${source}/connect`, {
+        method: 'POST',
+        body: { credentials },
+      }),
+
+    disconnectTaskSource: (workspaceId: string, source: TaskSourceKind) =>
+      http(`${ws(workspaceId)}/task-sources/${source}/connection`, { method: 'DELETE' }),
+
+    listTasks: (workspaceId: string) => http<SourceTask[]>(`${ws(workspaceId)}/tasks`),
+
+    importTask: (workspaceId: string, source: TaskSourceKind, body: { ref: string }) =>
+      http<SourceTask>(`${ws(workspaceId)}/task-sources/${source}/import`, {
+        method: 'POST',
+        body,
+      }),
+
+    linkTask: (
+      workspaceId: string,
+      body: { source: TaskSourceKind; externalId: string; blockId: string },
+    ) => http<SourceTask>(`${ws(workspaceId)}/tasks/link`, { method: 'POST', body }),
 
     // ---- github integration ----------------------------------------------
     // Connection management, projection reads (served from D1 — fast and

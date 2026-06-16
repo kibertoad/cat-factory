@@ -51,6 +51,24 @@ export interface AgentRunContext {
      */
     contextDocs?: { title: string; url: string; excerpt: string }[]
     /**
+     * Tracker issues (Jira, …) linked to this block, supplied as extra context.
+     * Present only when the task-source integration is wired and the block has
+     * linked issues. Carries the structured fields so the prompt can render a
+     * status/assignee header alongside the description and recent comments.
+     */
+    contextTasks?: {
+      key: string
+      url: string
+      title: string
+      status: string
+      type: string
+      assignee: string | null
+      priority: string | null
+      labels: string[]
+      description: string
+      comments: { author: string; createdAt: string; body: string }[]
+    }[]
+    /**
      * Where this block's acceptance / Playwright tests should run. Folded into
      * the acceptance-testing agents' prompt so generated tests target the right
      * harness. Absent when no preference is recorded.

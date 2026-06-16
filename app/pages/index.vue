@@ -10,6 +10,8 @@ import BlockFocusView from '~/components/focus/BlockFocusView.vue'
 import DocumentSourceConnectModal from '~/components/documents/DocumentSourceConnectModal.vue'
 import DocumentImportModal from '~/components/documents/DocumentImportModal.vue'
 import SpawnPreviewModal from '~/components/documents/SpawnPreviewModal.vue'
+import TaskSourceConnectModal from '~/components/tasks/TaskSourceConnectModal.vue'
+import TaskImportModal from '~/components/tasks/TaskImportModal.vue'
 import BootstrapModal from '~/components/bootstrap/BootstrapModal.vue'
 import GitHubPanel from '~/components/github/GitHubPanel.vue'
 
@@ -49,6 +51,8 @@ watch(
       <DocumentSourceConnectModal />
       <DocumentImportModal />
       <SpawnPreviewModal />
+      <TaskSourceConnectModal />
+      <TaskImportModal />
       <BootstrapModal />
       <GitHubPanel />
     </template>

@@ -44,6 +44,12 @@ export type {
   PlanFrame,
   PlanModule,
   PlanTask,
+  // Task-source integration projections + I/O shapes.
+  TaskSourceKind,
+  TaskSourceDescriptor,
+  TaskConnection,
+  TaskComment,
+  SourceTask,
   // Ephemeral environment provider shapes.
   EnvironmentSecretRef,
   EnvironmentAuthScheme,
