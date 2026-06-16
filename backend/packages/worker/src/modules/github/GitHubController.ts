@@ -73,13 +73,27 @@ export function githubController(): Hono<AppEnv> {
   })
 
   // Programmatic bind (the browser flow uses /github/setup/callback instead).
+  // Used by the "discover & link" picker and connect-by-id. Mirrors the setup
+  // callback: after binding, kick off an initial backfill so the workspace's
+  // repos show up immediately instead of only after a manual resync.
   app.post('/github/connect', jsonBody(connectSchema), async (c) => {
     const github = requireGitHub(c)
     if (!github) return unavailable(c)
-    const connection = await github.installationService.connect(
-      param(c, 'workspaceId'),
-      c.req.valid('json').installationId,
-    )
+    const workspaceId = param(c, 'workspaceId')
+    const { installationId } = c.req.valid('json')
+    const connection = await github.installationService.connect(workspaceId, installationId)
+
+    // Durable Workflow if available, else discover repos now; let the cron pass
+    // fill in per-repo detail. Best-effort — never fail the connect on backfill.
+    const workflow = c.env.GITHUB_BACKFILL_WORKFLOW
+    if (workflow) {
+      await workflow
+        .create({ id: `backfill-${installationId}-${Date.now()}`, params: { installationId } })
+        .catch(() => {})
+    } else {
+      await github.syncService.syncInstallationRepos(workspaceId, installationId).catch(() => {})
+    }
+
     return c.json(connection, 201)
   })
 

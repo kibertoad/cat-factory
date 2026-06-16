@@ -103,7 +103,14 @@ watch(
   { immediate: true },
 )
 
+// A bootstrap run creates and pushes to a GitHub repo, so the workspace must be
+// connected first (the backend pre-flights the same and 409s otherwise). When the
+// integration is on but unconnected, surface the discover-and-link prompt inline
+// and block launch until it's bound.
+const needsGitHub = computed(() => github.available === true && !github.connected)
+
 const canLaunch = computed(() => {
+  if (needsGitHub.value) return false
   if (!repoName.value.trim() || repoNameError.value) return false
   return usingReference.value ? !!selectedArchId.value : instructions.value.trim().length > 0
 })
@@ -271,6 +278,21 @@ const statusColor: Record<BootstrapStatus, 'neutral' | 'info' | 'success' | 'err
           container — either by adapting one of your reference architectures, or from scratch
           following a freeform prompt.
         </p>
+
+        <!-- not connected: a run needs GitHub, so discover & link before launching -->
+        <div
+          v-if="needsGitHub"
+          class="space-y-3 rounded-md border border-amber-500/30 bg-amber-500/5 p-3"
+        >
+          <div class="flex items-start gap-2">
+            <UIcon name="i-lucide-plug-zap" class="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
+            <p class="text-sm text-amber-200/90">
+              Connect this workspace to GitHub before bootstrapping — a run creates and pushes to a
+              new repository. Link an installation the App is already on, or install it.
+            </p>
+          </div>
+          <GitHubConnect />
+        </div>
 
         <!-- launch -->
         <section class="space-y-4">
