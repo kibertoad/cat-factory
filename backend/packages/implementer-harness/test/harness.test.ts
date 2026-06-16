@@ -122,11 +122,16 @@ describe('parsePiOutput', () => {
 })
 
 describe('parseTodoProgress', () => {
+  // The real `--mode json` shape: a tool result is a `message_end` event whose
+  // message is a `toolResult` (role/toolName/details/isError live on the message).
   const todoEvent = (tasks: Array<{ status: string }>) => ({
-    type: 'tool_result',
-    toolName: 'todo',
-    isError: false,
-    details: { action: 'update', tasks, nextId: tasks.length + 1 },
+    type: 'message_end',
+    message: {
+      role: 'toolResult',
+      toolName: 'todo',
+      isError: false,
+      details: { action: 'update', tasks, nextId: tasks.length + 1 },
+    },
   })
 
   it('counts completed/in-progress over live tasks from rpiv-todo details', () => {
@@ -147,21 +152,57 @@ describe('parseTodoProgress', () => {
 
   it('falls back to the example extension `todos[].done` shape', () => {
     const event = {
-      type: 'tool_result',
-      toolName: 'todo',
-      details: { todos: [{ done: true }, { done: false }, { done: true }] },
+      type: 'message_end',
+      message: {
+        role: 'toolResult',
+        toolName: 'todo',
+        details: { todos: [{ done: true }, { done: false }, { done: true }] },
+      },
     }
     expect(parseTodoProgress(event)).toEqual({ completed: 2, inProgress: 0, total: 3 })
   })
 
+  it('reads the tool_execution_end shape (details under result)', () => {
+    const event = {
+      type: 'tool_execution_end',
+      toolName: 'todo',
+      isError: false,
+      result: { details: { tasks: [{ status: 'completed' }, { status: 'in_progress' }] } },
+    }
+    expect(parseTodoProgress(event)).toEqual({ completed: 1, inProgress: 1, total: 2 })
+  })
+
+  it('also reads a defensive top-level tool_result shape', () => {
+    const event = {
+      type: 'tool_result',
+      toolName: 'todo',
+      details: { tasks: [{ status: 'completed' }, { status: 'pending' }] },
+    }
+    expect(parseTodoProgress(event)).toEqual({ completed: 1, inProgress: 0, total: 2 })
+  })
+
   it('ignores non-todo, errored, or unrecognised events', () => {
     expect(parseTodoProgress({ type: 'message_end' })).toBeUndefined()
-    expect(parseTodoProgress({ type: 'tool_result', toolName: 'bash' })).toBeUndefined()
+    // A plain assistant message_end is not a tool result.
     expect(
-      parseTodoProgress({ ...todoEvent([{ status: 'pending' }]), isError: true }),
+      parseTodoProgress({ type: 'message_end', message: { role: 'assistant', content: 'hi' } }),
+    ).toBeUndefined()
+    // A different tool's result.
+    expect(
+      parseTodoProgress({ type: 'message_end', message: { role: 'toolResult', toolName: 'bash' } }),
+    ).toBeUndefined()
+    // An errored todo call carries no usable counts.
+    expect(
+      parseTodoProgress({
+        ...todoEvent([{ status: 'pending' }]),
+        message: { role: 'toolResult', toolName: 'todo', isError: true, details: {} },
+      }),
     ).toBeUndefined()
     expect(
-      parseTodoProgress({ type: 'tool_result', toolName: 'todo', details: {} }),
+      parseTodoProgress({
+        type: 'message_end',
+        message: { role: 'toolResult', toolName: 'todo', details: {} },
+      }),
     ).toBeUndefined()
   })
 })

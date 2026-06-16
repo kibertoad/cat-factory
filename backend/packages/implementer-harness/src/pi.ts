@@ -63,6 +63,45 @@ export interface TodoProgress {
   total: number
 }
 
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+}
+
+/**
+ * Pull the `todo` tool's result `details` out of a Pi `--mode json` event, or
+ * undefined if the event isn't a successful `todo` tool result.
+ *
+ * The same tool result surfaces on the stream as two raw agent events, both of
+ * which we read (whichever Pi emits/orders first wins; the counts are identical):
+ *   - `message_end` with a `toolResult` message — `message.details`
+ *   - `tool_execution_end` — `result.details`
+ * A top-level `tool_result` shape is also accepted defensively. Pi has no
+ * built-in todo tool, so this only ever matches the installed extension's calls.
+ */
+function todoResultDetails(event: Record<string, unknown>): Record<string, unknown> | undefined {
+  if (event.type === 'message_end' && isObject(event.message)) {
+    const m = event.message
+    if (
+      m.role === 'toolResult' &&
+      m.toolName === 'todo' &&
+      m.isError !== true &&
+      isObject(m.details)
+    ) {
+      return m.details
+    }
+    return undefined
+  }
+  if (event.type === 'tool_execution_end' && event.toolName === 'todo' && event.isError !== true) {
+    return isObject(event.result) && isObject(event.result.details)
+      ? event.result.details
+      : undefined
+  }
+  if (event.type === 'tool_result' && event.toolName === 'todo' && event.isError !== true) {
+    return isObject(event.details) ? event.details : undefined
+  }
+  return undefined
+}
+
 /**
  * Derive {@link TodoProgress} from a single Pi `--mode json` event, or undefined
  * if the event isn't a successful `todo` tool result we can read.
@@ -74,12 +113,8 @@ export interface TodoProgress {
  * swapping the extension never silently drops progress.
  */
 export function parseTodoProgress(event: Record<string, unknown>): TodoProgress | undefined {
-  if (event.type !== 'tool_result' || event.toolName !== 'todo' || event.isError === true) {
-    return undefined
-  }
-  const details = event.details
-  if (typeof details !== 'object' || details === null) return undefined
-  const d = details as Record<string, unknown>
+  const d = todoResultDetails(event)
+  if (!d) return undefined
 
   if (Array.isArray(d.tasks)) {
     let total = 0
