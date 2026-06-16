@@ -2,6 +2,7 @@
 import type { Block, BlockStatus } from '~/types/domain'
 import { BLOCK_TYPE_META, STATUS_META } from '~/utils/catalog'
 import TaskContextDocs from '~/components/documents/TaskContextDocs.vue'
+import TaskContextIssues from '~/components/tasks/TaskContextIssues.vue'
 import FeatureScenarios from '~/components/scenarios/FeatureScenarios.vue'
 import ContainerSummary from '~/components/panels/inspector/ContainerSummary.vue'
 import TaskDependencies from '~/components/panels/inspector/TaskDependencies.vue'
@@ -14,18 +15,14 @@ const pipelines = usePipelinesStore()
 const execution = useExecutionStore()
 const ui = useUiStore()
 const documents = useDocumentsStore()
+const tasks = useTasksStore()
 const fragments = useFragmentsStore()
 const models = useModelsStore()
-const toast = useToast()
 
 onMounted(() => {
   fragments.ensureLoaded()
   models.ensureLoaded()
 })
-
-function placeholder(what: string) {
-  toast.add({ title: 'Placeholder', description: what, icon: 'i-lucide-construction' })
-}
 
 /** Open the document import/spawn flow, targeting this container's frame. */
 function spawnFromDocument() {
@@ -127,13 +124,14 @@ function remove() {
       <!-- external links -->
       <div class="flex flex-wrap gap-2">
         <UButton
+          v-if="tasks.available"
           color="neutral"
           variant="soft"
           size="xs"
           icon="i-lucide-ticket"
-          @click="placeholder('Link JIRA ticket')"
+          @click="ui.openTaskImport()"
         >
-          Link JIRA ticket
+          {{ tasks.anyConnected ? 'Import Jira issue' : 'Connect Jira' }}
         </UButton>
         <UButton
           v-if="isContainer && documents.available && documents.anyConnected"
@@ -149,6 +147,9 @@ function remove() {
 
       <!-- task: context documents -->
       <TaskContextDocs v-if="isTask" :block="block" />
+
+      <!-- task: context issues (tracker) -->
+      <TaskContextIssues v-if="isTask" :block="block" />
 
       <!-- service / module: tasks summary -->
       <ContainerSummary v-if="isContainer" :block="block" />
