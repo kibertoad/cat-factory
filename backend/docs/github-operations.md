@@ -64,6 +64,14 @@ it from the org's developer settings.)
 - Metadata: **Read-only** (mandatory)
 - Commit statuses: **Read-only** (optional, alongside checks)
 
+> **No `Administration` permission is needed** — cat-factory never creates or
+> deletes repositories. The "bootstrap repo" feature pushes its initial commit into
+> an **empty repository the user creates first** (the modal links to GitHub's
+> new-repo page), so `Contents: write` is sufficient. This deliberately keeps the
+> App away from the broad, delete-capable `Administration` permission, and it
+> sidesteps the fact that a GitHub App installation token cannot create a repo
+> under a personal account at all.
+
 **Subscribe to events**
 
 - `Push`, `Pull request`, `Issues`, `Check run`

@@ -5,6 +5,9 @@
 // architecture, or from scratch following a freeform prompt. The modal pairs the
 // launch form with the managed base list.
 import type { BootstrapStatus, ReferenceArchitecture } from '~/types/domain'
+// Explicit import (see GitHubPanel): the auto-import name for github/GitHubConnect
+// doesn't match the `<GitHubConnect>` tag, so bind it directly.
+import GitHubConnect from '~/components/github/GitHubConnect.vue'
 
 const ui = useUiStore()
 const bootstrap = useBootstrapStore()
@@ -103,11 +106,51 @@ watch(
   { immediate: true },
 )
 
-// A bootstrap run creates and pushes to a GitHub repo, so the workspace must be
-// connected first (the backend pre-flights the same and 409s otherwise). When the
+// A bootstrap run pushes into a GitHub repo, so the workspace must be connected
+// first (the backend pre-flights the same and 409s otherwise). When the
 // integration is on but unconnected, surface the discover-and-link prompt inline
 // and block launch until it's bound.
 const needsGitHub = computed(() => github.available === true && !github.connected)
+
+// The account the repo must live under — the connected installation's account. The
+// run pushes into an existing repo here (cat-factory doesn't create it: a GitHub App
+// can't create repos under a personal account, and we'd rather not hold the broad
+// Administration permission). The repo must be empty or hold only a prepopulated
+// README/.gitignore/license — the push force-overwrites that boilerplate. The
+// convenience link opens GitHub's new-repo page prefilled so the user can create it
+// in one click.
+const repoOwner = computed(() => github.connection?.accountLogin ?? '')
+const createRepoUrl = computed(() => {
+  const params = new URLSearchParams()
+  if (repoOwner.value) params.set('owner', repoOwner.value)
+  const name = repoName.value.trim()
+  if (name) params.set('name', name)
+  const desc = description.value.trim()
+  if (desc) params.set('description', desc)
+  params.set('visibility', isPrivate.value ? 'private' : 'public')
+  return `https://github.com/new?${params.toString()}`
+})
+
+function openCreateRepo() {
+  window.open(createRepoUrl.value, '_blank', 'noopener')
+}
+
+// After the repo is created, the App still needs access to it: a "selected
+// repositories" installation can't see a brand-new repo, so the run 404s with
+// "not accessible to the GitHub App". Link straight to the connected
+// installation's settings page, where the user adds the repo to its access list
+// in one click — no install/connect round-trip (the workspace is already bound).
+const manageInstallUrl = computed(() => {
+  const conn = github.connection
+  if (!conn) return undefined
+  return conn.targetType === 'Organization'
+    ? `https://github.com/organizations/${conn.accountLogin}/settings/installations/${conn.installationId}`
+    : `https://github.com/settings/installations/${conn.installationId}`
+})
+
+function openManageInstall() {
+  if (manageInstallUrl.value) window.open(manageInstallUrl.value, '_blank', 'noopener')
+}
 
 const canLaunch = computed(() => {
   if (needsGitHub.value) return false
@@ -274,9 +317,10 @@ const statusColor: Record<BootstrapStatus, 'neutral' | 'info' | 'success' | 'err
     <template #body>
       <div class="space-y-6">
         <p class="text-sm text-slate-400">
-          Create a brand-new repository and let a bootstrapper agent set it up in a sandbox
+          Create an empty GitHub repository, then let a bootstrapper agent populate it in a sandbox
           container — either by adapting one of your reference architectures, or from scratch
-          following a freeform prompt.
+          following a freeform prompt. cat-factory pushes the initial commit into the repo you
+          create, so it never needs permission to create or delete repos.
         </p>
 
         <!-- not connected: a run needs GitHub, so discover & link before launching -->
@@ -287,8 +331,8 @@ const statusColor: Record<BootstrapStatus, 'neutral' | 'info' | 'success' | 'err
           <div class="flex items-start gap-2">
             <UIcon name="i-lucide-plug-zap" class="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
             <p class="text-sm text-amber-200/90">
-              Connect this workspace to GitHub before bootstrapping — a run creates and pushes to a
-              new repository. Link an installation the App is already on, or install it.
+              Connect this workspace to GitHub before bootstrapping — a run pushes into a
+              repository. Link an installation the App is already on, or install it.
             </p>
           </div>
           <GitHubConnect />
@@ -324,12 +368,42 @@ const statusColor: Record<BootstrapStatus, 'neutral' | 'info' | 'success' | 'err
           </template>
 
           <UFormField
-            label="New repository name"
-            description="Just the name — the repo is created under your connected GitHub account/org."
+            label="Target repository name"
+            :description="
+              repoOwner
+                ? `Create a fresh repo with this name under ${repoOwner}, then bootstrap pushes into it. A prepopulated README, .gitignore or license is fine.`
+                : 'Create a fresh repo with this name, then bootstrap pushes into it. A prepopulated README, .gitignore or license is fine.'
+            "
             required
             :error="repoNameError"
           >
-            <UInput v-model="repoName" placeholder="payments-service" class="w-full" />
+            <div class="space-y-2">
+              <div class="flex items-center gap-2">
+                <UInput v-model="repoName" placeholder="payments-service" class="w-full" />
+                <UButton
+                  color="neutral"
+                  variant="subtle"
+                  icon="i-lucide-external-link"
+                  :disabled="!repoName.trim()"
+                  title="Open GitHub's new-repository page, prefilled"
+                  @click="openCreateRepo"
+                >
+                  Create on GitHub
+                </UButton>
+              </div>
+              <UButton
+                v-if="manageInstallUrl"
+                color="neutral"
+                variant="ghost"
+                size="sm"
+                icon="i-lucide-shield-check"
+                trailing-icon="i-lucide-external-link"
+                title="Open the App's installation settings to grant it access to the new repo"
+                @click="openManageInstall"
+              >
+                Grant the App access to this repo
+              </UButton>
+            </div>
           </UFormField>
 
           <UFormField label="Description" description="Optional one-line summary for the repo.">

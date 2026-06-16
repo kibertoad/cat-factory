@@ -5,6 +5,7 @@ import type {
   GitHubInstallationRepository,
   ModelRef,
   RepoBootstrapper,
+  RepoEntry,
 } from '@cat-factory/core'
 import type { DurableObjectNamespace } from '@cloudflare/workers-types'
 import type { ImplementationContainer } from '../containers/ImplementationContainer'
@@ -20,7 +21,7 @@ export interface ContainerRepoBootstrapperDependencies {
   container: DurableObjectNamespace<ImplementationContainer>
   /** Resolve which GitHub installation a workspace's repos live under. */
   installationRepository: GitHubInstallationRepository
-  /** Creates the new repository (under the installation account). */
+  /** Resolves/validates the pre-created target repository (existence + emptiness). */
   githubClient: GitHubClient
   /** Mints a short-lived GitHub installation token for clone + push. */
   mintInstallationToken: (installationId: number) => Promise<string>
@@ -62,14 +63,18 @@ interface BootstrapContainerResult {
 
 /**
  * A {@link RepoBootstrapper} that performs the side-effecting half of a
- * "bootstrap repo" run: it creates the new GitHub repository, then spins up a
+ * "bootstrap repo" run: the user pre-creates an empty target repository on GitHub
+ * (so cat-factory needs no repo-creation permission — a GitHub App installation
+ * token can't create a repo under a personal account anyway), and this spins up a
  * per-run Cloudflare Container that clones the reference architecture, has the
  * bootstrapper agent adapt it per the instructions, and pushes the result as the
  * new repo's initial commit.
  *
- * Secrets never reach the container image: the per-job GitHub installation token
- * and the model-locked LLM-proxy session token are minted here and handed over in
- * the dispatch body, exactly as the implementation executor does.
+ * It pre-flights that the target repo exists, is reachable by the installation,
+ * and is empty (the push is the first commit). Secrets never reach the container
+ * image: the per-job GitHub installation token and the model-locked LLM-proxy
+ * session token are minted here and handed over in the dispatch body, exactly as
+ * the implementation executor does.
  */
 export class ContainerRepoBootstrapper implements RepoBootstrapper {
   constructor(private readonly deps: ContainerRepoBootstrapperDependencies) {}
@@ -94,17 +99,45 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
       )
     }
 
-    // Create the new repository under the installation account.
+    // The user pre-creates the target repo (we don't create it — bootstrapping
+    // needs no repo-creation permission). Resolve it under the installation
+    // account to confirm it exists, is reachable by the App, and is empty — the
+    // run pushes the bootstrapped contents as the initial commit.
     const owner = installation.accountLogin
-    const created = await this.deps.githubClient.createRepo(installation.installationId, {
-      owner,
-      ownerType: installation.targetType,
-      name: request.target.name,
-      description: request.target.description,
-      private: request.target.private,
-      // Push the bootstrapped contents as the first commit, so start empty.
-      autoInit: false,
-    })
+    const repoName = request.target.name
+    const ref = { owner, repo: repoName }
+
+    let target
+    try {
+      target = await this.deps.githubClient.getRepo(installation.installationId, ref)
+    } catch {
+      throw new Error(
+        `Repository ${owner}/${repoName} was not found or is not accessible to the GitHub App. ` +
+          `Create a repository named "${repoName}" under ${owner} (an initial README, .gitignore ` +
+          `or license is fine), make sure the App is installed on it, then run bootstrap again.`,
+      )
+    }
+    // The run replaces the repo's contents with a fresh single-commit history, so
+    // the target must be empty — except that GitHub's create-repo page often
+    // prepopulates a README, .gitignore and/or license. Those are throwaway
+    // boilerplate, so tolerate a repo that holds *only* them (the push force-
+    // overwrites them); reject anything with real content to avoid clobbering work.
+    const rootEntries = await this.deps.githubClient.listRootEntries(
+      installation.installationId,
+      ref,
+    )
+    const realContent = rootEntries.filter((entry) => !isBootstrapBoilerplate(entry))
+    if (realContent.length > 0) {
+      const sample = realContent
+        .map((entry) => entry.path)
+        .slice(0, 5)
+        .join(', ')
+      throw new Error(
+        `Repository ${owner}/${repoName} already has content (${sample}). Bootstrapping replaces ` +
+          `the repository's contents, so it needs an empty repository — or one prepopulated only ` +
+          `with a README, .gitignore and/or license.`,
+      )
+    }
 
     const ghToken = await this.deps.mintInstallationToken(installation.installationId)
     const sessionToken = await this.deps.sessionService.mint({
@@ -116,8 +149,8 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
     })
 
     const webBase = (this.deps.webBaseUrl ?? 'https://github.com').replace(/\/+$/, '')
-    const targetCloneUrl = `${webBase}/${owner}/${created.name}.git`
-    const defaultBranch = created.defaultBranch ?? 'main'
+    const targetCloneUrl = `${webBase}/${owner}/${repoName}.git`
+    const defaultBranch = target.defaultBranch ?? 'main'
 
     // With a reference architecture the container clones + adapts it; without one
     // it scaffolds an empty repo from the freeform instructions alone.
@@ -144,7 +177,7 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
       ...(reference ? { reference } : {}),
       target: {
         owner,
-        name: created.name,
+        name: repoName,
         cloneUrl: targetCloneUrl,
         defaultBranch,
       },
@@ -167,12 +200,32 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
     if (result.error) throw new Error(`Bootstrap failed: ${result.error}`)
 
     return {
-      repoUrl: `${webBase}/${owner}/${created.name}`,
+      repoUrl: `${webBase}/${owner}/${repoName}`,
       owner,
-      name: created.name,
+      name: repoName,
       defaultBranch: result.defaultBranch ?? defaultBranch,
     }
   }
+}
+
+/**
+ * Whether a repo's root entry is throwaway boilerplate GitHub commonly prepopulates
+ * at create time — a README, a `.gitignore`, or a license file. Only top-level
+ * files qualify (a directory means real project content), and the match is
+ * case-insensitive across the usual extensions (`README.md`, `LICENSE.txt`, …).
+ */
+function isBootstrapBoilerplate(entry: RepoEntry): boolean {
+  if (entry.type !== 'file') return false
+  const name = entry.path.toLowerCase()
+  return (
+    name === '.gitignore' ||
+    name === 'readme' ||
+    name.startsWith('readme.') ||
+    name === 'license' ||
+    name.startsWith('license.') ||
+    name === 'licence' ||
+    name.startsWith('licence.')
+  )
 }
 
 /** Providers the LLM proxy can serve (mirrors ContainerAgentExecutor). */

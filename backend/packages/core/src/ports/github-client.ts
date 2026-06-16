@@ -61,6 +61,14 @@ export interface CommitFilesResult {
   sha: string
 }
 
+/** A single root-level entry of a repository's tree (file or directory). */
+export interface RepoEntry {
+  /** Path relative to the repo root, e.g. `README.md` or `src`. */
+  path: string
+  /** GitHub content type: `file` | `dir` | `symlink` | `submodule`. */
+  type: string
+}
+
 /** Installation metadata captured at connect time (needs the app JWT). */
 export interface InstallationMeta {
   accountLogin: string
@@ -74,19 +82,6 @@ export interface InstallationSummary {
   targetType: 'Organization' | 'User'
   /** The installing account's avatar, for display in the connect picker. */
   accountAvatarUrl: string | null
-}
-
-/** Parameters for creating a brand-new repository (used by repo bootstrapping). */
-export interface CreateRepoInput {
-  /** The account the repo is created under — an org login, or the user's own login. */
-  owner: string
-  /** Whether `owner` is an organization or the installation's own user account. */
-  ownerType: 'Organization' | 'User'
-  name: string
-  description?: string
-  private: boolean
-  /** Seed the repo with an initial commit so it has a default branch to push to. */
-  autoInit?: boolean
 }
 
 export interface GitHubClient {
@@ -105,6 +100,13 @@ export interface GitHubClient {
     ref: GitHubRepoRef,
     etag?: string,
   ): Promise<Paged<GitHubBranch>>
+  /**
+   * List a repository's root-level entries. Returns an empty array for an empty
+   * repository (GitHub answers 404 with no default branch there). Used by repo
+   * bootstrapping to tell an empty/boilerplate-only target from one with real
+   * content before it pushes the initial commit.
+   */
+  listRootEntries(installationId: number, ref: GitHubRepoRef): Promise<RepoEntry[]>
   listPullRequests(
     installationId: number,
     ref: GitHubRepoRef,
@@ -127,8 +129,6 @@ export interface GitHubClient {
   ): Promise<Paged<GitHubCheckRun>>
 
   // ---- writes -------------------------------------------------------------
-  /** Create a new repository under an org or the installation's user account. */
-  createRepo(installationId: number, input: CreateRepoInput): Promise<GitHubRepo>
   createBranch(
     installationId: number,
     ref: GitHubRepoRef,

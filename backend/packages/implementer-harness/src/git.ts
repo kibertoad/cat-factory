@@ -166,9 +166,15 @@ export async function pushBranch(
 
 /**
  * Reset the working tree's git history to a single bootstrap commit and push it
- * to the (initially empty) target repository's default branch. Wiping `.git`
- * before re-initialising means the new repo starts clean — it inherits the
- * bootstrapped *contents* of the reference architecture, not its commit history.
+ * to the target repository's default branch. Wiping `.git` before re-initialising
+ * means the new repo starts clean — it inherits the bootstrapped *contents* of the
+ * reference architecture, not its commit history.
+ *
+ * The push is forced: the fresh single-commit history shares no ancestor with
+ * whatever GitHub prepopulated when the user created the repo (a README,
+ * .gitignore and/or license picked on the new-repo page), so a fast-forward is
+ * impossible. The Worker pre-flights that the target is empty or holds only that
+ * boilerplate, so overwriting it is safe and intended.
  */
 export async function reinitAndPush(opts: {
   dir: string
@@ -186,7 +192,7 @@ export async function reinitAndPush(opts: {
   await git(['commit', '-m', opts.message], { cwd: opts.dir })
   const url = authenticatedCloneUrl(opts.target.cloneUrl)
   await git(['remote', 'add', 'origin', url], { cwd: opts.dir })
-  await git(['push', '-u', 'origin', opts.target.defaultBranch], {
+  await git(['push', '--force', '-u', 'origin', opts.target.defaultBranch], {
     cwd: opts.dir,
     env: await authEnv(opts.ghToken),
   })

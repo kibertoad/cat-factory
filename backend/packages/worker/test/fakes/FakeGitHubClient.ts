@@ -1,6 +1,5 @@
 import type {
   CommitFilesResult,
-  CreateRepoInput,
   GitHubBranch,
   GitHubCheckRun,
   GitHubClient,
@@ -15,6 +14,7 @@ import type {
   MergePullRequestInput,
   OpenPullRequestInput,
   Paged,
+  RepoEntry,
 } from '@cat-factory/core'
 import type { CommitFilesInput } from '@cat-factory/contracts'
 
@@ -27,6 +27,8 @@ export class FakeGitHubClient implements GitHubClient {
   installation: InstallationMeta = { accountLogin: 'acme', targetType: 'Organization' }
   repos: GitHubRepo[] = []
   branches: GitHubBranch[] = []
+  /** Root-level entries served by listRootEntries (empty = empty repo). */
+  rootEntries: RepoEntry[] = []
   pulls: GitHubPullRequest[] = []
   issues: GitHubIssue[] = []
   commits: GitHubCommit[] = []
@@ -61,6 +63,10 @@ export class FakeGitHubClient implements GitHubClient {
     return { items: this.branches }
   }
 
+  async listRootEntries(): Promise<RepoEntry[]> {
+    return this.rootEntries
+  }
+
   async listPullRequests(): Promise<Paged<GitHubPullRequest>> {
     return { items: this.pulls }
   }
@@ -80,26 +86,6 @@ export class FakeGitHubClient implements GitHubClient {
 
   async listCheckRuns(): Promise<Paged<GitHubCheckRun>> {
     return { items: this.checks }
-  }
-
-  async createRepo(_installationId: number, input: CreateRepoInput): Promise<GitHubRepo> {
-    this.writes.push({
-      method: 'createRepo',
-      ref: { owner: input.owner, repo: input.name },
-      args: input,
-    })
-    const repo: GitHubRepo = {
-      githubId: 7000 + this.repos.length,
-      installationId: _installationId,
-      owner: input.owner,
-      name: input.name,
-      defaultBranch: 'main',
-      private: input.private,
-      blockId: null,
-      syncedAt: 0,
-    }
-    this.repos.push(repo)
-    return repo
   }
 
   async createBranch(

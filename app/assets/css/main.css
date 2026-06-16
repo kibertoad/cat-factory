@@ -1,6 +1,14 @@
 @import 'tailwindcss';
 @import '@nuxt/ui';
 
+/* Toast text should be selectable. Reka UI sets `user-select: none` inline on
+ * the toast root (to support swipe-to-dismiss); since `user-select` is
+ * inherited, declaring it directly on the text slots overrides that. */
+[data-slot='viewport'] [data-slot='title'],
+[data-slot='viewport'] [data-slot='description'] {
+  user-select: text;
+}
+
 /* ---- Agent Architecture Board: shared visual language ---------------------- */
 
 :root {

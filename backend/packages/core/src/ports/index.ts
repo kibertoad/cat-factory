@@ -24,7 +24,6 @@ export { type WorkRunner, NoopWorkRunner } from './work-runner'
 export { type ExecutionEventPublisher, NoopEventPublisher } from './execution-events'
 export type {
   CommitFilesResult,
-  CreateRepoInput,
   GitHubClient,
   GitHubRepoRef,
   InstallationMeta,
@@ -32,6 +31,7 @@ export type {
   ListOptions,
   Paged,
   RateLimitSnapshot,
+  RepoEntry,
 } from './github-client'
 export type {
   BranchProjectionRepository,

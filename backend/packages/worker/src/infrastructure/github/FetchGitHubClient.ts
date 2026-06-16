@@ -1,7 +1,6 @@
 import {
   type Clock,
   type CommitFilesResult,
-  type CreateRepoInput,
   type GitHubBranch,
   type GitHubCheckRun,
   type GitHubClient,
@@ -19,6 +18,7 @@ import {
   type Paged,
   type RateLimitRepository,
   type RateLimitSnapshot,
+  type RepoEntry,
   githubProjection as gp,
 } from '@cat-factory/core'
 import type { CommitFilesInput } from '@cat-factory/contracts'
@@ -147,6 +147,24 @@ export class FetchGitHubClient implements GitHubClient {
     }
   }
 
+  async listRootEntries(installationId: number, ref: GitHubRepoRef): Promise<RepoEntry[]> {
+    let json: unknown
+    try {
+      ;({ json } = await this.request(`/repos/${ref.owner}/${ref.repo}/contents/`, {
+        installationId,
+      }))
+    } catch (err) {
+      // An empty repository has no default branch, so the contents endpoint 404s.
+      // That's the signal we want — treat it as "no entries", not an error.
+      if (err instanceof GitHubApiError && err.status === 404) return []
+      throw err
+    }
+    const entries = Array.isArray(json)
+      ? (json as Array<{ path?: string; name?: string; type?: string }>)
+      : []
+    return entries.map((e) => ({ path: e.path ?? e.name ?? '', type: e.type ?? 'file' }))
+  }
+
   async listPullRequests(
     installationId: number,
     ref: GitHubRepoRef,
@@ -222,23 +240,6 @@ export class FetchGitHubClient implements GitHubClient {
   }
 
   // ---- writes -------------------------------------------------------------
-
-  async createRepo(installationId: number, input: CreateRepoInput): Promise<GitHubRepo> {
-    // Orgs create under `/orgs/{org}/repos`; a user installation creates under
-    // `/user/repos` (the authenticated installation account is the owner).
-    const path = input.ownerType === 'Organization' ? `/orgs/${input.owner}/repos` : '/user/repos'
-    const { json } = await this.request(path, {
-      installationId,
-      method: 'POST',
-      body: {
-        name: input.name,
-        description: input.description ?? '',
-        private: input.private,
-        auto_init: input.autoInit ?? true,
-      },
-    })
-    return gp.toRepoProjection(json as gp.GhRepoPayload, installationId, this.deps.clock.now())
-  }
 
   async createBranch(
     installationId: number,

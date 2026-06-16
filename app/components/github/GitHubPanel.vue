@@ -5,6 +5,11 @@
 // connect/import surface, but for GitHub. Writes (new branch, open/merge PR,
 // comment) go straight to the repo via the backend's installation token.
 import type { GitHubPullRequest, GitHubRepo } from '~/types/domain'
+// Explicit import: the auto-import name for a component nested under a
+// like-named directory (github/GitHubConnect) doesn't match the `<GitHubConnect>`
+// tag, so it silently renders as an empty element. Importing it directly binds
+// the tag unambiguously.
+import GitHubConnect from './GitHubConnect.vue'
 
 const ui = useUiStore()
 const github = useGitHubStore()
