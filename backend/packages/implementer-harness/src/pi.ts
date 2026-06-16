@@ -142,9 +142,12 @@ export function parseTodoProgress(event: Record<string, unknown>): TodoProgress 
  * Run Pi non-interactively against `cwd` and return its assistant summary. Uses
  * print + JSON mode (`-p --mode json`) with `--approve` so it runs unattended.
  *
- * stdin is set to 'ignore' on purpose: print mode merges piped stdin into the
- * prompt, so an open (but empty) stdin pipe would make Pi block forever waiting
- * for EOF. Ignoring it gives an immediate EOF and Pi proceeds with the arg prompt.
+ * The (untrusted) prompt is fed over stdin, never as an argv positional, so a
+ * prompt beginning with `-`/`--` can't be mis-parsed as a Pi CLI flag (Pi has no
+ * `--` end-of-options terminator, so a positional `-foo` errors as "Unknown
+ * option"). Pi's print mode reads the prompt from piped stdin; we write it and
+ * close the pipe so Pi gets an immediate EOF and proceeds (an open, never-closed
+ * stdin pipe would make print mode block forever waiting for EOF).
  */
 export function runPi(opts: {
   cwd: string
@@ -165,25 +168,20 @@ export function runPi(opts: {
     }
     const child = spawn(
       'pi',
-      // `--` terminates option parsing so an untrusted prompt that begins with
-      // `-`/`--` is treated as the positional prompt, never as a Pi CLI flag
-      // (argument-injection guard).
-      [
-        '-p',
-        '--mode',
-        'json',
-        '--model',
-        `proxy/${opts.model}`,
-        '--approve',
-        '--',
-        opts.userPrompt,
-      ],
+      ['-p', '--mode', 'json', '--model', `proxy/${opts.model}`, '--approve'],
       {
         cwd: opts.cwd,
         env: { ...process.env, PI_PROXY_TOKEN: opts.sessionToken },
-        stdio: ['ignore', 'pipe', 'pipe'],
+        // stdin is piped (not 'ignore') so the prompt is delivered out-of-band
+        // rather than on argv — see the function doc for the injection rationale.
+        stdio: ['pipe', 'pipe', 'pipe'],
       },
     )
+    // Hand Pi the prompt over stdin, then close it so print mode sees EOF and
+    // runs. Ignore stdin errors (e.g. EPIPE if Pi exits before reading): the
+    // 'close'/'error' handlers below own the actual failure reporting.
+    child.stdin.on('error', () => {})
+    child.stdin.end(opts.userPrompt)
     let stdout = ''
     let stderr = ''
     let aborted = false
