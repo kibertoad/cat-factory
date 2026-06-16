@@ -1,0 +1,21 @@
+{
+  "name": "cat-factory",
+  "description": "Connects a cat-factory workspace to GitHub: repo/PR/issue read & write plus webhooks.",
+  "url": "https://github.com/kibertoad/cat-factory",
+  "public": false,
+  "hook_attributes": {
+    "url": "https://YOUR_WORKER_HOST/github/webhooks",
+    "active": true
+  },
+  "setup_url": "https://YOUR_WORKER_HOST/github/setup/callback",
+  "setup_on_update": true,
+  "redirect_url": "https://YOUR_WORKER_HOST/github/setup/callback",
+  "default_permissions": {
+    "contents": "write",
+    "pull_requests": "write",
+    "issues": "write",
+    "checks": "read",
+    "metadata": "read"
+  },
+  "default_events": ["push", "pull_request", "issues", "check_run"]
+}

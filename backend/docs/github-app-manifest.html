@@ -1,0 +1,88 @@
+<!doctype html>
+<!--
+  GitHub App manifest submitter for self-hosted cat-factory.
+
+  Open this file in a browser, fill in your worker host (and org, if installing
+  into an organization), and click "Create GitHub App". It posts the manifest in
+  github-app-manifest.json to GitHub's App-creation flow with your host baked in,
+  so every permission, event and URL is pre-filled — you just confirm.
+
+  After GitHub creates the App it redirects to setup_url; then finish the runbook:
+  generate a private key, convert it to PKCS#8, and set the worker secrets.
+  See github-operations.md.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>cat-factory · Create GitHub App</title>
+    <style>
+      body { font: 15px/1.5 system-ui, sans-serif; max-width: 38rem; margin: 3rem auto; padding: 0 1rem; }
+      label { display: block; margin: 1rem 0 0.25rem; font-weight: 600; }
+      input { width: 100%; padding: 0.5rem; font: inherit; box-sizing: border-box; }
+      small { color: #555; }
+      button { margin-top: 1.5rem; padding: 0.6rem 1.2rem; font: inherit; cursor: pointer; }
+    </style>
+  </head>
+  <body>
+    <h1>Create the cat-factory GitHub App</h1>
+    <p>
+      Each self-hosted instance needs its own (private) GitHub App pointing at its
+      own worker host. This form pre-fills it from the shared manifest.
+    </p>
+
+    <label for="host">Worker host</label>
+    <input id="host" placeholder="cat-factory.your-domain.com" />
+    <small>The public host of your deployed worker, without a scheme or trailing slash.</small>
+
+    <label for="org">Organization <small>(optional)</small></label>
+    <input id="org" placeholder="your-org" />
+    <small>Leave blank to create the App under your personal account.</small>
+
+    <button id="go">Create GitHub App</button>
+
+    <form id="form" method="post" target="_blank" hidden>
+      <input type="hidden" name="manifest" id="manifest" />
+    </form>
+
+    <script>
+      // Keep this in sync with github-app-manifest.json.
+      const MANIFEST = {
+        name: 'cat-factory',
+        description: 'Connects a cat-factory workspace to GitHub: repo/PR/issue read & write plus webhooks.',
+        url: 'https://github.com/kibertoad/cat-factory',
+        public: false,
+        hook_attributes: { url: '', active: true },
+        setup_url: '',
+        setup_on_update: true,
+        redirect_url: '',
+        default_permissions: {
+          contents: 'write',
+          pull_requests: 'write',
+          issues: 'write',
+          checks: 'read',
+          metadata: 'read',
+        },
+        default_events: ['push', 'pull_request', 'issues', 'check_run'],
+      }
+
+      document.getElementById('go').addEventListener('click', () => {
+        const host = document.getElementById('host').value.trim().replace(/^https?:\/\//, '').replace(/\/+$/, '')
+        if (!host) return alert('Enter your worker host first.')
+        const org = document.getElementById('org').value.trim()
+
+        const manifest = structuredClone(MANIFEST)
+        manifest.hook_attributes.url = `https://${host}/github/webhooks`
+        manifest.setup_url = `https://${host}/github/setup/callback`
+        manifest.redirect_url = `https://${host}/github/setup/callback`
+
+        const form = document.getElementById('form')
+        form.action = org
+          ? `https://github.com/organizations/${encodeURIComponent(org)}/settings/apps/new`
+          : 'https://github.com/settings/apps/new'
+        document.getElementById('manifest').value = JSON.stringify(manifest)
+        form.submit()
+      })
+    </script>
+  </body>
+</html>
