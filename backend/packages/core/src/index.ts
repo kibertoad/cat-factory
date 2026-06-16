@@ -114,6 +114,19 @@ export {
 } from './modules/github/GitHubSyncService'
 export { WebhookService, type WebhookServiceDependencies } from './modules/github/WebhookService'
 export * as githubProjection from './modules/github/projection.logic'
+export {
+  RepoProvisioningService,
+  type RepoProvisioningServiceDependencies,
+  type RepoProvisionFallback,
+  type ProvisionFallbackReason,
+  type ProvisionResult,
+} from './modules/github/RepoProvisioningService'
+export {
+  type AppTier,
+  type TierConfig,
+  canCreateRepo,
+  resolveAppTier,
+} from './modules/github/provisioning.logic'
 
 export {
   DocumentConnectionService,
