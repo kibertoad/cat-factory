@@ -14,11 +14,15 @@ import * as v from 'valibot'
 // ---------------------------------------------------------------------------
 
 const nameField = v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(120))
-/** A GitHub owner or repository slug (the `owner`/`name` in `owner/name`). */
+/**
+ * A single GitHub owner OR repository segment (the `owner` or the `name` in
+ * `owner/name`), validated on its own — never the combined `owner/name`, so a
+ * slash is not allowed. The message reflects exactly what the regex accepts.
+ */
 const slugField = v.pipe(
   v.string(),
   v.trim(),
-  v.regex(/^[A-Za-z0-9_.-]+$/, 'Must be a valid GitHub owner/repo slug'),
+  v.regex(/^[A-Za-z0-9_.-]+$/, "Only letters, digits, '.', '_' and '-' are allowed"),
   v.minLength(1),
   v.maxLength(100),
 )

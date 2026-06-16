@@ -67,6 +67,20 @@ const launching = ref(false)
 
 const usingReference = computed(() => mode.value === 'reference')
 
+// Mirror of the backend `slugField` rule (@cat-factory/contracts bootstrap
+// schema): the new repo name is a SINGLE GitHub name segment — no "owner/"
+// prefix — so reject a bad value inline before we hit the API. Kept in sync with
+// the contract regex by hand (the FE can't import the backend contracts package).
+const REPO_NAME_RE = /^[A-Za-z0-9_.-]+$/
+const repoNameError = computed<string | undefined>(() => {
+  const value = repoName.value.trim()
+  if (!value) return undefined
+  if (value.includes('/')) return 'Enter just the repository name — drop the “owner/” prefix.'
+  if (!REPO_NAME_RE.test(value)) return 'Only letters, digits, “.”, “_” and “-” are allowed.'
+  if (value.length > 100) return 'Must be 100 characters or fewer.'
+  return undefined
+})
+
 const selectedArch = computed(() =>
   bootstrap.architectures.find((a) => a.id === selectedArchId.value),
 )
@@ -90,7 +104,7 @@ watch(
 )
 
 const canLaunch = computed(() => {
-  if (!repoName.value.trim()) return false
+  if (!repoName.value.trim() || repoNameError.value) return false
   return usingReference.value ? !!selectedArchId.value : instructions.value.trim().length > 0
 })
 
@@ -289,8 +303,9 @@ const statusColor: Record<BootstrapStatus, 'neutral' | 'info' | 'success' | 'err
 
           <UFormField
             label="New repository name"
-            description="The repo is created under your connected GitHub account/org."
+            description="Just the name — the repo is created under your connected GitHub account/org."
             required
+            :error="repoNameError"
           >
             <UInput v-model="repoName" placeholder="payments-service" class="w-full" />
           </UFormField>
