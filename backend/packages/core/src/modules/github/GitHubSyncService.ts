@@ -11,7 +11,7 @@ import type {
   SyncCursor,
   SyncCursorKind,
 } from '../../ports/github-repositories'
-import type { GitHubRepo } from '../../domain/types'
+import type { GitHubAvailableRepo, GitHubRepo } from '../../domain/types'
 
 // ---------------------------------------------------------------------------
 // GitHubSyncService: keeps the local projections (repos/branches, PRs/issues,
@@ -49,20 +49,57 @@ export class GitHubSyncService {
   constructor(private readonly deps: GitHubSyncServiceDependencies) {}
 
   /**
-   * Discover every repo the installation can access, upsert them, and tombstone
-   * any previously-tracked repo that has gone away. Returns the live repos.
+   * The repos the workspace's installation can access, annotated with whether
+   * this workspace currently links each one. Repos are linked *explicitly* per
+   * workspace, so the connect UI lists these and the user picks a subset.
    */
-  async syncInstallationRepos(workspaceId: string, installationId: number): Promise<GitHubRepo[]> {
+  async listAvailableRepos(workspaceId: string): Promise<GitHubAvailableRepo[]> {
+    const installation = await this.deps.githubInstallationRepository.getByWorkspace(workspaceId)
+    if (!installation || installation.deletedAt) return []
+    const { items } = await this.deps.githubClient.listInstallationRepos(
+      installation.installationId,
+    )
+    const linked = new Set(
+      (await this.deps.repoProjectionRepository.list(workspaceId)).map((r) => r.githubId),
+    )
+    return items.map((r) => ({
+      githubId: r.githubId,
+      owner: r.owner,
+      name: r.name,
+      defaultBranch: r.defaultBranch,
+      private: r.private,
+      linked: linked.has(r.githubId),
+    }))
+  }
+
+  /**
+   * Set the exact set of repos this workspace links. Projects the newly selected
+   * repos (from those the installation can access), tombstones any deselected
+   * repo, then deep-syncs each linked repo. Returns the workspace's live repos.
+   */
+  async setLinkedRepos(workspaceId: string, repoGithubIds: number[]): Promise<GitHubRepo[]> {
+    const installation = await this.deps.githubInstallationRepository.getByWorkspace(workspaceId)
+    if (!installation || installation.deletedAt) return []
+    const installationId = installation.installationId
+    const wanted = new Set(repoGithubIds)
     const { items } = await this.deps.githubClient.listInstallationRepos(installationId)
-    const repos = items.map((r) => ({ ...r, installationId }))
-    await this.deps.repoProjectionRepository.upsertMany(workspaceId, repos)
+    const selected = items
+      .filter((r) => wanted.has(r.githubId))
+      .map((r) => ({ ...r, installationId, syncedAt: this.deps.clock.now() }))
+
+    if (selected.length > 0) {
+      await this.deps.repoProjectionRepository.upsertMany(workspaceId, selected)
+    }
+    // Tombstone every previously-linked repo for this installation that is no
+    // longer selected (the "seen" set is exactly the new selection).
     await this.deps.repoProjectionRepository.tombstoneMissing(
       workspaceId,
       installationId,
-      repos.map((r) => r.githubId),
+      selected.map((r) => r.githubId),
       this.deps.clock.now(),
     )
-    return repos
+    for (const repo of selected) await this.syncRepo(workspaceId, repo)
+    return this.deps.repoProjectionRepository.list(workspaceId)
   }
 
   /**
@@ -200,23 +237,24 @@ export class GitHubSyncService {
     if (repo) await this.syncRepo(workspaceId, repo)
   }
 
-  /** Incremental resync of every tracked repo for a workspace. */
+  /** Incremental resync of every repo this workspace links. */
   async resyncWorkspace(workspaceId: string): Promise<void> {
-    const installation = await this.deps.githubInstallationRepository.getByWorkspace(workspaceId)
-    if (!installation || installation.deletedAt) return
-    const repos = await this.syncInstallationRepos(workspaceId, installation.installationId)
+    const repos = await this.deps.repoProjectionRepository.list(workspaceId)
     for (const repo of repos) await this.syncRepo(workspaceId, repo)
   }
 
   /**
-   * Full backfill for an installation: rediscover repos then deep-sync each one.
-   * Resolves the owning workspace from the installation binding.
+   * Full backfill for an installation: deep-sync the linked repos of every
+   * workspace it backs (the connector workspace plus all workspaces in its
+   * account). Repos are linked explicitly, so backfill refreshes what's linked
+   * rather than rediscovering the whole installation.
    */
   async backfillInstallation(installationId: number): Promise<void> {
     const installation =
       await this.deps.githubInstallationRepository.getByInstallationId(installationId)
     if (!installation || installation.deletedAt) return
-    const repos = await this.syncInstallationRepos(installation.workspaceId, installationId)
-    for (const repo of repos) await this.syncRepo(installation.workspaceId, repo)
+    const workspaceIds =
+      await this.deps.githubInstallationRepository.listWorkspacesForInstallation(installationId)
+    for (const ws of workspaceIds) await this.resyncWorkspace(ws)
   }
 }

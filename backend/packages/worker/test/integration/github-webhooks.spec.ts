@@ -4,10 +4,29 @@ import { describe, expect, it } from 'vitest'
 import { createApp } from '../../src/app'
 import { githubDeps, uniqueInstallationId } from '../helpers'
 import { FakeAgentExecutor } from '../fakes/FakeAgentExecutor'
+import { FakeGitHubClient } from '../fakes/FakeGitHubClient'
 import { WebCryptoWebhookVerifier } from '../../src/infrastructure/github/WebCryptoWebhookVerifier'
 
 const SECRET = 'test-webhook-secret'
 const BASE = 'https://cat-factory.test'
+
+/** Repo 202 is the one the webhook fixtures touch; seed it so it can be linked. */
+function seededClient() {
+  const client = new FakeGitHubClient()
+  client.repos = [
+    {
+      githubId: 202,
+      installationId: 0,
+      owner: 'acme',
+      name: 'web',
+      defaultBranch: 'main',
+      private: false,
+      blockId: null,
+      syncedAt: 0,
+    },
+  ]
+  return client
+}
 
 /** Compute a GitHub-style `sha256=<hex>` signature over the raw body. */
 async function sign(secret: string, body: string): Promise<string> {
@@ -27,7 +46,7 @@ function buildApp() {
   return createApp({
     overrides: {
       agentExecutor: new FakeAgentExecutor(),
-      ...githubDeps({ verifier: new WebCryptoWebhookVerifier(SECRET) }),
+      ...githubDeps({ client: seededClient(), verifier: new WebCryptoWebhookVerifier(SECRET) }),
     },
   })
 }
@@ -87,6 +106,8 @@ describe('github webhooks', () => {
     const installationId = uniqueInstallationId()
     const ws = (await json<WorkspaceSnapshot>(app, 'POST', '/workspaces', {})).workspace.id
     await json(app, 'POST', `/workspaces/${ws}/github/connect`, { installationId })
+    // Webhooks only project into boards that explicitly link the affected repo.
+    await json(app, 'PUT', `/workspaces/${ws}/github/repos`, { repoGithubIds: [202] })
 
     const body = JSON.stringify(pullRequestEvent(installationId, 202))
     const res = await postWebhook(app, 'pull_request', body, await sign(SECRET, body))

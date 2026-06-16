@@ -1,35 +1,38 @@
 <script setup lang="ts">
 import BlockPalette from '~/components/palettes/BlockPalette.vue'
 import PipelinePalette from '~/components/palettes/PipelinePalette.vue'
+import BoardSwitcher from '~/components/layout/BoardSwitcher.vue'
 import UserMenu from '~/components/auth/UserMenu.vue'
 
 const documents = useDocumentsStore()
 const tasks = useTasksStore()
 const github = useGitHubStore()
+const workspace = useWorkspaceStore()
 const ui = useUiStore()
 
 // Resolve whether the document-source / task-source / GitHub integrations are
 // enabled on the backend, so each section is hidden entirely when it is off
 // (mirrors how auth gates its UI). A 503 from a probe flips its `available` to
-// false.
-onMounted(() => {
-  void documents.probe()
-  void tasks.probe()
-  void github.probe()
-})
+// false. Re-probe whenever the active board changes — connections are per board.
+watch(
+  () => workspace.workspaceId,
+  (id) => {
+    if (!id) return
+    void documents.probe()
+    void tasks.probe()
+    void github.probe()
+  },
+  { immediate: true },
+)
 </script>
 
 <template>
   <aside
     class="flex h-full w-64 shrink-0 flex-col gap-4 overflow-y-auto border-r border-slate-800 bg-slate-900/80 p-3 backdrop-blur"
   >
-    <div class="flex items-center gap-2 px-1">
-      <UIcon name="i-lucide-layout-dashboard" class="h-5 w-5 text-indigo-400" />
-      <div>
-        <div class="text-sm font-semibold text-white">Architecture Board</div>
-        <div class="text-[10px] text-slate-500">agent visualization prototype</div>
-      </div>
-    </div>
+    <BoardSwitcher />
+
+    <USeparator />
 
     <section>
       <h2 class="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">

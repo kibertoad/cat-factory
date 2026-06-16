@@ -65,6 +65,39 @@ const tabs: { id: Tab; label: string; icon: string }[] = [
   { id: 'issues', label: 'Issues', icon: 'i-lucide-circle-dot' },
 ]
 
+// Manage which repos this board links (the installation is shared across the
+// account; each board picks its own repos).
+const managing = ref(false)
+const selected = ref<Set<number>>(new Set())
+
+async function openManage() {
+  managing.value = true
+  try {
+    await github.loadAvailableRepos()
+    selected.value = new Set(github.availableRepos.filter((r) => r.linked).map((r) => r.githubId))
+  } catch (e) {
+    notifyError('Could not load repositories', e)
+    managing.value = false
+  }
+}
+
+function toggleSelected(githubId: number) {
+  const next = new Set(selected.value)
+  if (next.has(githubId)) next.delete(githubId)
+  else next.add(githubId)
+  selected.value = next
+}
+
+async function saveRepos() {
+  try {
+    await github.setLinkedRepos([...selected.value])
+    managing.value = false
+    toast.add({ title: 'Linked repositories updated', icon: 'i-lucide-check', color: 'success' })
+  } catch (e) {
+    notifyError('Could not update repositories', e)
+  }
+}
+
 // Repos: expand to load branches + open an inline "new branch" form.
 const expandedRepo = ref<number | null>(null)
 const branchForm = ref<{ name: string; fromSha: string }>({ name: '', fromSha: '' })
@@ -248,8 +281,77 @@ async function merge(pr: GitHubPullRequest) {
 
           <!-- repositories -->
           <section v-else-if="tab === 'repos'" class="space-y-2">
-            <p v-if="!github.repos.length" class="py-4 text-sm text-slate-400">
-              No repositories synced yet. Resync once the App has access to repos.
+            <!-- manage which repos this board links -->
+            <div class="flex items-center justify-between">
+              <span class="text-[11px] uppercase tracking-wide text-slate-500">
+                Linked to this board
+              </span>
+              <UButton
+                size="xs"
+                color="neutral"
+                variant="soft"
+                icon="i-lucide-list-checks"
+                @click="managing ? (managing = false) : openManage()"
+              >
+                {{ managing ? 'Close' : 'Manage repos' }}
+              </UButton>
+            </div>
+
+            <div
+              v-if="managing"
+              class="space-y-2 rounded-md border border-slate-700 bg-slate-900/80 p-3"
+            >
+              <p class="text-[12px] text-slate-400">
+                Pick the repositories this board should track. The GitHub connection is shared
+                across the account; each board links its own repos.
+              </p>
+              <div
+                v-if="github.loadingAvailable"
+                class="flex items-center gap-2 py-3 text-sm text-slate-400"
+              >
+                <UIcon name="i-lucide-loader" class="h-4 w-4 animate-spin" /> Loading repositories…
+              </div>
+              <p v-else-if="!github.availableRepos.length" class="py-2 text-sm text-slate-400">
+                The installation can’t access any repositories yet.
+              </p>
+              <div v-else class="max-h-64 space-y-1 overflow-y-auto">
+                <button
+                  v-for="r in github.availableRepos"
+                  :key="r.githubId"
+                  type="button"
+                  class="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left transition hover:bg-slate-800/60"
+                  @click="toggleSelected(r.githubId)"
+                >
+                  <UIcon
+                    :name="selected.has(r.githubId) ? 'i-lucide-check-square' : 'i-lucide-square'"
+                    class="h-4 w-4 shrink-0"
+                    :class="selected.has(r.githubId) ? 'text-indigo-400' : 'text-slate-500'"
+                  />
+                  <span class="truncate text-sm text-slate-200">{{ r.owner }}/{{ r.name }}</span>
+                  <UBadge v-if="r.private" color="neutral" variant="subtle" size="sm">
+                    private
+                  </UBadge>
+                </button>
+              </div>
+              <div class="flex items-center justify-end gap-2 pt-1">
+                <UButton color="neutral" variant="ghost" size="sm" @click="managing = false">
+                  Cancel
+                </UButton>
+                <UButton
+                  color="primary"
+                  size="sm"
+                  icon="i-lucide-save"
+                  :loading="github.savingRepos"
+                  @click="saveRepos"
+                >
+                  Save selection
+                </UButton>
+              </div>
+            </div>
+
+            <p v-if="!github.repos.length && !managing" class="py-4 text-sm text-slate-400">
+              No repositories linked yet. Use “Manage repos” to pick which repositories this board
+              tracks.
             </p>
             <div
               v-for="repo in github.repos"
