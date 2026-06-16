@@ -1,4 +1,4 @@
-import { HmacSigner } from '../auth/signing'
+import { HmacSigner, TOKEN_AUDIENCE } from '../auth/signing'
 
 // Short-lived, signed session token handed to an implementation container so it
 // can call the Worker's LLM proxy on behalf of one run — without ever holding a
@@ -9,6 +9,8 @@ import { HmacSigner } from '../auth/signing'
 
 /** Claims carried by a container session token. */
 export interface ContainerSession {
+  /** Audience pin — always `llm-proxy`; rejected by the user-session verifier. */
+  aud: typeof TOKEN_AUDIENCE.container
   /** Workspace the run belongs to (spend is metered against it). */
   workspaceId: string
   /** Execution instance id (links proxied usage to the run). */
@@ -48,6 +50,7 @@ export class ContainerSessionService {
   /** Mint a signed token for one run. */
   mint(input: MintInput): Promise<string> {
     const session: ContainerSession = {
+      aud: TOKEN_AUDIENCE.container,
       workspaceId: input.workspaceId,
       executionId: input.executionId,
       agentKind: input.agentKind,
@@ -58,8 +61,12 @@ export class ContainerSessionService {
     return this.signer.sign(session)
   }
 
-  /** Verify a bearer token, returning its claims or null when invalid/expired. */
+  /**
+   * Verify a bearer token, returning its claims or null when invalid/expired.
+   * Pins the `llm-proxy` audience so a user session token (same secret) cannot
+   * be used to drive the proxy, and vice-versa.
+   */
   verify(token: string | null | undefined): Promise<ContainerSession | null> {
-    return this.signer.verify<ContainerSession>(token)
+    return this.signer.verify<ContainerSession>(token, { aud: TOKEN_AUDIENCE.container })
   }
 }

@@ -42,7 +42,14 @@ export function githubController(): Hono<AppEnv> {
     if (!github) return unavailable(c)
     const config = c.get('container').config.github
     const signer = new StateSigner(c.env.GITHUB_WEBHOOK_SECRET ?? '')
-    const state = await signer.sign(param(c, 'workspaceId'))
+    // Bind the install to this workspace AND the signed-in user, with a short
+    // expiry. (The per-workspace authorization middleware has already confirmed
+    // the caller owns :workspaceId before this handler runs.)
+    const state = await signer.sign({
+      workspaceId: param(c, 'workspaceId'),
+      userId: c.get('user')?.id ?? null,
+      exp: Date.now() + 10 * 60 * 1000,
+    })
     const url = `https://github.com/apps/${config.appSlug}/installations/new?state=${encodeURIComponent(state)}`
     return c.json({ url })
   })

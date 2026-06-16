@@ -41,9 +41,14 @@ export class GitHubInstallationService {
     await requireWorkspace(this.deps.workspaceRepository, workspaceId)
 
     // Guard against binding an installation that already belongs elsewhere.
+    // We reject regardless of the other binding's `deletedAt`: a previously
+    // disconnected/suspended installation is still installed on GitHub (its
+    // tokens still mint), so allowing a *different* workspace to claim it would
+    // be an account-takeover primitive. Re-binding to the SAME workspace stays
+    // idempotent.
     const existing =
       await this.deps.githubInstallationRepository.getByInstallationId(installationId)
-    if (existing && !existing.deletedAt && existing.workspaceId !== workspaceId) {
+    if (existing && existing.workspaceId !== workspaceId) {
       throw new ConflictError(
         `Installation ${installationId} is already connected to another workspace`,
       )

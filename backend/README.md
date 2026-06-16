@@ -259,7 +259,11 @@ wrangler secret put AUTH_SESSION_SECRET            # any high-entropy random str
 
 # recommended in production (see docs/auth.md):
 #   AUTH_SUCCESS_REDIRECT_URL = "https://<your-spa>"   # fixed post-login landing
-#   AUTH_ALLOWED_LOGINS       = "octocat,hubot"        # restrict to specific users
+
+# REQUIRED — sign-in allowlist, fails closed (set at least one; see docs/auth.md):
+#   AUTH_ALLOWED_LOGINS = "octocat,hubot"      # admit these GitHub users, OR…
+#   AUTH_ALLOWED_ORGS   = "acme-inc"           # …any member of these GitHub orgs
+# Both empty => nobody can sign in. The two lists combine as an OR allowlist.
 ```
 
 Local dev and the test suite run open via the `AUTH_DEV_OPEN=true` escape hatch (in `.dev.vars`,

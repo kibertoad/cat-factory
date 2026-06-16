@@ -55,17 +55,29 @@ export class WorkspaceService {
     this.clock = clock
   }
 
-  list(): Promise<Workspace[]> {
-    return this.workspaceRepository.list()
+  /**
+   * Boards visible to a user. `ownerUserId` is the signed-in user's id, or
+   * `null` when auth is disabled (then all boards are returned).
+   */
+  list(ownerUserId: number | null): Promise<Workspace[]> {
+    return this.workspaceRepository.listByOwner(ownerUserId)
   }
 
-  async create(input: CreateWorkspaceInput): Promise<WorkspaceSnapshot> {
+  /** Owning user id for a board (number/owned, null/legacy, undefined/missing). */
+  ownerOf(id: string): Promise<number | null | undefined> {
+    return this.workspaceRepository.ownerOf(id)
+  }
+
+  async create(
+    input: CreateWorkspaceInput,
+    ownerUserId: number | null,
+  ): Promise<WorkspaceSnapshot> {
     const workspace: Workspace = {
       id: this.idGenerator.next('ws'),
       name: input.name?.trim() || 'Untitled board',
       createdAt: this.clock.now(),
     }
-    await this.workspaceRepository.create(workspace)
+    await this.workspaceRepository.create(workspace, ownerUserId)
 
     if (input.seed ?? true) {
       for (const block of seedBlocks()) {

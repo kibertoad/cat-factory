@@ -1,6 +1,6 @@
 import type { Context, MiddlewareHandler } from 'hono'
 import type { AppEnv } from '../http/types'
-import { HmacSigner, type SessionPayload } from './signing'
+import { HmacSigner, TOKEN_AUDIENCE, type SessionPayload } from './signing'
 
 // Bearer-token auth for the API. The session token is minted by the OAuth
 // callback (see AuthController) and carried by the SPA as `Authorization:
@@ -24,7 +24,11 @@ export function bearerToken(c: Context<AppEnv>): string | null {
 export function verifySession(c: Context<AppEnv>): Promise<SessionPayload | null> {
   const cfg = c.get('container').config.auth
   if (!cfg.enabled) return Promise.resolve(null)
-  return new HmacSigner(cfg.sessionSecret).verify<SessionPayload>(bearerToken(c))
+  // Pin the `session` audience: a container LLM-proxy token or a WS ticket — both
+  // signed with the same secret — must NOT be accepted as a user session.
+  return new HmacSigner(cfg.sessionSecret).verify<SessionPayload>(bearerToken(c), {
+    aud: TOKEN_AUDIENCE.session,
+  })
 }
 
 /**

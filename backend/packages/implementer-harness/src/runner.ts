@@ -2,7 +2,14 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { Job, RunResult } from './job.js'
-import { cloneRepo, commitAll, createBranch, openPullRequest, pushBranch } from './git.js'
+import {
+  cloneRepo,
+  commitAll,
+  createBranch,
+  openPullRequest,
+  pushBranch,
+  redactSecrets,
+} from './git.js'
 import { runPi, type TodoProgress, writeAgentsContext, writePiModelsConfig } from './pi.js'
 import { log } from './logger.js'
 
@@ -45,7 +52,7 @@ export async function handleRun(job: Job, opts: RunOptions = {}): Promise<RunRes
     if (!committed) {
       return { summary, branch: job.headBranch, error: 'Pi produced no file changes' }
     }
-    await pushBranch(dir, job.headBranch, signal)
+    await pushBranch(dir, job.headBranch, job.ghToken, signal)
     const prUrl = await openPullRequest({
       owner: job.repo.owner,
       name: job.repo.name,
@@ -198,14 +205,17 @@ export class JobRegistry {
         jobError: result.error ?? null,
       })
     } catch (error) {
-      const message =
+      // Defence-in-depth: scrub any credential that might have reached an error
+      // message/stack before it is stored on the job view or written to logs.
+      const message = redactSecrets(
         killReason === 'inactivity'
           ? `Aborted: no agent activity for ${Math.round(this.limits.inactivityMs / 1000)}s (likely hung)`
           : killReason === 'max-duration'
             ? `Aborted: exceeded max duration of ${Math.round(this.limits.maxDurationMs / 1000)}s`
             : error instanceof Error
               ? error.message
-              : String(error)
+              : String(error),
+      )
       entry.state = 'failed'
       entry.error = message
       log.error('job failed', {

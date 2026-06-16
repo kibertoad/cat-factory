@@ -10,10 +10,16 @@ export class D1WorkspaceRepository implements WorkspaceRepository {
     this.db = db
   }
 
-  async list(): Promise<Workspace[]> {
-    const { results } = await this.db
-      .prepare('SELECT * FROM workspaces ORDER BY created_at DESC')
-      .all<WorkspaceRow>()
+  async listByOwner(ownerUserId: number | null): Promise<Workspace[]> {
+    // A null owner means auth is disabled — return every board (legacy behaviour).
+    // A numeric owner scopes to that user; legacy NULL-owner rows are excluded.
+    const { results } = await (
+      ownerUserId === null
+        ? this.db.prepare('SELECT * FROM workspaces ORDER BY created_at DESC')
+        : this.db
+            .prepare('SELECT * FROM workspaces WHERE owner_user_id = ? ORDER BY created_at DESC')
+            .bind(ownerUserId)
+    ).all<WorkspaceRow>()
     return results.map(rowToWorkspace)
   }
 
@@ -25,10 +31,19 @@ export class D1WorkspaceRepository implements WorkspaceRepository {
     return row ? rowToWorkspace(row) : null
   }
 
-  async create(workspace: Workspace): Promise<void> {
+  async ownerOf(id: string): Promise<number | null | undefined> {
+    const row = await this.db
+      .prepare('SELECT owner_user_id FROM workspaces WHERE id = ?')
+      .bind(id)
+      .first<{ owner_user_id: number | null }>()
+    // Row absent → undefined (missing); present → the (possibly null) owner id.
+    return row ? row.owner_user_id : undefined
+  }
+
+  async create(workspace: Workspace, ownerUserId: number | null): Promise<void> {
     await this.db
-      .prepare('INSERT INTO workspaces (id, name, created_at) VALUES (?, ?, ?)')
-      .bind(workspace.id, workspace.name, workspace.createdAt)
+      .prepare('INSERT INTO workspaces (id, name, created_at, owner_user_id) VALUES (?, ?, ?, ?)')
+      .bind(workspace.id, workspace.name, workspace.createdAt, ownerUserId)
       .run()
   }
 

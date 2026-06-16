@@ -1,7 +1,11 @@
 import { env } from 'cloudflare:test'
 import { describe, expect, it } from 'vitest'
 import { createApp } from '../../src/app'
-import { HmacSigner, type SessionPayload } from '../../src/infrastructure/auth/signing'
+import {
+  HmacSigner,
+  TOKEN_AUDIENCE,
+  type SessionPayload,
+} from '../../src/infrastructure/auth/signing'
 import { pickPostLoginRedirect } from '../../src/modules/auth/AuthController'
 
 // Auth is opt-in: it only activates when the OAuth credentials + session secret
@@ -9,7 +13,8 @@ import { pickPostLoginRedirect } from '../../src/modules/auth/AuthController'
 // `env` straight to `app.fetch` (config is derived from `c.env` per request), so
 // the rest of the suite — which runs with auth unconfigured — is unaffected.
 
-const SECRET = 'test-session-secret'
+// Must be >= MIN_SESSION_SECRET_LENGTH (32) or auth is treated as misconfigured.
+const SECRET = 'test-session-secret-0123456789abcdef'
 const BASE = 'https://cat-factory.test'
 
 const authEnv = {
@@ -33,6 +38,7 @@ function fetchWith(
 
 function session(overrides: Partial<SessionPayload> = {}): Promise<string> {
   const payload: SessionPayload = {
+    aud: TOKEN_AUDIENCE.session,
     id: 42,
     login: 'octocat',
     name: 'The Octocat',
@@ -190,6 +196,21 @@ describe('auth', () => {
       expect(location.searchParams.get('client_id')).toBe('client-id')
       expect(location.searchParams.get('state')).toBeTruthy()
       expect(location.searchParams.get('redirect_uri')).toBe(`${BASE}/auth/callback`)
+    })
+
+    it('requests only read:user scope when no org allowlist is set', async () => {
+      const res = await fetchWith(authEnv, { path: '/auth/login' })
+      const location = new URL(res.headers.get('location')!)
+      expect(location.searchParams.get('scope')).toBe('read:user')
+    })
+
+    it('requests read:org scope when an org allowlist is set', async () => {
+      // Org membership must be read from GitHub at callback, which needs the
+      // read:org scope to be granted on the user token.
+      const orgEnv = { ...authEnv, AUTH_ALLOWED_ORGS: 'my-org' } as typeof env
+      const res = await fetchWith(orgEnv, { path: '/auth/login' })
+      const location = new URL(res.headers.get('location')!)
+      expect(location.searchParams.get('scope')).toBe('read:user read:org')
     })
 
     it('returns the user for /auth/me with a valid token', async () => {

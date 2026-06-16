@@ -1,14 +1,18 @@
 import { execFile } from 'node:child_process'
-import { rm } from 'node:fs/promises'
+import { chmod, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 import type { BootstrapTargetSpec, PrSpec, RepoSpec } from './job.js'
 
 const exec = promisify(execFile)
 
-// Git + GitHub helpers. The installation token is embedded in the clone URL so
-// the same authenticated remote is reused for push; the token is never logged
-// (errors surface stderr, so we keep the token out of any echoed command).
+// Git + GitHub helpers. The installation token is NEVER placed in a clone/remote
+// URL or in any git argv. Instead git authenticates over HTTPS via a GIT_ASKPASS
+// helper: the plain `https://x-access-token@host/...` remote (username only, no
+// secret) is used everywhere, and the token is handed to git out-of-band through
+// an environment variable the helper reads. That keeps the token out of process
+// listings and out of any command string Node echoes into an error/cmd field.
 
 const GIT_AUTHOR = 'cat-factory[bot]'
 const GIT_EMAIL = 'cat-factory[bot]@users.noreply.github.com'
@@ -18,25 +22,91 @@ const GIT_EMAIL = 'cat-factory[bot]@users.noreply.github.com'
 // (see runner.ts) is the outer bound, this stops one wedged command first.
 const GIT_TIMEOUT_MS = 10 * 60_000
 
-/** Build an authenticated HTTPS clone URL from a plain one + an installation token. */
-export function authenticatedCloneUrl(cloneUrl: string, ghToken: string): string {
-  // https://github.com/owner/name.git → https://x-access-token:TOKEN@github.com/...
-  return cloneUrl.replace(/^https:\/\//, `https://x-access-token:${ghToken}@`)
+/**
+ * Strip credentials out of any string before it is logged or stored. Removes
+ * URL userinfo (`https://user:pass@host`) and `x-access-token:<token>` patterns,
+ * plus bare GitHub token shapes (`ghs_`/`ghp_`/`github_pat_`), so a leaked clone
+ * URL or git error can never surface the installation token. Idempotent.
+ */
+export function redactSecrets(input: string): string {
+  return input
+    .replace(/(https?:\/\/)[^@\s/]*@/gi, '$1***@')
+    .replace(/x-access-token:[^@\s]+/gi, 'x-access-token:***')
+    .replace(/\b(gh[pso]_|github_pat_)[A-Za-z0-9_]+/g, '$1***')
+}
+
+/** Wrap an error so its message/stack carry no credentials. */
+function redactError(err: unknown): Error {
+  if (err instanceof Error) {
+    const redacted = new Error(redactSecrets(err.message))
+    if (err.stack) redacted.stack = redactSecrets(err.stack)
+    return redacted
+  }
+  return new Error(redactSecrets(String(err)))
+}
+
+/**
+ * Build the remote URL git uses. Only the username (`x-access-token`) is embedded
+ * — never the token — so the token never appears in argv. The token is supplied
+ * separately via {@link authEnv} and read by the GIT_ASKPASS helper.
+ */
+export function authenticatedCloneUrl(cloneUrl: string): string {
+  // https://github.com/owner/name.git → https://x-access-token@github.com/...
+  // (no secret in the URL). file:// and other local URLs are left untouched.
+  return cloneUrl.replace(/^https:\/\//, 'https://x-access-token@')
+}
+
+// A tiny askpass helper that prints the token git asks for. Created once per
+// process and reused; the token itself is passed per-command via the env (below),
+// never baked into the script.
+let askpassPathPromise: Promise<string> | undefined
+function ensureAskpass(): Promise<string> {
+  askpassPathPromise ??= (async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'git-askpass-'))
+    const path = join(dir, 'askpass.sh')
+    // git invokes this with the prompt as argv[1]; we only ever return the token
+    // (the username is already in the remote URL, so git only asks for the
+    // password). The token comes from the env, never from argv.
+    await writeFile(path, '#!/bin/sh\nexec printf %s "$GIT_ASKPASS_TOKEN"\n', 'utf8')
+    await chmod(path, 0o700)
+    return path
+  })()
+  return askpassPathPromise
+}
+
+/** Child-process env that lets git authenticate with `ghToken` without it touching argv. */
+async function authEnv(ghToken: string): Promise<NodeJS.ProcessEnv> {
+  return {
+    ...process.env,
+    GIT_ASKPASS: await ensureAskpass(),
+    GIT_ASKPASS_TOKEN: ghToken,
+    // Never fall back to an interactive prompt (which would hang the job).
+    GIT_TERMINAL_PROMPT: '0',
+  }
 }
 
 /**
  * Run one git command. `signal` (the job watchdog's) and a per-command timeout
  * both abort a wedged process, so neither a hung clone nor a stalled push can
- * keep the container running forever.
+ * keep the container running forever. Any failure is re-thrown with its message
+ * and stack scrubbed of credentials.
  */
-async function git(cwd: string, args: string[], signal?: AbortSignal): Promise<string> {
-  const { stdout } = await exec('git', args, {
-    cwd,
-    maxBuffer: 16 * 1024 * 1024,
-    timeout: GIT_TIMEOUT_MS,
-    ...(signal ? { signal } : {}),
-  })
-  return stdout
+async function git(
+  args: string[],
+  opts: { cwd?: string; signal?: AbortSignal; env?: NodeJS.ProcessEnv } = {},
+): Promise<string> {
+  try {
+    const { stdout } = await exec('git', args, {
+      ...(opts.cwd ? { cwd: opts.cwd } : {}),
+      maxBuffer: 16 * 1024 * 1024,
+      timeout: GIT_TIMEOUT_MS,
+      ...(opts.env ? { env: opts.env } : {}),
+      ...(opts.signal ? { signal: opts.signal } : {}),
+    })
+    return stdout
+  } catch (err) {
+    throw redactError(err)
+  }
 }
 
 /** Clone `repo`'s base branch (shallow) into `dir` and set commit identity. */
@@ -46,13 +116,13 @@ export async function cloneRepo(opts: {
   dir: string
   signal?: AbortSignal
 }): Promise<void> {
-  const url = authenticatedCloneUrl(opts.repo.cloneUrl, opts.ghToken)
-  await exec('git', ['clone', '--depth', '1', '--branch', opts.repo.baseBranch, url, opts.dir], {
-    timeout: GIT_TIMEOUT_MS,
-    ...(opts.signal ? { signal: opts.signal } : {}),
+  const url = authenticatedCloneUrl(opts.repo.cloneUrl)
+  await git(['clone', '--depth', '1', '--branch', opts.repo.baseBranch, url, opts.dir], {
+    signal: opts.signal,
+    env: await authEnv(opts.ghToken),
   })
-  await git(opts.dir, ['config', 'user.name', GIT_AUTHOR], opts.signal)
-  await git(opts.dir, ['config', 'user.email', GIT_EMAIL], opts.signal)
+  await git(['config', 'user.name', GIT_AUTHOR], { cwd: opts.dir, signal: opts.signal })
+  await git(['config', 'user.email', GIT_EMAIL], { cwd: opts.dir, signal: opts.signal })
 }
 
 /** Create and switch to the work branch. */
@@ -61,7 +131,7 @@ export async function createBranch(
   branch: string,
   signal?: AbortSignal,
 ): Promise<void> {
-  await git(dir, ['checkout', '-b', branch], signal)
+  await git(['checkout', '-b', branch], { cwd: dir, signal })
 }
 
 /** Stage everything and commit; returns false when there was nothing to commit. */
@@ -70,16 +140,28 @@ export async function commitAll(
   message: string,
   signal?: AbortSignal,
 ): Promise<boolean> {
-  await git(dir, ['add', '-A'], signal)
-  const status = await git(dir, ['status', '--porcelain'], signal)
+  await git(['add', '-A'], { cwd: dir, signal })
+  const status = await git(['status', '--porcelain'], { cwd: dir, signal })
   if (status.trim() === '') return false
-  await git(dir, ['commit', '-m', message], signal)
+  await git(['commit', '-m', message], { cwd: dir, signal })
   return true
 }
 
-/** Push the work branch to origin (already authenticated from the clone URL). */
-export async function pushBranch(dir: string, branch: string, signal?: AbortSignal): Promise<void> {
-  await git(dir, ['push', '-u', 'origin', branch], signal)
+/**
+ * Push the work branch to origin. The remote URL carries only the username, so
+ * the token is supplied here via the askpass env (never in argv).
+ */
+export async function pushBranch(
+  dir: string,
+  branch: string,
+  ghToken: string,
+  signal?: AbortSignal,
+): Promise<void> {
+  await git(['push', '-u', 'origin', branch], {
+    cwd: dir,
+    signal,
+    env: await authEnv(ghToken),
+  })
 }
 
 /**
@@ -95,16 +177,19 @@ export async function reinitAndPush(opts: {
   message: string
 }): Promise<void> {
   await rm(join(opts.dir, '.git'), { recursive: true, force: true })
-  await git(opts.dir, ['init'])
+  await git(['init'], { cwd: opts.dir })
   // Start the history on the target's default branch (init may default to master).
-  await git(opts.dir, ['checkout', '-b', opts.target.defaultBranch])
-  await git(opts.dir, ['config', 'user.name', GIT_AUTHOR])
-  await git(opts.dir, ['config', 'user.email', GIT_EMAIL])
-  await git(opts.dir, ['add', '-A'])
-  await git(opts.dir, ['commit', '-m', opts.message])
-  const url = authenticatedCloneUrl(opts.target.cloneUrl, opts.ghToken)
-  await git(opts.dir, ['remote', 'add', 'origin', url])
-  await git(opts.dir, ['push', '-u', 'origin', opts.target.defaultBranch])
+  await git(['checkout', '-b', opts.target.defaultBranch], { cwd: opts.dir })
+  await git(['config', 'user.name', GIT_AUTHOR], { cwd: opts.dir })
+  await git(['config', 'user.email', GIT_EMAIL], { cwd: opts.dir })
+  await git(['add', '-A'], { cwd: opts.dir })
+  await git(['commit', '-m', opts.message], { cwd: opts.dir })
+  const url = authenticatedCloneUrl(opts.target.cloneUrl)
+  await git(['remote', 'add', 'origin', url], { cwd: opts.dir })
+  await git(['push', '-u', 'origin', opts.target.defaultBranch], {
+    cwd: opts.dir,
+    env: await authEnv(opts.ghToken),
+  })
 }
 
 /** Open a PR via the GitHub REST API; returns its html_url. */
@@ -139,7 +224,9 @@ export async function openPullRequest(opts: {
   })
   if (!res.ok) {
     const detail = await res.text().catch(() => '')
-    throw new Error(`Failed to open PR (HTTP ${res.status}): ${detail.slice(0, 300)}`)
+    throw new Error(
+      redactSecrets(`Failed to open PR (HTTP ${res.status}): ${detail.slice(0, 300)}`),
+    )
   }
   const body = (await res.json()) as { html_url?: string }
   if (!body.html_url) throw new Error('GitHub did not return a PR url')

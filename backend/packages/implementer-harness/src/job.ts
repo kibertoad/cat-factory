@@ -58,6 +58,52 @@ function str(value: unknown, path: string): string {
   return value
 }
 
+// ---- Host allowlist -------------------------------------------------------
+// The short-lived GitHub installation token is sent (a) to the clone/push remote
+// over HTTPS and (b) to the REST API base. A body-supplied URL pointing at an
+// attacker-named host would exfiltrate that token, so every such URL's host is
+// checked against an allowlist before use. Defaults to github.com /
+// api.github.com; a GitHub Enterprise deployment can add its host via env.
+
+/** Hosts the harness is willing to send the installation token to. */
+export function allowedGithubHosts(env: NodeJS.ProcessEnv = process.env): Set<string> {
+  const hosts = new Set(['github.com', 'api.github.com'])
+  const enterprise = env.GITHUB_ENTERPRISE_HOST?.trim().toLowerCase()
+  if (enterprise) hosts.add(enterprise)
+  // Optional extra allowlist (comma-separated) for tests / bespoke deployments.
+  for (const h of (env.GITHUB_ALLOWED_HOSTS ?? '').split(',')) {
+    const t = h.trim().toLowerCase()
+    if (t) hosts.add(t)
+  }
+  return hosts
+}
+
+/**
+ * Reject a URL whose host isn't an allowed GitHub host. `file://` clone sources
+ * are local (no token leaves the box) and so are always permitted; anything else
+ * must be http(s) to an allowlisted host.
+ */
+function assertAllowedHost(
+  rawUrl: string,
+  path: string,
+  env: NodeJS.ProcessEnv = process.env,
+): void {
+  let url: URL
+  try {
+    url = new URL(rawUrl)
+  } catch {
+    throw new Error(`Invalid job: '${path}' must be a valid URL`)
+  }
+  if (url.protocol === 'file:') return
+  if (url.protocol !== 'https:' && url.protocol !== 'http:') {
+    throw new Error(`Invalid job: '${path}' must be an https or file URL`)
+  }
+  const host = url.hostname.toLowerCase()
+  if (!allowedGithubHosts(env).has(host)) {
+    throw new Error(`Invalid job: '${path}' host '${host}' is not an allowed GitHub host`)
+  }
+}
+
 // ---- Bootstrap job (POST /bootstrap) --------------------------------------
 
 /** The reference architecture clone source. */
@@ -120,7 +166,7 @@ export function parseBootstrapJob(input: unknown): BootstrapJob {
             cloneUrl: str(r.cloneUrl, 'reference.cloneUrl'),
           }
         })()
-  return {
+  const job: BootstrapJob = {
     systemPrompt: str(o.systemPrompt, 'systemPrompt'),
     instructions: str(o.instructions, 'instructions'),
     model: str(o.model, 'model'),
@@ -136,6 +182,12 @@ export function parseBootstrapJob(input: unknown): BootstrapJob {
     },
     ...(typeof o.githubApiBase === 'string' ? { githubApiBase: o.githubApiBase } : {}),
   }
+  // Only after all fields are present: refuse to send the token to a host that
+  // isn't an allowed GitHub host. `reference` is optional, so guard it.
+  if (job.reference) assertAllowedHost(job.reference.cloneUrl, 'reference.cloneUrl')
+  assertAllowedHost(job.target.cloneUrl, 'target.cloneUrl')
+  if (job.githubApiBase) assertAllowedHost(job.githubApiBase, 'githubApiBase')
+  return job
 }
 
 /** Validate + narrow an untrusted body into a {@link Job}, throwing on bad input. */
@@ -146,7 +198,7 @@ export function parseJob(input: unknown): Job {
   const o = input as Record<string, unknown>
   const repo = (o.repo ?? {}) as Record<string, unknown>
   const pr = (o.pr ?? {}) as Record<string, unknown>
-  return {
+  const job: Job = {
     jobId: str(o.jobId, 'jobId'),
     systemPrompt: str(o.systemPrompt, 'systemPrompt'),
     userPrompt: str(o.userPrompt, 'userPrompt'),
@@ -167,4 +219,9 @@ export function parseJob(input: unknown): Job {
     },
     ...(typeof o.githubApiBase === 'string' ? { githubApiBase: o.githubApiBase } : {}),
   }
+  // Only after all fields are present: refuse to send the token to a host that
+  // isn't an allowed GitHub host.
+  assertAllowedHost(job.repo.cloneUrl, 'repo.cloneUrl')
+  if (job.githubApiBase) assertAllowedHost(job.githubApiBase, 'githubApiBase')
+  return job
 }

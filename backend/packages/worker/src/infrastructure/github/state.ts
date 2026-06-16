@@ -1,28 +1,47 @@
 import { base64url, timingSafeEqual, base64urlToBytes } from './encoding'
 
 // Signs the `state` parameter carried through the GitHub App install flow. The
-// state binds the resulting installation to the workspace that initiated it; a
-// returning callback must present a state we signed, so a third party cannot
-// trick us into binding their installation to someone else's workspace.
+// state binds the resulting installation to the workspace that initiated it AND
+// to the signed-in user who started the flow, and carries a short expiry — so a
+// returning callback must present a state we issued, recently, for a known
+// owner. A third party cannot forge one to bind their installation to someone
+// else's workspace, and a captured state cannot be replayed indefinitely.
 //
-// Format: `<workspaceId>.<base64url(HMAC-SHA256(workspaceId))>`.
+// Format: `base64url(JSON payload).base64url(HMAC-SHA256(base64url(JSON)))`.
+//
+// SECURITY NOTE (residual): the callback still trusts the `installation_id`
+// query param GitHub sends. A stricter design would confirm the completing user
+// can administer that installation via the user-to-server `GET /user/installations`
+// API before binding it. Until then, the stricter conflict guard in
+// GitHubInstallationService.connect (reject any installation already bound to a
+// different workspace, even if soft-deleted) is the main defence against
+// claiming an installation bound elsewhere.
+
+/** Claims carried through the install round-trip. */
+export interface InstallState {
+  workspaceId: string
+  /** GitHub user id that initiated the install (null when auth is disabled). */
+  userId: number | null
+  /** Absolute expiry, epoch ms. */
+  exp: number
+}
 
 export class StateSigner {
   private keyPromise?: Promise<CryptoKey>
 
   constructor(private readonly secret: string) {}
 
-  async sign(workspaceId: string): Promise<string> {
-    const mac = await this.mac(workspaceId)
-    return `${workspaceId}.${base64url(mac)}`
+  async sign(state: InstallState): Promise<string> {
+    const body = base64url(JSON.stringify(state))
+    return `${body}.${base64url(await this.mac(body))}`
   }
 
-  /** Return the workspaceId if `state` carries a valid signature, else null. */
-  async verify(state: string | null): Promise<string | null> {
+  /** Return the claims if `state` carries a valid, unexpired signature, else null. */
+  async verify(state: string | null): Promise<InstallState | null> {
     if (!state) return null
-    const dot = state.lastIndexOf('.')
-    if (dot <= 0) return null
-    const workspaceId = state.slice(0, dot)
+    const dot = state.indexOf('.')
+    if (dot <= 0 || dot === state.length - 1) return null
+    const body = state.slice(0, dot)
     // A malformed base64url signature must fail closed, not throw out of `atob`.
     let provided: Uint8Array
     try {
@@ -30,13 +49,23 @@ export class StateSigner {
     } catch {
       return null
     }
-    const expected = new Uint8Array(await this.mac(workspaceId))
-    return timingSafeEqual(provided, expected) ? workspaceId : null
+    const expected = new Uint8Array(await this.mac(body))
+    if (!timingSafeEqual(provided, expected)) return null
+
+    let payload: InstallState
+    try {
+      payload = JSON.parse(new TextDecoder().decode(base64urlToBytes(body))) as InstallState
+    } catch {
+      return null
+    }
+    if (typeof payload.exp !== 'number' || payload.exp < Date.now()) return null
+    if (typeof payload.workspaceId !== 'string' || payload.workspaceId === '') return null
+    return payload
   }
 
-  private async mac(workspaceId: string): Promise<ArrayBuffer> {
+  private async mac(input: string): Promise<ArrayBuffer> {
     const key = await this.importKey()
-    return crypto.subtle.sign('HMAC', key, new TextEncoder().encode(workspaceId))
+    return crypto.subtle.sign('HMAC', key, new TextEncoder().encode(input))
   }
 
   private importKey(): Promise<CryptoKey> {

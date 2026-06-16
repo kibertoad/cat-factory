@@ -30,6 +30,10 @@ interface GitHubUserResponse {
   avatar_url: string | null
 }
 
+interface GitHubOrgResponse {
+  login: string
+}
+
 export class GitHubOAuth {
   constructor(private readonly deps: GitHubOAuthDependencies) {}
 
@@ -83,5 +87,25 @@ export class GitHubOAuth {
     if (!res.ok) throw new Error(`GitHub user fetch failed (HTTP ${res.status})`)
     const user = (await res.json()) as GitHubUserResponse
     return { id: user.id, login: user.login, name: user.name, avatarUrl: user.avatar_url }
+  }
+
+  /**
+   * List the orgs the token's user belongs to, as lowercased logins. Requires
+   * the token to carry `read:org` (the login flow requests it only when an org
+   * allowlist is configured) so private memberships are visible. A single page
+   * of up to 100 is read — well beyond any realistic membership count.
+   */
+  async fetchUserOrgs(accessToken: string): Promise<string[]> {
+    const res = await fetch(new URL('/user/orgs?per_page=100', this.deps.apiBase), {
+      headers: {
+        accept: 'application/vnd.github+json',
+        authorization: `Bearer ${accessToken}`,
+        'user-agent': USER_AGENT,
+        'x-github-api-version': API_VERSION,
+      },
+    })
+    if (!res.ok) throw new Error(`GitHub org list failed (HTTP ${res.status})`)
+    const orgs = (await res.json()) as GitHubOrgResponse[]
+    return orgs.map((org) => org.login.toLowerCase())
   }
 }

@@ -8,9 +8,20 @@ import type { Block, ExecutionInstance, Pipeline, Workspace } from '../domain/ty
 // ---------------------------------------------------------------------------
 
 export interface WorkspaceRepository {
-  list(): Promise<Workspace[]>
+  /**
+   * List boards owned by `ownerUserId`. A `null` owner means ownership is not
+   * being enforced (auth disabled) and ALL boards are returned; a numeric id
+   * returns only that user's boards.
+   */
+  listByOwner(ownerUserId: number | null): Promise<Workspace[]>
   get(id: string): Promise<Workspace | null>
-  create(workspace: Workspace): Promise<void>
+  /**
+   * The owning user id for a board: a number when owned, `null` for a legacy
+   * unowned board, and `undefined` when the board does not exist. Used by the
+   * API's per-workspace authorization check.
+   */
+  ownerOf(id: string): Promise<number | null | undefined>
+  create(workspace: Workspace, ownerUserId: number | null): Promise<void>
   delete(id: string): Promise<void>
 }
 

@@ -11,10 +11,8 @@
     "test": "vitest",
     "test:run": "vitest run",
     "typecheck": "nuxt typecheck",
-    "lint": "oxlint",
-    "lint:fix": "oxlint --fix",
-    "format": "oxfmt .",
-    "format:check": "oxfmt --check ."
+    "lint": "oxlint && oxfmt --check .",
+    "lint:fix": "oxlint --fix && oxfmt ."
   },
   "dependencies": {
     "@nuxt/ui": "^4.8.2",
