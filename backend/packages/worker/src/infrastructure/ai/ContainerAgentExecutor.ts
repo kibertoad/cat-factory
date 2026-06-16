@@ -57,9 +57,18 @@ interface RunResult {
   error?: string
 }
 
+/** Live subtask counts the harness derives from Pi's `todo` tool. */
+interface JobProgress {
+  completed: number
+  inProgress: number
+  total: number
+}
+
 /** The job view the harness returns from `GET /jobs/{id}`. */
 interface JobView {
   state: 'running' | 'done' | 'failed'
+  /** Present while running once Pi has touched its todo list. */
+  progress?: JobProgress
   result?: RunResult
   error?: string
 }
@@ -136,7 +145,11 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       throw new Error(`Implementation job poll failed (HTTP ${res.status}): ${await safeText(res)}`)
     }
     const view = (await res.json()) as JobView
-    if (view.state === 'running') return { state: 'running' }
+    if (view.state === 'running') {
+      // Forward the latest subtask counts (if any) so the engine can surface
+      // live "N/M done" progress on the step; the shapes match field-for-field.
+      return view.progress ? { state: 'running', subtasks: view.progress } : { state: 'running' }
+    }
     if (view.state === 'failed') {
       return { state: 'failed', error: view.error ?? 'Implementation job failed' }
     }

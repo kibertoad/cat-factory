@@ -151,10 +151,25 @@ export const decisionSchema = v.object({
 })
 export type Decision = v.InferOutput<typeof decisionSchema>
 
+/**
+ * Live subtask counts for a running step, reported by the container agent from
+ * the coding tool's own todo list (e.g. "3/8 done, 1 in progress"). Present only
+ * while an async job is in flight and the agent maintains a todo list; the board
+ * renders it as a finer-grained progress indicator than `progress` alone.
+ */
+export const stepSubtasksSchema = v.object({
+  completed: v.number(),
+  inProgress: v.number(),
+  total: v.number(),
+})
+export type StepSubtasks = v.InferOutput<typeof stepSubtasksSchema>
+
 export const pipelineStepSchema = v.object({
   agentKind: agentKindSchema,
   state: agentStateSchema,
   progress: v.number(),
+  /** Live subtask counts while an async (container) step runs; see {@link stepSubtasksSchema}. */
+  subtasks: v.optional(stepSubtasksSchema),
   decision: v.nullable(decisionSchema),
   /** Text the agent produced for this step (when LLM execution is enabled). */
   output: v.optional(v.string()),

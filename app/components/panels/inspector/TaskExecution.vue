@@ -62,7 +62,20 @@ function openDecisionFor(decisionId: string) {
               :style="{ color: AGENT_BY_KIND[s.agentKind].color }"
             />
             <span class="text-xs text-slate-200">{{ AGENT_BY_KIND[s.agentKind].label }}</span>
-            <span class="ml-auto text-[10px] text-slate-400">{{ stepLabel[s.state] }}</span>
+            <span
+              v-if="s.subtasks && s.subtasks.total > 0"
+              class="ml-auto font-mono text-[10px] tabular-nums text-slate-300"
+              :title="
+                s.subtasks.inProgress > 0
+                  ? `${s.subtasks.completed} of ${s.subtasks.total} subtasks done, ${s.subtasks.inProgress} in progress`
+                  : `${s.subtasks.completed} of ${s.subtasks.total} subtasks done`
+              "
+            >
+              {{ s.subtasks.completed }}/{{ s.subtasks.total }}
+            </span>
+            <span class="text-[10px] text-slate-400" :class="{ 'ml-auto': !s.subtasks }">
+              {{ stepLabel[s.state] }}
+            </span>
             <UButton
               v-if="s.decision && !s.decision.chosen"
               color="warning"
@@ -73,6 +86,15 @@ function openDecisionFor(decisionId: string) {
             >
               Resolve
             </UButton>
+          </div>
+          <div
+            v-if="s.subtasks && s.subtasks.total > 0"
+            class="mt-1 ml-6 h-1 overflow-hidden rounded-full bg-slate-700/60"
+          >
+            <div
+              class="h-full rounded-full bg-indigo-400 transition-all duration-500"
+              :style="{ width: `${(s.subtasks.completed / s.subtasks.total) * 100}%` }"
+            />
           </div>
           <div
             v-if="s.model"

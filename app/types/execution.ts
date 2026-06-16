@@ -20,12 +20,21 @@ export interface Decision {
   chosen: string | null
 }
 
+/** Live subtask counts a running step reports from the agent's own todo list. */
+export interface StepSubtasks {
+  completed: number
+  inProgress: number
+  total: number
+}
+
 /** One agent's slot in a running pipeline. */
 export interface PipelineStep {
   agentKind: AgentKind
   state: AgentState
   /** 0..1 progress of this individual step */
   progress: number
+  /** live "N/M done" subtask counts while an async (container) step runs */
+  subtasks?: StepSubtasks
   /** present + unresolved => the step (and block) is blocked */
   decision: Decision | null
   /** text the agent produced for this step (when LLM execution is enabled). */

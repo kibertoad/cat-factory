@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { Job, RunResult } from './job.js'
 import { cloneRepo, commitAll, createBranch, openPullRequest, pushBranch } from './git.js'
-import { runPi, writeAgentsContext, writePiModelsConfig } from './pi.js'
+import { runPi, type TodoProgress, writeAgentsContext, writePiModelsConfig } from './pi.js'
 import { log } from './logger.js'
 
 // Async job execution for the implementation container. A coding run can take
@@ -17,11 +17,13 @@ import { log } from './logger.js'
 export interface RunOptions {
   signal?: AbortSignal
   onActivity?: () => void
+  /** Receives the latest subtask counts as Pi updates its todo list. */
+  onProgress?: (progress: TodoProgress) => void
 }
 
 /** Run one implementation job end to end: clone → Pi implements → commit → push → PR. */
 export async function handleRun(job: Job, opts: RunOptions = {}): Promise<RunResult> {
-  const { signal, onActivity } = opts
+  const { signal, onActivity, onProgress } = opts
   const dir = await mkdtemp(join(tmpdir(), 'impl-'))
   try {
     await cloneRepo({ repo: job.repo, ghToken: job.ghToken, dir, signal })
@@ -36,6 +38,7 @@ export async function handleRun(job: Job, opts: RunOptions = {}): Promise<RunRes
       sessionToken: job.sessionToken,
       signal,
       onActivity,
+      onProgress,
     })
 
     const committed = await commitAll(dir, job.pr.title, signal)
@@ -68,6 +71,12 @@ export interface JobView {
   startedAt: number
   /** Epoch ms of the last sign of progress (job start, or Pi output). */
   heartbeatAt: number
+  /**
+   * Latest subtask progress from Pi's `todo` tool while the job runs — the
+   * Worker poll surfaces it to the board (e.g. "3/8 done"). Absent until Pi
+   * first touches its todo list (or if the model never uses it).
+   */
+  progress?: TodoProgress
   /** Present when `state === 'done'`: the orchestration's structured result. */
   result?: RunResult
   /** Present when `state === 'failed'`: why the job faulted (or was killed). */
@@ -173,7 +182,13 @@ export class JobRegistry {
 
     log.info('job started', { jobId: entry.id, headBranch: job.headBranch })
     try {
-      const result = await this.run(job, { signal: controller.signal, onActivity: heartbeat })
+      const result = await this.run(job, {
+        signal: controller.signal,
+        onActivity: heartbeat,
+        onProgress: (progress) => {
+          entry.progress = progress
+        },
+      })
       entry.state = 'done'
       entry.result = result
       log.info('job finished', {
