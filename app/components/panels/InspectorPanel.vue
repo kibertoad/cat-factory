@@ -9,6 +9,7 @@ import TaskDependencies from '~/components/panels/inspector/TaskDependencies.vue
 import TaskStructure from '~/components/panels/inspector/TaskStructure.vue'
 import TaskModelSettings from '~/components/panels/inspector/TaskModelSettings.vue'
 import TaskExecution from '~/components/panels/inspector/TaskExecution.vue'
+import AgentFailureCard from '~/components/board/AgentFailureCard.vue'
 
 const board = useBoardStore()
 const pipelines = usePipelinesStore()
@@ -18,6 +19,7 @@ const documents = useDocumentsStore()
 const tasks = useTasksStore()
 const fragments = useFragmentsStore()
 const models = useModelsStore()
+const agentRuns = useAgentRunsStore()
 
 onMounted(() => {
   fragments.ensureLoaded()
@@ -75,6 +77,15 @@ function remove() {
   board.removeBlock(block.value.id)
   ui.select(null)
 }
+
+// ---- failed agent run (bootstrap or execution) ------------------------------
+// A block whose current run failed surfaces the shared failure banner + retry,
+// keyed by block id — covering a failed "bootstrap repo" frame and (for tasks) a
+// failed pipeline execution alike.
+const failedRun = computed(() => {
+  const run = block.value ? agentRuns.byBlock[block.value.id] : undefined
+  return run && run.status === 'failed' ? run : null
+})
 </script>
 
 <template>
@@ -120,6 +131,9 @@ function remove() {
         class="w-full"
         placeholder="Describe this block…"
       />
+
+      <!-- failed run (bootstrap or execution): shared failure banner + retry -->
+      <AgentFailureCard v-if="failedRun" :run="failedRun" />
 
       <!-- external links -->
       <div class="flex flex-wrap gap-2">

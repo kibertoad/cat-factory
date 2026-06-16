@@ -54,9 +54,16 @@ export function workspaceController(): Hono<AppEnv> {
 
   app.get('/workspaces/:workspaceId', async (c) => {
     const container = c.get('container')
-    const snapshot = await container.workspaceService.snapshot(param(c, 'workspaceId'))
+    const workspaceId = param(c, 'workspaceId')
+    const snapshot = await container.workspaceService.snapshot(workspaceId)
     const spend = await container.spendService.status()
-    return c.json({ ...snapshot, spend })
+    // Carry bootstrap runs in the snapshot so the board renders a bootstrap's live
+    // progress / failure + retry the moment it loads (no separate, independently
+    // failing fetch). No-op when the bootstrap module isn't configured.
+    const bootstrapJobs = container.bootstrap
+      ? await container.bootstrap.service.listJobs(workspaceId)
+      : undefined
+    return c.json({ ...snapshot, spend, ...(bootstrapJobs ? { bootstrapJobs } : {}) })
   })
 
   app.patch('/workspaces/:workspaceId', jsonBody(renameWorkspaceSchema), async (c) => {

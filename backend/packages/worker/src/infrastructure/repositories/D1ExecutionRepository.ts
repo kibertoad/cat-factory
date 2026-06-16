@@ -1,8 +1,15 @@
-import type { Clock, ExecutionRepository, RunRef } from '@cat-factory/core'
+import type { AgentFailure, Clock, ExecutionRepository, RunRef } from '@cat-factory/core'
 import type { ExecutionInstance } from '@cat-factory/contracts'
 import type { D1Database } from '@cloudflare/workers-types'
 import { type ExecutionRow, rowToExecution } from './mappers'
 
+/**
+ * Execution runs, stored as `kind='execution'` rows of the unified `agent_runs`
+ * table (migration 0019). Every statement is scoped by `kind='execution'` so the
+ * bootstrap flow's rows (owned by {@link D1BootstrapJobRepository}) never collide
+ * — in particular `deleteByBlock` must NOT delete the bootstrap run that created a
+ * service frame when an execution on that block is replaced/cancelled.
+ */
 export class D1ExecutionRepository implements ExecutionRepository {
   private readonly db: D1Database
   private readonly clock: Clock
@@ -14,7 +21,9 @@ export class D1ExecutionRepository implements ExecutionRepository {
 
   async listByWorkspace(workspaceId: string): Promise<ExecutionInstance[]> {
     const { results } = await this.db
-      .prepare('SELECT * FROM executions WHERE workspace_id = ? ORDER BY rowid')
+      .prepare(
+        `SELECT * FROM agent_runs WHERE workspace_id = ? AND kind = 'execution' ORDER BY created_at`,
+      )
       .bind(workspaceId)
       .all<ExecutionRow>()
     return results.map(rowToExecution)
@@ -22,7 +31,7 @@ export class D1ExecutionRepository implements ExecutionRepository {
 
   async get(workspaceId: string, id: string): Promise<ExecutionInstance | null> {
     const row = await this.db
-      .prepare('SELECT * FROM executions WHERE workspace_id = ? AND id = ?')
+      .prepare(`SELECT * FROM agent_runs WHERE workspace_id = ? AND id = ? AND kind = 'execution'`)
       .bind(workspaceId, id)
       .first<ExecutionRow>()
     return row ? rowToExecution(row) : null
@@ -30,41 +39,46 @@ export class D1ExecutionRepository implements ExecutionRepository {
 
   async getByBlock(workspaceId: string, blockId: string): Promise<ExecutionInstance | null> {
     const row = await this.db
-      .prepare('SELECT * FROM executions WHERE workspace_id = ? AND block_id = ?')
+      .prepare(
+        `SELECT * FROM agent_runs WHERE workspace_id = ? AND block_id = ? AND kind = 'execution'`,
+      )
       .bind(workspaceId, blockId)
       .first<ExecutionRow>()
     return row ? rowToExecution(row) : null
   }
 
   async upsert(workspaceId: string, execution: ExecutionInstance): Promise<void> {
-    // `updated_at` is refreshed on every write so it doubles as the sweeper's
-    // lease. `error`/`workflow_instance_id` are deliberately left out of the
-    // conflict update so they survive normal step writes (see markError).
+    // The pipeline shape lives in `detail`; lifecycle is top-level. `updated_at`
+    // is refreshed on every write so it doubles as the sweeper's lease.
+    // `error`/`failure`/`workflow_instance_id` are deliberately left out of the
+    // conflict update so they survive normal step writes (see markFailed).
+    const now = this.clock.now()
+    const detail = JSON.stringify({
+      pipelineId: execution.pipelineId,
+      pipelineName: execution.pipelineName,
+      steps: execution.steps,
+      currentStep: execution.currentStep,
+    })
     await this.db
       .prepare(
-        `INSERT INTO executions
-           (workspace_id, id, block_id, pipeline_id, pipeline_name, steps, current_step,
-            status, updated_at, workflow_instance_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO agent_runs
+           (workspace_id, id, kind, block_id, status, detail, created_at, updated_at,
+            workflow_instance_id)
+         VALUES (?, ?, 'execution', ?, ?, ?, ?, ?, ?)
          ON CONFLICT (workspace_id, id) DO UPDATE SET
            block_id = excluded.block_id,
-           pipeline_id = excluded.pipeline_id,
-           pipeline_name = excluded.pipeline_name,
-           steps = excluded.steps,
-           current_step = excluded.current_step,
            status = excluded.status,
+           detail = excluded.detail,
            updated_at = excluded.updated_at`,
       )
       .bind(
         workspaceId,
         execution.id,
         execution.blockId,
-        execution.pipelineId,
-        execution.pipelineName,
-        JSON.stringify(execution.steps),
-        execution.currentStep,
         execution.status,
-        this.clock.now(),
+        detail,
+        now,
+        now,
         // Instance id == execution id today; stored for forward-compatibility.
         execution.id,
       )
@@ -73,7 +87,9 @@ export class D1ExecutionRepository implements ExecutionRepository {
 
   async deleteByBlock(workspaceId: string, blockId: string): Promise<void> {
     await this.db
-      .prepare('DELETE FROM executions WHERE workspace_id = ? AND block_id = ?')
+      .prepare(
+        `DELETE FROM agent_runs WHERE workspace_id = ? AND block_id = ? AND kind = 'execution'`,
+      )
       .bind(workspaceId, blockId)
       .run()
   }
@@ -81,8 +97,8 @@ export class D1ExecutionRepository implements ExecutionRepository {
   async listStale(olderThanEpochMs: number): Promise<RunRef[]> {
     const { results } = await this.db
       .prepare(
-        `SELECT workspace_id, id FROM executions
-         WHERE status = 'running' AND updated_at < ?
+        `SELECT workspace_id, id FROM agent_runs
+         WHERE kind = 'execution' AND status = 'running' AND updated_at < ?
          ORDER BY updated_at`,
       )
       .bind(olderThanEpochMs)
@@ -90,14 +106,14 @@ export class D1ExecutionRepository implements ExecutionRepository {
     return results.map((r) => ({ workspaceId: r.workspace_id, id: r.id }))
   }
 
-  async markError(workspaceId: string, id: string, error: string): Promise<void> {
+  async markFailed(workspaceId: string, id: string, failure: AgentFailure): Promise<void> {
     await this.db
       .prepare(
-        `UPDATE executions
-           SET status = 'done', error = ?, updated_at = ?
-         WHERE workspace_id = ? AND id = ?`,
+        `UPDATE agent_runs
+           SET status = 'failed', error = ?, failure = ?, updated_at = ?
+         WHERE workspace_id = ? AND id = ? AND kind = 'execution'`,
       )
-      .bind(error, this.clock.now(), workspaceId, id)
+      .bind(failure.message, JSON.stringify(failure), this.clock.now(), workspaceId, id)
       .run()
   }
 }

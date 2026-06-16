@@ -2,12 +2,13 @@ import type { ExecutionContext, MessageBatch, ScheduledController } from '@cloud
 import { createApp } from './app'
 import { loadConfig } from './infrastructure/config'
 import type { Env, ExecutionStartMessage, GitHubSyncMessage } from './infrastructure/env'
+import { D1AgentRunRepository } from './infrastructure/repositories/D1AgentRunRepository'
 import { D1CommitProjectionRepository } from './infrastructure/repositories/D1CommitProjectionRepository'
-import { D1ExecutionRepository } from './infrastructure/repositories/D1ExecutionRepository'
 import { D1RateLimitRepository } from './infrastructure/repositories/D1RateLimitRepository'
 import { D1TokenUsageRepository } from './infrastructure/repositories/D1TokenUsageRepository'
 import { CryptoIdGenerator, SystemClock } from './infrastructure/runtime'
 import { WorkflowsWorkRunner } from './infrastructure/workflows/WorkflowsWorkRunner'
+import { WorkflowsBootstrapRunner } from './infrastructure/workflows/WorkflowsBootstrapRunner'
 import { sweepRetention } from './infrastructure/workflows/retention'
 import { WorkflowsLookup, sweepStuckRuns } from './infrastructure/workflows/sweeper'
 import { handleGitHubSyncBatch, reconcileStaleRepos } from './infrastructure/github/sync-consumer'
@@ -85,14 +86,29 @@ export default {
     }
 
     // Frequent pass (every 2 min): time-sensitive backstops.
-    // Re-drive durable runs whose Workflows instance died.
-    if (env.EXECUTION_WORKFLOW) {
-      const workflow = env.EXECUTION_WORKFLOW
+    // Re-drive any agent run — execution OR bootstrap — whose Workflows instance
+    // died. One sweep over the unified agent_runs table dispatches by kind.
+    if (env.EXECUTION_WORKFLOW || env.BOOTSTRAP_WORKFLOW) {
+      const execLookup = env.EXECUTION_WORKFLOW ? new WorkflowsLookup(env.EXECUTION_WORKFLOW) : null
+      const bootLookup = env.BOOTSTRAP_WORKFLOW ? new WorkflowsLookup(env.BOOTSTRAP_WORKFLOW) : null
+      const execRunner = env.EXECUTION_WORKFLOW
+        ? new WorkflowsWorkRunner({ workflow: env.EXECUTION_WORKFLOW, queue: env.EXECUTION_QUEUE })
+        : null
+      const bootRunner = env.BOOTSTRAP_WORKFLOW
+        ? new WorkflowsBootstrapRunner(env.BOOTSTRAP_WORKFLOW)
+        : null
       ctx.waitUntil(
         sweepStuckRuns({
-          executionRepository: new D1ExecutionRepository({ db: env.DB, clock }),
-          workflowLookup: new WorkflowsLookup(workflow),
-          workRunner: new WorkflowsWorkRunner({ workflow, queue: env.EXECUTION_QUEUE }),
+          agentRunRepository: new D1AgentRunRepository({ db: env.DB }),
+          isAlive: (ref) => {
+            const lookup = ref.kind === 'bootstrap' ? bootLookup : execLookup
+            // No binding for this kind → can't re-drive, so treat as alive (skip).
+            return lookup ? lookup.isAlive(ref.id) : Promise.resolve(true)
+          },
+          redrive: async (ref) => {
+            if (ref.kind === 'bootstrap') await bootRunner?.startRun(ref.workspaceId, ref.id)
+            else await execRunner?.startRun(ref.workspaceId, ref.id)
+          },
           clock,
           leaseMs: SWEEP_LEASE_MS,
         })

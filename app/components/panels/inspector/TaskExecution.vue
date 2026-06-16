@@ -1,14 +1,23 @@
 <script setup lang="ts">
 import type { Block } from '~/types/domain'
 import { AGENT_BY_KIND } from '~/utils/catalog'
+import AgentFailureCard from '~/components/board/AgentFailureCard.vue'
 
 const props = defineProps<{ block: Block }>()
 
 const execution = useExecutionStore()
+const agentRuns = useAgentRunsStore()
 const ui = useUiStore()
 const models = useModelsStore()
 
 const instance = computed(() => execution.getInstance(props.block.executionId))
+
+// A failed pipeline run surfaces the shared failure banner + retry — the
+// execution failure surface that the old `pr_ready` flip used to hide.
+const failedRun = computed(() => {
+  const run = agentRuns.byBlock[props.block.id]
+  return run && run.status === 'failed' ? run : null
+})
 
 const pr = computed(() => props.block.pullRequest)
 /** A PR is merged once the block is `done`; otherwise it is open awaiting merge. */
@@ -107,6 +116,9 @@ function openDecisionFor(decisionId: string) {
         </li>
       </ul>
     </div>
+
+    <!-- failed run: shared failure banner + retry -->
+    <AgentFailureCard v-if="failedRun" :run="failedRun" />
 
     <!-- Open PR: link straight to it on GitHub -->
     <div v-if="pr" class="space-y-2">

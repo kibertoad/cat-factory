@@ -21,6 +21,7 @@ const STATUS_META: Record<ExecutionInstance['status'], { label: string; chip: st
   blocked: { label: 'Blocked on decision', chip: 'warning' },
   paused: { label: 'Paused (budget)', chip: 'neutral' },
   done: { label: 'Completed', chip: 'success' },
+  failed: { label: 'Failed', chip: 'error' },
 }
 
 const steps = computed(() => props.instance.steps)

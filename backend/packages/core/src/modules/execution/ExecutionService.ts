@@ -1,4 +1,11 @@
-import type { Block, ExecutionInstance, PipelineStep, StepSubtasks } from '../../domain/types'
+import type {
+  AgentFailure,
+  AgentFailureKind,
+  Block,
+  ExecutionInstance,
+  PipelineStep,
+  StepSubtasks,
+} from '../../domain/types'
 import { assertFound, ConflictError, NotFoundError } from '../../domain/errors'
 import { DEFAULT_CONFIDENCE_THRESHOLD } from '../../domain/catalog'
 import type {
@@ -7,7 +14,7 @@ import type {
   PipelineRepository,
   WorkspaceRepository,
 } from '../../ports/repositories'
-import type { IdGenerator } from '../../ports/runtime'
+import type { Clock, IdGenerator } from '../../ports/runtime'
 import type { AgentExecutor, AgentRunContext, AgentRunResult } from '../../ports/agent-executor'
 import { isAsyncAgentExecutor } from '../../ports/agent-executor'
 import type { WorkRunner } from '../../ports/work-runner'
@@ -22,12 +29,30 @@ import type { SpendService } from '../spend/SpendService'
 import { requireWorkspace } from '../workspaces/WorkspaceService'
 import type { AdvanceOptions, AdvanceResult } from './advance'
 
+/**
+ * "What to do next" guidance per failure kind a pipeline run can produce, shown
+ * under the failure banner on the board (mirrors bootstrap's FAILURE_HINTS). Only
+ * the execution-relevant subset of {@link AgentFailureKind} is keyed.
+ */
+const EXECUTION_FAILURE_HINTS: Partial<Record<AgentFailureKind, string>> = {
+  agent:
+    'An agent step failed after its automatic retries. Review the run, then retry to re-run the pipeline.',
+  job_failed:
+    'The implementation container reported a failure. Inspect its logs (Cloudflare Workers Observability, filtered by the run id), then retry to spin a fresh container.',
+  timeout:
+    'The run exceeded its time budget — a step or the implementation job did not finish in time. Retry to start it again.',
+  decision_timeout:
+    'A required decision was not answered in time, so the run was stopped. Retry to re-run the pipeline.',
+  unknown: 'The run failed for an unclassified reason. Review the run, then retry.',
+}
+
 export interface ExecutionServiceDependencies {
   workspaceRepository: WorkspaceRepository
   blockRepository: BlockRepository
   pipelineRepository: PipelineRepository
   executionRepository: ExecutionRepository
   idGenerator: IdGenerator
+  clock: Clock
   agentExecutor: AgentExecutor
   workRunner: WorkRunner
   executionEventPublisher: ExecutionEventPublisher
@@ -66,6 +91,7 @@ export class ExecutionService {
   private readonly pipelineRepository: PipelineRepository
   private readonly executionRepository: ExecutionRepository
   private readonly idGenerator: IdGenerator
+  private readonly clock: Clock
   private readonly agentExecutor: AgentExecutor
   private readonly workRunner: WorkRunner
   private readonly events: ExecutionEventPublisher
@@ -81,6 +107,7 @@ export class ExecutionService {
     pipelineRepository,
     executionRepository,
     idGenerator,
+    clock,
     agentExecutor,
     workRunner,
     executionEventPublisher,
@@ -95,6 +122,7 @@ export class ExecutionService {
     this.pipelineRepository = pipelineRepository
     this.executionRepository = executionRepository
     this.idGenerator = idGenerator
+    this.clock = clock
     this.agentExecutor = agentExecutor
     this.workRunner = workRunner
     this.events = executionEventPublisher
@@ -665,20 +693,58 @@ export class ExecutionService {
   }
 
   /**
-   * Record a terminal agent failure: persist the error, stop the run, and open
-   * the block for human review (`pr_ready`). Called by the durable driver once a
-   * step has exhausted its retries.
+   * Record a terminal agent failure: persist a structured {@link AgentFailure},
+   * flip the run to `failed`, and mark the block `blocked` (needs attention) — NOT
+   * `pr_ready`, which looked like success and hid the failure. The board then
+   * renders the same failure banner + retry as a failed bootstrap. Called by the
+   * durable driver once a step has exhausted its retries (or a job/decision
+   * faulted); `kind` classifies the cause so the right hint is shown.
    */
-  async failRun(workspaceId: string, executionId: string, message: string): Promise<void> {
+  async failRun(
+    workspaceId: string,
+    executionId: string,
+    message: string,
+    kind: AgentFailureKind = 'agent',
+  ): Promise<void> {
     const instance = await this.executionRepository.get(workspaceId, executionId)
     if (!instance) return
-    await this.executionRepository.markError(workspaceId, executionId, message)
+    const failure: AgentFailure = {
+      kind,
+      message,
+      detail: null,
+      hint: EXECUTION_FAILURE_HINTS[kind] ?? null,
+      occurredAt: this.clock.now(),
+      lastSubtasks: instance.steps[instance.currentStep]?.subtasks ?? null,
+    }
+    await this.executionRepository.markFailed(workspaceId, executionId, failure)
+    // Progress reflects how far the pipeline got before failing.
+    const done = instance.steps.filter((s) => s.state === 'done').length
+    const progress = instance.steps.length > 0 ? done / instance.steps.length : 0
     await this.blockRepository.update(workspaceId, instance.blockId, {
-      status: 'pr_ready',
-      progress: 1,
+      status: 'blocked',
+      progress,
     })
     const failed = await this.executionRepository.get(workspaceId, executionId)
     if (failed) await this.emitInstance(workspaceId, failed)
+  }
+
+  /**
+   * Retry a failed run: re-run the same pipeline on the same block, resetting its
+   * steps and re-driving the durable runner. Only a `failed` run can be retried.
+   * Mirrors {@link BootstrapService.retry}; both are reached via the unified
+   * `POST /agent-runs/:id/retry` endpoint.
+   */
+  async retry(workspaceId: string, executionId: string): Promise<ExecutionInstance> {
+    await this.requireWorkspace(workspaceId)
+    const previous = assertFound(
+      await this.executionRepository.get(workspaceId, executionId),
+      'Execution',
+      executionId,
+    )
+    if (previous.status !== 'failed') {
+      throw new ConflictError(`Only a failed run can be retried (run is '${previous.status}').`)
+    }
+    return this.start(workspaceId, previous.blockId, previous.pipelineId)
   }
 
   /**

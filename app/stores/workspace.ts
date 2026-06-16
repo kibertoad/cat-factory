@@ -5,6 +5,7 @@ import { useAccountsStore } from '~/stores/accounts'
 import { useBoardStore } from '~/stores/board'
 import { usePipelinesStore } from '~/stores/pipelines'
 import { useExecutionStore } from '~/stores/execution'
+import { useAgentRunsStore } from '~/stores/agentRuns'
 
 /**
  * Owns the active workspace and bootstraps the app against the backend. On load
@@ -56,6 +57,7 @@ export const useWorkspaceStore = defineStore(
       useBoardStore().hydrate(snapshot.blocks)
       usePipelinesStore().hydrate(snapshot.pipelines)
       useExecutionStore().hydrate(snapshot.executions)
+      useAgentRunsStore().hydrate(snapshot.bootstrapJobs ?? [])
     }
 
     /** Resolve accounts + boards, then open the right board for the active account. */

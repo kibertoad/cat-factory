@@ -7,7 +7,7 @@
 // from one and runs a bootstrapper agent in a container to adapt it.
 // ---------------------------------------------------------------------------
 
-import type { StepSubtasks } from './execution'
+import type { AgentFailure, AgentFailureKind, StepSubtasks } from './execution'
 
 /** A managed base repository new repos are bootstrapped from. */
 export interface ReferenceArchitecture {
@@ -37,24 +37,16 @@ export type UpdateReferenceArchitectureInput = Partial<CreateReferenceArchitectu
 /** Lifecycle of a single "bootstrap repo" run. */
 export type BootstrapStatus = 'pending' | 'running' | 'succeeded' | 'failed'
 
-/** How a bootstrap run faulted (mirrors the contract). */
-export type BootstrapFailureKind =
-  | 'preflight'
-  | 'dispatch'
-  | 'evicted'
-  | 'timeout'
-  | 'agent'
-  | 'unknown'
+/**
+ * A bootstrap run's failure is now the shared {@link AgentFailure} (same shape
+ * execution runs use), so the board renders one failure banner + retry for any
+ * agent. These aliases stay for back-compat / documentation of the bootstrap
+ * subset; `bootstrapFailureKindSchema` on the backend stays narrow.
+ */
+export type BootstrapFailureKind = AgentFailureKind
 
 /** Structured failure diagnostics captured when a bootstrap run fails. */
-export interface BootstrapFailure {
-  kind: BootstrapFailureKind
-  message: string
-  detail: string | null
-  hint: string | null
-  occurredAt: number
-  lastSubtasks: StepSubtasks | null
-}
+export type BootstrapFailure = AgentFailure
 
 /** One "bootstrap repo" run with its outcome. */
 export interface BootstrapJob {
