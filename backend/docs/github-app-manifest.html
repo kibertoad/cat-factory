@@ -17,18 +17,41 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>cat-factory · Create GitHub App</title>
     <style>
-      body { font: 15px/1.5 system-ui, sans-serif; max-width: 38rem; margin: 3rem auto; padding: 0 1rem; }
-      label { display: block; margin: 1rem 0 0.25rem; font-weight: 600; }
-      input { width: 100%; padding: 0.5rem; font: inherit; box-sizing: border-box; }
-      small { color: #555; }
-      button { margin-top: 1.5rem; padding: 0.6rem 1.2rem; font: inherit; cursor: pointer; }
+      body {
+        font:
+          15px/1.5 system-ui,
+          sans-serif;
+        max-width: 38rem;
+        margin: 3rem auto;
+        padding: 0 1rem;
+      }
+      label {
+        display: block;
+        margin: 1rem 0 0.25rem;
+        font-weight: 600;
+      }
+      input {
+        width: 100%;
+        padding: 0.5rem;
+        font: inherit;
+        box-sizing: border-box;
+      }
+      small {
+        color: #555;
+      }
+      button {
+        margin-top: 1.5rem;
+        padding: 0.6rem 1.2rem;
+        font: inherit;
+        cursor: pointer;
+      }
     </style>
   </head>
   <body>
     <h1>Create the cat-factory GitHub App</h1>
     <p>
-      Each self-hosted instance needs its own (private) GitHub App pointing at its
-      own worker host. This form pre-fills it from the shared manifest.
+      Each self-hosted instance needs its own (private) GitHub App pointing at its own worker host.
+      This form pre-fills it from the shared manifest.
     </p>
 
     <label for="host">Worker host</label>
@@ -49,7 +72,8 @@
       // Keep this in sync with github-app-manifest.json.
       const MANIFEST = {
         name: 'cat-factory',
-        description: 'Connects a cat-factory workspace to GitHub: repo/PR/issue read & write plus webhooks.',
+        description:
+          'Connects a cat-factory workspace to GitHub: repo/PR/issue read & write plus webhooks.',
         url: 'https://github.com/kibertoad/cat-factory',
         public: false,
         hook_attributes: { url: '', active: true },
@@ -67,7 +91,11 @@
       }
 
       document.getElementById('go').addEventListener('click', () => {
-        const host = document.getElementById('host').value.trim().replace(/^https?:\/\//, '').replace(/\/+$/, '')
+        const host = document
+          .getElementById('host')
+          .value.trim()
+          .replace(/^https?:\/\//, '')
+          .replace(/\/+$/, '')
         if (!host) return alert('Enter your worker host first.')
         const org = document.getElementById('org').value.trim()
 

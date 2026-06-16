@@ -141,11 +141,7 @@ describe('parseTodoProgress', () => {
   })
 
   it('excludes deleted (tombstoned) tasks from the total', () => {
-    const event = todoEvent([
-      { status: 'completed' },
-      { status: 'deleted' },
-      { status: 'pending' },
-    ])
+    const event = todoEvent([{ status: 'completed' }, { status: 'deleted' }, { status: 'pending' }])
     expect(parseTodoProgress(event)).toEqual({ completed: 1, inProgress: 0, total: 2 })
   })
 
@@ -161,7 +157,11 @@ describe('parseTodoProgress', () => {
   it('ignores non-todo, errored, or unrecognised events', () => {
     expect(parseTodoProgress({ type: 'message_end' })).toBeUndefined()
     expect(parseTodoProgress({ type: 'tool_result', toolName: 'bash' })).toBeUndefined()
-    expect(parseTodoProgress({ ...todoEvent([{ status: 'pending' }]), isError: true })).toBeUndefined()
-    expect(parseTodoProgress({ type: 'tool_result', toolName: 'todo', details: {} })).toBeUndefined()
+    expect(
+      parseTodoProgress({ ...todoEvent([{ status: 'pending' }]), isError: true }),
+    ).toBeUndefined()
+    expect(
+      parseTodoProgress({ type: 'tool_result', toolName: 'todo', details: {} }),
+    ).toBeUndefined()
   })
 })
