@@ -5,7 +5,14 @@ export type {
   PipelineRepository,
   RunRef,
   WorkspaceRepository,
+  WorkspaceVisibility,
 } from './repositories'
+export type {
+  AccountRecord,
+  AccountRepository,
+  Membership,
+  MembershipRepository,
+} from './account-repositories'
 export type { Clock, IdGenerator } from './runtime'
 export type { ModelProvider, ModelRef } from './model-provider'
 export type { TokenUsageRecord, TokenUsageRepository, TokenUsageTotals } from './token-usage'
@@ -106,10 +113,13 @@ export type {
   ReferenceArchitectureRepository,
 } from './bootstrap-repositories'
 export type {
+  BootstrapJobHandle,
+  BootstrapJobUpdate,
   BootstrapRepoOutcome,
   BootstrapRepoRequest,
   RepoBootstrapper,
 } from './repo-bootstrapper'
+export { type BootstrapRunner, NoopBootstrapRunner } from './bootstrap-runner'
 export type { RepoBlueprintRecord, RepoBlueprintRepository } from './board-scan-repositories'
 export type { RepoScanner, ScanRepoRequest, ScannedBlueprint } from './repo-scanner'
 export type {

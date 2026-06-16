@@ -100,5 +100,20 @@ export function bootstrapController(): Hono<AppEnv> {
     return c.json(job, 201)
   })
 
+  // Retry a failed run: spins a fresh container (and durable driver) for the same
+  // target, reusing the original job's board frame. 409s if the job isn't failed.
+  app.post('/bootstrap/jobs/:id/retry', async (c) => {
+    const bootstrap = requireBootstrap(c)
+    if (!bootstrap) return unavailable(c, 'Repo bootstrap is not configured')
+    if (!bootstrap.service.canBootstrap) {
+      return unavailable(
+        c,
+        'Repo bootstrapping needs the GitHub App and the implementation container to be configured',
+      )
+    }
+    const job = await bootstrap.service.retry(param(c, 'workspaceId'), param(c, 'id'))
+    return c.json(job, 201)
+  })
+
   return app
 }

@@ -36,6 +36,12 @@ export interface Env {
   EXECUTION_WORKFLOW?: Workflow
   /** Optional admission queue; its consumer creates the Workflow instance. */
   EXECUTION_QUEUE?: Queue<ExecutionStartMessage>
+  /**
+   * Workflows binding that durably drives each "bootstrap repo" run's poll loop
+   * (see BootstrapWorkflow). Without it a bootstrap still dispatches but isn't
+   * auto-driven — the cron sweep re-drives any job left running.
+   */
+  BOOTSTRAP_WORKFLOW?: Workflow
   /** How long a run may park on a human decision before expiring, e.g. "24h". */
   DECISION_TIMEOUT?: string
   /**

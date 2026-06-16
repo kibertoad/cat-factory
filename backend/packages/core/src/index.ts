@@ -39,6 +39,11 @@ export {
   requireWorkspace,
   type WorkspaceServiceDependencies,
 } from './modules/workspaces/WorkspaceService'
+export {
+  AccountService,
+  type AccountServiceDependencies,
+  type AccountUser,
+} from './modules/accounts/AccountService'
 
 export {
   SpendService,
@@ -201,6 +206,7 @@ export * as runnersLogic from './modules/runners/runners.logic'
 export {
   BootstrapService,
   type BootstrapServiceDependencies,
+  type BootstrapPollResult,
 } from './modules/bootstrap/BootstrapService'
 
 export {

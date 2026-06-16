@@ -1,4 +1,5 @@
 import type { Block, ExecutionInstance } from './entities'
+import type { BootstrapJob } from './bootstrap'
 
 // Real-time events pushed from the per-workspace events hub to subscribed
 // browsers over WebSocket, replacing the old `tick` polling. The shape is shared
@@ -17,3 +18,10 @@ export type WorkspaceEvent =
    * materialised, a run cancelled). The client responds with a full refresh.
    */
   | { type: 'board'; reason: string; at: number }
+  /**
+   * A repo-bootstrap run advanced. Carries the updated job (with live `subtasks`)
+   * and its provisional/linked service frame, so the client patches the board
+   * card and its progress without a refetch. `block` is null only if the frame
+   * vanished between the transition and the publish.
+   */
+  | { type: 'bootstrap'; job: BootstrapJob; block: Block | null; at: number }

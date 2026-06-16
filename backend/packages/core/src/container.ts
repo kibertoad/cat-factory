@@ -4,6 +4,7 @@ import type {
   PipelineRepository,
   WorkspaceRepository,
 } from './ports/repositories'
+import type { AccountRepository, MembershipRepository } from './ports/account-repositories'
 import type { Clock, IdGenerator } from './ports/runtime'
 import type { AgentExecutor } from './ports/agent-executor'
 import type { TokenUsageRepository } from './ports/token-usage'
@@ -31,6 +32,7 @@ import type {
   ReferenceArchitectureRepository,
 } from './ports/bootstrap-repositories'
 import type { RepoBootstrapper } from './ports/repo-bootstrapper'
+import type { BootstrapRunner } from './ports/bootstrap-runner'
 import type { RepoBlueprintRepository } from './ports/board-scan-repositories'
 import type { RepoScanner } from './ports/repo-scanner'
 import type { SecretCipher } from './ports/secret-cipher'
@@ -47,6 +49,7 @@ import { BoardService } from './modules/board/BoardService'
 import { ExecutionService } from './modules/execution/ExecutionService'
 import { PipelineService } from './modules/pipelines/PipelineService'
 import { WorkspaceService } from './modules/workspaces/WorkspaceService'
+import { AccountService } from './modules/accounts/AccountService'
 import { SpendService } from './modules/spend/SpendService'
 import { DEFAULT_SPEND_PRICING, type SpendPricing } from './modules/spend/pricing'
 import { GitHubInstallationService } from './modules/github/GitHubInstallationService'
@@ -78,6 +81,9 @@ import { BoardScanService } from './modules/boardScan/BoardScanService'
 
 export interface CoreDependencies {
   workspaceRepository: WorkspaceRepository
+  /** Account tenancy: accounts own workspaces; memberships grant access (0017). */
+  accountRepository: AccountRepository
+  membershipRepository: MembershipRepository
   blockRepository: BlockRepository
   pipelineRepository: PipelineRepository
   executionRepository: ExecutionRepository
@@ -200,6 +206,8 @@ export interface CoreDependencies {
   referenceArchitectureRepository?: ReferenceArchitectureRepository
   bootstrapJobRepository?: BootstrapJobRepository
   repoBootstrapper?: RepoBootstrapper
+  /** Durably drives a bootstrap run's poll loop; without it, runs aren't auto-driven. */
+  bootstrapRunner?: BootstrapRunner
 
   // ---- Board scan ("scan repository" → blueprint) -------------------------
   // Blueprint reads assemble whenever the repository is present (the worker wires
@@ -264,6 +272,7 @@ export interface BoardScanModule {
 
 export interface Core {
   workspaceService: WorkspaceService
+  accountService: AccountService
   boardService: BoardService
   pipelineService: PipelineService
   executionService: ExecutionService
@@ -518,7 +527,10 @@ function createRunnersModule(deps: CoreDependencies): RunnersModule | undefined 
  * but optional: the service exposes CRUD regardless and only gates the run path
  * on its presence.
  */
-function createBootstrapModule(deps: CoreDependencies): BootstrapModule | undefined {
+function createBootstrapModule(
+  deps: CoreDependencies,
+  eventPublisher: ExecutionEventPublisher,
+): BootstrapModule | undefined {
   const { referenceArchitectureRepository, bootstrapJobRepository } = deps
   if (!referenceArchitectureRepository || !bootstrapJobRepository) return undefined
 
@@ -526,9 +538,12 @@ function createBootstrapModule(deps: CoreDependencies): BootstrapModule | undefi
     referenceArchitectureRepository,
     bootstrapJobRepository,
     workspaceRepository: deps.workspaceRepository,
+    blockRepository: deps.blockRepository,
     idGenerator: deps.idGenerator,
     clock: deps.clock,
     repoBootstrapper: deps.repoBootstrapper,
+    bootstrapRunner: deps.bootstrapRunner,
+    eventPublisher,
   })
   return { service }
 }
@@ -562,6 +577,12 @@ export function createCore(dependencies: CoreDependencies): Core {
   const executionEventPublisher = dependencies.executionEventPublisher ?? new NoopEventPublisher()
   const boardService = new BoardService(dependencies)
   const workspaceService = new WorkspaceService(dependencies)
+  const accountService = new AccountService({
+    accountRepository: dependencies.accountRepository,
+    membershipRepository: dependencies.membershipRepository,
+    idGenerator: dependencies.idGenerator,
+    clock: dependencies.clock,
+  })
   const pipelineService = new PipelineService(dependencies)
   const spendService = new SpendService({
     tokenUsageRepository: dependencies.tokenUsageRepository,
@@ -584,11 +605,12 @@ export function createCore(dependencies: CoreDependencies): Core {
   const documents = createDocumentsModule(dependencies, boardService)
   const tasks = createTasksModule(dependencies)
   const runners = createRunnersModule(dependencies)
-  const bootstrap = createBootstrapModule(dependencies)
+  const bootstrap = createBootstrapModule(dependencies, executionEventPublisher)
   const boardScan = createBoardScanModule(dependencies, boardService)
 
   return {
     workspaceService,
+    accountService,
     boardService,
     pipelineService,
     executionService,

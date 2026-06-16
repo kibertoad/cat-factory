@@ -3,6 +3,7 @@ import {
   commitFilesSchema,
   createBranchSchema,
   createRepoRequestSchema,
+  linkReposSchema,
   mergePullRequestSchema,
   openPullRequestSchema,
   resyncRequestSchema,
@@ -74,28 +75,36 @@ export function githubController(): Hono<AppEnv> {
   })
 
   // Programmatic bind (the browser flow uses /github/setup/callback instead).
-  // Used by the "discover & link" picker and connect-by-id. Mirrors the setup
-  // callback: after binding, kick off an initial backfill so the workspace's
-  // repos show up immediately instead of only after a manual resync.
+  // Used by the "discover & link" picker and connect-by-id. Binds the installation
+  // to the workspace's account; repos are then linked explicitly (see below), so
+  // there is no whole-installation backfill on connect.
   app.post('/github/connect', jsonBody(connectSchema), async (c) => {
     const github = requireGitHub(c)
     if (!github) return unavailable(c)
     const workspaceId = param(c, 'workspaceId')
     const { installationId } = c.req.valid('json')
     const connection = await github.installationService.connect(workspaceId, installationId)
-
-    // Durable Workflow if available, else discover repos now; let the cron pass
-    // fill in per-repo detail. Best-effort — never fail the connect on backfill.
-    const workflow = c.env.GITHUB_BACKFILL_WORKFLOW
-    if (workflow) {
-      await workflow
-        .create({ id: `backfill-${installationId}-${Date.now()}`, params: { installationId } })
-        .catch(() => {})
-    } else {
-      await github.syncService.syncInstallationRepos(workspaceId, installationId).catch(() => {})
-    }
-
     return c.json(connection, 201)
+  })
+
+  // The repos the connected installation can access, annotated with whether this
+  // workspace links each. Drives the per-workspace repo picker.
+  app.get('/github/available-repos', async (c) => {
+    const github = requireGitHub(c)
+    if (!github) return unavailable(c)
+    return c.json(await github.syncService.listAvailableRepos(param(c, 'workspaceId')))
+  })
+
+  // Set the exact set of repos this workspace links. Projects the selection,
+  // tombstones the rest, and deep-syncs the linked repos.
+  app.put('/github/repos', jsonBody(linkReposSchema), async (c) => {
+    const github = requireGitHub(c)
+    if (!github) return unavailable(c)
+    const repos = await github.syncService.setLinkedRepos(
+      param(c, 'workspaceId'),
+      c.req.valid('json').repoGithubIds,
+    )
+    return c.json(repos)
   })
 
   app.delete('/github/connection', async (c) => {

@@ -203,6 +203,8 @@ export const workspaceSchema = v.object({
   id: v.string(),
   name: v.string(),
   createdAt: v.number(),
+  /** The account this board belongs to, or null for a legacy/unscoped board. */
+  accountId: v.nullable(v.string()),
 })
 export type Workspace = v.InferOutput<typeof workspaceSchema>
 

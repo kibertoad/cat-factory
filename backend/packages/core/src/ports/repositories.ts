@@ -7,21 +7,35 @@ import type { Block, ExecutionInstance, Pipeline, Workspace } from '../domain/ty
 // keeps this package framework-agnostic.
 // ---------------------------------------------------------------------------
 
+/**
+ * The set of boards a signed-in user may see: those belonging to an account they
+ * are a member of, plus any legacy boards they personally own (account_id NULL,
+ * owner_user_id = them). `null` means "no scoping" — the auth-disabled / local-dev
+ * path, where every board is returned.
+ */
+export type WorkspaceVisibility = { accountIds: string[]; ownerUserId: number } | null
+
 export interface WorkspaceRepository {
   /**
-   * List boards owned by `ownerUserId`. A `null` owner means ownership is not
-   * being enforced (auth disabled) and ALL boards are returned; a numeric id
-   * returns only that user's boards.
+   * List boards visible to a user (see {@link WorkspaceVisibility}). A `null`
+   * scope means ownership is not being enforced (auth disabled) and ALL boards
+   * are returned.
    */
-  listByOwner(ownerUserId: number | null): Promise<Workspace[]>
+  listVisible(scope: WorkspaceVisibility): Promise<Workspace[]>
   get(id: string): Promise<Workspace | null>
   /**
-   * The owning user id for a board: a number when owned, `null` for a legacy
-   * unowned board, and `undefined` when the board does not exist. Used by the
-   * API's per-workspace authorization check.
+   * The owning user id for a board: a number when owned, `null` for a board with
+   * no owner, and `undefined` when the board does not exist.
    */
   ownerOf(id: string): Promise<number | null | undefined>
-  create(workspace: Workspace, ownerUserId: number | null): Promise<void>
+  /**
+   * The owning account id for a board: a string when account-scoped, `null` for a
+   * legacy/unscoped board, and `undefined` when the board does not exist. Used by
+   * the API's per-workspace authorization check.
+   */
+  accountOf(id: string): Promise<string | null | undefined>
+  create(workspace: Workspace, ownerUserId: number | null, accountId: string | null): Promise<void>
+  rename(id: string, name: string): Promise<void>
   delete(id: string): Promise<void>
 }
 

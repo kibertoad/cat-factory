@@ -124,6 +124,13 @@ export interface BootstrapTargetSpec {
 
 /** The job the Worker's ContainerRepoBootstrapper POSTs to /bootstrap. */
 export interface BootstrapJob {
+  /**
+   * Stable identifier for this run's job, supplied by the Worker (the bootstrap
+   * job id). The harness keys the background job on it so a re-dispatched
+   * `/bootstrap` (a Workflows replay) re-attaches to the running job instead of
+   * starting a duplicate, and the Worker polls `GET /jobs/{jobId}` with it.
+   */
+  jobId: string
   /** Bootstrapper role prompt; written to AGENTS.md for Pi. */
   systemPrompt: string
   /** Free-form instructions handed to Pi as the task prompt. */
@@ -167,6 +174,7 @@ export function parseBootstrapJob(input: unknown): BootstrapJob {
           }
         })()
   const job: BootstrapJob = {
+    jobId: str(o.jobId, 'jobId'),
     systemPrompt: str(o.systemPrompt, 'systemPrompt'),
     instructions: str(o.instructions, 'instructions'),
     model: str(o.model, 'model'),

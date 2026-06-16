@@ -3,6 +3,7 @@ import type { GitHubInstallation } from '@cat-factory/core'
 export interface GitHubInstallationRow {
   installation_id: number
   workspace_id: string
+  account_id: string | null
   account_login: string
   target_type: string
   cached_token: string | null
@@ -15,6 +16,7 @@ export function rowToInstallation(row: GitHubInstallationRow): GitHubInstallatio
   return {
     installationId: row.installation_id,
     workspaceId: row.workspace_id,
+    accountId: row.account_id ?? null,
     accountLogin: row.account_login,
     targetType: row.target_type === 'Organization' ? 'Organization' : 'User',
     cachedToken: row.cached_token,
@@ -28,6 +30,7 @@ export function installationValues(i: GitHubInstallation): Record<string, unknow
   return {
     installation_id: i.installationId,
     workspace_id: i.workspaceId,
+    account_id: i.accountId,
     account_login: i.accountLogin,
     target_type: i.targetType,
     cached_token: i.cachedToken,

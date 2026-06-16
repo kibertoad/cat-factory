@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import type {
   CreateBranchInput,
   CreateRepoRequest,
+  GitHubAvailableRepo,
   GitHubBranch,
   GitHubConnection,
   GitHubInstallationOption,
@@ -36,6 +37,10 @@ export const useGitHubStore = defineStore('github', () => {
   const installations = ref<GitHubInstallationOption[]>([])
   const loadingInstallations = ref(false)
   const repos = ref<GitHubRepo[]>([])
+  /** Repos the installation can access, for the per-workspace link picker. */
+  const availableRepos = ref<GitHubAvailableRepo[]>([])
+  const loadingAvailable = ref(false)
+  const savingRepos = ref(false)
   const pulls = ref<GitHubPullRequest[]>([])
   const issues = ref<GitHubIssue[]>([])
   /** Branches loaded lazily per repo (by GitHub numeric id). */
@@ -105,6 +110,34 @@ export const useGitHubStore = defineStore('github', () => {
     }
   }
 
+  /** Load the repos the installation can access, with this workspace's link state. */
+  async function loadAvailableRepos() {
+    if (!connected.value) return
+    loadingAvailable.value = true
+    try {
+      availableRepos.value = await api.listGitHubAvailableRepos(workspace.requireId())
+    } finally {
+      loadingAvailable.value = false
+    }
+  }
+
+  /** Set the exact set of repos this workspace links, then refresh projections. */
+  async function setLinkedRepos(repoGithubIds: number[]) {
+    savingRepos.value = true
+    try {
+      repos.value = await api.setGitHubLinkedRepos(workspace.requireId(), repoGithubIds)
+      // Reflect the new link state in the picker and refresh PRs/issues.
+      const linked = new Set(repoGithubIds)
+      availableRepos.value = availableRepos.value.map((r) => ({
+        ...r,
+        linked: linked.has(r.githubId),
+      }))
+      await load()
+    } finally {
+      savingRepos.value = false
+    }
+  }
+
   /** Lazily load (and cache) the branches for a single repo. */
   async function loadBranches(repoGithubId: number): Promise<GitHubBranch[]> {
     const list = await api.listGitHubBranches(workspace.requireId(), repoGithubId)
@@ -139,6 +172,7 @@ export const useGitHubStore = defineStore('github', () => {
     await api.disconnectGitHub(workspace.requireId())
     connection.value = null
     repos.value = []
+    availableRepos.value = []
     pulls.value = []
     issues.value = []
     branches.value = {}
@@ -205,6 +239,9 @@ export const useGitHubStore = defineStore('github', () => {
     installations,
     loadingInstallations,
     repos,
+    availableRepos,
+    loadingAvailable,
+    savingRepos,
     pulls,
     issues,
     branches,
@@ -220,6 +257,8 @@ export const useGitHubStore = defineStore('github', () => {
     issueUrl,
     probe,
     load,
+    loadAvailableRepos,
+    setLinkedRepos,
     loadBranches,
     getInstallUrl,
     loadInstallations,

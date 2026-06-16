@@ -124,6 +124,23 @@ export const githubInstallationOptionSchema = v.object({
 })
 export type GitHubInstallationOption = v.InferOutput<typeof githubInstallationOptionSchema>
 
+/**
+ * A repository the connected installation can access, annotated with whether the
+ * current workspace explicitly links it. Repos are linked per workspace (the
+ * installation is shared across an account's workspaces, but each board chooses
+ * its own repos), so the connect UI lists these and the user picks a subset.
+ */
+export const githubAvailableRepoSchema = v.object({
+  githubId: v.number(),
+  owner: v.string(),
+  name: v.string(),
+  defaultBranch: v.nullable(v.string()),
+  private: v.boolean(),
+  /** Whether this repo is currently linked to (tracked by) this workspace. */
+  linked: v.boolean(),
+})
+export type GitHubAvailableRepo = v.InferOutput<typeof githubAvailableRepoSchema>
+
 // ---- Request bodies -------------------------------------------------------
 
 /**
@@ -143,6 +160,12 @@ export const createRepoRequestSchema = v.object({
   description: v.optional(v.pipe(v.string(), v.maxLength(350)), ''),
 })
 export type CreateRepoRequest = v.InferOutput<typeof createRepoRequestSchema>
+
+/** Set the exact set of repos (by GitHub numeric id) this workspace links. */
+export const linkReposSchema = v.object({
+  repoGithubIds: v.array(v.number()),
+})
+export type LinkReposInput = v.InferOutput<typeof linkReposSchema>
 
 /** Trigger a resync. Defaults to an incremental resync of all tracked repos. */
 export const resyncRequestSchema = v.object({

@@ -1,4 +1,7 @@
 import type {
+  Account,
+  AccountMember,
+  AddMemberInput,
   AuthUser,
   Block,
   BlockType,
@@ -15,6 +18,7 @@ import type {
   CreateBranchInput,
   CreatedRepo,
   CreateRepoRequest,
+  GitHubAvailableRepo,
   GitHubBranch,
   GitHubConnection,
   GitHubInstallationOption,
@@ -84,13 +88,33 @@ export function useApi() {
     // ---- model picker catalog (effective per-deployment flavours) ---------
     getModels: () => http<ModelOption[]>('/models'),
 
+    // ---- accounts (tenancy) -----------------------------------------------
+    // The accounts the user can switch between (personal + orgs), org creation
+    // and membership management. Empty when auth is disabled (dev).
+    listAccounts: () => http<Account[]>('/accounts'),
+
+    createAccount: (body: { name: string; githubAccountLogin?: string }) =>
+      http<Account>('/accounts', { method: 'POST', body }),
+
+    listAccountMembers: (accountId: string) =>
+      http<AccountMember[]>(`/accounts/${encodeURIComponent(accountId)}/members`),
+
+    addAccountMember: (accountId: string, body: AddMemberInput) =>
+      http<AccountMember>(`/accounts/${encodeURIComponent(accountId)}/members`, {
+        method: 'POST',
+        body,
+      }),
+
     // ---- workspaces -------------------------------------------------------
     listWorkspaces: () => http<Workspace[]>('/workspaces'),
 
-    createWorkspace: (body: { name?: string; seed?: boolean } = {}) =>
+    createWorkspace: (body: { name?: string; seed?: boolean; accountId?: string } = {}) =>
       http<WorkspaceSnapshot>('/workspaces', { method: 'POST', body }),
 
     getWorkspace: (workspaceId: string) => http<WorkspaceSnapshot>(ws(workspaceId)),
+
+    renameWorkspace: (workspaceId: string, name: string) =>
+      http<Workspace>(ws(workspaceId), { method: 'PATCH', body: { name } }),
 
     deleteWorkspace: (workspaceId: string) => http(ws(workspaceId), { method: 'DELETE' }),
 
@@ -284,6 +308,18 @@ export function useApi() {
     createGitHubRepo: (workspaceId: string, body: CreateRepoRequest) =>
       http<CreatedRepo>(`${ws(workspaceId)}/github/repos`, { method: 'POST', body }),
 
+    // Repos the connected installation can access, annotated with whether this
+    // workspace links each (drives the per-workspace repo picker).
+    listGitHubAvailableRepos: (workspaceId: string) =>
+      http<GitHubAvailableRepo[]>(`${ws(workspaceId)}/github/available-repos`),
+
+    // Set the exact set of repos this workspace links.
+    setGitHubLinkedRepos: (workspaceId: string, repoGithubIds: number[]) =>
+      http<GitHubRepo[]>(`${ws(workspaceId)}/github/repos`, {
+        method: 'PUT',
+        body: { repoGithubIds },
+      }),
+
     listGitHubBranches: (workspaceId: string, repoGithubId: number) =>
       http<GitHubBranch[]>(`${ws(workspaceId)}/github/repos/${repoGithubId}/branches`),
 
@@ -365,5 +401,8 @@ export function useApi() {
 
     bootstrapRepo: (workspaceId: string, body: BootstrapRepoInput) =>
       http<BootstrapJob>(`${ws(workspaceId)}/bootstrap/jobs`, { method: 'POST', body }),
+
+    retryBootstrapJob: (workspaceId: string, id: string) =>
+      http<BootstrapJob>(`${ws(workspaceId)}/bootstrap/jobs/${id}/retry`, { method: 'POST' }),
   }
 }

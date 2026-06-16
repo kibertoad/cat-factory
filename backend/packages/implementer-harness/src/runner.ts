@@ -71,8 +71,18 @@ export async function handleRun(job: Job, opts: RunOptions = {}): Promise<RunRes
 
 export type JobState = 'running' | 'done' | 'failed'
 
-/** The job view returned by GET /jobs/{id}. */
-export interface JobView {
+/**
+ * The minimum a job result must expose: a structured `error` marks a job-level
+ * failure even when the HTTP run itself succeeded. Both {@link RunResult} (the
+ * `/run` path) and the bootstrap result satisfy this, so {@link JobRegistry} is
+ * generic over the result it tracks while reusing one watchdog/lifecycle.
+ */
+export interface JobResultBase {
+  error?: string
+}
+
+/** The job view returned by GET /jobs/{id}, generic over the orchestration's result. */
+export interface JobView<TResult extends JobResultBase = RunResult> {
   id: string
   state: JobState
   startedAt: number
@@ -85,12 +95,12 @@ export interface JobView {
    */
   progress?: TodoProgress
   /** Present when `state === 'done'`: the orchestration's structured result. */
-  result?: RunResult
+  result?: TResult
   /** Present when `state === 'failed'`: why the job faulted (or was killed). */
   error?: string
 }
 
-interface JobEntry extends JobView {
+interface JobEntry<TResult extends JobResultBase> extends JobView<TResult> {
   /** The in-flight work; retained so the entry isn't GC-surprising (not awaited externally). */
   promise: Promise<void>
 }
@@ -119,34 +129,41 @@ export function loadRunnerLimits(env: NodeJS.ProcessEnv = process.env): RunnerLi
   }
 }
 
-function toView(entry: JobEntry): JobView {
+function toView<TResult extends JobResultBase>(entry: JobEntry<TResult>): JobView<TResult> {
   const { promise: _promise, ...view } = entry
   return { ...view }
 }
 
 /**
- * Tracks background implementation jobs by id. Keyed by the Worker-supplied job
- * id (the execution id) so a re-dispatched /run re-attaches to the running job
- * rather than starting a duplicate — which keeps the durable driver's retries
- * idempotent and avoids redoing already-running work.
+ * Tracks background jobs by id. Keyed by the Worker-supplied job id (the
+ * execution id for `/run`, the bootstrap job id for `/bootstrap`) so a
+ * re-dispatched start re-attaches to the running job rather than starting a
+ * duplicate — which keeps the durable driver's retries idempotent and avoids
+ * redoing already-running work. Generic over the job/result shape so the same
+ * lifecycle + inactivity/max-duration watchdogs drive both implementation and
+ * bootstrap runs.
  */
-export class JobRegistry {
-  private readonly jobs = new Map<string, JobEntry>()
+export class JobRegistry<TJob = Job, TResult extends JobResultBase = RunResult> {
+  private readonly jobs = new Map<string, JobEntry<TResult>>()
 
   constructor(
     private readonly limits: RunnerLimits,
-    // The unit of work; defaults to the real orchestration. Injectable so tests
-    // can drive the registry's lifecycle/watchdog logic without git or Pi.
-    private readonly run: (job: Job, opts: RunOptions) => Promise<RunResult> = handleRun,
+    // The unit of work; defaults to the real implementation orchestration.
+    // Injectable so tests (and the bootstrap path) can drive the registry's
+    // lifecycle/watchdog logic with a different runner.
+    private readonly run: (job: TJob, opts: RunOptions) => Promise<TResult> = handleRun as unknown as (
+      job: TJob,
+      opts: RunOptions,
+    ) => Promise<TResult>,
   ) {}
 
   /** Start the job for `id`, or return the existing one (idempotent re-attach). */
-  start(id: string, job: Job): JobView {
+  start(id: string, job: TJob): JobView<TResult> {
     const existing = this.jobs.get(id)
     if (existing) return toView(existing)
 
     const now = Date.now()
-    const entry: JobEntry = {
+    const entry: JobEntry<TResult> = {
       id,
       state: 'running',
       startedAt: now,
@@ -158,12 +175,12 @@ export class JobRegistry {
     return toView(entry)
   }
 
-  get(id: string): JobView | undefined {
+  get(id: string): JobView<TResult> | undefined {
     const entry = this.jobs.get(id)
     return entry ? toView(entry) : undefined
   }
 
-  private async drive(entry: JobEntry, job: Job): Promise<void> {
+  private async drive(entry: JobEntry<TResult>, job: TJob): Promise<void> {
     const controller = new AbortController()
     let killReason: 'inactivity' | 'max-duration' | undefined
 
@@ -187,7 +204,7 @@ export class JobRegistry {
     }
     resetInactivity()
 
-    log.info('job started', { jobId: entry.id, headBranch: job.headBranch })
+    log.info('job started', { jobId: entry.id })
     try {
       const result = await this.run(job, {
         signal: controller.signal,
@@ -201,7 +218,6 @@ export class JobRegistry {
       log.info('job finished', {
         jobId: entry.id,
         durationMs: Date.now() - entry.startedAt,
-        opened: Boolean(result.prUrl),
         jobError: result.error ?? null,
       })
     } catch (error) {

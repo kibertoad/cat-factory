@@ -44,37 +44,40 @@ export function githubWebhookController(): Hono<AppEnv> {
     return c.body(null, 202)
   })
 
-  // GitHub redirects here after an installation. `state` is the HMAC-signed
-  // workspace id we issued, which binds the new installation to that workspace.
+  // GitHub redirects here after an installation. On a fresh install we carry the
+  // HMAC-signed `state` (the workspace id we issued) that binds the installation
+  // to that workspace. But GitHub also redirects here for STATELESS actions —
+  // notably a repo-access change saved straight from the App's installation
+  // settings page (`setup_action=update`), which carries no `state`. We can't
+  // bind a NEW installation without a signed workspace id, but if it's already
+  // bound we recover the workspace and treat the redirect as a resync — so newly
+  // granted repos get picked up instead of dead-ending on "invalid state".
   app.get('/setup/callback', async (c) => {
     const container = c.get('container')
     const github = container.github
     if (!github)
       return c.json({ error: { code: 'unavailable', message: 'GitHub not configured' } }, 503)
 
-    const signer = new StateSigner(c.env.GITHUB_WEBHOOK_SECRET ?? '')
-    const state = await signer.verify(c.req.query('state') ?? null)
-    if (!state) {
-      return c.json({ error: { code: 'unauthorized', message: 'Invalid or expired state' } }, 401)
-    }
-    const workspaceId = state.workspaceId
     const installationId = Number(c.req.query('installation_id'))
     if (!Number.isFinite(installationId)) {
       return c.json({ error: { code: 'validation', message: 'Missing installation_id' } }, 400)
     }
 
+    const signer = new StateSigner(c.env.GITHUB_WEBHOOK_SECRET ?? '')
+    const state = await signer.verify(c.req.query('state') ?? null)
+    // No (valid) state → only proceed if this installation is already bound;
+    // binding a brand-new installation still requires a signed state.
+    const workspaceId =
+      state?.workspaceId ?? (await github.installationService.resolveBoundWorkspace(installationId))
+    if (!workspaceId) {
+      return c.json({ error: { code: 'unauthorized', message: 'Invalid or expired state' } }, 401)
+    }
+
     await github.installationService.connect(workspaceId, installationId)
 
-    // Kick off an initial backfill: durable Workflow if available, else discover
-    // repos now and let the cron pass fill in the per-repo detail.
-    const workflow = c.env.GITHUB_BACKFILL_WORKFLOW
-    if (workflow) {
-      await workflow
-        .create({ id: `backfill-${installationId}-${Date.now()}`, params: { installationId } })
-        .catch(() => {})
-    } else {
-      await github.syncService.syncInstallationRepos(workspaceId, installationId)
-    }
+    // Repos are linked explicitly per workspace after connecting, so there is no
+    // whole-installation backfill here — the user picks which repos this board
+    // tracks, which projects and syncs just those.
 
     return c.redirect(container.config.github.setupRedirectUrl)
   })

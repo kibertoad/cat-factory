@@ -80,17 +80,25 @@ describe('github connect', () => {
     expect(read.body.connection).toBeNull()
   })
 
-  it('rejects binding an installation already owned by another workspace', async () => {
+  it('no longer rejects binding the same installation to another workspace', async () => {
+    // One GitHub account → many boards. The old blanket cross-workspace guard is
+    // gone: the boundary is now the *account*, so binding is only rejected across
+    // different accounts. With auth disabled (the test path) both boards share the
+    // unscoped (null) account, so the second bind is allowed. (Account-level
+    // sharing across boards is exercised in the accounts integration test.)
     const app = makeApp(new FakeAgentExecutor(), githubDeps())
     const a = await app.createWorkspace()
     const b = await app.createWorkspace()
     const installationId = uniqueInstallationId()
 
-    await app.call('POST', `/workspaces/${a.workspace.id}/github/connect`, { installationId })
-    const conflict = await app.call('POST', `/workspaces/${b.workspace.id}/github/connect`, {
+    const first = await app.call('POST', `/workspaces/${a.workspace.id}/github/connect`, {
       installationId,
     })
-    expect(conflict.status).toBe(409)
+    const second = await app.call('POST', `/workspaces/${b.workspace.id}/github/connect`, {
+      installationId,
+    })
+    expect(first.status).toBe(201)
+    expect(second.status).toBe(201)
   })
 
   it('binds via the signed setup callback (install-url → callback)', async () => {
@@ -121,12 +129,30 @@ describe('github connect', () => {
     expect(read.body.connection?.installationId).toBe(installationId)
   })
 
-  it('rejects a setup callback with an invalid state', async () => {
+  it('rejects a setup callback with an invalid state for an unbound installation', async () => {
     const app = makeApp(new FakeAgentExecutor(), githubDeps())
     const res = await app.call(
       'GET',
       `/github/setup/callback?installation_id=${uniqueInstallationId()}&state=not-a-valid-state`,
     )
     expect(res.status).toBe(401)
+  })
+
+  it('accepts a stateless update callback for an already-bound installation', async () => {
+    const app = makeApp(new FakeAgentExecutor(), githubDeps())
+    const { workspace } = await app.createWorkspace()
+    const installationId = uniqueInstallationId()
+
+    // Bind first (as the install-url → callback flow would).
+    await app.call('POST', `/workspaces/${workspace.id}/github/connect`, { installationId })
+
+    // GitHub's repo-access "update" redirect carries no state. Since the
+    // installation is already bound, the callback recovers the workspace and
+    // redirects instead of rejecting.
+    const cb = await app.call(
+      'GET',
+      `/github/setup/callback?installation_id=${installationId}&setup_action=update`,
+    )
+    expect(cb.status).toBe(302)
   })
 })

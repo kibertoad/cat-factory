@@ -1,4 +1,4 @@
-import type { BootstrapStatus } from '../domain/types'
+import type { BootstrapFailure, BootstrapStatus, StepSubtasks } from '../domain/types'
 
 // Persistence ports for the repo-bootstrap feature. The worker implements these
 // against D1 (migration 0010); tests supply in-memory fakes. All rows are scoped
@@ -50,13 +50,22 @@ export interface BootstrapJobRecord {
   repoUrl: string | null
   instructions: string
   status: BootstrapStatus
+  /** The board service frame this run materialises, or null if none was created. */
+  blockId: string | null
+  /** Live subtask counts from the bootstrapper agent, or null until it reports. */
+  subtasks: StepSubtasks | null
   error: string | null
+  /** Structured failure diagnostics when `status` is `failed`; null otherwise. */
+  failure: BootstrapFailure | null
   createdAt: number
   updatedAt: number
 }
 
 export type BootstrapJobRecordPatch = Partial<
-  Pick<BootstrapJobRecord, 'status' | 'repoOwner' | 'repoUrl' | 'error' | 'updatedAt'>
+  Pick<
+    BootstrapJobRecord,
+    'status' | 'repoOwner' | 'repoUrl' | 'blockId' | 'subtasks' | 'error' | 'failure' | 'updatedAt'
+  >
 >
 
 export interface BootstrapJobRepository {

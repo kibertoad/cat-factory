@@ -325,10 +325,17 @@ endpoint instead. Either way the container is unchanged and holds no credentials
 
 #### Repo bootstrap (creating a new repo from a reference architecture)
 
-The "bootstrap repo" task creates a fresh GitHub repository from a reference architecture and
-runs the bootstrapper agent inside a per-run container to populate it. Managing reference
-architectures (the CRUD under `/bootstrap/reference-architectures`) always works, but **kicking
-off a run** (`POST /bootstrap/jobs`) needs the same machinery as container implementation. When
+The "bootstrap repo" task adapts a reference architecture (or scaffolds from scratch) into a
+pre-created, empty GitHub repo and force-pushes the result, running the bootstrapper agent
+inside a per-run container. The run is **asynchronous and observable**, mirroring the execution
+pipeline: `POST /bootstrap/jobs` returns immediately with a `running` job and materialises a
+provisional **service frame** on the board; a durable `BootstrapWorkflow` (binding
+`BOOTSTRAP_WORKFLOW`, declared in `wrangler.toml` like `EXECUTION_WORKFLOW`) polls the container,
+streams live subtask progress over the WebSocket events hub, and on success links the new repo to
+that frame so it becomes a real, droppable service (on failure the frame is marked blocked). See
+[`CLAUDE.md`](../CLAUDE.md) for the end-to-end flow. Managing reference architectures (the CRUD
+under `/bootstrap/reference-architectures`) always works, but **kicking off a run** needs the same
+machinery as container implementation. When
 any prerequisite is missing the endpoint returns:
 
 ```json
