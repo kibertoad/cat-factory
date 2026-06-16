@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { BootstrapJob, ReferenceArchitecture } from '@cat-factory/contracts'
+import type { Block, BootstrapJob, ReferenceArchitecture, WorkspaceSnapshot } from '@cat-factory/contracts'
 import { makeApp } from '../helpers'
 import { FakeRepoBootstrapper } from '../fakes/FakeRepoBootstrapper'
 
@@ -88,7 +88,7 @@ describe('bootstrap repo', () => {
     expect(res.status).toBe(503)
   })
 
-  it('creates a repo from a reference architecture and records a succeeded job', async () => {
+  it('dispatches a run, shows a provisional service frame, then links the repo on success', async () => {
     const bootstrapper = new FakeRepoBootstrapper()
     const app = makeApp(undefined, { repoBootstrapper: bootstrapper })
     const workspaceId = await newWorkspace(app)
@@ -100,6 +100,8 @@ describe('bootstrap repo', () => {
       sampleArch,
     )
 
+    // Kicking off a run returns immediately with a `running` job and a provisional
+    // board frame (the "bootstrapping…" card) — it does NOT block on the container.
     const job = await app.call<BootstrapJob>('POST', `${base}/jobs`, {
       referenceArchitectureId: arch.body.id,
       repoName: 'new-service',
@@ -108,12 +110,22 @@ describe('bootstrap repo', () => {
       instructions: 'Rename to new-service.',
     })
     expect(job.status).toBe(201)
-    expect(job.body.status).toBe('succeeded')
-    expect(job.body.repoUrl).toBe('https://github.com/acme/new-service')
-    expect(job.body.repoOwner).toBe('acme')
+    expect(job.body.status).toBe('running')
+    expect(job.body.repoUrl).toBeNull()
+    expect(job.body.blockId).toBeTruthy()
     expect(job.body.referenceArchitectureName).toBe('Service Template')
 
-    // The composed instructions fold the reference defaults in front of the extras.
+    // The provisional frame is a real, in-progress service block on the board.
+    const provisional = await app.call<WorkspaceSnapshot>('GET', `/workspaces/${workspaceId}`)
+    const frame = provisional.body.blocks.find((b: Block) => b.id === job.body.blockId)
+    expect(frame).toBeDefined()
+    expect(frame!.level).toBe('frame')
+    expect(frame!.type).toBe('service')
+    expect(frame!.status).toBe('in_progress')
+    expect(frame!.title).toBe('new-service')
+
+    // The composed instructions fold the reference defaults in front of the extras,
+    // captured at dispatch time.
     expect(bootstrapper.calls).toHaveLength(1)
     expect(bootstrapper.calls[0]!.instructions).toBe(
       'Keep the structure; update names.\n\nRename to new-service.',
@@ -123,10 +135,127 @@ describe('bootstrap repo', () => {
       name: 'service-template',
     })
 
-    const list = await app.call<BootstrapJob[]>('GET', `${base}/jobs`)
-    expect(list.body).toHaveLength(1)
+    // Drive the poll loop (the BootstrapWorkflow's job in production) to completion.
+    await app.driveBootstrap(workspaceId, job.body.id)
+
     const fetched = await app.call<BootstrapJob>('GET', `${base}/jobs/${job.body.id}`)
     expect(fetched.body.status).toBe('succeeded')
+    expect(fetched.body.repoUrl).toBe('https://github.com/acme/new-service')
+    expect(fetched.body.repoOwner).toBe('acme')
+
+    // The repo is linked to the frame, and the frame becomes a ready service.
+    expect(bootstrapper.links).toHaveLength(1)
+    expect(bootstrapper.links[0]!.blockId).toBe(job.body.blockId)
+    const after = await app.call<WorkspaceSnapshot>('GET', `/workspaces/${workspaceId}`)
+    const ready = after.body.blocks.find((b: Block) => b.id === job.body.blockId)
+    expect(ready!.status).toBe('ready')
+  })
+
+  it('streams subtask progress onto the job while the container runs', async () => {
+    const bootstrapper = new FakeRepoBootstrapper()
+    bootstrapper.progressScript = [
+      { completed: 1, inProgress: 1, total: 3 },
+      { completed: 3, inProgress: 0, total: 3 },
+    ]
+    const app = makeApp(undefined, { repoBootstrapper: bootstrapper })
+    const workspaceId = await newWorkspace(app)
+    const base = `/workspaces/${workspaceId}/bootstrap`
+
+    const job = await app.call<BootstrapJob>('POST', `${base}/jobs`, {
+      repoName: 'progressive',
+      instructions: 'Scaffold a service.',
+    })
+    expect(job.body.status).toBe('running')
+
+    await app.driveBootstrap(workspaceId, job.body.id)
+    const fetched = await app.call<BootstrapJob>('GET', `${base}/jobs/${job.body.id}`)
+    expect(fetched.body.status).toBe('succeeded')
+    // The last reported counts persist on the job (the board renders them as a bar).
+    expect(fetched.body.subtasks).toEqual({ completed: 3, inProgress: 0, total: 3 })
+  })
+
+  it('marks the job failed and the frame blocked when the run fails mid-flight', async () => {
+    const bootstrapper = new FakeRepoBootstrapper()
+    bootstrapper.failPollWith = 'push rejected'
+    const app = makeApp(undefined, { repoBootstrapper: bootstrapper })
+    const workspaceId = await newWorkspace(app)
+    const base = `/workspaces/${workspaceId}/bootstrap`
+
+    const job = await app.call<BootstrapJob>('POST', `${base}/jobs`, {
+      repoName: 'doomed-run',
+      instructions: 'Scaffold a service.',
+    })
+    expect(job.body.status).toBe('running')
+    expect(job.body.blockId).toBeTruthy()
+
+    await app.driveBootstrap(workspaceId, job.body.id)
+    const fetched = await app.call<BootstrapJob>('GET', `${base}/jobs/${job.body.id}`)
+    expect(fetched.body.status).toBe('failed')
+    expect(fetched.body.error).toBe('push rejected')
+    // Structured diagnostics are captured alongside the one-line error, and the
+    // per-run container is reclaimed best-effort.
+    expect(fetched.body.failure?.kind).toBe('agent')
+    expect(fetched.body.failure?.message).toBe('push rejected')
+    expect(fetched.body.failure?.hint).toBeTruthy()
+    expect(bootstrapper.stopped).toContain(job.body.id)
+
+    const snap = await app.call<WorkspaceSnapshot>('GET', `/workspaces/${workspaceId}`)
+    const frame = snap.body.blocks.find((b: Block) => b.id === job.body.blockId)
+    expect(frame!.status).toBe('blocked')
+  })
+
+  it('retries a failed run: a fresh run reuses the frame and drives it to success', async () => {
+    const bootstrapper = new FakeRepoBootstrapper()
+    bootstrapper.failPollWith = 'push rejected'
+    const app = makeApp(undefined, { repoBootstrapper: bootstrapper })
+    const workspaceId = await newWorkspace(app)
+    const base = `/workspaces/${workspaceId}/bootstrap`
+
+    const job = await app.call<BootstrapJob>('POST', `${base}/jobs`, {
+      repoName: 'retry-me',
+      instructions: 'Scaffold a service.',
+    })
+    await app.driveBootstrap(workspaceId, job.body.id)
+    const failed = await app.call<BootstrapJob>('GET', `${base}/jobs/${job.body.id}`)
+    expect(failed.body.status).toBe('failed')
+
+    // Clear the fault and retry: a NEW job is created that reuses the original frame.
+    bootstrapper.failPollWith = null
+    const retry = await app.call<BootstrapJob>('POST', `${base}/jobs/${job.body.id}/retry`)
+    expect(retry.status).toBe(201)
+    expect(retry.body.status).toBe('running')
+    expect(retry.body.id).not.toBe(job.body.id)
+    expect(retry.body.blockId).toBe(job.body.blockId)
+    expect(retry.body.failure).toBeNull()
+
+    // The reused frame flips back to in-progress while the retry runs.
+    let snap = await app.call<WorkspaceSnapshot>('GET', `/workspaces/${workspaceId}`)
+    let frame = snap.body.blocks.find((b: Block) => b.id === job.body.blockId)
+    expect(frame!.status).toBe('in_progress')
+
+    // Drive the retry to success: the same frame becomes a ready, linked service.
+    await app.driveBootstrap(workspaceId, retry.body.id)
+    const done = await app.call<BootstrapJob>('GET', `${base}/jobs/${retry.body.id}`)
+    expect(done.body.status).toBe('succeeded')
+    snap = await app.call<WorkspaceSnapshot>('GET', `/workspaces/${workspaceId}`)
+    frame = snap.body.blocks.find((b: Block) => b.id === job.body.blockId)
+    expect(frame!.status).toBe('ready')
+  })
+
+  it('409s retrying a job that is not in a failed state', async () => {
+    const bootstrapper = new FakeRepoBootstrapper()
+    const app = makeApp(undefined, { repoBootstrapper: bootstrapper })
+    const workspaceId = await newWorkspace(app)
+    const base = `/workspaces/${workspaceId}/bootstrap`
+
+    const job = await app.call<BootstrapJob>('POST', `${base}/jobs`, {
+      repoName: 'still-running',
+      instructions: 'Scaffold a service.',
+    })
+    expect(job.body.status).toBe('running')
+
+    const retry = await app.call('POST', `${base}/jobs/${job.body.id}/retry`)
+    expect(retry.status).toBe(409)
   })
 
   it('409s without recording a job when the workspace is not connected to GitHub', async () => {
@@ -181,14 +310,21 @@ describe('bootstrap repo', () => {
       instructions: 'Scaffold a TypeScript Hono API with a /health route.',
     })
     expect(job.status).toBe(201)
-    expect(job.body.status).toBe('succeeded')
+    expect(job.body.status).toBe('running')
     expect(job.body.referenceArchitectureId).toBeNull()
     expect(job.body.referenceArchitectureName).toBeNull()
     expect(job.body.instructions).toBe('Scaffold a TypeScript Hono API with a /health route.')
 
-    // The bootstrapper is invoked with no reference repo to clone.
+    // The bootstrapper is dispatched with no reference repo to clone.
     expect(bootstrapper.calls).toHaveLength(1)
     expect(bootstrapper.calls[0]!.referenceRepo).toBeUndefined()
+
+    await app.driveBootstrap(workspaceId, job.body.id)
+    const fetched = await app.call<BootstrapJob>(
+      'GET',
+      `/workspaces/${workspaceId}/bootstrap/jobs/${job.body.id}`,
+    )
+    expect(fetched.body.status).toBe('succeeded')
   })
 
   it('rejects a bootstrap with neither a reference architecture nor instructions', async () => {

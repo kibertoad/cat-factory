@@ -100,10 +100,13 @@ export type {
   ReferenceArchitectureRepository,
 } from './bootstrap-repositories'
 export type {
+  BootstrapJobHandle,
+  BootstrapJobUpdate,
   BootstrapRepoOutcome,
   BootstrapRepoRequest,
   RepoBootstrapper,
 } from './repo-bootstrapper'
+export { type BootstrapRunner, NoopBootstrapRunner } from './bootstrap-runner'
 export type { RepoBlueprintRecord, RepoBlueprintRepository } from './board-scan-repositories'
 export type { RepoScanner, ScanRepoRequest, ScannedBlueprint } from './repo-scanner'
 export type {

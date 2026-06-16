@@ -25,6 +25,9 @@ High-level docs (most live under [`backend/docs/`](./backend/docs)):
   model's retention sweeps and follow-ups.
 - **[Implementer harness](./backend/packages/implementer-harness/README.md)** — the
   payload that runs inside a per-run Cloudflare Container to do real code changes.
+- **[Architecture & flow notes](./CLAUDE.md)** — the cross-cutting runtime flows
+  (execution + real-time events, the repo-bootstrap flow and its known gaps, and
+  the board/service/repo-linkage model) gathered in one place for quick lookup.
 
 ### Architecture decisions
 

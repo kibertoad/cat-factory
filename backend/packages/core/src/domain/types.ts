@@ -77,6 +77,8 @@ export type {
   CreateReferenceArchitectureInput,
   UpdateReferenceArchitectureInput,
   BootstrapStatus,
+  BootstrapFailure,
+  BootstrapFailureKind,
   BootstrapJob,
   BootstrapRepoInput,
   // Board-scan (repository decomposition) shapes.

@@ -6,15 +6,18 @@ import type { WorkspaceEvent } from '~/types/domain'
  * board in sync in real time — the replacement for the old polling clock. Mount
  * once (e.g. on the board page) after the workspace is ready.
  *
- * `execution` events patch the run + its block directly; the coarse `board` event
- * (module materialised, run cancelled) triggers a debounced full refresh. On every
- * (re)connect we refresh once to reconcile anything missed while disconnected, so
- * the server stays the source of truth and a dropped socket self-heals.
+ * `execution` events patch the run + its block directly; `bootstrap` events patch
+ * a repo-bootstrap run + its service frame (live "bootstrapping…" progress); the
+ * coarse `board` event (module materialised, run cancelled) triggers a debounced
+ * full refresh. On every (re)connect we refresh once to reconcile anything missed
+ * while disconnected, so the server stays the source of truth and a dropped socket
+ * self-heals.
  */
 export function useWorkspaceStream() {
   const workspace = useWorkspaceStore()
   const execution = useExecutionStore()
   const board = useBoardStore()
+  const bootstrap = useBootstrapStore()
   const auth = useAuthStore()
   const apiBase = useRuntimeConfig().public.apiBase
 
@@ -46,6 +49,12 @@ export function useWorkspaceStream() {
       if (event.block) board.upsert(event.block)
     } else if (event.type === 'board') {
       debouncedBoardRefresh()
+    } else if (event.type === 'bootstrap') {
+      // Patch the run's live status/subtasks and its provisional/linked frame so
+      // the "bootstrapping…" card updates in place (then flips to a ready service
+      // or a failed badge) without a full refresh.
+      bootstrap.upsert(event.job)
+      if (event.block) board.upsert(event.block)
     }
   }
 
@@ -58,7 +67,11 @@ export function useWorkspaceStream() {
       attempt = 0
       connected.value = true
       // Resync on (re)connect: any event missed while disconnected is reconciled.
+      // Refresh both the board AND bootstrap jobs — a missed terminal `bootstrap`
+      // event (e.g. a container eviction that failed the run) would otherwise leave
+      // a frame stuck on its stale "bootstrapping…" badge until a full page reload.
       void workspace.refresh()
+      void bootstrap.load()
     }
     socket.onmessage = (e) => onMessage(typeof e.data === 'string' ? e.data : '')
     socket.onclose = () => {

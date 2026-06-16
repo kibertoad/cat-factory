@@ -189,6 +189,7 @@ export * as runnersLogic from './modules/runners/runners.logic'
 export {
   BootstrapService,
   type BootstrapServiceDependencies,
+  type BootstrapPollResult,
 } from './modules/bootstrap/BootstrapService'
 
 export {

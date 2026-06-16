@@ -1,4 +1,5 @@
 import * as v from 'valibot'
+import { stepSubtasksSchema } from './entities'
 
 // ---------------------------------------------------------------------------
 // Repo-bootstrap wire contracts. A "reference architecture" is a named base repo
@@ -78,6 +79,48 @@ export type UpdateReferenceArchitectureInput = v.InferOutput<
 export const bootstrapStatusSchema = v.picklist(['pending', 'running', 'succeeded', 'failed'])
 export type BootstrapStatus = v.InferOutput<typeof bootstrapStatusSchema>
 
+/**
+ * How a bootstrap run faulted, so the board can classify the failure (and decide
+ * whether a retry is likely to help):
+ *   - `preflight` — rejected before dispatch (repo missing/not empty, not connected).
+ *   - `dispatch`  — the container accepted-request itself failed (HTTP / network).
+ *   - `evicted`   — the container vanished mid-run (eviction/crash): its in-memory
+ *                   job was gone on the next poll. Retrying spins a fresh container.
+ *   - `timeout`   — a container watchdog fired (inactivity or max-duration).
+ *   - `agent`     — the bootstrapper agent / git push reported a failure.
+ *   - `unknown`   — anything not otherwise classified.
+ */
+export const bootstrapFailureKindSchema = v.picklist([
+  'preflight',
+  'dispatch',
+  'evicted',
+  'timeout',
+  'agent',
+  'unknown',
+])
+export type BootstrapFailureKind = v.InferOutput<typeof bootstrapFailureKindSchema>
+
+/**
+ * Structured diagnostics captured when a bootstrap run fails, stored on the job and
+ * surfaced on the board so a crash isn't just a one-line message. The container's
+ * stdout/stderr can't be pulled into this record (an evicted container is gone), so
+ * for `evicted` failures the `hint` points at the Cloudflare container logs.
+ */
+export const bootstrapFailureSchema = v.object({
+  kind: bootstrapFailureKindSchema,
+  /** Human-readable summary (mirrors the job's `error` for back-compat). */
+  message: v.string(),
+  /** Extended detail when available (the harness's reason, an HTTP body, …). */
+  detail: v.nullable(v.string()),
+  /** Where to look next (e.g. "check the container logs for this job id"). */
+  hint: v.nullable(v.string()),
+  /** Epoch ms the failure was recorded. */
+  occurredAt: v.number(),
+  /** Last subtask counts seen before the failure, for context (null if none). */
+  lastSubtasks: v.nullable(stepSubtasksSchema),
+})
+export type BootstrapFailure = v.InferOutput<typeof bootstrapFailureSchema>
+
 /** One "bootstrap repo" run, with its outcome. */
 export const bootstrapJobSchema = v.object({
   id: v.string(),
@@ -95,8 +138,24 @@ export const bootstrapJobSchema = v.object({
   /** Effective bootstrapper instructions (defaults + per-run), for transparency. */
   instructions: v.string(),
   status: bootstrapStatusSchema,
-  /** Failure reason when `status` is `failed`. */
+  /**
+   * The board service frame this run materialises. Created up front (in
+   * `running` state) so the bootstrap shows on the board immediately as a
+   * provisional "bootstrapping…" card; on success the frame is linked to the new
+   * repo and becomes a normal, droppable service. Null only if frame creation
+   * was skipped (e.g. an older job recorded before this field existed).
+   */
+  blockId: v.nullable(v.string()),
+  /**
+   * Live subtask counts from the bootstrapper agent's todo list while the
+   * container runs, so the board can render an "N/M done" progress bar
+   * identically to a pipeline step. Null until the agent first reports.
+   */
+  subtasks: v.nullable(stepSubtasksSchema),
+  /** Failure reason when `status` is `failed` (one-line; see `failure` for detail). */
   error: v.nullable(v.string()),
+  /** Structured failure diagnostics when `status` is `failed`; null otherwise. */
+  failure: v.nullable(bootstrapFailureSchema),
   createdAt: v.number(),
   updatedAt: v.number(),
 })

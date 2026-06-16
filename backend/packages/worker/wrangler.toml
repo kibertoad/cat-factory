@@ -3,6 +3,14 @@ main = "src/index.ts"
 compatibility_date = "2025-06-01"
 compatibility_flags = ["nodejs_compat"]
 
+# Workers Observability (Workers Logs). Captures invocation logs + the structured
+# pino traces this worker emits (controller→service→workflow→bootstrapper→harness)
+# and makes them queryable in the Cloudflare dashboard. head_sampling_rate = 1
+# keeps 100% of invocations; lower it if log volume/cost becomes a concern.
+[observability]
+enabled = true
+head_sampling_rate = 1
+
 # Production D1 database (created via `wrangler d1 create cat_factory` on the
 # iselwin@gmail.com account). For local/test runs wrangler uses a local sqlite
 # shadow keyed by this name, so the id only matters for --remote operations.
@@ -31,6 +39,16 @@ class_name = "ExecutionWorkflow"
 binding = "GITHUB_BACKFILL_WORKFLOW"
 name = "cat-factory-github-backfill"
 class_name = "GitHubBackfillWorkflow"
+
+# Durable driver for the "bootstrap repo" task (see
+# src/infrastructure/workflows/BootstrapWorkflow.ts). Each run becomes one
+# instance whose id is the bootstrap job id; it polls the per-run container,
+# streaming subtask progress to the board and, on success, linking the new repo
+# to its service frame. Only used when the bootstrap prerequisites are configured.
+[[workflows]]
+binding = "BOOTSTRAP_WORKFLOW"
+name = "cat-factory-bootstrap"
+class_name = "BootstrapWorkflow"
 
 # Per-run code-implementation containers (see src/infrastructure/containers and
 # @cat-factory/implementer-harness). Each run addresses its own instance, which

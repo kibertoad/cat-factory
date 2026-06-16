@@ -4,6 +4,7 @@ import { parsePiOutput, parseTodoProgress } from '../src/pi.js'
 import { authenticatedCloneUrl, redactSecrets } from '../src/git.js'
 
 const validBootstrapBody = {
+  jobId: 'boot_123',
   systemPrompt: 'You are a bootstrapper.',
   instructions: 'Rename the service.',
   model: 'qwen3-max',

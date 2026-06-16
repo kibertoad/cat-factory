@@ -8,7 +8,7 @@ import type {
   WebhookVerifier,
   WorkspaceSnapshot,
 } from '@cat-factory/core'
-import { NoopWorkRunner } from '@cat-factory/core'
+import { NoopBootstrapRunner, NoopWorkRunner } from '@cat-factory/core'
 import { env } from 'cloudflare:test'
 import { createApp } from '../src/app'
 import { buildContainer } from '../src/infrastructure/container'
@@ -48,6 +48,11 @@ export interface TestApp {
    * same agent/overrides this app was built with, against the shared `env.DB`.
    */
   drive(workspaceId: string, maxRounds?: number): Promise<ExecutionInstance[]>
+  /**
+   * Drive a bootstrap job's poll loop to a terminal state, mirroring what the
+   * durable BootstrapWorkflow does in production. Returns the number of polls.
+   */
+  driveBootstrap(workspaceId: string, jobId: string, maxPolls?: number): Promise<number>
 }
 
 /**
@@ -66,6 +71,10 @@ export function makeApp(
   const coreOverrides: Partial<CoreDependencies> = {
     agentExecutor,
     workRunner: new NoopWorkRunner(),
+    // Like workRunner: avoid spawning a real Cloudflare Workflows instance for a
+    // bootstrap in the test pool (the binding is present). Specs drive the
+    // bootstrap poll loop deterministically via `driveBootstrap`.
+    bootstrapRunner: new NoopBootstrapRunner(),
     ...overrides,
   }
   const app = createApp({ overrides: coreOverrides })
@@ -102,7 +111,21 @@ export function makeApp(
     return (await c.workspaceService.snapshot(workspaceId)).executions
   }
 
-  return { call, createWorkspace, drive }
+  async function driveBootstrap(
+    workspaceId: string,
+    jobId: string,
+    maxPolls = 50,
+  ): Promise<number> {
+    const c = buildContainer(env, coreOverrides)
+    if (!c.bootstrap) throw new Error('bootstrap module is not configured in this app')
+    for (let p = 0; p < maxPolls; p++) {
+      const result = await c.bootstrap.service.pollBootstrapJob(workspaceId, jobId)
+      if (result.state !== 'running') return p + 1
+    }
+    return maxPolls
+  }
+
+  return { call, createWorkspace, drive, driveBootstrap }
 }
 
 /**

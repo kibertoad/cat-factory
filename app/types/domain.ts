@@ -15,6 +15,7 @@
 // ---------------------------------------------------------------------------
 
 import type { ExecutionInstance } from './execution'
+import type { BootstrapJob } from './bootstrap'
 
 /** Lifecycle of an architecture building block. */
 export type BlockStatus =
@@ -182,6 +183,7 @@ export interface WorkspaceSnapshot {
 export type WorkspaceEvent =
   | { type: 'execution'; instance: ExecutionInstance; block: Block | null; at: number }
   | { type: 'board'; reason: string; at: number }
+  | { type: 'bootstrap'; job: BootstrapJob; block: Block | null; at: number }
 
 /** Level-of-detail buckets driven by the canvas zoom level. */
 export type LodLevel = 'far' | 'mid' | 'close'

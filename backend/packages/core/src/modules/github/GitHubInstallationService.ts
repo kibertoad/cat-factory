@@ -96,6 +96,21 @@ export class GitHubInstallationService {
     )
   }
 
+  /**
+   * Resolve the workspace an installation is already bound to, or null if it's
+   * unknown (or tombstoned). Used by the setup callback to recover from GitHub's
+   * *stateless* redirects: saving a repo-access change from the App's
+   * installation settings page redirects back with `setup_action=update` but no
+   * signed `state`, so there's no workspace id to bind. We can only act on an
+   * installation that's ALREADY bound — binding a NEW one still requires a state.
+   */
+  async resolveBoundWorkspace(installationId: number): Promise<string | null> {
+    const existing =
+      await this.deps.githubInstallationRepository.getByInstallationId(installationId)
+    if (!existing || existing.deletedAt) return null
+    return existing.workspaceId
+  }
+
   /** The workspace's current connection, or null if not connected. */
   async getConnection(workspaceId: string): Promise<GitHubConnection | null> {
     const installation = await this.deps.githubInstallationRepository.getByWorkspace(workspaceId)

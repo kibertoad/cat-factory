@@ -1,4 +1,4 @@
-import type { Block, ExecutionInstance, WorkspaceEvent } from '@cat-factory/contracts'
+import type { Block, BootstrapJob, ExecutionInstance, WorkspaceEvent } from '@cat-factory/contracts'
 import type { ExecutionEventPublisher } from '@cat-factory/core'
 import type { DurableObjectNamespace } from '@cloudflare/workers-types'
 import type { WorkspaceEventsHub } from '../durable-objects/WorkspaceEventsHub'
@@ -28,6 +28,19 @@ export class DurableObjectEventPublisher implements ExecutionEventPublisher {
 
   async boardChanged(workspaceId: string, reason: string): Promise<void> {
     await this.publish(workspaceId, { type: 'board', reason, at: Date.now() })
+  }
+
+  async bootstrapChanged(
+    workspaceId: string,
+    job: BootstrapJob,
+    block?: Block | null,
+  ): Promise<void> {
+    await this.publish(workspaceId, {
+      type: 'bootstrap',
+      job,
+      block: block ?? null,
+      at: Date.now(),
+    })
   }
 
   private async publish(workspaceId: string, event: WorkspaceEvent): Promise<void> {
