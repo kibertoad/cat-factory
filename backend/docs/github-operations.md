@@ -12,20 +12,25 @@ cat-factory is self-hosted, so **each deployment registers its own GitHub App.**
 An App's webhook and setup URLs point at a single host, so there is no shared or
 central App — every instance creates one pointing at its own worker host.
 
-- The App can stay **private**. Create it in your own org and install it on your
-  own repos — the owner can always install a private App. You do **not** need to
-  make it public or list it on the GitHub Marketplace; that's only required if you
-  want orgs you don't own to install your instance's App.
+- **Personal accounts and orgs both work.** Create the App under either a personal
+  account or an org (Settings → Developer settings → GitHub Apps); it installs on
+  whichever account owns the repos. Nothing in cat-factory requires an org — the
+  flow only binds an installation to a workspace.
+- The App can stay **private**. Create it under your own account/org and install it
+  on your own repos — the owner can always install a private App. You do **not** need
+  to make it public or list it on the GitHub Marketplace; that's only required if you
+  want accounts you don't own to install your instance's App.
 - It's the **same App definition** every time (the permissions and events below);
   only the per-instance values differ: the App name (must be unique across GitHub),
   the webhook/setup URLs (your host), and the generated webhook secret and key.
 - The multi-tenant design (one installation per workspace, per-installation tokens)
   still applies _within_ your instance — many workspaces, each bound to its own
-  installation under your org.
+  installation under your account/org.
 
 **Fast path — App Manifest.** Instead of hand-filling step 1, open
 [`github-app-manifest.html`](./github-app-manifest.html) in a browser, enter your
-worker host (and org), and submit. It posts [`github-app-manifest.json`](./github-app-manifest.json)
+worker host (and an org, or leave it blank for a personal account), and submit. It
+posts [`github-app-manifest.json`](./github-app-manifest.json)
 to GitHub's App-creation flow with every permission, event and URL pre-filled, so
 you only confirm. Then continue from **step 2** (key conversion) — you'll still
 generate the private key and set the worker secrets yourself. Prefer the manual
@@ -36,7 +41,8 @@ walkthrough below if you'd rather click through each field.
 ## 1. Create the GitHub App
 
 Create an App at **Settings → Developer settings → GitHub Apps → New GitHub App**
-(org-level for an org installation).
+— under a personal account or an org; both work. (For an org installation, create
+it from the org's developer settings.)
 
 **Webhook**
 
