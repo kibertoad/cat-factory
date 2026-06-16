@@ -44,6 +44,20 @@ describe('JobRegistry', () => {
     expect(registry.get('exec-1')?.result).toEqual(result)
   })
 
+  it('surfaces the latest subtask progress on the running job view', async () => {
+    const registry = new JobRegistry(limits, async (_job, opts: RunOptions) => {
+      opts.onProgress?.({ completed: 1, inProgress: 1, total: 3 })
+      opts.onProgress?.({ completed: 2, inProgress: 0, total: 3 })
+      await tick(50)
+      return { summary: 's' }
+    })
+    registry.start('exec-1', job())
+    await tick()
+    const view = registry.get('exec-1')
+    expect(view?.state).toBe('running')
+    expect(view?.progress).toEqual({ completed: 2, inProgress: 0, total: 3 })
+  })
+
   it('records a thrown fault as failed', async () => {
     const registry = new JobRegistry(limits, async () => {
       throw new Error('boom')

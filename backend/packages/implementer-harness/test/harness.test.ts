@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { parseBootstrapJob, parseJob } from '../src/job.js'
-import { parsePiOutput } from '../src/pi.js'
+import { parsePiOutput, parseTodoProgress } from '../src/pi.js'
 import { authenticatedCloneUrl } from '../src/git.js'
 
 const validBootstrapBody = {
@@ -118,5 +118,50 @@ describe('parsePiOutput', () => {
 
   it('falls back to the raw tail when nothing structured matches', () => {
     expect(parsePiOutput('plain text only')).toBe('plain text only')
+  })
+})
+
+describe('parseTodoProgress', () => {
+  const todoEvent = (tasks: Array<{ status: string }>) => ({
+    type: 'tool_result',
+    toolName: 'todo',
+    isError: false,
+    details: { action: 'update', tasks, nextId: tasks.length + 1 },
+  })
+
+  it('counts completed/in-progress over live tasks from rpiv-todo details', () => {
+    const event = todoEvent([
+      { status: 'completed' },
+      { status: 'completed' },
+      { status: 'completed' },
+      { status: 'in_progress' },
+      { status: 'pending' },
+    ])
+    expect(parseTodoProgress(event)).toEqual({ completed: 3, inProgress: 1, total: 5 })
+  })
+
+  it('excludes deleted (tombstoned) tasks from the total', () => {
+    const event = todoEvent([
+      { status: 'completed' },
+      { status: 'deleted' },
+      { status: 'pending' },
+    ])
+    expect(parseTodoProgress(event)).toEqual({ completed: 1, inProgress: 0, total: 2 })
+  })
+
+  it('falls back to the example extension `todos[].done` shape', () => {
+    const event = {
+      type: 'tool_result',
+      toolName: 'todo',
+      details: { todos: [{ done: true }, { done: false }, { done: true }] },
+    }
+    expect(parseTodoProgress(event)).toEqual({ completed: 2, inProgress: 0, total: 3 })
+  })
+
+  it('ignores non-todo, errored, or unrecognised events', () => {
+    expect(parseTodoProgress({ type: 'message_end' })).toBeUndefined()
+    expect(parseTodoProgress({ type: 'tool_result', toolName: 'bash' })).toBeUndefined()
+    expect(parseTodoProgress({ ...todoEvent([{ status: 'pending' }]), isError: true })).toBeUndefined()
+    expect(parseTodoProgress({ type: 'tool_result', toolName: 'todo', details: {} })).toBeUndefined()
   })
 })

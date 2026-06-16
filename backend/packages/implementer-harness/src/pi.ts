@@ -34,9 +34,73 @@ export async function writePiModelsConfig(opts: {
   return path
 }
 
+// Appended to every AGENTS.md so the model maintains the `todo` tool the image
+// installs (rpiv-todo). Without a nudge a model may skip the tool, which would
+// leave the run with no subtask progress to report; keeping the list current is
+// what makes the board's "N/M done" move.
+const TODO_GUIDANCE = `
+
+## Progress tracking (required)
+
+You have a \`todo\` tool. For any multi-step task, before you start coding, break
+the work into concrete subtasks with \`todo\` (action "create"). As you work, mark
+each one \`in_progress\` when you begin it and \`completed\` when it's done (action
+"update"). Keep the list accurate — it is the only signal the system has for how
+far along the run is.`
+
 /** Write the composed system prompt as project context Pi reads automatically. */
 export async function writeAgentsContext(cwd: string, systemPrompt: string): Promise<void> {
-  await writeFile(join(cwd, 'AGENTS.md'), systemPrompt, 'utf8')
+  await writeFile(join(cwd, 'AGENTS.md'), `${systemPrompt}${TODO_GUIDANCE}`, 'utf8')
+}
+
+/** Live subtask progress derived from Pi's `todo` tool — e.g. "3/8 done". */
+export interface TodoProgress {
+  /** Tasks marked completed. */
+  completed: number
+  /** Tasks currently being worked (rpiv-todo's `in_progress` status). */
+  inProgress: number
+  /** Total live tasks (tombstoned/deleted tasks excluded). */
+  total: number
+}
+
+/**
+ * Derive {@link TodoProgress} from a single Pi `--mode json` event, or undefined
+ * if the event isn't a successful `todo` tool result we can read.
+ *
+ * Pi has no built-in todo tool; the image installs the `@juicesharp/rpiv-todo`
+ * extension, whose every successful call returns `details.tasks[]` with a
+ * per-task `status` (pending | in_progress | completed | deleted). We also accept
+ * the simpler `details.todos[].done` shape of Pi's bundled example extension, so
+ * swapping the extension never silently drops progress.
+ */
+export function parseTodoProgress(event: Record<string, unknown>): TodoProgress | undefined {
+  if (event.type !== 'tool_result' || event.toolName !== 'todo' || event.isError === true) {
+    return undefined
+  }
+  const details = event.details
+  if (typeof details !== 'object' || details === null) return undefined
+  const d = details as Record<string, unknown>
+
+  if (Array.isArray(d.tasks)) {
+    let total = 0
+    let completed = 0
+    let inProgress = 0
+    for (const task of d.tasks) {
+      const status = (task as { status?: unknown } | null)?.status
+      if (status === 'deleted') continue
+      total++
+      if (status === 'completed') completed++
+      else if (status === 'in_progress') inProgress++
+    }
+    return { completed, inProgress, total }
+  }
+
+  if (Array.isArray(d.todos)) {
+    const completed = d.todos.filter((t) => (t as { done?: unknown } | null)?.done === true).length
+    return { completed, inProgress: 0, total: d.todos.length }
+  }
+
+  return undefined
 }
 
 /**
@@ -56,6 +120,8 @@ export function runPi(opts: {
   signal?: AbortSignal
   /** Called on every chunk of Pi output, so the watchdog sees the agent is alive. */
   onActivity?: () => void
+  /** Called with the latest subtask counts each time Pi updates its todo list. */
+  onProgress?: (progress: TodoProgress) => void
 }): Promise<string> {
   return new Promise((resolve, reject) => {
     if (opts.signal?.aborted) {
@@ -74,6 +140,27 @@ export function runPi(opts: {
     let stdout = ''
     let stderr = ''
     let aborted = false
+    // Pi's json mode is strict LF-framed JSONL; buffer partial lines across
+    // chunks so we only ever parse complete records for progress.
+    let lineBuffer = ''
+
+    const emitProgress = (text: string): void => {
+      if (!opts.onProgress) return
+      lineBuffer += text
+      let nl = lineBuffer.indexOf('\n')
+      while (nl !== -1) {
+        const line = lineBuffer.slice(0, nl).trim()
+        lineBuffer = lineBuffer.slice(nl + 1)
+        nl = lineBuffer.indexOf('\n')
+        if (!line.startsWith('{')) continue
+        try {
+          const progress = parseTodoProgress(JSON.parse(line) as Record<string, unknown>)
+          if (progress) opts.onProgress(progress)
+        } catch {
+          // Not a complete/valid JSON record; skip.
+        }
+      }
+    }
 
     // When the watchdog aborts, terminate Pi: SIGTERM first, then SIGKILL if it
     // ignores it. The `close` handler then rejects with the abort reason.
@@ -87,8 +174,11 @@ export function runPi(opts: {
     opts.signal?.addEventListener('abort', onAbort, { once: true })
 
     const onChunk = (chunk: Buffer, sink: 'out' | 'err'): void => {
-      if (sink === 'out') stdout += chunk.toString()
-      else stderr += chunk.toString()
+      const text = chunk.toString()
+      if (sink === 'out') {
+        stdout += text
+        emitProgress(text)
+      } else stderr += text
       // Any output means progress: reset the inactivity watchdog.
       opts.onActivity?.()
     }
