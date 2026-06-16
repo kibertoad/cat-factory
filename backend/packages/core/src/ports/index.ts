@@ -92,3 +92,18 @@ export type {
 } from './repo-bootstrapper'
 export type { RepoBlueprintRecord, RepoBlueprintRepository } from './board-scan-repositories'
 export type { RepoScanner, ScanRepoRequest, ScannedBlueprint } from './repo-scanner'
+export type {
+  RunnerJobProgress,
+  RunnerJobResult,
+  RunnerJobView,
+  RunnerTransport,
+} from './runner-transport'
+export type {
+  RunnerDispatchRequest,
+  RunnerPollRequest,
+  RunnerPoolProvider,
+} from './runner-pool-provider'
+export type {
+  RunnerPoolConnectionRecord,
+  RunnerPoolConnectionRepository,
+} from './runner-pool-repositories'

@@ -96,6 +96,7 @@ export {
   type GitHubModule,
   type DocumentsModule,
   type EnvironmentsModule,
+  type RunnersModule,
   type BootstrapModule,
   type BoardScanModule,
   createCore,
@@ -155,6 +156,13 @@ export {
   type EnvironmentTeardownServiceDependencies,
 } from './modules/environments/EnvironmentTeardownService'
 export * as environmentsLogic from './modules/environments/environments.logic'
+
+export {
+  RunnerPoolConnectionService,
+  type RunnerPoolConnectionServiceDependencies,
+  type ResolvedRunnerPool,
+} from './modules/runners/RunnerPoolConnectionService'
+export * as runnersLogic from './modules/runners/runners.logic'
 
 export {
   BootstrapService,

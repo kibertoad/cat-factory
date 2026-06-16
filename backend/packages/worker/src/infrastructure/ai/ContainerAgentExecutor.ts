@@ -6,13 +6,13 @@ import {
   type AgentRunResult,
   type AsyncAgentExecutor,
   type ModelRef,
+  type RunnerJobResult,
+  type RunnerTransport,
   composeSystemPrompt,
   resolveAgentConfig,
   systemPromptFor,
   userPromptFor,
 } from '@cat-factory/core'
-import type { DurableObjectNamespace } from '@cloudflare/workers-types'
-import type { ImplementationContainer } from '../containers/ImplementationContainer'
 import type { ContainerSessionService } from '../containers/ContainerSessionService'
 // The GitHub repo a run should be implemented against, resolved from the
 // workspace's installation + connected repos (see container.ts).
@@ -27,9 +27,18 @@ export type ResolveRepoTarget = (workspaceId: string, blockId: string) => Promis
 
 export type MintInstallationToken = (installationId: number) => Promise<string>
 
+/**
+ * Resolve the runner backend a workspace's coding jobs run on. Picks a workspace's
+ * self-hosted runner pool when one is registered (and runner pools are enabled),
+ * else the per-run Cloudflare Container. Called per dispatch and per poll; the
+ * poll site passes the job's `workspaceId` (carried on the handle) so it resolves
+ * the same backend it dispatched to.
+ */
+export type ResolveRunnerTransport = (workspaceId: string | undefined) => Promise<RunnerTransport>
+
 export interface ContainerAgentExecutorDependencies {
-  /** The Durable Object namespace backing the per-run container instances. */
-  container: DurableObjectNamespace<ImplementationContainer>
+  /** Resolve which runner backend (Cloudflare container or self-hosted pool) a job runs on. */
+  resolveTransport: ResolveRunnerTransport
   /** Default model routing; used when the block pins no (usable) model. */
   agentRouting: AgentRouting
   /** Resolve a block's selected model id to a concrete ref (direct flavour). */
@@ -49,35 +58,6 @@ export interface ContainerAgentExecutorDependencies {
   githubApiBase?: string
 }
 
-/** The structured outcome the harness records for a finished job. */
-interface RunResult {
-  prUrl?: string
-  branch?: string
-  summary?: string
-  error?: string
-}
-
-/** Live subtask counts the harness derives from Pi's `todo` tool. */
-interface JobProgress {
-  completed: number
-  inProgress: number
-  total: number
-}
-
-/** The job view the harness returns from `GET /jobs/{id}`. */
-interface JobView {
-  state: 'running' | 'done' | 'failed'
-  /** Present while running once Pi has touched its todo list. */
-  progress?: JobProgress
-  result?: RunResult
-  error?: string
-}
-
-// The harness `/run` and `/jobs/{id}` calls are quick (start a background job /
-// read its state), so they get a short timeout. The long coding work is bounded
-// container-side by the job's inactivity + max-duration watchdogs, not here.
-const DISPATCH_TIMEOUT_MS = 30_000
-const POLL_TIMEOUT_MS = 30_000
 /** Poll cadence for the non-durable `run()` fallback (the durable driver sleeps between polls itself). */
 const RUN_POLL_INTERVAL_MS = 5_000
 
@@ -109,42 +89,19 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
    * already running for `executionId`, so a replayed dispatch never duplicates work.
    */
   async startJob(context: AgentRunContext): Promise<AgentJobHandle> {
-    const { executionId } = this.requireIds(context)
+    const { workspaceId, executionId } = this.requireIds(context)
     const { body, model } = await this.buildJobBody(context)
-    const stub = this.deps.container.get(this.deps.container.idFromName(executionId))
-    const res = await stub.fetch('http://container/run', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(DISPATCH_TIMEOUT_MS),
-    })
-    if (!res.ok) {
-      throw new Error(
-        `Implementation container dispatch failed (HTTP ${res.status}): ${await safeText(res)}`,
-      )
-    }
-    return { jobId: executionId, model }
+    const transport = await this.deps.resolveTransport(workspaceId)
+    await transport.dispatch(executionId, body)
+    // Carry the workspace on the handle so the poll site can resolve the same
+    // backend (Cloudflare container vs. self-hosted pool) given only the job id.
+    return { jobId: executionId, model, workspaceId }
   }
 
-  /** Poll a dispatched job for its state, mapping the harness view into an update. */
+  /** Poll a dispatched job for its state, mapping the runner view into an update. */
   async pollJob(handle: AgentJobHandle): Promise<AgentJobUpdate> {
-    const stub = this.deps.container.get(this.deps.container.idFromName(handle.jobId))
-    const res = await stub.fetch(`http://container/jobs/${encodeURIComponent(handle.jobId)}`, {
-      method: 'GET',
-      signal: AbortSignal.timeout(POLL_TIMEOUT_MS),
-    })
-    if (res.status === 404) {
-      // The job/container vanished (eviction or crash): fail the run so it stops
-      // (the run-sweeper may then re-drive it from durable state).
-      return {
-        state: 'failed',
-        error: 'Implementation job not found (container evicted or crashed)',
-      }
-    }
-    if (!res.ok) {
-      throw new Error(`Implementation job poll failed (HTTP ${res.status}): ${await safeText(res)}`)
-    }
-    const view = (await res.json()) as JobView
+    const transport = await this.deps.resolveTransport(handle.workspaceId)
+    const view = await transport.poll(handle.jobId)
     if (view.state === 'running') {
       // Forward the latest subtask counts (if any) so the engine can surface
       // live "N/M done" progress on the step; the shapes match field-for-field.
@@ -262,8 +219,8 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
   }
 }
 
-/** Map a finished harness {@link RunResult} into the engine's {@link AgentRunResult}. */
-function toRunResult(result: RunResult): AgentRunResult {
+/** Map a finished runner {@link RunnerJobResult} into the engine's {@link AgentRunResult}. */
+function toRunResult(result: RunnerJobResult): AgentRunResult {
   const summary = result.summary?.trim() || 'Implementation complete.'
   const output = result.prUrl ? `${summary}\n\nPR: ${result.prUrl}` : summary
   // Surface the opened PR structurally (not just in the output text) so the
@@ -321,12 +278,4 @@ function prBody(context: AgentRunContext): string {
     `Pipeline: ${context.pipelineName}`,
   ]
   return lines.join('\n')
-}
-
-async function safeText(res: Response): Promise<string> {
-  try {
-    return (await res.text()).slice(0, 500)
-  } catch {
-    return '(no body)'
-  }
 }

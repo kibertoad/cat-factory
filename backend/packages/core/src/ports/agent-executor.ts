@@ -129,6 +129,13 @@ export interface AgentJobHandle {
    * the eventual result — has no access to the resolved model ref.
    */
   model?: string
+  /**
+   * The workspace the job belongs to. The engine sets this at the poll site (it is
+   * in scope there) so an executor that picks a per-workspace backend — e.g. the
+   * container executor choosing a self-hosted runner pool over Cloudflare
+   * Containers — can resolve the same backend when polling, given only the job id.
+   */
+  workspaceId?: string
 }
 
 /** The outcome of polling an {@link AgentJobHandle}. */
