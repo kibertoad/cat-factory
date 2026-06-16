@@ -54,7 +54,12 @@ export class HttpRunnerPoolProvider implements RunnerPoolProvider {
   }
 
   async dispatch(req: RunnerDispatchRequest): Promise<void> {
-    await this.execute(req.manifest, req.manifest.dispatch, this.scope(req.jobId, req.spec), req.resolveSecret)
+    await this.execute(
+      req.manifest,
+      req.manifest.dispatch,
+      this.scope(req.jobId, req.spec),
+      req.resolveSecret,
+    )
   }
 
   async poll(req: RunnerPollRequest): Promise<RunnerJobView> {
@@ -80,7 +85,10 @@ export class HttpRunnerPoolProvider implements RunnerPoolProvider {
    * body template can forward it verbatim). Reuses the environments interpolation
    * machinery; the second (`provision`) namespace is unused by runner manifests.
    */
-  private scope(jobId: string, spec?: Record<string, unknown>): environmentsLogic.InterpolationScope {
+  private scope(
+    jobId: string,
+    spec?: Record<string, unknown>,
+  ): environmentsLogic.InterpolationScope {
     return {
       input: { jobId, job: spec ? JSON.stringify(spec) : '' },
       provision: {},

@@ -21,7 +21,7 @@ coding jobs to their pool instead of spinning Cloudflare Containers**, and a
 clear, documented path for standing those runners up.
 
 This is exactly the **org-hosted runner** alternative that ADR 0003 deferred (see
-its *Alternatives considered*). We pick it up here.
+its _Alternatives considered_). We pick it up here.
 
 ## Decision
 
@@ -37,7 +37,7 @@ describes its pool scheduler as a single, generic, **declarative manifest**
   `{{input.jobId}}` / `{{input.job}}` interpolation (the latter is the full
   harness job spec as JSON, so a transparent scheduler forwards it verbatim);
 - an **auth scheme** for calling the scheduler API (none / api-key / bearer /
-  basic / OAuth2 client-credentials / custom headers) — the *same* generic
+  basic / OAuth2 client-credentials / custom headers) — the _same_ generic
   auth-scheme contract the environment manifest uses; and
 - a **dot-path response mapping** that projects the scheduler's arbitrary status
   response onto the canonical harness job view (state, subtask progress, the PR
@@ -96,7 +96,7 @@ length-capped and header-free.
 - **A transport seam, not a fork of the executor.** Putting the backend choice
   behind `RunnerTransport` means the prompt composition, model locking, token
   minting and result mapping in `ContainerAgentExecutor` are shared by both
-  backends — the only thing that varies is *where the job runs*.
+  backends — the only thing that varies is _where the job runs_.
 - **Addressable-by-job-id, so no job registry.** Requiring the pool to route by our
   job id keeps dispatch idempotent under Workflows replay and avoids persisting
   per-job dispatch state, which the durable driver would otherwise force.

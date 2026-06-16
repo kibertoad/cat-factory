@@ -23,7 +23,12 @@ describe('HttpRunnerPoolProvider', () => {
 
     const provider = new HttpRunnerPoolProvider()
     const spec = sampleJobSpec()
-    await provider.dispatch({ manifest: bearerRunnerManifest(), jobId: 'ex-1', spec, resolveSecret })
+    await provider.dispatch({
+      manifest: bearerRunnerManifest(),
+      jobId: 'ex-1',
+      spec,
+      resolveSecret,
+    })
 
     expect(calls).toHaveLength(1)
     const req = calls[0]!
@@ -43,7 +48,11 @@ describe('HttpRunnerPoolProvider', () => {
     vi.stubGlobal('fetch', fn)
 
     const provider = new HttpRunnerPoolProvider()
-    const view = await provider.poll({ manifest: bearerRunnerManifest(), jobId: 'ex-1', resolveSecret })
+    const view = await provider.poll({
+      manifest: bearerRunnerManifest(),
+      jobId: 'ex-1',
+      resolveSecret,
+    })
     expect(view).toEqual({ state: 'running', progress: { completed: 3, inProgress: 1, total: 8 } })
   })
 
@@ -61,7 +70,11 @@ describe('HttpRunnerPoolProvider', () => {
     vi.stubGlobal('fetch', fn)
 
     const provider = new HttpRunnerPoolProvider()
-    const view = await provider.poll({ manifest: bearerRunnerManifest(), jobId: 'ex-1', resolveSecret })
+    const view = await provider.poll({
+      manifest: bearerRunnerManifest(),
+      jobId: 'ex-1',
+      resolveSecret,
+    })
     expect(calls[0]!.url).toBe('https://pool.test/api/jobs/ex-1')
     expect(view.state).toBe('done')
     expect(view.result).toEqual({
@@ -76,7 +89,11 @@ describe('HttpRunnerPoolProvider', () => {
     vi.stubGlobal('fetch', fn)
 
     const provider = new HttpRunnerPoolProvider()
-    const view = await provider.poll({ manifest: bearerRunnerManifest(), jobId: 'ex-1', resolveSecret })
+    const view = await provider.poll({
+      manifest: bearerRunnerManifest(),
+      jobId: 'ex-1',
+      resolveSecret,
+    })
     expect(view).toEqual({ state: 'failed', error: 'runner OOM' })
   })
 
@@ -110,7 +127,11 @@ describe('HttpRunnerPoolProvider', () => {
 
     const provider = new HttpRunnerPoolProvider()
     await expect(
-      provider.poll({ manifest: bearerRunnerManifest(), jobId: 'ex-1', resolveSecret: () => undefined }),
+      provider.poll({
+        manifest: bearerRunnerManifest(),
+        jobId: 'ex-1',
+        resolveSecret: () => undefined,
+      }),
     ).rejects.toBeInstanceOf(RunnerPoolApiError)
   })
 })

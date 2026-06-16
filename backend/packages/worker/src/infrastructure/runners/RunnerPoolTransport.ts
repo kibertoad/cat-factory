@@ -19,7 +19,12 @@ export class RunnerPoolTransport implements RunnerTransport {
   ) {}
 
   dispatch(jobId: string, spec: Record<string, unknown>): Promise<void> {
-    return this.provider.dispatch({ manifest: this.manifest, jobId, spec, resolveSecret: this.resolveSecret })
+    return this.provider.dispatch({
+      manifest: this.manifest,
+      jobId,
+      spec,
+      resolveSecret: this.resolveSecret,
+    })
   }
 
   poll(jobId: string): Promise<RunnerJobView> {
@@ -27,6 +32,10 @@ export class RunnerPoolTransport implements RunnerTransport {
   }
 
   release(jobId: string): Promise<void> {
-    return this.provider.release({ manifest: this.manifest, jobId, resolveSecret: this.resolveSecret })
+    return this.provider.release({
+      manifest: this.manifest,
+      jobId,
+      resolveSecret: this.resolveSecret,
+    })
   }
 }

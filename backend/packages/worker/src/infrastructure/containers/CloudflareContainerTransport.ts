@@ -17,9 +17,7 @@ const DISPATCH_TIMEOUT_MS = 30_000
 const POLL_TIMEOUT_MS = 30_000
 
 export class CloudflareContainerTransport implements RunnerTransport {
-  constructor(
-    private readonly namespace: DurableObjectNamespace<ImplementationContainer>,
-  ) {}
+  constructor(private readonly namespace: DurableObjectNamespace<ImplementationContainer>) {}
 
   async dispatch(jobId: string, spec: Record<string, unknown>): Promise<void> {
     const stub = this.namespace.get(this.namespace.idFromName(jobId))

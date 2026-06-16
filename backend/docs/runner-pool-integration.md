@@ -44,26 +44,26 @@ see the comment block at the top of the Dockerfile.)
 
 The harness exposes:
 
-| Method & path     | Purpose                                                            |
-| ----------------- | ------------------------------------------------------------------ |
-| `GET /health`     | Liveness. `{ "status": "ok" }`.                                    |
-| `POST /run`       | Start (or re-attach to) a job. Returns `202 { jobId, state }`.     |
-| `GET /jobs/{id}`  | Poll a job. Returns the **job view** below.                        |
+| Method & path    | Purpose                                                        |
+| ---------------- | -------------------------------------------------------------- |
+| `GET /health`    | Liveness. `{ "status": "ok" }`.                                |
+| `POST /run`      | Start (or re-attach to) a job. Returns `202 { jobId, state }`. |
+| `GET /jobs/{id}` | Poll a job. Returns the **job view** below.                    |
 
 `POST /run` body (the job spec cat-factory sends; forward it verbatim):
 
 ```jsonc
 {
-  "jobId": "<execution id>",        // the job is keyed on this; re-POST re-attaches
+  "jobId": "<execution id>", // the job is keyed on this; re-POST re-attaches
   "systemPrompt": "...",
   "userPrompt": "...",
   "model": "qwen3-max",
-  "proxyBaseUrl": "https://<worker>/v1",  // the runner reaches models only via here
+  "proxyBaseUrl": "https://<worker>/v1", // the runner reaches models only via here
   "sessionToken": "<model-locked proxy token>",
   "ghToken": "<short-lived GitHub installation token>",
   "repo": { "owner": "...", "name": "...", "baseBranch": "main", "cloneUrl": "..." },
   "headBranch": "cat-factory/<block>-<short>",
-  "pr": { "title": "...", "body": "..." }
+  "pr": { "title": "...", "body": "..." },
 }
 ```
 
@@ -86,11 +86,11 @@ reach the same runner/job.
 
 ### Runner lifecycle knobs (set on the runner, read by the harness)
 
-| Env var               | Default          | Effect                                                        |
-| --------------------- | ---------------- | ------------------------------------------------------------- |
-| `PORT`                | `8080`           | HTTP port the harness listens on.                             |
-| `JOB_MAX_DURATION_MS` | `3600000` (60m)  | Hard ceiling on a job's wall-clock time; force-fails after.   |
-| `JOB_INACTIVITY_MS`   | `600000` (10m)   | Kills a hung agent that produces no output for this long.     |
+| Env var               | Default         | Effect                                                      |
+| --------------------- | --------------- | ----------------------------------------------------------- |
+| `PORT`                | `8080`          | HTTP port the harness listens on.                           |
+| `JOB_MAX_DURATION_MS` | `3600000` (60m) | Hard ceiling on a job's wall-clock time; force-fails after. |
+| `JOB_INACTIVITY_MS`   | `600000` (10m)  | Kills a hung agent that produces no output for this long.   |
 
 ---
 
@@ -126,7 +126,7 @@ A transparent scheduler that simply proxies the harness:
   "dispatch": {
     "method": "POST",
     "pathTemplate": "/jobs",
-    "bodyTemplate": "{\"id\":\"{{input.jobId}}\",\"job\":{{input.job}}}"
+    "bodyTemplate": "{\"id\":\"{{input.jobId}}\",\"job\":{{input.job}}}",
   },
   "poll": { "method": "GET", "pathTemplate": "/jobs/{{input.jobId}}" },
   "release": { "method": "DELETE", "pathTemplate": "/jobs/{{input.jobId}}" },
@@ -135,7 +135,7 @@ A transparent scheduler that simply proxies the harness:
     "statusMap": [
       { "from": "in_progress", "to": "running" },
       { "from": "succeeded", "to": "done" },
-      { "from": "errored", "to": "failed" }
+      { "from": "errored", "to": "failed" },
     ],
     "progressCompletedPath": "progress.completed",
     "progressInProgressPath": "progress.inProgress",
@@ -143,8 +143,8 @@ A transparent scheduler that simply proxies the harness:
     "prUrlPath": "result.pr_url",
     "branchPath": "result.branch",
     "summaryPath": "result.summary",
-    "errorPath": "error"
-  }
+    "errorPath": "error",
+  },
 }
 ```
 
@@ -152,7 +152,7 @@ Notes:
 
 - **Auth schemes:** `none`, `api_key` (header + optional value prefix), `bearer`,
   `basic`, `oauth2_client_credentials` (token URL + client id/secret, cached), and
-  `custom_headers`. Each references its secret(s) by *logical key*; you supply the
+  `custom_headers`. Each references its secret(s) by _logical key_; you supply the
   values separately (below) and they are stored encrypted at rest.
 - **`response` mapping** uses dot-paths against your JSON (`a.b.0.c`). Anything you
   omit simply maps to "unset". If your scheduler already returns the harness job
@@ -191,12 +191,12 @@ curl -X POST "$API/workspaces/$WS/runner-pool/connection" \
 
 Endpoints (all under `/workspaces/:workspaceId`):
 
-| Method & path                         | Purpose                                              |
-| ------------------------------------- | ---------------------------------------------------- |
-| `GET /runner-pool/connection`         | Current binding (safe metadata; never secret values).|
-| `POST /runner-pool/connection`        | Register/replace the manifest + secret bundle.       |
-| `PUT /runner-pool/connection/secrets` | Rotate the secret bundle (manifest unchanged).       |
-| `DELETE /runner-pool/connection`      | Unregister the pool.                                 |
+| Method & path                         | Purpose                                               |
+| ------------------------------------- | ----------------------------------------------------- |
+| `GET /runner-pool/connection`         | Current binding (safe metadata; never secret values). |
+| `POST /runner-pool/connection`        | Register/replace the manifest + secret bundle.        |
+| `PUT /runner-pool/connection/secrets` | Rotate the secret bundle (manifest unchanged).        |
+| `DELETE /runner-pool/connection`      | Unregister the pool.                                  |
 
 Once registered, that workspace's `coder` / `mocker` / `playwright` steps run on
 your pool. Workspaces **without** a registered pool fall back to Cloudflare

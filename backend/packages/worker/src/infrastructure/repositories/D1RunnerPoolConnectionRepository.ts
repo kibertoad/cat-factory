@@ -1,7 +1,4 @@
-import type {
-  RunnerPoolConnectionRecord,
-  RunnerPoolConnectionRepository,
-} from '@cat-factory/core'
+import type { RunnerPoolConnectionRecord, RunnerPoolConnectionRepository } from '@cat-factory/core'
 import type { D1Database } from '@cloudflare/workers-types'
 
 interface RunnerPoolConnectionRow {
@@ -38,7 +35,9 @@ export class D1RunnerPoolConnectionRepository implements RunnerPoolConnectionRep
 
   async getByWorkspace(workspaceId: string): Promise<RunnerPoolConnectionRecord | null> {
     const row = await this.db
-      .prepare('SELECT * FROM runner_pool_connections WHERE workspace_id = ? AND deleted_at IS NULL')
+      .prepare(
+        'SELECT * FROM runner_pool_connections WHERE workspace_id = ? AND deleted_at IS NULL',
+      )
       .bind(workspaceId)
       .first<RunnerPoolConnectionRow>()
     return row ? rowToRecord(row) : null

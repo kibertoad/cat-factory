@@ -55,7 +55,12 @@ export function sampleJobSpec(): Record<string, unknown> {
     proxyBaseUrl: 'https://worker.example/v1',
     sessionToken: 'session-tok',
     ghToken: 'gh-tok',
-    repo: { owner: 'octo', name: 'app', baseBranch: 'main', cloneUrl: 'https://github.com/octo/app.git' },
+    repo: {
+      owner: 'octo',
+      name: 'app',
+      baseBranch: 'main',
+      cloneUrl: 'https://github.com/octo/app.git',
+    },
     headBranch: 'cat-factory/blk-1-abcd1234',
     pr: { title: 'Rate limiter', body: 'body' },
   }

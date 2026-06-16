@@ -348,11 +348,7 @@ function selectEnvironmentsDeps(
  * `Core.runners` (the connection-management API); the per-job transport selection
  * lives in `buildResolveTransport` above. Returns `{}` when disabled.
  */
-function selectRunnersDeps(
-  env: Env,
-  config: AppConfig,
-  db: D1Database,
-): Partial<CoreDependencies> {
+function selectRunnersDeps(env: Env, config: AppConfig, db: D1Database): Partial<CoreDependencies> {
   if (!config.runners.enabled) return {}
   return {
     runnerPoolConnectionRepository: new D1RunnerPoolConnectionRepository({ db }),

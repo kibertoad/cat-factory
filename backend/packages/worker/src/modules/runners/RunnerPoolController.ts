@@ -44,19 +44,15 @@ export function runnerPoolController(): Hono<AppEnv> {
     return c.json(connection, 201)
   })
 
-  app.put(
-    '/runner-pool/connection/secrets',
-    jsonBody(updateRunnerPoolSecretsSchema),
-    async (c) => {
-      const runners = requireRunners(c)
-      if (!runners) return unavailable(c)
-      const connection = await runners.connectionService.updateSecrets(
-        param(c, 'workspaceId'),
-        c.req.valid('json').secrets,
-      )
-      return c.json(connection)
-    },
-  )
+  app.put('/runner-pool/connection/secrets', jsonBody(updateRunnerPoolSecretsSchema), async (c) => {
+    const runners = requireRunners(c)
+    if (!runners) return unavailable(c)
+    const connection = await runners.connectionService.updateSecrets(
+      param(c, 'workspaceId'),
+      c.req.valid('json').secrets,
+    )
+    return c.json(connection)
+  })
 
   app.delete('/runner-pool/connection', async (c) => {
     const runners = requireRunners(c)
