@@ -228,6 +228,9 @@ async function launch() {
       repoName.value = ''
       description.value = ''
       instructions.value = ''
+      // The run is now tracked on the board, so get out of the way: close the
+      // dialog as soon as bootstrapping has actually started.
+      ui.closeBootstrap()
     }
   } catch (e) {
     toast.add({
