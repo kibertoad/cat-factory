@@ -132,7 +132,8 @@ export interface BootstrapJob {
   proxyBaseUrl: string
   sessionToken: string
   ghToken: string
-  reference: BootstrapReferenceSpec
+  /** Reference architecture to clone + adapt; omitted for a from-scratch scaffold. */
+  reference?: BootstrapReferenceSpec
   target: BootstrapTargetSpec
   githubApiBase?: string
 }
@@ -150,8 +151,21 @@ export function parseBootstrapJob(input: unknown): BootstrapJob {
     throw new Error('Invalid job: body must be an object')
   }
   const o = input as Record<string, unknown>
-  const reference = (o.reference ?? {}) as Record<string, unknown>
   const target = (o.target ?? {}) as Record<string, unknown>
+  // `reference` is optional: present for a clone-and-adapt run, absent for a
+  // from-scratch scaffold. Only validate its shape when it is supplied.
+  const reference =
+    o.reference == null
+      ? undefined
+      : (() => {
+          const r = o.reference as Record<string, unknown>
+          return {
+            owner: str(r.owner, 'reference.owner'),
+            name: str(r.name, 'reference.name'),
+            baseBranch: str(r.baseBranch, 'reference.baseBranch'),
+            cloneUrl: str(r.cloneUrl, 'reference.cloneUrl'),
+          }
+        })()
   const job: BootstrapJob = {
     systemPrompt: str(o.systemPrompt, 'systemPrompt'),
     instructions: str(o.instructions, 'instructions'),
@@ -159,12 +173,7 @@ export function parseBootstrapJob(input: unknown): BootstrapJob {
     proxyBaseUrl: str(o.proxyBaseUrl, 'proxyBaseUrl'),
     sessionToken: str(o.sessionToken, 'sessionToken'),
     ghToken: str(o.ghToken, 'ghToken'),
-    reference: {
-      owner: str(reference.owner, 'reference.owner'),
-      name: str(reference.name, 'reference.name'),
-      baseBranch: str(reference.baseBranch, 'reference.baseBranch'),
-      cloneUrl: str(reference.cloneUrl, 'reference.cloneUrl'),
-    },
+    ...(reference ? { reference } : {}),
     target: {
       owner: str(target.owner, 'target.owner'),
       name: str(target.name, 'target.name'),
@@ -174,8 +183,8 @@ export function parseBootstrapJob(input: unknown): BootstrapJob {
     ...(typeof o.githubApiBase === 'string' ? { githubApiBase: o.githubApiBase } : {}),
   }
   // Only after all fields are present: refuse to send the token to a host that
-  // isn't an allowed GitHub host.
-  assertAllowedHost(job.reference.cloneUrl, 'reference.cloneUrl')
+  // isn't an allowed GitHub host. `reference` is optional, so guard it.
+  if (job.reference) assertAllowedHost(job.reference.cloneUrl, 'reference.cloneUrl')
   assertAllowedHost(job.target.cloneUrl, 'target.cloneUrl')
   if (job.githubApiBase) assertAllowedHost(job.githubApiBase, 'githubApiBase')
   return job

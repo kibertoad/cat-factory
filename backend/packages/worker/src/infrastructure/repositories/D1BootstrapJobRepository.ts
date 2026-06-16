@@ -8,8 +8,8 @@ import type { D1Database } from '@cloudflare/workers-types'
 interface BootstrapJobRow {
   id: string
   workspace_id: string
-  reference_architecture_id: string
-  reference_architecture_name: string
+  reference_architecture_id: string | null
+  reference_architecture_name: string | null
   repo_name: string
   repo_owner: string | null
   repo_url: string | null

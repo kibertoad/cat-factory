@@ -41,8 +41,10 @@ export interface ReferenceArchitectureRepository {
 export interface BootstrapJobRecord {
   id: string
   workspaceId: string
-  referenceArchitectureId: string
-  referenceArchitectureName: string
+  /** Reference architecture the run was based on, or null for a from-scratch run. */
+  referenceArchitectureId: string | null
+  /** Denormalized reference architecture name, or null for a from-scratch run. */
+  referenceArchitectureName: string | null
   repoName: string
   repoOwner: string | null
   repoUrl: string | null

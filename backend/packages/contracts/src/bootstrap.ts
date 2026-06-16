@@ -78,9 +78,10 @@ export type BootstrapStatus = v.InferOutput<typeof bootstrapStatusSchema>
 export const bootstrapJobSchema = v.object({
   id: v.string(),
   workspaceId: v.string(),
-  referenceArchitectureId: v.string(),
-  /** Denormalized at creation so the job is self-describing even if the base is later removed. */
-  referenceArchitectureName: v.string(),
+  /** Reference architecture the run was based on, or null for a from-scratch (freeform) run. */
+  referenceArchitectureId: v.nullable(v.string()),
+  /** Denormalized at creation so the job is self-describing even if the base is later removed; null for from-scratch runs. */
+  referenceArchitectureName: v.nullable(v.string()),
   /** Name of the new repository being created. */
   repoName: v.string(),
   /** Owner the new repo was created under (resolved at run time), or null until known. */
@@ -97,16 +98,33 @@ export const bootstrapJobSchema = v.object({
 })
 export type BootstrapJob = v.InferOutput<typeof bootstrapJobSchema>
 
-/** Kick off a "bootstrap repo" run from a reference architecture. */
-export const bootstrapRepoSchema = v.object({
-  referenceArchitectureId: v.pipe(v.string(), v.minLength(1)),
-  /** Name for the new repository. */
-  repoName: slugField,
-  /** Description applied to the new repository. */
-  description: v.optional(descriptionField, ''),
-  /** Whether the new repository is private (defaults to private). */
-  private: v.optional(v.boolean(), true),
-  /** Extra instructions for the bootstrapper agent, appended to the base defaults. */
-  instructions: v.optional(instructionsField, ''),
-})
+/**
+ * Kick off a "bootstrap repo" run. Two modes are supported:
+ *   - from a reference architecture: supply `referenceArchitectureId` (its base
+ *     repo is cloned and adapted), optionally with extra `instructions`.
+ *   - from scratch: omit `referenceArchitectureId` and describe the new service
+ *     entirely in `instructions` (the bootstrapper scaffolds an empty repo).
+ * Either a reference architecture or non-empty instructions must be provided.
+ */
+export const bootstrapRepoSchema = v.pipe(
+  v.object({
+    /** Reference architecture to clone from; omit to bootstrap from a freeform prompt. */
+    referenceArchitectureId: v.optional(v.nullable(v.pipe(v.string(), v.minLength(1)))),
+    /** Name for the new repository. */
+    repoName: slugField,
+    /** Description applied to the new repository. */
+    description: v.optional(descriptionField, ''),
+    /** Whether the new repository is private (defaults to private). */
+    private: v.optional(v.boolean(), true),
+    /**
+     * Instructions for the bootstrapper agent. With a reference architecture these
+     * are appended to its defaults; with no reference they are the whole brief.
+     */
+    instructions: v.optional(instructionsField, ''),
+  }),
+  v.check(
+    (input) => Boolean(input.referenceArchitectureId) || input.instructions.trim().length > 0,
+    'Provide a reference architecture or freeform instructions to bootstrap from.',
+  ),
+)
 export type BootstrapRepoInput = v.InferOutput<typeof bootstrapRepoSchema>

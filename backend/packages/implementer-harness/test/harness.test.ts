@@ -27,9 +27,16 @@ const validBootstrapBody = {
 describe('parseBootstrapJob', () => {
   it('accepts a well-formed bootstrap job', () => {
     const job = parseBootstrapJob(validBootstrapBody)
-    expect(job.reference.name).toBe('service-template')
+    expect(job.reference?.name).toBe('service-template')
     expect(job.target.name).toBe('new-service')
     expect(job.instructions).toBe('Rename the service.')
+  })
+
+  it('accepts a from-scratch job with no reference', () => {
+    const { reference: _reference, ...withoutReference } = validBootstrapBody
+    const job = parseBootstrapJob(withoutReference)
+    expect(job.reference).toBeUndefined()
+    expect(job.target.name).toBe('new-service')
   })
 
   it('rejects missing required fields', () => {
@@ -39,6 +46,12 @@ describe('parseBootstrapJob', () => {
     expect(() => parseBootstrapJob({ ...validBootstrapBody, target: { owner: 'acme' } })).toThrow(
       /target\.name/,
     )
+  })
+
+  it('rejects a malformed reference when one is supplied', () => {
+    expect(() =>
+      parseBootstrapJob({ ...validBootstrapBody, reference: { owner: 'acme' } }),
+    ).toThrow(/reference\.name/)
   })
 })
 

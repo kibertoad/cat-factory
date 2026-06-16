@@ -10,8 +10,8 @@ export interface BootstrapRepoRequest {
   workspaceId: string
   /** Id of the bootstrap job this run records into (for traceability). */
   jobId: string
-  /** The base repository to clone from. */
-  referenceRepo: { owner: string; name: string }
+  /** The base repository to clone from, or undefined to scaffold from scratch. */
+  referenceRepo?: { owner: string; name: string }
   /** The repository to create and bootstrap into. */
   target: { name: string; description: string; private: boolean }
   /** Effective bootstrapper instructions (reference defaults + per-run extras). */

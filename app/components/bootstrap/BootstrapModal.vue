@@ -1,12 +1,14 @@
 <script setup lang="ts">
-// Repo bootstrap: manage the reference architecture list and launch a "bootstrap
-// repo" run. A run creates a new repository from the chosen reference architecture
-// and has a bootstrapper agent adapt it (in a sandbox container) per the extra
-// instructions — so the modal pairs a launch form with the managed base list.
+// Repo bootstrap: launch a "bootstrap repo" run and manage the reference
+// architecture list. A run creates a new repository and has a bootstrapper agent
+// adapt it (in a sandbox container) — either by cloning a chosen reference
+// architecture, or from scratch following a freeform prompt. The modal pairs the
+// launch form with the managed base list.
 import type { BootstrapStatus, ReferenceArchitecture } from '~/types/domain'
 
 const ui = useUiStore()
 const bootstrap = useBootstrapStore()
+const github = useGitHubStore()
 const toast = useToast()
 
 const open = computed({
@@ -16,48 +18,88 @@ const open = computed({
   },
 })
 
-// Load the workspace's reference architectures + recent jobs when opened.
+// Load the workspace's reference architectures + recent jobs, plus (best-effort)
+// the GitHub repos the user can access so the base form can pick from them.
 watch(open, (isOpen) => {
-  if (isOpen) void bootstrap.load()
+  if (isOpen) {
+    void bootstrap.load()
+    void loadGitHubRepos()
+  }
 })
 
+async function loadGitHubRepos() {
+  try {
+    await github.probe()
+    if (github.connected) await github.load()
+  } catch {
+    // GitHub integration off / unreachable → the repo picker just isn't offered.
+  }
+}
+
+/** Existing GitHub repos (accessible to the workspace) as `owner/name` options. */
+const repoOptions = computed(() =>
+  github.repos.map((r) => ({ label: `${r.owner}/${r.name}`, value: `${r.owner}/${r.name}` })),
+)
+const hasRepoOptions = computed(() => repoOptions.value.length > 0)
+
 // ---- launch form -----------------------------------------------------------
-const selectedArchId = ref<string | null>(null)
+type LaunchMode = 'reference' | 'scratch'
+const mode = ref<LaunchMode>('reference')
+const modeItems = [
+  {
+    label: 'From a reference architecture',
+    value: 'reference' as const,
+    description: 'Clone a managed base repo and adapt it to the new service.',
+  },
+  {
+    label: 'From scratch',
+    value: 'scratch' as const,
+    description: 'Scaffold a brand-new repo from a freeform prompt — no base needed.',
+  },
+]
+
+const selectedArchId = ref<string | undefined>(undefined)
 const repoName = ref('')
 const description = ref('')
 const isPrivate = ref(true)
 const instructions = ref('')
 const launching = ref(false)
 
+const usingReference = computed(() => mode.value === 'reference')
+
 const selectedArch = computed(() =>
   bootstrap.architectures.find((a) => a.id === selectedArchId.value),
 )
 
-// Keep a sensible default selection as the list loads/changes.
+const archOptions = computed(() =>
+  bootstrap.architectures.map((a) => ({
+    label: `${a.name} · ${a.repoOwner}/${a.repoName}`,
+    value: a.id,
+  })),
+)
+
+// Keep a sensible default selection + mode as the list loads/changes. With no
+// reference architectures available, only the from-scratch flow makes sense.
 watch(
   () => bootstrap.architectures,
   (list) => {
     if (!selectedArchId.value && list.length) selectedArchId.value = list[0]!.id
+    if (!list.length) mode.value = 'scratch'
   },
   { immediate: true },
 )
 
-const archMenu = computed(() => [
-  bootstrap.architectures.map((a) => ({
-    label: `${a.name} · ${a.repoOwner}/${a.repoName}`,
-    icon: 'i-lucide-package',
-    onSelect: () => (selectedArchId.value = a.id),
-  })),
-])
-
-const canLaunch = computed(() => !!selectedArchId.value && repoName.value.trim().length > 0)
+const canLaunch = computed(() => {
+  if (!repoName.value.trim()) return false
+  return usingReference.value ? !!selectedArchId.value : instructions.value.trim().length > 0
+})
 
 async function launch() {
   if (!canLaunch.value) return
   launching.value = true
   try {
     const job = await bootstrap.bootstrap({
-      referenceArchitectureId: selectedArchId.value!,
+      referenceArchitectureId: usingReference.value ? (selectedArchId.value ?? null) : null,
       repoName: repoName.value.trim(),
       description: description.value.trim(),
       private: isPrivate.value,
@@ -113,9 +155,29 @@ const blankForm = (): ArchForm => ({
 const archForm = ref<ArchForm>(blankForm())
 const showArchForm = ref(false)
 const savingArch = ref(false)
+/** The `owner/name` slug picked from the GitHub repo list, when used. */
+const archRepoSlug = ref<string | undefined>(undefined)
+
+/** Match the form's current owner/name against an available repo option. */
+function slugForForm(): string | undefined {
+  if (!archForm.value.repoOwner || !archForm.value.repoName) return undefined
+  const slug = `${archForm.value.repoOwner}/${archForm.value.repoName}`
+  return repoOptions.value.some((o) => o.value === slug) ? slug : undefined
+}
+
+// Picking an existing repo fills owner/name (and seeds the name when still blank).
+watch(archRepoSlug, (slug) => {
+  if (!slug) return
+  const sep = slug.indexOf('/')
+  if (sep < 0) return
+  archForm.value.repoOwner = slug.slice(0, sep)
+  archForm.value.repoName = slug.slice(sep + 1)
+  if (!archForm.value.name.trim()) archForm.value.name = archForm.value.repoName
+})
 
 function startCreate() {
   archForm.value = blankForm()
+  archRepoSlug.value = undefined
   showArchForm.value = true
 }
 function startEdit(a: ReferenceArchitecture) {
@@ -127,6 +189,7 @@ function startEdit(a: ReferenceArchitecture) {
     description: a.description,
     defaultInstructions: a.defaultInstructions,
   }
+  archRepoSlug.value = slugForForm()
   showArchForm.value = true
 }
 
@@ -150,6 +213,7 @@ async function saveArch() {
     else await bootstrap.createArchitecture(body)
     showArchForm.value = false
     archForm.value = blankForm()
+    archRepoSlug.value = undefined
   } catch (e) {
     toast.add({
       title: 'Could not save reference architecture',
@@ -165,7 +229,7 @@ async function saveArch() {
 async function removeArch(a: ReferenceArchitecture) {
   try {
     await bootstrap.deleteArchitecture(a.id)
-    if (selectedArchId.value === a.id) selectedArchId.value = null
+    if (selectedArchId.value === a.id) selectedArchId.value = undefined
   } catch (e) {
     toast.add({
       title: 'Could not delete',
@@ -189,71 +253,99 @@ const statusColor: Record<BootstrapStatus, 'neutral' | 'info' | 'success' | 'err
     <template #body>
       <div class="space-y-6">
         <p class="text-sm text-slate-400">
-          Create a brand-new repository from a reference architecture. A bootstrapper agent runs in
-          a sandbox container to adapt the base to your new service following the instructions.
+          Create a brand-new repository and let a bootstrapper agent set it up in a sandbox
+          container — either by adapting one of your reference architectures, or from scratch
+          following a freeform prompt.
         </p>
 
         <!-- launch -->
-        <section class="space-y-3">
+        <section class="space-y-4">
           <h3 class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
             New repository
           </h3>
 
-          <div v-if="!bootstrap.hasArchitectures" class="text-sm text-slate-400">
-            Add a reference architecture below to bootstrap from.
-          </div>
+          <UFormField label="How should we start?" required>
+            <URadioGroup v-model="mode" :items="modeItems" />
+          </UFormField>
 
-          <template v-else>
-            <UFormField label="Reference architecture">
-              <UDropdownMenu :items="archMenu" :content="{ align: 'start' }">
-                <UButton
-                  color="neutral"
-                  variant="subtle"
-                  trailing-icon="i-lucide-chevron-down"
-                  class="w-full justify-between"
-                >
-                  <span class="truncate">
-                    {{
-                      selectedArch
-                        ? `${selectedArch.name} · ${selectedArch.repoOwner}/${selectedArch.repoName}`
-                        : 'Choose a reference architecture'
-                    }}
-                  </span>
-                </UButton>
-              </UDropdownMenu>
-            </UFormField>
-
-            <UFormField label="New repo name">
-              <UInput v-model="repoName" placeholder="payments-service" class="w-full" />
-            </UFormField>
-            <UFormField label="Description">
-              <UInput v-model="description" placeholder="Optional one-liner" class="w-full" />
-            </UFormField>
-            <UFormField label="Extra instructions for the bootstrapper">
-              <UTextarea
-                v-model="instructions"
-                :rows="3"
-                placeholder="e.g. rename the package to payments, drop the example queue worker"
+          <template v-if="usingReference">
+            <UFormField
+              label="Reference architecture"
+              description="The managed base repo to clone and adapt."
+              required
+            >
+              <div v-if="!bootstrap.hasArchitectures" class="text-sm text-slate-400">
+                No reference architectures yet — add one below, or switch to “From scratch”.
+              </div>
+              <USelect
+                v-else
+                v-model="selectedArchId"
+                :items="archOptions"
+                placeholder="Choose a reference architecture"
                 class="w-full"
               />
             </UFormField>
+          </template>
+
+          <UFormField
+            label="New repository name"
+            description="The repo is created under your connected GitHub account/org."
+            required
+          >
+            <UInput v-model="repoName" placeholder="payments-service" class="w-full" />
+          </UFormField>
+
+          <UFormField label="Description" description="Optional one-line summary for the repo.">
+            <UInput
+              v-model="description"
+              placeholder="Handles payment intents and refunds"
+              class="w-full"
+            />
+          </UFormField>
+
+          <UFormField
+            :label="
+              usingReference
+                ? 'Extra instructions for the bootstrapper'
+                : 'What should the bootstrapper build?'
+            "
+            :description="
+              usingReference
+                ? 'Optional — appended to the reference architecture’s default instructions.'
+                : 'Describe the new service: stack, structure, and what it should do.'
+            "
+            :required="!usingReference"
+          >
+            <UTextarea
+              v-model="instructions"
+              :rows="usingReference ? 3 : 5"
+              :placeholder="
+                usingReference
+                  ? 'e.g. rename the package to payments, drop the example queue worker'
+                  : 'e.g. a TypeScript Hono API with a /health route, Vitest tests, and a Dockerfile'
+              "
+              class="w-full"
+            />
+          </UFormField>
+
+          <UFormField label="Visibility">
             <div class="flex items-center gap-2">
               <USwitch v-model="isPrivate" />
               <span class="text-sm text-slate-300">Private repository</span>
             </div>
+          </UFormField>
 
-            <div class="flex justify-end">
-              <UButton
-                color="primary"
-                icon="i-lucide-rocket"
-                :loading="launching"
-                :disabled="!canLaunch"
-                @click="launch"
-              >
-                Bootstrap repo
-              </UButton>
-            </div>
-          </template>
+          <div class="flex justify-end">
+            <UButton
+              color="primary"
+              icon="i-lucide-rocket"
+              :loading="launching"
+              :disabled="!canLaunch"
+              @click="launch"
+            >
+              Bootstrap repo
+            </UButton>
+          </div>
         </section>
 
         <!-- recent jobs -->
@@ -269,7 +361,11 @@ const statusColor: Record<BootstrapStatus, 'neutral' | 'info' | 'success' | 'err
             <div class="min-w-0">
               <div class="truncate text-slate-200">{{ job.repoName }}</div>
               <div class="truncate text-[11px] text-slate-500">
-                from {{ job.referenceArchitectureName }}
+                {{
+                  job.referenceArchitectureName
+                    ? `from ${job.referenceArchitectureName}`
+                    : 'from scratch'
+                }}
               </div>
             </div>
             <div class="flex items-center gap-2">
@@ -341,22 +437,47 @@ const statusColor: Record<BootstrapStatus, 'neutral' | 'info' | 'success' | 'err
             v-if="showArchForm"
             class="space-y-3 rounded-md border border-slate-700 bg-slate-900/80 p-3"
           >
-            <UFormField label="Name">
+            <UFormField
+              v-if="hasRepoOptions"
+              label="Pick an existing GitHub repo"
+              description="Choose a repo you can access to fill in its owner and name, or enter them manually below."
+            >
+              <USelect
+                v-model="archRepoSlug"
+                :items="repoOptions"
+                placeholder="owner/name"
+                class="w-full"
+              />
+            </UFormField>
+
+            <UFormField label="Name" description="A friendly label for this base." required>
               <UInput v-model="archForm.name" placeholder="Service Template" class="w-full" />
             </UFormField>
             <div class="grid grid-cols-2 gap-2">
-              <UFormField label="Repo owner">
+              <UFormField label="Repo owner" required>
                 <UInput v-model="archForm.repoOwner" placeholder="acme" class="w-full" />
               </UFormField>
-              <UFormField label="Repo name">
+              <UFormField label="Repo name" required>
                 <UInput v-model="archForm.repoName" placeholder="service-template" class="w-full" />
               </UFormField>
             </div>
             <UFormField label="Description">
-              <UInput v-model="archForm.description" class="w-full" />
+              <UInput
+                v-model="archForm.description"
+                placeholder="Optional summary of this base"
+                class="w-full"
+              />
             </UFormField>
-            <UFormField label="Default bootstrapper instructions">
-              <UTextarea v-model="archForm.defaultInstructions" :rows="2" class="w-full" />
+            <UFormField
+              label="Default bootstrapper instructions"
+              description="Prepended to the per-run instructions whenever this base is used."
+            >
+              <UTextarea
+                v-model="archForm.defaultInstructions"
+                :rows="2"
+                placeholder="e.g. keep the structure; rename packages to match the new service"
+                class="w-full"
+              />
             </UFormField>
             <div class="flex justify-end gap-2">
               <UButton color="neutral" variant="ghost" @click="showArchForm = false">
