@@ -54,6 +54,10 @@ export default defineConfig(async () => {
             // encryption-at-rest wires up; `documentsDeps()` builds the cipher
             // from it. Production sets this as a secret.
             DOCUMENTS_ENCRYPTION_KEY: 'ZG9jdW1lbnRzLXRlc3Qta2V5LTAxMjM0NTY3ODlhYmM=',
+            // Master key so the task-source integration's credential
+            // encryption-at-rest wires up; `tasksDeps()` builds the cipher from
+            // it. Production sets this as a secret.
+            TASKS_ENCRYPTION_KEY: 'dGFza3MtdGVzdC1rZXktMDEyMzQ1Njc4OWFiY2RlZmc=',
           },
         },
       }),

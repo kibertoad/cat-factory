@@ -14,6 +14,7 @@ import { workspaceController } from './modules/workspaces/WorkspaceController'
 import { githubController } from './modules/github/GitHubController'
 import { githubWebhookController } from './modules/github/GitHubWebhookController'
 import { documentSourceController } from './modules/documents/DocumentSourceController'
+import { taskSourceController } from './modules/tasks/TaskSourceController'
 import { environmentController } from './modules/environments/EnvironmentController'
 import { runnerPoolController } from './modules/runners/RunnerPoolController'
 import { bootstrapController } from './modules/bootstrap/BootstrapController'
@@ -96,6 +97,7 @@ export function createApp(options: CreateAppOptions = {}): Hono<AppEnv> {
   app.route('/', eventsController())
   app.route('/workspaces/:workspaceId', githubController())
   app.route('/workspaces/:workspaceId', documentSourceController())
+  app.route('/workspaces/:workspaceId', taskSourceController())
   app.route('/workspaces/:workspaceId', environmentController())
   app.route('/workspaces/:workspaceId', runnerPoolController())
   app.route('/workspaces/:workspaceId', bootstrapController())

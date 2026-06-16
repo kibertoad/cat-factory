@@ -4,6 +4,7 @@ import {
   type Core,
   type CoreDependencies,
   type DocumentSourceProvider,
+  type TaskSourceProvider,
   type ExecutionEventPublisher,
   NoopWorkRunner,
   type WorkRunner,
@@ -55,6 +56,9 @@ import { FetchGitHubClient } from './github/FetchGitHubClient'
 import { WebCryptoWebhookVerifier } from './github/WebCryptoWebhookVerifier'
 import { ConfluenceProvider } from './documents/ConfluenceProvider'
 import { NotionProvider } from './documents/NotionProvider'
+import { JiraProvider } from './tasks/JiraProvider'
+import { D1TaskConnectionRepository } from './repositories/D1TaskConnectionRepository'
+import { D1TaskRepository } from './repositories/D1TaskRepository'
 import { CryptoIdGenerator, SystemClock } from './runtime'
 import type { Clock, IdGenerator } from '@cat-factory/core'
 import type { D1Database } from '@cloudflare/workers-types'
@@ -319,6 +323,32 @@ function selectDocumentsDeps(
 }
 
 /**
+ * Build the task-source integration's concrete ports when opted in. Mirrors
+ * `selectDocumentsDeps` but with no planner — issues are linked for context, not
+ * expanded into board structure. Returns `{}` when disabled, so `createCore`
+ * leaves the `tasks` module unassembled.
+ */
+function selectTasksDeps(env: Env, config: AppConfig, db: D1Database): Partial<CoreDependencies> {
+  if (!config.tasks.enabled) return {}
+  const providers: TaskSourceProvider[] = []
+  if (config.tasks.sources.includes('jira')) providers.push(new JiraProvider())
+  if (providers.length === 0) return {}
+  return {
+    taskSourceProviders: providers,
+    taskConnectionRepository: new D1TaskConnectionRepository({
+      db,
+      // The config gate guarantees the key is present when enabled; source
+      // credentials are encrypted at rest under a tasks-scoped HKDF info.
+      cipher: new WebCryptoSecretCipher({
+        masterKeyBase64: config.tasks.encryptionKey!,
+        info: 'cat-factory:tasks',
+      }),
+    }),
+    taskRepository: new D1TaskRepository({ db }),
+  }
+}
+
+/**
  * Build the ephemeral environment integration's concrete ports when opted in.
  * Requires the encryption key (the config gate already enforces this), so the
  * generic HTTP provider, the D1 repositories and the Web Crypto cipher are wired
@@ -483,6 +513,7 @@ export function buildContainer(env: Env, overrides: Partial<CoreDependencies> = 
     repoScanner: selectRepoScanner(env, config, db, clock),
     ...selectGitHubDeps(env, config, db, clock, idGenerator),
     ...selectDocumentsDeps(env, config, db),
+    ...selectTasksDeps(env, config, db),
     ...selectEnvironmentsDeps(env, config, db),
     ...selectRunnersDeps(env, config, db),
     ...overrides,

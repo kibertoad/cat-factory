@@ -1,0 +1,74 @@
+import type { TaskSourceKind, TaskComment } from '../domain/types'
+import type { TaskCredentials } from './task-source'
+
+// Persistence ports for the task-source integration. The worker implements
+// these against D1 (migration 0014); tests can supply in-memory fakes. All rows
+// are scoped by workspace and tagged with their `source`, so a single pair of
+// tables serves every provider.
+
+/**
+ * A workspace's connection to one task source, including its credential bag.
+ * Credentials are infrastructure detail (never sent on the wire); they live here
+ * so the import path can authenticate against the source for this workspace.
+ */
+export interface TaskConnectionRecord {
+  workspaceId: string
+  source: TaskSourceKind
+  credentials: TaskCredentials
+  /** Human-friendly label for the connection (site URL). */
+  label: string
+  createdAt: number
+  /** Set when the workspace disconnects (tombstone). */
+  deletedAt: number | null
+}
+
+export interface TaskConnectionRepository {
+  /** The workspace's live connection for a source, or null if not connected. */
+  getByWorkspace(workspaceId: string, source: TaskSourceKind): Promise<TaskConnectionRecord | null>
+  /** Every live connection the workspace holds, across sources. */
+  listByWorkspace(workspaceId: string): Promise<TaskConnectionRecord[]>
+  /** Create or replace the live connection for a (workspace, source). */
+  upsert(record: TaskConnectionRecord): Promise<void>
+  /** Tombstone the workspace's connection to a source. */
+  softDelete(workspaceId: string, source: TaskSourceKind, at: number): Promise<void>
+}
+
+/**
+ * An issue projected locally for a workspace as a structured record. The cached
+ * fields back both the agent-context injection and the list/preview rendering;
+ * `linkedBlockId` records the board block this issue is attached to, if any.
+ */
+export interface TaskRecord {
+  workspaceId: string
+  source: TaskSourceKind
+  externalId: string
+  title: string
+  url: string
+  status: string
+  type: string
+  assignee: string | null
+  priority: string | null
+  labels: string[]
+  description: string
+  comments: TaskComment[]
+  excerpt: string
+  linkedBlockId: string | null
+  syncedAt: number
+  deletedAt: number | null
+}
+
+export interface TaskRepository {
+  upsert(record: TaskRecord): Promise<void>
+  get(workspaceId: string, source: TaskSourceKind, externalId: string): Promise<TaskRecord | null>
+  /** Every live issue imported into the workspace, across sources. */
+  listByWorkspace(workspaceId: string): Promise<TaskRecord[]>
+  /** Live issues attached to a board block (resolved during execution). */
+  listByBlock(workspaceId: string, blockId: string): Promise<TaskRecord[]>
+  /** Attach an issue to a board block (or detach with null). */
+  linkBlock(
+    workspaceId: string,
+    source: TaskSourceKind,
+    externalId: string,
+    blockId: string | null,
+  ): Promise<void>
+}

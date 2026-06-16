@@ -8,6 +8,7 @@ import { loadSpendPricing } from './spending'
 import { type GitHubConfig, loadGitHubConfig } from './github'
 import { type AuthConfig, loadAuthConfig } from './auth'
 import { type DocumentsConfig, loadDocumentsConfig } from './documents'
+import { type TasksConfig, loadTasksConfig } from './tasks'
 import { type EnvironmentsConfig, loadEnvironmentsConfig } from './environments'
 import { type RunnerPoolConfig, loadRunnerPoolConfig } from './runners'
 import { type RetentionConfig, loadRetentionConfig } from './retention'
@@ -23,6 +24,7 @@ export type {
   GitHubConfig,
   AuthConfig,
   DocumentsConfig,
+  TasksConfig,
   EnvironmentsConfig,
   RunnerPoolConfig,
   RetentionConfig,
@@ -41,6 +43,8 @@ export interface AppConfig {
   auth: AuthConfig
   /** Document-source integration config; `enabled` is false unless opted in. */
   documents: DocumentsConfig
+  /** Task-source integration config; `enabled` is false unless opted in. */
+  tasks: TasksConfig
   /** Environment provider integration config; `enabled` is false unless opted in. */
   environments: EnvironmentsConfig
   /** Self-hosted runner-pool config; `enabled` is false unless opted in. */
@@ -59,6 +63,7 @@ export function loadConfig(env: Env): AppConfig {
     github: loadGitHubConfig(env),
     auth: loadAuthConfig(env),
     documents: loadDocumentsConfig(env),
+    tasks: loadTasksConfig(env),
     environments: loadEnvironmentsConfig(env),
     runners: loadRunnerPoolConfig(env),
     retention: loadRetentionConfig(env),

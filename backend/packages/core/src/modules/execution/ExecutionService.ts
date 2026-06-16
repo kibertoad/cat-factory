@@ -13,6 +13,7 @@ import { isAsyncAgentExecutor } from '../../ports/agent-executor'
 import type { WorkRunner } from '../../ports/work-runner'
 import type { ExecutionEventPublisher } from '../../ports/execution-events'
 import type { DocumentRepository } from '../../ports/document-repositories'
+import type { TaskRepository } from '../../ports/task-repositories'
 import type { EnvironmentProvisioningService } from '../environments/EnvironmentProvisioningService'
 import { isDeployStep } from '../environments/environments.logic'
 import { serviceOf } from '../board/board.logic'
@@ -37,6 +38,11 @@ export interface ExecutionServiceDependencies {
    * linked to a block are resolved here and fed to the agent as extra context.
    */
   documentRepository?: DocumentRepository
+  /**
+   * Optional: when the task-source integration is configured, tracker issues
+   * linked to a block are resolved here and fed to the agent as extra context.
+   */
+  taskRepository?: TaskRepository
   /**
    * Optional: when the environment integration is configured, a `deployer` step
    * provisions an ephemeral environment deterministically through this service
@@ -66,6 +72,7 @@ export class ExecutionService {
   private readonly board: BoardService
   private readonly spend: SpendService
   private readonly documents?: DocumentRepository
+  private readonly tasks?: TaskRepository
   private readonly environmentProvisioning?: EnvironmentProvisioningService
 
   constructor({
@@ -80,6 +87,7 @@ export class ExecutionService {
     boardService,
     spendService,
     documentRepository,
+    taskRepository,
     environmentProvisioning,
   }: ExecutionServiceDependencies) {
     this.workspaceRepository = workspaceRepository
@@ -93,6 +101,7 @@ export class ExecutionService {
     this.board = boardService
     this.spend = spendService
     this.documents = documentRepository
+    this.tasks = taskRepository
     this.environmentProvisioning = environmentProvisioning
   }
 
@@ -435,6 +444,7 @@ export class ExecutionService {
     block: Block,
   ): Promise<AgentRunContext> {
     const contextDocs = await this.resolveContextDocs(workspaceId, block.id)
+    const contextTasks = await this.resolveContextTasks(workspaceId, block.id)
     const environment = await this.resolveEnvironment(workspaceId, block.id)
     return {
       agentKind: step.agentKind,
@@ -453,6 +463,7 @@ export class ExecutionService {
         modelId: block.modelId,
         ...(block.testTarget ? { testTarget: block.testTarget } : {}),
         ...(contextDocs.length ? { contextDocs } : {}),
+        ...(contextTasks.length ? { contextTasks } : {}),
       },
       ...(environment ? { environment } : {}),
       priorOutputs: instance.steps
@@ -481,6 +492,29 @@ export class ExecutionService {
     if (!this.documents) return []
     const docs = await this.documents.listByBlock(workspaceId, blockId)
     return docs.map((d) => ({ title: d.title, url: d.url, excerpt: d.excerpt }))
+  }
+
+  /**
+   * Resolve tracker issues (from any source) linked to the running block into
+   * structured agent context. A no-op unless the task-source integration is
+   * wired (the repository is an optional dependency), so the engine stays
+   * unchanged when it is off.
+   */
+  private async resolveContextTasks(workspaceId: string, blockId: string) {
+    if (!this.tasks) return []
+    const tasks = await this.tasks.listByBlock(workspaceId, blockId)
+    return tasks.map((t) => ({
+      key: t.externalId,
+      url: t.url,
+      title: t.title,
+      status: t.status,
+      type: t.type,
+      assignee: t.assignee,
+      priority: t.priority,
+      labels: t.labels,
+      description: t.description,
+      comments: t.comments,
+    }))
   }
 
   /**

@@ -214,6 +214,18 @@ DOCUMENTS_ENABLED = "false"
 DOCUMENT_SOURCES = "confluence,notion"
 DOCUMENT_PLANNER = "llm"
 
+# Task-source integration (see src/infrastructure/config.ts). Off by default.
+# Turn it on to let workspaces link individual issues from a tracker (Jira, …) to
+# a board block as extra agent context (status/type/assignee + description +
+# comments). Per-workspace credentials are entered in the app and stored ENCRYPTED
+# in D1 — there are no source secrets here. TASK_SOURCES is an optional
+# comma-separated allow-list (default: all known sources). The one secret this
+# feature needs is the service-level master key used to encrypt the per-workspace
+# source credentials at rest, required when enabled; set it as a secret:
+#   openssl rand -base64 32 | wrangler secret put TASKS_ENCRYPTION_KEY
+TASKS_ENABLED = "false"
+TASK_SOURCES = "jira"
+
 # Ephemeral environment provider integration (see src/infrastructure/config.ts).
 # Off by default. Turn it on to let a workspace register its own self-rolled
 # environment management API (a declarative HTTP manifest) so a `deployer` agent
