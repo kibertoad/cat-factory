@@ -39,8 +39,10 @@ export type BootstrapStatus = 'pending' | 'running' | 'succeeded' | 'failed'
 export interface BootstrapJob {
   id: string
   workspaceId: string
-  referenceArchitectureId: string
-  referenceArchitectureName: string
+  /** Reference architecture the run was based on, or null for a from-scratch run. */
+  referenceArchitectureId: string | null
+  /** Denormalized reference architecture name, or null for a from-scratch run. */
+  referenceArchitectureName: string | null
   repoName: string
   repoOwner: string | null
   repoUrl: string | null
@@ -51,9 +53,10 @@ export interface BootstrapJob {
   updatedAt: number
 }
 
-/** Body to kick off a bootstrap run. */
+/** Body to kick off a bootstrap run. Omit `referenceArchitectureId` to bootstrap
+ * from a freeform prompt alone (then `instructions` must be non-empty). */
 export interface BootstrapRepoInput {
-  referenceArchitectureId: string
+  referenceArchitectureId?: string | null
   repoName: string
   description?: string
   private?: boolean

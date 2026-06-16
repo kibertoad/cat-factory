@@ -36,14 +36,22 @@ export interface ContainerRepoBootstrapperDependencies {
   webBaseUrl?: string
 }
 
-/** The role prompt the bootstrapper agent runs under inside the container. */
-const BOOTSTRAP_SYSTEM_PROMPT =
+/** The role prompt when adapting a cloned reference architecture. */
+const ADAPT_SYSTEM_PROMPT =
   'You are a repository bootstrapper. You have a fresh clone of a reference ' +
   'architecture (a base/golden-template repository). Adapt it in place into the ' +
   'new service per the instructions: rename packages/modules, remove pieces that ' +
   'do not apply, update README and metadata, and leave the project building. Make ' +
   'focused, idiomatic changes that match the existing structure. Do not invent ' +
   'unrelated features.'
+
+/** The role prompt when scaffolding a brand-new repository from scratch. */
+const SCAFFOLD_SYSTEM_PROMPT =
+  'You are a repository bootstrapper. You are working in an empty directory and ' +
+  'must scaffold a brand-new repository from scratch per the instructions. Create ' +
+  'a sensible, idiomatic project layout: source files, a README, and the metadata ' +
+  'and build/config files appropriate for the stack, leaving the project building. ' +
+  'Keep the scope to what the instructions describe; do not invent unrelated features.'
 
 /** The /bootstrap response from the harness. */
 interface BootstrapContainerResult {
@@ -102,23 +110,32 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
     })
 
     const webBase = (this.deps.webBaseUrl ?? 'https://github.com').replace(/\/+$/, '')
-    const referenceCloneUrl = `${webBase}/${request.referenceRepo.owner}/${request.referenceRepo.name}.git`
     const targetCloneUrl = `${webBase}/${owner}/${created.name}.git`
     const defaultBranch = created.defaultBranch ?? 'main'
 
+    // With a reference architecture the container clones + adapts it; without one
+    // it scaffolds an empty repo from the freeform instructions alone.
+    const reference = request.referenceRepo
+      ? {
+          owner: request.referenceRepo.owner,
+          name: request.referenceRepo.name,
+          cloneUrl: `${webBase}/${request.referenceRepo.owner}/${request.referenceRepo.name}.git`,
+          baseBranch: 'main',
+        }
+      : undefined
+
     const body = {
-      systemPrompt: BOOTSTRAP_SYSTEM_PROMPT,
-      instructions: request.instructions || 'Adapt the reference architecture for the new service.',
+      systemPrompt: reference ? ADAPT_SYSTEM_PROMPT : SCAFFOLD_SYSTEM_PROMPT,
+      instructions:
+        request.instructions ||
+        (reference
+          ? 'Adapt the reference architecture for the new service.'
+          : 'Scaffold a new repository for the service.'),
       model: this.deps.model.model,
       proxyBaseUrl: this.deps.proxyBaseUrl,
       sessionToken,
       ghToken,
-      reference: {
-        owner: request.referenceRepo.owner,
-        name: request.referenceRepo.name,
-        cloneUrl: referenceCloneUrl,
-        baseBranch: 'main',
-      },
+      ...(reference ? { reference } : {}),
       target: {
         owner,
         name: created.name,

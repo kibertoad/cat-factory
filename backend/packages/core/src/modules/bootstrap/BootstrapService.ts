@@ -154,10 +154,11 @@ export class BootstrapService {
   }
 
   /**
-   * Create a new repository from a reference architecture and run the bootstrapper
-   * agent against it. Records a job throughout: `running` while the container works,
-   * then `succeeded` (with the repo URL) or `failed` (with the reason). The job is
-   * returned in its terminal state. Requires {@link canBootstrap}.
+   * Create a new repository and run the bootstrapper agent against it — either by
+   * adapting a chosen reference architecture, or scaffolding from the freeform
+   * instructions alone when none is given. Records a job throughout: `running` while
+   * the container works, then `succeeded` (with the repo URL) or `failed` (with the
+   * reason). The job is returned in its terminal state. Requires {@link canBootstrap}.
    */
   async bootstrap(workspaceId: string, input: BootstrapRepoInput): Promise<BootstrapJob> {
     await requireWorkspace(this.deps.workspaceRepository, workspaceId)
@@ -166,22 +167,30 @@ export class BootstrapService {
       throw new Error('Repository bootstrapping is not configured')
     }
 
-    const reference = assertFound(
-      await this.deps.referenceArchitectureRepository.get(
-        workspaceId,
-        input.referenceArchitectureId,
-      ),
-      'Reference architecture',
-      input.referenceArchitectureId,
-    )
+    // A reference architecture is optional: when supplied the run clones and adapts
+    // its base repo; when omitted the run scaffolds a new repo from the freeform
+    // instructions alone. The contract guarantees at least one is present.
+    const reference = input.referenceArchitectureId
+      ? assertFound(
+          await this.deps.referenceArchitectureRepository.get(
+            workspaceId,
+            input.referenceArchitectureId,
+          ),
+          'Reference architecture',
+          input.referenceArchitectureId,
+        )
+      : null
 
-    const instructions = composeInstructions(reference.defaultInstructions, input.instructions)
+    const instructions = composeInstructions(
+      reference?.defaultInstructions ?? '',
+      input.instructions,
+    )
     const now = this.deps.clock.now()
     const record: BootstrapJobRecord = {
       id: this.deps.idGenerator.next('boot'),
       workspaceId,
-      referenceArchitectureId: reference.id,
-      referenceArchitectureName: reference.name,
+      referenceArchitectureId: reference?.id ?? null,
+      referenceArchitectureName: reference?.name ?? null,
       repoName: input.repoName,
       repoOwner: null,
       repoUrl: null,
@@ -197,7 +206,9 @@ export class BootstrapService {
       const outcome = await bootstrapper.bootstrap({
         workspaceId,
         jobId: record.id,
-        referenceRepo: { owner: reference.repoOwner, name: reference.repoName },
+        referenceRepo: reference
+          ? { owner: reference.repoOwner, name: reference.repoName }
+          : undefined,
         target: {
           name: input.repoName,
           description: input.description,

@@ -151,6 +151,35 @@ describe('bootstrap repo', () => {
     expect(job.body.repoUrl).toBeNull()
   })
 
+  it('bootstraps from a freeform prompt with no reference architecture', async () => {
+    const bootstrapper = new FakeRepoBootstrapper()
+    const app = makeApp(undefined, { repoBootstrapper: bootstrapper })
+    const workspaceId = await newWorkspace(app)
+
+    const job = await app.call<BootstrapJob>('POST', `/workspaces/${workspaceId}/bootstrap/jobs`, {
+      repoName: 'from-scratch',
+      instructions: 'Scaffold a TypeScript Hono API with a /health route.',
+    })
+    expect(job.status).toBe(201)
+    expect(job.body.status).toBe('succeeded')
+    expect(job.body.referenceArchitectureId).toBeNull()
+    expect(job.body.referenceArchitectureName).toBeNull()
+    expect(job.body.instructions).toBe('Scaffold a TypeScript Hono API with a /health route.')
+
+    // The bootstrapper is invoked with no reference repo to clone.
+    expect(bootstrapper.calls).toHaveLength(1)
+    expect(bootstrapper.calls[0]!.referenceRepo).toBeUndefined()
+  })
+
+  it('rejects a bootstrap with neither a reference architecture nor instructions', async () => {
+    const app = makeApp(undefined, { repoBootstrapper: new FakeRepoBootstrapper() })
+    const workspaceId = await newWorkspace(app)
+    const res = await app.call('POST', `/workspaces/${workspaceId}/bootstrap/jobs`, {
+      repoName: 'no-brief',
+    })
+    expect(res.status).toBe(400)
+  })
+
   it('404s a bootstrap against an unknown reference architecture', async () => {
     const app = makeApp(undefined, { repoBootstrapper: new FakeRepoBootstrapper() })
     const workspaceId = await newWorkspace(app)
