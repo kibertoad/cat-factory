@@ -80,17 +80,25 @@ describe('github connect', () => {
     expect(read.body.connection).toBeNull()
   })
 
-  it('rejects binding an installation already owned by another workspace', async () => {
+  it('no longer rejects binding the same installation to another workspace', async () => {
+    // One GitHub account → many boards. The old blanket cross-workspace guard is
+    // gone: the boundary is now the *account*, so binding is only rejected across
+    // different accounts. With auth disabled (the test path) both boards share the
+    // unscoped (null) account, so the second bind is allowed. (Account-level
+    // sharing across boards is exercised in the accounts integration test.)
     const app = makeApp(new FakeAgentExecutor(), githubDeps())
     const a = await app.createWorkspace()
     const b = await app.createWorkspace()
     const installationId = uniqueInstallationId()
 
-    await app.call('POST', `/workspaces/${a.workspace.id}/github/connect`, { installationId })
-    const conflict = await app.call('POST', `/workspaces/${b.workspace.id}/github/connect`, {
+    const first = await app.call('POST', `/workspaces/${a.workspace.id}/github/connect`, {
       installationId,
     })
-    expect(conflict.status).toBe(409)
+    const second = await app.call('POST', `/workspaces/${b.workspace.id}/github/connect`, {
+      installationId,
+    })
+    expect(first.status).toBe(201)
+    expect(second.status).toBe(201)
   })
 
   it('binds via the signed setup callback (install-url → callback)', async () => {

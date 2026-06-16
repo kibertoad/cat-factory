@@ -10,9 +10,16 @@ High-level docs (most live under [`backend/docs/`](./backend/docs)):
   monorepo, its hexagonal layering, and how the pieces fit together.
 - **[Authentication](./backend/docs/auth.md)** — "Login with GitHub"; GitHub
   accounts are the identity provider, so there's no separate user store.
-- **GitHub integration** — connect each workspace to GitHub via a **GitHub App**
+- **Accounts & workspaces** — a signed-in user can switch between **accounts** (a
+  personal account, plus any **orgs** they're a member of). An account owns many
+  **workspaces** (boards), so a team of engineers shares the same org boards while
+  keeping personal ones separate. Visibility is by membership; switching account
+  re-scopes the board list (see the sidebar's board switcher).
+- **GitHub integration** — connect an **account** to GitHub via a **GitHub App**
   (works with a personal account or an org) for repo/PR/issue read & write plus
-  webhooks. [Design](./backend/docs/github-integration.md) ·
+  webhooks. The installation is shared across the account's workspaces, and each
+  workspace then **explicitly links the specific repos** it tracks.
+  [Design](./backend/docs/github-integration.md) ·
   [Setup runbook](./backend/docs/github-operations.md) ·
   [App Manifest](./backend/docs/github-app-manifest.html). Self-hosted, so each
   deployment registers its own App.

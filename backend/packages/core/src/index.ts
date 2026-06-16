@@ -39,6 +39,11 @@ export {
   requireWorkspace,
   type WorkspaceServiceDependencies,
 } from './modules/workspaces/WorkspaceService'
+export {
+  AccountService,
+  type AccountServiceDependencies,
+  type AccountUser,
+} from './modules/accounts/AccountService'
 
 export {
   SpendService,

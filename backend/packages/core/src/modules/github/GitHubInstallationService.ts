@@ -36,21 +36,31 @@ function toConnection(installation: GitHubInstallation): GitHubConnection {
 export class GitHubInstallationService {
   constructor(private readonly deps: GitHubInstallationServiceDependencies) {}
 
-  /** Bind a GitHub App installation to a workspace (idempotent on re-install). */
+  /**
+   * Bind a GitHub App installation to the workspace's account (idempotent on
+   * re-install). Once bound, every workspace in that account shares it.
+   */
   async connect(workspaceId: string, installationId: number): Promise<GitHubConnection> {
     await requireWorkspace(this.deps.workspaceRepository, workspaceId)
+    const accountId = (await this.deps.workspaceRepository.accountOf(workspaceId)) ?? null
 
-    // Guard against binding an installation that already belongs elsewhere.
-    // We reject regardless of the other binding's `deletedAt`: a previously
-    // disconnected/suspended installation is still installed on GitHub (its
-    // tokens still mint), so allowing a *different* workspace to claim it would
-    // be an account-takeover primitive. Re-binding to the SAME workspace stays
-    // idempotent.
+    // Guard against binding an installation that already belongs to a DIFFERENT
+    // account. We reject regardless of the other binding's `deletedAt`: a
+    // previously disconnected/suspended installation is still installed on GitHub
+    // (its tokens still mint), so letting another tenant claim it would be an
+    // account-takeover primitive. Sharing WITHIN the same account is fine — that's
+    // the whole point — and the auth-disabled path (both accounts null) is
+    // unrestricted, exactly like the rest of the dev path.
     const existing =
       await this.deps.githubInstallationRepository.getByInstallationId(installationId)
-    if (existing && existing.workspaceId !== workspaceId) {
+    if (
+      existing &&
+      existing.accountId !== null &&
+      accountId !== null &&
+      existing.accountId !== accountId
+    ) {
       throw new ConflictError(
-        `Installation ${installationId} is already connected to another workspace`,
+        `Installation ${installationId} is already connected to another account`,
       )
     }
 
@@ -58,6 +68,7 @@ export class GitHubInstallationService {
     const installation: GitHubInstallation = {
       installationId,
       workspaceId,
+      accountId,
       accountLogin: meta.accountLogin,
       targetType: meta.targetType,
       cachedToken: null,
@@ -80,6 +91,7 @@ export class GitHubInstallationService {
    */
   async listAvailableInstallations(workspaceId: string): Promise<GitHubInstallationOption[]> {
     await requireWorkspace(this.deps.workspaceRepository, workspaceId)
+    const accountId = (await this.deps.workspaceRepository.accountOf(workspaceId)) ?? null
     const installations = await this.deps.githubClient.listInstallations()
     return Promise.all(
       installations.map(async (i) => {
@@ -88,8 +100,14 @@ export class GitHubInstallationService {
         )
         let connected: GitHubInstallationOption['connected'] = 'none'
         if (existing) {
-          if (existing.workspaceId !== workspaceId) connected = 'other'
-          else if (!existing.deletedAt) connected = 'this'
+          const sameAccount =
+            existing.accountId !== null && accountId !== null && existing.accountId === accountId
+          if (existing.workspaceId === workspaceId || sameAccount) {
+            // Already available to this workspace (directly, or shared via account).
+            if (!existing.deletedAt || sameAccount) connected = 'this'
+          } else {
+            connected = 'other'
+          }
         }
         return { ...i, connected }
       }),

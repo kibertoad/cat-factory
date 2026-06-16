@@ -9,8 +9,20 @@ export const createWorkspaceSchema = v.object({
   name: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(120))),
   /** Seed the board with the sample architecture (default true). */
   seed: v.optional(v.boolean()),
+  /**
+   * The account the new board belongs to. Optional: when omitted (or in the
+   * auth-disabled path) the board is created in the caller's personal account, or
+   * unscoped when there is no signed-in user.
+   */
+  accountId: v.optional(v.pipe(v.string(), v.minLength(1))),
 })
 export type CreateWorkspaceInput = v.InferOutput<typeof createWorkspaceSchema>
+
+/** Rename a board. */
+export const renameWorkspaceSchema = v.object({
+  name: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(120)),
+})
+export type RenameWorkspaceInput = v.InferOutput<typeof renameWorkspaceSchema>
 
 export const addFrameSchema = v.object({
   type: blockTypeSchema,

@@ -35,6 +35,8 @@ import { D1ExecutionRepository } from './repositories/D1ExecutionRepository'
 import { D1PipelineRepository } from './repositories/D1PipelineRepository'
 import { D1TokenUsageRepository } from './repositories/D1TokenUsageRepository'
 import { D1WorkspaceRepository } from './repositories/D1WorkspaceRepository'
+import { D1AccountRepository } from './repositories/D1AccountRepository'
+import { D1MembershipRepository } from './repositories/D1MembershipRepository'
 import { D1GitHubInstallationRepository } from './repositories/D1GitHubInstallationRepository'
 import { D1RepoProjectionRepository } from './repositories/D1RepoProjectionRepository'
 import { D1BranchProjectionRepository } from './repositories/D1BranchProjectionRepository'
@@ -495,6 +497,8 @@ export function buildContainer(env: Env, overrides: Partial<CoreDependencies> = 
 
   const dependencies: CoreDependencies = {
     workspaceRepository: new D1WorkspaceRepository({ db }),
+    accountRepository: new D1AccountRepository({ db }),
+    membershipRepository: new D1MembershipRepository({ db }),
     blockRepository: new D1BlockRepository({ db }),
     pipelineRepository: new D1PipelineRepository({ db }),
     executionRepository: new D1ExecutionRepository({ db, clock }),

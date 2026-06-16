@@ -5,7 +5,14 @@ export type {
   PipelineRepository,
   RunRef,
   WorkspaceRepository,
+  WorkspaceVisibility,
 } from './repositories'
+export type {
+  AccountRecord,
+  AccountRepository,
+  Membership,
+  MembershipRepository,
+} from './account-repositories'
 export type { Clock, IdGenerator } from './runtime'
 export type { ModelProvider, ModelRef } from './model-provider'
 export type { TokenUsageRecord, TokenUsageRepository, TokenUsageTotals } from './token-usage'

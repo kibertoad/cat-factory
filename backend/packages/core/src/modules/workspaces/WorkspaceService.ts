@@ -7,6 +7,7 @@ import type {
   ExecutionRepository,
   PipelineRepository,
   WorkspaceRepository,
+  WorkspaceVisibility,
 } from '../../ports/repositories'
 import type { Clock, IdGenerator } from '../../ports/runtime'
 
@@ -56,28 +57,35 @@ export class WorkspaceService {
   }
 
   /**
-   * Boards visible to a user. `ownerUserId` is the signed-in user's id, or
-   * `null` when auth is disabled (then all boards are returned).
+   * Boards visible to a user (see {@link WorkspaceVisibility}). A `null` scope
+   * means auth is disabled and all boards are returned.
    */
-  list(ownerUserId: number | null): Promise<Workspace[]> {
-    return this.workspaceRepository.listByOwner(ownerUserId)
+  list(scope: WorkspaceVisibility): Promise<Workspace[]> {
+    return this.workspaceRepository.listVisible(scope)
   }
 
-  /** Owning user id for a board (number/owned, null/legacy, undefined/missing). */
+  /** Owning user id for a board (number/owned, null/none, undefined/missing). */
   ownerOf(id: string): Promise<number | null | undefined> {
     return this.workspaceRepository.ownerOf(id)
+  }
+
+  /** Owning account id for a board (string/scoped, null/legacy, undefined/missing). */
+  accountOf(id: string): Promise<string | null | undefined> {
+    return this.workspaceRepository.accountOf(id)
   }
 
   async create(
     input: CreateWorkspaceInput,
     ownerUserId: number | null,
+    accountId: string | null,
   ): Promise<WorkspaceSnapshot> {
     const workspace: Workspace = {
       id: this.idGenerator.next('ws'),
       name: input.name?.trim() || 'Untitled board',
       createdAt: this.clock.now(),
+      accountId,
     }
-    await this.workspaceRepository.create(workspace, ownerUserId)
+    await this.workspaceRepository.create(workspace, ownerUserId, accountId)
 
     if (input.seed ?? true) {
       for (const block of seedBlocks()) {
@@ -88,6 +96,13 @@ export class WorkspaceService {
       }
     }
     return this.snapshot(workspace.id)
+  }
+
+  /** Rename a board. */
+  async rename(id: string, name: string): Promise<Workspace> {
+    await this.require(id)
+    await this.workspaceRepository.rename(id, name.trim())
+    return this.require(id)
   }
 
   require(id: string): Promise<Workspace> {

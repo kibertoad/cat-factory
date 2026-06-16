@@ -76,7 +76,7 @@ function seededClient(installationId: number): FakeGitHubClient {
 }
 
 describe('github sync', () => {
-  it('projects repos, branches, pulls and issues on an incremental resync', async () => {
+  it('projects repos, branches, pulls and issues for the linked repo', async () => {
     const installationId = uniqueInstallationId()
     const client = seededClient(installationId)
     const app = makeApp(new FakeAgentExecutor(), githubDeps({ client }))
@@ -84,6 +84,9 @@ describe('github sync', () => {
     const ws = workspace.id
 
     await app.call('POST', `/workspaces/${ws}/github/connect`, { installationId })
+    // Explicitly link repo 101 — this projects and deep-syncs just that repo.
+    const link = await app.call('PUT', `/workspaces/${ws}/github/repos`, { repoGithubIds: [101] })
+    expect(link.status).toBe(200)
     const resync = await app.call('POST', `/workspaces/${ws}/github/resync`, {})
     expect(resync.status).toBe(200)
 
@@ -108,7 +111,7 @@ describe('github sync', () => {
     expect(issues[0]!.labels).toEqual(['bug'])
   })
 
-  it('tombstones repos that disappear from the installation', async () => {
+  it('unlinking a repo tombstones it for the workspace', async () => {
     const installationId = uniqueInstallationId()
     const client = seededClient(installationId)
     const app = makeApp(new FakeAgentExecutor(), githubDeps({ client }))
@@ -116,14 +119,13 @@ describe('github sync', () => {
     const ws = workspace.id
 
     await app.call('POST', `/workspaces/${ws}/github/connect`, { installationId })
-    await app.call('POST', `/workspaces/${ws}/github/resync`, {})
+    await app.call('PUT', `/workspaces/${ws}/github/repos`, { repoGithubIds: [101] })
     expect(
       (await app.call<GitHubRepo[]>('GET', `/workspaces/${ws}/github/repos`)).body,
     ).toHaveLength(1)
 
-    // The repo is no longer accessible to the installation.
-    client.repos = []
-    await app.call('POST', `/workspaces/${ws}/github/resync`, {})
+    // Deselect the repo: linking an empty set tombstones it.
+    await app.call('PUT', `/workspaces/${ws}/github/repos`, { repoGithubIds: [] })
     expect(
       (await app.call<GitHubRepo[]>('GET', `/workspaces/${ws}/github/repos`)).body,
     ).toHaveLength(0)
@@ -137,7 +139,7 @@ describe('github sync', () => {
     const ws = workspace.id
 
     await app.call('POST', `/workspaces/${ws}/github/connect`, { installationId })
-    await app.call('POST', `/workspaces/${ws}/github/resync`, {})
+    await app.call('PUT', `/workspaces/${ws}/github/repos`, { repoGithubIds: [101] })
 
     const single = await app.call<{ status: string }>('POST', `/workspaces/${ws}/github/resync`, {
       repoGithubId: 101,
@@ -154,7 +156,7 @@ describe('github sync', () => {
     const ws = workspace.id
 
     await app.call('POST', `/workspaces/${ws}/github/connect`, { installationId })
-    await app.call('POST', `/workspaces/${ws}/github/resync`, {})
+    await app.call('PUT', `/workspaces/${ws}/github/repos`, { repoGithubIds: [101] })
 
     // The first sync has no commit cursor, so it must pass a `since` floor (the
     // default 90-day horizon) rather than fetching the repo's full history.
