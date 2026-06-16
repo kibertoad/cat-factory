@@ -115,6 +115,41 @@ describe('ContainerAgentExecutor', () => {
     expect(session).toMatchObject({ provider: 'qwen', model: 'qwen3-max', executionId: 'ex-1' })
   })
 
+  it('forwards live subtask progress from a still-running job poll', async () => {
+    // A container whose GET /jobs/{id} reports the job still running, with the
+    // latest todo counts attached — exactly the harness's running JobView.
+    const runningWithProgress = {
+      idFromName: (name: string) => ({ name }),
+      get: () => ({
+        fetch: () =>
+          Promise.resolve(
+            new Response(
+              JSON.stringify({
+                state: 'running',
+                progress: { completed: 3, inProgress: 1, total: 8 },
+              }),
+            ),
+          ),
+      }),
+    } as unknown as DurableObjectNamespace<ImplementationContainer>
+
+    const executor = new ContainerAgentExecutor({
+      container: runningWithProgress,
+      agentRouting: routing('qwen', 'qwen3-max'),
+      resolveBlockModel: () => undefined,
+      resolveRepoTarget: () => Promise.resolve(repo),
+      mintInstallationToken: () => Promise.resolve('gh-token'),
+      sessionService: new ContainerSessionService({ secret: 'secret' }),
+      proxyBaseUrl: 'https://worker.example/v1',
+    })
+
+    const update = await executor.pollJob({ jobId: 'ex-1' })
+    expect(update).toEqual({
+      state: 'running',
+      subtasks: { completed: 3, inProgress: 1, total: 8 },
+    })
+  })
+
   it('surfaces a job-level error from the container', async () => {
     const executor = new ContainerAgentExecutor({
       container: fakeContainer(

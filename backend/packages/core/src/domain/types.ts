@@ -17,6 +17,7 @@ export type {
   Position,
   PullRequestRef,
   SpendStatus,
+  StepSubtasks,
   TestTarget,
   Workspace,
   WorkspaceSnapshot,

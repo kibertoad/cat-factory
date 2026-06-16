@@ -1,4 +1,4 @@
-import type { Block, ExecutionInstance, PipelineStep } from '../../domain/types'
+import type { Block, ExecutionInstance, PipelineStep, StepSubtasks } from '../../domain/types'
 import { assertFound, ConflictError, NotFoundError } from '../../domain/errors'
 import { DEFAULT_CONFIDENCE_THRESHOLD } from '../../domain/catalog'
 import type {
@@ -258,6 +258,16 @@ export class ExecutionService {
 
     const update = await executor.pollJob({ jobId: step.jobId })
     if (update.state === 'running') {
+      // Surface live subtask progress (e.g. 3/8 todos done) without advancing the
+      // step. Only persist + emit when the counts actually changed so a poll that
+      // brings nothing new doesn't churn storage or the event stream.
+      if (update.subtasks && !sameSubtasks(step.subtasks, update.subtasks)) {
+        step.subtasks = update.subtasks
+        step.progress =
+          update.subtasks.total > 0 ? update.subtasks.completed / update.subtasks.total : 0
+        await this.executionRepository.upsert(workspaceId, instance)
+        await this.emitInstance(workspaceId, instance)
+      }
       return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
     }
     if (update.state === 'failed') {
@@ -318,6 +328,9 @@ export class ExecutionService {
     if (result.model) step.model = result.model
     step.progress = 1
     step.state = 'done'
+    // Live subtask counts only describe an in-flight run; drop them now the step
+    // is done so the board doesn't show a stale "3/8" against a finished step.
+    step.subtasks = undefined
 
     // A repo-operating step (the container "implementer" agent) opened a PR for
     // its work. Record it on the block so the board can surface and link to it,
@@ -670,4 +683,14 @@ export class ExecutionService {
     await this.events.boardChanged(workspaceId, 'cancel')
     return this.requireBlock(workspaceId, blockId)
   }
+}
+
+/** Whether two subtask snapshots carry the same counts (skips redundant re-emits). */
+function sameSubtasks(a: StepSubtasks | undefined, b: StepSubtasks): boolean {
+  return (
+    a !== undefined &&
+    a.completed === b.completed &&
+    a.inProgress === b.inProgress &&
+    a.total === b.total
+  )
 }

@@ -4,6 +4,7 @@ import type {
   EnvironmentAccessHandle,
   EnvironmentStatus,
   PullRequestRef,
+  StepSubtasks,
   TestTarget,
 } from '../domain/types'
 
@@ -132,8 +133,13 @@ export interface AgentJobHandle {
 
 /** The outcome of polling an {@link AgentJobHandle}. */
 export type AgentJobUpdate =
-  /** Still working — the durable driver should keep polling. */
-  | { state: 'running' }
+  /**
+   * Still working — the durable driver should keep polling. `subtasks`, when
+   * present, carries the job's latest subtask counts (the container agent reads
+   * these from the coding tool's todo list) so the driver can surface live
+   * "N/M done" progress on the step between polls.
+   */
+  | { state: 'running'; subtasks?: StepSubtasks }
   /** Finished successfully; `result` carries the work product. */
   | { state: 'done'; result: AgentRunResult }
   /** Finished with a failure (agent error, inactivity/max-duration watchdog, …). */
