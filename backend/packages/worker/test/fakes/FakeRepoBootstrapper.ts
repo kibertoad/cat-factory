@@ -48,7 +48,12 @@ export class FakeRepoBootstrapper implements RepoBootstrapper {
     if (this.failPollWith) {
       // A poll-time failure models the run faulting (agent / push), so classify it
       // accordingly and carry the detail through, mirroring ContainerRepoBootstrapper.
-      return { state: 'failed', error: this.failPollWith, failureKind: 'agent', detail: this.failPollWith }
+      return {
+        state: 'failed',
+        error: this.failPollWith,
+        failureKind: 'agent',
+        detail: this.failPollWith,
+      }
     }
     const n = this.pollCounts.get(handle.jobId) ?? 0
     this.pollCounts.set(handle.jobId, n + 1)

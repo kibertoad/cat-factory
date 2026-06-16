@@ -208,7 +208,10 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
     // returns immediately; we then poll GET /jobs/{id}. The base Container.fetch
     // proxies to the harness.
     const stub = this.deps.container.get(this.deps.container.idFromName(request.jobId))
-    log.info({ reference: reference ? `${reference.owner}/${reference.name}` : null }, 'bootstrap: dispatching container')
+    log.info(
+      { reference: reference ? `${reference.owner}/${reference.name}` : null },
+      'bootstrap: dispatching container',
+    )
     const res = await stub.fetch('http://container/bootstrap', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -216,7 +219,9 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
       signal: AbortSignal.timeout(DISPATCH_TIMEOUT_MS),
     })
     if (!res.ok) {
-      throw new Error(`Bootstrap container dispatch failed (HTTP ${res.status}): ${await safeText(res)}`)
+      throw new Error(
+        `Bootstrap container dispatch failed (HTTP ${res.status}): ${await safeText(res)}`,
+      )
     }
     log.info('bootstrap: container accepted job')
     return { workspaceId: request.workspaceId, jobId: request.jobId }
@@ -283,7 +288,9 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
   async stopBootstrap(handle: BootstrapJobHandle): Promise<void> {
     const stub = this.deps.container.get(this.deps.container.idFromName(handle.jobId))
     await stub.shutdown()
-    logger.child({ jobId: handle.jobId, workspaceId: handle.workspaceId }).info('bootstrap: stopped container')
+    logger
+      .child({ jobId: handle.jobId, workspaceId: handle.workspaceId })
+      .info('bootstrap: stopped container')
   }
 
   /**
@@ -307,7 +314,10 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
     })
     await this.deps.repoRepository.upsertMany(workspaceId, [repo])
     await this.deps.repoRepository.linkBlock(workspaceId, repo.githubId, blockId)
-    log.info({ repo: `${outcome.owner}/${outcome.name}`, githubId: repo.githubId }, 'bootstrap: linked repo to service frame')
+    log.info(
+      { repo: `${outcome.owner}/${outcome.name}`, githubId: repo.githubId },
+      'bootstrap: linked repo to service frame',
+    )
   }
 
   /** Construct the success outcome from the installation + the recorded job's repo name. */
@@ -316,7 +326,8 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
     resultDefaultBranch: string | undefined,
   ): Promise<BootstrapRepoOutcome> {
     const installation = await this.deps.installationRepository.getByWorkspace(handle.workspaceId)
-    if (!installation) throw new Error(`Workspace '${handle.workspaceId}' is not connected to GitHub`)
+    if (!installation)
+      throw new Error(`Workspace '${handle.workspaceId}' is not connected to GitHub`)
     const record = await this.deps.bootstrapJobRepository.get(handle.workspaceId, handle.jobId)
     if (!record) throw new Error(`Bootstrap job '${handle.jobId}' not found`)
     const owner = installation.accountLogin

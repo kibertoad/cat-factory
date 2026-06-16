@@ -50,11 +50,11 @@ has its own `wrangler.toml`: the backend Worker in
 [`backend/packages/worker/`](./backend/packages/worker/wrangler.toml) and the
 frontend Pages project at the [repo root](./wrangler.toml).
 
-| Piece    | Cloudflare resource                | Production URL                      |
-| -------- | ---------------------------------- | ----------------------------------- |
-| Backend  | Worker `cat-factory-backend`       | `https://catfactory-api.kiberion.com` |
-| Frontend | Pages project `cat-factory`        | `https://catfactory.kiberion.com`     |
-| Data     | D1 database `cat_factory`          | (bound to the Worker as `DB`)         |
+| Piece    | Cloudflare resource          | Production URL                        |
+| -------- | ---------------------------- | ------------------------------------- |
+| Backend  | Worker `cat-factory-backend` | `https://catfactory-api.kiberion.com` |
+| Frontend | Pages project `cat-factory`  | `https://catfactory.kiberion.com`     |
+| Data     | D1 database `cat_factory`    | (bound to the Worker as `DB`)         |
 
 **Deploy the backend first** so any schema the new frontend expects is already
 live, then the frontend. Migrations run **before** the Worker deploy.
@@ -81,7 +81,7 @@ and container secrets) is in [`backend/README.md`](./backend/README.md#deploying
 ### Frontend (Nuxt SPA → Pages)
 
 The SPA is `ssr: false`, so the backend URL is **baked in at build time** from
-`NUXT_PUBLIC_API_BASE` — it is *not* a Pages runtime var. Build with the prod
+`NUXT_PUBLIC_API_BASE` — it is _not_ a Pages runtime var. Build with the prod
 API base, then deploy the static output:
 
 ```sh

@@ -605,5 +605,9 @@ export function buildContainer(env: Env, overrides: Partial<CoreDependencies> = 
     ...overrides,
   }
 
-  return { ...createCore(dependencies), config, agentRunRepository: new D1AgentRunRepository({ db }) }
+  return {
+    ...createCore(dependencies),
+    config,
+    agentRunRepository: new D1AgentRunRepository({ db }),
+  }
 }

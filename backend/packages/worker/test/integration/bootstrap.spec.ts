@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import type { Block, BootstrapJob, ReferenceArchitecture, WorkspaceSnapshot } from '@cat-factory/contracts'
+import type {
+  Block,
+  BootstrapJob,
+  ReferenceArchitecture,
+  WorkspaceSnapshot,
+} from '@cat-factory/contracts'
 import { makeApp } from '../helpers'
 import { FakeRepoBootstrapper } from '../fakes/FakeRepoBootstrapper'
 

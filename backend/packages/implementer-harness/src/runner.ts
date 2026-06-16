@@ -151,7 +151,10 @@ export class JobRegistry<TJob = Job, TResult extends JobResultBase = RunResult> 
     // The unit of work; defaults to the real implementation orchestration.
     // Injectable so tests (and the bootstrap path) can drive the registry's
     // lifecycle/watchdog logic with a different runner.
-    private readonly run: (job: TJob, opts: RunOptions) => Promise<TResult> = handleRun as unknown as (
+    private readonly run: (
+      job: TJob,
+      opts: RunOptions,
+    ) => Promise<TResult> = handleRun as unknown as (
       job: TJob,
       opts: RunOptions,
     ) => Promise<TResult>,

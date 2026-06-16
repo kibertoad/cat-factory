@@ -311,7 +311,9 @@ export class BootstrapService {
       jobId,
     )
     if (previous.status !== 'failed') {
-      throw new ConflictError(`Only a failed bootstrap can be retried (job is '${previous.status}').`)
+      throw new ConflictError(
+        `Only a failed bootstrap can be retried (job is '${previous.status}').`,
+      )
     }
 
     // The original job stored only the reference architecture id, so re-resolve the
@@ -376,10 +378,17 @@ export class BootstrapService {
       await this.stopContainer(workspaceId, record.id)
       // Re-mark the reused frame blocked (it briefly belonged to this attempt).
       const block = previous.blockId
-        ? await this.markFrame(workspaceId, previous.blockId, 'blocked', `Bootstrap failed: ${message}`)
+        ? await this.markFrame(
+            workspaceId,
+            previous.blockId,
+            'blocked',
+            `Bootstrap failed: ${message}`,
+          )
         : null
       const failed = toBootstrapJob({ ...record, blockId: previous.blockId, ...patch })
-      await this.deps.bootstrapJobRepository.update(workspaceId, record.id, { blockId: previous.blockId })
+      await this.deps.bootstrapJobRepository.update(workspaceId, record.id, {
+        blockId: previous.blockId,
+      })
       await this.emitBootstrap(workspaceId, failed, block)
       return failed
     }
@@ -455,7 +464,12 @@ export class BootstrapService {
       // Reclaim the per-run container so a faulted/leaked instance doesn't idle
       // until its sleep timer (best-effort; an evicted container is already gone).
       await this.stopContainer(workspaceId, jobId)
-      const block = await this.markFrame(workspaceId, record.blockId, 'blocked', `Bootstrap failed: ${message}`)
+      const block = await this.markFrame(
+        workspaceId,
+        record.blockId,
+        'blocked',
+        `Bootstrap failed: ${message}`,
+      )
       await this.emitBootstrap(workspaceId, toBootstrapJob({ ...record, ...patch }), block)
       return { state: 'failed', error: message }
     }
@@ -502,7 +516,8 @@ export class BootstrapService {
       id: this.deps.idGenerator.next('blk'),
       title: repoName,
       type,
-      description: 'Bootstrapping repository… a container is adapting and pushing the initial commit.',
+      description:
+        'Bootstrapping repository… a container is adapting and pushing the initial commit.',
       // Stagger so a fresh frame doesn't land exactly on an existing one.
       position: { x: 80 + (frames % 5) * 48, y: 80 + (frames % 5) * 48 },
       status: 'in_progress',

@@ -266,13 +266,7 @@ export const pipelineStepSchema = v.object({
 })
 export type PipelineStep = v.InferOutput<typeof pipelineStepSchema>
 
-export const executionStatusSchema = v.picklist([
-  'running',
-  'blocked',
-  'done',
-  'paused',
-  'failed',
-])
+export const executionStatusSchema = v.picklist(['running', 'blocked', 'done', 'paused', 'failed'])
 export type ExecutionStatus = v.InferOutput<typeof executionStatusSchema>
 
 export const executionInstanceSchema = v.object({

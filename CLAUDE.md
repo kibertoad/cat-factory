@@ -88,17 +88,18 @@ It mirrors the execution pattern above: dispatch → durable poll → push event
   resets history to one commit and **force-pushes** to the default branch.
 - Events: `DurableObjectEventPublisher.bootstrapChanged()` → `WorkspaceEventsHub`
   → SPA `useWorkspaceStream.ts` patches `stores/agentRuns.ts` (`upsertBootstrap`)
-  + the board block. `BlockNode.vue` reads `agentRuns.byBlock[frameId]` to render
-  the "bootstrapping…" badge + subtask progress bar, flipping to a ready service or
-  the shared `<AgentFailureCard>` (failure hint + retry). Tracing logs (pino) run
-  controller→service→workflow→bootstrapper→harness, queryable in the Cloudflare
-  dashboard.
+  - the board block. `BlockNode.vue` reads `agentRuns.byBlock[frameId]` to render
+    the "bootstrapping…" badge + subtask progress bar, flipping to a ready service or
+    the shared `<AgentFailureCard>` (failure hint + retry). Tracing logs (pino) run
+    controller→service→workflow→bootstrapper→harness, queryable in the Cloudflare
+    dashboard.
 
 ## Unified agent runs (failure + retry surface)
 
 Both container-backed flows — task `execution` and repo `bootstrap` — persist to
 one `agent_runs` D1 table (kind-scoped), and the board surfaces their failure +
 retry uniformly:
+
 - Storage: `D1ExecutionRepository`/`D1BootstrapJobRepository` both target
   `agent_runs WHERE kind=…`; `D1AgentRunRepository` reads across kinds
   (`getRef` for retry dispatch, `listStale` for the sweeper).
@@ -106,13 +107,13 @@ retry uniformly:
   from `index.ts` `scheduled`) re-drives stale `running` runs of **both** kinds —
   so an evicted bootstrap is now re-driven too (the old known limitation is gone).
 - Retry: `POST /workspaces/:ws/agent-runs/:id/retry` (`modules/agentRuns/
-  AgentRunController.ts`) resolves the kind via `getRef`, then calls
+AgentRunController.ts`) resolves the kind via `getRef`, then calls
   `bootstrap.service.retry` / `executionService.retry`; returns `{ kind, run }`.
 - Frontend: `stores/agentRuns.ts` (`useAgentRunsStore`) merges `snapshot.executions`
-  + `snapshot.bootstrapJobs` into a per-block `byBlock` summary; the shared
-  `components/board/AgentFailureCard.vue` renders the rose banner + retry on the
-  board card, the inspector, and `TaskExecution.vue`. A failed execution now leaves
-  its block `blocked` (NOT the old success-looking `pr_ready`).
+  - `snapshot.bootstrapJobs` into a per-block `byBlock` summary; the shared
+    `components/board/AgentFailureCard.vue` renders the rose banner + retry on the
+    board card, the inspector, and `TaskExecution.vue`. A failed execution now leaves
+    its block `blocked` (NOT the old success-looking `pr_ready`).
 
 ## Board / service / repo-linkage model
 
@@ -124,7 +125,7 @@ retry uniformly:
   `github_repos` projection table via its `block_id` column (migration
   `0004_github_projections.sql`; `D1RepoProjectionRepository.linkBlock()`).
 - **Execution resolves the repo at runtime** via `resolveRepoTarget(workspaceId,
-  blockId)` (worker `infrastructure/container.ts`): find the `github_repos` row
+blockId)` (worker `infrastructure/container.ts`): find the `github_repos` row
   whose `block_id === blockId`, else fall back to `repos[0]`. So to make a
   bootstrapped repo a board service that tasks target correctly, the repo
   projection row must be linked to the new frame's block id.

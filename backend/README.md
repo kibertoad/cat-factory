@@ -339,21 +339,25 @@ machinery as container implementation. When
 any prerequisite is missing the endpoint returns:
 
 ```json
-{ "error": { "code": "unavailable",
-  "message": "Repo bootstrapping needs the GitHub App and the implementation container to be configured" } }
+{
+  "error": {
+    "code": "unavailable",
+    "message": "Repo bootstrapping needs the GitHub App and the implementation container to be configured"
+  }
+}
 ```
 
 To enable the run path, all of the following must be present (see `selectRepoBootstrapper` in
 `src/infrastructure/container.ts`):
 
-| Prerequisite | Kind | How to set it |
-| ------------ | ---- | ------------- |
-| `IMPL_CONTAINER` binding | binding | declared in `wrangler.toml` — the per-run container *factory*, not a shared instance (see below) |
-| `GITHUB_APP_ID` | `[vars]` | App id in `wrangler.toml [vars]` (with `GITHUB_APP_SLUG`) |
-| `GITHUB_APP_PRIVATE_KEY` | secret | `wrangler secret put GITHUB_APP_PRIVATE_KEY` (PKCS#8 PEM) |
-| `GITHUB_WEBHOOK_SECRET` | secret | `wrangler secret put GITHUB_WEBHOOK_SECRET` |
-| `WORKER_PUBLIC_URL` | `[vars]` | a `wrangler.toml [vars]` entry, e.g. `WORKER_PUBLIC_URL = "https://cat-factory-backend.<account>.workers.dev"` — it's a public origin, not a secret |
-| `AUTH_SESSION_SECRET` | secret | `wrangler secret put AUTH_SESSION_SECRET` (already required for auth) |
+| Prerequisite             | Kind     | How to set it                                                                                                                                       |
+| ------------------------ | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `IMPL_CONTAINER` binding | binding  | declared in `wrangler.toml` — the per-run container _factory_, not a shared instance (see below)                                                    |
+| `GITHUB_APP_ID`          | `[vars]` | App id in `wrangler.toml [vars]` (with `GITHUB_APP_SLUG`)                                                                                           |
+| `GITHUB_APP_PRIVATE_KEY` | secret   | `wrangler secret put GITHUB_APP_PRIVATE_KEY` (PKCS#8 PEM)                                                                                           |
+| `GITHUB_WEBHOOK_SECRET`  | secret   | `wrangler secret put GITHUB_WEBHOOK_SECRET`                                                                                                         |
+| `WORKER_PUBLIC_URL`      | `[vars]` | a `wrangler.toml [vars]` entry, e.g. `WORKER_PUBLIC_URL = "https://cat-factory-backend.<account>.workers.dev"` — it's a public origin, not a secret |
+| `AUTH_SESSION_SECRET`    | secret   | `wrangler secret put AUTH_SESSION_SECRET` (already required for auth)                                                                               |
 
 `IMPL_CONTAINER` is the Durable Object **namespace** binding, not a single long-lived container.
 Each run derives its own instance — `container.get(container.idFromName(jobId))` — so containers

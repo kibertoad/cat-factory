@@ -144,10 +144,10 @@ prompt:
 
 ```markdown
 ---
-id: backend.error-handling          # optional; defaults to a slug of the path
+id: backend.error-handling # optional; defaults to a slug of the path
 title: Backend error handling
 category: Node
-summary: Fail fast, wrap external errors, never swallow.   # required; feeds the selector
+summary: Fail fast, wrap external errors, never swallow. # required; feeds the selector
 tags: [backend, db]
 appliesTo:
   blockTypes: [backend]
@@ -171,7 +171,7 @@ Add a `FragmentSelector` port. At run time, for the agent on a block (the
 reviewer especially), the selector is given:
 
 - the **resolved catalog** reduced to `{ id, title, summary, tags, appliesTo }`
-  (bodies are *not* sent — summaries keep the call cheap), and
+  (bodies are _not_ sent — summaries keep the call cheap), and
 - the **PR context**: changed file paths + diff stat from the coder's push, the
   block type, and the agent kind.
 
@@ -282,10 +282,13 @@ authorization gate in `app.ts`.
   the selector is in `llm` mode, and new HTTP surface at both scopes.
 - **Open questions / deferred:** (a) no dedicated sweeper for an evicted large
   resync — acceptable while sync is inline; (b) whether `appliesTo.agentKinds`
-  should hard-gate a fragment to specific agents *before* the selector sees it,
+  should hard-gate a fragment to specific agents _before_ the selector sees it,
   or only inform it; (c) fragment **versioning/pinning** for reproducible replays
   (today resolution is "latest"); (d) frontmatter `id` collisions across two
   sources in the same tier (last-sync-wins vs. error) — proposed: namespace
   sourced ids as `src:<sourceId>:<path>` so they cannot collide, with the
-  optional frontmatter `id` only used to *shadow* a built-in.
+  optional frontmatter `id` only used to _shadow_ a built-in.
+
+```
+
 ```
