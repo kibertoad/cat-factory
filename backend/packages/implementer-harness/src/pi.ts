@@ -165,7 +165,19 @@ export function runPi(opts: {
     }
     const child = spawn(
       'pi',
-      ['-p', '--mode', 'json', '--model', `proxy/${opts.model}`, '--approve', opts.userPrompt],
+      // `--` terminates option parsing so an untrusted prompt that begins with
+      // `-`/`--` is treated as the positional prompt, never as a Pi CLI flag
+      // (argument-injection guard).
+      [
+        '-p',
+        '--mode',
+        'json',
+        '--model',
+        `proxy/${opts.model}`,
+        '--approve',
+        '--',
+        opts.userPrompt,
+      ],
       {
         cwd: opts.cwd,
         env: { ...process.env, PI_PROXY_TOKEN: opts.sessionToken },

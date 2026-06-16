@@ -1,7 +1,7 @@
 import { env } from 'cloudflare:test'
 import { describe, expect, it } from 'vitest'
 import { createApp } from '../../src/app'
-import { HmacSigner, type SessionPayload } from '../../src/infrastructure/auth/signing'
+import { HmacSigner, TOKEN_AUDIENCE, type SessionPayload } from '../../src/infrastructure/auth/signing'
 import { pickPostLoginRedirect } from '../../src/modules/auth/AuthController'
 
 // Auth is opt-in: it only activates when the OAuth credentials + session secret
@@ -9,7 +9,8 @@ import { pickPostLoginRedirect } from '../../src/modules/auth/AuthController'
 // `env` straight to `app.fetch` (config is derived from `c.env` per request), so
 // the rest of the suite — which runs with auth unconfigured — is unaffected.
 
-const SECRET = 'test-session-secret'
+// Must be >= MIN_SESSION_SECRET_LENGTH (32) or auth is treated as misconfigured.
+const SECRET = 'test-session-secret-0123456789abcdef'
 const BASE = 'https://cat-factory.test'
 
 const authEnv = {
@@ -33,6 +34,7 @@ function fetchWith(
 
 function session(overrides: Partial<SessionPayload> = {}): Promise<string> {
   const payload: SessionPayload = {
+    aud: TOKEN_AUDIENCE.session,
     id: 42,
     login: 'octocat',
     name: 'The Octocat',

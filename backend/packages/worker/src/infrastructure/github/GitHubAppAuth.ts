@@ -16,6 +16,17 @@ const TOKEN_SKEW_MS = 5 * 60 * 1000
 const USER_AGENT = 'cat-factory'
 const API_VERSION = '2022-11-28'
 
+/**
+ * Installation tokens (live ~1h repo read/write credentials) are cached IN
+ * MEMORY, per isolate — never written to D1. Persisting them put a plaintext
+ * credential at rest (readable from any DB dump / console / SQLi elsewhere);
+ * an isolate-local cache keeps the hit rate high for a warm isolate while the
+ * token never outlives the process. A cache miss just re-mints cheaply from the
+ * app JWT. The module-level map intentionally persists across requests within
+ * the same isolate.
+ */
+const tokenCache = new Map<number, { token: string; expiresAt: number }>()
+
 export interface GitHubAppAuthDependencies {
   appId: string
   /** App private key in PKCS#8 PEM (`-----BEGIN PRIVATE KEY-----`). */
@@ -53,13 +64,9 @@ export class GitHubAppAuth {
 
   /** A valid installation access token, minting + caching one if needed. */
   async installationToken(installationId: number): Promise<string> {
-    const cached = await this.deps.installationRepository.getByInstallationId(installationId)
-    if (
-      cached?.cachedToken &&
-      cached.tokenExpiresAt &&
-      cached.tokenExpiresAt - TOKEN_SKEW_MS > this.deps.clock.now()
-    ) {
-      return cached.cachedToken
+    const cached = tokenCache.get(installationId)
+    if (cached && cached.expiresAt - TOKEN_SKEW_MS > this.deps.clock.now()) {
+      return cached.token
     }
     return this.mintInstallationToken(installationId)
   }
@@ -85,12 +92,11 @@ export class GitHubAppAuth {
     }
     const body = (await res.json()) as AccessTokenResponse
     const expiresAt = Date.parse(body.expires_at)
-    // Best-effort cache; updates 0 rows harmlessly if the binding isn't persisted yet.
-    await this.deps.installationRepository.updateCachedToken(
-      installationId,
-      body.token,
-      Number.isNaN(expiresAt) ? this.deps.clock.now() + 30 * 60 * 1000 : expiresAt,
-    )
+    // In-memory only (see tokenCache note) — never persisted to D1.
+    tokenCache.set(installationId, {
+      token: body.token,
+      expiresAt: Number.isNaN(expiresAt) ? this.deps.clock.now() + 30 * 60 * 1000 : expiresAt,
+    })
     return body.token
   }
 

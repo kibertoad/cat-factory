@@ -1,6 +1,8 @@
+import { timingSafeEqual } from 'node:crypto'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { type BootstrapResult, parseBootstrapJob, parseJob, type RunResult } from './job.js'
 import { handleBootstrap } from './bootstrap.js'
+import { redactSecrets } from './git.js'
 import { JobRegistry, loadRunnerLimits } from './runner.js'
 import { handleRun } from './runner.js'
 import { log } from './logger.js'
@@ -13,6 +15,27 @@ import { log } from './logger.js'
 // duration of the job in an ephemeral workspace.
 
 const PORT = Number(process.env.PORT ?? 8080)
+
+// Optional inbound auth. When HARNESS_SHARED_SECRET is set, every non-health
+// request must present a matching `x-harness-secret` header (constant-time
+// compared). When it is unset the harness behaves as before (open), so local/dev
+// and the existing acceptance flow keep working without configuration.
+// TODO(worker): when a secret is configured, CloudflareContainerTransport should
+// send the same `x-harness-secret` header on its /run and /jobs fetches. Left to
+// the worker-side change to avoid conflicting with parallel work on that package.
+const SHARED_SECRET = process.env.HARNESS_SHARED_SECRET
+
+const HEADER = 'x-harness-secret'
+
+/** Constant-time check of the shared-secret header; true when auth is disabled. */
+function authorized(req: IncomingMessage): boolean {
+  if (!SHARED_SECRET) return true
+  const provided = req.headers[HEADER]
+  const got = Buffer.from(Array.isArray(provided) ? (provided[0] ?? '') : (provided ?? ''))
+  const want = Buffer.from(SHARED_SECRET)
+  // Length check first; timingSafeEqual requires equal-length buffers.
+  return got.length === want.length && timingSafeEqual(got, want)
+}
 
 // One registry per container process. Each run addresses its own container
 // instance (one Durable Object id per execution), so this tracks that run's job.
@@ -39,13 +62,25 @@ const server = createServer((req, res) => {
     if (req.method === 'GET' && req.url === '/health') {
       return send(res, 200, { status: 'ok' })
     }
+    // All non-health endpoints are gated by the optional shared secret.
+    if (!authorized(req)) {
+      return send(res, 401, { error: 'unauthorized' })
+    }
     if (req.method === 'POST' && req.url === '/bootstrap') {
+      // Parse failures (incl. host-allowlist rejection) are client errors → 400;
+      // a failure during the run itself is a server error → 500.
+      let job
       try {
-        const job = parseBootstrapJob(JSON.parse(await readBody(req)))
+        job = parseBootstrapJob(JSON.parse(await readBody(req)))
+      } catch (error) {
+        const message = redactSecrets(error instanceof Error ? error.message : String(error))
+        return send(res, 400, { error: message } satisfies BootstrapResult)
+      }
+      try {
         const result = await handleBootstrap(job)
         return send(res, 200, result)
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error)
+        const message = redactSecrets(error instanceof Error ? error.message : String(error))
         return send(res, 500, { error: message } satisfies BootstrapResult)
       }
     }
@@ -66,7 +101,7 @@ const server = createServer((req, res) => {
         const view = jobs.start(job.jobId, job)
         return send(res, 202, { jobId: view.id, state: view.state })
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error)
+        const message = redactSecrets(error instanceof Error ? error.message : String(error))
         log.error('failed to start run', { error: message })
         return send(res, 400, { error: message } satisfies RunResult)
       }

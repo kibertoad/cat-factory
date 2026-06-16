@@ -53,10 +53,11 @@ export function githubWebhookController(): Hono<AppEnv> {
       return c.json({ error: { code: 'unavailable', message: 'GitHub not configured' } }, 503)
 
     const signer = new StateSigner(c.env.GITHUB_WEBHOOK_SECRET ?? '')
-    const workspaceId = await signer.verify(c.req.query('state') ?? null)
-    if (!workspaceId) {
-      return c.json({ error: { code: 'unauthorized', message: 'Invalid state' } }, 401)
+    const state = await signer.verify(c.req.query('state') ?? null)
+    if (!state) {
+      return c.json({ error: { code: 'unauthorized', message: 'Invalid or expired state' } }, 401)
     }
+    const workspaceId = state.workspaceId
     const installationId = Number(c.req.query('installation_id'))
     if (!Number.isFinite(installationId)) {
       return c.json({ error: { code: 'validation', message: 'Missing installation_id' } }, 400)

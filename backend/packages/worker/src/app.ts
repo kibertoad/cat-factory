@@ -85,6 +85,30 @@ export function createApp(options: CreateAppOptions = {}): Hono<AppEnv> {
     return gate(c, next)
   })
 
+  // Per-workspace authorization. The gate above only proves the caller is signed
+  // in; this binds the signed-in user to the `:workspaceId` they are addressing,
+  // so one user cannot read or mutate another tenant's board (the previous
+  // behaviour granted every authenticated user access to ALL workspaces).
+  //   - Runs only when a user is set: when auth is disabled (dev) or for the
+  //     self-authenticating WS upgrade (gate-bypassed, no user), it is a no-op.
+  //   - `/workspaces` (list/create) has no :id and is skipped here.
+  //   - A board the user does not own — including a legacy NULL-owner board — is
+  //     reported as 404 (not 403) so existence isn't leaked.
+  app.use('*', async (c, next) => {
+    if (c.req.method === 'OPTIONS') return next()
+    const user = c.get('user')
+    if (!user) return next()
+    const match = /^\/workspaces\/([^/]+)(?:\/.*)?$/.exec(c.req.path)
+    if (!match) return next()
+    const workspaceId = decodeURIComponent(match[1]!)
+    const owner = await c.get('container').workspaceService.ownerOf(workspaceId)
+    if (owner === undefined) return next() // missing board → let the handler 404 normally
+    if (owner !== user.id) {
+      return c.json({ error: { code: 'not_found', message: 'Workspace not found' } }, 404)
+    }
+    return next()
+  })
+
   // Read-only best-practice fragment catalog (gated).
   app.route('/', promptFragmentController())
 

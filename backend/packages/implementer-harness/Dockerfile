@@ -20,6 +20,8 @@
 # copied: the image's runtime uses only Node built-ins + the global Pi CLI, and
 # the package's dev/test deps (incl. pnpm `workspace:*` entries npm can't parse)
 # are irrelevant here. typescript/@types/node are installed standalone.
+# TODO: pin by @sha256:<digest> (node:26-trixie-slim@sha256:...) instead of the
+# mutable tag once the digest can be resolved with registry access.
 FROM node:26-trixie-slim AS build
 WORKDIR /app
 COPY tsconfig.json ./
@@ -29,8 +31,18 @@ RUN --mount=type=secret,id=extra_ca,target=/tmp/extra_ca.crt \
     npm install --no-save --no-package-lock typescript@^5.6.0 @types/node@^22.0.0 && npx tsc -p tsconfig.json'
 
 # ---- runtime: git + the Pi CLI + the compiled wrapper --------------------
+# TODO: pin by @sha256:<digest> (node:26-trixie-slim@sha256:...) instead of the
+# mutable tag once the digest can be resolved with registry access.
 FROM node:26-trixie-slim AS runtime
 ENV NODE_ENV=production
+
+# Defense-in-depth: run as an unprivileged user, not root. Created before the Pi
+# installs so HOME points at this user's home and the extension/config land in a
+# location it owns and can read+write at runtime. The work checkout lives in an
+# os.tmpdir() mkdtemp dir, owned by this user, so clone/commit/push stay writable.
+RUN groupadd --system harness \
+    && useradd --system --gid harness --create-home --home-dir /home/harness harness
+ENV HOME=/home/harness
 # git for clone/commit/push; the Pi coding-agent CLI (bring-your-own key at
 # runtime — none is installed here). --ignore-scripts avoids running untrusted
 # install hooks.
@@ -47,21 +59,24 @@ RUN --mount=type=secret,id=extra_ca,target=/tmp/extra_ca.crt \
 # can use to plan multi-step work. We don't read its TUI overlay (headless json
 # mode no-ops the widget); we tap the structured `tool_result` events it emits so
 # the harness can report subtask progress (e.g. "3/8 done") back to the Worker.
-# Pinned for the same reproducibility reason as Pi itself. HOME is set explicitly
-# so `pi install` writes the extension + settings to a stable location the
-# runtime user (also root) reads.
+# Pinned for the same reproducibility reason as Pi itself. HOME (set above to the
+# unprivileged user's home) is where `pi install` writes the extension + settings;
+# the final chown hands ownership to that user so it can read them at runtime.
 ARG PI_TODO_EXTENSION_VERSION=1.20.0
-ENV HOME=/root
 RUN --mount=type=secret,id=extra_ca,target=/tmp/extra_ca.crt \
     sh -eu -c 'if [ -s /tmp/extra_ca.crt ]; then export NODE_EXTRA_CA_CERTS=/tmp/extra_ca.crt; fi; \
     pi install "npm:@juicesharp/rpiv-todo@${PI_TODO_EXTENSION_VERSION}"'
-# This ephemeral container runs as root and only ever operates on repositories we
-# hand it (a fresh clone, or a mounted repo in tests). Disable git's
-# dubious-ownership guard system-wide so a repo owned by another uid (e.g. a
-# bind-mounted host repo) doesn't block clone/push. NB: git only honours
-# safe.directory from system/global config, never from env or -c.
+# This ephemeral container only ever operates on repositories we hand it (a fresh
+# clone, or a mounted repo in tests). Disable git's dubious-ownership guard
+# system-wide so a repo owned by another uid (e.g. a bind-mounted host repo)
+# doesn't block clone/push. NB: git only honours safe.directory from
+# system/global config, never from env or -c.
 RUN git config --system --add safe.directory '*'
 WORKDIR /app
 COPY --from=build /app/dist ./dist
+# Hand the app dir and the user's home (Pi config/extension) to the unprivileged
+# user, then drop privileges for the running process.
+RUN chown -R harness:harness /app /home/harness
+USER harness
 EXPOSE 8080
 ENTRYPOINT ["node", "dist/server.js"]

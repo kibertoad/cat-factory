@@ -161,6 +161,13 @@ export interface Env {
    * so an unconfigured deployment fails closed instead of serving data openly.
    */
   AUTH_DEV_OPEN?: string
+  /**
+   * Deployment environment marker (e.g. `production`, `staging`, `development`).
+   * When set to a production-like value, the AUTH_DEV_OPEN escape hatch is
+   * refused even if present — so a leaked dev flag can't re-open a deployed
+   * worker. Set `ENVIRONMENT = "production"` in the deployed wrangler.toml.
+   */
+  ENVIRONMENT?: string
 
   /**
    * Comma-separated allowlist of browser Origins permitted by CORS (e.g. the

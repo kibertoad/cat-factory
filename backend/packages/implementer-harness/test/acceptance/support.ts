@@ -72,6 +72,9 @@ export function reclaimMount(work: string): void {
       [
         'run',
         '--rm',
+        // The image now drops to an unprivileged user; chown needs root.
+        '--user',
+        '0:0',
         '--entrypoint',
         'chown',
         '-v',
@@ -98,6 +101,10 @@ export function startContainer(name: string, hostPort: number, bare: string): vo
       '--name',
       name,
       '--add-host=host.docker.internal:host-gateway',
+      // The harness restricts which hosts may receive the GitHub token; the
+      // stub GitHub API is reached over host.docker.internal, so allow it.
+      '-e',
+      'GITHUB_ALLOWED_HOSTS=host.docker.internal',
       '-p',
       `${hostPort}:8080`,
       '-v',

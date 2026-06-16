@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { parseBootstrapJob, parseJob } from '../src/job.js'
 import { parsePiOutput, parseTodoProgress } from '../src/pi.js'
-import { authenticatedCloneUrl } from '../src/git.js'
+import { authenticatedCloneUrl, redactSecrets } from '../src/git.js'
 
 const validBootstrapBody = {
   systemPrompt: 'You are a bootstrapper.',
@@ -80,10 +80,41 @@ describe('parseJob', () => {
 })
 
 describe('authenticatedCloneUrl', () => {
-  it('injects the token as x-access-token', () => {
-    expect(authenticatedCloneUrl('https://github.com/o/r.git', 'TOK')).toBe(
-      'https://x-access-token:TOK@github.com/o/r.git',
+  it('embeds only the username, never the token (token goes via GIT_ASKPASS env)', () => {
+    const url = authenticatedCloneUrl('https://github.com/o/r.git')
+    expect(url).toBe('https://x-access-token@github.com/o/r.git')
+    // The secret must not appear anywhere in the URL/argv.
+    expect(url).not.toContain('TOK')
+    expect(url).not.toContain('ghs_')
+  })
+
+  it('leaves non-https (local file) URLs untouched', () => {
+    expect(authenticatedCloneUrl('file:///srv/repo')).toBe('file:///srv/repo')
+  })
+})
+
+describe('redactSecrets', () => {
+  it('strips URL userinfo so a leaked clone URL cannot reveal the token', () => {
+    expect(redactSecrets('fatal: clone https://x-access-token:ghs_SECRET123@github.com/o/r.git')).not.toContain(
+      'ghs_SECRET123',
     )
+  })
+
+  it('strips bare x-access-token credentials and GitHub token shapes', () => {
+    expect(redactSecrets('x-access-token:ghs_TOPSECRET failed')).not.toContain('ghs_TOPSECRET')
+    expect(redactSecrets('token ghp_abcDEF123 leaked')).not.toContain('ghp_abcDEF123')
+    expect(redactSecrets('token github_pat_abc123 leaked')).not.toContain('github_pat_abc123')
+  })
+
+  it('redacts a simulated git failure error without losing surrounding context', () => {
+    const token = 'ghs_ACTUALINSTALLATIONTOKEN'
+    // Shape of an error Node would surface if the token had been in the argv/URL.
+    const err = new Error(
+      `Command failed: git clone https://x-access-token:${token}@github.com/o/r.git\nfatal: repository not found`,
+    )
+    const redacted = redactSecrets(err.message)
+    expect(redacted).not.toContain(token)
+    expect(redacted).toContain('repository not found')
   })
 })
 

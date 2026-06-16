@@ -1,9 +1,10 @@
 import { Hono } from 'hono'
 import type { Context } from 'hono'
+import { getCookie, setCookie, deleteCookie } from 'hono/cookie'
 import type { AuthConfig } from '../../infrastructure/config'
 import type { AppEnv } from '../../infrastructure/http/types'
 import { GitHubOAuth } from '../../infrastructure/auth/GitHubOAuth'
-import { HmacSigner, type SessionPayload } from '../../infrastructure/auth/signing'
+import { HmacSigner, TOKEN_AUDIENCE, type SessionPayload } from '../../infrastructure/auth/signing'
 import { verifySession } from '../../infrastructure/auth/middleware'
 
 // "Login with GitHub" endpoints. The browser is bounced to GitHub, comes back to
@@ -14,7 +15,20 @@ import { verifySession } from '../../infrastructure/auth/middleware'
 
 const OAUTH_STATE_TTL_MS = 10 * 60 * 1000
 
+/**
+ * Browser-binding cookie for the OAuth round-trip. The `state` nonce is mirrored
+ * here as an HttpOnly, SameSite=Lax cookie set at `/login`; `/callback` requires
+ * the cookie to match the signed state's nonce. This binds the flow to the
+ * browser that started it, defeating login-CSRF / session fixation (an attacker
+ * who pre-fetches a valid `state` cannot complete it in a victim's browser,
+ * which carries no matching cookie). SameSite=Lax still rides the top-level GET
+ * navigation back from GitHub.
+ */
+const OAUTH_STATE_COOKIE = 'cf_oauth_state'
+
 interface OAuthState {
+  /** Audience pin — always `oauth-state`. */
+  aud: typeof TOKEN_AUDIENCE.oauthState
   nonce: string
   /** Where to send the browser (with the token) after a successful login. */
   redirect: string
@@ -95,17 +109,28 @@ export function authController(): Hono<AppEnv> {
   // Lets the SPA decide whether to show a login gate at all.
   app.get('/config', (c) => c.json({ enabled: authConfig(c).enabled }))
 
-  // Start the flow: redirect to GitHub with a signed state nonce.
+  // Start the flow: redirect to GitHub with a signed state nonce, and mirror that
+  // nonce into a browser-bound, HttpOnly cookie so the callback can prove the
+  // round-trip finished in the same browser (login-CSRF defence).
   app.get('/login', async (c) => {
     const cfg = authConfig(c)
     if (!cfg.enabled) return unavailable(c)
 
+    const nonce = crypto.randomUUID()
     const state: OAuthState = {
-      nonce: crypto.randomUUID(),
+      aud: TOKEN_AUDIENCE.oauthState,
+      nonce,
       redirect: resolveRedirect(c, cfg),
       exp: Date.now() + OAUTH_STATE_TTL_MS,
     }
     const signedState = await new HmacSigner(cfg.sessionSecret).sign(state)
+    setCookie(c, OAUTH_STATE_COOKIE, nonce, {
+      httpOnly: true,
+      secure: new URL(c.req.url).protocol === 'https:',
+      sameSite: 'Lax',
+      path: '/auth',
+      maxAge: OAUTH_STATE_TTL_MS / 1000,
+    })
     const url = oauthClient(cfg).authorizeUrl({
       redirectUri: callbackUrl(c, cfg),
       state: signedState,
@@ -113,15 +138,21 @@ export function authController(): Hono<AppEnv> {
     return c.redirect(url)
   })
 
-  // Finish the flow: verify state, exchange code, mint a session, hand it back.
+  // Finish the flow: verify state, confirm the browser-binding cookie, exchange
+  // code, mint a session, hand it back.
   app.get('/callback', async (c) => {
     const cfg = authConfig(c)
     if (!cfg.enabled) return unavailable(c)
 
     const code = c.req.query('code')
     const signer = new HmacSigner(cfg.sessionSecret)
-    const state = await signer.verify<OAuthState>(c.req.query('state'))
-    if (!code || !state) {
+    const state = await signer.verify<OAuthState>(c.req.query('state'), {
+      aud: TOKEN_AUDIENCE.oauthState,
+    })
+    // Single-use: drop the binding cookie regardless of outcome.
+    const boundNonce = getCookie(c, OAUTH_STATE_COOKIE)
+    deleteCookie(c, OAUTH_STATE_COOKIE, { path: '/auth' })
+    if (!code || !state || !boundNonce || boundNonce !== state.nonce) {
       return c.json({ error: { code: 'validation', message: 'Invalid OAuth callback' } }, 400)
     }
 
@@ -137,7 +168,11 @@ export function authController(): Hono<AppEnv> {
       )
     }
 
-    const session: SessionPayload = { ...user, exp: Date.now() + cfg.sessionTtlMs }
+    const session: SessionPayload = {
+      ...user,
+      aud: TOKEN_AUDIENCE.session,
+      exp: Date.now() + cfg.sessionTtlMs,
+    }
     const token = await signer.sign(session)
     return c.redirect(withToken(state.redirect, token))
   })

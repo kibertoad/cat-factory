@@ -8,13 +8,17 @@ import { jsonBody } from '../../infrastructure/http/validation'
 export function workspaceController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
 
+  // The signed-in user's id scopes the board list and stamps ownership on create.
+  // When auth is disabled (`user` unset), ownerId is null → no scoping (dev).
   app.get('/workspaces', async (c) => {
-    return c.json(await c.get('container').workspaceService.list())
+    const ownerId = c.get('user')?.id ?? null
+    return c.json(await c.get('container').workspaceService.list(ownerId))
   })
 
   app.post('/workspaces', jsonBody(createWorkspaceSchema), async (c) => {
     const container = c.get('container')
-    const snapshot = await container.workspaceService.create(c.req.valid('json'))
+    const ownerId = c.get('user')?.id ?? null
+    const snapshot = await container.workspaceService.create(c.req.valid('json'), ownerId)
     const spend = await container.spendService.status()
     return c.json({ ...snapshot, spend }, 201)
   })
