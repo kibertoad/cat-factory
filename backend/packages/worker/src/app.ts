@@ -23,6 +23,7 @@ import { bootstrapController } from './modules/bootstrap/BootstrapController'
 import { agentRunController } from './modules/agentRuns/AgentRunController'
 import { boardScanController } from './modules/boardScan/BoardScanController'
 import { promptFragmentController } from './modules/promptFragments/PromptFragmentController'
+import { fragmentLibraryController } from './modules/fragmentLibrary/FragmentLibraryController'
 import { modelController } from './modules/models/ModelController'
 import { llmProxyController } from './modules/llmProxy/LlmProxyController'
 
@@ -136,6 +137,9 @@ export function createApp(options: CreateAppOptions = {}): Hono<AppEnv> {
 
   // API layer — controllers grouped by module (all behind the default-deny gate).
   app.route('/', accountController())
+  // Prompt-fragment library: account-scoped (membership-guarded in the controller)
+  // and workspace-scoped (covered by the per-workspace gate above). ADR 0006.
+  app.route('/accounts/:accountId', fragmentLibraryController('account'))
   app.route('/', workspaceController())
   app.route('/workspaces/:workspaceId', boardController())
   app.route('/workspaces/:workspaceId', pipelineController())
@@ -151,6 +155,7 @@ export function createApp(options: CreateAppOptions = {}): Hono<AppEnv> {
   app.route('/workspaces/:workspaceId', bootstrapController())
   app.route('/workspaces/:workspaceId', agentRunController())
   app.route('/workspaces/:workspaceId', boardScanController())
+  app.route('/workspaces/:workspaceId', fragmentLibraryController('workspace'))
   // GitHub-facing (webhooks + setup callback); not workspace-scoped.
   app.route('/github', githubWebhookController())
 

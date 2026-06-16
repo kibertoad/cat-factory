@@ -37,6 +37,11 @@ import type { RepoBlueprintRepository } from './ports/board-scan-repositories'
 import type { RepoScanner } from './ports/repo-scanner'
 import type { SecretCipher } from './ports/secret-cipher'
 import type {
+  FragmentSourceRepository,
+  PromptFragmentRepository,
+} from './ports/fragment-repositories'
+import type { FragmentSelector } from './ports/fragment-selector'
+import type {
   BranchProjectionRepository,
   CheckRunProjectionRepository,
   CommitProjectionRepository,
@@ -73,6 +78,11 @@ import { EnvironmentTeardownService } from './modules/environments/EnvironmentTe
 import { RunnerPoolConnectionService } from './modules/runners/RunnerPoolConnectionService'
 import { BootstrapService } from './modules/bootstrap/BootstrapService'
 import { BoardScanService } from './modules/boardScan/BoardScanService'
+import { FragmentLibraryService } from './modules/fragmentLibrary/FragmentLibraryService'
+import {
+  FragmentSourceService,
+  type ResolveFragmentInstallationId,
+} from './modules/fragmentLibrary/FragmentSourceService'
 
 // Composition root for the domain layer. The worker's infrastructure builds the
 // concrete ports (D1 repositories, crypto id/rng, the AI agent executor) and
@@ -218,6 +228,18 @@ export interface CoreDependencies {
   // blueprints but reports the scan path as unavailable.
   repoBlueprintRepository?: RepoBlueprintRepository
   repoScanner?: RepoScanner
+
+  // ---- Prompt-fragment library (opt-in; ADR 0006) -------------------------
+  // The managed, tenant-scoped catalog of best-practice fragments. The library
+  // (per-tier CRUD + the merged-catalog resolver feeding every agent run)
+  // assembles whenever `promptFragmentRepository` is present. Repo-sourced
+  // fragments additionally need `fragmentSourceRepository`, the `githubClient`
+  // (above) and an installation resolver. `fragmentSelector` is optional within
+  // the module: absent → the deterministic matcher; present → the LLM selector.
+  promptFragmentRepository?: PromptFragmentRepository
+  fragmentSourceRepository?: FragmentSourceRepository
+  fragmentSelector?: FragmentSelector
+  resolveFragmentInstallationId?: ResolveFragmentInstallationId
 }
 
 /** The GitHub integration's services, present only when the app is configured. */
@@ -271,6 +293,14 @@ export interface BoardScanModule {
   service: BoardScanService
 }
 
+/** The prompt-fragment library's services, present only when configured (ADR 0006). */
+export interface FragmentLibraryModule {
+  /** Per-tier CRUD + the merged-catalog resolver (also the run-path FragmentResolver). */
+  libraryService: FragmentLibraryService
+  /** Repo-sourced fragments; present only when the GitHub client + source repo are wired. */
+  sourceService?: FragmentSourceService
+}
+
 export interface Core {
   workspaceService: WorkspaceService
   accountService: AccountService
@@ -292,6 +322,8 @@ export interface Core {
   bootstrap?: BootstrapModule
   /** Present only when the board-scan repository is wired (see CoreDependencies). */
   boardScan?: BoardScanModule
+  /** Present only when the prompt-fragment library is configured (see CoreDependencies). */
+  fragmentLibrary?: FragmentLibraryModule
 }
 
 /**
@@ -573,6 +605,40 @@ function createBoardScanModule(
   return { service }
 }
 
+/**
+ * Assemble the prompt-fragment library when its fragment repository is present.
+ * The library service (CRUD + the per-run catalog resolver) always assembles;
+ * the repo-source service additionally needs the GitHub client, the source
+ * repository and an installation resolver. The selector is optional — absent it
+ * falls back to deterministic matching. Returns undefined so the feature stays
+ * cleanly opt-in (the engine then uses the block's manual fragmentIds).
+ */
+function createFragmentLibraryModule(deps: CoreDependencies): FragmentLibraryModule | undefined {
+  const { promptFragmentRepository } = deps
+  if (!promptFragmentRepository) return undefined
+
+  const libraryService = new FragmentLibraryService({
+    promptFragmentRepository,
+    workspaceRepository: deps.workspaceRepository,
+    clock: deps.clock,
+    selector: deps.fragmentSelector,
+  })
+
+  const sourceService =
+    deps.fragmentSourceRepository && deps.githubClient && deps.resolveFragmentInstallationId
+      ? new FragmentSourceService({
+          fragmentSourceRepository: deps.fragmentSourceRepository,
+          promptFragmentRepository,
+          githubClient: deps.githubClient,
+          resolveInstallationId: deps.resolveFragmentInstallationId,
+          idGenerator: deps.idGenerator,
+          clock: deps.clock,
+        })
+      : undefined
+
+  return { libraryService, sourceService }
+}
+
 export function createCore(dependencies: CoreDependencies): Core {
   const workRunner = dependencies.workRunner ?? new NoopWorkRunner()
   const executionEventPublisher = dependencies.executionEventPublisher ?? new NoopEventPublisher()
@@ -592,6 +658,7 @@ export function createCore(dependencies: CoreDependencies): Core {
     pricing: dependencies.spendPricing ?? DEFAULT_SPEND_PRICING,
   })
   const environments = createEnvironmentsModule(dependencies)
+  const fragmentLibrary = createFragmentLibraryModule(dependencies)
 
   const executionService = new ExecutionService({
     ...dependencies,
@@ -600,6 +667,9 @@ export function createCore(dependencies: CoreDependencies): Core {
     boardService,
     spendService,
     environmentProvisioning: environments?.provisioningService,
+    // The library service is itself the run-path FragmentResolver (it merges the
+    // tenant catalog + runs selection); injected so every agent kind benefits.
+    fragmentResolver: fragmentLibrary?.libraryService,
   })
 
   const github = createGitHubModule(dependencies)
@@ -623,5 +693,6 @@ export function createCore(dependencies: CoreDependencies): Core {
     ...(runners ? { runners } : {}),
     ...(bootstrap ? { bootstrap } : {}),
     ...(boardScan ? { boardScan } : {}),
+    ...(fragmentLibrary ? { fragmentLibrary } : {}),
   }
 }

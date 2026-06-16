@@ -28,7 +28,10 @@ import { D1DocumentConnectionRepository } from '../src/infrastructure/repositori
 import { D1DocumentRepository } from '../src/infrastructure/repositories/D1DocumentRepository'
 import { D1TaskConnectionRepository } from '../src/infrastructure/repositories/D1TaskConnectionRepository'
 import { D1TaskRepository } from '../src/infrastructure/repositories/D1TaskRepository'
+import { D1PromptFragmentRepository } from '../src/infrastructure/repositories/D1PromptFragmentRepository'
+import { D1FragmentSourceRepository } from '../src/infrastructure/repositories/D1FragmentSourceRepository'
 import { WebCryptoSecretCipher } from '../src/infrastructure/environments/WebCryptoSecretCipher'
+import type { FragmentSelector } from '@cat-factory/core'
 
 const BASE = 'https://cat-factory.test'
 
@@ -209,4 +212,28 @@ export function tasksDeps(
     }),
     taskRepository: new D1TaskRepository({ db }),
   }
+}
+
+/**
+ * Build prompt-fragment library core overrides backed by the real local D1
+ * (migration 0020). Spread into `makeApp`'s overrides to make
+ * `container.fragmentLibrary` available (the module assembles whenever its deps
+ * are present, independent of the PROMPT_LIBRARY_ENABLED env gate). Pass a
+ * `client` to also wire repo-sourced fragments; defaults to the deterministic
+ * selector so runs stay deterministic, overridable via `selector`.
+ */
+export function fragmentLibraryDeps(
+  opts: { client?: GitHubClient; selector?: FragmentSelector; installationId?: number } = {},
+): Partial<CoreDependencies> {
+  const db = env.DB
+  const base: Partial<CoreDependencies> = {
+    promptFragmentRepository: new D1PromptFragmentRepository({ db }),
+    fragmentSourceRepository: new D1FragmentSourceRepository({ db }),
+    ...(opts.selector ? { fragmentSelector: opts.selector } : {}),
+  }
+  if (opts.client) {
+    base.githubClient = opts.client
+    base.resolveFragmentInstallationId = async () => opts.installationId ?? 4242
+  }
+  return base
 }

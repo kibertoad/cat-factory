@@ -14,6 +14,7 @@ import TaskSourceConnectModal from '~/components/tasks/TaskSourceConnectModal.vu
 import TaskImportModal from '~/components/tasks/TaskImportModal.vue'
 import BootstrapModal from '~/components/bootstrap/BootstrapModal.vue'
 import GitHubPanel from '~/components/github/GitHubPanel.vue'
+import FragmentLibraryPanel from '~/components/fragments/FragmentLibraryPanel.vue'
 
 const workspace = useWorkspaceStore()
 
@@ -55,6 +56,7 @@ watch(
       <TaskImportModal />
       <BootstrapModal />
       <GitHubPanel />
+      <FragmentLibraryPanel />
     </template>
 
     <!-- Backend unreachable / bootstrap failed -->

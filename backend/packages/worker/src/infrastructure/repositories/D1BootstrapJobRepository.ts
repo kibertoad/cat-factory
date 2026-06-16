@@ -45,7 +45,11 @@ function parseSubtasks(raw: string | null): BootstrapJobRecord['subtasks'] {
   if (!raw) return null
   try {
     const o = JSON.parse(raw) as Record<string, unknown>
-    if (typeof o.completed === 'number' && typeof o.inProgress === 'number' && typeof o.total === 'number') {
+    if (
+      typeof o.completed === 'number' &&
+      typeof o.inProgress === 'number' &&
+      typeof o.total === 'number'
+    ) {
       return { completed: o.completed, inProgress: o.inProgress, total: o.total }
     }
   } catch {

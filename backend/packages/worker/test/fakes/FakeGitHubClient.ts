@@ -14,7 +14,9 @@ import type {
   MergePullRequestInput,
   OpenPullRequestInput,
   Paged,
+  RepoContentEntry,
   RepoEntry,
+  RepoFileContent,
 } from '@cat-factory/core'
 import type { CommitFilesInput } from '@cat-factory/contracts'
 
@@ -69,6 +71,39 @@ export class FakeGitHubClient implements GitHubClient {
 
   async listRootEntries(): Promise<RepoEntry[]> {
     return this.rootEntries
+  }
+
+  /**
+   * Canned repo files for the fragment-library source flow, keyed by path. Each
+   * carries the file `content` and a `sha`; `listDirectory` lists the entries
+   * under a dir prefix and `getFileContent` returns one. Populate before syncing.
+   */
+  files: Record<string, { content: string; sha: string }> = {}
+
+  async listDirectory(
+    _installationId: number,
+    _ref: GitHubRepoRef,
+    path: string,
+    _gitRef?: string,
+  ): Promise<RepoContentEntry[]> {
+    const prefix = path ? `${path.replace(/\/+$/, '')}/` : ''
+    return Object.entries(this.files)
+      .filter(([p]) => (prefix ? p.startsWith(prefix) : !p.includes('/')))
+      .map(([p, f]) => ({
+        path: p,
+        name: p.split('/').pop() ?? p,
+        type: 'file',
+        sha: f.sha,
+      }))
+  }
+
+  async getFileContent(
+    _installationId: number,
+    _ref: GitHubRepoRef,
+    path: string,
+    _gitRef?: string,
+  ): Promise<RepoFileContent | null> {
+    return this.files[path] ?? null
   }
 
   async listPullRequests(): Promise<Paged<GitHubPullRequest>> {

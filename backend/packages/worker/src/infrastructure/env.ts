@@ -276,6 +276,19 @@ export interface Env {
    */
   RUNNERS_ENCRYPTION_KEY?: string
 
+  // ---- Prompt-fragment library (see config.ts; opt-in; ADR 0006) ----------
+  /**
+   * Enables the tenant-scoped prompt-fragment library ('true'). Fragments and
+   * repo-source linkages live in D1; no encryption key is needed (guidelines are
+   * not secrets and repo reads reuse the account's GitHub installation).
+   */
+  PROMPT_LIBRARY_ENABLED?: string
+  /**
+   * Relevance selector mode: 'llm' asks the agent model to pick relevant
+   * fragments per run; 'deterministic' (default) matches on appliesTo + tags.
+   */
+  PROMPT_LIBRARY_SELECTOR?: string
+
   // ---- Storage retention (see config.ts and docs/storage-and-retention.md) -
   /**
    * Days of `token_usage` ledger history to keep. The spend budget only reads the

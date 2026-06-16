@@ -66,8 +66,11 @@ import { NotionProvider } from './documents/NotionProvider'
 import { JiraProvider } from './tasks/JiraProvider'
 import { D1TaskConnectionRepository } from './repositories/D1TaskConnectionRepository'
 import { D1TaskRepository } from './repositories/D1TaskRepository'
+import { D1PromptFragmentRepository } from './repositories/D1PromptFragmentRepository'
+import { D1FragmentSourceRepository } from './repositories/D1FragmentSourceRepository'
+import { LlmFragmentSelector } from './ai/LlmFragmentSelector'
 import { CryptoIdGenerator, SystemClock } from './runtime'
-import type { Clock, IdGenerator } from '@cat-factory/core'
+import type { Clock, FragmentOwnerKind, IdGenerator } from '@cat-factory/core'
 import type { D1Database } from '@cloudflare/workers-types'
 
 // The infrastructure composition root: turn a Worker `env` into the concrete
@@ -518,6 +521,47 @@ function selectRepoScanner(
   })
 }
 
+/**
+ * Build the prompt-fragment library's concrete ports when opted in (ADR 0006):
+ * the two D1 repositories, the relevance selector (LLM when configured, else the
+ * core deterministic matcher via `fragmentSelector: undefined`), and the
+ * installation resolver repo-source sync uses to read guideline repos through the
+ * tier's GitHub installation. Returns `{}` when disabled, so `createCore` leaves
+ * the `fragmentLibrary` module unassembled and the engine uses manual fragmentIds.
+ */
+function selectFragmentLibraryDeps(
+  env: Env,
+  config: AppConfig,
+  db: D1Database,
+): Partial<CoreDependencies> {
+  if (!config.fragmentLibrary.enabled) return {}
+  const installationRepository = new D1GitHubInstallationRepository({ db })
+  const resolveFragmentInstallationId = async (
+    ownerKind: FragmentOwnerKind,
+    ownerId: string,
+  ): Promise<number | null> => {
+    if (ownerKind === 'workspace') {
+      return (await installationRepository.getByWorkspace(ownerId))?.installationId ?? null
+    }
+    // Account scope: the installation bound to this account (migration 0017).
+    const active = await installationRepository.listActive()
+    return active.find((i) => i.accountId === ownerId)?.installationId ?? null
+  }
+  return {
+    promptFragmentRepository: new D1PromptFragmentRepository({ db }),
+    fragmentSourceRepository: new D1FragmentSourceRepository({ db }),
+    resolveFragmentInstallationId,
+    ...(config.fragmentLibrary.selector === 'llm'
+      ? {
+          fragmentSelector: new LlmFragmentSelector({
+            modelProvider: new CloudflareModelProvider({ env }),
+            modelRef: config.agents.routing.default.ref,
+          }),
+        }
+      : {}),
+  }
+}
+
 export function buildContainer(env: Env, overrides: Partial<CoreDependencies> = {}): Container {
   const config = loadConfig(env)
   const db = env.DB
@@ -557,8 +601,13 @@ export function buildContainer(env: Env, overrides: Partial<CoreDependencies> = 
     ...selectTasksDeps(env, config, db),
     ...selectEnvironmentsDeps(env, config, db),
     ...selectRunnersDeps(env, config, db),
+    ...selectFragmentLibraryDeps(env, config, db),
     ...overrides,
   }
 
-  return { ...createCore(dependencies), config, agentRunRepository: new D1AgentRunRepository({ db }) }
+  return {
+    ...createCore(dependencies),
+    config,
+    agentRunRepository: new D1AgentRunRepository({ db }),
+  }
 }

@@ -78,6 +78,8 @@ export interface PipelineStep {
   output?: string
   /** identifier of the model that produced `output`, for transparency. */
   model?: string
+  /** prompt-fragment library ids folded into this step (manual ∪ selector pick). */
+  selectedFragmentIds?: string[]
 }
 
 /** A pipeline instance running against one block. */

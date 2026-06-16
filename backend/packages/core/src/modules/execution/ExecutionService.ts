@@ -21,6 +21,7 @@ import type { WorkRunner } from '../../ports/work-runner'
 import type { ExecutionEventPublisher } from '../../ports/execution-events'
 import type { DocumentRepository } from '../../ports/document-repositories'
 import type { TaskRepository } from '../../ports/task-repositories'
+import type { FragmentResolver } from '../../ports/fragment-selector'
 import type { EnvironmentProvisioningService } from '../environments/EnvironmentProvisioningService'
 import { isDeployStep } from '../environments/environments.logic'
 import { serviceOf } from '../board/board.logic'
@@ -74,6 +75,13 @@ export interface ExecutionServiceDependencies {
    * (no LLM), and downstream steps discover the resulting env via it.
    */
   environmentProvisioning?: EnvironmentProvisioningService
+  /**
+   * Optional: when the prompt-fragment library is configured, this resolves the
+   * relevant best-practice fragments to fold into each agent's system prompt —
+   * the merged tenant catalog selected per run (ADR 0006). Applies to every agent
+   * kind. Absent → the engine uses the block's manual `fragmentIds` unchanged.
+   */
+  fragmentResolver?: FragmentResolver
 }
 
 /**
@@ -100,6 +108,7 @@ export class ExecutionService {
   private readonly documents?: DocumentRepository
   private readonly tasks?: TaskRepository
   private readonly environmentProvisioning?: EnvironmentProvisioningService
+  private readonly fragmentResolver?: FragmentResolver
 
   constructor({
     workspaceRepository,
@@ -116,6 +125,7 @@ export class ExecutionService {
     documentRepository,
     taskRepository,
     environmentProvisioning,
+    fragmentResolver,
   }: ExecutionServiceDependencies) {
     this.workspaceRepository = workspaceRepository
     this.blockRepository = blockRepository
@@ -131,6 +141,7 @@ export class ExecutionService {
     this.documents = documentRepository
     this.tasks = taskRepository
     this.environmentProvisioning = environmentProvisioning
+    this.fragmentResolver = fragmentResolver
   }
 
   private requireWorkspace(workspaceId: string) {
@@ -474,6 +485,14 @@ export class ExecutionService {
     const contextDocs = await this.resolveContextDocs(workspaceId, block.id)
     const contextTasks = await this.resolveContextTasks(workspaceId, block.id)
     const environment = await this.resolveEnvironment(workspaceId, block.id)
+    const priorOutputs = instance.steps
+      .slice(0, instance.currentStep)
+      .filter((s) => s.output)
+      .map((s) => ({ agentKind: s.agentKind, output: s.output! }))
+    // Resolve the best-practice fragments to inject for this step from the tenant
+    // library (when configured): the merged catalog selected for this block/agent,
+    // unioned with the block's manual pins. Recorded on the step for observability.
+    const resolved = await this.resolveFragments(workspaceId, step, block, priorOutputs)
     return {
       agentKind: step.agentKind,
       pipelineName: instance.pipelineName,
@@ -488,22 +507,54 @@ export class ExecutionService {
         description: block.description,
         features: block.features,
         fragmentIds: block.fragmentIds,
+        ...(resolved ? { resolvedFragments: resolved.fragments } : {}),
         modelId: block.modelId,
         ...(block.testTarget ? { testTarget: block.testTarget } : {}),
         ...(contextDocs.length ? { contextDocs } : {}),
         ...(contextTasks.length ? { contextTasks } : {}),
       },
       ...(environment ? { environment } : {}),
-      priorOutputs: instance.steps
-        .slice(0, instance.currentStep)
-        .filter((s) => s.output)
-        .map((s) => ({ agentKind: s.agentKind, output: s.output! })),
+      priorOutputs,
       decisions: instance.steps
         .filter((s, i) => i < instance.currentStep && s.decision?.chosen)
         .map((s) => ({ question: s.decision!.question, chosen: s.decision!.chosen! })),
       resolvedDecision: step.decision?.chosen
         ? { question: step.decision.question, chosen: step.decision.chosen }
         : null,
+    }
+  }
+
+  /**
+   * Resolve the prompt-fragment library selection for a step. A no-op (returns
+   * null) unless the library module is wired, so the engine — and every executor
+   * — falls back to the block's manual `fragmentIds` when it is off. Records the
+   * selected ids on the step for observability; never throws (a selector failure
+   * degrades to the manual pins inside the resolver).
+   */
+  private async resolveFragments(
+    workspaceId: string,
+    step: PipelineStep,
+    block: Block,
+    priorOutputs: { agentKind: string; output: string }[],
+  ): Promise<{ fragments: { id: string; body: string }[] } | null> {
+    if (!this.fragmentResolver) return null
+    try {
+      const selection = await this.fragmentResolver.resolveForRun({
+        workspaceId,
+        agentKind: step.agentKind,
+        blockType: block.type,
+        blockTitle: block.title,
+        blockDescription: block.description,
+        manualIds: block.fragmentIds ?? [],
+        // The prior step's output (e.g. a coder's summary) is the cheapest signal
+        // available without fetching a diff; the selector reasons over it.
+        signals: priorOutputs.map((p) => p.output).slice(-2),
+      })
+      step.selectedFragmentIds = selection.selectedIds
+      return { fragments: selection.fragments }
+    } catch {
+      // Resolution must never wedge a run; fall back to manual id resolution.
+      return null
     }
   }
 
