@@ -65,16 +65,9 @@ export function githubWebhookController(): Hono<AppEnv> {
 
     await github.installationService.connect(workspaceId, installationId)
 
-    // Kick off an initial backfill: durable Workflow if available, else discover
-    // repos now and let the cron pass fill in the per-repo detail.
-    const workflow = c.env.GITHUB_BACKFILL_WORKFLOW
-    if (workflow) {
-      await workflow
-        .create({ id: `backfill-${installationId}-${Date.now()}`, params: { installationId } })
-        .catch(() => {})
-    } else {
-      await github.syncService.syncInstallationRepos(workspaceId, installationId)
-    }
+    // Repos are linked explicitly per workspace after connecting, so there is no
+    // whole-installation backfill here — the user picks which repos this board
+    // tracks, which projects and syncs just those.
 
     return c.redirect(container.config.github.setupRedirectUrl)
   })

@@ -15,14 +15,18 @@ import type { RateLimitSnapshot } from './github-client'
 // ---------------------------------------------------------------------------
 
 /**
- * A workspace's GitHub App installation binding, including the cached short-lived
- * installation token. The token fields are infrastructure detail (never sent on
- * the wire); they live here so the auth adapter can read/write the cache in the
- * same row that maps installation → workspace.
+ * A GitHub App installation binding. An installation is bound to an *account*
+ * (migration 0017), so every workspace in that account shares it; `workspaceId`
+ * records the workspace that connected it (and is the binding key on the
+ * auth-disabled path, where `accountId` is null). The token fields are
+ * infrastructure detail (never sent on the wire); they live here so the auth
+ * adapter can read/write the cache in the same row.
  */
 export interface GitHubInstallation {
   installationId: number
   workspaceId: string
+  /** The account this installation is bound to, or null on the auth-disabled path. */
+  accountId: string | null
   accountLogin: string
   targetType: 'Organization' | 'User'
   /** Cached installation access token, or null if none/expired. */
@@ -36,8 +40,17 @@ export interface GitHubInstallation {
 
 export interface GitHubInstallationRepository {
   getByInstallationId(installationId: number): Promise<GitHubInstallation | null>
+  /**
+   * The installation backing a workspace: its own direct binding, or one shared
+   * via its account. Returns null when neither exists or is tombstoned.
+   */
   getByWorkspace(workspaceId: string): Promise<GitHubInstallation | null>
-  /** List every live installation across workspaces (used by the cron pass). */
+  /**
+   * Every workspace that an installation's webhooks should fan out to: the
+   * connector workspace plus all workspaces in the installation's account.
+   */
+  listWorkspacesForInstallation(installationId: number): Promise<string[]>
+  /** List every live installation across accounts (used by the cron pass). */
   listActive(): Promise<GitHubInstallation[]>
   upsert(installation: GitHubInstallation): Promise<void>
   updateCachedToken(installationId: number, token: string, expiresAt: number): Promise<void>

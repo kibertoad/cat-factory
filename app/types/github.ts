@@ -48,6 +48,21 @@ export interface GitHubBranch {
   syncedAt: number
 }
 
+/**
+ * A repo the connected installation can access, annotated with whether the
+ * current workspace links it. Drives the per-workspace repo picker — repos are
+ * linked explicitly per board, since the installation is shared across an
+ * account's workspaces.
+ */
+export interface GitHubAvailableRepo {
+  githubId: number
+  owner: string
+  name: string
+  defaultBranch: string | null
+  private: boolean
+  linked: boolean
+}
+
 export type GitHubPullRequestState = 'open' | 'closed'
 
 export interface GitHubPullRequest {

@@ -20,10 +20,16 @@ export interface WorkspaceRow {
   id: string
   name: string
   created_at: number
+  account_id: string | null
 }
 
 export function rowToWorkspace(row: WorkspaceRow): Workspace {
-  return { id: row.id, name: row.name, createdAt: row.created_at }
+  return {
+    id: row.id,
+    name: row.name,
+    createdAt: row.created_at,
+    accountId: row.account_id ?? null,
+  }
 }
 
 export interface BlockRow {

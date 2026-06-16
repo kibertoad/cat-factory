@@ -12,6 +12,7 @@ import { executionController } from './modules/execution/ExecutionController'
 import { eventsController } from './modules/events/EventsController'
 import { pipelineController } from './modules/pipelines/PipelineController'
 import { workspaceController } from './modules/workspaces/WorkspaceController'
+import { accountController } from './modules/accounts/AccountController'
 import { githubController } from './modules/github/GitHubController'
 import { githubWebhookController } from './modules/github/GitHubWebhookController'
 import { documentSourceController } from './modules/documents/DocumentSourceController'
@@ -87,13 +88,14 @@ export function createApp(options: CreateAppOptions = {}): Hono<AppEnv> {
 
   // Per-workspace authorization. The gate above only proves the caller is signed
   // in; this binds the signed-in user to the `:workspaceId` they are addressing,
-  // so one user cannot read or mutate another tenant's board (the previous
-  // behaviour granted every authenticated user access to ALL workspaces).
+  // so one user cannot read or mutate a board outside the accounts they belong to.
   //   - Runs only when a user is set: when auth is disabled (dev) or for the
   //     self-authenticating WS upgrade (gate-bypassed, no user), it is a no-op.
   //   - `/workspaces` (list/create) has no :id and is skipped here.
-  //   - A board the user does not own — including a legacy NULL-owner board — is
-  //     reported as 404 (not 403) so existence isn't leaked.
+  //   - Access is granted when the user is a member of the board's account; a
+  //     legacy account-less board is still readable by the user who owns it.
+  //   - Anything else — including a board in an account the user doesn't belong to
+  //     — is reported as 404 (not 403) so existence isn't leaked.
   app.use('*', async (c, next) => {
     if (c.req.method === 'OPTIONS') return next()
     const user = c.get('user')
@@ -101,12 +103,20 @@ export function createApp(options: CreateAppOptions = {}): Hono<AppEnv> {
     const match = /^\/workspaces\/([^/]+)(?:\/.*)?$/.exec(c.req.path)
     if (!match) return next()
     const workspaceId = decodeURIComponent(match[1]!)
-    const owner = await c.get('container').workspaceService.ownerOf(workspaceId)
-    if (owner === undefined) return next() // missing board → let the handler 404 normally
-    if (owner !== user.id) {
-      return c.json({ error: { code: 'not_found', message: 'Workspace not found' } }, 404)
+    const container = c.get('container')
+    const accountId = await container.workspaceService.accountOf(workspaceId)
+    if (accountId === undefined) return next() // missing board → let the handler 404 normally
+
+    const notFound = () =>
+      c.json({ error: { code: 'not_found', message: 'Workspace not found' } }, 404)
+
+    if (accountId === null) {
+      // Legacy/unscoped board: only the user who personally owns it may access it.
+      const owner = await container.workspaceService.ownerOf(workspaceId)
+      return owner === user.id ? next() : notFound()
     }
-    return next()
+    if (await container.accountService.isMember(accountId, user.id)) return next()
+    return notFound()
   })
 
   // Read-only best-practice fragment catalog (gated).
@@ -124,6 +134,7 @@ export function createApp(options: CreateAppOptions = {}): Hono<AppEnv> {
   app.route('/auth', authController())
 
   // API layer — controllers grouped by module (all behind the default-deny gate).
+  app.route('/', accountController())
   app.route('/', workspaceController())
   app.route('/workspaces/:workspaceId', boardController())
   app.route('/workspaces/:workspaceId', pipelineController())

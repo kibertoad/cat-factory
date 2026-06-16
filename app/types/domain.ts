@@ -163,6 +163,8 @@ export interface Workspace {
   id: string
   name: string
   createdAt: number
+  /** The account this board belongs to, or null for a legacy/unscoped board. */
+  accountId: string | null
 }
 
 /** Full server-side state of a workspace, returned on load and after resets. */
@@ -204,3 +206,4 @@ export type * from './tasks'
 export type * from './scenarios'
 export type * from './bootstrap'
 export type * from './github'
+export type * from './accounts'

@@ -19,7 +19,6 @@ import {
   toCommitProjection,
   toIssueProjection,
   toPullRequestProjection,
-  toRepoProjection,
 } from './projection.logic'
 
 // ---------------------------------------------------------------------------
@@ -68,7 +67,6 @@ export class WebhookService {
     const installation =
       await this.deps.githubInstallationRepository.getByInstallationId(installationId)
     if (!installation || installation.deletedAt) return
-    const workspaceId = installation.workspaceId
     const now = this.deps.clock.now()
 
     switch (eventName) {
@@ -77,18 +75,22 @@ export class WebhookService {
         if (!pr) return
         const repoId = pullRepoGithubId(pr) ?? this.repoIdOf(root)
         if (repoId === null) return
-        await this.deps.pullRequestProjectionRepository.upsertMany(workspaceId, [
-          toPullRequestProjection(pr, repoId, now),
-        ])
+        await this.forEachLinkedWorkspace(installationId, repoId, (ws) =>
+          this.deps.pullRequestProjectionRepository.upsertMany(ws, [
+            toPullRequestProjection(pr, repoId, now),
+          ]),
+        )
         return
       }
       case 'issues': {
         const issue = asObject(root.issue) as GhIssuePayload | null
         const repoId = this.repoIdOf(root)
         if (!issue || repoId === null) return
-        await this.deps.issueProjectionRepository.upsertMany(workspaceId, [
-          toIssueProjection(issue, repoId, now),
-        ])
+        await this.forEachLinkedWorkspace(installationId, repoId, (ws) =>
+          this.deps.issueProjectionRepository.upsertMany(ws, [
+            toIssueProjection(issue, repoId, now),
+          ]),
+        )
         return
       }
       case 'push': {
@@ -97,38 +99,60 @@ export class WebhookService {
         // Update the pushed branch head and project the new commits.
         const ref = typeof root.ref === 'string' ? root.ref : ''
         const after = typeof root.after === 'string' ? root.after : ''
-        if (ref.startsWith('refs/heads/') && after) {
-          await this.deps.branchProjectionRepository.upsertMany(workspaceId, [
-            {
-              repoGithubId: repoId,
-              name: ref.slice('refs/heads/'.length),
-              headSha: after,
-              protected: false,
-              syncedAt: now,
-            },
-          ])
-        }
         const commits = Array.isArray(root.commits) ? (root.commits as GhCommitPayload[]) : []
-        if (commits.length > 0) {
-          await this.deps.commitProjectionRepository.upsertMany(
-            workspaceId,
-            commits.map((c) => toCommitProjection(c, repoId, now)),
-          )
-        }
+        await this.forEachLinkedWorkspace(installationId, repoId, async (ws) => {
+          if (ref.startsWith('refs/heads/') && after) {
+            await this.deps.branchProjectionRepository.upsertMany(ws, [
+              {
+                repoGithubId: repoId,
+                name: ref.slice('refs/heads/'.length),
+                headSha: after,
+                protected: false,
+                syncedAt: now,
+              },
+            ])
+          }
+          if (commits.length > 0) {
+            await this.deps.commitProjectionRepository.upsertMany(
+              ws,
+              commits.map((c) => toCommitProjection(c, repoId, now)),
+            )
+          }
+        })
         return
       }
       case 'check_run': {
         const check = asObject(root.check_run) as GhCheckRunPayload | null
         const repoId = this.repoIdOf(root)
         if (!check || repoId === null) return
-        await this.deps.checkRunProjectionRepository.upsertMany(workspaceId, [
-          toCheckRunProjection(check, repoId, now),
-        ])
+        await this.forEachLinkedWorkspace(installationId, repoId, (ws) =>
+          this.deps.checkRunProjectionRepository.upsertMany(ws, [
+            toCheckRunProjection(check, repoId, now),
+          ]),
+        )
         return
       }
       default:
         // Unhandled event kind: nothing to project incrementally.
         return
+    }
+  }
+
+  /**
+   * Apply `project` to every workspace backed by this installation that actually
+   * links the affected repo. Since repos are linked explicitly per workspace, an
+   * event for a repo only updates the boards that chose to track it.
+   */
+  private async forEachLinkedWorkspace(
+    installationId: number,
+    repoGithubId: number,
+    project: (workspaceId: string) => Promise<void>,
+  ): Promise<void> {
+    const workspaceIds =
+      await this.deps.githubInstallationRepository.listWorkspacesForInstallation(installationId)
+    for (const ws of workspaceIds) {
+      const repo = await this.deps.repoProjectionRepository.get(ws, repoGithubId)
+      if (repo) await project(ws)
     }
   }
 
@@ -141,48 +165,42 @@ export class WebhookService {
     const now = this.deps.clock.now()
     const action = typeof root.action === 'string' ? root.action : ''
 
-    // Lifecycle: suspend/uninstall tombstones the binding; (un)installing repos
-    // adds/removes projected repos.
+    // Lifecycle: suspend/uninstall tombstones the binding (account-wide, since the
+    // installation is shared); unsuspend revives it. Repos are NOT auto-projected
+    // here — they are linked explicitly per workspace.
     if (eventName === 'installation') {
       if (action === 'deleted' || action === 'suspend') {
         await this.deps.githubInstallationRepository.softDelete(installationId, now)
       } else if (action === 'unsuspend') {
         await this.deps.githubInstallationRepository.upsert({ ...installation, deletedAt: null })
       }
-      const repos = Array.isArray(root.repositories) ? (root.repositories as GhRepoPayload[]) : []
-      if (repos.length > 0) {
-        await this.deps.repoProjectionRepository.upsertMany(
-          installation.workspaceId,
-          repos.map((r) => toRepoProjection(r, installationId, now)),
-        )
-      }
       return
     }
 
-    // installation_repositories: repositories_added / repositories_removed.
-    const added = Array.isArray(root.repositories_added)
-      ? (root.repositories_added as GhRepoPayload[])
-      : []
+    // installation_repositories: a removed repo is no longer accessible, so
+    // tombstone it in every workspace that linked it. Added repos just become
+    // available — the user links them explicitly, so we don't project them here.
     const removed = Array.isArray(root.repositories_removed)
       ? (root.repositories_removed as GhRepoPayload[])
       : []
-    if (added.length > 0) {
-      await this.deps.repoProjectionRepository.upsertMany(
-        installation.workspaceId,
-        added.map((r) => toRepoProjection(r, installationId, now)),
-      )
-    }
-    for (const r of removed) {
-      // Tombstone each removed repo by excluding it from the "seen" set.
-      const remaining = (await this.deps.repoProjectionRepository.list(installation.workspaceId))
-        .filter((repo) => repo.githubId !== r.id && repo.installationId === installationId)
+    if (removed.length === 0) return
+    const workspaceIds =
+      await this.deps.githubInstallationRepository.listWorkspacesForInstallation(installationId)
+    for (const ws of workspaceIds) {
+      const tracked = await this.deps.repoProjectionRepository.list(ws)
+      const removedIds = new Set(removed.map((r) => r.id))
+      const remaining = tracked
+        .filter((repo) => repo.installationId === installationId && !removedIds.has(repo.githubId))
         .map((repo) => repo.githubId)
-      await this.deps.repoProjectionRepository.tombstoneMissing(
-        installation.workspaceId,
-        installationId,
-        remaining,
-        now,
-      )
+      // Only rewrite when this workspace actually tracks one of the removed repos.
+      if (remaining.length !== tracked.filter((r) => r.installationId === installationId).length) {
+        await this.deps.repoProjectionRepository.tombstoneMissing(
+          ws,
+          installationId,
+          remaining,
+          now,
+        )
+      }
     }
   }
 
