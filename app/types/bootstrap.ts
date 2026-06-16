@@ -7,6 +7,8 @@
 // from one and runs a bootstrapper agent in a container to adapt it.
 // ---------------------------------------------------------------------------
 
+import type { StepSubtasks } from './execution'
+
 /** A managed base repository new repos are bootstrapped from. */
 export interface ReferenceArchitecture {
   id: string
@@ -35,6 +37,25 @@ export type UpdateReferenceArchitectureInput = Partial<CreateReferenceArchitectu
 /** Lifecycle of a single "bootstrap repo" run. */
 export type BootstrapStatus = 'pending' | 'running' | 'succeeded' | 'failed'
 
+/** How a bootstrap run faulted (mirrors the contract). */
+export type BootstrapFailureKind =
+  | 'preflight'
+  | 'dispatch'
+  | 'evicted'
+  | 'timeout'
+  | 'agent'
+  | 'unknown'
+
+/** Structured failure diagnostics captured when a bootstrap run fails. */
+export interface BootstrapFailure {
+  kind: BootstrapFailureKind
+  message: string
+  detail: string | null
+  hint: string | null
+  occurredAt: number
+  lastSubtasks: StepSubtasks | null
+}
+
 /** One "bootstrap repo" run with its outcome. */
 export interface BootstrapJob {
   id: string
@@ -48,7 +69,13 @@ export interface BootstrapJob {
   repoUrl: string | null
   instructions: string
   status: BootstrapStatus
+  /** The board service frame this run materialises, or null if none was created. */
+  blockId: string | null
+  /** Live subtask counts from the bootstrapper agent, or null until it reports. */
+  subtasks: StepSubtasks | null
   error: string | null
+  /** Structured failure diagnostics when `status` is `failed`; null otherwise. */
+  failure: BootstrapFailure | null
   createdAt: number
   updatedAt: number
 }

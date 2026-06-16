@@ -1,4 +1,4 @@
-import type { Block, ExecutionInstance } from '../domain/types'
+import type { Block, BootstrapJob, ExecutionInstance } from '../domain/types'
 
 // Port for pushing state changes to connected clients in real time, instead of
 // the browser polling for them. The execution engine calls this whenever it
@@ -24,6 +24,13 @@ export interface ExecutionEventPublisher {
    * materialised, a run cancelled) — a coarse signal that prompts a full refresh.
    */
   boardChanged(workspaceId: string, reason: string): Promise<void>
+  /**
+   * A repo-bootstrap run advanced: push the updated job (with live `subtasks`)
+   * and its provisional/linked service frame, so the board patches the
+   * "bootstrapping…" card and its progress without a refetch. Optional so
+   * publishers/tests that predate bootstrap progress need no change.
+   */
+  bootstrapChanged?(workspaceId: string, job: BootstrapJob, block?: Block | null): Promise<void>
 }
 
 /**
@@ -34,4 +41,5 @@ export interface ExecutionEventPublisher {
 export class NoopEventPublisher implements ExecutionEventPublisher {
   async executionChanged(): Promise<void> {}
   async boardChanged(): Promise<void> {}
+  async bootstrapChanged(): Promise<void> {}
 }

@@ -29,6 +29,7 @@ import { CompositeAgentExecutor } from './ai/CompositeAgentExecutor'
 import { ContainerSessionService } from './containers/ContainerSessionService'
 import { DurableObjectEventPublisher } from './events/DurableObjectEventPublisher'
 import { WorkflowsWorkRunner } from './workflows/WorkflowsWorkRunner'
+import { WorkflowsBootstrapRunner } from './workflows/WorkflowsBootstrapRunner'
 import { D1BlockRepository } from './repositories/D1BlockRepository'
 import { D1ExecutionRepository } from './repositories/D1ExecutionRepository'
 import { D1PipelineRepository } from './repositories/D1PipelineRepository'
@@ -434,6 +435,8 @@ function selectRepoBootstrapper(
   return new ContainerRepoBootstrapper({
     container: env.IMPL_CONTAINER,
     installationRepository,
+    bootstrapJobRepository: new D1BootstrapJobRepository({ db }),
+    repoRepository: new D1RepoProjectionRepository({ db }),
     githubClient,
     mintInstallationToken: (id) => auth.installationToken(id),
     sessionService: new ContainerSessionService({ secret: env.AUTH_SESSION_SECRET }),
@@ -511,6 +514,11 @@ export function buildContainer(env: Env, overrides: Partial<CoreDependencies> = 
     referenceArchitectureRepository: new D1ReferenceArchitectureRepository({ db }),
     bootstrapJobRepository: new D1BootstrapJobRepository({ db }),
     repoBootstrapper: selectRepoBootstrapper(env, config, db, clock, idGenerator),
+    // Durably drive each bootstrap run's poll loop when the Workflows binding is
+    // present (mirrors the execution driver); without it a run still dispatches.
+    bootstrapRunner: env.BOOTSTRAP_WORKFLOW
+      ? new WorkflowsBootstrapRunner(env.BOOTSTRAP_WORKFLOW)
+      : undefined,
     // Board-scan: the blueprint repository is wired unconditionally (reads are
     // always available); the scan path additionally needs the container scanner.
     repoBlueprintRepository: new D1RepoBlueprintRepository({ db }),

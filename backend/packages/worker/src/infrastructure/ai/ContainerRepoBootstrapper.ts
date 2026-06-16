@@ -1,4 +1,7 @@
 import type {
+  BootstrapJobHandle,
+  BootstrapJobRepository,
+  BootstrapJobUpdate,
   BootstrapRepoOutcome,
   BootstrapRepoRequest,
   GitHubClient,
@@ -6,21 +9,28 @@ import type {
   ModelRef,
   RepoBootstrapper,
   RepoEntry,
+  RepoProjectionRepository,
 } from '@cat-factory/core'
 import type { DurableObjectNamespace } from '@cloudflare/workers-types'
 import type { ImplementationContainer } from '../containers/ImplementationContainer'
 import type { ContainerSessionService } from '../containers/ContainerSessionService'
+import { logger } from '../observability/logger'
 
-// Synchronous request/response (unlike `/run`); cap the Worker's wait so a wedged
-// container can't block forever. The harness's shared git timeouts bound the
-// underlying git operations too.
-const CONTAINER_SYNC_TIMEOUT_MS = 30 * 60_000
+// `/bootstrap` and `/jobs/{id}` are quick (start a background job / read its
+// state), like `/run`: the long bootstrap work is bounded container-side by the
+// job's inactivity + max-duration watchdogs, so these get a short timeout.
+const DISPATCH_TIMEOUT_MS = 30_000
+const POLL_TIMEOUT_MS = 30_000
 
 export interface ContainerRepoBootstrapperDependencies {
   /** The Durable Object namespace backing the per-run container instances. */
   container: DurableObjectNamespace<ImplementationContainer>
   /** Resolve which GitHub installation a workspace's repos live under. */
   installationRepository: GitHubInstallationRepository
+  /** Look up a job's target repo name when polling (the poll only carries a job id). */
+  bootstrapJobRepository: BootstrapJobRepository
+  /** Local repo projection: where the bootstrapped repo is recorded + linked to its frame. */
+  repoRepository: RepoProjectionRepository
   /** Resolves/validates the pre-created target repository (existence + emptiness). */
   githubClient: GitHubClient
   /** Mints a short-lived GitHub installation token for clone + push. */
@@ -85,7 +95,13 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
     return !!installation && !installation.deletedAt
   }
 
-  async bootstrap(request: BootstrapRepoRequest): Promise<BootstrapRepoOutcome> {
+  /**
+   * Pre-flight the target repo and dispatch the bootstrap container as a
+   * background job (returns once accepted, like `/run`). Throws on a pre-flight
+   * failure so the run fails fast before a board frame is created.
+   */
+  async startBootstrap(request: BootstrapRepoRequest): Promise<BootstrapJobHandle> {
+    const log = logger.child({ jobId: request.jobId, workspaceId: request.workspaceId })
     const installation = await this.deps.installationRepository.getByWorkspace(request.workspaceId)
     if (!installation || installation.deletedAt) {
       throw new Error(`Workspace '${request.workspaceId}' is not connected to GitHub`)
@@ -106,6 +122,7 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
     const owner = installation.accountLogin
     const repoName = request.target.name
     const ref = { owner, repo: repoName }
+    log.info({ target: `${owner}/${repoName}` }, 'bootstrap: pre-flighting target repo')
 
     let target
     try {
@@ -135,7 +152,7 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
       throw new Error(
         `Repository ${owner}/${repoName} already has content (${sample}). Bootstrapping replaces ` +
           `the repository's contents, so it needs an empty repository — or one prepopulated only ` +
-          `with a README, .gitignore and/or license.`,
+          `with a README, .gitignore, license and/or AGENTS.md.`,
       )
     }
 
@@ -164,6 +181,7 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
       : undefined
 
     const body = {
+      jobId: request.jobId,
       systemPrompt: reference ? ADAPT_SYSTEM_PROMPT : SCAFFOLD_SYSTEM_PROMPT,
       instructions:
         request.instructions ||
@@ -185,34 +203,140 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
     }
 
     // One container instance per job (keyed by job id), mirroring the per-run
-    // implementation container. The base Container.fetch proxies to the harness.
+    // implementation container. POST /bootstrap starts the background job and
+    // returns immediately; we then poll GET /jobs/{id}. The base Container.fetch
+    // proxies to the harness.
     const stub = this.deps.container.get(this.deps.container.idFromName(request.jobId))
+    log.info({ reference: reference ? `${reference.owner}/${reference.name}` : null }, 'bootstrap: dispatching container')
     const res = await stub.fetch('http://container/bootstrap', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(CONTAINER_SYNC_TIMEOUT_MS),
+      signal: AbortSignal.timeout(DISPATCH_TIMEOUT_MS),
     })
     if (!res.ok) {
-      throw new Error(`Bootstrap container failed (HTTP ${res.status}): ${await safeText(res)}`)
+      throw new Error(`Bootstrap container dispatch failed (HTTP ${res.status}): ${await safeText(res)}`)
     }
-    const result = (await res.json()) as BootstrapContainerResult
-    if (result.error) throw new Error(`Bootstrap failed: ${result.error}`)
+    log.info('bootstrap: container accepted job')
+    return { workspaceId: request.workspaceId, jobId: request.jobId }
+  }
 
+  /** Poll a dispatched bootstrap job, mapping the harness job view into an update. */
+  async pollBootstrap(handle: BootstrapJobHandle): Promise<BootstrapJobUpdate> {
+    const stub = this.deps.container.get(this.deps.container.idFromName(handle.jobId))
+    const res = await stub.fetch(`http://container/jobs/${encodeURIComponent(handle.jobId)}`, {
+      method: 'GET',
+      signal: AbortSignal.timeout(POLL_TIMEOUT_MS),
+    })
+    if (res.status === 404) {
+      // The job/container vanished (eviction or crash): report failed so the run
+      // stops with a clear, classified reason the board can act on.
+      return {
+        state: 'failed',
+        failureKind: 'evicted',
+        error: 'Bootstrap job not found (container evicted or crashed)',
+      }
+    }
+    if (!res.ok) {
+      throw new Error(`Bootstrap job poll failed (HTTP ${res.status}): ${await safeText(res)}`)
+    }
+    const view = (await res.json()) as {
+      state: 'running' | 'done' | 'failed'
+      progress?: { completed: number; inProgress: number; total: number }
+      result?: BootstrapContainerResult
+      error?: string
+    }
+
+    if (view.state === 'running') {
+      return view.progress ? { state: 'running', subtasks: view.progress } : { state: 'running' }
+    }
+    if (view.state === 'failed') {
+      // The harness redacts + labels watchdog kills ("…no agent activity…",
+      // "…exceeded max duration…"); classify those as `timeout`, the rest `agent`.
+      const error = view.error ?? 'Bootstrap job failed'
+      const failureKind = /inactivity|no agent activity|max duration/i.test(error)
+        ? ('timeout' as const)
+        : ('agent' as const)
+      return { state: 'failed', failureKind, error, detail: view.error }
+    }
+    // Completed: a structured `error` (e.g. push rejected) is still a failure.
+    const result = view.result ?? {}
+    if (result.error) {
+      return {
+        state: 'failed',
+        failureKind: 'agent',
+        error: `Bootstrap failed: ${result.error}`,
+        detail: result.error,
+      }
+    }
+    const outcome = await this.buildOutcome(handle, result.defaultBranch)
+    return { state: 'done', outcome }
+  }
+
+  /**
+   * Best-effort: reclaim the per-run container for a job. Addresses the same
+   * Durable Object instance the run used (keyed by job id) and asks it to shut its
+   * container down. Safe to call when the container is already gone — a stop on a
+   * non-running instance is a no-op, and any error is swallowed by the caller.
+   */
+  async stopBootstrap(handle: BootstrapJobHandle): Promise<void> {
+    const stub = this.deps.container.get(this.deps.container.idFromName(handle.jobId))
+    await stub.shutdown()
+    logger.child({ jobId: handle.jobId, workspaceId: handle.workspaceId }).info('bootstrap: stopped container')
+  }
+
+  /**
+   * After a successful run: record the bootstrapped repo in the local projection
+   * (a brand-new repo may not be there yet) and link it to the board frame, so
+   * tasks dropped on that service resolve to (and are implemented against) it.
+   */
+  async linkRepoToBlock(
+    workspaceId: string,
+    outcome: BootstrapRepoOutcome,
+    blockId: string,
+  ): Promise<void> {
+    const log = logger.child({ workspaceId, blockId })
+    const installation = await this.deps.installationRepository.getByWorkspace(workspaceId)
+    if (!installation || installation.deletedAt) {
+      throw new Error(`Workspace '${workspaceId}' is not connected to GitHub`)
+    }
+    const repo = await this.deps.githubClient.getRepo(installation.installationId, {
+      owner: outcome.owner,
+      repo: outcome.name,
+    })
+    await this.deps.repoRepository.upsertMany(workspaceId, [repo])
+    await this.deps.repoRepository.linkBlock(workspaceId, repo.githubId, blockId)
+    log.info({ repo: `${outcome.owner}/${outcome.name}`, githubId: repo.githubId }, 'bootstrap: linked repo to service frame')
+  }
+
+  /** Construct the success outcome from the installation + the recorded job's repo name. */
+  private async buildOutcome(
+    handle: BootstrapJobHandle,
+    resultDefaultBranch: string | undefined,
+  ): Promise<BootstrapRepoOutcome> {
+    const installation = await this.deps.installationRepository.getByWorkspace(handle.workspaceId)
+    if (!installation) throw new Error(`Workspace '${handle.workspaceId}' is not connected to GitHub`)
+    const record = await this.deps.bootstrapJobRepository.get(handle.workspaceId, handle.jobId)
+    if (!record) throw new Error(`Bootstrap job '${handle.jobId}' not found`)
+    const owner = installation.accountLogin
+    const webBase = (this.deps.webBaseUrl ?? 'https://github.com').replace(/\/+$/, '')
     return {
-      repoUrl: `${webBase}/${owner}/${repoName}`,
+      repoUrl: `${webBase}/${owner}/${record.repoName}`,
       owner,
-      name: repoName,
-      defaultBranch: result.defaultBranch ?? defaultBranch,
+      name: record.repoName,
+      defaultBranch: resultDefaultBranch ?? 'main',
     }
   }
 }
 
 /**
  * Whether a repo's root entry is throwaway boilerplate GitHub commonly prepopulates
- * at create time — a README, a `.gitignore`, or a license file. Only top-level
- * files qualify (a directory means real project content), and the match is
- * case-insensitive across the usual extensions (`README.md`, `LICENSE.txt`, …).
+ * at create time — a README, a `.gitignore`, or a license file — or an `AGENTS.md`
+ * that a prior (incomplete) bootstrap attempt left behind. The push force-overwrites
+ * all of these, so tolerating them lets bootstrap re-run over a repo seeded only with
+ * agent context. Only top-level files qualify (a directory means real project
+ * content), and the match is case-insensitive across the usual extensions
+ * (`README.md`, `LICENSE.txt`, …).
  */
 function isBootstrapBoilerplate(entry: RepoEntry): boolean {
   if (entry.type !== 'file') return false
@@ -224,7 +348,8 @@ function isBootstrapBoilerplate(entry: RepoEntry): boolean {
     name === 'license' ||
     name.startsWith('license.') ||
     name === 'licence' ||
-    name.startsWith('licence.')
+    name.startsWith('licence.') ||
+    name === 'agents.md'
   )
 }
 

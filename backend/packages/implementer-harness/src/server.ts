@@ -1,6 +1,12 @@
 import { timingSafeEqual } from 'node:crypto'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
-import { type BootstrapResult, parseBootstrapJob, parseJob, type RunResult } from './job.js'
+import {
+  type BootstrapJob,
+  type BootstrapResult,
+  parseBootstrapJob,
+  parseJob,
+  type RunResult,
+} from './job.js'
 import { handleBootstrap } from './bootstrap.js'
 import { redactSecrets } from './git.js'
 import { JobRegistry, loadRunnerLimits } from './runner.js'
@@ -38,8 +44,14 @@ function authorized(req: IncomingMessage): boolean {
 }
 
 // One registry per container process. Each run addresses its own container
-// instance (one Durable Object id per execution), so this tracks that run's job.
-const jobs = new JobRegistry(loadRunnerLimits())
+// instance (one Durable Object id per execution / bootstrap job), so these track
+// that instance's single job. Implementation (`/run`) and bootstrap
+// (`/bootstrap`) jobs share the same watchdog/lifecycle but produce different
+// results, so they get their own registries; `GET /jobs/{id}` checks both (job
+// ids never collide across them).
+const limits = loadRunnerLimits()
+const jobs = new JobRegistry(limits)
+const bootstrapJobs = new JobRegistry<BootstrapJob, BootstrapResult>(limits, handleBootstrap)
 
 // Re-exported so the acceptance suite (and any direct caller) can run a job
 // synchronously without going through the async job API.
@@ -66,28 +78,26 @@ const server = createServer((req, res) => {
     if (!authorized(req)) {
       return send(res, 401, { error: 'unauthorized' })
     }
+    // Start (or re-attach to) a bootstrap job: POST /bootstrap. Like /run it
+    // returns immediately with the job id; the Worker polls GET /jobs/{id} for
+    // live subtask progress and the final result.
     if (req.method === 'POST' && req.url === '/bootstrap') {
-      // Parse failures (incl. host-allowlist rejection) are client errors → 400;
-      // a failure during the run itself is a server error → 500.
-      let job
       try {
-        job = parseBootstrapJob(JSON.parse(await readBody(req)))
+        const job = parseBootstrapJob(JSON.parse(await readBody(req)))
+        const view = bootstrapJobs.start(job.jobId, job)
+        return send(res, 202, { jobId: view.id, state: view.state })
       } catch (error) {
+        // Parse failures (incl. host-allowlist rejection) are client errors → 400.
         const message = redactSecrets(error instanceof Error ? error.message : String(error))
+        log.error('failed to start bootstrap', { error: message })
         return send(res, 400, { error: message } satisfies BootstrapResult)
       }
-      try {
-        const result = await handleBootstrap(job)
-        return send(res, 200, result)
-      } catch (error) {
-        const message = redactSecrets(error instanceof Error ? error.message : String(error))
-        return send(res, 500, { error: message } satisfies BootstrapResult)
-      }
     }
-    // Poll a running/finished job: GET /jobs/{id}.
+    // Poll a running/finished job: GET /jobs/{id}. Job ids are unique per kind,
+    // so check the implementation registry first, then the bootstrap registry.
     if (req.method === 'GET' && req.url?.startsWith('/jobs/')) {
       const id = decodeURIComponent(req.url.slice('/jobs/'.length))
-      const view = jobs.get(id)
+      const view = jobs.get(id) ?? bootstrapJobs.get(id)
       if (!view) return send(res, 404, { error: 'job not found' })
       return send(res, 200, view)
     }

@@ -19,4 +19,19 @@ export class ImplementationContainer extends Container<Env> {
   // finished); the headroom tolerates a transient gap between polls without the
   // instance being reclaimed mid-job.
   override sleepAfter = '10m'
+
+  /**
+   * Reclaim this container now (SIGKILL via the base class), rather than waiting
+   * for the `sleepAfter` idle timer. Called over RPC when a run faults so a leaked
+   * instance isn't billed while idle. Best-effort and idempotent: destroying an
+   * already-stopped container is a no-op, and we swallow any error so the caller's
+   * failure handling is never derailed by cleanup.
+   */
+  async shutdown(): Promise<void> {
+    try {
+      await this.destroy()
+    } catch {
+      // Already gone / not running — nothing to reclaim.
+    }
+  }
 }

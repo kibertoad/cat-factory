@@ -129,12 +129,30 @@ describe('github connect', () => {
     expect(read.body.connection?.installationId).toBe(installationId)
   })
 
-  it('rejects a setup callback with an invalid state', async () => {
+  it('rejects a setup callback with an invalid state for an unbound installation', async () => {
     const app = makeApp(new FakeAgentExecutor(), githubDeps())
     const res = await app.call(
       'GET',
       `/github/setup/callback?installation_id=${uniqueInstallationId()}&state=not-a-valid-state`,
     )
     expect(res.status).toBe(401)
+  })
+
+  it('accepts a stateless update callback for an already-bound installation', async () => {
+    const app = makeApp(new FakeAgentExecutor(), githubDeps())
+    const { workspace } = await app.createWorkspace()
+    const installationId = uniqueInstallationId()
+
+    // Bind first (as the install-url → callback flow would).
+    await app.call('POST', `/workspaces/${workspace.id}/github/connect`, { installationId })
+
+    // GitHub's repo-access "update" redirect carries no state. Since the
+    // installation is already bound, the callback recovers the workspace and
+    // redirects instead of rejecting.
+    const cb = await app.call(
+      'GET',
+      `/github/setup/callback?installation_id=${installationId}&setup_action=update`,
+    )
+    expect(cb.status).toBe(302)
   })
 })

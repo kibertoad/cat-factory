@@ -169,23 +169,28 @@ async function launch() {
       private: isPrivate.value,
       instructions: instructions.value.trim(),
     })
-    if (job.status === 'succeeded') {
-      toast.add({
-        title: 'Repository bootstrapped',
-        description: job.repoUrl ?? undefined,
-        icon: 'i-lucide-check',
-        color: 'success',
-      })
-      repoName.value = ''
-      description.value = ''
-      instructions.value = ''
-    } else {
+    if (job.status === 'failed') {
+      // The container couldn't even start (pre-flight failure, e.g. the target
+      // repo isn't empty) — surfaced synchronously, before any board frame.
       toast.add({
         title: 'Bootstrap failed',
         description: job.error ?? 'The bootstrapper reported a failure.',
         icon: 'i-lucide-triangle-alert',
         color: 'error',
       })
+    } else {
+      // Running: the container is spinning up. A provisional service card now
+      // shows on the board and tracks live progress; the run continues in the
+      // background and becomes a real, droppable service when it finishes.
+      toast.add({
+        title: 'Bootstrapping started',
+        description: `A container is bootstrapping ${job.repoName} — watch its progress on the board.`,
+        icon: 'i-lucide-loader-circle',
+        color: 'info',
+      })
+      repoName.value = ''
+      description.value = ''
+      instructions.value = ''
     }
   } catch (e) {
     toast.add({

@@ -394,5 +394,8 @@ export function useApi() {
 
     bootstrapRepo: (workspaceId: string, body: BootstrapRepoInput) =>
       http<BootstrapJob>(`${ws(workspaceId)}/bootstrap/jobs`, { method: 'POST', body }),
+
+    retryBootstrapJob: (workspaceId: string, id: string) =>
+      http<BootstrapJob>(`${ws(workspaceId)}/bootstrap/jobs/${id}/retry`, { method: 'POST' }),
   }
 }
