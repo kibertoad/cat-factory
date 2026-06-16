@@ -68,7 +68,10 @@ export class WorkspaceService {
     return this.workspaceRepository.ownerOf(id)
   }
 
-  async create(input: CreateWorkspaceInput, ownerUserId: number | null): Promise<WorkspaceSnapshot> {
+  async create(
+    input: CreateWorkspaceInput,
+    ownerUserId: number | null,
+  ): Promise<WorkspaceSnapshot> {
     const workspace: Workspace = {
       id: this.idGenerator.next('ws'),
       name: input.name?.trim() || 'Untitled board',

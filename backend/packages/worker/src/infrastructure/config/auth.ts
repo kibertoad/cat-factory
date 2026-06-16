@@ -54,10 +54,10 @@ export function loadAuthConfig(env: Env): AuthConfig {
   // deployment, so leaving AUTH_DEV_OPEN=true set on a deployed worker can no
   // longer silently re-open the API. Operators should set ENVIRONMENT=production.
   const environment = env.ENVIRONMENT?.trim().toLowerCase() ?? ''
-  const devOpen =
-    env.AUTH_DEV_OPEN?.trim() === 'true' && !PRODUCTION_ENVIRONMENTS.has(environment)
+  const devOpen = env.AUTH_DEV_OPEN?.trim() === 'true' && !PRODUCTION_ENVIRONMENTS.has(environment)
   return {
-    enabled: clientId !== '' && clientSecret !== '' && sessionSecret.length >= MIN_SESSION_SECRET_LENGTH,
+    enabled:
+      clientId !== '' && clientSecret !== '' && sessionSecret.length >= MIN_SESSION_SECRET_LENGTH,
     devOpen,
     clientId,
     clientSecret,

@@ -13,11 +13,12 @@ export class D1WorkspaceRepository implements WorkspaceRepository {
   async listByOwner(ownerUserId: number | null): Promise<Workspace[]> {
     // A null owner means auth is disabled — return every board (legacy behaviour).
     // A numeric owner scopes to that user; legacy NULL-owner rows are excluded.
-    const { results } = await (ownerUserId === null
-      ? this.db.prepare('SELECT * FROM workspaces ORDER BY created_at DESC')
-      : this.db
-          .prepare('SELECT * FROM workspaces WHERE owner_user_id = ? ORDER BY created_at DESC')
-          .bind(ownerUserId)
+    const { results } = await (
+      ownerUserId === null
+        ? this.db.prepare('SELECT * FROM workspaces ORDER BY created_at DESC')
+        : this.db
+            .prepare('SELECT * FROM workspaces WHERE owner_user_id = ? ORDER BY created_at DESC')
+            .bind(ownerUserId)
     ).all<WorkspaceRow>()
     return results.map(rowToWorkspace)
   }

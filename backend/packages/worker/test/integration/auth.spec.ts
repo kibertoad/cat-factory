@@ -1,7 +1,11 @@
 import { env } from 'cloudflare:test'
 import { describe, expect, it } from 'vitest'
 import { createApp } from '../../src/app'
-import { HmacSigner, TOKEN_AUDIENCE, type SessionPayload } from '../../src/infrastructure/auth/signing'
+import {
+  HmacSigner,
+  TOKEN_AUDIENCE,
+  type SessionPayload,
+} from '../../src/infrastructure/auth/signing'
 import { pickPostLoginRedirect } from '../../src/modules/auth/AuthController'
 
 // Auth is opt-in: it only activates when the OAuth credentials + session secret

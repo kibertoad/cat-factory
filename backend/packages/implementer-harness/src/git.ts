@@ -224,7 +224,9 @@ export async function openPullRequest(opts: {
   })
   if (!res.ok) {
     const detail = await res.text().catch(() => '')
-    throw new Error(redactSecrets(`Failed to open PR (HTTP ${res.status}): ${detail.slice(0, 300)}`))
+    throw new Error(
+      redactSecrets(`Failed to open PR (HTTP ${res.status}): ${detail.slice(0, 300)}`),
+    )
   }
   const body = (await res.json()) as { html_url?: string }
   if (!body.html_url) throw new Error('GitHub did not return a PR url')

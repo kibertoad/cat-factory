@@ -108,9 +108,9 @@ describe('authenticatedCloneUrl', () => {
 
 describe('redactSecrets', () => {
   it('strips URL userinfo so a leaked clone URL cannot reveal the token', () => {
-    expect(redactSecrets('fatal: clone https://x-access-token:ghs_SECRET123@github.com/o/r.git')).not.toContain(
-      'ghs_SECRET123',
-    )
+    expect(
+      redactSecrets('fatal: clone https://x-access-token:ghs_SECRET123@github.com/o/r.git'),
+    ).not.toContain('ghs_SECRET123')
   })
 
   it('strips bare x-access-token credentials and GitHub token shapes', () => {
