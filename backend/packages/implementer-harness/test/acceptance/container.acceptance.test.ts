@@ -12,6 +12,7 @@ import {
   seedBareRepo,
   startContainer,
   streamingLlmStub,
+  todoDrivingLlmStub,
   waitForHealth,
 } from './support'
 
@@ -138,6 +139,76 @@ describe.skipIf(!docker)('implementer container acceptance', () => {
       'cat-factory/acc-1:IMPLEMENTED.md',
     ]).toString()
     expect(fileContent).toContain('hello from pi')
+  })
+
+  it('drives the todo tool and reports subtask progress', async () => {
+    // This proves the installed rpiv-todo extension actually loads and emits
+    // structured `todo` tool results that the harness parses into progress — the
+    // dummy-proxy happy-path test never touches the tool.
+    const proxy = todoDrivingLlmStub()
+    const github = githubStub()
+    const proxyPort = await listen(proxy.server)
+    const ghPort = await listen(github.server)
+    const hostPort = await freePort()
+    const name = `cf-acc-todo-${Date.now()}`
+    containers.push(name)
+    startContainer(name, hostPort, bare)
+    await waitForHealth(hostPort)
+
+    const job = {
+      jobId: 'acc-todo',
+      systemPrompt: 'You are a builder. Plan with the todo tool, then create the file.',
+      userPrompt: 'Create IMPLEMENTED.md containing "hello from pi".',
+      model: 'dummy-model',
+      proxyBaseUrl: `http://host.docker.internal:${proxyPort}/v1`,
+      sessionToken: 'dummy-session-token',
+      ghToken: 'dummy-gh-token',
+      repo: { owner: 'octo', name: 'app', baseBranch: 'main', cloneUrl: 'file:///srv/repo' },
+      headBranch: 'cat-factory/acc-todo',
+      pr: { title: 'Add IMPLEMENTED.md', body: 'Automated by acceptance test' },
+      githubApiBase: `http://host.docker.internal:${ghPort}`,
+    }
+
+    interface ProgressView {
+      state: string
+      progress?: { completed: number; inProgress: number; total: number }
+      result?: { prUrl?: string; error?: string }
+      error?: string
+    }
+
+    let view: ProgressView
+    // Capture the last non-empty progress snapshot seen across polls so the
+    // assertion holds whether or not the terminal view still carries it.
+    let lastProgress: ProgressView['progress']
+    try {
+      const start = await fetch(`http://127.0.0.1:${hostPort}/run`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(job),
+      })
+      expect(start.status).toBe(202)
+
+      const deadline = Date.now() + 180_000
+      do {
+        await new Promise((r) => setTimeout(r, 1000))
+        const poll = await fetch(`http://127.0.0.1:${hostPort}/jobs/acc-todo`)
+        expect(poll.status).toBe(200)
+        view = (await poll.json()) as ProgressView
+        if (view.progress) lastProgress = view.progress
+      } while (view.state === 'running' && Date.now() < deadline)
+    } finally {
+      proxy.server.close()
+      github.server.close()
+    }
+
+    // The run completed and the model worked through the whole scripted plan.
+    expect(view.state).toBe('done')
+    expect(view.result?.error).toBeUndefined()
+    expect(view.result?.prUrl).toBe('http://gh.test/octo/app/pull/1')
+
+    // Two of three subtasks completed, the third left in-progress — exactly what
+    // the rpiv-todo `tool_result` events encode, parsed by the harness.
+    expect(lastProgress).toEqual({ completed: 2, inProgress: 1, total: 3 })
   })
 })
 
