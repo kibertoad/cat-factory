@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import type {
   CreateBranchInput,
+  CreateRepoRequest,
   GitHubBranch,
   GitHubConnection,
   GitHubInstallationOption,
@@ -43,6 +44,8 @@ export const useGitHubStore = defineStore('github', () => {
   const syncing = ref(false)
 
   const connected = computed(() => connection.value !== null)
+  /** Whether cat-factory can create repos under the connected account itself. */
+  const canCreateRepos = computed(() => connection.value?.canCreateRepos === true)
 
   function repoFor(repoGithubId: number): GitHubRepo | undefined {
     return repos.value.find((r) => r.githubId === repoGithubId)
@@ -155,6 +158,15 @@ export const useGitHubStore = defineStore('github', () => {
 
   // ---- repo writes ----------------------------------------------------------
 
+  /**
+   * Create a repository under the connected account (privileged App tier). Only
+   * meaningful when `canCreateRepos`; the backend 409s otherwise. Returns the
+   * created repo so the caller can confirm/link it.
+   */
+  function createRepo(input: CreateRepoRequest) {
+    return api.createGitHubRepo(workspace.requireId(), input)
+  }
+
   async function createBranch(repoGithubId: number, input: CreateBranchInput) {
     const branch = await api.createGitHubBranch(workspace.requireId(), repoGithubId, input)
     const next = branches.value[repoGithubId] ?? []
@@ -199,6 +211,7 @@ export const useGitHubStore = defineStore('github', () => {
     loading,
     syncing,
     connected,
+    canCreateRepos,
     repoFor,
     pullsForRepo,
     issuesForRepo,
@@ -213,6 +226,7 @@ export const useGitHubStore = defineStore('github', () => {
     connect,
     disconnect,
     resync,
+    createRepo,
     createBranch,
     openPullRequest,
     mergePullRequest,

@@ -9,6 +9,7 @@ import {
   NoopWorkRunner,
   type WorkRunner,
   createCore,
+  resolveAppTier,
 } from '@cat-factory/core'
 import { type AppConfig, loadConfig } from './config'
 import type { Env } from './env'
@@ -53,6 +54,7 @@ import { HttpEnvironmentProvider } from './environments/HttpEnvironmentProvider'
 import { WebCryptoSecretCipher } from './environments/WebCryptoSecretCipher'
 import { GitHubAppAuth } from './github/GitHubAppAuth'
 import { FetchGitHubClient } from './github/FetchGitHubClient'
+import { FetchGitHubProvisioningClient } from './github/FetchGitHubProvisioningClient'
 import { WebCryptoWebhookVerifier } from './github/WebCryptoWebhookVerifier'
 import { ConfluenceProvider } from './documents/ConfluenceProvider'
 import { NotionProvider } from './documents/NotionProvider'
@@ -240,6 +242,44 @@ function selectEventPublisher(env: Env): ExecutionEventPublisher | undefined {
 }
 
 /**
+ * The privileged App tier (ADR 0005), built only when a second App is configured
+ * (`GITHUB_PRIVILEGED_APP_ID` + key). It carries `Administration: write` and is
+ * used solely to create repos for allow-listed orgs; `canCreateReposForOrg` is the
+ * (config-only) allow-list check the UI and bootstrapper guard on. Returns
+ * undefined when unconfigured, so everything stays on the restricted default App.
+ */
+function selectPrivilegedProvisioning(
+  env: Env,
+  config: AppConfig,
+  db: D1Database,
+  clock: Clock,
+):
+  | {
+      provisioningClient: FetchGitHubProvisioningClient
+      canCreateReposForOrg: (login: string) => boolean
+    }
+  | undefined {
+  const privileged = config.github.privilegedApp
+  if (!privileged || !env.GITHUB_PRIVILEGED_APP_PRIVATE_KEY) return undefined
+
+  const auth = new GitHubAppAuth({
+    appId: privileged.appId,
+    privateKeyPem: env.GITHUB_PRIVILEGED_APP_PRIVATE_KEY,
+    installationRepository: new D1GitHubInstallationRepository({ db }),
+    clock,
+    apiBase: config.github.apiBase,
+  })
+  const provisioningClient = new FetchGitHubProvisioningClient({
+    auth,
+    apiBase: config.github.apiBase,
+  })
+  // Fail closed: only allow-listed orgs are privileged (see resolveAppTier).
+  const tierConfig = { privilegedOrgs: privileged.privilegedOrgs }
+  const canCreateReposForOrg = (login: string) => resolveAppTier(login, tierConfig) === 'privileged'
+  return { provisioningClient, canCreateReposForOrg }
+}
+
+/**
  * Build the GitHub integration's concrete ports when an App is configured,
  * mirroring `selectWorkRunner`. Returns an empty object otherwise, so `createCore`
  * leaves the `github` module unassembled and the feature stays opt-in.
@@ -268,6 +308,10 @@ function selectGitHubDeps(
     clock,
     apiBase: config.github.apiBase,
   })
+  // Privileged App tier (ADR 0005): when configured, its client backs the
+  // create-repo endpoint and its allow-list flags `canCreateRepos` on the
+  // connection. Absent → repo creation stays the manual "create on GitHub" flow.
+  const privileged = selectPrivilegedProvisioning(env, config, db, clock)
   return {
     githubClient,
     githubInstallationRepository,
@@ -280,6 +324,8 @@ function selectGitHubDeps(
     webhookVerifier: new WebCryptoWebhookVerifier(env.GITHUB_WEBHOOK_SECRET!),
     // Bound the initial backfill to the commit retention horizon (0 = full).
     commitBackfillHorizonMs: config.retention.commitMs || undefined,
+    repoProvisioningClient: privileged?.provisioningClient,
+    canCreateReposForOrg: privileged?.canCreateReposForOrg,
   }
 }
 

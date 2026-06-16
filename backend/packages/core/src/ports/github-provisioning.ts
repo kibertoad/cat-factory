@@ -47,6 +47,13 @@ export interface ProvisionedRepo {
 
 export interface GitHubProvisioningClient {
   /**
+   * The privileged App's installation id on `org`, or null when the App isn't
+   * installed there. Resolved via the app JWT (`GET /orgs/{org}/installation`) —
+   * the privileged App is a *separate* registration from the one a workspace
+   * binds to, so it has its own installation id per org (ADR 0005).
+   */
+  getOrgInstallationId(org: string): Promise<number | null>
+  /**
    * The permissions the installation token actually carries. Read this before a
    * privileged action so the caller can choose a path (or refuse) without
    * provoking a guaranteed 403.

@@ -117,8 +117,7 @@ export * as githubProjection from './modules/github/projection.logic'
 export {
   RepoProvisioningService,
   type RepoProvisioningServiceDependencies,
-  type RepoProvisionFallback,
-  type ProvisionFallbackReason,
+  type DelegationReason,
   type ProvisionResult,
 } from './modules/github/RepoProvisioningService'
 export {

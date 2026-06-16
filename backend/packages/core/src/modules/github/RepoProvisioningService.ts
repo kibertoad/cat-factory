@@ -6,67 +6,58 @@ import type {
 import { canCreateRepo } from './provisioning.logic'
 
 // Orchestrates "create a repo for an org" under the two-App model (ADR 0005):
-// take the direct path only when the installation actually holds
-// `Administration: write`, otherwise delegate to a fallback. The capability
-// check is proactive (skips a guaranteed-403 round trip) and a live 403 routes
-// to the same fallback as a safety net.
+// take the direct path only when the privileged App is installed on the org AND
+// the installation actually holds `Administration: write`; otherwise report
+// `delegated` so the caller keeps the existing manual flow (the UI's "create on
+// GitHub" button). There is no server-side fallback action — restricted orgs
+// behave exactly as they did before this tier existed.
 
-/** Why a create request could not be performed directly. */
-export type ProvisionFallbackReason = 'insufficient_permissions' | 'forbidden'
+/** Why a repo wasn't created directly (informational; the caller delegates regardless). */
+export type DelegationReason =
+  | 'app_not_installed' // privileged App isn't installed on the org
+  | 'insufficient_permissions' // installed, but without Administration: write
+  | 'forbidden' // org policy refused the create (403)
+  | 'already_exists' // a repo by that name already exists (422)
 
-/**
- * Invoked when the chosen App cannot create the repo directly — either the
- * restricted tier lacks `Administration: write`, or GitHub rejected the create
- * with a 403 despite the proactive check. Implementations queue the request for
- * an org-admin OAuth flow, open a tracking issue, notify a human, etc., and
- * report where it landed.
- */
-export type RepoProvisionFallback = (
-  request: CreateRepoInput,
-  reason: ProvisionFallbackReason,
-) => Promise<ProvisionResult>
-
-export interface ProvisionResult {
-  status: 'created' | 'delegated'
-  /** Present when `status === 'created'`. */
-  repo?: ProvisionedRepo
-  /** Free-form note describing where a delegated request landed. */
-  detail?: string
-}
+export type ProvisionResult =
+  | { status: 'created'; repo: ProvisionedRepo }
+  | { status: 'delegated'; reason: DelegationReason }
 
 export interface RepoProvisioningServiceDependencies {
-  /**
-   * The provisioning client to act through. In the worker this is backed by the
-   * privileged App's credentials (resolved per-org via the App registry); the
-   * service stays agnostic to how the client was chosen.
-   */
+  /** Backed by the *privileged* App's credentials (resolved per-org by the worker). */
   client: GitHubProvisioningClient
-  fallback: RepoProvisionFallback
 }
 
-/** Sniff an HTTP 403 without coupling to a specific error class. */
-function isForbidden(err: unknown): boolean {
-  return (err as { status?: number } | null)?.status === 403
+/** Sniff an HTTP status without coupling to a specific error class. */
+function statusOf(err: unknown): number | undefined {
+  return (err as { status?: number } | null)?.status
 }
 
 export class RepoProvisioningService {
   constructor(private readonly deps: RepoProvisioningServiceDependencies) {}
 
   /**
-   * Create `input.name` under `input.org`. Guards the direct path on the
-   * installation's *granted* permissions, and falls back to delegation when the
-   * grant is missing or GitHub forbids the create.
+   * Create `input.name` under `input.org` when the privileged App can; otherwise
+   * `delegated`. The capability check is proactive (skips a guaranteed-403 round
+   * trip); a live 403 or a 422 "already exists" also resolve to `delegated` so
+   * the caller's manual/existing-repo path takes over.
    */
-  async provision(installationId: number, input: CreateRepoInput): Promise<ProvisionResult> {
+  async provision(input: CreateRepoInput): Promise<ProvisionResult> {
+    const installationId = await this.deps.client.getOrgInstallationId(input.org)
+    if (installationId === null) return { status: 'delegated', reason: 'app_not_installed' }
+
     const permissions = await this.deps.client.getGrantedPermissions(installationId)
     if (!canCreateRepo(permissions)) {
-      return this.deps.fallback(input, 'insufficient_permissions')
+      return { status: 'delegated', reason: 'insufficient_permissions' }
     }
+
     try {
       const repo = await this.deps.client.createRepoInOrg(installationId, input)
       return { status: 'created', repo }
     } catch (err) {
-      if (isForbidden(err)) return this.deps.fallback(input, 'forbidden')
+      const status = statusOf(err)
+      if (status === 403) return { status: 'delegated', reason: 'forbidden' }
+      if (status === 422) return { status: 'delegated', reason: 'already_exists' }
       throw err
     }
   }

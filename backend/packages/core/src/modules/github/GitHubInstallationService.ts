@@ -22,14 +22,21 @@ export interface GitHubInstallationServiceDependencies {
   githubInstallationRepository: GitHubInstallationRepository
   workspaceRepository: WorkspaceRepository
   clock: Clock
+  /**
+   * Whether cat-factory can create repos under an account itself (privileged App
+   * tier, ADR 0005). Surfaced on the connection so the UI can drop the manual
+   * "create on GitHub" step. Absent → always false (single-App default).
+   */
+  canCreateReposForOrg?: (accountLogin: string) => boolean
 }
 
-function toConnection(installation: GitHubInstallation): GitHubConnection {
+function toConnection(installation: GitHubInstallation, canCreateRepos: boolean): GitHubConnection {
   return {
     installationId: installation.installationId,
     accountLogin: installation.accountLogin,
     targetType: installation.targetType,
     connectedAt: installation.createdAt,
+    canCreateRepos,
   }
 }
 
@@ -66,7 +73,12 @@ export class GitHubInstallationService {
       deletedAt: null,
     }
     await this.deps.githubInstallationRepository.upsert(installation)
-    return toConnection(installation)
+    return toConnection(installation, this.canCreateRepos(installation.accountLogin))
+  }
+
+  /** Whether the privileged App tier can create repos under this account (ADR 0005). */
+  private canCreateRepos(accountLogin: string): boolean {
+    return this.deps.canCreateReposForOrg?.(accountLogin) ?? false
   }
 
   /**
@@ -100,7 +112,7 @@ export class GitHubInstallationService {
   async getConnection(workspaceId: string): Promise<GitHubConnection | null> {
     const installation = await this.deps.githubInstallationRepository.getByWorkspace(workspaceId)
     if (!installation || installation.deletedAt) return null
-    return toConnection(installation)
+    return toConnection(installation, this.canCreateRepos(installation.accountLogin))
   }
 
   /** Resolve the live installation for a workspace, or throw if not connected. */

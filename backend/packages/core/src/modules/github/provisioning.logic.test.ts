@@ -43,12 +43,17 @@ describe('canCreateRepo', () => {
 
 // A configurable fake of the privileged provisioning client.
 function fakeClient(
-  permissions: InstallationPermissions,
-  create?: GitHubProvisioningClient['createRepoInOrg'],
+  overrides: Partial<GitHubProvisioningClient> & {
+    permissions?: InstallationPermissions
+    installationId?: number | null
+  } = {},
 ): GitHubProvisioningClient {
   return {
-    getGrantedPermissions: vi.fn(async () => permissions),
-    createRepoInOrg: vi.fn(create ?? (async () => repo)),
+    getOrgInstallationId: vi.fn(async () =>
+      'installationId' in overrides ? (overrides.installationId ?? null) : 555,
+    ),
+    getGrantedPermissions: vi.fn(async () => overrides.permissions ?? {}),
+    createRepoInOrg: vi.fn(overrides.createRepoInOrg ?? (async () => repo)),
   }
 }
 
@@ -63,52 +68,70 @@ const repo: ProvisionedRepo = {
 const input: CreateRepoInput = { org: 'acme', name: 'new-svc', private: true }
 
 describe('RepoProvisioningService', () => {
-  it('creates directly when the installation has administration: write', async () => {
-    const client = fakeClient({ administration: 'write' })
-    const fallback = vi.fn()
-    const svc = new RepoProvisioningService({ client, fallback })
+  it('creates directly when the privileged install has administration: write', async () => {
+    const client = fakeClient({ permissions: { administration: 'write' }, installationId: 100 })
+    const svc = new RepoProvisioningService({ client })
 
-    const result = await svc.provision(100, input)
+    const result = await svc.provision(input)
 
     expect(result).toEqual({ status: 'created', repo })
     expect(client.createRepoInOrg).toHaveBeenCalledWith(100, input)
-    expect(fallback).not.toHaveBeenCalled()
+  })
+
+  it('delegates when the privileged App is not installed on the org', async () => {
+    const client = fakeClient({ installationId: null })
+    const svc = new RepoProvisioningService({ client })
+
+    expect(await svc.provision(input)).toEqual({ status: 'delegated', reason: 'app_not_installed' })
+    expect(client.getGrantedPermissions).not.toHaveBeenCalled()
+    expect(client.createRepoInOrg).not.toHaveBeenCalled()
   })
 
   it('delegates without an API call when the grant is insufficient', async () => {
-    const client = fakeClient({ administration: 'read' })
-    const fallback = vi.fn(async () => ({ status: 'delegated' as const, detail: 'queued' }))
-    const svc = new RepoProvisioningService({ client, fallback })
+    const client = fakeClient({ permissions: { administration: 'read' } })
+    const svc = new RepoProvisioningService({ client })
 
-    const result = await svc.provision(100, input)
-
-    expect(result).toEqual({ status: 'delegated', detail: 'queued' })
-    expect(fallback).toHaveBeenCalledWith(input, 'insufficient_permissions')
+    expect(await svc.provision(input)).toEqual({
+      status: 'delegated',
+      reason: 'insufficient_permissions',
+    })
     // Proactive guard: never even attempts the create.
     expect(client.createRepoInOrg).not.toHaveBeenCalled()
   })
 
-  it('falls back when GitHub forbids the create despite the proactive check', async () => {
-    const client = fakeClient({ administration: 'write' }, async () => {
-      throw Object.assign(new Error('Forbidden'), { status: 403 })
+  it('delegates when GitHub forbids the create despite the proactive check', async () => {
+    const client = fakeClient({
+      permissions: { administration: 'write' },
+      createRepoInOrg: async () => {
+        throw Object.assign(new Error('Forbidden'), { status: 403 })
+      },
     })
-    const fallback = vi.fn(async () => ({ status: 'delegated' as const }))
-    const svc = new RepoProvisioningService({ client, fallback })
+    const svc = new RepoProvisioningService({ client })
 
-    const result = await svc.provision(100, input)
-
-    expect(result).toEqual({ status: 'delegated' })
-    expect(fallback).toHaveBeenCalledWith(input, 'forbidden')
+    expect(await svc.provision(input)).toEqual({ status: 'delegated', reason: 'forbidden' })
   })
 
-  it('propagates non-403 failures', async () => {
-    const client = fakeClient({ administration: 'write' }, async () => {
-      throw Object.assign(new Error('Server error'), { status: 500 })
+  it('delegates on a 422 "already exists" so the existing repo path takes over', async () => {
+    const client = fakeClient({
+      permissions: { administration: 'write' },
+      createRepoInOrg: async () => {
+        throw Object.assign(new Error('Unprocessable'), { status: 422 })
+      },
     })
-    const fallback = vi.fn()
-    const svc = new RepoProvisioningService({ client, fallback })
+    const svc = new RepoProvisioningService({ client })
 
-    await expect(svc.provision(100, input)).rejects.toThrow('Server error')
-    expect(fallback).not.toHaveBeenCalled()
+    expect(await svc.provision(input)).toEqual({ status: 'delegated', reason: 'already_exists' })
+  })
+
+  it('propagates unexpected failures', async () => {
+    const client = fakeClient({
+      permissions: { administration: 'write' },
+      createRepoInOrg: async () => {
+        throw Object.assign(new Error('Server error'), { status: 500 })
+      },
+    })
+    const svc = new RepoProvisioningService({ client })
+
+    await expect(svc.provision(input)).rejects.toThrow('Server error')
   })
 })

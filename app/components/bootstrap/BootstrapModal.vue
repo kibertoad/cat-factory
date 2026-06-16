@@ -131,8 +131,44 @@ const createRepoUrl = computed(() => {
   return `https://github.com/new?${params.toString()}`
 })
 
-function openCreateRepo() {
-  window.open(createRepoUrl.value, '_blank', 'noopener')
+const creatingRepo = ref(false)
+
+// The "create repository" button behaves differently per tier. Restricted orgs
+// (the default) open GitHub's new-repo page prefilled — cat-factory needs no
+// repo-creation permission. Privileged orgs (the connection reports
+// `canCreateRepos`) create it programmatically via the backend, with no page.
+async function openCreateRepo() {
+  const name = repoName.value.trim()
+  if (!name || repoNameError.value) return
+
+  if (!github.canCreateRepos) {
+    window.open(createRepoUrl.value, '_blank', 'noopener')
+    return
+  }
+
+  creatingRepo.value = true
+  try {
+    const repo = await github.createRepo({
+      name,
+      private: isPrivate.value,
+      description: description.value.trim() || undefined,
+    })
+    toast.add({
+      title: 'Repository created',
+      description: `${repo.owner}/${repo.name}`,
+      icon: 'i-lucide-check',
+      color: 'success',
+    })
+  } catch (e) {
+    toast.add({
+      title: 'Could not create repository',
+      description: e instanceof Error ? e.message : String(e),
+      icon: 'i-lucide-triangle-alert',
+      color: 'error',
+    })
+  } finally {
+    creatingRepo.value = false
+  }
 }
 
 // After the repo is created, the App still needs access to it: a "selected
@@ -319,8 +355,12 @@ const statusColor: Record<BootstrapStatus, 'neutral' | 'info' | 'success' | 'err
         <p class="text-sm text-slate-400">
           Create an empty GitHub repository, then let a bootstrapper agent populate it in a sandbox
           container — either by adapting one of your reference architectures, or from scratch
-          following a freeform prompt. cat-factory pushes the initial commit into the repo you
-          create, so it never needs permission to create or delete repos.
+          following a freeform prompt. cat-factory pushes the initial commit into that repo;
+          {{
+            github.canCreateRepos
+              ? 'for this account it can create the repository for you too.'
+              : 'you create the repository (one click below), so it needs no repo-creation permission.'
+          }}
         </p>
 
         <!-- not connected: a run needs GitHub, so discover & link before launching -->
@@ -383,16 +423,21 @@ const statusColor: Record<BootstrapStatus, 'neutral' | 'info' | 'success' | 'err
                 <UButton
                   color="neutral"
                   variant="subtle"
-                  icon="i-lucide-external-link"
-                  :disabled="!repoName.trim()"
-                  title="Open GitHub's new-repository page, prefilled"
+                  :icon="github.canCreateRepos ? 'i-lucide-plus' : 'i-lucide-external-link'"
+                  :loading="creatingRepo"
+                  :disabled="!repoName.trim() || !!repoNameError"
+                  :title="
+                    github.canCreateRepos
+                      ? 'Create the repository now'
+                      : `Open GitHub's new-repository page, prefilled`
+                  "
                   @click="openCreateRepo"
                 >
-                  Create on GitHub
+                  {{ github.canCreateRepos ? 'Create repository' : 'Create on GitHub' }}
                 </UButton>
               </div>
               <UButton
-                v-if="manageInstallUrl"
+                v-if="manageInstallUrl && !github.canCreateRepos"
                 color="neutral"
                 variant="ghost"
                 size="sm"

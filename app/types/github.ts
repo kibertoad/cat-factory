@@ -12,6 +12,12 @@ export interface GitHubConnection {
   accountLogin: string
   targetType: 'Organization' | 'User'
   connectedAt: number
+  /**
+   * Whether cat-factory can create repos under this account itself (privileged
+   * App tier). When true, the bootstrap UI drops the manual "create on GitHub"
+   * step. Defaults to false for older backends that don't send it.
+   */
+  canCreateRepos?: boolean
 }
 
 /**
@@ -92,6 +98,23 @@ export interface ResyncRequest {
 export interface CreateBranchInput {
   name: string
   fromSha: string
+}
+
+/** Body for programmatic repo creation (privileged App tier). */
+export interface CreateRepoRequest {
+  /** A single GitHub name segment — no "owner/" prefix. */
+  name: string
+  private?: boolean
+  description?: string
+}
+
+/** The freshly-created repository returned by the create-repo endpoint. */
+export interface CreatedRepo {
+  githubId: number
+  owner: string
+  name: string
+  defaultBranch: string | null
+  private: boolean
 }
 
 export interface CommitFilesInput {
