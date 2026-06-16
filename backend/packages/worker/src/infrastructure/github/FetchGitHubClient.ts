@@ -18,7 +18,9 @@ import {
   type Paged,
   type RateLimitRepository,
   type RateLimitSnapshot,
+  type RepoContentEntry,
   type RepoEntry,
+  type RepoFileContent,
   githubProjection as gp,
 } from '@cat-factory/core'
 import type { CommitFilesInput } from '@cat-factory/contracts'
@@ -188,6 +190,59 @@ export class FetchGitHubClient implements GitHubClient {
       ? (json as Array<{ path?: string; name?: string; type?: string }>)
       : []
     return entries.map((e) => ({ path: e.path ?? e.name ?? '', type: e.type ?? 'file' }))
+  }
+
+  async listDirectory(
+    installationId: number,
+    ref: GitHubRepoRef,
+    path: string,
+    gitRef?: string,
+  ): Promise<RepoContentEntry[]> {
+    const clean = path.replace(/^\/+|\/+$/g, '')
+    const query = gitRef ? `?ref=${encodeURIComponent(gitRef)}` : ''
+    let json: unknown
+    try {
+      ;({ json } = await this.request(`/repos/${ref.owner}/${ref.repo}/contents/${clean}${query}`, {
+        installationId,
+      }))
+    } catch (err) {
+      // Missing path / empty repo → no entries (mirrors listRootEntries).
+      if (err instanceof GitHubApiError && err.status === 404) return []
+      throw err
+    }
+    // A directory returns an array; a single file returns an object — coerce both.
+    const arr = Array.isArray(json) ? json : [json]
+    return (arr as Array<{ path?: string; name?: string; type?: string; sha?: string }>).map(
+      (e) => ({
+        path: e.path ?? e.name ?? '',
+        name: e.name ?? (e.path ?? '').split('/').pop() ?? '',
+        type: e.type ?? 'file',
+        sha: e.sha ?? '',
+      }),
+    )
+  }
+
+  async getFileContent(
+    installationId: number,
+    ref: GitHubRepoRef,
+    path: string,
+    gitRef?: string,
+  ): Promise<RepoFileContent | null> {
+    const clean = path.replace(/^\/+/, '')
+    const query = gitRef ? `?ref=${encodeURIComponent(gitRef)}` : ''
+    let json: unknown
+    try {
+      ;({ json } = await this.request(`/repos/${ref.owner}/${ref.repo}/contents/${clean}${query}`, {
+        installationId,
+      }))
+    } catch (err) {
+      if (err instanceof GitHubApiError && err.status === 404) return null
+      throw err
+    }
+    const file = json as { type?: string; content?: string; encoding?: string; sha?: string }
+    if (file.type !== 'file' || typeof file.content !== 'string') return null
+    const content = file.encoding === 'base64' ? decodeBase64Utf8(file.content) : file.content
+    return { content, sha: file.sha ?? '' }
   }
 
   async listPullRequests(
@@ -489,6 +544,14 @@ export class GitHubApiError extends Error {
     super(message)
     this.name = 'GitHubApiError'
   }
+}
+
+/** Decode the contents API's base64 (whitespace-laden) payload to a UTF-8 string. */
+function decodeBase64Utf8(value: string): string {
+  const binary = atob(value.replace(/\s+/g, ''))
+  const bytes = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+  return new TextDecoder().decode(bytes)
 }
 
 function numHeader(res: Response, name: string): number | null {

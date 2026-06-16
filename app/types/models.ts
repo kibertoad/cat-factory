@@ -37,4 +37,12 @@ export interface PromptFragment {
     blockTypes?: BlockType[]
     agentKinds?: AgentKind[]
   }
+  /** Free-form tags the relevance selector uses (managed/sourced fragments only). */
+  tags?: string[]
+  /** Provenance when sourced from a repo; absent for built-in/hand-authored. */
+  source?: {
+    sourceId: string
+    path: string
+    sha: string
+  }
 }

@@ -69,6 +69,24 @@ export interface RepoEntry {
   type: string
 }
 
+/** A directory listing entry from the contents API, carrying the blob/tree sha. */
+export interface RepoContentEntry {
+  /** Path relative to the repo root, e.g. `guidelines/backend.md`. */
+  path: string
+  /** Base name, e.g. `backend.md`. */
+  name: string
+  /** `file` | `dir` | `symlink` | `submodule`. */
+  type: string
+  /** Blob sha (file) or tree sha (dir) — powers the cheap "changed?" check. */
+  sha: string
+}
+
+/** A single file's decoded UTF-8 content plus its blob sha. */
+export interface RepoFileContent {
+  content: string
+  sha: string
+}
+
 /** Installation metadata captured at connect time (needs the app JWT). */
 export interface InstallationMeta {
   accountLogin: string
@@ -113,6 +131,25 @@ export interface GitHubClient {
    * content before it pushes the initial commit.
    */
   listRootEntries(installationId: number, ref: GitHubRepoRef): Promise<RepoEntry[]>
+  /**
+   * List a directory's entries on a ref via the contents API, each with its blob
+   * (file) or tree (dir) sha. Returns `[]` for a missing path/empty repo (404).
+   * Used by the fragment library to read a repo of Markdown guidelines and detect
+   * which files changed since the last sync.
+   */
+  listDirectory(
+    installationId: number,
+    ref: GitHubRepoRef,
+    path: string,
+    gitRef?: string,
+  ): Promise<RepoContentEntry[]>
+  /** Read a file's decoded UTF-8 content + blob sha on a ref, or null if absent. */
+  getFileContent(
+    installationId: number,
+    ref: GitHubRepoRef,
+    path: string,
+    gitRef?: string,
+  ): Promise<RepoFileContent | null>
   listPullRequests(
     installationId: number,
     ref: GitHubRepoRef,

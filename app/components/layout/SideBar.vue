@@ -7,6 +7,7 @@ import UserMenu from '~/components/auth/UserMenu.vue'
 const documents = useDocumentsStore()
 const tasks = useTasksStore()
 const github = useGitHubStore()
+const library = useFragmentLibraryStore()
 const workspace = useWorkspaceStore()
 const ui = useUiStore()
 
@@ -21,6 +22,7 @@ watch(
     void documents.probe()
     void tasks.probe()
     void github.probe()
+    void library.probe()
   },
   { immediate: true },
 )
@@ -67,6 +69,26 @@ watch(
         Bootstrap repo
       </UButton>
     </section>
+
+    <template v-if="library.available">
+      <USeparator />
+      <section>
+        <h2 class="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+          Prompt library
+        </h2>
+        <UButton
+          block
+          color="neutral"
+          variant="soft"
+          size="sm"
+          icon="i-lucide-book-marked"
+          class="justify-start"
+          @click="ui.openFragmentLibrary()"
+        >
+          Best-practice fragments
+        </UButton>
+      </section>
+    </template>
 
     <template v-if="github.available">
       <USeparator />

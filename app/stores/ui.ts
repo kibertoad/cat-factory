@@ -38,6 +38,10 @@ export const useUiStore = defineStore('ui', () => {
   // GitHub integration panel (connection management + repo/PR/issue browsing).
   const githubOpen = ref(false)
 
+  // Prompt-fragment library panel (manage the board's best-practice catalog +
+  // linked guideline repos; ADR 0006).
+  const fragmentLibraryOpen = ref(false)
+
   /** Current canvas zoom (driven by Vue Flow viewport). */
   const zoom = ref(1)
 
@@ -136,6 +140,12 @@ export const useUiStore = defineStore('ui', () => {
   function closeGitHub() {
     githubOpen.value = false
   }
+  function openFragmentLibrary() {
+    fragmentLibraryOpen.value = true
+  }
+  function closeFragmentLibrary() {
+    fragmentLibraryOpen.value = false
+  }
 
   return {
     selectedBlockId,
@@ -149,6 +159,7 @@ export const useUiStore = defineStore('ui', () => {
     taskImport,
     bootstrapOpen,
     githubOpen,
+    fragmentLibraryOpen,
     zoom,
     lod,
     expandedFrames,
@@ -174,5 +185,7 @@ export const useUiStore = defineStore('ui', () => {
     closeBootstrap,
     openGitHub,
     closeGitHub,
+    openFragmentLibrary,
+    closeFragmentLibrary,
   }
 })

@@ -101,6 +101,25 @@ export const promptFragmentSchema = v.object({
       agentKinds: v.optional(v.array(agentKindSchema)),
     }),
   ),
+  /**
+   * Free-form tags used by the relevance selector to decide whether a fragment
+   * is pertinent to a given run (e.g. `backend`, `frontend`, `db`). Optional and
+   * absent on the built-in catalog tier; managed fragments may set them.
+   */
+  tags: v.optional(v.array(v.string())),
+  /**
+   * Provenance for a fragment sourced from a repo: which {@link FragmentSource}
+   * it came from, the file path within that source, and the blob sha last synced
+   * (so a "changed?" check is a cheap comparison). Absent for hand-authored
+   * fragments and the built-in catalog.
+   */
+  source: v.optional(
+    v.object({
+      sourceId: v.string(),
+      path: v.string(),
+      sha: v.string(),
+    }),
+  ),
 })
 export type PromptFragment = v.InferOutput<typeof promptFragmentSchema>
 
@@ -175,6 +194,13 @@ export const pipelineStepSchema = v.object({
   output: v.optional(v.string()),
   /** Identifier of the model that produced `output`, for transparency. */
   model: v.optional(v.string()),
+  /**
+   * Ids of the prompt-fragment library entries that were folded into this step's
+   * system prompt — the manual selection on the block unioned with the relevance
+   * selector's pick. Recorded for observability and replay-stability; absent when
+   * the fragment-library module is not configured.
+   */
+  selectedFragmentIds: v.optional(v.array(v.string())),
   /**
    * Identifier of an in-flight asynchronous agent job (a container run polled by
    * the durable driver). Set while the step is dispatched-but-not-yet-finished so

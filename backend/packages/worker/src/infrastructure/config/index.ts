@@ -12,6 +12,7 @@ import { type TasksConfig, loadTasksConfig } from './tasks'
 import { type EnvironmentsConfig, loadEnvironmentsConfig } from './environments'
 import { type RunnerPoolConfig, loadRunnerPoolConfig } from './runners'
 import { type RetentionConfig, loadRetentionConfig } from './retention'
+import { type FragmentLibraryConfig, loadFragmentLibraryConfig } from './fragmentLibrary'
 
 // Translates the flat, string-typed Worker environment into a structured app
 // config — in particular the agent model routing ("which LLM, with what config,
@@ -28,6 +29,7 @@ export type {
   EnvironmentsConfig,
   RunnerPoolConfig,
   RetentionConfig,
+  FragmentLibraryConfig,
 }
 
 export interface AppConfig {
@@ -51,6 +53,8 @@ export interface AppConfig {
   runners: RunnerPoolConfig
   /** Retention windows for the unbounded ledgers/projections (epoch-ms ages). */
   retention: RetentionConfig
+  /** Prompt-fragment library config; `enabled` is false unless opted in (ADR 0006). */
+  fragmentLibrary: FragmentLibraryConfig
 }
 
 export function loadConfig(env: Env): AppConfig {
@@ -67,5 +71,6 @@ export function loadConfig(env: Env): AppConfig {
     environments: loadEnvironmentsConfig(env),
     runners: loadRunnerPoolConfig(env),
     retention: loadRetentionConfig(env),
+    fragmentLibrary: loadFragmentLibraryConfig(env),
   }
 }

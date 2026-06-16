@@ -1,5 +1,6 @@
 export * from './primitives'
 export * from './entities'
+export * from './fragment-library'
 export * from './accounts'
 export * from './events'
 export * from './requests'

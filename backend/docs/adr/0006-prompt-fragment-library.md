@@ -1,6 +1,6 @@
 # ADR 0006: Tenant-scoped prompt-fragment library with repo sources and relevance selection
 
-- **Status:** Proposed
+- **Status:** Accepted (implemented)
 - **Date:** 2026-06-16
 - **Context layer:** backend (`@cat-factory/contracts`, `@cat-factory/core`,
   `@cat-factory/worker`, `@cat-factory/prompt-fragments`), frontend (`app/`)

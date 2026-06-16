@@ -104,6 +104,15 @@ function openDecisionFor(decisionId: string) {
             <UIcon name="i-lucide-cpu" class="h-3 w-3" />
             {{ models.labelForRef(s.model) }}
           </div>
+          <!-- Prompt-fragment standards the library selected for this step. -->
+          <div
+            v-if="s.selectedFragmentIds && s.selectedFragmentIds.length"
+            class="mt-0.5 flex flex-wrap items-center gap-1 pl-6 text-[10px] text-slate-500"
+            :title="`Best-practice fragments folded into this step: ${s.selectedFragmentIds.join(', ')}`"
+          >
+            <UIcon name="i-lucide-book-marked" class="h-3 w-3 shrink-0" />
+            <span>{{ s.selectedFragmentIds.length }} standard(s) applied</span>
+          </div>
         </li>
       </ul>
     </div>

@@ -38,7 +38,9 @@ export type {
   ListOptions,
   Paged,
   RateLimitSnapshot,
+  RepoContentEntry,
   RepoEntry,
+  RepoFileContent,
 } from './github-client'
 export type {
   CreateRepoInput,
@@ -87,6 +89,22 @@ export type {
   TaskRecord,
   TaskRepository,
 } from './task-repositories'
+export type {
+  FragmentAppliesTo,
+  PromptFragmentRecord,
+  PromptFragmentRepository,
+  FragmentSourceRecord,
+  FragmentSourceRepository,
+} from './fragment-repositories'
+export type {
+  SelectableFragment,
+  FragmentSelectionContext,
+  FragmentSelector,
+  ResolvedRunFragment,
+  FragmentResolverInput,
+  FragmentRunSelection,
+  FragmentResolver,
+} from './fragment-selector'
 export type { SecretCipher } from './secret-cipher'
 export type {
   EnvironmentProvider,

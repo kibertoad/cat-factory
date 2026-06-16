@@ -8,7 +8,7 @@ import {
   type ModelRef,
   type RunnerJobResult,
   type RunnerTransport,
-  composeSystemPrompt,
+  composeBlockSystemPrompt,
   resolveAgentConfig,
   systemPromptFor,
   userPromptFor,
@@ -184,11 +184,9 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     })
 
     // The "extra context" Pi runs with: the build-phase role plus the block's
-    // selected best-practice fragments, exactly as the inline executor composes.
-    const systemPrompt = composeSystemPrompt(
-      systemPromptFor(context.agentKind),
-      context.block.fragmentIds,
-    )
+    // selected best-practice fragments, exactly as the inline executor composes
+    // (engine-resolved tenant catalog when present, else the manual ids).
+    const systemPrompt = composeBlockSystemPrompt(systemPromptFor(context.agentKind), context.block)
     const userPrompt = userPromptFor(context)
     const headBranch = `cat-factory/${blockId}-${shortId()}`
 

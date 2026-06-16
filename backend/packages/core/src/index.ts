@@ -68,7 +68,11 @@ export {
   resolveAgentConfig,
 } from './modules/agents/agent-routing'
 export { systemPromptFor, userPromptFor } from './modules/agents/agent-catalog'
-export { composeSystemPrompt } from './modules/agents/prompt-fragments'
+export {
+  composeSystemPrompt,
+  composeBlockSystemPrompt,
+  type ComposableBlock,
+} from './modules/agents/prompt-fragments'
 export {
   type StandardPhase,
   STANDARD_PHASES,
@@ -105,8 +109,28 @@ export {
   type RunnersModule,
   type BootstrapModule,
   type BoardScanModule,
+  type FragmentLibraryModule,
   createCore,
 } from './container'
+
+export {
+  FragmentLibraryService,
+  type FragmentLibraryServiceDependencies,
+} from './modules/fragmentLibrary/FragmentLibraryService'
+export {
+  FragmentSourceService,
+  type FragmentSourceServiceDependencies,
+  type ResolveFragmentInstallationId,
+} from './modules/fragmentLibrary/FragmentSourceService'
+export { DeterministicFragmentSelector } from './modules/fragmentLibrary/DeterministicFragmentSelector'
+export {
+  type ResolvedCatalogEntry,
+  mergeCatalog,
+  toSelectable,
+  entryToFragment,
+  selectDeterministic,
+} from './modules/fragmentLibrary/fragment-catalog'
+export * as fragmentSourceLogic from './modules/fragmentLibrary/fragment-source.logic'
 
 export {
   GitHubInstallationService,

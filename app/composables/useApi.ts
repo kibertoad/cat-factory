@@ -30,6 +30,14 @@ import type {
   OpenPullRequestInput,
   Pipeline,
   PromptFragment,
+  CreatePromptFragmentInput,
+  UpdatePromptFragmentInput,
+  ResolvedFragment,
+  FragmentOwnerKind,
+  FragmentSource,
+  LinkFragmentSourceInput,
+  FragmentSourceStatus,
+  FragmentSyncResult,
   ReferenceArchitecture,
   ResyncRequest,
   SpawnResult,
@@ -73,6 +81,12 @@ export function useApi() {
   })
 
   const ws = (workspaceId: string) => `/workspaces/${encodeURIComponent(workspaceId)}`
+  // Prompt-fragment library routes exist at both tiers; resolve the prefix from
+  // the owner scope (ADR 0006 §8).
+  const scope = (kind: FragmentOwnerKind, id: string) =>
+    kind === 'account'
+      ? `/accounts/${encodeURIComponent(id)}`
+      : `/workspaces/${encodeURIComponent(id)}`
 
   return {
     // ---- auth -------------------------------------------------------------
@@ -84,6 +98,57 @@ export function useApi() {
 
     // ---- prompt fragments (best-practice catalog) -------------------------
     getPromptFragments: () => http<PromptFragment[]>('/prompt-fragments'),
+
+    // ---- prompt-fragment library (managed, tenant-scoped; ADR 0006) -------
+    // The merged catalog an agent actually sees for a board (builtin∪account∪ws).
+    getResolvedFragments: (workspaceId: string) =>
+      http<ResolvedFragment[]>(`${ws(workspaceId)}/prompt-fragments/resolved`),
+
+    // Per-tier management (scope = account or workspace).
+    listFragments: (kind: FragmentOwnerKind, id: string) =>
+      http<PromptFragment[]>(`${scope(kind, id)}/prompt-fragments`),
+
+    createFragment: (kind: FragmentOwnerKind, id: string, body: CreatePromptFragmentInput) =>
+      http<PromptFragment>(`${scope(kind, id)}/prompt-fragments`, { method: 'POST', body }),
+
+    updateFragment: (
+      kind: FragmentOwnerKind,
+      id: string,
+      fragmentId: string,
+      body: UpdatePromptFragmentInput,
+    ) =>
+      http<PromptFragment>(
+        `${scope(kind, id)}/prompt-fragments/${encodeURIComponent(fragmentId)}`,
+        { method: 'PATCH', body },
+      ),
+
+    deleteFragment: (kind: FragmentOwnerKind, id: string, fragmentId: string) =>
+      http(`${scope(kind, id)}/prompt-fragments/${encodeURIComponent(fragmentId)}`, {
+        method: 'DELETE',
+      }),
+
+    // Repo sources of guideline Markdown.
+    listFragmentSources: (kind: FragmentOwnerKind, id: string) =>
+      http<FragmentSource[]>(`${scope(kind, id)}/fragment-sources`),
+
+    linkFragmentSource: (kind: FragmentOwnerKind, id: string, body: LinkFragmentSourceInput) =>
+      http<FragmentSource>(`${scope(kind, id)}/fragment-sources`, { method: 'POST', body }),
+
+    unlinkFragmentSource: (kind: FragmentOwnerKind, id: string, sourceId: string) =>
+      http(`${scope(kind, id)}/fragment-sources/${encodeURIComponent(sourceId)}`, {
+        method: 'DELETE',
+      }),
+
+    fragmentSourceStatus: (kind: FragmentOwnerKind, id: string, sourceId: string) =>
+      http<FragmentSourceStatus>(
+        `${scope(kind, id)}/fragment-sources/${encodeURIComponent(sourceId)}/status`,
+      ),
+
+    syncFragmentSource: (kind: FragmentOwnerKind, id: string, sourceId: string) =>
+      http<FragmentSyncResult>(
+        `${scope(kind, id)}/fragment-sources/${encodeURIComponent(sourceId)}/sync`,
+        { method: 'POST' },
+      ),
 
     // ---- model picker catalog (effective per-deployment flavours) ---------
     getModels: () => http<ModelOption[]>('/models'),

@@ -42,6 +42,13 @@ export interface AgentRunContext {
     features?: string[]
     /** Ids of selected best-practice fragments to fold into the system prompt. */
     fragmentIds?: string[]
+    /**
+     * Fragment bodies the engine pre-resolved from the tenant fragment-library
+     * (the merged catalog + relevance selection; ADR 0006). When present these
+     * are folded into the system prompt verbatim, superseding `fragmentIds`'
+     * static resolution. Absent when the library module is not configured.
+     */
+    resolvedFragments?: { id: string; body: string }[]
     /** Id of the model picked for this block (overrides the agent routing), if any. */
     modelId?: string
     /**
