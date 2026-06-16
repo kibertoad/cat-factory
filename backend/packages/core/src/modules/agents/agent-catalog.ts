@@ -7,6 +7,7 @@ import {
 } from './acceptance-prompts'
 import { businessLogicSystemPrompt } from './business-logic-prompts'
 import { mockSystemPrompt } from './mock-prompts'
+import { renderTaskContext } from '../tasks/tasks.logic'
 import {
   environmentSection,
   phaseForKind,
@@ -69,6 +70,10 @@ export function userPromptFor(context: AgentRunContext): string {
     for (const doc of block.contextDocs) {
       lines.push(`### ${doc.title} (${doc.url})`, doc.excerpt)
     }
+  }
+  if (block.contextTasks?.length) {
+    lines.push('', 'Linked tracker issues (extra context):')
+    for (const task of block.contextTasks) lines.push(renderTaskContext(task))
   }
   const envSection = environmentSection(context)
   if (envSection) lines.push(envSection)

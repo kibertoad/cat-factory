@@ -2,6 +2,7 @@ import type {
   AgentExecutor,
   CoreDependencies,
   DocumentSourceProvider,
+  TaskSourceProvider,
   ExecutionInstance,
   GitHubClient,
   WebhookVerifier,
@@ -15,6 +16,7 @@ import { FakeAgentExecutor } from './fakes/FakeAgentExecutor'
 import { FakeGitHubClient } from './fakes/FakeGitHubClient'
 import { FakeWebhookVerifier } from './fakes/FakeWebhookVerifier'
 import { FakeDocumentSourceProvider } from './fakes/FakeDocumentSourceProvider'
+import { FakeTaskSourceProvider } from './fakes/FakeTaskSourceProvider'
 import { D1GitHubInstallationRepository } from '../src/infrastructure/repositories/D1GitHubInstallationRepository'
 import { D1RepoProjectionRepository } from '../src/infrastructure/repositories/D1RepoProjectionRepository'
 import { D1BranchProjectionRepository } from '../src/infrastructure/repositories/D1BranchProjectionRepository'
@@ -24,6 +26,8 @@ import { D1CommitProjectionRepository } from '../src/infrastructure/repositories
 import { D1CheckRunProjectionRepository } from '../src/infrastructure/repositories/D1CheckRunProjectionRepository'
 import { D1DocumentConnectionRepository } from '../src/infrastructure/repositories/D1DocumentConnectionRepository'
 import { D1DocumentRepository } from '../src/infrastructure/repositories/D1DocumentRepository'
+import { D1TaskConnectionRepository } from '../src/infrastructure/repositories/D1TaskConnectionRepository'
+import { D1TaskRepository } from '../src/infrastructure/repositories/D1TaskRepository'
 import { WebCryptoSecretCipher } from '../src/infrastructure/environments/WebCryptoSecretCipher'
 
 const BASE = 'https://cat-factory.test'
@@ -157,5 +161,29 @@ export function documentsDeps(
       }),
     }),
     documentRepository: new D1DocumentRepository({ db }),
+  }
+}
+
+/**
+ * Build task-source core overrides backed by the real local D1 plus fake
+ * providers. Spread into `makeApp`'s overrides to make `container.tasks`
+ * available (the module assembles whenever its deps are present, independent of
+ * the TASKS_ENABLED env gate). Defaults to a single Jira fake.
+ */
+export function tasksDeps(
+  opts: { providers?: TaskSourceProvider[] } = {},
+): Partial<CoreDependencies> {
+  const db = env.DB
+  return {
+    taskSourceProviders: opts.providers ?? [new FakeTaskSourceProvider('jira')],
+    taskConnectionRepository: new D1TaskConnectionRepository({
+      db,
+      cipher: new WebCryptoSecretCipher({
+        // Always set in the test bindings (see vitest.config.ts).
+        masterKeyBase64: env.TASKS_ENCRYPTION_KEY!,
+        info: 'cat-factory:tasks',
+      }),
+    }),
+    taskRepository: new D1TaskRepository({ db }),
   }
 }

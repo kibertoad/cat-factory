@@ -183,6 +183,22 @@ export interface Env {
    */
   DOCUMENT_PLANNER?: string
 
+  // ---- Task-source integration (see config.ts; opt-in) --------------------
+  /** Enables the task-source integration ('true'). Per-workspace creds live in D1. */
+  TASKS_ENABLED?: string
+  /**
+   * Service-level master key (base64, ≥32 bytes decoded) for encrypting the
+   * per-workspace source credentials (e.g. Jira tokens) at rest. Required when
+   * the integration is enabled (secret); without it the feature fails closed
+   * rather than persisting credentials in plaintext.
+   */
+  TASKS_ENCRYPTION_KEY?: string
+  /**
+   * Comma-separated allow-list of sources to register (e.g. `jira`). Defaults to
+   * all known sources when unset.
+   */
+  TASK_SOURCES?: string
+
   // ---- Ephemeral environment integration (see config.ts; opt-in) ----------
   /**
    * Enables the environment provider integration ('true'). Per-workspace provider

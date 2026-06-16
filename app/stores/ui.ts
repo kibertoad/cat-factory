@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { DocumentSourceKind, LodLevel } from '~/types/domain'
+import type { DocumentSourceKind, TaskSourceKind, LodLevel } from '~/types/domain'
 
 /** Transient UI state: selection, panels, zoom level. */
 export const useUiStore = defineStore('ui', () => {
@@ -24,6 +24,13 @@ export const useUiStore = defineStore('ui', () => {
     externalId: string
     targetFrameId: string | null
   } | null>(null)
+
+  // Task-source integration modals, keyed by source. `taskConnect` carries the
+  // source whose connect form to show; `taskImport`'s source may be null to let
+  // the modal pick a connected one (there is no spawn target — issues are linked
+  // to a block for context, not expanded into structure).
+  const taskConnect = ref<{ source: TaskSourceKind } | null>(null)
+  const taskImport = ref<{ source: TaskSourceKind | null } | null>(null)
 
   // Repo-bootstrap modal (manage reference architectures + launch a bootstrap).
   const bootstrapOpen = ref(false)
@@ -105,6 +112,18 @@ export const useUiStore = defineStore('ui', () => {
   function closeSpawnPreview() {
     spawnPreview.value = null
   }
+  function openTaskConnect(source: TaskSourceKind) {
+    taskConnect.value = { source }
+  }
+  function closeTaskConnect() {
+    taskConnect.value = null
+  }
+  function openTaskImport(source: TaskSourceKind | null = null) {
+    taskImport.value = { source }
+  }
+  function closeTaskImport() {
+    taskImport.value = null
+  }
   function openBootstrap() {
     bootstrapOpen.value = true
   }
@@ -126,6 +145,8 @@ export const useUiStore = defineStore('ui', () => {
     documentConnect,
     documentImport,
     spawnPreview,
+    taskConnect,
+    taskImport,
     bootstrapOpen,
     githubOpen,
     zoom,
@@ -145,6 +166,10 @@ export const useUiStore = defineStore('ui', () => {
     closeDocumentImport,
     openSpawnPreview,
     closeSpawnPreview,
+    openTaskConnect,
+    closeTaskConnect,
+    openTaskImport,
+    closeTaskImport,
     openBootstrap,
     closeBootstrap,
     openGitHub,

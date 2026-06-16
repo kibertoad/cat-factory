@@ -95,6 +95,7 @@ export {
   type CoreDependencies,
   type GitHubModule,
   type DocumentsModule,
+  type TasksModule,
   type EnvironmentsModule,
   type RunnersModule,
   type BootstrapModule,
@@ -138,6 +139,27 @@ export * as confluenceLogic from './modules/documents/confluence.logic'
 export * as notionLogic from './modules/documents/notion.logic'
 export { CONFLUENCE_DESCRIPTOR } from './modules/documents/confluence.logic'
 export { NOTION_DESCRIPTOR } from './modules/documents/notion.logic'
+export * as atlassianLogic from './shared/atlassian.logic'
+
+export {
+  TaskConnectionService,
+  type TaskConnectionServiceDependencies,
+} from './modules/tasks/TaskConnectionService'
+export {
+  TaskImportService,
+  type TaskImportServiceDependencies,
+  toSourceTask,
+} from './modules/tasks/TaskImportService'
+export { TaskLinkService, type TaskLinkServiceDependencies } from './modules/tasks/TaskLinkService'
+export {
+  MapTaskSourceRegistry,
+  type TaskContextView,
+  renderTaskContext,
+  buildTaskExcerpt,
+} from './modules/tasks/tasks.logic'
+export * as tasksLogic from './modules/tasks/tasks.logic'
+export * as jiraLogic from './modules/tasks/jira.logic'
+export { JIRA_DESCRIPTOR } from './modules/tasks/jira.logic'
 
 export {
   EnvironmentConnectionService,

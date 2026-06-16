@@ -200,6 +200,7 @@ export interface AuthUser {
 export type * from './execution'
 export type * from './models'
 export type * from './documents'
+export type * from './tasks'
 export type * from './scenarios'
 export type * from './bootstrap'
 export type * from './github'

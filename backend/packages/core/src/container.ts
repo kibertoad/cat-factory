@@ -17,6 +17,8 @@ import type {
   DocumentConnectionRepository,
   DocumentRepository,
 } from './ports/document-repositories'
+import type { TaskSourceProvider } from './ports/task-source'
+import type { TaskConnectionRepository, TaskRepository } from './ports/task-repositories'
 import type { EnvironmentProvider } from './ports/environment-provider'
 import type {
   EnvironmentConnectionRepository,
@@ -55,6 +57,10 @@ import { DocumentImportService } from './modules/documents/DocumentImportService
 import { DocumentPlannerService } from './modules/documents/DocumentPlannerService'
 import { DocumentLinkService } from './modules/documents/DocumentLinkService'
 import { MapDocumentSourceRegistry } from './modules/documents/documents.logic'
+import { TaskConnectionService } from './modules/tasks/TaskConnectionService'
+import { TaskImportService } from './modules/tasks/TaskImportService'
+import { TaskLinkService } from './modules/tasks/TaskLinkService'
+import { MapTaskSourceRegistry } from './modules/tasks/tasks.logic'
 import { EnvironmentConnectionService } from './modules/environments/EnvironmentConnectionService'
 import { EnvironmentProvisioningService } from './modules/environments/EnvironmentProvisioningService'
 import { EnvironmentTeardownService } from './modules/environments/EnvironmentTeardownService'
@@ -139,6 +145,17 @@ export interface CoreDependencies {
   documentConnectionRepository?: DocumentConnectionRepository
   documentRepository?: DocumentRepository
 
+  // ---- Task-source integration (optional; wired only when configured) ------
+  // A sibling of the document-source integration for external issue trackers
+  // (Jira, …). Mirrors the same default-off convention: the tasks module
+  // assembles when at least one source provider + both repositories are present.
+  // Each provider encapsulates one tracker's specifics behind the
+  // TaskSourceProvider port. `taskRepository` is additionally consumed by the
+  // execution engine to feed issues linked to a block to agents as context.
+  taskSourceProviders?: TaskSourceProvider[]
+  taskConnectionRepository?: TaskConnectionRepository
+  taskRepository?: TaskRepository
+
   // ---- Ephemeral environment integration (optional; wired when configured) -
   // Mirrors the GitHub/Confluence default-off convention. The module assembles
   // only when the provider, both repositories and the secret cipher are present,
@@ -197,6 +214,13 @@ export interface DocumentsModule {
   linkService: DocumentLinkService
 }
 
+/** The task-source integration's services, present only when configured. */
+export interface TasksModule {
+  connectionService: TaskConnectionService
+  importService: TaskImportService
+  linkService: TaskLinkService
+}
+
 /** The environment integration's services, present only when configured. */
 export interface EnvironmentsModule {
   connectionService: EnvironmentConnectionService
@@ -229,6 +253,8 @@ export interface Core {
   github?: GitHubModule
   /** Present only when the document-source integration is configured (see CoreDependencies). */
   documents?: DocumentsModule
+  /** Present only when the task-source integration is configured (see CoreDependencies). */
+  tasks?: TasksModule
   /** Present only when the environment integration is configured (see CoreDependencies). */
   environments?: EnvironmentsModule
   /** Present only when the self-hosted runner-pool integration is configured. */
@@ -352,6 +378,44 @@ function createDocumentsModule(
     documentRepository,
   })
   return { connectionService, importService, plannerService, linkService }
+}
+
+/**
+ * Assemble the task-source module when at least one provider + both repositories
+ * are present; otherwise return undefined so the feature stays cleanly opt-in.
+ * Unlike the documents module there is no planner — issues are linked for
+ * context, not expanded into board structure.
+ */
+function createTasksModule(deps: CoreDependencies): TasksModule | undefined {
+  const { taskSourceProviders, taskConnectionRepository, taskRepository } = deps
+  if (
+    !taskSourceProviders ||
+    taskSourceProviders.length === 0 ||
+    !taskConnectionRepository ||
+    !taskRepository
+  ) {
+    return undefined
+  }
+
+  const registry = new MapTaskSourceRegistry(taskSourceProviders)
+  const connectionService = new TaskConnectionService({
+    taskConnectionRepository,
+    registry,
+    workspaceRepository: deps.workspaceRepository,
+    clock: deps.clock,
+  })
+  const importService = new TaskImportService({
+    registry,
+    taskRepository,
+    connectionService,
+    workspaceRepository: deps.workspaceRepository,
+    clock: deps.clock,
+  })
+  const linkService = new TaskLinkService({
+    blockRepository: deps.blockRepository,
+    taskRepository,
+  })
+  return { connectionService, importService, linkService }
 }
 
 /**
@@ -488,6 +552,7 @@ export function createCore(dependencies: CoreDependencies): Core {
 
   const github = createGitHubModule(dependencies)
   const documents = createDocumentsModule(dependencies, boardService)
+  const tasks = createTasksModule(dependencies)
   const runners = createRunnersModule(dependencies)
   const bootstrap = createBootstrapModule(dependencies)
   const boardScan = createBoardScanModule(dependencies, boardService)
@@ -500,6 +565,7 @@ export function createCore(dependencies: CoreDependencies): Core {
     spendService,
     ...(github ? { github } : {}),
     ...(documents ? { documents } : {}),
+    ...(tasks ? { tasks } : {}),
     ...(environments ? { environments } : {}),
     ...(runners ? { runners } : {}),
     ...(bootstrap ? { bootstrap } : {}),

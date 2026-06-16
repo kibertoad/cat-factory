@@ -4,14 +4,17 @@ import PipelinePalette from '~/components/palettes/PipelinePalette.vue'
 import UserMenu from '~/components/auth/UserMenu.vue'
 
 const documents = useDocumentsStore()
+const tasks = useTasksStore()
 const github = useGitHubStore()
 const ui = useUiStore()
 
-// Resolve whether the document-source / GitHub integrations are enabled on the
-// backend, so each section is hidden entirely when it is off (mirrors how auth
-// gates its UI). A 503 from either probe flips its `available` to false.
+// Resolve whether the document-source / task-source / GitHub integrations are
+// enabled on the backend, so each section is hidden entirely when it is off
+// (mirrors how auth gates its UI). A 503 from a probe flips its `available` to
+// false.
 onMounted(() => {
   void documents.probe()
+  void tasks.probe()
   void github.probe()
 })
 </script>
@@ -117,6 +120,44 @@ onMounted(() => {
             @click="ui.openDocumentImport(null)"
           >
             Import &amp; spawn
+          </UButton>
+        </div>
+      </section>
+    </template>
+
+    <template v-if="tasks.available && tasks.sources.length">
+      <USeparator />
+      <section>
+        <h2 class="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+          Task sources
+        </h2>
+        <div class="space-y-1.5">
+          <UButton
+            v-for="src in tasks.sources"
+            :key="src.source"
+            block
+            color="neutral"
+            variant="soft"
+            size="sm"
+            :icon="src.icon"
+            class="justify-start"
+            @click="ui.openTaskConnect(src.source)"
+          >
+            <span class="truncate">
+              {{ tasks.isConnected(src.source) ? src.label : `Connect ${src.label}` }}
+            </span>
+          </UButton>
+          <UButton
+            v-if="tasks.anyConnected"
+            block
+            color="neutral"
+            variant="soft"
+            size="sm"
+            icon="i-lucide-file-down"
+            class="justify-start"
+            @click="ui.openTaskImport(null)"
+          >
+            Import issues
           </UButton>
         </div>
       </section>
