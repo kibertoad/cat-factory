@@ -87,17 +87,32 @@ It mirrors the execution pattern above: dispatch → durable poll → push event
   `writeAgentsContext()` writes `AGENTS.md` → `runPi()` adapts → `reinitAndPush()`
   resets history to one commit and **force-pushes** to the default branch.
 - Events: `DurableObjectEventPublisher.bootstrapChanged()` → `WorkspaceEventsHub`
-  → SPA `useWorkspaceStream.ts` patches `stores/bootstrap.ts` (`upsert`) + the
-  board block. `BlockNode.vue` reads `bootstrap.byBlock[frameId]` to render the
-  "bootstrapping…" badge + subtask progress bar, flipping to a ready service or a
-  failed badge. Tracing logs (pino) run controller→service→workflow→bootstrapper→
-  harness, queryable in the Cloudflare dashboard.
+  → SPA `useWorkspaceStream.ts` patches `stores/agentRuns.ts` (`upsertBootstrap`)
+  + the board block. `BlockNode.vue` reads `agentRuns.byBlock[frameId]` to render
+  the "bootstrapping…" badge + subtask progress bar, flipping to a ready service or
+  the shared `<AgentFailureCard>` (failure hint + retry). Tracing logs (pino) run
+  controller→service→workflow→bootstrapper→harness, queryable in the Cloudflare
+  dashboard.
 
-**Known limitation:** there is no dedicated cron sweeper for a bootstrap whose
-Workflows instance is evicted mid-run (the execution path has one via
-`sweepStuckRuns`). The `BootstrapWorkflow` retries transient poll failures, but a
-full eviction would leave the job `running`; re-driving is idempotent (the
-workflow create is keyed by job id) if a sweeper is added later.
+## Unified agent runs (failure + retry surface)
+
+Both container-backed flows — task `execution` and repo `bootstrap` — persist to
+one `agent_runs` D1 table (kind-scoped), and the board surfaces their failure +
+retry uniformly:
+- Storage: `D1ExecutionRepository`/`D1BootstrapJobRepository` both target
+  `agent_runs WHERE kind=…`; `D1AgentRunRepository` reads across kinds
+  (`getRef` for retry dispatch, `listStale` for the sweeper).
+- Sweeper: `sweepStuckRuns` (worker `infrastructure/workflows/sweeper.ts`, driven
+  from `index.ts` `scheduled`) re-drives stale `running` runs of **both** kinds —
+  so an evicted bootstrap is now re-driven too (the old known limitation is gone).
+- Retry: `POST /workspaces/:ws/agent-runs/:id/retry` (`modules/agentRuns/
+  AgentRunController.ts`) resolves the kind via `getRef`, then calls
+  `bootstrap.service.retry` / `executionService.retry`; returns `{ kind, run }`.
+- Frontend: `stores/agentRuns.ts` (`useAgentRunsStore`) merges `snapshot.executions`
+  + `snapshot.bootstrapJobs` into a per-block `byBlock` summary; the shared
+  `components/board/AgentFailureCard.vue` renders the rose banner + retry on the
+  board card, the inspector, and `TaskExecution.vue`. A failed execution now leaves
+  its block `blocked` (NOT the old success-looking `pr_ready`).
 
 ## Board / service / repo-linkage model
 

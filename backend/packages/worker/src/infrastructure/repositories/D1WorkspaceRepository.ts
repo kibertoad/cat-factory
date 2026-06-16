@@ -80,7 +80,8 @@ export class D1WorkspaceRepository implements WorkspaceRepository {
   async delete(id: string): Promise<void> {
     // Cascade explicitly: D1 does not enforce foreign keys by default.
     await this.db.batch([
-      this.db.prepare('DELETE FROM executions WHERE workspace_id = ?').bind(id),
+      // agent_runs holds both execution and bootstrap runs (migration 0019).
+      this.db.prepare('DELETE FROM agent_runs WHERE workspace_id = ?').bind(id),
       this.db.prepare('DELETE FROM blocks WHERE workspace_id = ?').bind(id),
       this.db.prepare('DELETE FROM pipelines WHERE workspace_id = ?').bind(id),
       this.db.prepare('DELETE FROM workspaces WHERE id = ?').bind(id),

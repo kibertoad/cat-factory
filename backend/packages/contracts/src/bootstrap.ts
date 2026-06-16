@@ -1,5 +1,5 @@
 import * as v from 'valibot'
-import { stepSubtasksSchema } from './entities'
+import { agentFailureSchema, stepSubtasksSchema } from './entities'
 
 // ---------------------------------------------------------------------------
 // Repo-bootstrap wire contracts. A "reference architecture" is a named base repo
@@ -101,24 +101,12 @@ export const bootstrapFailureKindSchema = v.picklist([
 export type BootstrapFailureKind = v.InferOutput<typeof bootstrapFailureKindSchema>
 
 /**
- * Structured diagnostics captured when a bootstrap run fails, stored on the job and
- * surfaced on the board so a crash isn't just a one-line message. The container's
- * stdout/stderr can't be pulled into this record (an evicted container is gone), so
- * for `evicted` failures the `hint` points at the Cloudflare container logs.
+ * Structured diagnostics captured when a bootstrap run fails. This is now the
+ * shared {@link agentFailureSchema} (the same shape execution runs use), so the
+ * board renders one failure banner + retry for any agent. `bootstrapFailureKind`
+ * stays a narrow alias documenting the subset a bootstrap run actually produces.
  */
-export const bootstrapFailureSchema = v.object({
-  kind: bootstrapFailureKindSchema,
-  /** Human-readable summary (mirrors the job's `error` for back-compat). */
-  message: v.string(),
-  /** Extended detail when available (the harness's reason, an HTTP body, …). */
-  detail: v.nullable(v.string()),
-  /** Where to look next (e.g. "check the container logs for this job id"). */
-  hint: v.nullable(v.string()),
-  /** Epoch ms the failure was recorded. */
-  occurredAt: v.number(),
-  /** Last subtask counts seen before the failure, for context (null if none). */
-  lastSubtasks: v.nullable(stepSubtasksSchema),
-})
+export const bootstrapFailureSchema = agentFailureSchema
 export type BootstrapFailure = v.InferOutput<typeof bootstrapFailureSchema>
 
 /** One "bootstrap repo" run, with its outcome. */

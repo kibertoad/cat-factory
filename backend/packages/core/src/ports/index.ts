@@ -14,6 +14,7 @@ export type {
   MembershipRepository,
 } from './account-repositories'
 export type { Clock, IdGenerator } from './runtime'
+export type { AgentRunRef, AgentRunRepository } from './agent-runs'
 export type { ModelProvider, ModelRef } from './model-provider'
 export type { TokenUsageRecord, TokenUsageRepository, TokenUsageTotals } from './token-usage'
 export type {

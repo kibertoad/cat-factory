@@ -6,24 +6,38 @@ import type {
 } from '@cat-factory/core'
 import type { D1Database } from '@cloudflare/workers-types'
 
-interface BootstrapJobRow {
+/**
+ * A row of the unified `agent_runs` table (see migration 0019). This repository
+ * owns only the `kind='bootstrap'` rows; the execution flow owns `kind='execution'`
+ * via {@link D1ExecutionRepository}. Bootstrap-specific fields (the reference
+ * architecture, repo name/owner/url, instructions) live in the `detail` JSON
+ * column — nothing queries on them — while lifecycle/progress/failure are
+ * top-level columns shared with execution.
+ */
+interface AgentRunRow {
   id: string
   workspace_id: string
-  reference_architecture_id: string | null
-  reference_architecture_name: string | null
-  repo_name: string
-  repo_owner: string | null
-  repo_url: string | null
-  instructions: string
   status: string
   block_id: string | null
+  /** JSON {referenceArchitectureId,referenceArchitectureName,repoName,repoOwner,repoUrl,instructions}. */
+  detail: string
   /** JSON {completed,inProgress,total}; null until the agent reports. */
   subtasks: string | null
   error: string | null
-  /** JSON-encoded BootstrapFailure; null unless the run failed (migration 0018). */
+  /** JSON-encoded AgentFailure; null unless the run failed. */
   failure: string | null
   created_at: number
   updated_at: number
+}
+
+/** The bootstrap-specific payload packed into `agent_runs.detail`. */
+interface BootstrapDetail {
+  referenceArchitectureId: string | null
+  referenceArchitectureName: string | null
+  repoName: string
+  repoOwner: string | null
+  repoUrl: string | null
+  instructions: string
 }
 
 /** Parse the JSON-encoded subtask counts column, tolerating a null/garbage value. */
@@ -52,16 +66,41 @@ function parseFailure(raw: string | null): BootstrapFailure | null {
   return null
 }
 
-function rowToRecord(row: BootstrapJobRow): BootstrapJobRecord {
+/** Parse the `detail` JSON, tolerating null/garbage (older/blank rows). */
+function parseDetail(raw: string): BootstrapDetail {
+  try {
+    const o = JSON.parse(raw) as Partial<BootstrapDetail>
+    return {
+      referenceArchitectureId: o.referenceArchitectureId ?? null,
+      referenceArchitectureName: o.referenceArchitectureName ?? null,
+      repoName: o.repoName ?? '',
+      repoOwner: o.repoOwner ?? null,
+      repoUrl: o.repoUrl ?? null,
+      instructions: o.instructions ?? '',
+    }
+  } catch {
+    return {
+      referenceArchitectureId: null,
+      referenceArchitectureName: null,
+      repoName: '',
+      repoOwner: null,
+      repoUrl: null,
+      instructions: '',
+    }
+  }
+}
+
+function rowToRecord(row: AgentRunRow): BootstrapJobRecord {
+  const detail = parseDetail(row.detail)
   return {
     id: row.id,
     workspaceId: row.workspace_id,
-    referenceArchitectureId: row.reference_architecture_id,
-    referenceArchitectureName: row.reference_architecture_name,
-    repoName: row.repo_name,
-    repoOwner: row.repo_owner,
-    repoUrl: row.repo_url,
-    instructions: row.instructions,
+    referenceArchitectureId: detail.referenceArchitectureId,
+    referenceArchitectureName: detail.referenceArchitectureName,
+    repoName: detail.repoName,
+    repoOwner: detail.repoOwner,
+    repoUrl: detail.repoUrl,
+    instructions: detail.instructions,
     status: row.status as BootstrapJobRecord['status'],
     blockId: row.block_id ?? null,
     subtasks: parseSubtasks(row.subtasks ?? null),
@@ -72,11 +111,9 @@ function rowToRecord(row: BootstrapJobRow): BootstrapJobRecord {
   }
 }
 
-/** Maps a patch field name to its DB column. */
-const PATCH_COLUMNS: Record<keyof BootstrapJobRecordPatch, string> = {
+/** Top-level patch fields → their `agent_runs` column. */
+const TOP_LEVEL_COLUMNS: Partial<Record<keyof BootstrapJobRecordPatch, string>> = {
   status: 'status',
-  repoOwner: 'repo_owner',
-  repoUrl: 'repo_url',
   blockId: 'block_id',
   subtasks: 'subtasks',
   error: 'error',
@@ -84,13 +121,13 @@ const PATCH_COLUMNS: Record<keyof BootstrapJobRecordPatch, string> = {
   updatedAt: 'updated_at',
 }
 
-/** Encode a patch value for D1: subtasks + failure are JSON, everything else scalar. */
-function encodePatchValue(key: string, value: unknown): string | number | null {
+/** Encode a top-level patch value: subtasks + failure are JSON, everything else scalar. */
+function encodeTopLevel(key: string, value: unknown): string | number | null {
   if (key === 'subtasks' || key === 'failure') return value == null ? null : JSON.stringify(value)
   return value as string | number | null
 }
 
-/** D1-backed log of "bootstrap repo" jobs (migration 0010). */
+/** D1-backed bootstrap runs, stored as `kind='bootstrap'` rows of `agent_runs`. */
 export class D1BootstrapJobRepository implements BootstrapJobRepository {
   private readonly db: D1Database
 
@@ -99,25 +136,27 @@ export class D1BootstrapJobRepository implements BootstrapJobRepository {
   }
 
   async insert(record: BootstrapJobRecord): Promise<void> {
+    const detail: BootstrapDetail = {
+      referenceArchitectureId: record.referenceArchitectureId,
+      referenceArchitectureName: record.referenceArchitectureName,
+      repoName: record.repoName,
+      repoOwner: record.repoOwner,
+      repoUrl: record.repoUrl,
+      instructions: record.instructions,
+    }
     await this.db
       .prepare(
-        `INSERT INTO bootstrap_jobs
-          (id, workspace_id, reference_architecture_id, reference_architecture_name,
-           repo_name, repo_owner, repo_url, instructions, status, block_id, subtasks,
-           error, failure, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO agent_runs
+          (workspace_id, id, kind, block_id, status, detail, subtasks, error, failure,
+           created_at, updated_at)
+         VALUES (?, ?, 'bootstrap', ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .bind(
-        record.id,
         record.workspaceId,
-        record.referenceArchitectureId,
-        record.referenceArchitectureName,
-        record.repoName,
-        record.repoOwner,
-        record.repoUrl,
-        record.instructions,
-        record.status,
+        record.id,
         record.blockId,
+        record.status,
+        JSON.stringify(detail),
         record.subtasks == null ? null : JSON.stringify(record.subtasks),
         record.error,
         record.failure == null ? null : JSON.stringify(record.failure),
@@ -130,29 +169,52 @@ export class D1BootstrapJobRepository implements BootstrapJobRepository {
   async update(workspaceId: string, id: string, patch: BootstrapJobRecordPatch): Promise<void> {
     const entries = Object.entries(patch).filter(([, value]) => value !== undefined)
     if (entries.length === 0) return
-    const setClause = entries
-      .map(([key]) => `${PATCH_COLUMNS[key as keyof BootstrapJobRecordPatch]} = ?`)
-      .join(', ')
-    const values = entries.map(([key, value]) => encodePatchValue(key, value))
+
+    const setClauses: string[] = []
+    const values: (string | number | null)[] = []
+
+    // repoOwner/repoUrl live inside the `detail` JSON; patch them together with a
+    // single json_set so a partial patch leaves the other field untouched.
+    const jsonSets: string[] = []
+    for (const [key, value] of entries) {
+      if (key === 'repoOwner' || key === 'repoUrl') {
+        jsonSets.push(`'$.${key}'`, '?')
+        values.push(value as string | null)
+      }
+    }
+    if (jsonSets.length > 0) setClauses.push(`detail = json_set(detail, ${jsonSets.join(', ')})`)
+
+    for (const [key, value] of entries) {
+      const column = TOP_LEVEL_COLUMNS[key as keyof BootstrapJobRecordPatch]
+      if (!column) continue // repoOwner/repoUrl handled above
+      setClauses.push(`${column} = ?`)
+      values.push(encodeTopLevel(key, value))
+    }
+
+    if (setClauses.length === 0) return
     await this.db
-      .prepare(`UPDATE bootstrap_jobs SET ${setClause} WHERE workspace_id = ? AND id = ?`)
+      .prepare(
+        `UPDATE agent_runs SET ${setClauses.join(', ')} WHERE workspace_id = ? AND id = ? AND kind = 'bootstrap'`,
+      )
       .bind(...values, workspaceId, id)
       .run()
   }
 
   async get(workspaceId: string, id: string): Promise<BootstrapJobRecord | null> {
     const row = await this.db
-      .prepare('SELECT * FROM bootstrap_jobs WHERE workspace_id = ? AND id = ?')
+      .prepare(`SELECT * FROM agent_runs WHERE workspace_id = ? AND id = ? AND kind = 'bootstrap'`)
       .bind(workspaceId, id)
-      .first<BootstrapJobRow>()
+      .first<AgentRunRow>()
     return row ? rowToRecord(row) : null
   }
 
   async listByWorkspace(workspaceId: string): Promise<BootstrapJobRecord[]> {
     const { results } = await this.db
-      .prepare('SELECT * FROM bootstrap_jobs WHERE workspace_id = ? ORDER BY created_at DESC')
+      .prepare(
+        `SELECT * FROM agent_runs WHERE workspace_id = ? AND kind = 'bootstrap' ORDER BY created_at DESC`,
+      )
       .bind(workspaceId)
-      .all<BootstrapJobRow>()
+      .all<AgentRunRow>()
     return (results ?? []).map(rowToRecord)
   }
 }

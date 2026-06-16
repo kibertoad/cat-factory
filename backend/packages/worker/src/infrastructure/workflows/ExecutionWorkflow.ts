@@ -5,7 +5,7 @@ import {
   type WorkflowStep,
   type WorkflowStepConfig,
 } from 'cloudflare:workers'
-import type { AdvanceResult } from '@cat-factory/core'
+import type { AdvanceResult, AgentFailureKind } from '@cat-factory/core'
 import type { Env } from '../env'
 import { buildContainer } from '../container'
 import { loadConfig } from '../config'
@@ -36,10 +36,14 @@ export class ExecutionWorkflow extends WorkflowEntrypoint<Env, ExecutionWorkflow
     const decisionTimeout = execConfig.decisionTimeout as WorkflowSleepDuration
     const jobPollInterval = execConfig.jobPollInterval as WorkflowSleepDuration
 
-    const failRun = async (i: number, message: string): Promise<void> => {
+    const failRun = async (
+      i: number,
+      message: string,
+      kind: AgentFailureKind = 'agent',
+    ): Promise<void> => {
       logger.warn({ workspaceId, executionId, step: i }, `failing run: ${message}`)
       await step.do(`fail-${i}`, () =>
-        buildContainer(this.env).executionService.failRun(workspaceId, executionId, message),
+        buildContainer(this.env).executionService.failRun(workspaceId, executionId, message, kind),
       )
     }
 
@@ -81,13 +85,13 @@ export class ExecutionWorkflow extends WorkflowEntrypoint<Env, ExecutionWorkflow
           }
         }
         if (!polled && result.kind === 'awaiting_job') {
-          await failRun(i, 'Implementation job did not finish within its polling budget')
+          await failRun(i, 'Implementation job did not finish within its polling budget', 'timeout')
           return
         }
       }
 
       if (result.kind === 'job_failed') {
-        await failRun(i, result.error)
+        await failRun(i, result.error, 'job_failed')
         return
       }
 
@@ -109,6 +113,7 @@ export class ExecutionWorkflow extends WorkflowEntrypoint<Env, ExecutionWorkflow
               workspaceId,
               executionId,
               'Decision timed out awaiting a human response',
+              'decision_timeout',
             ),
           )
           return

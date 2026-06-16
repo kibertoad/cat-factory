@@ -2,6 +2,7 @@ import type {
   Account,
   AccountMember,
   AddMemberInput,
+  AgentRunKind,
   AuthUser,
   Block,
   BlockType,
@@ -389,13 +390,16 @@ export function useApi() {
     deleteReferenceArchitecture: (workspaceId: string, id: string) =>
       http(`${ws(workspaceId)}/bootstrap/reference-architectures/${id}`, { method: 'DELETE' }),
 
-    listBootstrapJobs: (workspaceId: string) =>
-      http<BootstrapJob[]>(`${ws(workspaceId)}/bootstrap/jobs`),
-
     bootstrapRepo: (workspaceId: string, body: BootstrapRepoInput) =>
       http<BootstrapJob>(`${ws(workspaceId)}/bootstrap/jobs`, { method: 'POST', body }),
 
-    retryBootstrapJob: (workspaceId: string, id: string) =>
-      http<BootstrapJob>(`${ws(workspaceId)}/bootstrap/jobs/${id}/retry`, { method: 'POST' }),
+    // ---- agent runs (unified failure + retry) -----------------------------
+    // Retry any failed run (bootstrap or execution); the backend resolves the
+    // kind from the unified `agent_runs` table and re-drives the right flow.
+    retryAgentRun: (workspaceId: string, runId: string) =>
+      http<{ kind: AgentRunKind; run: ExecutionInstance | BootstrapJob }>(
+        `${ws(workspaceId)}/agent-runs/${encodeURIComponent(runId)}/retry`,
+        { method: 'POST' },
+      ),
   }
 }

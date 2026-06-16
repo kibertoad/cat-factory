@@ -1,7 +1,8 @@
-import type { AdvanceResult } from '@cat-factory/core'
+import type { AdvanceResult, AgentRunRef } from '@cat-factory/core'
 import { env } from 'cloudflare:test'
 import { describe, expect, it } from 'vitest'
 import { buildContainer } from '../../src/infrastructure/container'
+import { D1AgentRunRepository } from '../../src/infrastructure/repositories/D1AgentRunRepository'
 import { D1ExecutionRepository } from '../../src/infrastructure/repositories/D1ExecutionRepository'
 import { sweepStuckRuns } from '../../src/infrastructure/workflows/sweeper'
 import { makeApp } from '../helpers'
@@ -93,6 +94,43 @@ describe('durable execution: agent failure handling', () => {
   })
 })
 
+describe('durable execution: failRun + retry', () => {
+  it('records a structured failure, blocks the block (not pr_ready), and retries', async () => {
+    const wsId = await seedWorkspace()
+    const c = buildContainer(env, {
+      agentExecutor: new FakeAgentExecutor({ confidence: 1 }),
+      workRunner: new FakeWorkRunner(),
+    })
+    const instance = await c.executionService.start(wsId, 'task_login', 'pl_quick')
+
+    await c.executionService.failRun(wsId, instance.id, 'kaboom', 'job_failed')
+
+    const repo = new D1ExecutionRepository({ db: env.DB, clock })
+    const failed = await repo.get(wsId, instance.id)
+    expect(failed!.status).toBe('failed')
+    expect(failed!.failure?.kind).toBe('job_failed')
+    expect(failed!.failure?.message).toBe('kaboom')
+    expect(failed!.failure?.hint).toBeTruthy()
+
+    // The block surfaces the failure as "needs attention" — NOT the old pr_ready
+    // (which looked like success and hid the failure).
+    const snap = await makeApp().call<{ blocks: { id: string; status: string }[] }>(
+      'GET',
+      `/workspaces/${wsId}`,
+    )
+    expect(snap.body.blocks.find((b) => b.id === 'task_login')!.status).toBe('blocked')
+
+    // Retry re-runs the same pipeline on the block as a fresh run.
+    const retried = await c.executionService.retry(wsId, instance.id)
+    expect(retried.status).toBe('running')
+    expect(retried.blockId).toBe('task_login')
+    expect(retried.id).not.toBe(instance.id)
+
+    // Retrying a non-failed run is rejected.
+    await expect(c.executionService.retry(wsId, retried.id)).rejects.toThrow(/failed/)
+  })
+})
+
 describe('durable execution: WorkRunner signalling', () => {
   it('signals start, decision resolution and cancel', async () => {
     const wsId = await seedWorkspace()
@@ -130,19 +168,21 @@ describe('durable execution: sweeper', () => {
     })
     const instance = await starter.executionService.start(wsId, 'task_login', 'pl_quick')
 
-    const repo = new D1ExecutionRepository({ db: env.DB, clock })
-    const workRunner = new FakeWorkRunner()
+    const agentRunRepository = new D1AgentRunRepository({ db: env.DB })
+    const redrove: AgentRunRef[] = []
     // Negative lease => every running row counts as stale (now - (-x) > updated_at).
     const redriven = await sweepStuckRuns({
-      executionRepository: repo,
-      workflowLookup: { isAlive: async () => false },
-      workRunner,
+      agentRunRepository,
+      isAlive: async () => false,
+      redrive: async (ref) => {
+        redrove.push(ref)
+      },
       clock,
       leaseMs: -60_000,
     })
 
     expect(redriven).toBeGreaterThanOrEqual(1)
-    expect(workRunner.started.some((s) => s.executionId === instance.id)).toBe(true)
+    expect(redrove.some((r) => r.id === instance.id && r.kind === 'execution')).toBe(true)
   })
 
   it('leaves runs alone while their workflow is alive', async () => {
@@ -153,17 +193,46 @@ describe('durable execution: sweeper', () => {
     })
     await starter.executionService.start(wsId, 'task_login', 'pl_quick')
 
-    const repo = new D1ExecutionRepository({ db: env.DB, clock })
-    const workRunner = new FakeWorkRunner()
+    const agentRunRepository = new D1AgentRunRepository({ db: env.DB })
+    const redrove: AgentRunRef[] = []
     const redriven = await sweepStuckRuns({
-      executionRepository: repo,
-      workflowLookup: { isAlive: async () => true },
-      workRunner,
+      agentRunRepository,
+      isAlive: async () => true,
+      redrive: async (ref) => {
+        redrove.push(ref)
+      },
       clock,
       leaseMs: -60_000,
     })
 
     expect(redriven).toBe(0)
-    expect(workRunner.started.length).toBe(0)
+    expect(redrove.length).toBe(0)
+  })
+
+  it('spans both kinds: re-drives a stale bootstrap run too', async () => {
+    const wsId = await seedWorkspace()
+    // Insert a stale, still-running bootstrap row directly (no container needed).
+    const now = Date.now()
+    await env.DB.prepare(
+      `INSERT INTO agent_runs (workspace_id, id, kind, block_id, status, detail, created_at, updated_at)
+       VALUES (?, 'boot_stale', 'bootstrap', 'blk_x', 'running', '{"repoName":"svc"}', ?, ?)`,
+    )
+      .bind(wsId, now, now)
+      .run()
+
+    const agentRunRepository = new D1AgentRunRepository({ db: env.DB })
+    const redrove: AgentRunRef[] = []
+    const redriven = await sweepStuckRuns({
+      agentRunRepository,
+      isAlive: async () => false,
+      redrive: async (ref) => {
+        redrove.push(ref)
+      },
+      clock,
+      leaseMs: -60_000,
+    })
+
+    expect(redriven).toBeGreaterThanOrEqual(1)
+    expect(redrove.some((r) => r.id === 'boot_stale' && r.kind === 'bootstrap')).toBe(true)
   })
 })

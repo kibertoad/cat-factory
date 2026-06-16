@@ -124,6 +124,10 @@ describe('bootstrap repo', () => {
     expect(frame!.status).toBe('in_progress')
     expect(frame!.title).toBe('new-service')
 
+    // The running bootstrap is carried in the snapshot (so the board can render its
+    // progress/failure the moment it loads, without a separate fetch).
+    expect(provisional.body.bootstrapJobs?.some((j) => j.id === job.body.id)).toBe(true)
+
     // The composed instructions fold the reference defaults in front of the extras,
     // captured at dispatch time.
     expect(bootstrapper.calls).toHaveLength(1)
@@ -219,14 +223,19 @@ describe('bootstrap repo', () => {
     const failed = await app.call<BootstrapJob>('GET', `${base}/jobs/${job.body.id}`)
     expect(failed.body.status).toBe('failed')
 
-    // Clear the fault and retry: a NEW job is created that reuses the original frame.
+    // Clear the fault and retry via the unified agent-run endpoint: a NEW job is
+    // created that reuses the original frame.
     bootstrapper.failPollWith = null
-    const retry = await app.call<BootstrapJob>('POST', `${base}/jobs/${job.body.id}/retry`)
+    const retry = await app.call<{ kind: string; run: BootstrapJob }>(
+      'POST',
+      `/workspaces/${workspaceId}/agent-runs/${job.body.id}/retry`,
+    )
     expect(retry.status).toBe(201)
-    expect(retry.body.status).toBe('running')
-    expect(retry.body.id).not.toBe(job.body.id)
-    expect(retry.body.blockId).toBe(job.body.blockId)
-    expect(retry.body.failure).toBeNull()
+    expect(retry.body.kind).toBe('bootstrap')
+    expect(retry.body.run.status).toBe('running')
+    expect(retry.body.run.id).not.toBe(job.body.id)
+    expect(retry.body.run.blockId).toBe(job.body.blockId)
+    expect(retry.body.run.failure).toBeNull()
 
     // The reused frame flips back to in-progress while the retry runs.
     let snap = await app.call<WorkspaceSnapshot>('GET', `/workspaces/${workspaceId}`)
@@ -234,8 +243,8 @@ describe('bootstrap repo', () => {
     expect(frame!.status).toBe('in_progress')
 
     // Drive the retry to success: the same frame becomes a ready, linked service.
-    await app.driveBootstrap(workspaceId, retry.body.id)
-    const done = await app.call<BootstrapJob>('GET', `${base}/jobs/${retry.body.id}`)
+    await app.driveBootstrap(workspaceId, retry.body.run.id)
+    const done = await app.call<BootstrapJob>('GET', `${base}/jobs/${retry.body.run.id}`)
     expect(done.body.status).toBe('succeeded')
     snap = await app.call<WorkspaceSnapshot>('GET', `/workspaces/${workspaceId}`)
     frame = snap.body.blocks.find((b: Block) => b.id === job.body.blockId)
@@ -254,7 +263,10 @@ describe('bootstrap repo', () => {
     })
     expect(job.body.status).toBe('running')
 
-    const retry = await app.call('POST', `${base}/jobs/${job.body.id}/retry`)
+    const retry = await app.call(
+      'POST',
+      `/workspaces/${workspaceId}/agent-runs/${job.body.id}/retry`,
+    )
     expect(retry.status).toBe(409)
   })
 
