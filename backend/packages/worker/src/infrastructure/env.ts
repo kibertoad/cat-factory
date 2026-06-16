@@ -162,6 +162,15 @@ export interface Env {
    */
   AUTH_DEV_OPEN?: string
 
+  /**
+   * Comma-separated allowlist of browser Origins permitted by CORS (e.g. the
+   * SPA's origin, `https://app.example.com`). Each provisioning org sets its own
+   * frontend origin(s) here. A single `*` (or leaving this unset) allows any
+   * origin — safe because every route is bearer-gated and fails closed, but set
+   * it in production to harden. See `config/cors.ts` and `app.ts`.
+   */
+  CORS_ALLOWED_ORIGINS?: string
+
   // ---- Document-source integration (see config.ts; opt-in) ----------------
   /** Enables the document-source integration ('true'). Per-workspace creds live in D1. */
   DOCUMENTS_ENABLED?: string

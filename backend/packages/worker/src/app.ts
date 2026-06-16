@@ -1,6 +1,7 @@
 import type { CoreDependencies } from '@cat-factory/core'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
+import { resolveCorsOrigin } from './infrastructure/config/cors'
 import { buildContainer } from './infrastructure/container'
 import { handleError } from './infrastructure/http/errorHandler'
 import type { AppEnv } from './infrastructure/http/types'
@@ -35,7 +36,18 @@ export interface CreateAppOptions {
 export function createApp(options: CreateAppOptions = {}): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
 
-  app.use('*', cors({ allowHeaders: ['Content-Type', 'Authorization'] }))
+  // CORS allowlist is per-deployment configuration (CORS_ALLOWED_ORIGINS), not
+  // hardcoded, since each org provisions this system with its own frontend
+  // origin(s). Unset / `*` allows any origin — safe because every route is
+  // bearer-gated and fails closed; pinning origins is defense-in-depth. Auth is a
+  // bearer header (not cookies), so credentials mode stays off.
+  app.use(
+    '*',
+    cors({
+      origin: (origin, c) => resolveCorsOrigin(origin, c.env.CORS_ALLOWED_ORIGINS),
+      allowHeaders: ['Content-Type', 'Authorization'],
+    }),
+  )
   app.use('*', async (c, next) => {
     c.set('container', buildContainer(c.env, options.overrides))
     await next()

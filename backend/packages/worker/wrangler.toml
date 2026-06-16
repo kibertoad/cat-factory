@@ -175,11 +175,11 @@ SPEND_CURRENCY = "EUR"
 # here and the private key (PKCS#8 PEM) + webhook secret as secrets:
 #   wrangler secret put GITHUB_APP_PRIVATE_KEY
 #   wrangler secret put GITHUB_WEBHOOK_SECRET
-GITHUB_APP_ID = ""
-GITHUB_APP_SLUG = ""
+GITHUB_APP_ID = "4067384"
+GITHUB_APP_SLUG = "cat-factory-app"
 GITHUB_API_BASE = "https://api.github.com"
 # Where to send the browser after a successful install:
-# GITHUB_SETUP_REDIRECT_URL = "https://app.example.com/settings/github"
+GITHUB_SETUP_REDIRECT_URL = "https://catfactory.kiberion.com"
 
 # "Login with GitHub" (see src/infrastructure/config.ts and docs/auth.md).
 # REQUIRED in production: the auth gate fails closed, so until an OAuth app is
@@ -191,13 +191,19 @@ GITHUB_API_BASE = "https://api.github.com"
 # OAuth App's. Register the callback URL as <worker-origin>/auth/callback.
 # (Local dev/tests run open via AUTH_DEV_OPEN=true in .dev.vars — NEVER set that
 # here; doing so would re-open production.)
-GITHUB_OAUTH_CLIENT_ID = ""
+GITHUB_OAUTH_CLIENT_ID = "Iv23liSy37MggMK0afZL"
 # Fixed SPA landing URL after login (strongly recommended in production):
-# AUTH_SUCCESS_REDIRECT_URL = "https://app.example.com"
+AUTH_SUCCESS_REDIRECT_URL = "https://catfactory.kiberion.com"
 # Session lifetime in hours (default 168 = 7 days):
 # AUTH_SESSION_TTL_HOURS = "168"
 # Restrict sign-in to specific GitHub users (comma-separated; empty = anyone):
 # AUTH_ALLOWED_LOGINS = "octocat,hubot"
+
+# CORS allowlist (see src/infrastructure/config/cors.ts). Comma-separated browser
+# Origins the API answers cross-origin — set this to YOUR frontend origin(s) when
+# provisioning. Unset or "*" allows any origin, which is safe because every route
+# is bearer-gated and fails closed; pinning is defense-in-depth. No trailing slash.
+CORS_ALLOWED_ORIGINS = "https://catfactory.kiberion.com"
 
 # Document-source integration (see src/infrastructure/config.ts). Off by default.
 # Turn it on to let workspaces link requirements/RFCs/PRDs from Confluence, Notion
