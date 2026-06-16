@@ -236,7 +236,15 @@ function selectDocumentsDeps(
   if (providers.length === 0) return {}
   return {
     documentSourceProviders: providers,
-    documentConnectionRepository: new D1DocumentConnectionRepository({ db }),
+    documentConnectionRepository: new D1DocumentConnectionRepository({
+      db,
+      // The config gate guarantees the key is present when enabled; source
+      // credentials are encrypted at rest under a documents-scoped HKDF info.
+      cipher: new WebCryptoSecretCipher({
+        masterKeyBase64: config.documents.encryptionKey!,
+        info: 'cat-factory:documents',
+      }),
+    }),
     documentRepository: new D1DocumentRepository({ db }),
     ...(config.documents.planner === 'llm'
       ? {

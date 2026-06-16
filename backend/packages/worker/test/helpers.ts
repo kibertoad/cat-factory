@@ -24,6 +24,7 @@ import { D1CommitProjectionRepository } from '../src/infrastructure/repositories
 import { D1CheckRunProjectionRepository } from '../src/infrastructure/repositories/D1CheckRunProjectionRepository'
 import { D1DocumentConnectionRepository } from '../src/infrastructure/repositories/D1DocumentConnectionRepository'
 import { D1DocumentRepository } from '../src/infrastructure/repositories/D1DocumentRepository'
+import { WebCryptoSecretCipher } from '../src/infrastructure/environments/WebCryptoSecretCipher'
 
 const BASE = 'https://cat-factory.test'
 
@@ -147,7 +148,14 @@ export function documentsDeps(
       new FakeDocumentSourceProvider('confluence'),
       new FakeDocumentSourceProvider('notion'),
     ],
-    documentConnectionRepository: new D1DocumentConnectionRepository({ db }),
+    documentConnectionRepository: new D1DocumentConnectionRepository({
+      db,
+      cipher: new WebCryptoSecretCipher({
+        // Always set in the test bindings (see vitest.config.ts).
+        masterKeyBase64: env.DOCUMENTS_ENCRYPTION_KEY!,
+        info: 'cat-factory:documents',
+      }),
+    }),
     documentRepository: new D1DocumentRepository({ db }),
   }
 }

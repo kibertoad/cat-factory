@@ -2,6 +2,7 @@ import type {
   DocumentConnectionRecord,
   DocumentConnectionRepository,
   DocumentSourceKind,
+  SecretCipher,
 } from '@cat-factory/core'
 import type { D1Database } from '@cloudflare/workers-types'
 
@@ -14,30 +15,56 @@ interface DocumentConnectionRow {
   deleted_at: number | null
 }
 
-function rowToRecord(row: DocumentConnectionRow): DocumentConnectionRecord {
-  let credentials: Record<string, string> = {}
+function parseCredentials(json: string): Record<string, string> {
   try {
-    const parsed = JSON.parse(row.credentials)
-    if (parsed && typeof parsed === 'object') credentials = parsed as Record<string, string>
+    const parsed = JSON.parse(json)
+    if (parsed && typeof parsed === 'object') return parsed as Record<string, string>
   } catch {
     // A malformed bag is treated as empty; the import path then fails closed.
   }
-  return {
-    workspaceId: row.workspace_id,
-    source: row.source as DocumentSourceKind,
-    credentials,
-    label: row.label,
-    createdAt: row.created_at,
-    deletedAt: row.deleted_at,
-  }
+  return {}
 }
 
-/** D1-backed store of workspace → document-source connections (migration 0012). */
+/**
+ * D1-backed store of workspace → document-source connections (migration 0012).
+ *
+ * Source credentials (e.g. a Notion/Confluence API token) are third-party
+ * secrets, so they are encrypted at rest with the same AES-256-GCM envelope the
+ * environments integration uses — never written to D1 in plaintext. A row whose
+ * `credentials` column predates encryption (no `v1.` envelope) is still read as
+ * legacy plaintext JSON, then re-encrypted on the next write.
+ */
 export class D1DocumentConnectionRepository implements DocumentConnectionRepository {
   private readonly db: D1Database
+  private readonly cipher: SecretCipher
 
-  constructor({ db }: { db: D1Database }) {
+  constructor({ db, cipher }: { db: D1Database; cipher: SecretCipher }) {
     this.db = db
+    this.cipher = cipher
+  }
+
+  /** Decode the stored credential blob, decrypting the envelope when present. */
+  private async decodeCredentials(stored: string): Promise<Record<string, string>> {
+    // Legacy plaintext rows (written before encryption) lack the envelope tag.
+    if (!stored.startsWith('v1.')) return parseCredentials(stored)
+    try {
+      return parseCredentials(await this.cipher.decrypt(stored))
+    } catch {
+      // Wrong key / corrupt envelope: fail closed with an empty bag so the
+      // import path errors rather than leaking a decrypt exception.
+      return {}
+    }
+  }
+
+  private async rowToRecord(row: DocumentConnectionRow): Promise<DocumentConnectionRecord> {
+    return {
+      workspaceId: row.workspace_id,
+      source: row.source as DocumentSourceKind,
+      credentials: await this.decodeCredentials(row.credentials),
+      label: row.label,
+      createdAt: row.created_at,
+      deletedAt: row.deleted_at,
+    }
   }
 
   async getByWorkspace(
@@ -50,7 +77,7 @@ export class D1DocumentConnectionRepository implements DocumentConnectionReposit
       )
       .bind(workspaceId, source)
       .first<DocumentConnectionRow>()
-    return row ? rowToRecord(row) : null
+    return row ? this.rowToRecord(row) : null
   }
 
   async listByWorkspace(workspaceId: string): Promise<DocumentConnectionRecord[]> {
@@ -60,7 +87,7 @@ export class D1DocumentConnectionRepository implements DocumentConnectionReposit
       )
       .bind(workspaceId)
       .all<DocumentConnectionRow>()
-    return results.map(rowToRecord)
+    return Promise.all(results.map((row) => this.rowToRecord(row)))
   }
 
   async upsert(record: DocumentConnectionRecord): Promise<void> {
@@ -71,19 +98,14 @@ export class D1DocumentConnectionRepository implements DocumentConnectionReposit
       .prepare('DELETE FROM document_connections WHERE workspace_id = ? AND source = ?')
       .bind(record.workspaceId, record.source)
       .run()
+    const credentials = await this.cipher.encrypt(JSON.stringify(record.credentials))
     await this.db
       .prepare(
         `INSERT INTO document_connections
           (workspace_id, source, credentials, label, created_at, deleted_at)
          VALUES (?, ?, ?, ?, ?, NULL)`,
       )
-      .bind(
-        record.workspaceId,
-        record.source,
-        JSON.stringify(record.credentials),
-        record.label,
-        record.createdAt,
-      )
+      .bind(record.workspaceId, record.source, credentials, record.label, record.createdAt)
       .run()
   }
 

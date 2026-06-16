@@ -166,6 +166,13 @@ export interface Env {
   /** Enables the document-source integration ('true'). Per-workspace creds live in D1. */
   DOCUMENTS_ENABLED?: string
   /**
+   * Service-level master key (base64, ≥32 bytes decoded) for encrypting the
+   * per-workspace source credentials (e.g. Notion/Confluence tokens) at rest.
+   * Required when the integration is enabled (secret); without it the feature
+   * fails closed rather than persisting credentials in plaintext.
+   */
+  DOCUMENTS_ENCRYPTION_KEY?: string
+  /**
    * Comma-separated allow-list of sources to register (e.g. `confluence,notion`).
    * Defaults to all known sources when unset.
    */
