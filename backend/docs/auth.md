@@ -94,10 +94,10 @@ Authentication answers _who is signing in_; **access control** answers _who is
 allowed_. Once login is enabled the deployment is **private and fails closed**: a
 user may obtain a session only if they are on at least one allowlist.
 
-| Allowlist             | A user passes when…                                       |
-| --------------------- | --------------------------------------------------------- |
-| `AUTH_ALLOWED_LOGINS` | their GitHub login is listed (comma-separated, any case)  |
-| `AUTH_ALLOWED_ORGS`   | they are a member of any listed GitHub organization       |
+| Allowlist             | A user passes when…                                      |
+| --------------------- | -------------------------------------------------------- |
+| `AUTH_ALLOWED_LOGINS` | their GitHub login is listed (comma-separated, any case) |
+| `AUTH_ALLOWED_ORGS`   | they are a member of any listed GitHub organization      |
 
 The two lists combine with **OR** — being on either admits the user. The check
 runs in `/auth/callback`; anyone who matches neither gets `403 forbidden`, so
