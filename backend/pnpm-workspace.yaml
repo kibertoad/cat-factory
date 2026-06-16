@@ -4,3 +4,5 @@ allowBuilds:
   esbuild: true
   sharp: true
   workerd: true
+minimumReleaseAgeExclude:
+  - workers-ai-provider@3.2.0

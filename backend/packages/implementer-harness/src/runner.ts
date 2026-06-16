@@ -38,7 +38,7 @@ export async function handleRun(job: Job, opts: RunOptions = {}): Promise<RunRes
     await writeAgentsContext(dir, job.systemPrompt)
     await writePiModelsConfig({ model: job.model, proxyBaseUrl: job.proxyBaseUrl })
 
-    const summary = await runPi({
+    const { summary, stats, stderrTail } = await runPi({
       cwd: dir,
       model: job.model,
       userPrompt: job.userPrompt,
@@ -50,7 +50,17 @@ export async function handleRun(job: Job, opts: RunOptions = {}): Promise<RunRes
 
     const committed = await commitAll(dir, job.pr.title, signal)
     if (!committed) {
-      return { summary, branch: job.headBranch, error: 'Pi produced no file changes' }
+      const cause =
+        stats.toolCalls === 0 && stats.assistantChars === 0
+          ? ' (the agent never acted — it most likely could not reach the model)'
+          : ''
+      const detail = stderrTail ? ` Agent stderr: ${stderrTail.slice(-700)}` : ''
+      return {
+        summary,
+        stats,
+        branch: job.headBranch,
+        error: `Pi produced no file changes${cause}.${detail}`,
+      }
     }
     await pushBranch(dir, job.headBranch, job.ghToken, signal)
     const prUrl = await openPullRequest({
@@ -63,7 +73,7 @@ export async function handleRun(job: Job, opts: RunOptions = {}): Promise<RunRes
       apiBase: job.githubApiBase,
       signal,
     })
-    return { prUrl, branch: job.headBranch, summary }
+    return { prUrl, branch: job.headBranch, summary, stats }
   } finally {
     await rm(dir, { recursive: true, force: true })
   }

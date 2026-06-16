@@ -134,6 +134,38 @@ export async function createBranch(
   await git(['checkout', '-b', branch], { cwd: dir, signal })
 }
 
+/**
+ * Parse the paths out of `git status --porcelain` (v1) output. Each line is
+ * `XY <path>`, or `XY <old> -> <new>` for a rename/copy (we keep the new path);
+ * git quotes paths with special characters, which we unquote. Blank lines are
+ * skipped. Pure so the no-op detection can be tested without spawning git.
+ */
+export function changedPathsFromPorcelain(status: string): string[] {
+  const paths: string[] = []
+  for (const raw of status.split('\n')) {
+    const line = raw.replace(/\r$/, '')
+    if (line.trim() === '') continue
+    let path = line.slice(3)
+    const arrow = path.indexOf(' -> ')
+    if (arrow !== -1) path = path.slice(arrow + 4)
+    path = path.trim().replace(/^"(.*)"$/, '$1')
+    if (path) paths.push(path)
+  }
+  return paths
+}
+
+/**
+ * Whether the agent changed anything in a cloned checkout, ignoring the
+ * harness-written `AGENTS.md`. Stages the working tree and inspects the porcelain
+ * status: an empty result (or one holding only AGENTS.md) means the bootstrapper
+ * made no adaptation — a no-op we must not pass off as a successful push.
+ */
+export async function hasAgentChanges(dir: string, signal?: AbortSignal): Promise<boolean> {
+  await git(['add', '-A'], { cwd: dir, signal })
+  const status = await git(['status', '--porcelain'], { cwd: dir, signal })
+  return changedPathsFromPorcelain(status).some((path) => path.toLowerCase() !== 'agents.md')
+}
+
 /** Stage everything and commit; returns false when there was nothing to commit. */
 export async function commitAll(
   dir: string,

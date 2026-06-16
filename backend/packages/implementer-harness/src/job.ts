@@ -1,3 +1,5 @@
+import type { PiRunStats } from './pi.js'
+
 // The job the Worker's ContainerAgentExecutor POSTs to /run. Kept as plain
 // types with a hand-rolled validator so the image needs no schema dependency.
 // `ghToken` and `sessionToken` are secrets: they are consumed (moved into env /
@@ -48,6 +50,8 @@ export interface RunResult {
   prUrl?: string
   branch?: string
   summary?: string
+  /** What the agent actually did this run (surfaces no-op runs on the job view). */
+  stats?: PiRunStats
   error?: string
 }
 
@@ -149,6 +153,8 @@ export interface BootstrapJob {
 export interface BootstrapResult {
   defaultBranch?: string
   summary?: string
+  /** What the agent actually did this run (surfaces no-op runs on the job view). */
+  stats?: PiRunStats
   error?: string
 }
 

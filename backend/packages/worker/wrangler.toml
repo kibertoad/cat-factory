@@ -148,7 +148,13 @@ DECISION_TIMEOUT = "24 hours"
 CONTAINER_IMPL_ENABLED = "false"
 # Public origin of this Worker; required for container implementation and repo
 # bootstrap (the per-run container reaches the LLM proxy at ${WORKER_PUBLIC_URL}/v1).
-WORKER_PUBLIC_URL = "https://catfactory-api.kiberion.com"
+# MUST be the workers.dev origin, NOT the orange-clouded custom domain
+# (catfactory-api.kiberion.com): a per-run Container egresses from inside
+# Cloudflare's network, and the zone's WAF/Bot-Fight rules block its POSTs to the
+# proxy with "403 Your request was blocked." before the Worker ever runs (browsers
+# pass the bot checks, so the SPA is unaffected). workers.dev is not in that zone,
+# so the container reaches the proxy unblocked.
+WORKER_PUBLIC_URL = "https://cat-factory-backend.iselwin.workers.dev"
 # Container coding jobs run asynchronously: the driver dispatches the job and
 # then polls it on this cadence between durable sleeps, so a job can run far
 # longer than one Workflows step while each step stays short. JOB_MAX_POLLS is a

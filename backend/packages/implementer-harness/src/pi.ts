@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
+import { redactSecrets } from './git.js'
 
 // Drives the Pi coding-agent CLI. Pi is pointed at the Worker's OpenAI-compatible
 // proxy via a custom provider in ~/.pi/agent/models.json, authenticated with the
@@ -65,6 +66,33 @@ export interface TodoProgress {
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
+}
+
+/**
+ * What the agent actually did this run, independent of any file changes. Used to
+ * tell a genuine no-op (the agent never reached the model / never acted) apart
+ * from a real run, so a bootstrap that produced nothing is failed rather than
+ * pushed as an empty repo. `toolCalls === 0 && assistantChars === 0` is the
+ * signature of a run where Pi never made a successful model call.
+ */
+export interface PiRunStats {
+  /** Tool calls the assistant emitted across the transcript (0 ⇒ it never acted). */
+  toolCalls: number
+  /** Total characters of assistant text (0 ⇒ the model produced nothing). */
+  assistantChars: number
+}
+
+/** Pi's assistant summary plus {@link PiRunStats} describing what it did. */
+export interface PiRunOutcome {
+  summary: string
+  stats: PiRunStats
+  /**
+   * Tail of Pi's stderr (credential-scrubbed), captured even on a clean exit.
+   * On a no-op run this is where the real cause shows up — e.g. an unreachable
+   * proxy or a model the upstream rejected — so the failure is diagnosable
+   * without shelling into the (ephemeral) container.
+   */
+  stderrTail?: string
 }
 
 /**
@@ -160,7 +188,7 @@ export function runPi(opts: {
   onActivity?: () => void
   /** Called with the latest subtask counts each time Pi updates its todo list. */
   onProgress?: (progress: TodoProgress) => void
-}): Promise<string> {
+}): Promise<PiRunOutcome> {
   return new Promise((resolve, reject) => {
     if (opts.signal?.aborted) {
       reject(new Error('pi aborted before start'))
@@ -242,7 +270,8 @@ export function runPi(opts: {
           ),
         )
       } else if (code === 0) {
-        resolve(parsePiOutput(stdout))
+        const tail = redactSecrets(stderr.trim()).slice(-1500)
+        resolve({ ...summarizePiRun(stdout), ...(tail ? { stderrTail: tail } : {}) })
       } else {
         reject(new Error(`pi exited with code ${code}: ${(stderr || stdout).slice(-500)}`))
       }
@@ -250,13 +279,8 @@ export function runPi(opts: {
   })
 }
 
-/**
- * Extract the assistant's final summary from Pi's JSON-lines output. Pi emits a
- * terminal `agent_end` event whose `messages` is the full transcript, so the
- * last assistant message there is the canonical answer. Falls back to scanning
- * `message_end` events, then to a raw tail, so a schema tweak never loses output.
- */
-export function parsePiOutput(stdout: string): string {
+/** Parse Pi's LF-framed JSONL stdout into its event records, skipping noise. */
+function parsePiEvents(stdout: string): Record<string, unknown>[] {
   const events: Record<string, unknown>[] = []
   for (const raw of stdout.split('\n')) {
     const line = raw.trim()
@@ -267,7 +291,81 @@ export function parsePiOutput(stdout: string): string {
       // Not a JSON event line; skip.
     }
   }
+  return events
+}
 
+/**
+ * Pi's assistant summary plus {@link PiRunStats}, derived from one pass over its
+ * output — the canonical close-of-run signal the harness uses both to report the
+ * answer and to detect a no-op run (the agent never acted).
+ */
+export function summarizePiRun(stdout: string): PiRunOutcome {
+  const events = parsePiEvents(stdout)
+  return { summary: summaryFromEvents(events, stdout), stats: statsFromEvents(events) }
+}
+
+/**
+ * Count what the agent actually did. Prefers the canonical `agent_end`
+ * transcript (assistant `toolCall` parts + text); falls back to the streamed
+ * `tool_execution_end` / `message_end` events when no terminal transcript was
+ * emitted, so a no-op is never mistaken for a real run because of a schema tweak.
+ */
+function statsFromEvents(events: Record<string, unknown>[]): PiRunStats {
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i]!
+    if (e.type === 'agent_end' && Array.isArray(e.messages)) {
+      return statsFromMessages(e.messages as unknown[])
+    }
+  }
+  let toolCalls = 0
+  let toolResults = 0
+  let assistantChars = 0
+  for (const e of events) {
+    if (e.type === 'tool_execution_end') {
+      toolCalls++
+    } else if (e.type === 'message_end' && isObject(e.message)) {
+      const m = e.message
+      if (m.role === 'assistant') assistantChars += messageText(m).length
+      else if (m.role === 'toolResult') toolResults++
+    }
+  }
+  // The same call can surface as both a `tool_execution_end` and a toolResult
+  // `message_end`; prefer the former and only fall back to toolResult counts.
+  return { toolCalls: toolCalls || toolResults, assistantChars }
+}
+
+/** {@link PiRunStats} from a transcript: assistant `toolCall` parts + text length. */
+function statsFromMessages(messages: unknown[]): PiRunStats {
+  let toolCalls = 0
+  let assistantChars = 0
+  for (const m of messages) {
+    if (!isObject(m) || m.role !== 'assistant') continue
+    const content = m.content
+    if (typeof content === 'string') {
+      assistantChars += content.trim().length
+    } else if (Array.isArray(content)) {
+      for (const part of content) {
+        if (!isObject(part)) continue
+        if (part.type === 'toolCall') toolCalls++
+        else if (typeof part.text === 'string') assistantChars += part.text.length
+      }
+    }
+  }
+  return { toolCalls, assistantChars }
+}
+
+/**
+ * Extract the assistant's final summary from Pi's JSON-lines output. Pi emits a
+ * terminal `agent_end` event whose `messages` is the full transcript, so the
+ * last assistant message there is the canonical answer. Falls back to scanning
+ * `message_end` events, then to a raw tail, so a schema tweak never loses output.
+ */
+export function parsePiOutput(stdout: string): string {
+  return summaryFromEvents(parsePiEvents(stdout), stdout)
+}
+
+/** Shared summary extraction over already-parsed events (see {@link parsePiOutput}). */
+function summaryFromEvents(events: Record<string, unknown>[], stdout: string): string {
   // Preferred: the final transcript from the last agent_end event.
   for (let i = events.length - 1; i >= 0; i--) {
     const e = events[i]!

@@ -69,10 +69,10 @@ export class CloudflareModelProvider implements ModelProvider {
         if (!this.env.AI) {
           throw new Error('Workers AI binding (AI) is not configured')
         }
-        // workers-ai-provider pins a slightly older @ai-sdk/provider than `ai`
-        // v5; the runtime is compatible, so bridge the type-only skew with a cast.
+        // workers-ai-provider@3 implements the same provider spec as `ai` v6
+        // (`@ai-sdk/provider` v3), so the model is a real LanguageModel — no cast.
         const workersai = createWorkersAI({ binding: this.env.AI })
-        return workersai(ref.model as Parameters<typeof workersai>[0]) as unknown as LanguageModel
+        return workersai(ref.model as Parameters<typeof workersai>[0])
       }
       default:
         throw new Error(`Unsupported model provider: ${ref.provider}`)

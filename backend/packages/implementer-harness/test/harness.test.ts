@@ -1,7 +1,11 @@
-import { describe, expect, it } from 'vitest'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { parseBootstrapJob, parseJob } from '../src/job.js'
-import { parsePiOutput, parseTodoProgress } from '../src/pi.js'
-import { authenticatedCloneUrl, redactSecrets } from '../src/git.js'
+import { parsePiOutput, parseTodoProgress, summarizePiRun } from '../src/pi.js'
+import { authenticatedCloneUrl, changedPathsFromPorcelain, redactSecrets } from '../src/git.js'
+import { producedRepoContent } from '../src/bootstrap.js'
 
 const validBootstrapBody = {
   jobId: 'boot_123',
@@ -163,6 +167,78 @@ describe('parsePiOutput', () => {
 
   it('falls back to the raw tail when nothing structured matches', () => {
     expect(parsePiOutput('plain text only')).toBe('plain text only')
+  })
+})
+
+describe('summarizePiRun', () => {
+  it('counts tool calls and assistant text from the agent_end transcript', () => {
+    const stdout = [
+      '{"type":"agent_end","messages":[' +
+        '{"role":"user","content":[{"type":"text","text":"do it"}]},' +
+        '{"role":"assistant","content":[{"type":"toolCall","name":"write"},{"type":"toolCall","name":"bash"}]},' +
+        '{"role":"toolResult","content":[{"type":"text","text":"ok"}]},' +
+        '{"role":"assistant","content":[{"type":"text","text":"Done."}]}' +
+        ']}',
+    ].join('\n')
+    const { summary, stats } = summarizePiRun(stdout)
+    expect(summary).toBe('Done.')
+    expect(stats).toEqual({ toolCalls: 2, assistantChars: 'Done.'.length })
+  })
+
+  it('falls back to streamed events when there is no agent_end transcript', () => {
+    const stdout = [
+      '{"type":"tool_execution_end","toolName":"write","isError":false}',
+      '{"type":"message_end","message":{"role":"assistant","content":"working"}}',
+    ].join('\n')
+    expect(summarizePiRun(stdout).stats).toEqual({ toolCalls: 1, assistantChars: 'working'.length })
+  })
+
+  it('reports a true no-op (no tool calls, no model output) so the guard can fire', () => {
+    // Pi exited cleanly but never reached the model: empty transcript.
+    expect(summarizePiRun('{"type":"agent_end","messages":[]}').stats).toEqual({
+      toolCalls: 0,
+      assistantChars: 0,
+    })
+    expect(summarizePiRun('').stats).toEqual({ toolCalls: 0, assistantChars: 0 })
+  })
+})
+
+describe('changedPathsFromPorcelain', () => {
+  it('extracts paths, follows renames to the new name, and unquotes', () => {
+    const status = ['A  AGENTS.md', ' M src/index.ts', 'R  old.ts -> new.ts', '?? "with space.ts"']
+      .join('\n')
+    expect(changedPathsFromPorcelain(status)).toEqual([
+      'AGENTS.md',
+      'src/index.ts',
+      'new.ts',
+      'with space.ts',
+    ])
+  })
+
+  it('returns nothing for empty output', () => {
+    expect(changedPathsFromPorcelain('')).toEqual([])
+    expect(changedPathsFromPorcelain('\n  \n')).toEqual([])
+  })
+})
+
+describe('producedRepoContent (from-scratch scaffold)', () => {
+  let dir: string
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), 'boot-test-'))
+  })
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true })
+  })
+
+  it('is false when only the harness AGENTS.md exists (the observed no-op)', async () => {
+    await writeFile(join(dir, 'AGENTS.md'), 'context', 'utf8')
+    expect(await producedRepoContent(dir, false)).toBe(false)
+  })
+
+  it('is true once the agent scaffolds a real file', async () => {
+    await writeFile(join(dir, 'AGENTS.md'), 'context', 'utf8')
+    await writeFile(join(dir, 'package.json'), '{}', 'utf8')
+    expect(await producedRepoContent(dir, false)).toBe(true)
   })
 })
 
