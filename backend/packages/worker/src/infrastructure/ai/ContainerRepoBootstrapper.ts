@@ -73,12 +73,12 @@ interface BootstrapContainerResult {
 
 /**
  * A {@link RepoBootstrapper} that performs the side-effecting half of a
- * "bootstrap repo" run: the user pre-creates an empty target repository on GitHub
- * (so cat-factory needs no repo-creation permission — a GitHub App installation
- * token can't create a repo under a personal account anyway), and this spins up a
- * per-run Cloudflare Container that clones the reference architecture, has the
- * bootstrapper agent adapt it per the instructions, and pushes the result as the
- * new repo's initial commit.
+ * "bootstrap repo" run. The empty target repository is created up front — by the
+ * user (the default — cat-factory then needs no repo-creation permission) or, for
+ * orgs served by the privileged App tier (ADR 0005), via the create-repo endpoint
+ * behind the modal's "Create repository" button. This spins up a per-run Cloudflare
+ * Container that clones the reference architecture, has the bootstrapper agent adapt
+ * it per the instructions, and pushes the result as the new repo's initial commit.
  *
  * It pre-flights that the target repo exists, is reachable by the installation,
  * and is empty (the push is the first commit). Secrets never reach the container
@@ -115,10 +115,11 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
       )
     }
 
-    // The user pre-creates the target repo (we don't create it — bootstrapping
-    // needs no repo-creation permission). Resolve it under the installation
-    // account to confirm it exists, is reachable by the App, and is empty — the
-    // run pushes the bootstrapped contents as the initial commit.
+    // The target repo is created up front — by the user via GitHub's new-repo page,
+    // or, for privileged-tier orgs (ADR 0005), programmatically via the create-repo
+    // endpoint behind the modal's "Create repository" button. Resolve it under the
+    // installation account to confirm it exists, is reachable by the App, and is
+    // empty — the run pushes the bootstrapped contents as the initial commit.
     const owner = installation.accountLogin
     const repoName = request.target.name
     const ref = { owner, repo: repoName }

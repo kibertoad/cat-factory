@@ -11,6 +11,7 @@ import type { TokenUsageRepository } from './ports/token-usage'
 import { type WorkRunner, NoopWorkRunner } from './ports/work-runner'
 import { type ExecutionEventPublisher, NoopEventPublisher } from './ports/execution-events'
 import type { GitHubClient } from './ports/github-client'
+import type { GitHubProvisioningClient } from './ports/github-provisioning'
 import type { WebhookVerifier } from './ports/webhook-verifier'
 import type { ModelProvider, ModelRef } from './ports/model-provider'
 import type { DocumentSourceProvider } from './ports/document-source'
@@ -39,6 +40,7 @@ import type {
   BranchProjectionRepository,
   CheckRunProjectionRepository,
   CommitProjectionRepository,
+  GitHubInstallation,
   GitHubInstallationRepository,
   IssueProjectionRepository,
   PullRequestProjectionRepository,
@@ -52,6 +54,7 @@ import { AccountService } from './modules/accounts/AccountService'
 import { SpendService } from './modules/spend/SpendService'
 import { DEFAULT_SPEND_PRICING, type SpendPricing } from './modules/spend/pricing'
 import { GitHubInstallationService } from './modules/github/GitHubInstallationService'
+import { RepoProvisioningService } from './modules/github/RepoProvisioningService'
 import { GitHubService } from './modules/github/GitHubService'
 import { GitHubSyncService } from './modules/github/GitHubSyncService'
 import { WebhookService } from './modules/github/WebhookService'
@@ -134,6 +137,18 @@ export interface CoreDependencies {
    * undefined backfills the full history.
    */
   commitBackfillHorizonMs?: number
+  /**
+   * The privileged App's provisioning client (ADR 0005). Present only when a
+   * privileged App is configured; backs the create-repo endpoint. Absent → the
+   * `github` module exposes no `provisioningService` and creation stays manual.
+   */
+  repoProvisioningClient?: GitHubProvisioningClient
+  /**
+   * Whether the privileged App tier can create repos for an installation (ADR
+   * 0005) — true when its owning App is the privileged one. Surfaced on the
+   * connection so the UI drops the manual create step; absent → always false.
+   */
+  canCreateRepos?: (installation: GitHubInstallation) => boolean
 
   // ---- Document-source integration (optional; wired only when configured) --
   // Mirrors the GitHub default-off convention. The documents module assembles
@@ -212,6 +227,11 @@ export interface GitHubModule {
   webhookService: WebhookService
   service: GitHubService
   webhookVerifier: WebhookVerifier
+  /**
+   * Direct repo creation (privileged App tier, ADR 0005). Present only when a
+   * privileged provisioning client is wired; absent → creation stays manual.
+   */
+  provisioningService?: RepoProvisioningService
 }
 
 /** The document-source integration's services, present only when configured. */
@@ -309,6 +329,7 @@ function createGitHubModule(deps: CoreDependencies): GitHubModule | undefined {
     githubInstallationRepository,
     workspaceRepository: deps.workspaceRepository,
     clock: deps.clock,
+    canCreateRepos: deps.canCreateRepos,
   })
   const syncService = new GitHubSyncService({
     githubClient,
@@ -340,7 +361,17 @@ function createGitHubModule(deps: CoreDependencies): GitHubModule | undefined {
     issueProjectionRepository,
     clock: deps.clock,
   })
-  return { installationService, syncService, webhookService, service, webhookVerifier }
+  const provisioningService = deps.repoProvisioningClient
+    ? new RepoProvisioningService({ client: deps.repoProvisioningClient })
+    : undefined
+  return {
+    installationService,
+    syncService,
+    webhookService,
+    service,
+    webhookVerifier,
+    provisioningService,
+  }
 }
 
 /**

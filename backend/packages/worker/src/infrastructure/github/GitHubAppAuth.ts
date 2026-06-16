@@ -1,4 +1,8 @@
-import type { Clock, GitHubInstallationRepository } from '@cat-factory/core'
+import type {
+  Clock,
+  GitHubInstallationRepository,
+  InstallationPermissions,
+} from '@cat-factory/core'
 import { base64url, pkcs8PemToDer } from './encoding'
 
 // GitHub App authentication, implemented entirely on Web Crypto (`crypto.subtle`)
@@ -25,7 +29,10 @@ const API_VERSION = '2022-11-28'
  * app JWT. The module-level map intentionally persists across requests within
  * the same isolate.
  */
-const tokenCache = new Map<number, { token: string; expiresAt: number }>()
+const tokenCache = new Map<
+  number,
+  { token: string; expiresAt: number; permissions: InstallationPermissions }
+>()
 
 export interface GitHubAppAuthDependencies {
   appId: string
@@ -39,6 +46,8 @@ export interface GitHubAppAuthDependencies {
 interface AccessTokenResponse {
   token: string
   expires_at: string
+  /** The permissions actually granted to this token (App ∩ install approval). */
+  permissions?: InstallationPermissions
 }
 
 export class GitHubAppAuth {
@@ -64,14 +73,33 @@ export class GitHubAppAuth {
 
   /** A valid installation access token, minting + caching one if needed. */
   async installationToken(installationId: number): Promise<string> {
+    return (await this.cachedToken(installationId)).token
+  }
+
+  /**
+   * The permissions the installation token actually carries (App ∩ what the
+   * install approved) — the source of truth for capability checks. Comes free
+   * with the mint response and is cached alongside the token, so a warm isolate
+   * answers without a network call. Used by the provisioner to guard privileged
+   * actions (e.g. repo creation) before attempting them.
+   */
+  async installationPermissions(installationId: number): Promise<InstallationPermissions> {
+    return (await this.cachedToken(installationId)).permissions
+  }
+
+  private async cachedToken(
+    installationId: number,
+  ): Promise<{ token: string; permissions: InstallationPermissions }> {
     const cached = tokenCache.get(installationId)
     if (cached && cached.expiresAt - TOKEN_SKEW_MS > this.deps.clock.now()) {
-      return cached.token
+      return cached
     }
     return this.mintInstallationToken(installationId)
   }
 
-  private async mintInstallationToken(installationId: number): Promise<string> {
+  private async mintInstallationToken(
+    installationId: number,
+  ): Promise<{ token: string; permissions: InstallationPermissions }> {
     const jwt = await this.appJwt()
     const res = await fetch(
       `${this.deps.apiBase}/app/installations/${installationId}/access_tokens`,
@@ -92,12 +120,14 @@ export class GitHubAppAuth {
     }
     const body = (await res.json()) as AccessTokenResponse
     const expiresAt = Date.parse(body.expires_at)
-    // In-memory only (see tokenCache note) — never persisted to D1.
-    tokenCache.set(installationId, {
+    const entry = {
       token: body.token,
+      permissions: body.permissions ?? {},
       expiresAt: Number.isNaN(expiresAt) ? this.deps.clock.now() + 30 * 60 * 1000 : expiresAt,
-    })
-    return body.token
+    }
+    // In-memory only (see tokenCache note) — never persisted to D1.
+    tokenCache.set(installationId, entry)
+    return entry
   }
 
   private importKey(): Promise<CryptoKey> {

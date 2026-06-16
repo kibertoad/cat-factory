@@ -100,6 +100,12 @@ export const githubConnectionSchema = v.object({
   accountLogin: v.string(),
   targetType: v.picklist(['Organization', 'User']),
   connectedAt: v.number(),
+  /**
+   * Whether cat-factory can create repositories under this account itself — true
+   * only for accounts served by the privileged App tier (ADR 0005). When false,
+   * the UI keeps the manual "create on GitHub" flow.
+   */
+  canCreateRepos: v.optional(v.boolean(), false),
 })
 export type GitHubConnection = v.InferOutput<typeof githubConnectionSchema>
 
@@ -136,6 +142,24 @@ export const githubAvailableRepoSchema = v.object({
 export type GitHubAvailableRepo = v.InferOutput<typeof githubAvailableRepoSchema>
 
 // ---- Request bodies -------------------------------------------------------
+
+/**
+ * Create a repository under the connected account (privileged App tier, ADR
+ * 0005). `name` is a single GitHub name segment — no `owner/` prefix — matching
+ * the bootstrap repo-name rule; the owner is the connected installation account.
+ */
+export const createRepoRequestSchema = v.object({
+  name: v.pipe(
+    v.string(),
+    v.trim(),
+    v.regex(/^[A-Za-z0-9_.-]+$/, "Only letters, digits, '.', '_' and '-' are allowed"),
+    v.minLength(1),
+    v.maxLength(100),
+  ),
+  private: v.optional(v.boolean(), true),
+  description: v.optional(v.pipe(v.string(), v.maxLength(350)), ''),
+})
+export type CreateRepoRequest = v.InferOutput<typeof createRepoRequestSchema>
 
 /** Set the exact set of repos (by GitHub numeric id) this workspace links. */
 export const linkReposSchema = v.object({

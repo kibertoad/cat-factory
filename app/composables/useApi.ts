@@ -16,6 +16,8 @@ import type {
   ExecutionInstance,
   CommitFilesInput,
   CreateBranchInput,
+  CreatedRepo,
+  CreateRepoRequest,
   GitHubAvailableRepo,
   GitHubBranch,
   GitHubConnection,
@@ -300,6 +302,11 @@ export function useApi() {
       http<{ status: string }>(`${ws(workspaceId)}/github/resync`, { method: 'POST', body }),
 
     listGitHubRepos: (workspaceId: string) => http<GitHubRepo[]>(`${ws(workspaceId)}/github/repos`),
+
+    // Programmatic repo creation (privileged App tier). Only called when the
+    // connection reports `canCreateRepos`; otherwise the UI opens GitHub directly.
+    createGitHubRepo: (workspaceId: string, body: CreateRepoRequest) =>
+      http<CreatedRepo>(`${ws(workspaceId)}/github/repos`, { method: 'POST', body }),
 
     // Repos the connected installation can access, annotated with whether this
     // workspace links each (drives the per-workspace repo picker).

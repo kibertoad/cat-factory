@@ -73,6 +73,12 @@ export interface RepoEntry {
 export interface InstallationMeta {
   accountLogin: string
   targetType: 'Organization' | 'User'
+  /**
+   * Which configured App owns this installation (ADR 0005). The adapter probes
+   * the registered Apps to find the owner, so the binding records the App used
+   * for this installation's tokens.
+   */
+  appId: string
 }
 
 /** One installation of the App, as listed via the app JWT (GET /app/installations). */

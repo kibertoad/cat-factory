@@ -22,7 +22,7 @@ import {
   githubProjection as gp,
 } from '@cat-factory/core'
 import type { CommitFilesInput } from '@cat-factory/contracts'
-import type { GitHubAppAuth } from './GitHubAppAuth'
+import type { GitHubAppRegistry } from './GitHubAppRegistry'
 
 // Thin `fetch`-based GitHubClient: the only place that talks to the GitHub REST
 // API. It authenticates via the App (installation tokens for repo calls, the app
@@ -39,7 +39,8 @@ const PER_PAGE = 100
 const MAX_PAGES = 10
 
 export interface FetchGitHubClientDependencies {
-  auth: GitHubAppAuth
+  /** Resolves which App's credentials to use per installation (ADR 0005). */
+  registry: GitHubAppRegistry
   rateLimitRepository: RateLimitRepository
   idGenerator: IdGenerator
   clock: Clock
@@ -52,6 +53,11 @@ interface RequestOptions {
   method?: string
   installationId: number
   auth?: AuthMode
+  /**
+   * For app-JWT calls (`auth: 'app'`), which App signs the JWT. Defaults to the
+   * default App; the connect probe / installation listing pass each App in turn.
+   */
+  appId?: string
   etag?: string
   body?: unknown
 }
@@ -72,37 +78,56 @@ export class FetchGitHubClient implements GitHubClient {
   // ---- installation-level (app JWT) --------------------------------------
 
   async getInstallation(installationId: number): Promise<InstallationMeta> {
-    const { json } = await this.request(`/app/installations/${installationId}`, {
-      installationId,
-      auth: 'app',
-    })
-    const body = json as { account?: { login?: string }; target_type?: string }
-    return {
-      accountLogin: body.account?.login ?? '',
-      targetType: body.target_type === 'Organization' ? 'Organization' : 'User',
+    // An installation belongs to exactly one App; probe each configured App's JWT
+    // until one can see it (404 = not this App's), so the binding records the
+    // owning App for later token minting (ADR 0005).
+    for (const { appId } of this.deps.registry.apps()) {
+      try {
+        const { json } = await this.request(`/app/installations/${installationId}`, {
+          installationId,
+          auth: 'app',
+          appId,
+        })
+        const body = json as { account?: { login?: string }; target_type?: string }
+        return {
+          accountLogin: body.account?.login ?? '',
+          targetType: body.target_type === 'Organization' ? 'Organization' : 'User',
+          appId,
+        }
+      } catch (err) {
+        if (err instanceof GitHubApiError && err.status === 404) continue
+        throw err
+      }
     }
+    throw new GitHubApiError(404, `Installation ${installationId} not found on any configured App`)
   }
 
   async listInstallations(): Promise<InstallationSummary[]> {
     // App-JWT call, so no specific installation: pass 0 (used only for the
-    // best-effort rate-limit snapshot). Paginates like the rest.
-    return this.paginate<InstallationSummary>(
-      `/app/installations?per_page=${PER_PAGE}`,
-      { installationId: 0, auth: 'app' },
-      (json) =>
-        (
-          (json as Array<{
-            id: number
-            account?: { login?: string; avatar_url?: string }
-            target_type?: string
-          }>) ?? []
-        ).map((i) => ({
-          installationId: i.id,
-          accountLogin: i.account?.login ?? '',
-          targetType: i.target_type === 'Organization' ? 'Organization' : 'User',
-          accountAvatarUrl: i.account?.avatar_url ?? null,
-        })),
-    )
+    // best-effort rate-limit snapshot). Listed per App and merged, so the connect
+    // picker surfaces installations of both the default and privileged Apps.
+    const out: InstallationSummary[] = []
+    for (const { appId } of this.deps.registry.apps()) {
+      const page = await this.paginate<InstallationSummary>(
+        `/app/installations?per_page=${PER_PAGE}`,
+        { installationId: 0, auth: 'app', appId },
+        (json) =>
+          (
+            (json as Array<{
+              id: number
+              account?: { login?: string; avatar_url?: string }
+              target_type?: string
+            }>) ?? []
+          ).map((i) => ({
+            installationId: i.id,
+            accountLogin: i.account?.login ?? '',
+            targetType: i.target_type === 'Organization' ? 'Organization' : 'User',
+            accountAvatarUrl: i.account?.avatar_url ?? null,
+          })),
+      )
+      out.push(...page)
+    }
+    return out
   }
 
   async listInstallationRepos(installationId: number): Promise<Paged<GitHubRepo>> {
@@ -397,8 +422,10 @@ export class FetchGitHubClient implements GitHubClient {
     const url = pathOrUrl.startsWith('http') ? pathOrUrl : `${this.deps.apiBase}${pathOrUrl}`
     const token =
       opts.auth === 'app'
-        ? await this.deps.auth.appJwt()
-        : await this.deps.auth.installationToken(opts.installationId)
+        ? await this.deps.registry
+            .authForApp(opts.appId ?? this.deps.registry.defaultAppId)
+            .appJwt()
+        : await this.deps.registry.installationToken(opts.installationId)
 
     const headers: Record<string, string> = {
       authorization: `Bearer ${token}`,

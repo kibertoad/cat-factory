@@ -41,6 +41,12 @@ export type {
   RepoEntry,
 } from './github-client'
 export type {
+  CreateRepoInput,
+  GitHubProvisioningClient,
+  InstallationPermissions,
+  ProvisionedRepo,
+} from './github-provisioning'
+export type {
   BranchProjectionRepository,
   CheckRunProjectionRepository,
   CommitProjectionRepository,

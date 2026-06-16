@@ -6,6 +6,7 @@ export interface GitHubInstallationRow {
   account_id: string | null
   account_login: string
   target_type: string
+  app_id: string | null
   cached_token: string | null
   token_expires_at: number | null
   created_at: number
@@ -19,6 +20,7 @@ export function rowToInstallation(row: GitHubInstallationRow): GitHubInstallatio
     accountId: row.account_id ?? null,
     accountLogin: row.account_login,
     targetType: row.target_type === 'Organization' ? 'Organization' : 'User',
+    appId: row.app_id ?? null,
     cachedToken: row.cached_token,
     tokenExpiresAt: row.token_expires_at,
     createdAt: row.created_at,
@@ -33,6 +35,7 @@ export function installationValues(i: GitHubInstallation): Record<string, unknow
     account_id: i.accountId,
     account_login: i.accountLogin,
     target_type: i.targetType,
+    app_id: i.appId,
     cached_token: i.cachedToken,
     token_expires_at: i.tokenExpiresAt,
     created_at: i.createdAt,

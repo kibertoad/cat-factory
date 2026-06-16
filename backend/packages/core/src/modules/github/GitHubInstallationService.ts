@@ -22,14 +22,21 @@ export interface GitHubInstallationServiceDependencies {
   githubInstallationRepository: GitHubInstallationRepository
   workspaceRepository: WorkspaceRepository
   clock: Clock
+  /**
+   * Whether cat-factory can create repos for an installation itself — true when
+   * its owning App is the privileged tier (ADR 0005). Surfaced on the connection
+   * so the UI can drop the manual "create on GitHub" step. Absent → always false.
+   */
+  canCreateRepos?: (installation: GitHubInstallation) => boolean
 }
 
-function toConnection(installation: GitHubInstallation): GitHubConnection {
+function toConnection(installation: GitHubInstallation, canCreateRepos: boolean): GitHubConnection {
   return {
     installationId: installation.installationId,
     accountLogin: installation.accountLogin,
     targetType: installation.targetType,
     connectedAt: installation.createdAt,
+    canCreateRepos,
   }
 }
 
@@ -71,13 +78,21 @@ export class GitHubInstallationService {
       accountId,
       accountLogin: meta.accountLogin,
       targetType: meta.targetType,
+      // The App that owns this installation (probed at connect), so every later
+      // token mint routes to the right App's key (ADR 0005).
+      appId: meta.appId,
       cachedToken: null,
       tokenExpiresAt: null,
       createdAt: existing?.createdAt ?? this.deps.clock.now(),
       deletedAt: null,
     }
     await this.deps.githubInstallationRepository.upsert(installation)
-    return toConnection(installation)
+    return toConnection(installation, this.canCreate(installation))
+  }
+
+  /** Whether the privileged App tier can create repos for this installation (ADR 0005). */
+  private canCreate(installation: GitHubInstallation): boolean {
+    return this.deps.canCreateRepos?.(installation) ?? false
   }
 
   /**
@@ -133,7 +148,7 @@ export class GitHubInstallationService {
   async getConnection(workspaceId: string): Promise<GitHubConnection | null> {
     const installation = await this.deps.githubInstallationRepository.getByWorkspace(workspaceId)
     if (!installation || installation.deletedAt) return null
-    return toConnection(installation)
+    return toConnection(installation, this.canCreate(installation))
   }
 
   /** Resolve the live installation for a workspace, or throw if not connected. */

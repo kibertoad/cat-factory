@@ -24,7 +24,11 @@ import type { CommitFilesInput } from '@cat-factory/contracts'
  * public arrays before exercising the sync/read paths.
  */
 export class FakeGitHubClient implements GitHubClient {
-  installation: InstallationMeta = { accountLogin: 'acme', targetType: 'Organization' }
+  installation: InstallationMeta = {
+    accountLogin: 'acme',
+    targetType: 'Organization',
+    appId: 'app-default',
+  }
   repos: GitHubRepo[] = []
   branches: GitHubBranch[] = []
   /** Root-level entries served by listRootEntries (empty = empty repo). */

@@ -2,6 +2,7 @@ import {
   commentSchema,
   commitFilesSchema,
   createBranchSchema,
+  createRepoRequestSchema,
   linkReposSchema,
   mergePullRequestSchema,
   openPullRequestSchema,
@@ -180,6 +181,45 @@ export function githubController(): Hono<AppEnv> {
   })
 
   // ---- writes -------------------------------------------------------------
+
+  // Programmatically create a repository under the connected account (privileged
+  // App tier, ADR 0005). Backs the bootstrap modal's "Create repository" button
+  // for privileged orgs; restricted orgs never call this (the button opens
+  // GitHub's new-repo page client-side instead). 503 when no privileged App is
+  // configured; 409 when the account isn't actually privileged (the App isn't
+  // installed there or lacks the grant), so the caller can fall back.
+  app.post('/github/repos', jsonBody(createRepoRequestSchema), async (c) => {
+    const github = requireGitHub(c)
+    if (!github) return unavailable(c)
+    if (!github.provisioningService) {
+      return c.json(
+        { error: { code: 'unavailable', message: 'Direct repo creation is not configured' } },
+        503,
+      )
+    }
+    const workspaceId = param(c, 'workspaceId')
+    const { name, private: isPrivate, description } = c.req.valid('json')
+    // Owner = the connected installation's account (throws 409 when unconnected).
+    const installation = await github.installationService.requireInstallation(workspaceId)
+    const result = await github.provisioningService.provision(installation.installationId, {
+      org: installation.accountLogin,
+      name,
+      private: isPrivate,
+      description,
+    })
+    if (result.status === 'delegated') {
+      return c.json(
+        {
+          error: {
+            code: 'not_privileged',
+            message: `cat-factory can't create repositories under ${installation.accountLogin} (${result.reason}).`,
+          },
+        },
+        409,
+      )
+    }
+    return c.json(result.repo, 201)
+  })
 
   app.post('/github/repos/:repoGithubId/branches', jsonBody(createBranchSchema), async (c) => {
     const github = requireGitHub(c)
