@@ -174,6 +174,10 @@ export interface WorkspaceSnapshot {
   blocks: Block[]
   pipelines: Pipeline[]
   executions: ExecutionInstance[]
+  /** Bootstrap runs (the unified `agent_runs` bootstrap rows), so the board can
+   * render a bootstrap's live progress / failure + retry on load. Absent on
+   * older servers. */
+  bootstrapJobs?: BootstrapJob[]
   /** Current spend-safeguard status; absent on older servers. */
   spend?: SpendStatus
 }

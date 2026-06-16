@@ -17,7 +17,7 @@ export function useWorkspaceStream() {
   const workspace = useWorkspaceStore()
   const execution = useExecutionStore()
   const board = useBoardStore()
-  const bootstrap = useBootstrapStore()
+  const agentRuns = useAgentRunsStore()
   const auth = useAuthStore()
   const apiBase = useRuntimeConfig().public.apiBase
 
@@ -45,6 +45,8 @@ export function useWorkspaceStream() {
       return
     }
     if (event.type === 'execution') {
+      // Full instance drives the step-level UI; agentRuns derives its coarse
+      // failure/retry summary from the same store, so no extra call is needed.
       execution.upsert(event.instance)
       if (event.block) board.upsert(event.block)
     } else if (event.type === 'board') {
@@ -53,7 +55,7 @@ export function useWorkspaceStream() {
       // Patch the run's live status/subtasks and its provisional/linked frame so
       // the "bootstrapping…" card updates in place (then flips to a ready service
       // or a failed badge) without a full refresh.
-      bootstrap.upsert(event.job)
+      agentRuns.upsertBootstrap(event.job)
       if (event.block) board.upsert(event.block)
     }
   }
@@ -67,11 +69,10 @@ export function useWorkspaceStream() {
       attempt = 0
       connected.value = true
       // Resync on (re)connect: any event missed while disconnected is reconciled.
-      // Refresh both the board AND bootstrap jobs — a missed terminal `bootstrap`
-      // event (e.g. a container eviction that failed the run) would otherwise leave
-      // a frame stuck on its stale "bootstrapping…" badge until a full page reload.
+      // The snapshot carries `bootstrapJobs` + executions, so one refresh rehydrates
+      // agentRuns too — a missed terminal event (e.g. a container eviction that
+      // failed the run) can't leave a frame stuck on a stale "bootstrapping…" badge.
       void workspace.refresh()
-      void bootstrap.load()
     }
     socket.onmessage = (e) => onMessage(typeof e.data === 'string' ? e.data : '')
     socket.onclose = () => {

@@ -1,6 +1,7 @@
 import {
   AiAgentExecutor,
   type AgentExecutor,
+  type AgentRunRepository,
   type Core,
   type CoreDependencies,
   type DocumentSourceProvider,
@@ -51,6 +52,7 @@ import { D1EnvironmentConnectionRepository } from './repositories/D1EnvironmentC
 import { D1EnvironmentRegistryRepository } from './repositories/D1EnvironmentRegistryRepository'
 import { D1ReferenceArchitectureRepository } from './repositories/D1ReferenceArchitectureRepository'
 import { D1BootstrapJobRepository } from './repositories/D1BootstrapJobRepository'
+import { D1AgentRunRepository } from './repositories/D1AgentRunRepository'
 import { D1RepoBlueprintRepository } from './repositories/D1RepoBlueprintRepository'
 import { HttpEnvironmentProvider } from './environments/HttpEnvironmentProvider'
 import { WebCryptoSecretCipher } from './environments/WebCryptoSecretCipher'
@@ -78,6 +80,8 @@ import type { D1Database } from '@cloudflare/workers-types'
 
 export interface Container extends Core {
   config: AppConfig
+  /** Kind-spanning view over agent_runs (retry dispatch + the cron sweeper). */
+  agentRunRepository: AgentRunRepository
 }
 
 /**
@@ -601,5 +605,5 @@ export function buildContainer(env: Env, overrides: Partial<CoreDependencies> = 
     ...overrides,
   }
 
-  return { ...createCore(dependencies), config }
+  return { ...createCore(dependencies), config, agentRunRepository: new D1AgentRunRepository({ db }) }
 }

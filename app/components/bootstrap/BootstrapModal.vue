@@ -11,6 +11,7 @@ import GitHubConnect from '~/components/github/GitHubConnect.vue'
 
 const ui = useUiStore()
 const bootstrap = useBootstrapStore()
+const agentRuns = useAgentRunsStore()
 const github = useGitHubStore()
 const toast = useToast()
 
@@ -510,12 +511,12 @@ const statusColor: Record<BootstrapStatus, 'neutral' | 'info' | 'success' | 'err
         </section>
 
         <!-- recent jobs -->
-        <section v-if="bootstrap.jobs.length" class="space-y-2">
+        <section v-if="agentRuns.bootstrapJobs.length" class="space-y-2">
           <h3 class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
             Recent runs
           </h3>
           <div
-            v-for="job in bootstrap.jobs.slice(0, 5)"
+            v-for="job in agentRuns.bootstrapJobs.slice(0, 5)"
             :key="job.id"
             class="flex items-center justify-between gap-2 rounded-md border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm"
           >

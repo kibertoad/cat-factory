@@ -1,5 +1,6 @@
 import type { BlockPatch } from '@cat-factory/core'
 import type {
+  AgentFailure,
   Block,
   BlockLevel,
   BlockStatus,
@@ -156,28 +157,60 @@ export function rowToPipeline(row: PipelineRow): Pipeline {
   }
 }
 
+/**
+ * A `kind='execution'` row of the unified `agent_runs` table (migration 0019).
+ * The pipeline shape (pipelineId/Name, steps, currentStep) lives in the `detail`
+ * JSON column; lifecycle/failure are top-level columns shared with bootstrap.
+ */
 export interface ExecutionRow {
   id: string
-  block_id: string
-  pipeline_id: string
-  pipeline_name: string
-  steps: string
-  current_step: number
+  block_id: string | null
   status: string
-  // Added in migration 0002 for durable execution; not surfaced on the entity.
-  updated_at: number
+  /** JSON {pipelineId,pipelineName,steps,currentStep}. */
+  detail: string
   error: string | null
+  /** JSON-encoded AgentFailure; null unless the run failed. */
+  failure: string | null
+  // Lease for the cron sweeper; not surfaced on the entity.
+  updated_at: number
   workflow_instance_id: string | null
 }
 
+/** The execution-specific payload packed into `agent_runs.detail`. */
+interface ExecutionDetail {
+  pipelineId: string
+  pipelineName: string
+  steps: PipelineStep[]
+  currentStep: number
+}
+
+/** Parse the JSON-encoded structured failure column, tolerating null/garbage. */
+function parseAgentFailure(raw: string | null): AgentFailure | null {
+  if (!raw) return null
+  try {
+    const o = JSON.parse(raw) as AgentFailure
+    if (o && typeof o.kind === 'string' && typeof o.message === 'string') return o
+  } catch {
+    // fall through
+  }
+  return null
+}
+
 export function rowToExecution(row: ExecutionRow): ExecutionInstance {
+  let detail: Partial<ExecutionDetail>
+  try {
+    detail = JSON.parse(row.detail) as Partial<ExecutionDetail>
+  } catch {
+    detail = {}
+  }
   return {
     id: row.id,
-    blockId: row.block_id,
-    pipelineId: row.pipeline_id,
-    pipelineName: row.pipeline_name,
-    steps: JSON.parse(row.steps) as PipelineStep[],
-    currentStep: row.current_step,
+    blockId: row.block_id ?? '',
+    pipelineId: detail.pipelineId ?? '',
+    pipelineName: detail.pipelineName ?? '',
+    steps: detail.steps ?? [],
+    currentStep: detail.currentStep ?? 0,
     status: row.status as ExecutionStatus,
+    failure: parseAgentFailure(row.failure),
   }
 }

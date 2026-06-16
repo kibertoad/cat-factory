@@ -5,6 +5,9 @@
 export type {
   AgentKind,
   AgentState,
+  AgentFailure,
+  AgentFailureKind,
+  AgentRunKind,
   Block,
   BlockLevel,
   BlockStatus,

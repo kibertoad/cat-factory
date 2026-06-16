@@ -20,6 +20,7 @@ import { taskSourceController } from './modules/tasks/TaskSourceController'
 import { environmentController } from './modules/environments/EnvironmentController'
 import { runnerPoolController } from './modules/runners/RunnerPoolController'
 import { bootstrapController } from './modules/bootstrap/BootstrapController'
+import { agentRunController } from './modules/agentRuns/AgentRunController'
 import { boardScanController } from './modules/boardScan/BoardScanController'
 import { promptFragmentController } from './modules/promptFragments/PromptFragmentController'
 import { fragmentLibraryController } from './modules/fragmentLibrary/FragmentLibraryController'
@@ -152,6 +153,7 @@ export function createApp(options: CreateAppOptions = {}): Hono<AppEnv> {
   app.route('/workspaces/:workspaceId', environmentController())
   app.route('/workspaces/:workspaceId', runnerPoolController())
   app.route('/workspaces/:workspaceId', bootstrapController())
+  app.route('/workspaces/:workspaceId', agentRunController())
   app.route('/workspaces/:workspaceId', boardScanController())
   app.route('/workspaces/:workspaceId', fragmentLibraryController('workspace'))
   // GitHub-facing (webhooks + setup callback); not workspace-scoped.

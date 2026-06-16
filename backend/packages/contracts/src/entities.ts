@@ -183,6 +183,61 @@ export const stepSubtasksSchema = v.object({
 })
 export type StepSubtasks = v.InferOutput<typeof stepSubtasksSchema>
 
+/**
+ * The agent flows that produce an "agent run" (a container-backed job whose
+ * lifecycle, progress and failure the board surfaces uniformly):
+ *   - `bootstrap`  — a "bootstrap repo" run that scaffolds/adapts a new repo.
+ *   - `execution`  — a task pipeline run that implements a board task.
+ */
+export const agentRunKindSchema = v.picklist(['bootstrap', 'execution'])
+export type AgentRunKind = v.InferOutput<typeof agentRunKindSchema>
+
+/**
+ * How an agent run faulted, so the board can classify the failure (and hint
+ * whether a retry is likely to help). The union spans both flows; a given flow
+ * only ever produces a subset:
+ *   - `preflight`        — rejected before dispatch (repo missing/not empty, not connected). [bootstrap]
+ *   - `dispatch`         — the container accept-request itself failed (HTTP / network). [bootstrap]
+ *   - `evicted`          — the container vanished mid-run (eviction/crash). Retrying spins a fresh one.
+ *   - `timeout`          — a container watchdog fired (inactivity or max-duration).
+ *   - `agent`            — the agent / git push reported a failure.
+ *   - `job_failed`       — an async container job came back failed. [execution]
+ *   - `decision_timeout` — a human decision was not answered in time. [execution]
+ *   - `unknown`          — anything not otherwise classified.
+ */
+export const agentFailureKindSchema = v.picklist([
+  'preflight',
+  'dispatch',
+  'evicted',
+  'timeout',
+  'agent',
+  'job_failed',
+  'decision_timeout',
+  'unknown',
+])
+export type AgentFailureKind = v.InferOutput<typeof agentFailureKindSchema>
+
+/**
+ * Structured diagnostics captured when an agent run fails, stored on the run and
+ * surfaced on the board so a crash isn't just a one-line message. The container's
+ * stdout/stderr can't always be pulled into this record (an evicted container is
+ * gone), so for `evicted`/`timeout` failures the `hint` points at where to look.
+ */
+export const agentFailureSchema = v.object({
+  kind: agentFailureKindSchema,
+  /** Human-readable summary (mirrors the run's `error` for back-compat). */
+  message: v.string(),
+  /** Extended detail when available (the harness's reason, an HTTP body, …). */
+  detail: v.nullable(v.string()),
+  /** Where to look next (e.g. "check the container logs for this job id"). */
+  hint: v.nullable(v.string()),
+  /** Epoch ms the failure was recorded. */
+  occurredAt: v.number(),
+  /** Last subtask counts seen before the failure, for context (null if none). */
+  lastSubtasks: v.nullable(stepSubtasksSchema),
+})
+export type AgentFailure = v.InferOutput<typeof agentFailureSchema>
+
 export const pipelineStepSchema = v.object({
   agentKind: agentKindSchema,
   state: agentStateSchema,
@@ -211,7 +266,13 @@ export const pipelineStepSchema = v.object({
 })
 export type PipelineStep = v.InferOutput<typeof pipelineStepSchema>
 
-export const executionStatusSchema = v.picklist(['running', 'blocked', 'done', 'paused'])
+export const executionStatusSchema = v.picklist([
+  'running',
+  'blocked',
+  'done',
+  'paused',
+  'failed',
+])
 export type ExecutionStatus = v.InferOutput<typeof executionStatusSchema>
 
 export const executionInstanceSchema = v.object({
@@ -222,6 +283,12 @@ export const executionInstanceSchema = v.object({
   steps: v.array(pipelineStepSchema),
   currentStep: v.number(),
   status: executionStatusSchema,
+  /**
+   * Structured failure diagnostics when `status` is `failed`; absent/null
+   * otherwise. Lets a failed task surface the same failure banner + retry as a
+   * failed bootstrap (shared {@link agentFailureSchema}).
+   */
+  failure: v.optional(v.nullable(agentFailureSchema)),
 })
 export type ExecutionInstance = v.InferOutput<typeof executionInstanceSchema>
 
@@ -259,15 +326,6 @@ export const spendStatusSchema = v.object({
 })
 export type SpendStatus = v.InferOutput<typeof spendStatusSchema>
 
-export const workspaceSnapshotSchema = v.object({
-  workspace: workspaceSchema,
-  blocks: v.array(blockSchema),
-  pipelines: v.array(pipelineSchema),
-  executions: v.array(executionInstanceSchema),
-  /**
-   * The current spend-safeguard status. Attached by the worker (it depends on
-   * deployment-wide pricing/budget config), so it is optional on the wire.
-   */
-  spend: v.optional(spendStatusSchema),
-})
-export type WorkspaceSnapshot = v.InferOutput<typeof workspaceSnapshotSchema>
+// The workspace snapshot schema lives in ./snapshot — it references
+// `bootstrapJobSchema` from ./bootstrap, which itself imports from this file, so
+// keeping it here would be a circular import.

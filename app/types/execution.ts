@@ -27,6 +27,43 @@ export interface StepSubtasks {
   total: number
 }
 
+// ---------------------------------------------------------------------------
+// Shared "agent run" failure model. Both flows that run an agent in a container
+// — a task pipeline `execution` and a repo `bootstrap` — surface failures with
+// this shape, so the board renders one failure banner + retry for either. Mirrors
+// `agentFailureSchema` in `@cat-factory/contracts`.
+// ---------------------------------------------------------------------------
+
+/** The agent flows that produce a container-backed "agent run". */
+export type AgentRunKind = 'bootstrap' | 'execution'
+
+/** How an agent run faulted, so the board can classify it (and hint at a retry).
+ * The union spans both flows; a given flow only ever produces a subset. */
+export type AgentFailureKind =
+  | 'preflight'
+  | 'dispatch'
+  | 'evicted'
+  | 'timeout'
+  | 'agent'
+  | 'job_failed'
+  | 'decision_timeout'
+  | 'unknown'
+
+/** Structured diagnostics captured when an agent run fails. */
+export interface AgentFailure {
+  kind: AgentFailureKind
+  /** Human-readable summary (mirrors the run's one-line `error`). */
+  message: string
+  /** Extended detail when available (the harness's reason, an HTTP body, …). */
+  detail: string | null
+  /** Where to look next (e.g. "check the container logs for this job id"). */
+  hint: string | null
+  /** Epoch ms the failure was recorded. */
+  occurredAt: number
+  /** Last subtask counts seen before the failure, for context (null if none). */
+  lastSubtasks: StepSubtasks | null
+}
+
 /** One agent's slot in a running pipeline. */
 export interface PipelineStep {
   agentKind: AgentKind
@@ -54,6 +91,12 @@ export interface ExecutionInstance {
   steps: PipelineStep[]
   /** index into steps of the currently active step */
   currentStep: number
-  /** 'paused' = halted by the spend safeguard until the budget frees up. */
-  status: 'running' | 'blocked' | 'done' | 'paused'
+  /**
+   * 'paused' = halted by the spend safeguard until the budget frees up;
+   * 'failed' = the run faulted (see `failure`) — surfaces the shared failure
+   * banner + retry, instead of the old success-looking `pr_ready` lie.
+   */
+  status: 'running' | 'blocked' | 'done' | 'paused' | 'failed'
+  /** Structured failure diagnostics when `status` is `failed`; null otherwise. */
+  failure?: AgentFailure | null
 }

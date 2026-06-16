@@ -1,4 +1,4 @@
-import type { Block, ExecutionInstance, Pipeline, Workspace } from '../domain/types'
+import type { AgentFailure, Block, ExecutionInstance, Pipeline, Workspace } from '../domain/types'
 
 // ---------------------------------------------------------------------------
 // Repository ports: persistence interfaces the domain layer depends on. The
@@ -78,6 +78,10 @@ export interface ExecutionRepository {
    * Spans all workspaces so a single cron pass can repair the whole system.
    */
   listStale(olderThanEpochMs: number): Promise<RunRef[]>
-  /** Record a terminal agent failure: store `error` and stop the run. */
-  markError(workspaceId: string, id: string, error: string): Promise<void>
+  /**
+   * Record a terminal agent failure: flip the run to `failed` and store the
+   * structured {@link AgentFailure} (its `message` mirrors the legacy one-line
+   * `error`). Surfaces the same failure banner + retry as a failed bootstrap.
+   */
+  markFailed(workspaceId: string, id: string, failure: AgentFailure): Promise<void>
 }
