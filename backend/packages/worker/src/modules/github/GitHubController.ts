@@ -61,6 +61,17 @@ export function githubController(): Hono<AppEnv> {
     return c.json({ connection })
   })
 
+  // Discover the App's installations so the UI can offer a pick instead of a
+  // manually typed installation id (the caller already owns :workspaceId).
+  app.get('/github/installations', async (c) => {
+    const github = requireGitHub(c)
+    if (!github) return unavailable(c)
+    const installations = await github.installationService.listAvailableInstallations(
+      param(c, 'workspaceId'),
+    )
+    return c.json({ installations })
+  })
+
   // Programmatic bind (the browser flow uses /github/setup/callback instead).
   app.post('/github/connect', jsonBody(connectSchema), async (c) => {
     const github = requireGitHub(c)

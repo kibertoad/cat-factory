@@ -26,6 +26,7 @@ export type {
   GitHubCheckRun,
   GitHubCommit,
   GitHubConnection,
+  GitHubInstallationOption,
   GitHubIssue,
   GitHubIssueState,
   GitHubPullRequest,

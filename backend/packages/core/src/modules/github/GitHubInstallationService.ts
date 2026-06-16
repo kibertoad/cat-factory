@@ -4,7 +4,7 @@ import type {
   GitHubInstallation,
   GitHubInstallationRepository,
 } from '../../ports/github-repositories'
-import type { GitHubConnection } from '../../domain/types'
+import type { GitHubConnection, GitHubInstallationOption } from '../../domain/types'
 import { ConflictError } from '../../domain/errors'
 import { requireWorkspace } from '../workspaces/WorkspaceService'
 import type { WorkspaceRepository } from '../../ports/repositories'
@@ -67,6 +67,33 @@ export class GitHubInstallationService {
     }
     await this.deps.githubInstallationRepository.upsert(installation)
     return toConnection(installation)
+  }
+
+  /**
+   * Discover the App's installations so the connect UI can offer a pick instead
+   * of a manually typed installation id. Each is annotated with whether it's
+   * already bound — to THIS workspace, to ANOTHER (so connecting would be
+   * rejected by {@link connect}), or to NONE (free to connect). The `connected`
+   * computation mirrors that guard: a binding to another workspace counts as
+   * taken even when soft-deleted (the installation still lives on GitHub), while
+   * a soft-deleted binding to THIS workspace is re-connectable, so reported NONE.
+   */
+  async listAvailableInstallations(workspaceId: string): Promise<GitHubInstallationOption[]> {
+    await requireWorkspace(this.deps.workspaceRepository, workspaceId)
+    const installations = await this.deps.githubClient.listInstallations()
+    return Promise.all(
+      installations.map(async (i) => {
+        const existing = await this.deps.githubInstallationRepository.getByInstallationId(
+          i.installationId,
+        )
+        let connected: GitHubInstallationOption['connected'] = 'none'
+        if (existing) {
+          if (existing.workspaceId !== workspaceId) connected = 'other'
+          else if (!existing.deletedAt) connected = 'this'
+        }
+        return { ...i, connected }
+      }),
+    )
   }
 
   /** The workspace's current connection, or null if not connected. */

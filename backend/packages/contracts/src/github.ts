@@ -103,6 +103,21 @@ export const githubConnectionSchema = v.object({
 })
 export type GitHubConnection = v.InferOutput<typeof githubConnectionSchema>
 
+/**
+ * A discoverable GitHub App installation (one account where the App is installed),
+ * listed via the app JWT so the connect UI can offer a pick instead of a manually
+ * typed installation id. `connected` says whether it's already bound: to THIS
+ * workspace, to ANOTHER one (so connecting would be rejected), or to NONE.
+ */
+export const githubInstallationOptionSchema = v.object({
+  installationId: v.number(),
+  accountLogin: v.string(),
+  targetType: v.picklist(['Organization', 'User']),
+  accountAvatarUrl: v.nullable(v.string()),
+  connected: v.picklist(['this', 'other', 'none']),
+})
+export type GitHubInstallationOption = v.InferOutput<typeof githubInstallationOptionSchema>
+
 // ---- Request bodies -------------------------------------------------------
 
 /** Trigger a resync. Defaults to an incremental resync of all tracked repos. */

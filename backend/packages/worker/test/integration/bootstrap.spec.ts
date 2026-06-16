@@ -129,6 +129,26 @@ describe('bootstrap repo', () => {
     expect(fetched.body.status).toBe('succeeded')
   })
 
+  it('409s without recording a job when the workspace is not connected to GitHub', async () => {
+    const bootstrapper = new FakeRepoBootstrapper()
+    bootstrapper.connected = false
+    const app = makeApp(undefined, { repoBootstrapper: bootstrapper })
+    const workspaceId = await newWorkspace(app)
+    const base = `/workspaces/${workspaceId}/bootstrap`
+
+    const res = await app.call('POST', `${base}/jobs`, {
+      repoName: 'unconnected',
+      instructions: 'Scaffold something.',
+    })
+    expect(res.status).toBe(409)
+
+    // The pre-flight check runs before any job is recorded and before the
+    // bootstrapper's side-effecting run is invoked.
+    expect(bootstrapper.calls).toHaveLength(0)
+    const list = await app.call<BootstrapJob[]>('GET', `${base}/jobs`)
+    expect(list.body).toHaveLength(0)
+  })
+
   it('records a failed job when the bootstrapper throws', async () => {
     const bootstrapper = new FakeRepoBootstrapper()
     bootstrapper.failWith = 'repo already exists'

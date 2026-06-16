@@ -12,6 +12,7 @@ import {
   type GitHubRepoRef,
   type IdGenerator,
   type InstallationMeta,
+  type InstallationSummary,
   type ListOptions,
   type MergePullRequestInput,
   type OpenPullRequestInput,
@@ -80,6 +81,28 @@ export class FetchGitHubClient implements GitHubClient {
       accountLogin: body.account?.login ?? '',
       targetType: body.target_type === 'Organization' ? 'Organization' : 'User',
     }
+  }
+
+  async listInstallations(): Promise<InstallationSummary[]> {
+    // App-JWT call, so no specific installation: pass 0 (used only for the
+    // best-effort rate-limit snapshot). Paginates like the rest.
+    return this.paginate<InstallationSummary>(
+      `/app/installations?per_page=${PER_PAGE}`,
+      { installationId: 0, auth: 'app' },
+      (json) =>
+        (
+          (json as Array<{
+            id: number
+            account?: { login?: string; avatar_url?: string }
+            target_type?: string
+          }>) ?? []
+        ).map((i) => ({
+          installationId: i.id,
+          accountLogin: i.account?.login ?? '',
+          targetType: i.target_type === 'Organization' ? 'Organization' : 'User',
+          accountAvatarUrl: i.account?.avatar_url ?? null,
+        })),
+    )
   }
 
   async listInstallationRepos(installationId: number): Promise<Paged<GitHubRepo>> {

@@ -322,3 +322,52 @@ single spend-metering point.
 so container runs work out of the box on Workers AI. Setting a direct-provider key (above) simply
 upgrades the same blocks to that provider; the proxy then forwards to its OpenAI-compatible
 endpoint instead. Either way the container is unchanged and holds no credentials.
+
+#### Repo bootstrap (creating a new repo from a reference architecture)
+
+The "bootstrap repo" task creates a fresh GitHub repository from a reference architecture and
+runs the bootstrapper agent inside a per-run container to populate it. Managing reference
+architectures (the CRUD under `/bootstrap/reference-architectures`) always works, but **kicking
+off a run** (`POST /bootstrap/jobs`) needs the same machinery as container implementation. When
+any prerequisite is missing the endpoint returns:
+
+```json
+{ "error": { "code": "unavailable",
+  "message": "Repo bootstrapping needs the GitHub App and the implementation container to be configured" } }
+```
+
+To enable the run path, all of the following must be present (see `selectRepoBootstrapper` in
+`src/infrastructure/container.ts`):
+
+| Prerequisite | Kind | How to set it |
+| ------------ | ---- | ------------- |
+| `IMPL_CONTAINER` binding | binding | declared in `wrangler.toml` — the per-run container *factory*, not a shared instance (see below) |
+| `GITHUB_APP_ID` | `[vars]` | App id in `wrangler.toml [vars]` (with `GITHUB_APP_SLUG`) |
+| `GITHUB_APP_PRIVATE_KEY` | secret | `wrangler secret put GITHUB_APP_PRIVATE_KEY` (PKCS#8 PEM) |
+| `GITHUB_WEBHOOK_SECRET` | secret | `wrangler secret put GITHUB_WEBHOOK_SECRET` |
+| `WORKER_PUBLIC_URL` | `[vars]` | a `wrangler.toml [vars]` entry, e.g. `WORKER_PUBLIC_URL = "https://cat-factory-backend.<account>.workers.dev"` — it's a public origin, not a secret |
+| `AUTH_SESSION_SECRET` | secret | `wrangler secret put AUTH_SESSION_SECRET` (already required for auth) |
+
+`IMPL_CONTAINER` is the Durable Object **namespace** binding, not a single long-lived container.
+Each run derives its own instance — `container.get(container.idFromName(jobId))` — so containers
+are spun up **on demand, one per job**, up to the `[[containers]] max_instances` ceiling in
+`wrangler.toml`, and Cloudflare reclaims (spins down) each idle instance once its run finishes.
+The gate above only checks that this factory binding is wired into the deployment; you can't spin
+containers up dynamically without it declared at deploy time.
+
+```sh
+# Secrets (shared with the GitHub integration / auth):
+wrangler secret put GITHUB_APP_PRIVATE_KEY   # PKCS#8 PEM
+wrangler secret put GITHUB_WEBHOOK_SECRET
+wrangler secret put AUTH_SESSION_SECRET
+
+# Non-secret config — set in wrangler.toml [vars], not as secrets:
+#   GITHUB_APP_ID = "..."          (with GITHUB_APP_SLUG)
+#   WORKER_PUBLIC_URL = "https://cat-factory-backend.<account>.workers.dev"
+# plus the IMPL_CONTAINER binding (already declared in wrangler.toml).
+```
+
+Unlike container implementation, bootstrap does **not** require `CONTAINER_IMPL_ENABLED` — it
+only needs the `IMPL_CONTAINER` binding itself. Like the container executor, the bootstrapper
+holds no provider key: the agent reaches models only through this Worker's LLM proxy with a
+short-lived session token.

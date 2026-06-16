@@ -14,6 +14,19 @@ export interface GitHubConnection {
   connectedAt: number
 }
 
+/**
+ * A discoverable App installation for the connect picker. `connected` says
+ * whether it's already bound: to THIS workspace, to ANOTHER (so connecting would
+ * be rejected), or to NONE (free to connect).
+ */
+export interface GitHubInstallationOption {
+  installationId: number
+  accountLogin: string
+  targetType: 'Organization' | 'User'
+  accountAvatarUrl: string | null
+  connected: 'this' | 'other' | 'none'
+}
+
 /** A repository the integration tracks for a workspace. */
 export interface GitHubRepo {
   githubId: number

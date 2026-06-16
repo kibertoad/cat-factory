@@ -30,5 +30,11 @@ export interface BootstrapRepoOutcome {
 }
 
 export interface RepoBootstrapper {
+  /**
+   * Whether the workspace is connected to GitHub (an active App installation
+   * exists). Checked before a run starts so an unconnected workspace fails fast
+   * with a clear error instead of recording a job that immediately fails.
+   */
+  isWorkspaceConnected(workspaceId: string): Promise<boolean>
   bootstrap(request: BootstrapRepoRequest): Promise<BootstrapRepoOutcome>
 }

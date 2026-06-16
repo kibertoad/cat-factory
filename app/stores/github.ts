@@ -4,6 +4,7 @@ import type {
   CreateBranchInput,
   GitHubBranch,
   GitHubConnection,
+  GitHubInstallationOption,
   GitHubIssue,
   GitHubPullRequest,
   GitHubRepo,
@@ -30,6 +31,9 @@ export const useGitHubStore = defineStore('github', () => {
   const available = ref<boolean | null>(null)
   /** The workspace's App installation, or null when not yet connected. */
   const connection = ref<GitHubConnection | null>(null)
+  /** Discovered App installations for the connect picker; loaded on demand. */
+  const installations = ref<GitHubInstallationOption[]>([])
+  const loadingInstallations = ref(false)
   const repos = ref<GitHubRepo[]>([])
   const pulls = ref<GitHubPullRequest[]>([])
   const issues = ref<GitHubIssue[]>([])
@@ -110,6 +114,17 @@ export const useGitHubStore = defineStore('github', () => {
     return api.getGitHubInstallUrl(workspace.requireId()).then((r) => r.url)
   }
 
+  /** Discover the App's installations so the user can connect one without typing an id. */
+  async function loadInstallations() {
+    loadingInstallations.value = true
+    try {
+      const { installations: list } = await api.listGitHubInstallations(workspace.requireId())
+      installations.value = list
+    } finally {
+      loadingInstallations.value = false
+    }
+  }
+
   /** Programmatic bind by installation id (the browser flow uses the redirect). */
   async function connect(installationId: number) {
     connection.value = await api.connectGitHub(workspace.requireId(), installationId)
@@ -175,6 +190,8 @@ export const useGitHubStore = defineStore('github', () => {
   return {
     available,
     connection,
+    installations,
+    loadingInstallations,
     repos,
     pulls,
     issues,
@@ -192,6 +209,7 @@ export const useGitHubStore = defineStore('github', () => {
     load,
     loadBranches,
     getInstallUrl,
+    loadInstallations,
     connect,
     disconnect,
     resync,

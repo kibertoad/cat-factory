@@ -14,7 +14,7 @@ import type {
   ReferenceArchitectureRepository,
 } from '../../ports/bootstrap-repositories'
 import type { RepoBootstrapper } from '../../ports/repo-bootstrapper'
-import { assertFound } from '../../domain/errors'
+import { assertFound, ConflictError } from '../../domain/errors'
 import { requireWorkspace } from '../workspaces/WorkspaceService'
 
 // ---------------------------------------------------------------------------
@@ -165,6 +165,16 @@ export class BootstrapService {
     const bootstrapper = this.deps.repoBootstrapper
     if (!bootstrapper) {
       throw new Error('Repository bootstrapping is not configured')
+    }
+
+    // Pre-flight: a bootstrap run creates and pushes to a GitHub repo, so the
+    // workspace must be connected to GitHub first. Check before recording any job
+    // so an unconnected workspace fails fast with a clear 409 instead of leaving a
+    // job that immediately fails deep inside the container run.
+    if (!(await bootstrapper.isWorkspaceConnected(workspaceId))) {
+      throw new ConflictError(
+        'Workspace is not connected to GitHub. Install the GitHub App for this workspace before bootstrapping a repository.',
+      )
     }
 
     // A reference architecture is optional: when supplied the run clones and adapts

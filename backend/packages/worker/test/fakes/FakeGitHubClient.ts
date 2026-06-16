@@ -10,6 +10,7 @@ import type {
   GitHubRepo,
   GitHubRepoRef,
   InstallationMeta,
+  InstallationSummary,
   ListOptions,
   MergePullRequestInput,
   OpenPullRequestInput,
@@ -35,8 +36,15 @@ export class FakeGitHubClient implements GitHubClient {
   /** Options passed to each listCommits call, for asserting backfill bounds. */
   readonly commitListOpts: (ListOptions & { sha?: string })[] = []
 
+  /** Installations discoverable via the app JWT; populate before exercising the picker. */
+  installations: InstallationSummary[] = []
+
   async getInstallation(): Promise<InstallationMeta> {
     return this.installation
+  }
+
+  async listInstallations(): Promise<InstallationSummary[]> {
+    return this.installations
   }
 
   async listInstallationRepos(): Promise<Paged<GitHubRepo>> {

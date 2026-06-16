@@ -74,6 +74,12 @@ interface BootstrapContainerResult {
 export class ContainerRepoBootstrapper implements RepoBootstrapper {
   constructor(private readonly deps: ContainerRepoBootstrapperDependencies) {}
 
+  /** An active (non-soft-deleted) installation means the workspace is connected. */
+  async isWorkspaceConnected(workspaceId: string): Promise<boolean> {
+    const installation = await this.deps.installationRepository.getByWorkspace(workspaceId)
+    return !!installation && !installation.deletedAt
+  }
+
   async bootstrap(request: BootstrapRepoRequest): Promise<BootstrapRepoOutcome> {
     const installation = await this.deps.installationRepository.getByWorkspace(request.workspaceId)
     if (!installation || installation.deletedAt) {

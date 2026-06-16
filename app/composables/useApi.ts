@@ -15,6 +15,7 @@ import type {
   CreateBranchInput,
   GitHubBranch,
   GitHubConnection,
+  GitHubInstallationOption,
   GitHubIssue,
   GitHubPullRequest,
   GitHubRepo,
@@ -256,6 +257,11 @@ export function useApi() {
 
     getGitHubConnection: (workspaceId: string) =>
       http<{ connection: GitHubConnection | null }>(`${ws(workspaceId)}/github/connection`),
+
+    listGitHubInstallations: (workspaceId: string) =>
+      http<{ installations: GitHubInstallationOption[] }>(
+        `${ws(workspaceId)}/github/installations`,
+      ),
 
     connectGitHub: (workspaceId: string, installationId: number) =>
       http<GitHubConnection>(`${ws(workspaceId)}/github/connect`, {

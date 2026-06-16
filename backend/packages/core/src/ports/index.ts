@@ -28,6 +28,7 @@ export type {
   GitHubClient,
   GitHubRepoRef,
   InstallationMeta,
+  InstallationSummary,
   ListOptions,
   Paged,
   RateLimitSnapshot,

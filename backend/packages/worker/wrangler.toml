@@ -128,8 +128,9 @@ DECISION_TIMEOUT = "24 hours"
 # container reaches the LLM only via this Worker's proxy at ${WORKER_PUBLIC_URL}/v1,
 # so no provider key enters the image.
 CONTAINER_IMPL_ENABLED = "false"
-# Public origin of this Worker; required for container implementation.
-# WORKER_PUBLIC_URL = "https://cat-factory-backend.<account>.workers.dev"
+# Public origin of this Worker; required for container implementation and repo
+# bootstrap (the per-run container reaches the LLM proxy at ${WORKER_PUBLIC_URL}/v1).
+WORKER_PUBLIC_URL = "https://catfactory-api.kiberion.com"
 # Container coding jobs run asynchronously: the driver dispatches the job and
 # then polls it on this cadence between durable sleeps, so a job can run far
 # longer than one Workflows step while each step stays short. JOB_MAX_POLLS is a

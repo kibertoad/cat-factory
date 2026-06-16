@@ -67,6 +67,15 @@ export interface InstallationMeta {
   targetType: 'Organization' | 'User'
 }
 
+/** One installation of the App, as listed via the app JWT (GET /app/installations). */
+export interface InstallationSummary {
+  installationId: number
+  accountLogin: string
+  targetType: 'Organization' | 'User'
+  /** The installing account's avatar, for display in the connect picker. */
+  accountAvatarUrl: string | null
+}
+
 /** Parameters for creating a brand-new repository (used by repo bootstrapping). */
 export interface CreateRepoInput {
   /** The account the repo is created under — an org login, or the user's own login. */
@@ -84,6 +93,8 @@ export interface GitHubClient {
   // ---- installation-level (app JWT) --------------------------------------
   /** Fetch an installation's account login + type (used by the connect flow). */
   getInstallation(installationId: number): Promise<InstallationMeta>
+  /** List every installation of the App (used by the connect discovery picker). */
+  listInstallations(): Promise<InstallationSummary[]>
   /** List every repository the installation can access (for backfill/reconcile). */
   listInstallationRepos(installationId: number): Promise<Paged<GitHubRepo>>
 

@@ -28,6 +28,41 @@ describe('github connect', () => {
     expect(read.body.connection?.installationId).toBe(installationId)
   })
 
+  it('discovers the App installations, annotating which are already bound', async () => {
+    const client = new FakeGitHubClient()
+    const mine = uniqueInstallationId()
+    const theirs = uniqueInstallationId()
+    const free = uniqueInstallationId()
+    client.installations = [
+      { installationId: mine, accountLogin: 'me', targetType: 'User', accountAvatarUrl: null },
+      {
+        installationId: theirs,
+        accountLogin: 'org',
+        targetType: 'Organization',
+        accountAvatarUrl: null,
+      },
+      { installationId: free, accountLogin: 'free', targetType: 'User', accountAvatarUrl: null },
+    ]
+    const app = makeApp(new FakeAgentExecutor(), githubDeps({ client }))
+    const a = await app.createWorkspace()
+    const b = await app.createWorkspace()
+
+    // `mine` is bound to workspace A; `theirs` to workspace B; `free` to nobody.
+    await app.call('POST', `/workspaces/${a.workspace.id}/github/connect`, { installationId: mine })
+    await app.call('POST', `/workspaces/${b.workspace.id}/github/connect`, {
+      installationId: theirs,
+    })
+
+    const res = await app.call<{
+      installations: { installationId: number; connected: 'this' | 'other' | 'none' }[]
+    }>('GET', `/workspaces/${a.workspace.id}/github/installations`)
+    expect(res.status).toBe(200)
+    const byId = new Map(res.body.installations.map((i) => [i.installationId, i.connected]))
+    expect(byId.get(mine)).toBe('this')
+    expect(byId.get(theirs)).toBe('other')
+    expect(byId.get(free)).toBe('none')
+  })
+
   it('disconnects a workspace', async () => {
     const app = makeApp(new FakeAgentExecutor(), githubDeps())
     const { workspace } = await app.createWorkspace()

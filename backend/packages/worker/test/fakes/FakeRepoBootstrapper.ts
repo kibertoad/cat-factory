@@ -13,6 +13,12 @@ export class FakeRepoBootstrapper implements RepoBootstrapper {
   readonly calls: BootstrapRepoRequest[] = []
   /** When set, `bootstrap` throws with this message to exercise the failure path. */
   failWith: string | null = null
+  /** Whether the workspace reports as connected (the pre-flight check); on by default. */
+  connected = true
+
+  async isWorkspaceConnected(): Promise<boolean> {
+    return this.connected
+  }
 
   async bootstrap(request: BootstrapRepoRequest): Promise<BootstrapRepoOutcome> {
     this.calls.push(request)
