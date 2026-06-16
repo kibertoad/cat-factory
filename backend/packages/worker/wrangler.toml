@@ -224,3 +224,18 @@ DOCUMENT_PLANNER = "llm"
 # enabled; set it as a secret (never commit it):
 #   openssl rand -base64 32 | wrangler secret put ENVIRONMENTS_ENCRYPTION_KEY
 ENVIRONMENTS_ENABLED = "false"
+
+# Self-hosted runner pool — "bring your own infra" (see src/infrastructure/runners
+# and docs/runner-pool-integration.md). Off by default. Turn it on to let a
+# workspace register its OWN container runner pool (a declarative HTTP manifest of
+# its scheduler API) and run the repo-operating coding jobs (`coder`, `mocker`,
+# `playwright`) there instead of per-run Cloudflare Containers. Independent of
+# CONTAINER_IMPL_ENABLED: a workspace with a registered pool uses it; workspaces
+# without one fall back to Cloudflare Containers when those are enabled. Still
+# requires a configured GitHub App + WORKER_PUBLIC_URL + AUTH_SESSION_SECRET. The
+# per-tenant scheduler-API credentials are entered in the app and stored ENCRYPTED
+# in D1 — there are none here. The one secret this feature needs is the
+# service-level master key used to encrypt them at rest, required when enabled;
+# set it as a secret (never commit it):
+#   openssl rand -base64 32 | wrangler secret put RUNNERS_ENCRYPTION_KEY
+RUNNERS_ENABLED = "false"

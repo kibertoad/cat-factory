@@ -57,6 +57,14 @@ export type {
   EnvironmentAccessHandle,
   EnvironmentHandle,
   EnvironmentConnection,
+  // Self-hosted runner-pool ("bring your own infra") shapes.
+  RunnerPoolSecretRef,
+  RunnerPoolAuthScheme,
+  RunnerPoolRequestTemplate,
+  RunnerJobState,
+  RunnerPoolResponseMapping,
+  RunnerPoolManifest,
+  RunnerPoolConnection,
   // Repo-bootstrap shapes.
   ReferenceArchitecture,
   CreateReferenceArchitectureInput,

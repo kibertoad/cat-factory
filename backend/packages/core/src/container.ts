@@ -22,6 +22,7 @@ import type {
   EnvironmentConnectionRepository,
   EnvironmentRegistryRepository,
 } from './ports/environment-repositories'
+import type { RunnerPoolConnectionRepository } from './ports/runner-pool-repositories'
 import type {
   BootstrapJobRepository,
   ReferenceArchitectureRepository,
@@ -57,6 +58,7 @@ import { MapDocumentSourceRegistry } from './modules/documents/documents.logic'
 import { EnvironmentConnectionService } from './modules/environments/EnvironmentConnectionService'
 import { EnvironmentProvisioningService } from './modules/environments/EnvironmentProvisioningService'
 import { EnvironmentTeardownService } from './modules/environments/EnvironmentTeardownService'
+import { RunnerPoolConnectionService } from './modules/runners/RunnerPoolConnectionService'
 import { BootstrapService } from './modules/bootstrap/BootstrapService'
 import { BoardScanService } from './modules/boardScan/BoardScanService'
 
@@ -147,6 +149,17 @@ export interface CoreDependencies {
   environmentRegistryRepository?: EnvironmentRegistryRepository
   secretCipher?: SecretCipher
 
+  // ---- Self-hosted runner pool ("bring your own infra"; opt-in) ------------
+  // Lets a workspace route its repo-operating coding jobs to its own container
+  // runner pool instead of Cloudflare Containers. The module assembles when the
+  // connection repository and the secret cipher are present (the worker wires
+  // them only when RUNNERS_ENABLED + a master key are set); the actual transport
+  // selection lives in the worker's container executor. Per-tenant scheduler-API
+  // secrets are encrypted via `runnerSecretCipher` (its own master key + HKDF
+  // domain, independent of the environment module's `secretCipher`).
+  runnerPoolConnectionRepository?: RunnerPoolConnectionRepository
+  runnerSecretCipher?: SecretCipher
+
   // ---- Repo bootstrap (reference architectures + "bootstrap repo" task) ----
   // Reference-architecture CRUD assembles whenever both repositories are present
   // (the worker wires them unconditionally). Actually *running* a bootstrap also
@@ -191,6 +204,11 @@ export interface EnvironmentsModule {
   teardownService: EnvironmentTeardownService
 }
 
+/** The self-hosted runner-pool integration's services, present only when configured. */
+export interface RunnersModule {
+  connectionService: RunnerPoolConnectionService
+}
+
 /** The repo-bootstrap feature's service, present only when its repositories exist. */
 export interface BootstrapModule {
   service: BootstrapService
@@ -213,6 +231,8 @@ export interface Core {
   documents?: DocumentsModule
   /** Present only when the environment integration is configured (see CoreDependencies). */
   environments?: EnvironmentsModule
+  /** Present only when the self-hosted runner-pool integration is configured. */
+  runners?: RunnersModule
   /** Present only when the repo-bootstrap repositories are wired (see CoreDependencies). */
   bootstrap?: BootstrapModule
   /** Present only when the board-scan repository is wired (see CoreDependencies). */
@@ -381,6 +401,24 @@ function createEnvironmentsModule(deps: CoreDependencies): EnvironmentsModule | 
 }
 
 /**
+ * Assemble the self-hosted runner-pool module when its connection repository and
+ * the secret cipher are present; otherwise return undefined so the feature stays
+ * cleanly opt-in. Per-tenant scheduler-API secrets are encrypted via the cipher.
+ */
+function createRunnersModule(deps: CoreDependencies): RunnersModule | undefined {
+  const { runnerPoolConnectionRepository, runnerSecretCipher } = deps
+  if (!runnerPoolConnectionRepository || !runnerSecretCipher) return undefined
+
+  const connectionService = new RunnerPoolConnectionService({
+    runnerPoolConnectionRepository,
+    workspaceRepository: deps.workspaceRepository,
+    secretCipher: runnerSecretCipher,
+    clock: deps.clock,
+  })
+  return { connectionService }
+}
+
+/**
  * Assemble the repo-bootstrap module when both its repositories are present (the
  * worker wires them unconditionally). The `repoBootstrapper` is passed through
  * but optional: the service exposes CRUD regardless and only gates the run path
@@ -450,6 +488,7 @@ export function createCore(dependencies: CoreDependencies): Core {
 
   const github = createGitHubModule(dependencies)
   const documents = createDocumentsModule(dependencies, boardService)
+  const runners = createRunnersModule(dependencies)
   const bootstrap = createBootstrapModule(dependencies)
   const boardScan = createBoardScanModule(dependencies, boardService)
 
@@ -462,6 +501,7 @@ export function createCore(dependencies: CoreDependencies): Core {
     ...(github ? { github } : {}),
     ...(documents ? { documents } : {}),
     ...(environments ? { environments } : {}),
+    ...(runners ? { runners } : {}),
     ...(bootstrap ? { bootstrap } : {}),
     ...(boardScan ? { boardScan } : {}),
   }

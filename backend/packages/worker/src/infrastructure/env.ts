@@ -196,6 +196,25 @@ export interface Env {
    */
   ENVIRONMENTS_ENCRYPTION_KEY?: string
 
+  // ---- Self-hosted runner pool ("bring your own infra"; opt-in) -----------
+  /**
+   * Enables routing repo-operating coding jobs (`coder`, `mocker`, `playwright`)
+   * to a workspace's own container runner pool instead of Cloudflare Containers
+   * ('true'). Per-workspace pool manifests and their (encrypted) scheduler-API
+   * secret bundles live in D1, not here. Independent of CONTAINER_IMPL_ENABLED: a
+   * workspace with a registered pool uses it even when Cloudflare Containers are
+   * off; workspaces without one fall back to Cloudflare Containers when those are
+   * enabled. Requires a configured GitHub App, WORKER_PUBLIC_URL and the session
+   * secret, exactly like the Cloudflare container path.
+   */
+  RUNNERS_ENABLED?: string
+  /**
+   * Service-level master key (base64, ≥32 bytes decoded) for encrypting the
+   * per-tenant runner-pool scheduler-API secrets at rest. The only env secret
+   * this feature needs; required when enabled (secret).
+   */
+  RUNNERS_ENCRYPTION_KEY?: string
+
   // ---- Storage retention (see config.ts and docs/storage-and-retention.md) -
   /**
    * Days of `token_usage` ledger history to keep. The spend budget only reads the

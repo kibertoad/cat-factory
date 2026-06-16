@@ -4,7 +4,9 @@ import type { DurableObjectNamespace } from '@cloudflare/workers-types'
 import {
   ContainerAgentExecutor,
   type RepoTarget,
+  type ResolveRunnerTransport,
 } from '../../src/infrastructure/ai/ContainerAgentExecutor'
+import { CloudflareContainerTransport } from '../../src/infrastructure/containers/CloudflareContainerTransport'
 import { ContainerSessionService } from '../../src/infrastructure/containers/ContainerSessionService'
 import type { ImplementationContainer } from '../../src/infrastructure/containers/ImplementationContainer'
 
@@ -17,10 +19,16 @@ interface Dispatched {
   body: Record<string, unknown>
 }
 
+/** Wrap a fake Durable Object namespace as the executor's transport resolver. */
+function resolveTo(ns: DurableObjectNamespace<ImplementationContainer>): ResolveRunnerTransport {
+  const transport = new CloudflareContainerTransport(ns)
+  return () => Promise.resolve(transport)
+}
+
 function fakeContainer(
   respond: () => { error?: string } & Record<string, unknown>,
   capture: (d: Dispatched) => void,
-): DurableObjectNamespace<ImplementationContainer> {
+): ResolveRunnerTransport {
   // Speaks the async harness protocol: POST /run starts a job (returns its id),
   // GET /jobs/{id} reports it as already finished with `respond()` as the result.
   const stub = {
@@ -35,10 +43,10 @@ function fakeContainer(
       )
     },
   }
-  return {
+  return resolveTo({
     idFromName: (name: string) => ({ name }),
     get: () => stub,
-  } as unknown as DurableObjectNamespace<ImplementationContainer>
+  } as unknown as DurableObjectNamespace<ImplementationContainer>)
 }
 
 const routing = (provider: string, model: string): AgentRouting => ({
@@ -73,7 +81,7 @@ describe('ContainerAgentExecutor', () => {
   it('dispatches a composed job and returns the PR', async () => {
     let dispatched: Dispatched | undefined
     const executor = new ContainerAgentExecutor({
-      container: fakeContainer(
+      resolveTransport: fakeContainer(
         () => ({
           prUrl: 'https://github.com/octo/app/pull/42',
           branch: 'cat-factory/blk-1-abcd1234',
@@ -134,7 +142,7 @@ describe('ContainerAgentExecutor', () => {
     } as unknown as DurableObjectNamespace<ImplementationContainer>
 
     const executor = new ContainerAgentExecutor({
-      container: runningWithProgress,
+      resolveTransport: resolveTo(runningWithProgress),
       agentRouting: routing('qwen', 'qwen3-max'),
       resolveBlockModel: () => undefined,
       resolveRepoTarget: () => Promise.resolve(repo),
@@ -152,7 +160,7 @@ describe('ContainerAgentExecutor', () => {
 
   it('surfaces a job-level error from the container', async () => {
     const executor = new ContainerAgentExecutor({
-      container: fakeContainer(
+      resolveTransport: fakeContainer(
         () => ({ error: 'Pi produced no file changes' }),
         () => {},
       ),
@@ -169,7 +177,7 @@ describe('ContainerAgentExecutor', () => {
   it('accepts workers-ai (served by the proxy via the AI binding, no key)', async () => {
     let dispatched: Dispatched | undefined
     const executor = new ContainerAgentExecutor({
-      container: fakeContainer(
+      resolveTransport: fakeContainer(
         () => ({ prUrl: 'https://github.com/octo/app/pull/7', summary: 'done' }),
         (d) => (dispatched = d),
       ),
@@ -192,7 +200,7 @@ describe('ContainerAgentExecutor', () => {
 
   it('rejects a provider the proxy cannot serve (anthropic)', async () => {
     const executor = new ContainerAgentExecutor({
-      container: fakeContainer(
+      resolveTransport: fakeContainer(
         () => ({}),
         () => {},
       ),
@@ -208,7 +216,7 @@ describe('ContainerAgentExecutor', () => {
 
   it('fails when no repo is connected', async () => {
     const executor = new ContainerAgentExecutor({
-      container: fakeContainer(
+      resolveTransport: fakeContainer(
         () => ({}),
         () => {},
       ),

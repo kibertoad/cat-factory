@@ -45,6 +45,11 @@ export default defineConfig(async () => {
             // wire up; env specs stub global `fetch` to act as the provider.
             ENVIRONMENTS_ENABLED: 'true',
             ENVIRONMENTS_ENCRYPTION_KEY: 'MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=',
+            // Enable the self-hosted runner-pool integration with a fixed 32-byte
+            // master key so the real RunnerPoolConnectionService + cipher wire up;
+            // runner specs stub global `fetch` to act as the pool scheduler.
+            RUNNERS_ENABLED: 'true',
+            RUNNERS_ENCRYPTION_KEY: 'cnVubmVycy10ZXN0LWtleS0wMTIzNDU2Nzg5YWJjZGU=',
             // Master key so the document-source integration's credential
             // encryption-at-rest wires up; `documentsDeps()` builds the cipher
             // from it. Production sets this as a secret.

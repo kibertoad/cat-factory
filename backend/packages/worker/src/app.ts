@@ -15,6 +15,7 @@ import { githubController } from './modules/github/GitHubController'
 import { githubWebhookController } from './modules/github/GitHubWebhookController'
 import { documentSourceController } from './modules/documents/DocumentSourceController'
 import { environmentController } from './modules/environments/EnvironmentController'
+import { runnerPoolController } from './modules/runners/RunnerPoolController'
 import { bootstrapController } from './modules/bootstrap/BootstrapController'
 import { boardScanController } from './modules/boardScan/BoardScanController'
 import { promptFragmentController } from './modules/promptFragments/PromptFragmentController'
@@ -96,6 +97,7 @@ export function createApp(options: CreateAppOptions = {}): Hono<AppEnv> {
   app.route('/workspaces/:workspaceId', githubController())
   app.route('/workspaces/:workspaceId', documentSourceController())
   app.route('/workspaces/:workspaceId', environmentController())
+  app.route('/workspaces/:workspaceId', runnerPoolController())
   app.route('/workspaces/:workspaceId', bootstrapController())
   app.route('/workspaces/:workspaceId', boardScanController())
   // GitHub-facing (webhooks + setup callback); not workspace-scoped.

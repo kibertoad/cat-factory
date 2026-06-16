@@ -9,6 +9,7 @@ import { type GitHubConfig, loadGitHubConfig } from './github'
 import { type AuthConfig, loadAuthConfig } from './auth'
 import { type DocumentsConfig, loadDocumentsConfig } from './documents'
 import { type EnvironmentsConfig, loadEnvironmentsConfig } from './environments'
+import { type RunnerPoolConfig, loadRunnerPoolConfig } from './runners'
 import { type RetentionConfig, loadRetentionConfig } from './retention'
 
 // Translates the flat, string-typed Worker environment into a structured app
@@ -23,6 +24,7 @@ export type {
   AuthConfig,
   DocumentsConfig,
   EnvironmentsConfig,
+  RunnerPoolConfig,
   RetentionConfig,
 }
 
@@ -41,6 +43,8 @@ export interface AppConfig {
   documents: DocumentsConfig
   /** Environment provider integration config; `enabled` is false unless opted in. */
   environments: EnvironmentsConfig
+  /** Self-hosted runner-pool config; `enabled` is false unless opted in. */
+  runners: RunnerPoolConfig
   /** Retention windows for the unbounded ledgers/projections (epoch-ms ages). */
   retention: RetentionConfig
 }
@@ -56,6 +60,7 @@ export function loadConfig(env: Env): AppConfig {
     auth: loadAuthConfig(env),
     documents: loadDocumentsConfig(env),
     environments: loadEnvironmentsConfig(env),
+    runners: loadRunnerPoolConfig(env),
     retention: loadRetentionConfig(env),
   }
 }

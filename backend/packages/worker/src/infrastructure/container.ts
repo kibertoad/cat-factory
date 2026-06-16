@@ -12,7 +12,16 @@ import {
 import { type AppConfig, loadConfig } from './config'
 import type { Env } from './env'
 import { CloudflareModelProvider } from './ai/CloudflareModelProvider'
-import { ContainerAgentExecutor, type ResolveRepoTarget } from './ai/ContainerAgentExecutor'
+import {
+  ContainerAgentExecutor,
+  type ResolveRepoTarget,
+  type ResolveRunnerTransport,
+} from './ai/ContainerAgentExecutor'
+import { CloudflareContainerTransport } from './containers/CloudflareContainerTransport'
+import { HttpRunnerPoolProvider } from './runners/HttpRunnerPoolProvider'
+import { RunnerPoolTransport } from './runners/RunnerPoolTransport'
+import { D1RunnerPoolConnectionRepository } from './repositories/D1RunnerPoolConnectionRepository'
+import { RunnerPoolConnectionService } from '@cat-factory/core'
 import { ContainerRepoBootstrapper } from './ai/ContainerRepoBootstrapper'
 import { ContainerRepoScanner } from './ai/ContainerRepoScanner'
 import { CompositeAgentExecutor } from './ai/CompositeAgentExecutor'
@@ -77,10 +86,11 @@ function selectAgentExecutor(
     resolveBlockModel: config.agents.resolveBlockModel,
   })
 
-  // When container implementation is opted in and its prerequisites are wired,
-  // route the repo-operating steps (`coder`, `mocker`, `playwright`) to a real
-  // sandbox; every other step stays inline (see CompositeAgentExecutor).
-  if (config.agents.containerImpl) {
+  // When container implementation is opted in OR a self-hosted runner pool is
+  // enabled, route the repo-operating steps (`coder`, `mocker`, `playwright`) to a
+  // real sandbox — a per-run Cloudflare Container or the workspace's own pool;
+  // every other step stays inline (see CompositeAgentExecutor).
+  if (config.agents.containerImpl || config.runners.enabled) {
     const container = buildContainerExecutor(env, config, db, clock)
     if (container) return new CompositeAgentExecutor(inline, container)
   }
@@ -88,9 +98,60 @@ function selectAgentExecutor(
 }
 
 /**
+ * Build the factory that picks a job's runner backend: a workspace's own
+ * self-hosted runner pool when one is registered (and runner pools are enabled),
+ * otherwise the per-run Cloudflare Container. Returns null when neither backend is
+ * available, so {@link buildContainerExecutor} falls back to inline work.
+ */
+function buildResolveTransport(
+  env: Env,
+  config: AppConfig,
+  db: D1Database,
+  clock: Clock,
+): ResolveRunnerTransport | null {
+  const cloudflare = env.IMPL_CONTAINER
+    ? new CloudflareContainerTransport(env.IMPL_CONTAINER)
+    : null
+
+  // The self-hosted pool path: one stateless manifest interpreter (its OAuth cache
+  // shared) plus a connection service to resolve each workspace's manifest+secrets.
+  let runnerService: RunnerPoolConnectionService | undefined
+  let poolProvider: HttpRunnerPoolProvider | undefined
+  if (config.runners.enabled) {
+    runnerService = new RunnerPoolConnectionService({
+      runnerPoolConnectionRepository: new D1RunnerPoolConnectionRepository({ db }),
+      workspaceRepository: new D1WorkspaceRepository({ db }),
+      secretCipher: new WebCryptoSecretCipher({
+        masterKeyBase64: config.runners.encryptionKey!,
+        info: 'cat-factory:runners',
+      }),
+      clock,
+    })
+    poolProvider = new HttpRunnerPoolProvider()
+  }
+
+  if (!cloudflare && !runnerService) return null
+
+  return async (workspaceId) => {
+    if (runnerService && poolProvider && workspaceId) {
+      const resolved = await runnerService.resolve(workspaceId)
+      if (resolved) {
+        return new RunnerPoolTransport(poolProvider, resolved.manifest, resolved.resolveSecret)
+      }
+    }
+    if (cloudflare) return cloudflare
+    throw new Error(
+      `No runner backend available for workspace '${workspaceId ?? '(unknown)'}': ` +
+        `register a runner pool or enable Cloudflare Containers`,
+    )
+  }
+}
+
+/**
  * Build the container-based implementation executor, or return null when its
- * prerequisites are missing (the binding, a configured GitHub App, the proxy's
- * public URL and signing secret) — the caller then falls back to inline work.
+ * prerequisites are missing (a runner backend — Cloudflare Containers and/or a
+ * self-hosted pool — plus a configured GitHub App, the proxy's public URL and the
+ * signing secret) — the caller then falls back to inline work.
  */
 function buildContainerExecutor(
   env: Env,
@@ -99,7 +160,6 @@ function buildContainerExecutor(
   clock: Clock,
 ): AgentExecutor | null {
   if (
-    !env.IMPL_CONTAINER ||
     !config.github.enabled ||
     !env.GITHUB_APP_PRIVATE_KEY ||
     !env.WORKER_PUBLIC_URL ||
@@ -107,6 +167,9 @@ function buildContainerExecutor(
   ) {
     return null
   }
+
+  const resolveTransport = buildResolveTransport(env, config, db, clock)
+  if (!resolveTransport) return null
 
   const installationRepository = new D1GitHubInstallationRepository({ db })
   const repoRepository = new D1RepoProjectionRepository({ db })
@@ -134,7 +197,7 @@ function buildContainerExecutor(
   }
 
   return new ContainerAgentExecutor({
-    container: env.IMPL_CONTAINER,
+    resolveTransport,
     agentRouting: config.agents.routing,
     resolveBlockModel: config.agents.resolveBlockModel,
     resolveRepoTarget,
@@ -279,6 +342,28 @@ function selectEnvironmentsDeps(
 }
 
 /**
+ * Build the self-hosted runner-pool integration's concrete ports when opted in:
+ * the D1 connection repository and a dedicated Web Crypto cipher (its own master
+ * key + HKDF domain, separate from the environment module's). This assembles
+ * `Core.runners` (the connection-management API); the per-job transport selection
+ * lives in `buildResolveTransport` above. Returns `{}` when disabled.
+ */
+function selectRunnersDeps(
+  env: Env,
+  config: AppConfig,
+  db: D1Database,
+): Partial<CoreDependencies> {
+  if (!config.runners.enabled) return {}
+  return {
+    runnerPoolConnectionRepository: new D1RunnerPoolConnectionRepository({ db }),
+    runnerSecretCipher: new WebCryptoSecretCipher({
+      masterKeyBase64: config.runners.encryptionKey!,
+      info: 'cat-factory:runners',
+    }),
+  }
+}
+
+/**
  * Build the container-backed repo bootstrapper for the "bootstrap repo" task,
  * gated on the same prerequisites as the implementation container (the binding, a
  * configured GitHub App, the proxy's public URL and signing secret). Returns
@@ -403,6 +488,7 @@ export function buildContainer(env: Env, overrides: Partial<CoreDependencies> = 
     ...selectGitHubDeps(env, config, db, clock, idGenerator),
     ...selectDocumentsDeps(env, config, db),
     ...selectEnvironmentsDeps(env, config, db),
+    ...selectRunnersDeps(env, config, db),
     ...overrides,
   }
 

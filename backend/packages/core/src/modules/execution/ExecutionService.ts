@@ -256,7 +256,7 @@ export class ExecutionService {
     const executor = this.agentExecutor
     if (!isAsyncAgentExecutor(executor)) return { kind: 'noop' }
 
-    const update = await executor.pollJob({ jobId: step.jobId })
+    const update = await executor.pollJob({ jobId: step.jobId, workspaceId })
     if (update.state === 'running') {
       // Surface live subtask progress (e.g. 3/8 todos done) without advancing the
       // step. Only persist + emit when the counts actually changed so a poll that
