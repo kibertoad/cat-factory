@@ -125,12 +125,7 @@ export {
   type DelegationReason,
   type ProvisionResult,
 } from './modules/github/RepoProvisioningService'
-export {
-  type AppTier,
-  type TierConfig,
-  canCreateRepo,
-  resolveAppTier,
-} from './modules/github/provisioning.logic'
+export { canCreateRepo } from './modules/github/provisioning.logic'
 
 export {
   DocumentConnectionService,

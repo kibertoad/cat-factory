@@ -23,11 +23,11 @@ export interface GitHubInstallationServiceDependencies {
   workspaceRepository: WorkspaceRepository
   clock: Clock
   /**
-   * Whether cat-factory can create repos under an account itself (privileged App
-   * tier, ADR 0005). Surfaced on the connection so the UI can drop the manual
-   * "create on GitHub" step. Absent → always false (single-App default).
+   * Whether cat-factory can create repos for an installation itself — true when
+   * its owning App is the privileged tier (ADR 0005). Surfaced on the connection
+   * so the UI can drop the manual "create on GitHub" step. Absent → always false.
    */
-  canCreateReposForOrg?: (accountLogin: string) => boolean
+  canCreateRepos?: (installation: GitHubInstallation) => boolean
 }
 
 function toConnection(installation: GitHubInstallation, canCreateRepos: boolean): GitHubConnection {
@@ -78,18 +78,21 @@ export class GitHubInstallationService {
       accountId,
       accountLogin: meta.accountLogin,
       targetType: meta.targetType,
+      // The App that owns this installation (probed at connect), so every later
+      // token mint routes to the right App's key (ADR 0005).
+      appId: meta.appId,
       cachedToken: null,
       tokenExpiresAt: null,
       createdAt: existing?.createdAt ?? this.deps.clock.now(),
       deletedAt: null,
     }
     await this.deps.githubInstallationRepository.upsert(installation)
-    return toConnection(installation, this.canCreateRepos(installation.accountLogin))
+    return toConnection(installation, this.canCreate(installation))
   }
 
-  /** Whether the privileged App tier can create repos under this account (ADR 0005). */
-  private canCreateRepos(accountLogin: string): boolean {
-    return this.deps.canCreateReposForOrg?.(accountLogin) ?? false
+  /** Whether the privileged App tier can create repos for this installation (ADR 0005). */
+  private canCreate(installation: GitHubInstallation): boolean {
+    return this.deps.canCreateRepos?.(installation) ?? false
   }
 
   /**
@@ -145,7 +148,7 @@ export class GitHubInstallationService {
   async getConnection(workspaceId: string): Promise<GitHubConnection | null> {
     const installation = await this.deps.githubInstallationRepository.getByWorkspace(workspaceId)
     if (!installation || installation.deletedAt) return null
-    return toConnection(installation, this.canCreateRepos(installation.accountLogin))
+    return toConnection(installation, this.canCreate(installation))
   }
 
   /** Resolve the live installation for a workspace, or throw if not connected. */

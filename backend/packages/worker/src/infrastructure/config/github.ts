@@ -2,14 +2,13 @@ import type { Env } from '../env'
 
 /**
  * The optional privileged App tier (ADR 0005): a second App registration that
- * carries `Administration: write` for creating repos, used only for the
- * allow-listed orgs. Absent when GITHUB_PRIVILEGED_APP_ID is unset — then every
- * org runs on the default (restricted) App.
+ * carries `Administration: write` for creating repos. An org opts in by
+ * installing this App (instead of / alongside the default), so the allow-list is
+ * GitHub's own install state — no separate org list. Absent when
+ * GITHUB_PRIVILEGED_APP_ID/key are unset — then every org runs on the default App.
  */
 export interface PrivilegedAppConfig {
   appId: string
-  /** Org logins allowed to use the privileged App. */
-  privilegedOrgs: string[]
 }
 
 export interface GitHubConfig {
@@ -44,12 +43,5 @@ export function loadGitHubConfig(env: Env): GitHubConfig {
 function loadPrivilegedApp(env: Env): PrivilegedAppConfig | undefined {
   const appId = env.GITHUB_PRIVILEGED_APP_ID?.trim() ?? ''
   if (appId === '' || !env.GITHUB_PRIVILEGED_APP_PRIVATE_KEY) return undefined
-  return { appId, privilegedOrgs: parseOrgList(env.GITHUB_PRIVILEGED_ORGS) }
-}
-
-function parseOrgList(raw: string | undefined): string[] {
-  return (raw ?? '')
-    .split(',')
-    .map((o) => o.trim())
-    .filter((o) => o !== '')
+  return { appId }
 }

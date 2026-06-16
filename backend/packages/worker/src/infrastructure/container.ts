@@ -9,7 +9,6 @@ import {
   NoopWorkRunner,
   type WorkRunner,
   createCore,
-  resolveAppTier,
 } from '@cat-factory/core'
 import { type AppConfig, loadConfig } from './config'
 import type { Env } from './env'
@@ -56,6 +55,7 @@ import { D1RepoBlueprintRepository } from './repositories/D1RepoBlueprintReposit
 import { HttpEnvironmentProvider } from './environments/HttpEnvironmentProvider'
 import { WebCryptoSecretCipher } from './environments/WebCryptoSecretCipher'
 import { GitHubAppAuth } from './github/GitHubAppAuth'
+import { GitHubAppRegistry } from './github/GitHubAppRegistry'
 import { FetchGitHubClient } from './github/FetchGitHubClient'
 import { FetchGitHubProvisioningClient } from './github/FetchGitHubProvisioningClient'
 import { WebCryptoWebhookVerifier } from './github/WebCryptoWebhookVerifier'
@@ -162,6 +162,45 @@ function buildResolveTransport(
  * self-hosted pool — plus a configured GitHub App, the proxy's public URL and the
  * signing secret) — the caller then falls back to inline work.
  */
+/**
+ * Build the multi-App registry (ADR 0005): the default App always, plus the
+ * privileged App when configured. It resolves which App's key to use per
+ * installation (from the binding's recorded appId), so every token mint / app-JWT
+ * call routes correctly. Callers guard on `config.github.enabled`, which requires
+ * GITHUB_APP_PRIVATE_KEY, so the default key is present.
+ */
+function buildAppRegistry(
+  env: Env,
+  config: AppConfig,
+  db: D1Database,
+  clock: Clock,
+): GitHubAppRegistry {
+  const installationRepository = new D1GitHubInstallationRepository({ db })
+  const makeAuth = (appId: string, privateKeyPem: string) =>
+    new GitHubAppAuth({
+      appId,
+      privateKeyPem,
+      installationRepository,
+      clock,
+      apiBase: config.github.apiBase,
+    })
+  const privileged =
+    config.github.privilegedApp && env.GITHUB_PRIVILEGED_APP_PRIVATE_KEY
+      ? {
+          appId: config.github.privilegedApp.appId,
+          auth: makeAuth(config.github.privilegedApp.appId, env.GITHUB_PRIVILEGED_APP_PRIVATE_KEY),
+        }
+      : undefined
+  return new GitHubAppRegistry({
+    default: {
+      appId: config.github.appId,
+      auth: makeAuth(config.github.appId, env.GITHUB_APP_PRIVATE_KEY!),
+    },
+    privileged,
+    installationRepository,
+  })
+}
+
 function buildContainerExecutor(
   env: Env,
   config: AppConfig,
@@ -182,13 +221,7 @@ function buildContainerExecutor(
 
   const installationRepository = new D1GitHubInstallationRepository({ db })
   const repoRepository = new D1RepoProjectionRepository({ db })
-  const auth = new GitHubAppAuth({
-    appId: config.github.appId,
-    privateKeyPem: env.GITHUB_APP_PRIVATE_KEY,
-    installationRepository,
-    clock,
-    apiBase: config.github.apiBase,
-  })
+  const registry = buildAppRegistry(env, config, db, clock)
 
   // Pick the repo linked to the running block, else the workspace's first repo.
   const resolveRepoTarget: ResolveRepoTarget = async (workspaceId, blockId) => {
@@ -210,7 +243,7 @@ function buildContainerExecutor(
     agentRouting: config.agents.routing,
     resolveBlockModel: config.agents.resolveBlockModel,
     resolveRepoTarget,
-    mintInstallationToken: (id) => auth.installationToken(id),
+    mintInstallationToken: (id) => registry.installationToken(id),
     sessionService: new ContainerSessionService({ secret: env.AUTH_SESSION_SECRET }),
     proxyBaseUrl: `${env.WORKER_PUBLIC_URL.replace(/\/+$/, '')}/v1`,
     githubApiBase: config.github.apiBase,
@@ -245,44 +278,6 @@ function selectEventPublisher(env: Env): ExecutionEventPublisher | undefined {
 }
 
 /**
- * The privileged App tier (ADR 0005), built only when a second App is configured
- * (`GITHUB_PRIVILEGED_APP_ID` + key). It carries `Administration: write` and is
- * used solely to create repos for allow-listed orgs; `canCreateReposForOrg` is the
- * (config-only) allow-list check the UI and bootstrapper guard on. Returns
- * undefined when unconfigured, so everything stays on the restricted default App.
- */
-function selectPrivilegedProvisioning(
-  env: Env,
-  config: AppConfig,
-  db: D1Database,
-  clock: Clock,
-):
-  | {
-      provisioningClient: FetchGitHubProvisioningClient
-      canCreateReposForOrg: (login: string) => boolean
-    }
-  | undefined {
-  const privileged = config.github.privilegedApp
-  if (!privileged || !env.GITHUB_PRIVILEGED_APP_PRIVATE_KEY) return undefined
-
-  const auth = new GitHubAppAuth({
-    appId: privileged.appId,
-    privateKeyPem: env.GITHUB_PRIVILEGED_APP_PRIVATE_KEY,
-    installationRepository: new D1GitHubInstallationRepository({ db }),
-    clock,
-    apiBase: config.github.apiBase,
-  })
-  const provisioningClient = new FetchGitHubProvisioningClient({
-    auth,
-    apiBase: config.github.apiBase,
-  })
-  // Fail closed: only allow-listed orgs are privileged (see resolveAppTier).
-  const tierConfig = { privilegedOrgs: privileged.privilegedOrgs }
-  const canCreateReposForOrg = (login: string) => resolveAppTier(login, tierConfig) === 'privileged'
-  return { provisioningClient, canCreateReposForOrg }
-}
-
-/**
  * Build the GitHub integration's concrete ports when an App is configured,
  * mirroring `selectWorkRunner`. Returns an empty object otherwise, so `createCore`
  * leaves the `github` module unassembled and the feature stays opt-in.
@@ -297,24 +292,20 @@ function selectGitHubDeps(
   if (!config.github.enabled) return {}
 
   const githubInstallationRepository = new D1GitHubInstallationRepository({ db })
-  const auth = new GitHubAppAuth({
-    appId: config.github.appId,
-    privateKeyPem: env.GITHUB_APP_PRIVATE_KEY!,
-    installationRepository: githubInstallationRepository,
-    clock,
-    apiBase: config.github.apiBase,
-  })
+  const registry = buildAppRegistry(env, config, db, clock)
   const githubClient = new FetchGitHubClient({
-    auth,
+    registry,
     rateLimitRepository: new D1RateLimitRepository({ db, idGenerator }),
     idGenerator,
     clock,
     apiBase: config.github.apiBase,
   })
   // Privileged App tier (ADR 0005): when configured, its client backs the
-  // create-repo endpoint and its allow-list flags `canCreateRepos` on the
-  // connection. Absent → repo creation stays the manual "create on GitHub" flow.
-  const privileged = selectPrivilegedProvisioning(env, config, db, clock)
+  // create-repo endpoint; `canCreateRepos` flags a connection whose installation
+  // is owned by the privileged App. Absent → repo creation stays the manual flow.
+  const repoProvisioningClient = config.github.privilegedApp
+    ? new FetchGitHubProvisioningClient({ registry, apiBase: config.github.apiBase })
+    : undefined
   return {
     githubClient,
     githubInstallationRepository,
@@ -327,8 +318,8 @@ function selectGitHubDeps(
     webhookVerifier: new WebCryptoWebhookVerifier(env.GITHUB_WEBHOOK_SECRET!),
     // Bound the initial backfill to the commit retention horizon (0 = full).
     commitBackfillHorizonMs: config.retention.commitMs || undefined,
-    repoProvisioningClient: privileged?.provisioningClient,
-    canCreateReposForOrg: privileged?.canCreateReposForOrg,
+    repoProvisioningClient,
+    canCreateRepos: (installation) => registry.canCreateRepos(installation),
   }
 }
 
@@ -463,15 +454,9 @@ function selectRepoBootstrapper(
   }
 
   const installationRepository = new D1GitHubInstallationRepository({ db })
-  const auth = new GitHubAppAuth({
-    appId: config.github.appId,
-    privateKeyPem: env.GITHUB_APP_PRIVATE_KEY,
-    installationRepository,
-    clock,
-    apiBase: config.github.apiBase,
-  })
+  const registry = buildAppRegistry(env, config, db, clock)
   const githubClient = new FetchGitHubClient({
-    auth,
+    registry,
     rateLimitRepository: new D1RateLimitRepository({ db, idGenerator }),
     idGenerator,
     clock,
@@ -484,7 +469,7 @@ function selectRepoBootstrapper(
     bootstrapJobRepository: new D1BootstrapJobRepository({ db }),
     repoRepository: new D1RepoProjectionRepository({ db }),
     githubClient,
-    mintInstallationToken: (id) => auth.installationToken(id),
+    mintInstallationToken: (id) => registry.installationToken(id),
     sessionService: new ContainerSessionService({ secret: env.AUTH_SESSION_SECRET }),
     model: config.agents.routing.default.ref,
     proxyBaseUrl: `${env.WORKER_PUBLIC_URL.replace(/\/+$/, '')}/v1`,
@@ -516,18 +501,12 @@ function selectRepoScanner(
   }
 
   const installationRepository = new D1GitHubInstallationRepository({ db })
-  const auth = new GitHubAppAuth({
-    appId: config.github.appId,
-    privateKeyPem: env.GITHUB_APP_PRIVATE_KEY,
-    installationRepository,
-    clock,
-    apiBase: config.github.apiBase,
-  })
+  const registry = buildAppRegistry(env, config, db, clock)
 
   return new ContainerRepoScanner({
     container: env.IMPL_CONTAINER,
     installationRepository,
-    mintInstallationToken: (id) => auth.installationToken(id),
+    mintInstallationToken: (id) => registry.installationToken(id),
     sessionService: new ContainerSessionService({ secret: env.AUTH_SESSION_SECRET }),
     model: config.agents.routing.default.ref,
     proxyBaseUrl: `${env.WORKER_PUBLIC_URL.replace(/\/+$/, '')}/v1`,

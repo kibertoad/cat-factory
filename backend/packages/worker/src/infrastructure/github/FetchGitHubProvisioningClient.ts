@@ -4,20 +4,20 @@ import type {
   InstallationPermissions,
   ProvisionedRepo,
 } from '@cat-factory/core'
-import type { GitHubAppAuth } from './GitHubAppAuth'
+import type { GitHubAppRegistry } from './GitHubAppRegistry'
 
-// `fetch`-based adapter for the privileged provisioning slice (ADR 0005). Bound
-// to the *privileged* App's `GitHubAppAuth` — a separate registration from the
-// one a workspace binds to, so it discovers its own per-org installation id via
-// the app JWT. Mirrors `FetchGitHubClient`'s Web-Crypto/`fetch`-only approach
-// (no Octokit; see ADR 0001).
+// `fetch`-based adapter for the privileged provisioning slice (ADR 0005). Routes
+// token minting through the registry, so it acts as whichever App owns the
+// installation passed in — for a privileged-tier org that's the privileged App
+// carrying `Administration: write`. Mirrors `FetchGitHubClient`'s
+// Web-Crypto/`fetch`-only approach (no Octokit; see ADR 0001).
 
 const USER_AGENT = 'cat-factory'
 const API_VERSION = '2022-11-28'
 const ACCEPT = 'application/vnd.github+json'
 
 export interface FetchGitHubProvisioningClientDependencies {
-  auth: GitHubAppAuth
+  registry: GitHubAppRegistry
   apiBase: string
 }
 
@@ -42,31 +42,12 @@ interface CreatedRepoResponse {
 export class FetchGitHubProvisioningClient implements GitHubProvisioningClient {
   constructor(private readonly deps: FetchGitHubProvisioningClientDependencies) {}
 
-  async getOrgInstallationId(org: string): Promise<number | null> {
-    // App-JWT call: where is *this* App installed for the org? 404 = not installed.
-    const jwt = await this.deps.auth.appJwt()
-    const res = await fetch(`${this.deps.apiBase}/orgs/${encodeURIComponent(org)}/installation`, {
-      headers: {
-        authorization: `Bearer ${jwt}`,
-        accept: ACCEPT,
-        'user-agent': USER_AGENT,
-        'x-github-api-version': API_VERSION,
-      },
-    })
-    if (res.status === 404) return null
-    if (!res.ok) {
-      throw new GitHubHttpError(res.status, `Failed to resolve installation for ${org}`)
-    }
-    const body = (await res.json()) as { id: number }
-    return body.id
-  }
-
   getGrantedPermissions(installationId: number): Promise<InstallationPermissions> {
-    return this.deps.auth.installationPermissions(installationId)
+    return this.deps.registry.installationPermissions(installationId)
   }
 
   async createRepoInOrg(installationId: number, input: CreateRepoInput): Promise<ProvisionedRepo> {
-    const token = await this.deps.auth.installationToken(installationId)
+    const token = await this.deps.registry.installationToken(installationId)
     const res = await fetch(`${this.deps.apiBase}/orgs/${encodeURIComponent(input.org)}/repos`, {
       method: 'POST',
       headers: {

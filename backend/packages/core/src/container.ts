@@ -40,6 +40,7 @@ import type {
   BranchProjectionRepository,
   CheckRunProjectionRepository,
   CommitProjectionRepository,
+  GitHubInstallation,
   GitHubInstallationRepository,
   IssueProjectionRepository,
   PullRequestProjectionRepository,
@@ -143,11 +144,11 @@ export interface CoreDependencies {
    */
   repoProvisioningClient?: GitHubProvisioningClient
   /**
-   * Whether the privileged App tier can create repos under an account (ADR 0005).
-   * Surfaced on the connection so the UI drops the manual create step. The worker
-   * wires this from the privileged-org allow-list; absent → always false.
+   * Whether the privileged App tier can create repos for an installation (ADR
+   * 0005) — true when its owning App is the privileged one. Surfaced on the
+   * connection so the UI drops the manual create step; absent → always false.
    */
-  canCreateReposForOrg?: (accountLogin: string) => boolean
+  canCreateRepos?: (installation: GitHubInstallation) => boolean
 
   // ---- Document-source integration (optional; wired only when configured) --
   // Mirrors the GitHub default-off convention. The documents module assembles
@@ -328,7 +329,7 @@ function createGitHubModule(deps: CoreDependencies): GitHubModule | undefined {
     githubInstallationRepository,
     workspaceRepository: deps.workspaceRepository,
     clock: deps.clock,
-    canCreateReposForOrg: deps.canCreateReposForOrg,
+    canCreateRepos: deps.canCreateRepos,
   })
   const syncService = new GitHubSyncService({
     githubClient,

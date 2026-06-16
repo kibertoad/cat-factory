@@ -136,7 +136,7 @@ describe('accounts', () => {
 
   it('shares one installation across every workspace in the account', async () => {
     const client = new FakeGitHubClient()
-    client.installation = { accountLogin: 'acme', targetType: 'Organization' }
+    client.installation = { accountLogin: 'acme', targetType: 'Organization', appId: 'app-default' }
     const { call } = makeApp(githubDeps({ client }))
     const alice = user('alice')
 

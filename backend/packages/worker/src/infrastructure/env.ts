@@ -139,16 +139,14 @@ export interface Env {
 
   // ---- Privileged App tier (see config.ts; ADR 0005, opt-in) --------------
   /**
-   * Second GitHub App id carrying `Administration: write`, used only for orgs
-   * allow-listed in GITHUB_PRIVILEGED_ORGS to create repositories directly. When
-   * unset, every org runs on the restricted (default) App and repo creation
-   * delegates to the fallback path.
+   * Second GitHub App id carrying `Administration: write`. An org opts in by
+   * installing this App; workspaces bound to that installation can create repos
+   * directly. When unset, every installation runs on the restricted default App
+   * and repo creation stays the manual "create on GitHub" flow.
    */
   GITHUB_PRIVILEGED_APP_ID?: string
   /** Privileged App private key in PKCS#8 PEM (secret). */
   GITHUB_PRIVILEGED_APP_PRIVATE_KEY?: string
-  /** Comma-separated org logins allowed to use the privileged App. */
-  GITHUB_PRIVILEGED_ORGS?: string
 
   // ---- Authentication (see config.ts; opt-in "Login with GitHub") ---------
   /** OAuth client id (a GitHub App's or a classic OAuth App's). Enables login. */

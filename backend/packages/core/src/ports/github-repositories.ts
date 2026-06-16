@@ -29,6 +29,12 @@ export interface GitHubInstallation {
   accountId: string | null
   accountLogin: string
   targetType: 'Organization' | 'User'
+  /**
+   * Which GitHub App registration owns this installation (ADR 0005). null for
+   * rows created before the multi-App tier — treated as the default App. An
+   * installation id belongs to exactly one App on GitHub, so this is immutable.
+   */
+  appId: string | null
   /** Cached installation access token, or null if none/expired. */
   cachedToken: string | null
   /** Token expiry (epoch ms), or null. */

@@ -6,28 +6,11 @@ import type {
   ProvisionedRepo,
 } from '../../ports/github-provisioning'
 import { RepoProvisioningService } from './RepoProvisioningService'
-import { canCreateRepo, resolveAppTier } from './provisioning.logic'
+import { canCreateRepo } from './provisioning.logic'
 
-// The two-App provisioning model (ADR 0005): privileged orgs use the App that
-// carries `Administration: write` and get direct repo creation; everything else
-// fails closed to the restricted tier and a delegated fallback.
-
-describe('resolveAppTier', () => {
-  const config = { privilegedOrgs: ['Acme', 'beta-labs'] }
-
-  it('returns privileged for a listed org (case-insensitive)', () => {
-    expect(resolveAppTier('acme', config)).toBe('privileged')
-    expect(resolveAppTier('ACME', config)).toBe('privileged')
-    expect(resolveAppTier('  beta-labs ', config)).toBe('privileged')
-  })
-
-  it('fails closed to restricted for unlisted or empty orgs', () => {
-    expect(resolveAppTier('sensitive-corp', config)).toBe('restricted')
-    expect(resolveAppTier('', config)).toBe('restricted')
-    expect(resolveAppTier('   ', config)).toBe('restricted')
-    expect(resolveAppTier('acme', { privilegedOrgs: [] })).toBe('restricted')
-  })
-})
+// The two-App provisioning model (ADR 0005): a workspace's bound installation
+// belongs to either the privileged App (carries Administration: write → direct
+// creation) or the restricted App (no grant → delegated to the manual flow).
 
 describe('canCreateRepo', () => {
   it('requires repository administration: write', () => {
@@ -41,17 +24,14 @@ describe('canCreateRepo', () => {
   })
 })
 
-// A configurable fake of the privileged provisioning client.
+// A configurable fake of the provisioning client.
 function fakeClient(
-  overrides: Partial<GitHubProvisioningClient> & {
+  overrides: {
     permissions?: InstallationPermissions
-    installationId?: number | null
+    createRepoInOrg?: GitHubProvisioningClient['createRepoInOrg']
   } = {},
 ): GitHubProvisioningClient {
   return {
-    getOrgInstallationId: vi.fn(async () =>
-      'installationId' in overrides ? (overrides.installationId ?? null) : 555,
-    ),
     getGrantedPermissions: vi.fn(async () => overrides.permissions ?? {}),
     createRepoInOrg: vi.fn(overrides.createRepoInOrg ?? (async () => repo)),
   }
@@ -68,30 +48,21 @@ const repo: ProvisionedRepo = {
 const input: CreateRepoInput = { org: 'acme', name: 'new-svc', private: true }
 
 describe('RepoProvisioningService', () => {
-  it('creates directly when the privileged install has administration: write', async () => {
-    const client = fakeClient({ permissions: { administration: 'write' }, installationId: 100 })
+  it('creates directly when the installation has administration: write', async () => {
+    const client = fakeClient({ permissions: { administration: 'write' } })
     const svc = new RepoProvisioningService({ client })
 
-    const result = await svc.provision(input)
+    const result = await svc.provision(100, input)
 
     expect(result).toEqual({ status: 'created', repo })
     expect(client.createRepoInOrg).toHaveBeenCalledWith(100, input)
-  })
-
-  it('delegates when the privileged App is not installed on the org', async () => {
-    const client = fakeClient({ installationId: null })
-    const svc = new RepoProvisioningService({ client })
-
-    expect(await svc.provision(input)).toEqual({ status: 'delegated', reason: 'app_not_installed' })
-    expect(client.getGrantedPermissions).not.toHaveBeenCalled()
-    expect(client.createRepoInOrg).not.toHaveBeenCalled()
   })
 
   it('delegates without an API call when the grant is insufficient', async () => {
     const client = fakeClient({ permissions: { administration: 'read' } })
     const svc = new RepoProvisioningService({ client })
 
-    expect(await svc.provision(input)).toEqual({
+    expect(await svc.provision(100, input)).toEqual({
       status: 'delegated',
       reason: 'insufficient_permissions',
     })
@@ -108,7 +79,7 @@ describe('RepoProvisioningService', () => {
     })
     const svc = new RepoProvisioningService({ client })
 
-    expect(await svc.provision(input)).toEqual({ status: 'delegated', reason: 'forbidden' })
+    expect(await svc.provision(100, input)).toEqual({ status: 'delegated', reason: 'forbidden' })
   })
 
   it('delegates on a 422 "already exists" so the existing repo path takes over', async () => {
@@ -120,7 +91,10 @@ describe('RepoProvisioningService', () => {
     })
     const svc = new RepoProvisioningService({ client })
 
-    expect(await svc.provision(input)).toEqual({ status: 'delegated', reason: 'already_exists' })
+    expect(await svc.provision(100, input)).toEqual({
+      status: 'delegated',
+      reason: 'already_exists',
+    })
   })
 
   it('propagates unexpected failures', async () => {
@@ -132,6 +106,6 @@ describe('RepoProvisioningService', () => {
     })
     const svc = new RepoProvisioningService({ client })
 
-    await expect(svc.provision(input)).rejects.toThrow('Server error')
+    await expect(svc.provision(100, input)).rejects.toThrow('Server error')
   })
 })

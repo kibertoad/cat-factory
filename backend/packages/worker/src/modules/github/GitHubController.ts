@@ -201,7 +201,7 @@ export function githubController(): Hono<AppEnv> {
     const { name, private: isPrivate, description } = c.req.valid('json')
     // Owner = the connected installation's account (throws 409 when unconnected).
     const installation = await github.installationService.requireInstallation(workspaceId)
-    const result = await github.provisioningService.provision({
+    const result = await github.provisioningService.provision(installation.installationId, {
       org: installation.accountLogin,
       name,
       private: isPrivate,

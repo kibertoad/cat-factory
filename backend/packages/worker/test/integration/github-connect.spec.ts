@@ -7,7 +7,7 @@ import { FakeGitHubClient } from '../fakes/FakeGitHubClient'
 describe('github connect', () => {
   it('binds an installation to a workspace and reads it back', async () => {
     const client = new FakeGitHubClient()
-    client.installation = { accountLogin: 'acme', targetType: 'Organization' }
+    client.installation = { accountLogin: 'acme', targetType: 'Organization', appId: 'app-default' }
     const app = makeApp(new FakeAgentExecutor(), githubDeps({ client }))
     const { workspace } = await app.createWorkspace()
     const installationId = uniqueInstallationId()
