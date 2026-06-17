@@ -6,6 +6,7 @@ import {
   type AgentRunResult,
   type AsyncAgentExecutor,
   type ModelRef,
+  type RunnerDispatchKind,
   type RunnerJobResult,
   type RunnerTransport,
   composeBlockSystemPrompt,
@@ -61,6 +62,16 @@ export interface ContainerAgentExecutorDependencies {
 /** Poll cadence for the non-durable `run()` fallback (the durable driver sleeps between polls itself). */
 const RUN_POLL_INTERVAL_MS = 5_000
 
+/** Role prompt the Blueprinter step's agent runs under (returns the tree as JSON). */
+const BLUEPRINT_SYSTEM_PROMPT =
+  'You are a software architect mapping this repository. Decompose it into ONE ' +
+  'top-level service, the modules inside it, and the features within each module. ' +
+  'Anchor every node to the codebase with explicit repo-relative file/directory ' +
+  'references. Keep names short and descriptive; group by domain, not by file type. ' +
+  'Respond with ONLY a JSON object of shape {"type","name","summary","references":[],' +
+  '"modules":[{"name","summary","references":[],"features":[{"title","summary",' +
+  '"references":[]}]}]} — no prose, no code fences.'
+
 /**
  * An {@link AgentExecutor} that performs implementation work in a real sandbox:
  * it spins up a per-run Cloudflare Container running the Pi coding agent, feeds
@@ -90,9 +101,9 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
    */
   async startJob(context: AgentRunContext): Promise<AgentJobHandle> {
     const { workspaceId, executionId } = this.requireIds(context)
-    const { body, model } = await this.buildJobBody(context)
+    const { body, model, kind } = await this.buildJobBody(context)
     const transport = await this.deps.resolveTransport(workspaceId)
-    await transport.dispatch(executionId, body)
+    await transport.dispatch(executionId, body, kind)
     // Carry the workspace on the handle so the poll site can resolve the same
     // backend (Cloudflare container vs. self-hosted pool) given only the job id.
     return { jobId: executionId, model, workspaceId }
@@ -161,10 +172,10 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     return { workspaceId, executionId, blockId }
   }
 
-  /** Resolve tokens/prompts/target and assemble the `/run` job body for `context`. */
+  /** Resolve tokens/prompts/target and assemble the harness job body for `context`. */
   private async buildJobBody(
     context: AgentRunContext,
-  ): Promise<{ body: Record<string, unknown>; model: string }> {
+  ): Promise<{ body: Record<string, unknown>; model: string; kind: RunnerDispatchKind }> {
     const { workspaceId, executionId, blockId } = this.requireIds(context)
 
     // Lock the model to a provider the proxy can serve — either a direct
@@ -194,6 +205,35 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       provider: ref.provider,
       model: ref.model,
     })
+
+    // The Blueprinter step commits the regenerated `blueprints/` folder onto an
+    // existing branch (the earlier `coder` step's PR branch when present, else the
+    // repo's default branch) — never a fresh branch / new PR. Its body targets the
+    // harness `/blueprint` endpoint and returns the decomposition tree.
+    if (context.agentKind === 'blueprints') {
+      const branch = context.block.pullRequest?.branch ?? repo.baseBranch
+      const body = {
+        jobId: executionId,
+        systemPrompt: BLUEPRINT_SYSTEM_PROMPT,
+        instructions:
+          'Map (or update) this repository into the canonical service → modules → ' +
+          'features blueprint, anchored to real file/directory references.',
+        model: ref.model,
+        proxyBaseUrl: this.deps.proxyBaseUrl,
+        sessionToken,
+        ghToken,
+        repo: {
+          owner: repo.owner,
+          name: repo.name,
+          baseBranch: repo.baseBranch,
+          cloneUrl: `https://github.com/${repo.owner}/${repo.name}.git`,
+        },
+        branch,
+        mode: context.block.pullRequest?.branch ? 'update' : 'create',
+        ...(this.deps.githubApiBase ? { githubApiBase: this.deps.githubApiBase } : {}),
+      }
+      return { body, model: `${ref.provider}:${ref.model}`, kind: 'blueprint' }
+    }
 
     // The "extra context" Pi runs with: the build-phase role plus the block's
     // selected best-practice fragments, exactly as the inline executor composes
@@ -225,12 +265,20 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       },
       ...(this.deps.githubApiBase ? { githubApiBase: this.deps.githubApiBase } : {}),
     }
-    return { body, model: `${ref.provider}:${ref.model}` }
+    return { body, model: `${ref.provider}:${ref.model}`, kind: 'run' }
   }
 }
 
 /** Map a finished runner {@link RunnerJobResult} into the engine's {@link AgentRunResult}. */
 function toRunResult(result: RunnerJobResult): AgentRunResult {
+  // A Blueprinter job carries a decomposition tree instead of a PR; surface it so
+  // the engine can strictly validate + reconcile it onto the board.
+  if (result.service !== undefined) {
+    return {
+      output: result.summary?.trim() || 'Service blueprint updated.',
+      blueprintService: result.service,
+    }
+  }
   const summary = result.summary?.trim() || 'Implementation complete.'
   const output = result.prUrl ? `${summary}\n\nPR: ${result.prUrl}` : summary
   // Surface the opened PR structurally (not just in the output text) so the

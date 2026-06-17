@@ -1,4 +1,4 @@
-import type { RunnerJobView, RunnerTransport } from '@cat-factory/core'
+import type { RunnerDispatchKind, RunnerJobView, RunnerTransport } from '@cat-factory/core'
 import type { DurableObjectNamespace } from '@cloudflare/workers-types'
 import type { ImplementationContainer } from './ImplementationContainer'
 
@@ -19,9 +19,13 @@ const POLL_TIMEOUT_MS = 30_000
 export class CloudflareContainerTransport implements RunnerTransport {
   constructor(private readonly namespace: DurableObjectNamespace<ImplementationContainer>) {}
 
-  async dispatch(jobId: string, spec: Record<string, unknown>): Promise<void> {
+  async dispatch(
+    jobId: string,
+    spec: Record<string, unknown>,
+    kind: RunnerDispatchKind = 'run',
+  ): Promise<void> {
     const stub = this.namespace.get(this.namespace.idFromName(jobId))
-    const res = await stub.fetch('http://container/run', {
+    const res = await stub.fetch(`http://container/${kind}`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(spec),

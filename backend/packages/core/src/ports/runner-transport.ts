@@ -19,7 +19,12 @@ export interface RunnerJobResult {
   branch?: string
   summary?: string
   error?: string
+  /** A Blueprinter job's decomposition tree (the `/blueprint` endpoint's product). */
+  service?: unknown
 }
+
+/** Which harness endpoint a dispatch targets: a coding run, or a blueprint run. */
+export type RunnerDispatchKind = 'run' | 'blueprint'
 
 /** A job's current state, as the harness/pool reports it. */
 export interface RunnerJobView {
@@ -34,9 +39,10 @@ export interface RunnerTransport {
   /**
    * Start the job `jobId` with the harness job `spec`, or re-attach to one already
    * running for it. Must be idempotent per job id so a replayed dispatch never
-   * starts a duplicate.
+   * starts a duplicate. `kind` selects the harness endpoint (`run` by default, or
+   * `blueprint` for a Blueprinter job); both are polled identically via {@link poll}.
    */
-  dispatch(jobId: string, spec: Record<string, unknown>): Promise<void>
+  dispatch(jobId: string, spec: Record<string, unknown>, kind?: RunnerDispatchKind): Promise<void>
   /** Poll the job's current state. */
   poll(jobId: string): Promise<RunnerJobView>
   /** Optionally release the job/runner once a terminal state is observed. */

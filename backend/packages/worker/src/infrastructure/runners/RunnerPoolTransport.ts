@@ -1,4 +1,5 @@
 import type {
+  RunnerDispatchKind,
   RunnerJobView,
   RunnerPoolManifest,
   RunnerPoolProvider,
@@ -18,7 +19,12 @@ export class RunnerPoolTransport implements RunnerTransport {
     private readonly resolveSecret: SecretResolver,
   ) {}
 
-  dispatch(jobId: string, spec: Record<string, unknown>): Promise<void> {
+  dispatch(jobId: string, spec: Record<string, unknown>, kind: RunnerDispatchKind = 'run'): Promise<void> {
+    // Self-hosted pools implement the coding-run protocol only; blueprint mapping
+    // runs exclusively on the Cloudflare container backend.
+    if (kind !== 'run') {
+      throw new Error(`Self-hosted runner pools do not support '${kind}' jobs`)
+    }
     return this.provider.dispatch({
       manifest: this.manifest,
       jobId,
