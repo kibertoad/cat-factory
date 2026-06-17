@@ -1,6 +1,6 @@
 # Handover — splitting `@cat-factory/core` into scoped packages
 
-**Status:** Step 4 complete. Proceed with Step 5 (`@cat-factory/workspaces` → `@cat-factory/orchestration`).
+**Status:** Step 5 complete. All planned extractions done.
 **Prereqs landed:** the internal/published package separation (this branch —
 `reshape/internal-public-split`) and the core dedup (PR #54,
 `refactor/core-dedup`). Both are independent of this work and can be merged in
@@ -17,6 +17,14 @@ directly from `@cat-factory/spend`; implementer-harness devDep swapped from core
 to spend; CI `changes` filter narrowed to `backend/packages/spend/**` +
 `backend/packages/kernel/**` (core no longer gates the Docker acceptance job);
 changeset in `.changeset/spend-extract.md`.
+
+**Step 5 done:** `@cat-factory/workspaces` extracted — `WorkspaceService` + `AccountService`
+moved (git rename, history preserved); `@cat-factory/orchestration` extracted — board,
+boardScan, bootstrap, execution, pipelines, requirements, and the composition root
+(`createCore` / `container.ts`) moved. `@cat-factory/core` is now a thin barrel
+re-exporting the full public surface of all six split packages for backward compat;
+no consumer import paths changed. Build, typecheck, and all tests pass.
+Changesets in `.changeset/workspaces-extract.md` + `.changeset/orchestration-extract.md`.
 
 **Step 4 done:** `@cat-factory/integrations` extracted — `modules/github/*` (8 files),
 `modules/documents/*` (7 files), `modules/tasks/*` (5 files),
