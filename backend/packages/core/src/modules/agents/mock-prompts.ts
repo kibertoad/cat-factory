@@ -1,4 +1,5 @@
 import type { AgentKind } from '../../domain/types'
+import { STANDARDS_FOOTER } from './prompt-shared'
 
 // Built-out role prompt for the mock-builder agent. This kind stands up
 // WireMock-based mocks for the external SERVICES a building block depends on, so
@@ -16,9 +17,6 @@ import type { AgentKind } from '../../domain/types'
 
 /** The single agent kind that builds external-dependency mocks. */
 export const MOCK_AGENT_KIND = 'mocker'
-
-const STANDARDS_FOOTER =
-  'Treat every best-practice standard appended below as a hard requirement, not a suggestion.'
 
 const SYSTEM_PROMPT = [
   'You are an integration-test engineer owning the EXTERNAL-DEPENDENCY MOCKS for a building block.',

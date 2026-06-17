@@ -2,6 +2,7 @@ import type { TaskSourceKind, TaskComment } from '../../domain/types'
 import type { TaskSourceProvider, TaskSourceRegistry, TaskContent } from '../../ports/task-source'
 import type { TaskRecord } from '../../ports/task-repositories'
 import { markdownToText, buildExcerpt } from '../../shared/markdown.logic'
+import { MapSourceRegistry } from '../../shared/source-registry.logic'
 
 // Source-agnostic helpers shared by every task source: a trivial provider
 // registry, deriving a plain-text excerpt from an issue, and rendering an issue
@@ -10,21 +11,9 @@ import { markdownToText, buildExcerpt } from '../../shared/markdown.logic'
 // independent of any one source's format. Kept pure for easy testing.
 
 /** A trivial in-memory provider registry built from the wired providers. */
-export class MapTaskSourceRegistry implements TaskSourceRegistry {
-  private readonly byKind: Map<TaskSourceKind, TaskSourceProvider>
-
-  constructor(providers: TaskSourceProvider[]) {
-    this.byKind = new Map(providers.map((p) => [p.kind, p]))
-  }
-
-  get(kind: TaskSourceKind): TaskSourceProvider | undefined {
-    return this.byKind.get(kind)
-  }
-
-  list(): TaskSourceProvider[] {
-    return [...this.byKind.values()]
-  }
-}
+export class MapTaskSourceRegistry
+  extends MapSourceRegistry<TaskSourceKind, TaskSourceProvider>
+  implements TaskSourceRegistry {}
 
 /** The most recent comments to fold into context (newest, capped). */
 const MAX_CONTEXT_COMMENTS = 5

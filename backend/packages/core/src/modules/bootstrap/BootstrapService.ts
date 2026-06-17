@@ -21,7 +21,8 @@ import type {
 import type { RepoBootstrapper } from '../../ports/repo-bootstrapper'
 import type { BootstrapRunner } from '../../ports/bootstrap-runner'
 import type { ExecutionEventPublisher } from '../../ports/execution-events'
-import { assertFound, ConflictError } from '../../domain/errors'
+import { assertFound, ConflictError, getErrorMessage } from '../../domain/errors'
+import { sameSubtasks } from '../../domain/subtasks.logic'
 import { requireWorkspace } from '../workspaces/WorkspaceService'
 
 /** The poll's terminal-ness, returned to the durable driver so it knows when to stop. */
@@ -266,7 +267,7 @@ export class BootstrapService {
         instructions,
       })
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
+      const message = getErrorMessage(error)
       // A dispatch HTTP/network fault is `dispatch`; everything else here is a
       // pre-flight rejection (repo missing / not empty / not connected).
       const kind: BootstrapFailureKind = /dispatch failed/i.test(message) ? 'dispatch' : 'preflight'
@@ -373,7 +374,7 @@ export class BootstrapService {
         instructions: record.instructions,
       })
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
+      const message = getErrorMessage(error)
       const kind: BootstrapFailureKind = /dispatch failed/i.test(message) ? 'dispatch' : 'preflight'
       const patch = {
         status: 'failed' as const,
@@ -644,24 +645,6 @@ export class BootstrapService {
   ): Promise<void> {
     await this.deps.eventPublisher?.bootstrapChanged?.(workspaceId, job, block)
   }
-}
-
-/** Whether two subtask snapshots are identical (skip a no-op write + broadcast). */
-function sameSubtasks(a: StepSubtasks | null, b: StepSubtasks): boolean {
-  return (
-    !!a &&
-    a.completed === b.completed &&
-    a.inProgress === b.inProgress &&
-    a.total === b.total &&
-    sameSubtaskItems(a.items, b.items)
-  )
-}
-
-/** Whether two todo-item lists carry the same labels + statuses, in order. */
-function sameSubtaskItems(a: StepSubtasks['items'], b: StepSubtasks['items']): boolean {
-  if (a === b) return true
-  if (!a || !b || a.length !== b.length) return false
-  return a.every((it, i) => it.label === b[i]?.label && it.status === b[i]?.status)
 }
 
 /** A next-step pointer per failure kind, surfaced on the board's failed card. */
