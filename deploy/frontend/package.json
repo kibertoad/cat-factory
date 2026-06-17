@@ -1,6 +1,6 @@
 {
   "name": "@cat-factory/deploy-frontend",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "private": true,
   "description": "Example Cloudflare Pages deployment of the Agent Architecture Board SPA. Extends the @cat-factory/app Nuxt layer; copy this package to deploy the frontend on your own Cloudflare account.",
   "type": "module",

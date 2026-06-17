@@ -1,6 +1,6 @@
 {
   "name": "@cat-factory/deploy-backend",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "private": true,
   "description": "Example Cloudflare Worker deployment of the @cat-factory/worker library. Carries the wrangler.toml + config; copy this package to deploy the backend on your own Cloudflare account.",
   "type": "module",
