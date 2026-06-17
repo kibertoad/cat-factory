@@ -1,8 +1,40 @@
 # Agent Architecture Board — Backend
 
-Backend for the `cat-factory` frontend. Split into a **framework-agnostic core**
-and a **Cloudflare Worker facade**, as separate packages, following the
-infrastructure/domain layering and module grouping of `node-service-template`.
+Backend for the [`cat-factory`](../README.md) frontend. Split into a
+**framework-agnostic core** and a **Cloudflare Worker facade**, as separate
+packages, following the infrastructure/domain layering and module grouping of
+`node-service-template`.
+
+The Worker exposes one HTTP + WebSocket API over a Cloudflare **D1** database;
+core holds all domain logic behind ports; long-running coding work runs in
+per-run Cloudflare **Containers** (or a self-hosted runner pool). Most
+integrations are **opt-in** — they assemble only when their config is present, so
+a minimal deployment is just boards + pipelines.
+
+> For the end-to-end runtime flows (execution + events, bootstrap, blueprints,
+> requirements review, the board/repo-linkage model) read
+> [`../CLAUDE.md`](../CLAUDE.md). This README is the package-level map.
+
+## Table of contents
+
+- [Packages](#packages) · [Layering](#layering-per-the-templates-architecture-doc)
+- [Domain modules](#domain-modules) — what each core module does
+- [Agents](#agents-vercel-ai-sdk) — the executors and the engine
+- [Execution & real-time events](#execution--real-time-events)
+- [Spend safeguards](#spend-safeguards)
+- [Accounts & tenancy](#accounts--tenancy)
+- [GitHub integration](#github-integration-optional)
+- [Document & task sources](#document--task-sources-optional)
+- [Requirements review](#requirements-review)
+- [Service blueprints](#service-blueprints)
+- [Ephemeral environments](#ephemeral-environments--the-deployer-agent-optional)
+- [On-demand board scan](#on-demand-board-scan-repository--blueprint)
+- [Prompt-fragment library](#prompt-fragment-library-optional)
+- [Self-hosted runner pool](#self-hosted-runner-pool-optional)
+- [Persistence & migrations](#persistence--migrations)
+- [HTTP API](#http-api-selected)
+- [Develop & test](#develop--test)
+- [Deployment](#deploying)
 
 ## Packages
 
@@ -20,6 +52,39 @@ infrastructure/domain layering and module grouping of `node-service-template`.
 - **Infrastructure layer** — `worker/src/infrastructure/*`: D1 repositories implementing the
   ports, the AI model provider, runtime adapters, config, and the DI composition root
   (`container.ts`). Services use constructor injection of a single `dependencies` object.
+
+## Domain modules
+
+The domain lives in `core/src/modules/*` — each is a small service (or cluster of
+services) over ports, assembled in `core/src/container.ts`. The Worker mounts a
+matching controller per module in `worker/src/modules/*`.
+
+| Module | Responsibility |
+| --- | --- |
+| `workspaces` | Board (workspace) lifecycle; assembles the full snapshot (blocks, pipelines, executions, spend) the SPA hydrates from. |
+| `accounts` | Tenancy: personal/org accounts, GitHub-membership-based visibility, the account ↔ workspace ownership graph. |
+| `board` | Block mutations — frames/modules/tasks CRUD, reparenting, dependency edges. |
+| `pipelines` | Saved, reusable agent-kind sequences (the pipeline palette). |
+| `agents` | Agent-kind catalog, role/phase prompts, and the inline `AiAgentExecutor`. |
+| `execution` | The run state machine: `advanceInstance` moves a run one step, handles decisions, failures/retries, context injection, and the spend gate. |
+| `spend` | Token metering + org-wide monthly budget enforcement. |
+| `bootstrap` | Reference architectures + the async repo-bootstrap task. |
+| `boardScan` | "Scan repository" → a `service → modules → features` blueprint, optionally spawned onto the board. |
+| `blueprints` *(in `agents`/`boardScan` flow)* | The Blueprinter step that writes the in-repo `blueprints/` map and reconciles the board. |
+| `requirements` | Stateless reviewer agent over a block's collected requirements. |
+| `github` | GitHub App installs, repo/PR/issue projections, webhooks, repo provisioning (two-app tiering). |
+| `documents` | Connect Confluence/Notion sources, import pages, plan board structure, link docs to blocks. |
+| `tasks` | Connect Jira/Linear/issue trackers, import issues, link them to blocks as context. |
+| `environments` | Provision/teardown ephemeral environments from a per-workspace provider manifest. |
+| `fragmentLibrary` | Tenant-scoped prompt-fragment catalog + repo-linked sources + per-run relevance selection. |
+| `runners` | Bind a workspace to a self-hosted runner pool (manifest + encrypted secrets). |
+
+The repository **ports** these depend on live in `core/src/ports/*`
+(`agent-executor`, `model-provider`, `*-repositories`, `github-client`,
+`document-source`, `environment-provider`, `runner-pool-provider`,
+`fragment-selector`, `secret-cipher`, `token-usage`, `runtime`, …); their D1 /
+HTTP / Cloudflare adapters live under `worker/src/infrastructure/*` and are
+wired in `worker/src/infrastructure/container.ts`.
 
 ## Agents (Vercel AI SDK)
 
@@ -75,6 +140,19 @@ Configured entirely through Worker vars (see `wrangler.toml`): `SPEND_MONTHLY_LI
 overrides per 1M tokens). The container executor reports no usage directly (its LLM proxy meters
 tokens itself, to avoid double-counting), and test fakes report none.
 
+## Accounts & tenancy
+
+A signed-in user (authenticated by **"Login with GitHub"**, see
+[`docs/auth.md`](./docs/auth.md)) acts within an **account**: their personal
+account, plus any GitHub **orgs** they belong to. An account **owns many
+workspaces** (boards), so a team shares the org's boards while keeping personal
+ones separate. Visibility is by GitHub membership — switching the active account
+re-scopes the board list. Account-bound things (the GitHub installation, the
+account tier of the prompt-fragment library) are inherited by every workspace
+under that account; a workspace can refine them. Schema in migration
+`0017_accounts.sql`; the `accounts` core module + `AccountController` enforce the
+`isMember` gate.
+
 ## GitHub integration (optional)
 
 Connects each workspace to a GitHub org/account via a **GitHub App** so agents and
@@ -91,6 +169,60 @@ an RS256 app JWT mints short-lived installation tokens (cached in D1), and webho
 deliveries are HMAC-verified over the raw body before a fast `202` ack. New schema is
 in migration `0004_github_projections.sql`. Configure via `GITHUB_APP_ID/SLUG` vars
 and `GITHUB_APP_PRIVATE_KEY` (PKCS#8) + `GITHUB_WEBHOOK_SECRET` secrets.
+
+**Creating new repos (two-app tiering).** Creating a repo programmatically needs
+the App to hold `Administration: write`, which we don't want on every install. So
+there are **two App registrations**: a default *restricted* App (most installs)
+and an opt-in *privileged* App that carries `Administration: write`. An org opts
+in by installing the privileged App; `GitHubAppRegistry` routes every token mint
+by the installation's owning `appId`, and `GitHubConnection.canCreateRepos`
+drives whether the bootstrap modal creates the repo directly or delegates to
+GitHub's new-repo page. See
+[ADR 0005](./docs/adr/0005-two-app-repo-provisioning.md) (`GITHUB_PRIVILEGED_APP_ID`
++ `GITHUB_PRIVILEGED_APP_PRIVATE_KEY`).
+
+## Document & task sources (optional)
+
+Link external **requirement** sources to a board and either expand them into
+board structure or attach them to a block as context the agents read at run time.
+Both integrations are **source-agnostic** (one provider port per source kind) and
+**opt-in**, with per-workspace credentials stored **encrypted** in D1 (no source
+secrets in `wrangler.toml`).
+
+- **Document sources** (`documents` module, migration `0012_document_sources.sql`)
+  — import a page, **plan** it into `services → modules → tasks` (LLM or a
+  deterministic heading parser), **spawn** that structure onto the board, or link
+  it to a task. Ships Confluence Cloud + Notion providers. See
+  [`docs/document-sources.md`](./docs/document-sources.md).
+- **Task sources** (`tasks` module, migration `0014_task_sources.sql`) — connect
+  an issue tracker (Jira / Linear / GitHub Issues), import issues, and link them
+  to blocks so agents see the tracker context during execution.
+
+## Requirements review
+
+A **stateless, synchronous** reviewer agent (`requirements` module,
+`RequirementReviewService`, migration `0021_requirement_reviews.sql`) inspects a
+block's *collected requirements* — its description plus any linked PRD/RFC docs
+and tracker issues — and raises a list of review items
+(gaps / clarifications / assumptions / risks / questions), each with a
+category/severity. A human replies to or dismisses each; once all are settled,
+`incorporate()` rewrites the block description. Unlike execution/bootstrap this
+flow uses **no container and no durable driver** — it calls the `ModelProvider`
+port inline (like the document planner) and returns the updated entity, which the
+SPA patches directly. One live review per block; the model resolves exactly like
+an agent step (a block's pinned model wins, else the routing default, falling back
+to Workers AI). Full flow in [`../CLAUDE.md`](../CLAUDE.md).
+
+## Service blueprints
+
+A **Blueprinter** agent (`agentKind: 'blueprints'`, run as a normal pipeline step)
+decomposes a repo into the canonical `service → modules → features` tree and
+persists it **in the repo** under `blueprints/` (`blueprint.json`, `overview.md`,
+`modules/<slug>.md`, `version.json`), then reconciles the board's service frame
+from it (match by name, add missing, refresh descriptions, **never delete**). It
+reuses the whole execution engine, runs on the prior `coder` step's PR branch when
+present (else the repo default branch), and is also kicked off after a successful
+bootstrap to seed the initial map. Full flow in [`../CLAUDE.md`](../CLAUDE.md).
 
 ## Ephemeral environments + the Deployer agent (optional)
 
@@ -144,6 +276,67 @@ running a scan needs the `RepoScanner` port — a per-run Cloudflare Container
 the blueprint, gated on the same prerequisites as the implementation container (the
 `IMPL_CONTAINER` binding, a configured GitHub App, `WORKER_PUBLIC_URL` and
 `AUTH_SESSION_SECRET`). Without it the scan endpoint reports itself unavailable.
+
+## Prompt-fragment library (optional)
+
+Agents compose their system prompt from a catalog of **best-practice fragments**.
+The built-in tier ships as code in
+[`@cat-factory/prompt-fragments`](./packages/prompt-fragments/README.md); on top
+of it the `fragmentLibrary` module (migration `0020_prompt_fragments.sql`) adds a
+**tenant-scoped, editable** catalog. A resolved catalog is the merge of three
+tiers — **built-in ∪ account ∪ workspace** — later tiers overriding earlier ones
+by stable `id` (and a tombstone row suppresses one). Fragments can be
+hand-authored or **sourced from a repo** (Markdown + YAML frontmatter), tracked
+with a sync cursor (`source_sha`) so "check for changes" is a cheap comparison.
+
+At run time a `FragmentSelector` picks the **relevant** subset for the PR/diff at
+hand (LLM-picked from summaries, with a deterministic `tags`/`appliesTo`
+fallback), unioned with any ids the user pinned on the block — so reviews are
+sharper and cheaper. `composeSystemPrompt` is unchanged. Opt-in via
+`PROMPT_LIBRARY_ENABLED` (selector mode `PROMPT_LIBRARY_SELECTOR = llm |
+deterministic`); when off, the static built-in catalog and the manual
+`block.fragmentIds` flow are untouched. Design + data model in
+[ADR 0006](./docs/adr/0006-prompt-fragment-library.md).
+
+## Self-hosted runner pool (optional)
+
+By default the repo-operating coding jobs (`coder`, `mocker`, `playwright`) run in
+per-run Cloudflare Containers. A workspace can instead **bring its own**
+container/runner pool (Kubernetes, Nomad, an internal scheduler): you run the
+standard implementer-harness image and put a small **pool scheduler API** in front
+of it, described to cat-factory as a declarative **manifest** (dispatch / poll /
+release templates + auth + response dot-paths). The `runners` module
+(migration `0013_runner_pools.sql`) stores the manifest plus a per-tenant secret
+bundle **encrypted at rest** (AES-256-GCM under `RUNNERS_ENCRYPTION_KEY`); the
+`HttpRunnerPoolProvider` dispatches jobs there instead. Rollout is per-workspace
+and reversible — workspaces without a registered pool fall back to Cloudflare
+Containers. Opt-in via `RUNNERS_ENABLED`. Operator playbook in
+[`docs/runner-pool-integration.md`](./docs/runner-pool-integration.md);
+rationale in [ADR 0004](./docs/adr/0004-self-hosted-runner-pool.md).
+
+> Scope (v1): only the async coding jobs route to a self-hosted pool. Repo
+> **bootstrap** and **scan** still use Cloudflare Containers.
+
+## Persistence & migrations
+
+All state lives in one Cloudflare **D1** database (`cat_factory`, bound as `DB`).
+Migrations are plain SQL under
+[`packages/worker/migrations`](./packages/worker/migrations), applied with
+`wrangler d1 migrations apply`. The model has grown from `0001_init.sql` (core
+boards/blocks/pipelines/executions) through, notably:
+
+- `0003_token_usage`, `0006_storage_retention` — spend ledger + retention.
+- `0004_github_projections`, `0019_github_installation_app` — GitHub projections + two-app tiering.
+- `0008_environments`, `0011_repo_blueprints`, `0012_document_sources`, `0013_runner_pools`, `0014_task_sources` — the opt-in integrations.
+- `0010_bootstrap` (+ `0017_bootstrap_board`, `0018_bootstrap_failure`), `0017_accounts`, `0019_agent_runs` — bootstrap, tenancy, and the unified `agent_runs` table.
+- `0020_prompt_fragments`, `0021_requirement_reviews` — the prompt-fragment library and requirements review.
+
+Agent runs for **both** container flows (task `execution` and repo `bootstrap`)
+share one kind-scoped `agent_runs` table, so failure + retry surface uniformly
+and a cron **sweeper** can re-drive stale runs of either kind. How the data is
+swept/retained is in [`docs/storage-and-retention.md`](./docs/storage-and-retention.md);
+how per-run containers get reclaimed (and where that still leaks) is in
+[`docs/container-reaping.md`](./docs/container-reaping.md).
 
 ## HTTP API (selected)
 
@@ -211,6 +404,58 @@ GET    /workspaces/:ws/board-scan/blueprints                    list persisted r
 GET    /workspaces/:ws/board-scan/blueprints/:id                one blueprint (service → modules → features)
 DELETE /workspaces/:ws/board-scan/blueprints/:id                forget a blueprint
 POST   /workspaces/:ws/board-scan/scans                          scan { repoOwner, repoName, instructions?, spawn? }
+
+# Accounts & tenancy
+GET    /accounts                                             accounts the signed-in user can act within
+GET    /accounts/:id/workspaces                              boards owned by an account
+
+# Unified agent runs (execution + bootstrap failure/retry surface)
+POST   /workspaces/:ws/agent-runs/:id/retry                  retry a failed run (resolves kind)
+POST   /workspaces/:ws/agent-runs/:id/stop                   stop a run (reclaims its container)
+
+# Requirements review (stateless, synchronous — no container)
+GET    /blocks/:blockId/requirement-review                   current review for a block (or null)
+POST   /blocks/:blockId/requirement-review                   run a new review (replaces the prior one)
+POST   /requirement-reviews/:id/items/:itemId/reply          answer an item
+PATCH  /requirement-reviews/:id/items/:itemId                set item status (resolve/dismiss)
+POST   /requirement-reviews/:id/incorporate                  fold settled answers into the description
+
+# Repo bootstrap (managing reference architectures always; running needs the container + GitHub App)
+GET    /workspaces/:ws/bootstrap/reference-architectures     list reference architectures
+POST   /workspaces/:ws/bootstrap/reference-architectures     CRUD reference architectures
+POST   /workspaces/:ws/bootstrap/jobs                         start a bootstrap run (returns a running job)
+GET    /workspaces/:ws/bootstrap/jobs/:id                     poll a bootstrap job
+
+# Document sources (only when DOCUMENTS_ENABLED + encryption key are set)
+GET    /workspaces/:ws/documents/sources                     connected document sources
+POST   /workspaces/:ws/documents/sources                     connect a source (Confluence / Notion)
+POST   /workspaces/:ws/documents/import                      import a page
+POST   /workspaces/:ws/documents/spawn                       expand a document into board structure
+POST   /workspaces/:ws/documents/link                        attach a document to a block
+
+# Task sources (issue trackers)
+GET    /workspaces/:ws/tasks/sources                         connected task sources
+POST   /workspaces/:ws/tasks/sources                         connect a tracker (Jira / Linear / GH Issues)
+POST   /workspaces/:ws/tasks/import                          import issues
+POST   /workspaces/:ws/tasks/link                            link an issue to a block
+
+# Prompt-fragment library (built-in catalog always; tiers when PROMPT_LIBRARY_ENABLED)
+GET    /prompt-fragments                                     built-in catalog (static)
+GET    /:scope/prompt-fragments                              tier fragments (:scope = accounts/:id | workspaces/:id)
+POST   /:scope/prompt-fragments                              create a hand-authored fragment
+PATCH  /:scope/prompt-fragments/:fragmentId                  edit / suppress
+DELETE /:scope/prompt-fragments/:fragmentId                  tombstone
+GET    /:scope/fragment-sources                              linked guideline repos + last-synced state
+POST   /:scope/fragment-sources                              link a repo dir { repo, ref, dirPath }
+GET    /:scope/fragment-sources/:id/status                   check-for-changes (no writes)
+POST   /:scope/fragment-sources/:id/sync                     resync now
+GET    /workspaces/:ws/prompt-fragments/resolved             merged builtin ∪ account ∪ workspace
+
+# Self-hosted runner pool (only when RUNNERS_ENABLED + encryption key are set)
+GET    /workspaces/:ws/runner-pool/connection                current binding (safe metadata)
+POST   /workspaces/:ws/runner-pool/connection                register/replace manifest + secrets
+PUT    /workspaces/:ws/runner-pool/connection/secrets        rotate the secret bundle
+DELETE /workspaces/:ws/runner-pool/connection                unregister
 ```
 
 ## Develop & test
@@ -231,6 +476,11 @@ against a real local D1 database with the real migrations applied. Only the LLM 
 (deterministically); the storage and HTTP stack are real.
 
 ### Deploying
+
+> ⚠️ **Being reworked.** The deployment / configuration walkthrough below is
+> scheduled for a rewrite and may lag the current feature set (e.g. the
+> self-hosted runner pool, two-app GitHub provisioning, and the prompt-fragment
+> library flags above). Use it as a rough guide until refreshed.
 
 Set a real `database_id` in `wrangler.toml` (`wrangler d1 create cat_factory`), apply migrations
 with `db:migrate:remote`, configure authentication (see below — **required in production**), set
