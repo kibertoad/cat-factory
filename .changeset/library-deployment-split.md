@@ -1,9 +1,9 @@
 ---
-'@cat-factory/worker': minor
-'@cat-factory/app': minor
-'@cat-factory/contracts': patch
-'@cat-factory/core': patch
-'@cat-factory/prompt-fragments': patch
+'@cat-factory/worker': major
+'@cat-factory/app': major
+'@cat-factory/contracts': major
+'@cat-factory/core': major
+'@cat-factory/prompt-fragments': major
 ---
 
 Separate reusable libraries from deployment. The libraries now publish to npm

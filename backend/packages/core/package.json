@@ -1,6 +1,6 @@
 {
   "name": "@cat-factory/core",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "Framework-agnostic domain logic for the Agent Architecture Board.",
   "files": [
     "dist"
