@@ -52,21 +52,22 @@ jobs:
         with:
           # Builds every publishable package then runs `changeset publish`.
           publish: pnpm ci:publish
-          title: "Release Packages"
-          commit: "chore: release packages"
+          title: 'Release Packages'
+          commit: 'chore: release packages'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # No NPM_TOKEN: publishing authenticates via npm OIDC trusted
           # publishing (the `id-token: write` permission above). Configure each
           # package's trusted publisher on npmjs.com to point at this workflow.
           # Provenance is attested automatically from the same OIDC identity.
-          NPM_CONFIG_PROVENANCE: "true"
+          NPM_CONFIG_PROVENANCE: 'true'
 
       # Let the Release PR merge itself once required checks pass, so the
       # version bump + publish run hands-off. Requires repo auto-merge enabled
       # and a required status check on `main` (otherwise `--auto` is rejected).
       - name: Enable auto-merge on the Release PR
         if: steps.changesets.outputs.pullRequestNumber != ''
-        run: gh pr merge --auto --squash "${{ steps.changesets.outputs.pullRequestNumber }}"
+        run: gh pr merge --auto --squash "$PR_NUMBER"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ steps.changesets.outputs.pullRequestNumber }}

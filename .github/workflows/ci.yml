@@ -198,7 +198,9 @@ jobs:
       # For changes that genuinely need no release (docs, CI, tests), add an
       # empty changeset: `pnpm changeset --empty`.
       - name: Verify a changeset exists
-        run: pnpm changeset status --since=origin/${{ github.base_ref }}
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: pnpm changeset status --since="origin/${BASE_REF}"
 
   zizmor:
     name: Zizmor (workflow security)
