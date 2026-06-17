@@ -97,6 +97,15 @@ export function useApi() {
 
     logout: () => http('/auth/logout', { method: 'POST' }),
 
+    // Mint a short-lived, workspace-scoped ticket for the events WebSocket. A
+    // browser can't set Authorization on a WS handshake, so the socket auths from
+    // this `?ticket=` instead of the long-lived session token. Empty string when
+    // auth is disabled (dev) — the handshake is open in that case.
+    mintEventsTicket: (workspaceId: string) =>
+      http<{ ticket: string; expiresInMs?: number }>(`${ws(workspaceId)}/events/ticket`, {
+        method: 'POST',
+      }),
+
     // ---- prompt fragments (best-practice catalog) -------------------------
     getPromptFragments: () => http<PromptFragment[]>('/prompt-fragments'),
 

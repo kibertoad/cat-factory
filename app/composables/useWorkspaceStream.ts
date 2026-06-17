@@ -18,7 +18,7 @@ export function useWorkspaceStream() {
   const execution = useExecutionStore()
   const board = useBoardStore()
   const agentRuns = useAgentRunsStore()
-  const auth = useAuthStore()
+  const api = useApi()
   const apiBase = useRuntimeConfig().public.apiBase
 
   const connected = ref(false)
@@ -60,10 +60,26 @@ export function useWorkspaceStream() {
     }
   }
 
-  function connect() {
+  async function connect() {
     if (stopped || !workspace.workspaceId) return
-    const token = auth.token ? `?token=${encodeURIComponent(auth.token)}` : ''
-    socket = new WebSocket(`${wsBase}/workspaces/${workspace.workspaceId}/events${token}`)
+    const workspaceId = workspace.workspaceId
+
+    // A browser can't set Authorization on a WS handshake, so mint a short-lived,
+    // workspace-scoped ticket over the authenticated REST channel and pass it as
+    // `?ticket=`. Empty when auth is disabled (dev) — the handshake is open then.
+    let ticket: string
+    try {
+      ticket = (await api.mintEventsTicket(workspaceId)).ticket
+    } catch {
+      // Couldn't mint (offline, token lapsed) — back off and retry.
+      scheduleReconnect()
+      return
+    }
+    // A workspace switch (or stop()) may have happened while awaiting the mint.
+    if (stopped || workspace.workspaceId !== workspaceId) return
+
+    const query = ticket ? `?ticket=${encodeURIComponent(ticket)}` : ''
+    socket = new WebSocket(`${wsBase}/workspaces/${workspaceId}/events${query}`)
 
     socket.onopen = () => {
       attempt = 0

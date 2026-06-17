@@ -43,6 +43,14 @@ export class BootstrapWorkflow extends WorkflowEntrypoint<Env, BootstrapWorkflow
     const pollInterval = execConfig.jobPollInterval as WorkflowSleepDuration
     const log = logger.child({ workspaceId, jobId, workflow: 'bootstrap' })
 
+    // Consecutive failures to READ status — not the bootstrap failing. The agent
+    // can briefly make the container unresponsive while busy (cloning, installing,
+    // building); the job's real liveness is bounded container-side (inactivity +
+    // max-duration watchdogs), and a vanished container surfaces as a 404→failed
+    // value, so a *thrown* poll error is always transient. Tolerate a bounded run
+    // of them (reset on any good poll) rather than abandoning a healthy run on the
+    // first blip.
+    let pollReadFailures = 0
     for (let p = 0; p < execConfig.jobMaxPolls; p++) {
       await step.sleep(`poll-wait-${p}`, pollInterval)
       let result: BootstrapPollResult
@@ -55,14 +63,21 @@ export class BootstrapWorkflow extends WorkflowEntrypoint<Env, BootstrapWorkflow
           return container.bootstrap.service.pollBootstrapJob(workspaceId, jobId)
         })) as BootstrapPollResult
       } catch (error) {
-        // Retries exhausted: the poll itself is failing (not the bootstrap). Leave
-        // the job `running`; the cron sweep can re-drive it. Stop this instance.
-        log.error(
-          { err: error instanceof Error ? error.message : String(error) },
-          'bootstrap poll step failed after retries',
+        pollReadFailures += 1
+        log.warn(
+          { err: error instanceof Error ? error.message : String(error), pollReadFailures },
+          'bootstrap poll could not read job status; treating as still running and retrying',
         )
-        return
+        // Sustained unreachability: leave the job `running` so the cron sweep can
+        // re-drive it later (the container may recover, or report terminal, by then).
+        // Stop this instance to avoid burning the whole poll budget while wedged.
+        if (pollReadFailures >= execConfig.jobPollFailureTolerance) {
+          log.error('bootstrap poll unreadable past tolerance; leaving for sweeper')
+          return
+        }
+        continue
       }
+      pollReadFailures = 0
       if (result.state === 'done') {
         log.info('bootstrap run succeeded')
         return

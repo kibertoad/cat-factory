@@ -59,6 +59,12 @@ class_name = "BootstrapWorkflow"
 class_name = "ImplementationContainer"
 image = "../implementer-harness/Dockerfile"
 max_instances = 10
+# Coding/bootstrap runs legitimately install dependencies and run build/test/e2e
+# suites inside the box. The default `dev` tier (~256 MiB / ~1/16 vCPU) thrashes
+# and OOMs under that load, starving the harness HTTP server so status polls time
+# out and the run is wrongly failed. `standard` (4 GiB / 0.5 vCPU) gives those
+# commands real headroom; tune up (standard-2/3/4) if heavier stacks need it.
+instance_type = "standard"
 
 [[durable_objects.bindings]]
 name = "IMPL_CONTAINER"

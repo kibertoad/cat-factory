@@ -56,6 +56,11 @@ export const useGitHubStore = defineStore('github', () => {
     return repos.value.find((r) => r.githubId === repoGithubId)
   }
 
+  /** The repo linked to a board block (its backing service repo), if any. */
+  function repoForBlock(blockId: string): GitHubRepo | undefined {
+    return repos.value.find((r) => r.blockId === blockId)
+  }
+
   function pullsForRepo(repoGithubId: number): GitHubPullRequest[] {
     return pulls.value.filter((p) => p.repoGithubId === repoGithubId)
   }
@@ -108,6 +113,16 @@ export const useGitHubStore = defineStore('github', () => {
     } finally {
       loading.value = false
     }
+  }
+
+  /**
+   * Ensure the projection (repos/PRs/issues) is loaded at least once — for views
+   * that need it without opening the GitHub panel (e.g. the inspector's repo link).
+   * Probes the integration first if it hasn't been yet.
+   */
+  async function ensureLoaded() {
+    if (available.value === null) await probe()
+    if (connected.value && repos.value.length === 0) await load()
   }
 
   /** Load the repos the installation can access, with this workspace's link state. */
@@ -250,6 +265,7 @@ export const useGitHubStore = defineStore('github', () => {
     connected,
     canCreateRepos,
     repoFor,
+    repoForBlock,
     pullsForRepo,
     issuesForRepo,
     repoUrl,
@@ -257,6 +273,7 @@ export const useGitHubStore = defineStore('github', () => {
     issueUrl,
     probe,
     load,
+    ensureLoaded,
     loadAvailableRepos,
     setLinkedRepos,
     loadBranches,

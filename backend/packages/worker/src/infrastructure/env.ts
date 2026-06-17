@@ -56,6 +56,12 @@ export interface Env {
    */
   JOB_MAX_POLLS?: string
   /**
+   * How many consecutive status-read failures the durable driver tolerates before
+   * giving up on a job (a busy container can briefly fail to answer a poll without
+   * the job itself having failed). Default 6.
+   */
+  JOB_POLL_FAILURE_TOLERANCE?: string
+  /**
    * Per-workspace WebSocket fan-out hub (Durable Object). Pushes execution/board
    * changes to subscribed browsers in real time. When absent, the engine pushes
    * nothing (clients still get state on connect / refresh).

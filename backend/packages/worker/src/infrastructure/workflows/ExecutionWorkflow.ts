@@ -69,6 +69,15 @@ export class ExecutionWorkflow extends WorkflowEntrypoint<Env, ExecutionWorkflow
       // is only a backstop in case it never reports a terminal state.
       if (result.kind === 'awaiting_job') {
         let polled = false
+        // Consecutive failures to READ status — not the job failing. A coding step
+        // legitimately runs long shell commands (installing deps, build/test/e2e
+        // suites) that can briefly make the container unresponsive to a poll. The
+        // job's real liveness is bounded container-side (inactivity + max-duration
+        // watchdogs); eviction surfaces as a 404→failed value and a genuine job
+        // error as job_failed — both returned, not thrown. So a *thrown* poll error
+        // is always transient: tolerate a bounded run of them (reset on any good
+        // poll) rather than failing a healthy long-running job on the first blip.
+        let pollReadFailures = 0
         for (let p = 0; p < execConfig.jobMaxPolls; p++) {
           await step.sleep(`poll-wait-${i}-${p}`, jobPollInterval)
           try {
@@ -76,9 +85,24 @@ export class ExecutionWorkflow extends WorkflowEntrypoint<Env, ExecutionWorkflow
               buildContainer(this.env).executionService.pollAgentJob(workspaceId, executionId),
             )) as AdvanceResult
           } catch (error) {
-            await failRun(i, error instanceof Error ? error.message : String(error))
-            return
+            pollReadFailures += 1
+            const message = error instanceof Error ? error.message : String(error)
+            logger.warn(
+              { workspaceId, executionId, step: i, poll: p, pollReadFailures, err: message },
+              'poll could not read job status; treating as still running and retrying',
+            )
+            if (pollReadFailures >= execConfig.jobPollFailureTolerance) {
+              await failRun(
+                i,
+                `Job status was unreadable for ${pollReadFailures} consecutive polls; ` +
+                  `the container appears unreachable (last error: ${message})`,
+                'timeout',
+              )
+              return
+            }
+            continue
           }
+          pollReadFailures = 0
           if (result.kind !== 'awaiting_job') {
             polled = true
             break

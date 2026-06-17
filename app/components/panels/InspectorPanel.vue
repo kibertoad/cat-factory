@@ -20,10 +20,12 @@ const tasks = useTasksStore()
 const fragments = useFragmentsStore()
 const models = useModelsStore()
 const agentRuns = useAgentRunsStore()
+const github = useGitHubStore()
 
 onMounted(() => {
   fragments.ensureLoaded()
   models.ensureLoaded()
+  github.ensureLoaded()
 })
 
 /** Open the document import/spawn flow, targeting this container's frame. */
@@ -62,6 +64,15 @@ const statusLabel = computed(() =>
 )
 
 const runnable = computed(() => (block.value ? board.isRunnable(block.value.id) : false))
+
+// The GitHub repo backing this service (a frame), if one is linked. Linkage lives
+// on the github_repos projection (its `blockId`), not on the block itself.
+const serviceRepo = computed(() =>
+  isFrame.value && block.value ? github.repoForBlock(block.value.id) : undefined,
+)
+const serviceRepoUrl = computed(() =>
+  serviceRepo.value ? github.repoUrl(serviceRepo.value.githubId) : null,
+)
 
 const runMenu = computed(() =>
   pipelines.pipelines.map((p) => ({
@@ -137,6 +148,19 @@ const failedRun = computed(() => {
 
       <!-- external links -->
       <div class="flex flex-wrap gap-2">
+        <UButton
+          v-if="serviceRepoUrl"
+          :to="serviceRepoUrl"
+          target="_blank"
+          rel="noopener"
+          color="neutral"
+          variant="soft"
+          size="xs"
+          icon="i-lucide-github"
+          trailing-icon="i-lucide-external-link"
+        >
+          {{ serviceRepo!.owner }}/{{ serviceRepo!.name }}
+        </UButton>
         <UButton
           v-if="tasks.available"
           color="neutral"
