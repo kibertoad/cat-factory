@@ -69,6 +69,13 @@ export {
 } from './modules/agents/agent-routing'
 export { systemPromptFor, userPromptFor } from './modules/agents/agent-catalog'
 export {
+  type VersionedPrompt,
+  type PromptId,
+  PROMPT_VERSIONS,
+  promptVersion,
+  promptVersionLabel,
+} from './modules/agents/prompt-versions'
+export {
   composeSystemPrompt,
   composeBlockSystemPrompt,
   type ComposableBlock,
