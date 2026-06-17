@@ -1,4 +1,13 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+// This is a Nuxt *layer*: a consuming app `extends` it. Config file paths must
+// resolve against THIS layer's directory, not the consumer's — `~`/`@` rebind to
+// the consumer's srcDir, so an asset referenced as `~/assets/...` would be looked
+// up in the consumer. Use an absolute path anchored here instead.
+const layerDir = dirname(fileURLToPath(import.meta.url))
+
 export default defineNuxtConfig({
   compatibilityDate: '2025-06-01',
   devtools: { enabled: true },
@@ -22,7 +31,7 @@ export default defineNuxtConfig({
     '@vue-flow/controls/dist/style.css',
     '@vue-flow/minimap/dist/style.css',
     '@vue-flow/node-resizer/dist/style.css',
-    '~/assets/css/main.css',
+    join(layerDir, 'app/assets/css/main.css'),
   ],
 
   app: {

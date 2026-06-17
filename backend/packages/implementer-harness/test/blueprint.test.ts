@@ -51,7 +51,7 @@ describe('parseBlueprintJob', () => {
   })
 
   it('rejects a missing branch', () => {
-    const { branch, ...rest } = validBlueprintBody
+    const { branch: _branch, ...rest } = validBlueprintBody
     expect(() => parseBlueprintJob(rest)).toThrow(/branch/)
   })
 })
@@ -116,9 +116,7 @@ const sampleService: BlueprintServiceTree = {
       name: 'Auth',
       summary: 'Authentication.',
       references: ['src/auth'],
-      features: [
-        { title: 'Login', summary: 'User login.', references: ['src/auth/login.ts'] },
-      ],
+      features: [{ title: 'Login', summary: 'User login.', references: ['src/auth/login.ts'] }],
     },
   ],
 }

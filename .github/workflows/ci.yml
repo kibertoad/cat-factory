@@ -36,17 +36,17 @@ jobs:
           # The acceptance suite builds the implementer image (whose context is
           # just implementer-harness/) and drives it from host-side scaffolding
           # that imports @cat-factory/core and @cat-factory/worker. Gate on
-          # those packages, the backend manifests/lockfile (dep or build
-          # changes), and this workflow.
+          # those packages, the root manifests/lockfile (dep or build changes),
+          # and this workflow.
           filters: |
             backend:
               - 'backend/packages/implementer-harness/**'
               - 'backend/packages/core/**'
               - 'backend/packages/worker/**'
-              - 'backend/package.json'
-              - 'backend/pnpm-lock.yaml'
-              - 'backend/pnpm-workspace.yaml'
               - 'backend/tsconfig*.json'
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+              - 'pnpm-workspace.yaml'
               - '.github/workflows/ci.yml'
 
   lint:
@@ -76,14 +76,11 @@ jobs:
       - name: Lint & Formatting
         run: pnpm lint
 
-  test:
-    name: Test
+  build-typecheck:
+    name: Build & typecheck
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    defaults:
-      run:
-        working-directory: backend
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
@@ -99,7 +96,42 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
-          cache-dependency-path: backend/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Build the publishable libraries (contracts → prompt-fragments → core →
+      # worker, in dependency order). `tsc` emits declarations, so this is also a
+      # full typecheck of every library's shippable `src` — the same `dist` the
+      # deployments and npm consumers use.
+      - name: Build libraries
+        run: pnpm build
+
+      # Typecheck the frontend layer's shippable code (the deploy apps have no
+      # source of their own, and the libraries are typechecked by the build above).
+      - name: Typecheck frontend layer
+        run: pnpm --filter @cat-factory/app run typecheck
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6.0.8
+        with:
+          version: 11
+
+      - name: Set up Node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 24
+          cache: pnpm
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -114,9 +146,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    defaults:
-      run:
-        working-directory: backend
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
@@ -132,10 +161,14 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
-          cache-dependency-path: backend/pnpm-lock.yaml
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      # The acceptance scaffolding imports @cat-factory/core and @cat-factory/worker,
+      # which now resolve to built `dist`, so build the libraries first.
+      - name: Build libraries
+        run: pnpm build
 
       # Builds and launches the implementer Docker image and drives a full
       # clone → Pi → commit → push → PR against a dummy streaming LLM proxy and a
@@ -143,6 +176,39 @@ jobs:
       # host-gateway, so the suite runs rather than self-skipping.
       - name: Container acceptance tests
         run: pnpm --filter @cat-factory/implementer-harness run test:acceptance
+
+  changeset:
+    name: Changeset present
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          # Need history back to the base branch so `changeset status` can diff.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6.0.8
+        with:
+          version: 11
+
+      - name: Set up Node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Fails when versioned packages changed without an accompanying changeset.
+      # For changes that genuinely need no release (docs, CI, tests), add an
+      # empty changeset: `pnpm changeset --empty`.
+      - name: Verify a changeset exists
+        run: pnpm changeset status --since=origin/${{ github.base_ref }}
 
   zizmor:
     name: Zizmor (workflow security)

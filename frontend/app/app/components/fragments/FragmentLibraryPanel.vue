@@ -29,11 +29,13 @@ const tierLabel: Record<ResolvedFragment['tier'], string> = {
   account: 'Account',
   workspace: 'This board',
 }
-const tierColor: Record<ResolvedFragment['tier'], string> = {
+// `as const` keeps the literal color names (assignable to UBadge's `color`
+// union) instead of widening to `string`; `satisfies` still checks the shape.
+const tierColor = {
   builtin: 'neutral',
   account: 'info',
   workspace: 'primary',
-}
+} as const satisfies Record<ResolvedFragment['tier'], string>
 
 function notifyError(title: string, e: unknown) {
   toast.add({

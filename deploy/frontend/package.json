@@ -1,0 +1,24 @@
+{
+  "name": "@cat-factory/deploy-frontend",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Example Cloudflare Pages deployment of the Agent Architecture Board SPA. Extends the @cat-factory/app Nuxt layer; copy this package to deploy the frontend on your own Cloudflare account.",
+  "type": "module",
+  "scripts": {
+    "postinstall": "nuxt prepare",
+    "dev": "nuxt dev",
+    "build": "nuxt build",
+    "generate": "nuxt generate",
+    "preview": "nuxt preview",
+    "deploy": "wrangler pages deploy"
+  },
+  "dependencies": {
+    "@cat-factory/app": "workspace:*",
+    "nuxt": "^4.4.8"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.3",
+    "vue-tsc": "^3.3.4",
+    "wrangler": "^4.100.0"
+  }
+}

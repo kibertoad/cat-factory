@@ -1,79 +1,69 @@
-name = "cat-factory-backend"
+# Worker LIBRARY test/dev config — NOT the production deployment.
+#
+# @cat-factory/worker is a reusable library: it ships `createApp()`, the default
+# fetch/scheduled/queue handler, and the Durable Object + Workflow classes, but
+# carries no production configuration. This wrangler.toml exists only so the
+# package can (a) run its integration suite on the real `workerd` via
+# @cloudflare/vitest-pool-workers (see vitest.config.ts, which points at this
+# file) and (b) be exercised locally with `wrangler dev` (auth opened via
+# .dev.vars). It declares the bindings the runtime needs and nothing else — no
+# custom domains, no secrets, no production `[vars]`.
+#
+# The real, annotated production configuration lives in the deployment example at
+# deploy/backend/wrangler.toml, which re-exports this library and supplies all
+# `[vars]`, the published runner image, the D1 id, triggers and queues. Copy that
+# file when provisioning your own deployment.
+name = "cat-factory-worker-dev"
 main = "src/index.ts"
 compatibility_date = "2025-06-01"
 compatibility_flags = ["nodejs_compat"]
 
-# Workers Observability (Workers Logs). Captures invocation logs + the structured
-# pino traces this worker emits (controller→service→workflow→bootstrapper→harness)
-# and makes them queryable in the Cloudflare dashboard. head_sampling_rate = 1
-# keeps 100% of invocations; lower it if log volume/cost becomes a concern.
-[observability]
-enabled = true
-head_sampling_rate = 1
-
-# Production D1 database (created via `wrangler d1 create cat_factory` on the
-# iselwin@gmail.com account). For local/test runs wrangler uses a local sqlite
-# shadow keyed by this name, so the id only matters for --remote operations.
+# Local D1. Tests apply the migrations in ./migrations to a local sqlite shadow
+# keyed by this name (see test/apply-migrations.ts); no remote id is needed.
 [[d1_databases]]
 binding = "DB"
 database_name = "cat_factory"
-database_id = "30748a59-c500-4f31-804f-e48f1588d4ac"
 migrations_dir = "migrations"
 
-# Cloudflare Workers AI binding — one of the providers the agent executor can
-# route to. Optional: leave agents disabled and this is unused.
+# Workers AI binding. Tests inject a FakeAgentExecutor and never touch env.AI
+# (vitest.config.ts sets remoteBindings:false); declared so the binding shape
+# matches production.
 [ai]
 binding = "AI"
 
-# Durable execution engine. Each pipeline run becomes one Workflows instance
-# (see src/infrastructure/workflows/ExecutionWorkflow.ts) — the only path that
-# drives runs, so this binding is always used in a real deployment.
+# Durable execution engine — one Workflows instance per run.
 [[workflows]]
 binding = "EXECUTION_WORKFLOW"
 name = "cat-factory-execution"
 class_name = "ExecutionWorkflow"
 
-# Durable full-repo backfill for the GitHub integration (initial connect and
-# explicit `full` resyncs). Only used when a GitHub App is configured.
+# Durable full-repo backfill for the GitHub integration.
 [[workflows]]
 binding = "GITHUB_BACKFILL_WORKFLOW"
 name = "cat-factory-github-backfill"
 class_name = "GitHubBackfillWorkflow"
 
-# Durable driver for the "bootstrap repo" task (see
-# src/infrastructure/workflows/BootstrapWorkflow.ts). Each run becomes one
-# instance whose id is the bootstrap job id; it polls the per-run container,
-# streaming subtask progress to the board and, on success, linking the new repo
-# to its service frame. Only used when the bootstrap prerequisites are configured.
+# Durable driver for the "bootstrap repo" task.
 [[workflows]]
 binding = "BOOTSTRAP_WORKFLOW"
 name = "cat-factory-bootstrap"
 class_name = "BootstrapWorkflow"
 
-# Per-run code-implementation containers (see src/infrastructure/containers and
-# @cat-factory/implementer-harness). Each run addresses its own instance, which
-# runs the Pi coding agent. Only used when CONTAINER_IMPL_ENABLED = "true"; the
-# image carries no secrets (the per-job GitHub + LLM-proxy tokens are passed at
-# dispatch time). The class is a container-enabled Durable Object.
+# Per-run implementation container. The acceptance suite builds this image from
+# the sibling package's Dockerfile, so dev/test reference it by local path; the
+# production deployment instead references the published GHCR image
+# (ghcr.io/<owner>/cat-factory-implementer) — see deploy/backend/wrangler.toml.
 [[containers]]
 class_name = "ImplementationContainer"
 image = "../implementer-harness/Dockerfile"
 max_instances = 10
-# Coding/bootstrap runs legitimately install dependencies and run build/test/e2e
-# suites inside the box. The default `dev` tier (~256 MiB / ~1/16 vCPU) thrashes
-# and OOMs under that load, starving the harness HTTP server so status polls time
-# out and the run is wrongly failed. `standard-1` (4 GiB / 0.5 vCPU) gives those
-# commands real headroom; tune up (standard-2/3/4) if heavier stacks need it.
 instance_type = "standard-1"
 
 [[durable_objects.bindings]]
 name = "IMPL_CONTAINER"
 class_name = "ImplementationContainer"
 
-# Per-workspace WebSocket fan-out hub (see
-# src/infrastructure/durable-objects/WorkspaceEventsHub.ts). One instance per
-# workspace, addressed by idFromName(workspaceId); it holds subscribers' sockets
-# (hibernatable) and broadcasts execution/board events pushed by the engine.
+# Per-workspace WebSocket fan-out hub.
 [[durable_objects.bindings]]
 name = "WORKSPACE_EVENTS"
 class_name = "WorkspaceEventsHub"
@@ -85,214 +75,3 @@ new_sqlite_classes = ["ImplementationContainer"]
 [[migrations]]
 tag = "v2"
 new_sqlite_classes = ["WorkspaceEventsHub"]
-
-# GitHub sync queue: the webhook endpoint verifies + acks fast, enqueuing each
-# delivery here for async projection. The consumer also handles targeted repo
-# resyncs from the cron reconciler and the on-demand resync endpoint. When the
-# binding is absent (as below, and in tests) the worker applies webhook/resync
-# work inline — fine for local dev. To enable the fast-ack async path in
-# production, create the queues and uncomment both blocks:
-#   wrangler queues create cat-factory-github-sync
-#   wrangler queues create cat-factory-github-dlq
-# (queue consumers are left commented because the test pool registers one
-# consumer per test file, which collides on a shared queue — same reason
-# EXECUTION_QUEUE above is opt-in.)
-# [[queues.producers]]
-# binding = "GITHUB_SYNC_QUEUE"
-# queue = "cat-factory-github-sync"
-#
-# [[queues.consumers]]
-# queue = "cat-factory-github-sync"
-# max_batch_size = 10
-# max_concurrency = 5           # bounds concurrent GitHub API usage per batch
-# max_retries = 5
-# dead_letter_queue = "cat-factory-github-dlq"
-
-# Optional admission queue. By default runs are created directly by
-# WorkflowsWorkRunner and bounded by Workflows' own concurrency. To instead cap
-# how fast runs are *started*, create the queues and uncomment both blocks (and
-# the EXECUTION_QUEUE binding becomes active automatically):
-#   wrangler queues create cat-factory-execution-starts
-#   wrangler queues create cat-factory-execution-dlq
-# [[queues.producers]]
-# binding = "EXECUTION_QUEUE"
-# queue = "cat-factory-execution-starts"
-#
-# [[queues.consumers]]
-# queue = "cat-factory-execution-starts"
-# max_batch_size = 1
-# max_concurrency = 10          # bounds concurrent run starts (1-250)
-# max_retries = 3
-# dead_letter_queue = "cat-factory-execution-dlq"
-
-# Scheduled work (routed by cron in src/index.ts `scheduled`):
-#   */2 * * * *  — backstop sweeper (re-drive dead runs) + GitHub reconcile.
-#   0 3 * * *    — daily storage-retention sweep (windows are days-to-months,
-#                  so it doesn't belong on the 2-min cadence).
-[triggers]
-crons = ["*/2 * * * *", "0 3 * * *"]
-
-[vars]
-# Agent LLM configuration (see src/infrastructure/config.ts). Agents always perform
-# real work: unpinned blocks/agents default to the Qwen model from the picker
-# catalog (its Cloudflare Workers AI flavour, or direct DashScope when QWEN_API_KEY
-# is configured). Uncomment to pin a specific provider/model:
-# AGENT_DEFAULT_PROVIDER = "workers-ai"
-# AGENT_DEFAULT_MODEL = "@cf/qwen/qwen3-30b-a3b-fp8"
-# Runs are driven durably and server-side by Cloudflare Workflows (the
-# EXECUTION_WORKFLOW binding below). How long a run may park on a human decision
-# before expiring:
-DECISION_TIMEOUT = "24 hours"
-
-# Container-based implementation (see src/infrastructure/containers and
-# src/infrastructure/ai/ContainerAgentExecutor.ts). When "true" (and a GitHub App,
-# a direct OpenAI-compatible provider key and WORKER_PUBLIC_URL are all set), the
-# repo-operating steps (`coder`, `mocker`, `playwright`) run in a per-run Pi
-# container that clones the repo, implements the block and opens a PR. The
-# container reaches the LLM only via this Worker's proxy at ${WORKER_PUBLIC_URL}/v1,
-# so no provider key enters the image.
-CONTAINER_IMPL_ENABLED = "false"
-# Public origin of this Worker; required for container implementation and repo
-# bootstrap (the per-run container reaches the LLM proxy at ${WORKER_PUBLIC_URL}/v1).
-# MUST be the workers.dev origin, NOT the orange-clouded custom domain
-# (catfactory-api.kiberion.com): a per-run Container egresses from inside
-# Cloudflare's network, and the zone's WAF/Bot-Fight rules block its POSTs to the
-# proxy with "403 Your request was blocked." before the Worker ever runs (browsers
-# pass the bot checks, so the SPA is unaffected). workers.dev is not in that zone,
-# so the container reaches the proxy unblocked.
-WORKER_PUBLIC_URL = "https://cat-factory-backend.iselwin.workers.dev"
-# Container coding jobs run asynchronously: the driver dispatches the job and
-# then polls it on this cadence between durable sleeps, so a job can run far
-# longer than one Workflows step while each step stays short. JOB_MAX_POLLS is a
-# backstop in case a container never reports a terminal state (the container's own
-# max-duration watchdog should fire first).
-# JOB_POLL_INTERVAL = "15 seconds"
-# JOB_MAX_POLLS = "280"
-# The container-side watchdogs that bound every coding job (read by the harness,
-# so they live on the container, not here): JOB_MAX_DURATION_MS force-fails a job
-# after this long (default 3600000 = 60 min); JOB_INACTIVITY_MS kills the agent
-# if it produces no output for this long, i.e. it's hung (default 600000 = 10 min).
-
-# Spend safeguard (see src/infrastructure/config.ts). Token usage is metered per
-# LLM call into a ledger, priced into SPEND_CURRENCY, and gated by a monthly
-# budget; when reached, runs pause and the frontend shows a warning.
-SPEND_MONTHLY_LIMIT = "100"
-SPEND_CURRENCY = "EUR"
-# Optional per-model price overrides (per 1M tokens), merged over the built-in
-# defaults. Keys are "provider:model" or a bare "provider".
-# SPEND_MODEL_PRICES = '{"openai:gpt-4o":{"inputPerMillion":2.3,"outputPerMillion":9.2}}'
-
-# Per-block model picker (see src/infrastructure/ai/CloudflareModelProvider.ts and
-# MODEL_CATALOG in @cat-factory/core). Every model runs on the Workers AI binding
-# above by default; setting a provider key below switches that model to its direct
-# API instead (Llama has no direct variant). Set the keys as secrets:
-#   wrangler secret put QWEN_API_KEY       # Qwen → Alibaba DashScope (intl endpoint)
-#   wrangler secret put DEEPSEEK_API_KEY   # DeepSeek → DeepSeek API
-#   wrangler secret put MOONSHOT_API_KEY   # Kimi → Moonshot AI
-
-# Storage retention (see src/infrastructure/config.ts and
-# docs/storage-and-retention.md). The cron sweeper prunes the tables that don't
-# self-limit to these age windows (in days); 0 disables a table's pass. Defaults
-# are applied when unset, so these are shown only for visibility/tuning.
-# token_usage: generous — the spend budget only reads the current period.
-# TOKEN_USAGE_RETENTION_DAYS = "395"
-# github_rate_limits: aggressive — pure telemetry, only recent headroom matters.
-# GITHUB_RATE_LIMIT_RETENTION_DAYS = "7"
-# github_commits: also bounds the initial backfill window to the same age.
-# GITHUB_COMMIT_RETENTION_DAYS = "90"
-
-# GitHub App integration (see src/infrastructure/config.ts and
-# docs/github-operations.md). Off until an App is configured: set the App id/slug
-# here and the private key (PKCS#8 PEM) + webhook secret as secrets:
-#   wrangler secret put GITHUB_APP_PRIVATE_KEY
-#   wrangler secret put GITHUB_WEBHOOK_SECRET
-GITHUB_APP_ID = "4067384"
-GITHUB_APP_SLUG = "cat-factory-app"
-GITHUB_API_BASE = "https://api.github.com"
-# Where to send the browser after a successful install:
-GITHUB_SETUP_REDIRECT_URL = "https://catfactory.kiberion.com"
-
-# "Login with GitHub" (see src/infrastructure/config.ts and docs/auth.md).
-# REQUIRED in production: the auth gate fails closed, so until an OAuth app is
-# configured the protected API returns 503. Set the client id here and the
-# secrets via
-#   wrangler secret put GITHUB_OAUTH_CLIENT_SECRET
-#   wrangler secret put AUTH_SESSION_SECRET   # any high-entropy random string
-# The client id/secret may be a GitHub App's OAuth credentials or a classic
-# OAuth App's. Register the callback URL as <worker-origin>/auth/callback.
-# (Local dev/tests run open via AUTH_DEV_OPEN=true in .dev.vars — NEVER set that
-# here; doing so would re-open production.)
-GITHUB_OAUTH_CLIENT_ID = "Iv23liSy37MggMK0afZL"
-# Fixed SPA landing URL after login (strongly recommended in production):
-AUTH_SUCCESS_REDIRECT_URL = "https://catfactory.kiberion.com"
-# Session lifetime in hours (default 168 = 7 days):
-# AUTH_SESSION_TTL_HOURS = "168"
-#
-# Sign-in allowlist (fail closed). Login is restricted to the GitHub users named
-# in AUTH_ALLOWED_LOGINS OR the members of the organizations named in
-# AUTH_ALLOWED_ORGS — the two lists combine as an OR. Both empty => NOBODY can
-# sign in. At least one MUST be set or the deployment locks everyone out, so
-# AUTH_ALLOWED_LOGINS is seeded with the deploy owner below; adjust to taste.
-# Listing an org needs the OAuth app to be allowed the `read:org` scope (the
-# login flow requests it automatically when AUTH_ALLOWED_ORGS is set).
-AUTH_ALLOWED_LOGINS = "kibertoad"
-# AUTH_ALLOWED_ORGS = "my-org,another-org"
-
-# CORS allowlist (see src/infrastructure/config/cors.ts). Comma-separated browser
-# Origins the API answers cross-origin — set this to YOUR frontend origin(s) when
-# provisioning. Unset or "*" allows any origin, which is safe because every route
-# is bearer-gated and fails closed; pinning is defense-in-depth. No trailing slash.
-CORS_ALLOWED_ORIGINS = "https://catfactory.kiberion.com"
-
-# Document-source integration (see src/infrastructure/config.ts). Off by default.
-# Turn it on to let workspaces link requirements/RFCs/PRDs from Confluence, Notion
-# and the like, and spawn board structure from them. Per-workspace credentials are
-# entered in the app and stored ENCRYPTED in D1 — there are no source secrets here.
-# DOCUMENT_SOURCES is an optional comma-separated allow-list (default: all known
-# sources). The planner extracts structure with the configured agent model when
-# set to "llm"; otherwise it uses a deterministic heading parser.
-# The one secret this feature needs is the service-level master key used to encrypt
-# the per-workspace source credentials at rest, required when enabled; set it as a
-# secret (never commit it):
-#   openssl rand -base64 32 | wrangler secret put DOCUMENTS_ENCRYPTION_KEY
-DOCUMENTS_ENABLED = "false"
-DOCUMENT_SOURCES = "confluence,notion"
-DOCUMENT_PLANNER = "llm"
-
-# Task-source integration (see src/infrastructure/config.ts). Off by default.
-# Turn it on to let workspaces link individual issues from a tracker (Jira, …) to
-# a board block as extra agent context (status/type/assignee + description +
-# comments). Per-workspace credentials are entered in the app and stored ENCRYPTED
-# in D1 — there are no source secrets here. TASK_SOURCES is an optional
-# comma-separated allow-list (default: all known sources). The one secret this
-# feature needs is the service-level master key used to encrypt the per-workspace
-# source credentials at rest, required when enabled; set it as a secret:
-#   openssl rand -base64 32 | wrangler secret put TASKS_ENCRYPTION_KEY
-TASKS_ENABLED = "false"
-TASK_SOURCES = "jira"
-
-# Ephemeral environment provider integration (see src/infrastructure/config.ts).
-# Off by default. Turn it on to let a workspace register its own self-rolled
-# environment management API (a declarative HTTP manifest) so a `deployer` agent
-# can provision ephemeral environments a `tester` then runs against. The
-# per-tenant provider credentials are entered in the app and stored ENCRYPTED in
-# D1 — there are no provider secrets here. The one secret this feature needs is
-# the service-level master key used to encrypt them at rest, required when
-# enabled; set it as a secret (never commit it):
-#   openssl rand -base64 32 | wrangler secret put ENVIRONMENTS_ENCRYPTION_KEY
-ENVIRONMENTS_ENABLED = "false"
-
-# Self-hosted runner pool — "bring your own infra" (see src/infrastructure/runners
-# and docs/runner-pool-integration.md). Off by default. Turn it on to let a
-# workspace register its OWN container runner pool (a declarative HTTP manifest of
-# its scheduler API) and run the repo-operating coding jobs (`coder`, `mocker`,
-# `playwright`) there instead of per-run Cloudflare Containers. Independent of
-# CONTAINER_IMPL_ENABLED: a workspace with a registered pool uses it; workspaces
-# without one fall back to Cloudflare Containers when those are enabled. Still
-# requires a configured GitHub App + WORKER_PUBLIC_URL + AUTH_SESSION_SECRET. The
-# per-tenant scheduler-API credentials are entered in the app and stored ENCRYPTED
-# in D1 — there are none here. The one secret this feature needs is the
-# service-level master key used to encrypt them at rest, required when enabled;
-# set it as a secret (never commit it):
-#   openssl rand -base64 32 | wrangler secret put RUNNERS_ENCRYPTION_KEY
-RUNNERS_ENABLED = "false"

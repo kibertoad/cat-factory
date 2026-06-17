@@ -7,17 +7,51 @@ many files and are otherwise slow to re-derive.
 
 ## Layout
 
-- `app/` — Nuxt SPA (`ssr: false`). Stores in `app/stores`, composables in
-  `app/composables`, components in `app/components`, wire types in `app/types`.
+One pnpm workspace (single root lockfile). Reusable **libraries** (published to
+npm) are separated from example **deployments** (which carry the `wrangler.toml`s
+and config and depend on the libraries). See [`CONTRIBUTING.md`](./CONTRIBUTING.md)
+for the package/publish table.
+
+- `frontend/app` — `@cat-factory/app`, the reusable **Nuxt layer** (`ssr: false`):
+  the SPA source under `app/` (stores in `app/stores`, composables in
+  `app/composables`, components in `app/components`, wire types in `app/types`).
+  Published to npm; consumed by a deployment via `extends: ['@cat-factory/app']`.
 - `backend/packages/contracts` — Valibot wire contracts shared by SPA + Worker.
+- `backend/packages/prompt-fragments` — versioned best-practice prompt fragments.
 - `backend/packages/core` — framework-agnostic domain: module services
   (`src/modules/*`), pure logic, and repository **ports** (`src/ports`).
-- `backend/packages/worker` — Cloudflare Worker: Hono controllers
-  (`src/modules/*/?*Controller.ts`), D1 repos + infra (`src/infrastructure/*`),
-  the DI composition root (`src/infrastructure/container.ts`), Durable Objects,
-  Workflows.
+- `backend/packages/worker` — `@cat-factory/worker`, the reusable Cloudflare Worker
+  **library**: Hono controllers (`src/modules/*/?*Controller.ts`), D1 repos + infra
+  (`src/infrastructure/*`), the DI composition root
+  (`src/infrastructure/container.ts`), Durable Objects, Workflows. Exposes
+  `createApp()`, the default fetch/scheduled/queue handler, and the DO/Workflow
+  classes. Ships its D1 `migrations/`. Carries **no** production config; its own
+  `wrangler.toml` is a stripped test/dev config (the vitest workers pool reads it).
 - `backend/packages/implementer-harness` — the payload that runs **inside** each
-  per-run Cloudflare Container (the Pi coding-agent harness).
+  per-run Cloudflare Container (the Pi coding-agent harness). Versioned but not on
+  npm; its Docker image is published to **GHCR** by `docker-publish.yml`.
+- `deploy/backend` — example Worker deployment: a one-line `src/index.ts`
+  re-exporting `@cat-factory/worker` + the full production `wrangler.toml`
+  (`[vars]`, the GHCR runner `image`, `migrations_dir` →
+  `node_modules/@cat-factory/worker/migrations`).
+- `deploy/frontend` — example Pages deployment: a thin Nuxt app that `extends` the
+  `@cat-factory/app` layer + the Pages `wrangler.toml`. `NUXT_PUBLIC_API_BASE` is
+  baked in at `nuxt generate` time.
+
+## Releases & changesets
+
+- Versioning/publishing is [changesets](https://github.com/changesets/changesets)
+  (`.changeset/config.json`, root `pnpm changeset` / `ci:publish`). Public packages
+  publish to npm; `deploy/*` + `benchmark-harness` are `ignore`d;
+  `implementer-harness` is versioned-but-private (its version is the GHCR image tag).
+- **Always add a changeset for any change to a versioned package**, and bump
+  `@cat-factory/implementer-harness` whenever you touch what goes into its image
+  (`src/**`, `Dockerfile`, `tsconfig.json`, the pinned `PI_*` args). Empty changeset
+  (`pnpm changeset --empty`) for docs/CI/test-only changes. Full rules + file format
+  in [`CONTRIBUTING.md`](./CONTRIBUTING.md). CI enforces this (`changeset status`).
+- `.github/workflows/release.yml` runs changesets on push to `main`;
+  `docker-publish.yml` republishes the GHCR runner image, gated on image-affecting
+  paths (incl. the harness `package.json`, so a version bump re-tags the image).
 
 ## Execution flow (the canonical async + observable pattern)
 
