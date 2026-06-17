@@ -74,8 +74,8 @@ function onFrameHandle(e: PointerEvent) {
 }
 
 function addTask() {
-  board.addTask(props.id)
   ui.expandFrame(props.id)
+  ui.openAddTask(props.id)
 }
 
 // A task needs merging → green pulse; a task needs a decision → amber pulse.

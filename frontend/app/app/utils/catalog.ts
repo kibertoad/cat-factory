@@ -171,15 +171,3 @@ export const MODULE_META = { icon: 'i-lucide-package', color: '#a78bfa' }
 
 /** Visual metadata for the "feature" tag tasks carry. */
 export const FEATURE_META = { icon: 'i-lucide-puzzle', color: '#34d399' }
-
-/** Sample task names used to seed / quick-add tasks inside a frame. */
-export const TASK_NAME_BANK = [
-  'Login endpoint',
-  'Token refresh',
-  'Password reset',
-  'Session store',
-  'Rate limiter',
-  'Health checks',
-  'Schema migration',
-  'Error handling',
-]

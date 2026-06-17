@@ -32,6 +32,11 @@ export const useUiStore = defineStore('ui', () => {
   const taskConnect = ref<{ source: TaskSourceKind } | null>(null)
   const taskImport = ref<{ source: TaskSourceKind | null } | null>(null)
 
+  // Add-task modal: the container (service frame or module) a new task is being
+  // added to, or null when closed. The user types the title + description; nothing
+  // is launched until they explicitly start the created task.
+  const addTaskContainerId = ref<string | null>(null)
+
   // Repo-bootstrap modal (manage reference architectures + launch a bootstrap).
   const bootstrapOpen = ref(false)
 
@@ -132,6 +137,12 @@ export const useUiStore = defineStore('ui', () => {
   function closeTaskImport() {
     taskImport.value = null
   }
+  function openAddTask(containerId: string) {
+    addTaskContainerId.value = containerId
+  }
+  function closeAddTask() {
+    addTaskContainerId.value = null
+  }
   function openBootstrap() {
     bootstrapOpen.value = true
   }
@@ -167,6 +178,7 @@ export const useUiStore = defineStore('ui', () => {
     spawnPreview,
     taskConnect,
     taskImport,
+    addTaskContainerId,
     bootstrapOpen,
     githubOpen,
     fragmentLibraryOpen,
@@ -192,6 +204,8 @@ export const useUiStore = defineStore('ui', () => {
     closeTaskConnect,
     openTaskImport,
     closeTaskImport,
+    openAddTask,
+    closeAddTask,
     openBootstrap,
     closeBootstrap,
     openGitHub,

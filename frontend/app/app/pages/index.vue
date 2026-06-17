@@ -12,6 +12,7 @@ import DocumentImportModal from '~/components/documents/DocumentImportModal.vue'
 import SpawnPreviewModal from '~/components/documents/SpawnPreviewModal.vue'
 import TaskSourceConnectModal from '~/components/tasks/TaskSourceConnectModal.vue'
 import TaskImportModal from '~/components/tasks/TaskImportModal.vue'
+import AddTaskModal from '~/components/board/AddTaskModal.vue'
 import BootstrapModal from '~/components/bootstrap/BootstrapModal.vue'
 import GitHubPanel from '~/components/github/GitHubPanel.vue'
 import FragmentLibraryPanel from '~/components/fragments/FragmentLibraryPanel.vue'
@@ -55,6 +56,7 @@ watch(
       <SpawnPreviewModal />
       <TaskSourceConnectModal />
       <TaskImportModal />
+      <AddTaskModal />
       <BootstrapModal />
       <GitHubPanel />
       <FragmentLibraryPanel />

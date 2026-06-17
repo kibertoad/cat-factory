@@ -11,7 +11,7 @@ export {
   type DomainErrorCode,
 } from './domain/errors'
 export { sameSubtasks, sameSubtaskItems } from './domain/subtasks.logic'
-export { DEFAULT_CONFIDENCE_THRESHOLD, BLOCK_TYPE_LABEL, TASK_NAME_BANK } from './domain/catalog'
+export { DEFAULT_CONFIDENCE_THRESHOLD, BLOCK_TYPE_LABEL } from './domain/catalog'
 export {
   type SelectableModel,
   type ModelVariant,

@@ -22,12 +22,22 @@ describe('board', () => {
     expect(res.body.title).toMatch(/^Service \d+$/)
   })
 
-  it('adds a task inside a frame with the default confidence threshold', async () => {
-    const res = await app.call<Block>('POST', `/workspaces/${wsId}/blocks/blk_auth/tasks`, {})
+  it('adds a user-authored task with the default confidence threshold', async () => {
+    const res = await app.call<Block>('POST', `/workspaces/${wsId}/blocks/blk_auth/tasks`, {
+      title: 'Add SSO login',
+      description: 'Support SAML and OIDC providers.',
+    })
     expect(res.status).toBe(201)
     expect(res.body.level).toBe('task')
     expect(res.body.parentId).toBe('blk_auth')
+    expect(res.body.title).toBe('Add SSO login')
+    expect(res.body.description).toBe('Support SAML and OIDC providers.')
     expect(res.body.confidenceThreshold).toBe(0.8)
+  })
+
+  it('rejects a task without a title (no auto-generated names)', async () => {
+    const res = await app.call('POST', `/workspaces/${wsId}/blocks/blk_auth/tasks`, {})
+    expect(res.status).toBe(400)
   })
 
   it('adds a module to a service but rejects one on a task', async () => {

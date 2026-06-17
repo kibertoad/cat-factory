@@ -77,6 +77,29 @@ const statusLabel = computed(() =>
 
 const runnable = computed(() => (block.value ? board.isRunnable(block.value.id) : false))
 
+// A task is "started" once a pipeline has been launched on it (it has an
+// execution, or has moved past the pre-run states). Until then the user can keep
+// editing its title + description; afterwards those details are locked. Non-task
+// containers (frames / modules) are always editable.
+const started = computed(
+  () =>
+    isTask.value &&
+    (!!block.value?.executionId || !['planned', 'ready'].includes(block.value!.status)),
+)
+const editable = computed(() => !started.value)
+
+function saveTitle() {
+  const b = block.value
+  if (!b) return
+  const next = b.title.trim()
+  if (next) board.updateBlock(b.id, { title: next })
+}
+function saveDescription() {
+  const b = block.value
+  if (!b) return
+  board.updateBlock(b.id, { description: b.description ?? '' })
+}
+
 // Requirements review (questions / gaps the AI raised about this block's
 // requirements). Hidden only when the feature is known to be off.
 const reviewAvailable = computed(() => requirements.available !== false)
@@ -163,14 +186,34 @@ const runningRun = computed(() => {
         />
       </div>
 
-      <UTextarea
-        v-model="block.description"
-        :rows="2"
-        autoresize
-        size="sm"
-        class="w-full"
-        placeholder="Describe this block…"
-      />
+      <!-- editable identity: title + description. Edits persist to the backend.
+           A task's details lock once it has been started (a pipeline launched). -->
+      <div class="space-y-2">
+        <UInput
+          v-if="editable"
+          v-model="block.title"
+          size="sm"
+          class="w-full"
+          placeholder="Title…"
+          @change="saveTitle"
+          @blur="saveTitle"
+        />
+        <UTextarea
+          v-model="block.description"
+          :rows="2"
+          autoresize
+          size="sm"
+          class="w-full"
+          :disabled="!editable"
+          placeholder="Describe this block…"
+          @change="saveDescription"
+          @blur="saveDescription"
+        />
+        <p v-if="isTask && !editable" class="flex items-center gap-1 text-[11px] text-slate-500">
+          <UIcon name="i-lucide-lock" class="h-3 w-3" />
+          This task has started — its details are locked.
+        </p>
+      </div>
 
       <!-- requirements review: surface the AI's questions / gaps -->
       <UButton
