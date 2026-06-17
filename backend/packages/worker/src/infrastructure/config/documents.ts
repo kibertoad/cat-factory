@@ -1,4 +1,4 @@
-import type { DocumentSourceKind } from '@cat-factory/core'
+import type { DocumentSourceKind } from '@cat-factory/kernel'
 import type { Env } from '../env'
 
 const ALL_SOURCES: readonly DocumentSourceKind[] = ['confluence', 'notion']

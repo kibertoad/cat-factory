@@ -1,4 +1,4 @@
-import type { GitHubIssue, IssueProjectionRepository } from '@cat-factory/core'
+import type { GitHubIssue, IssueProjectionRepository } from '@cat-factory/kernel'
 import type { D1Database } from '@cloudflare/workers-types'
 import { type GitHubIssueRow, buildUpsert, issueValues, rowToIssue } from './github-mappers'
 

@@ -1,4 +1,4 @@
-import type { BootstrapRunner } from '@cat-factory/core'
+import type { BootstrapRunner } from '@cat-factory/kernel'
 import type { Workflow } from '@cloudflare/workers-types'
 import type { BootstrapWorkflowParams } from './BootstrapWorkflow'
 

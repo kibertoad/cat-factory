@@ -1,4 +1,4 @@
-import type { RunnerPoolManifest } from '@cat-factory/core'
+import type { RunnerPoolManifest } from '@cat-factory/kernel'
 
 // Shared fixtures for the self-hosted runner-pool tests. The real
 // HttpRunnerPoolProvider is exercised against a stubbed global `fetch` that acts

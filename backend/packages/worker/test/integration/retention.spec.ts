@@ -1,4 +1,4 @@
-import type { Clock } from '@cat-factory/core'
+import type { Clock } from '@cat-factory/kernel'
 import { env } from 'cloudflare:test'
 import { describe, expect, it } from 'vitest'
 import { CryptoIdGenerator } from '../../src/infrastructure/runtime'

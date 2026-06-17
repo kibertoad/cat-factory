@@ -1,4 +1,4 @@
-import type { EnvironmentConnection, EnvironmentHandle } from '@cat-factory/core'
+import type { EnvironmentConnection, EnvironmentHandle } from '@cat-factory/kernel'
 import { env } from 'cloudflare:test'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { makeApp } from '../helpers'

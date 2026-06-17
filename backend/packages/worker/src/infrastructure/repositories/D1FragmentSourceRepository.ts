@@ -2,7 +2,7 @@ import type {
   FragmentOwnerKind,
   FragmentSourceRecord,
   FragmentSourceRepository,
-} from '@cat-factory/core'
+} from '@cat-factory/kernel'
 import type { D1Database } from '@cloudflare/workers-types'
 
 interface FragmentSourceRow {

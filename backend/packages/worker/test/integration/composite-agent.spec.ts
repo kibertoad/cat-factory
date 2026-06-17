@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { AgentExecutor, AgentRunContext, AgentRunResult } from '@cat-factory/core'
+import type { AgentExecutor, AgentRunContext, AgentRunResult } from '@cat-factory/kernel'
 import { CompositeAgentExecutor } from '../../src/infrastructure/ai/CompositeAgentExecutor'
 
 // CompositeAgentExecutor must send the repo-operating steps — implementation

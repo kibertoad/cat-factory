@@ -1,4 +1,4 @@
-import type { GitHubInstallation, GitHubInstallationRepository } from '@cat-factory/core'
+import type { GitHubInstallation, GitHubInstallationRepository } from '@cat-factory/kernel'
 import type { D1Database } from '@cloudflare/workers-types'
 import {
   type GitHubInstallationRow,

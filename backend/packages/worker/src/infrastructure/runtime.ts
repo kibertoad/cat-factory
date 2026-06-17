@@ -1,4 +1,4 @@
-import type { Clock, IdGenerator } from '@cat-factory/core'
+import type { Clock, IdGenerator } from '@cat-factory/kernel'
 
 // Production implementations of the ambient runtime ports, backed by the Web
 // Crypto API available in the Workers runtime.

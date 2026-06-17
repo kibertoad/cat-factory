@@ -1,4 +1,4 @@
-import type { EnvironmentHandle } from '@cat-factory/core'
+import type { EnvironmentHandle } from '@cat-factory/kernel'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { env } from 'cloudflare:test'
 import { makeApp } from '../helpers'

@@ -1,4 +1,4 @@
-import type { PipelineRepository } from '@cat-factory/core'
+import type { PipelineRepository } from '@cat-factory/kernel'
 import type { Pipeline } from '@cat-factory/contracts'
 import type { D1Database } from '@cloudflare/workers-types'
 import { type PipelineRow, rowToPipeline } from './mappers'

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import type { AgentRouting, AgentRunContext } from '@cat-factory/core'
+import type { AgentRunContext } from '@cat-factory/kernel'
+import type { AgentRouting } from '@cat-factory/agents'
 import type { DurableObjectNamespace } from '@cloudflare/workers-types'
 import {
   ContainerAgentExecutor,

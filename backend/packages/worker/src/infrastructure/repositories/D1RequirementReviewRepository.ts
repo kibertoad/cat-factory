@@ -1,4 +1,4 @@
-import type { RequirementReviewRepository } from '@cat-factory/core'
+import type { RequirementReviewRepository } from '@cat-factory/kernel'
 import type { RequirementReview, RequirementReviewItem } from '@cat-factory/contracts'
 import type { D1Database } from '@cloudflare/workers-types'
 

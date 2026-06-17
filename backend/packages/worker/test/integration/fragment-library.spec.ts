@@ -8,7 +8,7 @@ import type {
   FragmentSyncResult,
   PromptFragment,
   ResolvedFragment,
-} from '@cat-factory/core'
+} from '@cat-factory/kernel'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { fragmentLibraryDeps, makeApp, type TestApp } from '../helpers'
 import { FakeGitHubClient } from '../fakes/FakeGitHubClient'

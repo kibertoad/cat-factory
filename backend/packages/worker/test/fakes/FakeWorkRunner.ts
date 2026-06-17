@@ -1,4 +1,4 @@
-import type { WorkRunner } from '@cat-factory/core'
+import type { WorkRunner } from '@cat-factory/kernel'
 
 /** Records WorkRunner calls so tests can assert the engine signals correctly. */
 export class FakeWorkRunner implements WorkRunner {

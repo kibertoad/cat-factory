@@ -1,4 +1,4 @@
-import type { Block, DocumentBoardPlan, WorkspaceSnapshot } from '@cat-factory/core'
+import type { Block, DocumentBoardPlan, WorkspaceSnapshot } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import { documentsDeps, makeApp } from '../helpers'
 import { FakeAgentExecutor } from '../fakes/FakeAgentExecutor'

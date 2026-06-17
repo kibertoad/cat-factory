@@ -11,7 +11,7 @@ import {
 import * as v from 'valibot'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
-import type { GitHubModule } from '@cat-factory/core'
+import type { GitHubModule } from '@cat-factory/orchestration'
 import type { AppEnv } from '../../infrastructure/http/types'
 import { param } from '../../infrastructure/http/params'
 import { jsonBody } from '../../infrastructure/http/validation'

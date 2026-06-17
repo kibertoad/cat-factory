@@ -1,4 +1,4 @@
-import type { IdGenerator, RateLimitRepository, RateLimitSnapshot } from '@cat-factory/core'
+import type { IdGenerator, RateLimitRepository, RateLimitSnapshot } from '@cat-factory/kernel'
 import type { D1Database } from '@cloudflare/workers-types'
 
 /**

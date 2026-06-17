@@ -1,12 +1,12 @@
-import {
-  JIRA_DESCRIPTOR,
-  type TaskContent,
-  type TaskCredentials,
-  type TaskSourceDescriptor,
-  type TaskSourceKind,
-  type TaskSourceProvider,
-  type NormalizedTaskConnection,
-} from '@cat-factory/core'
+import type {
+  TaskContent,
+  TaskCredentials,
+  TaskSourceDescriptor,
+  TaskSourceKind,
+  TaskSourceProvider,
+  NormalizedTaskConnection,
+} from '@cat-factory/kernel'
+import { JIRA_DESCRIPTOR } from '@cat-factory/integrations'
 
 const DESCRIPTORS: Record<TaskSourceKind, TaskSourceDescriptor> = {
   jira: JIRA_DESCRIPTOR,

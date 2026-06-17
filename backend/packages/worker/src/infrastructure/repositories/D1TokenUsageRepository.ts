@@ -1,4 +1,4 @@
-import type { TokenUsageRecord, TokenUsageRepository, TokenUsageTotals } from '@cat-factory/core'
+import type { TokenUsageRecord, TokenUsageRepository, TokenUsageTotals } from '@cat-factory/kernel'
 import type { D1Database } from '@cloudflare/workers-types'
 
 /** D1-backed ledger for the spend safeguard (see migration 0003). */

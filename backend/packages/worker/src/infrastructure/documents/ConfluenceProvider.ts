@@ -1,12 +1,11 @@
 import {
-  CONFLUENCE_DESCRIPTOR,
-  confluenceLogic,
   ValidationError,
   type DocumentContent,
   type DocumentCredentials,
   type DocumentSourceProvider,
   type NormalizedConnection,
-} from '@cat-factory/core'
+} from '@cat-factory/kernel'
+import { CONFLUENCE_DESCRIPTOR, confluenceLogic } from '@cat-factory/integrations'
 
 // ConfluenceProvider: the document-source provider for Confluence Cloud. It
 // authenticates with HTTP Basic (account email + API token), fetches a page in

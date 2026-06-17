@@ -1,4 +1,4 @@
-import type { SecretResolver } from '@cat-factory/core'
+import type { SecretResolver } from '@cat-factory/kernel'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   HttpRunnerPoolProvider,

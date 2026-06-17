@@ -1,4 +1,4 @@
-import { githubProjection as gp } from '@cat-factory/core'
+import { githubProjection as gp } from '@cat-factory/integrations'
 import { describe, expect, it } from 'vitest'
 
 // Pure-function unit tests for the shared GitHub-JSON → projection mappers. No

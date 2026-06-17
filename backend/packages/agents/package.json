@@ -1,0 +1,36 @@
+{
+  "name": "@cat-factory/agents",
+  "version": "1.0.0",
+  "description": "Agent catalog, routing, prompts and fragment library for the Agent Architecture Board.",
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "precompile:templates": "node scripts/precompile-prompts.mjs"
+  },
+  "dependencies": {
+    "@cat-factory/contracts": "workspace:*",
+    "@cat-factory/kernel": "workspace:*",
+    "@cat-factory/prompt-fragments": "workspace:*",
+    "ai": "^6.0.0",
+    "handlebars": "^4.7.8"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0"
+  }
+}

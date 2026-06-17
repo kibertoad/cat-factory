@@ -1,4 +1,4 @@
-import { ValidationError } from '@cat-factory/core'
+import { ValidationError } from '@cat-factory/kernel'
 import type { Context } from 'hono'
 
 /**

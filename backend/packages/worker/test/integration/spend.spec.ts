@@ -1,8 +1,5 @@
-import {
-  DEFAULT_SPEND_PRICING,
-  type ExecutionInstance,
-  type WorkspaceSnapshot,
-} from '@cat-factory/core'
+import type { ExecutionInstance, WorkspaceSnapshot } from '@cat-factory/kernel'
+import { DEFAULT_SPEND_PRICING } from '@cat-factory/spend'
 import { describe, expect, it } from 'vitest'
 import { makeApp } from '../helpers'
 import { FakeAgentExecutor } from '../fakes/FakeAgentExecutor'

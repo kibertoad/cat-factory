@@ -1,4 +1,4 @@
-import type { SourceTask, TaskConnection, TaskSourceDescriptor } from '@cat-factory/core'
+import type { SourceTask, TaskConnection, TaskSourceDescriptor } from '@cat-factory/kernel'
 import { env } from 'cloudflare:test'
 import { describe, expect, it } from 'vitest'
 import { tasksDeps, makeApp } from '../helpers'

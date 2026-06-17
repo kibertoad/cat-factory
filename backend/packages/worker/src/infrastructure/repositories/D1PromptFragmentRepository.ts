@@ -3,7 +3,7 @@ import type {
   FragmentOwnerKind,
   PromptFragmentRecord,
   PromptFragmentRepository,
-} from '@cat-factory/core'
+} from '@cat-factory/kernel'
 import type { D1Database } from '@cloudflare/workers-types'
 
 interface PromptFragmentRow {

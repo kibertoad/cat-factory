@@ -1,4 +1,4 @@
-import type { DocumentRecord, DocumentRepository, DocumentSourceKind } from '@cat-factory/core'
+import type { DocumentRecord, DocumentRepository, DocumentSourceKind } from '@cat-factory/kernel'
 import type { D1Database } from '@cloudflare/workers-types'
 
 interface DocumentRow {

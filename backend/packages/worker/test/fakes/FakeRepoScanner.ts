@@ -1,4 +1,4 @@
-import type { RepoScanner, ScanRepoRequest, ScannedBlueprint } from '@cat-factory/core'
+import type { RepoScanner, ScanRepoRequest, ScannedBlueprint } from '@cat-factory/kernel'
 
 /**
  * Deterministic RepoScanner for integration tests: records each request and

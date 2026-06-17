@@ -1,4 +1,4 @@
-import type { AgentRunContext } from '@cat-factory/core'
+import type { AgentRunContext } from '@cat-factory/kernel'
 import {
   BUSINESS_DOCUMENTER_KIND,
   BUSINESS_LOGIC_AGENT_KINDS,
@@ -10,7 +10,7 @@ import {
   phaseForKind,
   systemPromptFor,
   userPromptFor,
-} from '@cat-factory/core'
+} from '@cat-factory/agents'
 import { FRAGMENTS } from '@cat-factory/prompt-fragments'
 import { describe, expect, it } from 'vitest'
 

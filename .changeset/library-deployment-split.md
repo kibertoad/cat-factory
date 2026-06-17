@@ -2,7 +2,6 @@
 '@cat-factory/worker': major
 '@cat-factory/app': major
 '@cat-factory/contracts': major
-'@cat-factory/core': major
 '@cat-factory/prompt-fragments': major
 ---
 

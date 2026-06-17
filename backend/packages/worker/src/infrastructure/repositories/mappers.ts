@@ -1,4 +1,4 @@
-import type { BlockPatch } from '@cat-factory/core'
+import type { BlockPatch } from '@cat-factory/kernel'
 import type {
   AgentFailure,
   Block,

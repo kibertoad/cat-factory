@@ -18,7 +18,7 @@ importers:
         specifier: ^1.70.0
         version: 1.70.0
 
-  backend/packages/benchmark-harness:
+  backend/internal/benchmark-harness:
     dependencies:
       '@ai-sdk/anthropic':
         specifier: ^3.0.0
@@ -29,15 +29,24 @@ importers:
       '@ai-sdk/openai-compatible':
         specifier: ^2.0.0
         version: 2.0.50(zod@3.25.76)
+      '@cat-factory/agents':
+        specifier: workspace:*
+        version: link:../../packages/agents
       '@cat-factory/contracts':
         specifier: workspace:*
-        version: link:../contracts
-      '@cat-factory/core':
-        specifier: workspace:*
-        version: link:../core
+        version: link:../../packages/contracts
       '@cat-factory/implementer-harness':
         specifier: workspace:*
         version: link:../implementer-harness
+      '@cat-factory/kernel':
+        specifier: workspace:*
+        version: link:../../packages/kernel
+      '@cat-factory/orchestration':
+        specifier: workspace:*
+        version: link:../../packages/orchestration
+      '@cat-factory/spend':
+        specifier: workspace:*
+        version: link:../../packages/spend
       ai:
         specifier: ^6.0.0
         version: 6.0.206(zod@3.25.76)
@@ -58,46 +67,14 @@ importers:
         specifier: ^4.1.8
         version: 4.1.8(@opentelemetry/api@1.9.1)(@types/node@22.19.21)(happy-dom@15.11.7)(vite@7.3.5(@types/node@22.19.21)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(yaml@2.9.0))
 
-  backend/packages/contracts:
-    dependencies:
-      valibot:
-        specifier: ^1.0.0
-        version: 1.4.1(typescript@5.9.3)
+  backend/internal/implementer-harness:
     devDependencies:
-      typescript:
-        specifier: ^5.6.0
-        version: 5.9.3
-
-  backend/packages/core:
-    dependencies:
-      '@cat-factory/contracts':
+      '@cat-factory/spend':
         specifier: workspace:*
-        version: link:../contracts
-      '@cat-factory/prompt-fragments':
-        specifier: workspace:*
-        version: link:../prompt-fragments
-      ai:
-        specifier: ^6.0.0
-        version: 6.0.206(zod@3.25.76)
-      handlebars:
-        specifier: ^4.7.8
-        version: 4.7.9
-    devDependencies:
-      typescript:
-        specifier: ^5.6.0
-        version: 5.9.3
-      vitest:
-        specifier: ^4.1.8
-        version: 4.1.8(@opentelemetry/api@1.9.1)(@types/node@22.19.21)(happy-dom@15.11.7)(vite@7.3.5(@types/node@22.19.21)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(yaml@2.9.0))
-
-  backend/packages/implementer-harness:
-    devDependencies:
-      '@cat-factory/core':
-        specifier: workspace:*
-        version: link:../core
+        version: link:../../packages/spend
       '@cat-factory/worker':
         specifier: workspace:*
-        version: link:../worker
+        version: link:../../packages/worker
       '@hono/node-server':
         specifier: ^1.13.0
         version: 1.19.14(hono@4.12.25)
@@ -114,11 +91,116 @@ importers:
         specifier: ^4.1.8
         version: 4.1.8(@opentelemetry/api@1.9.1)(@types/node@22.19.21)(happy-dom@15.11.7)(vite@7.3.5(@types/node@22.19.21)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(yaml@2.9.0))
 
+  backend/packages/agents:
+    dependencies:
+      '@cat-factory/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@cat-factory/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+      '@cat-factory/prompt-fragments':
+        specifier: workspace:*
+        version: link:../prompt-fragments
+      ai:
+        specifier: ^6.0.0
+        version: 6.0.206(zod@3.25.76)
+      handlebars:
+        specifier: ^4.7.8
+        version: 4.7.9
+    devDependencies:
+      typescript:
+        specifier: ^5.6.0
+        version: 5.9.3
+
+  backend/packages/contracts:
+    dependencies:
+      valibot:
+        specifier: ^1.0.0
+        version: 1.4.1(typescript@5.9.3)
+    devDependencies:
+      typescript:
+        specifier: ^5.6.0
+        version: 5.9.3
+
+  backend/packages/integrations:
+    dependencies:
+      '@cat-factory/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@cat-factory/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+      ai:
+        specifier: ^6.0.0
+        version: 6.0.206(zod@3.25.76)
+    devDependencies:
+      typescript:
+        specifier: ^5.6.0
+        version: 5.9.3
+      vitest:
+        specifier: ^4.1.8
+        version: 4.1.8(@opentelemetry/api@1.9.1)(@types/node@22.19.21)(happy-dom@15.11.7)(vite@7.3.5(@types/node@22.19.21)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(yaml@2.9.0))
+
+  backend/packages/kernel:
+    dependencies:
+      '@cat-factory/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      ai:
+        specifier: ^6.0.0
+        version: 6.0.206(zod@3.25.76)
+    devDependencies:
+      typescript:
+        specifier: ^5.6.0
+        version: 5.9.3
+
+  backend/packages/orchestration:
+    dependencies:
+      '@cat-factory/agents':
+        specifier: workspace:*
+        version: link:../agents
+      '@cat-factory/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@cat-factory/integrations':
+        specifier: workspace:*
+        version: link:../integrations
+      '@cat-factory/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+      '@cat-factory/spend':
+        specifier: workspace:*
+        version: link:../spend
+      '@cat-factory/workspaces':
+        specifier: workspace:*
+        version: link:../workspaces
+      ai:
+        specifier: ^6.0.0
+        version: 6.0.206(zod@3.25.76)
+    devDependencies:
+      typescript:
+        specifier: ^5.6.0
+        version: 5.9.3
+
   backend/packages/prompt-fragments:
     dependencies:
       '@cat-factory/contracts':
         specifier: workspace:*
         version: link:../contracts
+    devDependencies:
+      typescript:
+        specifier: ^5.6.0
+        version: 5.9.3
+
+  backend/packages/spend:
+    dependencies:
+      '@cat-factory/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@cat-factory/kernel':
+        specifier: workspace:*
+        version: link:../kernel
     devDependencies:
       typescript:
         specifier: ^5.6.0
@@ -135,15 +217,27 @@ importers:
       '@ai-sdk/openai-compatible':
         specifier: ^2.0.0
         version: 2.0.50(zod@3.25.76)
+      '@cat-factory/agents':
+        specifier: workspace:*
+        version: link:../agents
       '@cat-factory/contracts':
         specifier: workspace:*
         version: link:../contracts
-      '@cat-factory/core':
+      '@cat-factory/integrations':
         specifier: workspace:*
-        version: link:../core
+        version: link:../integrations
+      '@cat-factory/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+      '@cat-factory/orchestration':
+        specifier: workspace:*
+        version: link:../orchestration
       '@cat-factory/prompt-fragments':
         specifier: workspace:*
         version: link:../prompt-fragments
+      '@cat-factory/spend':
+        specifier: workspace:*
+        version: link:../spend
       '@cloudflare/containers':
         specifier: ^0.3.7
         version: 0.3.7
@@ -181,6 +275,19 @@ importers:
       wrangler:
         specifier: ^4.100.0
         version: 4.101.0(@cloudflare/workers-types@4.20260616.1)
+
+  backend/packages/workspaces:
+    dependencies:
+      '@cat-factory/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@cat-factory/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+    devDependencies:
+      typescript:
+        specifier: ^5.6.0
+        version: 5.9.3
 
   deploy/backend:
     dependencies:

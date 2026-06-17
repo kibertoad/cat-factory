@@ -1,7 +1,7 @@
 # Benchmarks
 
 Committed results of the cat-factory **benchmark harness**
-(`backend/packages/benchmark-harness`, CLI `cat-bench`). Each run measures how
+(`backend/internal/benchmark-harness`, CLI `cat-bench`). Each run measures how
 different **models** and **prompt versions** affect the quality of three agent
 tasks — **requirement review**, **implementation**, and **code review** — graded
 by the Claude **benchmark-arbiter** skill.
@@ -40,7 +40,7 @@ Claude on code review"). It configures the matrix, runs the harness, invokes the
 grading-only **`benchmark-arbiter`** skill, merges the report, and offers to
 commit the run here.
 
-Manual equivalent (see `backend/packages/benchmark-harness/README.md` for detail):
+Manual equivalent (see `backend/internal/benchmark-harness/README.md` for detail):
 
 ```bash
 cat-bench run --config bench.config.ts --name my-run     # → docs/benchmarks/my-run/

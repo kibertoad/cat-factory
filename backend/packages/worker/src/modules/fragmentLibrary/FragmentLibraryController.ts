@@ -3,10 +3,10 @@ import {
   linkFragmentSourceSchema,
   updatePromptFragmentSchema,
 } from '@cat-factory/contracts'
-import type { FragmentOwnerKind } from '@cat-factory/core'
+import type { FragmentOwnerKind } from '@cat-factory/kernel'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
-import type { FragmentLibraryModule } from '@cat-factory/core'
+import type { FragmentLibraryModule } from '@cat-factory/orchestration'
 import type { AppEnv } from '../../infrastructure/http/types'
 import { param } from '../../infrastructure/http/params'
 import { jsonBody } from '../../infrastructure/http/validation'

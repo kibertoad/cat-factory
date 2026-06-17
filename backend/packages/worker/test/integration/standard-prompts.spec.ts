@@ -1,4 +1,4 @@
-import type { AgentRunContext } from '@cat-factory/core'
+import type { AgentRunContext } from '@cat-factory/kernel'
 import {
   composeSystemPrompt,
   phaseForKind,
@@ -7,7 +7,7 @@ import {
   standardSystemPrompt,
   systemPromptFor,
   userPromptFor,
-} from '@cat-factory/core'
+} from '@cat-factory/agents'
 import { FRAGMENTS } from '@cat-factory/prompt-fragments'
 import { describe, expect, it } from 'vitest'
 

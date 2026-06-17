@@ -1,4 +1,7 @@
-import type { RunnerPoolConnectionRecord, RunnerPoolConnectionRepository } from '@cat-factory/core'
+import type {
+  RunnerPoolConnectionRecord,
+  RunnerPoolConnectionRepository,
+} from '@cat-factory/kernel'
 import type { D1Database } from '@cloudflare/workers-types'
 
 interface RunnerPoolConnectionRow {

@@ -1,6 +1,6 @@
-import type { GitHubModule } from '@cat-factory/core'
+import type { Clock } from '@cat-factory/kernel'
 import type { MessageBatch } from '@cloudflare/workers-types'
-import type { Clock } from '@cat-factory/core'
+import type { GitHubModule } from '@cat-factory/orchestration'
 import type { Env, GitHubSyncMessage } from '../env'
 import { buildContainer } from '../container'
 import { loadConfig } from '../config'

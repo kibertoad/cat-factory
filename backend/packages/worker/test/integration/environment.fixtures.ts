@@ -1,4 +1,4 @@
-import type { EnvironmentManifest } from '@cat-factory/core'
+import type { EnvironmentManifest } from '@cat-factory/kernel'
 
 // Shared fixtures for the environment-provider integration tests. The real
 // HttpEnvironmentProvider is exercised against a stubbed global `fetch` that acts

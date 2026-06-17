@@ -1,4 +1,4 @@
-import type { Membership, MembershipRepository } from '@cat-factory/core'
+import type { Membership, MembershipRepository } from '@cat-factory/kernel'
 import type { D1Database } from '@cloudflare/workers-types'
 
 interface MembershipRow {

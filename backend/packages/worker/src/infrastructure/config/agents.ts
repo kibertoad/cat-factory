@@ -1,10 +1,6 @@
 import type { AgentKind } from '@cat-factory/contracts'
-import {
-  type AgentModelConfig,
-  type AgentRouting,
-  type ModelRef,
-  resolveModelRef,
-} from '@cat-factory/core'
+import { type ModelRef, resolveModelRef } from '@cat-factory/kernel'
+import { type AgentModelConfig, type AgentRouting } from '@cat-factory/agents'
 import type { Env } from '../env'
 import { num } from './utils'
 

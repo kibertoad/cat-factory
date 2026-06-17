@@ -1,4 +1,4 @@
-import type { WorkspaceRepository, WorkspaceVisibility } from '@cat-factory/core'
+import type { WorkspaceRepository, WorkspaceVisibility } from '@cat-factory/kernel'
 import type { Workspace } from '@cat-factory/contracts'
 import type { D1Database } from '@cloudflare/workers-types'
 import { type WorkspaceRow, rowToWorkspace } from './mappers'

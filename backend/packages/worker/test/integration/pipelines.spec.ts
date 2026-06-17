@@ -1,4 +1,4 @@
-import type { Pipeline } from '@cat-factory/core'
+import type { Pipeline } from '@cat-factory/kernel'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { makeApp, type TestApp } from '../helpers'
 

@@ -1,4 +1,4 @@
-import type { EnvironmentHandle, EnvironmentManifest } from '@cat-factory/core'
+import type { EnvironmentHandle, EnvironmentManifest } from '@cat-factory/kernel'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { makeApp } from '../helpers'
 import {

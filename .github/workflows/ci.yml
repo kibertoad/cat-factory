@@ -35,13 +35,14 @@ jobs:
         with:
           # The acceptance suite builds the implementer image (whose context is
           # just implementer-harness/) and drives it from host-side scaffolding
-          # that imports @cat-factory/core and @cat-factory/worker. Gate on
-          # those packages, the root manifests/lockfile (dep or build changes),
-          # and this workflow.
+          # that imports @cat-factory/spend and @cat-factory/worker. Gate on
+          # those packages plus kernel (spend's only dep), the root
+          # manifests/lockfile (dep or build changes), and this workflow.
           filters: |
             backend:
-              - 'backend/packages/implementer-harness/**'
-              - 'backend/packages/core/**'
+              - 'backend/internal/implementer-harness/**'
+              - 'backend/packages/kernel/**'
+              - 'backend/packages/spend/**'
               - 'backend/packages/worker/**'
               - 'backend/tsconfig*.json'
               - 'package.json'

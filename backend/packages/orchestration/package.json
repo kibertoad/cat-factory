@@ -1,0 +1,37 @@
+{
+  "name": "@cat-factory/orchestration",
+  "version": "1.0.0",
+  "description": "Delivery-workflow engine for the Agent Architecture Board (execution, bootstrap, pipelines, board, boardScan, requirements, and composition root).",
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@cat-factory/agents": "workspace:*",
+    "@cat-factory/contracts": "workspace:*",
+    "@cat-factory/integrations": "workspace:*",
+    "@cat-factory/kernel": "workspace:*",
+    "@cat-factory/spend": "workspace:*",
+    "@cat-factory/workspaces": "workspace:*",
+    "ai": "^6.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0"
+  }
+}

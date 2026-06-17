@@ -1,4 +1,4 @@
-import type { CoreDependencies } from '@cat-factory/core'
+import type { CoreDependencies } from '@cat-factory/orchestration'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { resolveCorsOrigin } from './infrastructure/config/cors'

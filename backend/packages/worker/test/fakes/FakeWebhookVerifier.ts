@@ -1,4 +1,4 @@
-import type { WebhookVerifier } from '@cat-factory/core'
+import type { WebhookVerifier } from '@cat-factory/kernel'
 
 /** Webhook verifier whose result is toggled by tests. */
 export class FakeWebhookVerifier implements WebhookVerifier {

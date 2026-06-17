@@ -1,4 +1,4 @@
-import type { Workspace, WorkspaceSnapshot } from '@cat-factory/core'
+import type { Workspace, WorkspaceSnapshot } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import { makeApp } from '../helpers'
 

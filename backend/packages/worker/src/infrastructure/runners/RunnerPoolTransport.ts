@@ -5,7 +5,7 @@ import type {
   RunnerPoolProvider,
   RunnerTransport,
   SecretResolver,
-} from '@cat-factory/core'
+} from '@cat-factory/kernel'
 
 // Adapts the stateless, manifest-interpreting HttpRunnerPoolProvider to the
 // per-job RunnerTransport the container executor drives, binding one workspace's

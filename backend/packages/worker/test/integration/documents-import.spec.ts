@@ -1,4 +1,4 @@
-import type { SourceDocument } from '@cat-factory/core'
+import type { SourceDocument } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import { documentsDeps, makeApp } from '../helpers'
 import { FakeAgentExecutor } from '../fakes/FakeAgentExecutor'

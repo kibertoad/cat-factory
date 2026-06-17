@@ -3,7 +3,7 @@ import type {
   GitHubProvisioningClient,
   InstallationPermissions,
   ProvisionedRepo,
-} from '@cat-factory/core'
+} from '@cat-factory/kernel'
 import type { GitHubAppRegistry } from './GitHubAppRegistry'
 
 // `fetch`-based adapter for the privileged provisioning slice (ADR 0005). Routes
