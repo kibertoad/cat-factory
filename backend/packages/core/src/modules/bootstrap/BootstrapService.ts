@@ -9,20 +9,20 @@ import type {
   ReferenceArchitecture,
   StepSubtasks,
   UpdateReferenceArchitectureInput,
-} from '../../domain/types'
-import type { Clock, IdGenerator } from '../../ports/runtime'
-import type { BlockRepository, WorkspaceRepository } from '../../ports/repositories'
+} from '@cat-factory/kernel'
+import type { Clock, IdGenerator } from '@cat-factory/kernel'
+import type { BlockRepository, WorkspaceRepository } from '@cat-factory/kernel'
 import type {
   BootstrapJobRecord,
   BootstrapJobRepository,
   ReferenceArchitectureRecord,
   ReferenceArchitectureRepository,
-} from '../../ports/bootstrap-repositories'
-import type { RepoBootstrapper } from '../../ports/repo-bootstrapper'
-import type { BootstrapRunner } from '../../ports/bootstrap-runner'
-import type { ExecutionEventPublisher } from '../../ports/execution-events'
-import { assertFound, ConflictError } from '../../domain/errors'
-import { requireWorkspace } from '../workspaces/WorkspaceService'
+} from '@cat-factory/kernel'
+import type { RepoBootstrapper } from '@cat-factory/kernel'
+import type { BootstrapRunner } from '@cat-factory/kernel'
+import type { ExecutionEventPublisher } from '@cat-factory/kernel'
+import { assertFound, ConflictError } from '@cat-factory/kernel'
+import { requireWorkspace } from '@cat-factory/kernel'
 
 /** The poll's terminal-ness, returned to the durable driver so it knows when to stop. */
 export interface BootstrapPollResult {

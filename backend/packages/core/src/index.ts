@@ -1,27 +1,7 @@
 // Public surface of the framework-agnostic core.
 
-export * from './domain/types'
-export {
-  DomainError,
-  NotFoundError,
-  ValidationError,
-  ConflictError,
-  assertFound,
-  type DomainErrorCode,
-} from './domain/errors'
-export { DEFAULT_CONFIDENCE_THRESHOLD } from './domain/catalog'
-export {
-  type SelectableModel,
-  type ModelVariant,
-  type DirectKeyAvailable,
-  MODEL_CATALOG,
-  getSelectableModel,
-  effectiveCatalog,
-  resolveModelRef,
-} from './domain/models'
-export { seedBlocks, seedPipelines } from './domain/seed'
-
-export * from './ports'
+// Re-export kernel (backward compat: consumers of @cat-factory/core still get these)
+export * from '@cat-factory/kernel'
 
 export { BoardService, type BoardServiceDependencies } from './modules/board/BoardService'
 export * as boardLogic from './modules/board/board.logic'
@@ -36,7 +16,6 @@ export {
 export type { AdvanceOptions, AdvanceResult } from './modules/execution/advance'
 export {
   WorkspaceService,
-  requireWorkspace,
   type WorkspaceServiceDependencies,
 } from './modules/workspaces/WorkspaceService'
 export {
@@ -188,7 +167,6 @@ export * as confluenceLogic from './modules/documents/confluence.logic'
 export * as notionLogic from './modules/documents/notion.logic'
 export { CONFLUENCE_DESCRIPTOR } from './modules/documents/confluence.logic'
 export { NOTION_DESCRIPTOR } from './modules/documents/notion.logic'
-export * as atlassianLogic from './shared/atlassian.logic'
 
 export {
   TaskConnectionService,

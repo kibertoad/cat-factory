@@ -1,12 +1,12 @@
 import { generateText } from 'ai'
-import type { Block, RequirementReview, ReviewItemStatus } from '../../domain/types'
-import { assertFound, ValidationError } from '../../domain/errors'
-import type { BlockRepository } from '../../ports/repositories'
-import type { Clock, IdGenerator } from '../../ports/runtime'
-import type { ModelProvider, ModelRef } from '../../ports/model-provider'
-import type { DocumentRepository } from '../../ports/document-repositories'
-import type { TaskRepository } from '../../ports/task-repositories'
-import type { RequirementReviewRepository } from '../../ports/requirement-review-repositories'
+import type { Block, RequirementReview, ReviewItemStatus } from '@cat-factory/kernel'
+import { assertFound, ValidationError } from '@cat-factory/kernel'
+import type { BlockRepository } from '@cat-factory/kernel'
+import type { Clock, IdGenerator } from '@cat-factory/kernel'
+import type { ModelProvider, ModelRef } from '@cat-factory/kernel'
+import type { DocumentRepository } from '@cat-factory/kernel'
+import type { TaskRepository } from '@cat-factory/kernel'
+import type { RequirementReviewRepository } from '@cat-factory/kernel'
 import {
   type RequirementsContext,
   INCORPORATE_SYSTEM_PROMPT,

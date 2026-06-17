@@ -2,9 +2,9 @@ import type {
   EnvironmentAccessHandle,
   EnvironmentHandle,
   EnvironmentStatus,
-} from '../../domain/types'
-import type { EnvironmentRecord } from '../../ports/environment-repositories'
-import { ValidationError } from '../../domain/errors'
+} from '@cat-factory/kernel'
+import type { EnvironmentRecord } from '@cat-factory/kernel'
+import { ValidationError } from '@cat-factory/kernel'
 
 // Pure helpers for the ephemeral-environment integration: SSRF validation of the
 // URLs we fetch/expose, `{{var}}` interpolation over a bounded scope, dot-path

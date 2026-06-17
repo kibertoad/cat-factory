@@ -1,7 +1,7 @@
 import { generateText } from 'ai'
-import type { ModelProvider, ModelRef } from '../../ports/model-provider'
-import type { DocumentRecord } from '../../ports/document-repositories'
-import type { DocumentBoardPlan } from '../../domain/types'
+import type { ModelProvider, ModelRef } from '@cat-factory/kernel'
+import type { DocumentRecord } from '@cat-factory/kernel'
+import type { DocumentBoardPlan } from '@cat-factory/kernel'
 import { coercePlan, markdownToText, planFromHeadings } from './documents.logic'
 
 // DocumentPlannerService: turns an imported document into a proposed board

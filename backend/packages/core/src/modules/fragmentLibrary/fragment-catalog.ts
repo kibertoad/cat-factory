@@ -1,7 +1,7 @@
 import type { PromptFragment } from '@cat-factory/contracts'
-import type { AgentKind, BlockType, FragmentTier } from '../../domain/types'
-import type { FragmentSelectionContext, SelectableFragment } from '../../ports/fragment-selector'
-import type { PromptFragmentRecord } from '../../ports/fragment-repositories'
+import type { AgentKind, BlockType, FragmentTier } from '@cat-factory/kernel'
+import type { FragmentSelectionContext, SelectableFragment } from '@cat-factory/kernel'
+import type { PromptFragmentRecord } from '@cat-factory/kernel'
 
 // Pure tier-merge + deterministic-selection logic for the fragment library
 // (ADR 0006 §1, §5). No I/O — the service hands in the three tiers and the

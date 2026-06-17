@@ -1,5 +1,5 @@
-import type { ModelRef } from '../../ports/model-provider'
-import type { AgentTokenUsage } from '../../ports/agent-executor'
+import type { ModelRef } from '@cat-factory/kernel'
+import type { AgentTokenUsage } from '@cat-factory/kernel'
 
 // Pricing for the spend safeguard. Token usage is converted to a monetary cost
 // so a single, human-meaningful budget ("~100 EUR/month") can gate execution

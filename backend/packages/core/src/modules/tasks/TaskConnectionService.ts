@@ -1,10 +1,10 @@
-import type { Clock } from '../../ports/runtime'
-import type { TaskConnectionRecord, TaskConnectionRepository } from '../../ports/task-repositories'
-import type { TaskSourceRegistry } from '../../ports/task-source'
-import type { TaskConnection, TaskSourceDescriptor, TaskSourceKind } from '../../domain/types'
-import { ConflictError, ValidationError } from '../../domain/errors'
-import { requireWorkspace } from '../workspaces/WorkspaceService'
-import type { WorkspaceRepository } from '../../ports/repositories'
+import type { Clock } from '@cat-factory/kernel'
+import type { TaskConnectionRecord, TaskConnectionRepository } from '@cat-factory/kernel'
+import type { TaskSourceRegistry } from '@cat-factory/kernel'
+import type { TaskConnection, TaskSourceDescriptor, TaskSourceKind } from '@cat-factory/kernel'
+import { ConflictError, ValidationError } from '@cat-factory/kernel'
+import { requireWorkspace } from '@cat-factory/kernel'
+import type { WorkspaceRepository } from '@cat-factory/kernel'
 
 // TaskConnectionService: owns the binding between a cat-factory workspace and an
 // external task source. Connecting delegates credential validation to the

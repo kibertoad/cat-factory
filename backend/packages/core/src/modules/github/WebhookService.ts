@@ -1,4 +1,4 @@
-import type { Clock } from '../../ports/runtime'
+import type { Clock } from '@cat-factory/kernel'
 import type {
   BranchProjectionRepository,
   CheckRunProjectionRepository,
@@ -7,7 +7,7 @@ import type {
   IssueProjectionRepository,
   PullRequestProjectionRepository,
   RepoProjectionRepository,
-} from '../../ports/github-repositories'
+} from '@cat-factory/kernel'
 import {
   type GhCheckRunPayload,
   type GhCommitPayload,

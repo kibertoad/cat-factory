@@ -1,4 +1,4 @@
-import type { InstallationPermissions } from '../../ports/github-provisioning'
+import type { InstallationPermissions } from '@cat-factory/kernel'
 
 // Pure capability logic for the two-App provisioning model (ADR 0005). No I/O —
 // just the rule for whether a token may create a repo, so it's trivially

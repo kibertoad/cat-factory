@@ -6,30 +6,30 @@ import type {
   ExecutionInstance,
   PipelineStep,
   StepSubtasks,
-} from '../../domain/types'
+} from '@cat-factory/kernel'
 import { parseBlueprintService } from '@cat-factory/contracts'
-import { assertFound, ConflictError, NotFoundError } from '../../domain/errors'
-import { DEFAULT_CONFIDENCE_THRESHOLD } from '../../domain/catalog'
+import { assertFound, ConflictError, NotFoundError } from '@cat-factory/kernel'
+import { DEFAULT_CONFIDENCE_THRESHOLD } from '@cat-factory/kernel'
 import type {
   BlockRepository,
   ExecutionRepository,
   PipelineRepository,
   WorkspaceRepository,
-} from '../../ports/repositories'
-import type { Clock, IdGenerator } from '../../ports/runtime'
-import type { AgentExecutor, AgentRunContext, AgentRunResult } from '../../ports/agent-executor'
-import { isAsyncAgentExecutor } from '../../ports/agent-executor'
-import type { WorkRunner } from '../../ports/work-runner'
-import type { ExecutionEventPublisher } from '../../ports/execution-events'
-import type { DocumentRepository } from '../../ports/document-repositories'
-import type { TaskRepository } from '../../ports/task-repositories'
-import type { FragmentResolver } from '../../ports/fragment-selector'
+} from '@cat-factory/kernel'
+import type { Clock, IdGenerator } from '@cat-factory/kernel'
+import type { AgentExecutor, AgentRunContext, AgentRunResult } from '@cat-factory/kernel'
+import { isAsyncAgentExecutor } from '@cat-factory/kernel'
+import type { WorkRunner } from '@cat-factory/kernel'
+import type { ExecutionEventPublisher } from '@cat-factory/kernel'
+import type { DocumentRepository } from '@cat-factory/kernel'
+import type { TaskRepository } from '@cat-factory/kernel'
+import type { FragmentResolver } from '@cat-factory/kernel'
 import type { EnvironmentProvisioningService } from '../environments/EnvironmentProvisioningService'
 import { isDeployStep } from '../environments/environments.logic'
 import { descendantIds, serviceOf } from '../board/board.logic'
 import type { BoardService } from '../board/BoardService'
 import type { SpendService } from '../spend/SpendService'
-import { requireWorkspace } from '../workspaces/WorkspaceService'
+import { requireWorkspace } from '@cat-factory/kernel'
 import type { AdvanceOptions, AdvanceResult } from './advance'
 
 /**

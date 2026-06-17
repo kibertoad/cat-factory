@@ -1,4 +1,4 @@
-import type { AgentKind } from '../../domain/types'
+import type { AgentKind } from '@cat-factory/kernel'
 import { CI_RETRY_SANITY_CHECK } from './ci-gate'
 
 // Built-out role prompts for the business-logic / domain-rules track. Two kinds

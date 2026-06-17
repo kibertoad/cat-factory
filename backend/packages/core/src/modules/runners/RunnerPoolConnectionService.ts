@@ -1,14 +1,14 @@
-import type { Clock } from '../../ports/runtime'
+import type { Clock } from '@cat-factory/kernel'
 import type {
   RunnerPoolConnectionRecord,
   RunnerPoolConnectionRepository,
-} from '../../ports/runner-pool-repositories'
-import type { SecretCipher } from '../../ports/secret-cipher'
-import type { SecretResolver } from '../../ports/environment-provider'
-import type { RunnerPoolConnection, RunnerPoolManifest } from '../../domain/types'
-import { ConflictError, ValidationError } from '../../domain/errors'
-import { requireWorkspace } from '../workspaces/WorkspaceService'
-import type { WorkspaceRepository } from '../../ports/repositories'
+} from '@cat-factory/kernel'
+import type { SecretCipher } from '@cat-factory/kernel'
+import type { SecretResolver } from '@cat-factory/kernel'
+import type { RunnerPoolConnection, RunnerPoolManifest } from '@cat-factory/kernel'
+import { ConflictError, ValidationError } from '@cat-factory/kernel'
+import { requireWorkspace } from '@cat-factory/kernel'
+import type { WorkspaceRepository } from '@cat-factory/kernel'
 import { assertManifestUrlsSafe, referencedSecretKeys } from './runners.logic'
 
 // RunnerPoolConnectionService: owns the binding between a workspace and a

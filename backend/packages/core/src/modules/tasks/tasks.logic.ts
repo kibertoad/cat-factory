@@ -1,7 +1,7 @@
-import type { TaskSourceKind, TaskComment } from '../../domain/types'
-import type { TaskSourceProvider, TaskSourceRegistry, TaskContent } from '../../ports/task-source'
-import type { TaskRecord } from '../../ports/task-repositories'
-import { markdownToText, buildExcerpt } from '../../shared/markdown.logic'
+import type { TaskSourceKind, TaskComment } from '@cat-factory/kernel'
+import type { TaskSourceProvider, TaskSourceRegistry, TaskContent } from '@cat-factory/kernel'
+import type { TaskRecord } from '@cat-factory/kernel'
+import { markdownToText, buildExcerpt } from '@cat-factory/kernel'
 
 // Source-agnostic helpers shared by every task source: a trivial provider
 // registry, deriving a plain-text excerpt from an issue, and rendering an issue

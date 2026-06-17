@@ -1,7 +1,7 @@
-import type { BlockType, DocumentSourceKind } from '../../domain/types'
-import type { DocumentBoardPlan, PlanFrame, PlanModule, PlanTask } from '../../domain/types'
-import type { DocumentSourceProvider, DocumentSourceRegistry } from '../../ports/document-source'
-import { buildExcerpt, markdownToText } from '../../shared/markdown.logic'
+import type { BlockType, DocumentSourceKind } from '@cat-factory/kernel'
+import type { DocumentBoardPlan, PlanFrame, PlanModule, PlanTask } from '@cat-factory/kernel'
+import type { DocumentSourceProvider, DocumentSourceRegistry } from '@cat-factory/kernel'
+import { buildExcerpt, markdownToText } from '@cat-factory/kernel'
 
 // `markdownToText`/`buildExcerpt` now live in the shared markdown helpers (also
 // used by the task-source integration); re-exported here so existing

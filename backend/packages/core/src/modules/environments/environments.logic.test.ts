@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { ValidationError } from '../../domain/errors'
-import { assertSafeAtlassianBaseUrl } from '../../shared/atlassian.logic'
+import { ValidationError } from '@cat-factory/kernel'
+import { assertSafeAtlassianBaseUrl } from '@cat-factory/kernel'
 import { assertSafeEnvironmentUrl } from './environments.logic'
 
 // SSRF host-classification regression tests (Finding #6b). The guards must block

@@ -4,7 +4,7 @@ import type {
   GitHubProvisioningClient,
   InstallationPermissions,
   ProvisionedRepo,
-} from '../../ports/github-provisioning'
+} from '@cat-factory/kernel'
 import { RepoProvisioningService } from './RepoProvisioningService'
 import { canCreateRepo } from './provisioning.logic'
 

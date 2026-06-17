@@ -1,5 +1,5 @@
-import type { AgentKind } from '../../domain/types'
-import type { AgentRunContext } from '../../ports/agent-executor'
+import type { AgentKind } from '@cat-factory/kernel'
+import type { AgentRunContext } from '@cat-factory/kernel'
 import {
   acceptanceSystemPrompt,
   testApproachSection,

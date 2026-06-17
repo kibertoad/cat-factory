@@ -1,9 +1,9 @@
 import type { CreatePipelineInput } from '@cat-factory/contracts'
-import type { Pipeline } from '../../domain/types'
-import { assertFound } from '../../domain/errors'
-import type { PipelineRepository, WorkspaceRepository } from '../../ports/repositories'
-import type { IdGenerator } from '../../ports/runtime'
-import { requireWorkspace } from '../workspaces/WorkspaceService'
+import type { Pipeline } from '@cat-factory/kernel'
+import { assertFound } from '@cat-factory/kernel'
+import type { PipelineRepository, WorkspaceRepository } from '@cat-factory/kernel'
+import type { IdGenerator } from '@cat-factory/kernel'
+import { requireWorkspace } from '@cat-factory/kernel'
 
 export interface PipelineServiceDependencies {
   workspaceRepository: WorkspaceRepository

@@ -4,16 +4,16 @@ import type {
   FragmentSourceStatus,
   FragmentSyncResult,
   LinkFragmentSourceInput,
-} from '../../domain/types'
-import { NotFoundError, ValidationError, assertFound } from '../../domain/errors'
-import type { Clock, IdGenerator } from '../../ports/runtime'
-import type { GitHubClient, RepoContentEntry } from '../../ports/github-client'
+} from '@cat-factory/kernel'
+import { NotFoundError, ValidationError, assertFound } from '@cat-factory/kernel'
+import type { Clock, IdGenerator } from '@cat-factory/kernel'
+import type { GitHubClient, RepoContentEntry } from '@cat-factory/kernel'
 import type {
   FragmentSourceRecord,
   FragmentSourceRepository,
   PromptFragmentRecord,
   PromptFragmentRepository,
-} from '../../ports/fragment-repositories'
+} from '@cat-factory/kernel'
 import {
   digestListing,
   isMarkdownFile,

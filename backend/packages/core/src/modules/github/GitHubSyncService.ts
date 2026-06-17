@@ -1,5 +1,5 @@
-import type { Clock } from '../../ports/runtime'
-import type { GitHubClient, GitHubRepoRef } from '../../ports/github-client'
+import type { Clock } from '@cat-factory/kernel'
+import type { GitHubClient, GitHubRepoRef } from '@cat-factory/kernel'
 import type {
   BranchProjectionRepository,
   CheckRunProjectionRepository,
@@ -10,8 +10,8 @@ import type {
   RepoProjectionRepository,
   SyncCursor,
   SyncCursorKind,
-} from '../../ports/github-repositories'
-import type { GitHubAvailableRepo, GitHubRepo } from '../../domain/types'
+} from '@cat-factory/kernel'
+import type { GitHubAvailableRepo, GitHubRepo } from '@cat-factory/kernel'
 
 // ---------------------------------------------------------------------------
 // GitHubSyncService: keeps the local projections (repos/branches, PRs/issues,

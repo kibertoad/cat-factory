@@ -4,16 +4,16 @@ import type {
   RepoBlueprint,
   ScanRepoInput,
   ScanRepoResult,
-} from '../../domain/types'
-import type { Clock, IdGenerator } from '../../ports/runtime'
-import type { BlockRepository, WorkspaceRepository } from '../../ports/repositories'
+} from '@cat-factory/kernel'
+import type { Clock, IdGenerator } from '@cat-factory/kernel'
+import type { BlockRepository, WorkspaceRepository } from '@cat-factory/kernel'
 import type {
   RepoBlueprintRecord,
   RepoBlueprintRepository,
-} from '../../ports/board-scan-repositories'
-import type { RepoScanner } from '../../ports/repo-scanner'
-import { assertFound } from '../../domain/errors'
-import { requireWorkspace } from '../workspaces/WorkspaceService'
+} from '@cat-factory/kernel'
+import type { RepoScanner } from '@cat-factory/kernel'
+import { assertFound } from '@cat-factory/kernel'
+import { requireWorkspace } from '@cat-factory/kernel'
 import type { BoardService } from '../board/BoardService'
 import { countFeatures, describeNode } from './board-scan.logic'
 

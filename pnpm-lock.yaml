@@ -18,7 +18,7 @@ importers:
         specifier: ^1.70.0
         version: 1.70.0
 
-  backend/internal/benchmark-harness:
+  backend/packages/benchmark-harness:
     dependencies:
       '@ai-sdk/anthropic':
         specifier: ^3.0.0
@@ -31,10 +31,10 @@ importers:
         version: 2.0.50(zod@3.25.76)
       '@cat-factory/contracts':
         specifier: workspace:*
-        version: link:../../packages/contracts
+        version: link:../contracts
       '@cat-factory/core':
         specifier: workspace:*
-        version: link:../../packages/core
+        version: link:../core
       '@cat-factory/implementer-harness':
         specifier: workspace:*
         version: link:../implementer-harness
@@ -58,30 +58,6 @@ importers:
         specifier: ^4.1.8
         version: 4.1.8(@opentelemetry/api@1.9.1)(@types/node@22.19.21)(happy-dom@15.11.7)(vite@7.3.5(@types/node@22.19.21)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(yaml@2.9.0))
 
-  backend/internal/implementer-harness:
-    devDependencies:
-      '@cat-factory/core':
-        specifier: workspace:*
-        version: link:../../packages/core
-      '@cat-factory/worker':
-        specifier: workspace:*
-        version: link:../../packages/worker
-      '@hono/node-server':
-        specifier: ^1.13.0
-        version: 1.19.14(hono@4.12.25)
-      '@types/node':
-        specifier: ^22.0.0
-        version: 22.19.21
-      hono:
-        specifier: ^4.6.0
-        version: 4.12.25
-      typescript:
-        specifier: ^5.6.0
-        version: 5.9.3
-      vitest:
-        specifier: ^4.1.8
-        version: 4.1.8(@opentelemetry/api@1.9.1)(@types/node@22.19.21)(happy-dom@15.11.7)(vite@7.3.5(@types/node@22.19.21)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(yaml@2.9.0))
-
   backend/packages/contracts:
     dependencies:
       valibot:
@@ -97,6 +73,9 @@ importers:
       '@cat-factory/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@cat-factory/kernel':
+        specifier: workspace:*
+        version: link:../kernel
       '@cat-factory/prompt-fragments':
         specifier: workspace:*
         version: link:../prompt-fragments
@@ -113,6 +92,43 @@ importers:
       vitest:
         specifier: ^4.1.8
         version: 4.1.8(@opentelemetry/api@1.9.1)(@types/node@22.19.21)(happy-dom@15.11.7)(vite@7.3.5(@types/node@22.19.21)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(yaml@2.9.0))
+
+  backend/packages/implementer-harness:
+    devDependencies:
+      '@cat-factory/core':
+        specifier: workspace:*
+        version: link:../core
+      '@cat-factory/worker':
+        specifier: workspace:*
+        version: link:../worker
+      '@hono/node-server':
+        specifier: ^1.13.0
+        version: 1.19.14(hono@4.12.25)
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.19.21
+      hono:
+        specifier: ^4.6.0
+        version: 4.12.25
+      typescript:
+        specifier: ^5.6.0
+        version: 5.9.3
+      vitest:
+        specifier: ^4.1.8
+        version: 4.1.8(@opentelemetry/api@1.9.1)(@types/node@22.19.21)(happy-dom@15.11.7)(vite@7.3.5(@types/node@22.19.21)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(yaml@2.9.0))
+
+  backend/packages/kernel:
+    dependencies:
+      '@cat-factory/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      ai:
+        specifier: ^6.0.0
+        version: 6.0.206(zod@3.25.76)
+    devDependencies:
+      typescript:
+        specifier: ^5.6.0
+        version: 5.9.3
 
   backend/packages/prompt-fragments:
     dependencies:

@@ -1,14 +1,14 @@
-import type { Clock } from '../../ports/runtime'
+import type { Clock } from '@cat-factory/kernel'
 import type {
   EnvironmentConnectionRecord,
   EnvironmentConnectionRepository,
-} from '../../ports/environment-repositories'
-import type { SecretCipher } from '../../ports/secret-cipher'
-import type { SecretResolver } from '../../ports/environment-provider'
-import type { EnvironmentConnection, EnvironmentManifest } from '../../domain/types'
-import { ConflictError, ValidationError } from '../../domain/errors'
-import { requireWorkspace } from '../workspaces/WorkspaceService'
-import type { WorkspaceRepository } from '../../ports/repositories'
+} from '@cat-factory/kernel'
+import type { SecretCipher } from '@cat-factory/kernel'
+import type { SecretResolver } from '@cat-factory/kernel'
+import type { EnvironmentConnection, EnvironmentManifest } from '@cat-factory/kernel'
+import { ConflictError, ValidationError } from '@cat-factory/kernel'
+import { requireWorkspace } from '@cat-factory/kernel'
+import type { WorkspaceRepository } from '@cat-factory/kernel'
 import { assertSafeEnvironmentUrl } from './environments.logic'
 
 // EnvironmentConnectionService: owns the binding between a workspace and an

@@ -1,5 +1,5 @@
-import type { AgentKind, BlockType } from '../../domain/types'
-import type { FragmentAppliesTo } from '../../ports/fragment-repositories'
+import type { AgentKind, BlockType } from '@cat-factory/kernel'
+import type { FragmentAppliesTo } from '@cat-factory/kernel'
 
 // Pure logic for repo-sourced fragments (ADR 0006 §4): parse one Markdown file
 // with YAML frontmatter into a fragment, plus the small helpers the sync flow

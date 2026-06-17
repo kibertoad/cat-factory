@@ -1,5 +1,5 @@
-import type { AgentKind, BlockType, TestTarget } from '../../domain/types'
-import type { AgentRunContext } from '../../ports/agent-executor'
+import type { AgentKind, BlockType, TestTarget } from '@cat-factory/kernel'
+import type { AgentRunContext } from '@cat-factory/kernel'
 import { CI_RETRY_SANITY_CHECK } from './ci-gate'
 
 // Built-out role prompts for the acceptance-testing agents. These two kinds turn

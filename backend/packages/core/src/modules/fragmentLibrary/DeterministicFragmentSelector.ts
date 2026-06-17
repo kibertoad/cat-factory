@@ -2,7 +2,7 @@ import type {
   FragmentSelectionContext,
   FragmentSelector,
   SelectableFragment,
-} from '../../ports/fragment-selector'
+} from '@cat-factory/kernel'
 import { selectDeterministic } from './fragment-catalog'
 
 /**

@@ -2,7 +2,7 @@ import type {
   CreateRepoInput,
   GitHubProvisioningClient,
   ProvisionedRepo,
-} from '../../ports/github-provisioning'
+} from '@cat-factory/kernel'
 import { canCreateRepo } from './provisioning.logic'
 
 // Orchestrates "create a repo" under the two-App model (ADR 0005). The caller

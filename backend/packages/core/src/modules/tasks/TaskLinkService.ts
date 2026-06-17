@@ -1,7 +1,7 @@
-import type { Block, SourceTask, TaskSourceKind } from '../../domain/types'
-import { assertFound } from '../../domain/errors'
-import type { BlockRepository } from '../../ports/repositories'
-import type { TaskRepository } from '../../ports/task-repositories'
+import type { Block, SourceTask, TaskSourceKind } from '@cat-factory/kernel'
+import { assertFound } from '@cat-factory/kernel'
+import type { BlockRepository } from '@cat-factory/kernel'
+import type { TaskRepository } from '@cat-factory/kernel'
 import { toSourceTask } from './TaskImportService'
 
 // TaskLinkService: the write side that attaches an imported issue to the board.

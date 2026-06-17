@@ -1,4 +1,4 @@
-import type { AgentKind } from '../../domain/types'
+import type { AgentKind } from '@cat-factory/kernel'
 
 // Built-out role prompt for the mock-builder agent. This kind stands up
 // WireMock-based mocks for the external SERVICES a building block depends on, so

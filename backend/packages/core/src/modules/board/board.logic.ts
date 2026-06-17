@@ -1,4 +1,4 @@
-import type { Block, BlockLevel, Position } from '../../domain/types'
+import type { Block, BlockLevel, Position } from '@cat-factory/kernel'
 
 // Pure board computations — no IO, no ports. They operate on plain in-memory
 // block arrays so they can be exhaustively unit-tested and are reused verbatim

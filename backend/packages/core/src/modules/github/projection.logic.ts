@@ -5,7 +5,7 @@ import type {
   GitHubIssue,
   GitHubPullRequest,
   GitHubRepo,
-} from '../../domain/types'
+} from '@cat-factory/kernel'
 
 // ---------------------------------------------------------------------------
 // Pure mappers: GitHub JSON payloads → projection entities. Shared by the

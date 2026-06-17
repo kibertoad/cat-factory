@@ -1,12 +1,12 @@
-import type { Account, AccountMember, CreateAccountInput } from '../../domain/types'
+import type { Account, AccountMember, CreateAccountInput } from '@cat-factory/kernel'
 import type {
   AccountRecord,
   AccountRepository,
   Membership,
   MembershipRepository,
-} from '../../ports/account-repositories'
-import type { Clock, IdGenerator } from '../../ports/runtime'
-import { ConflictError, NotFoundError, ValidationError, assertFound } from '../../domain/errors'
+} from '@cat-factory/kernel'
+import type { Clock, IdGenerator } from '@cat-factory/kernel'
+import { ConflictError, NotFoundError, ValidationError, assertFound } from '@cat-factory/kernel'
 
 // ---------------------------------------------------------------------------
 // AccountService: the tenancy layer. An account is the owner of workspaces —

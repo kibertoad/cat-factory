@@ -5,20 +5,20 @@ import type {
   ReparentInput,
   UpdateBlockInput,
 } from '@cat-factory/contracts'
-import type { Block, BlockType, Position } from '../../domain/types'
-import { assertFound, ValidationError } from '../../domain/errors'
+import type { Block, BlockType, Position } from '@cat-factory/kernel'
+import { assertFound, ValidationError } from '@cat-factory/kernel'
 import {
   BLOCK_TYPE_LABEL,
   DEFAULT_CONFIDENCE_THRESHOLD,
   TASK_NAME_BANK,
-} from '../../domain/catalog'
+} from '@cat-factory/kernel'
 import type {
   BlockRepository,
   ExecutionRepository,
   WorkspaceRepository,
-} from '../../ports/repositories'
-import type { IdGenerator } from '../../ports/runtime'
-import { requireWorkspace } from '../workspaces/WorkspaceService'
+} from '@cat-factory/kernel'
+import type { IdGenerator } from '@cat-factory/kernel'
+import { requireWorkspace } from '@cat-factory/kernel'
 import { canReparent, descendantIds, gridSlot, serviceOf, tasksOf } from './board.logic'
 
 export interface BoardServiceDependencies {

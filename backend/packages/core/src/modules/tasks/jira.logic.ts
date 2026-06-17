@@ -1,4 +1,4 @@
-import type { TaskSourceDescriptor } from '../../domain/types'
+import type { TaskSourceDescriptor } from '@cat-factory/kernel'
 
 // Jira-specific pure logic, kept out of the worker so it is unit-testable
 // without a live site: parsing an issue key out of user input and converting an

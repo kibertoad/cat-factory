@@ -3,7 +3,7 @@ import type {
   BlueprintFeature,
   BlueprintModule,
   BlueprintService,
-} from '../../domain/types'
+} from '@cat-factory/kernel'
 
 // Pure helpers for the board-scan feature — no IO, no ports. They coerce an
 // agent's arbitrary JSON into a well-formed blueprint tree (dropping anything

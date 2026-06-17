@@ -1,17 +1,17 @@
-import type { Clock } from '../../ports/runtime'
+import type { Clock } from '@cat-factory/kernel'
 import type {
   DocumentConnectionRecord,
   DocumentConnectionRepository,
-} from '../../ports/document-repositories'
-import type { DocumentSourceRegistry } from '../../ports/document-source'
+} from '@cat-factory/kernel'
+import type { DocumentSourceRegistry } from '@cat-factory/kernel'
 import type {
   DocumentConnection,
   DocumentSourceDescriptor,
   DocumentSourceKind,
-} from '../../domain/types'
-import { ConflictError, ValidationError } from '../../domain/errors'
-import { requireWorkspace } from '../workspaces/WorkspaceService'
-import type { WorkspaceRepository } from '../../ports/repositories'
+} from '@cat-factory/kernel'
+import { ConflictError, ValidationError } from '@cat-factory/kernel'
+import { requireWorkspace } from '@cat-factory/kernel'
+import type { WorkspaceRepository } from '@cat-factory/kernel'
 
 // DocumentConnectionService: owns the binding between a cat-factory workspace
 // and an external document source. Connecting delegates credential validation to

@@ -1,11 +1,11 @@
-import type { Clock } from '../../ports/runtime'
-import type { GitHubClient, GitHubRepoRef } from '../../ports/github-client'
+import type { Clock } from '@cat-factory/kernel'
+import type { GitHubClient, GitHubRepoRef } from '@cat-factory/kernel'
 import type {
   BranchProjectionRepository,
   IssueProjectionRepository,
   PullRequestProjectionRepository,
   RepoProjectionRepository,
-} from '../../ports/github-repositories'
+} from '@cat-factory/kernel'
 import type {
   CommitFilesInput,
   GitHubBranch,
@@ -14,8 +14,8 @@ import type {
   GitHubRepo,
   MergePullRequestInput,
   OpenPullRequestInput,
-} from '../../domain/types'
-import { assertFound } from '../../domain/errors'
+} from '@cat-factory/kernel'
+import { assertFound } from '@cat-factory/kernel'
 
 // ---------------------------------------------------------------------------
 // GitHubService: the read/write facade the API controller uses. Reads are served

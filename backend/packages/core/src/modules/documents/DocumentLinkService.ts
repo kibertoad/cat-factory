@@ -4,10 +4,10 @@ import type {
   SourceDocument,
   DocumentSourceKind,
   PlanFrame,
-} from '../../domain/types'
-import { assertFound, ValidationError } from '../../domain/errors'
-import type { BlockRepository } from '../../ports/repositories'
-import type { DocumentRepository } from '../../ports/document-repositories'
+} from '@cat-factory/kernel'
+import { assertFound, ValidationError } from '@cat-factory/kernel'
+import type { BlockRepository } from '@cat-factory/kernel'
+import type { DocumentRepository } from '@cat-factory/kernel'
 import type { BoardService } from '../board/BoardService'
 import { toSourceDocument } from './DocumentImportService'
 

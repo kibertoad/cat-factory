@@ -1,12 +1,12 @@
-import type { Clock, IdGenerator } from '../../ports/runtime'
+import type { Clock, IdGenerator } from '@cat-factory/kernel'
 import type {
   EnvironmentRecord,
   EnvironmentRegistryRepository,
-} from '../../ports/environment-repositories'
-import type { EnvironmentProvider, ProvisionedEnvironment } from '../../ports/environment-provider'
-import type { SecretCipher } from '../../ports/secret-cipher'
-import type { EnvironmentAccessHandle, EnvironmentHandle } from '../../domain/types'
-import { assertFound } from '../../domain/errors'
+} from '@cat-factory/kernel'
+import type { EnvironmentProvider, ProvisionedEnvironment } from '@cat-factory/kernel'
+import type { SecretCipher } from '@cat-factory/kernel'
+import type { EnvironmentAccessHandle, EnvironmentHandle } from '@cat-factory/kernel'
+import { assertFound } from '@cat-factory/kernel'
 import type { EnvironmentConnectionService } from './EnvironmentConnectionService'
 import { assertSafeEnvironmentUrl, recordToHandle } from './environments.logic'
 

@@ -5,20 +5,20 @@ import type {
   FragmentOwnerKind,
   ResolvedFragment,
   UpdatePromptFragmentInput,
-} from '../../domain/types'
-import { ValidationError } from '../../domain/errors'
-import type { Clock } from '../../ports/runtime'
+} from '@cat-factory/kernel'
+import { ValidationError } from '@cat-factory/kernel'
+import type { Clock } from '@cat-factory/kernel'
 import type {
   FragmentSelector,
   FragmentResolver,
   FragmentResolverInput,
   FragmentRunSelection,
-} from '../../ports/fragment-selector'
+} from '@cat-factory/kernel'
 import type {
   PromptFragmentRecord,
   PromptFragmentRepository,
-} from '../../ports/fragment-repositories'
-import type { WorkspaceRepository } from '../../ports/repositories'
+} from '@cat-factory/kernel'
+import type { WorkspaceRepository } from '@cat-factory/kernel'
 import { DeterministicFragmentSelector } from './DeterministicFragmentSelector'
 import {
   type ResolvedCatalogEntry,

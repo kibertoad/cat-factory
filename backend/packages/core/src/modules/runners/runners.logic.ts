@@ -1,4 +1,4 @@
-import type { RunnerJobState, RunnerPoolManifest } from '../../domain/types'
+import type { RunnerJobState, RunnerPoolManifest } from '@cat-factory/kernel'
 import { assertSafeEnvironmentUrl } from '../environments/environments.logic'
 
 // Pure helpers for the self-hosted runner-pool integration. The generic URL

@@ -1,5 +1,5 @@
-import type { DocumentSourceDescriptor } from '../../domain/types'
-import { assertSafeAtlassianBaseUrl, normalizeAtlassianBaseUrl } from '../../shared/atlassian.logic'
+import type { DocumentSourceDescriptor } from '@cat-factory/kernel'
+import { assertSafeAtlassianBaseUrl, normalizeAtlassianBaseUrl } from '@cat-factory/kernel'
 
 // Confluence-specific pure logic, kept out of the worker so it is unit-testable
 // without a live site: parsing a page id out of user input, validating/securing

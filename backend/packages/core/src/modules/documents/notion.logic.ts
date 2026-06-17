@@ -1,4 +1,4 @@
-import type { DocumentSourceDescriptor } from '../../domain/types'
+import type { DocumentSourceDescriptor } from '@cat-factory/kernel'
 
 // Notion-specific pure logic, kept out of the worker so it is unit-testable
 // without a live workspace: parsing/normalizing a page id out of user input, and

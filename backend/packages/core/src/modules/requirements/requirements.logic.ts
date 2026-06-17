@@ -3,7 +3,7 @@ import type {
   RequirementReviewItem,
   ReviewItemCategory,
   ReviewItemSeverity,
-} from '../../domain/types'
+} from '@cat-factory/kernel'
 
 // Pure logic for the requirements-review agent: assembling the "collected
 // requirements" text from a block + its linked context, building the review and

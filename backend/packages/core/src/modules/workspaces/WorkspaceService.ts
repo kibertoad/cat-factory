@@ -1,15 +1,20 @@
 import type { CreateWorkspaceInput } from '@cat-factory/contracts'
-import type { Workspace, WorkspaceSnapshot } from '../../domain/types'
-import { assertFound } from '../../domain/errors'
-import { seedBlocks, seedPipelines } from '../../domain/seed'
+import {
+  requireWorkspace,
+  seedBlocks,
+  seedPipelines,
+} from '@cat-factory/kernel'
+import type { Workspace, WorkspaceSnapshot } from '@cat-factory/kernel'
 import type {
   BlockRepository,
   ExecutionRepository,
   PipelineRepository,
   WorkspaceRepository,
   WorkspaceVisibility,
-} from '../../ports/repositories'
-import type { Clock, IdGenerator } from '../../ports/runtime'
+} from '@cat-factory/kernel'
+import type { Clock, IdGenerator } from '@cat-factory/kernel'
+
+export { requireWorkspace } from '@cat-factory/kernel'
 
 export interface WorkspaceServiceDependencies {
   workspaceRepository: WorkspaceRepository
@@ -18,17 +23,6 @@ export interface WorkspaceServiceDependencies {
   executionRepository: ExecutionRepository
   idGenerator: IdGenerator
   clock: Clock
-}
-
-/**
- * Resolve a workspace or throw — the shared guard the other module services use
- * before touching a board's contents.
- */
-export async function requireWorkspace(
-  repository: WorkspaceRepository,
-  id: string,
-): Promise<Workspace> {
-  return assertFound(await repository.get(id), 'Workspace', id)
 }
 
 /** Creates, reads and deletes boards (workspaces) and assembles snapshots. */

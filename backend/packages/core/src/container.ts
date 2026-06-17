@@ -3,45 +3,45 @@ import type {
   ExecutionRepository,
   PipelineRepository,
   WorkspaceRepository,
-} from './ports/repositories'
-import type { AccountRepository, MembershipRepository } from './ports/account-repositories'
-import type { Clock, IdGenerator } from './ports/runtime'
-import type { AgentExecutor } from './ports/agent-executor'
-import type { TokenUsageRepository } from './ports/token-usage'
-import { type WorkRunner, NoopWorkRunner } from './ports/work-runner'
-import { type ExecutionEventPublisher, NoopEventPublisher } from './ports/execution-events'
-import type { GitHubClient } from './ports/github-client'
-import type { GitHubProvisioningClient } from './ports/github-provisioning'
-import type { WebhookVerifier } from './ports/webhook-verifier'
-import type { ModelProvider, ModelRef } from './ports/model-provider'
-import type { DocumentSourceProvider } from './ports/document-source'
+} from '@cat-factory/kernel'
+import type { AccountRepository, MembershipRepository } from '@cat-factory/kernel'
+import type { Clock, IdGenerator } from '@cat-factory/kernel'
+import type { AgentExecutor } from '@cat-factory/kernel'
+import type { TokenUsageRepository } from '@cat-factory/kernel'
+import { type WorkRunner, NoopWorkRunner } from '@cat-factory/kernel'
+import { type ExecutionEventPublisher, NoopEventPublisher } from '@cat-factory/kernel'
+import type { GitHubClient } from '@cat-factory/kernel'
+import type { GitHubProvisioningClient } from '@cat-factory/kernel'
+import type { WebhookVerifier } from '@cat-factory/kernel'
+import type { ModelProvider, ModelRef } from '@cat-factory/kernel'
+import type { DocumentSourceProvider } from '@cat-factory/kernel'
 import type {
   DocumentConnectionRepository,
   DocumentRepository,
-} from './ports/document-repositories'
-import type { TaskSourceProvider } from './ports/task-source'
-import type { TaskConnectionRepository, TaskRepository } from './ports/task-repositories'
-import type { EnvironmentProvider } from './ports/environment-provider'
+} from '@cat-factory/kernel'
+import type { TaskSourceProvider } from '@cat-factory/kernel'
+import type { TaskConnectionRepository, TaskRepository } from '@cat-factory/kernel'
+import type { EnvironmentProvider } from '@cat-factory/kernel'
 import type {
   EnvironmentConnectionRepository,
   EnvironmentRegistryRepository,
-} from './ports/environment-repositories'
-import type { RunnerPoolConnectionRepository } from './ports/runner-pool-repositories'
+} from '@cat-factory/kernel'
+import type { RunnerPoolConnectionRepository } from '@cat-factory/kernel'
 import type {
   BootstrapJobRepository,
   ReferenceArchitectureRepository,
-} from './ports/bootstrap-repositories'
-import type { RepoBootstrapper } from './ports/repo-bootstrapper'
-import type { BootstrapRunner } from './ports/bootstrap-runner'
-import type { RepoBlueprintRepository } from './ports/board-scan-repositories'
-import type { RepoScanner } from './ports/repo-scanner'
-import type { RequirementReviewRepository } from './ports/requirement-review-repositories'
-import type { SecretCipher } from './ports/secret-cipher'
+} from '@cat-factory/kernel'
+import type { RepoBootstrapper } from '@cat-factory/kernel'
+import type { BootstrapRunner } from '@cat-factory/kernel'
+import type { RepoBlueprintRepository } from '@cat-factory/kernel'
+import type { RepoScanner } from '@cat-factory/kernel'
+import type { RequirementReviewRepository } from '@cat-factory/kernel'
+import type { SecretCipher } from '@cat-factory/kernel'
 import type {
   FragmentSourceRepository,
   PromptFragmentRepository,
-} from './ports/fragment-repositories'
-import type { FragmentSelector } from './ports/fragment-selector'
+} from '@cat-factory/kernel'
+import type { FragmentSelector } from '@cat-factory/kernel'
 import type {
   BranchProjectionRepository,
   CheckRunProjectionRepository,
@@ -51,7 +51,7 @@ import type {
   IssueProjectionRepository,
   PullRequestProjectionRepository,
   RepoProjectionRepository,
-} from './ports/github-repositories'
+} from '@cat-factory/kernel'
 import { BoardService } from './modules/board/BoardService'
 import { ExecutionService } from './modules/execution/ExecutionService'
 import { PipelineService } from './modules/pipelines/PipelineService'
@@ -80,7 +80,7 @@ import { RunnerPoolConnectionService } from './modules/runners/RunnerPoolConnect
 import { BootstrapService } from './modules/bootstrap/BootstrapService'
 import { BoardScanService } from './modules/boardScan/BoardScanService'
 import { RequirementReviewService } from './modules/requirements/RequirementReviewService'
-import { BLUEPRINT_PIPELINE_ID } from './domain/seed'
+import { BLUEPRINT_PIPELINE_ID } from '@cat-factory/kernel'
 import { FragmentLibraryService } from './modules/fragmentLibrary/FragmentLibraryService'
 import {
   FragmentSourceService,

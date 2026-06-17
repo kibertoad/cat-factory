@@ -1,5 +1,5 @@
-import type { AgentKind } from '../../domain/types'
-import type { ModelRef } from '../../ports/model-provider'
+import type { AgentKind } from '@cat-factory/kernel'
+import type { ModelRef } from '@cat-factory/kernel'
 
 // "Which LLM, with what configuration, for what." Routing maps each agent kind
 // to a model and generation settings, with a mandatory default fallback. The
