@@ -19,7 +19,7 @@
     "access": "public"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -b tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

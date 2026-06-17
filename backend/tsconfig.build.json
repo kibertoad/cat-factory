@@ -1,0 +1,19 @@
+{
+  // Solution-style config: no files of its own, just the library build graph.
+  // `tsc -b backend/tsconfig.build.json` compiles every publishable library as a
+  // single incremental project-reference graph (topological order is derived
+  // from each build config's `references`), so unchanged packages are cached via
+  // their `.tsbuildinfo` instead of recompiled on every `pnpm build`.
+  "files": [],
+  "references": [
+    { "path": "packages/contracts/tsconfig.build.json" },
+    { "path": "packages/prompt-fragments/tsconfig.build.json" },
+    { "path": "packages/kernel/tsconfig.build.json" },
+    { "path": "packages/spend/tsconfig.build.json" },
+    { "path": "packages/integrations/tsconfig.build.json" },
+    { "path": "packages/workspaces/tsconfig.build.json" },
+    { "path": "packages/agents/tsconfig.build.json" },
+    { "path": "packages/orchestration/tsconfig.build.json" },
+    { "path": "packages/worker/tsconfig.build.json" }
+  ]
+}

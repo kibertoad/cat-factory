@@ -24,7 +24,7 @@
     "access": "public"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "tsc -b tsconfig.build.json",
     "dev": "wrangler dev",
     "typecheck": "tsc -p tsconfig.build.json --noEmit",
     "test": "vitest",
