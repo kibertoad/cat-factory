@@ -7,10 +7,10 @@ import type { ModelProvider, ModelRef } from '@cat-factory/kernel'
 import type { DocumentRepository } from '@cat-factory/kernel'
 import type { TaskRepository } from '@cat-factory/kernel'
 import type { RequirementReviewRepository } from '@cat-factory/kernel'
+import { REVIEW_SYSTEM_PROMPT } from '@cat-factory/agents'
 import {
   type RequirementsContext,
   INCORPORATE_SYSTEM_PROMPT,
-  REVIEW_SYSTEM_PROMPT,
   buildIncorporatePrompt,
   buildReviewPrompt,
   coerceReviewItems,

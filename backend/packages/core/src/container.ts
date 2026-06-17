@@ -80,11 +80,7 @@ import { BootstrapService } from './modules/bootstrap/BootstrapService'
 import { BoardScanService } from './modules/boardScan/BoardScanService'
 import { RequirementReviewService } from './modules/requirements/RequirementReviewService'
 import { BLUEPRINT_PIPELINE_ID } from '@cat-factory/kernel'
-import { FragmentLibraryService } from './modules/fragmentLibrary/FragmentLibraryService'
-import {
-  FragmentSourceService,
-  type ResolveFragmentInstallationId,
-} from './modules/fragmentLibrary/FragmentSourceService'
+import { FragmentLibraryService, FragmentSourceService, type ResolveFragmentInstallationId } from '@cat-factory/agents'
 
 // Composition root for the domain layer. The worker's infrastructure builds the
 // concrete ports (D1 repositories, crypto id/rng, the AI agent executor) and

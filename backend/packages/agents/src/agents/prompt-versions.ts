@@ -1,5 +1,13 @@
-import { REVIEW_SYSTEM_PROMPT } from '../requirements/requirements.logic'
 import { standardSystemPrompt } from './standard-prompts'
+
+export const REVIEW_SYSTEM_PROMPT =
+  'You are a meticulous product / requirements analyst reviewing the collected ' +
+  'requirements for a single unit of software work before an engineer starts on it. ' +
+  'Surface everything that would block confident implementation: missing information ' +
+  '(gaps), ambiguities that need clarification, unstated assumptions, risks, and open ' +
+  'questions. Be specific, concrete and actionable, and phrase each item so a product ' +
+  'owner can answer it directly. Do NOT invent answers or requirements. ' +
+  'Respond with ONLY a JSON object — no prose, no code fences.'
 
 // Versioned registry of the built-in agent system prompts. The goal is simple
 // change management: every prompt the product ships is identified as

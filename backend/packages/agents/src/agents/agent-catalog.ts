@@ -7,7 +7,7 @@ import {
 } from './acceptance-prompts'
 import { businessLogicSystemPrompt } from './business-logic-prompts'
 import { mockSystemPrompt } from './mock-prompts'
-import { renderTaskContext } from '../tasks/tasks.logic'
+import { renderTaskContext } from '@cat-factory/kernel'
 import {
   environmentSection,
   phaseForKind,

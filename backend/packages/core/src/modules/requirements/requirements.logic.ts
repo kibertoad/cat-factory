@@ -67,15 +67,6 @@ export function renderRequirements(ctx: RequirementsContext): string {
   return lines.join('\n')
 }
 
-export const REVIEW_SYSTEM_PROMPT =
-  'You are a meticulous product / requirements analyst reviewing the collected ' +
-  'requirements for a single unit of software work before an engineer starts on it. ' +
-  'Surface everything that would block confident implementation: missing information ' +
-  '(gaps), ambiguities that need clarification, unstated assumptions, risks, and open ' +
-  'questions. Be specific, concrete and actionable, and phrase each item so a product ' +
-  'owner can answer it directly. Do NOT invent answers or requirements. ' +
-  'Respond with ONLY a JSON object — no prose, no code fences.'
-
 export function buildReviewPrompt(ctx: RequirementsContext): string {
   return [
     'Here are the collected requirements to review:',

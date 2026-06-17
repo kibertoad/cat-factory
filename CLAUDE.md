@@ -5,6 +5,13 @@ Orientation for working in this repo. High-level product docs live in
 `backend/docs/`. This file captures the **runtime flows** that are spread across
 many files and are otherwise slow to re-derive.
 
+## Known environment quirks
+
+- **Worker tests fail on Windows** with `config wrangler validation failed` / 47 errors
+  and "no tests" output. This is a pre-existing Windows-only wrangler issue, not caused
+  by code changes. Use `pnpm test:run` from `backend/packages/core` (or any non-worker
+  package) to verify logic changes; the worker integration suite only runs cleanly on Linux/macOS.
+
 ## Layout
 
 One pnpm workspace (single root lockfile). Packages are sorted by visibility:

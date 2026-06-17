@@ -38,42 +38,38 @@ export {
   startOfMonthUtc,
 } from '@cat-factory/spend'
 
-export { AiAgentExecutor, type AiAgentExecutorDependencies } from './modules/agents/AiAgentExecutor'
+// Re-export agents package (backward compat: consumers of @cat-factory/core still get these)
 export {
+  AiAgentExecutor,
+  type AiAgentExecutorDependencies,
   type AgentModelConfig,
   type AgentRouting,
   resolveAgentConfig,
-} from './modules/agents/agent-routing'
-export { systemPromptFor, userPromptFor } from './modules/agents/agent-catalog'
-export {
+  systemPromptFor,
+  userPromptFor,
   type VersionedPrompt,
   type PromptId,
   PROMPT_VERSIONS,
+  REVIEW_SYSTEM_PROMPT,
   promptVersion,
   promptVersionLabel,
-} from './modules/agents/prompt-versions'
-export {
   composeSystemPrompt,
   composeBlockSystemPrompt,
   type ComposableBlock,
-} from './modules/agents/prompt-fragments'
-export {
   type StandardPhase,
   STANDARD_PHASES,
   STANDARD_PHASE_BY_KIND,
   phaseForKind,
   standardSystemPrompt,
   renderStandardUserPrompt,
-} from './modules/agents/standard-prompts'
-export {
   type AcceptanceAgentKind,
   ACCEPTANCE_AGENT_KINDS,
   acceptanceSystemPrompt,
   isAcceptanceKind,
   testApproachSection,
-} from './modules/agents/acceptance-prompts'
-export { MOCK_AGENT_KIND, isMockKind, mockSystemPrompt } from './modules/agents/mock-prompts'
-export {
+  MOCK_AGENT_KIND,
+  isMockKind,
+  mockSystemPrompt,
   type BusinessLogicAgentKind,
   BUSINESS_LOGIC_AGENT_KINDS,
   BUSINESS_DOCUMENTER_KIND,
@@ -81,7 +77,8 @@ export {
   BUSINESS_LOGIC_DOCS_DIR,
   isBusinessLogicKind,
   businessLogicSystemPrompt,
-} from './modules/agents/business-logic-prompts'
+  CI_RETRY_SANITY_CHECK,
+} from '@cat-factory/agents'
 
 export {
   type Core,
@@ -106,21 +103,17 @@ export * as requirementsLogic from './modules/requirements/requirements.logic'
 export {
   FragmentLibraryService,
   type FragmentLibraryServiceDependencies,
-} from './modules/fragmentLibrary/FragmentLibraryService'
-export {
   FragmentSourceService,
   type FragmentSourceServiceDependencies,
   type ResolveFragmentInstallationId,
-} from './modules/fragmentLibrary/FragmentSourceService'
-export { DeterministicFragmentSelector } from './modules/fragmentLibrary/DeterministicFragmentSelector'
-export {
+  DeterministicFragmentSelector,
   type ResolvedCatalogEntry,
   mergeCatalog,
   toSelectable,
   entryToFragment,
   selectDeterministic,
-} from './modules/fragmentLibrary/fragment-catalog'
-export * as fragmentSourceLogic from './modules/fragmentLibrary/fragment-source.logic'
+  fragmentSourceLogic,
+} from '@cat-factory/agents'
 
 export {
   GitHubInstallationService,

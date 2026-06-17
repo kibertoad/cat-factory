@@ -1,7 +1,7 @@
 {
-  "name": "@cat-factory/core",
+  "name": "@cat-factory/agents",
   "version": "1.0.0",
-  "description": "Framework-agnostic domain logic for the Agent Architecture Board.",
+  "description": "Agent catalog, routing, prompts and fragment library for the Agent Architecture Board.",
   "files": [
     "dist"
   ],
@@ -20,22 +20,16 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run",
-    "test:run": "vitest run",
-    "precompile:templates": "node scripts/precompile-prompts.mjs"
+    "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@cat-factory/agents": "workspace:*",
     "@cat-factory/contracts": "workspace:*",
     "@cat-factory/kernel": "workspace:*",
-    "@cat-factory/spend": "workspace:*",
     "@cat-factory/prompt-fragments": "workspace:*",
     "ai": "^6.0.0",
     "handlebars": "^4.7.8"
   },
   "devDependencies": {
-    "typescript": "^5.6.0",
-    "vitest": "^4.1.8"
+    "typescript": "^5.6.0"
   }
 }

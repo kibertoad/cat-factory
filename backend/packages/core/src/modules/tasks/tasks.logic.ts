@@ -1,7 +1,10 @@
-import type { TaskSourceKind, TaskComment } from '@cat-factory/kernel'
+import type { TaskSourceKind } from '@cat-factory/kernel'
 import type { TaskSourceProvider, TaskSourceRegistry, TaskContent } from '@cat-factory/kernel'
 import type { TaskRecord } from '@cat-factory/kernel'
 import { markdownToText, buildExcerpt } from '@cat-factory/kernel'
+
+export type { TaskContextView } from '@cat-factory/kernel'
+export { renderTaskContext } from '@cat-factory/kernel'
 
 // Source-agnostic helpers shared by every task source: a trivial provider
 // registry, deriving a plain-text excerpt from an issue, and rendering an issue
@@ -26,56 +29,9 @@ export class MapTaskSourceRegistry implements TaskSourceRegistry {
   }
 }
 
-/** The most recent comments to fold into context (newest, capped). */
-const MAX_CONTEXT_COMMENTS = 5
-
 /** A short plain-text excerpt of an issue: its summary + the start of its description. */
 export function buildTaskExcerpt(content: TaskContent | TaskRecord, max = 280): string {
   const description = markdownToText(content.description)
   const lead = description ? `${content.title} — ${description}` : content.title
   return buildExcerpt(lead, max)
-}
-
-/** The plain shape the prompt renderer consumes (decoupled from the ports). */
-export interface TaskContextView {
-  key: string
-  url: string
-  title: string
-  status: string
-  type: string
-  assignee: string | null
-  priority: string | null
-  labels: string[]
-  description: string
-  comments: TaskComment[]
-}
-
-/** The one-line metadata header (status / type / assignee / priority / labels). */
-function metadataLine(view: TaskContextView): string {
-  const parts = [`Status: ${view.status || '(unknown)'}`, `Type: ${view.type || '(unknown)'}`]
-  if (view.assignee) parts.push(`Assignee: ${view.assignee}`)
-  if (view.priority) parts.push(`Priority: ${view.priority}`)
-  if (view.labels.length) parts.push(`Labels: ${view.labels.join(', ')}`)
-  return parts.join(' · ')
-}
-
-/**
- * Render an issue into a compact Markdown block for the agent prompt: a titled
- * header with its URL, a metadata line, the description, then the most recent
- * comments (capped, each truncated) so the section stays bounded.
- */
-export function renderTaskContext(view: TaskContextView): string {
-  const lines = [`### [${view.key}] ${view.title} (${view.url})`, metadataLine(view)]
-  const description = view.description.trim()
-  if (description) lines.push('', description)
-  const recent = view.comments.slice(-MAX_CONTEXT_COMMENTS)
-  if (recent.length) {
-    lines.push('', 'Recent comments:')
-    for (const c of recent) {
-      const who = c.author || 'unknown'
-      const when = c.createdAt ? ` (${c.createdAt.slice(0, 10)})` : ''
-      lines.push(`- ${who}${when}: ${buildExcerpt(c.body, 200)}`)
-    }
-  }
-  return lines.join('\n')
 }

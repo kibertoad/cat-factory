@@ -34,3 +34,8 @@ export {
 } from './shared/atlassian.logic'
 
 export { requireWorkspace } from './workspace-guard'
+
+export {
+  type TaskContextView,
+  renderTaskContext,
+} from './shared/tasks-prompt.logic'

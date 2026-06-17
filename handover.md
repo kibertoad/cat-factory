@@ -1,6 +1,6 @@
 # Handover — splitting `@cat-factory/core` into scoped packages
 
-**Status:** Step 2 complete (commit `f3ec9f9`). Proceed with Step 3.
+**Status:** Step 3 complete. Proceed with Step 4 (`@cat-factory/integrations`).
 **Prereqs landed:** the internal/published package separation (this branch —
 `reshape/internal-public-split`) and the core dedup (PR #54,
 `refactor/core-dedup`). Both are independent of this work and can be merged in
@@ -17,6 +17,19 @@ directly from `@cat-factory/spend`; implementer-harness devDep swapped from core
 to spend; CI `changes` filter narrowed to `backend/packages/spend/**` +
 `backend/packages/kernel/**` (core no longer gates the Docker acceptance job);
 changeset in `.changeset/spend-extract.md`.
+
+**Step 3 done:** `@cat-factory/agents` extracted — `modules/agents/*` (11 files:
+AiAgentExecutor, agent catalog/routing, all prompt files, versioned prompt
+registry, ci-gate) and `modules/fragmentLibrary/*` (5 files) moved via git rename.
+Two cross-module deps resolved cleanly: `REVIEW_SYSTEM_PROMPT` now lives in agents
+(its natural home as an agent prompt) — `requirements.logic.ts` and
+`RequirementReviewService.ts` in core import it from `@cat-factory/agents`;
+`renderTaskContext`/`TaskContextView` moved to `@cat-factory/kernel`
+(`shared/tasks-prompt.logic.ts`) since they're pure and kernel-deps-only, and
+`tasks.logic.ts` in core re-exports them from there. `@cat-factory/core`
+re-exports the full agents+fragmentLibrary surface for backward compat; no worker
+or harness import paths changed. Build, typecheck, and core unit tests all pass.
+Changeset in `.changeset/agents-extract.md`.
 
 ---
 
