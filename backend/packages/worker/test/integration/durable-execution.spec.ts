@@ -171,17 +171,19 @@ describe('durable execution: sweeper', () => {
     const agentRunRepository = new D1AgentRunRepository({ db: env.DB })
     const redrove: AgentRunRef[] = []
     // Negative lease => every running row counts as stale (now - (-x) > updated_at).
-    const redriven = await sweepStuckRuns({
+    const result = await sweepStuckRuns({
       agentRunRepository,
-      isAlive: async () => false,
+      // `missing` => the instance was lost, so it is safe to (re-)create.
+      instanceState: async () => 'missing',
       redrive: async (ref) => {
         redrove.push(ref)
       },
+      finalizeOrphan: async () => {},
       clock,
       leaseMs: -60_000,
     })
 
-    expect(redriven).toBeGreaterThanOrEqual(1)
+    expect(result.redriven).toBeGreaterThanOrEqual(1)
     expect(redrove.some((r) => r.id === instance.id && r.kind === 'execution')).toBe(true)
   })
 
@@ -195,18 +197,55 @@ describe('durable execution: sweeper', () => {
 
     const agentRunRepository = new D1AgentRunRepository({ db: env.DB })
     const redrove: AgentRunRef[] = []
-    const redriven = await sweepStuckRuns({
+    const finalized: AgentRunRef[] = []
+    const result = await sweepStuckRuns({
       agentRunRepository,
-      isAlive: async () => true,
+      instanceState: async () => 'alive',
       redrive: async (ref) => {
         redrove.push(ref)
+      },
+      finalizeOrphan: async (ref) => {
+        finalized.push(ref)
       },
       clock,
       leaseMs: -60_000,
     })
 
-    expect(redriven).toBe(0)
+    expect(result.redriven).toBe(0)
+    expect(result.finalized).toBe(0)
     expect(redrove.length).toBe(0)
+    expect(finalized.length).toBe(0)
+  })
+
+  it('finalizes a stale run whose workflow is terminal (cannot be re-driven)', async () => {
+    const wsId = await seedWorkspace()
+    const starter = buildContainer(env, {
+      agentExecutor: new FakeAgentExecutor(),
+      workRunner: new FakeWorkRunner(),
+    })
+    const instance = await starter.executionService.start(wsId, 'task_login', 'pl_quick')
+
+    const agentRunRepository = new D1AgentRunRepository({ db: env.DB })
+    const redrove: AgentRunRef[] = []
+    const finalized: AgentRunRef[] = []
+    const result = await sweepStuckRuns({
+      agentRunRepository,
+      // `terminal` => the instance ran and ended; it can't be recreated under the
+      // same id, so the sweeper must finalize (not re-drive) the orphaned run.
+      instanceState: async () => 'terminal',
+      redrive: async (ref) => {
+        redrove.push(ref)
+      },
+      finalizeOrphan: async (ref) => {
+        finalized.push(ref)
+      },
+      clock,
+      leaseMs: -60_000,
+    })
+
+    expect(result.finalized).toBeGreaterThanOrEqual(1)
+    expect(redrove.length).toBe(0)
+    expect(finalized.some((r) => r.id === instance.id && r.kind === 'execution')).toBe(true)
   })
 
   it('spans both kinds: re-drives a stale bootstrap run too', async () => {
@@ -222,17 +261,18 @@ describe('durable execution: sweeper', () => {
 
     const agentRunRepository = new D1AgentRunRepository({ db: env.DB })
     const redrove: AgentRunRef[] = []
-    const redriven = await sweepStuckRuns({
+    const result = await sweepStuckRuns({
       agentRunRepository,
-      isAlive: async () => false,
+      instanceState: async () => 'missing',
       redrive: async (ref) => {
         redrove.push(ref)
       },
+      finalizeOrphan: async () => {},
       clock,
       leaseMs: -60_000,
     })
 
-    expect(redriven).toBeGreaterThanOrEqual(1)
+    expect(result.redriven).toBeGreaterThanOrEqual(1)
     expect(redrove.some((r) => r.id === 'boot_stale' && r.kind === 'bootstrap')).toBe(true)
   })
 })

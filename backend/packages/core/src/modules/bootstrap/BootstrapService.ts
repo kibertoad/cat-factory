@@ -505,6 +505,50 @@ export class BootstrapService {
     return { state: 'done' }
   }
 
+  /**
+   * Explicitly stop a *running* bootstrap (the unified `POST /agent-runs/:id/stop`
+   * surface): kill its per-run container, tear down the durable driver, then mark
+   * the job `failed` (kind `cancelled`) and its service frame `blocked` so the board
+   * shows it stopped — with retry — instead of "bootstrapping…" forever. Idempotent:
+   * a job already in a terminal state is returned unchanged. `opts.reason`/`opts.kind`
+   * let the orphan sweep reuse this with its own wording.
+   */
+  async stop(
+    workspaceId: string,
+    jobId: string,
+    opts: { reason?: string; kind?: BootstrapFailureKind } = {},
+  ): Promise<BootstrapJob> {
+    await requireWorkspace(this.deps.workspaceRepository, workspaceId)
+    const record = assertFound(
+      await this.deps.bootstrapJobRepository.get(workspaceId, jobId),
+      'Bootstrap job',
+      jobId,
+    )
+    if (record.status === 'succeeded' || record.status === 'failed') return toBootstrapJob(record)
+
+    // Kill the per-run container first, then the durable driver, so neither is left
+    // running once the job is marked terminal. Both are best-effort/idempotent.
+    await this.stopContainer(workspaceId, jobId)
+    await this.deps.bootstrapRunner?.cancelRun(workspaceId, jobId)
+
+    const message = opts.reason ?? 'Stopped by the user.'
+    const patch = {
+      status: 'failed' as const,
+      error: message,
+      failure: this.buildFailure(opts.kind ?? 'cancelled', message, null, record.subtasks),
+      updatedAt: this.deps.clock.now(),
+    }
+    await this.deps.bootstrapJobRepository.update(workspaceId, jobId, patch)
+    const block = await this.markFrame(
+      workspaceId,
+      record.blockId,
+      'blocked',
+      `Bootstrap stopped: ${message}`,
+    )
+    await this.emitBootstrap(workspaceId, toBootstrapJob({ ...record, ...patch }), block)
+    return toBootstrapJob({ ...record, ...patch })
+  }
+
   // ---- helpers ------------------------------------------------------------
 
   /** Create the provisional, in-progress service frame a bootstrap run materialises. */
@@ -595,10 +639,7 @@ function sameSubtasks(a: StepSubtasks | null, b: StepSubtasks): boolean {
 }
 
 /** Whether two todo-item lists carry the same labels + statuses, in order. */
-function sameSubtaskItems(
-  a: StepSubtasks['items'],
-  b: StepSubtasks['items'],
-): boolean {
+function sameSubtaskItems(a: StepSubtasks['items'], b: StepSubtasks['items']): boolean {
   if (a === b) return true
   if (!a || !b || a.length !== b.length) return false
   return a.every((it, i) => it.label === b[i]?.label && it.status === b[i]?.status)
@@ -616,5 +657,6 @@ const FAILURE_HINTS: Record<BootstrapFailureKind, string> = {
     'A container watchdog fired (no agent activity, or the max run duration was exceeded). Check the container logs for where it stalled, then retry.',
   agent:
     'The bootstrapper agent or the git push reported a failure. See the detail below and the container logs, fix the cause if needed, then retry.',
+  cancelled: 'You stopped this run; its container was killed. Retry to start it again.',
   unknown: 'See the detail below and the container logs in the Cloudflare dashboard, then retry.',
 }

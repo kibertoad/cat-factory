@@ -24,7 +24,7 @@ import type { TaskRepository } from '../../ports/task-repositories'
 import type { FragmentResolver } from '../../ports/fragment-selector'
 import type { EnvironmentProvisioningService } from '../environments/EnvironmentProvisioningService'
 import { isDeployStep } from '../environments/environments.logic'
-import { serviceOf } from '../board/board.logic'
+import { descendantIds, serviceOf } from '../board/board.logic'
 import type { BoardService } from '../board/BoardService'
 import type { SpendService } from '../spend/SpendService'
 import { requireWorkspace } from '../workspaces/WorkspaceService'
@@ -44,6 +44,7 @@ const EXECUTION_FAILURE_HINTS: Partial<Record<AgentFailureKind, string>> = {
     'The run exceeded its time budget — a step or the implementation job did not finish in time. Retry to start it again.',
   decision_timeout:
     'A required decision was not answered in time, so the run was stopped. Retry to re-run the pipeline.',
+  cancelled: 'You stopped this run; its container was killed. Retry to start it again.',
   unknown: 'The run failed for an unclassified reason. Review the run, then retry.',
 }
 
@@ -820,9 +821,13 @@ export class ExecutionService {
   async cancel(workspaceId: string, blockId: string): Promise<Block> {
     await this.requireWorkspace(workspaceId)
     await this.requireBlock(workspaceId, blockId)
-    // Tear down the durable run (if any) before removing its record.
+    // Tear down the durable run (if any) AND its per-run container before removing
+    // the record, so a cancel never leaves a container running until its watchdog.
     const existing = await this.executionRepository.getByBlock(workspaceId, blockId)
-    if (existing) await this.workRunner.cancelRun(workspaceId, existing.id)
+    if (existing) {
+      await this.stopRunContainer(workspaceId, existing.id)
+      await this.workRunner.cancelRun(workspaceId, existing.id)
+    }
     await this.executionRepository.deleteByBlock(workspaceId, blockId)
     await this.blockRepository.update(workspaceId, blockId, {
       status: 'planned',
@@ -833,6 +838,74 @@ export class ExecutionService {
     // reconstruct that from a per-instance event, so signal a coarse refresh.
     await this.events.boardChanged(workspaceId, 'cancel')
     return this.requireBlock(workspaceId, blockId)
+  }
+
+  /**
+   * Explicitly stop a *running* run by id (the unified `POST /agent-runs/:id/stop`
+   * surface): kill its per-run container, tear down the durable driver, then record
+   * a terminal `cancelled` failure so the board shows the run stopped (with retry)
+   * rather than spinning forever. Idempotent — a run already terminal is returned
+   * as-is. `opts.reason`/`opts.kind` let the orphan sweep reuse this with its own
+   * wording instead of the user-facing default.
+   */
+  async stopRun(
+    workspaceId: string,
+    executionId: string,
+    opts: { reason?: string; kind?: AgentFailureKind } = {},
+  ): Promise<ExecutionInstance> {
+    await this.requireWorkspace(workspaceId)
+    const instance = assertFound(
+      await this.executionRepository.get(workspaceId, executionId),
+      'Execution',
+      executionId,
+    )
+    if (instance.status === 'failed' || instance.status === 'done') return instance
+    await this.stopRunContainer(workspaceId, executionId)
+    await this.workRunner.cancelRun(workspaceId, executionId)
+    await this.failRun(
+      workspaceId,
+      executionId,
+      opts.reason ?? 'Stopped by the user.',
+      opts.kind ?? 'cancelled',
+    )
+    return assertFound(
+      await this.executionRepository.get(workspaceId, executionId),
+      'Execution',
+      executionId,
+    )
+  }
+
+  /**
+   * Tear down every run under a block subtree — kill each container, terminate each
+   * durable driver, and delete the run record — so deleting a service/module never
+   * orphans a container or a Workflows instance. Best-effort and silent: the board
+   * delete that follows emits the coarse refresh, so no per-run event is needed.
+   */
+  async teardownForBlockTree(workspaceId: string, rootId: string): Promise<void> {
+    const blocks = await this.blockRepository.listByWorkspace(workspaceId)
+    for (const blockId of descendantIds(blocks, rootId)) {
+      const run = await this.executionRepository.getByBlock(workspaceId, blockId)
+      if (!run) continue
+      await this.stopRunContainer(workspaceId, run.id)
+      await this.workRunner.cancelRun(workspaceId, run.id)
+      await this.executionRepository.deleteByBlock(workspaceId, blockId)
+    }
+  }
+
+  /**
+   * Best-effort: kill the per-run container backing an execution. The container is
+   * keyed by the execution id (see ContainerAgentExecutor), so the handle needs no
+   * step lookup. A no-op for inline executors (no `stopJob`) and for an already-gone
+   * container; never throws, so it can't derail the teardown that calls it.
+   */
+  private async stopRunContainer(workspaceId: string, executionId: string): Promise<void> {
+    const executor = this.agentExecutor
+    if (!isAsyncAgentExecutor(executor) || !executor.stopJob) return
+    try {
+      await executor.stopJob({ jobId: executionId, workspaceId })
+    } catch {
+      // The container may already be gone (eviction/completion) — nothing to reclaim.
+    }
   }
 }
 

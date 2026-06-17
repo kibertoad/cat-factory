@@ -217,6 +217,7 @@ export type AgentRunKind = v.InferOutput<typeof agentRunKindSchema>
  *   - `agent`            — the agent / git push reported a failure.
  *   - `job_failed`       — an async container job came back failed. [execution]
  *   - `decision_timeout` — a human decision was not answered in time. [execution]
+ *   - `cancelled`        — the user (or an orphan sweep) explicitly stopped the run.
  *   - `unknown`          — anything not otherwise classified.
  */
 export const agentFailureKindSchema = v.picklist([
@@ -227,6 +228,7 @@ export const agentFailureKindSchema = v.picklist([
   'agent',
   'job_failed',
   'decision_timeout',
+  'cancelled',
   'unknown',
 ])
 export type AgentFailureKind = v.InferOutput<typeof agentFailureKindSchema>

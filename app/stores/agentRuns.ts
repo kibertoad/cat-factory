@@ -100,5 +100,18 @@ export const useAgentRunsStore = defineStore('agentRuns', () => {
     await ws.refresh()
   }
 
-  return { bootstrapJobs, hydrate, upsertBootstrap, byBlock, retry }
+  /**
+   * Explicitly stop a running run (bootstrap or execution) via the unified endpoint:
+   * the backend kills the per-run container + tears down the durable driver, then
+   * marks the run cancelled. Refresh so both stores rehydrate and the card flips out
+   * of its "running" state. Returns the resolved kind so the caller can word a toast.
+   */
+  async function stop(runId: string): Promise<AgentRunKind> {
+    const ws = useWorkspaceStore()
+    const { kind } = await api.stopAgentRun(ws.requireId(), runId)
+    await ws.refresh()
+    return kind
+  }
+
+  return { bootstrapJobs, hydrate, upsertBootstrap, byBlock, retry, stop }
 })

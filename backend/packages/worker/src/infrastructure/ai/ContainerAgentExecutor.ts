@@ -117,6 +117,18 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
   }
 
   /**
+   * Stop a running job and reclaim its backing runner: resolve the same transport
+   * the job dispatched to (by workspace) and `release` it — for the Cloudflare
+   * backend this SIGKILLs the per-run container instead of letting it idle out.
+   * Best-effort/idempotent: a transport without `release`, or an already-gone job,
+   * is a no-op.
+   */
+  async stopJob(handle: AgentJobHandle): Promise<void> {
+    const transport = await this.deps.resolveTransport(handle.workspaceId)
+    await transport.release?.(handle.jobId)
+  }
+
+  /**
    * Synchronous convenience for non-durable callers (and tests): dispatch then
    * poll inline until the job finishes. The durable driver does not use this — it
    * calls {@link startJob}/{@link pollJob} so it can sleep durably between polls.

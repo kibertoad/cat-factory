@@ -66,7 +66,14 @@ export function boardController(): Hono<AppEnv> {
   })
 
   app.delete('/blocks/:blockId', async (c) => {
-    await c.get('container').boardService.removeBlock(param(c, 'workspaceId'), param(c, 'blockId'))
+    const container = c.get('container')
+    const workspaceId = param(c, 'workspaceId')
+    const blockId = param(c, 'blockId')
+    // Tear down any running runs under this subtree FIRST — killing their containers
+    // and durable drivers — so deleting a service/module never orphans a container
+    // that would idle until its watchdog. Then remove the blocks + run records.
+    await container.executionService.teardownForBlockTree(workspaceId, blockId)
+    await container.boardService.removeBlock(workspaceId, blockId)
     return c.body(null, 204)
   })
 

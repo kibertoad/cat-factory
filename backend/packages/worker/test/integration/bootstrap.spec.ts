@@ -256,6 +256,41 @@ describe('bootstrap repo', () => {
     expect(frame!.status).toBe('ready')
   })
 
+  it('stops a running run: kills the container, fails the job (cancelled) and blocks the frame', async () => {
+    const bootstrapper = new FakeRepoBootstrapper()
+    const app = makeApp(undefined, { repoBootstrapper: bootstrapper })
+    const workspaceId = await newWorkspace(app)
+    const base = `/workspaces/${workspaceId}/bootstrap`
+
+    const job = await app.call<BootstrapJob>('POST', `${base}/jobs`, {
+      repoName: 'stop-me',
+      instructions: 'Scaffold a service.',
+    })
+    expect(job.body.status).toBe('running')
+
+    const stop = await app.call<{ kind: string; run: BootstrapJob }>(
+      'POST',
+      `/workspaces/${workspaceId}/agent-runs/${job.body.id}/stop`,
+    )
+    expect(stop.status).toBe(200)
+    expect(stop.body.kind).toBe('bootstrap')
+    expect(stop.body.run.status).toBe('failed')
+    expect(stop.body.run.failure?.kind).toBe('cancelled')
+    // The per-run container was reclaimed and the frame flipped to blocked.
+    expect(bootstrapper.stopped).toContain(job.body.id)
+    const snap = await app.call<WorkspaceSnapshot>('GET', `/workspaces/${workspaceId}`)
+    const frame = snap.body.blocks.find((b: Block) => b.id === job.body.blockId)
+    expect(frame!.status).toBe('blocked')
+
+    // Idempotent: stopping an already-terminal job returns it unchanged.
+    const again = await app.call<{ kind: string; run: BootstrapJob }>(
+      'POST',
+      `/workspaces/${workspaceId}/agent-runs/${job.body.id}/stop`,
+    )
+    expect(again.status).toBe(200)
+    expect(again.body.run.status).toBe('failed')
+  })
+
   it('409s retrying a job that is not in a failed state', async () => {
     const bootstrapper = new FakeRepoBootstrapper()
     const app = makeApp(undefined, { repoBootstrapper: bootstrapper })

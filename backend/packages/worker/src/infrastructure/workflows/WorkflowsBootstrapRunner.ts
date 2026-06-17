@@ -22,4 +22,13 @@ export class WorkflowsBootstrapRunner implements BootstrapRunner {
       // re-drive racing a live instance). The existing instance is authoritative.
     }
   }
+
+  async cancelRun(_workspaceId: string, jobId: string): Promise<void> {
+    try {
+      const instance = await this.workflow.get(jobId)
+      await instance.terminate()
+    } catch {
+      // No live instance to terminate (already finished/terminated). Nothing to do.
+    }
+  }
 }

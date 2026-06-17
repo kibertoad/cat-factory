@@ -12,9 +12,16 @@ export interface BootstrapRunner {
    * instance, is a no-op) — the persisted job record is authoritative.
    */
   startRun(workspaceId: string, jobId: string): Promise<void>
+  /**
+   * Best-effort: tear down the durable driver for `jobId` (terminate its Workflows
+   * instance) when the run is being stopped/cancelled. Idempotent — no live
+   * instance to terminate is a no-op.
+   */
+  cancelRun(workspaceId: string, jobId: string): Promise<void>
 }
 
 /** The default runner: does nothing (tests drive `pollBootstrapJob` directly). */
 export class NoopBootstrapRunner implements BootstrapRunner {
   async startRun(): Promise<void> {}
+  async cancelRun(): Promise<void> {}
 }

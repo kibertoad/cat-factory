@@ -199,6 +199,15 @@ export interface AsyncAgentExecutor extends AgentExecutor {
   startJob(context: AgentRunContext): Promise<AgentJobHandle>
   /** Poll a previously-started job for its current state. */
   pollJob(handle: AgentJobHandle): Promise<AgentJobUpdate>
+  /**
+   * Best-effort: stop a running job and reclaim its backing resources (e.g. kill
+   * the per-run container), so a user cancel / block delete / orphan sweep does not
+   * leak a container that idles until its watchdog. Optional — backends with
+   * nothing to reclaim may omit it; callers must treat it as best-effort and must
+   * not let a failure here derail their own teardown. Idempotent: stopping an
+   * already-gone job is a no-op.
+   */
+  stopJob?(handle: AgentJobHandle): Promise<void>
 }
 
 /** Narrow an executor to the async-capable interface. */

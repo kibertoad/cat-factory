@@ -53,6 +53,17 @@ export class CloudflareContainerTransport implements RunnerTransport {
     }
     return (await res.json()) as RunnerJobView
   }
+
+  /**
+   * Reclaim the per-run container now (SIGKILL via the DO's `shutdown` RPC) instead
+   * of waiting for its idle `sleepAfter`. Called when a run is stopped/cancelled or
+   * its block is deleted. Best-effort and idempotent: shutting down an already-gone
+   * container is a no-op (the base class swallows it).
+   */
+  async release(jobId: string): Promise<void> {
+    const stub = this.namespace.get(this.namespace.idFromName(jobId))
+    await stub.shutdown()
+  }
 }
 
 async function safeText(res: Response): Promise<string> {

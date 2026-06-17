@@ -5,6 +5,7 @@ import DecisionBadge from './DecisionBadge.vue'
 import DraggableTask from './DraggableTask.vue'
 import ModuleFrame from './ModuleFrame.vue'
 import AgentFailureCard from '~/components/board/AgentFailureCard.vue'
+import AgentStopButton from '~/components/board/AgentStopButton.vue'
 import { useBlockDrag } from '~/composables/useBlockDrag'
 
 // Vue Flow passes the node's `id` and `data` as props to custom node components.
@@ -174,6 +175,9 @@ const ITEM_ICON: Record<string, string> = {
             :style="{ width: bootstrapPct + '%' }"
           />
         </div>
+        <div v-if="run" class="mt-2 flex justify-end">
+          <AgentStopButton :run-id="run.runId" :kind="run.kind" size="xs" variant="ghost" />
+        </div>
       </div>
       <!-- failed run: shared failure banner + retry -->
       <div v-else-if="runFailed && run" class="p-2">
@@ -260,6 +264,9 @@ const ITEM_ICON: Record<string, string> = {
             <span>{{ item.label }}</span>
           </li>
         </ul>
+        <div v-if="run" class="mt-2 flex justify-end">
+          <AgentStopButton :run-id="run.runId" :kind="run.kind" size="xs" variant="ghost" />
+        </div>
       </div>
       <!-- failed run: shared failure banner + retry -->
       <div v-else-if="runFailed && run" class="p-3">

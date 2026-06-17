@@ -44,5 +44,30 @@ export function agentRunController(): Hono<AppEnv> {
     return c.json({ kind: ref.kind, run }, 201)
   })
 
+  // Explicitly stop a running run (bootstrap or execution). Kills the per-run
+  // container and tears down the durable driver, then marks the run terminally
+  // `cancelled` so the board stops showing it as running. Resolves the kind from
+  // the unified agent_runs table and dispatches to the matching service.
+  app.post('/agent-runs/:id/stop', async (c) => {
+    const container = c.get('container')
+    const workspaceId = param(c, 'workspaceId')
+    const id = param(c, 'id')
+
+    const ref = await container.agentRunRepository.getRef(workspaceId, id)
+    if (!ref) {
+      return c.json({ error: { code: 'not_found', message: `Agent run '${id}' not found` } }, 404)
+    }
+
+    if (ref.kind === 'bootstrap') {
+      const bootstrap = container.bootstrap
+      if (!bootstrap) return unavailable(c, 'Repo bootstrap is not configured')
+      const run = await bootstrap.service.stop(workspaceId, id)
+      return c.json({ kind: ref.kind, run })
+    }
+
+    const run = await container.executionService.stopRun(workspaceId, id)
+    return c.json({ kind: ref.kind, run })
+  })
+
   return app
 }

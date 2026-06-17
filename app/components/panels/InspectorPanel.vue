@@ -10,6 +10,7 @@ import TaskStructure from '~/components/panels/inspector/TaskStructure.vue'
 import TaskModelSettings from '~/components/panels/inspector/TaskModelSettings.vue'
 import TaskExecution from '~/components/panels/inspector/TaskExecution.vue'
 import AgentFailureCard from '~/components/board/AgentFailureCard.vue'
+import AgentStopButton from '~/components/board/AgentStopButton.vue'
 
 const board = useBoardStore()
 const pipelines = usePipelinesStore()
@@ -97,6 +98,15 @@ const failedRun = computed(() => {
   const run = block.value ? agentRuns.byBlock[block.value.id] : undefined
   return run && run.status === 'failed' ? run : null
 })
+
+// A running run on a container frame (a "bootstrapping…" service). Tasks surface
+// their own Stop in TaskExecution, so this covers the bootstrap case the board was
+// previously unable to stop. Drives the inspector's Stop control.
+const runningRun = computed(() => {
+  if (!isContainer.value) return null
+  const run = block.value ? agentRuns.byBlock[block.value.id] : undefined
+  return run && run.status === 'running' ? run : null
+})
 </script>
 
 <template>
@@ -145,6 +155,18 @@ const failedRun = computed(() => {
 
       <!-- failed run (bootstrap or execution): shared failure banner + retry -->
       <AgentFailureCard v-if="failedRun" :run="failedRun" />
+
+      <!-- running bootstrap: let the user stop it (kills the container) -->
+      <div
+        v-else-if="runningRun"
+        class="flex items-center justify-between gap-2 rounded-lg border border-amber-900/60 bg-amber-950/30 px-3 py-2"
+      >
+        <span class="flex items-center gap-1.5 text-xs text-amber-300">
+          <UIcon name="i-lucide-loader-circle" class="h-3.5 w-3.5 animate-spin" />
+          Bootstrapping…
+        </span>
+        <AgentStopButton :run-id="runningRun.runId" :kind="runningRun.kind" size="xs" />
+      </div>
 
       <!-- external links -->
       <div class="flex flex-wrap gap-2">

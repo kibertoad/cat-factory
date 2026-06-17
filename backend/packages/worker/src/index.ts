@@ -6,6 +6,7 @@ import { D1AgentRunRepository } from './infrastructure/repositories/D1AgentRunRe
 import { D1CommitProjectionRepository } from './infrastructure/repositories/D1CommitProjectionRepository'
 import { D1RateLimitRepository } from './infrastructure/repositories/D1RateLimitRepository'
 import { D1TokenUsageRepository } from './infrastructure/repositories/D1TokenUsageRepository'
+import { buildContainer } from './infrastructure/container'
 import { CryptoIdGenerator, SystemClock } from './infrastructure/runtime'
 import { WorkflowsWorkRunner } from './infrastructure/workflows/WorkflowsWorkRunner'
 import { WorkflowsBootstrapRunner } from './infrastructure/workflows/WorkflowsBootstrapRunner'
@@ -100,22 +101,45 @@ export default {
       ctx.waitUntil(
         sweepStuckRuns({
           agentRunRepository: new D1AgentRunRepository({ db: env.DB }),
-          isAlive: (ref) => {
+          instanceState: (ref) => {
             const lookup = ref.kind === 'bootstrap' ? bootLookup : execLookup
-            // No binding for this kind → can't re-drive, so treat as alive (skip).
-            return lookup ? lookup.isAlive(ref.id) : Promise.resolve(true)
+            // No binding for this kind → can't classify, so treat as alive (skip).
+            return lookup ? lookup.instanceState(ref.id) : Promise.resolve('alive' as const)
           },
           redrive: async (ref) => {
             if (ref.kind === 'bootstrap') await bootRunner?.startRun(ref.workspaceId, ref.id)
             else await execRunner?.startRun(ref.workspaceId, ref.id)
           },
+          // The durable instance is terminal and can't be recreated → finalize the
+          // run as stopped so it stops showing `running` forever (also reclaims any
+          // leftover container). Reuses the same stop path the user-facing button hits.
+          finalizeOrphan: async (ref) => {
+            const container = buildContainer(env)
+            const reason =
+              'The run was stopped automatically: its durable driver ended without finalizing it.'
+            if (ref.kind === 'bootstrap') {
+              if (container.bootstrap) {
+                await container.bootstrap.service.stop(ref.workspaceId, ref.id, {
+                  reason,
+                  kind: 'unknown',
+                })
+              }
+            } else {
+              await container.executionService.stopRun(ref.workspaceId, ref.id, {
+                reason,
+                kind: 'unknown',
+              })
+            }
+          },
           clock,
           leaseMs: SWEEP_LEASE_MS,
         })
-          // Surface how many orphaned runs were re-driven — the key signal for
-          // "are runs getting stuck?" Only log when it actually did something.
-          .then((redriven) => {
-            if (redriven > 0) logger.warn({ cron: 'run-sweeper', redriven }, 're-drove stuck runs')
+          // Surface what the sweep did — the key signal for "are runs getting stuck?"
+          // Only log when it actually acted.
+          .then(({ redriven, finalized }) => {
+            if (redriven > 0 || finalized > 0) {
+              logger.warn({ cron: 'run-sweeper', redriven, finalized }, 'swept stuck runs')
+            }
           })
           .catch((error) =>
             logger.error({ cron: 'run-sweeper', err: errInfo(error) }, 'run sweep failed'),

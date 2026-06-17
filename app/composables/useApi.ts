@@ -482,5 +482,14 @@ export function useApi() {
         `${ws(workspaceId)}/agent-runs/${encodeURIComponent(runId)}/retry`,
         { method: 'POST' },
       ),
+
+    // Explicitly stop a running run (bootstrap or execution): the backend kills the
+    // per-run container and tears down the durable driver, then marks the run
+    // terminally cancelled so the board stops showing it as running.
+    stopAgentRun: (workspaceId: string, runId: string) =>
+      http<{ kind: AgentRunKind; run: ExecutionInstance | BootstrapJob }>(
+        `${ws(workspaceId)}/agent-runs/${encodeURIComponent(runId)}/stop`,
+        { method: 'POST' },
+      ),
   }
 }

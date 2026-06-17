@@ -88,6 +88,7 @@ export type BootstrapStatus = v.InferOutput<typeof bootstrapStatusSchema>
  *                   job was gone on the next poll. Retrying spins a fresh container.
  *   - `timeout`   — a container watchdog fired (inactivity or max-duration).
  *   - `agent`     — the bootstrapper agent / git push reported a failure.
+ *   - `cancelled` — the user (or an orphan sweep) explicitly stopped the run.
  *   - `unknown`   — anything not otherwise classified.
  */
 export const bootstrapFailureKindSchema = v.picklist([
@@ -96,6 +97,7 @@ export const bootstrapFailureKindSchema = v.picklist([
   'evicted',
   'timeout',
   'agent',
+  'cancelled',
   'unknown',
 ])
 export type BootstrapFailureKind = v.InferOutput<typeof bootstrapFailureKindSchema>
