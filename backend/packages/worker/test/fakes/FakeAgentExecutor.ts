@@ -14,6 +14,11 @@ export interface FakeAgentOptions {
   usage?: { inputTokens: number; outputTokens: number }
   /** A PR the (container-flavoured) agent reports opening, so persistence can be exercised. */
   pullRequest?: PullRequestRef
+  /**
+   * A blueprint tree the `blueprints` step reports, so the engine's ingest +
+   * board reconcile can be exercised without a real container.
+   */
+  blueprintService?: unknown
 }
 
 /**
@@ -35,6 +40,15 @@ export class FakeAgentExecutor implements AgentExecutor {
           options: ['Option A', 'Option B'],
         },
         usage: this.options.usage,
+      }
+    }
+
+    // Mimic the container Blueprinter step returning a decomposition tree.
+    if (context.agentKind === 'blueprints' && this.options.blueprintService !== undefined) {
+      return {
+        output: `[blueprints] mapped "${context.block.title}"`,
+        model: 'fake',
+        blueprintService: this.options.blueprintService,
       }
     }
 

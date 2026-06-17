@@ -78,6 +78,7 @@ import { EnvironmentTeardownService } from './modules/environments/EnvironmentTe
 import { RunnerPoolConnectionService } from './modules/runners/RunnerPoolConnectionService'
 import { BootstrapService } from './modules/bootstrap/BootstrapService'
 import { BoardScanService } from './modules/boardScan/BoardScanService'
+import { BLUEPRINT_PIPELINE_ID } from './domain/seed'
 import { FragmentLibraryService } from './modules/fragmentLibrary/FragmentLibraryService'
 import {
   FragmentSourceService,
@@ -563,6 +564,7 @@ function createRunnersModule(deps: CoreDependencies): RunnersModule | undefined 
 function createBootstrapModule(
   deps: CoreDependencies,
   eventPublisher: ExecutionEventPublisher,
+  onBootstrapSucceeded?: (workspaceId: string, blockId: string) => Promise<void>,
 ): BootstrapModule | undefined {
   const { referenceArchitectureRepository, bootstrapJobRepository } = deps
   if (!referenceArchitectureRepository || !bootstrapJobRepository) return undefined
@@ -577,6 +579,7 @@ function createBootstrapModule(
     repoBootstrapper: deps.repoBootstrapper,
     bootstrapRunner: deps.bootstrapRunner,
     eventPublisher,
+    ...(onBootstrapSucceeded ? { onBootstrapSucceeded } : {}),
   })
   return { service }
 }
@@ -598,6 +601,7 @@ function createBoardScanModule(
     repoBlueprintRepository,
     workspaceRepository: deps.workspaceRepository,
     boardService,
+    blockRepository: deps.blockRepository,
     idGenerator: deps.idGenerator,
     clock: deps.clock,
     repoScanner: deps.repoScanner,
@@ -660,6 +664,10 @@ export function createCore(dependencies: CoreDependencies): Core {
   const environments = createEnvironmentsModule(dependencies)
   const fragmentLibrary = createFragmentLibraryModule(dependencies)
 
+  // Built before the execution engine so a `blueprints` step can reconcile its
+  // decomposition onto the board through it (when the module is configured).
+  const boardScan = createBoardScanModule(dependencies, boardService)
+
   const executionService = new ExecutionService({
     ...dependencies,
     workRunner,
@@ -670,14 +678,18 @@ export function createCore(dependencies: CoreDependencies): Core {
     // The library service is itself the run-path FragmentResolver (it merges the
     // tenant catalog + runs selection); injected so every agent kind benefits.
     fragmentResolver: fragmentLibrary?.libraryService,
+    blueprintReconciler: boardScan?.service,
   })
 
   const github = createGitHubModule(dependencies)
   const documents = createDocumentsModule(dependencies, boardService)
   const tasks = createTasksModule(dependencies)
   const runners = createRunnersModule(dependencies)
-  const bootstrap = createBootstrapModule(dependencies, executionEventPublisher)
-  const boardScan = createBoardScanModule(dependencies, boardService)
+  // After a bootstrap succeeds, map the new repo into a blueprint + the board by
+  // starting the blueprint-only pipeline against the service frame.
+  const bootstrap = createBootstrapModule(dependencies, executionEventPublisher, (ws, blockId) =>
+    executionService.start(ws, blockId, BLUEPRINT_PIPELINE_ID).then(() => undefined),
+  )
 
   return {
     workspaceService,

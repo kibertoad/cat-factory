@@ -132,13 +132,21 @@ export function seedPipelines(): Pipeline[] {
     {
       id: 'pl_full',
       name: 'Full build',
-      agentKinds: ['architect', 'researcher', 'coder', 'tester', 'reviewer'],
+      // `blueprints` runs right after implementation so the service map (and the
+      // board) is refreshed from the just-written code, on the same PR branch.
+      agentKinds: ['architect', 'researcher', 'coder', 'blueprints', 'tester', 'reviewer'],
     },
-    { id: 'pl_quick', name: 'Quick implement', agentKinds: ['coder', 'tester'] },
+    { id: 'pl_quick', name: 'Quick implement', agentKinds: ['coder', 'blueprints', 'tester'] },
     {
       id: 'pl_integrate',
       name: 'Integrate & ship',
       agentKinds: ['integrator', 'tester', 'documenter'],
     },
+    // A blueprint-only pipeline, run after a bootstrap to create the initial
+    // service map (and populate the board) from the freshly bootstrapped repo.
+    { id: 'pl_blueprint', name: 'Map service', agentKinds: ['blueprints'] },
   ]
 }
+
+/** Pipeline id of the blueprint-only run kicked off after a successful bootstrap. */
+export const BLUEPRINT_PIPELINE_ID = 'pl_blueprint'

@@ -1,13 +1,17 @@
 import { timingSafeEqual } from 'node:crypto'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import {
+  type BlueprintJob,
+  type BlueprintResult,
   type BootstrapJob,
   type BootstrapResult,
+  parseBlueprintJob,
   parseBootstrapJob,
   parseJob,
   type RunResult,
 } from './job.js'
 import { handleBootstrap } from './bootstrap.js'
+import { handleBlueprint } from './blueprint.js'
 import { redactSecrets } from './git.js'
 import { JobRegistry, loadRunnerLimits } from './runner.js'
 import { handleRun } from './runner.js'
@@ -52,6 +56,7 @@ function authorized(req: IncomingMessage): boolean {
 const limits = loadRunnerLimits()
 const jobs = new JobRegistry(limits)
 const bootstrapJobs = new JobRegistry<BootstrapJob, BootstrapResult>(limits, handleBootstrap)
+const blueprintJobs = new JobRegistry<BlueprintJob, BlueprintResult>(limits, handleBlueprint)
 
 // Re-exported so the acceptance suite (and any direct caller) can run a job
 // synchronously without going through the async job API.
@@ -93,11 +98,25 @@ const server = createServer((req, res) => {
         return send(res, 400, { error: message } satisfies BootstrapResult)
       }
     }
-    // Poll a running/finished job: GET /jobs/{id}. Job ids are unique per kind,
-    // so check the implementation registry first, then the bootstrap registry.
+    // Start (or re-attach to) a blueprint job: POST /blueprint. Like /bootstrap it
+    // returns immediately with the job id; the Worker polls GET /jobs/{id} for live
+    // subtask progress and the final decomposition tree.
+    if (req.method === 'POST' && req.url === '/blueprint') {
+      try {
+        const job = parseBlueprintJob(JSON.parse(await readBody(req)))
+        const view = blueprintJobs.start(job.jobId, job)
+        return send(res, 202, { jobId: view.id, state: view.state })
+      } catch (error) {
+        const message = redactSecrets(error instanceof Error ? error.message : String(error))
+        log.error('failed to start blueprint', { error: message })
+        return send(res, 400, { error: message } satisfies BlueprintResult)
+      }
+    }
+    // Poll a running/finished job: GET /jobs/{id}. Job ids are unique per kind, so
+    // check the implementation registry, then bootstrap, then blueprint.
     if (req.method === 'GET' && req.url?.startsWith('/jobs/')) {
       const id = decodeURIComponent(req.url.slice('/jobs/'.length))
-      const view = jobs.get(id) ?? bootstrapJobs.get(id)
+      const view = jobs.get(id) ?? bootstrapJobs.get(id) ?? blueprintJobs.get(id)
       if (!view) return send(res, 404, { error: 'job not found' })
       return send(res, 200, view)
     }

@@ -27,7 +27,15 @@ import {
  * end-to-end test authoring (`playwright`) and business-logic documentation
  * (`business-documenter`, which reads the code and commits the domain-rules docs).
  */
-const CONTAINER_KINDS = new Set(['coder', 'mocker', 'playwright', 'business-documenter'])
+const CONTAINER_KINDS = new Set([
+  'coder',
+  'mocker',
+  'playwright',
+  'business-documenter',
+  // The Blueprinter step clones the repo, regenerates the in-repo `blueprints/`
+  // folder and commits it — a real-checkout operation, so it runs in a container.
+  'blueprints',
+])
 
 export class CompositeAgentExecutor implements AsyncAgentExecutor {
   constructor(

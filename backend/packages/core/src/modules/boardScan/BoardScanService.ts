@@ -6,7 +6,7 @@ import type {
   ScanRepoResult,
 } from '../../domain/types'
 import type { Clock, IdGenerator } from '../../ports/runtime'
-import type { WorkspaceRepository } from '../../ports/repositories'
+import type { BlockRepository, WorkspaceRepository } from '../../ports/repositories'
 import type {
   RepoBlueprintRecord,
   RepoBlueprintRepository,
@@ -34,10 +34,17 @@ export interface BoardScanServiceDependencies {
   repoBlueprintRepository: RepoBlueprintRepository
   workspaceRepository: WorkspaceRepository
   boardService: BoardService
+  /** Read board blocks directly, to reconcile a blueprint onto an existing frame. */
+  blockRepository: BlockRepository
   idGenerator: IdGenerator
   clock: Clock
   /** Performs the side-effecting repo read + decomposition; optional. */
   repoScanner?: RepoScanner
+}
+
+/** Case-insensitive, whitespace-tolerant name match used to pair board ↔ blueprint nodes. */
+function sameName(a: string, b: string): boolean {
+  return a.trim().toLowerCase() === b.trim().toLowerCase()
 }
 
 function toRepoBlueprint(record: RepoBlueprintRecord): RepoBlueprint {
@@ -163,6 +170,79 @@ export class BoardScanService {
         features += 1
         const taskDescription = describeNode(feature.summary, feature.references)
         if (taskDescription) {
+          await this.deps.boardService.updateBlock(workspaceId, task.id, {
+            description: taskDescription,
+          })
+        }
+      }
+    }
+    return { frameId: frame.id, modules, features }
+  }
+
+  /**
+   * Reconcile a blueprint onto an **existing** service frame, in place and without
+   * deleting anything: the frame's modules/tasks are matched to the blueprint by
+   * name (case-insensitive), missing nodes are added, and matched nodes have their
+   * summary/code-reference description refreshed. Human-added blocks and tasks a
+   * pipeline is running against are left untouched — so re-running the Blueprinter
+   * after each implementation keeps the board current without clobbering edits.
+   *
+   * When `frameId` does not resolve to a frame (e.g. the repo isn't on the board
+   * yet) it falls back to {@link spawnBlueprint}, creating a fresh structure.
+   */
+  async reconcileBlueprint(
+    workspaceId: string,
+    frameId: string | null,
+    service: BlueprintService,
+  ): Promise<BoardScanSpawnResult> {
+    const blocks = await this.deps.blockRepository.listByWorkspace(workspaceId)
+    const frame = frameId
+      ? blocks.find((b) => b.id === frameId && b.level === 'frame')
+      : undefined
+    if (!frame) return this.spawnBlueprint(workspaceId, service)
+
+    // Refresh the frame's description (its summary/entrypoints) but keep the title,
+    // which a human may have renamed.
+    const frameDescription = describeNode(service.summary, service.references)
+    if (frameDescription && frameDescription !== frame.description) {
+      await this.deps.boardService.updateBlock(workspaceId, frame.id, {
+        description: frameDescription,
+      })
+    }
+
+    const moduleBlocks = blocks.filter((b) => b.parentId === frame.id && b.level === 'module')
+    let modules = 0
+    let features = 0
+    for (const planModule of service.modules ?? []) {
+      let moduleBlock = moduleBlocks.find((b) => sameName(b.title, planModule.name))
+      if (!moduleBlock) {
+        moduleBlock = await this.deps.boardService.addModule(workspaceId, frame.id, {
+          name: planModule.name,
+        })
+        moduleBlocks.push(moduleBlock)
+      }
+      modules += 1
+      const moduleDescription = describeNode(planModule.summary, planModule.references)
+      if (moduleDescription && moduleDescription !== moduleBlock.description) {
+        await this.deps.boardService.updateBlock(workspaceId, moduleBlock.id, {
+          description: moduleDescription,
+        })
+      }
+
+      const taskBlocks = blocks.filter(
+        (b) => b.parentId === moduleBlock!.id && b.level === 'task',
+      )
+      for (const feature of planModule.features ?? []) {
+        let task = taskBlocks.find((b) => sameName(b.title, feature.title))
+        if (!task) {
+          task = await this.deps.boardService.addTask(workspaceId, moduleBlock.id, {
+            title: feature.title,
+          })
+          taskBlocks.push(task)
+        }
+        features += 1
+        const taskDescription = describeNode(feature.summary, feature.references)
+        if (taskDescription && taskDescription !== task.description) {
           await this.deps.boardService.updateBlock(workspaceId, task.id, {
             description: taskDescription,
           })
