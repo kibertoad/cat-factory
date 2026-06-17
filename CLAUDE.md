@@ -36,7 +36,7 @@ package/publish table.
   `createApp()`, the default fetch/scheduled/queue handler, and the DO/Workflow
   classes. Ships its D1 `migrations/`. Carries **no** production config; its own
   `wrangler.toml` is a stripped test/dev config (the vitest workers pool reads it).
-- `backend/internal/implementer-harness` — the payload that runs **inside** each
+- `backend/internal/executor-harness` — the payload that runs **inside** each
   per-run Cloudflare Container (the Pi coding-agent harness). Private (not on npm);
   its Docker image is published to **GHCR** by `docker-publish.yml`.
 - `backend/internal/benchmark-harness` — headless agent benchmarking (`cat-bench`);
@@ -54,9 +54,9 @@ package/publish table.
 - Versioning/publishing is [changesets](https://github.com/changesets/changesets)
   (`.changeset/config.json`, root `pnpm changeset` / `ci:publish`). Public packages
   publish to npm; `deploy/*` + `benchmark-harness` are `ignore`d;
-  `implementer-harness` is versioned-but-private (its version is the GHCR image tag).
+  `executor-harness` is versioned-but-private (its version is the GHCR image tag).
 - **Always add a changeset for any change to a versioned package**, and bump
-  `@cat-factory/implementer-harness` whenever you touch what goes into its image
+  `@cat-factory/executor-harness` whenever you touch what goes into its image
   (`src/**`, `Dockerfile`, `tsconfig.json`, the pinned `PI_*` args). Empty changeset
   (`pnpm changeset --empty`) for docs/CI/test-only changes. Full rules + file format
   in [`CONTRIBUTING.md`](./CONTRIBUTING.md). CI enforces this (`changeset status`).
@@ -78,7 +78,7 @@ runs an agent in a container should mirror it.
 3. `ContainerAgentExecutor` (worker `infrastructure/ai/ContainerAgentExecutor.ts`)
    — `startJob()` dispatches the job **asynchronously** (`/run`, non-blocking,
    returns a `jobId`); `pollJob()` polls and lifts `view.progress` → `subtasks`.
-4. Inside the container, `runPi()` (`implementer-harness/src/pi.ts`) streams
+4. Inside the container, `runPi()` (`executor-harness/src/pi.ts`) streams
    Pi's JSON-line events; `parseTodoProgress()` turns the todo tool's output into
    `{completed, inProgress, total}` via the `onProgress` callback →
    `JobRegistry` (`src/runner.ts`) → exposed on the `/jobs/{id}` `JobView.progress`.
@@ -127,7 +127,7 @@ It mirrors the execution pattern above: dispatch → durable poll → push event
   (with subtasks) / done (outcome) / failed.
 - Harness: `/bootstrap` starts a **background job** in a `JobRegistry` (the same
   generic registry as `/run`), keyed by the job id; `handleBootstrap()`
-  (`implementer-harness/src/bootstrap.ts`) threads `onProgress`/`signal` so Pi's
+  (`executor-harness/src/bootstrap.ts`) threads `onProgress`/`signal` so Pi's
   todo-tool counts surface as `subtasks`. Sequence: clone (or empty dir) →
   `writeAgentsContext()` writes `AGENTS.md` → `runPi()` adapts → `reinitAndPush()`
   resets history to one commit and **force-pushes** to the default branch.
@@ -153,7 +153,7 @@ runner.
   `version.json` (a tiny manifest — monotonic version + content hash + counts — for
   quick staleness checks). Strict shape enforced by `parseBlueprintService`
   (Valibot) at ingest; the harness coerces leniently then the worker/core validate.
-- Harness: `handleBlueprint` (`implementer-harness/src/blueprint.ts`) clones the
+- Harness: `handleBlueprint` (`executor-harness/src/blueprint.ts`) clones the
   target branch, reads any existing blueprint (update mode), runs Pi to emit the
   tree, renders the files, and **commits onto that branch** (no history reset /
   force-push) via `commitAll`+`pushBranch`. Served at `POST /blueprint`, polled on

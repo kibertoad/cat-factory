@@ -275,7 +275,7 @@ blueprints always works (the `RepoBlueprintRepository` is wired unconditionally)
 running a scan needs the `RepoScanner` port — a per-run Cloudflare Container
 (`ContainerRepoScanner`) that clones the repo read-only and has a scanner agent produce
 the blueprint, gated on the same prerequisites as the implementation container (the
-`IMPL_CONTAINER` binding, a configured GitHub App, `WORKER_PUBLIC_URL` and
+`EXEC_CONTAINER` binding, a configured GitHub App, `WORKER_PUBLIC_URL` and
 `AUTH_SESSION_SECRET`). Without it the scan endpoint reports itself unavailable.
 
 ## Prompt-fragment library (optional)
@@ -304,7 +304,7 @@ deterministic`); when off, the static built-in catalog and the manual
 By default the repo-operating coding jobs (`coder`, `mocker`, `playwright`) run in
 per-run Cloudflare Containers. A workspace can instead **bring its own**
 container/runner pool (Kubernetes, Nomad, an internal scheduler): you run the
-standard implementer-harness image and put a small **pool scheduler API** in front
+standard executor-harness image and put a small **pool scheduler API** in front
 of it, described to cat-factory as a declarative **manifest** (dispatch / poll /
 release templates + auth + response dot-paths). The `runners` module
 (migration `0013_runner_pools.sql`) stores the manifest plus a per-tenant secret
@@ -601,7 +601,7 @@ in `wrangler.toml [vars]` (these are **vars, not secrets**):
 # wrangler.toml [vars]
 CONTAINER_IMPL_ENABLED = "true"
 WORKER_PUBLIC_URL = "https://cat-factory-backend.<account>.workers.dev"
-# Also requires the IMPL_CONTAINER binding + [[containers]] image (already in wrangler.toml)
+# Also requires the EXEC_CONTAINER binding + [[containers]] image (already in wrangler.toml)
 # and a configured GitHub App. Container runs are long-lived; the Workflows driver carries them.
 ```
 
@@ -652,14 +652,14 @@ To enable the run path, all of the following must be present (see `selectRepoBoo
 
 | Prerequisite             | Kind     | How to set it                                                                                                                                       |
 | ------------------------ | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `IMPL_CONTAINER` binding | binding  | declared in `wrangler.toml` — the per-run container _factory_, not a shared instance (see below)                                                    |
+| `EXEC_CONTAINER` binding | binding  | declared in `wrangler.toml` — the per-run container _factory_, not a shared instance (see below)                                                    |
 | `GITHUB_APP_ID`          | `[vars]` | App id in `wrangler.toml [vars]` (with `GITHUB_APP_SLUG`)                                                                                           |
 | `GITHUB_APP_PRIVATE_KEY` | secret   | `wrangler secret put GITHUB_APP_PRIVATE_KEY` (PKCS#8 PEM)                                                                                           |
 | `GITHUB_WEBHOOK_SECRET`  | secret   | `wrangler secret put GITHUB_WEBHOOK_SECRET`                                                                                                         |
 | `WORKER_PUBLIC_URL`      | `[vars]` | a `wrangler.toml [vars]` entry, e.g. `WORKER_PUBLIC_URL = "https://cat-factory-backend.<account>.workers.dev"` — it's a public origin, not a secret |
 | `AUTH_SESSION_SECRET`    | secret   | `wrangler secret put AUTH_SESSION_SECRET` (already required for auth)                                                                               |
 
-`IMPL_CONTAINER` is the Durable Object **namespace** binding, not a single long-lived container.
+`EXEC_CONTAINER` is the Durable Object **namespace** binding, not a single long-lived container.
 Each run derives its own instance — `container.get(container.idFromName(jobId))` — so containers
 are spun up **on demand, one per job**, up to the `[[containers]] max_instances` ceiling in
 `wrangler.toml`, and Cloudflare reclaims (spins down) each idle instance once its run finishes.
@@ -675,11 +675,11 @@ wrangler secret put AUTH_SESSION_SECRET
 # Non-secret config — set in wrangler.toml [vars], not as secrets:
 #   GITHUB_APP_ID = "..."          (with GITHUB_APP_SLUG)
 #   WORKER_PUBLIC_URL = "https://cat-factory-backend.<account>.workers.dev"
-# plus the IMPL_CONTAINER binding (already declared in wrangler.toml).
+# plus the EXEC_CONTAINER binding (already declared in wrangler.toml).
 ```
 
 Unlike container implementation, bootstrap does **not** require `CONTAINER_IMPL_ENABLED` — it
-only needs the `IMPL_CONTAINER` binding itself. Like the container executor, the bootstrapper
+only needs the `EXEC_CONTAINER` binding itself. Like the container executor, the bootstrapper
 holds no provider key: the agent reaches models only through this Worker's LLM proxy with a
 short-lived session token.
 

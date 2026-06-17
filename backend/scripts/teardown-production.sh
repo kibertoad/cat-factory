@@ -6,7 +6,7 @@
 # WHAT IT KILLS
 #   - The `cat-factory-backend` Worker. Deleting the Worker also tears down
 #     everything attached to it that can run up a bill if left alive:
-#       * the ImplementationContainer container application (Pi runner instances),
+#       * the ExecutionContainer container application (Pi runner instances),
 #       * the ExecutionWorkflow / GitHubBackfillWorkflow Durable Objects + Workflows,
 #       * the */2 * * * * and 0 3 * * * cron triggers.
 #   - (Opt-in, --include-pages) the `cat-factory` Cloudflare Pages project.
@@ -94,7 +94,7 @@ cat <<PLAN
 
 ==> Teardown plan ($($DRY_RUN && echo 'DRY RUN — no changes' || echo 'LIVE')):
       DELETE  Worker        $WORKER_NAME
-              └─ also removes: ImplementationContainer instances,
+              └─ also removes: ExecutionContainer instances,
                  ExecutionWorkflow + GitHubBackfillWorkflow, cron triggers
 $($INCLUDE_PAGES && echo "      DELETE  Pages project $PAGES_PROJECT" || echo "      KEEP    Pages project $PAGES_PROJECT (pass --include-pages to remove)")
       KEEP    D1 database   cat_factory  (data preserved — never touched)

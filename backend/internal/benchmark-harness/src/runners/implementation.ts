@@ -8,7 +8,7 @@ import {
   runPi,
   writeAgentsContext,
   writePiModelsConfig,
-} from '@cat-factory/implementer-harness/embed'
+} from '@cat-factory/executor-harness/embed'
 import type { ImplementationFixture } from '../fixtures'
 import type { RunnerInput, RunnerOutput } from './types'
 
@@ -20,7 +20,7 @@ async function git(args: string[], cwd: string): Promise<string> {
 }
 
 // Implementation candidate: the *real* Pi coding flow, reused from the
-// implementer harness but run locally — clone the repo, write the build system
+// executor harness but run locally — clone the repo, write the build system
 // prompt as AGENTS.md, point Pi at the chosen OpenAI-compatible endpoint
 // (a direct provider or Cloudflare Workers AI), run it, and capture the diff.
 // Requires the `pi` CLI on PATH; throws a clear error otherwise.

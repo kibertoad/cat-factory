@@ -142,7 +142,7 @@ const server = createServer((req, res) => {
 // Only auto-listen when run as the entry point (tests import handleRun directly).
 if (process.env.NODE_ENV !== 'test') {
   server.listen(PORT, () => {
-    console.log(`implementer-harness listening on :${PORT}`)
+    console.log(`executor-harness listening on :${PORT}`)
   })
 }
 

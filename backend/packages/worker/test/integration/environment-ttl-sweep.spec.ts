@@ -4,6 +4,7 @@ import { env } from 'cloudflare:test'
 import { makeApp } from '../helpers'
 import { SystemClock } from '../../src/infrastructure/runtime'
 import { sweepExpiredEnvironments } from '../../src/infrastructure/environments/sweep'
+import { FakeAgentExecutor } from '../fakes/FakeAgentExecutor'
 import {
   bearerManifest,
   readyEnvBody,
@@ -29,7 +30,9 @@ describe('environment TTL sweep', () => {
     })
     await app.call('POST', `/workspaces/${ws}/environments/provision`, { blockId: 'b' })
 
-    const swept = await sweepExpiredEnvironments(env, new SystemClock())
+    const swept = await sweepExpiredEnvironments(env, new SystemClock(), {
+      agentExecutor: new FakeAgentExecutor(),
+    })
     expect(swept).toBe(1)
 
     // The provider's teardown endpoint was called for the external id.

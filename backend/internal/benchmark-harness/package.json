@@ -20,7 +20,7 @@
     "@ai-sdk/openai-compatible": "^2.0.0",
     "@cat-factory/agents": "workspace:*",
     "@cat-factory/contracts": "workspace:*",
-    "@cat-factory/implementer-harness": "workspace:*",
+    "@cat-factory/executor-harness": "workspace:*",
     "@cat-factory/kernel": "workspace:*",
     "@cat-factory/orchestration": "workspace:*",
     "@cat-factory/spend": "workspace:*",

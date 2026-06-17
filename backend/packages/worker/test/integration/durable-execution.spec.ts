@@ -59,7 +59,7 @@ describe('durable execution: advanceInstance', () => {
 
   it('returns noop for a missing or finished run', async () => {
     const wsId = await seedWorkspace()
-    const c = buildContainer(env)
+    const c = buildContainer(env, { agentExecutor: new FakeAgentExecutor() })
     expect((await c.executionService.advanceInstance(wsId, 'exec_nope')).kind).toBe('noop')
   })
 })

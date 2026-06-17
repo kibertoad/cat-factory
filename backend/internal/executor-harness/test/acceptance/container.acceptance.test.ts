@@ -28,7 +28,7 @@ import {
 
 const docker = dockerAvailable()
 
-describe.skipIf(!docker)('implementer container acceptance', () => {
+describe.skipIf(!docker)('executor container acceptance', () => {
   let work: string
   let bare: string
 

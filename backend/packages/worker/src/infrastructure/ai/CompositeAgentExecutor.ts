@@ -19,6 +19,12 @@ import {
 // cost/latency to the phases that actually need a real workspace to operate on
 // repo contents, while pure design/review/analysis steps remain single-shot LLM
 // calls.
+//
+// There is deliberately NO inline fallback for the container kinds: a one-shot
+// LLM call cannot clone a repo, edit files, commit and open a PR, so routing an
+// implementer step to the inline executor produces plausible-looking text that is
+// silently useless. When no sandbox is wired (`container` is null), the container
+// kinds throw instead — the run fails loudly rather than pretending to succeed.
 
 /**
  * Agent kinds that need a real checkout to operate on repo contents (clone,
@@ -40,12 +46,27 @@ const CONTAINER_KINDS = new Set([
 export class CompositeAgentExecutor implements AsyncAgentExecutor {
   constructor(
     private readonly inline: AgentExecutor,
-    private readonly container: AgentExecutor,
+    // null when no sandbox is wired — container kinds then fail loudly (see below)
+    // rather than silently degrading to a useless one-shot inline call.
+    private readonly container: AgentExecutor | null,
   ) {}
 
-  /** The executor that handles a given step's kind. */
+  /**
+   * The executor that handles a given step's kind. Container kinds REQUIRE a real
+   * sandbox: with none wired we throw rather than fall back to the inline executor,
+   * because a one-shot LLM call cannot operate on repo contents.
+   */
   private pick(context: AgentRunContext): AgentExecutor {
-    return CONTAINER_KINDS.has(context.agentKind) ? this.container : this.inline
+    if (!CONTAINER_KINDS.has(context.agentKind)) return this.inline
+    if (!this.container) {
+      throw new Error(
+        `Agent kind '${context.agentKind}' needs a real checkout (clone/edit/commit/PR) ` +
+          'and cannot run as a one-shot LLM call. Enable container-based implementation ' +
+          '(CONTAINER_IMPL_ENABLED=true) or a self-hosted runner pool (RUNNERS_ENABLED=true) ' +
+          'with its prerequisites wired.',
+      )
+    }
+    return this.container
   }
 
   run(context: AgentRunContext): Promise<AgentRunResult> {
@@ -68,9 +89,21 @@ export class CompositeAgentExecutor implements AsyncAgentExecutor {
 
   pollJob(handle: AgentJobHandle): Promise<AgentJobUpdate> {
     // Only the container executor runs async jobs, so polls route there.
-    if (!isAsyncAgentExecutor(this.container)) {
+    if (!this.container || !isAsyncAgentExecutor(this.container)) {
       throw new Error('Container executor does not support async jobs')
     }
     return this.container.pollJob(handle)
+  }
+
+  /**
+   * Best-effort container reclaim. The engine narrows the composite (not the inner
+   * container executor) when stopping a run, so the composite must forward stopJob
+   * to the container — otherwise the Layer-2 reclaim silently no-ops and leaks a
+   * warm instance. Delegates only when a container that supports it is wired.
+   */
+  async stopJob(handle: AgentJobHandle): Promise<void> {
+    if (this.container && isAsyncAgentExecutor(this.container) && this.container.stopJob) {
+      await this.container.stopJob(handle)
+    }
   }
 }

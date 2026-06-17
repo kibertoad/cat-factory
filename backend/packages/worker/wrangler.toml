@@ -52,16 +52,16 @@ class_name = "BootstrapWorkflow"
 # Per-run implementation container. The acceptance suite builds this image from
 # the internal harness package's Dockerfile, so dev/test reference it by local
 # path; the production deployment instead references the published GHCR image
-# (ghcr.io/<owner>/cat-factory-implementer) — see deploy/backend/wrangler.toml.
+# (ghcr.io/<owner>/cat-factory-executor) — see deploy/backend/wrangler.toml.
 [[containers]]
-class_name = "ImplementationContainer"
-image = "../../internal/implementer-harness/Dockerfile"
+class_name = "ExecutionContainer"
+image = "../../internal/executor-harness/Dockerfile"
 max_instances = 10
 instance_type = "standard-1"
 
 [[durable_objects.bindings]]
-name = "IMPL_CONTAINER"
-class_name = "ImplementationContainer"
+name = "EXEC_CONTAINER"
+class_name = "ExecutionContainer"
 
 # Per-workspace WebSocket fan-out hub.
 [[durable_objects.bindings]]
@@ -75,3 +75,7 @@ new_sqlite_classes = ["ImplementationContainer"]
 [[migrations]]
 tag = "v2"
 new_sqlite_classes = ["WorkspaceEventsHub"]
+
+[[migrations]]
+tag = "v3"
+renamed_classes = [{ from = "ImplementationContainer", to = "ExecutionContainer" }]

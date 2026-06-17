@@ -7,6 +7,7 @@ import {
   type SessionPayload,
 } from '../../src/infrastructure/auth/signing'
 import { pickPostLoginRedirect } from '../../src/modules/auth/AuthController'
+import { FakeAgentExecutor } from '../fakes/FakeAgentExecutor'
 
 // Auth is opt-in: it only activates when the OAuth credentials + session secret
 // are present in the Worker env. We exercise both states by passing a tailored
@@ -28,7 +29,7 @@ function fetchWith(
   envOverride: typeof env,
   init: { method?: string; path: string; token?: string },
 ) {
-  const app = createApp()
+  const app = createApp({ overrides: { agentExecutor: new FakeAgentExecutor() } })
   const headers = init.token ? { authorization: `Bearer ${init.token}` } : undefined
   return app.fetch(
     new Request(`${BASE}${init.path}`, { method: init.method ?? 'GET', headers }),

@@ -3,6 +3,7 @@ import { env } from 'cloudflare:test'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { makeApp } from '../helpers'
 import { buildContainer } from '../../src/infrastructure/container'
+import { FakeAgentExecutor } from '../fakes/FakeAgentExecutor'
 import {
   bearerManifest,
   readyEnvBody,
@@ -72,13 +73,16 @@ describe('environment credential encryption', () => {
   })
 
   it('refuses to assemble the module without an encryption key', async () => {
-    const withKey = buildContainer(env)
+    const withKey = buildContainer(env, { agentExecutor: new FakeAgentExecutor() })
     expect(withKey.environments).toBeDefined()
 
-    const withoutKey = buildContainer({
-      ...env,
-      ENVIRONMENTS_ENCRYPTION_KEY: undefined,
-    } as typeof env)
+    const withoutKey = buildContainer(
+      {
+        ...env,
+        ENVIRONMENTS_ENCRYPTION_KEY: undefined,
+      } as typeof env,
+      { agentExecutor: new FakeAgentExecutor() },
+    )
     expect(withoutKey.environments).toBeUndefined()
   })
 })

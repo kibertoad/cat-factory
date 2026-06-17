@@ -1,6 +1,6 @@
 # Single workspace for the whole repo: the published backend libraries
 # (backend/packages), the private backend packages (backend/internal — the
-# implementer/benchmark harnesses), the frontend Nuxt layer (frontend/app), and
+# executor/benchmark harnesses), the frontend Nuxt layer (frontend/app), and
 # the example deployments (deploy/*). One workspace = one lockfile = one
 # changesets setup spanning FE + BE.
 packages:

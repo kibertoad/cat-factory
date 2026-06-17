@@ -4,7 +4,7 @@ name: Release
 # "Release Packages" PR (collecting the pending changesets into version bumps +
 # changelogs) or, when that PR has been merged, publishes the public packages to
 # npm. Private packages (the deploy/* examples, benchmark-harness, and the
-# implementer-harness) are versioned but not published; the runner image is
+# executor-harness) are versioned but not published; the runner image is
 # published separately by docker-publish.yml.
 
 on:

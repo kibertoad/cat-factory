@@ -16,7 +16,7 @@ permissions: {}
 jobs:
   # Detect which parts of the tree changed so expensive jobs can opt out when
   # they are not affected. The container acceptance suite builds and runs the
-  # implementer Docker image and only depends on the backend, so a
+  # executor Docker image and only depends on the backend, so a
   # frontend-only change has no reason to pay for it.
   changes:
     name: Detect changes
@@ -33,14 +33,14 @@ jobs:
       - id: filter
         uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
         with:
-          # The acceptance suite builds the implementer image (whose context is
-          # just implementer-harness/) and drives it from host-side scaffolding
+          # The acceptance suite builds the executor image (whose context is
+          # just executor-harness/) and drives it from host-side scaffolding
           # that imports @cat-factory/spend and @cat-factory/worker. Gate on
           # those packages plus kernel (spend's only dep), the root
           # manifests/lockfile (dep or build changes), and this workflow.
           filters: |
             backend:
-              - 'backend/internal/implementer-harness/**'
+              - 'backend/internal/executor-harness/**'
               - 'backend/packages/kernel/**'
               - 'backend/packages/spend/**'
               - 'backend/packages/worker/**'
@@ -163,12 +163,12 @@ jobs:
       - name: Build libraries
         run: pnpm build
 
-      # Builds and launches the implementer Docker image and drives a full
+      # Builds and launches the executor Docker image and drives a full
       # clone → Pi → commit → push → PR against a dummy streaming LLM proxy and a
       # stub GitHub API (no real provider/GitHub). The runner has Docker +
       # host-gateway, so the suite runs rather than self-skipping.
       - name: Container acceptance tests
-        run: pnpm --filter @cat-factory/implementer-harness run test:acceptance
+        run: pnpm --filter @cat-factory/executor-harness run test:acceptance
 
   changeset:
     name: Changeset present

@@ -16,4 +16,4 @@ packages, updates changelogs, and publishes the public ones to npm.
 
 See [`CONTRIBUTING.md`](../CONTRIBUTING.md) for the full authoring guide,
 including the rule that **image-affecting** changes must bump
-`@cat-factory/implementer-harness` so the runner Docker image is republished.
+`@cat-factory/executor-harness` so the runner Docker image is republished.

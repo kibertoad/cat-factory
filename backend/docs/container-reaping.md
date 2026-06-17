@@ -1,7 +1,7 @@
 # Per-run container reaping & deletion
 
 How the per-run Cloudflare Container instances that back agent work
-(`ImplementationContainer`, bind `IMPL_CONTAINER`) get stopped and reclaimed —
+(`ExecutionContainer`, bind `EXEC_CONTAINER`) get stopped and reclaimed —
 and where that logic currently has gaps that leave **dangling (warm, billed)
 instances**. Companion to the execution / bootstrap flow notes in
 [`../../CLAUDE.md`](../../CLAUDE.md).
@@ -16,9 +16,9 @@ is a known follow-up.
 ## The instance model
 
 Cloudflare Containers map one Durable Object id → one dedicated container. Each
-run addresses `IMPL_CONTAINER.get(idFromName(<jobId>))`, so **every execution /
+run addresses `EXEC_CONTAINER.get(idFromName(<jobId>))`, so **every execution /
 bootstrap job gets its own ephemeral instance**, keyed by the run id. Both flows
-share the one container class (`src/infrastructure/containers/ImplementationContainer.ts`).
+share the one container class (`src/infrastructure/containers/ExecutionContainer.ts`).
 
 Inspect live state with wrangler (read-only):
 
@@ -34,8 +34,8 @@ bootstrap instances show up named `boot_<…>`.)
 
 ## Layer 1 — idle auto-sleep (`sleepAfter`)
 
-`ImplementationContainer.sleepAfter = '10m'`
-(`ImplementationContainer.ts:21`). Cloudflare stops an instance after 10 minutes
+`ExecutionContainer.sleepAfter = '10m'`
+(`ExecutionContainer.ts:21`). Cloudflare stops an instance after 10 minutes
 with **no inbound requests**.
 
 - While a run is active the durable driver polls it every ~15s, which keeps the
@@ -47,7 +47,7 @@ with **no inbound requests**.
 
 ## Layer 2 — explicit reclaim (`shutdown()` RPC → SIGKILL)
 
-`ImplementationContainer.shutdown()` (`ImplementationContainer.ts:30`) calls the
+`ExecutionContainer.shutdown()` (`ExecutionContainer.ts:30`) calls the
 base `Container.destroy()` (SIGKILL) — idempotent, swallows "already gone". It is
 reached over RPC, keyed by job/execution id, through:
 

@@ -38,9 +38,9 @@ importers:
       '@cat-factory/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
-      '@cat-factory/implementer-harness':
+      '@cat-factory/executor-harness':
         specifier: workspace:*
-        version: link:../implementer-harness
+        version: link:../executor-harness
       '@cat-factory/kernel':
         specifier: workspace:*
         version: link:../../packages/kernel
@@ -70,7 +70,7 @@ importers:
         specifier: ^4.1.8
         version: 4.1.8(@opentelemetry/api@1.9.1)(@types/node@22.19.21)(happy-dom@15.11.7)(vite@7.3.5(@types/node@22.19.21)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(yaml@2.9.0))
 
-  backend/internal/implementer-harness:
+  backend/internal/executor-harness:
     devDependencies:
       '@cat-factory/spend':
         specifier: workspace:*

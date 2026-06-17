@@ -5,7 +5,7 @@ A standalone, headless harness for benchmarking cat-factory's agents across
 
 - **requirement review** — the stateless reviewer (`requirementsLogic` from core)
 - **code review** — the `reviewer` agent (`AiAgentExecutor`, standard `review` phase)
-- **implementation** — the _real_ Pi coding flow (reused from `@cat-factory/implementer-harness`): clone a repo, run Pi, capture the diff
+- **implementation** — the _real_ Pi coding flow (reused from `@cat-factory/executor-harness`): clone a repo, run Pi, capture the diff
 
 It reuses the **exact same agents and prompts** as the runtime, made embeddable
 outside the Worker/container. Outputs are graded by the Claude **benchmark-arbiter**

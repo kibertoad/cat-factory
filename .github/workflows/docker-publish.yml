@@ -1,8 +1,8 @@
 name: Docker publish (runner image)
 
-# Publishes the implementer-harness (Pi coding-agent) runner image to GHCR so any
+# Publishes the executor-harness (Pi coding-agent) runner image to GHCR so any
 # organization can reference it from their backend deployment's wrangler.toml
-# (`image = "ghcr.io/<owner>/cat-factory-implementer:<tag>"`) instead of building
+# (`image = "ghcr.io/<owner>/cat-factory-executor:<tag>"`) instead of building
 # the Dockerfile locally.
 #
 # GATED on changes that affect what is packaged into the image: only fires when a
@@ -14,10 +14,10 @@ on:
   push:
     branches: [main]
     paths:
-      - 'backend/internal/implementer-harness/src/**'
-      - 'backend/internal/implementer-harness/Dockerfile'
-      - 'backend/internal/implementer-harness/tsconfig.json'
-      - 'backend/internal/implementer-harness/package.json'
+      - 'backend/internal/executor-harness/src/**'
+      - 'backend/internal/executor-harness/Dockerfile'
+      - 'backend/internal/executor-harness/tsconfig.json'
+      - 'backend/internal/executor-harness/package.json'
       - '.github/workflows/docker-publish.yml'
   workflow_dispatch:
 
@@ -28,8 +28,8 @@ concurrency:
 permissions: {}
 
 env:
-  IMAGE: ghcr.io/${{ github.repository_owner }}/cat-factory-implementer
-  CONTEXT: backend/internal/implementer-harness
+  IMAGE: ghcr.io/${{ github.repository_owner }}/cat-factory-executor
+  CONTEXT: backend/internal/executor-harness
 
 jobs:
   publish:
@@ -58,11 +58,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # Validate the image end-to-end BEFORE publishing: builds the implementer
+      # Validate the image end-to-end BEFORE publishing: builds the executor
       # image and drives a full clone → Pi → commit → push → PR against a dummy
       # streaming LLM proxy and a stub GitHub API (no real provider/GitHub).
       - name: Container acceptance tests
-        run: pnpm --filter @cat-factory/implementer-harness run test:acceptance
+        run: pnpm --filter @cat-factory/executor-harness run test:acceptance
 
       - name: Resolve image tags
         id: tags

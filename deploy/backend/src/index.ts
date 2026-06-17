@@ -14,6 +14,6 @@ export {
   ExecutionWorkflow,
   GitHubBackfillWorkflow,
   BootstrapWorkflow,
-  ImplementationContainer,
+  ExecutionContainer,
   WorkspaceEventsHub,
 } from '@cat-factory/worker'
