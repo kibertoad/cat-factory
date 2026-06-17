@@ -1,6 +1,6 @@
 # Handover — splitting `@cat-factory/core` into scoped packages
 
-**Status:** Step 3 complete. Proceed with Step 4 (`@cat-factory/integrations`).
+**Status:** Step 4 complete. Proceed with Step 5 (`@cat-factory/workspaces` → `@cat-factory/orchestration`).
 **Prereqs landed:** the internal/published package separation (this branch —
 `reshape/internal-public-split`) and the core dedup (PR #54,
 `refactor/core-dedup`). Both are independent of this work and can be merged in
@@ -17,6 +17,22 @@ directly from `@cat-factory/spend`; implementer-harness devDep swapped from core
 to spend; CI `changes` filter narrowed to `backend/packages/spend/**` +
 `backend/packages/kernel/**` (core no longer gates the Docker acceptance job);
 changeset in `.changeset/spend-extract.md`.
+
+**Step 4 done:** `@cat-factory/integrations` extracted — `modules/github/*` (8 files),
+`modules/documents/*` (7 files), `modules/tasks/*` (5 files),
+`modules/environments/*` (5 files), `modules/runners/*` (2 files) moved via git
+rename. Cross-module coupling resolved: `DocumentLinkService` depended on
+`BoardService` — a `BoardWritePort` interface was added to `@cat-factory/kernel`
+(4 methods: `addFrame`, `addModule`, `addTask`, `updateBlock`), and
+`DocumentLinkService.boardService` was typed against that port. `ExecutionService`
+imported `EnvironmentProvisioningService` and `isDeployStep` from relative paths —
+both now import from `@cat-factory/integrations`. `DocumentPlannerService` uses
+the `ai` SDK — `ai` added as a dep to integrations. Test scripts (`provisioning
+.logic.test.ts`, `environments.logic.test.ts`) moved with the modules; core's
+`test`/`test:run` scripts removed (no longer has test files); integrations gains
+`test`/`test:run`. `@cat-factory/core` re-exports the full integrations surface
+for backward compat; no worker or harness import paths changed. Build, typecheck,
+and all non-wrangler tests pass. Changeset in `.changeset/integrations-extract.md`.
 
 **Step 3 done:** `@cat-factory/agents` extracted — `modules/agents/*` (11 files:
 AiAgentExecutor, agent catalog/routing, all prompt files, versioned prompt
@@ -134,7 +150,7 @@ status`). Do **not** do it all in one commit — phase it so a bisect is possibl
    `@cat-factory/spend`, then narrow the `ci.yml` `changes` filter from
    `backend/packages/core/**` to `backend/packages/spend/**` +
    `backend/packages/agents/**` (whatever the harness actually imports).
-3. **Extract `@cat-factory/agents`**, then `@cat-factory/integrations`, then
+3. **Extract `@cat-factory/agents`** ✓, then **`@cat-factory/integrations`** ✓, then
    `@cat-factory/workspaces`.
 4. **Rename the remainder** to `@cat-factory/orchestration` (or keep `core`, now
    with a real, narrow scope).

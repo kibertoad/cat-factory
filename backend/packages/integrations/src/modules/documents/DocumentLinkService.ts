@@ -8,7 +8,7 @@ import type {
 import { assertFound, ValidationError } from '@cat-factory/kernel'
 import type { BlockRepository } from '@cat-factory/kernel'
 import type { DocumentRepository } from '@cat-factory/kernel'
-import type { BoardService } from '../board/BoardService'
+import type { BoardWritePort } from '@cat-factory/kernel'
 import { toSourceDocument } from './DocumentImportService'
 
 // DocumentLinkService: the write side that connects an imported document to the
@@ -18,7 +18,7 @@ import { toSourceDocument } from './DocumentImportService'
 // extra context. Source-agnostic — it works on the projected document records.
 
 export interface DocumentLinkServiceDependencies {
-  boardService: BoardService
+  boardService: BoardWritePort
   blockRepository: BlockRepository
   documentRepository: DocumentRepository
 }

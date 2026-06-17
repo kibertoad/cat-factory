@@ -158,3 +158,4 @@ export type {
   RunnerPoolConnectionRecord,
   RunnerPoolConnectionRepository,
 } from './runner-pool-repositories'
+export type { BoardWritePort } from './board-operations'

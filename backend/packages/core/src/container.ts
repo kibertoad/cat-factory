@@ -58,24 +58,26 @@ import { PipelineService } from './modules/pipelines/PipelineService'
 import { WorkspaceService } from './modules/workspaces/WorkspaceService'
 import { AccountService } from './modules/accounts/AccountService'
 import { SpendService, DEFAULT_SPEND_PRICING, type SpendPricing } from '@cat-factory/spend'
-import { GitHubInstallationService } from './modules/github/GitHubInstallationService'
-import { RepoProvisioningService } from './modules/github/RepoProvisioningService'
-import { GitHubService } from './modules/github/GitHubService'
-import { GitHubSyncService } from './modules/github/GitHubSyncService'
-import { WebhookService } from './modules/github/WebhookService'
-import { DocumentConnectionService } from './modules/documents/DocumentConnectionService'
-import { DocumentImportService } from './modules/documents/DocumentImportService'
-import { DocumentPlannerService } from './modules/documents/DocumentPlannerService'
-import { DocumentLinkService } from './modules/documents/DocumentLinkService'
-import { MapDocumentSourceRegistry } from './modules/documents/documents.logic'
-import { TaskConnectionService } from './modules/tasks/TaskConnectionService'
-import { TaskImportService } from './modules/tasks/TaskImportService'
-import { TaskLinkService } from './modules/tasks/TaskLinkService'
-import { MapTaskSourceRegistry } from './modules/tasks/tasks.logic'
-import { EnvironmentConnectionService } from './modules/environments/EnvironmentConnectionService'
-import { EnvironmentProvisioningService } from './modules/environments/EnvironmentProvisioningService'
-import { EnvironmentTeardownService } from './modules/environments/EnvironmentTeardownService'
-import { RunnerPoolConnectionService } from './modules/runners/RunnerPoolConnectionService'
+import {
+  GitHubInstallationService,
+  RepoProvisioningService,
+  GitHubService,
+  GitHubSyncService,
+  WebhookService,
+  DocumentConnectionService,
+  DocumentImportService,
+  DocumentPlannerService,
+  DocumentLinkService,
+  MapDocumentSourceRegistry,
+  TaskConnectionService,
+  TaskImportService,
+  TaskLinkService,
+  MapTaskSourceRegistry,
+  EnvironmentConnectionService,
+  EnvironmentProvisioningService,
+  EnvironmentTeardownService,
+  RunnerPoolConnectionService,
+} from '@cat-factory/integrations'
 import { BootstrapService } from './modules/bootstrap/BootstrapService'
 import { BoardScanService } from './modules/boardScan/BoardScanService'
 import { RequirementReviewService } from './modules/requirements/RequirementReviewService'

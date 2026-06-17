@@ -1,7 +1,7 @@
 {
-  "name": "@cat-factory/core",
+  "name": "@cat-factory/integrations",
   "version": "1.0.0",
-  "description": "Framework-agnostic domain logic for the Agent Architecture Board.",
+  "description": "External-system integration domain logic for the Agent Architecture Board (GitHub, documents, tasks, environments, runners).",
   "files": [
     "dist"
   ],
@@ -21,17 +21,13 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "precompile:templates": "node scripts/precompile-prompts.mjs"
+    "test": "vitest run",
+    "test:run": "vitest run"
   },
   "dependencies": {
-    "@cat-factory/agents": "workspace:*",
     "@cat-factory/contracts": "workspace:*",
-    "@cat-factory/integrations": "workspace:*",
     "@cat-factory/kernel": "workspace:*",
-    "@cat-factory/spend": "workspace:*",
-    "@cat-factory/prompt-fragments": "workspace:*",
-    "ai": "^6.0.0",
-    "handlebars": "^4.7.8"
+    "ai": "^6.0.0"
   },
   "devDependencies": {
     "typescript": "^5.6.0",
