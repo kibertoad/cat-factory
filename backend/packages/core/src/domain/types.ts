@@ -114,4 +114,13 @@ export type {
   ScanRepoInput,
   ScanRepoResult,
   BoardScanSpawnResult,
+  // Requirements-review (stateless reviewer agent) shapes.
+  ReviewItemCategory,
+  ReviewItemSeverity,
+  ReviewItemStatus,
+  RequirementReviewItem,
+  RequirementReviewStatus,
+  RequirementReview,
+  ReplyReviewItemInput,
+  UpdateReviewItemStatusInput,
 } from '@cat-factory/contracts'

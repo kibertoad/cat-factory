@@ -109,9 +109,15 @@ export {
   type RunnersModule,
   type BootstrapModule,
   type BoardScanModule,
+  type RequirementsModule,
   type FragmentLibraryModule,
   createCore,
 } from './container'
+export {
+  RequirementReviewService,
+  type RequirementReviewServiceDependencies,
+} from './modules/requirements/RequirementReviewService'
+export * as requirementsLogic from './modules/requirements/requirements.logic'
 
 export {
   FragmentLibraryService,

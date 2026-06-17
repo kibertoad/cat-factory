@@ -133,6 +133,42 @@ runner.
   source of truth and the board is the projection); the manual board-scan `scan`
   command still populates that table.
 
+## Requirements review flow (stateless, synchronous reviewer agent)
+
+A **reviewer** agent inspects a block's "collected requirements" — its
+description plus any linked PRD/RFC docs and tracker issues — and raises a list of
+review items (gaps / clarifications / assumptions / risks / questions). A human
+answers or dismisses each; once all are settled the agent folds the answers back
+into the block's description. Unlike `execution` / `bootstrap` this flow is
+**stateless and synchronous**: no container, no durable driver, no real-time
+events — every call runs an LLM inline (via the `ModelProvider` port, like the
+document planner) and returns the updated entity, which the SPA patches directly.
+
+- Wire contracts: `contracts/src/requirements.ts` (`RequirementReview` +
+  `RequirementReviewItem`, item `category`/`severity`/`status`, request bodies).
+  One **live review per block** (a new run replaces the prior one).
+- Core: `RequirementReviewService` (`modules/requirements/`) — `review()` gathers
+  context + LLM-generates items, `replyToItem()`/`setItemStatus()` mutate items,
+  `incorporate()` requires every item settled (resolved/dismissed) then rewrites
+  the block description via `blockRepository.update`. Pure prompt/parse logic is in
+  `requirements.logic.ts`. Assembled by `createRequirementsModule` whenever
+  `requirementReviewRepository` is wired; the model + linked doc/task repos are
+  optional within the module.
+- Persistence: `requirement_reviews` D1 table (migration `0021`,
+  `D1RequirementReviewRepository`) — items as a JSON column, keyed by review id,
+  `getByBlock` returns the current one.
+- Worker: `RequirementReviewController` (`modules/requirements/`) mounts
+  `GET|POST /blocks/:blockId/requirement-review`,
+  `POST /requirement-reviews/:id/items/:itemId/reply`,
+  `PATCH …/items/:itemId`, `POST …/:id/incorporate`. `selectRequirementsDeps`
+  wires the repo + a `CloudflareModelProvider` + the agents' default model ref.
+- Frontend: `stores/requirements.ts` (load/review/reply/setItemStatus/incorporate;
+  patches the board with the rewritten block on incorporate),
+  `components/requirements/RequirementReviewModal.vue` (triggered from
+  `InspectorPanel.vue`'s "Review requirements" button; shows an open-item count
+  badge), `ui.requirementReviewBlockId` drives the modal. No stream event — the
+  responses carry the updated review.
+
 ## Unified agent runs (failure + retry surface)
 
 Both container-backed flows — task `execution` and repo `bootstrap` — persist to

@@ -50,6 +50,7 @@ import type {
   Workspace,
   WorkspaceSnapshot,
 } from '~/types/domain'
+import type { RequirementReview, ReviewItemStatus } from '~/types/requirements'
 
 type Position = { x: number; y: number }
 
@@ -348,6 +349,45 @@ export function useApi() {
       workspaceId: string,
       body: { source: TaskSourceKind; externalId: string; blockId: string },
     ) => http<SourceTask>(`${ws(workspaceId)}/tasks/link`, { method: 'POST', body }),
+
+    // ---- requirements review (stateless reviewer agent) ------------------
+    // The current review for a block (null when none has been run). A 503 means
+    // the feature is unconfigured (the panel hides on any error here).
+    getRequirementReview: (workspaceId: string, blockId: string) =>
+      http<RequirementReview | null>(
+        `${ws(workspaceId)}/blocks/${encodeURIComponent(blockId)}/requirement-review`,
+      ),
+
+    // Run a fresh review (synchronous — the LLM runs inline and returns the items).
+    reviewRequirements: (workspaceId: string, blockId: string) =>
+      http<RequirementReview>(
+        `${ws(workspaceId)}/blocks/${encodeURIComponent(blockId)}/requirement-review`,
+        { method: 'POST' },
+      ),
+
+    replyRequirementItem: (workspaceId: string, reviewId: string, itemId: string, reply: string) =>
+      http<RequirementReview>(
+        `${ws(workspaceId)}/requirement-reviews/${encodeURIComponent(reviewId)}/items/${encodeURIComponent(itemId)}/reply`,
+        { method: 'POST', body: { reply } },
+      ),
+
+    setRequirementItemStatus: (
+      workspaceId: string,
+      reviewId: string,
+      itemId: string,
+      status: ReviewItemStatus,
+    ) =>
+      http<RequirementReview>(
+        `${ws(workspaceId)}/requirement-reviews/${encodeURIComponent(reviewId)}/items/${encodeURIComponent(itemId)}`,
+        { method: 'PATCH', body: { status } },
+      ),
+
+    // Fold the answers back into the block's requirements (all items must be settled).
+    incorporateRequirements: (workspaceId: string, reviewId: string) =>
+      http<{ review: RequirementReview; block: Block }>(
+        `${ws(workspaceId)}/requirement-reviews/${encodeURIComponent(reviewId)}/incorporate`,
+        { method: 'POST' },
+      ),
 
     // ---- github integration ----------------------------------------------
     // Connection management, projection reads (served from D1 — fast and
