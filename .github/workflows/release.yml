@@ -49,6 +49,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Create Release PR or publish
+        id: changesets
         uses: changesets/action@a45c4d594aa4e2c509dc14a9f2b3b67ba3780d0d # v1
         with:
           # Builds every publishable package then runs `changeset publish`.
@@ -62,3 +63,12 @@ jobs:
           # package's trusted publisher on npmjs.com to point at this workflow.
           # Provenance is attested automatically from the same OIDC identity.
           NPM_CONFIG_PROVENANCE: "true"
+
+      # Let the Release PR merge itself once required checks pass, so the
+      # version bump + publish run hands-off. Requires repo auto-merge enabled
+      # and a required status check on `main` (otherwise `--auto` is rejected).
+      - name: Enable auto-merge on the Release PR
+        if: steps.changesets.outputs.pullRequestNumber != ''
+        run: gh pr merge --auto --squash "${{ steps.changesets.outputs.pullRequestNumber }}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
