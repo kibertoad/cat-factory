@@ -1,4 +1,4 @@
-import type { BlockPatch, BlockRepository } from '@cat-factory/core'
+import type { BlockPatch, BlockRepository } from '@cat-factory/kernel'
 import type { Block } from '@cat-factory/contracts'
 import type { D1Database } from '@cloudflare/workers-types'
 import { type BlockRow, blockInsertValues, blockPatchToColumns, rowToBlock } from './mappers'

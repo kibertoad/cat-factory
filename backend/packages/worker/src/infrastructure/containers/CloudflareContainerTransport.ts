@@ -1,4 +1,4 @@
-import type { RunnerDispatchKind, RunnerJobView, RunnerTransport } from '@cat-factory/core'
+import type { RunnerDispatchKind, RunnerJobView, RunnerTransport } from '@cat-factory/kernel'
 import type { DurableObjectNamespace } from '@cloudflare/workers-types'
 import type { ImplementationContainer } from './ImplementationContainer'
 

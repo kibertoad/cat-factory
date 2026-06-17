@@ -1,4 +1,4 @@
-import type { WorkRunner } from '@cat-factory/core'
+import type { WorkRunner } from '@cat-factory/kernel'
 import type { Queue, Workflow } from '@cloudflare/workers-types'
 import type { ExecutionStartMessage } from '../env'
 

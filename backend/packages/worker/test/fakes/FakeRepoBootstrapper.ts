@@ -5,7 +5,7 @@ import type {
   BootstrapRepoRequest,
   RepoBootstrapper,
   StepSubtasks,
-} from '@cat-factory/core'
+} from '@cat-factory/kernel'
 
 /**
  * Deterministic RepoBootstrapper for integration tests: records each dispatch and

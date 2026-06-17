@@ -5,7 +5,7 @@ import {
 } from '@cat-factory/contracts'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
-import type { EnvironmentsModule } from '@cat-factory/core'
+import type { EnvironmentsModule } from '@cat-factory/orchestration'
 import type { AppEnv } from '../../infrastructure/http/types'
 import { param } from '../../infrastructure/http/params'
 import { jsonBody } from '../../infrastructure/http/validation'

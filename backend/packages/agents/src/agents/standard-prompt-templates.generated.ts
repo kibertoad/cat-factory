@@ -4,7 +4,7 @@
 // codegen-free Handlebars runtime so the worker can render them on Cloudflare
 // Workers (which forbid runtime code generation).
 //
-// Regenerate with: pnpm --filter @cat-factory/core run precompile:templates
+// Regenerate with: pnpm --filter @cat-factory/agents run precompile:templates
 // Source templates live in scripts/precompile-prompts.mjs.
 
 /* eslint-disable */

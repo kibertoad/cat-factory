@@ -1,5 +1,5 @@
 import type { Block, BootstrapJob, ExecutionInstance, WorkspaceEvent } from '@cat-factory/contracts'
-import type { ExecutionEventPublisher } from '@cat-factory/core'
+import type { ExecutionEventPublisher } from '@cat-factory/kernel'
 import type { DurableObjectNamespace } from '@cloudflare/workers-types'
 import type { WorkspaceEventsHub } from '../durable-objects/WorkspaceEventsHub'
 

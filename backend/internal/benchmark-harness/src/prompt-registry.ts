@@ -1,4 +1,4 @@
-import { type PromptId, PROMPT_VERSIONS, promptVersionLabel } from '@cat-factory/core'
+import { type PromptId, PROMPT_VERSIONS, promptVersionLabel } from '@cat-factory/agents'
 import type { PromptVariant } from './types'
 
 // Resolves a PromptVariant to the concrete system prompt + its version label.

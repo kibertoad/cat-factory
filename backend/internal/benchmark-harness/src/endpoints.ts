@@ -1,4 +1,4 @@
-import type { ModelRef } from '@cat-factory/core'
+import type { ModelRef } from '@cat-factory/kernel'
 import type { PiEndpoint } from './types'
 
 // Where to point Pi for the implementation task. Pi only speaks the OpenAI

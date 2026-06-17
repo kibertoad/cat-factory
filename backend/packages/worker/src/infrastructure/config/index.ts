@@ -1,5 +1,6 @@
 import type { ModelOption } from '@cat-factory/contracts'
-import { effectiveCatalog, type SpendPricing } from '@cat-factory/core'
+import { effectiveCatalog } from '@cat-factory/kernel'
+import { type SpendPricing } from '@cat-factory/spend'
 import type { Env } from '../env'
 import { directKeyAvailable } from './utils'
 import { type AgentsConfig, loadAgentsConfig } from './agents'

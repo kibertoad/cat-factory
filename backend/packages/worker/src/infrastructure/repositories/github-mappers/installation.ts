@@ -1,4 +1,4 @@
-import type { GitHubInstallation } from '@cat-factory/core'
+import type { GitHubInstallation } from '@cat-factory/kernel'
 
 export interface GitHubInstallationRow {
   installation_id: number

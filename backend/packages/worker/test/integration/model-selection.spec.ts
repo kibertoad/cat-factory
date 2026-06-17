@@ -1,5 +1,5 @@
-import type { AgentExecutor, AgentRunContext, AgentRunResult, Block } from '@cat-factory/core'
-import { effectiveCatalog, MODEL_CATALOG, resolveModelRef } from '@cat-factory/core'
+import type { AgentExecutor, AgentRunContext, AgentRunResult, Block } from '@cat-factory/kernel'
+import { effectiveCatalog, MODEL_CATALOG, resolveModelRef } from '@cat-factory/kernel'
 import type { ModelOption } from '@cat-factory/contracts'
 import { modelCatalogSchema } from '@cat-factory/contracts'
 import * as v from 'valibot'

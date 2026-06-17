@@ -1,4 +1,4 @@
-import { DomainError } from '@cat-factory/core'
+import { DomainError } from '@cat-factory/kernel'
 import type { Context } from 'hono'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import { logger } from '../observability/logger'

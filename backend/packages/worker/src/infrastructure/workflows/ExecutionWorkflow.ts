@@ -5,7 +5,8 @@ import {
   type WorkflowStep,
   type WorkflowStepConfig,
 } from 'cloudflare:workers'
-import type { AdvanceResult, AgentFailureKind } from '@cat-factory/core'
+import type { AgentFailureKind } from '@cat-factory/kernel'
+import type { AdvanceResult } from '@cat-factory/orchestration'
 import type { Env } from '../env'
 import { buildContainer } from '../container'
 import { loadConfig } from '../config'

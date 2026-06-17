@@ -4,8 +4,8 @@ import {
   type ModelProvider,
   type ModelRef,
   type SelectableFragment,
-  selectDeterministic,
-} from '@cat-factory/core'
+} from '@cat-factory/kernel'
+import { selectDeterministic } from '@cat-factory/agents'
 import { generateText } from 'ai'
 
 export interface LlmFragmentSelectorDependencies {

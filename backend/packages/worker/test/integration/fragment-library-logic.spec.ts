@@ -1,10 +1,10 @@
-import type { PromptFragment, PromptFragmentRecord, WorkspaceRepository } from '@cat-factory/core'
+import type { PromptFragment, PromptFragmentRecord, WorkspaceRepository } from '@cat-factory/kernel'
 import {
   FragmentLibraryService,
   fragmentSourceLogic,
   mergeCatalog,
   selectDeterministic,
-} from '@cat-factory/core'
+} from '@cat-factory/agents'
 import { describe, expect, it } from 'vitest'
 
 const { parseFragmentMarkdown, slugFromPath, digestListing } = fragmentSourceLogic

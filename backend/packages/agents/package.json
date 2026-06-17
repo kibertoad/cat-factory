@@ -20,7 +20,8 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "precompile:templates": "node scripts/precompile-prompts.mjs"
   },
   "dependencies": {
     "@cat-factory/contracts": "workspace:*",

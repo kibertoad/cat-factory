@@ -2,7 +2,7 @@ import type {
   Clock,
   GitHubInstallationRepository,
   InstallationPermissions,
-} from '@cat-factory/core'
+} from '@cat-factory/kernel'
 import { base64url, pkcs8PemToDer } from './encoding'
 
 // GitHub App authentication, implemented entirely on Web Crypto (`crypto.subtle`)

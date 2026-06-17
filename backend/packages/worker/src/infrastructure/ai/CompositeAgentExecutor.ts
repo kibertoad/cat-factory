@@ -6,7 +6,7 @@ import {
   type AgentRunResult,
   type AsyncAgentExecutor,
   isAsyncAgentExecutor,
-} from '@cat-factory/core'
+} from '@cat-factory/kernel'
 
 // Routes each pipeline step to the right executor by agent kind. The kinds that
 // produce and commit files against a real checkout — implementation (`coder`),

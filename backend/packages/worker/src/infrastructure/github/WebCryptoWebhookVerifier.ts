@@ -1,4 +1,4 @@
-import type { WebhookVerifier } from '@cat-factory/core'
+import type { WebhookVerifier } from '@cat-factory/kernel'
 import { timingSafeEqual } from './encoding'
 
 // Verifies GitHub webhook deliveries: GitHub signs the raw body with

@@ -1,4 +1,4 @@
-import type { AgentExecutor, AgentRunContext, AgentRunResult, Block } from '@cat-factory/core'
+import type { AgentExecutor, AgentRunContext, AgentRunResult, Block } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import { documentsDeps, makeApp } from '../helpers'
 import { FakeDocumentSourceProvider } from '../fakes/FakeDocumentSourceProvider'

@@ -1,4 +1,4 @@
-import type { GitHubBranch, GitHubIssue, GitHubPullRequest, GitHubRepo } from '@cat-factory/core'
+import type { GitHubBranch, GitHubIssue, GitHubPullRequest, GitHubRepo } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import { githubDeps, makeApp, uniqueInstallationId } from '../helpers'
 import { FakeAgentExecutor } from '../fakes/FakeAgentExecutor'

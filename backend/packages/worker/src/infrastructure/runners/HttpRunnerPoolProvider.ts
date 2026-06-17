@@ -1,15 +1,14 @@
-import {
-  environmentsLogic,
-  runnersLogic,
-  type RunnerDispatchRequest,
-  type RunnerJobView,
-  type RunnerPollRequest,
-  type RunnerPoolAuthScheme,
-  type RunnerPoolManifest,
-  type RunnerPoolProvider,
-  type RunnerPoolRequestTemplate,
-  type SecretResolver,
-} from '@cat-factory/core'
+import type {
+  RunnerDispatchRequest,
+  RunnerJobView,
+  RunnerPollRequest,
+  RunnerPoolAuthScheme,
+  RunnerPoolManifest,
+  RunnerPoolProvider,
+  RunnerPoolRequestTemplate,
+  SecretResolver,
+} from '@cat-factory/kernel'
+import { environmentsLogic, runnersLogic } from '@cat-factory/integrations'
 
 // The single generic adapter that interprets ANY runner-pool manifest. There are
 // no per-org presets: an org's pool scheduler API is described as HTTP request

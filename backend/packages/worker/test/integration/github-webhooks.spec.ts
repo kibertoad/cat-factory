@@ -1,4 +1,4 @@
-import type { GitHubPullRequest, WorkspaceSnapshot } from '@cat-factory/core'
+import type { GitHubPullRequest, WorkspaceSnapshot } from '@cat-factory/kernel'
 import { env } from 'cloudflare:test'
 import { describe, expect, it } from 'vitest'
 import { createApp } from '../../src/app'

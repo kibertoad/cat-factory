@@ -1,13 +1,12 @@
-import {
-  CONFLUENCE_DESCRIPTOR,
-  NOTION_DESCRIPTOR,
-  type DocumentContent,
-  type DocumentCredentials,
-  type DocumentSourceDescriptor,
-  type DocumentSourceKind,
-  type DocumentSourceProvider,
-  type NormalizedConnection,
-} from '@cat-factory/core'
+import type {
+  DocumentContent,
+  DocumentCredentials,
+  DocumentSourceDescriptor,
+  DocumentSourceKind,
+  DocumentSourceProvider,
+  NormalizedConnection,
+} from '@cat-factory/kernel'
+import { CONFLUENCE_DESCRIPTOR, NOTION_DESCRIPTOR } from '@cat-factory/integrations'
 
 const DESCRIPTORS: Record<DocumentSourceKind, DocumentSourceDescriptor> = {
   confluence: CONFLUENCE_DESCRIPTOR,

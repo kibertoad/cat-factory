@@ -1,4 +1,4 @@
-import type { Clock } from '@cat-factory/core'
+import type { Clock } from '@cat-factory/kernel'
 import type { Env } from '../env'
 import { buildContainer } from '../container'
 

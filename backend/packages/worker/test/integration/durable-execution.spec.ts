@@ -1,4 +1,5 @@
-import type { AdvanceResult, AgentRunRef } from '@cat-factory/core'
+import type { AgentRunRef } from '@cat-factory/kernel'
+import type { AdvanceResult } from '@cat-factory/orchestration'
 import { env } from 'cloudflare:test'
 import { describe, expect, it } from 'vitest'
 import { buildContainer } from '../../src/infrastructure/container'

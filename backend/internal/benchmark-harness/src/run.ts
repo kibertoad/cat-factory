@@ -1,11 +1,7 @@
 import { performance } from 'node:perf_hooks'
-import {
-  DEFAULT_SPEND_PRICING,
-  estimateCost,
-  type ModelProvider,
-  type ModelRef,
-  requirementsLogic,
-} from '@cat-factory/core'
+import { DEFAULT_SPEND_PRICING, estimateCost } from '@cat-factory/spend'
+import type { ModelProvider, ModelRef } from '@cat-factory/kernel'
+import { requirementsLogic } from '@cat-factory/orchestration'
 import { type BenchmarkConfig, TASK_PROMPT_ID } from './config'
 import { resolvePiEndpoint } from './endpoints'
 import {

@@ -1,7 +1,6 @@
 import {
   type AgentJobHandle,
   type AgentJobUpdate,
-  type AgentRouting,
   type AgentRunContext,
   type AgentRunResult,
   type AsyncAgentExecutor,
@@ -9,11 +8,14 @@ import {
   type RunnerDispatchKind,
   type RunnerJobResult,
   type RunnerTransport,
+} from '@cat-factory/kernel'
+import {
+  type AgentRouting,
   composeBlockSystemPrompt,
   resolveAgentConfig,
   systemPromptFor,
   userPromptFor,
-} from '@cat-factory/core'
+} from '@cat-factory/agents'
 import type { ContainerSessionService } from '../containers/ContainerSessionService'
 // The GitHub repo a run should be implemented against, resolved from the
 // workspace's installation + connected repos (see container.ts).

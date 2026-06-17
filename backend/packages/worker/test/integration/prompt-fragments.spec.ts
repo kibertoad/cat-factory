@@ -1,5 +1,5 @@
-import type { AgentExecutor, AgentRunContext, AgentRunResult, Block } from '@cat-factory/core'
-import { composeSystemPrompt, systemPromptFor } from '@cat-factory/core'
+import type { AgentExecutor, AgentRunContext, AgentRunResult, Block } from '@cat-factory/kernel'
+import { composeSystemPrompt, systemPromptFor } from '@cat-factory/agents'
 import { promptFragmentCatalogSchema, type PromptFragment } from '@cat-factory/contracts'
 import { FRAGMENTS } from '@cat-factory/prompt-fragments'
 import * as v from 'valibot'

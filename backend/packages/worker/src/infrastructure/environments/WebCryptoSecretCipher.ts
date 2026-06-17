@@ -1,4 +1,4 @@
-import type { SecretCipher } from '@cat-factory/core'
+import type { SecretCipher } from '@cat-factory/kernel'
 import { base64url, base64urlToBytes } from '../github/encoding'
 
 // Authenticated encryption of credentials at rest, on Web Crypto (AES-256-GCM)

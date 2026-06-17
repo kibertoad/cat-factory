@@ -3,7 +3,7 @@ import type {
   AgentRunContext,
   AgentRunResult,
   PullRequestRef,
-} from '@cat-factory/core'
+} from '@cat-factory/kernel'
 
 export interface FakeAgentOptions {
   /** Confidence reported on the final step (drives auto-merge vs PR). Default 1. */

@@ -3,7 +3,7 @@ import type {
   DocumentConnectionRepository,
   DocumentSourceKind,
   SecretCipher,
-} from '@cat-factory/core'
+} from '@cat-factory/kernel'
 import type { D1Database } from '@cloudflare/workers-types'
 
 interface DocumentConnectionRow {

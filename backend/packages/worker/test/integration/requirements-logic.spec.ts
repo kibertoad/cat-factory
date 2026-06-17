@@ -1,4 +1,4 @@
-import { requirementsLogic } from '@cat-factory/core'
+import { requirementsLogic } from '@cat-factory/orchestration'
 import { describe, expect, it } from 'vitest'
 
 // Pure logic for the requirements-review agent: rendering the collected

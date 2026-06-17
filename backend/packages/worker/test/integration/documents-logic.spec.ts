@@ -1,4 +1,4 @@
-import { confluenceLogic, notionLogic, documentsLogic } from '@cat-factory/core'
+import { confluenceLogic, notionLogic, documentsLogic } from '@cat-factory/integrations'
 import { describe, expect, it } from 'vitest'
 
 // Pure-logic unit tests for the document-source providers' source-specific

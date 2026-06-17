@@ -17,7 +17,7 @@ import type {
   RepoContentEntry,
   RepoEntry,
   RepoFileContent,
-} from '@cat-factory/core'
+} from '@cat-factory/kernel'
 import type { CommitFilesInput } from '@cat-factory/contracts'
 
 /**

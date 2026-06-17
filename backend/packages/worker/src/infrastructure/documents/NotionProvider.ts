@@ -1,12 +1,11 @@
 import {
-  NOTION_DESCRIPTOR,
-  notionLogic,
   ValidationError,
   type DocumentContent,
   type DocumentCredentials,
   type DocumentSourceProvider,
   type NormalizedConnection,
-} from '@cat-factory/core'
+} from '@cat-factory/kernel'
+import { NOTION_DESCRIPTOR, notionLogic } from '@cat-factory/integrations'
 
 // NotionProvider: the document-source provider for Notion. It authenticates with
 // a single internal-integration token (Bearer), fetches a page for its title and

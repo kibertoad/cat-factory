@@ -1,4 +1,4 @@
-import type { DocumentConnection, DocumentSourceDescriptor } from '@cat-factory/core'
+import type { DocumentConnection, DocumentSourceDescriptor } from '@cat-factory/kernel'
 import { env } from 'cloudflare:test'
 import { describe, expect, it } from 'vitest'
 import { documentsDeps, makeApp } from '../helpers'

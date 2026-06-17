@@ -21,8 +21,8 @@ import {
   type RepoContentEntry,
   type RepoEntry,
   type RepoFileContent,
-  githubProjection as gp,
-} from '@cat-factory/core'
+} from '@cat-factory/kernel'
+import { githubProjection as gp } from '@cat-factory/integrations'
 import type { CommitFilesInput } from '@cat-factory/contracts'
 import type { GitHubAppRegistry } from './GitHubAppRegistry'
 

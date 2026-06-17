@@ -1,4 +1,4 @@
-import type { ModelRef } from '@cat-factory/core'
+import type { ModelRef } from '@cat-factory/kernel'
 
 // Shared shapes for the benchmark matrix. A "cell" is one point in the
 // task × fixture × model × prompt-variant grid; running it yields a

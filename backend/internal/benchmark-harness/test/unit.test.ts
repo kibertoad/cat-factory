@@ -1,7 +1,7 @@
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { LanguageModel, ModelProvider } from '@cat-factory/core'
+import type { LanguageModel, ModelProvider } from '@cat-factory/kernel'
 import { MockLanguageModelV3 } from 'ai/test'
 import { afterEach, describe, expect, it } from 'vitest'
 import { writeRunArtifacts } from '../src/artifacts'

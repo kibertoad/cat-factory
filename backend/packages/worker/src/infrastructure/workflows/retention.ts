@@ -3,7 +3,7 @@ import type {
   CommitProjectionRepository,
   RateLimitRepository,
   TokenUsageRepository,
-} from '@cat-factory/core'
+} from '@cat-factory/kernel'
 
 // Retention sweep for the tables that don't self-limit (see
 // docs/storage-and-retention.md): the append-only `token_usage` ledger, the

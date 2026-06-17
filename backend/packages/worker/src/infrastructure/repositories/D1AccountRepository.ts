@@ -1,4 +1,4 @@
-import type { AccountRecord, AccountRepository } from '@cat-factory/core'
+import type { AccountRecord, AccountRepository } from '@cat-factory/kernel'
 import type { D1Database } from '@cloudflare/workers-types'
 
 interface AccountRow {

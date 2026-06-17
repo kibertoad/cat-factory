@@ -1,16 +1,18 @@
 import {
-  AiAgentExecutor,
   type AgentExecutor,
   type AgentRunRepository,
-  type Core,
-  type CoreDependencies,
+  type Clock,
   type DocumentSourceProvider,
-  type TaskSourceProvider,
   type ExecutionEventPublisher,
+  type FragmentOwnerKind,
+  type IdGenerator,
   NoopWorkRunner,
+  type TaskSourceProvider,
   type WorkRunner,
-  createCore,
-} from '@cat-factory/core'
+} from '@cat-factory/kernel'
+import { AiAgentExecutor, resolveAgentConfig } from '@cat-factory/agents'
+import { RunnerPoolConnectionService } from '@cat-factory/integrations'
+import { type Core, type CoreDependencies, createCore } from '@cat-factory/orchestration'
 import { type AppConfig, loadConfig } from './config'
 import type { Env } from './env'
 import { CloudflareModelProvider } from './ai/CloudflareModelProvider'
@@ -23,7 +25,6 @@ import { CloudflareContainerTransport } from './containers/CloudflareContainerTr
 import { HttpRunnerPoolProvider } from './runners/HttpRunnerPoolProvider'
 import { RunnerPoolTransport } from './runners/RunnerPoolTransport'
 import { D1RunnerPoolConnectionRepository } from './repositories/D1RunnerPoolConnectionRepository'
-import { RunnerPoolConnectionService, resolveAgentConfig } from '@cat-factory/core'
 import { ContainerRepoBootstrapper } from './ai/ContainerRepoBootstrapper'
 import { ContainerRepoScanner } from './ai/ContainerRepoScanner'
 import { CompositeAgentExecutor } from './ai/CompositeAgentExecutor'
@@ -71,7 +72,6 @@ import { D1PromptFragmentRepository } from './repositories/D1PromptFragmentRepos
 import { D1FragmentSourceRepository } from './repositories/D1FragmentSourceRepository'
 import { LlmFragmentSelector } from './ai/LlmFragmentSelector'
 import { CryptoIdGenerator, SystemClock } from './runtime'
-import type { Clock, FragmentOwnerKind, IdGenerator } from '@cat-factory/core'
 import type { D1Database } from '@cloudflare/workers-types'
 
 // The infrastructure composition root: turn a Worker `env` into the concrete

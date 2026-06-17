@@ -1,5 +1,5 @@
-import type { Account, GitHubConnection, Workspace, WorkspaceSnapshot } from '@cat-factory/core'
-import type { CoreDependencies } from '@cat-factory/core'
+import type { Account, GitHubConnection, Workspace, WorkspaceSnapshot } from '@cat-factory/kernel'
+import type { CoreDependencies } from '@cat-factory/orchestration'
 import { env } from 'cloudflare:test'
 import { describe, expect, it } from 'vitest'
 import { createApp } from '../../src/app'

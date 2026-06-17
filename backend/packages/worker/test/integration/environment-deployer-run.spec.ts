@@ -4,7 +4,7 @@ import type {
   AgentRunResult,
   Block,
   EnvironmentHandle,
-} from '@cat-factory/core'
+} from '@cat-factory/kernel'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { makeApp } from '../helpers'
 import {

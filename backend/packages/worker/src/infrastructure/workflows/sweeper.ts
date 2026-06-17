@@ -1,4 +1,4 @@
-import type { AgentRunRef, AgentRunRepository, Clock } from '@cat-factory/core'
+import type { AgentRunRef, AgentRunRepository, Clock } from '@cat-factory/kernel'
 import type { Workflow } from '@cloudflare/workers-types'
 
 /**

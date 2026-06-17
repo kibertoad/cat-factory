@@ -1,4 +1,4 @@
-import type { CommitProjectionRepository, GitHubCommit } from '@cat-factory/core'
+import type { CommitProjectionRepository, GitHubCommit } from '@cat-factory/kernel'
 import type { D1Database, D1PreparedStatement } from '@cloudflare/workers-types'
 import { type GitHubCommitRow, buildUpsert, commitValues, rowToCommit } from './github-mappers'
 

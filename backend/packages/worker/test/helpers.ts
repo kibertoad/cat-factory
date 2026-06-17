@@ -1,14 +1,15 @@
 import type {
   AgentExecutor,
-  CoreDependencies,
   DocumentSourceProvider,
-  TaskSourceProvider,
   ExecutionInstance,
+  FragmentSelector,
   GitHubClient,
+  TaskSourceProvider,
   WebhookVerifier,
   WorkspaceSnapshot,
-} from '@cat-factory/core'
-import { NoopBootstrapRunner, NoopWorkRunner } from '@cat-factory/core'
+} from '@cat-factory/kernel'
+import { NoopBootstrapRunner, NoopWorkRunner } from '@cat-factory/kernel'
+import type { CoreDependencies } from '@cat-factory/orchestration'
 import { env } from 'cloudflare:test'
 import { createApp } from '../src/app'
 import { buildContainer } from '../src/infrastructure/container'
@@ -31,7 +32,6 @@ import { D1TaskRepository } from '../src/infrastructure/repositories/D1TaskRepos
 import { D1PromptFragmentRepository } from '../src/infrastructure/repositories/D1PromptFragmentRepository'
 import { D1FragmentSourceRepository } from '../src/infrastructure/repositories/D1FragmentSourceRepository'
 import { WebCryptoSecretCipher } from '../src/infrastructure/environments/WebCryptoSecretCipher'
-import type { FragmentSelector } from '@cat-factory/core'
 
 const BASE = 'https://cat-factory.test'
 

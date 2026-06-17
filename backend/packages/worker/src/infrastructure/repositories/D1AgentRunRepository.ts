@@ -1,5 +1,5 @@
 import type { AgentRunKind } from '@cat-factory/contracts'
-import type { AgentRunRef, AgentRunRepository } from '@cat-factory/core'
+import type { AgentRunRef, AgentRunRepository } from '@cat-factory/kernel'
 import type { D1Database } from '@cloudflare/workers-types'
 
 /**

@@ -1,4 +1,4 @@
-import type { GitHubPullRequest, PullRequestProjectionRepository } from '@cat-factory/core'
+import type { GitHubPullRequest, PullRequestProjectionRepository } from '@cat-factory/kernel'
 import type { D1Database } from '@cloudflare/workers-types'
 import {
   type GitHubPullRequestRow,

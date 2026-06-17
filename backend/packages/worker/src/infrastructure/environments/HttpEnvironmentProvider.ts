@@ -1,5 +1,4 @@
 import {
-  environmentsLogic,
   type EnvironmentAccessHandle,
   type EnvironmentAccessMapping,
   type EnvironmentAuthScheme,
@@ -13,7 +12,8 @@ import {
   type ProvisionFields,
   type ProvisionedEnvironment,
   type SecretResolver,
-} from '@cat-factory/core'
+} from '@cat-factory/kernel'
+import { environmentsLogic } from '@cat-factory/integrations'
 
 // The single generic adapter that interprets ANY environment manifest. There are
 // no per-provider presets: an org's self-rolled management API is described as

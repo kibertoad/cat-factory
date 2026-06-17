@@ -2,7 +2,7 @@ import type {
   GitHubInstallation,
   GitHubInstallationRepository,
   InstallationPermissions,
-} from '@cat-factory/core'
+} from '@cat-factory/kernel'
 import type { GitHubAppAuth } from './GitHubAppAuth'
 
 // The multi-App resolver (ADR 0005, single-App-per-org model). A single GitHub

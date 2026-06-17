@@ -1,4 +1,4 @@
-import type { AgentFailure, Clock, ExecutionRepository, RunRef } from '@cat-factory/core'
+import type { AgentFailure, Clock, ExecutionRepository, RunRef } from '@cat-factory/kernel'
 import type { ExecutionInstance } from '@cat-factory/contracts'
 import type { D1Database } from '@cloudflare/workers-types'
 import { type ExecutionRow, rowToExecution } from './mappers'

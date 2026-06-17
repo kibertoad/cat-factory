@@ -8,7 +8,7 @@
 // imported as ordinary source — no eval, no build-time magic at consume time.
 //
 // Regenerate after editing any template below:
-//   pnpm --filter @cat-factory/core run precompile:templates
+//   pnpm --filter @cat-factory/agents run precompile:templates
 
 import { writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -61,7 +61,7 @@ const header = `// @ts-nocheck
 // codegen-free Handlebars runtime so the worker can render them on Cloudflare
 // Workers (which forbid runtime code generation).
 //
-// Regenerate with: pnpm --filter @cat-factory/core run precompile:templates
+// Regenerate with: pnpm --filter @cat-factory/agents run precompile:templates
 // Source templates live in scripts/precompile-prompts.mjs.
 
 /* eslint-disable */
@@ -72,7 +72,6 @@ const outPath = join(
   dirname(fileURLToPath(import.meta.url)),
   '..',
   'src',
-  'modules',
   'agents',
   'standard-prompt-templates.generated.ts',
 )

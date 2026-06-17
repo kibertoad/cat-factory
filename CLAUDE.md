@@ -9,7 +9,7 @@ many files and are otherwise slow to re-derive.
 
 - **Worker tests fail on Windows** with `config wrangler validation failed` / 47 errors
   and "no tests" output. This is a pre-existing Windows-only wrangler issue, not caused
-  by code changes. Use `pnpm test:run` from `backend/packages/core` (or any non-worker
+  by code changes. Use `pnpm test:run` from `backend/packages/kernel` (or any non-worker
   package) to verify logic changes; the worker integration suite only runs cleanly on Linux/macOS.
 
 ## Layout

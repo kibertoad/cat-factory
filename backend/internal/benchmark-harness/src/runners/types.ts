@@ -1,4 +1,4 @@
-import type { ModelProvider, ModelRef } from '@cat-factory/core'
+import type { ModelProvider, ModelRef } from '@cat-factory/kernel'
 import type { ResolvedPrompt } from '../prompt-registry'
 import type { PiEndpoint } from '../types'
 

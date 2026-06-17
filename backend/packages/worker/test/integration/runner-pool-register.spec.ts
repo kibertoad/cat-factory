@@ -1,4 +1,4 @@
-import type { RunnerPoolConnection } from '@cat-factory/core'
+import type { RunnerPoolConnection } from '@cat-factory/kernel'
 import { env } from 'cloudflare:test'
 import { describe, expect, it } from 'vitest'
 import { makeApp } from '../helpers'

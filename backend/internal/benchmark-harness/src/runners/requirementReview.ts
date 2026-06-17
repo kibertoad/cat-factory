@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { requirementsLogic } from '@cat-factory/core'
+import { requirementsLogic } from '@cat-factory/orchestration'
 import { generateText } from 'ai'
 import type { RequirementReviewFixture } from '../fixtures'
 import type { RunnerInput, RunnerOutput } from './types'

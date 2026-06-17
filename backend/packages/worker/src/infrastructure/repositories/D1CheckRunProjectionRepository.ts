@@ -1,4 +1,4 @@
-import type { CheckRunProjectionRepository, GitHubCheckRun } from '@cat-factory/core'
+import type { CheckRunProjectionRepository, GitHubCheckRun } from '@cat-factory/kernel'
 import type { D1Database } from '@cloudflare/workers-types'
 import {
   type GitHubCheckRunRow,

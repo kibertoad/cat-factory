@@ -1,4 +1,4 @@
-import type { SyncCursor } from '@cat-factory/core'
+import type { SyncCursor } from '@cat-factory/kernel'
 
 export interface SyncCursorRow {
   etag: string | null

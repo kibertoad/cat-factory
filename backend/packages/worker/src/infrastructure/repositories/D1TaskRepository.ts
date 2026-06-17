@@ -1,4 +1,4 @@
-import type { TaskComment, TaskRecord, TaskRepository, TaskSourceKind } from '@cat-factory/core'
+import type { TaskComment, TaskRecord, TaskRepository, TaskSourceKind } from '@cat-factory/kernel'
 import type { D1Database } from '@cloudflare/workers-types'
 
 interface TaskRow {

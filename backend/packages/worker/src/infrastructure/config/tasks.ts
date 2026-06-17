@@ -1,4 +1,4 @@
-import type { TaskSourceKind } from '@cat-factory/core'
+import type { TaskSourceKind } from '@cat-factory/kernel'
 import type { Env } from '../env'
 
 const ALL_SOURCES: readonly TaskSourceKind[] = ['jira']

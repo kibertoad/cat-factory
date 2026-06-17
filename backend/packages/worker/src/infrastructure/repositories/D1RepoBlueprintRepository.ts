@@ -2,7 +2,7 @@ import type {
   BlueprintService,
   RepoBlueprintRecord,
   RepoBlueprintRepository,
-} from '@cat-factory/core'
+} from '@cat-factory/kernel'
 import type { D1Database } from '@cloudflare/workers-types'
 
 interface RepoBlueprintRow {

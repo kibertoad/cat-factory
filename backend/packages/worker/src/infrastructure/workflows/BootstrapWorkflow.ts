@@ -5,7 +5,7 @@ import {
   type WorkflowStep,
   type WorkflowStepConfig,
 } from 'cloudflare:workers'
-import type { BootstrapPollResult } from '@cat-factory/core'
+import type { BootstrapPollResult } from '@cat-factory/orchestration'
 import type { Env } from '../env'
 import { buildContainer } from '../container'
 import { loadConfig } from '../config'

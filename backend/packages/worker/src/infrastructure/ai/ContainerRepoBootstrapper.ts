@@ -11,7 +11,7 @@ import type {
   RepoEntry,
   RepoProjectionRepository,
   StepSubtasks,
-} from '@cat-factory/core'
+} from '@cat-factory/kernel'
 import type { DurableObjectNamespace } from '@cloudflare/workers-types'
 import type { ImplementationContainer } from '../containers/ImplementationContainer'
 import type { ContainerSessionService } from '../containers/ContainerSessionService'

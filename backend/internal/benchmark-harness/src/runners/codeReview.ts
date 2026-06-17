@@ -1,4 +1,4 @@
-import { AiAgentExecutor, type AgentRouting } from '@cat-factory/core'
+import { AiAgentExecutor, type AgentRouting } from '@cat-factory/agents'
 import type { CodeReviewFixture } from '../fixtures'
 import type { RunnerInput, RunnerOutput } from './types'
 

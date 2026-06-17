@@ -1,4 +1,4 @@
-import type { BranchProjectionRepository, GitHubBranch } from '@cat-factory/core'
+import type { BranchProjectionRepository, GitHubBranch } from '@cat-factory/kernel'
 import type { D1Database } from '@cloudflare/workers-types'
 import { type GitHubBranchRow, branchValues, buildUpsert, rowToBranch } from './github-mappers'
 
