@@ -14,7 +14,12 @@ describe('pipelines', () => {
 
   it('lists the seeded pipelines', async () => {
     const res = await app.call<Pipeline[]>('GET', `/workspaces/${wsId}/pipelines`)
-    expect(res.body.map((p) => p.id)).toEqual(['pl_full', 'pl_quick', 'pl_integrate'])
+    expect(res.body.map((p) => p.id)).toEqual([
+      'pl_full',
+      'pl_quick',
+      'pl_integrate',
+      'pl_blueprint',
+    ])
   })
 
   it('creates a custom pipeline', async () => {

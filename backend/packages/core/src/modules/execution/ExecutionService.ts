@@ -527,6 +527,9 @@ export class ExecutionService {
     }
     const frameId = await this.resolveServiceFrameId(workspaceId, blockId)
     await this.blueprintReconciler.reconcileBlueprint(workspaceId, frameId, service)
+    // The reconcile may have created/updated module + task blocks that aren't
+    // individually pushed; nudge clients to refresh the board so they appear.
+    await this.events.boardChanged(workspaceId, 'blueprint-reconciled')
   }
 
   /** Walk up `parentId` from a block to its top-level service frame id (or itself). */

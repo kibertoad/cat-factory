@@ -10,7 +10,7 @@ describe('workspaces', () => {
     expect(res.status).toBe(201)
     expect(res.body.workspace.name).toBe('My board')
     expect(res.body.blocks.find((b) => b.id === 'blk_auth')).toBeTruthy()
-    expect(res.body.pipelines).toHaveLength(3)
+    expect(res.body.pipelines).toHaveLength(4)
     expect(res.body.executions).toHaveLength(0)
   })
 
