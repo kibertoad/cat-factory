@@ -204,6 +204,78 @@ export function parseBootstrapJob(input: unknown): BootstrapJob {
   return job
 }
 
+// ---- Blueprint job (POST /blueprint) --------------------------------------
+
+/** How a blueprint run treats any blueprint already in the repo. */
+export type BlueprintMode = 'create' | 'update'
+
+/**
+ * The job the Worker's ContainerBlueprinter POSTs to /blueprint. The Blueprinter
+ * agent clones `repo` at `branch`, (re)generates the `blueprints/` folder — the
+ * canonical `blueprint.json` tree plus its markdown renderings — and commits the
+ * result back onto `branch`. Unlike a bootstrap it never resets history or
+ * force-pushes: it adds one commit to an existing branch (the repo's default
+ * branch after a bootstrap, or the implementation step's PR branch in a pipeline).
+ */
+export interface BlueprintJob {
+  /** Stable job id (the blueprint run id); keys the background job + poll endpoint. */
+  jobId: string
+  /** Blueprinter role prompt; written to AGENTS.md for Pi. */
+  systemPrompt: string
+  /** Free-form guidance handed to Pi as the task prompt (focus areas, granularity). */
+  instructions: string
+  model: string
+  proxyBaseUrl: string
+  sessionToken: string
+  ghToken: string
+  repo: RepoSpec
+  /** Branch to clone and commit the regenerated blueprint onto. */
+  branch: string
+  /** `create` ignores any existing blueprint; `update` refines it in place. */
+  mode: BlueprintMode
+  githubApiBase?: string
+}
+
+/** The /blueprint response. `service` (when set) is the decomposition tree to ingest. */
+export interface BlueprintResult {
+  /** The service → modules → features tree the agent produced (for board ingest). */
+  service?: unknown
+  summary?: string
+  stats?: PiRunStats
+  error?: string
+}
+
+/** Validate + narrow an untrusted body into a {@link BlueprintJob}, throwing on bad input. */
+export function parseBlueprintJob(input: unknown): BlueprintJob {
+  if (typeof input !== 'object' || input === null) {
+    throw new Error('Invalid job: body must be an object')
+  }
+  const o = input as Record<string, unknown>
+  const repo = (o.repo ?? {}) as Record<string, unknown>
+  const mode = o.mode === 'update' ? 'update' : 'create'
+  const job: BlueprintJob = {
+    jobId: str(o.jobId, 'jobId'),
+    systemPrompt: str(o.systemPrompt, 'systemPrompt'),
+    instructions: str(o.instructions, 'instructions'),
+    model: str(o.model, 'model'),
+    proxyBaseUrl: str(o.proxyBaseUrl, 'proxyBaseUrl'),
+    sessionToken: str(o.sessionToken, 'sessionToken'),
+    ghToken: str(o.ghToken, 'ghToken'),
+    repo: {
+      owner: str(repo.owner, 'repo.owner'),
+      name: str(repo.name, 'repo.name'),
+      baseBranch: str(repo.baseBranch, 'repo.baseBranch'),
+      cloneUrl: str(repo.cloneUrl, 'repo.cloneUrl'),
+    },
+    branch: str(o.branch, 'branch'),
+    mode,
+    ...(typeof o.githubApiBase === 'string' ? { githubApiBase: o.githubApiBase } : {}),
+  }
+  assertAllowedHost(job.repo.cloneUrl, 'repo.cloneUrl')
+  if (job.githubApiBase) assertAllowedHost(job.githubApiBase, 'githubApiBase')
+  return job
+}
+
 /** Validate + narrow an untrusted body into a {@link Job}, throwing on bad input. */
 export function parseJob(input: unknown): Job {
   if (typeof input !== 'object' || input === null) {

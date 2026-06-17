@@ -64,9 +64,29 @@ each one \`in_progress\` when you begin it and \`completed\` when it's done (act
 "update"). Keep the list accurate — it is the only signal the system has for how
 far along the run is.`
 
+// Appended to every AGENTS.md so an agent orients off the persisted service
+// blueprint before touching code, but stays shallow by default: read the
+// high-level overview first, and only open a module's deep-dive when the task
+// actually touches it. Harmless when no blueprint exists yet (e.g. a fresh
+// bootstrap) — the files simply aren't there to read.
+const BLUEPRINT_GUIDANCE = `
+
+## Service blueprint (read first, stay shallow)
+
+If a \`blueprints/\` folder exists, it is the map of this service. **Before you start,
+read \`blueprints/overview.md\`** for the high-level structure (modules and their
+features). Do NOT read every module file. Only open \`blueprints/modules/<name>.md\`
+for a module that is directly relevant to your task, when you need its features and
+exact code references. \`blueprints/version.json\` is a tiny manifest for quick
+staleness checks. Treat the blueprint as orientation, not a task list.`
+
 /** Write the composed system prompt as project context Pi reads automatically. */
 export async function writeAgentsContext(cwd: string, systemPrompt: string): Promise<void> {
-  await writeFile(join(cwd, 'AGENTS.md'), `${systemPrompt}${TODO_GUIDANCE}`, 'utf8')
+  await writeFile(
+    join(cwd, 'AGENTS.md'),
+    `${systemPrompt}${BLUEPRINT_GUIDANCE}${TODO_GUIDANCE}`,
+    'utf8',
+  )
 }
 
 /** One entry of the agent's todo list — its subject and current status. */
