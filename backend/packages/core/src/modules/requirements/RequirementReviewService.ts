@@ -24,8 +24,19 @@ export interface RequirementReviewServiceDependencies {
   clock: Clock
   /** Resolves the reviewer model; absent when no provider is configured. */
   modelProvider?: ModelProvider
-  /** Which model to use for review + incorporation (the agents' default ref). */
+  /**
+   * Default model ref when the block pins none — the agents' routing default,
+   * which itself resolves to the Cloudflare Workers AI flavour unless a direct
+   * provider key is configured (so the reviewer runs on Cloudflare by default,
+   * like the container Pi agent).
+   */
   modelRef?: ModelRef
+  /**
+   * Resolve a block's selected model id to a ref, honouring the direct/Cloudflare
+   * fallback — the same deployment-aware resolver the agent executor uses. When a
+   * block pins a model the reviewer runs it; otherwise it falls back to `modelRef`.
+   */
+  resolveBlockModel?: (modelId: string | undefined) => ModelRef | undefined
   /** Linked PRD/RFC documents (optional; only when the documents integration is on). */
   documentRepository?: DocumentRepository
   /** Linked tracker issues (optional; only when the task-source integration is on). */
@@ -43,9 +54,11 @@ const SETTLED: ReviewItemStatus[] = ['resolved', 'dismissed']
  *
  * The LLM is reached through the provider-agnostic {@link ModelProvider} port —
  * the same one the document planner uses — so this service never imports a
- * provider SDK or an API key. When no model is configured the review/incorporate
- * paths fail with a clear validation error (there is no useful deterministic
- * fallback for a reviewer); reads of an existing review still work.
+ * provider SDK or an API key. The model is resolved exactly like an agent step:
+ * a model pinned on the block wins, else the agents' routing default, which falls
+ * back to Cloudflare Workers AI when no direct provider key is set — so the
+ * reviewer runs on Cloudflare by default (like the container Pi agent) with no
+ * key required. Reads of an existing review work regardless.
  */
 export class RequirementReviewService {
   constructor(private readonly deps: RequirementReviewServiceDependencies) {}
@@ -53,6 +66,15 @@ export class RequirementReviewService {
   /** Whether the LLM-backed review path is available. */
   get enabled(): boolean {
     return !!this.deps.modelProvider && !!this.deps.modelRef
+  }
+
+  /**
+   * The model to run for a block: its pinned selection (resolved with the
+   * direct/Cloudflare fallback) when present, else the routing default. Mirrors
+   * how {@link AiAgentExecutor} picks a step's model.
+   */
+  private modelFor(block: Block): ModelRef | undefined {
+    return this.deps.resolveBlockModel?.(block.modelId) ?? this.deps.modelRef
   }
 
   /** The current review for a block, or null if none has been run. */
@@ -71,15 +93,16 @@ export class RequirementReviewService {
       'Block',
       blockId,
     )
-    const { modelProvider, modelRef } = this.deps
-    if (!modelProvider || !modelRef) {
+    const { modelProvider } = this.deps
+    const ref = this.modelFor(block)
+    if (!modelProvider || !ref) {
       throw new ValidationError('No model is configured for the requirements reviewer')
     }
 
     const context = await this.gatherContext(workspaceId, block)
     let text: string
     try {
-      const model = modelProvider.resolve(modelRef)
+      const model = modelProvider.resolve(ref)
       const result = await generateText({
         model,
         system: REVIEW_SYSTEM_PROMPT,
@@ -88,8 +111,14 @@ export class RequirementReviewService {
         maxOutputTokens: 5000,
       })
       text = result.text
-    } catch {
-      throw new ValidationError('The requirements reviewer model could not be reached')
+    } catch (e) {
+      // Surface the real cause (binding missing, rate limit, provider error)
+      // rather than masking every failure behind one vague message.
+      throw new ValidationError(
+        `The requirements reviewer (${ref.provider}:${ref.model}) failed: ${
+          e instanceof Error ? e.message : String(e)
+        }`,
+      )
     }
 
     const now = this.deps.clock.now()
@@ -99,7 +128,7 @@ export class RequirementReviewService {
       blockId,
       status: 'ready',
       items,
-      model: `${modelRef.provider}:${modelRef.model}`,
+      model: `${ref.provider}:${ref.model}`,
       incorporatedRequirements: null,
       createdAt: now,
       updatedAt: now,
@@ -165,15 +194,16 @@ export class RequirementReviewService {
         `Resolve or dismiss all ${unsettled.length} remaining item(s) before incorporating`,
       )
     }
-    const { modelProvider, modelRef } = this.deps
-    if (!modelProvider || !modelRef) {
+    const { modelProvider } = this.deps
+    const ref = this.modelFor(block)
+    if (!modelProvider || !ref) {
       throw new ValidationError('No model is configured for the requirements reviewer')
     }
 
     const context = await this.gatherContext(workspaceId, block)
     let revised: string
     try {
-      const model = modelProvider.resolve(modelRef)
+      const model = modelProvider.resolve(ref)
       const result = await generateText({
         model,
         system: INCORPORATE_SYSTEM_PROMPT,
@@ -182,8 +212,12 @@ export class RequirementReviewService {
         maxOutputTokens: 5000,
       })
       revised = result.text.trim()
-    } catch {
-      throw new ValidationError('The requirements reviewer model could not be reached')
+    } catch (e) {
+      throw new ValidationError(
+        `The requirements reviewer (${ref.provider}:${ref.model}) failed: ${
+          e instanceof Error ? e.message : String(e)
+        }`,
+      )
     }
     if (!revised) {
       throw new ValidationError('The reviewer produced no revised requirements')

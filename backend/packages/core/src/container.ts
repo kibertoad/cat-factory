@@ -241,11 +241,20 @@ export interface CoreDependencies {
   // PRDs and tracker issues into the reviewed requirements.
   requirementReviewRepository?: RequirementReviewRepository
   /**
-   * Model the requirements reviewer uses. Independent of the documents config so
-   * the reviewer works whenever a model provider is wired; the worker sets it to
-   * the agents' default ref. Falls back to `documentPlannerModel` when absent.
+   * Default model the requirements reviewer uses when a block pins none.
+   * Independent of the documents config so the reviewer works whenever a model
+   * provider is wired; the worker sets it to the agents' routing default (which
+   * resolves to Cloudflare Workers AI unless a direct key is set). Falls back to
+   * `documentPlannerModel` when absent.
    */
   requirementReviewModel?: ModelRef
+  /**
+   * Resolve a block's pinned model id to a ref for the reviewer, honouring the
+   * direct/Cloudflare fallback — the same resolver the agent executor uses. The
+   * worker wires `config.agents.resolveBlockModel`; absent → the reviewer always
+   * uses the default ref above.
+   */
+  requirementReviewResolveModel?: (modelId: string | undefined) => ModelRef | undefined
 
   // ---- Prompt-fragment library (opt-in; ADR 0006) -------------------------
   // The managed, tenant-scoped catalog of best-practice fragments. The library
@@ -652,6 +661,8 @@ function createRequirementsModule(deps: CoreDependencies): RequirementsModule | 
     modelProvider: deps.modelProvider,
     // The dedicated reviewer ref, else the document planner's (both the agents' default).
     modelRef: deps.requirementReviewModel ?? deps.documentPlannerModel,
+    // Honour a block's pinned model with the direct/Cloudflare fallback, like the executor.
+    resolveBlockModel: deps.requirementReviewResolveModel,
     documentRepository: deps.documentRepository,
     taskRepository: deps.taskRepository,
   })

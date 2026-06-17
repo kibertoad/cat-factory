@@ -161,7 +161,10 @@ document planner) and returns the updated entity, which the SPA patches directly
   `GET|POST /blocks/:blockId/requirement-review`,
   `POST /requirement-reviews/:id/items/:itemId/reply`,
   `PATCH …/items/:itemId`, `POST …/:id/incorporate`. `selectRequirementsDeps`
-  wires the repo + a `CloudflareModelProvider` + the agents' default model ref.
+  wires the repo + a `CloudflareModelProvider` + the agents' routing default ref +
+  `resolveBlockModel`, so the reviewer resolves its model exactly like an agent
+  step: a block's pinned model wins, else the default — which falls back to
+  **Cloudflare Workers AI** unless a direct provider key is set (no key required).
 - Frontend: `stores/requirements.ts` (load/review/reply/setItemStatus/incorporate;
   patches the board with the rewritten block on incorporate),
   `components/requirements/RequirementReviewModal.vue` (triggered from

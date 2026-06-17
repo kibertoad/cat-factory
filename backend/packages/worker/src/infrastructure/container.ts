@@ -412,7 +412,12 @@ function selectRequirementsDeps(
   return {
     requirementReviewRepository: new D1RequirementReviewRepository({ db }),
     modelProvider: new CloudflareModelProvider({ env }),
+    // The routing default already resolves to Cloudflare Workers AI unless a
+    // direct provider key is set, so the reviewer runs on Cloudflare by default.
     requirementReviewModel: config.agents.routing.default.ref,
+    // Honour a block's pinned model with the same direct/Cloudflare fallback the
+    // agent executor (and the Pi container path) use.
+    requirementReviewResolveModel: config.agents.resolveBlockModel,
   }
 }
 
