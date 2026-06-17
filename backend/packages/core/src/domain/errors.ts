@@ -40,3 +40,8 @@ export function assertFound<T>(value: T | null | undefined, entity: string, id: 
   if (value === null || value === undefined) throw new NotFoundError(entity, id)
   return value
 }
+
+/** Extract a human-readable message from an unknown thrown value. */
+export function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}

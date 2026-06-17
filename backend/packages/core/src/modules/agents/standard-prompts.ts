@@ -2,6 +2,7 @@ import Handlebars from 'handlebars/runtime'
 import type { AgentKind } from '../../domain/types'
 import type { AgentRunContext } from '../../ports/agent-executor'
 import { CI_RETRY_SANITY_CHECK } from './ci-gate'
+import { STANDARDS_FOOTER } from './prompt-shared'
 import * as templateSpecs from './standard-prompt-templates.generated'
 
 // Standard, built-out prompts for the four core phases of delivering a solution:
@@ -42,9 +43,6 @@ export function phaseForKind(kind: AgentKind): StandardPhase | undefined {
 // --- System prompts -------------------------------------------------------
 // Static role + approach guidance per phase. Each closes by deferring to the
 // best-practice standards that `composeSystemPrompt` appends below it.
-
-const STANDARDS_FOOTER =
-  'Treat every best-practice standard appended below as a hard requirement, not a suggestion.'
 
 // The build phase ships code through a pull request, so "done" means the PR's CI
 // is green — not merely that an implementation was written. The agent must keep
