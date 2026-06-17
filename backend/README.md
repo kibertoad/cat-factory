@@ -515,13 +515,13 @@ mistake:
   master keys. Locally these go in `.dev.vars` (gitignored; see
   `deploy/backend/.dev.vars.example`).
 
-| `[vars]` (in `wrangler.toml`)                                                                                                                                                           | Secrets (`wrangler secret put …`)                                                                                                          |
-| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `GITHUB_OAUTH_CLIENT_ID`, `AUTH_ALLOWED_LOGINS`/`AUTH_ALLOWED_ORGS`, `AUTH_SUCCESS_REDIRECT_URL`, `ENVIRONMENT`, `CORS_ALLOWED_ORIGINS`                                                 | `GITHUB_OAUTH_CLIENT_SECRET`, `AUTH_SESSION_SECRET`                                                                                       |
-| `CONTAINER_IMPL_ENABLED`, `WORKER_PUBLIC_URL`, `RUNNERS_ENABLED`                                                                                                                        | (container/runner path holds no key of its own — see below)                                                                               |
-| `GITHUB_APP_ID`, `GITHUB_APP_SLUG`, `GITHUB_SETUP_REDIRECT_URL`, `GITHUB_PRIVILEGED_APP_ID`                                                                                             | `GITHUB_APP_PRIVATE_KEY`, `GITHUB_WEBHOOK_SECRET`, `GITHUB_PRIVILEGED_APP_PRIVATE_KEY`                                                    |
-| `SPEND_MONTHLY_LIMIT`, `SPEND_CURRENCY`, `SPEND_MODEL_PRICES`, `AGENT_DEFAULT_*`/`AGENT_MODELS`, `DECISION_TIMEOUT`                                                                      | `QWEN_API_KEY`, `DEEPSEEK_API_KEY`, `MOONSHOT_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`                                             |
-| `DOCUMENTS_ENABLED`/`DOCUMENT_SOURCES`/`DOCUMENT_PLANNER`, `TASKS_ENABLED`/`TASK_SOURCES`, `ENVIRONMENTS_ENABLED`, `PROMPT_LIBRARY_ENABLED`/`PROMPT_LIBRARY_SELECTOR`                    | `DOCUMENTS_ENCRYPTION_KEY`, `TASKS_ENCRYPTION_KEY`, `ENVIRONMENTS_ENCRYPTION_KEY`, `RUNNERS_ENCRYPTION_KEY`                               |
+| `[vars]` (in `wrangler.toml`)                                                                                                                                         | Secrets (`wrangler secret put …`)                                                                           |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `GITHUB_OAUTH_CLIENT_ID`, `AUTH_ALLOWED_LOGINS`/`AUTH_ALLOWED_ORGS`, `AUTH_SUCCESS_REDIRECT_URL`, `ENVIRONMENT`, `CORS_ALLOWED_ORIGINS`                               | `GITHUB_OAUTH_CLIENT_SECRET`, `AUTH_SESSION_SECRET`                                                         |
+| `CONTAINER_IMPL_ENABLED`, `WORKER_PUBLIC_URL`, `RUNNERS_ENABLED`                                                                                                      | (container/runner path holds no key of its own — see below)                                                 |
+| `GITHUB_APP_ID`, `GITHUB_APP_SLUG`, `GITHUB_SETUP_REDIRECT_URL`, `GITHUB_PRIVILEGED_APP_ID`                                                                           | `GITHUB_APP_PRIVATE_KEY`, `GITHUB_WEBHOOK_SECRET`, `GITHUB_PRIVILEGED_APP_PRIVATE_KEY`                      |
+| `SPEND_MONTHLY_LIMIT`, `SPEND_CURRENCY`, `SPEND_MODEL_PRICES`, `AGENT_DEFAULT_*`/`AGENT_MODELS`, `DECISION_TIMEOUT`                                                   | `QWEN_API_KEY`, `DEEPSEEK_API_KEY`, `MOONSHOT_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`               |
+| `DOCUMENTS_ENABLED`/`DOCUMENT_SOURCES`/`DOCUMENT_PLANNER`, `TASKS_ENABLED`/`TASK_SOURCES`, `ENVIRONMENTS_ENABLED`, `PROMPT_LIBRARY_ENABLED`/`PROMPT_LIBRARY_SELECTOR` | `DOCUMENTS_ENCRYPTION_KEY`, `TASKS_ENCRYPTION_KEY`, `ENVIRONMENTS_ENCRYPTION_KEY`, `RUNNERS_ENCRYPTION_KEY` |
 
 > Two flags are **`[vars]`, not secrets**, despite older notes that said
 > otherwise: `CONTAINER_IMPL_ENABLED` and `WORKER_PUBLIC_URL`. Set them in
@@ -608,7 +608,7 @@ WORKER_PUBLIC_URL = "https://cat-factory-backend.<account>.workers.dev"
 > **`WORKER_PUBLIC_URL` must be the `*.workers.dev` origin, _not_ an orange-clouded
 > custom domain.** A per-run Container egresses from inside Cloudflare's network, so
 > a zone's WAF / Bot-Fight rules block its POSTs to the LLM proxy with a `403 …
-> blocked.` before the Worker even runs (browsers pass the bot checks, so the SPA is
+blocked.` before the Worker even runs (browsers pass the bot checks, so the SPA is
 > unaffected). `workers.dev` isn't in that zone, so the container reaches the proxy
 > unblocked. The container image is pinned by the `[[containers]].image` GHCR tag —
 > use a version tag, not `latest`, for reproducible deploys.
@@ -732,12 +732,12 @@ secret each one needs is a service-level **encryption master key** (base64, ≥3
 decoded) — there are **no provider credentials in `wrangler.toml`**. Generate with
 `openssl rand -base64 32`.
 
-| Feature                  | Enable (`[vars]`)                                                                     | Master-key secret               | Docs                                                                                  |
-| ------------------------ | ------------------------------------------------------------------------------------- | ------------------------------- | ------------------------------------------------------------------------------------- |
-| Document sources         | `DOCUMENTS_ENABLED = "true"` (+ `DOCUMENT_SOURCES`, `DOCUMENT_PLANNER`)                | `DOCUMENTS_ENCRYPTION_KEY`      | [document-sources](./docs/document-sources.md)                                        |
-| Task sources (trackers)  | `TASKS_ENABLED = "true"` (+ `TASK_SOURCES`)                                            | `TASKS_ENCRYPTION_KEY`          | README → Document & task sources                                                      |
-| Ephemeral environments   | `ENVIRONMENTS_ENABLED = "true"`                                                        | `ENVIRONMENTS_ENCRYPTION_KEY`   | [environments-integration](./docs/environments-integration.md)                        |
-| Self-hosted runner pool  | `RUNNERS_ENABLED = "true"`                                                             | `RUNNERS_ENCRYPTION_KEY`        | [runner-pool-integration](./docs/runner-pool-integration.md)                          |
+| Feature                 | Enable (`[vars]`)                                                       | Master-key secret             | Docs                                                           |
+| ----------------------- | ----------------------------------------------------------------------- | ----------------------------- | -------------------------------------------------------------- |
+| Document sources        | `DOCUMENTS_ENABLED = "true"` (+ `DOCUMENT_SOURCES`, `DOCUMENT_PLANNER`) | `DOCUMENTS_ENCRYPTION_KEY`    | [document-sources](./docs/document-sources.md)                 |
+| Task sources (trackers) | `TASKS_ENABLED = "true"` (+ `TASK_SOURCES`)                             | `TASKS_ENCRYPTION_KEY`        | README → Document & task sources                               |
+| Ephemeral environments  | `ENVIRONMENTS_ENABLED = "true"`                                         | `ENVIRONMENTS_ENCRYPTION_KEY` | [environments-integration](./docs/environments-integration.md) |
+| Self-hosted runner pool | `RUNNERS_ENABLED = "true"`                                              | `RUNNERS_ENCRYPTION_KEY`      | [runner-pool-integration](./docs/runner-pool-integration.md)   |
 
 ```sh
 openssl rand -base64 32 | wrangler secret put DOCUMENTS_ENCRYPTION_KEY      # repeat per enabled feature
