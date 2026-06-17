@@ -15,10 +15,7 @@ import type { GitHubProvisioningClient } from '@cat-factory/kernel'
 import type { WebhookVerifier } from '@cat-factory/kernel'
 import type { ModelProvider, ModelRef } from '@cat-factory/kernel'
 import type { DocumentSourceProvider } from '@cat-factory/kernel'
-import type {
-  DocumentConnectionRepository,
-  DocumentRepository,
-} from '@cat-factory/kernel'
+import type { DocumentConnectionRepository, DocumentRepository } from '@cat-factory/kernel'
 import type { TaskSourceProvider } from '@cat-factory/kernel'
 import type { TaskConnectionRepository, TaskRepository } from '@cat-factory/kernel'
 import type { EnvironmentProvider } from '@cat-factory/kernel'
@@ -27,20 +24,14 @@ import type {
   EnvironmentRegistryRepository,
 } from '@cat-factory/kernel'
 import type { RunnerPoolConnectionRepository } from '@cat-factory/kernel'
-import type {
-  BootstrapJobRepository,
-  ReferenceArchitectureRepository,
-} from '@cat-factory/kernel'
+import type { BootstrapJobRepository, ReferenceArchitectureRepository } from '@cat-factory/kernel'
 import type { RepoBootstrapper } from '@cat-factory/kernel'
 import type { BootstrapRunner } from '@cat-factory/kernel'
 import type { RepoBlueprintRepository } from '@cat-factory/kernel'
 import type { RepoScanner } from '@cat-factory/kernel'
 import type { RequirementReviewRepository } from '@cat-factory/kernel'
 import type { SecretCipher } from '@cat-factory/kernel'
-import type {
-  FragmentSourceRepository,
-  PromptFragmentRepository,
-} from '@cat-factory/kernel'
+import type { FragmentSourceRepository, PromptFragmentRepository } from '@cat-factory/kernel'
 import type { FragmentSelector } from '@cat-factory/kernel'
 import type {
   BranchProjectionRepository,
@@ -82,7 +73,11 @@ import { BootstrapService } from './modules/bootstrap/BootstrapService'
 import { BoardScanService } from './modules/boardScan/BoardScanService'
 import { RequirementReviewService } from './modules/requirements/RequirementReviewService'
 import { BLUEPRINT_PIPELINE_ID } from '@cat-factory/kernel'
-import { FragmentLibraryService, FragmentSourceService, type ResolveFragmentInstallationId } from '@cat-factory/agents'
+import {
+  FragmentLibraryService,
+  FragmentSourceService,
+  type ResolveFragmentInstallationId,
+} from '@cat-factory/agents'
 
 // Composition root for the domain layer. The worker's infrastructure builds the
 // concrete ports (D1 repositories, crypto id/rng, the AI agent executor) and

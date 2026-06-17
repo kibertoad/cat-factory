@@ -20,10 +20,10 @@
     "@ai-sdk/openai-compatible": "^2.0.0",
     "@cat-factory/agents": "workspace:*",
     "@cat-factory/contracts": "workspace:*",
+    "@cat-factory/implementer-harness": "workspace:*",
     "@cat-factory/kernel": "workspace:*",
     "@cat-factory/orchestration": "workspace:*",
     "@cat-factory/spend": "workspace:*",
-    "@cat-factory/implementer-harness": "workspace:*",
     "ai": "^6.0.0",
     "valibot": "^1.0.0",
     "workers-ai-provider": "^3.2.0"

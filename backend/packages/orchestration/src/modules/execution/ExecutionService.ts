@@ -7,7 +7,13 @@ import type {
   PipelineStep,
 } from '@cat-factory/kernel'
 import { parseBlueprintService } from '@cat-factory/contracts'
-import { assertFound, ConflictError, getErrorMessage, NotFoundError, sameSubtasks } from '@cat-factory/kernel'
+import {
+  assertFound,
+  ConflictError,
+  getErrorMessage,
+  NotFoundError,
+  sameSubtasks,
+} from '@cat-factory/kernel'
 import { DEFAULT_CONFIDENCE_THRESHOLD } from '@cat-factory/kernel'
 import type {
   BlockRepository,

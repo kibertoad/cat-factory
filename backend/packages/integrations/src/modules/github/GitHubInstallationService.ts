@@ -1,9 +1,6 @@
 import type { Clock } from '@cat-factory/kernel'
 import type { GitHubClient } from '@cat-factory/kernel'
-import type {
-  GitHubInstallation,
-  GitHubInstallationRepository,
-} from '@cat-factory/kernel'
+import type { GitHubInstallation, GitHubInstallationRepository } from '@cat-factory/kernel'
 import type { GitHubConnection, GitHubInstallationOption } from '@cat-factory/kernel'
 import { ConflictError } from '@cat-factory/kernel'
 import { requireWorkspace } from '@cat-factory/kernel'

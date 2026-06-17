@@ -14,10 +14,7 @@ import type {
   FragmentResolverInput,
   FragmentRunSelection,
 } from '@cat-factory/kernel'
-import type {
-  PromptFragmentRecord,
-  PromptFragmentRepository,
-} from '@cat-factory/kernel'
+import type { PromptFragmentRecord, PromptFragmentRepository } from '@cat-factory/kernel'
 import type { WorkspaceRepository } from '@cat-factory/kernel'
 import { DeterministicFragmentSelector } from './DeterministicFragmentSelector'
 import {

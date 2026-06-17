@@ -1,9 +1,5 @@
 import type { CreateWorkspaceInput } from '@cat-factory/contracts'
-import {
-  requireWorkspace,
-  seedBlocks,
-  seedPipelines,
-} from '@cat-factory/kernel'
+import { requireWorkspace, seedBlocks, seedPipelines } from '@cat-factory/kernel'
 import type { Workspace, WorkspaceSnapshot } from '@cat-factory/kernel'
 import type {
   BlockRepository,

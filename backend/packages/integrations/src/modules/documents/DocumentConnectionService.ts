@@ -1,8 +1,5 @@
 import type { Clock } from '@cat-factory/kernel'
-import type {
-  DocumentConnectionRecord,
-  DocumentConnectionRepository,
-} from '@cat-factory/kernel'
+import type { DocumentConnectionRecord, DocumentConnectionRepository } from '@cat-factory/kernel'
 import type { DocumentSourceRegistry } from '@cat-factory/kernel'
 import type {
   DocumentConnection,

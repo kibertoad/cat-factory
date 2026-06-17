@@ -27,18 +27,9 @@ export * from './ports'
 
 export { MapSourceRegistry } from './shared/source-registry.logic'
 export * as atlassianLogic from './shared/atlassian.logic'
-export {
-  markdownToText,
-  buildExcerpt,
-} from './shared/markdown.logic'
-export {
-  normalizeAtlassianBaseUrl,
-  assertSafeAtlassianBaseUrl,
-} from './shared/atlassian.logic'
+export { markdownToText, buildExcerpt } from './shared/markdown.logic'
+export { normalizeAtlassianBaseUrl, assertSafeAtlassianBaseUrl } from './shared/atlassian.logic'
 
 export { requireWorkspace } from './workspace-guard'
 
-export {
-  type TaskContextView,
-  renderTaskContext,
-} from './shared/tasks-prompt.logic'
+export { type TaskContextView, renderTaskContext } from './shared/tasks-prompt.logic'

@@ -1,4 +1,9 @@
-import type { AddFrameInput, AddModuleInput, AddTaskInput, UpdateBlockInput } from '@cat-factory/contracts'
+import type {
+  AddFrameInput,
+  AddModuleInput,
+  AddTaskInput,
+  UpdateBlockInput,
+} from '@cat-factory/contracts'
 import type { Block } from '../domain/types'
 
 /**

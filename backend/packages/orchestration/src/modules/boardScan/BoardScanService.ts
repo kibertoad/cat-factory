@@ -7,10 +7,7 @@ import type {
 } from '@cat-factory/kernel'
 import type { Clock, IdGenerator } from '@cat-factory/kernel'
 import type { BlockRepository, WorkspaceRepository } from '@cat-factory/kernel'
-import type {
-  RepoBlueprintRecord,
-  RepoBlueprintRepository,
-} from '@cat-factory/kernel'
+import type { RepoBlueprintRecord, RepoBlueprintRepository } from '@cat-factory/kernel'
 import type { RepoScanner } from '@cat-factory/kernel'
 import { assertFound } from '@cat-factory/kernel'
 import { requireWorkspace } from '@cat-factory/kernel'

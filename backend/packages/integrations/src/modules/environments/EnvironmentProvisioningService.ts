@@ -1,8 +1,5 @@
 import type { Clock, IdGenerator } from '@cat-factory/kernel'
-import type {
-  EnvironmentRecord,
-  EnvironmentRegistryRepository,
-} from '@cat-factory/kernel'
+import type { EnvironmentRecord, EnvironmentRegistryRepository } from '@cat-factory/kernel'
 import type { EnvironmentProvider, ProvisionedEnvironment } from '@cat-factory/kernel'
 import type { SecretCipher } from '@cat-factory/kernel'
 import type { EnvironmentAccessHandle, EnvironmentHandle } from '@cat-factory/kernel'

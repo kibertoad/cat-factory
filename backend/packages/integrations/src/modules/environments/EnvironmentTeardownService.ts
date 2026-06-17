@@ -1,8 +1,5 @@
 import type { Clock } from '@cat-factory/kernel'
-import type {
-  EnvironmentRecord,
-  EnvironmentRegistryRepository,
-} from '@cat-factory/kernel'
+import type { EnvironmentRecord, EnvironmentRegistryRepository } from '@cat-factory/kernel'
 import type { EnvironmentProvider } from '@cat-factory/kernel'
 import type { SecretCipher } from '@cat-factory/kernel'
 import type { EnvironmentHandle } from '@cat-factory/kernel'
