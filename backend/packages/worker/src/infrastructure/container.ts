@@ -629,7 +629,11 @@ export function buildContainer(env: Env, overrides: Partial<CoreDependencies> = 
     tokenUsageRepository: new D1TokenUsageRepository({ db }),
     idGenerator,
     clock,
-    agentExecutor: selectAgentExecutor(env, config, db, clock),
+    // When a caller injects its own agentExecutor (tests pass a FakeAgentExecutor)
+    // skip selection entirely — selectAgentExecutor throws when a sandbox is opted
+    // in but its prerequisites are missing, which is the desired loud failure in
+    // production but must not fire for tests that never reach the real executor.
+    agentExecutor: overrides.agentExecutor ?? selectAgentExecutor(env, config, db, clock),
     workRunner: selectWorkRunner(env),
     executionEventPublisher: selectEventPublisher(env),
     spendPricing: config.spend,

@@ -10,6 +10,7 @@ import {
 } from '../../src/infrastructure/auth/signing'
 import { githubDeps, uniqueInstallationId } from '../helpers'
 import { FakeGitHubClient } from '../fakes/FakeGitHubClient'
+import { FakeAgentExecutor } from '../fakes/FakeAgentExecutor'
 
 // Account tenancy is an authenticated concept, so these run with auth ENABLED —
 // minting session tokens directly (mirroring auth.spec) and passing a tailored
@@ -48,7 +49,9 @@ function token(u: TestUser): Promise<string> {
 }
 
 function makeApp(overrides?: Partial<CoreDependencies>) {
-  const app = createApp(overrides ? { overrides } : {})
+  // Inject a fake agent so building the container never trips the sandbox
+  // prerequisite guard (RUNNERS_ENABLED is set in the test bindings).
+  const app = createApp({ overrides: { agentExecutor: new FakeAgentExecutor(), ...overrides } })
   async function call<T = unknown>(
     u: TestUser,
     method: string,

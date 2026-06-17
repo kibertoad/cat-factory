@@ -107,10 +107,10 @@ deploy both halves on their end.
 
 **Internal** (private; not published to npm):
 
-| Path                                                                             | Package                            | Role                                                                                                                                                                                                          |
-| -------------------------------------------------------------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`backend/internal/executor-harness`](./backend/internal/executor-harness) | `@cat-factory/executor-harness` | The payload that runs **inside** each per-run container (the Pi coding-agent harness). Published as a **Docker image to GHCR** (not npm). See [its README](./backend/internal/executor-harness/README.md). |
-| [`backend/internal/benchmark-harness`](./backend/internal/benchmark-harness)     | `@cat-factory/benchmark-harness`   | Headless agent benchmarking (`cat-bench`); internal. See [its README](./backend/internal/benchmark-harness/README.md).                                                                                        |
+| Path                                                                         | Package                          | Role                                                                                                                                                                                                       |
+| ---------------------------------------------------------------------------- | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`backend/internal/executor-harness`](./backend/internal/executor-harness)   | `@cat-factory/executor-harness`  | The payload that runs **inside** each per-run container (the Pi coding-agent harness). Published as a **Docker image to GHCR** (not npm). See [its README](./backend/internal/executor-harness/README.md). |
+| [`backend/internal/benchmark-harness`](./backend/internal/benchmark-harness) | `@cat-factory/benchmark-harness` | Headless agent benchmarking (`cat-bench`); internal. See [its README](./backend/internal/benchmark-harness/README.md).                                                                                     |
 
 **Deployments** (examples; copy these to deploy on your own infra):
 

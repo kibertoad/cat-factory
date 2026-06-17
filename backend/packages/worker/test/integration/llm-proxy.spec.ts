@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { env } from 'cloudflare:test'
 import { createApp } from '../../src/app'
 import { ContainerSessionService } from '../../src/infrastructure/containers/ContainerSessionService'
+import { FakeAgentExecutor } from '../fakes/FakeAgentExecutor'
 
 // The LLM proxy is the seam that keeps provider keys out of containers and meters
 // their spend. These specs hit the real Hono app + local D1, stubbing the
@@ -47,13 +48,13 @@ describe('llm proxy /v1/chat/completions', () => {
   afterEach(() => vi.restoreAllMocks())
 
   it('rejects a request without a valid session token', async () => {
-    const app = createApp()
+    const app = createApp({ overrides: { agentExecutor: new FakeAgentExecutor() } })
     const res = await app.fetch(chatRequest(null), testEnv())
     expect(res.status).toBe(401)
   })
 
   it('returns 402 when the spend budget is exhausted', async () => {
-    const app = createApp()
+    const app = createApp({ overrides: { agentExecutor: new FakeAgentExecutor() } })
     const token = await mint()
     const res = await app.fetch(chatRequest(token), testEnv({ SPEND_MONTHLY_LIMIT: '0' }))
     expect(res.status).toBe(402)
@@ -83,7 +84,7 @@ describe('llm proxy /v1/chat/completions', () => {
       }),
     )
 
-    const app = createApp()
+    const app = createApp({ overrides: { agentExecutor: new FakeAgentExecutor() } })
     // Client asks for a different (cheap) model; the proxy must override it.
     const res = await app.fetch(chatRequest(token, 'cheap-model'), testEnv())
     expect(res.status).toBe(200)
@@ -109,7 +110,7 @@ describe('llm proxy /v1/chat/completions', () => {
   })
 
   it('returns 502 when the locked provider has no configured key', async () => {
-    const app = createApp()
+    const app = createApp({ overrides: { agentExecutor: new FakeAgentExecutor() } })
     const token = await mint({ provider: 'qwen', model: 'qwen3-max' })
     // QWEN_API_KEY removed → upstream cannot be resolved.
     const res = await app.fetch(chatRequest(token), testEnv({ QWEN_API_KEY: '' }))
@@ -123,7 +124,7 @@ describe('llm proxy /v1/chat/completions', () => {
     const fetchSpy = vi.fn()
     vi.stubGlobal('fetch', fetchSpy)
 
-    const app = createApp()
+    const app = createApp({ overrides: { agentExecutor: new FakeAgentExecutor() } })
     const token = await mint({ provider: 'workers-ai', model: '@cf/meta/llama-3.1-8b-instruct' })
     // No QWEN_API_KEY needed; AI binding removed → guarded 502 (not 502 "no key").
     const noBinding = { ...testEnv({ QWEN_API_KEY: '' }), AI: undefined }

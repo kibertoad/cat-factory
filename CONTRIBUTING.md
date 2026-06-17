@@ -7,17 +7,17 @@ visibility: published **libraries** (`backend/packages/*` + `frontend/app`),
 **private** packages (`backend/internal/*`), and example **deployments**
 (`deploy/*`):
 
-| Path                                   | Package                            | Published?                      |
-| -------------------------------------- | ---------------------------------- | ------------------------------- |
-| `backend/packages/contracts`           | `@cat-factory/contracts`           | npm                             |
-| `backend/packages/prompt-fragments`    | `@cat-factory/prompt-fragments`    | npm                             |
-| `backend/packages/core`                | `@cat-factory/core`                | npm                             |
-| `backend/packages/worker`              | `@cat-factory/worker`              | npm (Worker library)            |
-| `frontend/app`                         | `@cat-factory/app`                 | npm (Nuxt layer)                |
-| `backend/internal/executor-harness` | `@cat-factory/executor-harness` | GHCR image (versioned, not npm) |
-| `backend/internal/benchmark-harness`   | `@cat-factory/benchmark-harness`   | no (internal)                   |
-| `deploy/backend`                       | `@cat-factory/deploy-backend`      | no (example deployment)         |
-| `deploy/frontend`                      | `@cat-factory/deploy-frontend`     | no (example deployment)         |
+| Path                                 | Package                          | Published?                      |
+| ------------------------------------ | -------------------------------- | ------------------------------- |
+| `backend/packages/contracts`         | `@cat-factory/contracts`         | npm                             |
+| `backend/packages/prompt-fragments`  | `@cat-factory/prompt-fragments`  | npm                             |
+| `backend/packages/core`              | `@cat-factory/core`              | npm                             |
+| `backend/packages/worker`            | `@cat-factory/worker`            | npm (Worker library)            |
+| `frontend/app`                       | `@cat-factory/app`               | npm (Nuxt layer)                |
+| `backend/internal/executor-harness`  | `@cat-factory/executor-harness`  | GHCR image (versioned, not npm) |
+| `backend/internal/benchmark-harness` | `@cat-factory/benchmark-harness` | no (internal)                   |
+| `deploy/backend`                     | `@cat-factory/deploy-backend`    | no (example deployment)         |
+| `deploy/frontend`                    | `@cat-factory/deploy-frontend`   | no (example deployment)         |
 
 The `deploy/*` packages depend on the libraries via `workspace:*` in this repo;
 external organizations swap that for the published npm version (see each
