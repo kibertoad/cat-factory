@@ -1,9 +1,19 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
+    "composite": true,
     "types": ["@cloudflare/workers-types"],
     "rootDir": "src",
     "outDir": "dist"
   },
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*.ts"],
+  "references": [
+    { "path": "../agents/tsconfig.build.json" },
+    { "path": "../contracts/tsconfig.build.json" },
+    { "path": "../integrations/tsconfig.build.json" },
+    { "path": "../kernel/tsconfig.build.json" },
+    { "path": "../orchestration/tsconfig.build.json" },
+    { "path": "../prompt-fragments/tsconfig.build.json" },
+    { "path": "../spend/tsconfig.build.json" }
+  ]
 }
