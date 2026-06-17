@@ -478,16 +478,54 @@ against a real local D1 database with the real migrations applied. Only the LLM 
 
 ### Deploying
 
-> ⚠️ **Being reworked.** The deployment / configuration walkthrough below is
-> scheduled for a rewrite and may lag the current feature set (e.g. the
-> self-hosted runner pool, two-app GitHub provisioning, and the prompt-fragment
-> library flags above). Use it as a rough guide until refreshed.
+This package is a **library**; it carries no production config. Deployment is
+driven from the example **deployment** package
+[`deploy/backend`](../../deploy/backend), which re-exports this library's handler
+and holds the `wrangler.toml`, the per-deployment `[vars]`, and the secrets. The
+end-to-end walkthrough (deploy order, migrations, the reference URLs) lives in the
+[top-level README → Deployment](../README.md#deployment) and
+[`deploy/backend/README.md`](../../deploy/backend/README.md). **This section is the
+configuration reference**: what every var/secret does and how to turn each opt-in
+feature on. The canonical, fully-commented list of bindings + vars is the typed
+`Env` in [`packages/worker/src/infrastructure/env.ts`](./packages/worker/src/infrastructure/env.ts).
 
-Set a real `database_id` in `wrangler.toml` (`wrangler d1 create cat_factory`), apply migrations
-with `db:migrate:remote`, configure authentication (see below — **required in production**), set
-provider secrets (`wrangler secret put OPENAI_API_KEY`), and `pnpm deploy`. Agents always perform
-real work (unpinned ones default to the Qwen model on the Workers AI binding), so make sure at
-least one provider is reachable.
+The short path, from `deploy/backend`:
+
+```sh
+wrangler d1 create cat_factory          # paste the id into wrangler.toml [[d1_databases]]
+pnpm db:migrate:remote                   # wrangler d1 migrations apply cat_factory --remote
+# set the required auth secrets (below), then:
+pnpm deploy                              # builds @cat-factory/worker, then wrangler deploy
+```
+
+Agents always perform **real** work — an unpinned block defaults to the Qwen
+model on the Workers AI (`AI`) binding, so a minimal deployment needs **no
+provider key**. Setting a direct-provider key simply upgrades that model to its
+own API (see "Model picker" below).
+
+#### What is a `[vars]` entry vs a secret
+
+Two different `wrangler` mechanisms, and getting them confused is the most common
+mistake:
+
+- **`[vars]`** — non-secret config, committed in `wrangler.toml`. Origins,
+  ids, slugs, feature toggles, budgets. Visible in the dashboard.
+- **Secrets** — `wrangler secret put NAME` (never committed). Private keys,
+  OAuth/client and HMAC secrets, provider API keys, the per-feature encryption
+  master keys. Locally these go in `.dev.vars` (gitignored; see
+  `deploy/backend/.dev.vars.example`).
+
+| `[vars]` (in `wrangler.toml`)                                                                                                                                         | Secrets (`wrangler secret put …`)                                                                           |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `GITHUB_OAUTH_CLIENT_ID`, `AUTH_ALLOWED_LOGINS`/`AUTH_ALLOWED_ORGS`, `AUTH_SUCCESS_REDIRECT_URL`, `ENVIRONMENT`, `CORS_ALLOWED_ORIGINS`                               | `GITHUB_OAUTH_CLIENT_SECRET`, `AUTH_SESSION_SECRET`                                                         |
+| `CONTAINER_IMPL_ENABLED`, `WORKER_PUBLIC_URL`, `RUNNERS_ENABLED`                                                                                                      | (container/runner path holds no key of its own — see below)                                                 |
+| `GITHUB_APP_ID`, `GITHUB_APP_SLUG`, `GITHUB_SETUP_REDIRECT_URL`, `GITHUB_PRIVILEGED_APP_ID`                                                                           | `GITHUB_APP_PRIVATE_KEY`, `GITHUB_WEBHOOK_SECRET`, `GITHUB_PRIVILEGED_APP_PRIVATE_KEY`                      |
+| `SPEND_MONTHLY_LIMIT`, `SPEND_CURRENCY`, `SPEND_MODEL_PRICES`, `AGENT_DEFAULT_*`/`AGENT_MODELS`, `DECISION_TIMEOUT`                                                   | `QWEN_API_KEY`, `DEEPSEEK_API_KEY`, `MOONSHOT_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`               |
+| `DOCUMENTS_ENABLED`/`DOCUMENT_SOURCES`/`DOCUMENT_PLANNER`, `TASKS_ENABLED`/`TASK_SOURCES`, `ENVIRONMENTS_ENABLED`, `PROMPT_LIBRARY_ENABLED`/`PROMPT_LIBRARY_SELECTOR` | `DOCUMENTS_ENCRYPTION_KEY`, `TASKS_ENCRYPTION_KEY`, `ENVIRONMENTS_ENCRYPTION_KEY`, `RUNNERS_ENCRYPTION_KEY` |
+
+> Two flags are **`[vars]`, not secrets**, despite older notes that said
+> otherwise: `CONTAINER_IMPL_ENABLED` and `WORKER_PUBLIC_URL`. Set them in
+> `[vars]`.
 
 #### Authentication (required in production)
 
@@ -519,8 +557,10 @@ wrangler secret put AUTH_SESSION_SECRET            # any high-entropy random str
 
 Local dev and the test suite run open via the `AUTH_DEV_OPEN=true` escape hatch (in `.dev.vars`,
 gitignored, and the vitest bindings) — **never set it in the deployed `wrangler.toml`**, as that
-would re-open production. Full details, the OAuth flow, and all optional vars are in
-[`docs/auth.md`](./docs/auth.md).
+would re-open production. As belt-and-braces, set `ENVIRONMENT = "production"` in the deployed
+`[vars]`: when the environment is production-like the worker **refuses** the `AUTH_DEV_OPEN` hatch
+even if it leaks in, so a stray dev flag can't re-open a live deployment. Full details, the OAuth
+flow, and all optional vars are in [`docs/auth.md`](./docs/auth.md).
 
 > Note: this "Login with GitHub" user authentication is distinct from the optional **GitHub App
 > integration** below (how a workspace acts on repos); they use different credentials.
@@ -555,14 +595,23 @@ The phases that must operate on the repository — `coder` (implementation), `mo
 mocks) and `playwright` (end-to-end tests) — can run inside a per-run Cloudflare Container that
 clones the repo, edits files and opens a PR, instead of as a single inline LLM call. Every other
 phase (architect, reviewer, tester, the `acceptance` scenario writer, …) stays inline. Enable it
-with:
+in `wrangler.toml [vars]` (these are **vars, not secrets**):
 
-```sh
-wrangler secret put CONTAINER_IMPL_ENABLED   # set to: true
-wrangler secret put WORKER_PUBLIC_URL        # e.g. https://cat-factory.example.workers.dev
-# Requires the IMPL_CONTAINER binding (wrangler.toml) and the GitHub App configured.
-# Container runs are long-lived; the durable Workflows driver carries them.
+```toml
+# wrangler.toml [vars]
+CONTAINER_IMPL_ENABLED = "true"
+WORKER_PUBLIC_URL = "https://cat-factory-backend.<account>.workers.dev"
+# Also requires the IMPL_CONTAINER binding + [[containers]] image (already in wrangler.toml)
+# and a configured GitHub App. Container runs are long-lived; the Workflows driver carries them.
 ```
+
+> **`WORKER_PUBLIC_URL` must be the `*.workers.dev` origin, _not_ an orange-clouded
+> custom domain.** A per-run Container egresses from inside Cloudflare's network, so
+> a zone's WAF / Bot-Fight rules block its POSTs to the LLM proxy with a `403 …
+blocked.` before the Worker even runs (browsers pass the bot checks, so the SPA is
+> unaffected). `workers.dev` isn't in that zone, so the container reaches the proxy
+> unblocked. The container image is pinned by the `[[containers]].image` GHCR tag —
+> use a version tag, not `latest`, for reproducible deploys.
 
 The container never holds a provider key: it reaches models only through this Worker's LLM proxy
 (`/v1/chat/completions`) using a short-lived, model-locked session token, and the proxy is the
@@ -633,3 +682,76 @@ Unlike container implementation, bootstrap does **not** require `CONTAINER_IMPL_
 only needs the `IMPL_CONTAINER` binding itself. Like the container executor, the bootstrapper
 holds no provider key: the agent reaches models only through this Worker's LLM proxy with a
 short-lived session token.
+
+#### GitHub App integration (acting on repos)
+
+Distinct from "Login with GitHub" above — this is how a **workspace acts on repos**
+(read/write repos, branches, PRs, issues; webhooks). Off until an App is configured.
+Register a GitHub App, then:
+
+```toml
+# wrangler.toml [vars]
+GITHUB_APP_ID = "…"
+GITHUB_APP_SLUG = "your-app-slug"
+GITHUB_SETUP_REDIRECT_URL = "https://<your-spa>"   # where to land the browser after install
+```
+
+```sh
+wrangler secret put GITHUB_APP_PRIVATE_KEY   # PKCS#8 PEM
+wrangler secret put GITHUB_WEBHOOK_SECRET    # HMAC secret for /github/webhooks
+```
+
+By default the webhook endpoint applies projection updates **inline**. For the
+fast-ack async path, create the sync queues and uncomment the `[[queues.*]]` blocks
+in `wrangler.toml` (`wrangler queues create cat-factory-github-sync` + `…-dlq`).
+Design + runbook: [`docs/github-integration.md`](./docs/github-integration.md) ·
+[`docs/github-operations.md`](./docs/github-operations.md).
+
+**Creating repos directly (two-app tier, opt-in).** Programmatic repo creation
+needs `Administration: write`, which most installs shouldn't carry. So register a
+**second**, privileged App and configure it alongside the restricted default one;
+orgs opt in by installing it, and only then does the bootstrap modal create repos
+directly (otherwise it delegates to GitHub's new-repo page). See
+[ADR 0005](./docs/adr/0005-two-app-repo-provisioning.md).
+
+```toml
+GITHUB_PRIVILEGED_APP_ID = "…"
+```
+
+```sh
+wrangler secret put GITHUB_PRIVILEGED_APP_PRIVATE_KEY   # PKCS#8 PEM
+```
+
+#### Opt-in integrations (encrypted-credential features)
+
+The document-source, task-source, ephemeral-environment, and self-hosted runner-pool
+integrations are all **default-off** and **per-workspace**: an operator flips a single
+`[vars]` flag to enable the feature, and each workspace then enters its own provider
+credentials **in the app**, stored **encrypted at rest** in D1. So the only deployment
+secret each one needs is a service-level **encryption master key** (base64, ≥32 bytes
+decoded) — there are **no provider credentials in `wrangler.toml`**. Generate with
+`openssl rand -base64 32`.
+
+| Feature                 | Enable (`[vars]`)                                                       | Master-key secret             | Docs                                                           |
+| ----------------------- | ----------------------------------------------------------------------- | ----------------------------- | -------------------------------------------------------------- |
+| Document sources        | `DOCUMENTS_ENABLED = "true"` (+ `DOCUMENT_SOURCES`, `DOCUMENT_PLANNER`) | `DOCUMENTS_ENCRYPTION_KEY`    | [document-sources](./docs/document-sources.md)                 |
+| Task sources (trackers) | `TASKS_ENABLED = "true"` (+ `TASK_SOURCES`)                             | `TASKS_ENCRYPTION_KEY`        | README → Document & task sources                               |
+| Ephemeral environments  | `ENVIRONMENTS_ENABLED = "true"`                                         | `ENVIRONMENTS_ENCRYPTION_KEY` | [environments-integration](./docs/environments-integration.md) |
+| Self-hosted runner pool | `RUNNERS_ENABLED = "true"`                                              | `RUNNERS_ENCRYPTION_KEY`      | [runner-pool-integration](./docs/runner-pool-integration.md)   |
+
+```sh
+openssl rand -base64 32 | wrangler secret put DOCUMENTS_ENCRYPTION_KEY      # repeat per enabled feature
+```
+
+The **runner pool** routes the repo-operating coding jobs to a workspace's own
+infra instead of Cloudflare Containers; it is independent of `CONTAINER_IMPL_ENABLED`
+but, like the container path, still needs a configured GitHub App, `WORKER_PUBLIC_URL`
+and `AUTH_SESSION_SECRET`.
+
+The **prompt-fragment library** is the one opt-in feature that needs **no** key
+(guidelines aren't secrets, and repo reads reuse the account's GitHub installation):
+
+```toml
+PROMPT_LIBRARY_ENABLED = "true"
+PROMPT_LIBRARY_SELECTOR = "deterministic"   # or "llm" to pick relevant fragments per run
+```

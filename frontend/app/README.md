@@ -83,6 +83,6 @@ pnpm typecheck    # nuxt typecheck
 pnpm lint         # oxlint + oxfmt --check
 ```
 
-> Build/deploy of the static site is part of the setup/deployment docs, which are
-> reworked — see the [top-level README](../../README.md#deployment) and
-> [`deploy/frontend`](../../deploy/frontend).
+> Building/deploying the static site is covered in the deployment docs — see the
+> [top-level README → Deployment](../../README.md#deployment) and
+> [`deploy/frontend/README.md`](../../deploy/frontend/README.md).

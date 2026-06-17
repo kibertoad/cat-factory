@@ -223,6 +223,10 @@ GITHUB_SETUP_REDIRECT_URL = "https://catfactory.kiberion.com"
 GITHUB_OAUTH_CLIENT_ID = "Iv23liSy37MggMK0afZL"
 # Fixed SPA landing URL after login (strongly recommended in production):
 AUTH_SUCCESS_REDIRECT_URL = "https://catfactory.kiberion.com"
+# Deployment-environment marker. When production-like, the worker REFUSES the
+# AUTH_DEV_OPEN escape hatch even if it leaks in — belt-and-braces so a stray dev
+# flag can't re-open a live deployment. Always set this in a real deployment.
+ENVIRONMENT = "production"
 # Session lifetime in hours (default 168 = 7 days):
 # AUTH_SESSION_TTL_HOURS = "168"
 #
