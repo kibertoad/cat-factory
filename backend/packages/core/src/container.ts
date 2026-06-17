@@ -55,8 +55,8 @@ import type {
 import { BoardService } from './modules/board/BoardService'
 import { ExecutionService } from './modules/execution/ExecutionService'
 import { PipelineService } from './modules/pipelines/PipelineService'
-import { WorkspaceService } from './modules/workspaces/WorkspaceService'
-import { AccountService } from './modules/accounts/AccountService'
+import { WorkspaceService } from '@cat-factory/workspaces'
+import { AccountService } from '@cat-factory/workspaces'
 import { SpendService, DEFAULT_SPEND_PRICING, type SpendPricing } from '@cat-factory/spend'
 import {
   GitHubInstallationService,

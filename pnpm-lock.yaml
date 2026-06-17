@@ -134,6 +134,9 @@ importers:
       '@cat-factory/spend':
         specifier: workspace:*
         version: link:../spend
+      '@cat-factory/workspaces':
+        specifier: workspace:*
+        version: link:../workspaces
       ai:
         specifier: ^6.0.0
         version: 6.0.206(zod@3.25.76)
@@ -263,6 +266,19 @@ importers:
       wrangler:
         specifier: ^4.100.0
         version: 4.101.0(@cloudflare/workers-types@4.20260616.1)
+
+  backend/packages/workspaces:
+    dependencies:
+      '@cat-factory/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@cat-factory/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+    devDependencies:
+      typescript:
+        specifier: ^5.6.0
+        version: 5.9.3
 
   deploy/backend:
     dependencies:

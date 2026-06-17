@@ -29,6 +29,7 @@
     "@cat-factory/integrations": "workspace:*",
     "@cat-factory/kernel": "workspace:*",
     "@cat-factory/spend": "workspace:*",
+    "@cat-factory/workspaces": "workspace:*",
     "@cat-factory/prompt-fragments": "workspace:*",
     "ai": "^6.0.0",
     "handlebars": "^4.7.8"

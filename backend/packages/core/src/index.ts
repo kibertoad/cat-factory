@@ -17,12 +17,10 @@ export type { AdvanceOptions, AdvanceResult } from './modules/execution/advance'
 export {
   WorkspaceService,
   type WorkspaceServiceDependencies,
-} from './modules/workspaces/WorkspaceService'
-export {
   AccountService,
   type AccountServiceDependencies,
   type AccountUser,
-} from './modules/accounts/AccountService'
+} from '@cat-factory/workspaces'
 
 export {
   SpendService,
