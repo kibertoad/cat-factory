@@ -198,8 +198,11 @@ export function useApi() {
     addFrame: (workspaceId: string, body: { type: BlockType; position: Position }) =>
       http<Block>(`${ws(workspaceId)}/blocks`, { method: 'POST', body }),
 
-    addTask: (workspaceId: string, blockId: string, body: { title?: string } = {}) =>
-      http<Block>(`${ws(workspaceId)}/blocks/${blockId}/tasks`, { method: 'POST', body }),
+    addTask: (
+      workspaceId: string,
+      blockId: string,
+      body: { title: string; description?: string },
+    ) => http<Block>(`${ws(workspaceId)}/blocks/${blockId}/tasks`, { method: 'POST', body }),
 
     addModule: (
       workspaceId: string,

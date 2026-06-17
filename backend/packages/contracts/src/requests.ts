@@ -31,7 +31,9 @@ export const addFrameSchema = v.object({
 export type AddFrameInput = v.InferOutput<typeof addFrameSchema>
 
 export const addTaskSchema = v.object({
-  title: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(200))),
+  // The user always names the task — no auto-generated placeholder titles.
+  title: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200)),
+  description: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(2000))),
 })
 export type AddTaskInput = v.InferOutput<typeof addTaskSchema>
 

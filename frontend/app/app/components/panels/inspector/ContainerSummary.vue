@@ -14,7 +14,7 @@ const tasks = computed(() =>
 )
 
 function addTask() {
-  board.addTask(props.block.id)
+  ui.openAddTask(props.block.id)
 }
 </script>
 

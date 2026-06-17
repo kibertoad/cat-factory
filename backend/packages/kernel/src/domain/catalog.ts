@@ -16,15 +16,3 @@ export const BLOCK_TYPE_LABEL: Record<BlockType, string> = {
   external: 'External',
   environment: 'Environment',
 }
-
-/** Sample task names used to seed / quick-add tasks inside a frame. */
-export const TASK_NAME_BANK = [
-  'Login endpoint',
-  'Token refresh',
-  'Password reset',
-  'Session store',
-  'Rate limiter',
-  'Health checks',
-  'Schema migration',
-  'Error handling',
-]

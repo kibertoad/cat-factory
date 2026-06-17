@@ -36,10 +36,21 @@ export const useBoardStore = defineStore('board', () => {
     return block
   }
 
-  /** Add a task inside a container (a service or a module). */
-  async function addTask(containerId: string, title?: string): Promise<Block | undefined> {
+  /**
+   * Add a task inside a container (a service or a module). The user supplies the
+   * title (and optional description) — the task is created in `planned` state and
+   * is not launched until the user explicitly starts a pipeline on it.
+   */
+  async function addTask(
+    containerId: string,
+    title: string,
+    description?: string,
+  ): Promise<Block | undefined> {
     if (!getBlock(containerId)) return
-    const block = await api.addTask(useWorkspaceStore().requireId(), containerId, { title })
+    const block = await api.addTask(useWorkspaceStore().requireId(), containerId, {
+      title,
+      description,
+    })
     upsert(block)
     return block
   }
