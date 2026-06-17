@@ -1,6 +1,6 @@
 # Handover — splitting `@cat-factory/core` into scoped packages
 
-**Status:** Step 1 complete (commit `e208ae6`). Proceed with Step 2.
+**Status:** Step 2 complete (commit `f3ec9f9`). Proceed with Step 3.
 **Prereqs landed:** the internal/published package separation (this branch —
 `reshape/internal-public-split`) and the core dedup (PR #54,
 `refactor/core-dedup`). Both are independent of this work and can be merged in
@@ -9,6 +9,14 @@ any order.
 **Step 1 done:** `@cat-factory/kernel` extracted — domain/*, shared/*, ports/*,
 and `requireWorkspace` moved; `@cat-factory/core` re-exports kernel for backward
 compat; both pass typecheck; changeset in `.changeset/kernel-extract.md`.
+
+**Step 2 done:** `@cat-factory/spend` extracted — `SpendService` + `pricing.ts`
+moved (git rename, history preserved); `@cat-factory/core` re-exports the full
+surface for backward compat; acceptance test + worker's spending config now import
+directly from `@cat-factory/spend`; implementer-harness devDep swapped from core
+to spend; CI `changes` filter narrowed to `backend/packages/spend/**` +
+`backend/packages/kernel/**` (core no longer gates the Docker acceptance job);
+changeset in `.changeset/spend-extract.md`.
 
 ---
 
