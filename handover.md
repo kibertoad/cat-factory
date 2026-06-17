@@ -1,10 +1,14 @@
 # Handover — splitting `@cat-factory/core` into scoped packages
 
-**Status:** proposal, not yet started. Hand-off for the next agent.
+**Status:** Step 1 complete (commit `e208ae6`). Proceed with Step 2.
 **Prereqs landed:** the internal/published package separation (this branch —
 `reshape/internal-public-split`) and the core dedup (PR #54,
 `refactor/core-dedup`). Both are independent of this work and can be merged in
 any order.
+
+**Step 1 done:** `@cat-factory/kernel` extracted — domain/*, shared/*, ports/*,
+and `requireWorkspace` moved; `@cat-factory/core` re-exports kernel for backward
+compat; both pass typecheck; changeset in `.changeset/kernel-extract.md`.
 
 ---
 
@@ -96,13 +100,6 @@ thin top package that re-assembles the pieces — or fold composition into
   link patterns; `environments` + `runners` share manifest-based connection
   services. `@cat-factory/integrations` is the natural home to unify these. (Out
   of scope for the move itself — do it as a follow-up unless trivial.)
-
-### Optional finer split
-
-`@cat-factory/integrations` can later split along clean seams that the code
-already shows: `…/github`, `…/sources` (documents + tasks), `…/provisioning`
-(environments + runners). Start coarse; split when a consumer needs finer
-granularity.
 
 ## 4. Recommended migration order
 
