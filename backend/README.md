@@ -59,25 +59,25 @@ The domain lives in `core/src/modules/*` — each is a small service (or cluster
 services) over ports, assembled in `core/src/container.ts`. The Worker mounts a
 matching controller per module in `worker/src/modules/*`.
 
-| Module | Responsibility |
-| --- | --- |
-| `workspaces` | Board (workspace) lifecycle; assembles the full snapshot (blocks, pipelines, executions, spend) the SPA hydrates from. |
-| `accounts` | Tenancy: personal/org accounts, GitHub-membership-based visibility, the account ↔ workspace ownership graph. |
-| `board` | Block mutations — frames/modules/tasks CRUD, reparenting, dependency edges. |
-| `pipelines` | Saved, reusable agent-kind sequences (the pipeline palette). |
-| `agents` | Agent-kind catalog, role/phase prompts, and the inline `AiAgentExecutor`. |
-| `execution` | The run state machine: `advanceInstance` moves a run one step, handles decisions, failures/retries, context injection, and the spend gate. |
-| `spend` | Token metering + org-wide monthly budget enforcement. |
-| `bootstrap` | Reference architectures + the async repo-bootstrap task. |
-| `boardScan` | "Scan repository" → a `service → modules → features` blueprint, optionally spawned onto the board. |
-| `blueprints` *(in `agents`/`boardScan` flow)* | The Blueprinter step that writes the in-repo `blueprints/` map and reconciles the board. |
-| `requirements` | Stateless reviewer agent over a block's collected requirements. |
-| `github` | GitHub App installs, repo/PR/issue projections, webhooks, repo provisioning (two-app tiering). |
-| `documents` | Connect Confluence/Notion sources, import pages, plan board structure, link docs to blocks. |
-| `tasks` | Connect Jira/Linear/issue trackers, import issues, link them to blocks as context. |
-| `environments` | Provision/teardown ephemeral environments from a per-workspace provider manifest. |
-| `fragmentLibrary` | Tenant-scoped prompt-fragment catalog + repo-linked sources + per-run relevance selection. |
-| `runners` | Bind a workspace to a self-hosted runner pool (manifest + encrypted secrets). |
+| Module                                        | Responsibility                                                                                                                             |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `workspaces`                                  | Board (workspace) lifecycle; assembles the full snapshot (blocks, pipelines, executions, spend) the SPA hydrates from.                     |
+| `accounts`                                    | Tenancy: personal/org accounts, GitHub-membership-based visibility, the account ↔ workspace ownership graph.                               |
+| `board`                                       | Block mutations — frames/modules/tasks CRUD, reparenting, dependency edges.                                                                |
+| `pipelines`                                   | Saved, reusable agent-kind sequences (the pipeline palette).                                                                               |
+| `agents`                                      | Agent-kind catalog, role/phase prompts, and the inline `AiAgentExecutor`.                                                                  |
+| `execution`                                   | The run state machine: `advanceInstance` moves a run one step, handles decisions, failures/retries, context injection, and the spend gate. |
+| `spend`                                       | Token metering + org-wide monthly budget enforcement.                                                                                      |
+| `bootstrap`                                   | Reference architectures + the async repo-bootstrap task.                                                                                   |
+| `boardScan`                                   | "Scan repository" → a `service → modules → features` blueprint, optionally spawned onto the board.                                         |
+| `blueprints` _(in `agents`/`boardScan` flow)_ | The Blueprinter step that writes the in-repo `blueprints/` map and reconciles the board.                                                   |
+| `requirements`                                | Stateless reviewer agent over a block's collected requirements.                                                                            |
+| `github`                                      | GitHub App installs, repo/PR/issue projections, webhooks, repo provisioning (two-app tiering).                                             |
+| `documents`                                   | Connect Confluence/Notion sources, import pages, plan board structure, link docs to blocks.                                                |
+| `tasks`                                       | Connect Jira/Linear/issue trackers, import issues, link them to blocks as context.                                                         |
+| `environments`                                | Provision/teardown ephemeral environments from a per-workspace provider manifest.                                                          |
+| `fragmentLibrary`                             | Tenant-scoped prompt-fragment catalog + repo-linked sources + per-run relevance selection.                                                 |
+| `runners`                                     | Bind a workspace to a self-hosted runner pool (manifest + encrypted secrets).                                                              |
 
 The repository **ports** these depend on live in `core/src/ports/*`
 (`agent-executor`, `model-provider`, `*-repositories`, `github-client`,
@@ -172,14 +172,15 @@ and `GITHUB_APP_PRIVATE_KEY` (PKCS#8) + `GITHUB_WEBHOOK_SECRET` secrets.
 
 **Creating new repos (two-app tiering).** Creating a repo programmatically needs
 the App to hold `Administration: write`, which we don't want on every install. So
-there are **two App registrations**: a default *restricted* App (most installs)
-and an opt-in *privileged* App that carries `Administration: write`. An org opts
+there are **two App registrations**: a default _restricted_ App (most installs)
+and an opt-in _privileged_ App that carries `Administration: write`. An org opts
 in by installing the privileged App; `GitHubAppRegistry` routes every token mint
 by the installation's owning `appId`, and `GitHubConnection.canCreateRepos`
 drives whether the bootstrap modal creates the repo directly or delegates to
 GitHub's new-repo page. See
 [ADR 0005](./docs/adr/0005-two-app-repo-provisioning.md) (`GITHUB_PRIVILEGED_APP_ID`
-+ `GITHUB_PRIVILEGED_APP_PRIVATE_KEY`).
+
+- `GITHUB_PRIVILEGED_APP_PRIVATE_KEY`).
 
 ## Document & task sources (optional)
 
@@ -202,7 +203,7 @@ secrets in `wrangler.toml`).
 
 A **stateless, synchronous** reviewer agent (`requirements` module,
 `RequirementReviewService`, migration `0021_requirement_reviews.sql`) inspects a
-block's *collected requirements* — its description plus any linked PRD/RFC docs
+block's _collected requirements_ — its description plus any linked PRD/RFC docs
 and tracker issues — and raises a list of review items
 (gaps / clarifications / assumptions / risks / questions), each with a
 category/severity. A human replies to or dismisses each; once all are settled,

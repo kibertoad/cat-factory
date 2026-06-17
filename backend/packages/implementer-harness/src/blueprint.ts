@@ -90,7 +90,11 @@ function coerceFeature(value: unknown): BlueprintFeatureTree | null {
   const obj = value as Record<string, unknown>
   const title = asString(obj.title)
   if (!title) return null
-  return { title, summary: asString(obj.summary) ?? '', references: coerceReferences(obj.references) }
+  return {
+    title,
+    summary: asString(obj.summary) ?? '',
+    references: coerceReferences(obj.references),
+  }
 }
 
 function coerceModule(value: unknown): BlueprintModuleTree | null {
@@ -258,7 +262,10 @@ export function renderBlueprintFiles(service: BlueprintServiceTree): RenderedFil
         lines.push('')
       }
     }
-    files.push({ path: `${BLUEPRINT_MODULES_DIR}/${slug}.md`, content: `${lines.join('\n').trimEnd()}\n` })
+    files.push({
+      path: `${BLUEPRINT_MODULES_DIR}/${slug}.md`,
+      content: `${lines.join('\n').trimEnd()}\n`,
+    })
   }
 
   return files
@@ -425,8 +432,7 @@ export async function handleBlueprint(
     // Add one commit onto the branch (no history reset, no force). An unchanged
     // blueprint produces no commit — we still return the tree so the board ingest
     // is idempotent.
-    const message =
-      job.mode === 'update' ? 'Update service blueprint' : 'Add service blueprint'
+    const message = job.mode === 'update' ? 'Update service blueprint' : 'Add service blueprint'
     const committed = await commitAll(dir, message, signal)
     if (committed) {
       log.info('blueprint: pushing regenerated blueprint', { ...trace, ...stats })

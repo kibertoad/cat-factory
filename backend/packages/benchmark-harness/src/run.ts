@@ -22,7 +22,13 @@ import { runCodeReview } from './runners/codeReview'
 import { runImplementation } from './runners/implementation'
 import { runRequirementReview } from './runners/requirementReview'
 import type { RunnerDeps, RunnerOutput } from './runners/types'
-import { type CandidateResult, type CellKey, cellId, type PromptVariant, type TaskType } from './types'
+import {
+  type CandidateResult,
+  type CellKey,
+  cellId,
+  type PromptVariant,
+  type TaskType,
+} from './types'
 
 export interface RunOptions {
   config: BenchmarkConfig
@@ -59,7 +65,8 @@ export async function runBenchmark(opts: RunOptions): Promise<CandidateResult[]>
   const log = opts.log ?? (() => {})
   const provider = opts.provider ?? new NodeModelProvider({ env })
   const deps: RunnerDeps = { provider, env, signal: opts.signal }
-  const tasks = opts.config.tasks ?? (['requirement-review', 'code-review', 'implementation'] as TaskType[])
+  const tasks =
+    opts.config.tasks ?? (['requirement-review', 'code-review', 'implementation'] as TaskType[])
   const results: CandidateResult[] = []
 
   for (const task of tasks) {
@@ -72,7 +79,11 @@ export async function runBenchmark(opts: RunOptions): Promise<CandidateResult[]>
       const modelId = `${ref.provider}:${ref.model}`
 
       for (const prompt of variants) {
-        const runOne = async (fixtureId: string, input: string, run: () => Promise<RunnerOutput>) => {
+        const runOne = async (
+          fixtureId: string,
+          input: string,
+          run: () => Promise<RunnerOutput>,
+        ) => {
           const cell: CellKey = {
             task,
             fixtureId,
@@ -112,7 +123,12 @@ export async function runBenchmark(opts: RunOptions): Promise<CandidateResult[]>
         if (task === 'requirement-review') {
           for (const fx of REQUIREMENT_REVIEW_FIXTURES.filter((f) => accept(f.id))) {
             await runOne(fx.id, requirementsLogic.renderRequirements(fx.context), () =>
-              runRequirementReview({ fixture: fx as RequirementReviewFixture, modelRef: ref, prompt, deps }),
+              runRequirementReview({
+                fixture: fx as RequirementReviewFixture,
+                modelRef: ref,
+                prompt,
+                deps,
+              }),
             )
           }
         } else if (task === 'code-review') {

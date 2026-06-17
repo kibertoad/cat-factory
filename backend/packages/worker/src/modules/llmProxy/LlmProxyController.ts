@@ -526,9 +526,7 @@ function toAiSdkTools(raw: unknown): ToolSet | undefined {
     const fn = isObject(entry.function) ? entry.function : undefined
     const name = typeof fn?.name === 'string' ? fn.name : undefined
     if (!name) continue
-    const parameters = isObject(fn?.parameters)
-      ? fn.parameters
-      : { type: 'object', properties: {} }
+    const parameters = isObject(fn?.parameters) ? fn.parameters : { type: 'object', properties: {} }
     tools[name] = tool({
       description: typeof fn?.description === 'string' ? fn.description : undefined,
       inputSchema: jsonSchema(parameters as Parameters<typeof jsonSchema>[0]),

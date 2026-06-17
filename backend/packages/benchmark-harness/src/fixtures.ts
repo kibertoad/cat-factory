@@ -61,7 +61,8 @@ export const CODE_REVIEW_FIXTURES: CodeReviewFixture[] = [
       block: {
         title: 'Per-IP rate limiter',
         type: 'api' as BlockType,
-        description: 'A token-bucket rate limiter middleware that allows 100 requests/minute per IP.',
+        description:
+          'A token-bucket rate limiter middleware that allows 100 requests/minute per IP.',
       },
       priorOutputs: [
         {

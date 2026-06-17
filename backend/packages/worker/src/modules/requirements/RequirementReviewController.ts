@@ -12,10 +12,7 @@ function requireRequirements(c: Context<AppEnv>): RequirementsModule | null {
 }
 
 const unavailable = (c: Context<AppEnv>) =>
-  c.json(
-    { error: { code: 'unavailable', message: 'Requirements review is not configured' } },
-    503,
-  )
+  c.json({ error: { code: 'unavailable', message: 'Requirements review is not configured' } }, 503)
 
 /**
  * Workspace-scoped requirements-review endpoints. The reviewer is stateless and

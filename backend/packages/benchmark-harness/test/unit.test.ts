@@ -113,14 +113,18 @@ describe('endpoints', () => {
 describe('NodeModelProvider', () => {
   it('throws a clear error when a required key is missing', () => {
     const p = new NodeModelProvider({ env: {} as NodeJS.ProcessEnv })
-    expect(() => p.resolve({ provider: 'anthropic', model: 'claude-x' })).toThrow(/ANTHROPIC_API_KEY/)
+    expect(() => p.resolve({ provider: 'anthropic', model: 'claude-x' })).toThrow(
+      /ANTHROPIC_API_KEY/,
+    )
   })
 })
 
 describe('runBenchmark', () => {
   it('runs requirement-review + code-review with a fake model and records exact model/prompt', async () => {
     const reviewJson = JSON.stringify({
-      items: [{ category: 'gap', severity: 'high', title: 'Link expiry', detail: 'How long valid?' }],
+      items: [
+        { category: 'gap', severity: 'high', title: 'Link expiry', detail: 'How long valid?' },
+      ],
     })
     const results = await runBenchmark({
       config: {

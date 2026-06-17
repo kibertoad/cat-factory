@@ -40,9 +40,7 @@ function buildRows(candidates: CandidateResult[], grades: CellGrade[]): ReportRo
       outputTokens: c.usage?.outputTokens,
       costEur: c.costEur,
       error: c.error,
-      score: grade
-        ? grade.weightedTotal ?? weightedTotal(c.cell.task, grade.scores)
-        : undefined,
+      score: grade ? (grade.weightedTotal ?? weightedTotal(c.cell.task, grade.scores)) : undefined,
       scores,
       notes: grade?.notes,
     }
@@ -55,7 +53,14 @@ function fmt(n: number | undefined, digits = 2): string {
 
 function renderTaskTable(task: TaskType, rows: ReportRow[]): string {
   const dims = rubricFor(task).dimensions
-  const header = ['Model', 'Prompt', 'Score', ...dims.map((d) => d.label), 'Latency (ms)', 'Cost (€)']
+  const header = [
+    'Model',
+    'Prompt',
+    'Score',
+    ...dims.map((d) => d.label),
+    'Latency (ms)',
+    'Cost (€)',
+  ]
   const sep = header.map(() => '---')
   const body = rows
     .slice()
@@ -89,7 +94,12 @@ function renderReportMd(runId: string, rows: ReportRow[]): string {
     `${rows.length} cells, ${graded} graded. Scores are the weighted mean of rubric dimensions (1–5).`,
     'Each row records the exact model and prompt version.',
     '',
-    ...tasks.map((task) => renderTaskTable(task, rows.filter((r) => r.task === task))),
+    ...tasks.map((task) =>
+      renderTaskTable(
+        task,
+        rows.filter((r) => r.task === task),
+      ),
+    ),
   ].join('\n')
 }
 
@@ -106,7 +116,11 @@ export async function buildReport(outDir: string, runId: string): Promise<Report
     // No grades yet — produce a candidates-only report.
   }
   const rows = buildRows(candidates, grades)
-  await writeFile(join(outDir, 'report.json'), `${JSON.stringify({ runId, rows }, null, 2)}\n`, 'utf8')
+  await writeFile(
+    join(outDir, 'report.json'),
+    `${JSON.stringify({ runId, rows }, null, 2)}\n`,
+    'utf8',
+  )
   await writeFile(join(outDir, 'report.md'), renderReportMd(runId, rows), 'utf8')
   return rows
 }

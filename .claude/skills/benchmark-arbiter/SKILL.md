@@ -51,9 +51,7 @@ If no run directory is given, ask for one or default to the most recent under
       "model": "<exact provider:model from the cell file>",
       "prompt": "<exact id@vN from the cell file>",
       "variant": "<variant from the cell file>",
-      "scores": [
-        { "key": "<dimension key>", "score": 1, "rationale": "<one line>" }
-      ],
+      "scores": [{ "key": "<dimension key>", "score": 1, "rationale": "<one line>" }],
       "weightedTotal": 0.0,
       "notes": "<optional one-line overall note>"
     }
@@ -78,21 +76,26 @@ cell's standout strengths/weaknesses. Keep it skimmable.
 # Benchmark conclusions — <run-id>
 
 ## Compared
+
 - Models: <list of exact provider:model ids>
 - Prompt versions: <list of exact id@vN>
 - Tasks: <list>
 
 ## Per-task winner
+
 | Task | Best model | Best prompt | Score | Why |
-| --- | --- | --- | --- | --- |
+| ---- | ---------- | ----------- | ----- | --- |
+
 <one row per task>
 
 ## Notable findings
+
 - <prompt-version deltas: did vN+1 beat vN? by how much?>
 - <model trade-offs: quality vs cost/latency, using candidates.json>
 - <regressions or failures worth flagging>
 
 ## Recommendations
+
 - <which model + prompt version to ship per task, and any prompt change to make next>
 ```
 

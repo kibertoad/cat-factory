@@ -19,7 +19,11 @@ export class RunnerPoolTransport implements RunnerTransport {
     private readonly resolveSecret: SecretResolver,
   ) {}
 
-  dispatch(jobId: string, spec: Record<string, unknown>, kind: RunnerDispatchKind = 'run'): Promise<void> {
+  dispatch(
+    jobId: string,
+    spec: Record<string, unknown>,
+    kind: RunnerDispatchKind = 'run',
+  ): Promise<void> {
     // Self-hosted pools implement the coding-run protocol only; blueprint mapping
     // runs exclusively on the Cloudflare container backend.
     if (kind !== 'run') {

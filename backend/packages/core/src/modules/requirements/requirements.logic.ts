@@ -122,9 +122,7 @@ function coerceCategory(value: unknown): ReviewItemCategory {
 }
 
 function coerceSeverity(value: unknown): ReviewItemSeverity {
-  return SEVERITIES.includes(value as ReviewItemSeverity)
-    ? (value as ReviewItemSeverity)
-    : 'medium'
+  return SEVERITIES.includes(value as ReviewItemSeverity) ? (value as ReviewItemSeverity) : 'medium'
 }
 
 /**

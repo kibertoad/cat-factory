@@ -6,14 +6,30 @@ import { describe, expect, it } from 'vitest'
 // model's JSON into review items. Exercised in the Workers pool like the other
 // prompt specs so the parsing runs in the real workerd runtime.
 
-const { renderRequirements, buildReviewPrompt, buildIncorporatePrompt, coerceReviewItems, extractJson } =
-  requirementsLogic
+const {
+  renderRequirements,
+  buildReviewPrompt,
+  buildIncorporatePrompt,
+  coerceReviewItems,
+  extractJson,
+} = requirementsLogic
 
 const ctx = {
-  block: { title: 'Login', type: 'service' as const, description: 'Authenticate users', features: ['SSO'] },
+  block: {
+    title: 'Login',
+    type: 'service' as const,
+    description: 'Authenticate users',
+    features: ['SSO'],
+  },
   docs: [{ title: 'Auth PRD', url: 'https://x/prd', excerpt: 'Users sign in with email.' }],
   tasks: [
-    { key: 'PROJ-1', title: 'Rate limiter', status: 'Open', type: 'Story', description: '100 rps.' },
+    {
+      key: 'PROJ-1',
+      title: 'Rate limiter',
+      status: 'Open',
+      type: 'Story',
+      description: '100 rps.',
+    },
   ],
 }
 
