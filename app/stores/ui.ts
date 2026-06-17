@@ -42,6 +42,10 @@ export const useUiStore = defineStore('ui', () => {
   // linked guideline repos; ADR 0006).
   const fragmentLibraryOpen = ref(false)
 
+  // Requirements-review panel: the block whose requirements review (questions /
+  // gaps / clarifications) to show, or null when closed.
+  const requirementReviewBlockId = ref<string | null>(null)
+
   /** Current canvas zoom (driven by Vue Flow viewport). */
   const zoom = ref(1)
 
@@ -146,6 +150,12 @@ export const useUiStore = defineStore('ui', () => {
   function closeFragmentLibrary() {
     fragmentLibraryOpen.value = false
   }
+  function openRequirementReview(blockId: string) {
+    requirementReviewBlockId.value = blockId
+  }
+  function closeRequirementReview() {
+    requirementReviewBlockId.value = null
+  }
 
   return {
     selectedBlockId,
@@ -160,6 +170,7 @@ export const useUiStore = defineStore('ui', () => {
     bootstrapOpen,
     githubOpen,
     fragmentLibraryOpen,
+    requirementReviewBlockId,
     zoom,
     lod,
     expandedFrames,
@@ -187,5 +198,7 @@ export const useUiStore = defineStore('ui', () => {
     closeGitHub,
     openFragmentLibrary,
     closeFragmentLibrary,
+    openRequirementReview,
+    closeRequirementReview,
   }
 })

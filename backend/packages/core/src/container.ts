@@ -35,6 +35,7 @@ import type { RepoBootstrapper } from './ports/repo-bootstrapper'
 import type { BootstrapRunner } from './ports/bootstrap-runner'
 import type { RepoBlueprintRepository } from './ports/board-scan-repositories'
 import type { RepoScanner } from './ports/repo-scanner'
+import type { RequirementReviewRepository } from './ports/requirement-review-repositories'
 import type { SecretCipher } from './ports/secret-cipher'
 import type {
   FragmentSourceRepository,
@@ -78,6 +79,7 @@ import { EnvironmentTeardownService } from './modules/environments/EnvironmentTe
 import { RunnerPoolConnectionService } from './modules/runners/RunnerPoolConnectionService'
 import { BootstrapService } from './modules/bootstrap/BootstrapService'
 import { BoardScanService } from './modules/boardScan/BoardScanService'
+import { RequirementReviewService } from './modules/requirements/RequirementReviewService'
 import { BLUEPRINT_PIPELINE_ID } from './domain/seed'
 import { FragmentLibraryService } from './modules/fragmentLibrary/FragmentLibraryService'
 import {
@@ -230,6 +232,30 @@ export interface CoreDependencies {
   repoBlueprintRepository?: RepoBlueprintRepository
   repoScanner?: RepoScanner
 
+  // ---- Requirements review (stateless reviewer agent) ---------------------
+  // The review feature assembles whenever its repository is present (the worker
+  // wires it unconditionally). The LLM is optional *within* the module: reads of
+  // an existing review work without it, but running a review / incorporation
+  // needs `modelProvider` + `documentPlannerModel` (reused as the reviewer ref).
+  // The document/task repositories above are reused, when wired, to fold linked
+  // PRDs and tracker issues into the reviewed requirements.
+  requirementReviewRepository?: RequirementReviewRepository
+  /**
+   * Default model the requirements reviewer uses when a block pins none.
+   * Independent of the documents config so the reviewer works whenever a model
+   * provider is wired; the worker sets it to the agents' routing default (which
+   * resolves to Cloudflare Workers AI unless a direct key is set). Falls back to
+   * `documentPlannerModel` when absent.
+   */
+  requirementReviewModel?: ModelRef
+  /**
+   * Resolve a block's pinned model id to a ref for the reviewer, honouring the
+   * direct/Cloudflare fallback — the same resolver the agent executor uses. The
+   * worker wires `config.agents.resolveBlockModel`; absent → the reviewer always
+   * uses the default ref above.
+   */
+  requirementReviewResolveModel?: (modelId: string | undefined) => ModelRef | undefined
+
   // ---- Prompt-fragment library (opt-in; ADR 0006) -------------------------
   // The managed, tenant-scoped catalog of best-practice fragments. The library
   // (per-tier CRUD + the merged-catalog resolver feeding every agent run)
@@ -294,6 +320,11 @@ export interface BoardScanModule {
   service: BoardScanService
 }
 
+/** The requirements-review feature's service, present only when its repository is wired. */
+export interface RequirementsModule {
+  service: RequirementReviewService
+}
+
 /** The prompt-fragment library's services, present only when configured (ADR 0006). */
 export interface FragmentLibraryModule {
   /** Per-tier CRUD + the merged-catalog resolver (also the run-path FragmentResolver). */
@@ -323,6 +354,8 @@ export interface Core {
   bootstrap?: BootstrapModule
   /** Present only when the board-scan repository is wired (see CoreDependencies). */
   boardScan?: BoardScanModule
+  /** Present only when the requirements-review repository is wired (see CoreDependencies). */
+  requirements?: RequirementsModule
   /** Present only when the prompt-fragment library is configured (see CoreDependencies). */
   fragmentLibrary?: FragmentLibraryModule
 }
@@ -610,6 +643,33 @@ function createBoardScanModule(
 }
 
 /**
+ * Assemble the requirements-review module when its repository is present (the
+ * worker wires it unconditionally). The model provider/ref are optional within
+ * the module — reads work without them and the run paths surface a clear error —
+ * and the document/task repositories are reused, when wired, to fold linked PRDs
+ * and tracker issues into the reviewed requirements.
+ */
+function createRequirementsModule(deps: CoreDependencies): RequirementsModule | undefined {
+  const { requirementReviewRepository } = deps
+  if (!requirementReviewRepository) return undefined
+
+  const service = new RequirementReviewService({
+    requirementReviewRepository,
+    blockRepository: deps.blockRepository,
+    idGenerator: deps.idGenerator,
+    clock: deps.clock,
+    modelProvider: deps.modelProvider,
+    // The dedicated reviewer ref, else the document planner's (both the agents' default).
+    modelRef: deps.requirementReviewModel ?? deps.documentPlannerModel,
+    // Honour a block's pinned model with the direct/Cloudflare fallback, like the executor.
+    resolveBlockModel: deps.requirementReviewResolveModel,
+    documentRepository: deps.documentRepository,
+    taskRepository: deps.taskRepository,
+  })
+  return { service }
+}
+
+/**
  * Assemble the prompt-fragment library when its fragment repository is present.
  * The library service (CRUD + the per-run catalog resolver) always assembles;
  * the repo-source service additionally needs the GitHub client, the source
@@ -684,6 +744,7 @@ export function createCore(dependencies: CoreDependencies): Core {
   const github = createGitHubModule(dependencies)
   const documents = createDocumentsModule(dependencies, boardService)
   const tasks = createTasksModule(dependencies)
+  const requirements = createRequirementsModule(dependencies)
   const runners = createRunnersModule(dependencies)
   // After a bootstrap succeeds, map the new repo into a blueprint + the board by
   // starting the blueprint-only pipeline against the service frame.
@@ -705,6 +766,7 @@ export function createCore(dependencies: CoreDependencies): Core {
     ...(runners ? { runners } : {}),
     ...(bootstrap ? { bootstrap } : {}),
     ...(boardScan ? { boardScan } : {}),
+    ...(requirements ? { requirements } : {}),
     ...(fragmentLibrary ? { fragmentLibrary } : {}),
   }
 }

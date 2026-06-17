@@ -54,6 +54,7 @@ import { D1ReferenceArchitectureRepository } from './repositories/D1ReferenceArc
 import { D1BootstrapJobRepository } from './repositories/D1BootstrapJobRepository'
 import { D1AgentRunRepository } from './repositories/D1AgentRunRepository'
 import { D1RepoBlueprintRepository } from './repositories/D1RepoBlueprintRepository'
+import { D1RequirementReviewRepository } from './repositories/D1RequirementReviewRepository'
 import { HttpEnvironmentProvider } from './environments/HttpEnvironmentProvider'
 import { WebCryptoSecretCipher } from './environments/WebCryptoSecretCipher'
 import { GitHubAppAuth } from './github/GitHubAppAuth'
@@ -396,6 +397,31 @@ function selectTasksDeps(env: Env, config: AppConfig, db: D1Database): Partial<C
 }
 
 /**
+ * Wire the requirements-review feature. The repository is always available, and a
+ * model provider + the agents' default ref are supplied so the stateless reviewer
+ * works whenever an LLM is configured — independent of the documents integration.
+ * (Supplying the provider here is harmless when documents are off or set to the
+ * heading-based planner: that planner only engages when `documentPlannerModel` is
+ * also set, which this does not touch.)
+ */
+function selectRequirementsDeps(
+  env: Env,
+  config: AppConfig,
+  db: D1Database,
+): Partial<CoreDependencies> {
+  return {
+    requirementReviewRepository: new D1RequirementReviewRepository({ db }),
+    modelProvider: new CloudflareModelProvider({ env }),
+    // The routing default already resolves to Cloudflare Workers AI unless a
+    // direct provider key is set, so the reviewer runs on Cloudflare by default.
+    requirementReviewModel: config.agents.routing.default.ref,
+    // Honour a block's pinned model with the same direct/Cloudflare fallback the
+    // agent executor (and the Pi container path) use.
+    requirementReviewResolveModel: config.agents.resolveBlockModel,
+  }
+}
+
+/**
  * Build the ephemeral environment integration's concrete ports when opted in.
  * Requires the encryption key (the config gate already enforces this), so the
  * generic HTTP provider, the D1 repositories and the Web Crypto cipher are wired
@@ -602,6 +628,7 @@ export function buildContainer(env: Env, overrides: Partial<CoreDependencies> = 
     ...selectGitHubDeps(env, config, db, clock, idGenerator),
     ...selectDocumentsDeps(env, config, db),
     ...selectTasksDeps(env, config, db),
+    ...selectRequirementsDeps(env, config, db),
     ...selectEnvironmentsDeps(env, config, db),
     ...selectRunnersDeps(env, config, db),
     ...selectFragmentLibraryDeps(env, config, db),
