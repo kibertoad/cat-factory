@@ -9,10 +9,21 @@ import { redactSecrets } from './git.js'
 // per-job session token (interpolated from $PI_PROXY_TOKEN) — so no provider key
 // ever lives in the image or in Pi's config on disk.
 
+/**
+ * Per-completion output-token ceiling Pi requests (its model-entry `maxTokens`).
+ * Generous on purpose: a reasoning model (e.g. GLM-5.2) spends tokens on its
+ * `<think>` trace before the answer + tool calls, so a tight cap truncates it
+ * mid-reasoning and the agent never commits edits. It is a ceiling, not a target
+ * — unused output tokens are not billed — so erring high is safe.
+ */
+export const PI_MAX_OUTPUT_TOKENS = 16_384
+
 /** Write the Pi provider config that routes all model calls through the proxy. */
 export async function writePiModelsConfig(opts: {
   model: string
   proxyBaseUrl: string
+  /** Output-token ceiling Pi may request per completion. Defaults to PI_MAX_OUTPUT_TOKENS. */
+  maxTokens?: number
 }): Promise<string> {
   const dir = join(homedir(), '.pi', 'agent')
   await mkdir(dir, { recursive: true })
@@ -26,7 +37,11 @@ export async function writePiModelsConfig(opts: {
         // OpenAI-compatible upstreams behind the proxy don't all accept the
         // `developer` role or `reasoning_effort`; send a plain system message.
         compat: { supportsDeveloperRole: false, supportsReasoningEffort: false },
-        models: [{ id: opts.model, name: opts.model }],
+        // `maxTokens` is Pi's per-completion output ceiling — set it generously so
+        // a reasoning model isn't cut off mid-think (see PI_MAX_OUTPUT_TOKENS).
+        models: [
+          { id: opts.model, name: opts.model, maxTokens: opts.maxTokens ?? PI_MAX_OUTPUT_TOKENS },
+        ],
       },
     },
   }
@@ -54,6 +69,13 @@ export async function writeAgentsContext(cwd: string, systemPrompt: string): Pro
   await writeFile(join(cwd, 'AGENTS.md'), `${systemPrompt}${TODO_GUIDANCE}`, 'utf8')
 }
 
+/** One entry of the agent's todo list — its subject and current status. */
+export interface TodoItem {
+  /** The task's subject text, as the agent wrote it. */
+  label: string
+  status: 'pending' | 'in_progress' | 'completed'
+}
+
 /** Live subtask progress derived from Pi's `todo` tool — e.g. "3/8 done". */
 export interface TodoProgress {
   /** Tasks marked completed. */
@@ -62,6 +84,12 @@ export interface TodoProgress {
   inProgress: number
   /** Total live tasks (tombstoned/deleted tasks excluded). */
   total: number
+  /**
+   * The individual live tasks (label + status), in list order — so the board can
+   * render the actual task list, not just the count. Absent for the simpler
+   * `todos[].done` fallback shape, which carries no per-task subject.
+   */
+  items?: TodoItem[]
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -140,6 +168,22 @@ function todoResultDetails(event: Record<string, unknown>): Record<string, unkno
  * the simpler `details.todos[].done` shape of Pi's bundled example extension, so
  * swapping the extension never silently drops progress.
  */
+/**
+ * Best-effort subject for a todo task. rpiv-todo creates tasks with a `subject`
+ * (see the `todo` `create` action); we also accept the common alternates so a
+ * minor extension change never blanks the label. Falls back to "Untitled task".
+ */
+function taskLabel(task: unknown): string {
+  if (task && typeof task === 'object') {
+    const t = task as Record<string, unknown>
+    for (const key of ['subject', 'title', 'content', 'text', 'name', 'task']) {
+      const v = t[key]
+      if (typeof v === 'string' && v.trim()) return v.trim()
+    }
+  }
+  return 'Untitled task'
+}
+
 export function parseTodoProgress(event: Record<string, unknown>): TodoProgress | undefined {
   const d = todoResultDetails(event)
   if (!d) return undefined
@@ -148,14 +192,20 @@ export function parseTodoProgress(event: Record<string, unknown>): TodoProgress 
     let total = 0
     let completed = 0
     let inProgress = 0
+    const items: TodoItem[] = []
     for (const task of d.tasks) {
       const status = (task as { status?: unknown } | null)?.status
       if (status === 'deleted') continue
       total++
       if (status === 'completed') completed++
       else if (status === 'in_progress') inProgress++
+      items.push({
+        label: taskLabel(task),
+        status:
+          status === 'completed' ? 'completed' : status === 'in_progress' ? 'in_progress' : 'pending',
+      })
     }
-    return { completed, inProgress, total }
+    return { completed, inProgress, total, items }
   }
 
   if (Array.isArray(d.todos)) {

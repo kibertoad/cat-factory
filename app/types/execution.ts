@@ -20,11 +20,19 @@ export interface Decision {
   chosen: string | null
 }
 
+/** One entry of a running step's todo list — its label and current status. */
+export interface StepSubtaskItem {
+  label: string
+  status: 'pending' | 'in_progress' | 'completed'
+}
+
 /** Live subtask counts a running step reports from the agent's own todo list. */
 export interface StepSubtasks {
   completed: number
   inProgress: number
   total: number
+  /** The individual todo entries, so a zoomed-in card can show the actual list. */
+  items?: StepSubtaskItem[]
 }
 
 // ---------------------------------------------------------------------------

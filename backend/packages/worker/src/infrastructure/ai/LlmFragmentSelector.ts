@@ -78,7 +78,9 @@ export class LlmFragmentSelector implements FragmentSelector {
         system: SYSTEM_PROMPT,
         prompt: buildPrompt(candidates, context),
         temperature: 0,
-        maxOutputTokens: 500,
+        // Headroom for a reasoning model's `<think>` before the (small) id list —
+        // a tight cap truncates the output before any ids are emitted.
+        maxOutputTokens: 5000,
       })
       const ids = extractIds(text, new Set(candidates.map((c) => c.id)))
       return ids ?? fallback()

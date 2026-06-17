@@ -50,7 +50,23 @@ function parseSubtasks(raw: string | null): BootstrapJobRecord['subtasks'] {
       typeof o.inProgress === 'number' &&
       typeof o.total === 'number'
     ) {
-      return { completed: o.completed, inProgress: o.inProgress, total: o.total }
+      type Item = NonNullable<NonNullable<BootstrapJobRecord['subtasks']>['items']>[number]
+      let items: Item[] | undefined
+      if (Array.isArray(o.items)) {
+        items = []
+        for (const it of o.items as unknown[]) {
+          if (!it || typeof it !== 'object') continue
+          const r = it as Record<string, unknown>
+          const status = r.status
+          if (
+            typeof r.label === 'string' &&
+            (status === 'pending' || status === 'in_progress' || status === 'completed')
+          ) {
+            items.push({ label: r.label, status })
+          }
+        }
+      }
+      return { completed: o.completed, inProgress: o.inProgress, total: o.total, items }
     }
   } catch {
     // fall through

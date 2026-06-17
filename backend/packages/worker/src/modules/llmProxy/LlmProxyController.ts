@@ -31,6 +31,17 @@ import { type Logger, logger } from '../../infrastructure/observability/logger'
 // proxying an HTTP request. No provider key is involved, which is exactly why the
 // container can run on Workers AI with zero extra secrets.
 
+/**
+ * Defense-in-depth floor on a container agent's per-call output budget for Workers
+ * AI models. The primary control is Pi's own model-entry `maxTokens` (set in the
+ * harness's writePiModelsConfig); this is a safety net in case a call still arrives
+ * under-provisioned, so a reasoning model is never truncated mid-`<think>`. A
+ * ceiling, not a target — unused tokens are not billed — so a generous value is
+ * safe. Workers AI clamps to the model's own large limit; stricter upstreams keep
+ * Pi's requested value (their hard output caps can be below this).
+ */
+const PI_MIN_OUTPUT_TOKENS = 16_384
+
 /** Pull the bearer token from the Authorization header. */
 function bearer(header: string | undefined): string | null {
   if (!header) return null
@@ -75,6 +86,18 @@ export function llmProxyController(): Hono<AppEnv> {
       return c.json({ error: { message: 'Invalid JSON body' } }, 400)
     }
     payload.model = session.model
+
+    // Give container agents (Pi) generous output room. A reasoning model like
+    // GLM-5.2 spends tokens on `<think>` before the answer + tool calls, so a
+    // small per-call cap truncates it mid-reasoning (the agent then never commits
+    // edits and the run spins). Pi can under-ask, so floor the budget for Workers
+    // AI models — which clamp to their (large) ceilings gracefully. Other
+    // providers keep Pi's value to respect their stricter upstream output caps.
+    if (session.provider === 'workers-ai') {
+      const asked = typeof payload.max_tokens === 'number' ? payload.max_tokens : 0
+      payload.max_tokens = Math.max(asked, PI_MIN_OUTPUT_TOKENS)
+    }
+
     const streaming = payload.stream === true
 
     // Correlate every proxied call with its run so a bootstrap/execution can be
@@ -213,6 +236,10 @@ async function runWorkersAi(args: WorkersAiArgs): Promise<Response> {
   // supports specification version …"); workers-ai-provider@3 matches `ai` v6, so
   // the model is used directly with no cast. Keep these majors in lockstep.
   const model: LanguageModel = workersai(modelId as Parameters<typeof workersai>[0])
+  // The AI SDK wants the system prompt in the dedicated `system` option, not as a
+  // `role:'system'` entry in `messages` (which it flags as a prompt-injection risk
+  // and warns about). Split it out: system text → `system`, the rest → `messages`.
+  const system = systemFromMessages(payload.messages)
   const messages = toModelMessages(payload.messages)
   const temperature = typeof payload.temperature === 'number' ? payload.temperature : undefined
   const maxOutputTokens = typeof payload.max_tokens === 'number' ? payload.max_tokens : undefined
@@ -224,6 +251,7 @@ async function runWorkersAi(args: WorkersAiArgs): Promise<Response> {
   const common = {
     model,
     messages,
+    ...(system ? { system } : {}),
     temperature,
     maxOutputTokens,
     ...(tools ? { tools } : {}),
@@ -407,6 +435,21 @@ function safeParseArgs(raw: unknown): unknown {
  * since OpenAI tool messages omit it). Without this, every turn after the first
  * tool call would be malformed and the agent could never make progress.
  */
+/**
+ * Concatenate every `role:'system'` message's text (in order) so it can be passed
+ * via the AI SDK's `system` option rather than inlined into `messages` — which the
+ * SDK warns is a prompt-injection risk. Returns undefined when there is no system
+ * content, so plain chats pass no empty `system`.
+ */
+function systemFromMessages(raw: unknown): string | undefined {
+  if (!Array.isArray(raw)) return undefined
+  const parts = raw
+    .filter((m): m is Record<string, unknown> => isObject(m) && m.role === 'system')
+    .map((m) => contentText(m.content))
+    .filter((t) => t.length > 0)
+  return parts.length > 0 ? parts.join('\n\n') : undefined
+}
+
 function toModelMessages(raw: unknown): ModelMessage[] {
   if (!Array.isArray(raw)) return []
   const toolNameById = new Map<string, string>()
@@ -429,7 +472,9 @@ function toModelMessages(raw: unknown): ModelMessage[] {
   for (const m of raw) {
     if (!isObject(m)) continue
     if (m.role === 'system') {
-      out.push({ role: 'system', content: contentText(m.content) })
+      // System content is hoisted to the `system` option (see systemFromMessages),
+      // so it is intentionally dropped from the message list here.
+      continue
     } else if (m.role === 'user') {
       out.push({ role: 'user', content: toUserContent(m.content) } as ModelMessage)
     } else if (m.role === 'assistant') {

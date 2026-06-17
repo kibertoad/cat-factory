@@ -69,14 +69,36 @@ export function loadAgentsConfig(
       model: env.AGENT_DEFAULT_MODEL ?? qwenDefault?.model ?? '@cf/qwen/qwen3-30b-a3b-fp8',
     },
     temperature: num(env.AGENT_DEFAULT_TEMPERATURE) ?? 0.4,
-    maxOutputTokens: num(env.AGENT_MAX_OUTPUT_TOKENS) ?? 512,
+    // 5000, not 512: the default model is a *reasoning* model whose `<think>`
+    // tokens count against this cap, so a tight limit truncates the answer mid
+    // reasoning (finish_reason: length). Operators can still override via env or
+    // pin a leaner cap per kind in AGENT_MODELS.
+    maxOutputTokens: num(env.AGENT_MAX_OUTPUT_TOKENS) ?? 5000,
   }
+
+  // The agentic phases — design (bootstrap/architect), build (coder) and review
+  // (reviewer) — drive long multi-step tool loops, so they default to GLM-5.2,
+  // Cloudflare's agentic-coding model (function calling + 256K context). The
+  // small default MoE (qwen3-30b-a3b) is too weak to sustain that loop and tends
+  // to spin without committing changes. The cheap default still handles the
+  // lighter kinds (e.g. tester, fragment selection, doc planning). An operator's
+  // AGENT_MODELS env entry overrides any of these per kind.
+  const agenticDefault: AgentModelConfig = {
+    ref: { provider: 'workers-ai', model: '@cf/zai-org/glm-5.2' },
+    temperature: num(env.AGENT_DEFAULT_TEMPERATURE) ?? 0.3,
+    maxOutputTokens: num(env.AGENT_MAX_OUTPUT_TOKENS) ?? 5000,
+  }
+  const agenticKinds: AgentKind[] = ['architect', 'coder', 'reviewer']
+  const byKind: Partial<Record<AgentKind, AgentModelConfig>> = {}
+  for (const kind of agenticKinds) byKind[kind] = agenticDefault
+  // Env overrides win over the built-in agentic defaults.
+  Object.assign(byKind, parseModelOverrides(env.AGENT_MODELS))
 
   return {
     containerImpl: env.CONTAINER_IMPL_ENABLED === 'true',
     routing: {
       default: defaultConfig,
-      byKind: parseModelOverrides(env.AGENT_MODELS),
+      byKind,
     },
     resolveBlockModel: (modelId) => resolveModelRef(modelId, isDirectAvailable),
   }

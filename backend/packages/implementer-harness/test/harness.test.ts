@@ -245,7 +245,7 @@ describe('producedRepoContent (from-scratch scaffold)', () => {
 describe('parseTodoProgress', () => {
   // The real `--mode json` shape: a tool result is a `message_end` event whose
   // message is a `toolResult` (role/toolName/details/isError live on the message).
-  const todoEvent = (tasks: Array<{ status: string }>) => ({
+  const todoEvent = (tasks: Array<{ status: string; subject?: string }>) => ({
     type: 'message_end',
     message: {
       role: 'toolResult',
@@ -263,15 +263,46 @@ describe('parseTodoProgress', () => {
       { status: 'in_progress' },
       { status: 'pending' },
     ])
-    expect(parseTodoProgress(event)).toEqual({ completed: 3, inProgress: 1, total: 5 })
+    expect(parseTodoProgress(event)).toMatchObject({ completed: 3, inProgress: 1, total: 5 })
   })
 
-  it('excludes deleted (tombstoned) tasks from the total', () => {
-    const event = todoEvent([{ status: 'completed' }, { status: 'deleted' }, { status: 'pending' }])
-    expect(parseTodoProgress(event)).toEqual({ completed: 1, inProgress: 0, total: 2 })
+  it('surfaces each live task as an item with its subject + status', () => {
+    const event = todoEvent([
+      { status: 'completed', subject: 'Scaffold project' },
+      { status: 'in_progress', subject: 'Write app.js' },
+      { status: 'pending', subject: 'Add README' },
+    ])
+    expect(parseTodoProgress(event)?.items).toEqual([
+      { label: 'Scaffold project', status: 'completed' },
+      { label: 'Write app.js', status: 'in_progress' },
+      { label: 'Add README', status: 'pending' },
+    ])
   })
 
-  it('falls back to the example extension `todos[].done` shape', () => {
+  it('labels a subject-less task "Untitled task"', () => {
+    expect(parseTodoProgress(todoEvent([{ status: 'pending' }]))?.items).toEqual([
+      { label: 'Untitled task', status: 'pending' },
+    ])
+  })
+
+  it('excludes deleted (tombstoned) tasks from the total and items', () => {
+    const event = todoEvent([
+      { status: 'completed', subject: 'a' },
+      { status: 'deleted', subject: 'gone' },
+      { status: 'pending', subject: 'b' },
+    ])
+    expect(parseTodoProgress(event)).toEqual({
+      completed: 1,
+      inProgress: 0,
+      total: 2,
+      items: [
+        { label: 'a', status: 'completed' },
+        { label: 'b', status: 'pending' },
+      ],
+    })
+  })
+
+  it('falls back to the example extension `todos[].done` shape (no items)', () => {
     const event = {
       type: 'message_end',
       message: {
@@ -290,7 +321,7 @@ describe('parseTodoProgress', () => {
       isError: false,
       result: { details: { tasks: [{ status: 'completed' }, { status: 'in_progress' }] } },
     }
-    expect(parseTodoProgress(event)).toEqual({ completed: 1, inProgress: 1, total: 2 })
+    expect(parseTodoProgress(event)).toMatchObject({ completed: 1, inProgress: 1, total: 2 })
   })
 
   it('also reads a defensive top-level tool_result shape', () => {
@@ -299,7 +330,7 @@ describe('parseTodoProgress', () => {
       toolName: 'todo',
       details: { tasks: [{ status: 'completed' }, { status: 'pending' }] },
     }
-    expect(parseTodoProgress(event)).toEqual({ completed: 1, inProgress: 0, total: 2 })
+    expect(parseTodoProgress(event)).toMatchObject({ completed: 1, inProgress: 0, total: 2 })
   })
 
   it('ignores non-todo, errored, or unrecognised events', () => {

@@ -10,6 +10,7 @@ import type {
   RepoBootstrapper,
   RepoEntry,
   RepoProjectionRepository,
+  StepSubtasks,
 } from '@cat-factory/core'
 import type { DurableObjectNamespace } from '@cloudflare/workers-types'
 import type { ImplementationContainer } from '../containers/ImplementationContainer'
@@ -248,7 +249,7 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
     }
     const view = (await res.json()) as {
       state: 'running' | 'done' | 'failed'
-      progress?: { completed: number; inProgress: number; total: number }
+      progress?: StepSubtasks
       result?: BootstrapContainerResult
       error?: string
     }

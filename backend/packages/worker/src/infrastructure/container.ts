@@ -23,7 +23,7 @@ import { CloudflareContainerTransport } from './containers/CloudflareContainerTr
 import { HttpRunnerPoolProvider } from './runners/HttpRunnerPoolProvider'
 import { RunnerPoolTransport } from './runners/RunnerPoolTransport'
 import { D1RunnerPoolConnectionRepository } from './repositories/D1RunnerPoolConnectionRepository'
-import { RunnerPoolConnectionService } from '@cat-factory/core'
+import { RunnerPoolConnectionService, resolveAgentConfig } from '@cat-factory/core'
 import { ContainerRepoBootstrapper } from './ai/ContainerRepoBootstrapper'
 import { ContainerRepoScanner } from './ai/ContainerRepoScanner'
 import { CompositeAgentExecutor } from './ai/CompositeAgentExecutor'
@@ -478,7 +478,9 @@ function selectRepoBootstrapper(
     githubClient,
     mintInstallationToken: (id) => registry.installationToken(id),
     sessionService: new ContainerSessionService({ secret: env.AUTH_SESSION_SECRET }),
-    model: config.agents.routing.default.ref,
+    // Bootstrap is an `architect`-kind run, so it follows that kind's routing
+    // (GLM-5.2 by default) rather than the global default.
+    model: resolveAgentConfig(config.agents.routing, 'architect').ref,
     proxyBaseUrl: `${env.WORKER_PUBLIC_URL.replace(/\/+$/, '')}/v1`,
     githubApiBase: config.github.apiBase,
   })
@@ -515,7 +517,8 @@ function selectRepoScanner(
     installationRepository,
     mintInstallationToken: (id) => registry.installationToken(id),
     sessionService: new ContainerSessionService({ secret: env.AUTH_SESSION_SECRET }),
-    model: config.agents.routing.default.ref,
+    // Repo scanning is also an `architect`-kind run — follow that kind's routing.
+    model: resolveAgentConfig(config.agents.routing, 'architect').ref,
     proxyBaseUrl: `${env.WORKER_PUBLIC_URL.replace(/\/+$/, '')}/v1`,
     githubApiBase: config.github.apiBase,
   })

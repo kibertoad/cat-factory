@@ -170,16 +170,30 @@ export const decisionSchema = v.object({
 })
 export type Decision = v.InferOutput<typeof decisionSchema>
 
+/** One entry of a running step's todo list — its label and current status. */
+export const stepSubtaskItemSchema = v.object({
+  /** The task's human-readable subject, as the agent wrote it. */
+  label: v.string(),
+  status: v.picklist(['pending', 'in_progress', 'completed']),
+})
+export type StepSubtaskItem = v.InferOutput<typeof stepSubtaskItemSchema>
+
 /**
  * Live subtask counts for a running step, reported by the container agent from
  * the coding tool's own todo list (e.g. "3/8 done, 1 in progress"). Present only
  * while an async job is in flight and the agent maintains a todo list; the board
  * renders it as a finer-grained progress indicator than `progress` alone.
+ *
+ * `items` carries the individual todo entries (label + status) so a zoomed-in
+ * card can render the actual task list, not just the count. It is optional — an
+ * older agent/poll that only reported counts, or the simpler `todos[].done`
+ * fallback shape, still validates without it.
  */
 export const stepSubtasksSchema = v.object({
   completed: v.number(),
   inProgress: v.number(),
   total: v.number(),
+  items: v.optional(v.array(stepSubtaskItemSchema)),
 })
 export type StepSubtasks = v.InferOutput<typeof stepSubtasksSchema>
 

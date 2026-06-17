@@ -84,7 +84,9 @@ export class DocumentPlannerService {
         system: SYSTEM_PROMPT,
         prompt: buildUserPrompt(record.title, record.body),
         temperature: 0.2,
-        maxOutputTokens: 1500,
+        // Headroom for a reasoning model's `<think>` before the JSON plan — a
+        // tight cap truncates the plan mid-output (finish_reason: length).
+        maxOutputTokens: 5000,
       })
       const plan = coercePlan(record.source, record.externalId, extractJson(text))
       return plan ?? fallback()

@@ -102,6 +102,14 @@ const bootstrapPct = computed(() => {
   if (!s || s.total <= 0) return 0
   return Math.min(100, Math.round((s.completed / s.total) * 100))
 })
+// The actual todo items the agent is working through, surfaced on the expanded
+// card so a zoomed-in user sees the task list, not just the "N/M" count.
+const bootstrapItems = computed(() => bootstrapSubtasks.value?.items ?? [])
+const ITEM_ICON: Record<string, string> = {
+  completed: 'i-lucide-check-circle-2',
+  in_progress: 'i-lucide-loader-circle',
+  pending: 'i-lucide-circle',
+}
 </script>
 
 <template>
@@ -227,6 +235,31 @@ const bootstrapPct = computed(() => {
             :style="{ width: bootstrapPct + '%' }"
           />
         </div>
+        <!-- the actual todo list, once the agent has reported any items -->
+        <ul v-if="bootstrapItems.length" class="mt-2 space-y-1">
+          <li
+            v-for="(item, i) in bootstrapItems"
+            :key="i"
+            class="flex items-start gap-1.5 text-[11px]"
+            :class="
+              item.status === 'completed'
+                ? 'text-amber-200/60 line-through'
+                : item.status === 'in_progress'
+                  ? 'text-amber-100'
+                  : 'text-amber-200/80'
+            "
+          >
+            <UIcon
+              :name="ITEM_ICON[item.status]"
+              class="mt-px h-3 w-3 shrink-0"
+              :class="[
+                item.status === 'in_progress' ? 'animate-spin text-amber-400' : '',
+                item.status === 'completed' ? 'text-emerald-400' : 'text-amber-400/70',
+              ]"
+            />
+            <span>{{ item.label }}</span>
+          </li>
+        </ul>
       </div>
       <!-- failed run: shared failure banner + retry -->
       <div v-else-if="runFailed && run" class="p-3">

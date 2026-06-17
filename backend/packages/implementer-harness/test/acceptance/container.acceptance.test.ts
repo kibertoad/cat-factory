@@ -208,7 +208,7 @@ describe.skipIf(!docker)('implementer container acceptance', () => {
 
     // Two of three subtasks completed, the third left in-progress — exactly what
     // the rpiv-todo `tool_result` events encode, parsed by the harness.
-    expect(lastProgress).toEqual({ completed: 2, inProgress: 1, total: 3 })
+    expect(lastProgress).toMatchObject({ completed: 2, inProgress: 1, total: 3 })
   })
 })
 

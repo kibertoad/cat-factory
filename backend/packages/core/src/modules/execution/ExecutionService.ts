@@ -836,12 +836,20 @@ export class ExecutionService {
   }
 }
 
-/** Whether two subtask snapshots carry the same counts (skips redundant re-emits). */
+/** Whether two subtask snapshots carry the same counts + items (skips redundant re-emits). */
 function sameSubtasks(a: StepSubtasks | undefined, b: StepSubtasks): boolean {
   return (
     a !== undefined &&
     a.completed === b.completed &&
     a.inProgress === b.inProgress &&
-    a.total === b.total
+    a.total === b.total &&
+    sameSubtaskItems(a.items, b.items)
   )
+}
+
+/** Whether two todo-item lists carry the same labels + statuses, in order. */
+function sameSubtaskItems(a: StepSubtasks['items'], b: StepSubtasks['items']): boolean {
+  if (a === b) return true
+  if (!a || !b || a.length !== b.length) return false
+  return a.every((it, i) => it.label === b[i]?.label && it.status === b[i]?.status)
 }

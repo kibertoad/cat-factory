@@ -585,7 +585,23 @@ export class BootstrapService {
 
 /** Whether two subtask snapshots are identical (skip a no-op write + broadcast). */
 function sameSubtasks(a: StepSubtasks | null, b: StepSubtasks): boolean {
-  return !!a && a.completed === b.completed && a.inProgress === b.inProgress && a.total === b.total
+  return (
+    !!a &&
+    a.completed === b.completed &&
+    a.inProgress === b.inProgress &&
+    a.total === b.total &&
+    sameSubtaskItems(a.items, b.items)
+  )
+}
+
+/** Whether two todo-item lists carry the same labels + statuses, in order. */
+function sameSubtaskItems(
+  a: StepSubtasks['items'],
+  b: StepSubtasks['items'],
+): boolean {
+  if (a === b) return true
+  if (!a || !b || a.length !== b.length) return false
+  return a.every((it, i) => it.label === b[i]?.label && it.status === b[i]?.status)
 }
 
 /** A next-step pointer per failure kind, surfaced on the board's failed card. */
