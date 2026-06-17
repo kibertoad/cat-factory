@@ -1,6 +1,5 @@
 ---
 '@cat-factory/integrations': minor
-'@cat-factory/core': patch
 '@cat-factory/kernel': patch
 ---
 

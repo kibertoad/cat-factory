@@ -1,6 +1,5 @@
 ---
 '@cat-factory/spend': minor
-'@cat-factory/core': patch
 '@cat-factory/worker': patch
 ---
 

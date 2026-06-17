@@ -1,6 +1,5 @@
 ---
 '@cat-factory/orchestration': minor
-'@cat-factory/core': patch
 ---
 
 Extract `@cat-factory/orchestration` from `@cat-factory/core`

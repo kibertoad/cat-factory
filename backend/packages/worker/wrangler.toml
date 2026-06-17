@@ -50,12 +50,12 @@ name = "cat-factory-bootstrap"
 class_name = "BootstrapWorkflow"
 
 # Per-run implementation container. The acceptance suite builds this image from
-# the sibling package's Dockerfile, so dev/test reference it by local path; the
-# production deployment instead references the published GHCR image
+# the internal harness package's Dockerfile, so dev/test reference it by local
+# path; the production deployment instead references the published GHCR image
 # (ghcr.io/<owner>/cat-factory-implementer) — see deploy/backend/wrangler.toml.
 [[containers]]
 class_name = "ImplementationContainer"
-image = "../implementer-harness/Dockerfile"
+image = "../../internal/implementer-harness/Dockerfile"
 max_instances = 10
 instance_type = "standard-1"
 

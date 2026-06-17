@@ -1,6 +1,5 @@
 ---
 '@cat-factory/workspaces': minor
-'@cat-factory/core': patch
 ---
 
 Extract `@cat-factory/workspaces` from `@cat-factory/core`
