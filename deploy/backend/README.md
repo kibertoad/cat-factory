@@ -33,7 +33,7 @@ Edit `wrangler.toml`:
 - `name`, `[[d1_databases]].database_id` — your Worker name + D1 id
   (`wrangler d1 create cat_factory`).
 - `[[containers]].image` — the published runner image. Pin a version:
-  `ghcr.io/<owner>/cat-factory-implementer:<version>` (see the repo's
+  `ghcr.io/<owner>/cat-factory-executor:<version>` (see the repo's
   `docker-publish` workflow; forks publish under their own owner).
 - `[vars]` — `WORKER_PUBLIC_URL`, `CORS_ALLOWED_ORIGINS`, auth/GitHub ids, spend
   budget, and the per-feature toggles. Each block documents what it needs.

@@ -5,7 +5,7 @@ import type {
   Queue,
   Workflow,
 } from '@cloudflare/workers-types'
-import type { ImplementationContainer } from './containers/ImplementationContainer'
+import type { ExecutionContainer } from './containers/ExecutionContainer'
 import type { WorkspaceEventsHub } from './durable-objects/WorkspaceEventsHub'
 
 /** Message enqueued to bound the rate at which durable runs are started. */
@@ -73,11 +73,11 @@ export interface Env {
    * Durable Object namespace backing per-run implementation containers. Each run
    * addresses its own instance; the container runs the Pi coding-agent harness.
    */
-  IMPL_CONTAINER?: DurableObjectNamespace<ImplementationContainer>
+  EXEC_CONTAINER?: DurableObjectNamespace<ExecutionContainer>
   /**
    * Routes the repo-operating steps (`coder`, `mocker`, `playwright`) to a real
    * sandbox container instead of a single inline LLM call ('true'). Requires the
-   * IMPL_CONTAINER binding, a configured GitHub App, a direct OpenAI-compatible
+   * EXEC_CONTAINER binding, a configured GitHub App, a direct OpenAI-compatible
    * provider key, and WORKER_PUBLIC_URL. (Container runs are long; the durable
    * Workflows driver carries them.)
    */

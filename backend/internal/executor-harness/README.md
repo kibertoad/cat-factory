@@ -1,4 +1,4 @@
-# @cat-factory/implementer-harness
+# @cat-factory/executor-harness
 
 The payload that runs **inside** a per-run Cloudflare Container (or a
 [self-hosted runner](../../docs/runner-pool-integration.md)) to perform real
@@ -87,8 +87,8 @@ runner):
 ## Build / test
 
 ```sh
-pnpm --filter @cat-factory/implementer-harness build      # tsc → dist/
-pnpm --filter @cat-factory/implementer-harness test       # unit tests
+pnpm --filter @cat-factory/executor-harness build      # tsc → dist/
+pnpm --filter @cat-factory/executor-harness test       # unit tests
 docker build -f Dockerfile .                              # the container image
 ```
 
@@ -104,11 +104,11 @@ gated on changes that affect the image (`src/**`, `Dockerfile`, `tsconfig.json`,
 `latest`:
 
 ```
-ghcr.io/<owner>/cat-factory-implementer:<version>
+ghcr.io/<owner>/cat-factory-executor:<version>
 ```
 
 A backend deployment references it from `wrangler.toml`
-(`[[containers]] image = "ghcr.io/<owner>/cat-factory-implementer:<version>"` — see
+(`[[containers]] image = "ghcr.io/<owner>/cat-factory-executor:<version>"` — see
 [`deploy/backend`](../../../deploy/backend)). The worker library's own test/dev
 `wrangler.toml` still references this `Dockerfile` by local path so the acceptance
 suite can build it. Because the version is the image tag, **bump this package via a

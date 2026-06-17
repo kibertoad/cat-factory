@@ -1,4 +1,4 @@
-// Embeddable surface of the implementer harness: the Pi-driving and git helpers
+// Embeddable surface of the executor harness: the Pi-driving and git helpers
 // the container payload uses, re-exported so other packages (e.g. the benchmark
 // harness) can run the *same* coding-agent flow outside the container — clone a
 // repo, write the agent context, point Pi at an OpenAI-compatible endpoint, run

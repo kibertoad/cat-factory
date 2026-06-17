@@ -25,6 +25,18 @@ export default defineNuxtConfig({
 
   modules: ['@nuxt/ui', '@pinia/nuxt', 'pinia-plugin-persistedstate/nuxt'],
 
+  // This is a Nuxt *layer*. @pinia/nuxt's default `storesDirs` is an ABSOLUTE path
+  // resolved against the CONSUMER's srcDir, so when this layer is `extends`ed it
+  // resolves every layer to the consumer's (empty) `stores/` and never scans this
+  // layer's own stores — every `use*Store` then fails as "not defined" at boot. A
+  // RELATIVE entry is re-resolved against each layer's app dir
+  // (`resolve(layer.app, 'stores')`), so the layer's stores auto-import in any
+  // consumer (and a consumer can still add its own `stores/`). See @pinia/nuxt
+  // module.mjs.
+  pinia: {
+    storesDirs: ['stores'],
+  },
+
   css: [
     '@vue-flow/core/dist/style.css',
     '@vue-flow/core/dist/theme-default.css',

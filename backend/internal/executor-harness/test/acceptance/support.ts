@@ -39,7 +39,7 @@ export async function freePort(): Promise<number> {
   return port
 }
 
-/** Build the implementer image. Passes the sandbox proxy CA as a build secret when present. */
+/** Build the executor image. Passes the sandbox proxy CA as a build secret when present. */
 export function buildImage(): void {
   const ca = process.env.NODE_EXTRA_CA_CERTS
   const caArgs = ca && existsSync(ca) ? ['--secret', `id=extra_ca,src=${ca}`] : []

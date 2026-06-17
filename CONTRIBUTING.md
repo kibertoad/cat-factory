@@ -14,7 +14,7 @@ visibility: published **libraries** (`backend/packages/*` + `frontend/app`),
 | `backend/packages/core`                | `@cat-factory/core`                | npm                             |
 | `backend/packages/worker`              | `@cat-factory/worker`              | npm (Worker library)            |
 | `frontend/app`                         | `@cat-factory/app`                 | npm (Nuxt layer)                |
-| `backend/internal/implementer-harness` | `@cat-factory/implementer-harness` | GHCR image (versioned, not npm) |
+| `backend/internal/executor-harness` | `@cat-factory/executor-harness` | GHCR image (versioned, not npm) |
 | `backend/internal/benchmark-harness`   | `@cat-factory/benchmark-harness`   | no (internal)                   |
 | `deploy/backend`                       | `@cat-factory/deploy-backend`      | no (example deployment)         |
 | `deploy/frontend`                      | `@cat-factory/deploy-frontend`     | no (example deployment)         |
@@ -62,17 +62,38 @@ image to GHCR.
 
 ### Runner image changes — special rule
 
-The `@cat-factory/implementer-harness` package is not published to npm, but it
+The `@cat-factory/executor-harness` package is not published to npm, but it
 **is** versioned, and that version becomes the GHCR image tag. **Always add a
-changeset bumping `@cat-factory/implementer-harness` whenever you change anything
+changeset bumping `@cat-factory/executor-harness` whenever you change anything
 that goes into the runner image:**
 
-- `backend/internal/implementer-harness/src/**`
-- `backend/internal/implementer-harness/Dockerfile`
-- `backend/internal/implementer-harness/tsconfig.json`
+- `backend/internal/executor-harness/src/**`
+- `backend/internal/executor-harness/Dockerfile`
+- `backend/internal/executor-harness/tsconfig.json`
 - the pinned `PI_VERSION` / `PI_TODO_EXTENSION_VERSION` build args
 
 This keeps the published image tag in lockstep with the source that produced it.
+
+### Publishing the runner image to Cloudflare (maintainer-only)
+
+> This step is specific to **this** repo's own Cloudflare deployment — external
+> orgs deploying the libraries do not need it, so it is documented here rather
+> than in `deploy/*/README.md`.
+
+CI publishes the runner image to **GHCR**, but Cloudflare Containers cannot pull
+from GHCR (only the Cloudflare managed registry, Docker Hub, and ECR are
+supported pull sources). So before deploying the backend, mirror the image into
+the managed registry the Worker actually pulls from:
+
+```sh
+pnpm --filter @cat-factory/deploy-backend image:publish   # build + push to registry.cloudflare.com
+pnpm --filter @cat-factory/deploy-backend deploy          # wrangler deploy
+```
+
+`image:publish` builds the harness `Dockerfile` and pushes it with
+`wrangler containers build --push`; pin the `registry.cloudflare.com/...:<tag>`
+ref it prints in `deploy/backend/wrangler.toml`. Bump the `:<tag>` in lockstep
+with `@cat-factory/executor-harness`'s version whenever the image changes.
 
 ### Changes that need no release
 

@@ -87,9 +87,16 @@ export interface Container extends Core {
 
 /**
  * Pick the agent that performs pipeline steps: real LLM work via the Vercel AI
- * SDK, optionally composed with a per-run sandbox container for the repo-operating
- * steps (`coder`, `mocker`, `playwright`) when container implementation is opted
- * in and wired. Tests bypass this entirely by overriding `agentExecutor` with a fake.
+ * SDK, composed with a per-run sandbox for the repo-operating steps (`coder`,
+ * `mocker`, `playwright`, …) when container implementation is opted in and wired.
+ * Tests bypass this entirely by overriding `agentExecutor` with a fake.
+ *
+ * There is intentionally NO inline fallback for the sandbox kinds — a one-shot
+ * LLM call cannot clone/edit/commit/open a PR, so a degraded inline implementer is
+ * silently broken rather than usefully degraded. When a sandbox is opted in but
+ * its prerequisites are missing we throw here (fail the deploy loudly); when it
+ * is not opted in at all the composite throws if a sandbox kind is ever
+ * dispatched (see {@link CompositeAgentExecutor}).
  */
 function selectAgentExecutor(
   env: Env,
@@ -103,15 +110,30 @@ function selectAgentExecutor(
     resolveBlockModel: config.agents.resolveBlockModel,
   })
 
-  // When container implementation is opted in OR a self-hosted runner pool is
-  // enabled, route the repo-operating steps (`coder`, `mocker`, `playwright`) to a
-  // real sandbox — a per-run Cloudflare Container or the workspace's own pool;
-  // every other step stays inline (see CompositeAgentExecutor).
+  // A sandbox is opted in by container implementation OR a self-hosted runner
+  // pool. When opted in it MUST build — a null here means CONTAINER_IMPL_ENABLED /
+  // RUNNERS_ENABLED is set but a prerequisite (GitHub App private key,
+  // WORKER_PUBLIC_URL, AUTH_SESSION_SECRET, or a runner backend) is missing. We
+  // refuse to start with a half-configured implementer rather than quietly running
+  // the repo-operating steps as useless one-shot LLM calls.
+  let container: AgentExecutor | null = null
   if (config.agents.containerImpl || config.runners.enabled) {
-    const container = buildContainerExecutor(env, config, db, clock)
-    if (container) return new CompositeAgentExecutor(inline, container)
+    container = buildContainerExecutor(env, config, db, clock)
+    if (!container) {
+      throw new Error(
+        'Container-based implementation is enabled (CONTAINER_IMPL_ENABLED or ' +
+          'RUNNERS_ENABLED) but its prerequisites are missing. Required: a configured ' +
+          'GitHub App (GITHUB_APP_PRIVATE_KEY), WORKER_PUBLIC_URL, AUTH_SESSION_SECRET, ' +
+          'and a runner backend (the EXEC_CONTAINER binding or a registered runner pool). ' +
+          'Refusing to start with a broken executor instead of silently degrading to ' +
+          'one-shot LLM calls.',
+      )
+    }
   }
-  return inline
+
+  // Always the composite: non-sandbox kinds run inline; sandbox kinds run in the
+  // container when wired, else throw at dispatch (never fall back to inline).
+  return new CompositeAgentExecutor(inline, container)
 }
 
 /**
@@ -126,8 +148,8 @@ function buildResolveTransport(
   db: D1Database,
   clock: Clock,
 ): ResolveRunnerTransport | null {
-  const cloudflare = env.IMPL_CONTAINER
-    ? new CloudflareContainerTransport(env.IMPL_CONTAINER)
+  const cloudflare = env.EXEC_CONTAINER
+    ? new CloudflareContainerTransport(env.EXEC_CONTAINER)
     : null
 
   // The self-hosted pool path: one stateless manifest interpreter (its OAuth cache
@@ -477,7 +499,7 @@ function selectRepoBootstrapper(
   idGenerator: IdGenerator,
 ): ContainerRepoBootstrapper | undefined {
   if (
-    !env.IMPL_CONTAINER ||
+    !env.EXEC_CONTAINER ||
     !config.github.enabled ||
     !env.GITHUB_APP_PRIVATE_KEY ||
     !env.WORKER_PUBLIC_URL ||
@@ -497,7 +519,7 @@ function selectRepoBootstrapper(
   })
 
   return new ContainerRepoBootstrapper({
-    container: env.IMPL_CONTAINER,
+    container: env.EXEC_CONTAINER,
     installationRepository,
     bootstrapJobRepository: new D1BootstrapJobRepository({ db }),
     repoRepository: new D1RepoProjectionRepository({ db }),
@@ -526,7 +548,7 @@ function selectRepoScanner(
   clock: Clock,
 ): ContainerRepoScanner | undefined {
   if (
-    !env.IMPL_CONTAINER ||
+    !env.EXEC_CONTAINER ||
     !config.github.enabled ||
     !env.GITHUB_APP_PRIVATE_KEY ||
     !env.WORKER_PUBLIC_URL ||
@@ -539,7 +561,7 @@ function selectRepoScanner(
   const registry = buildAppRegistry(env, config, db, clock)
 
   return new ContainerRepoScanner({
-    container: env.IMPL_CONTAINER,
+    container: env.EXEC_CONTAINER,
     installationRepository,
     mintInstallationToken: (id) => registry.installationToken(id),
     sessionService: new ContainerSessionService({ secret: env.AUTH_SESSION_SECRET }),

@@ -52,7 +52,7 @@ function cost(ref: ModelRef, usage: RunnerOutput['usage']): number | undefined {
 
 /**
  * Run the whole matrix. For each task × fixture × model × prompt-variant cell it
- * runs the real cat-factory agent (reused from core / the implementer harness)
+ * runs the real cat-factory agent (reused from core / the executor harness)
  * and records the candidate output with its exact model and prompt version. The
  * outputs are graded later by the Claude arbiter skill.
  */

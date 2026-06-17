@@ -8,8 +8,8 @@
 
 The repo-operating coding steps (`coder`, `mocker`, `playwright`) run the Pi
 coding agent in a real sandbox: by default a **per-run Cloudflare Container**
-(`ImplementationContainer`, a Durable-Object-backed container). The Worker
-addresses one instance per execution and speaks the `implementer-harness` HTTP
+(`ExecutionContainer`, a Durable-Object-backed container). The Worker
+addresses one instance per execution and speaks the `executor-harness` HTTP
 job protocol to it — `POST /run` to dispatch, `GET /jobs/{id}` to poll
 (`ContainerAgentExecutor`).
 
@@ -117,7 +117,7 @@ length-capped and header-free.
   its own envelope. The passthrough case is still trivial to express as a manifest.
 - **Publishing the harness image + reference k8s manifests.** Useful, but out of
   scope for this change: orgs build the existing
-  `implementer-harness/Dockerfile` and stand up their own pool. Documented in
+  `executor-harness/Dockerfile` and stand up their own pool. Documented in
   `docs/runner-pool-integration.md`; a published image is a sensible follow-up.
 
 ## Consequences
@@ -128,7 +128,7 @@ length-capped and header-free.
 - **Scope (v1):** only the async coding jobs (`/run` + poll) route to a pool. The
   synchronous repo **bootstrap** and **scan** flows still use Cloudflare Containers
   (`ContainerRepoBootstrapper` / `ContainerRepoScanner` are unchanged); a pure-BYO
-  deployment with no `IMPL_CONTAINER` binding therefore cannot bootstrap/scan yet.
+  deployment with no `EXEC_CONTAINER` binding therefore cannot bootstrap/scan yet.
   Extending the manifest with optional bootstrap/scan templates is a follow-up.
 - A self-hosted pool must be reachable from the Worker (public or via a tunnel),
   and the runner must reach back out to the Worker's LLM proxy and to GitHub. The

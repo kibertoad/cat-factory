@@ -247,7 +247,7 @@ export async function openPullRequest(opts: {
     headers: {
       authorization: `Bearer ${opts.ghToken}`,
       accept: 'application/vnd.github+json',
-      'user-agent': 'cat-factory-implementer',
+      'user-agent': 'cat-factory-executor',
       'x-github-api-version': '2022-11-28',
       'content-type': 'application/json',
     },

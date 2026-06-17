@@ -1,6 +1,6 @@
 import type { RunnerDispatchKind, RunnerJobView, RunnerTransport } from '@cat-factory/kernel'
 import type { DurableObjectNamespace } from '@cloudflare/workers-types'
-import type { ImplementationContainer } from './ImplementationContainer'
+import type { ExecutionContainer } from './ExecutionContainer'
 
 // The default runner transport: a per-run Cloudflare Container. Each job is one
 // Durable Object instance keyed by the job id (the execution id); the base
@@ -17,7 +17,7 @@ const DISPATCH_TIMEOUT_MS = 30_000
 const POLL_TIMEOUT_MS = 30_000
 
 export class CloudflareContainerTransport implements RunnerTransport {
-  constructor(private readonly namespace: DurableObjectNamespace<ImplementationContainer>) {}
+  constructor(private readonly namespace: DurableObjectNamespace<ExecutionContainer>) {}
 
   async dispatch(
     jobId: string,

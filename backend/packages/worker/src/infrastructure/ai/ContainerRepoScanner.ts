@@ -7,7 +7,7 @@ import {
 } from '@cat-factory/kernel'
 import { boardScanLogic } from '@cat-factory/orchestration'
 import type { DurableObjectNamespace } from '@cloudflare/workers-types'
-import type { ImplementationContainer } from '../containers/ImplementationContainer'
+import type { ExecutionContainer } from '../containers/ExecutionContainer'
 import type { ContainerSessionService } from '../containers/ContainerSessionService'
 
 // Unlike `/run`, scan/bootstrap stay synchronous request/response. This caps how
@@ -17,7 +17,7 @@ const CONTAINER_SYNC_TIMEOUT_MS = 30 * 60_000
 
 export interface ContainerRepoScannerDependencies {
   /** The Durable Object namespace backing the per-run container instances. */
-  container: DurableObjectNamespace<ImplementationContainer>
+  container: DurableObjectNamespace<ExecutionContainer>
   /** Resolve which GitHub installation a workspace's repos live under. */
   installationRepository: GitHubInstallationRepository
   /** Mints a short-lived GitHub installation token for the read-only clone. */

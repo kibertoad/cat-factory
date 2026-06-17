@@ -65,18 +65,26 @@ binding = "BOOTSTRAP_WORKFLOW"
 name = "cat-factory-bootstrap"
 class_name = "BootstrapWorkflow"
 
-# Per-run code-implementation containers (the @cat-factory/implementer-harness
+# Per-run code-implementation containers (the @cat-factory/executor-harness
 # Pi coding-agent image). Each run addresses its own instance. Only used when
 # CONTAINER_IMPL_ENABLED = "true"; the image carries no secrets (the per-job
 # GitHub + LLM-proxy tokens are passed at dispatch time).
 #
-# The image is published to GHCR by the docker-publish workflow. Pin a specific
-# version tag in production rather than `latest` so deploys are reproducible:
-#   image = "ghcr.io/kibertoad/cat-factory-implementer:0.1.0"
-# Forks publish under their own owner — point this at your registry/owner.
+# The runner image must live in a registry Cloudflare Containers can PULL from:
+# the Cloudflare managed registry (registry.cloudflare.com), Docker Hub, or ECR.
+# GHCR is NOT a supported pull source (a `ghcr.io/...` ref here fails the deploy
+# with IMAGE_REGISTRY_NOT_CONFIGURED), even for a public package — so we publish
+# the image into the managed registry and reference it here. The CI-built GHCR
+# image (`ghcr.io/<owner>/cat-factory-executor`) is the canonical published
+# artifact (forks/reproducibility); it is mirrored here, not pulled directly.
+#
+# Publish/refresh the managed-registry image before deploying:
+#   pnpm image:publish          # = wrangler containers build ... --push
+# It prints the exact registry.cloudflare.com/<account_id>/<image>:<tag> ref;
+# pin that tag here (the account id below is THIS deployment's — change it).
 [[containers]]
-class_name = "ImplementationContainer"
-image = "ghcr.io/kibertoad/cat-factory-implementer:latest"
+class_name = "ExecutionContainer"
+image = "registry.cloudflare.com/fe0047c6e869c8cb875ca425a9c341af/cat-factory-executor:1.0.0"
 max_instances = 10
 # Coding/bootstrap runs legitimately install dependencies and run build/test/e2e
 # suites inside the box. The default `dev` tier (~256 MiB / ~1/16 vCPU) thrashes
@@ -85,8 +93,8 @@ max_instances = 10
 instance_type = "standard-1"
 
 [[durable_objects.bindings]]
-name = "IMPL_CONTAINER"
-class_name = "ImplementationContainer"
+name = "EXEC_CONTAINER"
+class_name = "ExecutionContainer"
 
 # Per-workspace WebSocket fan-out hub (WorkspaceEventsHub). One instance per
 # workspace, addressed by idFromName(workspaceId); it holds subscribers' sockets
@@ -102,6 +110,10 @@ new_sqlite_classes = ["ImplementationContainer"]
 [[migrations]]
 tag = "v2"
 new_sqlite_classes = ["WorkspaceEventsHub"]
+
+[[migrations]]
+tag = "v3"
+renamed_classes = [{ from = "ImplementationContainer", to = "ExecutionContainer" }]
 
 # GitHub sync queue: the webhook endpoint verifies + acks fast, enqueuing each
 # delivery here for async projection. The consumer also handles targeted repo

@@ -13,7 +13,7 @@ import type {
   StepSubtasks,
 } from '@cat-factory/kernel'
 import type { DurableObjectNamespace } from '@cloudflare/workers-types'
-import type { ImplementationContainer } from '../containers/ImplementationContainer'
+import type { ExecutionContainer } from '../containers/ExecutionContainer'
 import type { ContainerSessionService } from '../containers/ContainerSessionService'
 import { logger } from '../observability/logger'
 
@@ -25,7 +25,7 @@ const POLL_TIMEOUT_MS = 30_000
 
 export interface ContainerRepoBootstrapperDependencies {
   /** The Durable Object namespace backing the per-run container instances. */
-  container: DurableObjectNamespace<ImplementationContainer>
+  container: DurableObjectNamespace<ExecutionContainer>
   /** Resolve which GitHub installation a workspace's repos live under. */
   installationRepository: GitHubInstallationRepository
   /** Look up a job's target repo name when polling (the poll only carries a job id). */

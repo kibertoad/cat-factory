@@ -8,7 +8,7 @@ cat-factory will dispatch its coding jobs there instead.
 
 You provide two things:
 
-1. **Runners** that run the standard cat-factory implementer-harness image and
+1. **Runners** that run the standard cat-factory executor-harness image and
    speak its job protocol.
 2. A small **pool scheduler API** in front of those runners, described to
    cat-factory as a declarative **manifest** (no cat-factory code change).
@@ -17,7 +17,7 @@ See ADR 0004 for the design rationale. This guide is the operator playbook.
 
 > **Scope (v1).** Only the asynchronous coding jobs route to a self-hosted pool.
 > Repo **bootstrap** and **scan** still use Cloudflare Containers, so keep the
-> `IMPL_CONTAINER` binding enabled if you use those features.
+> `EXEC_CONTAINER` binding enabled if you use those features.
 
 ---
 
@@ -28,8 +28,8 @@ image:
 
 ```bash
 docker build -t my-org/cat-factory-runner \
-  -f backend/internal/implementer-harness/Dockerfile \
-  backend/internal/implementer-harness
+  -f backend/internal/executor-harness/Dockerfile \
+  backend/internal/executor-harness
 ```
 
 The image **carries no secrets**. It bundles git + the pinned Pi coding-agent CLI

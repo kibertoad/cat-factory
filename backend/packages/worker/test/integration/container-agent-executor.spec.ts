@@ -9,7 +9,7 @@ import {
 } from '../../src/infrastructure/ai/ContainerAgentExecutor'
 import { CloudflareContainerTransport } from '../../src/infrastructure/containers/CloudflareContainerTransport'
 import { ContainerSessionService } from '../../src/infrastructure/containers/ContainerSessionService'
-import type { ImplementationContainer } from '../../src/infrastructure/containers/ImplementationContainer'
+import type { ExecutionContainer } from '../../src/infrastructure/containers/ExecutionContainer'
 
 // ContainerAgentExecutor must compose the block's fragments into Pi's context,
 // lock the model, dispatch a well-formed job to the per-run container, and report
@@ -21,7 +21,7 @@ interface Dispatched {
 }
 
 /** Wrap a fake Durable Object namespace as the executor's transport resolver. */
-function resolveTo(ns: DurableObjectNamespace<ImplementationContainer>): ResolveRunnerTransport {
+function resolveTo(ns: DurableObjectNamespace<ExecutionContainer>): ResolveRunnerTransport {
   const transport = new CloudflareContainerTransport(ns)
   return () => Promise.resolve(transport)
 }
@@ -47,7 +47,7 @@ function fakeContainer(
   return resolveTo({
     idFromName: (name: string) => ({ name }),
     get: () => stub,
-  } as unknown as DurableObjectNamespace<ImplementationContainer>)
+  } as unknown as DurableObjectNamespace<ExecutionContainer>)
 }
 
 const routing = (provider: string, model: string): AgentRouting => ({
@@ -140,7 +140,7 @@ describe('ContainerAgentExecutor', () => {
             ),
           ),
       }),
-    } as unknown as DurableObjectNamespace<ImplementationContainer>
+    } as unknown as DurableObjectNamespace<ExecutionContainer>
 
     const executor = new ContainerAgentExecutor({
       resolveTransport: resolveTo(runningWithProgress),

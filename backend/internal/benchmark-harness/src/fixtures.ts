@@ -1,6 +1,6 @@
 import type { AgentRunContext, BlockType } from '@cat-factory/kernel'
 import { requirementsLogic } from '@cat-factory/orchestration'
-import type { RepoSpec } from '@cat-factory/implementer-harness/embed'
+import type { RepoSpec } from '@cat-factory/executor-harness/embed'
 
 // Task fixtures: the inputs each benchmarked agent reasons over. Hand-authored
 // and committed with the package so runs are reproducible; add more cases by
