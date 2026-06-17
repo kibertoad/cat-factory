@@ -35,7 +35,12 @@ version against the old one and commit the run here so the impact is on record.
 
 ## Running
 
-See `backend/packages/benchmark-harness/README.md` for full usage. In short:
+Easiest: ask Claude to run the **`/benchmark`** skill (e.g. "benchmark Llama vs
+Claude on code review"). It configures the matrix, runs the harness, invokes the
+grading-only **`benchmark-arbiter`** skill, merges the report, and offers to
+commit the run here.
+
+Manual equivalent (see `backend/packages/benchmark-harness/README.md` for detail):
 
 ```bash
 cat-bench run --config bench.config.ts --name my-run     # → docs/benchmarks/my-run/
@@ -43,3 +48,8 @@ cat-bench run --config bench.config.ts --name my-run     # → docs/benchmarks/m
 cat-bench grade --out docs/benchmarks/my-run             # → report.md
 git add docs/benchmarks/my-run && git commit             # commit the run
 ```
+
+The two Claude skills are deliberately separate: **`benchmark`** orchestrates
+(run → grade → merge), while **`benchmark-arbiter`** only grades — so grading
+stays impartial and you can re-grade without re-running, or re-run without
+re-grading.

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
+import { existsSync } from 'node:fs'
 import { mkdir } from 'node:fs/promises'
-import { isAbsolute, join, resolve } from 'node:path'
+import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { writeRunArtifacts } from './artifacts'
 import { type BenchmarkConfig, loadConfig } from './config'
 import { buildReport } from './report'
@@ -42,10 +43,25 @@ function slugTimestamp(): string {
   return new Date().toISOString().replace(/[:.]/g, '-').replace('T', '_').slice(0, 19)
 }
 
+/**
+ * Walk up from `start` to the git repo root so a default, relative `outDir`
+ * (docs/benchmarks) always lands at the repo root — pnpm runs the script with
+ * cwd set to the package directory, so `process.cwd()` is not the repo root.
+ */
+function repoRoot(start: string = process.cwd()): string {
+  let dir = start
+  while (true) {
+    if (existsSync(join(dir, '.git'))) return dir
+    const parent = dirname(dir)
+    if (parent === dir) return start
+    dir = parent
+  }
+}
+
 function resolveRunDir(config: BenchmarkConfig, runId: string, out?: string): string {
   if (out) return isAbsolute(out) ? out : resolve(process.cwd(), out)
   const base = config.outDir ?? 'docs/benchmarks'
-  return resolve(process.cwd(), join(base, runId))
+  return isAbsolute(base) ? join(base, runId) : resolve(repoRoot(), base, runId)
 }
 
 async function cmdRun(flags: Flags): Promise<void> {
