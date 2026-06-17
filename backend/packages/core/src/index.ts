@@ -1,19 +1,11 @@
 // Public surface of the framework-agnostic core.
+// Each concern now lives in its own package; @cat-factory/core re-exports everything
+// for backward compatibility — no consumer import paths need to change.
 
-// Re-export kernel (backward compat: consumers of @cat-factory/core still get these)
+// Kernel: shared vocabulary, pure logic, port interfaces
 export * from '@cat-factory/kernel'
 
-export { BoardService, type BoardServiceDependencies } from './modules/board/BoardService'
-export * as boardLogic from './modules/board/board.logic'
-export {
-  PipelineService,
-  type PipelineServiceDependencies,
-} from './modules/pipelines/PipelineService'
-export {
-  ExecutionService,
-  type ExecutionServiceDependencies,
-} from './modules/execution/ExecutionService'
-export type { AdvanceOptions, AdvanceResult } from './modules/execution/advance'
+// Tenancy base: workspaces and accounts
 export {
   WorkspaceService,
   type WorkspaceServiceDependencies,
@@ -22,6 +14,7 @@ export {
   type AccountUser,
 } from '@cat-factory/workspaces'
 
+// Spend metering and pricing
 export {
   SpendService,
   type SpendServiceDependencies,
@@ -36,7 +29,7 @@ export {
   startOfMonthUtc,
 } from '@cat-factory/spend'
 
-// Re-export agents package (backward compat: consumers of @cat-factory/core still get these)
+// Agent catalog, routing, prompts, and fragment library
 export {
   AiAgentExecutor,
   type AiAgentExecutorDependencies,
@@ -76,29 +69,6 @@ export {
   isBusinessLogicKind,
   businessLogicSystemPrompt,
   CI_RETRY_SANITY_CHECK,
-} from '@cat-factory/agents'
-
-export {
-  type Core,
-  type CoreDependencies,
-  type GitHubModule,
-  type DocumentsModule,
-  type TasksModule,
-  type EnvironmentsModule,
-  type RunnersModule,
-  type BootstrapModule,
-  type BoardScanModule,
-  type RequirementsModule,
-  type FragmentLibraryModule,
-  createCore,
-} from './container'
-export {
-  RequirementReviewService,
-  type RequirementReviewServiceDependencies,
-} from './modules/requirements/RequirementReviewService'
-export * as requirementsLogic from './modules/requirements/requirements.logic'
-
-export {
   FragmentLibraryService,
   type FragmentLibraryServiceDependencies,
   FragmentSourceService,
@@ -113,7 +83,7 @@ export {
   fragmentSourceLogic,
 } from '@cat-factory/agents'
 
-// Re-export integrations package (backward compat: consumers of @cat-factory/core still get these)
+// External-system integrations (GitHub, documents, tasks, environments, runners)
 export {
   GitHubInstallationService,
   type GitHubInstallationServiceDependencies,
@@ -176,14 +146,36 @@ export {
   runnersLogic,
 } from '@cat-factory/integrations'
 
+// Delivery-workflow engine + composition root
 export {
+  BoardService,
+  type BoardServiceDependencies,
+  boardLogic,
+  PipelineService,
+  type PipelineServiceDependencies,
+  ExecutionService,
+  type ExecutionServiceDependencies,
+  type AdvanceOptions,
+  type AdvanceResult,
   BootstrapService,
   type BootstrapServiceDependencies,
   type BootstrapPollResult,
-} from './modules/bootstrap/BootstrapService'
-
-export {
   BoardScanService,
   type BoardScanServiceDependencies,
-} from './modules/boardScan/BoardScanService'
-export * as boardScanLogic from './modules/boardScan/board-scan.logic'
+  boardScanLogic,
+  RequirementReviewService,
+  type RequirementReviewServiceDependencies,
+  requirementsLogic,
+  type Core,
+  type CoreDependencies,
+  type GitHubModule,
+  type DocumentsModule,
+  type TasksModule,
+  type EnvironmentsModule,
+  type RunnersModule,
+  type BootstrapModule,
+  type BoardScanModule,
+  type RequirementsModule,
+  type FragmentLibraryModule,
+  createCore,
+} from '@cat-factory/orchestration'

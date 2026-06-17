@@ -1,7 +1,7 @@
 {
-  "name": "@cat-factory/core",
+  "name": "@cat-factory/orchestration",
   "version": "1.0.0",
-  "description": "Framework-agnostic domain logic for the Agent Architecture Board.",
+  "description": "Delivery-workflow engine for the Agent Architecture Board (execution, bootstrap, pipelines, board, boardScan, requirements, and composition root).",
   "files": [
     "dist"
   ],
@@ -27,12 +27,11 @@
     "@cat-factory/contracts": "workspace:*",
     "@cat-factory/integrations": "workspace:*",
     "@cat-factory/kernel": "workspace:*",
-    "@cat-factory/orchestration": "workspace:*",
     "@cat-factory/spend": "workspace:*",
-    "@cat-factory/workspaces": "workspace:*"
+    "@cat-factory/workspaces": "workspace:*",
+    "ai": "^6.0.0"
   },
   "devDependencies": {
-    "typescript": "^5.6.0",
-    "vitest": "^4.1.8"
+    "typescript": "^5.6.0"
   }
 }

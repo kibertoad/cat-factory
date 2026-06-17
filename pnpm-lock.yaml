@@ -128,21 +128,15 @@ importers:
       '@cat-factory/kernel':
         specifier: workspace:*
         version: link:../kernel
-      '@cat-factory/prompt-fragments':
+      '@cat-factory/orchestration':
         specifier: workspace:*
-        version: link:../prompt-fragments
+        version: link:../orchestration
       '@cat-factory/spend':
         specifier: workspace:*
         version: link:../spend
       '@cat-factory/workspaces':
         specifier: workspace:*
         version: link:../workspaces
-      ai:
-        specifier: ^6.0.0
-        version: 6.0.206(zod@3.25.76)
-      handlebars:
-        specifier: ^4.7.8
-        version: 4.7.9
     devDependencies:
       typescript:
         specifier: ^5.6.0
@@ -175,6 +169,34 @@ importers:
       '@cat-factory/contracts':
         specifier: workspace:*
         version: link:../contracts
+      ai:
+        specifier: ^6.0.0
+        version: 6.0.206(zod@3.25.76)
+    devDependencies:
+      typescript:
+        specifier: ^5.6.0
+        version: 5.9.3
+
+  backend/packages/orchestration:
+    dependencies:
+      '@cat-factory/agents':
+        specifier: workspace:*
+        version: link:../agents
+      '@cat-factory/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@cat-factory/integrations':
+        specifier: workspace:*
+        version: link:../integrations
+      '@cat-factory/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+      '@cat-factory/spend':
+        specifier: workspace:*
+        version: link:../spend
+      '@cat-factory/workspaces':
+        specifier: workspace:*
+        version: link:../workspaces
       ai:
         specifier: ^6.0.0
         version: 6.0.206(zod@3.25.76)
