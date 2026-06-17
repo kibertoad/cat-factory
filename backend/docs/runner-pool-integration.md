@@ -28,8 +28,8 @@ image:
 
 ```bash
 docker build -t my-org/cat-factory-runner \
-  -f backend/packages/implementer-harness/Dockerfile \
-  backend/packages/implementer-harness
+  -f backend/internal/implementer-harness/Dockerfile \
+  backend/internal/implementer-harness
 ```
 
 The image **carries no secrets**. It bundles git + the pinned Pi coding-agent CLI

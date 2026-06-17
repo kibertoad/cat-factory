@@ -14,10 +14,10 @@ on:
   push:
     branches: [main]
     paths:
-      - 'backend/packages/implementer-harness/src/**'
-      - 'backend/packages/implementer-harness/Dockerfile'
-      - 'backend/packages/implementer-harness/tsconfig.json'
-      - 'backend/packages/implementer-harness/package.json'
+      - 'backend/internal/implementer-harness/src/**'
+      - 'backend/internal/implementer-harness/Dockerfile'
+      - 'backend/internal/implementer-harness/tsconfig.json'
+      - 'backend/internal/implementer-harness/package.json'
       - '.github/workflows/docker-publish.yml'
   workflow_dispatch:
 
@@ -29,7 +29,7 @@ permissions: {}
 
 env:
   IMAGE: ghcr.io/${{ github.repository_owner }}/cat-factory-implementer
-  CONTEXT: backend/packages/implementer-harness
+  CONTEXT: backend/internal/implementer-harness
 
 jobs:
   publish:

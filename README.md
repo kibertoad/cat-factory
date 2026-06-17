@@ -104,8 +104,13 @@ deploy both halves on their end.
 | [`backend/packages/core`](./backend/packages/core)                               | `@cat-factory/core`                | Framework-agnostic domain: module services, pure logic, repository **ports**.                                                                                                                                 |
 | [`backend/packages/worker`](./backend/packages/worker)                           | `@cat-factory/worker`              | Reusable Cloudflare Worker **library**: Hono controllers, D1 repos, Durable Objects, Workflows, the DI composition root. Exposes `createApp()` + the handler/DO/Workflow exports; ships the D1 `migrations/`. |
 | [`backend/packages/prompt-fragments`](./backend/packages/prompt-fragments)       | `@cat-factory/prompt-fragments`    | The built-in tier of best-practice prompt fragments. See [its README](./backend/packages/prompt-fragments/README.md).                                                                                         |
-| [`backend/packages/implementer-harness`](./backend/packages/implementer-harness) | `@cat-factory/implementer-harness` | The payload that runs **inside** each per-run container (the Pi coding-agent harness). Published as a **Docker image to GHCR** (not npm). See [its README](./backend/packages/implementer-harness/README.md). |
-| [`backend/packages/benchmark-harness`](./backend/packages/benchmark-harness)     | `@cat-factory/benchmark-harness`   | Headless agent benchmarking (`cat-bench`); internal. See [its README](./backend/packages/benchmark-harness/README.md).                                                                                        |
+
+**Internal** (private; not published to npm):
+
+| Path                                                                             | Package                            | Role                                                                                                                                                                                                          |
+| -------------------------------------------------------------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`backend/internal/implementer-harness`](./backend/internal/implementer-harness) | `@cat-factory/implementer-harness` | The payload that runs **inside** each per-run container (the Pi coding-agent harness). Published as a **Docker image to GHCR** (not npm). See [its README](./backend/internal/implementer-harness/README.md). |
+| [`backend/internal/benchmark-harness`](./backend/internal/benchmark-harness)     | `@cat-factory/benchmark-harness`   | Headless agent benchmarking (`cat-bench`); internal. See [its README](./backend/internal/benchmark-harness/README.md).                                                                                        |
 
 **Deployments** (examples; copy these to deploy on your own infra):
 
@@ -160,7 +165,7 @@ Each capability has a deeper write-up; start here and follow the link.
 - **Container reaping** — how per-run containers get reclaimed, and the current
   gaps. [`docs/container-reaping.md`](./backend/docs/container-reaping.md).
 - **Benchmarking** — score agents across models and prompt versions.
-  [`benchmark-harness` README](./backend/packages/benchmark-harness/README.md).
+  [`benchmark-harness` README](./backend/internal/benchmark-harness/README.md).
 
 ## Documentation index
 
@@ -216,7 +221,7 @@ account (`wrangler whoami` must show `fe0047c6e869c8cb875ca425a9c341af`).
 **Deploy the backend first** so any schema the new frontend expects is already
 live, then the frontend. Migrations run **before** the Worker deploy. The runner
 container image is published independently to GHCR (see
-[`backend/packages/implementer-harness`](./backend/packages/implementer-harness/README.md)
+[`backend/internal/implementer-harness`](./backend/internal/implementer-harness/README.md)
 and `.github/workflows/docker-publish.yml`); the backend `wrangler.toml`
 references it by tag.
 

@@ -2,8 +2,10 @@
 
 ## Repository shape
 
-This is a single pnpm workspace (one lockfile) split into reusable **libraries**
-and example **deployments**:
+This is a single pnpm workspace (one lockfile), with packages sorted by
+visibility: published **libraries** (`backend/packages/*` + `frontend/app`),
+**private** packages (`backend/internal/*`), and example **deployments**
+(`deploy/*`):
 
 | Path                                   | Package                            | Published?                      |
 | -------------------------------------- | ---------------------------------- | ------------------------------- |
@@ -11,9 +13,9 @@ and example **deployments**:
 | `backend/packages/prompt-fragments`    | `@cat-factory/prompt-fragments`    | npm                             |
 | `backend/packages/core`                | `@cat-factory/core`                | npm                             |
 | `backend/packages/worker`              | `@cat-factory/worker`              | npm (Worker library)            |
-| `backend/packages/implementer-harness` | `@cat-factory/implementer-harness` | GHCR image (versioned, not npm) |
-| `backend/packages/benchmark-harness`   | `@cat-factory/benchmark-harness`   | no (internal)                   |
 | `frontend/app`                         | `@cat-factory/app`                 | npm (Nuxt layer)                |
+| `backend/internal/implementer-harness` | `@cat-factory/implementer-harness` | GHCR image (versioned, not npm) |
+| `backend/internal/benchmark-harness`   | `@cat-factory/benchmark-harness`   | no (internal)                   |
 | `deploy/backend`                       | `@cat-factory/deploy-backend`      | no (example deployment)         |
 | `deploy/frontend`                      | `@cat-factory/deploy-frontend`     | no (example deployment)         |
 
@@ -65,9 +67,9 @@ The `@cat-factory/implementer-harness` package is not published to npm, but it
 changeset bumping `@cat-factory/implementer-harness` whenever you change anything
 that goes into the runner image:**
 
-- `backend/packages/implementer-harness/src/**`
-- `backend/packages/implementer-harness/Dockerfile`
-- `backend/packages/implementer-harness/tsconfig.json`
+- `backend/internal/implementer-harness/src/**`
+- `backend/internal/implementer-harness/Dockerfile`
+- `backend/internal/implementer-harness/tsconfig.json`
 - the pinned `PI_VERSION` / `PI_TODO_EXTENSION_VERSION` build args
 
 This keeps the published image tag in lockstep with the source that produced it.

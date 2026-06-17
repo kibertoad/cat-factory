@@ -7,10 +7,12 @@ many files and are otherwise slow to re-derive.
 
 ## Layout
 
-One pnpm workspace (single root lockfile). Reusable **libraries** (published to
-npm) are separated from example **deployments** (which carry the `wrangler.toml`s
-and config and depend on the libraries). See [`CONTRIBUTING.md`](./CONTRIBUTING.md)
-for the package/publish table.
+One pnpm workspace (single root lockfile). Packages are sorted by visibility:
+**published libraries** live in `backend/packages/*` + `frontend/app`, **private
+packages** (the harnesses) in `backend/internal/*`, and the example
+**deployments** (which carry the `wrangler.toml`s and config and depend on the
+libraries) in `deploy/*`. See [`CONTRIBUTING.md`](./CONTRIBUTING.md) for the
+package/publish table.
 
 - `frontend/app` — `@cat-factory/app`, the reusable **Nuxt layer** (`ssr: false`):
   the SPA source under `app/` (stores in `app/stores`, composables in
@@ -27,9 +29,11 @@ for the package/publish table.
   `createApp()`, the default fetch/scheduled/queue handler, and the DO/Workflow
   classes. Ships its D1 `migrations/`. Carries **no** production config; its own
   `wrangler.toml` is a stripped test/dev config (the vitest workers pool reads it).
-- `backend/packages/implementer-harness` — the payload that runs **inside** each
-  per-run Cloudflare Container (the Pi coding-agent harness). Versioned but not on
-  npm; its Docker image is published to **GHCR** by `docker-publish.yml`.
+- `backend/internal/implementer-harness` — the payload that runs **inside** each
+  per-run Cloudflare Container (the Pi coding-agent harness). Private (not on npm);
+  its Docker image is published to **GHCR** by `docker-publish.yml`.
+- `backend/internal/benchmark-harness` — headless agent benchmarking (`cat-bench`);
+  private, not published.
 - `deploy/backend` — example Worker deployment: a one-line `src/index.ts`
   re-exporting `@cat-factory/worker` + the full production `wrangler.toml`
   (`[vars]`, the GHCR runner `image`, `migrations_dir` →

@@ -12,10 +12,10 @@ export default defineConfig({
       // source (LlmProxyController, ContainerSessionService) rather than its
       // published API. `@cat-factory/worker`'s exports map intentionally only
       // surfaces `.`/`./app`, so map the deep `/src/*` imports straight to the
-      // sibling worker source for this test run.
+      // worker source (in backend/packages) for this test run.
       {
         find: /^@cat-factory\/worker\/src\/(.*)$/,
-        replacement: `${fileURLToPath(new URL('../worker/src/', import.meta.url))}$1`,
+        replacement: `${fileURLToPath(new URL('../../packages/worker/src/', import.meta.url))}$1`,
       },
     ],
   },

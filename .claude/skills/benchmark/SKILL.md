@@ -22,7 +22,7 @@ Figure out, from the user's request, the matrix to run:
   `backend/packages/core/src/modules/agents/prompt-versions.ts`.
 
 If a config file already exists (e.g. `bench.config.ts`), use it. Otherwise copy
-`backend/packages/benchmark-harness/bench.config.example.ts` to a new
+`backend/internal/benchmark-harness/bench.config.example.ts` to a new
 `bench.config.ts` and edit `models`, `tasks` and `prompts` to match the request.
 Confirm any non-obvious choice (which models, which prompt variants) with the
 user before running — runs cost tokens, and the implementation task is slow.

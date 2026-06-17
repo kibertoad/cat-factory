@@ -40,7 +40,7 @@ jobs:
           # and this workflow.
           filters: |
             backend:
-              - 'backend/packages/implementer-harness/**'
+              - 'backend/internal/implementer-harness/**'
               - 'backend/packages/core/**'
               - 'backend/packages/worker/**'
               - 'backend/tsconfig*.json'
