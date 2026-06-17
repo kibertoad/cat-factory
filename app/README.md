@@ -1,16 +1,16 @@
 # cat-factory — Frontend (Nuxt SPA)
 
-The user-facing app: a **Nuxt 4 single-page app** (`ssr: false`) that renders the
-architecture board, drives agent pipelines, and reflects live execution. It talks
-to the [backend Worker](../backend/README.md) over REST and a single WebSocket,
-sharing wire types from [`@cat-factory/contracts`](../backend/packages/contracts).
+The user-facing app: a **Nuxt 4 single-page app** that runs entirely in the
+browser and renders the architecture board, drives agent pipelines, and reflects
+live execution. It talks to the [backend Worker](../backend/README.md) over REST
+and a single WebSocket, sharing wire types from
+[`@cat-factory/contracts`](../backend/packages/contracts).
 
 ## Table of contents
 
 - [What it is](#what-it-is)
 - [Tech stack](#tech-stack)
 - [Layout](#layout)
-- [State & data flow](#state--data-flow)
 - [Key UI surfaces](#key-ui-surfaces)
 - [Develop & test](#develop--test)
 
@@ -23,13 +23,13 @@ Execution streams back in real time — step/subtask progress bars, decision
 prompts, failures with retry — so the canvas doubles as a live dashboard.
 
 It is a thin client: there is **no business logic here**. Every mutation calls the
-Worker API and the stores hydrate from server snapshots + pushed events. The SPA
-is static (`nuxt generate`) and the backend URL is baked in at build time via
-`NUXT_PUBLIC_API_BASE`.
+Worker API and the stores hydrate from server snapshots and live updates pushed
+over the WebSocket. How that sync works is written up in
+[`docs/architecture.md`](./docs/architecture.md).
 
 ## Tech stack
 
-- **Nuxt 4 / Vue 3** (`ssr: false`) — single route (`pages/index.vue`).
+- **Nuxt 4 / Vue 3** SPA — single route (`pages/index.vue`).
 - **Pinia** (+ `pinia-plugin-persistedstate`) — feature stores.
 - **Vue Flow** (`core`, `background`, `controls`, `minimap`, `node-resizer`) — the canvas.
 - **Nuxt UI** + Tailwind — components and styling.
@@ -47,29 +47,6 @@ is static (`nuxt generate`) and the backend URL is baked in at build time via
 | `stores/` | Pinia stores, one per feature domain. |
 | `types/` | TypeScript domain unions (`domain.ts`) and wire types mirroring the contracts. |
 | `utils/` | Small pure helpers. |
-
-## State & data flow
-
-```
-REST (useApi)  ─────────────▶  Worker  ─────────────▶  D1
-   ▲                                                    │
-   │ mutations                                          │ persisted transition
-stores (Pinia)  ◀── patch ──  useWorkspaceStream  ◀── WebSocket push (events hub)
-```
-
-- **Read path:** `workspace` store loads the full snapshot and fans it into
-  `board`, `pipelines`, `execution`, `spend`, etc.
-- **Write path:** components call `useApi` → Worker; the response (or a pushed
-  event) patches the relevant store. No optimistic business logic.
-- **Live path:** `useWorkspaceStream` opens one WebSocket to
-  `GET /workspaces/:ws/events?token=…`, patches `execution` / `agentRuns` /
-  `board` as events arrive, and refreshes on reconnect to reconcile anything
-  missed.
-
-Notable stores: `workspace`, `accounts`, `auth`, `board`, `ui`, `pipelines`,
-`agents`, `execution`, `agentRuns`, `models`, `github`, `bootstrap`, `documents`,
-`tasks`, `requirements`, `scenarios`, `fragments` (built-in catalog),
-`fragmentLibrary` (tenant tiers + sources), `spend`.
 
 ## Key UI surfaces
 
