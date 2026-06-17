@@ -196,9 +196,7 @@ export class BoardScanService {
     service: BlueprintService,
   ): Promise<BoardScanSpawnResult> {
     const blocks = await this.deps.blockRepository.listByWorkspace(workspaceId)
-    const frame = frameId
-      ? blocks.find((b) => b.id === frameId && b.level === 'frame')
-      : undefined
+    const frame = frameId ? blocks.find((b) => b.id === frameId && b.level === 'frame') : undefined
     if (!frame) return this.spawnBlueprint(workspaceId, service)
 
     // Refresh the frame's description (its summary/entrypoints) but keep the title,
@@ -229,9 +227,7 @@ export class BoardScanService {
         })
       }
 
-      const taskBlocks = blocks.filter(
-        (b) => b.parentId === moduleBlock!.id && b.level === 'task',
-      )
+      const taskBlocks = blocks.filter((b) => b.parentId === moduleBlock!.id && b.level === 'task')
       for (const feature of planModule.features ?? []) {
         let task = taskBlocks.find((b) => sameName(b.title, feature.title))
         if (!task) {

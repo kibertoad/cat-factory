@@ -222,7 +222,11 @@ export function parseTodoProgress(event: Record<string, unknown>): TodoProgress 
       items.push({
         label: taskLabel(task),
         status:
-          status === 'completed' ? 'completed' : status === 'in_progress' ? 'in_progress' : 'pending',
+          status === 'completed'
+            ? 'completed'
+            : status === 'in_progress'
+              ? 'in_progress'
+              : 'pending',
       })
     }
     return { completed, inProgress, total, items }

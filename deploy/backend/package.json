@@ -1,0 +1,24 @@
+{
+  "name": "@cat-factory/deploy-backend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Example Cloudflare Worker deployment of the @cat-factory/worker library. Carries the wrangler.toml + config; copy this package to deploy the backend on your own Cloudflare account.",
+  "type": "module",
+  "scripts": {
+    "predev": "pnpm --filter @cat-factory/worker run build",
+    "dev": "wrangler dev",
+    "predeploy": "pnpm --filter @cat-factory/worker run build",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "db:migrate:local": "wrangler d1 migrations apply cat_factory --local",
+    "db:migrate:remote": "wrangler d1 migrations apply cat_factory --remote"
+  },
+  "dependencies": {
+    "@cat-factory/worker": "workspace:*"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250620.0",
+    "typescript": "^5.6.0",
+    "wrangler": "^4.100.0"
+  }
+}

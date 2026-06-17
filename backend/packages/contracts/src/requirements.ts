@@ -36,12 +36,7 @@ export type ReviewItemSeverity = v.InferOutput<typeof reviewItemSeveritySchema>
  * off as not applicable. Both `resolved` and `dismissed` count as "settled" for
  * the purpose of gating incorporation.
  */
-export const reviewItemStatusSchema = v.picklist([
-  'open',
-  'answered',
-  'resolved',
-  'dismissed',
-])
+export const reviewItemStatusSchema = v.picklist(['open', 'answered', 'resolved', 'dismissed'])
 export type ReviewItemStatus = v.InferOutput<typeof reviewItemStatusSchema>
 
 /** A single question / challenge the reviewer raised about the requirements. */

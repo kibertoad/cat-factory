@@ -1,10 +1,14 @@
-# cat-factory — Frontend (Nuxt SPA)
+# `@cat-factory/app` — Frontend (Nuxt layer)
 
-The user-facing app: a **Nuxt 4 single-page app** that runs entirely in the
-browser and renders the architecture board, drives agent pipelines, and reflects
-live execution. It talks to the [backend Worker](../backend/README.md) over REST
-and a single WebSocket, sharing wire types from
-[`@cat-factory/contracts`](../backend/packages/contracts).
+The user-facing app, packaged as a **reusable Nuxt 4 layer**: a single-page app
+that runs entirely in the browser and renders the architecture board, drives agent
+pipelines, and reflects live execution. A deployment consumes it via
+`extends: ['@cat-factory/app']` (see [`deploy/frontend`](../../deploy/frontend)).
+It talks to the [backend Worker](../../backend/README.md) over REST and a single
+WebSocket, sharing wire types from
+[`@cat-factory/contracts`](../../backend/packages/contracts).
+
+The SPA source lives under `app/` (the Nuxt srcDir).
 
 ## Table of contents
 
@@ -25,7 +29,7 @@ prompts, failures with retry — so the canvas doubles as a live dashboard.
 It is a thin client: there is **no business logic here**. Every mutation calls the
 Worker API and the stores hydrate from server snapshots and live updates pushed
 over the WebSocket. How that sync works is written up in
-[`docs/architecture.md`](./docs/architecture.md).
+[`app/docs/architecture.md`](./app/docs/architecture.md).
 
 ## Tech stack
 
@@ -38,15 +42,15 @@ over the WebSocket. How that sync works is written up in
 
 ## Layout
 
-| Path | Contents |
-| --- | --- |
-| `app.vue` | Root; wraps the page in `AuthGate`. |
-| `pages/index.vue` | The only route — mounts the sidebar, canvas, toolbar, inspector, focus view, and all modals. |
-| `components/` | UI grouped by area (see [Key UI surfaces](#key-ui-surfaces)). |
-| `composables/` | `useApi` (typed client), `useWorkspaceStream` (WebSocket sync), `useBlockDrag`, `useBlockQueries`, `useBoardFlow`, `useSemanticZoom`, `useDepLabels`. |
-| `stores/` | Pinia stores, one per feature domain. |
-| `types/` | TypeScript domain unions (`domain.ts`) and wire types mirroring the contracts. |
-| `utils/` | Small pure helpers. |
+| Path              | Contents                                                                                                                                              |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `app.vue`         | Root; wraps the page in `AuthGate`.                                                                                                                   |
+| `pages/index.vue` | The only route — mounts the sidebar, canvas, toolbar, inspector, focus view, and all modals.                                                          |
+| `components/`     | UI grouped by area (see [Key UI surfaces](#key-ui-surfaces)).                                                                                         |
+| `composables/`    | `useApi` (typed client), `useWorkspaceStream` (WebSocket sync), `useBlockDrag`, `useBlockQueries`, `useBoardFlow`, `useSemanticZoom`, `useDepLabels`. |
+| `stores/`         | Pinia stores, one per feature domain.                                                                                                                 |
+| `types/`          | TypeScript domain unions (`domain.ts`) and wire types mirroring the contracts.                                                                        |
+| `utils/`          | Small pure helpers.                                                                                                                                   |
 
 ## Key UI surfaces
 
@@ -80,4 +84,5 @@ pnpm lint         # oxlint + oxfmt --check
 ```
 
 > Build/deploy of the static site is part of the setup/deployment docs, which are
-> being reworked — see the [top-level README](../README.md#deployment).
+> reworked — see the [top-level README](../../README.md#deployment) and
+> [`deploy/frontend`](../../deploy/frontend).

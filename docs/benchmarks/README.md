@@ -10,15 +10,15 @@ by the Claude **benchmark-arbiter** skill.
 
 Each run lives in its own directory: `docs/benchmarks/<run-id>/`.
 
-| File | Written by | Contents |
-| --- | --- | --- |
-| `manifest.json` | `cat-bench run` | Run metadata: date, exact models + prompt versions compared, cell count. |
-| `candidates.json` | `cat-bench run` | Every cell's input, output, latency, tokens and estimated cost. |
-| `grading/INDEX.md` + `grading/<cell>.md` | `cat-bench run` | One self-contained grading task per cell (input, output, rubric). |
-| `grades.json` | `benchmark-arbiter` skill | Per-cell dimension scores + weighted total (machine form). |
-| `grading-summary.md` | `benchmark-arbiter` skill | Human-readable grading digest. |
-| `conclusions.md` | `benchmark-arbiter` skill | Standardized conclusions: winners, deltas, recommendations. |
-| `report.json` / `report.md` | `cat-bench grade` | Final report joining candidates + grades. |
+| File                                     | Written by                | Contents                                                                 |
+| ---------------------------------------- | ------------------------- | ------------------------------------------------------------------------ |
+| `manifest.json`                          | `cat-bench run`           | Run metadata: date, exact models + prompt versions compared, cell count. |
+| `candidates.json`                        | `cat-bench run`           | Every cell's input, output, latency, tokens and estimated cost.          |
+| `grading/INDEX.md` + `grading/<cell>.md` | `cat-bench run`           | One self-contained grading task per cell (input, output, rubric).        |
+| `grades.json`                            | `benchmark-arbiter` skill | Per-cell dimension scores + weighted total (machine form).               |
+| `grading-summary.md`                     | `benchmark-arbiter` skill | Human-readable grading digest.                                           |
+| `conclusions.md`                         | `benchmark-arbiter` skill | Standardized conclusions: winners, deltas, recommendations.              |
+| `report.json` / `report.md`              | `cat-bench grade`         | Final report joining candidates + grades.                                |
 
 Every artifact records the **exact `provider:model`** and the **exact prompt
 version** (`id@vN`) that produced each result, so an outcome is always traceable.

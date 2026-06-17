@@ -10,7 +10,7 @@ Status (2026-06): reaping is **best-effort across three layers** below. There is
 **no scheduled reaper that kills a warm instance independently of its run
 record**, and the success path does not explicitly reclaim — so a long-lived or
 stuck run can leave an instance warm past its idle timer. Manual cleanup is
-sometimes required (see *Manual deletion* at the end). Improving the autoreaping
+sometimes required (see _Manual deletion_ at the end). Improving the autoreaping
 is a known follow-up.
 
 ## The instance model
@@ -64,13 +64,13 @@ the failure/teardown handling that calls it.
 
 **When explicit reclaim actually fires:**
 
-| Trigger | Execution | Bootstrap |
-| --- | --- | --- |
-| Poll observes the job **failed** | (via stop on fault) | `pollBootstrapJob` → `BootstrapService.ts:466` |
-| User **stops/cancels** the run | `ExecutionService.stopRun` | `BootstrapService.stop` → `BootstrapService.ts:531` |
-| Pre-flight / dispatch cleanup | — | `BootstrapService.ts:275`, `:378` |
-| Block-tree **delete / teardown** | `teardownForBlockTree` → `ExecutionService.ts:889` (also `:828`, `:863`) | (frame removed with job) |
-| Job **succeeds** | ❌ **not reclaimed** — relies on Layer 1 | ❌ **not reclaimed** (success path `BootstrapService.ts:477-505` has no `stopContainer`) |
+| Trigger                          | Execution                                                                | Bootstrap                                                                                |
+| -------------------------------- | ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
+| Poll observes the job **failed** | (via stop on fault)                                                      | `pollBootstrapJob` → `BootstrapService.ts:466`                                           |
+| User **stops/cancels** the run   | `ExecutionService.stopRun`                                               | `BootstrapService.stop` → `BootstrapService.ts:531`                                      |
+| Pre-flight / dispatch cleanup    | —                                                                        | `BootstrapService.ts:275`, `:378`                                                        |
+| Block-tree **delete / teardown** | `teardownForBlockTree` → `ExecutionService.ts:889` (also `:828`, `:863`) | (frame removed with job)                                                                 |
+| Job **succeeds**                 | ❌ **not reclaimed** — relies on Layer 1                                 | ❌ **not reclaimed** (success path `BootstrapService.ts:477-505` has no `stopContainer`) |
 
 The success-path omission is deliberate (sleepAfter handles it) but is the main
 reason a healthy run still bills ~10 min of idle compute after finishing.

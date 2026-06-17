@@ -1,9 +1,20 @@
+# Single workspace for the whole repo: the reusable libraries (backend/packages),
+# the frontend Nuxt layer (frontend/app), and the example deployments (deploy/*).
+# One workspace = one lockfile = one changesets setup spanning FE + BE.
+packages:
+  - 'backend/packages/*'
+  - 'frontend/app'
+  - 'deploy/backend'
+  - 'deploy/frontend'
 allowBuilds:
   '@parcel/watcher': true
   esbuild: true
+  sharp: true
   vue-demi: true
+  workerd: true
 minimumReleaseAgeExclude:
   - '@oxfmt/*'
   - '@oxlint/*'
   - 'oxfmt'
   - 'oxlint'
+  - 'workers-ai-provider@3.2.0'

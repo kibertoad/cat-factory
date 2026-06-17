@@ -9,7 +9,8 @@ const REQUIREMENT_REVIEW: RubricDimension[] = [
   {
     key: 'gap_coverage',
     label: 'Gap coverage',
-    description: 'Surfaces the genuine gaps, ambiguities and risks that would block confident implementation.',
+    description:
+      'Surfaces the genuine gaps, ambiguities and risks that would block confident implementation.',
     weight: 3,
   },
   {
@@ -21,7 +22,8 @@ const REQUIREMENT_REVIEW: RubricDimension[] = [
   {
     key: 'no_hallucination',
     label: 'No invented requirements',
-    description: 'Does not fabricate requirements or answers; raises questions instead of guessing.',
+    description:
+      'Does not fabricate requirements or answers; raises questions instead of guessing.',
     weight: 3,
   },
   {
@@ -115,10 +117,7 @@ export function rubricFor(task: TaskType): Rubric {
 }
 
 /** Weighted mean of dimension scores (1–5), using the rubric weights. */
-export function weightedTotal(
-  task: TaskType,
-  scores: { key: string; score: number }[],
-): number {
+export function weightedTotal(task: TaskType, scores: { key: string; score: number }[]): number {
   const dims = RUBRICS[task]
   let sum = 0
   let weight = 0

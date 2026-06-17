@@ -83,6 +83,10 @@ out
 dist
 .output
 
+# Cloudflare Wrangler local state + local dev secrets (worker + deploy/*)
+.wrangler
+.dev.vars
+
 # Gatsby files
 .cache/
 # Comment in the public line in if your project uses Gatsby and not Next.js

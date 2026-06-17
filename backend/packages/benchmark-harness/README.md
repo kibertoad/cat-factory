@@ -5,7 +5,7 @@ A standalone, headless harness for benchmarking cat-factory's agents across
 
 - **requirement review** — the stateless reviewer (`requirementsLogic` from core)
 - **code review** — the `reviewer` agent (`AiAgentExecutor`, standard `review` phase)
-- **implementation** — the *real* Pi coding flow (reused from `@cat-factory/implementer-harness`): clone a repo, run Pi, capture the diff
+- **implementation** — the _real_ Pi coding flow (reused from `@cat-factory/implementer-harness`): clone a repo, run Pi, capture the diff
 
 It reuses the **exact same agents and prompts** as the runtime, made embeddable
 outside the Worker/container. Outputs are graded by the Claude **benchmark-arbiter**
@@ -45,12 +45,12 @@ Copy `bench.config.example.ts` to `bench.config.ts` and edit the `models`,
 
 ## Environment
 
-| Var | Needed for |
-| --- | --- |
-| `CF_ACCOUNT_ID`, `CF_API_TOKEN` | Cloudflare Workers AI (local), via REST and as the Pi endpoint |
-| `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `QWEN_API_KEY` / `DEEPSEEK_API_KEY` / `MOONSHOT_API_KEY` | the matching provider, only if used as a *candidate* model |
-| `GH_TOKEN` | cloning a private repo for the implementation task (optional for public repos) |
-| `pi` CLI on PATH | the implementation task |
+| Var                                                                                               | Needed for                                                                     |
+| ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| `CF_ACCOUNT_ID`, `CF_API_TOKEN`                                                                   | Cloudflare Workers AI (local), via REST and as the Pi endpoint                 |
+| `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `QWEN_API_KEY` / `DEEPSEEK_API_KEY` / `MOONSHOT_API_KEY` | the matching provider, only if used as a _candidate_ model                     |
+| `GH_TOKEN`                                                                                        | cloning a private repo for the implementation task (optional for public repos) |
+| `pi` CLI on PATH                                                                                  | the implementation task                                                        |
 
 Arbiter grading needs **no key** — it runs as a Claude skill.
 

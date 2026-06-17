@@ -27,9 +27,7 @@ export async function runRequirementReview(
     Date.now(),
   )
   const rendered = items.length
-    ? items
-        .map((i) => `- [${i.severity}/${i.category}] ${i.title}\n  ${i.detail}`)
-        .join('\n')
+    ? items.map((i) => `- [${i.severity}/${i.category}] ${i.title}\n  ${i.detail}`).join('\n')
     : '(no review items raised — requirements judged complete)'
   return {
     output: rendered,

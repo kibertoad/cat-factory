@@ -1,18 +1,35 @@
 {
   "name": "@cat-factory/worker",
   "version": "0.1.0",
-  "private": true,
-  "description": "Cloudflare Worker facade (Hono + D1) exposing the Agent Architecture Board core.",
+  "description": "Reusable Cloudflare Worker library (Hono + D1) exposing the Agent Architecture Board core: the `createApp()` Hono factory, the default fetch/scheduled/queue handler, and the Durable Object + Workflow classes. Deployments (see deploy/backend) supply the wrangler.toml + config and re-export these.",
+  "files": [
+    "dist",
+    "migrations"
+  ],
   "type": "module",
-  "main": "./src/index.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./app": {
+      "types": "./dist/app.d.ts",
+      "default": "./dist/app.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
+    "build": "tsc -p tsconfig.build.json",
     "dev": "wrangler dev",
-    "deploy": "wrangler deploy",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsc -p tsconfig.build.json --noEmit",
     "test": "vitest",
     "test:run": "vitest run",
-    "db:migrate:local": "wrangler d1 migrations apply cat_factory --local",
-    "db:migrate:remote": "wrangler d1 migrations apply cat_factory --remote"
+    "db:migrate:local": "wrangler d1 migrations apply cat_factory --local"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.0",

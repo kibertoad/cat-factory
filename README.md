@@ -41,32 +41,32 @@ Two ideas anchor the model:
 
 ## What it supports
 
-| Capability | What you get |
-| --- | --- |
-| **Visual architecture boards** | A pannable/zoomable canvas of frames (services), modules and tasks with dependency edges, drag-drop reparenting, and semantic level-of-detail. |
-| **Accounts & workspaces** | A signed-in user switches between a personal account and any **orgs** they belong to; an account owns many **workspaces** (boards). Visibility is by membership. |
-| **Agent pipelines** | Reusable, ordered chains of agent steps (architect → coder → blueprints → reviewer → tester → acceptance, plus mocker/playwright/deployer/custom kinds) applied per block. |
-| **Durable, observable execution** | Runs are driven by Cloudflare Workflows and stream live step/subtask progress, decision prompts, and failures to the board over WebSockets. |
-| **Real code changes via PRs** | Coding agents (`coder`, `mocker`, `playwright`) run in a per-run container, clone the repo, implement, and open a PR; merge flips the block to done. |
-| **Requirements review** | A stateless reviewer agent raises gaps/clarifications/assumptions/risks on a block; a human answers each, then the agent folds the answers back into the description. |
-| **Service blueprints** | A Blueprinter agent decomposes a repo into a `service → modules → features` map stored **in the repo** (`blueprints/`) and reconciles it onto the board. |
-| **Repo bootstrap** | Adapt a reference architecture (or scaffold from scratch) into a pre-created empty repo and force-push the result, materialising a new service frame on the board. |
-| **On-demand board scan** | Decompose an existing repo into a board structure / reusable blueprint anchored to file references. |
-| **GitHub integration** | Connect an account to GitHub via a GitHub App for repo/PR/issue read & write plus webhooks, with local D1 projections kept fresh. |
-| **Document & task sources** | Link Confluence/Notion docs and Jira/Linear/GitHub issues to a board: import, expand into structure, or attach as agent context. |
-| **Ephemeral environments** | Register your own preview-environment tooling via a declarative HTTP manifest so `deployer`/`tester` agents provision and run against it. |
-| **Prompt-fragment library** | A tenant-scoped, versioned catalog of best-practice guidelines (built-in ∪ account ∪ workspace), optionally sourced from a repo, selected per run. |
-| **Bring-your-own runner pool** | Route coding jobs to your own Kubernetes/Nomad/scheduler pool instead of Cloudflare Containers, described by a manifest. |
-| **Spend safeguards** | Every LLM call is metered into an org-wide monthly budget; runs **pause** at the cap and resume when the period rolls over (or on an explicit override). |
-| **Model picker** | Per-block model selection; each model runs on Cloudflare Workers AI by default and upgrades to its direct provider API when a key is set. |
-| **Benchmarking** | A headless harness (`cat-bench`) that scores agents (requirement review / code review / implementation) across models and prompt versions. |
+| Capability                        | What you get                                                                                                                                                               |
+| --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Visual architecture boards**    | A pannable/zoomable canvas of frames (services), modules and tasks with dependency edges, drag-drop reparenting, and semantic level-of-detail.                             |
+| **Accounts & workspaces**         | A signed-in user switches between a personal account and any **orgs** they belong to; an account owns many **workspaces** (boards). Visibility is by membership.           |
+| **Agent pipelines**               | Reusable, ordered chains of agent steps (architect → coder → blueprints → reviewer → tester → acceptance, plus mocker/playwright/deployer/custom kinds) applied per block. |
+| **Durable, observable execution** | Runs are driven by Cloudflare Workflows and stream live step/subtask progress, decision prompts, and failures to the board over WebSockets.                                |
+| **Real code changes via PRs**     | Coding agents (`coder`, `mocker`, `playwright`) run in a per-run container, clone the repo, implement, and open a PR; merge flips the block to done.                       |
+| **Requirements review**           | A stateless reviewer agent raises gaps/clarifications/assumptions/risks on a block; a human answers each, then the agent folds the answers back into the description.      |
+| **Service blueprints**            | A Blueprinter agent decomposes a repo into a `service → modules → features` map stored **in the repo** (`blueprints/`) and reconciles it onto the board.                   |
+| **Repo bootstrap**                | Adapt a reference architecture (or scaffold from scratch) into a pre-created empty repo and force-push the result, materialising a new service frame on the board.         |
+| **On-demand board scan**          | Decompose an existing repo into a board structure / reusable blueprint anchored to file references.                                                                        |
+| **GitHub integration**            | Connect an account to GitHub via a GitHub App for repo/PR/issue read & write plus webhooks, with local D1 projections kept fresh.                                          |
+| **Document & task sources**       | Link Confluence/Notion docs and Jira/Linear/GitHub issues to a board: import, expand into structure, or attach as agent context.                                           |
+| **Ephemeral environments**        | Register your own preview-environment tooling via a declarative HTTP manifest so `deployer`/`tester` agents provision and run against it.                                  |
+| **Prompt-fragment library**       | A tenant-scoped, versioned catalog of best-practice guidelines (built-in ∪ account ∪ workspace), optionally sourced from a repo, selected per run.                         |
+| **Bring-your-own runner pool**    | Route coding jobs to your own Kubernetes/Nomad/scheduler pool instead of Cloudflare Containers, described by a manifest.                                                   |
+| **Spend safeguards**              | Every LLM call is metered into an org-wide monthly budget; runs **pause** at the cap and resume when the period rolls over (or on an explicit override).                   |
+| **Model picker**                  | Per-block model selection; each model runs on Cloudflare Workers AI by default and upgrades to its direct provider API when a key is set.                                  |
+| **Benchmarking**                  | A headless harness (`cat-bench`) that scores agents (requirement review / code review / implementation) across models and prompt versions.                                 |
 
 ## How it works
 
 ```
 ┌──────────────┐   WebSocket events    ┌───────────────────────────┐
 │  Nuxt SPA    │ ◀──── push, not ────  │  Cloudflare Worker        │
-│  (app/)      │       polling         │  Hono controllers + D1    │
+│ (frontend/app)│      polling         │  Hono controllers + D1    │
 │  Vue Flow    │ ───── REST ─────────▶ │  (backend/packages/worker)│
 └──────────────┘                       └────────────┬──────────────┘
                                                      │ ports (DI)
@@ -90,19 +90,36 @@ end-to-end flows are written up in [`CLAUDE.md`](./CLAUDE.md).
 
 ## Repository layout
 
-| Path | Package | Role |
-| --- | --- | --- |
-| [`app/`](./app) | `cat-factory` | Nuxt 4 SPA (`ssr: false`) — the board UI, Pinia stores, the WebSocket stream. See [`app/README.md`](./app/README.md). |
-| [`backend/packages/contracts`](./backend/packages/contracts) | `@cat-factory/contracts` | Valibot wire contracts shared by SPA + Worker. |
-| [`backend/packages/core`](./backend/packages/core) | `@cat-factory/core` | Framework-agnostic domain: module services, pure logic, repository **ports**. |
-| [`backend/packages/worker`](./backend/packages/worker) | `@cat-factory/worker` | Cloudflare Worker: Hono controllers, D1 repos, Durable Objects, Workflows, the DI composition root. |
-| [`backend/packages/prompt-fragments`](./backend/packages/prompt-fragments) | `@cat-factory/prompt-fragments` | The built-in tier of best-practice prompt fragments. See [its README](./backend/packages/prompt-fragments/README.md). |
-| [`backend/packages/implementer-harness`](./backend/packages/implementer-harness) | `@cat-factory/implementer-harness` | The payload that runs **inside** each per-run container (the Pi coding-agent harness). See [its README](./backend/packages/implementer-harness/README.md). |
-| [`backend/packages/benchmark-harness`](./backend/packages/benchmark-harness) | `@cat-factory/benchmark-harness` | Headless agent benchmarking (`cat-bench`). See [its README](./backend/packages/benchmark-harness/README.md). |
+One pnpm workspace, split into reusable **libraries** (published to npm + a GHCR
+runner image) and example **deployments** that depend on them. Other
+organizations copy `deploy/*`, point the config at their own resources, and
+deploy both halves on their end.
 
-The backend is a hexagonal monorepo — controllers (worker) → services (core) →
-ports, with infra adapters wired in `container.ts`. The full breakdown is in the
-[backend overview](./backend/README.md).
+**Libraries** (published):
+
+| Path                                                                             | Package                            | Role                                                                                                                                                                                                          |
+| -------------------------------------------------------------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`frontend/app`](./frontend/app)                                                 | `@cat-factory/app`                 | Reusable **Nuxt layer** (`ssr: false`) — the board UI, Pinia stores, composables, the WebSocket stream. Consumed via `extends`.                                                                               |
+| [`backend/packages/contracts`](./backend/packages/contracts)                     | `@cat-factory/contracts`           | Valibot wire contracts shared by SPA + Worker.                                                                                                                                                                |
+| [`backend/packages/core`](./backend/packages/core)                               | `@cat-factory/core`                | Framework-agnostic domain: module services, pure logic, repository **ports**.                                                                                                                                 |
+| [`backend/packages/worker`](./backend/packages/worker)                           | `@cat-factory/worker`              | Reusable Cloudflare Worker **library**: Hono controllers, D1 repos, Durable Objects, Workflows, the DI composition root. Exposes `createApp()` + the handler/DO/Workflow exports; ships the D1 `migrations/`. |
+| [`backend/packages/prompt-fragments`](./backend/packages/prompt-fragments)       | `@cat-factory/prompt-fragments`    | The built-in tier of best-practice prompt fragments. See [its README](./backend/packages/prompt-fragments/README.md).                                                                                         |
+| [`backend/packages/implementer-harness`](./backend/packages/implementer-harness) | `@cat-factory/implementer-harness` | The payload that runs **inside** each per-run container (the Pi coding-agent harness). Published as a **Docker image to GHCR** (not npm). See [its README](./backend/packages/implementer-harness/README.md). |
+| [`backend/packages/benchmark-harness`](./backend/packages/benchmark-harness)     | `@cat-factory/benchmark-harness`   | Headless agent benchmarking (`cat-bench`); internal. See [its README](./backend/packages/benchmark-harness/README.md).                                                                                        |
+
+**Deployments** (examples; copy these to deploy on your own infra):
+
+| Path                                   | Package                        | Role                                                                                                                                            |
+| -------------------------------------- | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`deploy/backend`](./deploy/backend)   | `@cat-factory/deploy-backend`  | Worker deployment: re-exports `@cat-factory/worker` + the production `wrangler.toml`. See [its README](./deploy/backend/README.md).             |
+| [`deploy/frontend`](./deploy/frontend) | `@cat-factory/deploy-frontend` | Pages deployment: a thin Nuxt app that `extends` `@cat-factory/app` + the Pages `wrangler.toml`. See [its README](./deploy/frontend/README.md). |
+
+In this repo the deployments depend on the libraries via `workspace:*`; in your
+own copy you swap that for the published npm version. The backend is a hexagonal
+monorepo — controllers (worker) → services (core) → ports, with infra adapters
+wired in `container.ts`. The full breakdown is in the
+[backend overview](./backend/README.md). Releases use changesets — see
+[`CONTRIBUTING.md`](./CONTRIBUTING.md).
 
 ## Feature guide
 
@@ -150,7 +167,7 @@ Each capability has a deeper write-up; start here and follow the link.
 **Start here**
 
 - [Backend overview](./backend/README.md) — the Worker + D1 monorepo and its layering.
-- [`app/README.md`](./app/README.md) — the Nuxt SPA frontend.
+- [`frontend/app/README.md`](./frontend/app/README.md) — the Nuxt SPA layer.
 - [`CLAUDE.md`](./CLAUDE.md) — the cross-cutting runtime flows (execution + events,
   bootstrap, blueprints, requirements review, the board/repo-linkage model) in one
   place for quick lookup.
@@ -181,17 +198,14 @@ Each capability has a deeper write-up; start here and follow the link.
 
 ## Deployment
 
-> ⚠️ **Being reworked.** The setup/deployment instructions below are scheduled
-> for a rewrite and may be partially out of date (e.g. they predate the
-> self-hosted runner pool and the two-app GitHub provisioning tiers). Treat them
-> as a rough guide until this section is refreshed.
-
-
-Both halves deploy to Cloudflare under the `iselwin@gmail.com` account
-(`wrangler whoami` must show account `fe0047c6e869c8cb875ca425a9c341af`). Each
-has its own `wrangler.toml`: the backend Worker in
-[`backend/packages/worker/`](./backend/packages/worker/wrangler.toml) and the
-frontend Pages project at the [repo root](./wrangler.toml).
+The two halves are deployed from the example packages under `deploy/`. Each
+carries its own `wrangler.toml`: the backend Worker in
+[`deploy/backend/`](./deploy/backend/wrangler.toml) and the frontend Pages
+project in [`deploy/frontend/`](./deploy/frontend/wrangler.toml). To deploy on
+**your own** infrastructure, copy those directories and swap the `workspace:*`
+dependency for the published npm version — see each package's README. The
+reference deployment below runs on Cloudflare under the `iselwin@gmail.com`
+account (`wrangler whoami` must show `fe0047c6e869c8cb875ca425a9c341af`).
 
 | Piece    | Cloudflare resource          | Production URL                        |
 | -------- | ---------------------------- | ------------------------------------- |
@@ -200,23 +214,31 @@ frontend Pages project at the [repo root](./wrangler.toml).
 | Data     | D1 database `cat_factory`    | (bound to the Worker as `DB`)         |
 
 **Deploy the backend first** so any schema the new frontend expects is already
-live, then the frontend. Migrations run **before** the Worker deploy.
+live, then the frontend. Migrations run **before** the Worker deploy. The runner
+container image is published independently to GHCR (see
+[`backend/packages/implementer-harness`](./backend/packages/implementer-harness/README.md)
+and `.github/workflows/docker-publish.yml`); the backend `wrangler.toml`
+references it by tag.
 
 ### Backend (Worker + D1)
 
 ```sh
-cd backend/packages/worker
+cd deploy/backend
 
 # 1. apply any new migrations to the PRODUCTION D1 (review the pending list first)
 wrangler d1 migrations list  cat_factory --remote
 wrangler d1 migrations apply cat_factory --remote     # == pnpm db:migrate:remote
 
-# 2. deploy the Worker (also rolls the container image, workflows, cron triggers)
-wrangler deploy                                        # == pnpm --filter @cat-factory/worker deploy
+# 2. deploy the Worker (also rolls the container image, workflows, cron triggers).
+#    `pnpm deploy` builds @cat-factory/worker first, then `wrangler deploy`.
+pnpm deploy
 ```
 
-The Worker prints its `*.workers.dev` URL; production traffic reaches it through
-the `catfactory-api.kiberion.com` custom domain (configured in the Cloudflare
+The migrations ship with the `@cat-factory/worker` library, so `migrations_dir`
+points at `node_modules/@cat-factory/worker/migrations` (see the comment in
+`deploy/backend/wrangler.toml` if your tooling can't follow the symlink). The
+Worker prints its `*.workers.dev` URL; production traffic reaches it through the
+`catfactory-api.kiberion.com` custom domain (configured in the Cloudflare
 dashboard, not in `wrangler.toml`). First-time setup (auth, provider, GitHub-App
 and container secrets) is in [`backend/README.md`](./backend/README.md#deploying)
 — **auth is required or the API fails closed.**
@@ -228,9 +250,9 @@ The SPA is `ssr: false`, so the backend URL is **baked in at build time** from
 API base, then deploy the static output:
 
 ```sh
-# from the repo root
+cd deploy/frontend
 NUXT_PUBLIC_API_BASE=https://catfactory-api.kiberion.com pnpm generate
-wrangler pages deploy                  # project + output dir come from ./wrangler.toml
+pnpm deploy                            # wrangler pages deploy; project + dir from wrangler.toml
 ```
 
 PowerShell equivalent for the build step:
@@ -241,8 +263,8 @@ $env:NUXT_PUBLIC_API_BASE = "https://catfactory-api.kiberion.com"; pnpm generate
 
 `pnpm generate` writes the static site to `.output/public`; `wrangler pages
 deploy` (no args) reads the project name `cat-factory` and that output dir from
-`./wrangler.toml`. `main` is the Pages **production** branch, so the deploy
-updates the `catfactory.kiberion.com` alias. Sanity-check after deploying:
+`deploy/frontend/wrangler.toml`. `main` is the Pages **production** branch, so the
+deploy updates the `catfactory.kiberion.com` alias. Sanity-check after deploying:
 
 ```sh
 curl -s https://catfactory-api.kiberion.com/health        # {"status":"ok"}
