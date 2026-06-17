@@ -28,7 +28,7 @@ import type { EnvironmentProvisioningService } from '../environments/Environment
 import { isDeployStep } from '../environments/environments.logic'
 import { descendantIds, serviceOf } from '../board/board.logic'
 import type { BoardService } from '../board/BoardService'
-import type { SpendService } from '../spend/SpendService'
+import type { SpendService } from '@cat-factory/spend'
 import { requireWorkspace } from '@cat-factory/kernel'
 import type { AdvanceOptions, AdvanceResult } from './advance'
 

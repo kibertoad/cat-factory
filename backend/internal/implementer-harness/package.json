@@ -17,7 +17,7 @@
     "test:acceptance": "vitest run --config vitest.acceptance.config.ts"
   },
   "devDependencies": {
-    "@cat-factory/core": "workspace:*",
+    "@cat-factory/spend": "workspace:*",
     "@cat-factory/worker": "workspace:*",
     "@hono/node-server": "^1.13.0",
     "@types/node": "^22.0.0",

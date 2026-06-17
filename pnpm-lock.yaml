@@ -60,9 +60,9 @@ importers:
 
   backend/internal/implementer-harness:
     devDependencies:
-      '@cat-factory/core':
+      '@cat-factory/spend':
         specifier: workspace:*
-        version: link:../../packages/core
+        version: link:../../packages/spend
       '@cat-factory/worker':
         specifier: workspace:*
         version: link:../../packages/worker
@@ -103,6 +103,9 @@ importers:
       '@cat-factory/prompt-fragments':
         specifier: workspace:*
         version: link:../prompt-fragments
+      '@cat-factory/spend':
+        specifier: workspace:*
+        version: link:../spend
       ai:
         specifier: ^6.0.0
         version: 6.0.206(zod@3.25.76)
@@ -140,6 +143,19 @@ importers:
         specifier: ^5.6.0
         version: 5.9.3
 
+  backend/packages/spend:
+    dependencies:
+      '@cat-factory/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@cat-factory/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+    devDependencies:
+      typescript:
+        specifier: ^5.6.0
+        version: 5.9.3
+
   backend/packages/worker:
     dependencies:
       '@ai-sdk/anthropic':
@@ -160,6 +176,9 @@ importers:
       '@cat-factory/prompt-fragments':
         specifier: workspace:*
         version: link:../prompt-fragments
+      '@cat-factory/spend':
+        specifier: workspace:*
+        version: link:../spend
       '@cloudflare/containers':
         specifier: ^0.3.7
         version: 0.3.7

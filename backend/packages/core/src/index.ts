@@ -28,8 +28,6 @@ export {
   SpendService,
   type SpendServiceDependencies,
   type RecordUsageInput,
-} from './modules/spend/SpendService'
-export {
   type ModelPrice,
   type SpendPricing,
   DEFAULT_MODEL_PRICES,
@@ -38,7 +36,7 @@ export {
   priceFor,
   estimateCost,
   startOfMonthUtc,
-} from './modules/spend/pricing'
+} from '@cat-factory/spend'
 
 export { AiAgentExecutor, type AiAgentExecutorDependencies } from './modules/agents/AiAgentExecutor'
 export {

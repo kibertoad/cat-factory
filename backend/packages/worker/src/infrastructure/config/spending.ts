@@ -3,7 +3,7 @@ import {
   DEFAULT_MONTHLY_LIMIT_EUR,
   type ModelPrice,
   type SpendPricing,
-} from '@cat-factory/core'
+} from '@cat-factory/spend'
 import type { Env } from '../env'
 import { num } from './utils'
 
