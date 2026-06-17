@@ -104,7 +104,6 @@ The sweet spot for inline reasoning roles and lighter container work.
 |---|---|---|---|
 | `@cf/openai/gpt-oss-20b` | $0.200 / $0.300 | OpenAI open-weight, reasoning + tool use, ~128K, cheap output | ✅ reviewer, architect (value), tester, business-reviewer, requirement-reviewer; ⚠️ coder (light) |
 | `@cf/meta/llama-4-scout-17b-16e-instruct` | $0.270 / $0.850 | **MoE 17Bx16e**, very long ctx, multimodal, tool use | ⚠️ business-documenter, document-planner (long inputs); ⚠️ reviewer; ❌ heavy coder |
-| `@cf/google/gemma-3-12b-it` | $0.345 / $0.556 | *(excluded as superseded by Gemma 4 — listed for reference only)* | — |
 | `@cf/openai/gpt-oss-120b` | $0.350 / $0.750 | OpenAI open-weight flagship-open, strong reasoning + tool use | ✅✅ reviewer, architect; ✅ coder (mid-tier agentic candidate), business-reviewer |
 | `@cf/mistralai/mistral-small-3.1-24b-instruct` | $0.351 / $0.555 | Dense 24B, tool use, vision, ~128K | ✅ tester, acceptance, mocker, documenter; ⚠️ reviewer |
 | `@cf/nvidia/nemotron-3-120b-a12b` | $0.500 / $1.500 | **MoE 120B/12B active**, reasoning-tuned | ⚠️ architect, reviewer (try vs gpt-oss-120b); ⚠️ coder |
