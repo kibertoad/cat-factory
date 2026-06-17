@@ -1,48 +1,191 @@
 # cat-factory
 
-Software development agent management platform
+**A self-hosted platform for designing software on a visual board and having LLM
+agents build it — turning architecture blocks into real, reviewed pull
+requests, with the whole pipeline observable in real time.**
 
-## Documentation
+You sketch a system as a board of **services → modules → tasks**, attach
+requirements (PRDs, RFCs, tracker issues), and run **agent pipelines** against
+each block. Coding agents clone the linked repo, implement the work, open a PR,
+and push live progress back to the board. Reviewer, tester and acceptance agents
+sharpen the result; humans stay in the loop through decision prompts, PR review
+and a hard spend cap.
 
-High-level docs (most live under [`backend/docs/`](./backend/docs)):
+## Table of contents
 
-- **[Backend overview](./backend/README.md)** — the Cloudflare Workers + D1
-  monorepo, its hexagonal layering, and how the pieces fit together.
-- **[Authentication](./backend/docs/auth.md)** — "Login with GitHub"; GitHub
-  accounts are the identity provider, so there's no separate user store.
-- **Accounts & workspaces** — a signed-in user can switch between **accounts** (a
-  personal account, plus any **orgs** they're a member of). An account owns many
-  **workspaces** (boards), so a team of engineers shares the same org boards while
-  keeping personal ones separate. Visibility is by membership; switching account
-  re-scopes the board list (see the sidebar's board switcher).
-- **GitHub integration** — connect an **account** to GitHub via a **GitHub App**
-  (works with a personal account or an org) for repo/PR/issue read & write plus
-  webhooks. The installation is shared across the account's workspaces, and each
-  workspace then **explicitly links the specific repos** it tracks.
+- [What it is](#what-it-is)
+- [What it supports](#what-it-supports)
+- [How it works](#how-it-works)
+- [Repository layout](#repository-layout)
+- [Feature guide](#feature-guide)
+- [Documentation index](#documentation-index)
+- [Deployment](#deployment)
+
+## What it is
+
+cat-factory is a **software-development agent management platform**. It is
+**self-hosted** and runs end-to-end on Cloudflare: a Nuxt single-page app talks
+to a Cloudflare Worker (Hono + D1), and the heavy coding work runs in per-run
+Cloudflare Containers (or your own runner pool). It pairs a spatial planning
+surface (a Vue Flow canvas) with a durable, server-side execution engine so runs
+make progress whether or not a browser is open.
+
+Two ideas anchor the model:
+
+- **The board is the plan.** A "service" is a `Block` with `level: 'frame'`;
+  modules are sub-frames, tasks are leaves. Dependencies are edges. The board is
+  both the design artifact and the unit of work agents act on.
+- **Agents do real work through pull requests.** The implementation phases run a
+  coding agent on an actual checkout; "done" means a PR exists and its CI is
+  green, not merely that text was generated.
+
+## What it supports
+
+| Capability | What you get |
+| --- | --- |
+| **Visual architecture boards** | A pannable/zoomable canvas of frames (services), modules and tasks with dependency edges, drag-drop reparenting, and semantic level-of-detail. |
+| **Accounts & workspaces** | A signed-in user switches between a personal account and any **orgs** they belong to; an account owns many **workspaces** (boards). Visibility is by membership. |
+| **Agent pipelines** | Reusable, ordered chains of agent steps (architect → coder → blueprints → reviewer → tester → acceptance, plus mocker/playwright/deployer/custom kinds) applied per block. |
+| **Durable, observable execution** | Runs are driven by Cloudflare Workflows and stream live step/subtask progress, decision prompts, and failures to the board over WebSockets. |
+| **Real code changes via PRs** | Coding agents (`coder`, `mocker`, `playwright`) run in a per-run container, clone the repo, implement, and open a PR; merge flips the block to done. |
+| **Requirements review** | A stateless reviewer agent raises gaps/clarifications/assumptions/risks on a block; a human answers each, then the agent folds the answers back into the description. |
+| **Service blueprints** | A Blueprinter agent decomposes a repo into a `service → modules → features` map stored **in the repo** (`blueprints/`) and reconciles it onto the board. |
+| **Repo bootstrap** | Adapt a reference architecture (or scaffold from scratch) into a pre-created empty repo and force-push the result, materialising a new service frame on the board. |
+| **On-demand board scan** | Decompose an existing repo into a board structure / reusable blueprint anchored to file references. |
+| **GitHub integration** | Connect an account to GitHub via a GitHub App for repo/PR/issue read & write plus webhooks, with local D1 projections kept fresh. |
+| **Document & task sources** | Link Confluence/Notion docs and Jira/Linear/GitHub issues to a board: import, expand into structure, or attach as agent context. |
+| **Ephemeral environments** | Register your own preview-environment tooling via a declarative HTTP manifest so `deployer`/`tester` agents provision and run against it. |
+| **Prompt-fragment library** | A tenant-scoped, versioned catalog of best-practice guidelines (built-in ∪ account ∪ workspace), optionally sourced from a repo, selected per run. |
+| **Bring-your-own runner pool** | Route coding jobs to your own Kubernetes/Nomad/scheduler pool instead of Cloudflare Containers, described by a manifest. |
+| **Spend safeguards** | Every LLM call is metered into an org-wide monthly budget; runs **pause** at the cap and resume when the period rolls over (or on an explicit override). |
+| **Model picker** | Per-block model selection; each model runs on Cloudflare Workers AI by default and upgrades to its direct provider API when a key is set. |
+| **Benchmarking** | A headless harness (`cat-bench`) that scores agents (requirement review / code review / implementation) across models and prompt versions. |
+
+## How it works
+
+```
+┌──────────────┐   WebSocket events    ┌───────────────────────────┐
+│  Nuxt SPA    │ ◀──── push, not ────  │  Cloudflare Worker        │
+│  (app/)      │       polling         │  Hono controllers + D1    │
+│  Vue Flow    │ ───── REST ─────────▶ │  (backend/packages/worker)│
+└──────────────┘                       └────────────┬──────────────┘
+                                                     │ ports (DI)
+                                          ┌──────────▼──────────┐
+                                          │  @cat-factory/core  │
+                                          │  domain + services  │
+                                          └──────────┬──────────┘
+                                                     │ dispatch coding jobs
+                              ┌──────────────────────▼───────────────────────┐
+                              │ per-run Cloudflare Container (or runner pool) │
+                              │ implementer-harness → Pi coding agent → PR    │
+                              └───────────────────────────────────────────────┘
+```
+
+The canonical pattern is **async + durable + observable**: a service starts a run,
+a Cloudflare **Workflows** instance drives it one checkpointed step at a time, a
+container executes the long-running agent work asynchronously, and every
+persisted transition is **pushed** to the browser through a per-workspace Durable
+Object. The same shape is reused by execution, bootstrap and blueprints. The
+end-to-end flows are written up in [`CLAUDE.md`](./CLAUDE.md).
+
+## Repository layout
+
+| Path | Package | Role |
+| --- | --- | --- |
+| [`app/`](./app) | `cat-factory` | Nuxt 4 SPA (`ssr: false`) — the board UI, Pinia stores, the WebSocket stream. See [`app/README.md`](./app/README.md). |
+| [`backend/packages/contracts`](./backend/packages/contracts) | `@cat-factory/contracts` | Valibot wire contracts shared by SPA + Worker. |
+| [`backend/packages/core`](./backend/packages/core) | `@cat-factory/core` | Framework-agnostic domain: module services, pure logic, repository **ports**. |
+| [`backend/packages/worker`](./backend/packages/worker) | `@cat-factory/worker` | Cloudflare Worker: Hono controllers, D1 repos, Durable Objects, Workflows, the DI composition root. |
+| [`backend/packages/prompt-fragments`](./backend/packages/prompt-fragments) | `@cat-factory/prompt-fragments` | The built-in tier of best-practice prompt fragments. See [its README](./backend/packages/prompt-fragments/README.md). |
+| [`backend/packages/implementer-harness`](./backend/packages/implementer-harness) | `@cat-factory/implementer-harness` | The payload that runs **inside** each per-run container (the Pi coding-agent harness). See [its README](./backend/packages/implementer-harness/README.md). |
+| [`backend/packages/benchmark-harness`](./backend/packages/benchmark-harness) | `@cat-factory/benchmark-harness` | Headless agent benchmarking (`cat-bench`). See [its README](./backend/packages/benchmark-harness/README.md). |
+
+The backend is a hexagonal monorepo — controllers (worker) → services (core) →
+ports, with infra adapters wired in `container.ts`. The full breakdown is in the
+[backend overview](./backend/README.md).
+
+## Feature guide
+
+Each capability has a deeper write-up; start here and follow the link.
+
+- **Boards, services & repo linkage** — the `frame → module → task` model, how a
+  repo is resolved for a block at runtime, and drag-drop reparenting.
+  [`CLAUDE.md` → Board / service / repo-linkage model](./CLAUDE.md).
+- **Execution & real-time events** — the durable run engine, decision prompts,
+  failure/retry surface, and the push-not-poll event hub.
+  [Backend → Execution & real-time events](./backend/README.md).
+- **Requirements review** — the stateless, synchronous reviewer agent.
+  [`CLAUDE.md` → Requirements review flow](./CLAUDE.md).
+- **Service blueprints** — the in-repo `blueprints/` map and board reconciliation.
+  [`CLAUDE.md` → Service blueprints flow](./CLAUDE.md).
+- **Repo bootstrap** — create a repo from a reference architecture.
+  [`CLAUDE.md` → Repo bootstrap flow](./CLAUDE.md).
+- **Authentication** — "Login with GitHub"; GitHub accounts are the identity
+  provider, so there's no separate user store.
+  [`docs/auth.md`](./backend/docs/auth.md).
+- **GitHub integration** — connect an account via a GitHub App for repo/PR/issue
+  read & write plus webhooks; the installation is shared across the account's
+  workspaces, and each workspace explicitly links the repos it tracks.
   [Design](./backend/docs/github-integration.md) ·
-  [Setup runbook](./backend/docs/github-operations.md) ·
-  [App Manifest](./backend/docs/github-app-manifest.html). Self-hosted, so each
-  deployment registers its own App.
-- **[Document sources](./backend/docs/document-sources.md)** — link requirements,
-  RFCs and PRDs from external sources to a board and expand them into structure.
-- **[Ephemeral environments](./backend/docs/environments-integration.md)** — plug
-  in your own preview-environment tooling via a declarative HTTP manifest so
-  `deployer`/`tester` agents can provision and run against it.
-- **[Storage & retention](./backend/docs/storage-and-retention.md)** — the D1 data
-  model's retention sweeps and follow-ups.
-- **[Implementer harness](./backend/packages/implementer-harness/README.md)** — the
-  payload that runs inside a per-run Cloudflare Container to do real code changes.
-- **[Architecture & flow notes](./CLAUDE.md)** — the cross-cutting runtime flows
-  (execution + real-time events, the repo-bootstrap flow and its known gaps, and
-  the board/service/repo-linkage model) gathered in one place for quick lookup.
+  [Operations runbook](./backend/docs/github-operations.md) ·
+  [Two-app provisioning (ADR 0005)](./backend/docs/adr/0005-two-app-repo-provisioning.md).
+- **Document sources** — link requirements, RFCs and PRDs from Confluence/Notion
+  and expand them into structure. [`docs/document-sources.md`](./backend/docs/document-sources.md).
+- **Ephemeral environments** — plug in your own preview-environment tooling via a
+  declarative manifest. [`docs/environments-integration.md`](./backend/docs/environments-integration.md).
+- **Prompt-fragment library** — tenant-scoped, repo-sourced guidelines selected
+  per run. [ADR 0006](./backend/docs/adr/0006-prompt-fragment-library.md).
+- **Self-hosted runner pool** — run coding jobs on your own infra.
+  [Operator guide](./backend/docs/runner-pool-integration.md) ·
+  [ADR 0004](./backend/docs/adr/0004-self-hosted-runner-pool.md).
+- **Storage & retention** — the D1 data model's retention sweeps.
+  [`docs/storage-and-retention.md`](./backend/docs/storage-and-retention.md).
+- **Container reaping** — how per-run containers get reclaimed, and the current
+  gaps. [`docs/container-reaping.md`](./backend/docs/container-reaping.md).
+- **Benchmarking** — score agents across models and prompt versions.
+  [`benchmark-harness` README](./backend/packages/benchmark-harness/README.md).
 
-### Architecture decisions
+## Documentation index
 
-- [ADR 0001 — GitHub integration via a GitHub App](./backend/docs/adr/0001-github-app-integration.md)
-- [ADR 0002 — Cloudflare as the runtime platform](./backend/docs/adr/0002-cloudflare-platform.md)
-- [ADR 0003 — Pluggable ephemeral-environment providers](./backend/docs/adr/0003-ephemeral-environment-provider.md)
+**Start here**
+
+- [Backend overview](./backend/README.md) — the Worker + D1 monorepo and its layering.
+- [`app/README.md`](./app/README.md) — the Nuxt SPA frontend.
+- [`CLAUDE.md`](./CLAUDE.md) — the cross-cutting runtime flows (execution + events,
+  bootstrap, blueprints, requirements review, the board/repo-linkage model) in one
+  place for quick lookup.
+
+**Integrations & features**
+
+- [Authentication](./backend/docs/auth.md)
+- [GitHub integration — design](./backend/docs/github-integration.md) ·
+  [operations runbook](./backend/docs/github-operations.md) ·
+  [App Manifest](./backend/docs/github-app-manifest.html)
+- [Document sources](./backend/docs/document-sources.md)
+- [Ephemeral environments](./backend/docs/environments-integration.md)
+- [Self-hosted runner pool](./backend/docs/runner-pool-integration.md)
+
+**Operations**
+
+- [Storage & retention](./backend/docs/storage-and-retention.md)
+- [Container reaping & deletion](./backend/docs/container-reaping.md)
+
+**Architecture decisions (ADRs)**
+
+- [0001 — GitHub integration via a GitHub App](./backend/docs/adr/0001-github-app-integration.md)
+- [0002 — Cloudflare as the runtime platform](./backend/docs/adr/0002-cloudflare-platform.md)
+- [0003 — Pluggable ephemeral-environment providers](./backend/docs/adr/0003-ephemeral-environment-provider.md)
+- [0004 — Self-hosted runner pool](./backend/docs/adr/0004-self-hosted-runner-pool.md)
+- [0005 — Two-app tiering for repository creation](./backend/docs/adr/0005-two-app-repo-provisioning.md)
+- [0006 — Tenant-scoped prompt-fragment library](./backend/docs/adr/0006-prompt-fragment-library.md)
 
 ## Deployment
+
+> ⚠️ **Being reworked.** The setup/deployment instructions below are scheduled
+> for a rewrite and may be partially out of date (e.g. they predate the
+> self-hosted runner pool and the two-app GitHub provisioning tiers). Treat them
+> as a rough guide until this section is refreshed.
+
 
 Both halves deploy to Cloudflare under the `iselwin@gmail.com` account
 (`wrangler whoami` must show account `fe0047c6e869c8cb875ca425a9c341af`). Each
