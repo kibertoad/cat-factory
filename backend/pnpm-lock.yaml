@@ -8,6 +8,46 @@ importers:
 
   .: {}
 
+  packages/benchmark-harness:
+    dependencies:
+      '@ai-sdk/anthropic':
+        specifier: ^3.0.0
+        version: 3.0.84(zod@3.25.76)
+      '@ai-sdk/openai':
+        specifier: ^3.0.0
+        version: 3.0.71(zod@3.25.76)
+      '@ai-sdk/openai-compatible':
+        specifier: ^2.0.0
+        version: 2.0.50(zod@3.25.76)
+      '@cat-factory/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@cat-factory/core':
+        specifier: workspace:*
+        version: link:../core
+      '@cat-factory/implementer-harness':
+        specifier: workspace:*
+        version: link:../implementer-harness
+      ai:
+        specifier: ^6.0.0
+        version: 6.0.206(zod@3.25.76)
+      valibot:
+        specifier: ^1.0.0
+        version: 1.4.1(typescript@5.9.3)
+      workers-ai-provider:
+        specifier: ^3.2.0
+        version: 3.2.0(@ai-sdk/anthropic@3.0.84(zod@3.25.76))(@ai-sdk/openai@3.0.71(zod@3.25.76))(@ai-sdk/provider@3.0.10)(ai@6.0.206(zod@3.25.76))
+    devDependencies:
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.19.21
+      typescript:
+        specifier: ^5.6.0
+        version: 5.9.3
+      vitest:
+        specifier: ^4.1.8
+        version: 4.1.8(@opentelemetry/api@1.9.0)(@types/node@22.19.21)(vite@7.3.5(@types/node@22.19.21))
+
   packages/contracts:
     dependencies:
       valibot:
