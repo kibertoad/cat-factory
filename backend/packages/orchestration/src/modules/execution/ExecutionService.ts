@@ -5,7 +5,6 @@ import type {
   BlueprintService,
   ExecutionInstance,
   PipelineStep,
-  StepSubtasks,
 } from '@cat-factory/kernel'
 import { parseBlueprintService } from '@cat-factory/contracts'
 import { assertFound, ConflictError, getErrorMessage, NotFoundError, sameSubtasks } from '@cat-factory/kernel'
