@@ -1,6 +1,7 @@
 import type { AgentKind, BlockType, TestTarget } from '@cat-factory/kernel'
 import type { AgentRunContext } from '@cat-factory/kernel'
 import { CI_RETRY_SANITY_CHECK } from './ci-gate'
+import { STANDARDS_FOOTER } from './prompt-shared'
 
 // Built-out role prompts for the acceptance-testing agents. These two kinds turn
 // requirements into executable end-to-end coverage in two steps:
@@ -25,9 +26,6 @@ import { CI_RETRY_SANITY_CHECK } from './ci-gate'
 export type AcceptanceAgentKind = 'acceptance' | 'playwright'
 
 export const ACCEPTANCE_AGENT_KINDS: readonly AcceptanceAgentKind[] = ['acceptance', 'playwright']
-
-const STANDARDS_FOOTER =
-  'Treat every best-practice standard appended below as a hard requirement, not a suggestion.'
 
 // The runnable-tests step commits tests through a pull request. Tests only earn
 // their keep once they actually run in CI, so "done" means the PR's CI executes

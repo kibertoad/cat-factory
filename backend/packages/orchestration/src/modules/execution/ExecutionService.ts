@@ -8,7 +8,7 @@ import type {
   StepSubtasks,
 } from '@cat-factory/kernel'
 import { parseBlueprintService } from '@cat-factory/contracts'
-import { assertFound, ConflictError, NotFoundError } from '@cat-factory/kernel'
+import { assertFound, ConflictError, getErrorMessage, NotFoundError, sameSubtasks } from '@cat-factory/kernel'
 import { DEFAULT_CONFIDENCE_THRESHOLD } from '@cat-factory/kernel'
 import type {
   BlockRepository,
@@ -463,7 +463,7 @@ export class ExecutionService {
     } catch (error) {
       if (options.rethrowAgentErrors) throw error
       return {
-        output: `Deployer error: ${error instanceof Error ? error.message : String(error)}`,
+        output: `Deployer error: ${getErrorMessage(error)}`,
       }
     }
   }
@@ -498,7 +498,7 @@ export class ExecutionService {
       if (options.rethrowAgentErrors) throw error
       // Otherwise a failed agent must not wedge the run; record and complete.
       return {
-        output: `Agent error: ${error instanceof Error ? error.message : String(error)}`,
+        output: `Agent error: ${getErrorMessage(error)}`,
       }
     }
   }
@@ -983,22 +983,4 @@ export class ExecutionService {
       // The container may already be gone (eviction/completion) — nothing to reclaim.
     }
   }
-}
-
-/** Whether two subtask snapshots carry the same counts + items (skips redundant re-emits). */
-function sameSubtasks(a: StepSubtasks | undefined, b: StepSubtasks): boolean {
-  return (
-    a !== undefined &&
-    a.completed === b.completed &&
-    a.inProgress === b.inProgress &&
-    a.total === b.total &&
-    sameSubtaskItems(a.items, b.items)
-  )
-}
-
-/** Whether two todo-item lists carry the same labels + statuses, in order. */
-function sameSubtaskItems(a: StepSubtasks['items'], b: StepSubtasks['items']): boolean {
-  if (a === b) return true
-  if (!a || !b || a.length !== b.length) return false
-  return a.every((it, i) => it.label === b[i]?.label && it.status === b[i]?.status)
 }

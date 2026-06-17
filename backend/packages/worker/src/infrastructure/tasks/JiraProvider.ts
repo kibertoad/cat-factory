@@ -1,12 +1,13 @@
 import {
   ValidationError,
+  atlassianLogic,
   type TaskComment,
   type TaskContent,
   type TaskCredentials,
   type TaskSourceProvider,
   type NormalizedTaskConnection,
 } from '@cat-factory/kernel'
-import { JIRA_DESCRIPTOR, jiraLogic, atlassianLogic } from '@cat-factory/integrations'
+import { JIRA_DESCRIPTOR, jiraLogic } from '@cat-factory/integrations'
 
 // JiraProvider: the task-source provider for Jira Cloud. It authenticates with
 // HTTP Basic (account email + API token, the same scheme as Confluence), fetches

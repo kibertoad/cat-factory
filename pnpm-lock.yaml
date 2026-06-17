@@ -29,15 +29,24 @@ importers:
       '@ai-sdk/openai-compatible':
         specifier: ^2.0.0
         version: 2.0.50(zod@3.25.76)
+      '@cat-factory/agents':
+        specifier: workspace:*
+        version: link:../../packages/agents
       '@cat-factory/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
-      '@cat-factory/core':
-        specifier: workspace:*
-        version: link:../../packages/core
       '@cat-factory/implementer-harness':
         specifier: workspace:*
         version: link:../implementer-harness
+      '@cat-factory/kernel':
+        specifier: workspace:*
+        version: link:../../packages/kernel
+      '@cat-factory/orchestration':
+        specifier: workspace:*
+        version: link:../../packages/orchestration
+      '@cat-factory/spend':
+        specifier: workspace:*
+        version: link:../../packages/spend
       ai:
         specifier: ^6.0.0
         version: 6.0.206(zod@3.25.76)
@@ -113,37 +122,6 @@ importers:
       typescript:
         specifier: ^5.6.0
         version: 5.9.3
-
-  backend/packages/core:
-    dependencies:
-      '@cat-factory/agents':
-        specifier: workspace:*
-        version: link:../agents
-      '@cat-factory/contracts':
-        specifier: workspace:*
-        version: link:../contracts
-      '@cat-factory/integrations':
-        specifier: workspace:*
-        version: link:../integrations
-      '@cat-factory/kernel':
-        specifier: workspace:*
-        version: link:../kernel
-      '@cat-factory/orchestration':
-        specifier: workspace:*
-        version: link:../orchestration
-      '@cat-factory/spend':
-        specifier: workspace:*
-        version: link:../spend
-      '@cat-factory/workspaces':
-        specifier: workspace:*
-        version: link:../workspaces
-    devDependencies:
-      typescript:
-        specifier: ^5.6.0
-        version: 5.9.3
-      vitest:
-        specifier: ^4.1.8
-        version: 4.1.8(@opentelemetry/api@1.9.1)(@types/node@22.19.21)(happy-dom@15.11.7)(vite@7.3.5(@types/node@22.19.21)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(yaml@2.9.0))
 
   backend/packages/integrations:
     dependencies:
@@ -239,12 +217,21 @@ importers:
       '@ai-sdk/openai-compatible':
         specifier: ^2.0.0
         version: 2.0.50(zod@3.25.76)
+      '@cat-factory/agents':
+        specifier: workspace:*
+        version: link:../agents
       '@cat-factory/contracts':
         specifier: workspace:*
         version: link:../contracts
-      '@cat-factory/core':
+      '@cat-factory/integrations':
         specifier: workspace:*
-        version: link:../core
+        version: link:../integrations
+      '@cat-factory/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+      '@cat-factory/orchestration':
+        specifier: workspace:*
+        version: link:../orchestration
       '@cat-factory/prompt-fragments':
         specifier: workspace:*
         version: link:../prompt-fragments

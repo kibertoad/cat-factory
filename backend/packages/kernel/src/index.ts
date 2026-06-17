@@ -7,8 +7,10 @@ export {
   ValidationError,
   ConflictError,
   assertFound,
+  getErrorMessage,
   type DomainErrorCode,
 } from './domain/errors'
+export { sameSubtasks, sameSubtaskItems } from './domain/subtasks.logic'
 export { DEFAULT_CONFIDENCE_THRESHOLD, BLOCK_TYPE_LABEL, TASK_NAME_BANK } from './domain/catalog'
 export {
   type SelectableModel,
@@ -23,6 +25,7 @@ export { seedBlocks, seedPipelines, BLUEPRINT_PIPELINE_ID } from './domain/seed'
 
 export * from './ports'
 
+export { MapSourceRegistry } from './shared/source-registry.logic'
 export * as atlassianLogic from './shared/atlassian.logic'
 export {
   markdownToText,

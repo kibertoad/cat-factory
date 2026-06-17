@@ -1,7 +1,7 @@
 import type { TaskSourceKind } from '@cat-factory/kernel'
 import type { TaskSourceProvider, TaskSourceRegistry, TaskContent } from '@cat-factory/kernel'
 import type { TaskRecord } from '@cat-factory/kernel'
-import { markdownToText, buildExcerpt } from '@cat-factory/kernel'
+import { markdownToText, buildExcerpt, MapSourceRegistry } from '@cat-factory/kernel'
 
 export type { TaskContextView } from '@cat-factory/kernel'
 export { renderTaskContext } from '@cat-factory/kernel'
@@ -13,21 +13,9 @@ export { renderTaskContext } from '@cat-factory/kernel'
 // independent of any one source's format. Kept pure for easy testing.
 
 /** A trivial in-memory provider registry built from the wired providers. */
-export class MapTaskSourceRegistry implements TaskSourceRegistry {
-  private readonly byKind: Map<TaskSourceKind, TaskSourceProvider>
-
-  constructor(providers: TaskSourceProvider[]) {
-    this.byKind = new Map(providers.map((p) => [p.kind, p]))
-  }
-
-  get(kind: TaskSourceKind): TaskSourceProvider | undefined {
-    return this.byKind.get(kind)
-  }
-
-  list(): TaskSourceProvider[] {
-    return [...this.byKind.values()]
-  }
-}
+export class MapTaskSourceRegistry
+  extends MapSourceRegistry<TaskSourceKind, TaskSourceProvider>
+  implements TaskSourceRegistry {}
 
 /** A short plain-text excerpt of an issue: its summary + the start of its description. */
 export function buildTaskExcerpt(content: TaskContent | TaskRecord, max = 280): string {

@@ -1,7 +1,7 @@
 import type { BlockType, DocumentSourceKind } from '@cat-factory/kernel'
 import type { DocumentBoardPlan, PlanFrame, PlanModule, PlanTask } from '@cat-factory/kernel'
 import type { DocumentSourceProvider, DocumentSourceRegistry } from '@cat-factory/kernel'
-import { buildExcerpt, markdownToText } from '@cat-factory/kernel'
+import { buildExcerpt, markdownToText, MapSourceRegistry } from '@cat-factory/kernel'
 
 // `markdownToText`/`buildExcerpt` now live in the shared markdown helpers (also
 // used by the task-source integration); re-exported here so existing
@@ -26,21 +26,9 @@ const BLOCK_TYPES: readonly BlockType[] = [
 ]
 
 /** A trivial in-memory provider registry built from the wired providers. */
-export class MapDocumentSourceRegistry implements DocumentSourceRegistry {
-  private readonly byKind: Map<DocumentSourceKind, DocumentSourceProvider>
-
-  constructor(providers: DocumentSourceProvider[]) {
-    this.byKind = new Map(providers.map((p) => [p.kind, p]))
-  }
-
-  get(kind: DocumentSourceKind): DocumentSourceProvider | undefined {
-    return this.byKind.get(kind)
-  }
-
-  list(): DocumentSourceProvider[] {
-    return [...this.byKind.values()]
-  }
-}
+export class MapDocumentSourceRegistry
+  extends MapSourceRegistry<DocumentSourceKind, DocumentSourceProvider>
+  implements DocumentSourceRegistry {}
 
 interface Heading {
   level: number

@@ -1,5 +1,6 @@
 import type { AgentKind } from '@cat-factory/kernel'
 import { CI_RETRY_SANITY_CHECK } from './ci-gate'
+import { STANDARDS_FOOTER } from './prompt-shared'
 
 // Built-out role prompts for the business-logic / domain-rules track. Two kinds
 // keep a service's encoded business rules honest and documented:
@@ -49,9 +50,6 @@ export const BUSINESS_REVIEWER_KIND: BusinessLogicAgentKind = 'business-reviewer
  * default — the prompts tell the agents to respect one if they find it.
  */
 export const BUSINESS_LOGIC_DOCS_DIR = 'docs/business-logic'
-
-const STANDARDS_FOOTER =
-  'Treat every best-practice standard appended below as a hard requirement, not a suggestion.'
 
 // The documenter commits files through a pull request, so "done" means the docs
 // are written and the PR is open and green — mirroring the build / mock / e2e
