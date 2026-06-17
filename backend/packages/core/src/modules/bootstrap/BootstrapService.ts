@@ -53,6 +53,13 @@ export interface BootstrapServiceDependencies {
   bootstrapRunner?: BootstrapRunner
   /** Pushes live bootstrap progress / board changes to subscribed clients. */
   eventPublisher?: ExecutionEventPublisher
+  /**
+   * Optional: invoked (best-effort) after a bootstrap succeeds and its repo is
+   * linked to the service frame, to kick off the initial blueprint run that maps
+   * the freshly bootstrapped repo and populates the board. Wired to start the
+   * blueprint-only pipeline; absent in tests / when blueprints aren't configured.
+   */
+  onBootstrapSucceeded?: (workspaceId: string, blockId: string) => Promise<void>
 }
 
 function toReferenceArchitecture(record: ReferenceArchitectureRecord): ReferenceArchitecture {
@@ -502,6 +509,18 @@ export class BootstrapService {
     )
     await this.emitBootstrap(workspaceId, toBootstrapJob({ ...record, ...patch }), block)
     await this.deps.eventPublisher?.boardChanged(workspaceId, 'bootstrap-succeeded')
+
+    // Kick off the initial blueprint run for the new repo (best-effort): it maps
+    // the bootstrapped code into the in-repo `blueprints/` folder and reconciles
+    // the board from it. A failure here must not flip the successful bootstrap to
+    // failed — the repo is live; the user can re-run the mapping.
+    if (record.blockId) {
+      try {
+        await this.deps.onBootstrapSucceeded?.(workspaceId, record.blockId)
+      } catch {
+        // swallow — see above
+      }
+    }
     return { state: 'done' }
   }
 

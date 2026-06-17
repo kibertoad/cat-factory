@@ -81,6 +81,13 @@ export interface AgentRunContext {
      * harness. Absent when no preference is recorded.
      */
     testTarget?: TestTarget
+    /**
+     * A pull request already opened for this block (e.g. by an earlier `coder`
+     * step in the same run). The Blueprinter step reads its `branch` so it commits
+     * the regenerated blueprint onto the implementation's branch rather than a new
+     * one. Absent until a step records a PR.
+     */
+    pullRequest?: PullRequestRef
   }
   /** Outputs produced by earlier steps in the same run, in order. */
   priorOutputs: { agentKind: AgentKind; output: string }[]
@@ -132,6 +139,13 @@ export interface AgentRunResult {
    * a PR); the engine records it on the block so the board can link to it.
    */
   pullRequest?: PullRequestRef
+  /**
+   * The service → modules → features blueprint tree a Blueprinter step produced.
+   * The engine strictly validates it and reconciles it onto the board (in place).
+   * Carried as `unknown` so the core port stays free of the contracts schema; the
+   * engine parses it with the authoritative Valibot schema before use.
+   */
+  blueprintService?: unknown
   /**
    * Tokens the model consumed for this call. Reported by inline LLM executors so
    * the spend safeguard can meter usage; absent for the container executor (whose

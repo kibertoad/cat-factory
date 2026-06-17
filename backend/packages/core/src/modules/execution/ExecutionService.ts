@@ -2,10 +2,12 @@ import type {
   AgentFailure,
   AgentFailureKind,
   Block,
+  BlueprintService,
   ExecutionInstance,
   PipelineStep,
   StepSubtasks,
 } from '../../domain/types'
+import { parseBlueprintService } from '@cat-factory/contracts'
 import { assertFound, ConflictError, NotFoundError } from '../../domain/errors'
 import { DEFAULT_CONFIDENCE_THRESHOLD } from '../../domain/catalog'
 import type {
@@ -83,6 +85,22 @@ export interface ExecutionServiceDependencies {
    * kind. Absent → the engine uses the block's manual `fragmentIds` unchanged.
    */
   fragmentResolver?: FragmentResolver
+  /**
+   * Optional: when the board-scan module is configured, a `blueprints` step's
+   * decomposition tree is reconciled onto the board through this (BoardScanService).
+   * Absent → a blueprint step still runs and commits its in-repo files, but the
+   * board isn't auto-updated from it.
+   */
+  blueprintReconciler?: BlueprintReconciler
+}
+
+/** Reconciles a Blueprinter step's tree onto the board in place (BoardScanService). */
+export interface BlueprintReconciler {
+  reconcileBlueprint(
+    workspaceId: string,
+    frameId: string | null,
+    service: BlueprintService,
+  ): Promise<unknown>
 }
 
 /**
@@ -110,6 +128,7 @@ export class ExecutionService {
   private readonly tasks?: TaskRepository
   private readonly environmentProvisioning?: EnvironmentProvisioningService
   private readonly fragmentResolver?: FragmentResolver
+  private readonly blueprintReconciler?: BlueprintReconciler
 
   constructor({
     workspaceRepository,
@@ -127,6 +146,7 @@ export class ExecutionService {
     taskRepository,
     environmentProvisioning,
     fragmentResolver,
+    blueprintReconciler,
   }: ExecutionServiceDependencies) {
     this.workspaceRepository = workspaceRepository
     this.blockRepository = blockRepository
@@ -143,6 +163,7 @@ export class ExecutionService {
     this.tasks = taskRepository
     this.environmentProvisioning = environmentProvisioning
     this.fragmentResolver = fragmentResolver
+    this.blueprintReconciler = blueprintReconciler
   }
 
   private requireWorkspace(workspaceId: string) {
@@ -390,6 +411,13 @@ export class ExecutionService {
       })
     }
 
+    // A Blueprinter step produced a fresh service decomposition. Validate it with
+    // the authoritative schema (a bad payload must never touch the board), then
+    // reconcile it in place onto the run's service frame.
+    if (result.blueprintService !== undefined) {
+      await this.ingestBlueprint(workspaceId, instance.blockId, result.blueprintService)
+    }
+
     if (isFinalStep) {
       instance.status = 'done'
       await this.finalizeBlock(workspaceId, instance, result.confidence)
@@ -475,6 +503,46 @@ export class ExecutionService {
     }
   }
 
+  /**
+   * Strictly parse a Blueprinter step's tree and reconcile it onto the board. The
+   * blueprint maps the whole repository, so it is reconciled onto the run block's
+   * **service frame** (walked up from the block), not the task the run targeted.
+   * Best-effort and reconciler-gated: a parse/reconcile failure is logged-by-throw
+   * upstream only when the reconciler is wired; with no reconciler it is a no-op so
+   * the blueprint's in-repo files still land.
+   */
+  private async ingestBlueprint(
+    workspaceId: string,
+    blockId: string,
+    rawService: unknown,
+  ): Promise<void> {
+    if (!this.blueprintReconciler) return
+    let service: BlueprintService
+    try {
+      service = parseBlueprintService(rawService)
+    } catch {
+      // A malformed tree must not fail the step (the in-repo files are already
+      // committed); skip the board reconcile.
+      return
+    }
+    const frameId = await this.resolveServiceFrameId(workspaceId, blockId)
+    await this.blueprintReconciler.reconcileBlueprint(workspaceId, frameId, service)
+  }
+
+  /** Walk up `parentId` from a block to its top-level service frame id (or itself). */
+  private async resolveServiceFrameId(
+    workspaceId: string,
+    blockId: string,
+  ): Promise<string | null> {
+    let current = await this.blockRepository.get(workspaceId, blockId)
+    // Bounded walk (the tree is at most frame → module → task) guarded against cycles.
+    for (let i = 0; current && i < 8; i++) {
+      if (current.level === 'frame' || !current.parentId) return current.id
+      current = await this.blockRepository.get(workspaceId, current.parentId)
+    }
+    return current?.id ?? null
+  }
+
   /** Assemble the {@link AgentRunContext} for a step from the run + block state. */
   private async buildAgentContext(
     workspaceId: string,
@@ -511,6 +579,7 @@ export class ExecutionService {
         ...(resolved ? { resolvedFragments: resolved.fragments } : {}),
         modelId: block.modelId,
         ...(block.testTarget ? { testTarget: block.testTarget } : {}),
+        ...(block.pullRequest ? { pullRequest: block.pullRequest } : {}),
         ...(contextDocs.length ? { contextDocs } : {}),
         ...(contextTasks.length ? { contextTasks } : {}),
       },
@@ -642,8 +711,12 @@ export class ExecutionService {
     if (!block || block.status === 'done') return
 
     if ((block.level ?? 'frame') !== 'task') {
+      // A mapping-only run (just the `blueprints` step, e.g. kicked off after a
+      // bootstrap) leaves the service frame `ready` and droppable rather than
+      // marking the whole service "done".
+      const mappingOnly = instance.steps.every((s) => s.agentKind === 'blueprints')
       await this.blockRepository.update(workspaceId, block.id, {
-        status: 'done',
+        status: mappingOnly ? 'ready' : 'done',
         progress: 1,
       })
       return
