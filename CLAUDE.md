@@ -94,6 +94,45 @@ It mirrors the execution pattern above: dispatch → durable poll → push event
     controller→service→workflow→bootstrapper→harness, queryable in the Cloudflare
     dashboard.
 
+## Service blueprints flow (in-repo map + board population)
+
+A **Blueprinter** agent decomposes a repo into the canonical service → modules →
+features tree and persists it **in the repo** under `blueprints/`, then the board
+is reconciled from it. It is modelled as a normal pipeline step (`agentKind:
+'blueprints'`), so it reuses the whole execution engine — no separate durable
+runner.
+
+- In-repo artifact (`blueprints/`, rendered deterministically by the harness from
+  the coerced tree): `blueprint.json` (canonical `BlueprintService`), `overview.md`
+  (high-level, read first), `modules/<slug>.md` (deep-dive per module), and
+  `version.json` (a tiny manifest — monotonic version + content hash + counts — for
+  quick staleness checks). Strict shape enforced by `parseBlueprintService`
+  (Valibot) at ingest; the harness coerces leniently then the worker/core validate.
+- Harness: `handleBlueprint` (`implementer-harness/src/blueprint.ts`) clones the
+  target branch, reads any existing blueprint (update mode), runs Pi to emit the
+  tree, renders the files, and **commits onto that branch** (no history reset /
+  force-push) via `commitAll`+`pushBranch`. Served at `POST /blueprint`, polled on
+  the shared `/jobs/{id}`. Every agent's `AGENTS.md` carries `BLUEPRINT_GUIDANCE`
+  (pi.ts): read `overview.md` first, open a module file only when relevant.
+- Worker: `ContainerAgentExecutor` builds a blueprint job for the `blueprints` kind
+  — branch = the prior `coder` step's PR branch (`block.pullRequest.branch`) when
+  present (mode `update`), else the repo default branch (mode `create`) — and
+  dispatches it via `RunnerTransport.dispatch(id, body, 'blueprint')` (Cloudflare
+  container only; `CompositeAgentExecutor` routes the kind to the container
+  executor). The returned tree maps to `AgentRunResult.blueprintService`.
+- Core: `ExecutionService.recordStepResult` ingests that tree — strict-parse, then
+  `BoardScanService.reconcileBlueprint(frameId, service)` updates the run block's
+  **service frame** in place (match modules/tasks by name, add missing, refresh
+  descriptions, **never delete**), and emits a `board` event so the SPA refreshes.
+- Triggers: `blueprints` is inserted after `coder` in the default pipelines (so the
+  map + board refresh on the same implementation PR branch), and
+  `BootstrapService.pollBootstrapJob` success starts the blueprint-only
+  `pl_blueprint` pipeline against the new frame (best-effort) to create the initial
+  map. A mapping-only run leaves a frame `ready` (not `done`).
+- Not persisted to `repo_blueprints` on the pipeline path (the in-repo files are the
+  source of truth and the board is the projection); the manual board-scan `scan`
+  command still populates that table.
+
 ## Unified agent runs (failure + retry surface)
 
 Both container-backed flows — task `execution` and repo `bootstrap` — persist to
