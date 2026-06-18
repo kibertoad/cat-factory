@@ -1,6 +1,7 @@
 import Handlebars from 'handlebars/runtime'
 import type { AgentKind } from '@cat-factory/kernel'
 import type { AgentRunContext } from '@cat-factory/kernel'
+import { renderTaskContext } from '@cat-factory/kernel'
 import { CI_RETRY_SANITY_CHECK } from './ci-gate'
 import { STANDARDS_FOOTER } from './prompt-shared'
 import * as templateSpecs from './standard-prompt-templates.generated'
@@ -201,9 +202,35 @@ export function environmentSection(context: AgentRunContext): string {
   return lines.join('\n')
 }
 
+/**
+ * Render the linked extra-context section — documents (requirements / RFCs /
+ * PRDs) and tracker issues attached to the block — or an empty string when none
+ * are linked. Shared by every agent kind (standard phases and the generic roles
+ * alike) so the same context the engine resolves for a step (see
+ * `ExecutionService.buildAgentContext`) reaches whichever agent runs it. The
+ * leading blank lines separate it from the preceding prompt content;
+ * `renderStandardUserPrompt` collapses any runs of blank lines it produces.
+ */
+export function linkedContextSection(context: AgentRunContext): string {
+  const { contextDocs, contextTasks } = context.block
+  const lines: string[] = []
+  if (contextDocs?.length) {
+    lines.push('', 'Linked context documents (requirements / RFCs / PRDs):')
+    for (const doc of contextDocs) lines.push(`### ${doc.title} (${doc.url})`, doc.excerpt)
+  }
+  if (contextTasks?.length) {
+    lines.push('', 'Linked tracker issues (extra context):')
+    for (const task of contextTasks) lines.push(renderTaskContext(task))
+  }
+  return lines.length ? `\n${lines.join('\n')}` : ''
+}
+
 /** Render the built-out user prompt for a standard phase from the run context. */
 export function renderStandardUserPrompt(phase: StandardPhase, context: AgentRunContext): string {
-  const rendered = USER_TEMPLATES[phase](toView(context)) + environmentSection(context)
+  const rendered =
+    USER_TEMPLATES[phase](toView(context)) +
+    linkedContextSection(context) +
+    environmentSection(context)
   // Collapse the blank lines that conditionals leave behind, then trim.
   return rendered.replace(/\n{3,}/g, '\n\n').trim()
 }

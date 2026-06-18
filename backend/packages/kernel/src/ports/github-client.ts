@@ -87,6 +87,40 @@ export interface RepoFileContent {
   sha: string
 }
 
+/** A single comment on an issue, as returned by {@link GitHubClient.getIssue}. */
+export interface GitHubIssueComment {
+  /** Commenter login, or '' when unknown. */
+  author: string
+  /** GitHub-supplied ISO creation timestamp. */
+  createdAt: string
+  /** Comment body (GitHub Markdown, used as-is). */
+  body: string
+}
+
+/**
+ * One issue's full content — body + recent comments + metadata — for linking an
+ * issue to a board block as agent context. Distinct from the lean
+ * {@link GitHubIssue} projection (which omits the body/comments): this is fetched
+ * on demand by the task-source provider, never bulk-synced.
+ */
+export interface GitHubIssueDetail {
+  number: number
+  title: string
+  /** Workflow state, e.g. `open` / `closed`. */
+  state: string
+  /** Canonical web URL (GitHub `html_url`). */
+  url: string
+  /** Issue author login, or null when unknown. */
+  author: string | null
+  /** Assignee login, or null when unassigned. */
+  assignee: string | null
+  labels: string[]
+  /** Issue body (GitHub Markdown). */
+  body: string
+  /** Comments oldest→newest. */
+  comments: GitHubIssueComment[]
+}
+
 /** Installation metadata captured at connect time (needs the app JWT). */
 export interface InstallationMeta {
   accountLogin: string
@@ -160,6 +194,16 @@ export interface GitHubClient {
     ref: GitHubRepoRef,
     opts?: ListOptions,
   ): Promise<Paged<GitHubIssue>>
+  /**
+   * Fetch a single issue's full content (body + comments) for linking it to a
+   * board block as agent context. Throws (GitHubApiError) if the issue or repo
+   * is not visible to the installation.
+   */
+  getIssue(
+    installationId: number,
+    ref: GitHubRepoRef,
+    issueNumber: number,
+  ): Promise<GitHubIssueDetail>
   listCommits(
     installationId: number,
     ref: GitHubRepoRef,

@@ -5,6 +5,7 @@ import type {
   GitHubClient,
   GitHubCommit,
   GitHubIssue,
+  GitHubIssueDetail,
   GitHubPullRequest,
   GitHubRepo,
   GitHubRepoRef,
@@ -112,6 +113,21 @@ export class FakeGitHubClient implements GitHubClient {
 
   async listIssues(): Promise<Paged<GitHubIssue>> {
     return { items: this.issues }
+  }
+
+  /** Full issue details served by getIssue, keyed by `owner/repo#number`. */
+  issueDetails: Record<string, GitHubIssueDetail> = {}
+
+  async getIssue(
+    _installationId: number,
+    ref: GitHubRepoRef,
+    issueNumber: number,
+  ): Promise<GitHubIssueDetail> {
+    const found = this.issueDetails[`${ref.owner}/${ref.repo}#${issueNumber}`]
+    if (!found) {
+      throw new Error(`FakeGitHubClient: no issue ${ref.owner}/${ref.repo}#${issueNumber}`)
+    }
+    return found
   }
 
   async listCommits(

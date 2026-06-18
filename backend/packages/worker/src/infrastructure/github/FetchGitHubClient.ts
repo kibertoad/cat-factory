@@ -6,6 +6,7 @@ import {
   type GitHubClient,
   type GitHubCommit,
   type GitHubIssue,
+  type GitHubIssueDetail,
   type GitHubPullRequest,
   type GitHubRepo,
   type GitHubRepoRef,
@@ -72,6 +73,25 @@ interface GitHubResponse {
   etag?: string
   /** Absolute URL of the next page, if any. */
   next?: string
+}
+
+/** The slice of the single-issue REST payload `getIssue` reads. */
+interface GhIssueDetailPayload {
+  number?: number
+  title?: string
+  state?: string
+  html_url?: string
+  body?: string
+  user?: { login?: string } | null
+  assignee?: { login?: string } | null
+  labels?: Array<string | { name?: string } | null>
+}
+
+/** The slice of the issue-comment REST payload `getIssue` reads. */
+interface GhIssueCommentPayload {
+  body?: string
+  created_at?: string
+  user?: { login?: string } | null
 }
 
 export class FetchGitHubClient implements GitHubClient {
@@ -284,6 +304,37 @@ export class FetchGitHubClient implements GitHubClient {
           .map((i) => gp.toIssueProjection(i, repoId, syncedAt)),
     )
     return { items }
+  }
+
+  async getIssue(
+    installationId: number,
+    ref: GitHubRepoRef,
+    issueNumber: number,
+  ): Promise<GitHubIssueDetail> {
+    const base = `/repos/${ref.owner}/${ref.repo}/issues/${issueNumber}`
+    const { json } = await this.request(base, { installationId })
+    const issue = (json ?? {}) as GhIssueDetailPayload
+    // Comments are a separate paginated collection; oldest→newest is the API's
+    // default order. One page (100) is plenty of context for an agent.
+    const commentsRes = await this.request(`${base}/comments?per_page=${PER_PAGE}`, {
+      installationId,
+    })
+    const rawComments = (commentsRes.json ?? []) as GhIssueCommentPayload[]
+    return {
+      number: issue.number ?? issueNumber,
+      title: issue.title ?? '(untitled)',
+      state: issue.state ?? '',
+      url: issue.html_url ?? `https://github.com/${ref.owner}/${ref.repo}/issues/${issueNumber}`,
+      author: issue.user?.login ?? null,
+      assignee: issue.assignee?.login ?? null,
+      labels: (issue.labels ?? []).map((l) => (typeof l === 'string' ? l : (l?.name ?? ''))).filter(Boolean),
+      body: issue.body ?? '',
+      comments: (Array.isArray(rawComments) ? rawComments : []).map((c) => ({
+        author: c.user?.login ?? '',
+        createdAt: c.created_at ?? '',
+        body: c.body ?? '',
+      })),
+    }
   }
 
   async listCommits(

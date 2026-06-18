@@ -3,8 +3,19 @@
 // description themselves — there are no auto-generated placeholder titles. The
 // task lands in `planned` state; it is never launched here. The user starts a
 // pipeline on it explicitly (and can keep editing it until they do).
+//
+// When the document/task integrations are available, the user can also attach
+// already-imported documents (Confluence / Notion / …) and tracker issues (Jira
+// / GitHub) as extra context up front. Linking needs the block id, so we create
+// the task first, then link the selected items to it before closing — the same
+// context the agents see for every step of the run (see the backend's
+// linkedContextSection).
+import type { SourceDocument, SourceTask } from '~/types/domain'
+
 const ui = useUiStore()
 const board = useBoardStore()
+const documents = useDocumentsStore()
+const tasks = useTasksStore()
 const toast = useToast()
 
 const open = computed({
@@ -22,23 +33,90 @@ const title = ref('')
 const description = ref('')
 const saving = ref(false)
 
-// Reset the form whenever the modal opens for a (new) container.
+// Pending selections, keyed by `source:externalId` (stable across reloads).
+const selectedDocs = ref<Set<string>>(new Set())
+const selectedTasks = ref<Set<string>>(new Set())
+
+const docKey = (d: Pick<SourceDocument, 'source' | 'externalId'>) => `${d.source}:${d.externalId}`
+const taskKey = (t: Pick<SourceTask, 'source' | 'externalId'>) => `${t.source}:${t.externalId}`
+
+const showContext = computed(
+  () =>
+    (documents.available && documents.documents.length > 0) ||
+    (tasks.available && tasks.tasks.length > 0),
+)
+
+// Reset the form whenever the modal opens for a (new) container, and refresh the
+// imported docs/issues so the latest are selectable.
 watch(open, (isOpen) => {
-  if (isOpen) {
-    title.value = ''
-    description.value = ''
-    saving.value = false
-  }
+  if (!isOpen) return
+  title.value = ''
+  description.value = ''
+  saving.value = false
+  selectedDocs.value = new Set()
+  selectedTasks.value = new Set()
+  documents.loadDocuments().catch(() => {})
+  tasks.loadTasks().catch(() => {})
 })
 
+function toggleDoc(key: string) {
+  const next = new Set(selectedDocs.value)
+  if (next.has(key)) next.delete(key)
+  else next.add(key)
+  selectedDocs.value = next
+}
+
+function toggleTask(key: string) {
+  const next = new Set(selectedTasks.value)
+  if (next.has(key)) next.delete(key)
+  else next.add(key)
+  selectedTasks.value = next
+}
+
 const canAdd = computed(() => title.value.trim().length > 0)
+
+/** Link every selected doc/issue to the new block; returns how many failed. */
+async function linkSelections(blockId: string): Promise<number> {
+  let failed = 0
+  for (const doc of documents.documents) {
+    if (!selectedDocs.value.has(docKey(doc))) continue
+    try {
+      await documents.linkToBlock(blockId, doc.source, doc.externalId)
+    } catch {
+      failed++
+    }
+  }
+  for (const task of tasks.tasks) {
+    if (!selectedTasks.value.has(taskKey(task))) continue
+    try {
+      await tasks.linkToBlock(blockId, task.source, task.externalId)
+    } catch {
+      failed++
+    }
+  }
+  return failed
+}
 
 async function add() {
   const containerId = ui.addTaskContainerId
   if (!containerId || !canAdd.value) return
   saving.value = true
   try {
-    await board.addTask(containerId, title.value.trim(), description.value.trim() || undefined)
+    const block = await board.addTask(
+      containerId,
+      title.value.trim(),
+      description.value.trim() || undefined,
+    )
+    if (block) {
+      const failed = await linkSelections(block.id)
+      if (failed > 0) {
+        toast.add({
+          title: `Task added, but ${failed} attachment${failed === 1 ? '' : 's'} could not be linked`,
+          icon: 'i-lucide-triangle-alert',
+          color: 'warning',
+        })
+      }
+    }
     ui.closeAddTask()
   } catch (e) {
     toast.add({
@@ -80,6 +158,62 @@ async function add() {
             class="w-full"
           />
         </UFormField>
+
+        <div v-if="showContext" class="space-y-2">
+          <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+            Extra context (optional)
+          </span>
+
+          <div v-if="documents.available && documents.documents.length" class="space-y-1">
+            <button
+              v-for="doc in documents.documents"
+              :key="docKey(doc)"
+              type="button"
+              class="flex w-full items-center gap-1.5 rounded-md border px-2 py-1.5 text-left text-xs"
+              :class="
+                selectedDocs.has(docKey(doc))
+                  ? 'border-indigo-500/60 bg-indigo-500/10 text-slate-200'
+                  : 'border-slate-800 bg-slate-900/60 text-slate-300 hover:bg-slate-800/60'
+              "
+              @click="toggleDoc(docKey(doc))"
+            >
+              <UIcon
+                :name="selectedDocs.has(docKey(doc)) ? 'i-lucide-check' : (documents.descriptorFor(doc.source)?.icon ?? 'i-lucide-file-text')"
+                class="h-3.5 w-3.5 shrink-0 text-indigo-400"
+              />
+              <span class="truncate">{{ doc.title }}</span>
+            </button>
+          </div>
+
+          <div v-if="tasks.available && tasks.tasks.length" class="space-y-1">
+            <button
+              v-for="task in tasks.tasks"
+              :key="taskKey(task)"
+              type="button"
+              class="flex w-full items-center gap-1.5 rounded-md border px-2 py-1.5 text-left text-xs"
+              :class="
+                selectedTasks.has(taskKey(task))
+                  ? 'border-indigo-500/60 bg-indigo-500/10 text-slate-200'
+                  : 'border-slate-800 bg-slate-900/60 text-slate-300 hover:bg-slate-800/60'
+              "
+              @click="toggleTask(taskKey(task))"
+            >
+              <UIcon
+                :name="selectedTasks.has(taskKey(task)) ? 'i-lucide-check' : (tasks.descriptorFor(task.source)?.icon ?? 'i-lucide-square-check')"
+                class="h-3.5 w-3.5 shrink-0 text-indigo-400"
+              />
+              <span class="truncate">{{ task.externalId }} · {{ task.title }}</span>
+              <UBadge color="neutral" variant="soft" size="xs" class="ml-auto shrink-0">
+                {{ task.status }}
+              </UBadge>
+            </button>
+          </div>
+
+          <p class="text-[11px] text-slate-500">
+            Attached documents and issues are fed to every agent step as context. Import more from
+            the sidebar or the task inspector.
+          </p>
+        </div>
 
         <p class="text-[11px] text-slate-500">
           The task is added in a planned state. It won't run until you start a pipeline on it — you

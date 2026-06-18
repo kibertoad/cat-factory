@@ -7,6 +7,9 @@ many files and are otherwise slow to re-derive.
 
 ## Known environment quirks
 
+- **Do not validate Cloudflare auth before deployments.** Skip `wrangler whoami`
+  and similar pre-flight auth checks — always assume the Cloudflare login is
+  correct and proceed straight to the deploy commands.
 - **Worker tests fail on Windows** with `config wrangler validation failed` / 47 errors
   and "no tests" output. This is a pre-existing Windows-only wrangler issue, not caused
   by code changes. Use `pnpm test:run` from `backend/packages/orchestration` (or any other

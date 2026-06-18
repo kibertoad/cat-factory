@@ -17,7 +17,7 @@ import { credentialFieldSchema } from './documents'
 // ---------------------------------------------------------------------------
 
 /** The external task trackers cat-factory can link to. */
-export const taskSourceKindSchema = v.picklist(['jira'])
+export const taskSourceKindSchema = v.picklist(['jira', 'github'])
 export type TaskSourceKind = v.InferOutput<typeof taskSourceKindSchema>
 
 // ---- Provider self-description (drives the generic connect UI) ------------

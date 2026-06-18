@@ -73,6 +73,7 @@ import { WebCryptoWebhookVerifier } from './github/WebCryptoWebhookVerifier'
 import { ConfluenceProvider } from './documents/ConfluenceProvider'
 import { NotionProvider } from './documents/NotionProvider'
 import { JiraProvider } from './tasks/JiraProvider'
+import { GitHubIssuesProvider } from './tasks/GitHubIssuesProvider'
 import { D1TaskConnectionRepository } from './repositories/D1TaskConnectionRepository'
 import { D1TaskRepository } from './repositories/D1TaskRepository'
 import { D1PromptFragmentRepository } from './repositories/D1PromptFragmentRepository'
@@ -501,10 +502,34 @@ function selectDocumentsDeps(
  * expanded into board structure. Returns `{}` when disabled, so `createCore`
  * leaves the `tasks` module unassembled.
  */
-function selectTasksDeps(env: Env, config: AppConfig, db: D1Database): Partial<CoreDependencies> {
+function selectTasksDeps(
+  env: Env,
+  config: AppConfig,
+  db: D1Database,
+  clock: Clock,
+  idGenerator: IdGenerator,
+): Partial<CoreDependencies> {
   if (!config.tasks.enabled) return {}
   const providers: TaskSourceProvider[] = []
   if (config.tasks.sources.includes('jira')) providers.push(new JiraProvider())
+  // GitHub issues reuse the workspace's installed GitHub App, so this provider
+  // is wired only when the GitHub integration is also configured — it has no
+  // credentials of its own and resolves the installation per issue.
+  if (config.tasks.sources.includes('github') && config.github.enabled) {
+    const registry = buildAppRegistry(env, config, db, clock)
+    providers.push(
+      new GitHubIssuesProvider({
+        githubClient: new FetchGitHubClient({
+          registry,
+          rateLimitRepository: new D1RateLimitRepository({ db, idGenerator }),
+          idGenerator,
+          clock,
+          apiBase: config.github.apiBase,
+        }),
+        installations: new D1GitHubInstallationRepository({ db }),
+      }),
+    )
+  }
   if (providers.length === 0) return {}
   return {
     taskSourceProviders: providers,
@@ -765,7 +790,7 @@ export function buildContainer(env: Env, overrides: Partial<CoreDependencies> = 
     ...selectGitHubDeps(env, config, db, clock, idGenerator),
     ...selectMergeLifecycleDeps(env, config, db, clock, idGenerator),
     ...selectDocumentsDeps(env, config, db),
-    ...selectTasksDeps(env, config, db),
+    ...selectTasksDeps(env, config, db, clock, idGenerator),
     ...selectRequirementsDeps(env, config, db),
     ...selectEnvironmentsDeps(env, config, db),
     ...selectRunnersDeps(env, config, db),

@@ -28,9 +28,15 @@ watch(open, (isOpen) => {
   if (isOpen) values.value = {}
 })
 
+// A source with no credential fields (e.g. GitHub, which reuses the workspace's
+// installed GitHub App) connects with an empty bag — there is nothing to fill in,
+// so the button is enabled as long as it isn't already connected.
+const credentialless = computed(() => (descriptor.value?.credentialFields.length ?? 0) === 0)
+
 const canSubmit = computed(() => {
   const fields = descriptor.value?.credentialFields ?? []
-  return fields.length > 0 && fields.every((f) => (values.value[f.key] ?? '').trim())
+  if (credentialless.value) return !connected.value
+  return fields.every((f) => (values.value[f.key] ?? '').trim())
 })
 
 async function submit() {
@@ -79,7 +85,12 @@ async function disconnect() {
           Connect {{ descriptor.label }} to import issues and attach them to tasks as agent context.
         </p>
 
-        <div class="space-y-3">
+        <p v-if="credentialless" class="text-[11px] text-slate-500">
+          This source uses the GitHub App already installed on your workspace — there are no
+          credentials to enter. Connecting just enables linking its issues to tasks.
+        </p>
+
+        <div v-else class="space-y-3">
           <UFormField
             v-for="field in descriptor.credentialFields"
             :key="field.key"

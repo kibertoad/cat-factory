@@ -34,6 +34,8 @@ export { type ExecutionEventPublisher, NoopEventPublisher } from './execution-ev
 export type {
   CommitFilesResult,
   GitHubClient,
+  GitHubIssueComment,
+  GitHubIssueDetail,
   GitHubRepoRef,
   InstallationMeta,
   InstallationSummary,

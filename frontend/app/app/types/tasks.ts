@@ -9,7 +9,7 @@
 import type { CredentialField } from './documents'
 
 /** The external task trackers cat-factory can link to. */
-export type TaskSourceKind = 'jira'
+export type TaskSourceKind = 'jira' | 'github'
 
 export type { CredentialField }
 

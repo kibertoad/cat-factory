@@ -1,7 +1,7 @@
 import type { TaskSourceKind } from '@cat-factory/kernel'
 import type { Env } from '../env'
 
-const ALL_SOURCES: readonly TaskSourceKind[] = ['jira']
+const ALL_SOURCES: readonly TaskSourceKind[] = ['jira', 'github']
 
 export interface TasksConfig {
   /**

@@ -63,6 +63,8 @@ export {
 export * as tasksLogic from './modules/tasks/tasks.logic'
 export * as jiraLogic from './modules/tasks/jira.logic'
 export { JIRA_DESCRIPTOR } from './modules/tasks/jira.logic'
+export * as githubIssuesLogic from './modules/tasks/github-issues.logic'
+export { GITHUB_ISSUES_DESCRIPTOR } from './modules/tasks/github-issues.logic'
 
 export {
   EnvironmentConnectionService,

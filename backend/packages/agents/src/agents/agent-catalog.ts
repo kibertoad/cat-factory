@@ -7,9 +7,9 @@ import {
 } from './acceptance-prompts'
 import { businessLogicSystemPrompt } from './business-logic-prompts'
 import { mockSystemPrompt } from './mock-prompts'
-import { renderTaskContext } from '@cat-factory/kernel'
 import {
   environmentSection,
+  linkedContextSection,
   phaseForKind,
   renderStandardUserPrompt,
   standardSystemPrompt,
@@ -107,16 +107,8 @@ function buildBaseUserPrompt(context: AgentRunContext): string {
   if (block.features?.length) {
     lines.push(`Target features: ${block.features.join(', ')}`)
   }
-  if (block.contextDocs?.length) {
-    lines.push('', 'Linked context documents (requirements / RFCs / PRDs):')
-    for (const doc of block.contextDocs) {
-      lines.push(`### ${doc.title} (${doc.url})`, doc.excerpt)
-    }
-  }
-  if (block.contextTasks?.length) {
-    lines.push('', 'Linked tracker issues (extra context):')
-    for (const task of block.contextTasks) lines.push(renderTaskContext(task))
-  }
+  const linked = linkedContextSection(context)
+  if (linked) lines.push(linked)
   const envSection = environmentSection(context)
   if (envSection) lines.push(envSection)
   const approachSection = testApproachSection(context)
