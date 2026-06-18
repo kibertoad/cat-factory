@@ -1,4 +1,5 @@
 import type {
+  BootstrapFailureKind,
   BootstrapJobHandle,
   BootstrapJobRepository,
   BootstrapJobUpdate,
@@ -10,22 +11,17 @@ import type {
   RepoBootstrapper,
   RepoEntry,
   RepoProjectionRepository,
-  StepSubtasks,
 } from '@cat-factory/kernel'
-import type { DurableObjectNamespace } from '@cloudflare/workers-types'
-import type { ExecutionContainer } from '../containers/ExecutionContainer'
 import type { ContainerSessionService } from '../containers/ContainerSessionService'
+import { RunnerJobClient, type ResolveRunnerTransport } from './RunnerJobClient'
 import { logger } from '../observability/logger'
 
-// `/bootstrap` and `/jobs/{id}` are quick (start a background job / read its
-// state), like `/run`: the long bootstrap work is bounded container-side by the
-// job's inactivity + max-duration watchdogs, so these get a short timeout.
-const DISPATCH_TIMEOUT_MS = 30_000
-const POLL_TIMEOUT_MS = 30_000
-
 export interface ContainerRepoBootstrapperDependencies {
-  /** The Durable Object namespace backing the per-run container instances. */
-  container: DurableObjectNamespace<ExecutionContainer>
+  /**
+   * Resolve which runner backend (Cloudflare container or self-hosted pool) a
+   * bootstrap job dispatches to — the same seam the implementation executor rides.
+   */
+  resolveTransport: ResolveRunnerTransport
   /** Resolve which GitHub installation a workspace's repos live under. */
   installationRepository: GitHubInstallationRepository
   /** Look up a job's target repo name when polling (the poll only carries a job id). */
@@ -65,13 +61,6 @@ const SCAFFOLD_SYSTEM_PROMPT =
   'and build/config files appropriate for the stack, leaving the project building. ' +
   'Keep the scope to what the instructions describe; do not invent unrelated features.'
 
-/** The /bootstrap response from the harness. */
-interface BootstrapContainerResult {
-  defaultBranch?: string
-  summary?: string
-  error?: string
-}
-
 /**
  * A {@link RepoBootstrapper} that performs the side-effecting half of a
  * "bootstrap repo" run. The empty target repository is created up front — by the
@@ -88,7 +77,12 @@ interface BootstrapContainerResult {
  * the implementation executor does.
  */
 export class ContainerRepoBootstrapper implements RepoBootstrapper {
-  constructor(private readonly deps: ContainerRepoBootstrapperDependencies) {}
+  /** Shared backend-polymorphic dispatch/poll/release plumbing (see RunnerJobClient). */
+  private readonly jobs: RunnerJobClient
+
+  constructor(private readonly deps: ContainerRepoBootstrapperDependencies) {
+    this.jobs = new RunnerJobClient(deps.resolveTransport)
+  }
 
   /** An active (non-soft-deleted) installation means the workspace is connected. */
   async isWorkspaceConnected(workspaceId: string): Promise<boolean> {
@@ -204,67 +198,32 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
       ...(this.deps.githubApiBase ? { githubApiBase: this.deps.githubApiBase } : {}),
     }
 
-    // One container instance per job (keyed by job id), mirroring the per-run
-    // implementation container. POST /bootstrap starts the background job and
-    // returns immediately; we then poll GET /jobs/{id}. The base Container.fetch
-    // proxies to the harness.
-    const stub = this.deps.container.get(this.deps.container.idFromName(request.jobId))
+    // Dispatch through the shared transport (keyed by job id), exactly like the
+    // implementation executor: it hits the harness `/bootstrap` endpoint, starts the
+    // background job and returns once accepted; we then poll via the same transport.
+    // Idempotent per job id — a replayed dispatch re-attaches rather than duplicating.
     log.info(
       { reference: reference ? `${reference.owner}/${reference.name}` : null },
       'bootstrap: dispatching container',
     )
-    const res = await stub.fetch('http://container/bootstrap', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(DISPATCH_TIMEOUT_MS),
-    })
-    if (!res.ok) {
-      throw new Error(
-        `Bootstrap container dispatch failed (HTTP ${res.status}): ${await safeText(res)}`,
-      )
-    }
+    await this.jobs.dispatch(request.workspaceId, request.jobId, body, 'bootstrap')
     log.info('bootstrap: container accepted job')
     return { workspaceId: request.workspaceId, jobId: request.jobId }
   }
 
-  /** Poll a dispatched bootstrap job, mapping the harness job view into an update. */
+  /** Poll a dispatched bootstrap job, mapping the runner job view into an update. */
   async pollBootstrap(handle: BootstrapJobHandle): Promise<BootstrapJobUpdate> {
-    const stub = this.deps.container.get(this.deps.container.idFromName(handle.jobId))
-    const res = await stub.fetch(`http://container/jobs/${encodeURIComponent(handle.jobId)}`, {
-      method: 'GET',
-      signal: AbortSignal.timeout(POLL_TIMEOUT_MS),
-    })
-    if (res.status === 404) {
-      // The job/container vanished (eviction or crash): report failed so the run
-      // stops with a clear, classified reason the board can act on.
-      return {
-        state: 'failed',
-        failureKind: 'evicted',
-        error: 'Bootstrap job not found (container evicted or crashed)',
-      }
-    }
-    if (!res.ok) {
-      throw new Error(`Bootstrap job poll failed (HTTP ${res.status}): ${await safeText(res)}`)
-    }
-    const view = (await res.json()) as {
-      state: 'running' | 'done' | 'failed'
-      progress?: StepSubtasks
-      result?: BootstrapContainerResult
-      error?: string
-    }
+    const view = await this.jobs.poll(handle.workspaceId, handle.jobId)
 
     if (view.state === 'running') {
       return view.progress ? { state: 'running', subtasks: view.progress } : { state: 'running' }
     }
     if (view.state === 'failed') {
-      // The harness redacts + labels watchdog kills ("…no agent activity…",
-      // "…exceeded max duration…"); classify those as `timeout`, the rest `agent`.
+      // The transport maps an evicted/crashed container (a 404 poll) to a failed
+      // view; the harness redacts + labels watchdog kills. Classify both kinds so the
+      // board surfaces a clear, actionable reason.
       const error = view.error ?? 'Bootstrap job failed'
-      const failureKind = /inactivity|no agent activity|max duration/i.test(error)
-        ? ('timeout' as const)
-        : ('agent' as const)
-      return { state: 'failed', failureKind, error, detail: view.error }
+      return { state: 'failed', failureKind: classifyBootstrapFailure(error), error, detail: view.error }
     }
     // Completed: a structured `error` (e.g. push rejected) is still a failure.
     const result = view.result ?? {}
@@ -281,14 +240,14 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
   }
 
   /**
-   * Best-effort: reclaim the per-run container for a job. Addresses the same
-   * Durable Object instance the run used (keyed by job id) and asks it to shut its
-   * container down. Safe to call when the container is already gone — a stop on a
-   * non-running instance is a no-op, and any error is swallowed by the caller.
+   * Best-effort: reclaim the per-run container for a job. Releases through the same
+   * transport the run dispatched to (keyed by job id) — for the Cloudflare backend
+   * this SIGKILLs the per-run container and clears its live-inventory row. Safe to
+   * call when the container is already gone — a release on a non-running instance is
+   * a no-op, and any error is swallowed by the caller.
    */
   async stopBootstrap(handle: BootstrapJobHandle): Promise<void> {
-    const stub = this.deps.container.get(this.deps.container.idFromName(handle.jobId))
-    await stub.shutdown()
+    await this.jobs.release(handle.workspaceId, handle.jobId)
     logger
       .child({ jobId: handle.jobId, workspaceId: handle.workspaceId })
       .info('bootstrap: stopped container')
@@ -377,10 +336,15 @@ function isProxyableProvider(provider: string): boolean {
   )
 }
 
-async function safeText(res: Response): Promise<string> {
-  try {
-    return (await res.text()).slice(0, 500)
-  } catch {
-    return '(no body)'
-  }
+/**
+ * Classify a failed bootstrap job's error message into a {@link BootstrapFailureKind}
+ * the board can act on. The transport maps an evicted/crashed container (a 404 poll)
+ * to a failed view whose message ends "(container evicted or crashed)"; the harness
+ * redacts + labels its watchdog kills ("…no agent activity…", "…exceeded max
+ * duration…"). Everything else is an ordinary agent fault.
+ */
+function classifyBootstrapFailure(error: string): BootstrapFailureKind {
+  if (/evicted or crashed/i.test(error)) return 'evicted'
+  if (/inactivity|no agent activity|max duration/i.test(error)) return 'timeout'
+  return 'agent'
 }

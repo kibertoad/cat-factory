@@ -428,6 +428,11 @@ export class ExecutionService {
       await this.finalizeBlock(workspaceId, instance, result.confidence)
       await this.executionRepository.upsert(workspaceId, instance)
       await this.emitInstance(workspaceId, instance)
+      // The run is finished: reclaim its per-run container now instead of letting it
+      // idle out its sleepAfter window (~10 min of billed-but-useless compute). All
+      // pipeline steps share the one container keyed by the execution id, so this is
+      // only safe on the FINAL step — never between steps. Best-effort/idempotent.
+      await this.stopRunContainer(workspaceId, instance.id)
       return { kind: 'done' }
     }
     instance.currentStep += 1
@@ -841,6 +846,11 @@ export class ExecutionService {
   ): Promise<void> {
     const instance = await this.executionRepository.get(workspaceId, executionId)
     if (!instance) return
+    // Reclaim the per-run container on the failure path too: a failed run otherwise
+    // leaves its container to idle out sleepAfter. This is the single funnel for
+    // every failure kind (job_failed from the driver, the spend/decision timeouts,
+    // and the user-facing stopRun, which already reclaimed — the call is idempotent).
+    await this.stopRunContainer(workspaceId, executionId)
     const failure: AgentFailure = {
       kind,
       message,

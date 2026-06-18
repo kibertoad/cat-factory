@@ -21,10 +21,18 @@ export interface RunnerJobResult {
   error?: string
   /** A Blueprinter job's decomposition tree (the `/blueprint` endpoint's product). */
   service?: unknown
+  /** A bootstrap job's pushed default branch (the `/bootstrap` endpoint's product). */
+  defaultBranch?: string
 }
 
-/** Which harness endpoint a dispatch targets: a coding run, or a blueprint run. */
-export type RunnerDispatchKind = 'run' | 'blueprint'
+/**
+ * Which harness endpoint a dispatch targets: a coding run, a blueprint run, or a
+ * repo-bootstrap run. All are dispatched + polled identically through this
+ * transport; `kind` only selects the harness endpoint (`/run` | `/blueprint` |
+ * `/bootstrap`). The Cloudflare backend serves all three; a self-hosted pool serves
+ * only `run` and rejects the rest until it implements them.
+ */
+export type RunnerDispatchKind = 'run' | 'blueprint' | 'bootstrap'
 
 /** A job's current state, as the harness/pool reports it. */
 export interface RunnerJobView {
@@ -39,8 +47,9 @@ export interface RunnerTransport {
   /**
    * Start the job `jobId` with the harness job `spec`, or re-attach to one already
    * running for it. Must be idempotent per job id so a replayed dispatch never
-   * starts a duplicate. `kind` selects the harness endpoint (`run` by default, or
-   * `blueprint` for a Blueprinter job); both are polled identically via {@link poll}.
+   * starts a duplicate. `kind` selects the harness endpoint (`run` by default,
+   * `blueprint` for a Blueprinter job, or `bootstrap` for a repo-bootstrap job);
+   * all are polled identically via {@link poll}.
    */
   dispatch(jobId: string, spec: Record<string, unknown>, kind?: RunnerDispatchKind): Promise<void>
   /** Poll the job's current state. */

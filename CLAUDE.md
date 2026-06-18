@@ -120,11 +120,17 @@ It mirrors the execution pattern above: dispatch → durable poll → push event
   **failure** marks the job `failed` and the frame `blocked`. It is idempotent
   (terminal jobs return as-is) so the driver's retries/replays are safe.
 - `ContainerRepoBootstrapper` (worker `infrastructure/ai/ContainerRepoBootstrapper.ts`):
+  a **thin layer on the generic runner seam**, mirroring `ContainerAgentExecutor`.
   `startBootstrap` pre-flights (target exists, reachable, empty — only
   README/.gitignore/license/**AGENTS.md** tolerated, see `isBootstrapBoilerplate`),
-  mints GH + proxy tokens, and dispatches `POST /bootstrap` (async, short timeout);
-  `pollBootstrap` reads `GET /jobs/{id}` and maps the harness job view to running
-  (with subtasks) / done (outcome) / failed.
+  mints GH + proxy tokens, builds the job body, then dispatches via the shared
+  `RunnerJobClient` → `resolveTransport(workspaceId).dispatch(jobId, body,
+  'bootstrap')` (no direct `EXEC_CONTAINER`; backend-polymorphic — Cloudflare
+  always, a self-hosted pool throws a clean "unsupported" until it implements the
+  kind). `pollBootstrap` `RunnerJobClient.poll`s and maps the `RunnerJobView` to
+  running (with subtasks) / done (outcome, from `result.defaultBranch`) / failed
+  (`classifyBootstrapFailure`: `evicted` on a 404-mapped view, `timeout` on a
+  watchdog kill, else `agent`). `stopBootstrap` → `RunnerJobClient.release`.
 - Harness: `/bootstrap` starts a **background job** in a `JobRegistry` (the same
   generic registry as `/run`), keyed by the job id; `handleBootstrap()`
   (`executor-harness/src/bootstrap.ts`) threads `onProgress`/`signal` so Pi's

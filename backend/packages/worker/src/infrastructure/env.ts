@@ -87,6 +87,13 @@ export interface Env {
    * Handed to the container so Pi can reach the LLM proxy at `${url}/v1`.
    */
   WORKER_PUBLIC_URL?: string
+  /**
+   * Age ceiling (minutes) for the instance-level container reaper: the cron sweeper
+   * SIGKILLs any per-run container whose first dispatch is older than this. Default
+   * 90, hard-clamped to ≥75 so a misconfigured low value can't kill live work (the
+   * longest legitimate lifetime is ≈70 min). See config/execution.ts.
+   */
+  CONTAINER_MAX_AGE_MINUTES?: string
 
   // ---- Agent LLM configuration (see config.ts) ----------------------------
   AGENT_DEFAULT_PROVIDER?: string

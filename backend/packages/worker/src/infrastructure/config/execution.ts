@@ -24,6 +24,17 @@ export interface ExecutionConfig {
    * exhausted step-level retries, so this spans several minutes of unreachability).
    */
   jobPollFailureTolerance: number
+  /**
+   * Age ceiling for the instance-level container reaper (epoch-ms). The cron reaper
+   * SIGKILLs any per-run container whose first dispatch is older than this — the
+   * load-bearing backstop for a container the run record can no longer reach (a
+   * terminal run whose container survived, or a stuck-`running` run held warm by a
+   * live driver). Sized above the longest legitimate lifetime: the harness caps a
+   * job at 60 min and the driver at ≈70 min of polling, so 90 min clears the tail.
+   * Floored at 75 min so a misconfigured low value can't reap live work. Config:
+   * `CONTAINER_MAX_AGE_MINUTES` (default 90, clamped to ≥75).
+   */
+  containerMaxAgeMs: number
 }
 
 function intEnv(value: string | undefined, fallback: number): number {
@@ -37,5 +48,8 @@ export function loadExecutionConfig(env: Env): ExecutionConfig {
     jobPollInterval: env.JOB_POLL_INTERVAL?.trim() || '15 seconds',
     jobMaxPolls: intEnv(env.JOB_MAX_POLLS, 280),
     jobPollFailureTolerance: intEnv(env.JOB_POLL_FAILURE_TOLERANCE, 6),
+    // Hard floor of 75 min: a misconfigured low value must never reap live work
+    // (the longest legitimate container lifetime is ≈70 min of driver polling).
+    containerMaxAgeMs: Math.max(75, intEnv(env.CONTAINER_MAX_AGE_MINUTES, 90)) * 60_000,
   }
 }
