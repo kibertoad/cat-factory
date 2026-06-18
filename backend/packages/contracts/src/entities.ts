@@ -386,6 +386,13 @@ export const pipelineStepSchema = v.object({
    * this yields the step's execution duration. Absent until the step completes.
    */
   finishedAt: v.optional(v.nullable(v.number())),
+  /**
+   * How many times this step's container was evicted/crashed and recovered by
+   * automatically re-dispatching a fresh container (bounded by
+   * `MAX_EVICTION_RECOVERIES`). Once spent, a further eviction fails the run as
+   * `evicted` rather than looping. Absent/0 until the first eviction.
+   */
+  evictionRecoveries: v.optional(v.number()),
 })
 export type PipelineStep = v.InferOutput<typeof pipelineStepSchema>
 

@@ -212,6 +212,14 @@ export class ExecutionWorkflow extends WorkflowEntrypoint<Env, ExecutionWorkflow
         return
       }
 
+      // The container kept getting evicted/crashing even after the engine's single
+      // automatic fresh-container restart, so the eviction is deterministic: fail
+      // the run as `evicted` (its hint points at the container logs / instance size).
+      if (result.kind === 'job_evicted') {
+        await failRun(i, result.error, 'evicted')
+        return
+      }
+
       // 'paused' means the spend budget is exhausted: stop driving this run.
       // The /spend/resume endpoint re-creates the workflow once it frees up.
       if (result.kind === 'done' || result.kind === 'noop' || result.kind === 'paused') return

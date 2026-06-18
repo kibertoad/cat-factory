@@ -29,6 +29,14 @@ export type AdvanceResult =
   | { kind: 'awaiting_conflicts'; stepIndex: number }
   /** A polled async job finished with a failure; the driver should fail the run. */
   | { kind: 'job_failed'; error: string }
+  /**
+   * A polled async job's container was evicted/crashed and the single automatic
+   * recovery (a fresh-container re-dispatch of the same step) has been spent, so the
+   * eviction is treated as deterministic. The driver fails the run as `evicted`.
+   * (A first eviction is recovered silently inside {@link ExecutionService.pollAgentJob}
+   * by re-dispatching and returning `continue`, so it never reaches the driver.)
+   */
+  | { kind: 'job_evicted'; error: string }
   /** The final step completed; the run is finished. */
   | { kind: 'done' }
   /** The spend budget is exhausted; the run is paused until it frees up. */

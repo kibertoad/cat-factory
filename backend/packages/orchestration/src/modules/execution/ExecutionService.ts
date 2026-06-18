@@ -52,6 +52,8 @@ import type { BoardService } from '../board/BoardService'
 import type { SpendService } from '@cat-factory/spend'
 import { requireWorkspace } from '@cat-factory/kernel'
 import type { AdvanceOptions, AdvanceResult } from './advance'
+import { planResumedSteps } from './retry.logic'
+import { isContainerEvictionError, MAX_EVICTION_RECOVERIES } from './job.logic'
 
 /**
  * "What to do next" guidance per failure kind a pipeline run can produce, shown
@@ -63,6 +65,8 @@ const EXECUTION_FAILURE_HINTS: Partial<Record<AgentFailureKind, string>> = {
     'An agent step failed after its automatic retries. Review the run, then retry to re-run the pipeline.',
   job_failed:
     'The implementation container reported a failure. Inspect its logs (Cloudflare Workers Observability, filtered by the run id), then retry to spin a fresh container.',
+  evicted:
+    'The implementation container was evicted or crashed repeatedly (it kept vanishing mid-run even after an automatic fresh-container restart). This is often a memory/crash issue on the run — inspect its logs (Cloudflare Workers Observability, filtered by the run id); a heavier container instance type may be needed. Retry to try again.',
   timeout:
     'The run exceeded its time budget — a step or the implementation job did not finish in time. Retry to start it again.',
   decision_timeout:
@@ -465,6 +469,29 @@ export class ExecutionService {
     }
 
     if (update.state === 'failed') {
+      // A container eviction/crash (the per-run container vanished, its in-memory
+      // job is gone) is usually transient. Recover it once by dropping the dead
+      // handle and returning `continue`: the driver loops back into `advanceInstance`,
+      // which re-dispatches the SAME step to a fresh container (a new instance boots
+      // under the same id). A second eviction of the same step is treated as
+      // deterministic and fails the run as `evicted`. A genuine agent/job failure is
+      // never recovered — it fails immediately.
+      if (isContainerEvictionError(update.error)) {
+        const recoveries = step.evictionRecoveries ?? 0
+        if (recoveries < MAX_EVICTION_RECOVERIES) {
+          step.evictionRecoveries = recoveries + 1
+          step.jobId = undefined
+          step.subtasks = undefined
+          step.progress = 0
+          await this.executionRepository.upsert(workspaceId, instance)
+          await this.emitInstance(workspaceId, instance)
+          return { kind: 'continue' }
+        }
+        return {
+          kind: 'job_evicted',
+          error: `${update.error ?? 'Container evicted'} (still evicting after ${recoveries} automatic container restart${recoveries === 1 ? '' : 's'} — treating as deterministic)`,
+        }
+      }
       return { kind: 'job_failed', error: update.error }
     }
 
@@ -1600,9 +1627,18 @@ export class ExecutionService {
   }
 
   /**
-   * Retry a failed run: re-run the same pipeline on the same block, resetting its
-   * steps and re-driving the durable runner. Only a `failed` run can be retried.
-   * Mirrors {@link BootstrapService.retry}; both are reached via the unified
+   * Retry a failed run: re-drive the same pipeline on the same block, **resuming
+   * from the step that actually failed** rather than restarting from step 0. The
+   * steps that already completed are preserved (so a `coder` failure in `pl_full`
+   * doesn't re-run the human-gated `requirements`/`architect` steps before it);
+   * the failed step and everything after it are reset to a clean, re-runnable
+   * state. Only a `failed` run can be retried.
+   *
+   * A fresh instance id is minted because the durable runner addresses one
+   * Workflows instance per execution id and the failed one is terminal — the new
+   * instance simply starts with `currentStep` pointed at the failed step, so the
+   * driver advances forward from there and never re-issues the completed steps'
+   * work. Mirrors {@link BootstrapService.retry}; both are reached via the unified
    * `POST /agent-runs/:id/retry` endpoint.
    */
   async retry(workspaceId: string, executionId: string): Promise<ExecutionInstance> {
@@ -1615,7 +1651,31 @@ export class ExecutionService {
     if (previous.status !== 'failed') {
       throw new ConflictError(`Only a failed run can be retried (run is '${previous.status}').`)
     }
-    return this.start(workspaceId, previous.blockId, previous.pipelineId)
+    await this.requireBlock(workspaceId, previous.blockId)
+
+    const { steps, currentStep } = planResumedSteps(previous)
+    // Replace the terminal failed run for this block with the resumed one (single
+    // run per block, matching the board's by-block projection).
+    await this.executionRepository.deleteByBlock(workspaceId, previous.blockId)
+    const instance: ExecutionInstance = {
+      id: this.idGenerator.next('exec'),
+      blockId: previous.blockId,
+      pipelineId: previous.pipelineId,
+      pipelineName: previous.pipelineName,
+      steps,
+      currentStep,
+      status: 'running',
+    }
+    await this.executionRepository.upsert(workspaceId, instance)
+    const done = steps.filter((s) => s.state === 'done').length
+    await this.blockRepository.update(workspaceId, previous.blockId, {
+      status: 'in_progress',
+      progress: steps.length > 0 ? done / steps.length : 0,
+      executionId: instance.id,
+    })
+    await this.workRunner.startRun(workspaceId, instance.id)
+    await this.emitInstance(workspaceId, instance)
+    return instance
   }
 
   /**
