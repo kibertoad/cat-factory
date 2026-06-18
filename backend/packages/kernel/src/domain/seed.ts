@@ -1,5 +1,4 @@
 import type { Block, Pipeline } from './types'
-import { DEFAULT_CONFIDENCE_THRESHOLD } from './catalog'
 
 // Sample architecture used to populate a workspace on creation. Mirrors the
 // frontend's `app/utils/seed.ts`. Block ids are stable strings; because blocks
@@ -80,8 +79,6 @@ export function seedBlocks(): Block[] {
       level: 'task',
       parentId: 'blk_auth',
       moduleName: 'Sessions',
-      features: ['Credential check', 'Session issue'],
-      confidenceThreshold: DEFAULT_CONFIDENCE_THRESHOLD,
     }),
     base({
       id: 'task_refresh',
@@ -93,9 +90,7 @@ export function seedBlocks(): Block[] {
       level: 'task',
       parentId: 'blk_auth',
       moduleName: 'Sessions',
-      features: ['Token rotation'],
       dependsOn: ['task_login'],
-      confidenceThreshold: DEFAULT_CONFIDENCE_THRESHOLD,
     }),
 
     // A module that already exists, with an implemented task living inside it.
@@ -119,9 +114,7 @@ export function seedBlocks(): Block[] {
       level: 'task',
       parentId: 'mod_sessions',
       moduleName: 'Sessions',
-      features: ['Sliding expiry', 'Session repository'],
       confidence: 0.92,
-      confidenceThreshold: DEFAULT_CONFIDENCE_THRESHOLD,
     }),
   ]
 }

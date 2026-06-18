@@ -150,7 +150,6 @@ const USER_TEMPLATES: Record<StandardPhase, HandlebarsTemplateDelegate> = {
 interface UserPromptView {
   pipelineName: string
   block: { title: string; type: string; description: string }
-  features: string[]
   decisions: { question: string; chosen: string }[]
   priorOutputs: { agentKind: string; output: string }[]
 }
@@ -167,7 +166,6 @@ function toView(context: AgentRunContext): UserPromptView {
       type: context.block.type,
       description: context.block.description,
     },
-    features: context.block.features ?? [],
     decisions,
     priorOutputs: context.priorOutputs,
   }

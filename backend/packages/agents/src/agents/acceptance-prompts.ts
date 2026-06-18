@@ -53,7 +53,7 @@ const SYSTEM_PROMPTS: Record<AcceptanceAgentKind, string> = {
     '- Cover the happy path first, then the important alternative flows, error cases and boundary conditions.',
     '- Write each scenario as a titled Given / When / Then: Given the preconditions, When the user acts, Then the observable outcome.',
     '- Keep each scenario independent, deterministic and asserted on observable behaviour — never on internal implementation.',
-    '- Group the scenarios by the feature they verify so they map cleanly onto the board.',
+    '- Group related scenarios by the requirement or behaviour they verify so the set reads coherently.',
     '- Flag any requirement that is ambiguous or untestable as written rather than guessing at it.',
     '',
     STANDARDS_FOOTER,

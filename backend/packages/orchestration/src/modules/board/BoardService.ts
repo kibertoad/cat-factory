@@ -8,7 +8,7 @@ import type {
 } from '@cat-factory/contracts'
 import type { Block, BlockType, Position } from '@cat-factory/kernel'
 import { assertFound, ValidationError } from '@cat-factory/kernel'
-import { BLOCK_TYPE_LABEL, DEFAULT_CONFIDENCE_THRESHOLD } from '@cat-factory/kernel'
+import { BLOCK_TYPE_LABEL } from '@cat-factory/kernel'
 import type {
   BlockRepository,
   ExecutionRepository,
@@ -153,9 +153,12 @@ export class BoardService {
       executionId: null,
       level: 'task',
       parentId: containerId,
-      confidenceThreshold: DEFAULT_CONFIDENCE_THRESHOLD,
-      features: [],
     }
+    // Optional run configuration chosen at creation: which merge policy governs the
+    // task's auto-merge, and the pipeline its Run controls default to. Empty strings
+    // are treated as "not set" (workspace default preset / no pinned pipeline).
+    if (input.mergePresetId) block.mergePresetId = input.mergePresetId
+    if (input.pipelineId) block.pipelineId = input.pipelineId
     await this.blockRepository.insert(workspaceId, block)
     return block
   }

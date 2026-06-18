@@ -2,9 +2,6 @@ import type { BlockType } from './types'
 
 // Static catalogs and constants used across the domain.
 
-/** Default confidence threshold for a new task (auto-merge at/above this). */
-export const DEFAULT_CONFIDENCE_THRESHOLD = 0.8
-
 /**
  * The built-in merge threshold preset seeded for every workspace, used by any
  * task that hasn't picked its own. A PR auto-merges only when the `merger`

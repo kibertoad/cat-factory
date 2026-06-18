@@ -46,9 +46,7 @@ export const blockSchema = v.object({
   level: blockLevelSchema,
   parentId: v.nullable(v.string()),
   confidence: v.optional(v.number()),
-  confidenceThreshold: v.optional(v.number()),
   moduleName: v.optional(v.string()),
-  features: v.optional(v.array(v.string())),
   /**
    * Ids of curated best-practice prompt fragments selected for this block. Their
    * bodies are composed into the agent system prompt at run time. The catalog
@@ -80,6 +78,12 @@ export const blockSchema = v.object({
    * default preset".
    */
   mergePresetId: v.optional(v.string()),
+  /**
+   * Id of the pipeline chosen for this task at creation (see {@link pipelineSchema}).
+   * The task's "Start"/"Run" controls default to it; absent means the user picks a
+   * pipeline at run time (the board falls back to the first defined pipeline).
+   */
+  pipelineId: v.optional(v.string()),
 })
 export type Block = v.InferOutput<typeof blockSchema>
 

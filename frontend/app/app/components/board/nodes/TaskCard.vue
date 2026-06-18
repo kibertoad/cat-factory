@@ -1,11 +1,6 @@
 <script setup lang="ts">
 import type { Block } from '~/types/domain'
-import {
-  STATUS_META,
-  FEATURE_META,
-  MODULE_META,
-  DEFAULT_CONFIDENCE_THRESHOLD,
-} from '~/utils/catalog'
+import { STATUS_META, MODULE_META } from '~/utils/catalog'
 import AgentFailureCard from '~/components/board/AgentFailureCard.vue'
 import TaskPipelineMini from './TaskPipelineMini.vue'
 
@@ -20,7 +15,6 @@ const toast = useToast()
 
 const task = computed<Block | undefined>(() => board.getBlock(props.taskId))
 const statusMeta = computed(() => (task.value ? STATUS_META[task.value.status] : null))
-const features = computed(() => task.value?.features ?? [])
 const selected = computed(() => ui.selectedBlockId === props.taskId)
 
 // ---- dependencies (gate execution order; may point across frames) ----------
@@ -35,11 +29,11 @@ const runnable = computed(() => board.isRunnable(props.taskId))
 const { depLabel: labelDep } = useDepLabels()
 const depLabel = (dep: Block) => labelDep(dep, task.value?.parentId)
 
-const threshold = computed(() => task.value?.confidenceThreshold ?? DEFAULT_CONFIDENCE_THRESHOLD)
-/** The pipeline a plain "Start" will use (first defined pipeline). */
-const defaultPipeline = computed(() => pipelines.pipelines[0])
-const confidencePct = computed(() =>
-  task.value?.confidence != null ? Math.round(task.value.confidence * 100) : null,
+/** The pipeline a plain "Start" will use: the task's pinned pipeline, else the first. */
+const defaultPipeline = computed(
+  () =>
+    (task.value?.pipelineId ? pipelines.getPipeline(task.value.pipelineId) : undefined) ??
+    pipelines.pipelines[0],
 )
 
 /** The PR the implementer agent opened for this task, if any. */
@@ -67,7 +61,7 @@ async function run() {
     })
     return
   }
-  const pipeline = pipelines.pipelines[0]
+  const pipeline = defaultPipeline.value
   if (!pipeline) {
     toast.add({ title: 'No pipeline defined', description: 'Create one in the builder first.' })
     return
@@ -165,15 +159,6 @@ function selectTask() {
       </span>
     </div>
 
-    <!-- confidence vs threshold (once scored) -->
-    <div v-if="confidencePct != null" class="mt-1.5 flex items-center gap-1 text-[9px]">
-      <UIcon name="i-lucide-gauge" class="h-3 w-3 text-slate-500" />
-      <span :class="task.confidence! >= threshold ? 'text-emerald-400' : 'text-amber-400'">
-        {{ confidencePct }}% conf
-      </span>
-      <span class="text-slate-600">· need {{ Math.round(threshold * 100) }}%</span>
-    </div>
-
     <!-- actions by state -->
     <div class="nodrag mt-2 flex flex-wrap items-center gap-1">
       <template v-if="task.status === 'planned' || task.status === 'ready'">
@@ -245,27 +230,17 @@ function selectTask() {
       </span>
     </div>
 
-    <!-- structural metadata: assigned module + implemented features -->
+    <!-- structural metadata: assigned module -->
     <div
-      v-if="task.moduleName || features.length"
+      v-if="task.moduleName"
       class="mt-2 flex flex-wrap items-center gap-1 border-t border-slate-800 pt-2"
     >
       <span
-        v-if="task.moduleName"
         class="inline-flex items-center gap-1 rounded bg-violet-500/15 px-1.5 py-0.5 text-[9px] text-violet-200"
         :title="`Module: ${task.moduleName}`"
       >
         <UIcon :name="MODULE_META.icon" class="h-3 w-3" :style="{ color: MODULE_META.color }" />
         {{ task.moduleName }}
-      </span>
-      <span
-        v-for="f in features"
-        :key="f"
-        class="inline-flex items-center gap-1 rounded bg-slate-800/80 px-1.5 py-0.5 text-[9px] text-slate-200"
-        :title="`Feature: ${f}`"
-      >
-        <UIcon :name="FEATURE_META.icon" class="h-3 w-3" :style="{ color: FEATURE_META.color }" />
-        <span class="max-w-[110px] truncate">{{ f }}</span>
       </span>
     </div>
   </div>

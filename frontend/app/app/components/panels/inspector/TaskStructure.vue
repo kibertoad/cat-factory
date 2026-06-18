@@ -6,21 +6,6 @@ const props = defineProps<{ block: Block }>()
 const board = useBoardStore()
 const fragments = useFragmentsStore()
 
-// ---- features implemented --------------------------------------------------
-const newFeature = ref('')
-function addFeature() {
-  const v = newFeature.value.trim()
-  if (!v) return
-  const list = props.block.features ? [...props.block.features] : []
-  if (!list.includes(v)) list.push(v)
-  board.updateBlock(props.block.id, { features: list })
-  newFeature.value = ''
-}
-function removeFeature(f: string) {
-  if (!props.block.features) return
-  board.updateBlock(props.block.id, { features: props.block.features.filter((x) => x !== f) })
-}
-
 // ---- best-practice prompt fragments ----------------------------------------
 // Selected fragments (resolved against the catalog; unknown ids are dropped).
 const selectedFragments = computed(() =>
@@ -70,34 +55,6 @@ function removeFragment(id: string) {
         class="w-full"
         placeholder="e.g. Sessions (created on implement if new)"
         icon="i-lucide-package"
-      />
-    </div>
-
-    <!-- features implemented -->
-    <div>
-      <div class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-        Features implemented
-      </div>
-      <div v-if="block.features?.length" class="mb-1 flex flex-wrap gap-1">
-        <UBadge
-          v-for="f in block.features"
-          :key="f"
-          color="success"
-          variant="subtle"
-          size="sm"
-          class="cursor-pointer"
-          @click="removeFeature(f)"
-        >
-          {{ f }}<UIcon name="i-lucide-x" class="ml-0.5 h-3 w-3" />
-        </UBadge>
-      </div>
-      <UInput
-        v-model="newFeature"
-        size="sm"
-        class="w-full"
-        placeholder="Add a feature, press Enter"
-        icon="i-lucide-puzzle"
-        @keydown.enter="addFeature"
       />
     </div>
 

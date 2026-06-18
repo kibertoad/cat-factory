@@ -171,11 +171,5 @@ export const STATUS_META: Record<
   },
 }
 
-/** Default confidence threshold for a new task (auto-merge at/above this). */
-export const DEFAULT_CONFIDENCE_THRESHOLD = 0.8
-
 /** Visual metadata for module sub-frames. */
 export const MODULE_META = { icon: 'i-lucide-package', color: '#a78bfa' }
-
-/** Visual metadata for the "feature" tag tasks carry. */
-export const FEATURE_META = { icon: 'i-lucide-puzzle', color: '#34d399' }

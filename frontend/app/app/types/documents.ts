@@ -57,7 +57,6 @@ export interface SourceDocument {
 export interface PlanTask {
   title: string
   description?: string
-  features?: string[]
 }
 
 /** A proposed module grouping tasks within a planned frame. */

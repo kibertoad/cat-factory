@@ -63,12 +63,11 @@ const RUN_POLL_INTERVAL_MS = 5_000
 /** Role prompt the Blueprinter step's agent runs under (returns the tree as JSON). */
 const BLUEPRINT_SYSTEM_PROMPT =
   'You are a software architect mapping this repository. Decompose it into ONE ' +
-  'top-level service, the modules inside it, and the features within each module. ' +
+  'top-level service and the modules inside it. ' +
   'Anchor every node to the codebase with explicit repo-relative file/directory ' +
   'references. Keep names short and descriptive; group by domain, not by file type. ' +
   'Respond with ONLY a JSON object of shape {"type","name","summary","references":[],' +
-  '"modules":[{"name","summary","references":[],"features":[{"title","summary",' +
-  '"references":[]}]}]} — no prose, no code fences.'
+  '"modules":[{"name","summary","references":[]}]} — no prose, no code fences.'
 
 /** Role prompt the `merger` step runs under (scores the PR; returns JSON only). */
 const MERGER_SYSTEM_PROMPT =
@@ -225,8 +224,8 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
         jobId: executionId,
         systemPrompt: BLUEPRINT_SYSTEM_PROMPT,
         instructions:
-          'Map (or update) this repository into the canonical service → modules → ' +
-          'features blueprint, anchored to real file/directory references.',
+          'Map (or update) this repository into the canonical service → modules ' +
+          'blueprint, anchored to real file/directory references.',
         model: ref.model,
         proxyBaseUrl: this.deps.proxyBaseUrl,
         sessionToken,

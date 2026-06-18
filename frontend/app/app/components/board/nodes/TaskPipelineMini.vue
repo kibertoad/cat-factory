@@ -20,13 +20,12 @@ const steps = computed(() => instance.value?.steps ?? [])
 const showSteps = computed(() => lodAtLeast(lod.value, 'steps') && steps.value.length > 0)
 const showItems = computed(() => lodAtLeast(lod.value, 'subtasks'))
 
-// Which step's prose conclusion is expanded inline. Mirrors the inspector's
-// TaskExecution panel: clicking a step that produced prose (architect /
-// researcher / reviewer …) reveals the full text it wrote, so the zoomed-in
-// pipeline reads its conclusions the same way the inspector does. One at a time.
-const expandedStep = ref<number | null>(null)
-function toggleStep(i: number) {
-  expandedStep.value = expandedStep.value === i ? null : i
+// Clicking a step opens the full agent step-detail overlay — execution metadata
+// (state, timing, model, subtasks) plus the agent's prose output — exactly like
+// clicking it from the inspector panel or the focus-view pipeline, rather than
+// expanding the text inline inside the board card.
+function openStep(i: number) {
+  if (instance.value) ui.openStepDetail(instance.value.id, i)
 }
 
 /** Per-state accent, matching the inspector/focus pipeline views. */
@@ -54,10 +53,9 @@ const ITEM_ICON: Record<string, string> = {
     </div>
     <div v-for="(s, i) in steps" :key="i" class="rounded bg-slate-900/60 px-1.5 py-1">
       <div
-        class="flex items-center gap-1"
-        :class="s.output ? 'cursor-pointer' : ''"
-        :title="s.output ? 'Show what this agent produced' : undefined"
-        @click="s.output && toggleStep(i)"
+        class="flex cursor-pointer items-center gap-1"
+        title="View step details & output"
+        @click.stop="openStep(i)"
       >
         <UIcon
           :name="AGENT_BY_KIND[s.agentKind].icon"
@@ -69,9 +67,8 @@ const ITEM_ICON: Record<string, string> = {
         </span>
         <UIcon
           v-if="s.output"
-          name="i-lucide-chevron-down"
-          class="h-2.5 w-2.5 shrink-0 text-slate-500 transition-transform"
-          :class="expandedStep === i ? 'rotate-180' : ''"
+          name="i-lucide-file-text"
+          class="h-2.5 w-2.5 shrink-0 text-slate-500"
         />
         <span
           v-if="s.subtasks && s.subtasks.total > 0"
@@ -87,13 +84,6 @@ const ITEM_ICON: Record<string, string> = {
           :style="{ color: STATE_META[s.state].color }"
         />
       </div>
-
-      <!-- the prose conclusion this agent produced, revealed on click -->
-      <pre
-        v-if="s.output && expandedStep === i"
-        class="mt-1 max-h-40 overflow-auto whitespace-pre-wrap rounded bg-slate-950/60 px-1.5 py-1 font-sans text-[9px] leading-relaxed text-slate-300"
-        >{{ s.output }}</pre
-      >
 
       <!-- pending approval gate: jump straight to the review modal -->
       <button

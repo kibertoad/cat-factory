@@ -22,17 +22,18 @@ describe('board', () => {
     expect(res.body.title).toMatch(/^Service \d+$/)
   })
 
-  it('adds a user-authored task with the default confidence threshold', async () => {
+  it('adds a user-authored task, optionally pinning a pipeline + merge policy', async () => {
     const res = await app.call<Block>('POST', `/workspaces/${wsId}/blocks/blk_auth/tasks`, {
       title: 'Add SSO login',
       description: 'Support SAML and OIDC providers.',
+      pipelineId: 'pl_quick',
     })
     expect(res.status).toBe(201)
     expect(res.body.level).toBe('task')
     expect(res.body.parentId).toBe('blk_auth')
     expect(res.body.title).toBe('Add SSO login')
     expect(res.body.description).toBe('Support SAML and OIDC providers.')
-    expect(res.body.confidenceThreshold).toBe(0.8)
+    expect(res.body.pipelineId).toBe('pl_quick')
   })
 
   it('rejects a task without a title (no auto-generated names)', async () => {

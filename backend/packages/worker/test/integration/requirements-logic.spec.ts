@@ -19,7 +19,6 @@ const ctx = {
     title: 'Login',
     type: 'service' as const,
     description: 'Authenticate users',
-    features: ['SSO'],
   },
   docs: [{ title: 'Auth PRD', url: 'https://x/prd', excerpt: 'Users sign in with email.' }],
   tasks: [
@@ -38,14 +37,13 @@ describe('requirements review logic', () => {
     const text = renderRequirements(ctx)
     expect(text).toContain('# Login (service)')
     expect(text).toContain('Authenticate users')
-    expect(text).toContain('- SSO')
     expect(text).toContain('Auth PRD')
     expect(text).toContain('PROJ-1')
   })
 
   it('renders a placeholder when no description is provided', () => {
     const text = renderRequirements({
-      block: { title: 'Empty', type: 'service', description: '', features: [] },
+      block: { title: 'Empty', type: 'service', description: '' },
       docs: [],
       tasks: [],
     })

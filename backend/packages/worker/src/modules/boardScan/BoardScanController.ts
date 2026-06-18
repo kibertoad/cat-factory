@@ -16,8 +16,8 @@ const unavailable = (c: Context<AppEnv>, message: string) =>
 
 /**
  * Workspace-scoped board-scan endpoints: read the persisted repository blueprints,
- * and the "scan repository" command (decompose a repo into a service → modules →
- * features blueprint, optionally spawning it onto the board). Mounted under
+ * and the "scan repository" command (decompose a repo into a service → modules
+ * blueprint, optionally spawning it onto the board). Mounted under
  * `/workspaces/:workspaceId`.
  */
 export function boardScanController(): Hono<AppEnv> {

@@ -18,10 +18,7 @@ const tree = {
     {
       name: 'Telemetry',
       summary: 'Metrics + tracing.',
-      references: ['src/telemetry'],
-      features: [
-        { title: 'Metrics', summary: 'Emits counters.', references: ['src/telemetry/metrics.ts'] },
-      ],
+      references: ['src/telemetry', 'src/telemetry/metrics.ts'],
     },
   ],
 }
@@ -44,19 +41,14 @@ describe('blueprint pipeline step', () => {
 
     const snap = (await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)).body
 
-    // The blueprint's module was materialised under the service frame…
+    // The blueprint's module was materialised under the service frame, carrying its
+    // code references in the description (the map tracks services and modules only —
+    // no feature-level tasks are auto-created).
     const telemetry = snap.blocks.find(
       (b) => b.parentId === 'blk_auth' && b.level === 'module' && b.title === 'Telemetry',
     )
     expect(telemetry).toBeTruthy()
-    expect(telemetry!.description).toContain('src/telemetry')
-
-    // …with its feature as a task carrying the code references.
-    const metrics = snap.blocks.find(
-      (b) => b.parentId === telemetry!.id && b.level === 'task' && b.title === 'Metrics',
-    )
-    expect(metrics).toBeTruthy()
-    expect(metrics!.description).toContain('src/telemetry/metrics.ts')
+    expect(telemetry!.description).toContain('src/telemetry/metrics.ts')
 
     // Existing structure is untouched (reconcile never deletes).
     expect(snap.blocks.find((b) => b.id === 'mod_sessions')).toBeTruthy()

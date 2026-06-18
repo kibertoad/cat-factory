@@ -1,9 +1,4 @@
-import type {
-  BlockType,
-  BlueprintFeature,
-  BlueprintModule,
-  BlueprintService,
-} from '@cat-factory/kernel'
+import type { BlockType, BlueprintModule, BlueprintService } from '@cat-factory/kernel'
 
 // Pure helpers for the board-scan feature — no IO, no ports. They coerce an
 // agent's arbitrary JSON into a well-formed blueprint tree (dropping anything
@@ -23,7 +18,6 @@ const BLOCK_TYPES: readonly BlockType[] = [
 ]
 
 const MAX_MODULES = 40
-const MAX_FEATURES = 40
 const MAX_REFERENCES = 40
 
 function asString(value: unknown): string | undefined {
@@ -42,32 +36,15 @@ function coerceReferences(value: unknown): string[] {
   return [...seen]
 }
 
-function coerceFeature(value: unknown): BlueprintFeature | null {
-  if (typeof value !== 'object' || value === null) return null
-  const obj = value as Record<string, unknown>
-  const title = asString(obj.title)
-  if (!title) return null
-  return {
-    title,
-    summary: asString(obj.summary) ?? '',
-    references: coerceReferences(obj.references),
-  }
-}
-
 function coerceModule(value: unknown): BlueprintModule | null {
   if (typeof value !== 'object' || value === null) return null
   const obj = value as Record<string, unknown>
   const name = asString(obj.name)
   if (!name) return null
-  const features = (Array.isArray(obj.features) ? obj.features : [])
-    .map(coerceFeature)
-    .filter((f): f is BlueprintFeature => f !== null)
-    .slice(0, MAX_FEATURES)
   return {
     name,
     summary: asString(obj.summary) ?? '',
     references: coerceReferences(obj.references),
-    features,
   }
 }
 
@@ -103,9 +80,9 @@ export function coerceService(parsed: unknown, fallbackName: string): BlueprintS
   }
 }
 
-/** Total feature count across a service's modules — the unit of work on the board. */
-export function countFeatures(service: BlueprintService): number {
-  return (service.modules ?? []).reduce((sum, m) => sum + (m.features?.length ?? 0), 0)
+/** Module count for a service — the structural size of the map. */
+export function countModules(service: BlueprintService): number {
+  return (service.modules ?? []).length
 }
 
 /**

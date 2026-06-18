@@ -47,6 +47,11 @@ export const addTaskSchema = v.object({
   // The user always names the task — no auto-generated placeholder titles.
   title: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200)),
   description: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(2000))),
+  // The merge threshold preset governing this task's auto-merge; omitted/empty →
+  // the workspace default preset.
+  mergePresetId: v.optional(v.pipe(v.string(), v.maxLength(120))),
+  // The pipeline the task's Run controls default to; omitted/empty → none recorded.
+  pipelineId: v.optional(v.pipe(v.string(), v.maxLength(120))),
 })
 export type AddTaskInput = v.InferOutput<typeof addTaskSchema>
 
@@ -61,14 +66,16 @@ export const updateBlockSchema = v.partial(
     title: v.pipe(v.string(), v.trim(), v.maxLength(200)),
     description: v.pipe(v.string(), v.maxLength(2000)),
     position: positionSchema,
-    confidenceThreshold: v.pipe(v.number(), v.minValue(0), v.maxValue(1)),
     moduleName: v.pipe(v.string(), v.trim(), v.maxLength(120)),
-    features: v.array(v.pipe(v.string(), v.maxLength(120))),
     fragmentIds: v.array(v.pipe(v.string(), v.maxLength(120))),
     // The selected model's catalog id; an empty string resets to the default.
     modelId: v.pipe(v.string(), v.maxLength(120)),
     // Where this block's acceptance / Playwright tests run.
     testTarget: testTargetSchema,
+    // The merge threshold preset id; an empty string resets to the workspace default.
+    mergePresetId: v.pipe(v.string(), v.maxLength(120)),
+    // The task's default pipeline id; an empty string clears the selection.
+    pipelineId: v.pipe(v.string(), v.maxLength(120)),
   }),
 )
 export type UpdateBlockInput = v.InferOutput<typeof updateBlockSchema>

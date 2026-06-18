@@ -41,7 +41,6 @@ export const REQUIREMENT_REVIEW_FIXTURES: RequirementReviewFixture[] = [
         type: 'service' as BlockType,
         description:
           'Let users reset their password. Send them a link by email and let them set a new password.',
-        features: ['Request reset link', 'Set new password'],
       },
       docs: [],
       tasks: [],

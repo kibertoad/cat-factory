@@ -102,13 +102,9 @@ function coerceTask(value: unknown): PlanTask | null {
   const obj = value as Record<string, unknown>
   const title = asString(obj.title)
   if (!title) return null
-  const features = Array.isArray(obj.features)
-    ? obj.features.map(asString).filter((f): f is string => !!f)
-    : undefined
   const task: PlanTask = { title }
   const description = asString(obj.description)
   if (description) task.description = description
-  if (features && features.length) task.features = features
   return task
 }
 

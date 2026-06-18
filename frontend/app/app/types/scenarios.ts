@@ -1,25 +1,27 @@
 // ---------------------------------------------------------------------------
 // Acceptance test scenarios.
 //
-// A feature-scoped, black-box acceptance scenario in Given / When / Then form.
-// These are what the `acceptance` agent produces from a block's requirements
-// (description + linked PRDs), and what the `playwright` agent turns into
-// end-to-end tests. The board is server-owned, but — like the agent palette —
-// scenarios are an editable, client-side prototype surface, persisted locally so
-// a user can author and refine the set for a feature before wiring up real runs.
+// A freeform, black-box acceptance scenario in Given / When / Then form, attached
+// to a single task (block). These are what the `acceptance` agent drafts from a
+// block's requirements (its description + linked PRDs), and what the `playwright`
+// agent turns into end-to-end tests. The board is server-owned, but — like the
+// agent palette — scenarios are an editable, client-side prototype surface,
+// persisted locally so a user can author and refine the set for a task before
+// wiring up real runs. (A deeper requirements-driven model is planned; for now the
+// set is simply scoped to the task.)
 // ---------------------------------------------------------------------------
 
 /** Where a scenario came from: drafted by the acceptance agent or hand-written. */
 export type ScenarioSource = 'generated' | 'manual'
 
-/** Review state of a scenario in its feature's current set. */
+/** Review state of a scenario in its task's current set. */
 export type ScenarioStatus = 'draft' | 'approved'
 
-/** A single acceptance scenario for a feature. */
+/** A single acceptance scenario for a task. */
 export interface AcceptanceScenario {
   id: string
-  /** The feature (matching `Block.features`) this scenario verifies. */
-  feature: string
+  /** The task (`Block.id`) this scenario verifies. */
+  blockId: string
   /** Short, human title — also the name of the generated Playwright test. */
   title: string
   /** Preconditions (one clause per entry). */

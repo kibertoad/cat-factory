@@ -37,13 +37,12 @@ export interface ContainerRepoScannerDependencies {
 /** The role prompt the scanner agent runs under inside the container. */
 const SCAN_SYSTEM_PROMPT =
   'You are a software architect mapping an existing repository. You have a fresh, ' +
-  'read-only clone. Decompose it into ONE top-level service, the modules inside it, ' +
-  'and the features within each module. Anchor every node to the codebase with ' +
+  'read-only clone. Decompose it into ONE top-level service and the modules inside ' +
+  'it. Anchor every node to the codebase with ' +
   'explicit repo-relative file/directory references. Keep names short and ' +
   'descriptive; group by domain, not by file type. Respond with ONLY a JSON object ' +
   'of shape {"type","name","summary","references":[],"modules":[{"name","summary",' +
-  '"references":[],"features":[{"title","summary","references":[]}]}]} — no prose, ' +
-  'no code fences.'
+  '"references":[]}]} — no prose, no code fences.'
 
 /** The /scan response from the harness: the raw blueprint JSON (or an error). */
 interface ScanContainerResult {
@@ -55,7 +54,7 @@ interface ScanContainerResult {
  * A {@link RepoScanner} that performs the side-effecting half of a "scan
  * repository" run: it spins up a per-run Cloudflare Container that clones the
  * repository read-only, has the scanner agent decompose it into the canonical
- * service → modules → features blueprint (with codebase references), and returns
+ * service → modules blueprint (with codebase references), and returns
  * that structure. The agent's JSON is coerced into a well-formed tree here.
  *
  * Secrets never reach the container image: the per-run GitHub installation token

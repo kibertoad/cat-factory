@@ -12,13 +12,10 @@ const tasks = computed(() => board.tasksOf(props.moduleId))
 const size = computed(() => board.containerSize(props.moduleId))
 const selected = computed(() => ui.selectedBlockId === props.moduleId)
 
-// A module groups the features left behind by its merged tasks. We label it by
-// feature count once any work has merged, falling back to a task count while
-// work is still in flight inside it.
-const featureCount = computed(() =>
-  tasks.value.filter((t) => t.status === 'done').reduce((n, t) => n + (t.features?.length ?? 0), 0),
-)
+// A module groups the tasks inside it. We label it by how many tasks are still in
+// flight, falling back to the total task count once everything inside has merged.
 const inflight = computed(() => tasks.value.filter((t) => t.status !== 'done').length)
+const total = computed(() => tasks.value.length)
 
 const { draggingId, startDrag } = useBlockDrag()
 
@@ -54,11 +51,11 @@ function onHandle(e: PointerEvent) {
         :style="{ color: MODULE_META.color }"
       />
       <span class="truncate text-[11px] font-semibold text-violet-100">{{ mod.title }}</span>
-      <span v-if="featureCount" class="ml-auto shrink-0 text-[9px] text-violet-300/70">
-        {{ featureCount }} feature{{ featureCount === 1 ? '' : 's' }}
-      </span>
-      <span v-else class="ml-auto shrink-0 text-[9px] text-violet-300/70">
+      <span v-if="inflight" class="ml-auto shrink-0 text-[9px] text-violet-300/70">
         {{ inflight }} task{{ inflight === 1 ? '' : 's' }}
+      </span>
+      <span v-else-if="total" class="ml-auto shrink-0 text-[9px] text-violet-300/70">
+        {{ total }} task{{ total === 1 ? '' : 's' }}
       </span>
     </div>
 

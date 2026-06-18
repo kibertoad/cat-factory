@@ -60,17 +60,14 @@ describe('coerceService', () => {
   it('drops malformed nodes and falls back to the repo name', () => {
     const service = coerceService(
       {
-        modules: [
-          { name: 'Auth', features: [{ title: 'Login' }, { notitle: true }] },
-          { nope: true },
-        ],
+        modules: [{ name: 'Auth', summary: 'Auth.' }, { nope: true }],
       },
       'widgets',
     )
     expect(service?.name).toBe('widgets')
     expect(service?.type).toBe('service')
     expect(service?.modules).toHaveLength(1)
-    expect(service?.modules[0]?.features).toHaveLength(1)
+    expect(service?.modules[0]?.name).toBe('Auth')
   })
 
   it('unwraps a { service: {...} } envelope', () => {
@@ -115,8 +112,7 @@ const sampleService: BlueprintServiceTree = {
     {
       name: 'Auth',
       summary: 'Authentication.',
-      references: ['src/auth'],
-      features: [{ title: 'Login', summary: 'User login.', references: ['src/auth/login.ts'] }],
+      references: ['src/auth/login.ts'],
     },
   ],
 }
@@ -132,11 +128,10 @@ describe('renderBlueprintFiles', () => {
     const overview = byPath['blueprints/overview.md']!
     expect(overview).toContain('# Widgets')
     expect(overview).toContain('[Auth](modules/auth.md)')
-    expect(overview).toContain('- Login')
 
     const moduleDoc = byPath['blueprints/modules/auth.md']!
     expect(moduleDoc).toContain('# Auth')
-    expect(moduleDoc).toContain('### Login')
+    expect(moduleDoc).toContain('Authentication.')
     expect(moduleDoc).toContain('`src/auth/login.ts`')
   })
 
@@ -161,7 +156,6 @@ describe('version manifest', () => {
       generatedAt: '2020-01-01T00:00:00.000Z',
       hash: hashBlueprint(sampleService),
       modules: 1,
-      features: 1,
     }
     expect(nextVersion(sampleService, prior, now)).toEqual({
       version: 4,
@@ -175,7 +169,6 @@ describe('version manifest', () => {
       generatedAt: '2020-01-01T00:00:00.000Z',
       hash: 'stale',
       modules: 0,
-      features: 0,
     }
     expect(nextVersion(sampleService, prior, now)).toEqual({
       version: 5,
@@ -192,7 +185,6 @@ describe('version manifest', () => {
       generatedAt: now.toISOString(),
       hash: hashBlueprint(sampleService),
       modules: 1,
-      features: 1,
     })
   })
 })

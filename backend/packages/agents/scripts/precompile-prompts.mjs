@@ -20,7 +20,6 @@ const BLOCK_CONTEXT_PARTIAL = [
   'Pipeline: {{pipelineName}}',
   'Block: {{block.title}} ({{block.type}})',
   'Description: {{#if block.description}}{{block.description}}{{else}}(none provided){{/if}}',
-  '{{#if features.length}}Target features: {{join features ", "}}{{/if}}',
   '{{#if decisions.length}}',
   'Resolved decisions:',
   '{{#each decisions}}- {{question}} → {{chosen}}',

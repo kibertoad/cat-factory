@@ -104,9 +104,6 @@ function buildBaseUserPrompt(context: AgentRunContext): string {
     `Block: ${block.title} (${block.type})`,
     `Description: ${block.description || '(none provided)'}`,
   ]
-  if (block.features?.length) {
-    lines.push(`Target features: ${block.features.join(', ')}`)
-  }
   const linked = linkedContextSection(context)
   if (linked) lines.push(linked)
   const envSection = environmentSection(context)

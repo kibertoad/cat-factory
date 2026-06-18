@@ -64,8 +64,9 @@ describe('board scan', () => {
       `${base}/blueprints/${scan.body.blueprint.id}`,
     )
     expect(fetched.status).toBe(200)
-    expect(fetched.body.service.modules[0]!.features).toHaveLength(2)
-    expect(fetched.body.service.modules[0]!.features[0]!.references).toEqual(['src/auth/login.ts'])
+    expect(fetched.body.service.modules).toHaveLength(2)
+    expect(fetched.body.service.modules[0]!.name).toBe('Auth')
+    expect(fetched.body.service.modules[0]!.references).toEqual(['src/auth'])
   })
 
   it('materialises the blueprint onto the board when spawn is requested', async () => {
@@ -81,7 +82,6 @@ describe('board scan', () => {
     expect(scan.status).toBe(201)
     expect(scan.body.spawn).toBeDefined()
     expect(scan.body.spawn!.modules).toBe(2)
-    expect(scan.body.spawn!.features).toBe(3)
 
     const snapshot = await app.call<WorkspaceSnapshot>('GET', `/workspaces/${workspaceId}`)
     const blocks = snapshot.body.blocks
@@ -92,14 +92,15 @@ describe('board scan', () => {
 
     const modules = blocks.filter((b: Block) => b.level === 'module' && b.parentId === frame!.id)
     expect(modules).toHaveLength(2)
-    const tasks = blocks.filter((b: Block) => b.level === 'task')
-    expect(tasks).toHaveLength(3)
+    // The map tracks services and modules only — no feature-level tasks are spawned.
+    const tasks = blocks.filter((b: Block) => b.level === 'task' && b.parentId === frame!.id)
+    expect(tasks).toHaveLength(0)
 
-    // Codebase references are folded into block descriptions, parseably.
-    const login = tasks.find((b: Block) => b.title === 'Login endpoint')
-    expect(login).toBeDefined()
-    expect(login!.description).toContain('Code references:')
-    expect(login!.description).toContain('- src/auth/login.ts')
+    // Codebase references are folded into module descriptions, parseably.
+    const auth = modules.find((b: Block) => b.title === 'Auth')
+    expect(auth).toBeDefined()
+    expect(auth!.description).toContain('Code references:')
+    expect(auth!.description).toContain('- src/auth')
   })
 
   it('replaces the blueprint in place on re-scan (same id, refreshed tree)', async () => {

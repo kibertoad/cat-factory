@@ -13,7 +13,7 @@ import type { RepoScanner } from '@cat-factory/kernel'
 import { assertFound } from '@cat-factory/kernel'
 import { requireWorkspace } from '@cat-factory/kernel'
 import type { BoardService } from '../board/BoardService'
-import { countFeatures, describeNode } from './board-scan.logic'
+import { countModules, describeNode } from './board-scan.logic'
 
 // ---------------------------------------------------------------------------
 // BoardScanService: owns the "scan repository" command and the persisted
@@ -22,10 +22,11 @@ import { countFeatures, describeNode } from './board-scan.logic'
 // machinery) to be wired — when it is absent, `canScan` is false and the
 // controller surfaces "unavailable" rather than attempting a run.
 //
-// A scan decomposes one repository into the canonical service → modules →
-// features tree (anchored to codebase paths), persists it as the single current
-// blueprint for that repo, and optionally materialises it onto the board so the
-// structure is visible and future work can be scoped against it.
+// A scan decomposes one repository into the canonical service → modules tree
+// (anchored to codebase paths), persists it as the single current blueprint for
+// that repo, and optionally materialises it onto the board so the structure is
+// visible and future work can be scoped against it. Tasks are authored by people,
+// not derived from the map.
 // ---------------------------------------------------------------------------
 
 export interface BoardScanServiceDependencies {
@@ -141,12 +142,13 @@ export class BoardScanService {
   }
 
   /**
-   * Materialise a blueprint onto the board: one service frame, a module per
-   * blueprint module, and a task per feature — each carrying the node's summary
-   * and codebase references in its description, so the board mirrors the map.
+   * Materialise a blueprint onto the board: one service frame and a module per
+   * blueprint module — each carrying the node's summary and codebase references in
+   * its description, so the board mirrors the map. Tasks are authored by people, so
+   * the spawn never creates them.
    *
    * When `repo` is given the new frame is linked to that repo's projection, so
-   * tasks under it resolve to the right repository instead of being unaddressable.
+   * tasks added under it resolve to the right repository instead of unaddressable.
    */
   private async spawnBlueprint(
     workspaceId: string,
@@ -164,7 +166,6 @@ export class BoardScanService {
     if (repo) await this.linkRepoToFrame(workspaceId, repo, frame.id)
 
     let modules = 0
-    let features = 0
     for (const planModule of service.modules ?? []) {
       const module = await this.deps.boardService.addModule(workspaceId, frame.id, {
         name: planModule.name,
@@ -176,29 +177,17 @@ export class BoardScanService {
           description: moduleDescription,
         })
       }
-      for (const feature of planModule.features ?? []) {
-        const task = await this.deps.boardService.addTask(workspaceId, module.id, {
-          title: feature.title,
-        })
-        features += 1
-        const taskDescription = describeNode(feature.summary, feature.references)
-        if (taskDescription) {
-          await this.deps.boardService.updateBlock(workspaceId, task.id, {
-            description: taskDescription,
-          })
-        }
-      }
     }
-    return { frameId: frame.id, modules, features }
+    return { frameId: frame.id, modules }
   }
 
   /**
    * Reconcile a blueprint onto an **existing** service frame, in place and without
-   * deleting anything: the frame's modules/tasks are matched to the blueprint by
-   * name (case-insensitive), missing nodes are added, and matched nodes have their
-   * summary/code-reference description refreshed. Human-added blocks and tasks a
-   * pipeline is running against are left untouched — so re-running the Blueprinter
-   * after each implementation keeps the board current without clobbering edits.
+   * deleting anything: the frame's modules are matched to the blueprint by name
+   * (case-insensitive), missing modules are added, and matched modules have their
+   * summary/code-reference description refreshed. Human-added blocks and the tasks
+   * inside modules are left untouched — so re-running the Blueprinter after each
+   * implementation keeps the map current without clobbering authored work.
    *
    * When `frameId` does not resolve to a frame (e.g. the repo isn't on the board
    * yet) it falls back to {@link spawnBlueprint}, creating a fresh structure.
@@ -223,7 +212,6 @@ export class BoardScanService {
 
     const moduleBlocks = blocks.filter((b) => b.parentId === frame.id && b.level === 'module')
     let modules = 0
-    let features = 0
     for (const planModule of service.modules ?? []) {
       let moduleBlock = moduleBlocks.find((b) => sameName(b.title, planModule.name))
       if (!moduleBlock) {
@@ -239,26 +227,8 @@ export class BoardScanService {
           description: moduleDescription,
         })
       }
-
-      const taskBlocks = blocks.filter((b) => b.parentId === moduleBlock!.id && b.level === 'task')
-      for (const feature of planModule.features ?? []) {
-        let task = taskBlocks.find((b) => sameName(b.title, feature.title))
-        if (!task) {
-          task = await this.deps.boardService.addTask(workspaceId, moduleBlock.id, {
-            title: feature.title,
-          })
-          taskBlocks.push(task)
-        }
-        features += 1
-        const taskDescription = describeNode(feature.summary, feature.references)
-        if (taskDescription && taskDescription !== task.description) {
-          await this.deps.boardService.updateBlock(workspaceId, task.id, {
-            description: taskDescription,
-          })
-        }
-      }
     }
-    return { frameId: frame.id, modules, features }
+    return { frameId: frame.id, modules }
   }
 
   /**
@@ -278,8 +248,8 @@ export class BoardScanService {
     if (match) await projection.linkBlock(workspaceId, match.githubId, frameId)
   }
 
-  /** Convenience for callers/tests: the unit-of-work count a blueprint implies. */
-  static featureCount(service: BlueprintService): number {
-    return countFeatures(service)
+  /** Convenience for callers/tests: the module count a blueprint implies. */
+  static moduleCount(service: BlueprintService): number {
+    return countModules(service)
   }
 }

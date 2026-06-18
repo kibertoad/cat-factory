@@ -4,7 +4,7 @@ import type { RepoScanner, ScanRepoRequest, ScannedBlueprint } from '@cat-factor
  * Deterministic RepoScanner for integration tests: records each request and
  * returns a canned blueprint (or throws when `failWith` is set), so the board-scan
  * orchestration can be exercised without GitHub or a real container. By default it
- * derives a small service → modules → features tree from the requested repo name.
+ * derives a small service → modules tree from the requested repo name.
  */
 export class FakeRepoScanner implements RepoScanner {
   readonly calls: ScanRepoRequest[] = []
@@ -29,30 +29,11 @@ export class FakeRepoScanner implements RepoScanner {
             name: 'Auth',
             summary: 'Authentication and sessions.',
             references: ['src/auth'],
-            features: [
-              {
-                title: 'Login endpoint',
-                summary: 'Issues a session.',
-                references: ['src/auth/login.ts'],
-              },
-              {
-                title: 'Token refresh',
-                summary: 'Refreshes an expiring session.',
-                references: ['src/auth/refresh.ts'],
-              },
-            ],
           },
           {
             name: 'Billing',
             summary: 'Invoicing and payments.',
             references: ['src/billing'],
-            features: [
-              {
-                title: 'Create invoice',
-                summary: 'Creates a draft invoice.',
-                references: ['src/billing/invoice.ts'],
-              },
-            ],
           },
         ],
       },

@@ -74,9 +74,9 @@ const BLUEPRINT_GUIDANCE = `
 ## Service blueprint (read first, stay shallow)
 
 If a \`blueprints/\` folder exists, it is the map of this service. **Before you start,
-read \`blueprints/overview.md\`** for the high-level structure (modules and their
-features). Do NOT read every module file. Only open \`blueprints/modules/<name>.md\`
-for a module that is directly relevant to your task, when you need its features and
+read \`blueprints/overview.md\`** for the high-level structure (the service and its
+modules). Do NOT read every module file. Only open \`blueprints/modules/<name>.md\`
+for a module that is directly relevant to your task, when you need its summary and
 exact code references. \`blueprints/version.json\` is a tiny manifest for quick
 staleness checks. Treat the blueprint as orientation, not a task list.`
 

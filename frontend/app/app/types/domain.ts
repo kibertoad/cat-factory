@@ -70,12 +70,8 @@ export interface Block {
   parentId: string | null
   /** task-only: 0..1 confidence produced when the pipeline finishes. */
   confidence?: number
-  /** task-only: auto-merge the PR when confidence ≥ this threshold (0..1). */
-  confidenceThreshold?: number
   /** task-only: the module this task belongs to (created on implement if absent). */
   moduleName?: string
-  /** task-only: the features this task implements (definition metadata). */
-  features?: string[]
   /** ids of best-practice prompt fragments folded into this block's agent prompts. */
   fragmentIds?: string[]
   /** id of the model (from MODEL_CATALOG) to run this block's agents with; absent = default. */
@@ -86,6 +82,8 @@ export interface Block {
   pullRequest?: PullRequestRef
   /** task-only: selected merge threshold preset id; absent = workspace default. */
   mergePresetId?: string
+  /** task-only: pinned default pipeline id picked at creation; absent = none. */
+  pipelineId?: string
 }
 
 /**

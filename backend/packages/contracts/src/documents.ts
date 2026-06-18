@@ -90,7 +90,6 @@ export type SourceDocument = v.InferOutput<typeof sourceDocumentSchema>
 export const planTaskSchema = v.object({
   title: v.string(),
   description: v.optional(v.string()),
-  features: v.optional(v.array(v.string())),
 })
 export type PlanTask = v.InferOutput<typeof planTaskSchema>
 

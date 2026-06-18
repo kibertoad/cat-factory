@@ -3,11 +3,11 @@ import type { Block, BlockStatus } from '~/types/domain'
 import { BLOCK_TYPE_META, STATUS_META } from '~/utils/catalog'
 import TaskContextDocs from '~/components/documents/TaskContextDocs.vue'
 import TaskContextIssues from '~/components/tasks/TaskContextIssues.vue'
-import FeatureScenarios from '~/components/scenarios/FeatureScenarios.vue'
+import TaskScenarios from '~/components/scenarios/TaskScenarios.vue'
 import ContainerSummary from '~/components/panels/inspector/ContainerSummary.vue'
 import TaskDependencies from '~/components/panels/inspector/TaskDependencies.vue'
 import TaskStructure from '~/components/panels/inspector/TaskStructure.vue'
-import TaskModelSettings from '~/components/panels/inspector/TaskModelSettings.vue'
+import TaskRunSettings from '~/components/panels/inspector/TaskRunSettings.vue'
 import TaskExecution from '~/components/panels/inspector/TaskExecution.vue'
 import AgentFailureCard from '~/components/board/AgentFailureCard.vue'
 import AgentStopButton from '~/components/board/AgentStopButton.vue'
@@ -19,13 +19,11 @@ const ui = useUiStore()
 const documents = useDocumentsStore()
 const tasks = useTasksStore()
 const fragments = useFragmentsStore()
-const models = useModelsStore()
 const agentRuns = useAgentRunsStore()
 const github = useGitHubStore()
 
 onMounted(() => {
   fragments.ensureLoaded()
-  models.ensureLoaded()
   github.ensureLoaded()
 })
 
@@ -270,8 +268,8 @@ const runningRun = computed(() => {
       <template v-else-if="isTask">
         <TaskDependencies :block="block" />
         <TaskStructure :block="block" />
-        <FeatureScenarios :block="block" />
-        <TaskModelSettings :block="block" />
+        <TaskScenarios :block="block" />
+        <TaskRunSettings :block="block" />
         <TaskExecution :block="block" />
       </template>
 

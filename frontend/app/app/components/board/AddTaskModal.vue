@@ -16,6 +16,8 @@ const ui = useUiStore()
 const board = useBoardStore()
 const documents = useDocumentsStore()
 const tasks = useTasksStore()
+const mergePresets = useMergePresetsStore()
+const pipelines = usePipelinesStore()
 const toast = useToast()
 
 const open = computed({
@@ -32,6 +34,54 @@ const container = computed(() =>
 const title = ref('')
 const description = ref('')
 const saving = ref(false)
+
+// Run configuration picked up front. Empty string = use the default (workspace
+// default merge preset / no pinned pipeline).
+const mergePresetId = ref('')
+const pipelineId = ref('')
+
+const presetMenu = computed(() => [
+  [
+    {
+      label: mergePresets.defaultPreset
+        ? `Default (${mergePresets.defaultPreset.name})`
+        : 'Workspace default',
+      icon: 'i-lucide-rotate-ccw',
+      onSelect: () => (mergePresetId.value = ''),
+    },
+    ...mergePresets.presets.map((p) => ({
+      label: p.name,
+      icon: 'i-lucide-git-merge',
+      onSelect: () => (mergePresetId.value = p.id),
+    })),
+  ],
+])
+const selectedPresetLabel = computed(() => {
+  if (!mergePresetId.value) {
+    return mergePresets.defaultPreset
+      ? `Default (${mergePresets.defaultPreset.name})`
+      : 'Workspace default'
+  }
+  return mergePresets.presets.find((p) => p.id === mergePresetId.value)?.name ?? 'Workspace default'
+})
+
+const pipelineMenu = computed(() => [
+  [
+    {
+      label: 'Choose at run time',
+      icon: 'i-lucide-rotate-ccw',
+      onSelect: () => (pipelineId.value = ''),
+    },
+    ...pipelines.pipelines.map((p) => ({
+      label: p.name,
+      icon: 'i-lucide-workflow',
+      onSelect: () => (pipelineId.value = p.id),
+    })),
+  ],
+])
+const selectedPipelineLabel = computed(
+  () => pipelines.getPipeline(pipelineId.value)?.name ?? 'Choose at run time',
+)
 
 // Pending selections, keyed by `source:externalId` (stable across reloads).
 const selectedDocs = ref<Set<string>>(new Set())
@@ -53,6 +103,8 @@ watch(open, (isOpen) => {
   title.value = ''
   description.value = ''
   saving.value = false
+  mergePresetId.value = ''
+  pipelineId.value = ''
   selectedDocs.value = new Set()
   selectedTasks.value = new Set()
   documents.loadDocuments().catch(() => {})
@@ -106,6 +158,10 @@ async function add() {
       containerId,
       title.value.trim(),
       description.value.trim() || undefined,
+      {
+        ...(mergePresetId.value ? { mergePresetId: mergePresetId.value } : {}),
+        ...(pipelineId.value ? { pipelineId: pipelineId.value } : {}),
+      },
     )
     if (block) {
       const failed = await linkSelections(block.id)
@@ -158,6 +214,38 @@ async function add() {
             class="w-full"
           />
         </UFormField>
+
+        <div class="grid grid-cols-2 gap-3">
+          <UFormField label="Pipeline">
+            <UDropdownMenu :items="pipelineMenu" class="w-full">
+              <UButton
+                color="neutral"
+                variant="subtle"
+                size="sm"
+                icon="i-lucide-workflow"
+                trailing-icon="i-lucide-chevron-down"
+                class="w-full justify-between"
+              >
+                {{ selectedPipelineLabel }}
+              </UButton>
+            </UDropdownMenu>
+          </UFormField>
+
+          <UFormField label="Merge policy">
+            <UDropdownMenu :items="presetMenu" class="w-full">
+              <UButton
+                color="neutral"
+                variant="subtle"
+                size="sm"
+                icon="i-lucide-git-merge"
+                trailing-icon="i-lucide-chevron-down"
+                class="w-full justify-between"
+              >
+                {{ selectedPresetLabel }}
+              </UButton>
+            </UDropdownMenu>
+          </UFormField>
+        </div>
 
         <div v-if="showContext" class="space-y-2">
           <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">

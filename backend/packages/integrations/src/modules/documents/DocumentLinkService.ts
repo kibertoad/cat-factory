@@ -101,18 +101,17 @@ export class DocumentLinkService {
   private async addTask(
     workspaceId: string,
     containerId: string,
-    task: { title: string; description?: string; features?: string[] },
+    task: { title: string; description?: string },
     result: SpawnResult,
   ): Promise<void> {
     const created = await this.deps.boardService.addTask(workspaceId, containerId, {
       title: task.title,
     })
     result.tasks += 1
-    const patch: { description?: string; features?: string[] } = {}
-    if (task.description) patch.description = task.description
-    if (task.features?.length) patch.features = task.features
-    if (Object.keys(patch).length > 0) {
-      await this.deps.boardService.updateBlock(workspaceId, created.id, patch)
+    if (task.description) {
+      await this.deps.boardService.updateBlock(workspaceId, created.id, {
+        description: task.description,
+      })
     }
   }
 

@@ -10,11 +10,11 @@ import { log } from './logger.js'
 
 // Runs one "service blueprint" job end to end. The Blueprinter agent gets a fresh
 // clone of the target branch, (re)decomposes the repository into the canonical
-// service → modules → features tree, and the harness deterministically renders
-// that tree into the in-repo `blueprints/` folder (a machine-readable
-// `blueprint.json` plus a high-level `overview.md` and one deep-dive markdown per
-// module), then commits the result back onto the same branch. The tree is also
-// returned to the Worker so it can persist + reconcile the board from it.
+// service → modules tree, and the harness deterministically renders that tree into
+// the in-repo `blueprints/` folder (a machine-readable `blueprint.json` plus a
+// high-level `overview.md` and one deep-dive markdown per module), then commits the
+// result back onto the same branch. The tree is also returned to the Worker so it
+// can persist + reconcile the board from it.
 //
 // Mirrors handleBootstrap's secret handling and watchdog wiring: the per-job
 // GitHub + proxy tokens arrive in the request body and live only for the job's
@@ -34,7 +34,6 @@ const BLUEPRINT_VERSION_PATH = `${BLUEPRINT_DIR}/version.json`
 // Coercion limits, mirroring core's board-scan.logic so a committed blueprint can
 // never balloon past what the board/schema accept.
 const MAX_MODULES = 40
-const MAX_FEATURES = 40
 const MAX_REFERENCES = 40
 
 const BLOCK_TYPES = [
@@ -48,18 +47,11 @@ const BLOCK_TYPES = [
   'environment',
 ] as const
 
-/** A unit of behaviour within a module, anchored to the files implementing it. */
-export interface BlueprintFeatureTree {
-  title: string
-  summary: string
-  references: string[]
-}
-/** A cohesive area of the service grouping features. */
+/** A cohesive area of the service. */
 export interface BlueprintModuleTree {
   name: string
   summary: string
   references: string[]
-  features: BlueprintFeatureTree[]
 }
 /** The repository as a single top-level service with its modules. */
 export interface BlueprintServiceTree {
@@ -85,32 +77,15 @@ function coerceReferences(value: unknown): string[] {
   return [...seen]
 }
 
-function coerceFeature(value: unknown): BlueprintFeatureTree | null {
-  if (typeof value !== 'object' || value === null) return null
-  const obj = value as Record<string, unknown>
-  const title = asString(obj.title)
-  if (!title) return null
-  return {
-    title,
-    summary: asString(obj.summary) ?? '',
-    references: coerceReferences(obj.references),
-  }
-}
-
 function coerceModule(value: unknown): BlueprintModuleTree | null {
   if (typeof value !== 'object' || value === null) return null
   const obj = value as Record<string, unknown>
   const name = asString(obj.name)
   if (!name) return null
-  const features = (Array.isArray(obj.features) ? obj.features : [])
-    .map(coerceFeature)
-    .filter((f): f is BlueprintFeatureTree => f !== null)
-    .slice(0, MAX_FEATURES)
   return {
     name,
     summary: asString(obj.summary) ?? '',
     references: coerceReferences(obj.references),
-    features,
   }
 }
 
@@ -171,11 +146,6 @@ export function hashBlueprint(service: BlueprintServiceTree): string {
   return createHash('sha256').update(canonicalBlueprintJson(service)).digest('hex')
 }
 
-/** Total feature count across the tree's modules (a quick size signal). */
-function countFeatures(service: BlueprintServiceTree): number {
-  return service.modules.reduce((sum, m) => sum + m.features.length, 0)
-}
-
 /** The lightweight version manifest agents read to check the blueprint is current. */
 export interface BlueprintVersion {
   /** Monotonic counter, bumped only when the blueprint content actually changes. */
@@ -184,9 +154,8 @@ export interface BlueprintVersion {
   generatedAt: string
   /** sha256 of the canonical `blueprint.json` — compare to detect drift cheaply. */
   hash: string
-  /** Module / feature counts, so staleness tooling needn't open the full tree. */
+  /** Module count, so staleness tooling needn't open the full tree. */
   modules: number
-  features: number
 }
 
 /** Render the lightweight `version.json` manifest for `service`. */
@@ -199,7 +168,6 @@ export function renderVersionFile(
     generatedAt: meta.generatedAt,
     hash: hashBlueprint(service),
     modules: service.modules.length,
-    features: countFeatures(service),
   }
   return { path: BLUEPRINT_VERSION_PATH, content: `${JSON.stringify(manifest, null, 2)}\n` }
 }
@@ -212,9 +180,9 @@ function renderReferences(references: string[]): string[] {
 /**
  * Deterministically render a blueprint tree into the in-repo artifact files: the
  * canonical `blueprint.json`, a high-level `overview.md` (service + each module
- * with a one-line summary and its feature titles — what agents read first), and
- * one `modules/<slug>.md` deep-dive per module (summaries + code references — read
- * only when a task touches that module). Pure: same tree → same bytes.
+ * with a one-line summary — what agents read first), and one `modules/<slug>.md`
+ * deep-dive per module (summary + code references — read only when a task touches
+ * that module). Pure: same tree → same bytes.
  */
 export function renderBlueprintFiles(service: BlueprintServiceTree): RenderedFile[] {
   const files: RenderedFile[] = []
@@ -237,10 +205,6 @@ export function renderBlueprintFiles(service: BlueprintServiceTree): RenderedFil
       const slug = moduleSlug(m.name)
       overview.push(`### [${m.name}](modules/${slug}.md)`)
       if (m.summary) overview.push('', m.summary)
-      if (m.features.length > 0) {
-        overview.push('')
-        for (const f of m.features) overview.push(`- ${f.title}`)
-      }
       overview.push('')
     }
   }
@@ -252,16 +216,6 @@ export function renderBlueprintFiles(service: BlueprintServiceTree): RenderedFil
     const lines: string[] = [`# ${m.name}`, '']
     if (m.summary) lines.push(m.summary, '')
     lines.push(...renderReferences(m.references))
-    if (m.features.length > 0) {
-      lines.push('', '## Features', '')
-      for (const f of m.features) {
-        lines.push(`### ${f.title}`)
-        if (f.summary) lines.push('', f.summary)
-        const refs = renderReferences(f.references)
-        if (refs.length > 0) lines.push(...refs)
-        lines.push('')
-      }
-    }
     files.push({
       path: `${BLUEPRINT_MODULES_DIR}/${slug}.md`,
       content: `${lines.join('\n').trimEnd()}\n`,
@@ -297,7 +251,6 @@ async function readExistingVersion(dir: string): Promise<BlueprintVersion | null
       generatedAt: typeof parsed.generatedAt === 'string' ? parsed.generatedAt : '',
       hash: parsed.hash,
       modules: typeof parsed.modules === 'number' ? parsed.modules : 0,
-      features: typeof parsed.features === 'number' ? parsed.features : 0,
     }
   } catch {
     return null
@@ -347,7 +300,7 @@ function buildUserPrompt(job: BlueprintJob, existing: BlueprintServiceTree | nul
     lines.push(
       '',
       'An existing blueprint is present. Update it to reflect the current code:',
-      'keep accurate modules/features, add new ones, refine summaries and code',
+      'keep accurate modules, add new ones, refine summaries and code',
       'references. Return the COMPLETE updated tree (not a diff).',
       '',
       'Existing blueprint:',

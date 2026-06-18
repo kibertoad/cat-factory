@@ -33,14 +33,14 @@ export interface ReviewContextTask {
 
 /** Everything the reviewer reasons over: the block plus its linked context. */
 export interface RequirementsContext {
-  block: Pick<Block, 'title' | 'type' | 'description' | 'features'>
+  block: Pick<Block, 'title' | 'type' | 'description'>
   docs: ReviewContextDoc[]
   tasks: ReviewContextTask[]
 }
 
 /**
  * Render the block's "collected requirements" as a single Markdown document —
- * its description plus target features and any linked PRD/RFC pages and tracker
+ * its description plus any linked PRD/RFC pages and tracker
  * issues. Used both as the reviewer's input and as the base the incorporate step
  * rewrites.
  */
@@ -51,9 +51,6 @@ export function renderRequirements(ctx: RequirementsContext): string {
     '## Description',
     ctx.block.description?.trim() || '(no description provided)',
   ]
-  if (ctx.block.features?.length) {
-    lines.push('', '## Target features', ...ctx.block.features.map((f) => `- ${f}`))
-  }
   if (ctx.docs.length) {
     lines.push('', '## Linked requirement / PRD / RFC documents')
     for (const d of ctx.docs) lines.push('', `### ${d.title} (${d.url})`, d.excerpt)

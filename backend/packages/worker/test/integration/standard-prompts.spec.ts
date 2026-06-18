@@ -111,14 +111,13 @@ describe('standard solution-phase prompts', () => {
 
     it('omits optional sections when absent', () => {
       const prompt = renderStandardUserPrompt('build', ctx())
-      expect(prompt).not.toContain('Target features')
       expect(prompt).not.toContain('Resolved decisions')
       expect(prompt).not.toContain('Work from earlier agents')
       // No stray runs of blank lines left by skipped conditionals.
       expect(prompt).not.toMatch(/\n{3,}/)
     })
 
-    it('includes features, resolved decisions and prior outputs when present', () => {
+    it('includes resolved decisions and prior outputs when present', () => {
       const prompt = renderStandardUserPrompt(
         'review',
         ctx({
@@ -126,14 +125,12 @@ describe('standard solution-phase prompts', () => {
             title: 'Login',
             type: 'service',
             description: 'Auth',
-            features: ['oauth', 'mfa'],
           },
           decisions: [{ question: 'DB?', chosen: 'Postgres' }],
           resolvedDecision: { question: 'Cache?', chosen: 'Redis' },
           priorOutputs: [{ agentKind: 'architect', output: 'Use a token service.' }],
         }),
       )
-      expect(prompt).toContain('Target features: oauth, mfa')
       expect(prompt).toContain('- DB? → Postgres')
       expect(prompt).toContain('- Cache? → Redis')
       expect(prompt).toContain('### architect')

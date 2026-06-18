@@ -213,7 +213,7 @@ export function useApi() {
     addTask: (
       workspaceId: string,
       blockId: string,
-      body: { title: string; description?: string },
+      body: { title: string; description?: string; mergePresetId?: string; pipelineId?: string },
     ) => http<Block>(`${ws(workspaceId)}/blocks/${blockId}/tasks`, { method: 'POST', body }),
 
     addModule: (

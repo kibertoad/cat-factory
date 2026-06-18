@@ -39,7 +39,6 @@ export interface AgentRunContext {
     title: string
     type: BlockType
     description: string
-    features?: string[]
     /** Ids of selected best-practice fragments to fold into the system prompt. */
     fragmentIds?: string[]
     /**
@@ -147,7 +146,7 @@ export interface AgentRunResult {
    */
   pullRequest?: PullRequestRef
   /**
-   * The service → modules → features blueprint tree a Blueprinter step produced.
+   * The service → modules blueprint tree a Blueprinter step produced.
    * The engine strictly validates it and reconciles it onto the board (in place).
    * Carried as `unknown` so the core port stays free of the contracts schema; the
    * engine parses it with the authoritative Valibot schema before use.

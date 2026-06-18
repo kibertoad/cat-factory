@@ -238,7 +238,7 @@ export interface BlueprintJob {
 
 /** The /blueprint response. `service` (when set) is the decomposition tree to ingest. */
 export interface BlueprintResult {
-  /** The service → modules → features tree the agent produced (for board ingest). */
+  /** The service → modules tree the agent produced (for board ingest). */
   service?: unknown
   summary?: string
   stats?: PiRunStats

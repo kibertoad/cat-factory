@@ -285,7 +285,6 @@ export class RequirementReviewService {
         title: block.title,
         type: block.type,
         description: block.description,
-        features: block.features,
       },
       docs,
       tasks,

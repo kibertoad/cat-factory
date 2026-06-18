@@ -792,7 +792,6 @@ export class ExecutionService {
       type: block.type,
       description: block.description,
     }
-    if (block.features?.length) inputs.features = block.features.join(',')
     return inputs
   }
 
@@ -893,7 +892,6 @@ export class ExecutionService {
         title: block.title,
         type: block.type,
         description: block.description,
-        features: block.features,
         fragmentIds: block.fragmentIds,
         ...(resolved ? { resolvedFragments: resolved.fragments } : {}),
         modelId: block.modelId,

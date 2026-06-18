@@ -3,15 +3,16 @@ import { blockTypeSchema } from './primitives'
 
 // ---------------------------------------------------------------------------
 // Board-scan wire contracts. The "scan repository" command decomposes an existing
-// codebase into one canonical board structure — a single service, the modules
-// inside it, and the features within each module — anchored to the codebase by
-// explicit file/directory references on every node. The result is persisted as a
-// reusable "repository blueprint": a durable, LLM-friendly map of the repo that
-// future work is scoped against (and re-scanned to keep current).
+// codebase into one canonical board structure — a single service and the modules
+// inside it — anchored to the codebase by explicit file/directory references on
+// every node. The result is persisted as a reusable "repository blueprint": a
+// durable, LLM-friendly map of the repo that future work is scoped against (and
+// re-scanned to keep current).
 //
-// The shape is deliberately shallow and uniform (service → modules → features),
-// mirroring the board's frame → module → task levels, so a blueprint spawns
-// directly onto the board and reads the same way an LLM would navigate the code.
+// The shape is deliberately shallow and uniform (service → modules), mirroring the
+// board's frame → module levels, so a blueprint spawns directly onto the board and
+// reads the same way an LLM would navigate the code. Individual tasks are authored
+// by people, not derived from the map.
 // ---------------------------------------------------------------------------
 
 /**
@@ -34,20 +35,9 @@ const referenceField = v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(
 /** The file/directory paths a node maps to — what to read to work on it. */
 const referencesField = v.array(referenceField)
 
-// ---- Blueprint tree (service → modules → features) ------------------------
+// ---- Blueprint tree (service → modules) -----------------------------------
 
-/** A unit of behaviour within a module, anchored to the files that implement it. */
-export const blueprintFeatureSchema = v.object({
-  /** Short, imperative name, e.g. `Token refresh`. */
-  title: nameField,
-  /** One or two sentences on what the feature does. */
-  summary: v.optional(summaryField, ''),
-  /** Repo-relative paths implementing the feature. */
-  references: v.optional(referencesField, []),
-})
-export type BlueprintFeature = v.InferOutput<typeof blueprintFeatureSchema>
-
-/** A cohesive area of the service (e.g. `auth`, `billing`) grouping features. */
+/** A cohesive area of the service (e.g. `auth`, `billing`). */
 export const blueprintModuleSchema = v.object({
   /** Module name, typically the owning directory's domain (e.g. `Auth`). */
   name: nameField,
@@ -55,7 +45,6 @@ export const blueprintModuleSchema = v.object({
   summary: v.optional(summaryField, ''),
   /** Repo-relative paths the module owns (its directories / key files). */
   references: v.optional(referencesField, []),
-  features: v.optional(v.array(blueprintFeatureSchema), []),
 })
 export type BlueprintModule = v.InferOutput<typeof blueprintModuleSchema>
 
@@ -115,7 +104,6 @@ export const boardScanSpawnResultSchema = v.object({
   /** Id of the service frame created for the blueprint. */
   frameId: v.string(),
   modules: v.number(),
-  features: v.number(),
 })
 export type BoardScanSpawnResult = v.InferOutput<typeof boardScanSpawnResultSchema>
 
@@ -156,7 +144,6 @@ export const blueprintVersionSchema = v.object({
   /** sha256 (hex) of the canonical `blueprint.json` bytes. */
   hash: v.string(),
   modules: v.pipe(v.number(), v.integer(), v.minValue(0)),
-  features: v.pipe(v.number(), v.integer(), v.minValue(0)),
 })
 export type BlueprintVersion = v.InferOutput<typeof blueprintVersionSchema>
 

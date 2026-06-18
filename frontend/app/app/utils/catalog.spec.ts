@@ -1,13 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import type { AgentKind, BlockStatus, BlockType } from '~/types/domain'
-import {
-  AGENT_ARCHETYPES,
-  AGENT_BY_KIND,
-  BLOCK_TYPE_META,
-  STATUS_META,
-  DEFAULT_CONFIDENCE_THRESHOLD,
-  uid,
-} from '~/utils/catalog'
+import { AGENT_ARCHETYPES, AGENT_BY_KIND, BLOCK_TYPE_META, STATUS_META, uid } from '~/utils/catalog'
 
 const AGENT_KINDS: AgentKind[] = [
   'requirements',
@@ -69,11 +62,6 @@ describe('catalog', () => {
         icon: expect.any(String),
       })
     }
-  })
-
-  it('keeps the default confidence threshold within 0..1', () => {
-    expect(DEFAULT_CONFIDENCE_THRESHOLD).toBeGreaterThan(0)
-    expect(DEFAULT_CONFIDENCE_THRESHOLD).toBeLessThanOrEqual(1)
   })
 
   it('uid produces prefixed, unique-ish ids', () => {

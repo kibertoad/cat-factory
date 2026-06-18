@@ -13,7 +13,7 @@ export interface RepoBlueprintRecord {
   repoOwner: string
   repoName: string
   source: BlueprintSource
-  /** The service → modules → features tree. */
+  /** The service → modules tree. */
   service: BlueprintService
   createdAt: number
   updatedAt: number

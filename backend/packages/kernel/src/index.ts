@@ -12,7 +12,6 @@ export {
 } from './domain/errors'
 export { sameSubtasks, sameSubtaskItems } from './domain/subtasks.logic'
 export {
-  DEFAULT_CONFIDENCE_THRESHOLD,
   BLOCK_TYPE_LABEL,
   DEFAULT_MERGE_PRESET,
   DEFAULT_CI_MAX_ATTEMPTS,
