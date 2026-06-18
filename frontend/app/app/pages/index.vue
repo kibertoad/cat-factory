@@ -16,13 +16,32 @@ import AddTaskModal from '~/components/board/AddTaskModal.vue'
 import BootstrapModal from '~/components/bootstrap/BootstrapModal.vue'
 import AddServiceFromRepoModal from '~/components/github/AddServiceFromRepoModal.vue'
 import GitHubPanel from '~/components/github/GitHubPanel.vue'
+import GitHubOnboarding from '~/components/github/GitHubOnboarding.vue'
 import FragmentLibraryPanel from '~/components/fragments/FragmentLibraryPanel.vue'
 import RequirementReviewModal from '~/components/requirements/RequirementReviewModal.vue'
 
 const workspace = useWorkspaceStore()
+const github = useGitHubStore()
 
 // Load the board from the backend before rendering it.
 onMounted(() => workspace.init())
+
+// Probe the GitHub integration as soon as a board is active (re-probe per board —
+// connections are per workspace). The result drives the onboarding gate below
+// before the board mounts, so an unconnected user can't slip past it. SideBar
+// re-probes once it mounts; that duplicate is harmless (probe is idempotent).
+watch(
+  () => workspace.workspaceId,
+  (id) => {
+    if (id) void github.probe()
+  },
+  { immediate: true },
+)
+
+// Hard gate: the App is enabled on the backend but this workspace has no
+// installation yet. `available === null` means the probe is still in flight.
+const needsGitHubInstall = computed(() => github.available === true && !github.connected)
+const githubProbePending = computed(() => github.available === null)
 
 // Subscribe to the backend's real-time event stream and (re)connect whenever the
 // active workspace changes. Runs advance durably server-side; progress arrives as
@@ -40,7 +59,19 @@ watch(
 
 <template>
   <div class="flex h-screen w-screen overflow-hidden bg-slate-950 text-slate-100">
-    <template v-if="workspace.ready">
+    <!-- Resolving whether the GitHub App is installed, before we decide what to show. -->
+    <div
+      v-if="workspace.ready && githubProbePending"
+      class="m-auto flex flex-col items-center gap-3 text-slate-400"
+    >
+      <UIcon name="i-lucide-loader" class="h-8 w-8 animate-spin" />
+      <span class="text-sm">Loading…</span>
+    </div>
+
+    <!-- App enabled but not installed on this workspace: hard onboarding gate. -->
+    <GitHubOnboarding v-else-if="workspace.ready && needsGitHubInstall" />
+
+    <template v-else-if="workspace.ready">
       <SideBar />
       <main class="relative min-w-0 flex-1">
         <BoardCanvas />
