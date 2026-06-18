@@ -19,7 +19,7 @@ Figure out, from the user's request, the matrix to run:
 - **Models**: the candidates to compare (e.g. a Cloudflare-AI model vs Anthropic).
 - **Prompt versions/variants**: the default built-in (`id@vN`) and/or experimental
   variants. Prompt ids and current versions live in
-  `backend/packages/core/src/modules/agents/prompt-versions.ts`.
+  `backend/packages/agents/src/agents/prompt-versions.ts`.
 
 If a config file already exists (e.g. `bench.config.ts`), use it. Otherwise copy
 `backend/internal/benchmark-harness/bench.config.example.ts` to a new

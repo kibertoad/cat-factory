@@ -41,14 +41,17 @@ a minimal deployment is just boards + pipelines.
 | Package                  | Role                                                                                         |
 | ------------------------ | -------------------------------------------------------------------------------------------- |
 | `@cat-factory/contracts` | Valibot wire contract (entities + request bodies). Shared by the frontend and the backend.   |
-| `@cat-factory/core`      | Domain layer: module services, pure logic, ports. No framework, no Cloudflare, no LLM SDK.   |
+| `@cat-factory/kernel`    | Shared vocabulary: domain types, pure logic + constants, and **all** repository/port interfaces. |
+| `@cat-factory/orchestration` | Domain layer: module services + the composition root (`createCore()`). No framework, no Cloudflare, no LLM SDK. |
+| `@cat-factory/integrations`, `@cat-factory/agents`, `@cat-factory/spend`, `@cat-factory/workspaces` | The rest of the framework-agnostic domain, split by concern (integrations, agent prompts, spend, workspaces). |
 | `@cat-factory/worker`    | Infrastructure + API layer: Hono controllers, D1 repositories, composition root, the Worker. |
 
 ### Layering (per the template's architecture doc)
 
 - **API layer** — `worker/src/modules/*/?*Controller.ts` (Hono routes), grouped by module.
-- **Domain layer** — `core/src/modules/*` services + `core/src/domain` models/logic. Defines
-  repository **ports**; depends on no concrete adapter.
+- **Domain layer** — `orchestration/src/modules/*` services (+ the other domain packages) and
+  `kernel/src/domain` models/logic. `kernel/src/ports` defines the repository **ports**; the
+  domain depends on no concrete adapter.
 - **Infrastructure layer** — `worker/src/infrastructure/*`: D1 repositories implementing the
   ports, the AI model provider, runtime adapters, config, and the DI composition root
   (`container.ts`). Services use constructor injection of a single `dependencies` object.
@@ -95,7 +98,7 @@ Each pipeline step is performed by an `AgentExecutor` (a port). Implementations:
   configured from Worker env vars (`AGENT_DEFAULT_PROVIDER/MODEL`, `AGENT_MODELS` JSON overrides).
   Concrete models are resolved by `CloudflareModelProvider` (Workers AI / OpenAI / Anthropic, plus
   the direct DashScope / DeepSeek / Moonshot providers). A block may also pick a specific model
-  (`Block.modelId`) from the catalog in `core/src/domain/models.ts`; each model runs on Cloudflare
+  (`Block.modelId`) from the catalog in `kernel/src/domain/models.ts`; each model runs on Cloudflare
   Workers AI by default and switches to its direct provider API when that key is configured.
 - **`ContainerAgentExecutor`** (worker) — runs the repo-operating steps (`coder`, `mocker`,
   `playwright`) in a per-run Cloudflare Container (the Pi coding-agent harness) that clones the

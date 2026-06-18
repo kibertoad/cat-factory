@@ -14,7 +14,7 @@ import { JIRA_DESCRIPTOR, jiraLogic } from '@cat-factory/integrations'
 // an issue via the REST v3 API, and maps it onto the structured TaskContent —
 // converting the ADF description and comment bodies to the Markdown the generic
 // excerpt/prompt logic consumes. All Jira-specific *pure* logic (ref parsing, ADF
-// conversion) lives in `@cat-factory/core` so it is unit-testable; this class is
+// conversion) lives in `@cat-factory/integrations` so it is unit-testable; this class is
 // the thin `fetch` shell around it. No SDK — fetch + `btoa` suffice.
 
 const USER_AGENT = 'cat-factory'

@@ -13,7 +13,7 @@ import { NOTION_DESCRIPTOR, notionLogic } from '@cat-factory/integrations'
 // Markdown the planner consumes. Because the API host is fixed
 // (`api.notion.com`) and there is no per-site base URL, there is no SSRF surface.
 // Notion-specific *pure* logic (ref parsing, block → Markdown) lives in
-// `@cat-factory/core`; this class is the thin `fetch` shell.
+// `@cat-factory/integrations`; this class is the thin `fetch` shell.
 
 const API_BASE = 'https://api.notion.com/v1'
 const NOTION_API_HOST = 'api.notion.com'

@@ -11,7 +11,12 @@ visibility: published **libraries** (`backend/packages/*` + `frontend/app`),
 | ------------------------------------ | -------------------------------- | ------------------------------- |
 | `backend/packages/contracts`         | `@cat-factory/contracts`         | npm                             |
 | `backend/packages/prompt-fragments`  | `@cat-factory/prompt-fragments`  | npm                             |
-| `backend/packages/core`              | `@cat-factory/core`              | npm                             |
+| `backend/packages/kernel`            | `@cat-factory/kernel`            | npm                             |
+| `backend/packages/orchestration`     | `@cat-factory/orchestration`     | npm                             |
+| `backend/packages/integrations`      | `@cat-factory/integrations`      | npm                             |
+| `backend/packages/agents`            | `@cat-factory/agents`            | npm                             |
+| `backend/packages/spend`             | `@cat-factory/spend`             | npm                             |
+| `backend/packages/workspaces`        | `@cat-factory/workspaces`        | npm                             |
 | `backend/packages/worker`            | `@cat-factory/worker`            | npm (Worker library)            |
 | `frontend/app`                       | `@cat-factory/app`               | npm (Nuxt layer)                |
 | `backend/internal/executor-harness`  | `@cat-factory/executor-harness`  | GHCR image (versioned, not npm) |
@@ -111,7 +116,7 @@ package names to bump levels, followed by the summary:
 
 ```md
 ---
-'@cat-factory/core': minor
+'@cat-factory/orchestration': minor
 '@cat-factory/worker': patch
 ---
 

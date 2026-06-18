@@ -71,8 +71,8 @@ Two ideas anchor the model:
 └──────────────┘                       └────────────┬──────────────┘
                                                      │ ports (DI)
                                           ┌──────────▼──────────┐
-                                          │  @cat-factory/core  │
-                                          │  domain + services  │
+                                          │   domain packages   │
+                                          │  kernel + services  │
                                           └──────────┬──────────┘
                                                      │ dispatch coding jobs
                               ┌──────────────────────▼───────────────────────┐
@@ -101,7 +101,12 @@ deploy both halves on their end.
 | -------------------------------------------------------------------------- | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [`frontend/app`](./frontend/app)                                           | `@cat-factory/app`              | Reusable **Nuxt layer** (`ssr: false`) — the board UI, Pinia stores, composables, the WebSocket stream. Consumed via `extends`.                                                                               |
 | [`backend/packages/contracts`](./backend/packages/contracts)               | `@cat-factory/contracts`        | Valibot wire contracts shared by SPA + Worker.                                                                                                                                                                |
-| [`backend/packages/core`](./backend/packages/core)                         | `@cat-factory/core`             | Framework-agnostic domain: module services, pure logic, repository **ports**.                                                                                                                                 |
+| [`backend/packages/kernel`](./backend/packages/kernel)                     | `@cat-factory/kernel`           | Shared vocabulary: domain types, pure logic + constants, and **all** repository/port interfaces.                                                                                                              |
+| [`backend/packages/orchestration`](./backend/packages/orchestration)       | `@cat-factory/orchestration`    | The delivery-workflow engine + domain **composition root** (`createCore()`): module services for execution, bootstrap, pipelines, board, requirements, merge, …                                               |
+| [`backend/packages/integrations`](./backend/packages/integrations)         | `@cat-factory/integrations`     | Opt-in integration services (GitHub, documents, tasks, environments, runner pools) behind kernel ports.                                                                                                       |
+| [`backend/packages/agents`](./backend/packages/agents)                     | `@cat-factory/agents`           | Agent catalog + prompt composition (`systemPromptFor`/`userPromptFor`, the per-kind roles, prompt-version registry).                                                                                          |
+| [`backend/packages/spend`](./backend/packages/spend)                       | `@cat-factory/spend`            | The spend safeguard: pricing tables + spend metering/gating.                                                                                                                                                   |
+| [`backend/packages/workspaces`](./backend/packages/workspaces)             | `@cat-factory/workspaces`       | Workspace + account services.                                                                                                                                                                                 |
 | [`backend/packages/worker`](./backend/packages/worker)                     | `@cat-factory/worker`           | Reusable Cloudflare Worker **library**: Hono controllers, D1 repos, Durable Objects, Workflows, the DI composition root. Exposes `createApp()` + the handler/DO/Workflow exports; ships the D1 `migrations/`. |
 | [`backend/packages/prompt-fragments`](./backend/packages/prompt-fragments) | `@cat-factory/prompt-fragments` | The built-in tier of best-practice prompt fragments. See [its README](./backend/packages/prompt-fragments/README.md).                                                                                         |
 

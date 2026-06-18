@@ -11,7 +11,7 @@ import { CONFLUENCE_DESCRIPTOR, confluenceLogic } from '@cat-factory/integration
 // authenticates with HTTP Basic (account email + API token), fetches a page in
 // storage format, and converts the body to the Markdown the planner consumes.
 // All Confluence-specific *pure* logic (ref parsing, base-URL SSRF guard,
-// XHTML → Markdown) lives in `@cat-factory/core` so it is unit-testable; this
+// XHTML → Markdown) lives in `@cat-factory/integrations` so it is unit-testable; this
 // class is the thin `fetch` shell around it. No SDK — fetch + `btoa` suffice.
 
 const USER_AGENT = 'cat-factory'

@@ -1,4 +1,5 @@
-// Shared vocabulary, pure logic, and port interfaces for @cat-factory/core.
+// Shared vocabulary, pure logic, and port interfaces for the domain packages
+// (@cat-factory/orchestration, @cat-factory/integrations, …).
 
 export * from './domain/types'
 export {
