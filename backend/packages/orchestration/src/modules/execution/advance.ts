@@ -19,6 +19,14 @@ export type AdvanceResult =
    * `continue`, a dispatched CI-fixer yields `awaiting_job`, exhaustion fails the run.
    */
   | { kind: 'awaiting_ci'; stepIndex: number }
+  /**
+   * A `conflicts` step is gating the PR on being mergeable. The run is parked: the
+   * durable driver sleeps, then polls {@link ExecutionService.pollConflicts} to
+   * re-check mergeability. Polling stops the moment it returns anything else —
+   * mergeable yields `continue`, a dispatched conflict-resolver yields
+   * `awaiting_job`, exhaustion fails the run.
+   */
+  | { kind: 'awaiting_conflicts'; stepIndex: number }
   /** A polled async job finished with a failure; the driver should fail the run. */
   | { kind: 'job_failed'; error: string }
   /** The final step completed; the run is finished. */

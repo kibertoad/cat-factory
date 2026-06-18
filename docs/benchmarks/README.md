@@ -28,7 +28,7 @@ version** (`id@vN`) that produced each result, so an outcome is always traceable
 Cat-factory prompts are numbered for change management — each is identified as
 `id@vN` (e.g. `build@v1`, `review@v1`, `requirement-review@v1`). The current
 versions live in
-`backend/packages/core/src/modules/agents/prompt-versions.ts`.
+`backend/packages/agents/src/agents/prompt-versions.ts`.
 
 **Convention: when you change a prompt, bump its number.** Benchmark a new
 version against the old one and commit the run here so the impact is on record.

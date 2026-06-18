@@ -335,6 +335,67 @@ export function parseCiFixerJob(input: unknown): CiFixerJob {
   return job
 }
 
+// ---- Conflict-resolver job (POST /resolve-conflicts) ----------------------
+
+/**
+ * The job the Worker's ContainerAgentExecutor POSTs to /resolve-conflicts when a
+ * PR cannot be merged because it conflicts with its base. The resolver clones the
+ * PR head `branch` (full history), merges `repo.baseBranch` into it to surface the
+ * conflicts, runs Pi to resolve them, completes the merge commit and pushes back
+ * onto the SAME branch (no new branch / PR) so the PR becomes mergeable and CI
+ * re-runs. Like the CI-fixer it works on the existing PR branch in place.
+ */
+export interface ConflictResolverJob {
+  jobId: string
+  systemPrompt: string
+  userPrompt: string
+  model: string
+  proxyBaseUrl: string
+  sessionToken: string
+  ghToken: string
+  repo: RepoSpec
+  /** The PR head branch to clone, merge the base into, and push the resolution onto. */
+  branch: string
+  githubApiBase?: string
+}
+
+/** The /resolve-conflicts response. `resolved` says whether the branch is now mergeable. */
+export interface ConflictResolverResult {
+  resolved?: boolean
+  summary?: string
+  stats?: PiRunStats
+  error?: string
+}
+
+/** Validate + narrow an untrusted body into a {@link ConflictResolverJob}, throwing on bad input. */
+export function parseConflictResolverJob(input: unknown): ConflictResolverJob {
+  if (typeof input !== 'object' || input === null) {
+    throw new Error('Invalid job: body must be an object')
+  }
+  const o = input as Record<string, unknown>
+  const repo = (o.repo ?? {}) as Record<string, unknown>
+  const job: ConflictResolverJob = {
+    jobId: str(o.jobId, 'jobId'),
+    systemPrompt: str(o.systemPrompt, 'systemPrompt'),
+    userPrompt: str(o.userPrompt, 'userPrompt'),
+    model: str(o.model, 'model'),
+    proxyBaseUrl: str(o.proxyBaseUrl, 'proxyBaseUrl'),
+    sessionToken: str(o.sessionToken, 'sessionToken'),
+    ghToken: str(o.ghToken, 'ghToken'),
+    repo: {
+      owner: str(repo.owner, 'repo.owner'),
+      name: str(repo.name, 'repo.name'),
+      baseBranch: str(repo.baseBranch, 'repo.baseBranch'),
+      cloneUrl: str(repo.cloneUrl, 'repo.cloneUrl'),
+    },
+    branch: str(o.branch, 'branch'),
+    ...(typeof o.githubApiBase === 'string' ? { githubApiBase: o.githubApiBase } : {}),
+  }
+  assertAllowedHost(job.repo.cloneUrl, 'repo.cloneUrl')
+  if (job.githubApiBase) assertAllowedHost(job.githubApiBase, 'githubApiBase')
+  return job
+}
+
 // ---- Merger job (POST /merge) ---------------------------------------------
 
 /**

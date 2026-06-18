@@ -109,18 +109,25 @@ async function git(
   }
 }
 
-/** Clone `repo`'s base branch (shallow) into `dir` and set commit identity. */
+/** Clone `repo`'s base branch (shallow by default) into `dir` and set commit identity. */
 export async function cloneRepo(opts: {
   repo: RepoSpec
   ghToken: string
   dir: string
   signal?: AbortSignal
+  /**
+   * Full history + all remote-tracking branches. A shallow single-branch clone is
+   * enough to implement on one branch, but merging ANOTHER branch in (the
+   * conflict-resolver) needs the merge base in history and `origin/<other>` present
+   * — so `full` drops both `--depth 1` (which implies `--single-branch`).
+   */
+  full?: boolean
 }): Promise<void> {
   const url = authenticatedCloneUrl(opts.repo.cloneUrl)
-  await git(['clone', '--depth', '1', '--branch', opts.repo.baseBranch, url, opts.dir], {
-    signal: opts.signal,
-    env: await authEnv(opts.ghToken),
-  })
+  const cloneArgs = opts.full
+    ? ['clone', '--branch', opts.repo.baseBranch, url, opts.dir]
+    : ['clone', '--depth', '1', '--branch', opts.repo.baseBranch, url, opts.dir]
+  await git(cloneArgs, { signal: opts.signal, env: await authEnv(opts.ghToken) })
   await git(['config', 'user.name', GIT_AUTHOR], { cwd: opts.dir, signal: opts.signal })
   await git(['config', 'user.email', GIT_EMAIL], { cwd: opts.dir, signal: opts.signal })
 }
@@ -166,6 +173,40 @@ export async function hasAgentChanges(dir: string, signal?: AbortSignal): Promis
   return changedPathsFromPorcelain(status).some((path) => path.toLowerCase() !== 'agents.md')
 }
 
+/** The commit SHA at `dir`'s HEAD — captured right after clone as the base tip. */
+export async function headCommit(dir: string, signal?: AbortSignal): Promise<string> {
+  return (await git(['rev-parse', 'HEAD'], { cwd: dir, signal })).trim()
+}
+
+/**
+ * Whether the work branch produced any real change relative to `baseSha` (the base
+ * branch tip captured right after clone). Crucially this counts the agent's OWN
+ * commits as well as any still-uncommitted edits — the build role tells the agent
+ * to commit its work itself, so by the end of a successful run the working tree is
+ * often clean and a trailing {@link commitAll} finds nothing even though the branch
+ * advanced. Judging the *whole run* against the base tip (and ignoring the
+ * harness-written AGENTS.md, as {@link hasAgentChanges} does) is what tells a
+ * genuine no-op — the agent never wrote anything — apart from a real run whose
+ * changes are already committed. Stages first so newly created files are visible.
+ */
+export async function branchHasChanges(
+  dir: string,
+  baseSha: string,
+  signal?: AbortSignal,
+): Promise<boolean> {
+  await git(['add', '-A'], { cwd: dir, signal })
+  const diff = await git(['diff', '--name-only', baseSha], { cwd: dir, signal })
+  return diff
+    .split('\n')
+    .map((line) =>
+      line
+        .replace(/\r$/, '')
+        .trim()
+        .replace(/^"(.*)"$/, '$1'),
+    )
+    .some((path) => path !== '' && path.toLowerCase() !== 'agents.md')
+}
+
 /** Stage everything and commit; returns false when there was nothing to commit. */
 export async function commitAll(
   dir: string,
@@ -177,6 +218,44 @@ export async function commitAll(
   if (status.trim() === '') return false
   await git(['commit', '-m', message], { cwd: dir, signal })
   return true
+}
+
+/** Paths git still reports as unmerged (conflict stage entries) in the working tree. */
+export async function unmergedPaths(dir: string, signal?: AbortSignal): Promise<string[]> {
+  const out = await git(['diff', '--name-only', '--diff-filter=U'], { cwd: dir, signal })
+  return out
+    .split('\n')
+    .map((line) =>
+      line
+        .replace(/\r$/, '')
+        .trim()
+        .replace(/^"(.*)"$/, '$1'),
+    )
+    .filter((path) => path !== '')
+}
+
+/**
+ * Merge `origin/<baseBranch>` into the current branch (no fast-forward squash, no
+ * editor). Returns `true` for a clean merge (or an already-up-to-date no-op) and
+ * `false` when the merge left conflicts in the working tree — the expected case the
+ * conflict-resolver agent then fixes, NOT an error. Any other git failure (e.g. an
+ * unknown ref) is re-thrown. Requires a {@link cloneRepo} with `full: true` so the
+ * merge base and `origin/<baseBranch>` are present.
+ */
+export async function mergeBranch(
+  dir: string,
+  baseBranch: string,
+  signal?: AbortSignal,
+): Promise<boolean> {
+  try {
+    await git(['merge', '--no-edit', `origin/${baseBranch}`], { cwd: dir, signal })
+    return true
+  } catch (err) {
+    // A merge conflict exits non-zero and leaves unmerged paths; distinguish it
+    // from a genuine failure (which leaves none) so only real errors propagate.
+    if ((await unmergedPaths(dir, signal)).length > 0) return false
+    throw err
+  }
 }
 
 /**

@@ -111,7 +111,9 @@ export class D1MergePresetRepository implements MergePresetRepository {
 
   async remove(workspaceId: string, id: string): Promise<void> {
     await this.db
-      .prepare(`DELETE FROM merge_threshold_presets WHERE workspace_id = ? AND id = ? AND is_default = 0`)
+      .prepare(
+        `DELETE FROM merge_threshold_presets WHERE workspace_id = ? AND id = ? AND is_default = 0`,
+      )
       .bind(workspaceId, id)
       .run()
   }

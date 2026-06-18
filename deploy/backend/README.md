@@ -2,8 +2,8 @@
 
 This package is the **deployment** half of the backend. The reusable logic lives
 in the published [`@cat-factory/worker`](../../backend/packages/worker) library
-(plus `@cat-factory/core`, `@cat-factory/contracts`,
-`@cat-factory/prompt-fragments`); this package carries only the
+(plus `@cat-factory/contracts`, `@cat-factory/kernel`, `@cat-factory/orchestration`
+and the other domain packages); this package carries only the
 **configuration**: a `wrangler.toml`, the per-deployment `[vars]`, secrets
 guidance, and a one-line entry (`src/index.ts`) that re-exports the library's
 handler and Durable Object / Workflow classes.

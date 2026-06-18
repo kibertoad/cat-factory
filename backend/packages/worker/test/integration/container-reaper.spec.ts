@@ -66,12 +66,18 @@ describe('ContainerInstanceRegistry: reaper', () => {
     const killed: string[] = []
     const reg = new ContainerInstanceRegistry(fakeNamespace(killed), store, at(10_000))
     // started_at: old ones are stale; the fresh one is within the window.
-    await new ContainerInstanceRegistry(fakeNamespace([]), store, at(1_000)).register('old-a', 'run')
+    await new ContainerInstanceRegistry(fakeNamespace([]), store, at(1_000)).register(
+      'old-a',
+      'run',
+    )
     await new ContainerInstanceRegistry(fakeNamespace([]), store, at(1_500)).register(
       'old-b',
       'bootstrap',
     )
-    await new ContainerInstanceRegistry(fakeNamespace([]), store, at(9_900)).register('fresh', 'run')
+    await new ContainerInstanceRegistry(fakeNamespace([]), store, at(9_900)).register(
+      'fresh',
+      'run',
+    )
 
     const { reaped } = await reg.reapStaleBefore(5_000)
 

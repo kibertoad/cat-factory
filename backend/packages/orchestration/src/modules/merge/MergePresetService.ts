@@ -7,7 +7,12 @@ import type {
   UpdateMergePresetInput,
   WorkspaceRepository,
 } from '@cat-factory/kernel'
-import { assertFound, ConflictError, DEFAULT_MERGE_PRESET, requireWorkspace } from '@cat-factory/kernel'
+import {
+  assertFound,
+  ConflictError,
+  DEFAULT_MERGE_PRESET,
+  requireWorkspace,
+} from '@cat-factory/kernel'
 
 export interface MergePresetServiceDependencies {
   mergePresetRepository: MergePresetRepository
@@ -44,10 +49,7 @@ export class MergePresetService {
   }
 
   /** Create a new preset. The first one (or one flagged default) becomes the default. */
-  async create(
-    workspaceId: string,
-    input: CreateMergePresetInput,
-  ): Promise<MergeThresholdPreset> {
+  async create(workspaceId: string, input: CreateMergePresetInput): Promise<MergeThresholdPreset> {
     await requireWorkspace(this.workspaceRepository, workspaceId)
     const existing = await this.presets.list(workspaceId)
     const preset: MergeThresholdPreset = {

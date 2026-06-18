@@ -12,11 +12,7 @@ export {
   type DomainErrorCode,
 } from './domain/errors'
 export { sameSubtasks, sameSubtaskItems } from './domain/subtasks.logic'
-export {
-  BLOCK_TYPE_LABEL,
-  DEFAULT_MERGE_PRESET,
-  DEFAULT_CI_MAX_ATTEMPTS,
-} from './domain/catalog'
+export { BLOCK_TYPE_LABEL, DEFAULT_MERGE_PRESET, DEFAULT_CI_MAX_ATTEMPTS } from './domain/catalog'
 export {
   type SelectableModel,
   type ModelVariant,

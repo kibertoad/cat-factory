@@ -36,6 +36,7 @@ import type {
   NotificationChannel,
   NotificationRepository,
   PullRequestMerger,
+  PullRequestMergeabilityProvider,
 } from '@cat-factory/kernel'
 import type { SecretCipher } from '@cat-factory/kernel'
 import type { FragmentSourceRepository, PromptFragmentRepository } from '@cat-factory/kernel'
@@ -288,6 +289,8 @@ export interface CoreDependencies {
   notificationChannel?: NotificationChannel
   /** Reads a block's PR CI checks so the `ci` step can gate on green CI. */
   ciStatusProvider?: CiStatusProvider
+  /** Reads a block's PR mergeability so the `conflicts` step can gate on it. */
+  mergeabilityProvider?: PullRequestMergeabilityProvider
   /** Performs the real GitHub merge so a task's `done` means "PR merged". */
   pullRequestMerger?: PullRequestMerger
   /** Resolves a task's merge threshold preset (auto-merge ceilings + CI attempt budget). */
@@ -750,9 +753,7 @@ function createFragmentLibraryModule(deps: CoreDependencies): FragmentLibraryMod
  * without it the rows still persist (the inbox + snapshot work) but nothing is
  * pushed; the worker wires the in-app channel, and email/Slack compose in later.
  */
-function createNotificationsModule(
-  deps: CoreDependencies,
-): NotificationsModule | undefined {
+function createNotificationsModule(deps: CoreDependencies): NotificationsModule | undefined {
   const { notificationRepository } = deps
   if (!notificationRepository) return undefined
   const service = new NotificationService({

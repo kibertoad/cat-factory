@@ -65,7 +65,11 @@ export function notificationController(): Hono<AppEnv> {
     const notifications = requireNotifications(c)
     if (!notifications) return unavailable(c)
     return c.json(
-      await notifications.service.resolve(param(c, 'workspaceId'), param(c, 'notificationId'), 'dismiss'),
+      await notifications.service.resolve(
+        param(c, 'workspaceId'),
+        param(c, 'notificationId'),
+        'dismiss',
+      ),
     )
   })
 

@@ -163,6 +163,11 @@ export type {
 export type { BoardWritePort } from './board-operations'
 export type { PullRequestMerger } from './pr-merger'
 export type { CiCheck, CiStatusReport, CiStatusProvider } from './ci-status'
+export type {
+  MergeabilityVerdict,
+  MergeabilityReport,
+  PullRequestMergeabilityProvider,
+} from './pr-mergeability'
 export type { NotificationRepository } from './notification-repositories'
 export type { MergePresetRepository } from './merge-preset-repositories'
 export {

@@ -314,12 +314,35 @@ export const ciStepStateSchema = v.object({
 })
 export type CiStepState = v.InferOutput<typeof ciStepStateSchema>
 
+/**
+ * State a `conflicts` step carries while it gates a pull request on being
+ * mergeable. Like a `ci` step it is special (not an LLM/container agent itself):
+ * it checks the PR's mergeability and, on a conflict, dispatches the
+ * `conflict-resolver` container agent (which merges the base in, resolves the
+ * conflicts and pushes), looping until the PR is mergeable or the budget is spent.
+ *   - `phase: 'checking'`  — checking the PR's mergeability for `headSha`.
+ *   - `phase: 'resolving'` — a `conflict-resolver` job is in flight (tracked via the
+ *                            step's `jobId`); on completion the step returns to `checking`.
+ */
+export const conflictsStepStateSchema = v.object({
+  phase: v.picklist(['checking', 'resolving']),
+  /** How many `conflict-resolver` attempts have been dispatched so far. */
+  attempts: v.number(),
+  /** Ceiling on attempts, resolved from the task's merge preset at step start. */
+  maxAttempts: v.number(),
+  /** The PR head commit whose mergeability is being gated, once resolved. */
+  headSha: v.optional(v.nullable(v.string())),
+})
+export type ConflictsStepState = v.InferOutput<typeof conflictsStepStateSchema>
+
 export const pipelineStepSchema = v.object({
   agentKind: agentKindSchema,
   state: agentStateSchema,
   progress: v.number(),
   /** Live CI-gate state while a `ci` step polls/fixes checks; see {@link ciStepStateSchema}. */
   ci: v.optional(v.nullable(ciStepStateSchema)),
+  /** Live conflict-gate state while a `conflicts` step checks/resolves mergeability. */
+  conflicts: v.optional(v.nullable(conflictsStepStateSchema)),
   /** Live subtask counts while an async (container) step runs; see {@link stepSubtasksSchema}. */
   subtasks: v.optional(stepSubtasksSchema),
   decision: v.nullable(decisionSchema),

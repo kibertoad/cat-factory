@@ -1,10 +1,16 @@
 import { createHash } from 'node:crypto'
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import type { BlueprintJob, BlueprintResult } from './job.js'
 import { cloneRepo, commitAll, pushBranch } from './git.js'
-import { type PiRunStats, runPi, writeAgentsContext, writePiModelsConfig } from './pi.js'
+import type { PiRunStats } from './pi.js'
+import {
+  agentNeverActed,
+  agentOutputTail,
+  NEVER_ACTED_CAUSE,
+  runAgentInWorkspace,
+  withWorkspace,
+} from './pi-workspace.js'
 import type { RunOptions } from './runner.js'
 import { log } from './logger.js'
 
@@ -333,10 +339,9 @@ export async function handleBlueprint(
   job: BlueprintJob,
   opts: RunOptions = {},
 ): Promise<BlueprintResult> {
-  const { signal, onActivity, onProgress } = opts
-  const dir = await mkdtemp(join(tmpdir(), 'blueprint-'))
+  const { signal } = opts
   const trace = { jobId: job.jobId, repo: `${job.repo.owner}/${job.repo.name}`, branch: job.branch }
-  try {
+  return withWorkspace('blueprint', async (dir) => {
     log.info('blueprint: cloning target branch', trace)
     await cloneRepo({
       repo: { ...job.repo, baseBranch: job.branch },
@@ -349,19 +354,19 @@ export async function handleBlueprint(
     // The prior version manifest is read regardless of mode so the counter keeps
     // climbing across runs (and an unchanged tree stays at the same version).
     const previousVersion = await readExistingVersion(dir)
-    await writeAgentsContext(dir, job.systemPrompt)
-    await writePiModelsConfig({ model: job.model, proxyBaseUrl: job.proxyBaseUrl })
 
     log.info('blueprint: running agent', { ...trace, mode: job.mode })
-    const { summary, stats, stderrTail } = await runPi({
-      cwd: dir,
-      model: job.model,
-      userPrompt: buildUserPrompt(job, existing),
-      sessionToken: job.sessionToken,
-      signal,
-      onActivity,
-      onProgress,
-    })
+    const { summary, stats, stderrTail } = await runAgentInWorkspace(
+      {
+        dir,
+        systemPrompt: job.systemPrompt,
+        userPrompt: buildUserPrompt(job, existing),
+        model: job.model,
+        proxyBaseUrl: job.proxyBaseUrl,
+        sessionToken: job.sessionToken,
+      },
+      opts,
+    )
 
     let service: BlueprintServiceTree | null = null
     try {
@@ -395,9 +400,7 @@ export async function handleBlueprint(
     }
 
     return { service, summary, stats }
-  } finally {
-    await rm(dir, { recursive: true, force: true })
-  }
+  })
 }
 
 /** Human-readable reason a blueprint run produced no usable tree. */
@@ -406,17 +409,10 @@ function noBlueprintReason(
   summary: string,
   stderrTail: string | undefined,
 ): string {
-  const acted = stats.toolCalls === 0 && stats.assistantChars === 0
-  const cause = acted
-    ? ' The agent never acted (no tool calls, no model output) — it most likely could not reach the model.'
-    : ''
-  const detail = stderrTail
-    ? ` Agent stderr: ${stderrTail.slice(-700)}`
-    : summary
-      ? ` Agent output: ${summary.slice(0, 700)}`
-      : ''
+  const cause = agentNeverActed(stats) ? NEVER_ACTED_CAUSE : ''
   return (
     `the blueprint agent produced no usable decomposition ` +
-    `(tool calls: ${stats.toolCalls}, assistant output: ${stats.assistantChars} chars).${cause}${detail}`
+    `(tool calls: ${stats.toolCalls}, assistant output: ${stats.assistantChars} chars).${cause}` +
+    agentOutputTail(stderrTail, summary)
   )
 }

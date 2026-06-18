@@ -46,6 +46,11 @@ const CONTAINER_KINDS = new Set([
   // step itself is NOT here: it is a special, non-agent gate handled in the engine
   // that *dispatches* a `ci-fixer` job; only the fixer reaches this executor.)
   'ci-fixer',
+  // The conflict-resolver clones the PR head branch, merges the base in and resolves
+  // the conflicts on the same branch — a real-checkout operation. (The `conflicts`
+  // gate itself is NOT here: like `ci` it is a non-agent engine gate that *dispatches*
+  // a `conflict-resolver` job; only the resolver reaches this executor.)
+  'conflict-resolver',
   // The merger clones the PR head branch to assess the diff (complexity/risk/impact)
   // before the engine decides whether to auto-merge — a real-checkout operation.
   'merger',

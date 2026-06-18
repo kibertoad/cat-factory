@@ -1,11 +1,24 @@
+import { execFile } from 'node:child_process'
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { promisify } from 'node:util'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { parseBootstrapJob, parseJob } from '../src/job.js'
+import { parseBootstrapJob, parseConflictResolverJob, parseJob } from '../src/job.js'
 import { parsePiOutput, parseTodoProgress, summarizePiRun } from '../src/pi.js'
-import { authenticatedCloneUrl, changedPathsFromPorcelain, redactSecrets } from '../src/git.js'
+import {
+  authenticatedCloneUrl,
+  branchHasChanges,
+  changedPathsFromPorcelain,
+  commitAll,
+  headCommit,
+  mergeBranch,
+  redactSecrets,
+  unmergedPaths,
+} from '../src/git.js'
 import { producedRepoContent } from '../src/bootstrap.js'
+
+const exec = promisify(execFile)
 
 const validBootstrapBody = {
   jobId: 'boot_123',
@@ -243,6 +256,164 @@ describe('producedRepoContent (from-scratch scaffold)', () => {
     await writeFile(join(dir, 'AGENTS.md'), 'context', 'utf8')
     await writeFile(join(dir, 'package.json'), '{}', 'utf8')
     expect(await producedRepoContent(dir, false)).toBe(true)
+  })
+})
+
+describe('branchHasChanges', () => {
+  let dir: string
+
+  /** Init a repo with one base commit (a tracked file) and return its base tip SHA. */
+  const initRepo = async (): Promise<string> => {
+    const git = (...args: string[]): Promise<unknown> => exec('git', args, { cwd: dir })
+    await git('init', '-b', 'main')
+    await git('config', 'user.email', 'test@example.com')
+    await git('config', 'user.name', 'Test')
+    // AGENTS.md is the harness-written context; in these repos it is gitignored,
+    // exactly as in the deployments where the no-op false-positive was observed.
+    await writeFile(join(dir, '.gitignore'), 'AGENTS.md\n', 'utf8')
+    await writeFile(join(dir, 'base.txt'), 'base\n', 'utf8')
+    await git('add', '-A')
+    await git('commit', '-m', 'base')
+    return headCommit(dir)
+  }
+
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), 'branch-test-'))
+  })
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true })
+  })
+
+  it('is false when the agent produced nothing (only the gitignored AGENTS.md)', async () => {
+    const base = await initRepo()
+    await writeFile(join(dir, 'AGENTS.md'), 'context', 'utf8')
+    expect(await branchHasChanges(dir, base)).toBe(false)
+  })
+
+  it('is true when the agent committed its own work (the observed false-positive)', async () => {
+    const base = await initRepo()
+    // The agent writes AND commits its change itself, leaving a clean working tree
+    // — so a trailing commitAll finds nothing, but the branch has advanced.
+    await writeFile(join(dir, 'feature.ts'), 'export const x = 1\n', 'utf8')
+    await exec('git', ['add', '-A'], { cwd: dir })
+    await exec('git', ['commit', '-m', 'feat'], { cwd: dir })
+    expect(await commitAll(dir, 'noop')).toBe(false)
+    expect(await branchHasChanges(dir, base)).toBe(true)
+  })
+
+  it('is true when the agent left uncommitted edits', async () => {
+    const base = await initRepo()
+    await writeFile(join(dir, 'feature.ts'), 'export const x = 1\n', 'utf8')
+    expect(await branchHasChanges(dir, base)).toBe(true)
+  })
+
+  it('ignores a lone AGENTS.md change even when it is tracked (not gitignored)', async () => {
+    const git = (...args: string[]): Promise<unknown> => exec('git', args, { cwd: dir })
+    await git('init', '-b', 'main')
+    await git('config', 'user.email', 'test@example.com')
+    await git('config', 'user.name', 'Test')
+    await writeFile(join(dir, 'base.txt'), 'base\n', 'utf8')
+    await git('add', '-A')
+    await git('commit', '-m', 'base')
+    const base = await headCommit(dir)
+    // No .gitignore here, so AGENTS.md is tracked; rewriting only it is still a no-op.
+    await writeFile(join(dir, 'AGENTS.md'), 'fresh context', 'utf8')
+    expect(await branchHasChanges(dir, base)).toBe(false)
+  })
+})
+
+const validConflictBody = {
+  jobId: 'exec-1',
+  systemPrompt: 'Resolve the conflicts.',
+  userPrompt: 'Resolve.',
+  model: 'qwen3-max',
+  proxyBaseUrl: 'https://w/v1',
+  sessionToken: 'sess',
+  ghToken: 'ght',
+  repo: { owner: 'o', name: 'r', baseBranch: 'main', cloneUrl: 'https://github.com/o/r.git' },
+  branch: 'cat-factory/blk-1',
+}
+
+describe('parseConflictResolverJob', () => {
+  it('accepts a well-formed conflict-resolver job', () => {
+    const job = parseConflictResolverJob(validConflictBody)
+    expect(job.jobId).toBe('exec-1')
+    expect(job.branch).toBe('cat-factory/blk-1')
+    expect(job.repo.baseBranch).toBe('main')
+  })
+
+  it('rejects missing required fields', () => {
+    expect(() => parseConflictResolverJob({ ...validConflictBody, branch: '' })).toThrow(/branch/)
+    expect(() => parseConflictResolverJob({ ...validConflictBody, repo: { owner: 'o' } })).toThrow(
+      /repo\.name/,
+    )
+  })
+
+  it('rejects a clone URL pointing at a non-GitHub host', () => {
+    expect(() =>
+      parseConflictResolverJob({
+        ...validConflictBody,
+        repo: { ...validConflictBody.repo, cloneUrl: 'https://evil.example/o/r.git' },
+      }),
+    ).toThrow(/not an allowed GitHub host/)
+  })
+})
+
+describe('mergeBranch / unmergedPaths', () => {
+  let origin: string
+  let work: string
+
+  const g = (cwd: string, ...args: string[]): Promise<unknown> => exec('git', args, { cwd })
+
+  beforeEach(async () => {
+    // A real "origin" repo with one commit, cloned into a work tree (so the work
+    // tree carries an `origin/main` remote-tracking ref the merge can target).
+    origin = await mkdtemp(join(tmpdir(), 'merge-origin-'))
+    await g(origin, 'init', '-b', 'main')
+    await g(origin, 'config', 'user.email', 'o@e.com')
+    await g(origin, 'config', 'user.name', 'Origin')
+    await writeFile(join(origin, 'file.txt'), 'base\n', 'utf8')
+    await g(origin, 'add', '-A')
+    await g(origin, 'commit', '-m', 'base')
+
+    work = await mkdtemp(join(tmpdir(), 'merge-work-'))
+    await exec('git', ['clone', origin, work])
+    await g(work, 'config', 'user.email', 'w@e.com')
+    await g(work, 'config', 'user.name', 'Work')
+  })
+  afterEach(async () => {
+    await rm(origin, { recursive: true, force: true })
+    await rm(work, { recursive: true, force: true })
+  })
+
+  it('returns true (no conflict) when the base only adds new files', async () => {
+    await g(work, 'checkout', '-b', 'feature')
+    await writeFile(join(work, 'feature.txt'), 'work\n', 'utf8')
+    await g(work, 'add', '-A')
+    await g(work, 'commit', '-m', 'feature')
+    // origin/main advances with a non-overlapping file.
+    await writeFile(join(origin, 'extra.txt'), 'extra\n', 'utf8')
+    await g(origin, 'add', '-A')
+    await g(origin, 'commit', '-m', 'extra')
+    await g(work, 'fetch', 'origin')
+
+    expect(await mergeBranch(work, 'main')).toBe(true)
+    expect(await unmergedPaths(work)).toEqual([])
+  })
+
+  it('returns false and reports the unmerged path on a real conflict', async () => {
+    await g(work, 'checkout', '-b', 'feature')
+    await writeFile(join(work, 'file.txt'), 'feature change\n', 'utf8')
+    await g(work, 'add', '-A')
+    await g(work, 'commit', '-m', 'feature edit')
+    // origin/main changes the SAME line, so the merge cannot auto-resolve.
+    await writeFile(join(origin, 'file.txt'), 'main change\n', 'utf8')
+    await g(origin, 'add', '-A')
+    await g(origin, 'commit', '-m', 'main edit')
+    await g(work, 'fetch', 'origin')
+
+    expect(await mergeBranch(work, 'main')).toBe(false)
+    expect(await unmergedPaths(work)).toEqual(['file.txt'])
   })
 })
 

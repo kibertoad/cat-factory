@@ -1,16 +1,7 @@
-import { mkdtemp, rm } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
 import type { Job, RunResult } from './job.js'
-import {
-  cloneRepo,
-  commitAll,
-  createBranch,
-  openPullRequest,
-  pushBranch,
-  redactSecrets,
-} from './git.js'
-import { runPi, type TodoProgress, writeAgentsContext, writePiModelsConfig } from './pi.js'
+import { openPullRequest, redactSecrets } from './git.js'
+import type { TodoProgress } from './pi.js'
+import { noChangesReason, runCodingAgent } from './coding-agent.js'
 import { log } from './logger.js'
 
 // Async job execution for the implementation container. A coding run can take
@@ -19,6 +10,10 @@ import { log } from './logger.js'
 // polls GET /jobs/{id}. Two watchdogs bound every job so a container can never
 // run forever — an inactivity timer (kills Pi when it stops producing output)
 // and an overall max-duration cap.
+//
+// The repo/Pi/push mechanics are shared with the CI-fixer in {@link runCodingAgent};
+// this file's `handleRun` only adds what is specific to implementation: a fresh
+// work branch and opening a pull request when the run produced changes.
 
 /** Options threaded into the long-running git/Pi work so a watchdog can cancel it. */
 export interface RunOptions {
@@ -28,55 +23,50 @@ export interface RunOptions {
   onProgress?: (progress: TodoProgress) => void
 }
 
-/** Run one implementation job end to end: clone → Pi implements → commit → push → PR. */
+/** Run one implementation job end to end: clone → Pi implements → push → PR. */
 export async function handleRun(job: Job, opts: RunOptions = {}): Promise<RunResult> {
-  const { signal, onActivity, onProgress } = opts
-  const dir = await mkdtemp(join(tmpdir(), 'impl-'))
-  try {
-    await cloneRepo({ repo: job.repo, ghToken: job.ghToken, dir, signal })
-    await createBranch(dir, job.headBranch, signal)
-    await writeAgentsContext(dir, job.systemPrompt)
-    await writePiModelsConfig({ model: job.model, proxyBaseUrl: job.proxyBaseUrl })
-
-    const { summary, stats, stderrTail } = await runPi({
-      cwd: dir,
-      model: job.model,
-      userPrompt: job.userPrompt,
-      sessionToken: job.sessionToken,
-      signal,
-      onActivity,
-      onProgress,
-    })
-
-    const committed = await commitAll(dir, job.pr.title, signal)
-    if (!committed) {
-      const cause =
-        stats.toolCalls === 0 && stats.assistantChars === 0
-          ? ' (the agent never acted — it most likely could not reach the model)'
-          : ''
-      const detail = stderrTail ? ` Agent stderr: ${stderrTail.slice(-700)}` : ''
-      return {
-        summary,
-        stats,
-        branch: job.headBranch,
-        error: `Pi produced no file changes${cause}.${detail}`,
-      }
-    }
-    await pushBranch(dir, job.headBranch, job.ghToken, signal)
-    const prUrl = await openPullRequest({
-      owner: job.repo.owner,
-      name: job.repo.name,
+  const { summary, stats, stderrTail, pushed } = await runCodingAgent(
+    {
+      kind: 'impl',
+      jobId: job.jobId,
+      repo: job.repo,
+      // Branch off the repo's base branch onto a fresh work branch for the PR.
+      cloneBranch: job.repo.baseBranch,
+      newBranch: job.headBranch,
+      pushBranch: job.headBranch,
       ghToken: job.ghToken,
-      head: job.headBranch,
-      base: job.repo.baseBranch,
-      pr: job.pr,
-      apiBase: job.githubApiBase,
-      signal,
-    })
-    return { prUrl, branch: job.headBranch, summary, stats }
-  } finally {
-    await rm(dir, { recursive: true, force: true })
+      systemPrompt: job.systemPrompt,
+      userPrompt: job.userPrompt,
+      model: job.model,
+      proxyBaseUrl: job.proxyBaseUrl,
+      sessionToken: job.sessionToken,
+      commitMessage: job.pr.title,
+    },
+    opts,
+  )
+
+  // A no-op (nothing changed across the whole run) is an implementation failure.
+  if (!pushed) {
+    return {
+      summary,
+      stats,
+      branch: job.headBranch,
+      error: noChangesReason('Pi produced no file changes', stats, stderrTail),
+    }
   }
+
+  // Changes are on the branch: open the pull request for them.
+  const prUrl = await openPullRequest({
+    owner: job.repo.owner,
+    name: job.repo.name,
+    ghToken: job.ghToken,
+    head: job.headBranch,
+    base: job.repo.baseBranch,
+    pr: job.pr,
+    apiBase: job.githubApiBase,
+    signal: opts.signal,
+  })
+  return { prUrl, branch: job.headBranch, summary, stats }
 }
 
 export type JobState = 'running' | 'done' | 'failed'

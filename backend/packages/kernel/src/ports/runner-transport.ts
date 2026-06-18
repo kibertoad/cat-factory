@@ -27,16 +27,28 @@ export interface RunnerJobResult {
   assessment?: unknown
   /** A `ci-fixer` job's outcome: whether it pushed a fix to the PR branch. */
   pushed?: boolean
+  /**
+   * A conflict-resolver job's outcome: whether the PR branch is now mergeable (the
+   * `/resolve-conflicts` endpoint's product). `false` means conflicts remain.
+   */
+  resolved?: boolean
 }
 
 /**
- * Which harness endpoint a dispatch targets: a coding run, a blueprint run, or a
- * repo-bootstrap run. All are dispatched + polled identically through this
- * transport; `kind` only selects the harness endpoint (`/run` | `/blueprint` |
- * `/bootstrap`). The Cloudflare backend serves all three; a self-hosted pool serves
- * only `run` and rejects the rest until it implements them.
+ * Which harness endpoint a dispatch targets (a coding run, a blueprint run, a
+ * repo-bootstrap run, a CI fix, a merge-conflict resolution, or a merge
+ * assessment). All are dispatched + polled identically through this transport;
+ * `kind` only selects the harness endpoint (e.g. `/run` | `/blueprint` |
+ * `/resolve-conflicts`). The Cloudflare backend serves all of them; a self-hosted
+ * pool serves only `run` and rejects the rest until it implements them.
  */
-export type RunnerDispatchKind = 'run' | 'blueprint' | 'bootstrap' | 'ci-fix' | 'merge'
+export type RunnerDispatchKind =
+  | 'run'
+  | 'blueprint'
+  | 'bootstrap'
+  | 'ci-fix'
+  | 'resolve-conflicts'
+  | 'merge'
 
 /** A job's current state, as the harness/pool reports it. */
 export interface RunnerJobView {

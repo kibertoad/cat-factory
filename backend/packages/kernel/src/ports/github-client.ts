@@ -239,6 +239,17 @@ export interface GitHubClient {
     number: number,
     patch: { title?: string; body?: string; state?: 'open' | 'closed'; base?: string },
   ): Promise<GitHubPullRequest>
+  /**
+   * Read a PR's lazily-computed mergeability. GitHub computes `mergeable` /
+   * `mergeable_state` asynchronously, so `mergeable` is `null` until it is ready;
+   * `mergeableState === 'dirty'` is its signal that the PR conflicts with its base.
+   * `headSha` is the PR head commit (null when the PR can't be read).
+   */
+  getPullRequestMergeability(
+    installationId: number,
+    ref: GitHubRepoRef,
+    number: number,
+  ): Promise<{ mergeable: boolean | null; mergeableState: string; headSha: string | null }>
   mergePullRequest(
     installationId: number,
     ref: GitHubRepoRef,

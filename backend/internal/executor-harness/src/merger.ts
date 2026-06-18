@@ -1,10 +1,14 @@
-import { mkdtemp, rm } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
 import type { MergerJob, MergerResult } from './job.js'
 import { cloneRepo } from './git.js'
 import { extractJsonObject } from './blueprint.js'
-import { runPi, type PiRunStats, writeAgentsContext, writePiModelsConfig } from './pi.js'
+import type { PiRunStats } from './pi.js'
+import {
+  agentNeverActed,
+  agentOutputTail,
+  NEVER_ACTED_CAUSE,
+  runAgentInWorkspace,
+  withWorkspace,
+} from './pi-workspace.js'
 import type { RunOptions } from './runner.js'
 import { log } from './logger.js'
 
@@ -40,7 +44,8 @@ function coerceAssessment(raw: unknown, summary: string): MergeAssessmentShape {
     complexity: clamp01(o.complexity, 1),
     risk: clamp01(o.risk, 1),
     impact: clamp01(o.impact, 1),
-    rationale: typeof o.rationale === 'string' && o.rationale ? o.rationale : summary.slice(0, 2000),
+    rationale:
+      typeof o.rationale === 'string' && o.rationale ? o.rationale : summary.slice(0, 2000),
   }
 }
 
@@ -60,30 +65,28 @@ function buildUserPrompt(job: MergerJob): string {
 
 /** Run one merger job end to end: clone branch → Pi assesses → return scores (no commit). */
 export async function handleMerger(job: MergerJob, opts: RunOptions = {}): Promise<MergerResult> {
-  const { signal, onActivity, onProgress } = opts
-  const dir = await mkdtemp(join(tmpdir(), 'merge-'))
   const trace = { jobId: job.jobId, repo: `${job.repo.owner}/${job.repo.name}`, branch: job.branch }
-  try {
+  return withWorkspace('merge', async (dir) => {
     log.info('merge: cloning PR branch', trace)
     await cloneRepo({
       repo: { ...job.repo, baseBranch: job.branch },
       ghToken: job.ghToken,
       dir,
-      signal,
+      signal: opts.signal,
     })
-    await writeAgentsContext(dir, job.systemPrompt)
-    await writePiModelsConfig({ model: job.model, proxyBaseUrl: job.proxyBaseUrl })
 
     log.info('merge: running agent', trace)
-    const { summary, stats, stderrTail } = await runPi({
-      cwd: dir,
-      model: job.model,
-      userPrompt: buildUserPrompt(job),
-      sessionToken: job.sessionToken,
-      signal,
-      onActivity,
-      onProgress,
-    })
+    const { summary, stats, stderrTail } = await runAgentInWorkspace(
+      {
+        dir,
+        systemPrompt: job.systemPrompt,
+        userPrompt: buildUserPrompt(job),
+        model: job.model,
+        proxyBaseUrl: job.proxyBaseUrl,
+        sessionToken: job.sessionToken,
+      },
+      opts,
+    )
 
     let parsed: unknown
     try {
@@ -98,17 +101,13 @@ export async function handleMerger(job: MergerJob, opts: RunOptions = {}): Promi
     const assessment = coerceAssessment(parsed, summary)
     log.info('merge: assessed', { ...trace, ...assessment })
     return { assessment, summary, stats }
-  } finally {
-    await rm(dir, { recursive: true, force: true })
-  }
+  })
 }
 
 /** Human-readable reason a merger run produced no usable assessment. */
 function noAssessmentReason(stats: PiRunStats, stderrTail: string | undefined): string {
-  const acted = stats.toolCalls === 0 && stats.assistantChars === 0
-  const cause = acted
-    ? ' The agent never acted (no tool calls, no model output) — it most likely could not reach the model.'
+  const cause = agentNeverActed(stats)
+    ? NEVER_ACTED_CAUSE
     : ' The agent did not return a parseable JSON assessment.'
-  const detail = stderrTail ? ` Agent stderr: ${stderrTail.slice(-700)}` : ''
-  return `Merger produced no assessment.${cause}${detail}`
+  return `Merger produced no assessment.${cause}${agentOutputTail(stderrTail)}`
 }

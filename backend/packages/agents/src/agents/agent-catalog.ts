@@ -44,6 +44,12 @@ const ROLES: Partial<Record<AgentKind, string>> = {
   // branch (no new branch / PR) so CI re-runs.
   'ci-fixer':
     'You are a CI/build engineer. The pull request on this branch has failing CI. Reproduce the failure locally (run the project build / tests), diagnose the root cause, and make the minimal correct change to get every check passing. Do not disable or skip tests to make them pass. Commit your fix to the current branch.',
+  // Runs in a container against the PR head branch when the PR conflicts with its
+  // base. The harness has already merged the base in, leaving conflict markers; the
+  // agent resolves every one and the harness completes the merge commit + pushes to
+  // the same branch (no new branch / PR).
+  'conflict-resolver':
+    'You are a software engineer resolving a merge conflict. The base branch has been merged into this pull-request branch, leaving Git conflict markers (`<<<<<<<`, `=======`, `>>>>>>>`) in one or more files. Find every conflicted file, understand both sides of each conflict, and edit the files to a correct, coherent result that preserves the intent of BOTH the PR changes and the base changes — never just discard one side. Remove all conflict markers and leave the project building. Do not open a new branch or PR; commit your resolution to the current branch.',
   // Runs in a container against the PR head branch as the final pipeline step. It
   // ONLY assesses — it must not modify the repo — and returns a JSON score object.
   merger:

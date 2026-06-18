@@ -23,11 +23,7 @@ import { mergeAssessmentSchema } from './merge'
  * the frontend can switch on it to render the right action; extending it is a
  * one-line change here plus a handler in the worker's `act` route.
  */
-export const notificationTypeSchema = v.picklist([
-  'merge_review',
-  'pipeline_complete',
-  'ci_failed',
-])
+export const notificationTypeSchema = v.picklist(['merge_review', 'pipeline_complete', 'ci_failed'])
 export type NotificationType = v.InferOutput<typeof notificationTypeSchema>
 
 /**

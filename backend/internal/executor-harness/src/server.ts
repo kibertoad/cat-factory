@@ -7,11 +7,14 @@ import {
   type BootstrapResult,
   type CiFixerJob,
   type CiFixerResult,
+  type ConflictResolverJob,
+  type ConflictResolverResult,
   type MergerJob,
   type MergerResult,
   parseBlueprintJob,
   parseBootstrapJob,
   parseCiFixerJob,
+  parseConflictResolverJob,
   parseMergerJob,
   parseJob,
   type RunResult,
@@ -19,6 +22,7 @@ import {
 import { handleBootstrap } from './bootstrap.js'
 import { handleBlueprint } from './blueprint.js'
 import { handleCiFixer } from './ci-fixer.js'
+import { handleConflictResolver } from './conflict-resolver.js'
 import { handleMerger } from './merger.js'
 import { redactSecrets } from './git.js'
 import { JobRegistry, loadRunnerLimits } from './runner.js'
@@ -66,6 +70,10 @@ const jobs = new JobRegistry(limits)
 const bootstrapJobs = new JobRegistry<BootstrapJob, BootstrapResult>(limits, handleBootstrap)
 const blueprintJobs = new JobRegistry<BlueprintJob, BlueprintResult>(limits, handleBlueprint)
 const ciFixerJobs = new JobRegistry<CiFixerJob, CiFixerResult>(limits, handleCiFixer)
+const conflictResolverJobs = new JobRegistry<ConflictResolverJob, ConflictResolverResult>(
+  limits,
+  handleConflictResolver,
+)
 const mergerJobs = new JobRegistry<MergerJob, MergerResult>(limits, handleMerger)
 
 // Re-exported so the acceptance suite (and any direct caller) can run a job
@@ -135,6 +143,20 @@ const server = createServer((req, res) => {
         return send(res, 400, { error: message } satisfies CiFixerResult)
       }
     }
+    // Start (or re-attach to) a conflict-resolver job: POST /resolve-conflicts.
+    // Clones the PR branch, merges the base in, resolves the conflicts and pushes
+    // back onto the same branch so the PR becomes mergeable.
+    if (req.method === 'POST' && req.url === '/resolve-conflicts') {
+      try {
+        const job = parseConflictResolverJob(JSON.parse(await readBody(req)))
+        const view = conflictResolverJobs.start(job.jobId, job)
+        return send(res, 202, { jobId: view.id, state: view.state })
+      } catch (error) {
+        const message = redactSecrets(error instanceof Error ? error.message : String(error))
+        log.error('failed to start conflict-resolve', { error: message })
+        return send(res, 400, { error: message } satisfies ConflictResolverResult)
+      }
+    }
     // Start (or re-attach to) a merger job: POST /merge. Clones the PR branch and
     // returns a JSON assessment (no commits).
     if (req.method === 'POST' && req.url === '/merge') {
@@ -149,7 +171,8 @@ const server = createServer((req, res) => {
       }
     }
     // Poll a running/finished job: GET /jobs/{id}. Job ids are unique per kind, so
-    // check each registry in turn (implementation, bootstrap, blueprint, ci-fix, merge).
+    // check each registry in turn (implementation, bootstrap, blueprint, ci-fix,
+    // resolve-conflicts, merge).
     if (req.method === 'GET' && req.url?.startsWith('/jobs/')) {
       const id = decodeURIComponent(req.url.slice('/jobs/'.length))
       const view =
@@ -157,6 +180,7 @@ const server = createServer((req, res) => {
         bootstrapJobs.get(id) ??
         blueprintJobs.get(id) ??
         ciFixerJobs.get(id) ??
+        conflictResolverJobs.get(id) ??
         mergerJobs.get(id)
       if (!view) return send(res, 404, { error: 'job not found' })
       return send(res, 200, view)

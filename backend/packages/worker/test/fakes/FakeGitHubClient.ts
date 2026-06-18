@@ -210,6 +210,21 @@ export class FakeGitHubClient implements GitHubClient {
     }
   }
 
+  /** Canned mergeability returned by getPullRequestMergeability (override per test). */
+  mergeability: { mergeable: boolean | null; mergeableState: string; headSha: string | null } = {
+    mergeable: true,
+    mergeableState: 'clean',
+    headSha: 'head-sha',
+  }
+
+  async getPullRequestMergeability(
+    _installationId: number,
+    _ref: GitHubRepoRef,
+    _number: number,
+  ): Promise<{ mergeable: boolean | null; mergeableState: string; headSha: string | null }> {
+    return this.mergeability
+  }
+
   async mergePullRequest(
     _installationId: number,
     ref: GitHubRepoRef,

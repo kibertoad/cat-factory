@@ -10,6 +10,18 @@ export const CI_FIXER_AGENT_KIND = 'ci-fixer'
 export const MERGER_AGENT_KIND = 'merger'
 
 /**
+ * The agent kind of the special pre-merge gate step: it checks whether the PR can
+ * be merged and, on a conflict, loops the conflict-resolver — mirroring the CI gate.
+ */
+export const CONFLICTS_AGENT_KIND = 'conflicts'
+
+/**
+ * The agent kind of the container agent that resolves merge conflicts: it merges
+ * the base into the PR branch, fixes the conflicts and pushes back onto the branch.
+ */
+export const CONFLICT_RESOLVER_AGENT_KIND = 'conflict-resolver'
+
+/**
  * The aggregate CI verdict for a PR head commit, derived from its check runs:
  *  - `none`    — no checks reported (nothing to gate; treated as green).
  *  - `pending` — at least one check is still queued/in-progress and none failed.

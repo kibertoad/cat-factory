@@ -1,4 +1,8 @@
-import type { ExecutionEventPublisher, Notification, NotificationChannel } from '@cat-factory/kernel'
+import type {
+  ExecutionEventPublisher,
+  Notification,
+  NotificationChannel,
+} from '@cat-factory/kernel'
 
 /**
  * The in-app notification channel: pushes the `notification` WorkspaceEvent to the

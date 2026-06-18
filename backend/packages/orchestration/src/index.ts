@@ -20,6 +20,8 @@ export {
   CI_AGENT_KIND,
   CI_FIXER_AGENT_KIND,
   MERGER_AGENT_KIND,
+  CONFLICTS_AGENT_KIND,
+  CONFLICT_RESOLVER_AGENT_KIND,
   type CiVerdict,
 } from './modules/execution/ci.logic'
 

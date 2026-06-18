@@ -223,7 +223,12 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
       // view; the harness redacts + labels watchdog kills. Classify both kinds so the
       // board surfaces a clear, actionable reason.
       const error = view.error ?? 'Bootstrap job failed'
-      return { state: 'failed', failureKind: classifyBootstrapFailure(error), error, detail: view.error }
+      return {
+        state: 'failed',
+        failureKind: classifyBootstrapFailure(error),
+        error,
+        detail: view.error,
+      }
     }
     // Completed: a structured `error` (e.g. push rejected) is still a failure.
     const result = view.result ?? {}

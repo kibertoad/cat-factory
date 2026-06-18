@@ -1,4 +1,9 @@
-import type { BlockRepository, CiStatusProvider, CiStatusReport, GitHubClient } from '@cat-factory/kernel'
+import type {
+  BlockRepository,
+  CiStatusProvider,
+  CiStatusReport,
+  GitHubClient,
+} from '@cat-factory/kernel'
 import type { ResolveRepoTarget } from '../ai/ContainerAgentExecutor'
 
 export interface GitHubCiStatusProviderDependencies {

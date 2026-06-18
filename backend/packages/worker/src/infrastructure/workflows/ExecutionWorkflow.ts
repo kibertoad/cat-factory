@@ -163,6 +163,50 @@ export class ExecutionWorkflow extends WorkflowEntrypoint<Env, ExecutionWorkflow
         // is handled by the checks below and the next outer-loop iteration.
       }
 
+      // A `conflicts` step is gating the PR on being mergeable. Poll mergeability
+      // between durable sleeps — mirroring the CI loop above, reusing the CI poll
+      // cadence — until the gate yields something terminal: a mergeable PR returns
+      // `continue`, a dispatched conflict-resolver returns `awaiting_job` (handled on
+      // the next outer-loop iteration), and a spent budget returns `job_failed`.
+      if (result.kind === 'awaiting_conflicts') {
+        let settled = false
+        let pollReadFailures = 0
+        for (let p = 0; p < execConfig.ciMaxPolls; p++) {
+          await step.sleep(`conflicts-wait-${i}-${p}`, ciPollInterval)
+          try {
+            result = (await step.do(`conflicts-poll-${i}-${p}`, STEP_CONFIG, () =>
+              buildContainer(this.env).executionService.pollConflicts(workspaceId, executionId),
+            )) as AdvanceResult
+          } catch (error) {
+            pollReadFailures += 1
+            const message = error instanceof Error ? error.message : String(error)
+            logger.warn(
+              { workspaceId, executionId, step: i, poll: p, pollReadFailures, err: message },
+              'conflict poll could not read mergeability; treating as still pending and retrying',
+            )
+            if (pollReadFailures >= execConfig.jobPollFailureTolerance) {
+              await failRun(
+                i,
+                `PR mergeability was unreadable for ${pollReadFailures} consecutive polls (last error: ${message})`,
+                'timeout',
+              )
+              return
+            }
+            continue
+          }
+          pollReadFailures = 0
+          if (result.kind !== 'awaiting_conflicts') {
+            settled = true
+            break
+          }
+        }
+        if (!settled && result.kind === 'awaiting_conflicts') {
+          await failRun(i, 'PR mergeability did not settle within its polling budget', 'timeout')
+          return
+        }
+        // Fall through: the now-updated `result` is handled below / next iteration.
+      }
+
       if (result.kind === 'job_failed') {
         await failRun(i, result.error, 'job_failed')
         return

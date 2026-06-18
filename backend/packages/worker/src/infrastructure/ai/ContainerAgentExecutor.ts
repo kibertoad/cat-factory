@@ -15,7 +15,11 @@ import {
   systemPromptFor,
   userPromptFor,
 } from '@cat-factory/agents'
-import { CI_FIXER_AGENT_KIND, MERGER_AGENT_KIND } from '@cat-factory/orchestration'
+import {
+  CI_FIXER_AGENT_KIND,
+  CONFLICT_RESOLVER_AGENT_KIND,
+  MERGER_AGENT_KIND,
+} from '@cat-factory/orchestration'
 import type { ContainerSessionService } from '../containers/ContainerSessionService'
 import { RunnerJobClient, type ResolveRunnerTransport } from './RunnerJobClient'
 
@@ -270,6 +274,36 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       return { body, model: `${ref.provider}:${ref.model}`, kind: 'ci-fix' }
     }
 
+    // The conflict-resolver clones the PR head branch, merges the base in, resolves
+    // the conflicts and pushes back to the SAME branch (no new branch / PR) so the
+    // PR becomes mergeable and CI re-runs. Mirrors the CI-fixer's body.
+    if (context.agentKind === CONFLICT_RESOLVER_AGENT_KIND) {
+      const branch = context.block.pullRequest?.branch
+      if (!branch) {
+        throw new Error(
+          'Conflict-resolver needs the implementation PR branch to resolve conflicts on',
+        )
+      }
+      const body = {
+        jobId: executionId,
+        systemPrompt: composeBlockSystemPrompt(systemPromptFor(context.agentKind), context.block),
+        userPrompt: userPromptFor(context),
+        model: ref.model,
+        proxyBaseUrl: this.deps.proxyBaseUrl,
+        sessionToken,
+        ghToken,
+        repo: {
+          owner: repo.owner,
+          name: repo.name,
+          baseBranch: repo.baseBranch,
+          cloneUrl: `https://github.com/${repo.owner}/${repo.name}.git`,
+        },
+        branch,
+        ...(this.deps.githubApiBase ? { githubApiBase: this.deps.githubApiBase } : {}),
+      }
+      return { body, model: `${ref.provider}:${ref.model}`, kind: 'resolve-conflicts' }
+    }
+
     // The merger clones the PR head branch to assess the diff vs base; it makes no
     // commits (the engine performs the real merge through the GitHub API on its
     // verdict). Returns ONLY a JSON assessment, mapped to `mergeAssessment`.
@@ -359,6 +393,17 @@ function toRunResult(result: RunnerJobResult): AgentRunResult {
       output:
         result.summary?.trim() ||
         (result.pushed ? 'Pushed a CI fix to the PR branch.' : 'No CI fix was produced.'),
+    }
+  }
+  // A `conflict-resolver` job reports whether the branch is now mergeable. The
+  // engine's conflicts gate re-checks mergeability regardless; map to an output.
+  if (result.resolved !== undefined) {
+    return {
+      output:
+        result.summary?.trim() ||
+        (result.resolved
+          ? 'Resolved merge conflicts and pushed to the PR branch.'
+          : 'Could not fully resolve the merge conflicts.'),
     }
   }
   const summary = result.summary?.trim() || 'Implementation complete.'

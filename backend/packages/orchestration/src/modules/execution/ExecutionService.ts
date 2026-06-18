@@ -9,6 +9,7 @@ import type {
   MergePresetRepository,
   PipelineStep,
   PullRequestMerger,
+  PullRequestMergeabilityProvider,
 } from '@cat-factory/kernel'
 import { parseBlueprintService, parseMergeAssessment } from '@cat-factory/contracts'
 import {
@@ -23,6 +24,8 @@ import {
   aggregateCi,
   CI_AGENT_KIND,
   CI_FIXER_AGENT_KIND,
+  CONFLICTS_AGENT_KIND,
+  CONFLICT_RESOLVER_AGENT_KIND,
   describeFailingChecks,
   isCiGreen,
   MERGER_AGENT_KIND,
@@ -128,6 +131,12 @@ export interface ExecutionServiceDependencies {
    */
   ciStatusProvider?: CiStatusProvider
   /**
+   * Optional: reads a block's PR mergeability so the `conflicts` step can gate the
+   * PR on being mergeable. Absent → the `conflicts` step is a pass-through (nothing
+   * to gate), so the engine works unchanged when GitHub isn't wired.
+   */
+  mergeabilityProvider?: PullRequestMergeabilityProvider
+  /**
    * Optional: performs the real GitHub merge when a task should become `done`.
    * Absent → `done` is a board-only flip (tests); when wired, `done` provably
    * means the PR was merged on the remote.
@@ -177,6 +186,7 @@ export class ExecutionService {
   private readonly blueprintReconciler?: BlueprintReconciler
   private readonly notificationService?: NotificationService
   private readonly ciStatusProvider?: CiStatusProvider
+  private readonly mergeabilityProvider?: PullRequestMergeabilityProvider
   private readonly prMerger?: PullRequestMerger
   private readonly mergePresetRepository?: MergePresetRepository
 
@@ -199,6 +209,7 @@ export class ExecutionService {
     blueprintReconciler,
     notificationService,
     ciStatusProvider,
+    mergeabilityProvider,
     pullRequestMerger,
     mergePresetRepository,
   }: ExecutionServiceDependencies) {
@@ -220,6 +231,7 @@ export class ExecutionService {
     this.blueprintReconciler = blueprintReconciler
     this.notificationService = notificationService
     this.ciStatusProvider = ciStatusProvider
+    this.mergeabilityProvider = mergeabilityProvider
     this.prMerger = pullRequestMerger
     this.mergePresetRepository = mergePresetRepository
   }
@@ -356,6 +368,14 @@ export class ExecutionService {
       return this.evaluateCi(workspaceId, instance, step, block, isFinalStep)
     }
 
+    // A `conflicts` step gates the PR on being mergeable: it checks the PR's
+    // mergeability and, on a conflict, dispatches the `conflict-resolver` container
+    // agent — no LLM of its own. Pass-through when no mergeability provider is wired.
+    // See {@link evaluateConflicts}.
+    if (step.agentKind === CONFLICTS_AGENT_KIND) {
+      return this.evaluateConflicts(workspaceId, instance, step, block, isFinalStep)
+    }
+
     // Async (container) steps don't block: dispatch the job and park. The durable
     // driver polls `pollAgentJob` between sleeps so the run can span far longer
     // than a single durable step's timeout, while each step stays short. A set
@@ -430,6 +450,20 @@ export class ExecutionService {
       return { kind: 'awaiting_ci', stepIndex: instance.currentStep }
     }
 
+    // A `conflicts` step's in-flight job is a conflict-resolver run, NOT the step's
+    // own work: when it finishes (or fails) we drop the handle, return the gate to
+    // `checking` and re-check mergeability (the resolver's push updates it). A
+    // resolver that failed without pushing leaves the PR conflicted, so the next
+    // check re-dispatches (until the attempt budget is spent).
+    if (step.agentKind === CONFLICTS_AGENT_KIND) {
+      step.jobId = undefined
+      step.subtasks = undefined
+      if (step.conflicts) step.conflicts.phase = 'checking'
+      await this.executionRepository.upsert(workspaceId, instance)
+      await this.emitInstance(workspaceId, instance)
+      return { kind: 'awaiting_conflicts', stepIndex: instance.currentStep }
+    }
+
     if (update.state === 'failed') {
       return { kind: 'job_failed', error: update.error }
     }
@@ -458,11 +492,35 @@ export class ExecutionService {
     if (!step || step.agentKind !== CI_AGENT_KIND) return { kind: 'continue' }
     // A fixer job is in flight — the driver should be polling it, not CI; let the
     // job-poll loop drive (defensive; a replay could route here).
-    if (step.jobId) return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
+    if (step.jobId)
+      return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
     const block = await this.blockRepository.get(workspaceId, instance.blockId)
     if (!block) return { kind: 'noop' }
     const isFinalStep = instance.currentStep === instance.steps.length - 1
     return this.evaluateCi(workspaceId, instance, step, block, isFinalStep)
+  }
+
+  /**
+   * Re-check a `conflicts` step's gate from the durable driver's `awaiting_conflicts`
+   * loop: re-reads the PR's mergeability and returns the same outcomes as the initial
+   * evaluation (mergeable → advance, still computing → keep polling, conflicted →
+   * dispatch a resolver or give up). Safe under replay; a no-op unless the current
+   * step is a `conflicts` step actively in its `checking` phase.
+   */
+  async pollConflicts(workspaceId: string, executionId: string): Promise<AdvanceResult> {
+    const instance = await this.executionRepository.get(workspaceId, executionId)
+    if (!instance || (instance.status !== 'running' && instance.status !== 'paused')) {
+      return { kind: 'noop' }
+    }
+    const step = instance.steps[instance.currentStep]
+    if (!step || step.agentKind !== CONFLICTS_AGENT_KIND) return { kind: 'continue' }
+    // A resolver job is in flight — the driver should be polling it, not mergeability.
+    if (step.jobId)
+      return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
+    const block = await this.blockRepository.get(workspaceId, instance.blockId)
+    if (!block) return { kind: 'noop' }
+    const isFinalStep = instance.currentStep === instance.steps.length - 1
+    return this.evaluateConflicts(workspaceId, instance, step, block, isFinalStep)
   }
 
   /**
@@ -715,8 +773,7 @@ export class ExecutionService {
     await this.raiseCiFailed(workspaceId, instance, block, summary, step.ci.attempts)
     return {
       kind: 'job_failed',
-      error:
-        `CI did not pass after ${step.ci.attempts} CI-fixer attempt(s). ${summary}`.trim(),
+      error: `CI did not pass after ${step.ci.attempts} CI-fixer attempt(s). ${summary}`.trim(),
     }
   }
 
@@ -782,6 +839,121 @@ export class ExecutionService {
         pipelineName: instance.pipelineName,
       },
     })
+  }
+
+  /**
+   * Evaluate a `conflicts` step's gate once: read the PR's mergeability and decide.
+   *   - no provider wired → pass-through (advance; nothing to gate);
+   *   - mergeable / no PR  → advance to the next step;
+   *   - still computing    → `awaiting_conflicts` (the driver sleeps then re-polls);
+   *   - conflicted, budget left → dispatch a `conflict-resolver` container job;
+   *   - conflicted, budget spent → fail the run (a human resolves + retries).
+   * Shared by the initial advance and the durable `awaiting_conflicts` re-poll.
+   */
+  private async evaluateConflicts(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    step: PipelineStep,
+    block: Block,
+    isFinalStep: boolean,
+  ): Promise<AdvanceResult> {
+    // Re-attach after a replay: a resolver is already in flight for this gate.
+    if (step.conflicts?.phase === 'resolving' && step.jobId) {
+      return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
+    }
+
+    // No mergeability provider wired: the gate is a pass-through so the engine works
+    // without GitHub. Advance via the normal result path.
+    if (!this.mergeabilityProvider) {
+      return this.recordStepResult(workspaceId, instance, step, isFinalStep, {
+        output: 'Conflict gate skipped (no mergeability provider configured).',
+      })
+    }
+
+    // Initialise the gate's state on first entry, resolving the attempt budget from
+    // the task's merge preset (shares the CI-fixer budget; stable across polls).
+    if (!step.conflicts) {
+      const preset = await this.resolveMergePreset(workspaceId, block)
+      step.conflicts = {
+        phase: 'checking',
+        attempts: 0,
+        maxAttempts: preset.ciMaxAttempts,
+        headSha: null,
+      }
+    }
+
+    const report = await this.mergeabilityProvider.getMergeability(workspaceId, block.id)
+    step.conflicts.headSha = report.headSha
+
+    // No PR resolved, or it merges cleanly → nothing to do; advance.
+    if (report.headSha === null || report.verdict === 'mergeable') {
+      return this.recordStepResult(workspaceId, instance, step, isFinalStep, {
+        output:
+          report.headSha === null
+            ? 'Conflict gate passed: no open PR to gate.'
+            : 'Conflict gate passed: the PR merges cleanly with its base.',
+      })
+    }
+
+    if (report.verdict === 'unknown') {
+      // GitHub is still computing mergeability — keep polling.
+      step.conflicts.phase = 'checking'
+      await this.executionRepository.upsert(workspaceId, instance)
+      await this.emitInstance(workspaceId, instance)
+      return { kind: 'awaiting_conflicts', stepIndex: instance.currentStep }
+    }
+
+    // verdict === 'conflicted'.
+    const executor = this.agentExecutor
+    const canResolve = isAsyncAgentExecutor(executor)
+    if (canResolve && step.conflicts.attempts < step.conflicts.maxAttempts) {
+      return this.dispatchConflictResolver(workspaceId, instance, step, block, isFinalStep)
+    }
+
+    // Budget spent (or no async executor to resolve with): give up and fail the run
+    // so a human resolves the conflict manually and retries.
+    return {
+      kind: 'job_failed',
+      error:
+        `The pull request still conflicts with its base after ` +
+        `${step.conflicts.attempts} conflict-resolver attempt(s). Resolve the conflict ` +
+        `manually, then retry the run.`,
+    }
+  }
+
+  /**
+   * Dispatch a `conflict-resolver` container job for a conflicted `conflicts` gate:
+   * build the agent context with the kind overridden to `conflict-resolver` (it
+   * clones the PR head branch, merges the base in, resolves the conflicts and pushes
+   * — no new PR), park on the job, and flip the gate to `resolving`. Idempotent under
+   * replay via the step's `jobId` (re-attach handled in {@link evaluateConflicts}).
+   */
+  private async dispatchConflictResolver(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    step: PipelineStep,
+    block: Block,
+    isFinalStep: boolean,
+  ): Promise<AdvanceResult> {
+    const executor = this.agentExecutor
+    if (!isAsyncAgentExecutor(executor)) {
+      // Defensive: evaluateConflicts only calls this when async-capable.
+      return { kind: 'job_failed', error: 'No async executor available to resolve conflicts.' }
+    }
+    const base = await this.buildAgentContext(workspaceId, instance, step, isFinalStep, block)
+    const context: AgentRunContext = { ...base, agentKind: CONFLICT_RESOLVER_AGENT_KIND }
+    const handle = await executor.startJob(context)
+    step.jobId = handle.jobId
+    if (handle.model) step.model = handle.model
+    step.conflicts = {
+      phase: 'resolving',
+      attempts: (step.conflicts?.attempts ?? 0) + 1,
+      maxAttempts: step.conflicts?.maxAttempts ?? DEFAULT_MERGE_PRESET.ciMaxAttempts,
+      headSha: step.conflicts?.headSha ?? null,
+    }
+    await this.executionRepository.upsert(workspaceId, instance)
+    await this.emitInstance(workspaceId, instance)
+    return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
   }
 
   /** Provision inputs (`{{input.*}}`) derived from the block under deployment. */

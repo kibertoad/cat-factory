@@ -1,9 +1,14 @@
-import { mkdtemp, readdir, rm } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { readdir } from 'node:fs/promises'
 import type { BootstrapJob, BootstrapResult } from './job.js'
 import { cloneRepo, hasAgentChanges, reinitAndPush } from './git.js'
-import { type PiRunStats, runPi, writeAgentsContext, writePiModelsConfig } from './pi.js'
+import type { PiRunStats } from './pi.js'
+import {
+  agentNeverActed,
+  agentOutputTail,
+  NEVER_ACTED_CAUSE,
+  runAgentInWorkspace,
+  withWorkspace,
+} from './pi-workspace.js'
 import type { RunOptions } from './runner.js'
 import { log } from './logger.js'
 
@@ -35,20 +40,11 @@ function noOpReason(
   const what = hasReference
     ? 'made no changes to the reference architecture'
     : 'scaffolded no files'
-  const acted = stats.toolCalls === 0 && stats.assistantChars === 0
-  const cause = acted
-    ? ' The agent never acted (no tool calls, no model output) — it most likely could not reach the model.'
-    : ''
-  // Pi's stderr carries the real failure (unreachable proxy, rejected model, …);
-  // the stdout summary is the fallback when stderr is empty.
-  const detail = stderrTail
-    ? ` Agent stderr: ${stderrTail.slice(-700)}`
-    : summary
-      ? ` Agent output: ${summary.slice(0, 700)}`
-      : ''
+  const cause = agentNeverActed(stats) ? NEVER_ACTED_CAUSE : ''
   return (
     `the bootstrapper agent ${what} ` +
-    `(tool calls: ${stats.toolCalls}, assistant output: ${stats.assistantChars} chars).${cause}${detail}`
+    `(tool calls: ${stats.toolCalls}, assistant output: ${stats.assistantChars} chars).${cause}` +
+    agentOutputTail(stderrTail, summary)
   )
 }
 
@@ -67,12 +63,11 @@ export async function handleBootstrap(
   job: BootstrapJob,
   opts: RunOptions = {},
 ): Promise<BootstrapResult> {
-  const { signal, onActivity, onProgress } = opts
-  const dir = await mkdtemp(join(tmpdir(), 'boot-'))
+  const { signal } = opts
   // The worker keys the background job on `jobId`; thread it through every log
   // line so a bootstrap can be traced end to end in the Cloudflare dashboard.
   const trace = { jobId: job.jobId, target: `${job.target.owner}/${job.target.name}` }
-  try {
+  return withWorkspace('boot', async (dir) => {
     if (job.reference) {
       log.info('bootstrap: cloning reference architecture', {
         ...trace,
@@ -92,19 +87,19 @@ export async function handleBootstrap(
     } else {
       log.info('bootstrap: scaffolding from scratch (no reference)', trace)
     }
-    await writeAgentsContext(dir, job.systemPrompt)
-    await writePiModelsConfig({ model: job.model, proxyBaseUrl: job.proxyBaseUrl })
 
     log.info('bootstrap: running agent', trace)
-    const { summary, stats, stderrTail } = await runPi({
-      cwd: dir,
-      model: job.model,
-      userPrompt: job.instructions,
-      sessionToken: job.sessionToken,
-      signal,
-      onActivity,
-      onProgress,
-    })
+    const { summary, stats, stderrTail } = await runAgentInWorkspace(
+      {
+        dir,
+        systemPrompt: job.systemPrompt,
+        userPrompt: job.instructions,
+        model: job.model,
+        proxyBaseUrl: job.proxyBaseUrl,
+        sessionToken: job.sessionToken,
+      },
+      opts,
+    )
 
     // Guard against a no-op run: Pi can exit cleanly having done nothing (e.g. it
     // never reached the model), and reinitAndPush would then force-push an empty
@@ -127,7 +122,5 @@ export async function handleBootstrap(
     })
     log.info('bootstrap: complete', { ...trace, defaultBranch: job.target.defaultBranch })
     return { defaultBranch: job.target.defaultBranch, summary, stats }
-  } finally {
-    await rm(dir, { recursive: true, force: true })
-  }
+  })
 }

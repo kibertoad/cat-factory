@@ -57,6 +57,6 @@ Arbiter grading needs **no key** — it runs as a Claude skill.
 ## Prompt versioning
 
 Prompt versions live in
-`backend/packages/core/src/modules/agents/prompt-versions.ts` as `id@vN`.
+`backend/packages/agents/src/agents/prompt-versions.ts` as `id@vN`.
 Convention: **edit a prompt ⇒ bump its number**, then benchmark the new version
 against the old and commit the run under `docs/benchmarks/`.

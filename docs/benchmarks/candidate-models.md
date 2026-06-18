@@ -49,7 +49,7 @@ candidacy and not benchmarked:
 ## The demand side — agent role workload profiles
 
 Mapping needs a picture of what each role actually asks of a model. Roles are
-defined in `backend/packages/core/src/modules/agents/*` and routed by
+defined in `backend/packages/agents/src/agents/*` and routed by
 `agent-routing.ts`; container-operating roles run a real tool/agent loop inside a
 Cloudflare Container (the Pi harness), the rest are inline LLM calls.
 

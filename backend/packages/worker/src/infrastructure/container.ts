@@ -62,6 +62,7 @@ import { D1NotificationRepository } from './repositories/D1NotificationRepositor
 import { D1MergePresetRepository } from './repositories/D1MergePresetRepository'
 import { InAppNotificationChannel } from './events/InAppNotificationChannel'
 import { GitHubCiStatusProvider } from './github/GitHubCiStatusProvider'
+import { GitHubMergeabilityProvider } from './github/GitHubMergeabilityProvider'
 import { GitHubPullRequestMerger } from './github/GitHubPullRequestMerger'
 import { HttpEnvironmentProvider } from './environments/HttpEnvironmentProvider'
 import { WebCryptoSecretCipher } from './environments/WebCryptoSecretCipher'
@@ -331,6 +332,11 @@ function selectMergeLifecycleDeps(
     const resolveRepoTarget = buildResolveRepoTarget(db)
     const blockRepository = new D1BlockRepository({ db })
     deps.ciStatusProvider = new GitHubCiStatusProvider({
+      githubClient,
+      resolveRepoTarget,
+      blockRepository,
+    })
+    deps.mergeabilityProvider = new GitHubMergeabilityProvider({
       githubClient,
       resolveRepoTarget,
       blockRepository,

@@ -327,7 +327,9 @@ export class FetchGitHubClient implements GitHubClient {
       url: issue.html_url ?? `https://github.com/${ref.owner}/${ref.repo}/issues/${issueNumber}`,
       author: issue.user?.login ?? null,
       assignee: issue.assignee?.login ?? null,
-      labels: (issue.labels ?? []).map((l) => (typeof l === 'string' ? l : (l?.name ?? ''))).filter(Boolean),
+      labels: (issue.labels ?? [])
+        .map((l) => (typeof l === 'string' ? l : (l?.name ?? '')))
+        .filter(Boolean),
       body: issue.body ?? '',
       comments: (Array.isArray(rawComments) ? rawComments : []).map((c) => ({
         author: c.user?.login ?? '',
@@ -468,6 +470,26 @@ export class FetchGitHubClient implements GitHubClient {
     })
     const p = json as gp.GhPullPayload
     return gp.toPullRequestProjection(p, gp.pullRepoGithubId(p) ?? 0, this.deps.clock.now())
+  }
+
+  async getPullRequestMergeability(
+    installationId: number,
+    ref: GitHubRepoRef,
+    number: number,
+  ): Promise<{ mergeable: boolean | null; mergeableState: string; headSha: string | null }> {
+    const { json } = await this.request(`/repos/${ref.owner}/${ref.repo}/pulls/${number}`, {
+      installationId,
+    })
+    const p = (json ?? {}) as {
+      mergeable?: boolean | null
+      mergeable_state?: string
+      head?: { sha?: string }
+    }
+    return {
+      mergeable: typeof p.mergeable === 'boolean' ? p.mergeable : null,
+      mergeableState: typeof p.mergeable_state === 'string' ? p.mergeable_state : 'unknown',
+      headSha: p.head?.sha ?? null,
+    }
   }
 
   async mergePullRequest(

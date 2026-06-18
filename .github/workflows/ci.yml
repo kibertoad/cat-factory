@@ -158,7 +158,7 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # The acceptance scaffolding imports @cat-factory/core and @cat-factory/worker,
+      # The acceptance scaffolding imports the domain packages and @cat-factory/worker,
       # which now resolve to built `dist`, so build the libraries first.
       - name: Build libraries
         run: pnpm build

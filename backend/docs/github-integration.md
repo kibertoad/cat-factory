@@ -57,7 +57,7 @@ secrets). With it unconfigured, nothing about the existing system changes.
    Workflow   ──▶ GitHubBackfillWorkflow ──▶ deep sync on connect / full resync
 ```
 
-### Core ports (`backend/packages/core/src/ports`)
+### Core ports (`backend/packages/kernel/src/ports`)
 
 - **`GitHubClient`** (`github-client.ts`) — the narrow REST surface we use
   (installation discovery, reads, and writes incl. the Git Data API). Read methods
@@ -67,7 +67,7 @@ secrets). With it unconfigured, nothing about the existing system changes.
   workspace↔installation binding (with cached token), and the rate-limit ledger.
 - **`WebhookVerifier`** (`webhook-verifier.ts`) — HMAC verification of deliveries.
 
-### Core services (`backend/packages/core/src/modules/github`)
+### Core services (`backend/packages/integrations/src/modules/github`)
 
 - **`GitHubInstallationService`** — connect/disconnect, the workspace↔installation
   binding, and `requireInstallation`.

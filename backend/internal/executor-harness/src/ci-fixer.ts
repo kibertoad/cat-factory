@@ -1,11 +1,6 @@
-import { mkdtemp, rm } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
 import type { CiFixerJob, CiFixerResult } from './job.js'
-import { cloneRepo, commitAll, pushBranch } from './git.js'
-import { runPi, writeAgentsContext, writePiModelsConfig } from './pi.js'
+import { noChangesReason, runCodingAgent } from './coding-agent.js'
 import type { RunOptions } from './runner.js'
-import { log } from './logger.js'
 
 // Async job execution for the CI-fixer. When a PR's CI is red the engine
 // dispatches this: clone the PR HEAD branch, run Pi to make the failing
@@ -13,51 +8,44 @@ import { log } from './logger.js'
 // no new PR) so CI re-runs. The engine re-polls CI after the push and loops the
 // fixer up to the task's attempt budget. A run that produced no change pushes
 // nothing and reports `pushed: false`.
+//
+// The clone/Pi/push mechanics are shared with implementation via runCodingAgent;
+// the CI-fixer only differs in working ON the existing PR branch (no new branch /
+// PR) and treating a no-op as non-fatal rather than an implementation failure.
 
-/** Run one CI-fixer job end to end: clone branch → Pi fixes → commit → push. */
-export async function handleCiFixer(job: CiFixerJob, opts: RunOptions = {}): Promise<CiFixerResult> {
-  const { signal, onActivity, onProgress } = opts
-  const dir = await mkdtemp(join(tmpdir(), 'ci-fix-'))
-  const trace = { jobId: job.jobId, repo: `${job.repo.owner}/${job.repo.name}`, branch: job.branch }
-  try {
-    log.info('ci-fix: cloning PR branch', trace)
-    // Clone the PR head branch directly (no new branch) so fixes land on it.
-    await cloneRepo({
-      repo: { ...job.repo, baseBranch: job.branch },
+/** Run one CI-fixer job end to end: clone branch → Pi fixes → push (same branch). */
+export async function handleCiFixer(
+  job: CiFixerJob,
+  opts: RunOptions = {},
+): Promise<CiFixerResult> {
+  const { summary, stats, stderrTail, pushed } = await runCodingAgent(
+    {
+      kind: 'ci-fix',
+      jobId: job.jobId,
+      repo: job.repo,
+      // Work directly on the PR head branch — no new branch, no new PR.
+      cloneBranch: job.branch,
+      pushBranch: job.branch,
       ghToken: job.ghToken,
-      dir,
-      signal,
-    })
-    await writeAgentsContext(dir, job.systemPrompt)
-    await writePiModelsConfig({ model: job.model, proxyBaseUrl: job.proxyBaseUrl })
-
-    log.info('ci-fix: running agent', trace)
-    const { summary, stats, stderrTail } = await runPi({
-      cwd: dir,
-      model: job.model,
+      systemPrompt: job.systemPrompt,
       userPrompt: job.userPrompt,
+      model: job.model,
+      proxyBaseUrl: job.proxyBaseUrl,
       sessionToken: job.sessionToken,
-      signal,
-      onActivity,
-      onProgress,
-    })
+      commitMessage: 'Fix failing CI',
+    },
+    opts,
+  )
 
-    const committed = await commitAll(dir, 'Fix failing CI', signal)
-    if (!committed) {
-      const cause =
-        stats.toolCalls === 0 && stats.assistantChars === 0
-          ? ' (the agent never acted — it most likely could not reach the model)'
-          : ''
-      const detail = stderrTail ? ` Agent stderr: ${stderrTail.slice(-700)}` : ''
-      // Not an error: the engine re-checks CI regardless and loops/exhausts. We
-      // report `pushed: false` so the (unused) result is still meaningful.
-      log.info('ci-fix: no changes to push', trace)
-      return { pushed: false, summary, stats, error: `No CI fix produced${cause}.${detail}` }
+  // Not an error: the engine re-checks CI regardless and loops/exhausts. We report
+  // `pushed: false` so the (unused) result is still meaningful.
+  if (!pushed) {
+    return {
+      pushed: false,
+      summary,
+      stats,
+      error: noChangesReason('No CI fix produced', stats, stderrTail),
     }
-    log.info('ci-fix: pushing fix', { ...trace, ...stats })
-    await pushBranch(dir, job.branch, job.ghToken, signal)
-    return { pushed: true, summary, stats }
-  } finally {
-    await rm(dir, { recursive: true, force: true })
   }
+  return { pushed: true, summary, stats }
 }

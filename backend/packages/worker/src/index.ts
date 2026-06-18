@@ -167,10 +167,14 @@ export default {
         reaper
           .reapStaleBefore(clock.now() - maxAgeMs)
           .then(({ reaped }) => {
-            if (reaped > 0) logger.warn({ cron: 'container-reaper', reaped }, 'reaped leaked containers')
+            if (reaped > 0)
+              logger.warn({ cron: 'container-reaper', reaped }, 'reaped leaked containers')
           })
           .catch((error) =>
-            logger.error({ cron: 'container-reaper', err: errInfo(error) }, 'container reap failed'),
+            logger.error(
+              { cron: 'container-reaper', err: errInfo(error) },
+              'container reap failed',
+            ),
           ),
       )
     }
