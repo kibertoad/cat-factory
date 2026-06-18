@@ -60,6 +60,8 @@ it from the org's developer settings.)
 - Contents: **Read & write** (branches, commits via Git Data API)
 - Pull requests: **Read & write**
 - Issues: **Read & write**
+- Workflows: **Read & write** (so agents may add/update `.github/workflows/*`;
+  GitHub rejects pushes that touch workflow files without this)
 - Checks: **Read-only** (CI gating)
 - Metadata: **Read-only** (mandatory)
 - Commit statuses: **Read-only** (optional, alongside checks)

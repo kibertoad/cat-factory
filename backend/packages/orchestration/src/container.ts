@@ -630,6 +630,7 @@ function createBoardScanModule(
     idGenerator: deps.idGenerator,
     clock: deps.clock,
     repoScanner: deps.repoScanner,
+    repoProjectionRepository: deps.repoProjectionRepository,
   })
   return { service }
 }

@@ -8,6 +8,7 @@ import type {
 import type { Clock, IdGenerator } from '@cat-factory/kernel'
 import type { BlockRepository, WorkspaceRepository } from '@cat-factory/kernel'
 import type { RepoBlueprintRecord, RepoBlueprintRepository } from '@cat-factory/kernel'
+import type { RepoProjectionRepository } from '@cat-factory/kernel'
 import type { RepoScanner } from '@cat-factory/kernel'
 import { assertFound } from '@cat-factory/kernel'
 import { requireWorkspace } from '@cat-factory/kernel'
@@ -37,6 +38,13 @@ export interface BoardScanServiceDependencies {
   clock: Clock
   /** Performs the side-effecting repo read + decomposition; optional. */
   repoScanner?: RepoScanner
+  /**
+   * Links a freshly-spawned service frame to its backing repo projection, so the
+   * scanned service is repo-addressable out of the box (execution resolves the
+   * repo by walking up to the linked frame). Optional — when absent the frame is
+   * still created, just unlinked.
+   */
+  repoProjectionRepository?: RepoProjectionRepository
 }
 
 /** Case-insensitive, whitespace-tolerant name match used to pair board ↔ blueprint nodes. */
@@ -125,7 +133,10 @@ export class BoardScanService {
 
     const blueprint = toRepoBlueprint(record)
     if (!input.spawn) return { blueprint }
-    const spawn = await this.spawnBlueprint(workspaceId, blueprint.service)
+    const spawn = await this.spawnBlueprint(workspaceId, blueprint.service, {
+      owner: input.repoOwner,
+      name: input.repoName,
+    })
     return { blueprint, spawn }
   }
 
@@ -133,10 +144,14 @@ export class BoardScanService {
    * Materialise a blueprint onto the board: one service frame, a module per
    * blueprint module, and a task per feature — each carrying the node's summary
    * and codebase references in its description, so the board mirrors the map.
+   *
+   * When `repo` is given the new frame is linked to that repo's projection, so
+   * tasks under it resolve to the right repository instead of being unaddressable.
    */
   private async spawnBlueprint(
     workspaceId: string,
     service: BlueprintService,
+    repo?: { owner: string; name: string },
   ): Promise<BoardScanSpawnResult> {
     const frame = await this.deps.boardService.addFrame(workspaceId, {
       type: service.type,
@@ -146,6 +161,7 @@ export class BoardScanService {
       title: service.name,
       description: describeNode(service.summary, service.references),
     })
+    if (repo) await this.linkRepoToFrame(workspaceId, repo, frame.id)
 
     let modules = 0
     let features = 0
@@ -243,6 +259,23 @@ export class BoardScanService {
       }
     }
     return { frameId: frame.id, modules, features }
+  }
+
+  /**
+   * Link a spawned frame to its backing repo projection (by `owner/name`), so
+   * execution resolves the repo by walking up to this frame. Best-effort: a no-op
+   * when the projection port is unwired or the repo isn't projected yet.
+   */
+  private async linkRepoToFrame(
+    workspaceId: string,
+    repo: { owner: string; name: string },
+    frameId: string,
+  ): Promise<void> {
+    const projection = this.deps.repoProjectionRepository
+    if (!projection) return
+    const repos = await projection.list(workspaceId)
+    const match = repos.find((r) => sameName(r.owner, repo.owner) && sameName(r.name, repo.name))
+    if (match) await projection.linkBlock(workspaceId, match.githubId, frameId)
   }
 
   /** Convenience for callers/tests: the unit-of-work count a blueprint implies. */
