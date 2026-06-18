@@ -159,3 +159,12 @@ export type {
   RunnerPoolConnectionRepository,
 } from './runner-pool-repositories'
 export type { BoardWritePort } from './board-operations'
+export type { PullRequestMerger } from './pr-merger'
+export type { CiCheck, CiStatusReport, CiStatusProvider } from './ci-status'
+export type { NotificationRepository } from './notification-repositories'
+export type { MergePresetRepository } from './merge-preset-repositories'
+export {
+  type NotificationChannel,
+  CompositeNotificationChannel,
+  NoopNotificationChannel,
+} from './notification-channel'

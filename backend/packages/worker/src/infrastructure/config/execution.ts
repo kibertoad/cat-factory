@@ -25,6 +25,19 @@ export interface ExecutionConfig {
    */
   jobPollFailureTolerance: number
   /**
+   * How long the durable driver sleeps between polls of a `ci` step's CI status.
+   * CI runs (GitHub Actions etc.) take minutes, so this is coarser than the job
+   * poll. Default 30 seconds.
+   */
+  ciPollInterval: string
+  /**
+   * Safety bound on the number of CI polls before the gate is given up (in case CI
+   * never reports a terminal state). Sized to comfortably exceed a long CI run:
+   * default 120 × 30s = 60 min. Note the CI-fixer loop has its own per-task attempt
+   * budget; this only bounds a single `checking` wait.
+   */
+  ciMaxPolls: number
+  /**
    * Age ceiling for the instance-level container reaper (epoch-ms). The cron reaper
    * SIGKILLs any per-run container whose first dispatch is older than this — the
    * load-bearing backstop for a container the run record can no longer reach (a
@@ -48,6 +61,8 @@ export function loadExecutionConfig(env: Env): ExecutionConfig {
     jobPollInterval: env.JOB_POLL_INTERVAL?.trim() || '15 seconds',
     jobMaxPolls: intEnv(env.JOB_MAX_POLLS, 280),
     jobPollFailureTolerance: intEnv(env.JOB_POLL_FAILURE_TOLERANCE, 6),
+    ciPollInterval: env.CI_POLL_INTERVAL?.trim() || '30 seconds',
+    ciMaxPolls: intEnv(env.CI_MAX_POLLS, 120),
     // Hard floor of 75 min: a misconfigured low value must never reap live work
     // (the longest legitimate container lifetime is ≈70 min of driver polling).
     containerMaxAgeMs: Math.max(75, intEnv(env.CONTAINER_MAX_AGE_MINUTES, 90)) * 60_000,

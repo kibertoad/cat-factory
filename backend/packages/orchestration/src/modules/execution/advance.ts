@@ -12,6 +12,13 @@ export type AdvanceResult =
    * sleeps until the job finishes, then records its result and continues.
    */
   | { kind: 'awaiting_job'; jobId: string; stepIndex: number }
+  /**
+   * A `ci` step is gating the PR on green CI. The run is parked: the durable driver
+   * sleeps, then polls {@link ExecutionService.pollCi} to re-check GitHub check
+   * runs. Polling stops the moment `pollCi` returns anything else — green CI yields
+   * `continue`, a dispatched CI-fixer yields `awaiting_job`, exhaustion fails the run.
+   */
+  | { kind: 'awaiting_ci'; stepIndex: number }
   /** A polled async job finished with a failure; the driver should fail the run. */
   | { kind: 'job_failed'; error: string }
   /** The final step completed; the run is finished. */

@@ -41,6 +41,14 @@ const CONTAINER_KINDS = new Set([
   // The Blueprinter step clones the repo, regenerates the in-repo `blueprints/`
   // folder and commits it — a real-checkout operation, so it runs in a container.
   'blueprints',
+  // The CI-fixer clones the PR head branch, runs the failing build/tests, fixes
+  // them and pushes back to the same branch — a real-checkout operation. (The `ci`
+  // step itself is NOT here: it is a special, non-agent gate handled in the engine
+  // that *dispatches* a `ci-fixer` job; only the fixer reaches this executor.)
+  'ci-fixer',
+  // The merger clones the PR head branch to assess the diff (complexity/risk/impact)
+  // before the engine decides whether to auto-merge — a real-checkout operation.
+  'merger',
 ])
 
 export class CompositeAgentExecutor implements AsyncAgentExecutor {

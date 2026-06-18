@@ -51,6 +51,12 @@ import type {
   WorkspaceSnapshot,
 } from '~/types/domain'
 import type { RequirementReview, ReviewItemStatus } from '~/types/requirements'
+import type { Notification } from '~/types/notifications'
+import type {
+  MergeThresholdPreset,
+  CreateMergePresetInput,
+  UpdateMergePresetInput,
+} from '~/types/merge'
 
 type Position = { x: number; y: number }
 
@@ -421,6 +427,40 @@ export function useApi() {
         `${ws(workspaceId)}/requirement-reviews/${encodeURIComponent(reviewId)}/incorporate`,
         { method: 'POST' },
       ),
+
+    // ---- notifications (human-actionable board items) ---------------------
+    listNotifications: (workspaceId: string) =>
+      http<Notification[]>(`${ws(workspaceId)}/notifications`),
+
+    // Act on a notification (merge the PR / confirm / retry), then resolve it.
+    actNotification: (workspaceId: string, id: string) =>
+      http<Notification>(`${ws(workspaceId)}/notifications/${encodeURIComponent(id)}/act`, {
+        method: 'POST',
+      }),
+
+    // Dismiss a notification without acting.
+    dismissNotification: (workspaceId: string, id: string) =>
+      http<Notification>(`${ws(workspaceId)}/notifications/${encodeURIComponent(id)}/dismiss`, {
+        method: 'POST',
+      }),
+
+    // ---- merge threshold presets (per-task auto-merge policy library) -----
+    listMergePresets: (workspaceId: string) =>
+      http<MergeThresholdPreset[]>(`${ws(workspaceId)}/merge-presets`),
+
+    createMergePreset: (workspaceId: string, body: CreateMergePresetInput) =>
+      http<MergeThresholdPreset>(`${ws(workspaceId)}/merge-presets`, { method: 'POST', body }),
+
+    updateMergePreset: (workspaceId: string, presetId: string, body: UpdateMergePresetInput) =>
+      http<MergeThresholdPreset>(
+        `${ws(workspaceId)}/merge-presets/${encodeURIComponent(presetId)}`,
+        { method: 'PATCH', body },
+      ),
+
+    deleteMergePreset: (workspaceId: string, presetId: string) =>
+      http(`${ws(workspaceId)}/merge-presets/${encodeURIComponent(presetId)}`, {
+        method: 'DELETE',
+      }),
 
     // ---- github integration ----------------------------------------------
     // Connection management, projection reads (served from D1 — fast and

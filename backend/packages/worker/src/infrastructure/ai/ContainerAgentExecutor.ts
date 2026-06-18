@@ -15,6 +15,7 @@ import {
   systemPromptFor,
   userPromptFor,
 } from '@cat-factory/agents'
+import { CI_FIXER_AGENT_KIND, MERGER_AGENT_KIND } from '@cat-factory/orchestration'
 import type { ContainerSessionService } from '../containers/ContainerSessionService'
 import { RunnerJobClient, type ResolveRunnerTransport } from './RunnerJobClient'
 
@@ -68,6 +69,15 @@ const BLUEPRINT_SYSTEM_PROMPT =
   'Respond with ONLY a JSON object of shape {"type","name","summary","references":[],' +
   '"modules":[{"name","summary","references":[],"features":[{"title","summary",' +
   '"references":[]}]}]} — no prose, no code fences.'
+
+/** Role prompt the `merger` step runs under (scores the PR; returns JSON only). */
+const MERGER_SYSTEM_PROMPT =
+  'You are a release manager assessing a pull request before merge. Inspect the ' +
+  'diff between the PR head branch and the base branch and judge three axes, each ' +
+  'as a number from 0 (trivial/safe) to 1 (severe): complexity (how intricate the ' +
+  'change is), risk (how likely it is to break something), and impact (blast radius ' +
+  'if it does). Be conservative. Respond with ONLY a JSON object of shape ' +
+  '{"complexity":0.0,"risk":0.0,"impact":0.0,"rationale":"…"} — no prose, no code fences.'
 
 /**
  * An {@link AgentExecutor} that performs implementation work in a real sandbox:
@@ -234,6 +244,63 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       return { body, model: `${ref.provider}:${ref.model}`, kind: 'blueprint' }
     }
 
+    // The CI-fixer clones the PR head branch, runs the failing build/tests, fixes
+    // them and pushes back to the SAME branch (no new branch / PR) so CI re-runs.
+    if (context.agentKind === CI_FIXER_AGENT_KIND) {
+      const branch = context.block.pullRequest?.branch
+      if (!branch) {
+        throw new Error('CI-fixer needs the implementation PR branch to push fixes to')
+      }
+      const body = {
+        jobId: executionId,
+        systemPrompt: composeBlockSystemPrompt(systemPromptFor(context.agentKind), context.block),
+        userPrompt: userPromptFor(context),
+        model: ref.model,
+        proxyBaseUrl: this.deps.proxyBaseUrl,
+        sessionToken,
+        ghToken,
+        repo: {
+          owner: repo.owner,
+          name: repo.name,
+          baseBranch: repo.baseBranch,
+          cloneUrl: `https://github.com/${repo.owner}/${repo.name}.git`,
+        },
+        branch,
+        ...(this.deps.githubApiBase ? { githubApiBase: this.deps.githubApiBase } : {}),
+      }
+      return { body, model: `${ref.provider}:${ref.model}`, kind: 'ci-fix' }
+    }
+
+    // The merger clones the PR head branch to assess the diff vs base; it makes no
+    // commits (the engine performs the real merge through the GitHub API on its
+    // verdict). Returns ONLY a JSON assessment, mapped to `mergeAssessment`.
+    if (context.agentKind === MERGER_AGENT_KIND) {
+      const branch = context.block.pullRequest?.branch ?? repo.baseBranch
+      const body = {
+        jobId: executionId,
+        systemPrompt: MERGER_SYSTEM_PROMPT,
+        instructions:
+          'Assess the pull request on the head branch against the base branch and ' +
+          'return the complexity / risk / impact scores + rationale as JSON.',
+        model: ref.model,
+        proxyBaseUrl: this.deps.proxyBaseUrl,
+        sessionToken,
+        ghToken,
+        repo: {
+          owner: repo.owner,
+          name: repo.name,
+          baseBranch: repo.baseBranch,
+          cloneUrl: `https://github.com/${repo.owner}/${repo.name}.git`,
+        },
+        branch,
+        ...(context.block.pullRequest?.number !== undefined
+          ? { prNumber: context.block.pullRequest.number }
+          : {}),
+        ...(this.deps.githubApiBase ? { githubApiBase: this.deps.githubApiBase } : {}),
+      }
+      return { body, model: `${ref.provider}:${ref.model}`, kind: 'merge' }
+    }
+
     // The "extra context" Pi runs with: the build-phase role plus the block's
     // selected best-practice fragments, exactly as the inline executor composes
     // (engine-resolved tenant catalog when present, else the manual ids).
@@ -276,6 +343,23 @@ function toRunResult(result: RunnerJobResult): AgentRunResult {
     return {
       output: result.summary?.trim() || 'Service blueprint updated.',
       blueprintService: result.service,
+    }
+  }
+  // A `merger` job carries a PR assessment instead of a PR; surface it so the
+  // engine can compare it to the task's thresholds and merge-or-notify.
+  if (result.assessment !== undefined) {
+    return {
+      output: result.summary?.trim() || 'Pull request assessed.',
+      mergeAssessment: result.assessment,
+    }
+  }
+  // A `ci-fixer` job reports whether it pushed a fix. The engine's CI gate ignores
+  // this result (it just re-polls CI), but map it to a sensible output regardless.
+  if (result.pushed !== undefined) {
+    return {
+      output:
+        result.summary?.trim() ||
+        (result.pushed ? 'Pushed a CI fix to the PR branch.' : 'No CI fix was produced.'),
     }
   }
   const summary = result.summary?.trim() || 'Implementation complete.'

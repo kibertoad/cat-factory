@@ -73,6 +73,13 @@ export const blockSchema = v.object({
    * PR; surfaced on the board so the PR can be opened from the selected task.
    */
   pullRequest: v.optional(pullRequestRefSchema),
+  /**
+   * Id of the merge threshold preset selected for this task (see
+   * {@link mergeThresholdPresetSchema}). Drives the `merger` step's auto-merge
+   * decision and the CI-fixer attempt budget. Absent means "use the workspace's
+   * default preset".
+   */
+  mergePresetId: v.optional(v.string()),
 })
 export type Block = v.InferOutput<typeof blockSchema>
 
@@ -282,10 +289,33 @@ export const agentFailureSchema = v.object({
 })
 export type AgentFailure = v.InferOutput<typeof agentFailureSchema>
 
+/**
+ * State a `ci` step carries while it gates a pull request on green CI. A `ci`
+ * step is special (like a `deployer` step): it is not itself an LLM/container
+ * agent — it polls GitHub check runs for the PR's head commit and, on failure,
+ * dispatches the `ci-fixer` container agent to push a fix, looping until checks
+ * pass or the attempt budget is spent.
+ *   - `phase: 'checking'` — polling check runs for `headSha`.
+ *   - `phase: 'fixing'`   — a `ci-fixer` job is in flight (tracked via the step's
+ *                           `jobId`); on completion the step returns to `checking`.
+ */
+export const ciStepStateSchema = v.object({
+  phase: v.picklist(['checking', 'fixing']),
+  /** How many `ci-fixer` attempts have been dispatched so far. */
+  attempts: v.number(),
+  /** Ceiling on attempts, resolved from the task's merge preset at step start. */
+  maxAttempts: v.number(),
+  /** The PR head commit whose checks are being gated, once resolved. */
+  headSha: v.optional(v.nullable(v.string())),
+})
+export type CiStepState = v.InferOutput<typeof ciStepStateSchema>
+
 export const pipelineStepSchema = v.object({
   agentKind: agentKindSchema,
   state: agentStateSchema,
   progress: v.number(),
+  /** Live CI-gate state while a `ci` step polls/fixes checks; see {@link ciStepStateSchema}. */
+  ci: v.optional(v.nullable(ciStepStateSchema)),
   /** Live subtask counts while an async (container) step runs; see {@link stepSubtasksSchema}. */
   subtasks: v.optional(stepSubtasksSchema),
   decision: v.nullable(decisionSchema),

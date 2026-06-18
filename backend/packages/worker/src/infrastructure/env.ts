@@ -62,6 +62,18 @@ export interface Env {
    */
   JOB_POLL_FAILURE_TOLERANCE?: string
   /**
+   * Durable driver poll cadence for a `ci` step's GitHub check runs (a Workflows
+   * sleep duration). CI takes minutes, so coarser than the job poll. Default
+   * "30 seconds".
+   */
+  CI_POLL_INTERVAL?: string
+  /**
+   * Safety cap on how many times the driver polls CI in one `checking` wait before
+   * giving up the gate. Default 120 (≈60 min at the default 30s cadence). The
+   * CI-fixer attempt budget is separate (per-task, on the merge preset).
+   */
+  CI_MAX_POLLS?: string
+  /**
    * Per-workspace WebSocket fan-out hub (Durable Object). Pushes execution/board
    * changes to subscribed browsers in real time. When absent, the engine pushes
    * nothing (clients still get state on connect / refresh).

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useBoardFlow } from '~/composables/useBoardFlow'
+import NotificationsInbox from '~/components/layout/NotificationsInbox.vue'
 
 const ui = useUiStore()
 const board = useBoardStore()
@@ -91,6 +92,9 @@ async function resetBoard() {
         }}
       </UButton>
     </UDropdownMenu>
+
+    <!-- human-actionable notifications (merge review, pipeline complete, CI failed) -->
+    <NotificationsInbox />
 
     <!-- spend safeguard usage -->
     <UButton

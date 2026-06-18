@@ -5,13 +5,21 @@ import {
   type BlueprintResult,
   type BootstrapJob,
   type BootstrapResult,
+  type CiFixerJob,
+  type CiFixerResult,
+  type MergerJob,
+  type MergerResult,
   parseBlueprintJob,
   parseBootstrapJob,
+  parseCiFixerJob,
+  parseMergerJob,
   parseJob,
   type RunResult,
 } from './job.js'
 import { handleBootstrap } from './bootstrap.js'
 import { handleBlueprint } from './blueprint.js'
+import { handleCiFixer } from './ci-fixer.js'
+import { handleMerger } from './merger.js'
 import { redactSecrets } from './git.js'
 import { JobRegistry, loadRunnerLimits } from './runner.js'
 import { handleRun } from './runner.js'
@@ -57,6 +65,8 @@ const limits = loadRunnerLimits()
 const jobs = new JobRegistry(limits)
 const bootstrapJobs = new JobRegistry<BootstrapJob, BootstrapResult>(limits, handleBootstrap)
 const blueprintJobs = new JobRegistry<BlueprintJob, BlueprintResult>(limits, handleBlueprint)
+const ciFixerJobs = new JobRegistry<CiFixerJob, CiFixerResult>(limits, handleCiFixer)
+const mergerJobs = new JobRegistry<MergerJob, MergerResult>(limits, handleMerger)
 
 // Re-exported so the acceptance suite (and any direct caller) can run a job
 // synchronously without going through the async job API.
@@ -112,11 +122,42 @@ const server = createServer((req, res) => {
         return send(res, 400, { error: message } satisfies BlueprintResult)
       }
     }
+    // Start (or re-attach to) a CI-fixer job: POST /ci-fix. Clones the PR branch,
+    // fixes failing CI and pushes back onto the same branch.
+    if (req.method === 'POST' && req.url === '/ci-fix') {
+      try {
+        const job = parseCiFixerJob(JSON.parse(await readBody(req)))
+        const view = ciFixerJobs.start(job.jobId, job)
+        return send(res, 202, { jobId: view.id, state: view.state })
+      } catch (error) {
+        const message = redactSecrets(error instanceof Error ? error.message : String(error))
+        log.error('failed to start ci-fix', { error: message })
+        return send(res, 400, { error: message } satisfies CiFixerResult)
+      }
+    }
+    // Start (or re-attach to) a merger job: POST /merge. Clones the PR branch and
+    // returns a JSON assessment (no commits).
+    if (req.method === 'POST' && req.url === '/merge') {
+      try {
+        const job = parseMergerJob(JSON.parse(await readBody(req)))
+        const view = mergerJobs.start(job.jobId, job)
+        return send(res, 202, { jobId: view.id, state: view.state })
+      } catch (error) {
+        const message = redactSecrets(error instanceof Error ? error.message : String(error))
+        log.error('failed to start merge', { error: message })
+        return send(res, 400, { error: message } satisfies MergerResult)
+      }
+    }
     // Poll a running/finished job: GET /jobs/{id}. Job ids are unique per kind, so
-    // check the implementation registry, then bootstrap, then blueprint.
+    // check each registry in turn (implementation, bootstrap, blueprint, ci-fix, merge).
     if (req.method === 'GET' && req.url?.startsWith('/jobs/')) {
       const id = decodeURIComponent(req.url.slice('/jobs/'.length))
-      const view = jobs.get(id) ?? bootstrapJobs.get(id) ?? blueprintJobs.get(id)
+      const view =
+        jobs.get(id) ??
+        bootstrapJobs.get(id) ??
+        blueprintJobs.get(id) ??
+        ciFixerJobs.get(id) ??
+        mergerJobs.get(id)
       if (!view) return send(res, 404, { error: 'job not found' })
       return send(res, 200, view)
     }

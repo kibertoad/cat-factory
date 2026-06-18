@@ -1,5 +1,6 @@
 import type { Block, ExecutionInstance } from './entities'
 import type { BootstrapJob } from './bootstrap'
+import type { Notification } from './notifications'
 
 // Real-time events pushed from the per-workspace events hub to subscribed
 // browsers over WebSocket, replacing the old `tick` polling. The shape is shared
@@ -25,3 +26,9 @@ export type WorkspaceEvent =
    * vanished between the transition and the publish.
    */
   | { type: 'bootstrap'; job: BootstrapJob; block: Block | null; at: number }
+  /**
+   * A human-actionable notification was raised or resolved (a PR needs review, a
+   * pipeline finished and wants confirmation, CI fixing gave up). The client
+   * upserts it into its notifications store and surfaces/clears the board badge.
+   */
+  | { type: 'notification'; notification: Notification; at: number }

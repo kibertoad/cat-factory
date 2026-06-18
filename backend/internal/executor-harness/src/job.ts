@@ -276,6 +276,127 @@ export function parseBlueprintJob(input: unknown): BlueprintJob {
   return job
 }
 
+// ---- CI-fixer job (POST /ci-fix) ------------------------------------------
+
+/**
+ * The job the Worker's ContainerAgentExecutor POSTs to /ci-fix when a PR's CI is
+ * red. The fixer clones the PR head `branch`, runs the failing build/tests, fixes
+ * them and pushes back onto the SAME branch (no new branch, no new PR) so CI
+ * re-runs. The failing-check summary is folded into `userPrompt` by the Worker.
+ */
+export interface CiFixerJob {
+  jobId: string
+  systemPrompt: string
+  userPrompt: string
+  model: string
+  proxyBaseUrl: string
+  sessionToken: string
+  ghToken: string
+  repo: RepoSpec
+  /** The PR head branch to clone and push fixes onto. */
+  branch: string
+  githubApiBase?: string
+}
+
+/** The /ci-fix response. `pushed` says whether a fix commit was pushed. */
+export interface CiFixerResult {
+  pushed?: boolean
+  summary?: string
+  stats?: PiRunStats
+  error?: string
+}
+
+/** Validate + narrow an untrusted body into a {@link CiFixerJob}, throwing on bad input. */
+export function parseCiFixerJob(input: unknown): CiFixerJob {
+  if (typeof input !== 'object' || input === null) {
+    throw new Error('Invalid job: body must be an object')
+  }
+  const o = input as Record<string, unknown>
+  const repo = (o.repo ?? {}) as Record<string, unknown>
+  const job: CiFixerJob = {
+    jobId: str(o.jobId, 'jobId'),
+    systemPrompt: str(o.systemPrompt, 'systemPrompt'),
+    userPrompt: str(o.userPrompt, 'userPrompt'),
+    model: str(o.model, 'model'),
+    proxyBaseUrl: str(o.proxyBaseUrl, 'proxyBaseUrl'),
+    sessionToken: str(o.sessionToken, 'sessionToken'),
+    ghToken: str(o.ghToken, 'ghToken'),
+    repo: {
+      owner: str(repo.owner, 'repo.owner'),
+      name: str(repo.name, 'repo.name'),
+      baseBranch: str(repo.baseBranch, 'repo.baseBranch'),
+      cloneUrl: str(repo.cloneUrl, 'repo.cloneUrl'),
+    },
+    branch: str(o.branch, 'branch'),
+    ...(typeof o.githubApiBase === 'string' ? { githubApiBase: o.githubApiBase } : {}),
+  }
+  assertAllowedHost(job.repo.cloneUrl, 'repo.cloneUrl')
+  if (job.githubApiBase) assertAllowedHost(job.githubApiBase, 'githubApiBase')
+  return job
+}
+
+// ---- Merger job (POST /merge) ---------------------------------------------
+
+/**
+ * The job the Worker's ContainerAgentExecutor POSTs to /merge. The merger clones
+ * the PR head `branch`, assesses the diff vs `repo.baseBranch` (complexity / risk
+ * / impact) and returns ONLY a JSON assessment — it makes NO commits (the Worker
+ * performs the real merge through the GitHub API on the engine's verdict).
+ */
+export interface MergerJob {
+  jobId: string
+  systemPrompt: string
+  instructions: string
+  model: string
+  proxyBaseUrl: string
+  sessionToken: string
+  ghToken: string
+  repo: RepoSpec
+  /** The PR head branch to clone and assess against the base branch. */
+  branch: string
+  /** The PR number, for the agent's context (optional). */
+  prNumber?: number
+  githubApiBase?: string
+}
+
+/** The /merge response. `assessment` (when set) is the scores object to ingest. */
+export interface MergerResult {
+  assessment?: unknown
+  summary?: string
+  stats?: PiRunStats
+  error?: string
+}
+
+/** Validate + narrow an untrusted body into a {@link MergerJob}, throwing on bad input. */
+export function parseMergerJob(input: unknown): MergerJob {
+  if (typeof input !== 'object' || input === null) {
+    throw new Error('Invalid job: body must be an object')
+  }
+  const o = input as Record<string, unknown>
+  const repo = (o.repo ?? {}) as Record<string, unknown>
+  const job: MergerJob = {
+    jobId: str(o.jobId, 'jobId'),
+    systemPrompt: str(o.systemPrompt, 'systemPrompt'),
+    instructions: str(o.instructions, 'instructions'),
+    model: str(o.model, 'model'),
+    proxyBaseUrl: str(o.proxyBaseUrl, 'proxyBaseUrl'),
+    sessionToken: str(o.sessionToken, 'sessionToken'),
+    ghToken: str(o.ghToken, 'ghToken'),
+    repo: {
+      owner: str(repo.owner, 'repo.owner'),
+      name: str(repo.name, 'repo.name'),
+      baseBranch: str(repo.baseBranch, 'repo.baseBranch'),
+      cloneUrl: str(repo.cloneUrl, 'repo.cloneUrl'),
+    },
+    branch: str(o.branch, 'branch'),
+    ...(typeof o.prNumber === 'number' ? { prNumber: o.prNumber } : {}),
+    ...(typeof o.githubApiBase === 'string' ? { githubApiBase: o.githubApiBase } : {}),
+  }
+  assertAllowedHost(job.repo.cloneUrl, 'repo.cloneUrl')
+  if (job.githubApiBase) assertAllowedHost(job.githubApiBase, 'githubApiBase')
+  return job
+}
+
 /** Validate + narrow an untrusted body into a {@link Job}, throwing on bad input. */
 export function parseJob(input: unknown): Job {
   if (typeof input !== 'object' || input === null) {

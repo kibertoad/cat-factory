@@ -58,6 +58,11 @@ import { D1BootstrapJobRepository } from './repositories/D1BootstrapJobRepositor
 import { D1AgentRunRepository } from './repositories/D1AgentRunRepository'
 import { D1RepoBlueprintRepository } from './repositories/D1RepoBlueprintRepository'
 import { D1RequirementReviewRepository } from './repositories/D1RequirementReviewRepository'
+import { D1NotificationRepository } from './repositories/D1NotificationRepository'
+import { D1MergePresetRepository } from './repositories/D1MergePresetRepository'
+import { InAppNotificationChannel } from './events/InAppNotificationChannel'
+import { GitHubCiStatusProvider } from './github/GitHubCiStatusProvider'
+import { GitHubPullRequestMerger } from './github/GitHubPullRequestMerger'
 import { HttpEnvironmentProvider } from './environments/HttpEnvironmentProvider'
 import { WebCryptoSecretCipher } from './environments/WebCryptoSecretCipher'
 import { GitHubAppAuth } from './github/GitHubAppAuth'
@@ -240,37 +245,21 @@ function buildAppRegistry(
   })
 }
 
-function buildContainerExecutor(
-  env: Env,
-  config: AppConfig,
-  db: D1Database,
-  clock: Clock,
-  resolveTransport: ResolveRunnerTransport | null,
-): AgentExecutor | null {
-  if (
-    !config.github.enabled ||
-    !env.GITHUB_APP_PRIVATE_KEY ||
-    !env.WORKER_PUBLIC_URL ||
-    !env.AUTH_SESSION_SECRET
-  ) {
-    return null
-  }
-
-  if (!resolveTransport) return null
-
+/**
+ * Resolve the repo linked to a running block's enclosing service. Repos are
+ * linked at the service-frame level (see `linkBlock`), but execution runs at the
+ * task/module level, so we walk up the block's ancestry to find the frame's repo.
+ * There is deliberately NO "first repo" fallback: a workspace can have many repos,
+ * and guessing silently pushes work into the wrong one (this is how a simple-service
+ * task ended up force-pushing to butter-spread). If nothing in the chain is linked
+ * we throw so the misconfiguration surfaces instead of corrupting another repo.
+ * Shared by the container executor, the CI status provider and the PR merger.
+ */
+function buildResolveRepoTarget(db: D1Database): ResolveRepoTarget {
   const installationRepository = new D1GitHubInstallationRepository({ db })
   const repoRepository = new D1RepoProjectionRepository({ db })
   const blockRepository = new D1BlockRepository({ db })
-  const registry = buildAppRegistry(env, config, db, clock)
-
-  // Resolve the repo linked to the running block's enclosing service. Repos are
-  // linked at the service-frame level (see `linkBlock`), but execution runs at the
-  // task/module level, so we walk up the block's ancestry to find the frame's repo.
-  // There is deliberately NO "first repo" fallback: a workspace can have many repos,
-  // and guessing silently pushes work into the wrong one (this is how a simple-service
-  // task ended up force-pushing to butter-spread). If nothing in the chain is linked
-  // we throw so the misconfiguration surfaces instead of corrupting another repo.
-  const resolveRepoTarget: ResolveRepoTarget = async (workspaceId, blockId) => {
+  return async (workspaceId, blockId) => {
     const installation = await installationRepository.getByWorkspace(workspaceId)
     if (!installation) return null
     const repos = await repoRepository.list(workspaceId)
@@ -305,6 +294,75 @@ function buildContainerExecutor(
       baseBranch: repo.defaultBranch ?? 'main',
     }
   }
+}
+
+/**
+ * Build the merge-lifecycle ports. The notification repository + merge-preset
+ * repository are wired unconditionally (the inbox + presets are always available);
+ * the in-app delivery channel is wired only when the events binding is present
+ * (else rows persist but nothing is pushed). The CI status provider + PR merger
+ * need GitHub, so they're wired only when the App is configured — without them the
+ * `ci` gate passes through and `done` is a board-only flip (graceful degradation).
+ */
+function selectMergeLifecycleDeps(
+  env: Env,
+  config: AppConfig,
+  db: D1Database,
+  clock: Clock,
+  idGenerator: IdGenerator,
+): Partial<CoreDependencies> {
+  const deps: Partial<CoreDependencies> = {
+    notificationRepository: new D1NotificationRepository({ db }),
+    mergePresetRepository: new D1MergePresetRepository({ db }),
+  }
+  const publisher = selectEventPublisher(env)
+  if (publisher) deps.notificationChannel = new InAppNotificationChannel(publisher)
+
+  if (config.github.enabled && env.GITHUB_APP_PRIVATE_KEY) {
+    const registry = buildAppRegistry(env, config, db, clock)
+    const githubClient = new FetchGitHubClient({
+      registry,
+      rateLimitRepository: new D1RateLimitRepository({ db, idGenerator }),
+      idGenerator,
+      clock,
+      apiBase: config.github.apiBase,
+    })
+    const resolveRepoTarget = buildResolveRepoTarget(db)
+    const blockRepository = new D1BlockRepository({ db })
+    deps.ciStatusProvider = new GitHubCiStatusProvider({
+      githubClient,
+      resolveRepoTarget,
+      blockRepository,
+    })
+    deps.pullRequestMerger = new GitHubPullRequestMerger({
+      githubClient,
+      resolveRepoTarget,
+      blockRepository,
+    })
+  }
+  return deps
+}
+
+function buildContainerExecutor(
+  env: Env,
+  config: AppConfig,
+  db: D1Database,
+  clock: Clock,
+  resolveTransport: ResolveRunnerTransport | null,
+): AgentExecutor | null {
+  if (
+    !config.github.enabled ||
+    !env.GITHUB_APP_PRIVATE_KEY ||
+    !env.WORKER_PUBLIC_URL ||
+    !env.AUTH_SESSION_SECRET
+  ) {
+    return null
+  }
+
+  if (!resolveTransport) return null
+
+  const registry = buildAppRegistry(env, config, db, clock)
+  const resolveRepoTarget = buildResolveRepoTarget(db)
 
   return new ContainerAgentExecutor({
     resolveTransport,
@@ -705,6 +763,7 @@ export function buildContainer(env: Env, overrides: Partial<CoreDependencies> = 
     repoBlueprintRepository: new D1RepoBlueprintRepository({ db }),
     repoScanner: selectRepoScanner(env, config, db, clock),
     ...selectGitHubDeps(env, config, db, clock, idGenerator),
+    ...selectMergeLifecycleDeps(env, config, db, clock, idGenerator),
     ...selectDocumentsDeps(env, config, db),
     ...selectTasksDeps(env, config, db),
     ...selectRequirementsDeps(env, config, db),

@@ -36,6 +36,7 @@ export class ExecutionWorkflow extends WorkflowEntrypoint<Env, ExecutionWorkflow
     const execConfig = loadConfig(this.env).execution
     const decisionTimeout = execConfig.decisionTimeout as WorkflowSleepDuration
     const jobPollInterval = execConfig.jobPollInterval as WorkflowSleepDuration
+    const ciPollInterval = execConfig.ciPollInterval as WorkflowSleepDuration
 
     const failRun = async (
       i: number,
@@ -113,6 +114,53 @@ export class ExecutionWorkflow extends WorkflowEntrypoint<Env, ExecutionWorkflow
           await failRun(i, 'Implementation job did not finish within its polling budget', 'timeout')
           return
         }
+      }
+
+      // A `ci` step is gating the PR on green CI. Poll GitHub check runs between
+      // durable sleeps — mirroring the job-poll loop above — until the gate yields
+      // something terminal: green CI returns `continue`, a dispatched CI-fixer
+      // returns `awaiting_job` (handled on the next outer-loop iteration), and a
+      // spent budget returns `job_failed`. Each poll is its own short, retriable
+      // step so the gate can wait far longer than one step's timeout while the
+      // driver stays cheap and survives eviction.
+      if (result.kind === 'awaiting_ci') {
+        let settled = false
+        let pollReadFailures = 0
+        for (let p = 0; p < execConfig.ciMaxPolls; p++) {
+          await step.sleep(`ci-wait-${i}-${p}`, ciPollInterval)
+          try {
+            result = (await step.do(`ci-poll-${i}-${p}`, STEP_CONFIG, () =>
+              buildContainer(this.env).executionService.pollCi(workspaceId, executionId),
+            )) as AdvanceResult
+          } catch (error) {
+            pollReadFailures += 1
+            const message = error instanceof Error ? error.message : String(error)
+            logger.warn(
+              { workspaceId, executionId, step: i, poll: p, pollReadFailures, err: message },
+              'CI poll could not read status; treating as still pending and retrying',
+            )
+            if (pollReadFailures >= execConfig.jobPollFailureTolerance) {
+              await failRun(
+                i,
+                `CI status was unreadable for ${pollReadFailures} consecutive polls (last error: ${message})`,
+                'timeout',
+              )
+              return
+            }
+            continue
+          }
+          pollReadFailures = 0
+          if (result.kind !== 'awaiting_ci') {
+            settled = true
+            break
+          }
+        }
+        if (!settled && result.kind === 'awaiting_ci') {
+          await failRun(i, 'CI did not settle within its polling budget', 'timeout')
+          return
+        }
+        // Fall through: the now-updated `result` (continue / awaiting_job / job_failed)
+        // is handled by the checks below and the next outer-loop iteration.
       }
 
       if (result.kind === 'job_failed') {

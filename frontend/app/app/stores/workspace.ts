@@ -6,6 +6,8 @@ import { useBoardStore } from '~/stores/board'
 import { usePipelinesStore } from '~/stores/pipelines'
 import { useExecutionStore } from '~/stores/execution'
 import { useAgentRunsStore } from '~/stores/agentRuns'
+import { useNotificationsStore } from '~/stores/notifications'
+import { useMergePresetsStore } from '~/stores/mergePresets'
 
 /**
  * Owns the active workspace and bootstraps the app against the backend. On load
@@ -58,6 +60,8 @@ export const useWorkspaceStore = defineStore(
       usePipelinesStore().hydrate(snapshot.pipelines)
       useExecutionStore().hydrate(snapshot.executions)
       useAgentRunsStore().hydrate(snapshot.bootstrapJobs ?? [])
+      useNotificationsStore().hydrate(snapshot.notifications ?? [])
+      useMergePresetsStore().hydrate(snapshot.mergePresets ?? [])
     }
 
     /** Resolve accounts + boards, then open the right board for the active account. */

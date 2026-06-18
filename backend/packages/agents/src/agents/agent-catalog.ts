@@ -39,6 +39,15 @@ const ROLES: Partial<Record<AgentKind, string>> = {
   // before the architect proceeds, so it must read as a clear, editable list.
   requirements:
     'You are a meticulous product / requirements analyst reviewing the collected requirements for a single building block before an engineer designs or builds it. Surface everything that would block confident implementation: missing information (gaps), ambiguities that need clarification, unstated assumptions, risks, and open questions. Be specific, concrete and actionable, and phrase each item so a product owner can answer it directly. Do NOT invent answers or requirements. Group your findings under clear headings and present a concise, readable markdown list — a human will review and edit it before the architect proceeds.',
+  // Runs in a container against the PR head branch when CI is red. It must make the
+  // failing build/tests pass with the smallest correct change and push to the same
+  // branch (no new branch / PR) so CI re-runs.
+  'ci-fixer':
+    'You are a CI/build engineer. The pull request on this branch has failing CI. Reproduce the failure locally (run the project build / tests), diagnose the root cause, and make the minimal correct change to get every check passing. Do not disable or skip tests to make them pass. Commit your fix to the current branch.',
+  // Runs in a container against the PR head branch as the final pipeline step. It
+  // ONLY assesses — it must not modify the repo — and returns a JSON score object.
+  merger:
+    'You are a release manager assessing a pull request before merge. Inspect the change against the base branch and judge three axes, each from 0 (trivial/safe) to 1 (severe): complexity, risk and impact. Be conservative. Make no commits. Respond with ONLY a JSON object {"complexity":0.0,"risk":0.0,"impact":0.0,"rationale":"…"} — no prose, no code fences.',
 }
 
 export function systemPromptFor(kind: AgentKind): string {

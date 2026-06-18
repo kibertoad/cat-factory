@@ -23,6 +23,10 @@ export interface RunnerJobResult {
   service?: unknown
   /** A bootstrap job's pushed default branch (the `/bootstrap` endpoint's product). */
   defaultBranch?: string
+  /** A `merger` job's PR assessment (the `/merge` endpoint's product). */
+  assessment?: unknown
+  /** A `ci-fixer` job's outcome: whether it pushed a fix to the PR branch. */
+  pushed?: boolean
 }
 
 /**
@@ -32,7 +36,7 @@ export interface RunnerJobResult {
  * `/bootstrap`). The Cloudflare backend serves all three; a self-hosted pool serves
  * only `run` and rejects the rest until it implements them.
  */
-export type RunnerDispatchKind = 'run' | 'blueprint' | 'bootstrap'
+export type RunnerDispatchKind = 'run' | 'blueprint' | 'bootstrap' | 'ci-fix' | 'merge'
 
 /** A job's current state, as the harness/pool reports it. */
 export interface RunnerJobView {

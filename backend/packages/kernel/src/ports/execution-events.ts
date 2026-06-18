@@ -1,4 +1,4 @@
-import type { Block, BootstrapJob, ExecutionInstance } from '../domain/types'
+import type { Block, BootstrapJob, ExecutionInstance, Notification } from '../domain/types'
 
 // Port for pushing state changes to connected clients in real time, instead of
 // the browser polling for them. The execution engine calls this whenever it
@@ -31,6 +31,12 @@ export interface ExecutionEventPublisher {
    * publishers/tests that predate bootstrap progress need no change.
    */
   bootstrapChanged?(workspaceId: string, job: BootstrapJob, block?: Block | null): Promise<void>
+  /**
+   * A human-actionable notification was raised or resolved: push it so the board
+   * surfaces/clears its badge and inbox entry live. Optional so publishers/tests
+   * that predate notifications need no change.
+   */
+  notificationChanged?(workspaceId: string, notification: Notification): Promise<void>
 }
 
 /**
@@ -42,4 +48,5 @@ export class NoopEventPublisher implements ExecutionEventPublisher {
   async executionChanged(): Promise<void> {}
   async boardChanged(): Promise<void> {}
   async bootstrapChanged(): Promise<void> {}
+  async notificationChanged(): Promise<void> {}
 }

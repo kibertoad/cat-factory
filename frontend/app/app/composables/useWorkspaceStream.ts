@@ -18,6 +18,7 @@ export function useWorkspaceStream() {
   const execution = useExecutionStore()
   const board = useBoardStore()
   const agentRuns = useAgentRunsStore()
+  const notifications = useNotificationsStore()
   const api = useApi()
   const apiBase = useRuntimeConfig().public.apiBase
 
@@ -57,6 +58,10 @@ export function useWorkspaceStream() {
       // or a failed badge) without a full refresh.
       agentRuns.upsertBootstrap(event.job)
       if (event.block) board.upsert(event.block)
+    } else if (event.type === 'notification') {
+      // A PR needs a merge decision, a pipeline finished, or CI gave up — patch the
+      // inbox + per-block badge in place (resolved ones drop out of the inbox).
+      notifications.upsert(event.notification)
     }
   }
 

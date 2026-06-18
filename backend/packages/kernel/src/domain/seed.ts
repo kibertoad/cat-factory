@@ -136,7 +136,10 @@ export function seedPipelines(): Pipeline[] {
       // architect then designs the solution. Both pause for human approval (their
       // proposals are reviewed/edited before the next step), while `blueprints`
       // runs right after implementation so the service map (and the board) is
-      // refreshed from the just-written code, on the same PR branch.
+      // refreshed from the just-written code, on the same PR branch. `ci` then
+      // gates the (now-final) PR branch on green CI — looping a `ci-fixer` agent on
+      // failure — and `merger` runs last: it scores the PR and either auto-merges
+      // (within the task's thresholds) or raises a review notification.
       agentKinds: [
         'requirements',
         'architect',
@@ -145,11 +148,18 @@ export function seedPipelines(): Pipeline[] {
         'blueprints',
         'tester',
         'reviewer',
+        'ci',
+        'merger',
       ],
-      // Gate the requirements review and the architecture proposal.
-      gates: [true, true, false, false, false, false, false],
+      // Gate the requirements review and the architecture proposal. `ci` / `merger`
+      // are never human-gated (they gate/decide themselves), so their slots are false.
+      gates: [true, true, false, false, false, false, false, false, false],
     },
-    { id: 'pl_quick', name: 'Quick implement', agentKinds: ['coder', 'blueprints', 'tester'] },
+    {
+      id: 'pl_quick',
+      name: 'Quick implement',
+      agentKinds: ['coder', 'blueprints', 'tester', 'ci', 'merger'],
+    },
     {
       id: 'pl_integrate',
       name: 'Integrate & ship',

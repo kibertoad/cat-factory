@@ -3,10 +3,14 @@ import type {
   AgentFailureKind,
   Block,
   BlueprintService,
+  CiStatusProvider,
   ExecutionInstance,
+  MergeAssessment,
+  MergePresetRepository,
   PipelineStep,
+  PullRequestMerger,
 } from '@cat-factory/kernel'
-import { parseBlueprintService } from '@cat-factory/contracts'
+import { parseBlueprintService, parseMergeAssessment } from '@cat-factory/contracts'
 import {
   assertFound,
   ConflictError,
@@ -14,7 +18,16 @@ import {
   NotFoundError,
   sameSubtasks,
 } from '@cat-factory/kernel'
-import { DEFAULT_CONFIDENCE_THRESHOLD } from '@cat-factory/kernel'
+import { DEFAULT_MERGE_PRESET } from '@cat-factory/kernel'
+import {
+  aggregateCi,
+  CI_AGENT_KIND,
+  CI_FIXER_AGENT_KIND,
+  describeFailingChecks,
+  isCiGreen,
+  MERGER_AGENT_KIND,
+} from './ci.logic'
+import type { NotificationService } from '../notifications/NotificationService'
 import type {
   BlockRepository,
   ExecutionRepository,
@@ -53,6 +66,11 @@ const EXECUTION_FAILURE_HINTS: Partial<Record<AgentFailureKind, string>> = {
     'A required decision was not answered in time, so the run was stopped. Retry to re-run the pipeline.',
   cancelled: 'You stopped this run; its container was killed. Retry to start it again.',
   unknown: 'The run failed for an unclassified reason. Review the run, then retry.',
+}
+
+/** Format a 0..1 score as a rounded percentage for notification copy. */
+function pct(score: number): string {
+  return `${Math.round(score * 100)}%`
 }
 
 export interface ExecutionServiceDependencies {
@@ -97,6 +115,29 @@ export interface ExecutionServiceDependencies {
    * board isn't auto-updated from it.
    */
   blueprintReconciler?: BlueprintReconciler
+  /**
+   * Optional: raises human-actionable notifications (a PR needs a merge decision,
+   * a no-merger pipeline finished, CI fixing gave up). Absent → those events still
+   * transition the block but no notification surfaces (tests).
+   */
+  notificationService?: NotificationService
+  /**
+   * Optional: reads a block's CI check runs so the `ci` step can gate the PR on
+   * green CI. Absent → the `ci` step is a pass-through (nothing to gate), so the
+   * engine works unchanged when GitHub CI isn't wired.
+   */
+  ciStatusProvider?: CiStatusProvider
+  /**
+   * Optional: performs the real GitHub merge when a task should become `done`.
+   * Absent → `done` is a board-only flip (tests); when wired, `done` provably
+   * means the PR was merged on the remote.
+   */
+  pullRequestMerger?: PullRequestMerger
+  /**
+   * Optional: resolves a task's merge threshold preset (auto-merge ceilings + the
+   * CI-fixer attempt budget). Absent → the built-in {@link DEFAULT_MERGE_PRESET}.
+   */
+  mergePresetRepository?: MergePresetRepository
 }
 
 /** Reconciles a Blueprinter step's tree onto the board in place (BoardScanService). */
@@ -134,6 +175,10 @@ export class ExecutionService {
   private readonly environmentProvisioning?: EnvironmentProvisioningService
   private readonly fragmentResolver?: FragmentResolver
   private readonly blueprintReconciler?: BlueprintReconciler
+  private readonly notificationService?: NotificationService
+  private readonly ciStatusProvider?: CiStatusProvider
+  private readonly prMerger?: PullRequestMerger
+  private readonly mergePresetRepository?: MergePresetRepository
 
   constructor({
     workspaceRepository,
@@ -152,6 +197,10 @@ export class ExecutionService {
     environmentProvisioning,
     fragmentResolver,
     blueprintReconciler,
+    notificationService,
+    ciStatusProvider,
+    pullRequestMerger,
+    mergePresetRepository,
   }: ExecutionServiceDependencies) {
     this.workspaceRepository = workspaceRepository
     this.blockRepository = blockRepository
@@ -169,6 +218,10 @@ export class ExecutionService {
     this.environmentProvisioning = environmentProvisioning
     this.fragmentResolver = fragmentResolver
     this.blueprintReconciler = blueprintReconciler
+    this.notificationService = notificationService
+    this.ciStatusProvider = ciStatusProvider
+    this.prMerger = pullRequestMerger
+    this.mergePresetRepository = mergePresetRepository
   }
 
   private requireWorkspace(workspaceId: string) {
@@ -295,6 +348,14 @@ export class ExecutionService {
       return this.recordStepResult(workspaceId, instance, step, isFinalStep, result)
     }
 
+    // A `ci` step gates the PR on green CI: it polls GitHub check runs and, on
+    // failure, dispatches the `ci-fixer` container agent — no LLM of its own. It
+    // is a pass-through when no CI status provider is wired (the engine works
+    // unchanged without GitHub CI). See {@link evaluateCi}.
+    if (step.agentKind === CI_AGENT_KIND) {
+      return this.evaluateCi(workspaceId, instance, step, block, isFinalStep)
+    }
+
     // Async (container) steps don't block: dispatch the job and park. The durable
     // driver polls `pollAgentJob` between sleeps so the run can span far longer
     // than a single durable step's timeout, while each step stays short. A set
@@ -354,6 +415,21 @@ export class ExecutionService {
       }
       return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
     }
+
+    // A `ci` step's in-flight job is a CI-fixer run, NOT the step's own work: when
+    // it finishes (or fails) we don't record a result or advance — we drop the
+    // handle, return the gate to `checking`, and re-poll CI (the fixer's push
+    // triggers a fresh run). A fixer that failed without pushing leaves CI red, so
+    // the next CI check re-dispatches (until the attempt budget is spent).
+    if (step.agentKind === CI_AGENT_KIND) {
+      step.jobId = undefined
+      step.subtasks = undefined
+      if (step.ci) step.ci.phase = 'checking'
+      await this.executionRepository.upsert(workspaceId, instance)
+      await this.emitInstance(workspaceId, instance)
+      return { kind: 'awaiting_ci', stepIndex: instance.currentStep }
+    }
+
     if (update.state === 'failed') {
       return { kind: 'job_failed', error: update.error }
     }
@@ -364,6 +440,29 @@ export class ExecutionService {
     // Clear the handle before recording so a replay re-attaches to nothing.
     step.jobId = undefined
     return this.recordStepResult(workspaceId, instance, step, isFinalStep, update.result)
+  }
+
+  /**
+   * Re-check a `ci` step's gate from the durable driver's `awaiting_ci` loop:
+   * re-reads CI check runs and returns the same outcomes as the initial evaluation
+   * (green → advance, still running → keep polling, failure → dispatch a fixer or
+   * give up). Safe under replay: reading run state fresh each call. A no-op unless
+   * the current step is a `ci` step actively in its `checking` phase.
+   */
+  async pollCi(workspaceId: string, executionId: string): Promise<AdvanceResult> {
+    const instance = await this.executionRepository.get(workspaceId, executionId)
+    if (!instance || (instance.status !== 'running' && instance.status !== 'paused')) {
+      return { kind: 'noop' }
+    }
+    const step = instance.steps[instance.currentStep]
+    if (!step || step.agentKind !== CI_AGENT_KIND) return { kind: 'continue' }
+    // A fixer job is in flight — the driver should be polling it, not CI; let the
+    // job-poll loop drive (defensive; a replay could route here).
+    if (step.jobId) return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
+    const block = await this.blockRepository.get(workspaceId, instance.blockId)
+    if (!block) return { kind: 'noop' }
+    const isFinalStep = instance.currentStep === instance.steps.length - 1
+    return this.evaluateCi(workspaceId, instance, step, block, isFinalStep)
   }
 
   /**
@@ -479,6 +578,20 @@ export class ExecutionService {
 
     if (isFinalStep) {
       instance.status = 'done'
+      // Record the reported confidence for transparency BEFORE any merge — once a
+      // task auto-merges it is `done` and `finalizeBlock` early-returns, so this is
+      // the single place confidence is persisted across both the merge and review paths.
+      if (result.confidence !== undefined) {
+        await this.blockRepository.update(workspaceId, instance.blockId, {
+          confidence: result.confidence,
+        })
+      }
+      // A `merger` step produced a PR assessment: compare it against the task's
+      // thresholds and either merge for real or raise a review notification. This
+      // owns the block's terminal status, so `finalizeBlock` then leaves it alone.
+      if (result.mergeAssessment !== undefined) {
+        await this.resolveMergerStep(workspaceId, instance, result.mergeAssessment)
+      }
       await this.finalizeBlock(workspaceId, instance, result.confidence)
       await this.executionRepository.upsert(workspaceId, instance)
       await this.emitInstance(workspaceId, instance)
@@ -530,6 +643,145 @@ export class ExecutionService {
         output: `Deployer error: ${getErrorMessage(error)}`,
       }
     }
+  }
+
+  /**
+   * Evaluate a `ci` step's gate once: read the PR's CI check runs and decide.
+   *   - no provider wired → pass-through (advance; nothing to gate);
+   *   - green / no checks → advance to the next step;
+   *   - still running     → `awaiting_ci` (the driver sleeps then calls {@link pollCi});
+   *   - failing, budget left → dispatch a `ci-fixer` container job (`awaiting_job`);
+   *   - failing, budget spent → raise a `ci_failed` notification + fail the run.
+   * Shared by the initial advance and the durable `awaiting_ci` re-poll.
+   */
+  private async evaluateCi(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    step: PipelineStep,
+    block: Block,
+    isFinalStep: boolean,
+  ): Promise<AdvanceResult> {
+    // Re-attach after a replay: a fixer is already in flight for this gate.
+    if (step.ci?.phase === 'fixing' && step.jobId) {
+      return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
+    }
+
+    // No CI status wired: the gate is a pass-through so the engine works without
+    // GitHub CI. Advance via the normal result path.
+    if (!this.ciStatusProvider) {
+      return this.recordStepResult(workspaceId, instance, step, isFinalStep, {
+        output: 'CI gate skipped (no CI status provider configured).',
+      })
+    }
+
+    // Initialise the gate's state on first entry, resolving the attempt budget from
+    // the task's merge preset (stable across polls once set).
+    if (!step.ci) {
+      const preset = await this.resolveMergePreset(workspaceId, block)
+      step.ci = { phase: 'checking', attempts: 0, maxAttempts: preset.ciMaxAttempts, headSha: null }
+    }
+
+    const report = await this.ciStatusProvider.getStatus(workspaceId, block.id)
+    step.ci.headSha = report.headSha
+    const verdict = aggregateCi(report.checks)
+
+    if (isCiGreen(verdict)) {
+      // Stop polling the moment CI is green — finish the step and advance.
+      return this.recordStepResult(workspaceId, instance, step, isFinalStep, {
+        output:
+          verdict === 'none'
+            ? 'CI gate passed: no checks configured for the PR head.'
+            : `CI gate passed: ${report.checks.length} check(s) green.`,
+      })
+    }
+
+    if (verdict === 'pending') {
+      // Keep polling. Persist the head sha + phase so the board can reflect it.
+      step.ci.phase = 'checking'
+      await this.executionRepository.upsert(workspaceId, instance)
+      await this.emitInstance(workspaceId, instance)
+      return { kind: 'awaiting_ci', stepIndex: instance.currentStep }
+    }
+
+    // verdict === 'failure'.
+    const summary = describeFailingChecks(report.checks)
+    const executor = this.agentExecutor
+    const canFix = isAsyncAgentExecutor(executor)
+    if (canFix && step.ci.attempts < step.ci.maxAttempts) {
+      return this.dispatchCiFixer(workspaceId, instance, step, block, isFinalStep, summary)
+    }
+
+    // Budget spent (or no async executor to fix with): give up and notify a human.
+    await this.raiseCiFailed(workspaceId, instance, block, summary, step.ci.attempts)
+    return {
+      kind: 'job_failed',
+      error:
+        `CI did not pass after ${step.ci.attempts} CI-fixer attempt(s). ${summary}`.trim(),
+    }
+  }
+
+  /**
+   * Dispatch a `ci-fixer` container job for a failing `ci` gate: build the agent
+   * context with the kind overridden to `ci-fixer` (it clones the PR head branch
+   * and pushes a fix — no new PR), park on the job, and flip the gate to `fixing`.
+   * Idempotent under replay via the step's `jobId` (re-attach handled in {@link evaluateCi}).
+   */
+  private async dispatchCiFixer(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    step: PipelineStep,
+    block: Block,
+    isFinalStep: boolean,
+    failureSummary: string,
+  ): Promise<AdvanceResult> {
+    const executor = this.agentExecutor
+    if (!isAsyncAgentExecutor(executor)) {
+      // Defensive: evaluateCi only calls this when async-capable.
+      return { kind: 'job_failed', error: 'No async executor available to fix CI.' }
+    }
+    const base = await this.buildAgentContext(workspaceId, instance, step, isFinalStep, block)
+    const context: AgentRunContext = {
+      ...base,
+      agentKind: CI_FIXER_AGENT_KIND,
+      // Surface the failing-check summary to the fixer as resolved context.
+      priorOutputs: [...base.priorOutputs, { agentKind: CI_AGENT_KIND, output: failureSummary }],
+    }
+    const handle = await executor.startJob(context)
+    step.jobId = handle.jobId
+    if (handle.model) step.model = handle.model
+    step.ci = {
+      phase: 'fixing',
+      attempts: (step.ci?.attempts ?? 0) + 1,
+      maxAttempts: step.ci?.maxAttempts ?? DEFAULT_MERGE_PRESET.ciMaxAttempts,
+      headSha: step.ci?.headSha ?? null,
+    }
+    await this.executionRepository.upsert(workspaceId, instance)
+    await this.emitInstance(workspaceId, instance)
+    return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
+  }
+
+  /** Raise a `ci_failed` notification when the CI gate exhausts its fixer budget. */
+  private async raiseCiFailed(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    block: Block,
+    summary: string,
+    attempts: number,
+  ): Promise<void> {
+    if (!this.notificationService) return
+    await this.notificationService.raise(workspaceId, {
+      type: 'ci_failed',
+      blockId: block.id,
+      executionId: instance.id,
+      title: `CI is still failing for "${block.title}"`,
+      body:
+        `The CI-fixer agent tried ${attempts} time(s) but CI is still red. ${summary} ` +
+        `Take a look and retry the run once fixed.`,
+      payload: {
+        ...(block.pullRequest?.url ? { prUrl: block.pullRequest.url } : {}),
+        pipelineName: instance.pipelineName,
+      },
+    })
   }
 
   /** Provision inputs (`{{input.*}}`) derived from the block under deployment. */
@@ -779,7 +1031,16 @@ export class ExecutionService {
     })
   }
 
-  /** A pipeline finished: a task auto-merges or opens a PR; a frame is done. */
+  /**
+   * A pipeline finished. A frame becomes `done` (a mapping-only run leaves it
+   * `ready`). A *task* never auto-`done`s from a confidence score any more — that
+   * looked merged when the PR was still open with red CI. Instead:
+   *   - if the pipeline has a `merger` step, it already owned the merge/notify
+   *     decision (see {@link resolveMergerStep}); we only backstop a missing one;
+   *   - otherwise the work is complete but unmerged: leave the PR open (`pr_ready`)
+   *     and raise a `pipeline_complete` notification for a human to confirm + merge.
+   * `done` now strictly means the PR was merged (see {@link finalizeMerge}).
+   */
   private async finalizeBlock(
     workspaceId: string,
     instance: ExecutionInstance,
@@ -800,28 +1061,165 @@ export class ExecutionService {
       return
     }
 
-    // No confidence reported (e.g. a real LLM agent) means confident → merge.
-    const score = confidence ?? 1
-    const threshold = block.confidenceThreshold ?? DEFAULT_CONFIDENCE_THRESHOLD
-    await this.blockRepository.update(workspaceId, block.id, { confidence: score })
-    if (score >= threshold) {
-      await this.finalizeMerge(workspaceId, block.id)
-    } else {
-      await this.blockRepository.update(workspaceId, block.id, {
-        status: 'pr_ready',
-        progress: 1,
-      })
+    // Confidence is recorded by the caller (recordStepResult) before any merge, so
+    // it persists on both the merge and review paths; `confidence` is unused here.
+    void confidence
+
+    const hasMerger = instance.steps.some((s) => s.agentKind === MERGER_AGENT_KIND)
+    if (hasMerger) {
+      // The `merger` step already merged (→ `done`) or raised a review (→ `pr_ready`).
+      // Only backstop the case where it produced no decision at all.
+      const fresh = await this.blockRepository.get(workspaceId, block.id)
+      if (fresh && fresh.status !== 'done' && fresh.status !== 'pr_ready') {
+        await this.blockRepository.update(workspaceId, block.id, {
+          status: 'pr_ready',
+          progress: 1,
+        })
+      }
+      return
     }
+
+    // No merger in this pipeline: complete but unmerged — ask a human to confirm.
+    await this.blockRepository.update(workspaceId, block.id, { status: 'pr_ready', progress: 1 })
+    await this.raisePipelineComplete(workspaceId, instance, block)
   }
 
-  /** Mark a block implemented; for a task, materialise its assigned module. */
+  /**
+   * Merge a block's PR for real, then mark it `done`. The remote merge happens
+   * FIRST (via the {@link PullRequestMerger} port) and only on its success does the
+   * block flip to `done` — so `done` provably means "merged", not a board-only
+   * status. When no merger is wired (tests) this degrades to the old board-only
+   * flip. Throws if the remote merge fails so callers can fall back to a manual
+   * merge / review notification.
+   */
   private async finalizeMerge(workspaceId: string, blockId: string): Promise<void> {
     const block = await this.blockRepository.get(workspaceId, blockId)
     if (!block) return
+    if (this.prMerger && block.pullRequest) {
+      // Throws on a blocked/failed merge — the caller decides what to do next.
+      await this.prMerger.mergeForBlock(workspaceId, blockId)
+    }
     await this.blockRepository.update(workspaceId, blockId, { status: 'done', progress: 1 })
     if ((block.level ?? 'frame') === 'task') {
       await this.applyModuleAssignment(workspaceId, blockId)
     }
+  }
+
+  /**
+   * Resolve a `merger` step's assessment: parse + validate it, compare each axis
+   * against the task's resolved merge preset, and either merge the PR for real
+   * (all within threshold) or raise a `merge_review` notification leaving the
+   * block `pr_ready`. A malformed assessment or a failed auto-merge also falls back
+   * to a review notification — never a silent merge.
+   */
+  private async resolveMergerStep(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    rawAssessment: unknown,
+  ): Promise<void> {
+    const block = await this.blockRepository.get(workspaceId, instance.blockId)
+    if (!block) return
+
+    let assessment: MergeAssessment | null = null
+    try {
+      assessment = parseMergeAssessment(rawAssessment)
+    } catch {
+      assessment = null
+    }
+
+    const preset = await this.resolveMergePreset(workspaceId, block)
+    const within =
+      assessment !== null &&
+      assessment.complexity <= preset.maxComplexity &&
+      assessment.risk <= preset.maxRisk &&
+      assessment.impact <= preset.maxImpact
+
+    if (within) {
+      try {
+        await this.finalizeMerge(workspaceId, block.id)
+        return
+      } catch {
+        // Auto-merge failed (e.g. branch protection / conflict): fall through to a
+        // review notification so a human can sort it out.
+      }
+    }
+
+    await this.blockRepository.update(workspaceId, block.id, { status: 'pr_ready', progress: 1 })
+    await this.raiseMergeReview(workspaceId, instance, block, assessment)
+  }
+
+  /**
+   * Resolve the merge threshold preset that governs a task: its explicitly-picked
+   * preset, else the workspace default, else the built-in {@link DEFAULT_MERGE_PRESET}.
+   * Returns just the thresholds the engine compares against (+ the CI attempt budget).
+   */
+  private async resolveMergePreset(
+    workspaceId: string,
+    block: Block,
+  ): Promise<{
+    maxComplexity: number
+    maxRisk: number
+    maxImpact: number
+    ciMaxAttempts: number
+  }> {
+    if (this.mergePresetRepository) {
+      if (block.mergePresetId) {
+        const picked = await this.mergePresetRepository.get(workspaceId, block.mergePresetId)
+        if (picked) return picked
+      }
+      const fallback = await this.mergePresetRepository.getDefault(workspaceId)
+      if (fallback) return fallback
+    }
+    return DEFAULT_MERGE_PRESET
+  }
+
+  /** Raise a `merge_review` notification carrying the agent's assessment + the PR. */
+  private async raiseMergeReview(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    block: Block,
+    assessment: MergeAssessment | null,
+  ): Promise<void> {
+    if (!this.notificationService) return
+    const body = assessment
+      ? `The merger scored this PR outside the task's auto-merge thresholds ` +
+        `(complexity ${pct(assessment.complexity)}, risk ${pct(assessment.risk)}, ` +
+        `impact ${pct(assessment.impact)}). ${assessment.rationale}`
+      : `The merger could not produce a valid assessment for this PR. Review and merge manually.`
+    await this.notificationService.raise(workspaceId, {
+      type: 'merge_review',
+      blockId: block.id,
+      executionId: instance.id,
+      title: `Review PR for "${block.title}"`,
+      body,
+      payload: {
+        ...(assessment ? { assessment } : {}),
+        ...(block.pullRequest?.url ? { prUrl: block.pullRequest.url } : {}),
+        pipelineName: instance.pipelineName,
+      },
+    })
+  }
+
+  /** Raise a `pipeline_complete` notification for a no-merger run awaiting confirmation. */
+  private async raisePipelineComplete(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    block: Block,
+  ): Promise<void> {
+    if (!this.notificationService) return
+    await this.notificationService.raise(workspaceId, {
+      type: 'pipeline_complete',
+      blockId: block.id,
+      executionId: instance.id,
+      title: `Confirm "${block.title}" is complete`,
+      body:
+        `The "${instance.pipelineName}" pipeline finished and opened a PR, but it has no ` +
+        `merger step. Review the work and confirm it as complete (this merges the PR).`,
+      payload: {
+        ...(block.pullRequest?.url ? { prUrl: block.pullRequest.url } : {}),
+        pipelineName: instance.pipelineName,
+      },
+    })
   }
 
   /**

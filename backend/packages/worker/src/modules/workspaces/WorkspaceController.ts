@@ -63,7 +63,21 @@ export function workspaceController(): Hono<AppEnv> {
     const bootstrapJobs = container.bootstrap
       ? await container.bootstrap.service.listJobs(workspaceId)
       : undefined
-    return c.json({ ...snapshot, spend, ...(bootstrapJobs ? { bootstrapJobs } : {}) })
+    // Open notifications + merge-preset library, so the board renders the inbox,
+    // per-block badges and the task preset picker on load. No-ops when unconfigured.
+    const notifications = container.notifications
+      ? await container.notifications.service.listOpen(workspaceId)
+      : undefined
+    const mergePresets = container.mergePresets
+      ? await container.mergePresets.service.list(workspaceId)
+      : undefined
+    return c.json({
+      ...snapshot,
+      spend,
+      ...(bootstrapJobs ? { bootstrapJobs } : {}),
+      ...(notifications ? { notifications } : {}),
+      ...(mergePresets ? { mergePresets } : {}),
+    })
   })
 
   app.patch('/workspaces/:workspaceId', jsonBody(renameWorkspaceSchema), async (c) => {

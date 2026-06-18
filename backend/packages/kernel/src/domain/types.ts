@@ -124,4 +124,16 @@ export type {
   RequirementReview,
   ReplyReviewItemInput,
   UpdateReviewItemStatusInput,
+  // CI gate / merge-policy shapes.
+  CiStepState,
+  MergeAssessment,
+  MergeThresholdPreset,
+  CreateMergePresetInput,
+  UpdateMergePresetInput,
+  // Notification shapes.
+  Notification,
+  NotificationType,
+  NotificationStatus,
+  NotificationPayload,
+  ResolveNotificationAction,
 } from '@cat-factory/contracts'

@@ -7,6 +7,8 @@ import {
   workspaceSchema,
 } from './entities'
 import { bootstrapJobSchema } from './bootstrap'
+import { notificationSchema } from './notifications'
+import { mergeThresholdPresetSchema } from './merge'
 
 // The full board snapshot returned by GET /workspaces/:id (and POST /workspaces).
 // It lives in its own module because it references both ./entities and
@@ -30,5 +32,17 @@ export const workspaceSnapshotSchema = v.object({
    * deployment-wide pricing/budget config), so it is optional on the wire.
    */
   spend: v.optional(spendStatusSchema),
+  /**
+   * Open human-actionable notifications for this workspace (PRs awaiting a merge
+   * decision, completed pipelines awaiting confirmation, CI that gave up). Carried
+   * in the snapshot so the board renders the inbox + badges on load. Attached by
+   * the worker, so optional on the wire.
+   */
+  notifications: v.optional(v.array(notificationSchema)),
+  /**
+   * The workspace's merge threshold presets (the library a task picks its
+   * auto-merge policy from). Attached by the worker, so optional on the wire.
+   */
+  mergePresets: v.optional(v.array(mergeThresholdPresetSchema)),
 })
 export type WorkspaceSnapshot = v.InferOutput<typeof workspaceSnapshotSchema>

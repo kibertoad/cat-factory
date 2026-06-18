@@ -1,4 +1,10 @@
-import type { Block, BootstrapJob, ExecutionInstance, WorkspaceEvent } from '@cat-factory/contracts'
+import type {
+  Block,
+  BootstrapJob,
+  ExecutionInstance,
+  Notification,
+  WorkspaceEvent,
+} from '@cat-factory/contracts'
 import type { ExecutionEventPublisher } from '@cat-factory/kernel'
 import type { DurableObjectNamespace } from '@cloudflare/workers-types'
 import type { WorkspaceEventsHub } from '../durable-objects/WorkspaceEventsHub'
@@ -41,6 +47,10 @@ export class DurableObjectEventPublisher implements ExecutionEventPublisher {
       block: block ?? null,
       at: Date.now(),
     })
+  }
+
+  async notificationChanged(workspaceId: string, notification: Notification): Promise<void> {
+    await this.publish(workspaceId, { type: 'notification', notification, at: Date.now() })
   }
 
   private async publish(workspaceId: string, event: WorkspaceEvent): Promise<void> {

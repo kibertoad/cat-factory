@@ -16,6 +16,8 @@
 
 import type { ExecutionInstance } from './execution'
 import type { BootstrapJob } from './bootstrap'
+import type { Notification } from './notifications'
+import type { MergeThresholdPreset } from './merge'
 
 /** Lifecycle of an architecture building block. */
 export type BlockStatus =
@@ -82,6 +84,8 @@ export interface Block {
   testTarget?: TestTarget
   /** the PR the block's implementer agent opened for its work; absent = none yet. */
   pullRequest?: PullRequestRef
+  /** task-only: selected merge threshold preset id; absent = workspace default. */
+  mergePresetId?: string
 }
 
 /**
@@ -120,6 +124,11 @@ export type AgentKind =
   | 'mocker'
   | 'business-documenter'
   | 'business-reviewer'
+  // The CI gate (a special, non-LLM step that polls checks + loops the fixer),
+  // the container agent that fixes failing CI, and the PR-scoring merger.
+  | 'ci'
+  | 'ci-fixer'
+  | 'merger'
 
 /** A draggable agent definition shown in the agent palette. */
 export interface AgentArchetype {
@@ -187,6 +196,10 @@ export interface WorkspaceSnapshot {
   bootstrapJobs?: BootstrapJob[]
   /** Current spend-safeguard status; absent on older servers. */
   spend?: SpendStatus
+  /** Open human-actionable notifications for the board inbox + badges. */
+  notifications?: Notification[]
+  /** The workspace's merge threshold presets (the task preset picker's options). */
+  mergePresets?: MergeThresholdPreset[]
 }
 
 /**
@@ -197,6 +210,7 @@ export type WorkspaceEvent =
   | { type: 'execution'; instance: ExecutionInstance; block: Block | null; at: number }
   | { type: 'board'; reason: string; at: number }
   | { type: 'bootstrap'; job: BootstrapJob; block: Block | null; at: number }
+  | { type: 'notification'; notification: Notification; at: number }
 
 /** Level-of-detail buckets driven by the canvas zoom level. Shallow → deep:
  * `far`/`mid`/`close` govern a service frame (chip → card → opened with tasks);
@@ -224,3 +238,5 @@ export type * from './scenarios'
 export type * from './bootstrap'
 export type * from './github'
 export type * from './accounts'
+export type * from './notifications'
+export type * from './merge'

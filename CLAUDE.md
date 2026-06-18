@@ -9,8 +9,9 @@ many files and are otherwise slow to re-derive.
 
 - **Worker tests fail on Windows** with `config wrangler validation failed` / 47 errors
   and "no tests" output. This is a pre-existing Windows-only wrangler issue, not caused
-  by code changes. Use `pnpm test:run` from `backend/packages/kernel` (or any non-worker
-  package) to verify logic changes; the worker integration suite only runs cleanly on Linux/macOS.
+  by code changes. Use `pnpm test:run` from `backend/packages/orchestration` (or any other
+  non-worker package with a vitest setup, e.g. `integrations`) to verify pure-logic changes;
+  the worker integration suite only runs cleanly on Linux/macOS.
 
 ## Layout
 
@@ -27,8 +28,22 @@ package/publish table.
   Published to npm; consumed by a deployment via `extends: ['@cat-factory/app']`.
 - `backend/packages/contracts` — Valibot wire contracts shared by SPA + Worker.
 - `backend/packages/prompt-fragments` — versioned best-practice prompt fragments.
-- `backend/packages/core` — framework-agnostic domain: module services
-  (`src/modules/*`), pure logic, and repository **ports** (`src/ports`).
+- The framework-agnostic domain is split across several published packages (there
+  is **no** `backend/packages/core` any more):
+  - `backend/packages/kernel` — shared vocabulary: the domain **types**
+    (`src/domain/types.ts`, re-exporting the contracts), pure logic + constants
+    (`src/domain/*`, e.g. `seed.ts`, `catalog.ts`), and **all repository/port
+    interfaces** (`src/ports/*`). Everything else imports its ports from here.
+  - `backend/packages/orchestration` — the delivery-workflow engine + domain
+    **composition root**: module services under `src/modules/*` (`execution`,
+    `bootstrap`, `pipelines`, `board`, `boardScan`, `requirements`,
+    `notifications`, `merge`) and `createCore()` in `src/container.ts`.
+  - `backend/packages/integrations` — opt-in integration services (GitHub,
+    documents, tasks, environments, runner pools) behind kernel ports.
+  - `backend/packages/agents` — agent catalog + prompt composition
+    (`systemPromptFor`/`userPromptFor`, the per-kind `ROLES`).
+  - `backend/packages/spend` — the spend safeguard; `backend/packages/workspaces`
+    — workspace + account services.
 - `backend/packages/worker` — `@cat-factory/worker`, the reusable Cloudflare Worker
   **library**: Hono controllers (`src/modules/*/?*Controller.ts`), D1 repos + infra
   (`src/infrastructure/*`), the DI composition root
@@ -69,7 +84,7 @@ package/publish table.
 This is the gold-standard pattern for long-running agent work. Anything new that
 runs an agent in a container should mirror it.
 
-1. `ExecutionService.start()` (core `modules/execution/ExecutionService.ts`)
+1. `ExecutionService.start()` (orchestration `src/modules/execution/ExecutionService.ts`)
    creates an `ExecutionInstance` with steps and hands off to the durable driver.
 2. `ExecutionWorkflow` (worker `infrastructure/workflows/ExecutionWorkflow.ts`) —
    one Cloudflare **Workflows** instance per run, addressed by execution id.
@@ -100,7 +115,7 @@ It mirrors the execution pattern above: dispatch → durable poll → push event
 - Trigger: SPA `components/bootstrap/BootstrapModal.vue` → `stores/bootstrap.ts`
   → `POST /workspaces/:ws/bootstrap/jobs`. The call returns **immediately** with a
   `running` job (the container keeps working in the background).
-- `BootstrapService.bootstrap()` (core `modules/bootstrap/BootstrapService.ts`):
+- `BootstrapService.bootstrap()` (orchestration `src/modules/bootstrap/BootstrapService.ts`):
   pre-flight GitHub connection → insert a `bootstrap_jobs` row as `running` →
   `repoBootstrapper.startBootstrap()` (dispatch, returns once accepted) →
   materialise a **provisional service frame** (a real `Block`, `level:'frame'`,
@@ -223,6 +238,57 @@ document planner) and returns the updated entity, which the SPA patches directly
   badge), `ui.requirementReviewBlockId` drives the modal. No stream event — the
   responses carry the updated review.
 
+## Merge lifecycle flow (CI gate → CI-fixer → merger → notifications)
+
+The tail of a build pipeline turns an open PR into a merged one — gated on **real**
+CI and a **real** GitHub merge, so a task is `done` only when its PR actually merged
+(the old bug: a task showed "merged" — `block.status === 'done'`, rendered by
+`TaskExecution.vue` — purely from a confidence score, while CI was red and the PR
+still open). Two new container agent kinds plus a special gate step implement it.
+
+- **`ci` step (special, like `deployer`)** — auto-inserted second-to-last in the
+  standard pipelines, after all code-producing steps. It is NOT an LLM/container
+  agent: `ExecutionService.evaluateCi` (orchestration) reads the PR head's GitHub
+  check runs via the `CiStatusProvider` port (worker `GitHubCiStatusProvider`),
+  aggregates them (`ci.logic.ts` → green / pending / failure / none), and:
+  green/none → finish + advance (polling **stops**); pending → `awaiting_ci` (the
+  durable driver sleeps `ciPollInterval` then calls `pollCi`); failure → dispatch a
+  `ci-fixer` container job (up to the task preset's `ciMaxAttempts`, default 10),
+  else raise a `ci_failed` notification + fail the run. `ExecutionWorkflow` gained an
+  `awaiting_ci` poll loop mirroring `awaiting_job`; a finished fixer job returns the
+  gate to `checking` (it never advances the step). Pass-through when no
+  `CiStatusProvider` is wired (tests / no GitHub).
+- **`ci-fixer` (container kind)** — `executor-harness/src/ci-fixer.ts` (POST
+  `/ci-fix`): clones the PR head branch, runs Pi to make CI pass, commits + pushes
+  back onto the **same** branch (no new PR). `ContainerAgentExecutor` builds the body
+  with `agentKind` overridden to `ci-fixer` and dispatch kind `ci-fix`.
+- **`merger` (container kind)** — the **last** standard-pipeline step.
+  `executor-harness/src/merger.ts` (POST `/merge`) clones the PR head branch, scores
+  the diff vs base (complexity / risk / impact, each 0..1) and returns ONLY a JSON
+  assessment — it makes **no** commits. `ExecutionService.resolveMergerStep` parses
+  the assessment, compares it to the task's resolved **merge threshold preset**, and
+  either merges for real (the `PullRequestMerger` port → worker
+  `GitHubPullRequestMerger` → `GitHubClient.mergePullRequest` → block `done`) or
+  raises a `merge_review` notification leaving the block `pr_ready`. A pipeline with
+  **no** merger raises a `pipeline_complete` notification (confirm + merge) instead of
+  auto-`done`.
+- **Merge threshold presets** — a per-workspace library
+  (`merge_threshold_presets`, migration 0024; `MergePresetService` +
+  `D1MergePresetRepository`; `GET|POST|PATCH|DELETE /workspaces/:ws/merge-presets`).
+  A task selects one via `Block.mergePresetId` (the inspector dropdown in
+  `TaskModelSettings.vue`); none → the workspace default (lazily seeded from
+  `DEFAULT_MERGE_PRESET` in kernel). Carries the auto-merge ceilings + `ciMaxAttempts`.
+- **Notifications** — a first-class, human-actionable surface (NOT a mid-pipeline
+  gate). `notifications` table (migration 0024) + `NotificationService`
+  (orchestration) behind a `NotificationChannel` port: the canonical row is persisted
+  + the in-app `notification` `WorkspaceEvent` is pushed (worker
+  `InAppNotificationChannel` over `DurableObjectEventPublisher.notificationChanged`),
+  with `CompositeNotificationChannel` as the seam for **future email/Slack** channels.
+  `NotificationController` mounts `GET /notifications`, `POST /notifications/:id/act`
+  (merge / confirm / retry by type), `POST …/dismiss`. SPA: `stores/notifications.ts`
+  + the toolbar `NotificationsInbox.vue`; the snapshot carries open notifications +
+  the preset library.
+
 ## Unified agent runs (failure + retry surface)
 
 Both container-backed flows — task `execution` and repo `bootstrap` — persist to
@@ -259,7 +325,7 @@ blockId)` (worker `infrastructure/container.ts`): find the `github_repos` row
   bootstrapped repo a board service that tasks target correctly, the repo
   projection row must be linked to the new frame's block id.
 - A workspace has exactly **one** GitHub installation but may have **many** repos.
-- `BoardScanService.spawnBlueprint()` (core `modules/boardScan/BoardScanService.ts`)
+- `BoardScanService.spawnBlueprint()` (orchestration `src/modules/boardScan/BoardScanService.ts`)
   materialises a scanned repo as frame→modules→tasks but does **not** link the
   repo to the frame today.
 - Drag-drop: `useBlockDrag.ts` (`reparentAt()`) → `POST /blocks/:id/reparent` →
@@ -268,7 +334,8 @@ blockId)` (worker `infrastructure/container.ts`): find the `github_repos` row
 
 ## Conventions
 
-- Hexagonal layering: controllers (worker) → services (core) → ports; infra
+- Hexagonal layering: controllers (worker) → services (orchestration/integrations)
+  → ports (kernel); infra
   adapters implement ports and are wired in `container.ts` via constructor
   injection of a single `dependencies` object. Opt-in integrations
   (GitHub / environments / board-scan / bootstrap) wire only when configured.

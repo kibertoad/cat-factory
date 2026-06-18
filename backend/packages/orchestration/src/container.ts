@@ -30,6 +30,13 @@ import type { BootstrapRunner } from '@cat-factory/kernel'
 import type { RepoBlueprintRepository } from '@cat-factory/kernel'
 import type { RepoScanner } from '@cat-factory/kernel'
 import type { RequirementReviewRepository } from '@cat-factory/kernel'
+import type {
+  CiStatusProvider,
+  MergePresetRepository,
+  NotificationChannel,
+  NotificationRepository,
+  PullRequestMerger,
+} from '@cat-factory/kernel'
 import type { SecretCipher } from '@cat-factory/kernel'
 import type { FragmentSourceRepository, PromptFragmentRepository } from '@cat-factory/kernel'
 import type { FragmentSelector } from '@cat-factory/kernel'
@@ -72,6 +79,8 @@ import {
 import { BootstrapService } from './modules/bootstrap/BootstrapService'
 import { BoardScanService } from './modules/boardScan/BoardScanService'
 import { RequirementReviewService } from './modules/requirements/RequirementReviewService'
+import { NotificationService } from './modules/notifications/NotificationService'
+import { MergePresetService } from './modules/merge/MergePresetService'
 import { BLUEPRINT_PIPELINE_ID } from '@cat-factory/kernel'
 import {
   FragmentLibraryService,
@@ -265,6 +274,24 @@ export interface CoreDependencies {
   fragmentSourceRepository?: FragmentSourceRepository
   fragmentSelector?: FragmentSelector
   resolveFragmentInstallationId?: ResolveFragmentInstallationId
+
+  // ---- Notifications + merge lifecycle (optional; wired when configured) ----
+  // The notifications subsystem (the in-app inbox + the board's human-action
+  // surfaces) assembles whenever `notificationRepository` is present (the worker
+  // wires it unconditionally). `notificationChannel` is the delivery extension
+  // seam — in-app push today, email/Slack later via CompositeNotificationChannel;
+  // absent → the rows still persist but nothing is pushed. The CI gate / real
+  // merge / per-task thresholds are each optional within the engine, mirroring the
+  // GitHub default-off convention: without them the engine degrades gracefully
+  // (CI gate passes through, `done` is a board-only flip, the built-in preset is used).
+  notificationRepository?: NotificationRepository
+  notificationChannel?: NotificationChannel
+  /** Reads a block's PR CI checks so the `ci` step can gate on green CI. */
+  ciStatusProvider?: CiStatusProvider
+  /** Performs the real GitHub merge so a task's `done` means "PR merged". */
+  pullRequestMerger?: PullRequestMerger
+  /** Resolves a task's merge threshold preset (auto-merge ceilings + CI attempt budget). */
+  mergePresetRepository?: MergePresetRepository
 }
 
 /** The GitHub integration's services, present only when the app is configured. */
@@ -323,6 +350,16 @@ export interface RequirementsModule {
   service: RequirementReviewService
 }
 
+/** The notifications feature's service, present only when its repository is wired. */
+export interface NotificationsModule {
+  service: NotificationService
+}
+
+/** The merge-preset feature's service, present only when its repository is wired. */
+export interface MergePresetsModule {
+  service: MergePresetService
+}
+
 /** The prompt-fragment library's services, present only when configured (ADR 0006). */
 export interface FragmentLibraryModule {
   /** Per-tier CRUD + the merged-catalog resolver (also the run-path FragmentResolver). */
@@ -354,6 +391,10 @@ export interface Core {
   boardScan?: BoardScanModule
   /** Present only when the requirements-review repository is wired (see CoreDependencies). */
   requirements?: RequirementsModule
+  /** Present only when the notifications repository is wired (see CoreDependencies). */
+  notifications?: NotificationsModule
+  /** Present only when the merge-preset repository is wired (see CoreDependencies). */
+  mergePresets?: MergePresetsModule
   /** Present only when the prompt-fragment library is configured (see CoreDependencies). */
   fragmentLibrary?: FragmentLibraryModule
 }
@@ -703,6 +744,40 @@ function createFragmentLibraryModule(deps: CoreDependencies): FragmentLibraryMod
   return { libraryService, sourceService }
 }
 
+/**
+ * Assemble the notifications module when its repository is present (the worker
+ * wires it unconditionally). The delivery channel is optional within the module —
+ * without it the rows still persist (the inbox + snapshot work) but nothing is
+ * pushed; the worker wires the in-app channel, and email/Slack compose in later.
+ */
+function createNotificationsModule(
+  deps: CoreDependencies,
+): NotificationsModule | undefined {
+  const { notificationRepository } = deps
+  if (!notificationRepository) return undefined
+  const service = new NotificationService({
+    notificationRepository,
+    workspaceRepository: deps.workspaceRepository,
+    idGenerator: deps.idGenerator,
+    clock: deps.clock,
+    channel: deps.notificationChannel,
+  })
+  return { service }
+}
+
+/** Assemble the merge-preset module when its repository is present. */
+function createMergePresetsModule(deps: CoreDependencies): MergePresetsModule | undefined {
+  const { mergePresetRepository } = deps
+  if (!mergePresetRepository) return undefined
+  const service = new MergePresetService({
+    mergePresetRepository,
+    workspaceRepository: deps.workspaceRepository,
+    idGenerator: deps.idGenerator,
+    clock: deps.clock,
+  })
+  return { service }
+}
+
 export function createCore(dependencies: CoreDependencies): Core {
   const workRunner = dependencies.workRunner ?? new NoopWorkRunner()
   const executionEventPublisher = dependencies.executionEventPublisher ?? new NoopEventPublisher()
@@ -727,6 +802,10 @@ export function createCore(dependencies: CoreDependencies): Core {
   // Built before the execution engine so a `blueprints` step can reconcile its
   // decomposition onto the board through it (when the module is configured).
   const boardScan = createBoardScanModule(dependencies, boardService)
+  // Built before the execution engine so it can raise merge-review / CI-failed /
+  // pipeline-complete notifications during a run (when the module is configured).
+  const notifications = createNotificationsModule(dependencies)
+  const mergePresets = createMergePresetsModule(dependencies)
 
   const executionService = new ExecutionService({
     ...dependencies,
@@ -739,6 +818,7 @@ export function createCore(dependencies: CoreDependencies): Core {
     // tenant catalog + runs selection); injected so every agent kind benefits.
     fragmentResolver: fragmentLibrary?.libraryService,
     blueprintReconciler: boardScan?.service,
+    notificationService: notifications?.service,
   })
 
   const github = createGitHubModule(dependencies)
@@ -767,6 +847,8 @@ export function createCore(dependencies: CoreDependencies): Core {
     ...(bootstrap ? { bootstrap } : {}),
     ...(boardScan ? { boardScan } : {}),
     ...(requirements ? { requirements } : {}),
+    ...(notifications ? { notifications } : {}),
+    ...(mergePresets ? { mergePresets } : {}),
     ...(fragmentLibrary ? { fragmentLibrary } : {}),
   }
 }

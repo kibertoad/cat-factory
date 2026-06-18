@@ -6,6 +6,31 @@ const props = defineProps<{ block: Block }>()
 
 const board = useBoardStore()
 const models = useModelsStore()
+const mergePresets = useMergePresetsStore()
+
+// ---- merge policy preset ---------------------------------------------------
+// Which merge threshold preset governs this task's auto-merge decision + CI-fixer
+// budget. None selected → the workspace default preset.
+const selectedPreset = computed(() => mergePresets.resolve(props.block.mergePresetId))
+const presetMenu = computed(() => [
+  [
+    {
+      label: mergePresets.defaultPreset
+        ? `Default (${mergePresets.defaultPreset.name})`
+        : 'Workspace default',
+      icon: 'i-lucide-rotate-ccw',
+      onSelect: () => setPreset(''),
+    },
+    ...mergePresets.presets.map((p) => ({
+      label: p.name,
+      icon: 'i-lucide-git-merge',
+      onSelect: () => setPreset(p.id),
+    })),
+  ],
+])
+function setPreset(id: string) {
+  board.updateBlock(props.block.id, { mergePresetId: id })
+}
 
 // ---- model selection -------------------------------------------------------
 // The model picked for this block (resolved against the deployment's effective
@@ -92,6 +117,35 @@ const confidencePct = computed(() =>
         Default — runs the Qwen model ({{
           models.getModel('qwen')?.providerLabel ?? 'Cloudflare'
         }}).
+      </div>
+    </div>
+
+    <!-- merge policy preset -->
+    <div>
+      <div class="mb-1 flex items-center justify-between">
+        <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+          Merge policy
+        </span>
+        <UDropdownMenu :items="presetMenu">
+          <UButton
+            size="xs"
+            variant="ghost"
+            color="neutral"
+            icon="i-lucide-git-merge"
+            trailing-icon="i-lucide-chevron-down"
+          />
+        </UDropdownMenu>
+      </div>
+      <div v-if="selectedPreset" class="text-[11px] text-slate-400">
+        <span class="text-slate-300">{{ selectedPreset.name }}</span>
+        — auto-merge when complexity ≤ {{ Math.round(selectedPreset.maxComplexity * 100) }}%, risk ≤
+        {{ Math.round(selectedPreset.maxRisk * 100) }}%, impact ≤
+        {{ Math.round(selectedPreset.maxImpact * 100) }}%; up to
+        {{ selectedPreset.ciMaxAttempts }} CI-fix attempts.
+        <span v-if="!block.mergePresetId" class="text-slate-500">(workspace default)</span>
+      </div>
+      <div v-else class="text-[11px] text-slate-500">
+        No preset configured — the merger raises a review notification for every PR.
       </div>
     </div>
 

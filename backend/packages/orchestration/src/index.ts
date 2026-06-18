@@ -13,6 +13,25 @@ export {
   type ExecutionServiceDependencies,
 } from './modules/execution/ExecutionService'
 export type { AdvanceOptions, AdvanceResult } from './modules/execution/advance'
+export {
+  aggregateCi,
+  isCiGreen,
+  describeFailingChecks,
+  CI_AGENT_KIND,
+  CI_FIXER_AGENT_KIND,
+  MERGER_AGENT_KIND,
+  type CiVerdict,
+} from './modules/execution/ci.logic'
+
+export {
+  NotificationService,
+  type NotificationServiceDependencies,
+  type RaiseNotificationInput,
+} from './modules/notifications/NotificationService'
+export {
+  MergePresetService,
+  type MergePresetServiceDependencies,
+} from './modules/merge/MergePresetService'
 
 export {
   BootstrapService,
@@ -43,6 +62,8 @@ export {
   type BootstrapModule,
   type BoardScanModule,
   type RequirementsModule,
+  type NotificationsModule,
+  type MergePresetsModule,
   type FragmentLibraryModule,
   createCore,
 } from './container'

@@ -19,6 +19,13 @@ export interface FakeAgentOptions {
    * board reconcile can be exercised without a real container.
    */
   blueprintService?: unknown
+  /**
+   * The assessment the `merger` step reports. When omitted, the fake derives one
+   * from `confidence` so existing tests keep their semantics: high confidence
+   * (≥ 0.8) yields a within-threshold assessment (auto-merge → `done`), and low
+   * confidence yields a severe assessment (raise `merge_review` → `pr_ready`).
+   */
+  mergeAssessment?: { complexity: number; risk: number; impact: number; rationale: string }
 }
 
 /**
@@ -52,12 +59,34 @@ export class FakeAgentExecutor implements AgentExecutor {
       }
     }
 
+    const confidence = this.options.confidence ?? 1
+
+    // The `merger` step returns a PR assessment the engine compares to the task's
+    // thresholds. Derive it from `confidence` (unless explicitly supplied) so the
+    // old auto-merge-vs-PR semantics carry over: high confidence → within-threshold
+    // (auto-merge), low confidence → severe (raise a review notification).
+    if (context.agentKind === 'merger') {
+      const severe = confidence < 0.8
+      const mergeAssessment =
+        this.options.mergeAssessment ??
+        (severe
+          ? { complexity: 1, risk: 1, impact: 1, rationale: 'fake: low confidence' }
+          : { complexity: 0, risk: 0, impact: 0, rationale: 'fake: high confidence' })
+      return {
+        output: `[merger] assessed "${context.block.title}"`,
+        model: 'fake',
+        confidence: context.isFinalStep ? confidence : undefined,
+        usage: this.options.usage,
+        mergeAssessment,
+      }
+    }
+
     // Surface revision feedback so a "request changes" re-run can be asserted.
     const revisionSuffix = context.revision ? ` [revised: ${context.revision.feedback}]` : ''
     return {
       output: `[${context.agentKind}] processed "${context.block.title}"${revisionSuffix}`,
       model: 'fake',
-      confidence: context.isFinalStep ? (this.options.confidence ?? 1) : undefined,
+      confidence: context.isFinalStep ? confidence : undefined,
       usage: this.options.usage,
       // Mimic the container "implementer" agent opening a PR for repo-operating work.
       ...(this.options.pullRequest ? { pullRequest: this.options.pullRequest } : {}),

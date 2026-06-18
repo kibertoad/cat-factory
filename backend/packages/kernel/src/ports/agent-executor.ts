@@ -154,6 +154,14 @@ export interface AgentRunResult {
    */
   blueprintService?: unknown
   /**
+   * A `merger` step's structured PR assessment (complexity / risk / impact +
+   * rationale). The engine validates it, compares the scores against the task's
+   * resolved merge preset, and either performs a real GitHub merge or raises a
+   * `merge_review` notification. Carried as `unknown` so the port stays free of
+   * the contracts schema; the engine parses it before use.
+   */
+  mergeAssessment?: unknown
+  /**
    * Tokens the model consumed for this call. Reported by inline LLM executors so
    * the spend safeguard can meter usage; absent for the container executor (whose
    * proxy meters tokens itself, to avoid double-counting) and test fakes.
