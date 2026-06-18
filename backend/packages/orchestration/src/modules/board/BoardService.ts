@@ -98,10 +98,7 @@ export class BoardService {
    * dropped on the frame. The frontend's drag-drop path uses {@link addFrame};
    * this is the "import an existing repo as a service" button.
    */
-  async addServiceFromRepo(
-    workspaceId: string,
-    input: AddServiceFromRepoInput,
-  ): Promise<Block> {
+  async addServiceFromRepo(workspaceId: string, input: AddServiceFromRepoInput): Promise<Block> {
     await this.requireWorkspace(workspaceId)
     if (!this.repoProjectionRepository) {
       throw new ValidationError('GitHub integration is not configured')
@@ -227,6 +224,17 @@ export class BoardService {
     const doomed = descendantIds(blocks, id)
 
     await this.executionRepository.deleteByBlock(workspaceId, id)
+    // Unlink any repo backing a doomed service frame so the repo becomes
+    // addable again (otherwise its github_repos.block_id dangles to a deleted
+    // block: the repo shows "already on board" yet nothing renders it).
+    if (this.repoProjectionRepository) {
+      const repos = await this.repoProjectionRepository.list(workspaceId)
+      for (const repo of repos) {
+        if (repo.blockId && doomed.has(repo.blockId)) {
+          await this.repoProjectionRepository.linkBlock(workspaceId, repo.githubId, null)
+        }
+      }
+    }
     await this.blockRepository.deleteMany(workspaceId, [...doomed])
 
     for (const b of blocks) {

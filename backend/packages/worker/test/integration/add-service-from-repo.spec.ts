@@ -28,7 +28,10 @@ function clientWithRepo(installationId: number): FakeGitHubClient {
 describe('add service from existing repo', () => {
   it('creates a ready service frame linked to a repo the App can access', async () => {
     const installationId = uniqueInstallationId()
-    const app = makeApp(new FakeAgentExecutor(), githubDeps({ client: clientWithRepo(installationId) }))
+    const app = makeApp(
+      new FakeAgentExecutor(),
+      githubDeps({ client: clientWithRepo(installationId) }),
+    )
     const { workspace } = await app.createWorkspace()
     const ws = workspace.id
     await app.call('POST', `/workspaces/${ws}/github/connect`, { installationId })
@@ -52,7 +55,10 @@ describe('add service from existing repo', () => {
 
   it('rejects importing a repo that is already on the board', async () => {
     const installationId = uniqueInstallationId()
-    const app = makeApp(new FakeAgentExecutor(), githubDeps({ client: clientWithRepo(installationId) }))
+    const app = makeApp(
+      new FakeAgentExecutor(),
+      githubDeps({ client: clientWithRepo(installationId) }),
+    )
     const { workspace } = await app.createWorkspace()
     const ws = workspace.id
     await app.call('POST', `/workspaces/${ws}/github/connect`, { installationId })
@@ -62,13 +68,47 @@ describe('add service from existing repo', () => {
     })
     expect(first.status).toBe(201)
 
-    const again = await app.call('POST', `/workspaces/${ws}/blocks/from-repo`, { repoGithubId: 101 })
+    const again = await app.call('POST', `/workspaces/${ws}/blocks/from-repo`, {
+      repoGithubId: 101,
+    })
     expect(again.status).toBe(422)
+  })
+
+  it('unlinks the repo when its service frame is deleted, so it can be re-added', async () => {
+    const installationId = uniqueInstallationId()
+    const app = makeApp(
+      new FakeAgentExecutor(),
+      githubDeps({ client: clientWithRepo(installationId) }),
+    )
+    const { workspace } = await app.createWorkspace()
+    const ws = workspace.id
+    await app.call('POST', `/workspaces/${ws}/github/connect`, { installationId })
+
+    const first = await app.call<Block>('POST', `/workspaces/${ws}/blocks/from-repo`, {
+      repoGithubId: 101,
+    })
+    expect(first.status).toBe(201)
+
+    // Delete the service frame — the repo link must be cleared, not left dangling.
+    const del = await app.call('DELETE', `/workspaces/${ws}/blocks/${first.body.id}`)
+    expect(del.status).toBe(204)
+    const repos = await app.call<GitHubRepo[]>('GET', `/workspaces/${ws}/github/repos`)
+    expect(repos.body.find((r) => r.githubId === 101)?.blockId).toBeNull()
+
+    // The repo is addable again now that nothing claims it.
+    const again = await app.call<Block>('POST', `/workspaces/${ws}/blocks/from-repo`, {
+      repoGithubId: 101,
+    })
+    expect(again.status).toBe(201)
+    expect(again.body.id).not.toBe(first.body.id)
   })
 
   it('409s when the App cannot access the requested repo', async () => {
     const installationId = uniqueInstallationId()
-    const app = makeApp(new FakeAgentExecutor(), githubDeps({ client: clientWithRepo(installationId) }))
+    const app = makeApp(
+      new FakeAgentExecutor(),
+      githubDeps({ client: clientWithRepo(installationId) }),
+    )
     const { workspace } = await app.createWorkspace()
     const ws = workspace.id
     await app.call('POST', `/workspaces/${ws}/github/connect`, { installationId })

@@ -77,6 +77,12 @@ const statusLabel = computed(() =>
 
 const runnable = computed(() => (block.value ? board.isRunnable(block.value.id) : false))
 
+// The delete control names what it removes, so selecting a task and deleting it
+// reads as "Delete task" rather than ambiguously removing the whole service.
+const deleteLabel = computed(() =>
+  isTask.value ? 'Delete task' : level.value === 'module' ? 'Delete module' : 'Delete service',
+)
+
 // A task is "started" once a pipeline has been launched on it (it has an
 // execution, or has moved past the pre-run states). Until then the user can keep
 // editing its title + description; afterwards those details are locked. Non-task
@@ -331,8 +337,11 @@ const runningRun = computed(() => {
           size="sm"
           icon="i-lucide-trash-2"
           class="ml-auto"
+          :title="deleteLabel"
           @click="remove"
-        />
+        >
+          {{ deleteLabel }}
+        </UButton>
       </div>
     </div>
   </div>
