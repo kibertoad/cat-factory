@@ -1,0 +1,75 @@
+import { describe, it, expect } from 'vitest'
+import { parseOutputOutline } from '~/utils/agentOutput'
+
+describe('parseOutputOutline', () => {
+  it('splits on headings and builds a ToC', () => {
+    const out = parseOutputOutline(
+      ['# Overview', 'intro text', '', '## Findings', '- a', '- b'].join('\n'),
+    )
+    expect(out.hasToc).toBe(true)
+    expect(out.minDepth).toBe(1)
+    expect(out.sections.map((s) => s.title)).toEqual(['Overview', 'Findings'])
+    expect(out.sections[0]!.depth).toBe(1)
+    expect(out.sections[1]!.depth).toBe(2)
+    const findings = out.sections[1]!.bodyHtml
+    expect(findings).toContain('<ul>')
+    expect(findings).toContain('<li>a</li>')
+  })
+
+  it('keeps text before the first heading as an untitled preamble (no ToC entry)', () => {
+    const out = parseOutputOutline('loose intro\n\n## Section')
+    expect(out.sections[0]!.title).toBe('')
+    expect(out.sections[0]!.depth).toBe(0)
+    expect(out.sections[0]!.bodyHtml).toContain('loose intro')
+    expect(out.sections.filter((s) => s.depth > 0)).toHaveLength(1)
+  })
+
+  it('reports no ToC when there are no headings', () => {
+    const out = parseOutputOutline('just a paragraph of prose')
+    expect(out.hasToc).toBe(false)
+    expect(out.sections).toHaveLength(1)
+  })
+
+  it('gives every section a unique id even with duplicate titles', () => {
+    const out = parseOutputOutline('## Risks\na\n## Risks\nb')
+    const ids = out.sections.map((s) => s.id)
+    expect(new Set(ids).size).toBe(ids.length)
+  })
+
+  it('captures fenced code verbatim without treating its lines as headings', () => {
+    const out = parseOutputOutline('## Code\n```ts\nconst x = 1\n# not a heading\n```')
+    expect(out.sections).toHaveLength(1)
+    const body = out.sections[0]!.bodyHtml
+    expect(body).toContain('<pre>')
+    expect(body).toContain('# not a heading')
+  })
+
+  it('escapes raw HTML rather than injecting it (html: false)', () => {
+    const out = parseOutputOutline('## S\n<img src=x onerror=alert(1)>')
+    const body = out.sections[0]!.bodyHtml
+    expect(body).not.toContain('<img')
+    expect(body).toContain('&lt;img')
+  })
+
+  it('renders inline marks and decorates links to open safely in a new tab', () => {
+    const out = parseOutputOutline('## S\nsee **bold** and [site](https://example.com)')
+    const body = out.sections[0]!.bodyHtml
+    expect(body).toContain('<strong>bold</strong>')
+    expect(body).toContain('href="https://example.com"')
+    expect(body).toContain('target="_blank"')
+    expect(body).toContain('rel="noopener noreferrer"')
+  })
+
+  it('does not create a link for javascript: URLs (markdown-it validateLink)', () => {
+    // validateLink rejects the scheme, so it stays inert plain text — never an <a>.
+    const out = parseOutputOutline('## S\n[x](javascript:alert(1))')
+    const body = out.sections[0]!.bodyHtml
+    expect(body).not.toContain('<a ')
+    expect(body).not.toContain('href')
+  })
+
+  it('tolerates empty / nullish input', () => {
+    expect(parseOutputOutline('').sections).toHaveLength(0)
+    expect(parseOutputOutline(undefined as unknown as string).sections).toHaveLength(0)
+  })
+})

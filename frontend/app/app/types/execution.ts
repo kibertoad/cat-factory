@@ -106,6 +106,10 @@ export interface PipelineStep {
   model?: string
   /** prompt-fragment library ids folded into this step (manual ∪ selector pick). */
   selectedFragmentIds?: string[]
+  /** epoch ms the step first began executing (transitioned to `working`). */
+  startedAt?: number | null
+  /** epoch ms the step finished (transitioned to `done`); with `startedAt` gives duration. */
+  finishedAt?: number | null
 }
 
 /** A pipeline instance running against one block. */

@@ -7,6 +7,7 @@ import PipelineBuilder from '~/components/pipeline/PipelineBuilder.vue'
 import InspectorPanel from '~/components/panels/InspectorPanel.vue'
 import DecisionModal from '~/components/panels/DecisionModal.vue'
 import ApprovalModal from '~/components/panels/ApprovalModal.vue'
+import AgentStepDetail from '~/components/panels/AgentStepDetail.vue'
 import BlockFocusView from '~/components/focus/BlockFocusView.vue'
 import DocumentSourceConnectModal from '~/components/documents/DocumentSourceConnectModal.vue'
 import DocumentImportModal from '~/components/documents/DocumentImportModal.vue'
@@ -84,6 +85,7 @@ watch(
       <PipelineBuilder />
       <DecisionModal />
       <ApprovalModal />
+      <AgentStepDetail />
       <DocumentSourceConnectModal />
       <DocumentImportModal />
       <SpawnPreviewModal />

@@ -57,6 +57,13 @@ export const useUiStore = defineStore('ui', () => {
   // gaps / clarifications) to show, or null when closed.
   const requirementReviewBlockId = ref<string | null>(null)
 
+  // Agent step-detail overlay: which pipeline step (a run instance + step index)
+  // a human is inspecting, or null when closed. The overlay resolves the step
+  // from the execution store so it stays live; it shows the step's metadata
+  // (model, state, progress, subtasks, …) and — when the agent produced prose —
+  // a reader for it (ToC + collapsible sections).
+  const stepDetail = ref<{ instanceId: string; stepIndex: number } | null>(null)
+
   /** Current canvas zoom (driven by Vue Flow viewport). */
   const zoom = ref(1)
 
@@ -183,6 +190,12 @@ export const useUiStore = defineStore('ui', () => {
   function closeRequirementReview() {
     requirementReviewBlockId.value = null
   }
+  function openStepDetail(instanceId: string, stepIndex: number) {
+    stepDetail.value = { instanceId, stepIndex }
+  }
+  function closeStepDetail() {
+    stepDetail.value = null
+  }
 
   return {
     selectedBlockId,
@@ -201,6 +214,7 @@ export const useUiStore = defineStore('ui', () => {
     githubOpen,
     fragmentLibraryOpen,
     requirementReviewBlockId,
+    stepDetail,
     zoom,
     lod,
     expandedFrames,
@@ -236,5 +250,7 @@ export const useUiStore = defineStore('ui', () => {
     closeFragmentLibrary,
     openRequirementReview,
     closeRequirementReview,
+    openStepDetail,
+    closeStepDetail,
   }
 })

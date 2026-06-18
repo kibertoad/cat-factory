@@ -1,0 +1,138 @@
+// Turn an agent's prose output (markdown) into a heading-delimited outline so it
+// can be read in the dedicated reader overlay: a navigable table of contents on
+// one side, collapsible sections on the other.
+//
+// Markdown → HTML is done by `markdown-it` (a mature CommonMark parser) with
+// `html: false`, so it is secure by default: any raw HTML in the agent's output
+// is escaped rather than injected, and its `validateLink` blocks dangerous URL
+// schemes — no separate sanitizer needed for the LLM-generated text we feed it.
+// This module only adds the one thing markdown-it doesn't: SEGMENTATION — split
+// the rendered document at each heading into sections we can collapse
+// independently and link from a ToC. That split is done over the parsed DOM, so
+// it is independent of markdown-it's token internals.
+import MarkdownIt from 'markdown-it'
+
+/** One heading-delimited section. `depth` 0 / empty `title` is the preamble that
+ * precedes the first heading (rendered, but never shown in the ToC). */
+export interface OutputSection {
+  id: string
+  depth: number
+  /** Plain-text heading, for the ToC. */
+  title: string
+  /** Inline-rendered heading HTML (code/bold/… preserved), for the section header. */
+  titleHtml: string
+  /** HTML of everything under this heading up to the next one. */
+  bodyHtml: string
+}
+
+export interface OutputOutline {
+  sections: OutputSection[]
+  /** True once there is at least one real heading worth a ToC entry. */
+  hasToc: boolean
+  /** Shallowest heading depth present, so the ToC can indent relative to it. */
+  minDepth: number
+}
+
+const md = new MarkdownIt({
+  html: false, // secure by default: escape raw HTML rather than render it
+  linkify: true, // turn bare URLs into links
+  breaks: true, // single newlines → <br>, matching how agents lay out prose
+  typographer: true,
+})
+
+const HEADINGS = new Set(['H1', 'H2', 'H3', 'H4', 'H5', 'H6'])
+const LINK_CLASS = 'text-indigo-300 underline decoration-indigo-500/40 hover:text-indigo-200'
+
+function slugify(title: string, used: Set<string>): string {
+  const base =
+    title
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '') || 'section'
+  let slug = base
+  let n = 2
+  while (used.has(slug)) slug = `${base}-${n++}`
+  used.add(slug)
+  return slug
+}
+
+/** Make every link open safely in a new tab and pick up the reader's link style. */
+function decorateLinks(root: HTMLElement): void {
+  for (const a of Array.from(root.querySelectorAll('a'))) {
+    a.setAttribute('target', '_blank')
+    a.setAttribute('rel', 'noopener noreferrer')
+    a.setAttribute('class', LINK_CLASS)
+  }
+}
+
+/** Build the heading-based outline for an agent's prose output. */
+export function parseOutputOutline(text: string): OutputOutline {
+  const source = text ?? ''
+  if (!source.trim()) return { sections: [], hasToc: false, minDepth: 1 }
+
+  const html = md.render(source)
+
+  // No DOM (SSR / non-browser): fall back to one un-segmented section. The reader
+  // overlay is client-only, so this path is effectively dead outside any runtime
+  // without `document`.
+  if (typeof document === 'undefined') {
+    return {
+      sections: [{ id: 'overview', depth: 0, title: '', titleHtml: '', bodyHtml: html }],
+      hasToc: false,
+      minDepth: 1,
+    }
+  }
+
+  const root = document.createElement('div')
+  root.innerHTML = html
+  decorateLinks(root)
+
+  const used = new Set<string>()
+  const sections: OutputSection[] = []
+  let current: OutputSection | null = null
+  let body: HTMLElement | null = null
+
+  const flush = () => {
+    if (current && body) current.bodyHtml = body.innerHTML.trim()
+    if (current) sections.push(current)
+  }
+
+  for (const node of Array.from(root.childNodes)) {
+    const el = node.nodeType === 1 ? (node as HTMLElement) : null
+    if (el && HEADINGS.has(el.tagName)) {
+      flush()
+      const title = (el.textContent ?? '').trim()
+      current = {
+        id: slugify(title, used),
+        depth: Number(el.tagName[1]),
+        title,
+        titleHtml: el.innerHTML,
+        bodyHtml: '',
+      }
+      body = document.createElement('div')
+    } else {
+      if (!current) {
+        // Content before the first heading → untitled preamble section.
+        current = {
+          id: slugify('overview', used),
+          depth: 0,
+          title: '',
+          titleHtml: '',
+          bodyHtml: '',
+        }
+        body = document.createElement('div')
+      }
+      body!.appendChild(node.cloneNode(true))
+    }
+  }
+  flush()
+
+  // A preamble that turned out to hold nothing renderable is noise — drop it.
+  const cleaned = sections.filter((s) => s.title || s.bodyHtml)
+  const headed = cleaned.filter((s) => s.depth > 0)
+  return {
+    sections: cleaned,
+    hasToc: headed.length > 0,
+    minDepth: headed.length ? Math.min(...headed.map((s) => s.depth)) : 1,
+  }
+}

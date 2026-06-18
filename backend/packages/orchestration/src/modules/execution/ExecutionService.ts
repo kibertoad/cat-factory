@@ -281,7 +281,7 @@ export class ExecutionService {
         return { kind: 'awaiting_decision', decisionId: pendingId }
       }
     }
-    step.state = 'working'
+    this.startStep(step)
 
     const block = await this.blockRepository.get(workspaceId, instance.blockId)
     if (!block) return { kind: 'noop' }
@@ -367,6 +367,30 @@ export class ExecutionService {
   }
 
   /**
+   * Transition a step into `working`, stamping its start time the first time it
+   * actually begins. Set-once so a Workflows replay (which re-runs `advance`)
+   * preserves the original start rather than resetting it on every replay. An
+   * explicit re-run clears `startedAt` first (see {@link requestStepChanges}) so
+   * the fresh attempt is timed from scratch.
+   */
+  private startStep(step: PipelineStep): void {
+    step.state = 'working'
+    if (step.startedAt == null) step.startedAt = this.clock.now()
+  }
+
+  /**
+   * Transition a step into `done`, stamping its finish time once. Set-once so the
+   * approval-gate flow (which re-asserts `done` after a human approves, long after
+   * the agent actually finished) keeps the agent's true completion time, and so a
+   * replay doesn't move it. With {@link startStep}'s `startedAt` this yields the
+   * step's execution duration.
+   */
+  private finishStep(step: PipelineStep): void {
+    step.state = 'done'
+    if (step.finishedAt == null) step.finishedAt = this.clock.now()
+  }
+
+  /**
    * Record a completed agent step's result and report what the driver should do
    * next: meter token usage, park on a raised decision, or persist the output
    * (and any opened PR) and either finish the run or advance to the next step.
@@ -411,7 +435,7 @@ export class ExecutionService {
     step.output = result.output ?? ''
     if (result.model) step.model = result.model
     step.progress = 1
-    step.state = 'done'
+    this.finishStep(step)
     // Live subtask counts only describe an in-flight run; drop them now the step
     // is done so the board doesn't show a stale "3/8" against a finished step.
     step.subtasks = undefined
@@ -467,7 +491,7 @@ export class ExecutionService {
     }
     instance.currentStep += 1
     const next = instance.steps[instance.currentStep]
-    if (next) next.state = 'working'
+    if (next) this.startStep(next)
     await this.updateBlockProgress(workspaceId, instance, 'in_progress')
     await this.executionRepository.upsert(workspaceId, instance)
     await this.emitInstance(workspaceId, instance)
@@ -848,7 +872,7 @@ export class ExecutionService {
     if (!step || !step.decision) throw new NotFoundError('Decision', decisionId)
 
     step.decision.chosen = choice
-    step.state = 'working'
+    this.startStep(step)
     if (instance.status === 'blocked') instance.status = 'running'
     await this.updateBlockProgress(workspaceId, instance, 'in_progress')
     await this.executionRepository.upsert(workspaceId, instance)
@@ -891,7 +915,7 @@ export class ExecutionService {
       step.approval.proposal = opts.proposal
     }
     step.approval.status = 'approved'
-    step.state = 'done'
+    this.finishStep(step)
     step.progress = 1
 
     const isFinalStep = stepIndex === instance.steps.length - 1
@@ -903,7 +927,7 @@ export class ExecutionService {
     } else {
       instance.currentStep = stepIndex + 1
       const next = instance.steps[instance.currentStep]
-      if (next) next.state = 'working'
+      if (next) this.startStep(next)
       if (instance.status === 'blocked') instance.status = 'running'
       await this.updateBlockProgress(workspaceId, instance, 'in_progress')
     }
@@ -943,7 +967,11 @@ export class ExecutionService {
     // Drop the live job handle so the re-run dispatches fresh work rather than
     // re-attaching to the finished job (async steps); inline steps ignore this.
     step.jobId = undefined
-    step.state = 'working'
+    // A requested re-run is a fresh execution: clear the prior timing so the next
+    // start/finish times this attempt rather than spanning the human gate wait.
+    step.startedAt = null
+    step.finishedAt = null
+    this.startStep(step)
     if (instance.status === 'blocked') instance.status = 'running'
     await this.executionRepository.upsert(workspaceId, instance)
     await this.workRunner.signalDecision(workspaceId, instance.id, approvalId, 'changes_requested')

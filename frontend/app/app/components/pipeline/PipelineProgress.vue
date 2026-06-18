@@ -9,6 +9,13 @@ const emit = defineEmits<{
 }>()
 
 const models = useModelsStore()
+const ui = useUiStore()
+
+// Clicking an agent opens its step-detail overlay — execution metadata (state,
+// timing, model, subtasks) plus the full prose output when the agent produced one.
+function openStep(i: number) {
+  ui.openStepDetail(props.instance.id, i)
+}
 
 /** Visual language for an individual agent's runtime state. */
 const STATE_META: Record<AgentState, { label: string; color: string; icon: string }> = {
@@ -72,14 +79,6 @@ const ITEM_ICON: Record<string, string> = {
   completed: 'i-lucide-check-circle-2',
   in_progress: 'i-lucide-loader-circle',
   pending: 'i-lucide-circle',
-}
-
-// Which agent's prose is expanded in full. Clicking an agent that produced output
-// (architect, researcher, reviewer, …) reveals the full text it wrote; clicking
-// again collapses it back to the teaser. Only one is open at a time.
-const expandedStep = ref<number | null>(null)
-function toggleStep(i: number) {
-  expandedStep.value = expandedStep.value === i ? null : i
 }
 </script>
 
@@ -151,10 +150,9 @@ function toggleStep(i: number) {
           ]"
         >
           <div
-            class="flex items-center gap-2"
-            :class="s.output ? 'cursor-pointer' : ''"
-            :title="s.output ? 'Show what this agent produced' : undefined"
-            @click="s.output && toggleStep(i)"
+            class="group flex cursor-pointer items-center gap-2"
+            :title="s.output ? 'View details & read output' : 'View step details'"
+            @click="openStep(i)"
           >
             <div
               class="flex h-8 w-8 items-center justify-center rounded-lg"
@@ -181,10 +179,8 @@ function toggleStep(i: number) {
               {{ STATE_META[s.state].label }}
             </span>
             <UIcon
-              v-if="s.output"
-              name="i-lucide-chevron-down"
-              class="h-4 w-4 shrink-0 text-slate-500 transition-transform"
-              :class="expandedStep === i ? 'rotate-180' : ''"
+              :name="s.output ? 'i-lucide-book-open-text' : 'i-lucide-info'"
+              class="h-4 w-4 shrink-0 text-slate-500 transition-colors group-hover:text-indigo-300"
             />
           </div>
 
@@ -251,23 +247,12 @@ function toggleStep(i: number) {
             {{ models.labelForRef(s.model) }}
           </p>
 
-          <!-- the prose this agent produced: a 3-line teaser, expanded in full
-               when the agent is clicked (architect/researcher/reviewer work) -->
-          <template v-if="s.output">
-            <pre
-              v-if="expandedStep === i"
-              class="mt-2 max-h-80 overflow-auto whitespace-pre-wrap rounded-md bg-slate-950/60 px-2 py-1.5 font-sans text-[11px] leading-relaxed text-slate-200"
-              >{{ s.output }}</pre
-            >
-            <p
-              v-else
-              class="mt-2 line-clamp-3 cursor-pointer rounded-md bg-slate-950/60 px-2 py-1.5 text-[11px] text-slate-300 hover:bg-slate-950"
-              title="Click to read the full output"
-              @click="toggleStep(i)"
-            >
-              {{ s.output }}
-            </p>
-          </template>
+          <!-- A one-line hint that the agent produced prose; the full output (and
+               all step metadata) lives in the step-detail overlay opened by click. -->
+          <p v-if="s.output" class="mt-2 flex items-center gap-1 text-[11px] text-slate-500">
+            <UIcon name="i-lucide-book-open-text" class="h-3 w-3 shrink-0" />
+            Click to read this agent’s output
+          </p>
 
           <!-- approval gate: review (and edit) the proposal before continuing -->
           <div v-if="s.approval && s.approval.status === 'pending'" class="mt-3">

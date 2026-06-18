@@ -26,11 +26,13 @@
     "@vue-flow/minimap": "^1.5.4",
     "@vue-flow/node-resizer": "^1.5.1",
     "@vueuse/core": "^14.3.0",
+    "markdown-it": "^14.1.0",
     "pinia": "^3.0.4",
     "pinia-plugin-persistedstate": "^4.7.1",
     "vue": "^3.5.38"
   },
   "devDependencies": {
+    "@types/markdown-it": "^14.1.2",
     "happy-dom": "^15.11.7",
     "nuxt": "^4.4.8",
     "typescript": "^6.0.3",

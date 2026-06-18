@@ -23,6 +23,12 @@ describe('execution engine', () => {
     expect(exec.steps.every((s) => s.state === 'done')).toBe(true)
     expect(exec.steps[0]!.output).toContain('[coder]')
     expect(exec.steps[0]!.model).toBe('fake')
+    // Each completed step records its execution timing (start ≤ finish).
+    for (const s of exec.steps) {
+      expect(typeof s.startedAt).toBe('number')
+      expect(typeof s.finishedAt).toBe('number')
+      expect(s.finishedAt!).toBeGreaterThanOrEqual(s.startedAt!)
+    }
 
     const snap = (await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)).body
     const task = snap.blocks.find((b) => b.id === 'task_login')!

@@ -318,6 +318,17 @@ export const pipelineStepSchema = v.object({
    * one; cleared once the job's result is recorded.
    */
   jobId: v.optional(v.string()),
+  /**
+   * Epoch ms the step first began executing (transitioned to `working`). Set once
+   * and never overwritten on subsequent state changes, so a re-run/replay keeps the
+   * original start. Absent until the step starts.
+   */
+  startedAt: v.optional(v.nullable(v.number())),
+  /**
+   * Epoch ms the step finished (transitioned to `done`). With {@link startedAt}
+   * this yields the step's execution duration. Absent until the step completes.
+   */
+  finishedAt: v.optional(v.nullable(v.number())),
 })
 export type PipelineStep = v.InferOutput<typeof pipelineStepSchema>
 
