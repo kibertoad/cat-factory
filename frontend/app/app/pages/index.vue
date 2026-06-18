@@ -6,6 +6,7 @@ import SpendWarningBanner from '~/components/layout/SpendWarningBanner.vue'
 import PipelineBuilder from '~/components/pipeline/PipelineBuilder.vue'
 import InspectorPanel from '~/components/panels/InspectorPanel.vue'
 import DecisionModal from '~/components/panels/DecisionModal.vue'
+import ApprovalModal from '~/components/panels/ApprovalModal.vue'
 import BlockFocusView from '~/components/focus/BlockFocusView.vue'
 import DocumentSourceConnectModal from '~/components/documents/DocumentSourceConnectModal.vue'
 import DocumentImportModal from '~/components/documents/DocumentImportModal.vue'
@@ -18,7 +19,6 @@ import AddServiceFromRepoModal from '~/components/github/AddServiceFromRepoModal
 import GitHubPanel from '~/components/github/GitHubPanel.vue'
 import GitHubOnboarding from '~/components/github/GitHubOnboarding.vue'
 import FragmentLibraryPanel from '~/components/fragments/FragmentLibraryPanel.vue'
-import RequirementReviewModal from '~/components/requirements/RequirementReviewModal.vue'
 
 const workspace = useWorkspaceStore()
 const github = useGitHubStore()
@@ -83,6 +83,7 @@ watch(
 
       <PipelineBuilder />
       <DecisionModal />
+      <ApprovalModal />
       <DocumentSourceConnectModal />
       <DocumentImportModal />
       <SpawnPreviewModal />
@@ -93,7 +94,6 @@ watch(
       <AddServiceFromRepoModal />
       <GitHubPanel />
       <FragmentLibraryPanel />
-      <RequirementReviewModal />
     </template>
 
     <!-- Backend unreachable / bootstrap failed -->

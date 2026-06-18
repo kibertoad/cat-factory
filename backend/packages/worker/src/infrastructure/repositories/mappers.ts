@@ -147,13 +147,16 @@ export interface PipelineRow {
   id: string
   name: string
   agent_kinds: string
+  /** Nullable JSON array of per-step approval gates (migration 0022). */
+  gates: string | null
 }
 
 export function rowToPipeline(row: PipelineRow): Pipeline {
   return {
     id: row.id,
     name: row.name,
-    agentKinds: JSON.parse(row.agent_kinds) as string[],
+    agentKinds: JSON.parse(row.agent_kinds) as Pipeline['agentKinds'],
+    ...(row.gates ? { gates: JSON.parse(row.gates) as boolean[] } : {}),
   }
 }
 

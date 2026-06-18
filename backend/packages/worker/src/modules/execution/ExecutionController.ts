@@ -1,4 +1,9 @@
-import { resolveDecisionSchema, startExecutionSchema } from '@cat-factory/contracts'
+import {
+  approveStepSchema,
+  requestStepChangesSchema,
+  resolveDecisionSchema,
+  startExecutionSchema,
+} from '@cat-factory/contracts'
 import { Hono } from 'hono'
 import type { AppEnv } from '../../infrastructure/http/types'
 import { param } from '../../infrastructure/http/params'
@@ -62,6 +67,41 @@ export function executionController(): Hono<AppEnv> {
           param(c, 'executionId'),
           param(c, 'decisionId'),
           c.req.valid('json').choice,
+        )
+      return c.json(instance)
+    },
+  )
+
+  // Approve a step's gated proposal (optionally with a human-edited proposal);
+  // the run advances to the next step carrying it forward as context.
+  app.post(
+    '/executions/:executionId/steps/:approvalId/approve',
+    jsonBody(approveStepSchema),
+    async (c) => {
+      const instance = await c
+        .get('container')
+        .executionService.approveStep(
+          param(c, 'workspaceId'),
+          param(c, 'executionId'),
+          param(c, 'approvalId'),
+          { proposal: c.req.valid('json').proposal },
+        )
+      return c.json(instance)
+    },
+  )
+
+  // Request changes on a gated proposal: the step re-runs with this feedback.
+  app.post(
+    '/executions/:executionId/steps/:approvalId/request-changes',
+    jsonBody(requestStepChangesSchema),
+    async (c) => {
+      const instance = await c
+        .get('container')
+        .executionService.requestStepChanges(
+          param(c, 'workspaceId'),
+          param(c, 'executionId'),
+          param(c, 'approvalId'),
+          c.req.valid('json').feedback,
         )
       return c.json(instance)
     },

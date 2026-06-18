@@ -200,6 +200,10 @@ export class ExecutionService {
       state: i === 0 ? 'working' : 'pending',
       progress: 0,
       decision: null,
+      // A gated step pauses for human approval once its proposal is ready (see
+      // recordStepResult). Copied from the pipeline definition at run start.
+      requiresApproval: pipeline.gates?.[i] ?? false,
+      approval: null,
     }))
     const instance: ExecutionInstance = {
       id: this.idGenerator.next('exec'),
@@ -267,10 +271,15 @@ export class ExecutionService {
     if (instance.status === 'paused') instance.status = 'running'
 
     if (step.state === 'waiting_decision') {
-      instance.status = 'blocked'
-      await this.executionRepository.upsert(workspaceId, instance)
-      await this.emitInstance(workspaceId, instance)
-      return { kind: 'awaiting_decision', decisionId: step.decision!.id }
+      // Parked on either an agent-raised decision or a human approval gate; both
+      // are addressed by the same durable event id.
+      const pendingId = step.decision?.id ?? step.approval?.id
+      if (pendingId) {
+        instance.status = 'blocked'
+        await this.executionRepository.upsert(workspaceId, instance)
+        await this.emitInstance(workspaceId, instance)
+        return { kind: 'awaiting_decision', decisionId: pendingId }
+      }
     }
     step.state = 'working'
 
@@ -421,6 +430,27 @@ export class ExecutionService {
     // reconcile it in place onto the run's service frame.
     if (result.blueprintService !== undefined) {
       await this.ingestBlueprint(workspaceId, instance.blockId, result.blueprintService)
+    }
+
+    // Human approval gate: a step the pipeline marked `requiresApproval` pauses
+    // here once its proposal is ready, so a human can review (and edit) it before
+    // the next step runs. We reuse the durable decision wait — returning
+    // `awaiting_decision` keyed by the approval id parks the run on the same named
+    // event the workflow already listens for; `approveStep` / `requestStepChanges`
+    // wake it. Never gates the final step (nothing downstream to feed) and is
+    // idempotent: an already-approved step falls through to advance/finish.
+    if (step.requiresApproval && !isFinalStep && step.approval?.status !== 'approved') {
+      step.approval = {
+        id: this.idGenerator.next('appr'),
+        status: 'pending',
+        proposal: step.output,
+      }
+      step.state = 'waiting_decision'
+      instance.status = 'blocked'
+      await this.updateBlockProgress(workspaceId, instance, 'blocked')
+      await this.executionRepository.upsert(workspaceId, instance)
+      await this.emitInstance(workspaceId, instance)
+      return { kind: 'awaiting_decision', decisionId: step.approval.id }
     }
 
     if (isFinalStep) {
@@ -604,6 +634,17 @@ export class ExecutionService {
       resolvedDecision: step.decision?.chosen
         ? { question: step.decision.question, chosen: step.decision.chosen }
         : null,
+      // A re-run triggered by "Request changes" on this step's approval gate:
+      // hand the agent its previous proposal plus the human's feedback so it
+      // revises rather than starting over.
+      ...(step.approval?.status === 'changes_requested'
+        ? {
+            revision: {
+              previousProposal: step.approval.proposal,
+              feedback: step.approval.feedback ?? '',
+            },
+          }
+        : {}),
     }
   }
 
@@ -815,6 +856,97 @@ export class ExecutionService {
     // of truth (so the backstop sweeper can still re-drive it); the signal is an
     // optimisation that lets the workflow continue immediately.
     await this.workRunner.signalDecision(workspaceId, instance.id, decisionId, choice)
+    await this.emitInstance(workspaceId, instance)
+    return instance
+  }
+
+  /**
+   * Approve a step's gated proposal: the run advances to the next step, carrying
+   * the (optionally human-edited) proposal forward as context. Mirrors
+   * {@link resolveDecision}'s durable-wake but *advances* the pipeline instead of
+   * re-running the step (the step is already done). Idempotent — re-approving an
+   * already-approved gate is a no-op.
+   */
+  async approveStep(
+    workspaceId: string,
+    executionId: string,
+    approvalId: string,
+    opts: { proposal?: string } = {},
+  ): Promise<ExecutionInstance> {
+    await this.requireWorkspace(workspaceId)
+    const instance = assertFound(
+      await this.executionRepository.get(workspaceId, executionId),
+      'Execution',
+      executionId,
+    )
+    const stepIndex = instance.steps.findIndex((s) => s.approval?.id === approvalId)
+    const step = instance.steps[stepIndex]
+    if (!step || !step.approval) throw new NotFoundError('Approval', approvalId)
+    if (step.approval.status === 'approved') return instance
+
+    // A human edit to the proposal replaces the agent's text, so the revised
+    // proposal is what downstream steps read (via priorOutputs).
+    if (opts.proposal !== undefined) {
+      step.output = opts.proposal
+      step.approval.proposal = opts.proposal
+    }
+    step.approval.status = 'approved'
+    step.state = 'done'
+    step.progress = 1
+
+    const isFinalStep = stepIndex === instance.steps.length - 1
+    if (isFinalStep) {
+      // A gate is never raised on the final step, but stay defensive: just finish.
+      instance.status = 'done'
+      await this.finalizeBlock(workspaceId, instance, undefined)
+      await this.stopRunContainer(workspaceId, instance.id)
+    } else {
+      instance.currentStep = stepIndex + 1
+      const next = instance.steps[instance.currentStep]
+      if (next) next.state = 'working'
+      if (instance.status === 'blocked') instance.status = 'running'
+      await this.updateBlockProgress(workspaceId, instance, 'in_progress')
+    }
+    await this.executionRepository.upsert(workspaceId, instance)
+    // Wake the parked durable run (the DB write above is the source of truth).
+    await this.workRunner.signalDecision(workspaceId, instance.id, approvalId, 'approved')
+    await this.emitInstance(workspaceId, instance)
+    return instance
+  }
+
+  /**
+   * Request changes on a step's gated proposal: the same step re-runs with the
+   * human's feedback (and its prior proposal) folded into the agent's context (see
+   * `buildAgentContext`). The run is left `running` on the same step; on the
+   * re-run's completion the gate is raised afresh.
+   */
+  async requestStepChanges(
+    workspaceId: string,
+    executionId: string,
+    approvalId: string,
+    feedback: string,
+  ): Promise<ExecutionInstance> {
+    await this.requireWorkspace(workspaceId)
+    const instance = assertFound(
+      await this.executionRepository.get(workspaceId, executionId),
+      'Execution',
+      executionId,
+    )
+    const step = instance.steps.find((s) => s.approval?.id === approvalId)
+    if (!step || !step.approval) throw new NotFoundError('Approval', approvalId)
+    if (step.approval.status === 'approved') {
+      throw new ConflictError(`Approval '${approvalId}' is already approved`)
+    }
+
+    step.approval.status = 'changes_requested'
+    step.approval.feedback = feedback
+    // Drop the live job handle so the re-run dispatches fresh work rather than
+    // re-attaching to the finished job (async steps); inline steps ignore this.
+    step.jobId = undefined
+    step.state = 'working'
+    if (instance.status === 'blocked') instance.status = 'running'
+    await this.executionRepository.upsert(workspaceId, instance)
+    await this.workRunner.signalDecision(workspaceId, instance.id, approvalId, 'changes_requested')
     await this.emitInstance(workspaceId, instance)
     return instance
   }

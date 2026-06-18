@@ -25,15 +25,26 @@ export interface GitHubInstallationServiceDependencies {
    * so the UI can drop the manual "create on GitHub" step. Absent → always false.
    */
   canCreateRepos?: (installation: GitHubInstallation) => boolean
+  /**
+   * Whether the installation actually granted `workflows: write` (read from the
+   * token's granted set). Surfaced so the UI can warn when agent pushes that touch
+   * `.github/workflows/*` would be rejected. Absent (or throwing) → false.
+   */
+  workflowsGranted?: (installation: GitHubInstallation) => Promise<boolean>
 }
 
-function toConnection(installation: GitHubInstallation, canCreateRepos: boolean): GitHubConnection {
+function toConnection(
+  installation: GitHubInstallation,
+  canCreateRepos: boolean,
+  canManageWorkflows: boolean,
+): GitHubConnection {
   return {
     installationId: installation.installationId,
     accountLogin: installation.accountLogin,
     targetType: installation.targetType,
     connectedAt: installation.createdAt,
     canCreateRepos,
+    canManageWorkflows,
   }
 }
 
@@ -84,12 +95,26 @@ export class GitHubInstallationService {
       deletedAt: null,
     }
     await this.deps.githubInstallationRepository.upsert(installation)
-    return toConnection(installation, this.canCreate(installation))
+    return toConnection(installation, this.canCreate(installation), await this.canWorkflows(installation))
   }
 
   /** Whether the privileged App tier can create repos for this installation (ADR 0005). */
   private canCreate(installation: GitHubInstallation): boolean {
     return this.deps.canCreateRepos?.(installation) ?? false
+  }
+
+  /**
+   * Whether the installation granted `workflows: write`. Best-effort: any failure
+   * reading the granted set (token mint error, integration quirk) resolves to
+   * false rather than blocking the connection — the warning is advisory.
+   */
+  private async canWorkflows(installation: GitHubInstallation): Promise<boolean> {
+    if (!this.deps.workflowsGranted) return false
+    try {
+      return await this.deps.workflowsGranted(installation)
+    } catch {
+      return false
+    }
   }
 
   /**
@@ -145,7 +170,7 @@ export class GitHubInstallationService {
   async getConnection(workspaceId: string): Promise<GitHubConnection | null> {
     const installation = await this.deps.githubInstallationRepository.getByWorkspace(workspaceId)
     if (!installation || installation.deletedAt) return null
-    return toConnection(installation, this.canCreate(installation))
+    return toConnection(installation, this.canCreate(installation), await this.canWorkflows(installation))
   }
 
   /** Resolve the live installation for a workspace, or throw if not connected. */

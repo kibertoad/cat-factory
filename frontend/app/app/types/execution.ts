@@ -72,6 +72,20 @@ export interface AgentFailure {
   lastSubtasks: StepSubtasks | null
 }
 
+/**
+ * A human approval gate on a step (mirrors `stepApprovalSchema` in contracts).
+ * Raised once a gated step's proposal is ready; the human reviews/edits it, then
+ * approves (advance) or requests changes (re-run with feedback).
+ */
+export interface StepApproval {
+  id: string
+  status: 'pending' | 'approved' | 'changes_requested'
+  /** the agent's output the human reviews (editable before approval) */
+  proposal: string
+  /** the human's guidance when changes were requested */
+  feedback?: string
+}
+
 /** One agent's slot in a running pipeline. */
 export interface PipelineStep {
   agentKind: AgentKind
@@ -82,6 +96,10 @@ export interface PipelineStep {
   subtasks?: StepSubtasks
   /** present + unresolved => the step (and block) is blocked */
   decision: Decision | null
+  /** whether a human approval gate fires after this step (from the pipeline) */
+  requiresApproval?: boolean
+  /** the live approval gate for this step; pending => the run is blocked on a human */
+  approval?: StepApproval | null
   /** text the agent produced for this step (when LLM execution is enabled). */
   output?: string
   /** identifier of the model that produced `output`, for transparency. */

@@ -3,7 +3,10 @@ import type { AgentState, ExecutionInstance } from '~/types/domain'
 import { AGENT_BY_KIND } from '~/utils/catalog'
 
 const props = defineProps<{ instance: ExecutionInstance }>()
-const emit = defineEmits<{ openDecision: [decisionId: string] }>()
+const emit = defineEmits<{
+  openDecision: [decisionId: string]
+  openApproval: [approvalId: string]
+}>()
 
 const models = useModelsStore()
 
@@ -18,7 +21,7 @@ const STATE_META: Record<AgentState, { label: string; color: string; icon: strin
 /** Visual language for the pipeline instance as a whole. */
 const STATUS_META: Record<ExecutionInstance['status'], { label: string; chip: string }> = {
   running: { label: 'Running', chip: 'primary' },
-  blocked: { label: 'Blocked on decision', chip: 'warning' },
+  blocked: { label: 'Needs you', chip: 'warning' },
   paused: { label: 'Paused (budget)', chip: 'neutral' },
   done: { label: 'Completed', chip: 'success' },
   failed: { label: 'Failed', chip: 'error' },
@@ -266,8 +269,21 @@ function toggleStep(i: number) {
             </p>
           </template>
 
+          <!-- approval gate: review (and edit) the proposal before continuing -->
+          <div v-if="s.approval && s.approval.status === 'pending'" class="mt-3">
+            <UButton
+              color="warning"
+              variant="soft"
+              size="xs"
+              icon="i-lucide-shield-check"
+              @click="emit('openApproval', s.approval.id)"
+            >
+              Review &amp; approve {{ AGENT_BY_KIND[s.agentKind].label }}'s proposal
+            </UButton>
+          </div>
+
           <!-- decision: unresolved => prompt, resolved => show the choice -->
-          <div v-if="s.decision && !s.decision.chosen" class="mt-3">
+          <div v-else-if="s.decision && !s.decision.chosen" class="mt-3">
             <UButton
               color="warning"
               variant="soft"

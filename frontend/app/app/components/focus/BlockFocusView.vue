@@ -42,6 +42,10 @@ onKeyStroke('Escape', () => {
 function openDecisionFor(decisionId: string) {
   if (instance.value) ui.openDecision(instance.value.id, decisionId)
 }
+
+function openApprovalFor(approvalId: string) {
+  if (instance.value) ui.openApproval(instance.value.id, approvalId)
+}
 </script>
 
 <template>
@@ -103,7 +107,12 @@ function openDecisionFor(decisionId: string) {
             </h2>
           </div>
 
-          <PipelineProgress v-if="instance" :instance="instance" @open-decision="openDecisionFor" />
+          <PipelineProgress
+            v-if="instance"
+            :instance="instance"
+            @open-decision="openDecisionFor"
+            @open-approval="openApprovalFor"
+          />
 
           <div
             v-else

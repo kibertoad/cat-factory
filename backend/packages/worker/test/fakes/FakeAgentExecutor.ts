@@ -52,8 +52,10 @@ export class FakeAgentExecutor implements AgentExecutor {
       }
     }
 
+    // Surface revision feedback so a "request changes" re-run can be asserted.
+    const revisionSuffix = context.revision ? ` [revised: ${context.revision.feedback}]` : ''
     return {
-      output: `[${context.agentKind}] processed "${context.block.title}"`,
+      output: `[${context.agentKind}] processed "${context.block.title}"${revisionSuffix}`,
       model: 'fake',
       confidence: context.isFinalStep ? (this.options.confidence ?? 1) : undefined,
       usage: this.options.usage,

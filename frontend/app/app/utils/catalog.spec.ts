@@ -10,6 +10,7 @@ import {
 } from '~/utils/catalog'
 
 const AGENT_KINDS: AgentKind[] = [
+  'requirements',
   'architect',
   'researcher',
   'coder',

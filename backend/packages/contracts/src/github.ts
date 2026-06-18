@@ -106,6 +106,13 @@ export const githubConnectionSchema = v.object({
    * the UI keeps the manual "create on GitHub" flow.
    */
   canCreateRepos: v.optional(v.boolean(), false),
+  /**
+   * Whether the installation actually granted the App `workflows: write`. When
+   * false, pushes that add/update `.github/workflows/*` are rejected by GitHub, so
+   * the UI warns the user to grant the permission. Read from the token's granted
+   * set (App ∩ install approval); defaults to false for older backends.
+   */
+  canManageWorkflows: v.optional(v.boolean(), false),
 })
 export type GitHubConnection = v.InferOutput<typeof githubConnectionSchema>
 

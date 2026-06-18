@@ -55,12 +55,20 @@ function onDragEnd(event: DragEvent) {
         </div>
         <div class="flex flex-wrap items-center gap-1">
           <template v-for="(k, i) in p.agentKinds" :key="i">
-            <UIcon
-              :name="AGENT_BY_KIND[k].icon"
-              class="h-4 w-4"
-              :style="{ color: AGENT_BY_KIND[k].color }"
-              :title="AGENT_BY_KIND[k].label"
-            />
+            <span class="relative inline-flex">
+              <UIcon
+                :name="AGENT_BY_KIND[k].icon"
+                class="h-4 w-4"
+                :style="{ color: AGENT_BY_KIND[k].color }"
+                :title="AGENT_BY_KIND[k].label"
+              />
+              <UIcon
+                v-if="p.gates?.[i]"
+                name="i-lucide-shield-check"
+                class="absolute -right-1.5 -top-1.5 h-2.5 w-2.5 text-amber-400"
+                title="Human approval required after this step"
+              />
+            </span>
             <UIcon
               v-if="i < p.agentKinds.length - 1"
               name="i-lucide-chevron-right"

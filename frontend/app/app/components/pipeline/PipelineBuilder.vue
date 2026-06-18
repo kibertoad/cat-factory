@@ -114,6 +114,24 @@ async function save() {
               />
               <span class="text-xs text-slate-100">{{ AGENT_BY_KIND[kind].label }}</span>
               <div class="ml-auto flex items-center">
+                <!-- Approval gate: pause after this step so a human reviews (and
+                     can edit) its proposal before the next step runs. -->
+                <UButton
+                  :icon="
+                    pipelines.draftGates[i]
+                      ? 'i-lucide-shield-check'
+                      : 'i-lucide-shield'
+                  "
+                  :color="pipelines.draftGates[i] ? 'warning' : 'neutral'"
+                  variant="ghost"
+                  size="xs"
+                  :title="
+                    pipelines.draftGates[i]
+                      ? 'Approval required after this step — click to remove the gate'
+                      : 'Require human approval after this step'
+                  "
+                  @click="pipelines.toggleDraftGate(i)"
+                />
                 <UButton
                   icon="i-lucide-chevron-up"
                   color="neutral"

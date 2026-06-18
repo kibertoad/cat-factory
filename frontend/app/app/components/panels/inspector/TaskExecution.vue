@@ -34,8 +34,18 @@ const stepLabel: Record<string, string> = {
   done: 'Done',
 }
 
+/** A gated step parked for approval reads "Needs approval", not "Needs decision". */
+function labelForStep(s: { state: string; approval?: { status: string } | null }) {
+  if (s.approval?.status === 'pending') return 'Needs approval'
+  return stepLabel[s.state]
+}
+
 function openDecisionFor(decisionId: string) {
   if (instance.value) ui.openDecision(instance.value.id, decisionId)
+}
+
+function openApprovalFor(approvalId: string) {
+  if (instance.value) ui.openApproval(instance.value.id, approvalId)
 }
 
 // Which step's prose output is expanded inline. Agents like architect and
@@ -99,7 +109,7 @@ function toggleStep(i: number) {
               {{ s.subtasks.completed }}/{{ s.subtasks.total }}
             </span>
             <span class="text-[10px] text-slate-400" :class="{ 'ml-auto': !s.subtasks }">
-              {{ stepLabel[s.state] }}
+              {{ labelForStep(s) }}
             </span>
             <UButton
               v-if="s.decision && !s.decision.chosen"
@@ -110,6 +120,16 @@ function toggleStep(i: number) {
               @click="openDecisionFor(s.decision.id)"
             >
               Resolve
+            </UButton>
+            <UButton
+              v-else-if="s.approval && s.approval.status === 'pending'"
+              color="warning"
+              variant="soft"
+              size="xs"
+              icon="i-lucide-shield-check"
+              @click="openApprovalFor(s.approval.id)"
+            >
+              Approve
             </UButton>
           </div>
           <div

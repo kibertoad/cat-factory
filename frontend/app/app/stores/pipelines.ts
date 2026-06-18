@@ -14,6 +14,8 @@ export const usePipelinesStore = defineStore('pipelines', () => {
 
   /** The chain currently being assembled in the builder. */
   const draft = ref<AgentKind[]>([])
+  /** Per-step approval gates, kept index-aligned with `draft`. */
+  const draftGates = ref<boolean[]>([])
   const draftName = ref('New pipeline')
 
   /** Replace the cached pipelines with a server snapshot. */
@@ -27,20 +29,30 @@ export const usePipelinesStore = defineStore('pipelines', () => {
 
   function addToDraft(kind: AgentKind) {
     draft.value.push(kind)
+    draftGates.value.push(false)
   }
 
   function removeFromDraft(index: number) {
     draft.value.splice(index, 1)
+    draftGates.value.splice(index, 1)
   }
 
   function moveInDraft(from: number, to: number) {
     if (to < 0 || to >= draft.value.length) return
     const [item] = draft.value.splice(from, 1)
     if (item) draft.value.splice(to, 0, item)
+    const [gate] = draftGates.value.splice(from, 1)
+    draftGates.value.splice(to, 0, gate ?? false)
+  }
+
+  /** Toggle the approval gate on the draft step at `index`. */
+  function toggleDraftGate(index: number) {
+    draftGates.value[index] = !draftGates.value[index]
   }
 
   function clearDraft() {
     draft.value = []
+    draftGates.value = []
     draftName.value = 'New pipeline'
   }
 
@@ -50,6 +62,8 @@ export const usePipelinesStore = defineStore('pipelines', () => {
     const pipeline = await api.createPipeline(useWorkspaceStore().requireId(), {
       name: draftName.value.trim() || 'Untitled pipeline',
       agentKinds: [...draft.value],
+      // Only send gates when at least one step is gated.
+      ...(draftGates.value.some(Boolean) ? { gates: [...draftGates.value] } : {}),
     })
     pipelines.value.push(pipeline)
     clearDraft()
@@ -64,12 +78,14 @@ export const usePipelinesStore = defineStore('pipelines', () => {
   return {
     pipelines,
     draft,
+    draftGates,
     draftName,
     hydrate,
     getPipeline,
     addToDraft,
     removeFromDraft,
     moveInDraft,
+    toggleDraftGate,
     clearDraft,
     saveDraft,
     removePipeline,

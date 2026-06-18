@@ -21,6 +21,7 @@ export type {
   PromptFragment,
   PullRequestRef,
   SpendStatus,
+  StepApproval,
   StepSubtasks,
   TestTarget,
   Workspace,

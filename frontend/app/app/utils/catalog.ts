@@ -8,6 +8,14 @@ export function uid(prefix = 'id'): string {
 /** The agent palette — the building blocks of a development pipeline. */
 export const AGENT_ARCHETYPES: AgentArchetype[] = [
   {
+    kind: 'requirements',
+    label: 'Requirements Reviewer',
+    icon: 'i-lucide-clipboard-check',
+    color: '#f59e0b',
+    description:
+      'Reviews the collected requirements for gaps, ambiguities, assumptions and risks before the architect starts.',
+  },
+  {
     kind: 'architect',
     label: 'Architect',
     icon: 'i-lucide-drafting-compass',

@@ -159,6 +159,14 @@ export const pipelineSchema = v.object({
   id: v.string(),
   name: v.string(),
   agentKinds: v.array(agentKindSchema),
+  /**
+   * Per-step human approval gates, parallel to {@link agentKinds}: when
+   * `gates[i]` is true the run pauses after step `i` completes so a human can
+   * review (and edit) its proposal before the next step runs. Absent / shorter
+   * than `agentKinds` means "no gate" for the missing indices, so legacy
+   * pipelines run straight through unchanged.
+   */
+  gates: v.optional(v.array(v.boolean())),
 })
 export type Pipeline = v.InferOutput<typeof pipelineSchema>
 
@@ -196,6 +204,26 @@ export const stepSubtasksSchema = v.object({
   items: v.optional(v.array(stepSubtaskItemSchema)),
 })
 export type StepSubtasks = v.InferOutput<typeof stepSubtasksSchema>
+
+/**
+ * A human approval gate raised after a step whose pipeline marked it
+ * `requiresApproval`. Unlike a {@link Decision} (which an agent raises and which
+ * re-runs the same step on resolution), an approval gate fires once the step has
+ * already produced its `proposal`; approving advances the run (carrying the —
+ * possibly edited — proposal forward as context), while requesting changes
+ * re-runs the same step with the human's `feedback`.
+ */
+export const stepApprovalSchema = v.object({
+  /** Unique id of this gate; the durable run parks on it like a decision. */
+  id: v.string(),
+  /** `pending` while awaiting the human; terminal `approved`; `changes_requested` re-runs the step. */
+  status: v.picklist(['pending', 'approved', 'changes_requested']),
+  /** The agent's output the human is reviewing (editable before approval). */
+  proposal: v.string(),
+  /** When changes were requested, the human's guidance fed into the re-run. */
+  feedback: v.optional(v.string()),
+})
+export type StepApproval = v.InferOutput<typeof stepApprovalSchema>
 
 /**
  * The agent flows that produce an "agent run" (a container-backed job whose
@@ -261,6 +289,17 @@ export const pipelineStepSchema = v.object({
   /** Live subtask counts while an async (container) step runs; see {@link stepSubtasksSchema}. */
   subtasks: v.optional(stepSubtasksSchema),
   decision: v.nullable(decisionSchema),
+  /**
+   * Whether a human approval gate fires after this step completes. Copied from
+   * the pipeline's `gates` at run start; absent means no gate.
+   */
+  requiresApproval: v.optional(v.boolean()),
+  /**
+   * The live approval gate for this step (see {@link stepApprovalSchema}). Set
+   * once the step's proposal is ready and `requiresApproval` is true; null/absent
+   * otherwise.
+   */
+  approval: v.optional(v.nullable(stepApprovalSchema)),
   /** Text the agent produced for this step (when LLM execution is enabled). */
   output: v.optional(v.string()),
   /** Identifier of the model that produced `output`, for transparency. */

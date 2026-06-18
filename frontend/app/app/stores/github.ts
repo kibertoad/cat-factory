@@ -51,6 +51,13 @@ export const useGitHubStore = defineStore('github', () => {
   const connected = computed(() => connection.value !== null)
   /** Whether cat-factory can create repos under the connected account itself. */
   const canCreateRepos = computed(() => connection.value?.canCreateRepos === true)
+  /**
+   * True when connected but the install is MISSING `workflows: write` — agent
+   * pushes that touch `.github/workflows/*` will be rejected until it's granted.
+   */
+  const missingWorkflowsPermission = computed(
+    () => connection.value !== null && connection.value.canManageWorkflows !== true,
+  )
 
   function repoFor(repoGithubId: number): GitHubRepo | undefined {
     return repos.value.find((r) => r.githubId === repoGithubId)
@@ -264,6 +271,7 @@ export const useGitHubStore = defineStore('github', () => {
     syncing,
     connected,
     canCreateRepos,
+    missingWorkflowsPermission,
     repoFor,
     repoForBlock,
     pullsForRepo,

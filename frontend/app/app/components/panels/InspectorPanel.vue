@@ -22,23 +22,12 @@ const fragments = useFragmentsStore()
 const models = useModelsStore()
 const agentRuns = useAgentRunsStore()
 const github = useGitHubStore()
-const requirements = useRequirementsStore()
 
 onMounted(() => {
   fragments.ensureLoaded()
   models.ensureLoaded()
   github.ensureLoaded()
 })
-
-// Pull this block's requirements review (if any) when the selection changes, so
-// the inspector can show an open-question count and probe feature availability.
-watch(
-  () => ui.selectedBlockId,
-  (id) => {
-    if (id) void requirements.load(id)
-  },
-  { immediate: true },
-)
 
 /** Open the document import/spawn flow, targeting this container's frame. */
 function spawnFromDocument() {
@@ -106,14 +95,6 @@ function saveDescription() {
   board.updateBlock(b.id, { description: b.description ?? '' })
 }
 
-// Requirements review (questions / gaps the AI raised about this block's
-// requirements). Hidden only when the feature is known to be off.
-const reviewAvailable = computed(() => requirements.available !== false)
-const blockReview = computed(() => (block.value ? requirements.reviewFor(block.value.id) : null))
-const openReviewCount = computed(() =>
-  blockReview.value ? requirements.openCount(blockReview.value) : 0,
-)
-
 // The GitHub repo backing this service (a frame), if one is linked. Linkage lives
 // on the github_repos projection (its `blockId`), not on the block itself.
 const serviceRepo = computed(() =>
@@ -163,7 +144,10 @@ const runningRun = computed(() => {
     class="absolute right-4 top-4 z-20 w-80 overflow-hidden rounded-2xl border border-slate-700 bg-slate-900/95 shadow-2xl backdrop-blur"
   >
     <div class="h-1.5 w-full" :style="{ backgroundColor: statusMeta.color }" />
-    <div class="space-y-4 p-4">
+    <!-- A tall task (execution steps + scenarios + docs) can overflow the
+         viewport; cap the body height and let it scroll so the lower controls
+         (Run / Focus / Delete) stay reachable. The status bar above stays put. -->
+    <div class="max-h-[calc(100vh-5rem)] space-y-4 overflow-y-auto p-4">
       <!-- header -->
       <div class="flex items-start justify-between gap-2">
         <div class="flex items-center gap-2">
@@ -220,22 +204,6 @@ const runningRun = computed(() => {
           This task has started — its details are locked.
         </p>
       </div>
-
-      <!-- requirements review: surface the AI's questions / gaps -->
-      <UButton
-        v-if="reviewAvailable"
-        block
-        color="neutral"
-        variant="soft"
-        size="sm"
-        icon="i-lucide-clipboard-check"
-        @click="ui.openRequirementReview(block.id)"
-      >
-        Review requirements
-        <UBadge v-if="openReviewCount" size="xs" color="warning" variant="solid" class="ml-auto">
-          {{ openReviewCount }}
-        </UBadge>
-      </UButton>
 
       <!-- failed run (bootstrap or execution): shared failure banner + retry -->
       <AgentFailureCard v-if="failedRun" :run="failedRun" />

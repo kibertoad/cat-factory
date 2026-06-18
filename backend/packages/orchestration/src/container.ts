@@ -154,6 +154,12 @@ export interface CoreDependencies {
    * connection so the UI drops the manual create step; absent → always false.
    */
   canCreateRepos?: (installation: GitHubInstallation) => boolean
+  /**
+   * Whether an installation actually granted `workflows: write`. Surfaced on the
+   * connection so the UI can warn that agent pushes touching `.github/workflows/*`
+   * would be rejected; absent → always false.
+   */
+  workflowsGranted?: (installation: GitHubInstallation) => Promise<boolean>
 
   // ---- Document-source integration (optional; wired only when configured) --
   // Mirrors the GitHub default-off convention. The documents module assembles
@@ -388,6 +394,7 @@ function createGitHubModule(deps: CoreDependencies): GitHubModule | undefined {
     workspaceRepository: deps.workspaceRepository,
     clock: deps.clock,
     canCreateRepos: deps.canCreateRepos,
+    workflowsGranted: deps.workflowsGranted,
   })
   const syncService = new GitHubSyncService({
     githubClient,

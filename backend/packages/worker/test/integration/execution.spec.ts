@@ -1,4 +1,4 @@
-import type { ExecutionInstance, WorkspaceSnapshot } from '@cat-factory/kernel'
+import type { ExecutionInstance, Pipeline, WorkspaceSnapshot } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import { makeApp } from '../helpers'
 import { FakeAgentExecutor } from '../fakes/FakeAgentExecutor'
@@ -118,6 +118,91 @@ describe('execution engine', () => {
     const finished = resumed.find((e) => e.blockId === 'task_login')!
     expect(finished.status).toBe('done')
     expect(finished.steps[0]!.decision!.chosen).toBe(choice)
+  })
+
+  it('pauses at an approval gate, then advances with the edited proposal on approve', async () => {
+    const app = makeApp(new FakeAgentExecutor({ confidence: 1 }))
+    const { workspace } = await app.createWorkspace()
+    const wsId = workspace.id
+
+    // A two-step pipeline gated after the first step.
+    const gated = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+      name: 'Gated',
+      agentKinds: ['architect', 'coder'],
+      gates: [true, false],
+    })
+
+    await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+      pipelineId: gated.body.id,
+    })
+
+    const blocked = await app.drive(wsId)
+    const exec = blocked.find((e) => e.blockId === 'task_login')!
+    expect(exec.status).toBe('blocked')
+    const step = exec.steps[0]!
+    expect(step.state).toBe('waiting_decision')
+    expect(step.approval?.status).toBe('pending')
+    // The proposal carries the agent's output for the human to review/edit.
+    expect(step.approval?.proposal).toBe(step.output)
+    // The run is parked before the second step has started.
+    expect(exec.steps[1]!.state).toBe('pending')
+
+    const taskBlocked = (
+      await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+    ).body.blocks.find((b) => b.id === 'task_login')!
+    expect(taskBlocked.status).toBe('blocked')
+
+    // Approve with an edited proposal; it becomes the step's output (and flows on).
+    const approve = await app.call(
+      'POST',
+      `/workspaces/${wsId}/executions/${exec.id}/steps/${step.approval!.id}/approve`,
+      { proposal: 'EDITED PROPOSAL' },
+    )
+    expect(approve.status).toBe(200)
+
+    const resumed = await app.drive(wsId)
+    const finished = resumed.find((e) => e.blockId === 'task_login')!
+    expect(finished.status).toBe('done')
+    expect(finished.steps[0]!.output).toBe('EDITED PROPOSAL')
+    expect(finished.steps[0]!.approval?.status).toBe('approved')
+    expect(finished.steps[1]!.state).toBe('done')
+  })
+
+  it('re-runs the gated step with feedback when changes are requested', async () => {
+    const app = makeApp(new FakeAgentExecutor({ confidence: 1 }))
+    const { workspace } = await app.createWorkspace()
+    const wsId = workspace.id
+
+    const gated = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+      name: 'Gated',
+      agentKinds: ['architect', 'coder'],
+      gates: [true, false],
+    })
+    await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+      pipelineId: gated.body.id,
+    })
+
+    const blocked = await app.drive(wsId)
+    const exec = blocked.find((e) => e.blockId === 'task_login')!
+    const firstApprovalId = exec.steps[0]!.approval!.id
+
+    const reqChanges = await app.call(
+      'POST',
+      `/workspaces/${wsId}/executions/${exec.id}/steps/${firstApprovalId}/request-changes`,
+      { feedback: 'add error handling' },
+    )
+    expect(reqChanges.status).toBe(200)
+
+    // The same step re-runs with the feedback in context, then gates afresh.
+    const regated = await app.drive(wsId)
+    const reExec = regated.find((e) => e.blockId === 'task_login')!
+    expect(reExec.status).toBe('blocked')
+    const reStep = reExec.steps[0]!
+    expect(reStep.state).toBe('waiting_decision')
+    expect(reStep.approval?.status).toBe('pending')
+    // A fresh gate id, and the re-run incorporated the feedback.
+    expect(reStep.approval!.id).not.toBe(firstApprovalId)
+    expect(reStep.output).toContain('[revised: add error handling]')
   })
 
   it('runs a pipeline on a frame straight to done', async () => {

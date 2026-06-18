@@ -1,6 +1,12 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { Decision, ExecutionInstance, Pipeline, PipelineStep } from '~/types/domain'
+import type {
+  Decision,
+  ExecutionInstance,
+  Pipeline,
+  PipelineStep,
+  StepApproval,
+} from '~/types/domain'
 import { useWorkspaceStore } from '~/stores/workspace'
 
 /**
@@ -70,6 +76,29 @@ export const useExecutionStore = defineStore('execution', () => {
     return out
   })
 
+  /** All currently-pending approval gates across all runs (board badges/queue). */
+  const openApprovals = computed(() => {
+    const out: {
+      instanceId: string
+      blockId: string
+      approval: StepApproval
+      agentKind: PipelineStep['agentKind']
+    }[] = []
+    for (const e of instances.value) {
+      for (const s of e.steps) {
+        if (s.approval?.status === 'pending') {
+          out.push({
+            instanceId: e.id,
+            blockId: e.blockId,
+            approval: s.approval,
+            agentKind: s.agentKind,
+          })
+        }
+      }
+    }
+    return out
+  })
+
   /** Start `pipeline` against a block; the server marks the block in-progress. */
   async function start(blockId: string, pipeline: Pipeline) {
     const ws = useWorkspaceStore()
@@ -82,6 +111,28 @@ export const useExecutionStore = defineStore('execution', () => {
     await api.resolveDecision(ws.requireId(), instanceId, decisionId, { choice })
     await ws.refresh()
   }
+
+  /** Approve a step's gated proposal (optionally edited); the run advances. */
+  async function approveStep(instanceId: string, approvalId: string, proposal?: string) {
+    const ws = useWorkspaceStore()
+    await api.approveStep(ws.requireId(), instanceId, approvalId, { proposal })
+    await ws.refresh()
+  }
+
+  /** Request changes on a gated proposal; the step re-runs with `feedback`. */
+  async function requestStepChanges(instanceId: string, approvalId: string, feedback: string) {
+    const ws = useWorkspaceStore()
+    await api.requestStepChanges(ws.requireId(), instanceId, approvalId, { feedback })
+    await ws.refresh()
+  }
+
+  /** How many approval gates anywhere are awaiting a human. */
+  const pendingApprovalCount = computed(() =>
+    instances.value.reduce(
+      (n, e) => n + e.steps.filter((s) => s.approval?.status === 'pending').length,
+      0,
+    ),
+  )
 
   /** Merge an open PR (a task in `pr_ready`) — the server completes the task. */
   async function mergePr(blockId: string) {
@@ -107,8 +158,12 @@ export const useExecutionStore = defineStore('execution', () => {
     getByBlock,
     pendingDecisionCount,
     openDecisions,
+    openApprovals,
+    pendingApprovalCount,
     start,
     resolveDecision,
+    approveStep,
+    requestStepChanges,
     mergePr,
     cancel,
   }

@@ -132,9 +132,22 @@ export function seedPipelines(): Pipeline[] {
     {
       id: 'pl_full',
       name: 'Full build',
-      // `blueprints` runs right after implementation so the service map (and the
-      // board) is refreshed from the just-written code, on the same PR branch.
-      agentKinds: ['architect', 'researcher', 'coder', 'blueprints', 'tester', 'reviewer'],
+      // `requirements` runs first and reviews the collected requirements; the
+      // architect then designs the solution. Both pause for human approval (their
+      // proposals are reviewed/edited before the next step), while `blueprints`
+      // runs right after implementation so the service map (and the board) is
+      // refreshed from the just-written code, on the same PR branch.
+      agentKinds: [
+        'requirements',
+        'architect',
+        'researcher',
+        'coder',
+        'blueprints',
+        'tester',
+        'reviewer',
+      ],
+      // Gate the requirements review and the architecture proposal.
+      gates: [true, true, false, false, false, false, false],
     },
     { id: 'pl_quick', name: 'Quick implement', agentKinds: ['coder', 'blueprints', 'tester'] },
     {

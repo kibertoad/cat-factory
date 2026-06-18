@@ -39,7 +39,7 @@ describe('spend safeguards', () => {
     const wsId = workspace.id
 
     await app.call('POST', `/workspaces/${wsId}/blocks/blk_api/executions`, {
-      pipelineId: 'pl_full', // five steps
+      pipelineId: 'pl_quick', // multi-step, ungated (pl_full now has approval gates)
     })
     const ticked = await app.drive(wsId)
 
@@ -62,7 +62,7 @@ describe('spend safeguards', () => {
     const wsId = workspace.id
 
     await pausingApp.call('POST', `/workspaces/${wsId}/blocks/blk_api/executions`, {
-      pipelineId: 'pl_full',
+      pipelineId: 'pl_quick',
     })
     await pausingApp.drive(wsId)
 

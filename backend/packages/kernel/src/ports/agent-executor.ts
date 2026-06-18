@@ -110,6 +110,13 @@ export interface AgentRunContext {
    * the resolved decision — so the agent can finish instead of re-raising it.
    */
   resolvedDecision: { question: string; chosen: string } | null
+  /**
+   * When a human reviewed this step's gated proposal and requested changes, the
+   * previous proposal plus their feedback. Present only on a re-run triggered by
+   * "Request changes"; the agent should revise its previous proposal to address
+   * the feedback rather than start from scratch.
+   */
+  revision?: { previousProposal: string; feedback: string }
 }
 
 /** A point at which the agent needs a human to choose before continuing. */

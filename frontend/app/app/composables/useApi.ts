@@ -237,8 +237,10 @@ export function useApi() {
     // ---- pipelines --------------------------------------------------------
     listPipelines: (workspaceId: string) => http<Pipeline[]>(`${ws(workspaceId)}/pipelines`),
 
-    createPipeline: (workspaceId: string, body: { name: string; agentKinds: string[] }) =>
-      http<Pipeline>(`${ws(workspaceId)}/pipelines`, { method: 'POST', body }),
+    createPipeline: (
+      workspaceId: string,
+      body: { name: string; agentKinds: string[]; gates?: boolean[] },
+    ) => http<Pipeline>(`${ws(workspaceId)}/pipelines`, { method: 'POST', body }),
 
     removePipeline: (workspaceId: string, pipelineId: string) =>
       http(`${ws(workspaceId)}/pipelines/${pipelineId}`, { method: 'DELETE' }),
@@ -264,6 +266,28 @@ export function useApi() {
     ) =>
       http<ExecutionInstance>(
         `${ws(workspaceId)}/executions/${executionId}/decisions/${decisionId}`,
+        { method: 'POST', body },
+      ),
+
+    approveStep: (
+      workspaceId: string,
+      executionId: string,
+      approvalId: string,
+      body: { proposal?: string },
+    ) =>
+      http<ExecutionInstance>(
+        `${ws(workspaceId)}/executions/${executionId}/steps/${approvalId}/approve`,
+        { method: 'POST', body },
+      ),
+
+    requestStepChanges: (
+      workspaceId: string,
+      executionId: string,
+      approvalId: string,
+      body: { feedback: string },
+    ) =>
+      http<ExecutionInstance>(
+        `${ws(workspaceId)}/executions/${executionId}/steps/${approvalId}/request-changes`,
         { method: 'POST', body },
       ),
 

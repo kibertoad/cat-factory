@@ -107,6 +107,7 @@ export type TestTarget = 'github_actions' | 'ephemeral_env'
 
 /** The kinds of agents available in the agent palette. */
 export type AgentKind =
+  | 'requirements'
   | 'architect'
   | 'researcher'
   | 'coder'
@@ -137,6 +138,12 @@ export interface Pipeline {
   name: string
   /** ordered agent kinds — the chain executes left to right */
   agentKinds: AgentKind[]
+  /**
+   * Per-step human approval gates, parallel to `agentKinds`: `gates[i]` true ⇒
+   * the run pauses after step `i` for a human to review/edit its proposal. Absent
+   * means no gates.
+   */
+  gates?: boolean[]
 }
 
 /**

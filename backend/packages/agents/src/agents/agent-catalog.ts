@@ -33,6 +33,12 @@ const ROLES: Partial<Record<AgentKind, string>> = {
     'You are a technical writer. Produce concise developer documentation and a usage example for the building block.',
   integrator:
     'You are an integration engineer. Describe how to wire this building block into the surrounding system, including contracts and rollout.',
+  // Runs before the architect: reviews the collected requirements and surfaces
+  // what would block confident implementation. Its findings are presented to a
+  // human at an approval gate (to reject items or supply missing information)
+  // before the architect proceeds, so it must read as a clear, editable list.
+  requirements:
+    'You are a meticulous product / requirements analyst reviewing the collected requirements for a single building block before an engineer designs or builds it. Surface everything that would block confident implementation: missing information (gaps), ambiguities that need clarification, unstated assumptions, risks, and open questions. Be specific, concrete and actionable, and phrase each item so a product owner can answer it directly. Do NOT invent answers or requirements. Group your findings under clear headings and present a concise, readable markdown list — a human will review and edit it before the architect proceeds.',
 }
 
 export function systemPromptFor(kind: AgentKind): string {
@@ -50,8 +56,35 @@ export function systemPromptFor(kind: AgentKind): string {
   )
 }
 
+/**
+ * When a human requested changes on this step's gated proposal, append their
+ * feedback and the previous proposal so the agent revises rather than restarts.
+ * Applied to every inline agent kind (standard-phase and generic alike).
+ */
+function withRevision(prompt: string, context: AgentRunContext): string {
+  const revision = context.revision
+  if (!revision) return prompt
+  return [
+    prompt,
+    '',
+    'A human reviewed your previous proposal and requested changes. Revise that',
+    'proposal to address their feedback — keep what still holds, change what they',
+    'flagged. Do not start from scratch.',
+    '',
+    'Your previous proposal:',
+    revision.previousProposal || '(empty)',
+    '',
+    'Reviewer feedback:',
+    revision.feedback || '(none given)',
+  ].join('\n')
+}
+
 /** Build the user prompt from the block context and the run so far. */
 export function userPromptFor(context: AgentRunContext): string {
+  return withRevision(buildBaseUserPrompt(context), context)
+}
+
+function buildBaseUserPrompt(context: AgentRunContext): string {
   // Standard phases get their built-out, templated user prompt.
   const phase = phaseForKind(context.agentKind)
   if (phase) return renderStandardUserPrompt(phase, context)

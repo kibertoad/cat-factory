@@ -90,6 +90,11 @@ export type ToggleDependencyInput = v.InferOutput<typeof toggleDependencySchema>
 export const createPipelineSchema = v.object({
   name: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(120)),
   agentKinds: v.pipe(v.array(agentKindSchema), v.minLength(1)),
+  /**
+   * Per-step human approval gates, parallel to {@link agentKinds}. Optional;
+   * omitted means no gates (the pipeline runs straight through).
+   */
+  gates: v.optional(v.array(v.boolean())),
 })
 export type CreatePipelineInput = v.InferOutput<typeof createPipelineSchema>
 
@@ -102,3 +107,18 @@ export const resolveDecisionSchema = v.object({
   choice: v.pipe(v.string(), v.minLength(1)),
 })
 export type ResolveDecisionInput = v.InferOutput<typeof resolveDecisionSchema>
+
+/**
+ * Approve a step's gated proposal. An optional edited `proposal` overrides the
+ * agent's text, so the human's revision is what flows to downstream steps.
+ */
+export const approveStepSchema = v.object({
+  proposal: v.optional(v.pipe(v.string(), v.maxLength(50000))),
+})
+export type ApproveStepInput = v.InferOutput<typeof approveStepSchema>
+
+/** Request changes on a gated proposal: the step re-runs with this feedback. */
+export const requestStepChangesSchema = v.object({
+  feedback: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(10000)),
+})
+export type RequestStepChangesInput = v.InferOutput<typeof requestStepChangesSchema>

@@ -388,6 +388,13 @@ function selectGitHubDeps(
     commitBackfillHorizonMs: config.retention.commitMs || undefined,
     repoProvisioningClient,
     canCreateRepos: (installation) => registry.canCreateRepos(installation),
+    // Advisory: does the install actually grant `workflows: write`? Read from the
+    // owning App's installation-token permission set (cached), so the UI can warn
+    // when agent pushes touching `.github/workflows/*` would be rejected.
+    workflowsGranted: async (installation) => {
+      const perms = await registry.installationPermissions(installation.installationId)
+      return perms.workflows === 'write'
+    },
   }
 }
 

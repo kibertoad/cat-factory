@@ -18,6 +18,12 @@ export interface GitHubConnection {
    * step. Defaults to false for older backends that don't send it.
    */
   canCreateRepos?: boolean
+  /**
+   * Whether the installation granted the App `workflows: write`. When false, agent
+   * pushes that add/update `.github/workflows/*` are rejected by GitHub, so the UI
+   * warns the user to grant the permission. Defaults to false for older backends.
+   */
+  canManageWorkflows?: boolean
 }
 
 /**

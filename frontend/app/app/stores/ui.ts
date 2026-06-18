@@ -9,6 +9,8 @@ export const useUiStore = defineStore('ui', () => {
   const focusBlockId = ref<string | null>(null)
   const builderOpen = ref(false)
   const decisionContext = ref<{ instanceId: string; decisionId: string } | null>(null)
+  // Approval-gate modal: the run + gate a human is reviewing, or null when closed.
+  const approvalContext = ref<{ instanceId: string; approvalId: string } | null>(null)
 
   // Document-source integration modals, keyed by source. `documentImport` and
   // `spawnPreview` carry an optional target frame, so structure spawned from a
@@ -101,6 +103,13 @@ export const useUiStore = defineStore('ui', () => {
     decisionContext.value = null
   }
 
+  function openApproval(instanceId: string, approvalId: string) {
+    approvalContext.value = { instanceId, approvalId }
+  }
+  function closeApproval() {
+    approvalContext.value = null
+  }
+
   function openDocumentConnect(source: DocumentSourceKind) {
     documentConnect.value = { source }
   }
@@ -180,6 +189,7 @@ export const useUiStore = defineStore('ui', () => {
     focusBlockId,
     builderOpen,
     decisionContext,
+    approvalContext,
     documentConnect,
     documentImport,
     spawnPreview,
@@ -202,6 +212,8 @@ export const useUiStore = defineStore('ui', () => {
     openBuilder,
     openDecision,
     closeDecision,
+    openApproval,
+    closeApproval,
     openDocumentConnect,
     closeDocumentConnect,
     openDocumentImport,

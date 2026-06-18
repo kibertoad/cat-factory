@@ -61,6 +61,16 @@ function openFirstDecision() {
   if (d) ui.openDecision(d.instanceId, d.decision.id)
 }
 
+// Surface a pending approval gate from this frame OR any of its tasks.
+const blockApprovals = computed(() =>
+  execution.openApprovals.filter((a) => a.blockId === props.id || taskIds.value.has(a.blockId)),
+)
+
+function openFirstApproval() {
+  const a = blockApprovals.value[0]
+  if (a) ui.openApproval(a.instanceId, a.approval.id)
+}
+
 function toggleExpand() {
   ui.toggleFrame(props.id)
 }
@@ -115,12 +125,24 @@ const ITEM_ICON: Record<string, string> = {
 
 <template>
   <div v-if="block" class="relative" :data-block-id="block.id">
-    <!-- decision indicator floats above the card at all zoom levels -->
-    <div v-if="blockDecisions.length" class="absolute -top-3 left-1/2 z-10 -translate-x-1/2">
+    <!-- decision / approval indicator floats above the card at all zoom levels -->
+    <div
+      v-if="blockDecisions.length || blockApprovals.length"
+      class="absolute -top-3 left-1/2 z-10 flex -translate-x-1/2 gap-1"
+    >
       <DecisionBadge
+        v-if="blockDecisions.length"
         :count="blockDecisions.length"
         :compact="lod === 'far'"
         @open="openFirstDecision"
+      />
+      <DecisionBadge
+        v-if="blockApprovals.length"
+        :count="blockApprovals.length"
+        :compact="lod === 'far'"
+        label="Approval needed"
+        icon="i-lucide-shield-check"
+        @open="openFirstApproval"
       />
     </div>
 

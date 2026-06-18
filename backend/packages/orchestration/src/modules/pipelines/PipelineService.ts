@@ -42,6 +42,11 @@ export class PipelineService {
       id: this.idGenerator.next('pl'),
       name: input.name.trim() || 'Untitled pipeline',
       agentKinds: [...input.agentKinds],
+      // Keep gates aligned to agentKinds; only persist when at least one step is
+      // gated so an all-false / absent array stays null (a straight-through run).
+      ...(input.gates?.some(Boolean)
+        ? { gates: input.agentKinds.map((_, i) => input.gates?.[i] ?? false) }
+        : {}),
     }
     await this.pipelineRepository.insert(workspaceId, pipeline)
     return pipeline
