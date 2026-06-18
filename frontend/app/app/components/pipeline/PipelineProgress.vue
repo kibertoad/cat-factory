@@ -62,6 +62,22 @@ const legend: { state: AgentState }[] = [
   { state: 'waiting_decision' },
   { state: 'pending' },
 ]
+
+// Icon per todo-item status, matching how the bootstrap card renders its
+// subtask breakdown — so a zoomed-in task shows the same live todo list.
+const ITEM_ICON: Record<string, string> = {
+  completed: 'i-lucide-check-circle-2',
+  in_progress: 'i-lucide-loader-circle',
+  pending: 'i-lucide-circle',
+}
+
+// Which agent's prose is expanded in full. Clicking an agent that produced output
+// (architect, researcher, reviewer, …) reveals the full text it wrote; clicking
+// again collapses it back to the teaser. Only one is open at a time.
+const expandedStep = ref<number | null>(null)
+function toggleStep(i: number) {
+  expandedStep.value = expandedStep.value === i ? null : i
+}
 </script>
 
 <template>
@@ -131,7 +147,12 @@ const legend: { state: AgentState }[] = [
             s.state === 'pending' ? 'opacity-60' : '',
           ]"
         >
-          <div class="flex items-center gap-2">
+          <div
+            class="flex items-center gap-2"
+            :class="s.output ? 'cursor-pointer' : ''"
+            :title="s.output ? 'Show what this agent produced' : undefined"
+            @click="s.output && toggleStep(i)"
+          >
             <div
               class="flex h-8 w-8 items-center justify-center rounded-lg"
               :style="{ backgroundColor: AGENT_BY_KIND[s.agentKind].color + '22' }"
@@ -156,6 +177,12 @@ const legend: { state: AgentState }[] = [
             >
               {{ STATE_META[s.state].label }}
             </span>
+            <UIcon
+              v-if="s.output"
+              name="i-lucide-chevron-down"
+              class="h-4 w-4 shrink-0 text-slate-500 transition-transform"
+              :class="expandedStep === i ? 'rotate-180' : ''"
+            />
           </div>
 
           <!-- per-step progress (only while it has meaningful progress) -->
@@ -182,6 +209,33 @@ const legend: { state: AgentState }[] = [
                 :style="{ width: `${(s.subtasks.completed / s.subtasks.total) * 100}%` }"
               />
             </div>
+
+            <!-- the actual todo breakdown, rendered the same way the bootstrap
+                 card shows its subtasks (status icon + struck-through when done) -->
+            <ul v-if="s.subtasks.items?.length" class="mt-2 space-y-1">
+              <li
+                v-for="(item, i) in s.subtasks.items"
+                :key="i"
+                class="flex items-start gap-1.5 text-[11px]"
+                :class="
+                  item.status === 'completed'
+                    ? 'text-slate-500 line-through'
+                    : item.status === 'in_progress'
+                      ? 'text-slate-100'
+                      : 'text-slate-400'
+                "
+              >
+                <UIcon
+                  :name="ITEM_ICON[item.status]"
+                  class="mt-px h-3 w-3 shrink-0"
+                  :class="[
+                    item.status === 'in_progress' ? 'animate-spin text-indigo-400' : '',
+                    item.status === 'completed' ? 'text-emerald-400' : 'text-slate-500',
+                  ]"
+                />
+                <span>{{ item.label }}</span>
+              </li>
+            </ul>
           </div>
 
           <!-- model used for this step -->
@@ -194,14 +248,23 @@ const legend: { state: AgentState }[] = [
             {{ models.labelForRef(s.model) }}
           </p>
 
-          <!-- output the agent produced -->
-          <p
-            v-if="s.output"
-            class="mt-2 line-clamp-3 rounded-md bg-slate-950/60 px-2 py-1.5 text-[11px] text-slate-300"
-            :title="s.output"
-          >
-            {{ s.output }}
-          </p>
+          <!-- the prose this agent produced: a 3-line teaser, expanded in full
+               when the agent is clicked (architect/researcher/reviewer work) -->
+          <template v-if="s.output">
+            <pre
+              v-if="expandedStep === i"
+              class="mt-2 max-h-80 overflow-auto whitespace-pre-wrap rounded-md bg-slate-950/60 px-2 py-1.5 font-sans text-[11px] leading-relaxed text-slate-200"
+              >{{ s.output }}</pre
+            >
+            <p
+              v-else
+              class="mt-2 line-clamp-3 cursor-pointer rounded-md bg-slate-950/60 px-2 py-1.5 text-[11px] text-slate-300 hover:bg-slate-950"
+              title="Click to read the full output"
+              @click="toggleStep(i)"
+            >
+              {{ s.output }}
+            </p>
+          </template>
 
           <!-- decision: unresolved => prompt, resolved => show the choice -->
           <div v-if="s.decision && !s.decision.chosen" class="mt-3">

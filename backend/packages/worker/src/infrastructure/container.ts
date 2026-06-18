@@ -90,15 +90,15 @@ export interface Container extends Core {
 /**
  * Pick the agent that performs pipeline steps: real LLM work via the Vercel AI
  * SDK, composed with a per-run sandbox for the repo-operating steps (`coder`,
- * `mocker`, `playwright`, …) when container implementation is opted in and wired.
+ * `mocker`, `playwright`, …). Container-based implementation is ALWAYS on — the
+ * sandbox is a hard requirement, so this throws at startup if it can't be built.
  * Tests bypass this entirely by overriding `agentExecutor` with a fake.
  *
  * There is intentionally NO inline fallback for the sandbox kinds — a one-shot
  * LLM call cannot clone/edit/commit/open a PR, so a degraded inline implementer is
- * silently broken rather than usefully degraded. When a sandbox is opted in but
- * its prerequisites are missing we throw here (fail the deploy loudly); when it
- * is not opted in at all the composite throws if a sandbox kind is ever
- * dispatched (see {@link CompositeAgentExecutor}).
+ * silently broken rather than usefully degraded. If the sandbox prerequisites are
+ * missing we fail the deploy loudly here rather than starting with a half-wired
+ * implementer that would only fault the moment a repo-operating step is dispatched.
  */
 function selectAgentExecutor(
   env: Env,
@@ -113,29 +113,24 @@ function selectAgentExecutor(
     resolveBlockModel: config.agents.resolveBlockModel,
   })
 
-  // A sandbox is opted in by container implementation OR a self-hosted runner
-  // pool. When opted in it MUST build — a null here means CONTAINER_IMPL_ENABLED /
-  // RUNNERS_ENABLED is set but a prerequisite (GitHub App private key,
-  // WORKER_PUBLIC_URL, AUTH_SESSION_SECRET, or a runner backend) is missing. We
-  // refuse to start with a half-configured implementer rather than quietly running
-  // the repo-operating steps as useless one-shot LLM calls.
-  let container: AgentExecutor | null = null
-  if (config.agents.containerImpl || config.runners.enabled) {
-    container = buildContainerExecutor(env, config, db, clock, resolveTransport)
-    if (!container) {
-      throw new Error(
-        'Container-based implementation is enabled (CONTAINER_IMPL_ENABLED or ' +
-          'RUNNERS_ENABLED) but its prerequisites are missing. Required: a configured ' +
-          'GitHub App (GITHUB_APP_PRIVATE_KEY), WORKER_PUBLIC_URL, AUTH_SESSION_SECRET, ' +
-          'and a runner backend (the EXEC_CONTAINER binding or a registered runner pool). ' +
-          'Refusing to start with a broken executor instead of silently degrading to ' +
-          'one-shot LLM calls.',
-      )
-    }
+  // The sandbox MUST build — a null here means a prerequisite (GitHub App private
+  // key, WORKER_PUBLIC_URL, AUTH_SESSION_SECRET, or a runner backend: the
+  // EXEC_CONTAINER binding or a registered runner pool) is missing. We refuse to
+  // start with a half-configured implementer rather than quietly running the
+  // repo-operating steps as useless one-shot LLM calls.
+  const container = buildContainerExecutor(env, config, db, clock, resolveTransport)
+  if (!container) {
+    throw new Error(
+      'Container-based implementation is required but its prerequisites are missing. ' +
+        'Required: a configured GitHub App (GITHUB_APP_PRIVATE_KEY), WORKER_PUBLIC_URL, ' +
+        'AUTH_SESSION_SECRET, and a runner backend (the EXEC_CONTAINER binding or a ' +
+        'registered runner pool with RUNNERS_ENABLED). Refusing to start with a broken ' +
+        'executor instead of silently degrading to one-shot LLM calls.',
+    )
   }
 
   // Always the composite: non-sandbox kinds run inline; sandbox kinds run in the
-  // container when wired, else throw at dispatch (never fall back to inline).
+  // container.
   return new CompositeAgentExecutor(inline, container)
 }
 

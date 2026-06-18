@@ -75,14 +75,6 @@ export interface Env {
    */
   EXEC_CONTAINER?: DurableObjectNamespace<ExecutionContainer>
   /**
-   * Routes the repo-operating steps (`coder`, `mocker`, `playwright`) to a real
-   * sandbox container instead of a single inline LLM call ('true'). Requires the
-   * EXEC_CONTAINER binding, a configured GitHub App, a direct OpenAI-compatible
-   * provider key, and WORKER_PUBLIC_URL. (Container runs are long; the durable
-   * Workflows driver carries them.)
-   */
-  CONTAINER_IMPL_ENABLED?: string
-  /**
    * Public origin of this Worker, e.g. https://cat-factory.example.workers.dev.
    * Handed to the container so Pi can reach the LLM proxy at `${url}/v1`.
    */
@@ -275,10 +267,11 @@ export interface Env {
    * Enables routing repo-operating coding jobs (`coder`, `mocker`, `playwright`)
    * to a workspace's own container runner pool instead of Cloudflare Containers
    * ('true'). Per-workspace pool manifests and their (encrypted) scheduler-API
-   * secret bundles live in D1, not here. Independent of CONTAINER_IMPL_ENABLED: a
-   * workspace with a registered pool uses it even when Cloudflare Containers are
-   * off; workspaces without one fall back to Cloudflare Containers when those are
-   * enabled. Requires a configured GitHub App, WORKER_PUBLIC_URL and the session
+   * secret bundles live in D1, not here. A workspace with a registered pool uses
+   * it; workspaces without one fall back to the Cloudflare `EXEC_CONTAINER`
+   * binding. Container-based implementation is always on, so when no
+   * `EXEC_CONTAINER` binding is present a registered pool is the mandatory runner
+   * backend. Requires a configured GitHub App, WORKER_PUBLIC_URL and the session
    * secret, exactly like the Cloudflare container path.
    */
   RUNNERS_ENABLED?: string
