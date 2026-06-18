@@ -492,6 +492,10 @@ export class BootstrapService {
       updatedAt: this.deps.clock.now(),
     }
     await this.deps.bootstrapJobRepository.update(workspaceId, jobId, patch)
+    // Reclaim the per-run container on success too (the failure path above already
+    // does): a bootstrapped repo otherwise leaves its container to idle out its
+    // sleep timer. Best-effort — an evicted/auto-slept container is already gone.
+    await this.stopContainer(workspaceId, jobId)
     if (record.blockId) {
       // Best-effort: a failure to link must not flip a successful run to failed —
       // the repo is bootstrapped; the projection reconciles on the next sync.

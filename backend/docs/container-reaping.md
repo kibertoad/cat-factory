@@ -6,12 +6,12 @@ and where that logic currently has gaps that leave **dangling (warm, billed)
 instances**. Companion to the execution / bootstrap flow notes in
 [`../../CLAUDE.md`](../../CLAUDE.md).
 
-Status (2026-06): reaping is **best-effort across three layers** below. There is
-**no scheduled reaper that kills a warm instance independently of its run
-record**, and the success path does not explicitly reclaim — so a long-lived or
-stuck run can leave an instance warm past its idle timer. Manual cleanup is
-sometimes required (see _Manual deletion_ at the end). Improving the autoreaping
-is a known follow-up.
+Status (2026-06): reaping is **best-effort across four layers** below. Every
+terminal path now reclaims explicitly (success **and** failure, for both flows),
+and **Layer 4 is an instance-level cron reaper** that kills a warm instance from
+the real live-container inventory — independent of its run record — closing the
+two leak modes that previously let an instance stay warm for ~a day. Manual
+cleanup should now be rare (see _Manual deletion_ at the end).
 
 ## The instance model
 
@@ -41,39 +41,45 @@ with **no inbound requests**.
 - While a run is active the durable driver polls it every ~15s, which keeps the
   instance warm; the 10-minute idle window only starts counting **once polling
   stops** (i.e. the job reached a terminal state and the driver stopped polling).
-- This is the **only** reaper on the **success path** — see Layer 2. A
-  successfully-completed run is simply left to idle out, so it can bill up to
-  ~10 min of idle compute after finishing. Normally acceptable.
+- The success path now also reclaims explicitly (Layer 2), so this idle window is
+  a fallback (e.g. when no async container executor is wired), not the primary
+  success-path reaper.
 
 ## Layer 2 — explicit reclaim (`shutdown()` RPC → SIGKILL)
 
 `ExecutionContainer.shutdown()` (`ExecutionContainer.ts:30`) calls the
 base `Container.destroy()` (SIGKILL) — idempotent, swallows "already gone". It is
-reached over RPC, keyed by job/execution id, through:
+reached over RPC, keyed by job/execution id. **Both flows now funnel through the
+one `RunnerTransport.release` seam** (`CloudflareContainerTransport.release`),
+which goes through the `ContainerInstanceRegistry`'s single kill path
+(SIGKILL **+** clears the live-inventory row, see Layer 4):
 
-- **Execution:** `CloudflareContainerTransport.release(jobId)`
-  (`CloudflareContainerTransport.ts:63`) ← port `AsyncAgentExecutor.stopJob`
-  (`ContainerAgentExecutor.stopJob`, `ContainerAgentExecutor.ts:126`) ←
-  `ExecutionService.stopRunContainer` (`ExecutionService.ts:901`).
-- **Bootstrap:** `ContainerRepoBootstrapper.stopBootstrap`
-  (`ContainerRepoBootstrapper.ts:289`) ← `BootstrapService.stopContainer`
-  (`BootstrapService.ts:611`).
+- **Execution:** `transport.release(jobId)` ← port `AsyncAgentExecutor.stopJob`
+  (`ContainerAgentExecutor.stopJob`) ← `ExecutionService.stopRunContainer`.
+- **Bootstrap:** `ContainerRepoBootstrapper.stopBootstrap` →
+  `transport.release(jobId)` (the bootstrapper rides the same transport now,
+  rather than hand-rolling its own `EXEC_CONTAINER` call) ←
+  `BootstrapService.stopContainer`.
 
 Both wrappers are best-effort/idempotent and never throw, so cleanup can't derail
 the failure/teardown handling that calls it.
 
 **When explicit reclaim actually fires:**
 
-| Trigger                          | Execution                                                                | Bootstrap                                                                                |
-| -------------------------------- | ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
-| Poll observes the job **failed** | (via stop on fault)                                                      | `pollBootstrapJob` → `BootstrapService.ts:466`                                           |
-| User **stops/cancels** the run   | `ExecutionService.stopRun`                                               | `BootstrapService.stop` → `BootstrapService.ts:531`                                      |
-| Pre-flight / dispatch cleanup    | —                                                                        | `BootstrapService.ts:275`, `:378`                                                        |
-| Block-tree **delete / teardown** | `teardownForBlockTree` → `ExecutionService.ts:889` (also `:828`, `:863`) | (frame removed with job)                                                                 |
-| Job **succeeds**                 | ❌ **not reclaimed** — relies on Layer 1                                 | ❌ **not reclaimed** (success path `BootstrapService.ts:477-505` has no `stopContainer`) |
+| Trigger                          | Execution                                                                | Bootstrap                                                       |
+| -------------------------------- | ------------------------------------------------------------------------ | -------------------------------------------------------------- |
+| Run **fails** (agent fault, etc) | ✅ `failRun` → `stopRunContainer` (single funnel for every failure kind) | ✅ `pollBootstrapJob` failure path → `stopContainer`           |
+| User **stops/cancels** the run   | ✅ `ExecutionService.stopRun`                                            | ✅ `BootstrapService.stop`                                     |
+| Pre-flight / dispatch cleanup    | —                                                                        | ✅ pre-flight / dispatch cleanup                              |
+| Block-tree **delete / teardown** | ✅ `teardownForBlockTree`                                                | (frame removed with job)                                       |
+| Job **succeeds**                 | ✅ `recordStepResult` final step → `stopRunContainer`                    | ✅ `pollBootstrapJob` success path → `stopContainer`          |
 
-The success-path omission is deliberate (sleepAfter handles it) but is the main
-reason a healthy run still bills ~10 min of idle compute after finishing.
+Every terminal path now reclaims explicitly. The success-path reclaim is only safe
+on the **final** step (all pipeline steps share one container keyed by the
+execution id); the failure reclaim funnels through `failRun` so every failure kind
+(driver `job_failed`, spend/decision timeouts, user stop) reclaims once,
+idempotently. These calls are no-ops where no async container executor is wired
+(e.g. the test `FakeAgentExecutor`).
 
 ## Layer 3 — orphan sweeper (cron backstop)
 
@@ -93,7 +99,39 @@ instance** is no longer driving them, across **both** kinds:
 
 So the sweeper reclaims a container **only as a side effect of finalizing a
 terminal orphan**. It does **not** look at containers directly and will not kill a
-warm instance whose run record still looks healthy/`alive`.
+warm instance whose run record still looks healthy/`alive` — that blind spot is
+what Layer 4 covers.
+
+## Layer 4 — instance-level reaper (cron backstop, registry-backed)
+
+The load-bearing backstop that keys off the **real container inventory**, not the
+run record. A tiny D1 registry, `live_containers` (migration `0022`), records one
+row per live container: the Cloudflare transport `register`s a row on dispatch and
+`release` clears it (Layer 2), so the row's `started_at` is the container's true
+age.
+
+- `ContainerInstanceRegistry` (`src/infrastructure/containers/ContainerInstanceRegistry.ts`)
+  owns the `EXEC_CONTAINER` namespace + the `LiveContainerStore`
+  (`D1LiveContainerRepository`) + a `Clock`. Its `release(key)` is the **single kill
+  path** (SIGKILL via `shutdown` **+** remove the row), shared by Layer 2 and this
+  reaper so they can't diverge.
+- `reapStaleBefore(now − maxAgeMs)` (`src/index.ts` `scheduled`, the `*/2` cron, in
+  `ctx.waitUntil`) lists every row older than the ceiling, kills each through
+  `release`, and **warn-logs each kill** (`cron: 'container-reaper'`). With normal
+  runs self-reclaiming, a reap is a genuine **leak signal**.
+- Ceiling = `CONTAINER_MAX_AGE_MINUTES` (default **90**, hard-clamped to **≥75**),
+  sized above the longest legitimate lifetime (harness 60-min max-duration; driver
+  ≈70-min polling) so it never kills live work
+  (`config/execution.ts` → `ExecutionConfig.containerMaxAgeMs`).
+- It covers **every** dispatch kind (`run` / `blueprint` / `bootstrap`) for free,
+  because they all dispatch through the one Cloudflare transport where the
+  register/release lives.
+- Backend = **registry + the existing `EXEC_CONTAINER` binding, no Cloudflare API
+  token.** Any container can be killed by job id via
+  `EXEC_CONTAINER.get(idFromName(key)).shutdown()` — the same binding that started
+  it. The registry's only blind spot is a container we never recorded due to our own
+  bug (e.g. a `register` write that failed and was swallowed); the table is the
+  source of truth for the reaper.
 
 ## Container-side watchdogs
 
@@ -107,19 +145,25 @@ container, `wrangler.toml:171-173`):
 A force-failed job becomes terminal, after which polling stops and Layer 1 (or a
 stop on the observed failure) reaps the instance.
 
-## Where dangling instances come from (the gap)
+## Leak modes and how they're now covered
 
-1. **Success idle tail** — a completed run bills up to ~10 min before sleepAfter
-   stops it (no explicit reclaim on success). Expected, minor.
-2. **Long / stuck running jobs** — while a driver keeps polling, the idle timer
-   never starts, so an instance can stay warm well past `sleepAfter` (observed: a
-   bootstrap instance ~39 min old, under the 60-min watchdog — either still doing
-   real work, or a workflow still polling a job that won't terminate). The sweeper
-   won't touch it because its run still classifies as `alive`.
-3. **No instance-level reaper** — nothing kills a warm instance based on the
-   instance's own age/idleness; reclamation is always routed through the run
-   record. If the run record and the real instance state diverge, an instance can
-   leak until the next event that happens to reclaim it.
+The two historical leak modes (each defeated a different net; both could survive
+~a day):
+
+1. **Terminal run, surviving container.** A `done`/`failed` run drops out of
+   `agentRunRepository.listStale` (running-only), so the cron sweeper (Layer 3)
+   never revisits it — only `sleepAfter` could reap, and if that didn't fire the
+   instance was invisible to every net. **Covered** by per-path reclaim (Layer 2,
+   success + failure now reclaim) and, as a backstop, the Layer 4 reaper.
+2. **Stuck-`running` run, live workflow.** The driver keeps polling (~15s), keeping
+   the container warm so the 10-min idle clock never starts; and the sweeper sees
+   the Workflows instance `alive` and skips it. Immune to both `sleepAfter` and the
+   sweeper. **Covered** only by the Layer 4 reaper (age from the live-container
+   inventory, independent of the run record).
+
+Residual: the **success idle tail** when no async executor is wired (the per-path
+reclaim is a no-op there) — a completed run can bill up to ~10 min before
+`sleepAfter` stops it. Expected and minor.
 
 ## Manual deletion (current stop-gap)
 

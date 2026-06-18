@@ -4,6 +4,8 @@ import { loadConfig } from './infrastructure/config'
 import type { Env, ExecutionStartMessage, GitHubSyncMessage } from './infrastructure/env'
 import { D1AgentRunRepository } from './infrastructure/repositories/D1AgentRunRepository'
 import { D1CommitProjectionRepository } from './infrastructure/repositories/D1CommitProjectionRepository'
+import { D1LiveContainerRepository } from './infrastructure/repositories/D1LiveContainerRepository'
+import { ContainerInstanceRegistry } from './infrastructure/containers/ContainerInstanceRegistry'
 import { D1RateLimitRepository } from './infrastructure/repositories/D1RateLimitRepository'
 import { D1TokenUsageRepository } from './infrastructure/repositories/D1TokenUsageRepository'
 import { buildContainer } from './infrastructure/container'
@@ -143,6 +145,32 @@ export default {
           })
           .catch((error) =>
             logger.error({ cron: 'run-sweeper', err: errInfo(error) }, 'run sweep failed'),
+          ),
+      )
+    }
+
+    // Instance-level container reaper: kill any per-run container that outlived its
+    // legitimate maximum lifetime. This is the load-bearing backstop the run-record
+    // nets miss — a terminal run whose container survived, or a stuck-`running` run
+    // a live driver keeps warm (so its idle sleep clock never starts). Keys off the
+    // real live-container inventory, not the run record, and kills via the same
+    // EXEC_CONTAINER binding (no Cloudflare API token). With normal runs now self-
+    // reclaiming, a reaped container is a genuine leak — the registry logs each loudly.
+    if (env.EXEC_CONTAINER) {
+      const reaper = new ContainerInstanceRegistry(
+        env.EXEC_CONTAINER,
+        new D1LiveContainerRepository({ db: env.DB }),
+        clock,
+      )
+      const maxAgeMs = loadConfig(env).execution.containerMaxAgeMs
+      ctx.waitUntil(
+        reaper
+          .reapStaleBefore(clock.now() - maxAgeMs)
+          .then(({ reaped }) => {
+            if (reaped > 0) logger.warn({ cron: 'container-reaper', reaped }, 'reaped leaked containers')
+          })
+          .catch((error) =>
+            logger.error({ cron: 'container-reaper', err: errInfo(error) }, 'container reap failed'),
           ),
       )
     }

@@ -7,7 +7,6 @@ import {
   type ModelRef,
   type RunnerDispatchKind,
   type RunnerJobResult,
-  type RunnerTransport,
 } from '@cat-factory/kernel'
 import {
   type AgentRouting,
@@ -17,6 +16,11 @@ import {
   userPromptFor,
 } from '@cat-factory/agents'
 import type { ContainerSessionService } from '../containers/ContainerSessionService'
+import { RunnerJobClient, type ResolveRunnerTransport } from './RunnerJobClient'
+
+// Re-exported for the composition root + tests that wire this executor by name.
+export type { ResolveRunnerTransport }
+
 // The GitHub repo a run should be implemented against, resolved from the
 // workspace's installation + connected repos (see container.ts).
 export interface RepoTarget {
@@ -29,15 +33,6 @@ export interface RepoTarget {
 export type ResolveRepoTarget = (workspaceId: string, blockId: string) => Promise<RepoTarget | null>
 
 export type MintInstallationToken = (installationId: number) => Promise<string>
-
-/**
- * Resolve the runner backend a workspace's coding jobs run on. Picks a workspace's
- * self-hosted runner pool when one is registered (and runner pools are enabled),
- * else the per-run Cloudflare Container. Called per dispatch and per poll; the
- * poll site passes the job's `workspaceId` (carried on the handle) so it resolves
- * the same backend it dispatched to.
- */
-export type ResolveRunnerTransport = (workspaceId: string | undefined) => Promise<RunnerTransport>
 
 export interface ContainerAgentExecutorDependencies {
   /** Resolve which runner backend (Cloudflare container or self-hosted pool) a job runs on. */
@@ -88,7 +83,12 @@ const BLUEPRINT_SYSTEM_PROMPT =
  * to avoid double-counting in the execution engine.
  */
 export class ContainerAgentExecutor implements AsyncAgentExecutor {
-  constructor(private readonly deps: ContainerAgentExecutorDependencies) {}
+  /** Shared backend-polymorphic dispatch/poll/release plumbing (see RunnerJobClient). */
+  private readonly jobs: RunnerJobClient
+
+  constructor(private readonly deps: ContainerAgentExecutorDependencies) {
+    this.jobs = new RunnerJobClient(deps.resolveTransport)
+  }
 
   /** Repo-operating steps always run as polled async jobs (the coding can be long). */
   runsAsync(_context: AgentRunContext): boolean {
@@ -104,8 +104,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
   async startJob(context: AgentRunContext): Promise<AgentJobHandle> {
     const { workspaceId, executionId } = this.requireIds(context)
     const { body, model, kind } = await this.buildJobBody(context)
-    const transport = await this.deps.resolveTransport(workspaceId)
-    await transport.dispatch(executionId, body, kind)
+    await this.jobs.dispatch(workspaceId, executionId, body, kind)
     // Carry the workspace on the handle so the poll site can resolve the same
     // backend (Cloudflare container vs. self-hosted pool) given only the job id.
     return { jobId: executionId, model, workspaceId }
@@ -113,8 +112,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
 
   /** Poll a dispatched job for its state, mapping the runner view into an update. */
   async pollJob(handle: AgentJobHandle): Promise<AgentJobUpdate> {
-    const transport = await this.deps.resolveTransport(handle.workspaceId)
-    const view = await transport.poll(handle.jobId)
+    const view = await this.jobs.poll(handle.workspaceId, handle.jobId)
     if (view.state === 'running') {
       // Forward the latest subtask counts (if any) so the engine can surface
       // live "N/M done" progress on the step; the shapes match field-for-field.
@@ -137,8 +135,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
    * is a no-op.
    */
   async stopJob(handle: AgentJobHandle): Promise<void> {
-    const transport = await this.deps.resolveTransport(handle.workspaceId)
-    await transport.release?.(handle.jobId)
+    await this.jobs.release(handle.workspaceId, handle.jobId)
   }
 
   /**

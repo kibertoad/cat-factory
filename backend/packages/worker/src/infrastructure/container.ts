@@ -22,6 +22,8 @@ import {
   type ResolveRunnerTransport,
 } from './ai/ContainerAgentExecutor'
 import { CloudflareContainerTransport } from './containers/CloudflareContainerTransport'
+import { ContainerInstanceRegistry } from './containers/ContainerInstanceRegistry'
+import { D1LiveContainerRepository } from './repositories/D1LiveContainerRepository'
 import { HttpRunnerPoolProvider } from './runners/HttpRunnerPoolProvider'
 import { RunnerPoolTransport } from './runners/RunnerPoolTransport'
 import { D1RunnerPoolConnectionRepository } from './repositories/D1RunnerPoolConnectionRepository'
@@ -103,6 +105,7 @@ function selectAgentExecutor(
   config: AppConfig,
   db: D1Database,
   clock: Clock,
+  resolveTransport: ResolveRunnerTransport | null,
 ): AgentExecutor {
   const inline = new AiAgentExecutor({
     modelProvider: new CloudflareModelProvider({ env }),
@@ -118,7 +121,7 @@ function selectAgentExecutor(
   // the repo-operating steps as useless one-shot LLM calls.
   let container: AgentExecutor | null = null
   if (config.agents.containerImpl || config.runners.enabled) {
-    container = buildContainerExecutor(env, config, db, clock)
+    container = buildContainerExecutor(env, config, db, clock, resolveTransport)
     if (!container) {
       throw new Error(
         'Container-based implementation is enabled (CONTAINER_IMPL_ENABLED or ' +
@@ -148,8 +151,19 @@ function buildResolveTransport(
   db: D1Database,
   clock: Clock,
 ): ResolveRunnerTransport | null {
+  // The Cloudflare backend folds in instance-level reaping: the registry records
+  // each dispatched container in the live inventory and clears it on release, so the
+  // cron reaper (index.ts) can kill anything that outlived its lifetime — covering
+  // run/blueprint/bootstrap through this one transport with no per-flow wiring.
   const cloudflare = env.EXEC_CONTAINER
-    ? new CloudflareContainerTransport(env.EXEC_CONTAINER)
+    ? new CloudflareContainerTransport(
+        env.EXEC_CONTAINER,
+        new ContainerInstanceRegistry(
+          env.EXEC_CONTAINER,
+          new D1LiveContainerRepository({ db }),
+          clock,
+        ),
+      )
     : null
 
   // The self-hosted pool path: one stateless manifest interpreter (its OAuth cache
@@ -236,6 +250,7 @@ function buildContainerExecutor(
   config: AppConfig,
   db: D1Database,
   clock: Clock,
+  resolveTransport: ResolveRunnerTransport | null,
 ): AgentExecutor | null {
   if (
     !config.github.enabled ||
@@ -246,7 +261,6 @@ function buildContainerExecutor(
     return null
   }
 
-  const resolveTransport = buildResolveTransport(env, config, db, clock)
   if (!resolveTransport) return null
 
   const installationRepository = new D1GitHubInstallationRepository({ db })
@@ -497,9 +511,10 @@ function selectRepoBootstrapper(
   db: D1Database,
   clock: Clock,
   idGenerator: IdGenerator,
+  resolveTransport: ResolveRunnerTransport | null,
 ): ContainerRepoBootstrapper | undefined {
   if (
-    !env.EXEC_CONTAINER ||
+    !resolveTransport ||
     !config.github.enabled ||
     !env.GITHUB_APP_PRIVATE_KEY ||
     !env.WORKER_PUBLIC_URL ||
@@ -519,7 +534,7 @@ function selectRepoBootstrapper(
   })
 
   return new ContainerRepoBootstrapper({
-    container: env.EXEC_CONTAINER,
+    resolveTransport,
     installationRepository,
     bootstrapJobRepository: new D1BootstrapJobRepository({ db }),
     repoRepository: new D1RepoProjectionRepository({ db }),
@@ -619,6 +634,12 @@ export function buildContainer(env: Env, overrides: Partial<CoreDependencies> = 
   const clock = new SystemClock()
   const idGenerator = new CryptoIdGenerator()
 
+  // The runner-backend factory is shared by every container-backed flow (the
+  // implementation executor and the repo bootstrapper), so both dispatch through the
+  // same Cloudflare/self-hosted seam — and the bootstrapper rides the reaping-aware
+  // Cloudflare transport for free. Null when no backend is configured.
+  const resolveTransport = buildResolveTransport(env, config, db, clock)
+
   const dependencies: CoreDependencies = {
     workspaceRepository: new D1WorkspaceRepository({ db }),
     accountRepository: new D1AccountRepository({ db }),
@@ -633,7 +654,8 @@ export function buildContainer(env: Env, overrides: Partial<CoreDependencies> = 
     // skip selection entirely — selectAgentExecutor throws when a sandbox is opted
     // in but its prerequisites are missing, which is the desired loud failure in
     // production but must not fire for tests that never reach the real executor.
-    agentExecutor: overrides.agentExecutor ?? selectAgentExecutor(env, config, db, clock),
+    agentExecutor:
+      overrides.agentExecutor ?? selectAgentExecutor(env, config, db, clock, resolveTransport),
     workRunner: selectWorkRunner(env),
     executionEventPublisher: selectEventPublisher(env),
     spendPricing: config.spend,
@@ -641,7 +663,7 @@ export function buildContainer(env: Env, overrides: Partial<CoreDependencies> = 
     // CRUD is always available); the run path additionally needs the bootstrapper.
     referenceArchitectureRepository: new D1ReferenceArchitectureRepository({ db }),
     bootstrapJobRepository: new D1BootstrapJobRepository({ db }),
-    repoBootstrapper: selectRepoBootstrapper(env, config, db, clock, idGenerator),
+    repoBootstrapper: selectRepoBootstrapper(env, config, db, clock, idGenerator, resolveTransport),
     // Durably drive each bootstrap run's poll loop when the Workflows binding is
     // present (mirrors the execution driver); without it a run still dispatches.
     bootstrapRunner: env.BOOTSTRAP_WORKFLOW
