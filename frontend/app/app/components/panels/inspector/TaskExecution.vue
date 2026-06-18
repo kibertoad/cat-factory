@@ -37,6 +37,14 @@ const stepLabel: Record<string, string> = {
 function openDecisionFor(decisionId: string) {
   if (instance.value) ui.openDecision(instance.value.id, decisionId)
 }
+
+// Which step's prose output is expanded inline. Agents like architect and
+// researcher produce prose rather than a PR; clicking the row reveals the full
+// text it wrote, clicking again collapses it back to the teaser. One at a time.
+const expandedStep = ref<number | null>(null)
+function toggleStep(i: number) {
+  expandedStep.value = expandedStep.value === i ? null : i
+}
 </script>
 
 <template>
@@ -71,6 +79,14 @@ function openDecisionFor(decisionId: string) {
               :style="{ color: AGENT_BY_KIND[s.agentKind].color }"
             />
             <span class="text-xs text-slate-200">{{ AGENT_BY_KIND[s.agentKind].label }}</span>
+            <UIcon
+              v-if="s.output"
+              name="i-lucide-chevron-down"
+              class="h-3.5 w-3.5 shrink-0 cursor-pointer text-slate-500 transition-transform hover:text-slate-300"
+              :class="expandedStep === i ? 'rotate-180' : ''"
+              title="Show what this agent produced"
+              @click="toggleStep(i)"
+            />
             <span
               v-if="s.subtasks && s.subtasks.total > 0"
               class="ml-auto font-mono text-[10px] tabular-nums text-slate-300"
@@ -122,6 +138,23 @@ function openDecisionFor(decisionId: string) {
             <UIcon name="i-lucide-book-marked" class="h-3 w-3 shrink-0" />
             <span>{{ s.selectedFragmentIds.length }} standard(s) applied</span>
           </div>
+          <!-- the prose this agent produced (architect/researcher/reviewer, …):
+               a 2-line teaser that expands to the full text on click -->
+          <template v-if="s.output">
+            <pre
+              v-if="expandedStep === i"
+              class="mt-1.5 ml-6 max-h-72 overflow-auto whitespace-pre-wrap rounded-md bg-slate-950/60 px-2 py-1.5 font-sans text-[11px] leading-relaxed text-slate-200"
+              >{{ s.output }}</pre
+            >
+            <p
+              v-else
+              class="mt-1.5 ml-6 line-clamp-2 cursor-pointer rounded-md bg-slate-950/60 px-2 py-1.5 text-[11px] text-slate-400 hover:bg-slate-950"
+              title="Click to read the full output"
+              @click="toggleStep(i)"
+            >
+              {{ s.output }}
+            </p>
+          </template>
         </li>
       </ul>
     </div>
