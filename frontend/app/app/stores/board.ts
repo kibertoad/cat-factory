@@ -37,6 +37,17 @@ export const useBoardStore = defineStore('board', () => {
   }
 
   /**
+   * Import an existing GitHub repo (the App is installed + it's projected) as a
+   * service frame, with no bootstrap run. The backend links the repo to the new
+   * frame and returns it `ready`; we upsert it onto the board.
+   */
+  async function addServiceFromRepo(repoGithubId: number): Promise<Block> {
+    const block = await api.addServiceFromRepo(useWorkspaceStore().requireId(), { repoGithubId })
+    upsert(block)
+    return block
+  }
+
+  /**
    * Add a task inside a container (a service or a module). The user supplies the
    * title (and optional description) — the task is created in `planned` state and
    * is not launched until the user explicitly starts a pipeline on it.
@@ -146,6 +157,7 @@ export const useBoardStore = defineStore('board', () => {
     upsert,
     ...queries,
     addBlock,
+    addServiceFromRepo,
     addTask,
     addModule,
     reparentBlock,

@@ -57,17 +57,31 @@ watch(
       <h2 class="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
         Repositories
       </h2>
-      <UButton
-        block
-        color="neutral"
-        variant="soft"
-        size="sm"
-        icon="i-lucide-git-branch-plus"
-        class="justify-start"
-        @click="ui.openBootstrap()"
-      >
-        Bootstrap repo
-      </UButton>
+      <div class="space-y-1.5">
+        <UButton
+          v-if="github.available"
+          block
+          color="neutral"
+          variant="soft"
+          size="sm"
+          icon="i-lucide-folder-git-2"
+          class="justify-start"
+          @click="ui.openAddService()"
+        >
+          Add from existing repo
+        </UButton>
+        <UButton
+          block
+          color="neutral"
+          variant="soft"
+          size="sm"
+          icon="i-lucide-git-branch-plus"
+          class="justify-start"
+          @click="ui.openBootstrap()"
+        >
+          Bootstrap repo
+        </UButton>
+      </div>
     </section>
 
     <template v-if="library.available">

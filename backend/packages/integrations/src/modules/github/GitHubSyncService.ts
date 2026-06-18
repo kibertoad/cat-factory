@@ -73,6 +73,30 @@ export class GitHubSyncService {
   }
 
   /**
+   * Link a single repo into this workspace without disturbing the rest (unlike
+   * {@link setLinkedRepos}, which sets the exact set and tombstones the others).
+   * Projects + deep-syncs the repo the first time it's seen, and is a no-op that
+   * returns the live row when it's already tracked. Returns null when the repo is
+   * not accessible to the installation (the App hasn't been granted it yet) — the
+   * caller surfaces a "grant the App access" hint. Backs the "add an existing
+   * repo as a board service" flow, where the workspace may not link the repo yet.
+   */
+  async linkRepo(workspaceId: string, repoGithubId: number): Promise<GitHubRepo | null> {
+    const existing = await this.deps.repoProjectionRepository.get(workspaceId, repoGithubId)
+    if (existing) return existing
+    const installation = await this.deps.githubInstallationRepository.getByWorkspace(workspaceId)
+    if (!installation || installation.deletedAt) return null
+    const installationId = installation.installationId
+    const { items } = await this.deps.githubClient.listInstallationRepos(installationId)
+    const match = items.find((r) => r.githubId === repoGithubId)
+    if (!match) return null
+    const repo: GitHubRepo = { ...match, installationId, syncedAt: this.deps.clock.now() }
+    await this.deps.repoProjectionRepository.upsertMany(workspaceId, [repo])
+    await this.syncRepo(workspaceId, repo)
+    return this.deps.repoProjectionRepository.get(workspaceId, repoGithubId)
+  }
+
+  /**
    * Set the exact set of repos this workspace links. Projects the newly selected
    * repos (from those the installation can access), tombstones any deselected
    * repo, then deep-syncs each linked repo. Returns the workspace's live repos.

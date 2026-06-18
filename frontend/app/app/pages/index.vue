@@ -14,6 +14,7 @@ import TaskSourceConnectModal from '~/components/tasks/TaskSourceConnectModal.vu
 import TaskImportModal from '~/components/tasks/TaskImportModal.vue'
 import AddTaskModal from '~/components/board/AddTaskModal.vue'
 import BootstrapModal from '~/components/bootstrap/BootstrapModal.vue'
+import AddServiceFromRepoModal from '~/components/github/AddServiceFromRepoModal.vue'
 import GitHubPanel from '~/components/github/GitHubPanel.vue'
 import FragmentLibraryPanel from '~/components/fragments/FragmentLibraryPanel.vue'
 import RequirementReviewModal from '~/components/requirements/RequirementReviewModal.vue'
@@ -58,6 +59,7 @@ watch(
       <TaskImportModal />
       <AddTaskModal />
       <BootstrapModal />
+      <AddServiceFromRepoModal />
       <GitHubPanel />
       <FragmentLibraryPanel />
       <RequirementReviewModal />

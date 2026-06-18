@@ -198,6 +198,12 @@ export function useApi() {
     addFrame: (workspaceId: string, body: { type: BlockType; position: Position }) =>
       http<Block>(`${ws(workspaceId)}/blocks`, { method: 'POST', body }),
 
+    // Import an existing GitHub repo as a service frame (no bootstrap run).
+    addServiceFromRepo: (
+      workspaceId: string,
+      body: { repoGithubId: number; position?: Position },
+    ) => http<Block>(`${ws(workspaceId)}/blocks/from-repo`, { method: 'POST', body }),
+
     addTask: (
       workspaceId: string,
       blockId: string,

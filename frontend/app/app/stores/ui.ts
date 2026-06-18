@@ -40,6 +40,9 @@ export const useUiStore = defineStore('ui', () => {
   // Repo-bootstrap modal (manage reference architectures + launch a bootstrap).
   const bootstrapOpen = ref(false)
 
+  // "Add a service from an existing GitHub repo" modal (no bootstrap run).
+  const addServiceOpen = ref(false)
+
   // GitHub integration panel (connection management + repo/PR/issue browsing).
   const githubOpen = ref(false)
 
@@ -149,6 +152,12 @@ export const useUiStore = defineStore('ui', () => {
   function closeBootstrap() {
     bootstrapOpen.value = false
   }
+  function openAddService() {
+    addServiceOpen.value = true
+  }
+  function closeAddService() {
+    addServiceOpen.value = false
+  }
   function openGitHub() {
     githubOpen.value = true
   }
@@ -180,6 +189,7 @@ export const useUiStore = defineStore('ui', () => {
     taskImport,
     addTaskContainerId,
     bootstrapOpen,
+    addServiceOpen,
     githubOpen,
     fragmentLibraryOpen,
     requirementReviewBlockId,
@@ -208,6 +218,8 @@ export const useUiStore = defineStore('ui', () => {
     closeAddTask,
     openBootstrap,
     closeBootstrap,
+    openAddService,
+    closeAddService,
     openGitHub,
     closeGitHub,
     openFragmentLibrary,

@@ -1,6 +1,7 @@
 import {
   addFrameSchema,
   addModuleSchema,
+  addServiceFromRepoSchema,
   addTaskSchema,
   moveBlockSchema,
   reparentSchema,
@@ -23,6 +24,34 @@ export function boardController(): Hono<AppEnv> {
     const block = await c
       .get('container')
       .boardService.addFrame(param(c, 'workspaceId'), c.req.valid('json'))
+    return c.json(block, 201)
+  })
+
+  // Import an existing GitHub repo as a service frame — no bootstrap / agent run.
+  // First link + sync the repo into the workspace (it may be App-accessible but
+  // not yet tracked here), then create the `ready` frame and link the repo to it.
+  // A 409 tells the client the App can't see the repo yet (grant it access); the
+  // board service 404s an unknown repo and 422s one already on the board.
+  app.post('/blocks/from-repo', jsonBody(addServiceFromRepoSchema), async (c) => {
+    const container = c.get('container')
+    const workspaceId = param(c, 'workspaceId')
+    const { repoGithubId } = c.req.valid('json')
+    if (container.github) {
+      const linked = await container.github.syncService.linkRepo(workspaceId, repoGithubId)
+      if (!linked) {
+        return c.json(
+          {
+            error: {
+              code: 'repo_not_accessible',
+              message:
+                'The GitHub App cannot access this repository yet. Grant it access, then try again.',
+            },
+          },
+          409,
+        )
+      }
+    }
+    const block = await container.boardService.addServiceFromRepo(workspaceId, c.req.valid('json'))
     return c.json(block, 201)
   })
 

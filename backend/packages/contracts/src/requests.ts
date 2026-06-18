@@ -30,6 +30,19 @@ export const addFrameSchema = v.object({
 })
 export type AddFrameInput = v.InferOutput<typeof addFrameSchema>
 
+/**
+ * Add a service frame backed by an EXISTING GitHub repo the App can access.
+ * Unlike bootstrap there is no container / agent run: the backend links + syncs
+ * the repo into the workspace (if it wasn't already tracked), creates the frame
+ * `ready`, and links the repo projection to it. `position` is optional — the
+ * backend lays the frame out when omitted (the side-panel button passes none).
+ */
+export const addServiceFromRepoSchema = v.object({
+  repoGithubId: v.number(),
+  position: v.optional(positionSchema),
+})
+export type AddServiceFromRepoInput = v.InferOutput<typeof addServiceFromRepoSchema>
+
 export const addTaskSchema = v.object({
   // The user always names the task — no auto-generated placeholder titles.
   title: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200)),

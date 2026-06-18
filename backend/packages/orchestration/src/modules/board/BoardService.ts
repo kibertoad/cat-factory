@@ -1,6 +1,7 @@
 import type {
   AddFrameInput,
   AddModuleInput,
+  AddServiceFromRepoInput,
   AddTaskInput,
   ReparentInput,
   UpdateBlockInput,
@@ -8,7 +9,12 @@ import type {
 import type { Block, BlockType, Position } from '@cat-factory/kernel'
 import { assertFound, ValidationError } from '@cat-factory/kernel'
 import { BLOCK_TYPE_LABEL, DEFAULT_CONFIDENCE_THRESHOLD } from '@cat-factory/kernel'
-import type { BlockRepository, ExecutionRepository, WorkspaceRepository } from '@cat-factory/kernel'
+import type {
+  BlockRepository,
+  ExecutionRepository,
+  RepoProjectionRepository,
+  WorkspaceRepository,
+} from '@cat-factory/kernel'
 import type { IdGenerator } from '@cat-factory/kernel'
 import { requireWorkspace } from '@cat-factory/kernel'
 import { canReparent, descendantIds, gridSlot, serviceOf, tasksOf } from './board.logic'
@@ -18,6 +24,12 @@ export interface BoardServiceDependencies {
   blockRepository: BlockRepository
   executionRepository: ExecutionRepository
   idGenerator: IdGenerator
+  /**
+   * The GitHub repo projection, present only when the GitHub integration is
+   * wired. Backs {@link BoardService.addServiceFromRepo}, which links an existing
+   * repo to the new service frame; absent → that path reports unavailable.
+   */
+  repoProjectionRepository?: RepoProjectionRepository
 }
 
 /**
@@ -31,17 +43,20 @@ export class BoardService {
   private readonly blockRepository: BlockRepository
   private readonly executionRepository: ExecutionRepository
   private readonly idGenerator: IdGenerator
+  private readonly repoProjectionRepository?: RepoProjectionRepository
 
   constructor({
     workspaceRepository,
     blockRepository,
     executionRepository,
     idGenerator,
+    repoProjectionRepository,
   }: BoardServiceDependencies) {
     this.workspaceRepository = workspaceRepository
     this.blockRepository = blockRepository
     this.executionRepository = executionRepository
     this.idGenerator = idGenerator
+    this.repoProjectionRepository = repoProjectionRepository
   }
 
   private requireWorkspace(workspaceId: string) {
@@ -72,6 +87,50 @@ export class BoardService {
       parentId: null,
     }
     await this.blockRepository.insert(workspaceId, block)
+    return block
+  }
+
+  /**
+   * Add a service frame backed by an existing GitHub repo the workspace already
+   * links (the App is installed and the repo is projected). No container / agent
+   * run — the frame is created `ready`, titled after the repo, and the repo
+   * projection row is linked to it so execution resolves this repo for tasks
+   * dropped on the frame. The frontend's drag-drop path uses {@link addFrame};
+   * this is the "import an existing repo as a service" button.
+   */
+  async addServiceFromRepo(
+    workspaceId: string,
+    input: AddServiceFromRepoInput,
+  ): Promise<Block> {
+    await this.requireWorkspace(workspaceId)
+    if (!this.repoProjectionRepository) {
+      throw new ValidationError('GitHub integration is not configured')
+    }
+    const repo = assertFound(
+      await this.repoProjectionRepository.get(workspaceId, input.repoGithubId),
+      'GitHubRepo',
+      String(input.repoGithubId),
+    )
+    if (repo.blockId) {
+      throw new ValidationError('This repository is already linked to a board service')
+    }
+    const blocks = await this.blockRepository.listByWorkspace(workspaceId)
+    const frames = blocks.filter((b) => b.level === 'frame').length
+    const block: Block = {
+      id: this.idGenerator.next('blk'),
+      title: repo.name,
+      type: 'service',
+      description: `Service backed by ${repo.owner}/${repo.name}.`,
+      position: input.position ?? { x: 80 + (frames % 5) * 48, y: 80 + (frames % 5) * 48 },
+      status: 'ready',
+      progress: 0,
+      dependsOn: [],
+      executionId: null,
+      level: 'frame',
+      parentId: null,
+    }
+    await this.blockRepository.insert(workspaceId, block)
+    await this.repoProjectionRepository.linkBlock(workspaceId, repo.githubId, block.id)
     return block
   }
 
