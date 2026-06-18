@@ -61,9 +61,9 @@ export class CompositeAgentExecutor implements AsyncAgentExecutor {
     if (!this.container) {
       throw new Error(
         `Agent kind '${context.agentKind}' needs a real checkout (clone/edit/commit/PR) ` +
-          'and cannot run as a one-shot LLM call. Enable container-based implementation ' +
-          '(CONTAINER_IMPL_ENABLED=true) or a self-hosted runner pool (RUNNERS_ENABLED=true) ' +
-          'with its prerequisites wired.',
+          'and cannot run as a one-shot LLM call. Its sandbox prerequisites must be wired: ' +
+          'the EXEC_CONTAINER binding (or a registered runner pool with RUNNERS_ENABLED), ' +
+          'plus the GitHub App, WORKER_PUBLIC_URL and AUTH_SESSION_SECRET.',
       )
     }
     return this.container

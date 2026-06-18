@@ -6,6 +6,7 @@ import {
   MODULE_META,
   DEFAULT_CONFIDENCE_THRESHOLD,
 } from '~/utils/catalog'
+import AgentFailureCard from '~/components/board/AgentFailureCard.vue'
 
 const props = defineProps<{ taskId: string }>()
 
@@ -13,6 +14,7 @@ const board = useBoardStore()
 const execution = useExecutionStore()
 const pipelines = usePipelinesStore()
 const ui = useUiStore()
+const agentRuns = useAgentRunsStore()
 const toast = useToast()
 
 const task = computed<Block | undefined>(() => board.getBlock(props.taskId))
@@ -43,7 +45,19 @@ const confidencePct = computed(() =>
 const pr = computed(() => task.value?.pullRequest)
 const prLabel = computed(() => (pr.value?.number ? `PR #${pr.value.number}` : 'PR'))
 
-function run() {
+// This task's current agent run (if any). A failed run must surface the shared
+// failure banner + retry — NOT a stuck progress bar — so the card never looks
+// like it's still working after the run has terminated.
+const agentRun = computed(() => agentRuns.byBlock[props.taskId])
+const runFailed = computed(() => agentRun.value?.status === 'failed')
+
+// Optimistic "Start": flip the button into a spinning "Starting…" state the
+// instant it's clicked, before the server confirms. The button naturally
+// unmounts once the stream pushes the block into `in_progress`; if the start
+// call faults we revert and surface a toast.
+const starting = ref(false)
+
+async function run() {
   if (!runnable.value) {
     toast.add({
       title: 'Blocked by dependencies',
@@ -57,7 +71,19 @@ function run() {
     toast.add({ title: 'No pipeline defined', description: 'Create one in the builder first.' })
     return
   }
-  execution.start(props.taskId, pipeline)
+  starting.value = true
+  try {
+    await execution.start(props.taskId, pipeline)
+  } catch (e) {
+    // Real confirmation came back as a failure — revert the optimistic state.
+    starting.value = false
+    toast.add({
+      title: 'Failed to start',
+      description: e instanceof Error ? e.message : String(e),
+      color: 'error',
+      icon: 'i-lucide-alert-triangle',
+    })
+  }
 }
 
 function review() {
@@ -101,9 +127,12 @@ function selectTask() {
       </span>
     </div>
 
-    <!-- progress while a pipeline runs -->
+    <!-- a failed run: the shared failure banner + retry, never a stuck bar -->
+    <AgentFailureCard v-if="runFailed && agentRun" :run="agentRun" variant="compact" class="mt-1.5" />
+
+    <!-- progress while a pipeline runs (suppressed once the run has failed) -->
     <UProgress
-      v-if="task.status === 'in_progress' || task.status === 'blocked'"
+      v-else-if="task.status === 'in_progress' || task.status === 'blocked'"
       :model-value="Math.round(task.progress * 100)"
       size="xs"
       class="mt-1.5"
@@ -148,7 +177,8 @@ function selectTask() {
           variant="soft"
           size="xs"
           :icon="runnable ? 'i-lucide-play' : 'i-lucide-lock'"
-          :disabled="!runnable"
+          :loading="starting"
+          :disabled="!runnable || starting"
           :title="
             runnable
               ? `Start ${defaultPipeline?.name ?? 'pipeline'}`
@@ -156,7 +186,7 @@ function selectTask() {
           "
           @click.stop="run"
         >
-          {{ runnable ? 'Start' : 'Blocked' }}
+          {{ starting ? 'Starting…' : runnable ? 'Start' : 'Blocked' }}
         </UButton>
         <span
           v-if="runnable && defaultPipeline"

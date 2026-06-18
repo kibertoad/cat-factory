@@ -5,14 +5,6 @@ import type { Env } from '../env'
 import { num } from './utils'
 
 export interface AgentsConfig {
-  /**
-   * Route the repo-operating steps (`coder`, plus the `mocker` mock builder, the
-   * `playwright` e2e writer and the `business-documenter` domain-rules documenter)
-   * to a per-run Cloudflare Container running the Pi coding agent, rather than a
-   * single inline LLM call. Requires `enabled` plus the container binding / GitHub
-   * / proxy wiring (see container.ts).
-   */
-  containerImpl: boolean
   routing: AgentRouting
   /**
    * Resolve a block's selected model id to a concrete ref, honouring the
@@ -91,7 +83,6 @@ export function loadAgentsConfig(
   Object.assign(byKind, parseModelOverrides(env.AGENT_MODELS))
 
   return {
-    containerImpl: env.CONTAINER_IMPL_ENABLED === 'true',
     routing: {
       default: defaultConfig,
       byKind,

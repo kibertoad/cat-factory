@@ -66,9 +66,10 @@ name = "cat-factory-bootstrap"
 class_name = "BootstrapWorkflow"
 
 # Per-run code-implementation containers (the @cat-factory/executor-harness
-# Pi coding-agent image). Each run addresses its own instance. Only used when
-# CONTAINER_IMPL_ENABLED = "true"; the image carries no secrets (the per-job
-# GitHub + LLM-proxy tokens are passed at dispatch time).
+# Pi coding-agent image). Each run addresses its own instance. Container-based
+# implementation is always on — this binding (or a registered runner pool) is a
+# hard prerequisite and the Worker refuses to start without one. The image carries
+# no secrets (the per-job GitHub + LLM-proxy tokens are passed at dispatch time).
 #
 # The runner image must live in a registry Cloudflare Containers can PULL from:
 # the Cloudflare managed registry (registry.cloudflare.com), Docker Hub, or ECR.
@@ -168,13 +169,13 @@ crons = ["*/2 * * * *", "0 3 * * *"]
 # How long a run may park on a human decision before expiring:
 DECISION_TIMEOUT = "24 hours"
 
-# Container-based implementation. When "true" (and a GitHub App, a direct
-# OpenAI-compatible provider key and WORKER_PUBLIC_URL are all set), the
-# repo-operating steps (`coder`, `mocker`, `playwright`) run in a per-run Pi
-# container that clones the repo, implements the block and opens a PR. The
-# container reaches the LLM only via this Worker's proxy at ${WORKER_PUBLIC_URL}/v1,
-# so no provider key enters the image.
-CONTAINER_IMPL_ENABLED = "false"
+# Container-based implementation is always on: the repo-operating steps (`coder`,
+# `mocker`, `playwright`, `blueprints`) run in a per-run Pi container that clones
+# the repo, implements the block and opens a PR. The container reaches the LLM only
+# via this Worker's proxy at ${WORKER_PUBLIC_URL}/v1, so no provider key enters the
+# image. Its prerequisites — a GitHub App, WORKER_PUBLIC_URL, AUTH_SESSION_SECRET
+# and a runner backend (the EXEC_CONTAINER binding above or a registered runner
+# pool) — are mandatory; the Worker fails to start if any is missing.
 # Public origin of this Worker; required for container implementation and repo
 # bootstrap. MUST be the workers.dev origin, NOT an orange-clouded custom domain:
 # a per-run Container egresses from inside Cloudflare's network, and a zone's
@@ -286,7 +287,8 @@ ENVIRONMENTS_ENABLED = "false"
 
 # Self-hosted runner pool — "bring your own infra". Off by default. Turn it on to
 # let a workspace register its OWN container runner pool and run the repo-operating
-# coding jobs there instead of per-run Cloudflare Containers. Independent of
-# CONTAINER_IMPL_ENABLED. The one secret this feature needs:
+# coding jobs there instead of per-run Cloudflare Containers. When on, a registered
+# pool can stand in for the EXEC_CONTAINER binding as the mandatory runner backend.
+# The one secret this feature needs:
 #   openssl rand -base64 32 | wrangler secret put RUNNERS_ENCRYPTION_KEY
 RUNNERS_ENABLED = "false"

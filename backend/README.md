@@ -99,8 +99,9 @@ Each pipeline step is performed by an `AgentExecutor` (a port). Implementations:
   Workers AI by default and switches to its direct provider API when that key is configured.
 - **`ContainerAgentExecutor`** (worker) — runs the repo-operating steps (`coder`, `mocker`,
   `playwright`) in a per-run Cloudflare Container (the Pi coding-agent harness) that clones the
-  repo, implements the block and opens a PR. Composed with the inline executor by
-  `CompositeAgentExecutor` when `CONTAINER_IMPL_ENABLED` and its prerequisites are set.
+  repo, implements the block and opens a PR. Always composed with the inline executor by
+  `CompositeAgentExecutor`; its prerequisites are mandatory and the Worker fails to start
+  without them (there is no opt-out flag — container implementation is always on).
 - **`FakeAgentExecutor`** (worker tests) — deterministic; used by the integration tests.
 
 The engine itself (`ExecutionService`) is deterministic: `advanceInstance` moves one run forward
@@ -518,14 +519,13 @@ mistake:
 | `[vars]` (in `wrangler.toml`)                                                                                                                                         | Secrets (`wrangler secret put …`)                                                                           |
 | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
 | `GITHUB_OAUTH_CLIENT_ID`, `AUTH_ALLOWED_LOGINS`/`AUTH_ALLOWED_ORGS`, `AUTH_SUCCESS_REDIRECT_URL`, `ENVIRONMENT`, `CORS_ALLOWED_ORIGINS`                               | `GITHUB_OAUTH_CLIENT_SECRET`, `AUTH_SESSION_SECRET`                                                         |
-| `CONTAINER_IMPL_ENABLED`, `WORKER_PUBLIC_URL`, `RUNNERS_ENABLED`                                                                                                      | (container/runner path holds no key of its own — see below)                                                 |
+| `WORKER_PUBLIC_URL`, `RUNNERS_ENABLED`                                                                                                                                | (container/runner path holds no key of its own — see below)                                                 |
 | `GITHUB_APP_ID`, `GITHUB_APP_SLUG`, `GITHUB_SETUP_REDIRECT_URL`, `GITHUB_PRIVILEGED_APP_ID`                                                                           | `GITHUB_APP_PRIVATE_KEY`, `GITHUB_WEBHOOK_SECRET`, `GITHUB_PRIVILEGED_APP_PRIVATE_KEY`                      |
 | `SPEND_MONTHLY_LIMIT`, `SPEND_CURRENCY`, `SPEND_MODEL_PRICES`, `AGENT_DEFAULT_*`/`AGENT_MODELS`, `DECISION_TIMEOUT`                                                   | `QWEN_API_KEY`, `DEEPSEEK_API_KEY`, `MOONSHOT_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`               |
 | `DOCUMENTS_ENABLED`/`DOCUMENT_SOURCES`/`DOCUMENT_PLANNER`, `TASKS_ENABLED`/`TASK_SOURCES`, `ENVIRONMENTS_ENABLED`, `PROMPT_LIBRARY_ENABLED`/`PROMPT_LIBRARY_SELECTOR` | `DOCUMENTS_ENCRYPTION_KEY`, `TASKS_ENCRYPTION_KEY`, `ENVIRONMENTS_ENCRYPTION_KEY`, `RUNNERS_ENCRYPTION_KEY` |
 
-> Two flags are **`[vars]`, not secrets**, despite older notes that said
-> otherwise: `CONTAINER_IMPL_ENABLED` and `WORKER_PUBLIC_URL`. Set them in
-> `[vars]`.
+> `WORKER_PUBLIC_URL` is a **`[var]`, not a secret**, despite older notes that
+> said otherwise. Set it in `[vars]`.
 
 #### Authentication (required in production)
 
@@ -592,17 +592,19 @@ only labels and provider/model ids, never the keys.
 #### Container implementation (running agents on a real checkout)
 
 The phases that must operate on the repository — `coder` (implementation), `mocker` (WireMock
-mocks) and `playwright` (end-to-end tests) — can run inside a per-run Cloudflare Container that
+mocks) and `playwright` (end-to-end tests) — run inside a per-run Cloudflare Container that
 clones the repo, edits files and opens a PR, instead of as a single inline LLM call. Every other
-phase (architect, reviewer, tester, the `acceptance` scenario writer, …) stays inline. Enable it
-in `wrangler.toml [vars]` (these are **vars, not secrets**):
+phase (architect, reviewer, tester, the `acceptance` scenario writer, …) stays inline. This is
+**always on** — there is no opt-out flag — so its prerequisites are mandatory and the Worker
+**fails to start** if any is missing:
 
 ```toml
-# wrangler.toml [vars]
-CONTAINER_IMPL_ENABLED = "true"
+# wrangler.toml [vars] (WORKER_PUBLIC_URL is a var, not a secret)
 WORKER_PUBLIC_URL = "https://cat-factory-backend.<account>.workers.dev"
-# Also requires the EXEC_CONTAINER binding + [[containers]] image (already in wrangler.toml)
-# and a configured GitHub App. Container runs are long-lived; the Workflows driver carries them.
+# Also requires the EXEC_CONTAINER binding + [[containers]] image (already in wrangler.toml),
+# a configured GitHub App, and AUTH_SESSION_SECRET. (A registered self-hosted runner pool can
+# stand in for the EXEC_CONTAINER binding.) Container runs are long-lived; the Workflows driver
+# carries them.
 ```
 
 > **`WORKER_PUBLIC_URL` must be the `*.workers.dev` origin, _not_ an orange-clouded
@@ -678,10 +680,10 @@ wrangler secret put AUTH_SESSION_SECRET
 # plus the EXEC_CONTAINER binding (already declared in wrangler.toml).
 ```
 
-Unlike container implementation, bootstrap does **not** require `CONTAINER_IMPL_ENABLED` — it
-only needs the `EXEC_CONTAINER` binding itself. Like the container executor, the bootstrapper
-holds no provider key: the agent reaches models only through this Worker's LLM proxy with a
-short-lived session token.
+Bootstrap needs the same runner backend as container implementation — the `EXEC_CONTAINER`
+binding (or a registered runner pool). Like the container executor, the bootstrapper holds no
+provider key: the agent reaches models only through this Worker's LLM proxy with a short-lived
+session token.
 
 #### GitHub App integration (acting on repos)
 
@@ -744,8 +746,9 @@ openssl rand -base64 32 | wrangler secret put DOCUMENTS_ENCRYPTION_KEY      # re
 ```
 
 The **runner pool** routes the repo-operating coding jobs to a workspace's own
-infra instead of Cloudflare Containers; it is independent of `CONTAINER_IMPL_ENABLED`
-but, like the container path, still needs a configured GitHub App, `WORKER_PUBLIC_URL`
+infra instead of Cloudflare Containers; when enabled, a registered pool can serve as
+the mandatory runner backend in place of the `EXEC_CONTAINER` binding. Like the
+container path, it still needs a configured GitHub App, `WORKER_PUBLIC_URL`
 and `AUTH_SESSION_SECRET`.
 
 The **prompt-fragment library** is the one opt-in feature that needs **no** key
