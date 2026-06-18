@@ -5,6 +5,7 @@ import type { Env, GitHubSyncMessage } from '../env'
 import { buildContainer } from '../container'
 import { loadConfig } from '../config'
 import { D1RepoProjectionRepository } from '../repositories/D1RepoProjectionRepository'
+import { D1GitHubInstallationRepository } from '../repositories/D1GitHubInstallationRepository'
 import { logger } from '../observability/logger'
 
 // The async side of the GitHub integration: applying queued webhook deliveries /
@@ -57,6 +58,10 @@ export async function reconcileStaleRepos(
 ): Promise<number> {
   if (!loadConfig(env).github.enabled) return 0
   const repoRepo = new D1RepoProjectionRepository({ db: env.DB })
+  const installationRepo = new D1GitHubInstallationRepository({ db: env.DB })
+  // `listStale` already excludes repos whose installation is tombstoned, so a dead
+  // installation stops being swept once it is known-gone; the handling below tombstones
+  // one the webhook never told us about (a missed uninstall), so it stops next pass.
   const stale = await repoRepo.listStale(clock.now() - staleMs)
   let scheduled = 0
   for (const repo of stale) {
@@ -79,6 +84,19 @@ export async function reconcileStaleRepos(
       // an expected operational state for a stale projection, so log it at warn; any
       // other fault is a real error. Either way, continue with the next repo.
       const gone = isInstallationGoneError(error)
+      // A token-mint 404/410 means the installation itself is gone — uninstalled or
+      // revoked without us receiving the webhook (the cron's most common stuck state).
+      // Tombstone it so this and every future pass skip ALL its repos until it is
+      // reinstalled (the `unsuspend`/reinstall webhook clears the tombstone). Scoped to
+      // the mint error (not a repo-level 404, which means a single deleted repo) and to
+      // 404/410 (never 401, which can be a transient app-JWT fault hitting everything).
+      if (isInstallationTokenGoneError(error)) {
+        try {
+          await installationRepo.softDelete(repo.installationId, clock.now())
+        } catch {
+          // Best-effort: a failed tombstone just means we retry (and warn) next pass.
+        }
+      }
       logger[gone ? 'warn' : 'error'](
         {
           cron: 'github-reconcile',
@@ -88,7 +106,7 @@ export async function reconcileStaleRepos(
           err: errInfo(error),
         },
         gone
-          ? 'skipping stale repo whose GitHub App installation is gone (uninstalled/revoked); reinstall the app or remove the connection to stop these'
+          ? 'skipping stale repo whose GitHub App installation is gone (uninstalled/revoked); reinstall the app to re-enable it'
           : 'repo resync failed',
       )
     }
@@ -113,4 +131,16 @@ function errInfo(error: unknown): { message: string; stack?: string } {
 function isInstallationGoneError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error)
   return /\(HTTP (401|404|410)\)/.test(message)
+}
+
+/**
+ * Whether the error is specifically a *token mint* returning 404/410 — i.e. the
+ * installation itself is gone (uninstalled/revoked), not merely a single repo
+ * being inaccessible. Matches {@link GitHubAppAuth.mintInstallationToken}'s
+ * message. Excludes 401 (a transient app-JWT/clock fault would mint-fail for every
+ * installation, and must not tombstone a healthy connection).
+ */
+function isInstallationTokenGoneError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error)
+  return /Failed to mint installation token .*\(HTTP (404|410)\)/i.test(message)
 }

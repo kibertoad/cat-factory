@@ -92,10 +92,17 @@ export class D1RepoProjectionRepository implements RepoProjectionRepository {
   }
 
   async listStale(olderThanEpochMs: number): Promise<StaleRepoRef[]> {
+    // Join the installation so a tombstoned (uninstalled/suspended) installation's
+    // repos are excluded: there is no way to mint a token for it, so reconciling it
+    // would 404 every pass. `unsuspend`/reinstall clears the installation tombstone,
+    // which re-enables its repos automatically — that is the "until reactivated" gate.
+    // An INNER JOIN also drops repos whose installation row is missing entirely.
     const { results } = await this.db
       .prepare(
-        `SELECT workspace_id, github_id, installation_id, owner, name
-         FROM github_repos WHERE deleted_at IS NULL AND synced_at < ?`,
+        `SELECT r.workspace_id, r.github_id, r.installation_id, r.owner, r.name
+         FROM github_repos r
+         JOIN github_installations i ON i.installation_id = r.installation_id
+         WHERE r.deleted_at IS NULL AND r.synced_at < ? AND i.deleted_at IS NULL`,
       )
       .bind(olderThanEpochMs)
       .all<{
