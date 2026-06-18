@@ -191,8 +191,11 @@ export type WorkspaceEvent =
   | { type: 'board'; reason: string; at: number }
   | { type: 'bootstrap'; job: BootstrapJob; block: Block | null; at: number }
 
-/** Level-of-detail buckets driven by the canvas zoom level. */
-export type LodLevel = 'far' | 'mid' | 'close'
+/** Level-of-detail buckets driven by the canvas zoom level. Shallow → deep:
+ * `far`/`mid`/`close` govern a service frame (chip → card → opened with tasks);
+ * `steps`/`subtasks` drill spatially into an individual task — revealing its
+ * build-pipeline steps, then each step's live todo breakdown. */
+export type LodLevel = 'far' | 'mid' | 'close' | 'steps' | 'subtasks'
 
 /** The signed-in GitHub user, as returned by the backend's /auth/me. */
 export interface AuthUser {

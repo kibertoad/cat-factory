@@ -122,7 +122,7 @@ async function onDrop(event: DragEvent) {
       :id="BOARD_FLOW_ID"
       :nodes="nodes"
       :min-zoom="0.2"
-      :max-zoom="2.5"
+      :max-zoom="3"
       :default-viewport="{ x: 40, y: 20, zoom: 0.85 }"
       :pan-on-drag="[0, 2]"
       fit-view-on-init

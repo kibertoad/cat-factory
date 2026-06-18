@@ -7,6 +7,7 @@ import {
   DEFAULT_CONFIDENCE_THRESHOLD,
 } from '~/utils/catalog'
 import AgentFailureCard from '~/components/board/AgentFailureCard.vue'
+import TaskPipelineMini from './TaskPipelineMini.vue'
 
 const props = defineProps<{ taskId: string }>()
 
@@ -137,6 +138,10 @@ function selectTask() {
       size="xs"
       class="mt-1.5"
     />
+
+    <!-- spatial drill-down: build steps (at `steps` zoom) and each step's live
+         subtask todos (one band deeper, at `subtasks` zoom) -->
+    <TaskPipelineMini :task-id="taskId" />
 
     <!-- dependencies (run order) -->
     <div v-if="deps.length" class="mt-1.5 flex flex-wrap items-center gap-1">

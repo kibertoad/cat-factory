@@ -8,7 +8,16 @@ const workspace = useWorkspaceStore()
 const { fitView, zoomIn, zoomOut } = useBoardFlow()
 
 const zoomPct = computed(() => Math.round(ui.zoom * 100))
-const lodLabel = computed(() => ({ far: 'Overview', mid: 'Summary', close: 'Detail' })[ui.lod])
+const lodLabel = computed(
+  () =>
+    ({
+      far: 'Overview',
+      mid: 'Summary',
+      close: 'Detail',
+      steps: 'Build steps',
+      subtasks: 'Subtasks',
+    })[ui.lod],
+)
 
 // Live spend indicator: shown once any tokens have been metered this period.
 const spend = computed(() => workspace.spend)

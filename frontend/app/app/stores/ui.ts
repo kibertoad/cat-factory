@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { DocumentSourceKind, TaskSourceKind, LodLevel } from '~/types/domain'
+import { zoomToLod, lodAtLeast } from '~/composables/useSemanticZoom'
 
 /** Transient UI state: selection, panels, zoom level. */
 export const useUiStore = defineStore('ui', () => {
@@ -57,11 +58,7 @@ export const useUiStore = defineStore('ui', () => {
   /** Current canvas zoom (driven by Vue Flow viewport). */
   const zoom = ref(1)
 
-  const lod = computed<LodLevel>(() => {
-    if (zoom.value < 0.6) return 'far'
-    if (zoom.value < 1.2) return 'mid'
-    return 'close'
-  })
+  const lod = computed<LodLevel>(() => zoomToLod(zoom.value))
 
   /** Frames the user has manually expanded to reveal their tasks. */
   const expandedFrames = ref<Set<string>>(new Set())
@@ -78,9 +75,10 @@ export const useUiStore = defineStore('ui', () => {
     expandedFrames.value = new Set(expandedFrames.value).add(id)
   }
 
-  /** A frame shows its tasks when manually expanded OR when zoomed in close. */
+  /** A frame shows its tasks when manually expanded OR once zoomed in to `close`
+   * or any deeper band (`steps`/`subtasks` drill further into those tasks). */
   function isFrameExpanded(id: string) {
-    return expandedFrames.value.has(id) || lod.value === 'close'
+    return expandedFrames.value.has(id) || lodAtLeast(lod.value, 'close')
   }
 
   function select(id: string | null) {
