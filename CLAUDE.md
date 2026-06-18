@@ -165,11 +165,12 @@ It mirrors the execution pattern above: dispatch → durable poll → push event
 
 ## Service blueprints flow (in-repo map + board population)
 
-A **Blueprinter** agent decomposes a repo into the canonical service → modules →
-features tree and persists it **in the repo** under `blueprints/`, then the board
-is reconciled from it. It is modelled as a normal pipeline step (`agentKind:
+A **Blueprinter** agent decomposes a repo into the canonical service → modules
+tree and persists it **in the repo** under `blueprints/`, then the board is
+reconciled from it. It is modelled as a normal pipeline step (`agentKind:
 'blueprints'`), so it reuses the whole execution engine — no separate durable
-runner.
+runner. The map intentionally stops at modules: tasks are authored by people, not
+derived from the blueprint (there is no longer a "feature" granularity level).
 
 - In-repo artifact (`blueprints/`, rendered deterministically by the harness from
   the coerced tree): `blueprint.json` (canonical `BlueprintService`), `overview.md`
@@ -191,8 +192,9 @@ runner.
   executor). The returned tree maps to `AgentRunResult.blueprintService`.
 - Core: `ExecutionService.recordStepResult` ingests that tree — strict-parse, then
   `BoardScanService.reconcileBlueprint(frameId, service)` updates the run block's
-  **service frame** in place (match modules/tasks by name, add missing, refresh
-  descriptions, **never delete**), and emits a `board` event so the SPA refreshes.
+  **service frame** in place (match modules by name, add missing, refresh
+  descriptions, **never delete**, and never touch the authored tasks inside them),
+  and emits a `board` event so the SPA refreshes.
 - Triggers: `blueprints` is inserted after `coder` in the default pipelines (so the
   map + board refresh on the same implementation PR branch), and
   `BootstrapService.pollBootstrapJob` success starts the blueprint-only
