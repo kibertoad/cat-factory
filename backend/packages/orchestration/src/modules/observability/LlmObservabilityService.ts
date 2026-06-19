@@ -5,7 +5,7 @@ import type {
   LlmCallMetricSummary,
 } from '@cat-factory/kernel'
 import type { LlmMetricsExport } from '@cat-factory/contracts'
-import { buildLlmMetricsExport } from './observability.logic.js'
+import { buildLlmMetricsExport, computeStoredPrompt } from './observability.logic.js'
 
 export interface LlmObservabilityServiceDependencies {
   llmCallMetricRepository: LlmCallMetricRepository
@@ -82,16 +82,35 @@ export class LlmObservabilityService {
     this.clock = clock
   }
 
-  /** Persist one metered call, assigning its id + timestamp and deriving the overhead. */
+  /**
+   * Persist one metered call, assigning its id + timestamp and deriving the overhead.
+   * The prompt is stored as a DELTA against the previous call in the same
+   * `(execution, agentKind)` conversation — a container agent re-sends its whole
+   * growing history every call, so storing only the new messages collapses ~21× of
+   * redundant prompt bytes (see `computeStoredPrompt`). The full prompt is rebuilt on
+   * export. The chain-tip lookup is off the response path (the proxy records via
+   * `waitUntil`), so the extra read is free of user latency.
+   */
   async record(input: RecordLlmCallInput): Promise<void> {
     const overheadMs = Math.max(0, input.totalMs - input.upstreamMs)
+    const prev =
+      input.executionId != null
+        ? await this.repository.latestChainTip(
+            input.workspaceId,
+            input.executionId,
+            input.agentKind,
+          )
+        : null
+    const stored = computeStoredPrompt(input.promptText, prev)
     const metric: LlmCallMetric = {
       id: this.idGenerator.next('llm'),
       createdAt: this.clock.now(),
       ...input,
       // Derived/bounded fields last, so they win over any same-named input field.
       overheadMs,
-      promptText: clampBody(input.promptText),
+      promptText: clampBody(stored.promptText),
+      promptPrefixCount: stored.promptPrefixCount,
+      promptHash: stored.promptHash,
       responseText: clampBody(input.responseText),
     }
     await this.repository.record(metric)

@@ -32,6 +32,8 @@ function metric(overrides: Partial<LlmCallMetric> & Pick<LlmCallMetric, 'id'>): 
     httpStatus: 200,
     errorMessage: null,
     promptText: '[]',
+    promptPrefixCount: 0,
+    promptHash: '',
     responseText: 'ok',
     ...overrides,
   }
@@ -72,6 +74,49 @@ export function defineLlmMetricsSuite(
       expect(first.responseText).toBe('ok')
       expect(first.streaming).toBe(false)
       expect(first.requestMaxTokens).toBe(1000)
+    })
+
+    it('round-trips the delta prompt fields and reports the newest chain tip', async () => {
+      const repo = makeRepo()
+      const { ws, e1 } = ids()
+      // No calls yet ⇒ no chain tip.
+      expect(await repo.latestChainTip(ws, e1, 'coder')).toBeNull()
+
+      await repo.record(
+        metric({
+          id: `${ws}-1`,
+          workspaceId: ws,
+          executionId: e1,
+          createdAt: 10,
+          messageCount: 2,
+          promptText: '[{"role":"system"},{"role":"user"}]',
+          promptPrefixCount: 0,
+          promptHash: 'h1',
+        }),
+      )
+      await repo.record(
+        metric({
+          id: `${ws}-2`,
+          workspaceId: ws,
+          executionId: e1,
+          createdAt: 20,
+          messageCount: 4,
+          promptText: '[{"role":"assistant"},{"role":"tool"}]',
+          promptPrefixCount: 2,
+          promptHash: 'h2',
+        }),
+      )
+
+      // The tip is the newest call for the (ws, execution, kind) chain.
+      expect(await repo.latestChainTip(ws, e1, 'coder')).toEqual({ messageCount: 4, promptHash: 'h2' })
+      // A different agent kind has its own (empty) chain.
+      expect(await repo.latestChainTip(ws, e1, 'reviewer')).toBeNull()
+
+      // The delta fields survive the round-trip.
+      const stored = (await repo.listByExecution(ws, e1)).find((c) => c.id === `${ws}-2`)!
+      expect(stored.promptPrefixCount).toBe(2)
+      expect(stored.promptHash).toBe('h2')
+      expect(stored.promptText).toBe('[{"role":"assistant"},{"role":"tool"}]')
     })
 
     it('summarizes per agent-kind: tokens, peak, headroom, truncation, errors, warnings', async () => {

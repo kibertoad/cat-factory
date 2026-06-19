@@ -60,6 +60,8 @@ function llmMetric(id: string, createdAt: number, ws: string) {
     httpStatus: 200,
     errorMessage: null,
     promptText: '[]',
+    promptPrefixCount: 0,
+    promptHash: '',
     responseText: 'ok',
   }
 }

@@ -179,7 +179,11 @@ export const llmCallMetrics = pgTable(
     ok: integer('ok').notNull().default(1),
     http_status: integer('http_status'),
     error_message: text('error_message'),
+    // prompt_text is stored as a DELTA (only the messages this call appended beyond
+    // prompt_prefix_count); the full prompt is rebuilt on export. See D1 migration 0027.
     prompt_text: text('prompt_text').notNull().default(''),
+    prompt_prefix_count: integer('prompt_prefix_count').notNull().default(0),
+    prompt_hash: text('prompt_hash').notNull().default(''),
     response_text: text('response_text').notNull().default(''),
   },
   (t) => [

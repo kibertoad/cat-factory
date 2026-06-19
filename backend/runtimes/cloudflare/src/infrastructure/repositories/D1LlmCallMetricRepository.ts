@@ -3,6 +3,7 @@ import {
   type LlmCallMetric,
   type LlmCallMetricRepository,
   type LlmCallMetricSummary,
+  type LlmPromptChainTip,
 } from '@cat-factory/kernel'
 import type { D1Database } from '@cloudflare/workers-types'
 
@@ -33,6 +34,8 @@ interface MetricRow {
   http_status: number | null
   error_message: string | null
   prompt_text: string
+  prompt_prefix_count: number
+  prompt_hash: string
   response_text: string
 }
 
@@ -60,6 +63,8 @@ function rowToMetric(row: MetricRow): LlmCallMetric {
     httpStatus: row.http_status,
     errorMessage: row.error_message,
     promptText: row.prompt_text,
+    promptPrefixCount: row.prompt_prefix_count,
+    promptHash: row.prompt_hash,
     responseText: row.response_text,
   }
 }
@@ -80,8 +85,8 @@ export class D1LlmCallMetricRepository implements LlmCallMetricRepository {
             streaming, message_count, tool_count, request_max_tokens,
             prompt_tokens, completion_tokens, total_tokens, finish_reason,
             upstream_ms, overhead_ms, total_ms, ok, http_status, error_message,
-            prompt_text, response_text)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            prompt_text, prompt_prefix_count, prompt_hash, response_text)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .bind(
         metric.id,
@@ -106,9 +111,29 @@ export class D1LlmCallMetricRepository implements LlmCallMetricRepository {
         metric.httpStatus,
         metric.errorMessage,
         metric.promptText,
+        metric.promptPrefixCount,
+        metric.promptHash,
         metric.responseText,
       )
       .run()
+  }
+
+  async latestChainTip(
+    workspaceId: string,
+    executionId: string,
+    agentKind: string,
+  ): Promise<LlmPromptChainTip | null> {
+    // The newest call for the conversation; one indexed row, no text columns.
+    const row = await this.db
+      .prepare(
+        `SELECT message_count, prompt_hash FROM llm_call_metrics
+         WHERE workspace_id = ? AND execution_id = ? AND agent_kind = ?
+         ORDER BY created_at DESC, id DESC
+         LIMIT 1`,
+      )
+      .bind(workspaceId, executionId, agentKind)
+      .first<{ message_count: number; prompt_hash: string }>()
+    return row ? { messageCount: row.message_count, promptHash: row.prompt_hash } : null
   }
 
   async listByExecution(

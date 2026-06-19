@@ -16,6 +16,7 @@ import type {
   LlmCallMetric,
   LlmCallMetricRepository,
   LlmCallMetricSummary,
+  LlmPromptChainTip,
   Pipeline,
   PipelineRepository,
   RunRef,
@@ -505,6 +506,8 @@ function rowToLlmMetric(row: typeof llmCallMetrics.$inferSelect): LlmCallMetric 
     httpStatus: row.http_status,
     errorMessage: row.error_message,
     promptText: row.prompt_text,
+    promptPrefixCount: row.prompt_prefix_count,
+    promptHash: row.prompt_hash,
     responseText: row.response_text,
   }
 }
@@ -536,8 +539,35 @@ class DrizzleLlmCallMetricRepository implements LlmCallMetricRepository {
       http_status: metric.httpStatus,
       error_message: metric.errorMessage,
       prompt_text: metric.promptText,
+      prompt_prefix_count: metric.promptPrefixCount,
+      prompt_hash: metric.promptHash,
       response_text: metric.responseText,
     })
+  }
+
+  async latestChainTip(
+    workspaceId: string,
+    executionId: string,
+    agentKind: string,
+  ): Promise<LlmPromptChainTip | null> {
+    // The newest call for the conversation; one indexed row, no text columns.
+    const rows = await this.db
+      .select({
+        messageCount: llmCallMetrics.message_count,
+        promptHash: llmCallMetrics.prompt_hash,
+      })
+      .from(llmCallMetrics)
+      .where(
+        and(
+          eq(llmCallMetrics.workspace_id, workspaceId),
+          eq(llmCallMetrics.execution_id, executionId),
+          eq(llmCallMetrics.agent_kind, agentKind),
+        ),
+      )
+      .orderBy(desc(llmCallMetrics.created_at), desc(llmCallMetrics.id))
+      .limit(1)
+    const row = rows[0]
+    return row ? { messageCount: row.messageCount, promptHash: row.promptHash } : null
   }
 
   async listByExecution(

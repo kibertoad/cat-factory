@@ -5,6 +5,7 @@ import type {
   LlmCallMetric,
   LlmCallMetricRepository,
   LlmCallMetricSummary,
+  LlmPromptChainTip,
 } from '@cat-factory/kernel'
 import {
   LlmObservabilityService,
@@ -23,6 +24,22 @@ class MemoryRepo implements LlmCallMetricRepository {
       .filter((m) => m.workspaceId === workspaceId && m.executionId === executionId)
       .sort((a, b) => b.createdAt - a.createdAt)
   }
+  async latestChainTip(
+    workspaceId: string,
+    executionId: string,
+    agentKind: string,
+  ): Promise<LlmPromptChainTip | null> {
+    const chain = this.recorded
+      .filter(
+        (m) =>
+          m.workspaceId === workspaceId &&
+          m.executionId === executionId &&
+          m.agentKind === agentKind,
+      )
+      .sort((a, b) => b.createdAt - a.createdAt)
+    const tip = chain[0]
+    return tip ? { messageCount: tip.messageCount, promptHash: tip.promptHash } : null
+  }
   async summarizeByExecution(): Promise<LlmCallMetricSummary[]> {
     return []
   }
@@ -33,6 +50,10 @@ class MemoryRepo implements LlmCallMetricRepository {
 
 const idGenerator: IdGenerator = { next: (p) => `${p}_1` }
 const clock: Clock = { now: () => 1700 }
+let seq = 0
+const seqIdGenerator: IdGenerator = { next: (p) => `${p}_${++seq}` }
+let nowSeq = 0
+const seqClock: Clock = { now: () => 1700 + nowSeq++ }
 
 function input(overrides: Partial<RecordLlmCallInput> = {}): RecordLlmCallInput {
   return {
@@ -90,6 +111,57 @@ describe('LlmObservabilityService.record', () => {
     expect(m.promptText.length).toBeLessThan(huge.length)
     expect(m.promptText).toContain('[truncated')
     expect(m.responseText).toContain('[truncated')
+  })
+
+  it('stores each call as a delta against the previous one in the chain', async () => {
+    const repo = new MemoryRepo()
+    const service = new LlmObservabilityService({
+      llmCallMetricRepository: repo,
+      idGenerator: seqIdGenerator,
+      clock: seqClock,
+    })
+    const sys = { role: 'system', content: 'you are a coder' }
+    const u1 = { role: 'user', content: 'do the thing' }
+    const a1 = { role: 'assistant', content: 'on it' }
+    // Call 1: system + user. Call 2: + assistant + user. Call 3: + assistant.
+    await service.record(input({ promptText: JSON.stringify([sys, u1]), messageCount: 2 }))
+    await service.record(
+      input({ promptText: JSON.stringify([sys, u1, a1, u1]), messageCount: 4 }),
+    )
+
+    const stored = repo.recorded
+    // First call stores the full array (nothing to chain onto).
+    expect(stored[0]!.promptPrefixCount).toBe(0)
+    expect(JSON.parse(stored[0]!.promptText)).toHaveLength(2)
+    // Second call stores ONLY the two new messages, eliding the 2-message prefix.
+    expect(stored[1]!.promptPrefixCount).toBe(2)
+    expect(JSON.parse(stored[1]!.promptText)).toEqual([a1, u1])
+
+    // The export rebuilds the full prompt from the deltas.
+    const out = await service.exportForExecution('ws', 'exec')
+    const exported = out.calls.sort((a, b) => a.createdAt - b.createdAt)
+    expect(JSON.parse(exported[1]!.promptText)).toEqual([sys, u1, a1, u1])
+    expect(exported[1]!.promptPrefixCount).toBe(0)
+  })
+
+  it('falls back to the full array when the prefix does not chain (fresh conversation)', async () => {
+    const repo = new MemoryRepo()
+    const service = new LlmObservabilityService({
+      llmCallMetricRepository: repo,
+      idGenerator: seqIdGenerator,
+      clock: seqClock,
+    })
+    await service.record(input({ promptText: JSON.stringify([{ role: 'system', content: 'a' }]), messageCount: 1 }))
+    // A retry restarts the conversation: same length region but different content.
+    await service.record(
+      input({
+        promptText: JSON.stringify([{ role: 'system', content: 'b' }, { role: 'user', content: 'x' }]),
+        messageCount: 2,
+      }),
+    )
+    // The second call cannot chain onto the first (prefix mismatch) ⇒ stored full.
+    expect(repo.recorded[1]!.promptPrefixCount).toBe(0)
+    expect(JSON.parse(repo.recorded[1]!.promptText)).toHaveLength(2)
   })
 
   it('never derives a negative overhead', async () => {
