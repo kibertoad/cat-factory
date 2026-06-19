@@ -1221,8 +1221,12 @@ export class ExecutionService {
    * swallows its own errors, and the persisted run remains the source of truth.
    */
   private async emitInstance(workspaceId: string, instance: ExecutionInstance): Promise<void> {
-    await this.attachStepMetrics(workspaceId, instance)
-    const block = await this.blockRepository.get(workspaceId, instance.blockId)
+    // The metrics rollup and the block fetch are independent, so run them concurrently
+    // — the rollup adds no serial latency to the (frequent) emit path.
+    const [, block] = await Promise.all([
+      this.attachStepMetrics(workspaceId, instance),
+      this.blockRepository.get(workspaceId, instance.blockId),
+    ])
     await this.events.executionChanged(workspaceId, instance, block)
   }
 

@@ -540,8 +540,12 @@ class DrizzleLlmCallMetricRepository implements LlmCallMetricRepository {
     })
   }
 
-  async listByExecution(workspaceId: string, executionId: string): Promise<LlmCallMetric[]> {
-    const rows = await this.db
+  async listByExecution(
+    workspaceId: string,
+    executionId: string,
+    limit?: number,
+  ): Promise<LlmCallMetric[]> {
+    const base = this.db
       .select()
       .from(llmCallMetrics)
       .where(
@@ -551,6 +555,7 @@ class DrizzleLlmCallMetricRepository implements LlmCallMetricRepository {
         ),
       )
       .orderBy(desc(llmCallMetrics.created_at), desc(llmCallMetrics.id))
+    const rows = await (limit == null ? base : base.limit(limit))
     return rows.map(rowToLlmMetric)
   }
 
@@ -562,7 +567,7 @@ class DrizzleLlmCallMetricRepository implements LlmCallMetricRepository {
     // execution emit (it backs the live board rollups). int sums fit Number's safe
     // range here (per-run call counts/tokens are small), so a plain ::bigint cast
     // matching the SQLite 64-bit sum is unnecessary — totals are coerced below.
-    const reasons = LLM_WARNING_FINISH_REASONS as readonly string[]
+    const reasons = [...LLM_WARNING_FINISH_REASONS]
     const rows = await this.db
       .select({
         agentKind: llmCallMetrics.agent_kind,
@@ -575,7 +580,10 @@ class DrizzleLlmCallMetricRepository implements LlmCallMetricRepository {
         upstreamMs: sql<number>`coalesce(sum(${llmCallMetrics.upstream_ms}), 0)::int`,
         overheadMs: sql<number>`coalesce(sum(${llmCallMetrics.overhead_ms}), 0)::int`,
         errors: sql<number>`coalesce(sum(case when ${llmCallMetrics.ok} = 0 then 1 else 0 end), 0)::int`,
-        warnings: sql<number>`coalesce(sum(case when ${llmCallMetrics.ok} = 1 and ${llmCallMetrics.finish_reason} in ${reasons} then 1 else 0 end), 0)::int`,
+        // Use `inArray` (not a raw `in ${array}` — drizzle binds an array as a single
+        // param, which Postgres won't expand into an IN list) so the warning count is
+        // correct and stays tied to the shared constant.
+        warnings: sql<number>`coalesce(sum(case when ${llmCallMetrics.ok} = 1 and ${inArray(llmCallMetrics.finish_reason, reasons)} then 1 else 0 end), 0)::int`,
       })
       .from(llmCallMetrics)
       .where(

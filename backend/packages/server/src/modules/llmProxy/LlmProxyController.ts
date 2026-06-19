@@ -350,6 +350,12 @@ interface StreamChunk {
  * observability metric without buffering the response. `dispatchAt` anchors the
  * model-execution slice (`upstreamMs` = stream end − dispatch). OpenAI emits usage
  * in the last `data:` event when `stream_options.include_usage` is set.
+ *
+ * Caveat: for a streamed call `upstreamMs` is measured at `flush`, which fires when
+ * the upstream closes after chunks have drained downstream — so a slow consumer can
+ * fold some client-drain time into the "model execution" slice. Container readers
+ * (Pi) drain fast, so the transport-vs-execution split stays a good approximation;
+ * exact per-chunk attribution would need first-byte/last-byte timestamps.
  */
 function observationStream(
   dispatchAt: number,

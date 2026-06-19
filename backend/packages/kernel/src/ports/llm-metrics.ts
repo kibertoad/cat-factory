@@ -92,8 +92,16 @@ export interface LlmCallMetricSummary {
 export interface LlmCallMetricRepository {
   /** Append one metered call. */
   record(metric: LlmCallMetric): Promise<void>
-  /** Every call recorded for a run, newest first (full prompt/response included). */
-  listByExecution(workspaceId: string, executionId: string): Promise<LlmCallMetric[]>
+  /**
+   * Calls recorded for a run, newest first (full prompt/response included). `limit`
+   * caps the rows returned (the bodies are heavy) — newest `limit` calls; omit for
+   * all. Callers pass a bound so a long run can't produce an unbounded payload.
+   */
+  listByExecution(
+    workspaceId: string,
+    executionId: string,
+    limit?: number,
+  ): Promise<LlmCallMetric[]>
   /**
    * Per-agent-kind aggregates for a run, for the board rollups. Aggregates in SQL
    * and deliberately selects no text columns, so it is cheap to run on every emit.

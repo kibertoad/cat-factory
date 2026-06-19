@@ -111,14 +111,20 @@ export class D1LlmCallMetricRepository implements LlmCallMetricRepository {
       .run()
   }
 
-  async listByExecution(workspaceId: string, executionId: string): Promise<LlmCallMetric[]> {
+  async listByExecution(
+    workspaceId: string,
+    executionId: string,
+    limit?: number,
+  ): Promise<LlmCallMetric[]> {
+    // Newest first; `LIMIT -1` means "no limit" in SQLite, so an omitted cap reads all.
     const { results } = await this.db
       .prepare(
         `SELECT * FROM llm_call_metrics
          WHERE workspace_id = ? AND execution_id = ?
-         ORDER BY created_at DESC, id DESC`,
+         ORDER BY created_at DESC, id DESC
+         LIMIT ?`,
       )
-      .bind(workspaceId, executionId)
+      .bind(workspaceId, executionId, limit ?? -1)
       .all<MetricRow>()
     return (results ?? []).map(rowToMetric)
   }
