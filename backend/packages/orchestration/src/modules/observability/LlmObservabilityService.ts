@@ -14,6 +14,24 @@ export interface LlmObservabilityServiceDependencies {
 }
 
 /**
+ * Defensive upper bound on a stored prompt/response body (characters). Real agent
+ * prompts sit far below this; the cap exists only so a pathological body can't blow
+ * past the store's per-row/value limit and make the whole metric fail to record
+ * (which would drop the call from observability entirely). A truncated-but-recorded
+ * body is strictly more useful than a silently dropped one.
+ */
+export const MAX_BODY_CHARS = 512 * 1024
+
+/** Cap a body to {@link MAX_BODY_CHARS}, marking where it was cut. */
+function clampBody(text: string): string {
+  if (text.length <= MAX_BODY_CHARS) return text
+  return `${text.slice(0, MAX_BODY_CHARS)}\n…[truncated ${text.length - MAX_BODY_CHARS} chars]`
+}
+
+/** Default cap on how many (newest) calls a list/export returns. */
+export const DEFAULT_LIST_LIMIT = 1000
+
+/**
  * Details of one proxied LLM call, handed in by the LLM proxy. The proxy owns the
  * timing (it wraps the upstream call): {@link totalMs} is the end-to-end time it
  * spent and {@link upstreamMs} the slice waiting on the model — the difference is
@@ -70,15 +88,25 @@ export class LlmObservabilityService {
     const metric: LlmCallMetric = {
       id: this.idGenerator.next('llm'),
       createdAt: this.clock.now(),
-      overheadMs,
       ...input,
+      // Derived/bounded fields last, so they win over any same-named input field.
+      overheadMs,
+      promptText: clampBody(input.promptText),
+      responseText: clampBody(input.responseText),
     }
     await this.repository.record(metric)
   }
 
-  /** Every call recorded for a run, newest first (full prompt/response included). */
-  listByExecution(workspaceId: string, executionId: string): Promise<LlmCallMetric[]> {
-    return this.repository.listByExecution(workspaceId, executionId)
+  /**
+   * Calls recorded for a run, newest first (full prompt/response included), capped
+   * at {@link DEFAULT_LIST_LIMIT} so a long run can't produce an unbounded payload.
+   */
+  listByExecution(
+    workspaceId: string,
+    executionId: string,
+    limit: number = DEFAULT_LIST_LIMIT,
+  ): Promise<LlmCallMetric[]> {
+    return this.repository.listByExecution(workspaceId, executionId, limit)
   }
 
   /** Per-agent-kind aggregates for a run, for the board step rollups. */
@@ -95,7 +123,7 @@ export class LlmObservabilityService {
    * model for analysis. Stamped with the service clock.
    */
   async exportForExecution(workspaceId: string, executionId: string): Promise<LlmMetricsExport> {
-    const calls = await this.repository.listByExecution(workspaceId, executionId)
+    const calls = await this.listByExecution(workspaceId, executionId)
     return buildLlmMetricsExport(executionId, calls, this.clock.now())
   }
 }

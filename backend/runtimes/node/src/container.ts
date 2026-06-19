@@ -15,6 +15,11 @@ export interface NodeContainerOptions {
   /** The Drizzle/Postgres client (the single persistence layer). */
   db: DrizzleDb
   /**
+   * Pre-built repositories; defaults to building them from {@link db}. Lets the caller
+   * (e.g. {@link start}) share one set with the retention sweeper rather than rebuild.
+   */
+  repos?: ReturnType<typeof createDrizzleRepositories>
+  /**
    * Started pg-boss instance for durable execution. When present the container wires
    * a {@link PgBossWorkRunner}; otherwise runs fall back to the engine's NoopWorkRunner
    * (the caller drives runs itself — e.g. tests).
@@ -40,7 +45,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   const config = options.config ?? loadNodeConfig(env)
   const clock = new SystemClock()
   const idGenerator = new CryptoIdGenerator()
-  const repos = createDrizzleRepositories(options.db, clock)
+  const repos = options.repos ?? createDrizzleRepositories(options.db, clock)
 
   const agentExecutor = new AiAgentExecutor({
     modelProvider: createNodeModelProvider(env),

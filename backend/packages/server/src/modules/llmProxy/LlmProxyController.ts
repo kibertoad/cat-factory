@@ -350,6 +350,21 @@ interface StreamChunk {
  * observability metric without buffering the response. `dispatchAt` anchors the
  * model-execution slice (`upstreamMs` = stream end − dispatch). OpenAI emits usage
  * in the last `data:` event when `stream_options.include_usage` is set.
+ *
+ * Caveat: for a streamed call `upstreamMs` is measured at `flush`, which fires when
+ * the upstream closes after chunks have drained downstream — so a slow consumer can
+ * fold some client-drain time into the "model execution" slice. Container readers
+ * (Pi) drain fast, so the transport-vs-execution split stays a good approximation;
+ * exact per-chunk attribution would need first-byte/last-byte timestamps.
+ *
+ * Two further limitations are accepted deliberately to keep the response unbuffered:
+ * - `responseText` captures the assistant *text* deltas only (not tool-call argument
+ *   deltas), matching the buffered path — a tool-only turn records empty text.
+ * - `flush` only runs on a clean close, so a stream the upstream *errors* mid-flight
+ *   is not recorded here; the error still propagates to the client. (The in-process
+ *   Workers-AI path, which owns its generation, does record stream failures.)
+ * Recording either would require buffering/teeing the body, which this seam exists to
+ * avoid; revisit only if streaming-error observability becomes a real need.
  */
 function observationStream(
   dispatchAt: number,

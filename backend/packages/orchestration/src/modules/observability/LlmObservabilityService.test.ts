@@ -6,7 +6,11 @@ import type {
   LlmCallMetricRepository,
   LlmCallMetricSummary,
 } from '@cat-factory/kernel'
-import { LlmObservabilityService, type RecordLlmCallInput } from './LlmObservabilityService.js'
+import {
+  LlmObservabilityService,
+  MAX_BODY_CHARS,
+  type RecordLlmCallInput,
+} from './LlmObservabilityService.js'
 
 /** A minimal in-memory repo capturing recorded metrics. */
 class MemoryRepo implements LlmCallMetricRepository {
@@ -71,6 +75,21 @@ describe('LlmObservabilityService.record', () => {
     expect(m.id).toBe('llm_1')
     expect(m.createdAt).toBe(1700)
     expect(m.overheadMs).toBe(50) // totalMs - upstreamMs
+  })
+
+  it('bounds oversized bodies so a pathological call still records', async () => {
+    const repo = new MemoryRepo()
+    const service = new LlmObservabilityService({
+      llmCallMetricRepository: repo,
+      idGenerator,
+      clock,
+    })
+    const huge = 'x'.repeat(MAX_BODY_CHARS + 5000)
+    await service.record(input({ promptText: huge, responseText: huge }))
+    const m = repo.recorded[0]!
+    expect(m.promptText.length).toBeLessThan(huge.length)
+    expect(m.promptText).toContain('[truncated')
+    expect(m.responseText).toContain('[truncated')
   })
 
   it('never derives a negative overhead', async () => {

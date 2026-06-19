@@ -20,6 +20,9 @@ import {
   startExecutionWorker,
   startStaleRunSweeper,
 } from './execution/pgBossRunner.js'
+import { createDrizzleRepositories } from './repositories/drizzle.js'
+import { startRetentionSweeper } from './retention.js'
+import { SystemClock } from './runtime.js'
 
 // The Node facade: the SAME shared Hono app (controllers + middleware) the Cloudflare
 // Worker mounts, served over `@hono/node-server`. The middleware order mirrors the
@@ -82,7 +85,11 @@ export async function start(
   const boss = new PgBoss(databaseUrl)
   await boss.start()
 
-  const container = buildNodeContainer({ db, boss, env })
+  // Build the repositories once and share them with both the container and the
+  // retention sweeper (so the sweeper prunes the very stores the app writes to).
+  const clock = new SystemClock()
+  const repos = createDrizzleRepositories(db, clock)
+  const container = buildNodeContainer({ db, boss, env, repos })
 
   const runtime = executionRuntime(container.config, env)
   // The decision-timeout worker creates its queue first so the advance worker's send to
@@ -93,6 +100,10 @@ export async function start(
     decisionTimeoutSeconds: runtime.decisionTimeoutSeconds,
   })
   const stopSweeper = startStaleRunSweeper(boss, container, runtime.sweeper, runtime.queue, logger)
+  // Bound the unbounded tables (`token_usage`, the heavy `llm_call_metrics`): the Worker
+  // prunes these from cron, Node has none, so a timer mirrors it. Without this the
+  // observability sink — full per-call prompt/response — grows forever on Postgres.
+  const stopRetention = startRetentionSweeper(repos, container.config.retention, clock, logger)
 
   const app = createApp(container, env)
   const port = Number(env.PORT ?? 8787)
@@ -108,6 +119,7 @@ export async function start(
     shuttingDown = true
     logger.info({ signal }, 'shutting down cat-factory node server')
     stopSweeper()
+    stopRetention()
     await new Promise<void>((resolve) => server.close(() => resolve()))
     try {
       await boss.stop()
