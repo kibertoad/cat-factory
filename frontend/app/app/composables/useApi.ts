@@ -50,6 +50,7 @@ import type {
   Workspace,
   WorkspaceSnapshot,
 } from '~/types/domain'
+import type { LlmCallMetric, LlmMetricsExport } from '~/types/execution'
 import type { RequirementReview, ReviewItemStatus } from '~/types/requirements'
 import type { Notification } from '~/types/notifications'
 import type {
@@ -295,6 +296,20 @@ export function useApi() {
       http<ExecutionInstance>(
         `${ws(workspaceId)}/executions/${executionId}/steps/${approvalId}/request-changes`,
         { method: 'POST', body },
+      ),
+
+    // ---- LLM observability (per-run model-call metrics) -------------------
+    // The full per-call detail behind the board's step rollups. Empty when the
+    // observability sink is not wired.
+    getLlmMetrics: (workspaceId: string, executionId: string) =>
+      http<{ executionId: string; calls: LlmCallMetric[] }>(
+        `${ws(workspaceId)}/executions/${encodeURIComponent(executionId)}/llm-metrics`,
+      ),
+
+    // The LLM-friendly export bundle (totals + per-agent insights + every call).
+    exportLlmMetrics: (workspaceId: string, executionId: string) =>
+      http<LlmMetricsExport>(
+        `${ws(workspaceId)}/executions/${encodeURIComponent(executionId)}/llm-metrics/export`,
       ),
 
     // ---- spend safeguard --------------------------------------------------

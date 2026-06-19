@@ -3,6 +3,7 @@ import { env } from 'cloudflare:test'
 import { describe, expect, it } from 'vitest'
 import { CryptoIdGenerator } from '../../src/infrastructure/runtime'
 import { D1CommitProjectionRepository } from '../../src/infrastructure/repositories/D1CommitProjectionRepository'
+import { D1LlmCallMetricRepository } from '../../src/infrastructure/repositories/D1LlmCallMetricRepository'
 import { D1RateLimitRepository } from '../../src/infrastructure/repositories/D1RateLimitRepository'
 import { D1TokenUsageRepository } from '../../src/infrastructure/repositories/D1TokenUsageRepository'
 import { sweepRetention } from '../../src/infrastructure/workflows/retention'
@@ -16,7 +17,12 @@ const NOW = 1_700_000_000_000
 const DAY = 24 * 60 * 60 * 1000
 const clock: Clock = { now: () => NOW }
 
-const POLICY = { tokenUsageMs: 395 * DAY, rateLimitMs: 7 * DAY, commitMs: 90 * DAY }
+const POLICY = {
+  tokenUsageMs: 395 * DAY,
+  rateLimitMs: 7 * DAY,
+  commitMs: 90 * DAY,
+  llmCallMetricsMs: 3 * DAY,
+}
 
 function deps() {
   const db = env.DB
@@ -24,8 +30,37 @@ function deps() {
     tokenUsageRepository: new D1TokenUsageRepository({ db }),
     rateLimitRepository: new D1RateLimitRepository({ db, idGenerator: new CryptoIdGenerator() }),
     commitRepository: new D1CommitProjectionRepository({ db }),
+    llmCallMetricRepository: new D1LlmCallMetricRepository({ db }),
     clock,
     policy: POLICY,
+  }
+}
+
+function llmMetric(id: string, createdAt: number, ws: string) {
+  return {
+    id,
+    workspaceId: ws,
+    executionId: 'exec',
+    agentKind: 'coder',
+    provider: 'workers-ai',
+    model: 'm',
+    createdAt,
+    streaming: false,
+    messageCount: 1,
+    toolCount: 0,
+    requestMaxTokens: 1000,
+    promptTokens: 10,
+    completionTokens: 5,
+    totalTokens: 15,
+    finishReason: 'stop',
+    upstreamMs: 100,
+    overheadMs: 10,
+    totalMs: 110,
+    ok: true,
+    httpStatus: 200,
+    errorMessage: null,
+    promptText: '[]',
+    responseText: 'ok',
   }
 }
 
@@ -131,6 +166,19 @@ describe('storage retention sweep', () => {
     expect(remaining.map((c) => c.sha).sort()).toEqual(['recent', 'undated'])
   })
 
+  it('prunes llm_call_metrics past the 3-day window but keeps fresh ones', async () => {
+    const ws = 'ws_retention_llm'
+    const repo = new D1LlmCallMetricRepository({ db: env.DB })
+    await repo.record(llmMetric('llm_old', NOW - 10 * DAY, ws))
+    await repo.record(llmMetric('llm_fresh', NOW - 1 * DAY, ws))
+
+    const result = await sweepRetention(deps())
+
+    expect(result.llmCallMetrics).toBeGreaterThanOrEqual(1)
+    expect(await countRows('llm_call_metrics', 'id = ?', 'llm_old')).toBe(0)
+    expect(await countRows('llm_call_metrics', 'id = ?', 'llm_fresh')).toBe(1)
+  })
+
   it('treats a zero window as "disabled" and prunes nothing', async () => {
     const ws = 'ws_retention_disabled'
     const repo = new D1TokenUsageRepository({ db: env.DB })
@@ -149,10 +197,10 @@ describe('storage retention sweep', () => {
 
     const result = await sweepRetention({
       ...deps(),
-      policy: { tokenUsageMs: 0, rateLimitMs: 0, commitMs: 0 },
+      policy: { tokenUsageMs: 0, rateLimitMs: 0, commitMs: 0, llmCallMetricsMs: 0 },
     })
 
-    expect(result).toEqual({ tokenUsage: 0, rateLimits: 0, commits: 0 })
+    expect(result).toEqual({ tokenUsage: 0, rateLimits: 0, commits: 0, llmCallMetrics: 0 })
     expect(await countRows('token_usage', 'id = ?', 'tok_disabled')).toBe(1)
   })
 })

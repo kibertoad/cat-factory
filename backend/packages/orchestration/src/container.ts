@@ -8,6 +8,7 @@ import type { AccountRepository, MembershipRepository } from '@cat-factory/kerne
 import type { Clock, IdGenerator } from '@cat-factory/kernel'
 import type { AgentExecutor } from '@cat-factory/kernel'
 import type { TokenUsageRepository } from '@cat-factory/kernel'
+import type { LlmCallMetricRepository } from '@cat-factory/kernel'
 import { type WorkRunner, NoopWorkRunner } from '@cat-factory/kernel'
 import { type ExecutionEventPublisher, NoopEventPublisher } from '@cat-factory/kernel'
 import type { GitHubClient } from '@cat-factory/kernel'
@@ -57,6 +58,7 @@ import { PipelineService } from './modules/pipelines/PipelineService.js'
 import { WorkspaceService } from '@cat-factory/workspaces'
 import { AccountService } from '@cat-factory/workspaces'
 import { SpendService, DEFAULT_SPEND_PRICING, type SpendPricing } from '@cat-factory/spend'
+import { LlmObservabilityService } from './modules/observability/LlmObservabilityService.js'
 import {
   GitHubInstallationService,
   RepoProvisioningService,
@@ -113,6 +115,14 @@ export interface CoreDependencies {
   agentExecutor: AgentExecutor
   /** Ledger backing the spend safeguard (per-call token usage). */
   tokenUsageRepository: TokenUsageRepository
+  /**
+   * Sink backing LLM observability (full per-call prompt/response, output-limit
+   * headroom, transport-vs-execution latency). Optional and default-off: when
+   * present the proxy records every container-agent call and the engine rolls the
+   * aggregates onto pipeline steps; absent → no observability is collected and
+   * tests/unconfigured facades are unaffected.
+   */
+  llmCallMetricRepository?: LlmCallMetricRepository
   /**
    * Drives runs durably outside the starting request. Defaults to a no-op (tests);
    * the worker wires WorkflowsWorkRunner when the Workflows binding is present.
@@ -378,6 +388,8 @@ export interface Core {
   pipelineService: PipelineService
   executionService: ExecutionService
   spendService: SpendService
+  /** Present only when the LLM-metric repository is wired (see CoreDependencies). */
+  llmObservability?: LlmObservabilityService
   /** Present only when the GitHub integration is configured (see CoreDependencies). */
   github?: GitHubModule
   /** Present only when the document-source integration is configured (see CoreDependencies). */
@@ -797,6 +809,13 @@ export function createCore(dependencies: CoreDependencies): Core {
     clock: dependencies.clock,
     pricing: dependencies.spendPricing ?? DEFAULT_SPEND_PRICING,
   })
+  const llmObservability = dependencies.llmCallMetricRepository
+    ? new LlmObservabilityService({
+        llmCallMetricRepository: dependencies.llmCallMetricRepository,
+        idGenerator: dependencies.idGenerator,
+        clock: dependencies.clock,
+      })
+    : undefined
   const environments = createEnvironmentsModule(dependencies)
   const fragmentLibrary = createFragmentLibraryModule(dependencies)
 
@@ -820,6 +839,7 @@ export function createCore(dependencies: CoreDependencies): Core {
     fragmentResolver: fragmentLibrary?.libraryService,
     blueprintReconciler: boardScan?.service,
     notificationService: notifications?.service,
+    llmObservability,
   })
 
   const github = createGitHubModule(dependencies)
@@ -840,6 +860,7 @@ export function createCore(dependencies: CoreDependencies): Core {
     pipelineService,
     executionService,
     spendService,
+    ...(llmObservability ? { llmObservability } : {}),
     ...(github ? { github } : {}),
     ...(documents ? { documents } : {}),
     ...(tasks ? { tasks } : {}),

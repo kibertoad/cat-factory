@@ -13,6 +13,9 @@ import type {
   ExecutionRepository,
   Membership,
   MembershipRepository,
+  LlmCallMetric,
+  LlmCallMetricRepository,
+  LlmCallMetricSummary,
   Pipeline,
   PipelineRepository,
   RunRef,
@@ -23,6 +26,7 @@ import type {
   WorkspaceRepository,
   WorkspaceVisibility,
 } from '@cat-factory/kernel'
+import { LLM_WARNING_FINISH_REASONS } from '@cat-factory/kernel'
 import {
   type ExecutionRow,
   blockInsertValues,
@@ -38,6 +42,7 @@ import {
   accounts,
   agentRuns,
   blocks,
+  llmCallMetrics,
   memberships,
   pipelines,
   tokenUsage,
@@ -476,6 +481,134 @@ class DrizzleTokenUsageRepository implements TokenUsageRepository {
   }
 }
 
+function rowToLlmMetric(row: typeof llmCallMetrics.$inferSelect): LlmCallMetric {
+  return {
+    id: row.id,
+    workspaceId: row.workspace_id,
+    executionId: row.execution_id,
+    agentKind: row.agent_kind,
+    provider: row.provider,
+    model: row.model,
+    createdAt: row.created_at,
+    streaming: row.streaming === 1,
+    messageCount: row.message_count,
+    toolCount: row.tool_count,
+    requestMaxTokens: row.request_max_tokens,
+    promptTokens: row.prompt_tokens,
+    completionTokens: row.completion_tokens,
+    totalTokens: row.total_tokens,
+    finishReason: row.finish_reason,
+    upstreamMs: row.upstream_ms,
+    overheadMs: row.overhead_ms,
+    totalMs: row.total_ms,
+    ok: row.ok === 1,
+    httpStatus: row.http_status,
+    errorMessage: row.error_message,
+    promptText: row.prompt_text,
+    responseText: row.response_text,
+  }
+}
+
+class DrizzleLlmCallMetricRepository implements LlmCallMetricRepository {
+  constructor(private readonly db: DrizzleDb) {}
+
+  async record(metric: LlmCallMetric): Promise<void> {
+    await this.db.insert(llmCallMetrics).values({
+      id: metric.id,
+      workspace_id: metric.workspaceId,
+      execution_id: metric.executionId,
+      agent_kind: metric.agentKind,
+      provider: metric.provider,
+      model: metric.model,
+      created_at: metric.createdAt,
+      streaming: metric.streaming ? 1 : 0,
+      message_count: metric.messageCount,
+      tool_count: metric.toolCount,
+      request_max_tokens: metric.requestMaxTokens,
+      prompt_tokens: metric.promptTokens,
+      completion_tokens: metric.completionTokens,
+      total_tokens: metric.totalTokens,
+      finish_reason: metric.finishReason,
+      upstream_ms: metric.upstreamMs,
+      overhead_ms: metric.overheadMs,
+      total_ms: metric.totalMs,
+      ok: metric.ok ? 1 : 0,
+      http_status: metric.httpStatus,
+      error_message: metric.errorMessage,
+      prompt_text: metric.promptText,
+      response_text: metric.responseText,
+    })
+  }
+
+  async listByExecution(workspaceId: string, executionId: string): Promise<LlmCallMetric[]> {
+    const rows = await this.db
+      .select()
+      .from(llmCallMetrics)
+      .where(
+        and(
+          eq(llmCallMetrics.workspace_id, workspaceId),
+          eq(llmCallMetrics.execution_id, executionId),
+        ),
+      )
+      .orderBy(desc(llmCallMetrics.created_at), desc(llmCallMetrics.id))
+    return rows.map(rowToLlmMetric)
+  }
+
+  async summarizeByExecution(
+    workspaceId: string,
+    executionId: string,
+  ): Promise<LlmCallMetricSummary[]> {
+    // Aggregate-only: selects no prompt/response text, so it stays cheap on every
+    // execution emit (it backs the live board rollups). int sums fit Number's safe
+    // range here (per-run call counts/tokens are small), so a plain ::bigint cast
+    // matching the SQLite 64-bit sum is unnecessary — totals are coerced below.
+    const reasons = LLM_WARNING_FINISH_REASONS as readonly string[]
+    const rows = await this.db
+      .select({
+        agentKind: llmCallMetrics.agent_kind,
+        calls: sql<number>`count(*)::int`,
+        promptTokens: sql<number>`coalesce(sum(${llmCallMetrics.prompt_tokens}), 0)::int`,
+        completionTokens: sql<number>`coalesce(sum(${llmCallMetrics.completion_tokens}), 0)::int`,
+        peakCompletionTokens: sql<number>`coalesce(max(${llmCallMetrics.completion_tokens}), 0)::int`,
+        maxOutputTokens: sql<number | null>`max(${llmCallMetrics.request_max_tokens})`,
+        truncatedCalls: sql<number>`coalesce(sum(case when ${llmCallMetrics.finish_reason} = 'length' then 1 else 0 end), 0)::int`,
+        upstreamMs: sql<number>`coalesce(sum(${llmCallMetrics.upstream_ms}), 0)::int`,
+        overheadMs: sql<number>`coalesce(sum(${llmCallMetrics.overhead_ms}), 0)::int`,
+        errors: sql<number>`coalesce(sum(case when ${llmCallMetrics.ok} = 0 then 1 else 0 end), 0)::int`,
+        warnings: sql<number>`coalesce(sum(case when ${llmCallMetrics.ok} = 1 and ${llmCallMetrics.finish_reason} in ${reasons} then 1 else 0 end), 0)::int`,
+      })
+      .from(llmCallMetrics)
+      .where(
+        and(
+          eq(llmCallMetrics.workspace_id, workspaceId),
+          eq(llmCallMetrics.execution_id, executionId),
+        ),
+      )
+      .groupBy(llmCallMetrics.agent_kind)
+    return rows.map((r) => ({
+      agentKind: r.agentKind,
+      calls: Number(r.calls),
+      promptTokens: Number(r.promptTokens),
+      completionTokens: Number(r.completionTokens),
+      peakCompletionTokens: Number(r.peakCompletionTokens),
+      maxOutputTokens: r.maxOutputTokens == null ? null : Number(r.maxOutputTokens),
+      truncatedCalls: Number(r.truncatedCalls),
+      upstreamMs: Number(r.upstreamMs),
+      overheadMs: Number(r.overheadMs),
+      errors: Number(r.errors),
+      warnings: Number(r.warnings),
+    }))
+  }
+
+  async deleteOlderThan(epochMs: number): Promise<number> {
+    const deleted = await this.db
+      .delete(llmCallMetrics)
+      .where(lt(llmCallMetrics.created_at, epochMs))
+      .returning({ id: llmCallMetrics.id })
+    return deleted.length
+  }
+}
+
 export interface CoreRepositories {
   workspaceRepository: WorkspaceRepository
   accountRepository: AccountRepository
@@ -484,6 +617,7 @@ export interface CoreRepositories {
   pipelineRepository: PipelineRepository
   executionRepository: ExecutionRepository
   tokenUsageRepository: TokenUsageRepository
+  llmCallMetricRepository: LlmCallMetricRepository
   agentRunRepository: AgentRunRepository
 }
 
@@ -497,6 +631,7 @@ export function createDrizzleRepositories(db: DrizzleDb, clock: Clock): CoreRepo
     pipelineRepository: new DrizzlePipelineRepository(db),
     executionRepository: new DrizzleExecutionRepository(db, clock),
     tokenUsageRepository: new DrizzleTokenUsageRepository(db),
+    llmCallMetricRepository: new DrizzleLlmCallMetricRepository(db),
     agentRunRepository: new DrizzleAgentRunRepository(db),
   }
 }

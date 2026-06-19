@@ -114,6 +114,11 @@ export interface RetentionConfig {
   tokenUsageMs: number
   rateLimitMs: number
   commitMs: number
+  /**
+   * LLM observability sink (full per-call prompt/response). Heavy, and only useful
+   * for recent debugging, so it is pruned aggressively (default 3 days).
+   */
+  llmCallMetricsMs: number
 }
 
 export interface FragmentLibraryConfig {

@@ -86,12 +86,100 @@ export interface StepApproval {
   feedback?: string
 }
 
+/**
+ * LLM observability rollup for a step (mirrors `stepMetricsSchema` in contracts):
+ * a compact aggregate over every model call the step's container made — token
+ * usage, how close it ran to the output-token limit (truncation), the latency
+ * split between transport/proxy overhead and actual model execution, and any
+ * errors/warnings. Absent when the observability sink is not wired.
+ */
+export interface StepMetrics {
+  calls: number
+  promptTokens: number
+  completionTokens: number
+  /** the largest single completion produced (closest approach to the limit) */
+  peakCompletionTokens: number
+  /** the output ceiling in effect (max requested max_tokens), or null when unknown */
+  maxOutputTokens: number | null
+  /** calls cut short by the output limit (finish_reason === 'length') */
+  truncatedCalls: number
+  /** sum of model execution time (ms) — the actual prompt/tool execution */
+  upstreamMs: number
+  /** sum of transport/proxy overhead (ms) — the interim-layer cost */
+  overheadMs: number
+  /** calls that failed (non-2xx / refused / in-process error) */
+  errors: number
+  /** successful calls that warned (truncated or content-filtered) */
+  warnings: number
+}
+
+/** One proxied LLM call's full detail (mirrors `llmCallMetricSchema` in contracts). */
+export interface LlmCallMetric {
+  id: string
+  workspaceId: string
+  executionId: string | null
+  agentKind: string
+  provider: string
+  model: string
+  createdAt: number
+  streaming: boolean
+  messageCount: number
+  toolCount: number
+  requestMaxTokens: number | null
+  promptTokens: number
+  completionTokens: number
+  totalTokens: number
+  finishReason: string | null
+  upstreamMs: number
+  overheadMs: number
+  totalMs: number
+  ok: boolean
+  httpStatus: number | null
+  errorMessage: string | null
+  /** the full request messages, serialised as JSON */
+  promptText: string
+  /** the full assistant response text */
+  responseText: string
+}
+
+/** One per-agent-kind insight in the LLM-friendly export (rollup + derived ratios). */
+export interface LlmExportInsight extends StepMetrics {
+  agentKind: string
+  /** peakCompletionTokens / maxOutputTokens, 0..1; null when the ceiling is unknown. */
+  outputHeadroomRatio: number | null
+  /** overheadMs / (upstreamMs + overheadMs), 0..1; the share spent in transport. */
+  transportOverheadRatio: number | null
+}
+
+/** LLM-friendly export of a run's model activity (mirrors `llmMetricsExportSchema`). */
+export interface LlmMetricsExport {
+  kind: 'cat-factory.llm-metrics-export'
+  version: 1
+  executionId: string
+  generatedAt: number
+  totals: {
+    calls: number
+    promptTokens: number
+    completionTokens: number
+    upstreamMs: number
+    overheadMs: number
+    transportOverheadRatio: number | null
+    errors: number
+    warnings: number
+    truncatedCalls: number
+  }
+  insights: LlmExportInsight[]
+  calls: LlmCallMetric[]
+}
+
 /** One agent's slot in a running pipeline. */
 export interface PipelineStep {
   agentKind: AgentKind
   state: AgentState
   /** 0..1 progress of this individual step */
   progress: number
+  /** LLM observability rollup for this step (token use, headroom, latency split). */
+  metrics?: StepMetrics | null
   /** live "N/M done" subtask counts while an async (container) step runs */
   subtasks?: StepSubtasks
   /** present + unresolved => the step (and block) is blocked */

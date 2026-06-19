@@ -335,10 +335,45 @@ export const conflictsStepStateSchema = v.object({
 })
 export type ConflictsStepState = v.InferOutput<typeof conflictsStepStateSchema>
 
+/**
+ * Per-step LLM observability rollup: a compact aggregate over every model call the
+ * step's container made, recorded by the LLM proxy and summed by the engine for the
+ * board. It surfaces, at a glance, token usage, how close the step ran to its
+ * output-token limit (truncation), the latency split between transport/proxy
+ * overhead and actual model execution, and any errors/warnings. The full per-call
+ * detail (prompts + responses) is fetched on demand for the drill-down panel.
+ * Absent when the observability sink is not wired.
+ */
+export const stepMetricsSchema = v.object({
+  /** Number of model calls recorded for this step. */
+  calls: v.number(),
+  /** Sum of prompt (input) tokens across the step's calls. */
+  promptTokens: v.number(),
+  /** Sum of completion (output) tokens across the step's calls. */
+  completionTokens: v.number(),
+  /** Largest single completion the model produced (closest approach to the limit). */
+  peakCompletionTokens: v.number(),
+  /** The output ceiling in effect (max requested `max_tokens`), or null when unknown. */
+  maxOutputTokens: v.nullable(v.number()),
+  /** Calls cut short by the output limit (`finish_reason === 'length'`). */
+  truncatedCalls: v.number(),
+  /** Sum of model execution time (ms) — the "actual prompt/tool execution" slice. */
+  upstreamMs: v.number(),
+  /** Sum of transport/proxy overhead (ms) — the interim-layer cost. */
+  overheadMs: v.number(),
+  /** Calls that failed (non-2xx / refused / in-process error). */
+  errors: v.number(),
+  /** Successful calls that warned (truncated or content-filtered). */
+  warnings: v.number(),
+})
+export type StepMetrics = v.InferOutput<typeof stepMetricsSchema>
+
 export const pipelineStepSchema = v.object({
   agentKind: agentKindSchema,
   state: agentStateSchema,
   progress: v.number(),
+  /** LLM observability rollup for this step; see {@link stepMetricsSchema}. */
+  metrics: v.optional(v.nullable(stepMetricsSchema)),
   /** Live CI-gate state while a `ci` step polls/fixes checks; see {@link ciStepStateSchema}. */
   ci: v.optional(v.nullable(ciStepStateSchema)),
   /** Live conflict-gate state while a `conflicts` step checks/resolves mergeability. */

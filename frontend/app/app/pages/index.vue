@@ -8,6 +8,7 @@ import InspectorPanel from '~/components/panels/InspectorPanel.vue'
 import DecisionModal from '~/components/panels/DecisionModal.vue'
 import ApprovalModal from '~/components/panels/ApprovalModal.vue'
 import AgentStepDetail from '~/components/panels/AgentStepDetail.vue'
+import ObservabilityPanel from '~/components/panels/ObservabilityPanel.vue'
 import BlockFocusView from '~/components/focus/BlockFocusView.vue'
 import DocumentSourceConnectModal from '~/components/documents/DocumentSourceConnectModal.vue'
 import DocumentImportModal from '~/components/documents/DocumentImportModal.vue'
@@ -86,6 +87,7 @@ watch(
       <DecisionModal />
       <ApprovalModal />
       <AgentStepDetail />
+      <ObservabilityPanel />
       <DocumentSourceConnectModal />
       <DocumentImportModal />
       <SpawnPreviewModal />

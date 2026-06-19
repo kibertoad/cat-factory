@@ -150,3 +150,40 @@ export const tokenUsage = pgTable(
   },
   (t) => [index('idx_token_usage_created').on(t.created_at)],
 )
+
+// LLM observability sink (mirror of D1 migration 0026). One row per proxied
+// container-agent model call: full prompt/response, output-limit headroom and the
+// transport-vs-execution latency split. Pruned aggressively by retention (the full
+// bodies make it heavy); booleans are integer 0/1 to match the SQLite store.
+export const llmCallMetrics = pgTable(
+  'llm_call_metrics',
+  {
+    id: text('id').primaryKey(),
+    workspace_id: text('workspace_id').notNull(),
+    execution_id: text('execution_id'),
+    agent_kind: text('agent_kind').notNull(),
+    provider: text('provider').notNull(),
+    model: text('model').notNull(),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+    streaming: integer('streaming').notNull().default(0),
+    message_count: integer('message_count').notNull().default(0),
+    tool_count: integer('tool_count').notNull().default(0),
+    request_max_tokens: integer('request_max_tokens'),
+    prompt_tokens: integer('prompt_tokens').notNull().default(0),
+    completion_tokens: integer('completion_tokens').notNull().default(0),
+    total_tokens: integer('total_tokens').notNull().default(0),
+    finish_reason: text('finish_reason'),
+    upstream_ms: integer('upstream_ms').notNull().default(0),
+    overhead_ms: integer('overhead_ms').notNull().default(0),
+    total_ms: integer('total_ms').notNull().default(0),
+    ok: integer('ok').notNull().default(1),
+    http_status: integer('http_status'),
+    error_message: text('error_message'),
+    prompt_text: text('prompt_text').notNull().default(''),
+    response_text: text('response_text').notNull().default(''),
+  },
+  (t) => [
+    index('idx_llm_call_metrics_execution').on(t.workspace_id, t.execution_id, t.created_at),
+    index('idx_llm_call_metrics_created').on(t.created_at),
+  ],
+)

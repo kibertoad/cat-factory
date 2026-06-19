@@ -325,4 +325,10 @@ export interface Env {
    * step. Default 90. 0 disables pruning and backfills the full history.
    */
   GITHUB_COMMIT_RETENTION_DAYS?: string
+  /**
+   * Days of `llm_call_metrics` (LLM observability) history to keep. Heavy — full
+   * per-call prompt/response — and only useful for recent debugging, so pruned
+   * aggressively. Default 3. 0 disables pruning.
+   */
+  LLM_CALL_METRICS_RETENTION_DAYS?: string
 }

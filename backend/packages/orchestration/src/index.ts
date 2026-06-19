@@ -36,6 +36,20 @@ export {
 } from './modules/merge/MergePresetService.js'
 
 export {
+  LlmObservabilityService,
+  type LlmObservabilityServiceDependencies,
+  type RecordLlmCallInput,
+} from './modules/observability/LlmObservabilityService.js'
+export {
+  classifyCall,
+  isWarningFinishReason,
+  outputHeadroomRatio,
+  transportOverheadRatio,
+  buildLlmMetricsExport,
+  type LlmCallOutcome,
+} from './modules/observability/observability.logic.js'
+
+export {
   BootstrapService,
   type BootstrapServiceDependencies,
   type BootstrapPollResult,

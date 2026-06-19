@@ -64,6 +64,11 @@ export const useUiStore = defineStore('ui', () => {
   // a reader for it (ToC + collapsible sections).
   const stepDetail = ref<{ instanceId: string; stepIndex: number } | null>(null)
 
+  // LLM observability panel: which run (execution instance) a human is inspecting
+  // the per-call model activity for, or null when closed. The panel loads the full
+  // per-call detail from the observability store on open.
+  const observabilityInstanceId = ref<string | null>(null)
+
   /** Current canvas zoom (driven by Vue Flow viewport). */
   const zoom = ref(1)
 
@@ -196,6 +201,12 @@ export const useUiStore = defineStore('ui', () => {
   function closeStepDetail() {
     stepDetail.value = null
   }
+  function openObservability(instanceId: string) {
+    observabilityInstanceId.value = instanceId
+  }
+  function closeObservability() {
+    observabilityInstanceId.value = null
+  }
 
   return {
     selectedBlockId,
@@ -215,6 +226,7 @@ export const useUiStore = defineStore('ui', () => {
     fragmentLibraryOpen,
     requirementReviewBlockId,
     stepDetail,
+    observabilityInstanceId,
     zoom,
     lod,
     expandedFrames,
@@ -252,5 +264,7 @@ export const useUiStore = defineStore('ui', () => {
     closeRequirementReview,
     openStepDetail,
     closeStepDetail,
+    openObservability,
+    closeObservability,
   }
 })

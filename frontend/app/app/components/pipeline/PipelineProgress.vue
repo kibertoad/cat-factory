@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { AgentState, ExecutionInstance } from '~/types/domain'
 import { AGENT_BY_KIND } from '~/utils/catalog'
+import StepMetricsBar from '~/components/observability/StepMetricsBar.vue'
 
 const props = defineProps<{ instance: ExecutionInstance }>()
 const emit = defineEmits<{
@@ -246,6 +247,16 @@ const ITEM_ICON: Record<string, string> = {
             <UIcon name="i-lucide-cpu" class="h-3 w-3 shrink-0" />
             {{ models.labelForRef(s.model) }}
           </p>
+
+          <!-- LLM observability rollup (tokens, output-limit headroom, transport-
+               vs-execution); click opens the full per-call activity panel. -->
+          <StepMetricsBar
+            v-if="s.metrics && s.metrics.calls > 0"
+            :metrics="s.metrics"
+            clickable
+            class="mt-2"
+            @inspect="ui.openObservability(instance.id)"
+          />
 
           <!-- A one-line hint that the agent produced prose; the full output (and
                all step metadata) lives in the step-detail overlay opened by click. -->

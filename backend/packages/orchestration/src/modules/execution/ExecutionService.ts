@@ -31,6 +31,7 @@ import {
   MERGER_AGENT_KIND,
 } from './ci.logic.js'
 import type { NotificationService } from '../notifications/NotificationService.js'
+import type { LlmObservabilityService } from '../observability/LlmObservabilityService.js'
 import type {
   BlockRepository,
   ExecutionRepository,
@@ -151,6 +152,13 @@ export interface ExecutionServiceDependencies {
    * CI-fixer attempt budget). Absent → the built-in {@link DEFAULT_MERGE_PRESET}.
    */
   mergePresetRepository?: MergePresetRepository
+  /**
+   * Optional: the LLM observability sink. When wired, each emit rolls the per-run
+   * model-call aggregates onto the matching pipeline steps (`step.metrics`) so the
+   * board shows tokens / output-limit headroom / transport-vs-execution latency
+   * live. Absent (tests / unconfigured) → steps carry no `metrics`.
+   */
+  llmObservability?: LlmObservabilityService
 }
 
 /** Reconciles a Blueprinter step's tree onto the board in place (BoardScanService). */
@@ -189,6 +197,7 @@ export class ExecutionService {
   private readonly fragmentResolver?: FragmentResolver
   private readonly blueprintReconciler?: BlueprintReconciler
   private readonly notificationService?: NotificationService
+  private readonly llmObservability?: LlmObservabilityService
   private readonly ciStatusProvider?: CiStatusProvider
   private readonly mergeabilityProvider?: PullRequestMergeabilityProvider
   private readonly prMerger?: PullRequestMerger
@@ -212,6 +221,7 @@ export class ExecutionService {
     fragmentResolver,
     blueprintReconciler,
     notificationService,
+    llmObservability,
     ciStatusProvider,
     mergeabilityProvider,
     pullRequestMerger,
@@ -234,6 +244,7 @@ export class ExecutionService {
     this.fragmentResolver = fragmentResolver
     this.blueprintReconciler = blueprintReconciler
     this.notificationService = notificationService
+    this.llmObservability = llmObservability
     this.ciStatusProvider = ciStatusProvider
     this.mergeabilityProvider = mergeabilityProvider
     this.prMerger = pullRequestMerger
@@ -1210,8 +1221,47 @@ export class ExecutionService {
    * swallows its own errors, and the persisted run remains the source of truth.
    */
   private async emitInstance(workspaceId: string, instance: ExecutionInstance): Promise<void> {
+    await this.attachStepMetrics(workspaceId, instance)
     const block = await this.blockRepository.get(workspaceId, instance.blockId)
     await this.events.executionChanged(workspaceId, instance, block)
+  }
+
+  /**
+   * Roll the run's recorded LLM calls into per-step `metrics` for the board, in
+   * place on the emitted instance. The proxy keys calls by execution + agentKind
+   * (not step index), so the aggregate is per-agent-kind within the run; steps
+   * sharing a kind get the same rollup. Best-effort and a no-op when the sink is
+   * not wired, so it never blocks an emit.
+   */
+  private async attachStepMetrics(
+    workspaceId: string,
+    instance: ExecutionInstance,
+  ): Promise<void> {
+    if (!this.llmObservability) return
+    try {
+      const summaries = await this.llmObservability.summarizeByExecution(workspaceId, instance.id)
+      if (summaries.length === 0) return
+      const byKind = new Map(summaries.map((s) => [s.agentKind, s]))
+      for (const step of instance.steps) {
+        const s = byKind.get(step.agentKind)
+        if (!s) continue
+        step.metrics = {
+          calls: s.calls,
+          promptTokens: s.promptTokens,
+          completionTokens: s.completionTokens,
+          peakCompletionTokens: s.peakCompletionTokens,
+          maxOutputTokens: s.maxOutputTokens,
+          truncatedCalls: s.truncatedCalls,
+          upstreamMs: s.upstreamMs,
+          overheadMs: s.overheadMs,
+          errors: s.errors,
+          warnings: s.warnings,
+        }
+      }
+    } catch (error) {
+      // Observability is best-effort; never block an emit on a metrics read.
+      void error
+    }
   }
 
   /** Set the block's in-progress/blocked status and step-completion progress. */

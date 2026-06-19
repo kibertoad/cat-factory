@@ -8,6 +8,7 @@ import { D1LiveContainerRepository } from './infrastructure/repositories/D1LiveC
 import { ContainerInstanceRegistry } from './infrastructure/containers/ContainerInstanceRegistry'
 import { D1RateLimitRepository } from './infrastructure/repositories/D1RateLimitRepository'
 import { D1TokenUsageRepository } from './infrastructure/repositories/D1TokenUsageRepository'
+import { D1LlmCallMetricRepository } from './infrastructure/repositories/D1LlmCallMetricRepository'
 import { buildContainer } from './infrastructure/container'
 import { CryptoIdGenerator, SystemClock } from './infrastructure/runtime'
 import { WorkflowsWorkRunner } from './infrastructure/workflows/WorkflowsWorkRunner'
@@ -84,6 +85,7 @@ export default {
             idGenerator: new CryptoIdGenerator(),
           }),
           commitRepository: new D1CommitProjectionRepository({ db: env.DB }),
+          llmCallMetricRepository: new D1LlmCallMetricRepository({ db: env.DB }),
           clock,
           policy: loadConfig(env).retention,
         })

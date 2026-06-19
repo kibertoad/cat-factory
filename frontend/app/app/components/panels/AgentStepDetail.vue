@@ -4,6 +4,7 @@ import { onKeyStroke } from '@vueuse/core'
 import type { AgentState } from '~/types/domain'
 import { AGENT_BY_KIND } from '~/utils/catalog'
 import { parseOutputOutline } from '~/utils/agentOutput'
+import StepMetricsBar from '~/components/observability/StepMetricsBar.vue'
 
 // Detail overlay for a single pipeline step. Opened by clicking an agent in the
 // inspector list (TaskExecution) or the focus-view pipeline (PipelineProgress) via
@@ -330,6 +331,27 @@ async function copyOutput() {
                       <span>{{ item.label }}</span>
                     </li>
                   </ul>
+                </div>
+
+                <!-- LLM observability rollup (tokens, output-limit headroom,
+                     transport-vs-execution); click to open the full per-call panel -->
+                <div v-if="step.metrics && step.metrics.calls > 0" class="mt-4">
+                  <div class="mb-1 flex items-center justify-between">
+                    <span class="text-[11px] uppercase tracking-wide text-slate-500">
+                      Model activity
+                    </span>
+                    <button
+                      class="text-[11px] text-sky-400 hover:text-sky-300"
+                      @click="ctx && ui.openObservability(ctx.instanceId)"
+                    >
+                      View all calls →
+                    </button>
+                  </div>
+                  <StepMetricsBar
+                    :metrics="step.metrics"
+                    clickable
+                    @inspect="ctx && ui.openObservability(ctx.instanceId)"
+                  />
                 </div>
 
                 <!-- standards (prompt fragments) folded into this step -->

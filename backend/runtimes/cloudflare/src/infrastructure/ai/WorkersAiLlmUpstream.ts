@@ -49,7 +49,10 @@ interface WorkersAiArgs extends LlmInProcessRequest {
  * `stream` and always reports usage so spend is metered.
  */
 async function runWorkersAi(args: WorkersAiArgs): Promise<Response> {
-  const { binding, model: modelId, payload, streaming, record, waitUntil, log } = args
+  const { binding, model: modelId, payload, streaming, record, recordMetric, waitUntil, log } = args
+  // Model-execution clock for the observability split: the in-process work the proxy
+  // attributes to the model (everything else it does is transport overhead).
+  const upstreamStart = Date.now()
   const workersai = createWorkersAI({ binding })
   // workers-ai-provider must implement the same provider spec as `ai`
   // (`@ai-sdk/provider`); workers-ai-provider@3 matches `ai` v6, so the model is used
@@ -97,6 +100,15 @@ async function runWorkersAi(args: WorkersAiArgs): Promise<Response> {
       'llm proxy: Workers AI completion ok',
     )
     await record(u)
+    recordMetric?.({
+      usage: u,
+      finishReason: toOpenAiFinish(finishReason, oaToolCalls.length > 0),
+      responseText: text,
+      ok: true,
+      httpStatus: null,
+      errorMessage: null,
+      upstreamMs: Date.now() - upstreamStart,
+    })
     const message: Record<string, unknown> = {
       role: 'assistant',
       content: text.length > 0 ? text : null,
@@ -141,17 +153,18 @@ async function runWorkersAi(args: WorkersAiArgs): Promise<Response> {
       // Errors raised here happen AFTER the Response has been returned, so the
       // controller's try/catch can't see them — log + error the stream so the
       // failure is visible instead of a silent hang.
+      let fullText = ''
       try {
         controller.enqueue(
           sse(chunk([{ index: 0, delta: { role: 'assistant' }, finish_reason: null }])),
         )
-        let textLength = 0
         for await (const delta of result.textStream) {
-          textLength += delta.length
+          fullText += delta
           controller.enqueue(
             sse(chunk([{ index: 0, delta: { content: delta }, finish_reason: null }])),
           )
         }
+        const textLength = fullText.length
         // After the text stream drains, the tool calls (if any) are resolved. We
         // relay them in a single delta with complete `arguments`.
         const oaToolCalls = toOpenAiToolCalls(await result.toolCalls)
@@ -177,9 +190,27 @@ async function runWorkersAi(args: WorkersAiArgs): Promise<Response> {
         controller.enqueue(encoder.encode('data: [DONE]\n\n'))
         controller.close()
         waitUntil(record(usage))
+        recordMetric?.({
+          usage,
+          finishReason,
+          responseText: fullText,
+          ok: true,
+          httpStatus: null,
+          errorMessage: null,
+          upstreamMs: Date.now() - upstreamStart,
+        })
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err)
         log.error({ err: message, model: modelId }, 'llm proxy: Workers AI stream failed')
+        recordMetric?.({
+          usage: null,
+          finishReason: null,
+          responseText: fullText,
+          ok: false,
+          httpStatus: null,
+          errorMessage: message,
+          upstreamMs: Date.now() - upstreamStart,
+        })
         controller.error(err)
       }
     },

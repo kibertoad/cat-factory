@@ -48,6 +48,31 @@ export function executionController(): Hono<AppEnv> {
     return c.json(await c.get('container').spendService.status())
   })
 
+  // LLM observability for a run: the full per-call detail (prompts, responses,
+  // token usage, output-limit headroom, transport-vs-execution latency) behind the
+  // board's step rollups. Empty when the observability sink is not wired.
+  app.get('/executions/:executionId/llm-metrics', async (c) => {
+    const executionId = param(c, 'executionId')
+    const observability = c.get('container').llmObservability
+    const calls = observability
+      ? await observability.listByExecution(param(c, 'workspaceId'), executionId)
+      : []
+    return c.json({ executionId, calls })
+  })
+
+  // LLM-friendly export of a run's model activity: a self-describing JSON bundle
+  // (totals + per-agent insights + every call, with derived ratios) meant to be
+  // handed straight to a model for analysis. Sets a download filename.
+  app.get('/executions/:executionId/llm-metrics/export', async (c) => {
+    const executionId = param(c, 'executionId')
+    const observability = c.get('container').llmObservability
+    const exported = observability
+      ? await observability.exportForExecution(param(c, 'workspaceId'), executionId)
+      : { kind: 'cat-factory.llm-metrics-export' as const, version: 1 as const, executionId, generatedAt: 0, totals: { calls: 0, promptTokens: 0, completionTokens: 0, upstreamMs: 0, overheadMs: 0, transportOverheadRatio: null, errors: 0, warnings: 0, truncatedCalls: 0 }, insights: [], calls: [] }
+    c.header('content-disposition', `attachment; filename="llm-metrics-${executionId}.json"`)
+    return c.json(exported)
+  })
+
   // Resume runs paused by the spend safeguard in this workspace.
   app.post('/spend/resume', async (c) => {
     const instances = await c

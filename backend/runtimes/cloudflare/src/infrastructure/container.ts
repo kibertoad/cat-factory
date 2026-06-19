@@ -42,6 +42,7 @@ import { D1BlockRepository } from './repositories/D1BlockRepository'
 import { D1ExecutionRepository } from './repositories/D1ExecutionRepository'
 import { D1PipelineRepository } from './repositories/D1PipelineRepository'
 import { D1TokenUsageRepository } from './repositories/D1TokenUsageRepository'
+import { D1LlmCallMetricRepository } from './repositories/D1LlmCallMetricRepository'
 import { D1WorkspaceRepository } from './repositories/D1WorkspaceRepository'
 import { D1AccountRepository } from './repositories/D1AccountRepository'
 import { D1MembershipRepository } from './repositories/D1MembershipRepository'
@@ -781,6 +782,7 @@ export function buildContainer(env: Env, overrides: Partial<CoreDependencies> = 
     pipelineRepository: new D1PipelineRepository({ db }),
     executionRepository: new D1ExecutionRepository({ db, clock }),
     tokenUsageRepository: new D1TokenUsageRepository({ db }),
+    llmCallMetricRepository: new D1LlmCallMetricRepository({ db }),
     idGenerator,
     clock,
     // When a caller injects its own agentExecutor (tests pass a FakeAgentExecutor)

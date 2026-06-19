@@ -49,6 +49,24 @@ export interface LlmTokenUsage {
   completion_tokens?: number
 }
 
+/**
+ * What an upstream path (HTTP buffered/streamed, or an in-process gateway) reports
+ * back to the proxy for observability once a call resolves. The proxy supplies the
+ * request-side fields (prompt, correlation, total timing); this is the response side.
+ */
+export interface ProxyCallObservation {
+  usage: LlmTokenUsage | null
+  /** Upstream finish reason (`stop` | `length` | `tool_calls` | `content_filter` | …). */
+  finishReason: string | null
+  /** The assistant response text (concatenated for streamed calls). */
+  responseText: string
+  ok: boolean
+  httpStatus: number | null
+  errorMessage: string | null
+  /** Time spent waiting on the model (ms) — measured by the path that made the call. */
+  upstreamMs: number
+}
+
 /** A resolved OpenAI-compatible upstream: where to forward, and the key to use. */
 export interface LlmUpstreamEndpoint {
   baseURL: string
@@ -64,6 +82,12 @@ export interface LlmInProcessRequest {
   streaming: boolean
   /** Meter token usage into the spend ledger. */
   record: (usage: LlmTokenUsage | null) => Promise<number>
+  /**
+   * Report the call's full observation (usage + finish reason + response text +
+   * model timing) for the observability sink. Optional and a no-op when the sink
+   * is not wired; the gateway should call it once the completion resolves.
+   */
+  recordMetric?: (observation: ProxyCallObservation) => void
   /** Schedule post-response work (CF `waitUntil`; a no-op fire-and-forget on Node). */
   waitUntil: (p: Promise<unknown>) => void
   /** Correlated logger for this proxied call. */

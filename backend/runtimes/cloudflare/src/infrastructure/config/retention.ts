@@ -12,5 +12,8 @@ export function loadRetentionConfig(env: Env): RetentionConfig {
     rateLimitMs: retentionMs(env.GITHUB_RATE_LIMIT_RETENTION_DAYS, 7),
     // Caps the commits projection and bounds the initial backfill to the same age.
     commitMs: retentionMs(env.GITHUB_COMMIT_RETENTION_DAYS, 90),
+    // Heavy (full per-call prompt/response) and only useful for recent debugging,
+    // so pruned aggressively — default 3 days.
+    llmCallMetricsMs: retentionMs(env.LLM_CALL_METRICS_RETENTION_DAYS, 3),
   }
 }
