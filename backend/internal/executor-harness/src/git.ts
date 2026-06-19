@@ -142,6 +142,77 @@ export async function createBranch(
 }
 
 /**
+ * Whether `branch` already exists on the remote — i.e. an earlier (possibly
+ * evicted) run of this task already pushed work to it, so a re-dispatch should
+ * RESUME on it (clone it, continue on its commits) rather than branch off base and
+ * start over. Uses `git ls-remote` (no checkout); the token is supplied out of band.
+ */
+export async function remoteBranchExists(
+  cloneUrl: string,
+  branch: string,
+  ghToken: string,
+  signal?: AbortSignal,
+): Promise<boolean> {
+  const url = authenticatedCloneUrl(cloneUrl)
+  const out = await git(['ls-remote', '--heads', url, branch], {
+    signal,
+    env: await authEnv(ghToken),
+  })
+  return out.trim() !== ''
+}
+
+/**
+ * Clone an EXISTING work branch (full history) into `dir` and check it out — used
+ * to resume a task whose earlier run already pushed commits to this branch, so the
+ * agent continues on top of that work instead of redoing it.
+ */
+export async function cloneExistingBranch(opts: {
+  cloneUrl: string
+  branch: string
+  ghToken: string
+  dir: string
+  signal?: AbortSignal
+}): Promise<void> {
+  const url = authenticatedCloneUrl(opts.cloneUrl)
+  await git(['clone', '--branch', opts.branch, '--single-branch', url, opts.dir], {
+    signal: opts.signal,
+    env: await authEnv(opts.ghToken),
+  })
+  await git(['config', 'user.name', GIT_AUTHOR], { cwd: opts.dir, signal: opts.signal })
+  await git(['config', 'user.email', GIT_EMAIL], { cwd: opts.dir, signal: opts.signal })
+}
+
+/**
+ * Commit edits the agent left UNCOMMITTED — but only to files git already tracks
+ * (`git add -u`), never new untracked files. The agent owns commit selection (it
+ * alone knows which new files are part of the solution vs scratch scripts/artifacts
+ * it created while exploring), so this is just a safety net that captures forgotten
+ * edits to existing files without ever sweeping in junk a blanket `git add -A`
+ * would. Returns false when there was nothing tracked to commit.
+ */
+export async function commitTrackedEdits(
+  dir: string,
+  message: string,
+  signal?: AbortSignal,
+): Promise<boolean> {
+  await git(['add', '-u'], { cwd: dir, signal })
+  // Only consider staged (tracked) changes — untracked files are deliberately ignored.
+  const staged = await git(['diff', '--cached', '--name-only'], { cwd: dir, signal })
+  if (staged.trim() === '') return false
+  await git(['commit', '-m', message], { cwd: dir, signal })
+  return true
+}
+
+/** Whether the branch advanced past `baseSha` via commits (the agent's own + any safety-net commit). */
+export async function branchHasCommitsSince(
+  dir: string,
+  baseSha: string,
+  signal?: AbortSignal,
+): Promise<boolean> {
+  return (await headCommit(dir, signal)) !== baseSha
+}
+
+/**
  * Parse the paths out of `git status --porcelain` (v1) output. Each line is
  * `XY <path>`, or `XY <old> -> <new>` for a rename/copy (we keep the new path);
  * git quotes paths with special characters, which we unquote. Blank lines are
@@ -341,6 +412,13 @@ export async function openPullRequest(opts: {
   })
   if (!res.ok) {
     const detail = await res.text().catch(() => '')
+    // A resumed run pushes to a branch that already has an open PR; GitHub answers
+    // 422 "A pull request already exists". That's success for us — return the
+    // existing PR's url rather than failing the resumed run.
+    if (res.status === 422 && /pull request already exists/i.test(detail)) {
+      const existing = await findOpenPullRequestUrl(opts)
+      if (existing) return existing
+    }
     throw new Error(
       redactSecrets(`Failed to open PR (HTTP ${res.status}): ${detail.slice(0, 300)}`),
     )
@@ -348,4 +426,30 @@ export async function openPullRequest(opts: {
   const body = (await res.json()) as { html_url?: string }
   if (!body.html_url) throw new Error('GitHub did not return a PR url')
   return body.html_url
+}
+
+/** Find the open PR for `opts.head` on `opts.base`, returning its html_url or undefined. */
+async function findOpenPullRequestUrl(opts: {
+  owner: string
+  name: string
+  ghToken: string
+  head: string
+  base: string
+  apiBase?: string
+  signal?: AbortSignal
+}): Promise<string | undefined> {
+  const apiBase = opts.apiBase ?? 'https://api.github.com'
+  const query = `head=${opts.owner}:${opts.head}&base=${opts.base}&state=open`
+  const res = await fetch(`${apiBase}/repos/${opts.owner}/${opts.name}/pulls?${query}`, {
+    headers: {
+      authorization: `Bearer ${opts.ghToken}`,
+      accept: 'application/vnd.github+json',
+      'user-agent': 'cat-factory-executor',
+      'x-github-api-version': '2022-11-28',
+    },
+    ...(opts.signal ? { signal: opts.signal } : {}),
+  })
+  if (!res.ok) return undefined
+  const list = (await res.json().catch(() => [])) as Array<{ html_url?: string }>
+  return Array.isArray(list) && list[0]?.html_url ? list[0].html_url : undefined
 }

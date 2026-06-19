@@ -16,8 +16,10 @@ import {
 import {
   authenticatedCloneUrl,
   branchHasChanges,
+  branchHasCommitsSince,
   changedPathsFromPorcelain,
   commitAll,
+  commitTrackedEdits,
   headCommit,
   mergeBranch,
   redactSecrets,
@@ -326,6 +328,61 @@ describe('branchHasChanges', () => {
     // No .gitignore here, so AGENTS.md is tracked; rewriting only it is still a no-op.
     await writeFile(join(dir, 'AGENTS.md'), 'fresh context', 'utf8')
     expect(await branchHasChanges(dir, base)).toBe(false)
+  })
+})
+
+describe('commitTrackedEdits + branchHasCommitsSince', () => {
+  let dir: string
+  const git = (...args: string[]): Promise<unknown> => exec('git', args, { cwd: dir })
+  const initRepo = async (): Promise<string> => {
+    await git('init', '-b', 'main')
+    await git('config', 'user.email', 'test@example.com')
+    await git('config', 'user.name', 'Test')
+    await writeFile(join(dir, 'tracked.ts'), 'export const x = 1\n', 'utf8')
+    await git('add', '-A')
+    await git('commit', '-m', 'base')
+    return headCommit(dir)
+  }
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), 'commit-test-'))
+  })
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true })
+  })
+
+  it('commits edits to tracked files but never untracked scratch files', async () => {
+    const base = await initRepo()
+    // The agent edited a tracked file but forgot to commit it, and left a scratch
+    // script + a build artifact behind (untracked).
+    await writeFile(join(dir, 'tracked.ts'), 'export const x = 2\n', 'utf8')
+    await writeFile(join(dir, 'scratch.sh'), 'echo debugging\n', 'utf8')
+    await writeFile(join(dir, 'out.log'), 'noise\n', 'utf8')
+
+    expect(await commitTrackedEdits(dir, 'safety-net commit')).toBe(true)
+    expect(await branchHasCommitsSince(dir, base)).toBe(true)
+    // The scratch + artifact files were NOT committed (still untracked).
+    const status = String(await exec('git', ['status', '--porcelain'], { cwd: dir }).then((r) => r.stdout))
+    expect(status).toMatch(/\?\? scratch\.sh/)
+    expect(status).toMatch(/\?\? out\.log/)
+    // The tracked edit landed in the commit.
+    const show = String(await exec('git', ['show', 'HEAD:tracked.ts'], { cwd: dir }).then((r) => r.stdout))
+    expect(show).toContain('export const x = 2')
+  })
+
+  it('is a no-op when only untracked files exist (agent must commit new files itself)', async () => {
+    const base = await initRepo()
+    await writeFile(join(dir, 'new-feature.ts'), 'export const y = 1\n', 'utf8')
+    // No tracked edits ⇒ nothing the safety net should commit; the branch is unchanged.
+    expect(await commitTrackedEdits(dir, 'safety-net commit')).toBe(false)
+    expect(await branchHasCommitsSince(dir, base)).toBe(false)
+  })
+
+  it('counts the agent’s own commits as advancing the branch', async () => {
+    const base = await initRepo()
+    await writeFile(join(dir, 'new-feature.ts'), 'export const y = 1\n', 'utf8')
+    await git('add', 'new-feature.ts')
+    await git('commit', '-m', 'feat: add feature (by the agent)')
+    expect(await branchHasCommitsSince(dir, base)).toBe(true)
   })
 })
 
