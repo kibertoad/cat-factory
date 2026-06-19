@@ -142,7 +142,10 @@ export function reconstructPrompts(calls: LlmCallMetric[]): LlmCallMetric[] {
     if (c.promptPrefixCount > 0) {
       const prev = running.get(c.agentKind) ?? []
       // Only rebuild when we actually hold the referenced prefix; else keep the delta.
-      full = prev.length >= c.promptPrefixCount ? [...prev.slice(0, c.promptPrefixCount), ...delta] : delta
+      full =
+        prev.length >= c.promptPrefixCount
+          ? [...prev.slice(0, c.promptPrefixCount), ...delta]
+          : delta
     } else {
       full = delta
     }

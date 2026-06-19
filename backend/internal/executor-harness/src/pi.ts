@@ -241,7 +241,9 @@ export function parseTodoProgress(event: Record<string, unknown>): TodoProgress 
 }
 
 /** Tool-call signal read off a streamed Pi event, or undefined if not a tool call. */
-function toolCallSignal(event: Record<string, unknown>): { name: string; isError: boolean } | undefined {
+function toolCallSignal(
+  event: Record<string, unknown>,
+): { name: string; isError: boolean } | undefined {
   // `tool_execution_end` is the canonical per-call stream event (statsFromEvents
   // counts the same one), so the guard reads it and nothing else — no double count.
   if (event.type !== 'tool_execution_end') return undefined

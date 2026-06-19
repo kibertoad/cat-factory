@@ -361,11 +361,15 @@ describe('commitTrackedEdits + branchHasCommitsSince', () => {
     expect(await commitTrackedEdits(dir, 'safety-net commit')).toBe(true)
     expect(await branchHasCommitsSince(dir, base)).toBe(true)
     // The scratch + artifact files were NOT committed (still untracked).
-    const status = String(await exec('git', ['status', '--porcelain'], { cwd: dir }).then((r) => r.stdout))
+    const status = String(
+      await exec('git', ['status', '--porcelain'], { cwd: dir }).then((r) => r.stdout),
+    )
     expect(status).toMatch(/\?\? scratch\.sh/)
     expect(status).toMatch(/\?\? out\.log/)
     // The tracked edit landed in the commit.
-    const show = String(await exec('git', ['show', 'HEAD:tracked.ts'], { cwd: dir }).then((r) => r.stdout))
+    const show = String(
+      await exec('git', ['show', 'HEAD:tracked.ts'], { cwd: dir }).then((r) => r.stdout),
+    )
     expect(show).toContain('export const x = 2')
   })
 

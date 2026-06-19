@@ -286,20 +286,30 @@ function exportJson() {
                     <span>{{ c.messageCount }} messages</span>
                     <span>{{ c.toolCount }} tools</span>
                     <span>{{ c.streaming ? 'streamed' : 'buffered' }}</span>
-                    <span v-if="c.requestMaxTokens != null">max_tokens {{ c.requestMaxTokens }}</span>
+                    <span v-if="c.requestMaxTokens != null"
+                      >max_tokens {{ c.requestMaxTokens }}</span
+                    >
                     <span v-if="c.cachedPromptTokens > 0" class="text-emerald-400"
                       >{{ c.cachedPromptTokens }}/{{ c.promptTokens }} prompt cached</span
                     >
                     <span>total {{ formatMs(c.totalMs) }}</span>
                   </div>
                   <div>
-                    <div class="mb-1 flex items-center gap-2 text-[11px] uppercase tracking-wide text-slate-500">
+                    <div
+                      class="mb-1 flex items-center gap-2 text-[11px] uppercase tracking-wide text-slate-500"
+                    >
                       <span>Prompt</span>
-                      <span v-if="c.promptPrefixCount > 0" class="normal-case tracking-normal text-slate-600">
+                      <span
+                        v-if="c.promptPrefixCount > 0"
+                        class="normal-case tracking-normal text-slate-600"
+                      >
                         (new messages only — {{ c.promptPrefixCount }} earlier omitted)
                       </span>
                     </div>
-                    <pre class="max-h-72 overflow-auto rounded-lg bg-slate-950/70 p-3 text-[11px] leading-relaxed text-slate-300">{{ prettyPrompt(c.promptText) }}</pre>
+                    <pre
+                      class="max-h-72 overflow-auto rounded-lg bg-slate-950/70 p-3 text-[11px] leading-relaxed text-slate-300"
+                      >{{ prettyPrompt(c.promptText) }}</pre
+                    >
                   </div>
                   <div>
                     <div class="mb-1 text-[11px] uppercase tracking-wide text-slate-500">

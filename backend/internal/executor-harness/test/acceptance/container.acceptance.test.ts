@@ -3,6 +3,7 @@ import { execFileSync } from 'node:child_process'
 import { rmSync } from 'node:fs'
 import {
   buildImage,
+  committingLlmStub,
   dockerAvailable,
   freePort,
   githubStub,
@@ -11,7 +12,6 @@ import {
   removeContainer,
   seedBareRepo,
   startContainer,
-  streamingLlmStub,
   todoDrivingLlmStub,
   waitForHealth,
 } from './support'
@@ -49,7 +49,7 @@ describe.skipIf(!docker)('executor container acceptance', () => {
   })
 
   it('clones, runs Pi, pushes a branch and opens a PR', async () => {
-    const proxy = streamingLlmStub()
+    const proxy = committingLlmStub()
     const github = githubStub()
     const proxyPort = await listen(proxy.server)
     const ghPort = await listen(github.server)

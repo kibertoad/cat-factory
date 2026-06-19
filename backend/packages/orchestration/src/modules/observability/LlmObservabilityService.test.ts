@@ -126,9 +126,7 @@ describe('LlmObservabilityService.record', () => {
     const a1 = { role: 'assistant', content: 'on it' }
     // Call 1: system + user. Call 2: + assistant + user. Call 3: + assistant.
     await service.record(input({ promptText: JSON.stringify([sys, u1]), messageCount: 2 }))
-    await service.record(
-      input({ promptText: JSON.stringify([sys, u1, a1, u1]), messageCount: 4 }),
-    )
+    await service.record(input({ promptText: JSON.stringify([sys, u1, a1, u1]), messageCount: 4 }))
 
     const stored = repo.recorded
     // First call stores the full array (nothing to chain onto).
@@ -152,11 +150,16 @@ describe('LlmObservabilityService.record', () => {
       idGenerator: seqIdGenerator,
       clock: seqClock,
     })
-    await service.record(input({ promptText: JSON.stringify([{ role: 'system', content: 'a' }]), messageCount: 1 }))
+    await service.record(
+      input({ promptText: JSON.stringify([{ role: 'system', content: 'a' }]), messageCount: 1 }),
+    )
     // A retry restarts the conversation: same length region but different content.
     await service.record(
       input({
-        promptText: JSON.stringify([{ role: 'system', content: 'b' }, { role: 'user', content: 'x' }]),
+        promptText: JSON.stringify([
+          { role: 'system', content: 'b' },
+          { role: 'user', content: 'x' },
+        ]),
         messageCount: 2,
       }),
     )

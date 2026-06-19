@@ -106,7 +106,10 @@ export function defineLlmMetricsSuite(name: string, makeRepo: () => LlmCallMetri
       )
 
       // The tip is the newest call for the (ws, execution, kind) chain.
-      expect(await repo.latestChainTip(ws, e1, 'coder')).toEqual({ messageCount: 4, promptHash: 'h2' })
+      expect(await repo.latestChainTip(ws, e1, 'coder')).toEqual({
+        messageCount: 4,
+        promptHash: 'h2',
+      })
       // A different agent kind has its own (empty) chain.
       expect(await repo.latestChainTip(ws, e1, 'reviewer')).toBeNull()
 
