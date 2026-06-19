@@ -5,11 +5,13 @@ import { buildNodeContainer } from '../src/container.js'
 import { createDbClient } from '../src/db/client.js'
 import { createApp } from '../src/server.js'
 
-// Exercise the shared default-deny auth gate (mountAuthGate) on the real Node app —
-// the security-critical path the conformance suite can't cover because it runs with
-// AUTH_DEV_OPEN. These assertions need no Postgres: an unauthenticated request is
-// rejected at the gate before any repository query, and the container is built lazily
-// (the pg Pool only connects on first query), so the suite runs anywhere.
+// Smoke-test that the real Node app wires the shared auth gate (mountAuthGate) over a
+// config derived from the process env — the security-critical path the conformance
+// suite can't cover because it runs with AUTH_DEV_OPEN. The gate's own behaviour is
+// unit-tested in @cat-factory/server; here we only confirm the Node-facade glue. No
+// Postgres needed: an unauthenticated request is rejected at the gate before any
+// repository query, and the container is built lazily (the pg Pool connects on first
+// query), so the suite runs anywhere.
 
 const BASE = 'https://cat-factory.test'
 
@@ -40,40 +42,23 @@ function makeApp(env: NodeJS.ProcessEnv) {
     app.fetch(new Request(`${BASE}${path}`, { method, headers }))
 }
 
-describe('Node auth gate (mountAuthGate)', () => {
-  const call = makeApp(AUTH_ENABLED)
-
-  it('allows the public health probe', async () => {
+// The gate's own logic (every public prefix, the WS-upgrade bypass, the authz branch)
+// is covered exhaustively by @cat-factory/server's `authGate.spec.ts`. This file proves
+// only the Node-facade-specific glue that suite can't: `createApp` actually mounts the
+// gate, and `loadNodeConfig` derives `auth.enabled`/`devOpen` from the process env.
+describe('Node auth gate wiring', () => {
+  it('mounts the gate over a configured env: protected → 401, /health stays public', async () => {
+    // Reaching 401 (not 503) proves loadNodeConfig derived auth.enabled from the
+    // OAuth creds + 32-char session secret, and that createApp wired mountAuthGate.
+    const call = makeApp(AUTH_ENABLED)
+    expect((await call('GET', '/workspaces')).status).toBe(401)
     expect((await call('GET', '/health')).status).toBe(200)
   })
 
-  it('rejects a protected route with no session (default-deny → 401)', async () => {
-    expect((await call('GET', '/workspaces')).status).toBe(401)
-    expect((await call('POST', '/workspaces')).status).toBe(401)
-    expect((await call('GET', '/workspaces/ws_x/blocks')).status).toBe(401)
-  })
-
-  it('bypasses the gate for public prefixes (/auth, /v1, /github)', async () => {
-    // The gate lets these through; the router then handles them (200/404/…), but it is
-    // never the gate's 401/503 — proving the prefix is public.
-    for (const path of ['/auth/anything', '/v1/anything', '/github/anything']) {
-      const status = (await call('GET', path)).status
-      expect(status).not.toBe(401)
-      expect(status).not.toBe(503)
-    }
-  })
-
-  it('gates a non-WebSocket request to the event-stream path', async () => {
-    // The WS-upgrade bypass is narrow: only a real `Upgrade: websocket` handshake is
-    // let through (it can't be simulated via fetch — `Upgrade`/`Connection` are
-    // forbidden request headers undici strips). A plain GET stays default-deny.
-    expect((await call('GET', '/workspaces/ws_x/events')).status).toBe(401)
-  })
-
   it('fails closed (503) when auth is unconfigured and dev-open is off', async () => {
+    // Production shape: no creds, no dev-open hatch → loadNodeConfig leaves auth
+    // disabled and the gate refuses rather than serving protected data openly.
     const closed = makeApp(AUTH_UNCONFIGURED)
     expect((await closed('GET', '/workspaces')).status).toBe(503)
-    // Public routes still work even when auth is unconfigured.
-    expect((await closed('GET', '/health')).status).toBe(200)
   })
 })
