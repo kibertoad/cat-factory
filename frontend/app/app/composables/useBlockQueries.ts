@@ -96,8 +96,12 @@ export function useBlockQueries(blocks: Ref<Block[]>) {
     return 'ready'
   }
 
-  /** Pixel size of a container's inner 2D canvas, derived from its children. */
-  function containerSize(id: string): { w: number; h: number } {
+  /**
+   * The natural extent of a container's inner 2D canvas — the smallest size that
+   * still fits all its children. This is the floor a resizable frame can never be
+   * dragged below (so tasks/modules are never clipped).
+   */
+  function contentSize(id: string): { w: number; h: number } {
     const b = getBlock(id)
     const isModule = b?.level === 'module'
     const TASK_W = 180
@@ -117,6 +121,19 @@ export function useBlockQueries(blocks: Ref<Block[]>) {
     return { w, h: inner + headerH }
   }
 
+  /**
+   * Pixel size of a container's inner 2D canvas. The content extent is the floor;
+   * a frame the user has resized (dragging its borders) uses its stored `size`
+   * when that is larger, so an explicit size grows the frame but never shrinks it
+   * below its contents.
+   */
+  function containerSize(id: string): { w: number; h: number } {
+    const content = contentSize(id)
+    const stored = getBlock(id)?.size
+    if (!stored) return content
+    return { w: Math.max(content.w, stored.w), h: Math.max(content.h, stored.h) }
+  }
+
   return {
     byId,
     getBlock,
@@ -131,6 +148,7 @@ export function useBlockQueries(blocks: Ref<Block[]>) {
     isRunnable,
     frameProgress,
     frameStatus,
+    contentSize,
     containerSize,
   }
 }

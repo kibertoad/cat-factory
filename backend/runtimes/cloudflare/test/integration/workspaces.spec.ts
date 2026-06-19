@@ -14,12 +14,13 @@ describe('workspaces', () => {
     expect(res.body.executions).toHaveLength(0)
   })
 
-  it('creates an empty board when seed=false', async () => {
+  it('creates a board with no sample blocks when seed=false (pipelines always seeded)', async () => {
     const { call } = makeApp()
     const res = await call<WorkspaceSnapshot>('POST', '/workspaces', { seed: false })
 
     expect(res.body.blocks).toHaveLength(0)
-    expect(res.body.pipelines).toHaveLength(0)
+    // The pipeline catalog is product config, not sample data — always present.
+    expect(res.body.pipelines).toHaveLength(4)
   })
 
   it('lists and deletes boards', async () => {

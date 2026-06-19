@@ -1,5 +1,11 @@
 import * as v from 'valibot'
-import { agentKindSchema, blockTypeSchema, positionSchema, testTargetSchema } from './primitives.js'
+import {
+  agentKindSchema,
+  blockTypeSchema,
+  positionSchema,
+  sizeSchema,
+  testTargetSchema,
+} from './primitives.js'
 
 // Request body schemas. The Hono facade validates inbound JSON against these via
 // @hono/valibot-validator; the frontend API client can import the inferred input
@@ -7,7 +13,11 @@ import { agentKindSchema, blockTypeSchema, positionSchema, testTargetSchema } fr
 
 export const createWorkspaceSchema = v.object({
   name: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(120))),
-  /** Seed the board with the sample architecture (default true). */
+  /**
+   * Seed the board with the sample architecture *blocks* (default true; the SPA
+   * passes false so real boards start empty). The pipeline catalog is always
+   * provisioned regardless — it is product config, not sample data.
+   */
   seed: v.optional(v.boolean()),
   /**
    * The account the new board belongs to. Optional: when omitted (or in the
@@ -66,6 +76,8 @@ export const updateBlockSchema = v.partial(
     title: v.pipe(v.string(), v.trim(), v.maxLength(200)),
     description: v.pipe(v.string(), v.maxLength(2000)),
     position: positionSchema,
+    // The dragged frame size (service frames are resizable by their borders).
+    size: sizeSchema,
     moduleName: v.pipe(v.string(), v.trim(), v.maxLength(120)),
     fragmentIds: v.array(v.pipe(v.string(), v.maxLength(120))),
     // The selected model's catalog id; an empty string resets to the default.

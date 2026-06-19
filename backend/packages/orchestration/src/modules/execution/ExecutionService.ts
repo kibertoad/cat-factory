@@ -400,10 +400,20 @@ export class ExecutionService {
     const executor = this.agentExecutor
     if (isAsyncAgentExecutor(executor) && executor.runsAsync(context)) {
       if (!step.jobId) {
+        // Surface an explicit "spinning up container" phase for the cold-boot
+        // window: dispatch blocks until the per-run container is up and has
+        // accepted the job, so emitting before it lets the board show the boot
+        // instead of a blank "working" state.
+        step.startingContainer = true
+        await this.executionRepository.upsert(workspaceId, instance)
+        await this.emitInstance(workspaceId, instance)
+
         const handle = await executor.startJob(context)
         step.jobId = handle.jobId
         // Record the model at dispatch — the poll site can't resolve it later.
         if (handle.model) step.model = handle.model
+        // The dispatch returned, so the container is up and execution has begun.
+        step.startingContainer = false
         await this.executionRepository.upsert(workspaceId, instance)
         await this.emitInstance(workspaceId, instance)
       }
@@ -438,13 +448,23 @@ export class ExecutionService {
 
     const update = await executor.pollJob({ jobId: step.jobId, workspaceId })
     if (update.state === 'running') {
-      // Surface live subtask progress (e.g. 3/8 todos done) without advancing the
-      // step. Only persist + emit when the counts actually changed so a poll that
-      // brings nothing new doesn't churn storage or the event stream.
+      // A successful poll proves the container is up, so the cold-boot phase is
+      // over (defensive: a replay may have left the flag set). Surface live subtask
+      // progress (e.g. 3/8 todos done) without advancing the step. Only persist +
+      // emit when something actually changed so an idle poll doesn't churn storage
+      // or the event stream.
+      let changed = false
+      if (step.startingContainer) {
+        step.startingContainer = false
+        changed = true
+      }
       if (update.subtasks && !sameSubtasks(step.subtasks, update.subtasks)) {
         step.subtasks = update.subtasks
         step.progress =
           update.subtasks.total > 0 ? update.subtasks.completed / update.subtasks.total : 0
+        changed = true
+      }
+      if (changed) {
         await this.executionRepository.upsert(workspaceId, instance)
         await this.emitInstance(workspaceId, instance)
       }

@@ -7,6 +7,7 @@ import ModuleFrame from './ModuleFrame.vue'
 import AgentFailureCard from '~/components/board/AgentFailureCard.vue'
 import AgentStopButton from '~/components/board/AgentStopButton.vue'
 import { useBlockDrag } from '~/composables/useBlockDrag'
+import { useFrameResize } from '~/composables/useFrameResize'
 
 // Vue Flow passes the node's `id` and `data` as props to custom node components.
 // Only frames are rendered as board nodes; their tasks live inside the card.
@@ -81,6 +82,14 @@ function toggleExpand() {
 const { startDrag } = useBlockDrag()
 function onFrameHandle(e: PointerEvent) {
   if (block.value) startDrag(block.value, e, { clamp: false })
+}
+
+// Miro-style frame resizing: drag the right / bottom edges or the corner. Handles
+// live on the expanded card's drop zone (see template); the composable clamps to
+// the frame's content extent and persists the size on release.
+const { startResize } = useFrameResize()
+function onResize(e: PointerEvent, edge: 'e' | 's' | 'se') {
+  if (block.value) startResize(block.value, e, edge)
 }
 
 function addTask() {
@@ -362,6 +371,27 @@ const ITEM_ICON: Record<string, string> = {
           >
             <UIcon name="i-lucide-plus" class="h-3.5 w-3.5" /> Add the first task
           </button>
+
+          <!-- resize handles (drag the borders to resize the service, Miro-style) -->
+          <div
+            class="nodrag absolute right-0 top-0 h-full w-2 cursor-ew-resize hover:bg-sky-400/20"
+            title="Drag to resize"
+            @pointerdown="onResize($event, 'e')"
+          />
+          <div
+            class="nodrag absolute bottom-0 left-0 h-2 w-full cursor-ns-resize hover:bg-sky-400/20"
+            title="Drag to resize"
+            @pointerdown="onResize($event, 's')"
+          />
+          <div
+            class="nodrag absolute bottom-0 right-0 h-4 w-4 cursor-nwse-resize"
+            title="Drag to resize"
+            @pointerdown="onResize($event, 'se')"
+          >
+            <span
+              class="absolute bottom-1 right-1 h-2 w-2 rounded-sm border-b-2 border-r-2 border-slate-500"
+            />
+          </div>
         </div>
       </div>
     </div>

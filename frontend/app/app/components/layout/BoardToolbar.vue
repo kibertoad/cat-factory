@@ -37,6 +37,7 @@ const spendLabel = computed(() => {
 })
 const spendColor = computed(() => (spend.value?.exceeded ? 'error' : 'neutral'))
 
+
 const decisionItems = computed(() =>
   execution.openDecisions.map((d) => {
     const b = board.getBlock(d.blockId)
@@ -48,13 +49,6 @@ const decisionItems = computed(() =>
     }
   }),
 )
-
-async function resetBoard() {
-  await workspace.reset()
-  ui.select(null)
-  ui.focus(null)
-  setTimeout(() => fitView({ padding: 0.2 }), 50)
-}
 </script>
 
 <template>
@@ -107,16 +101,5 @@ async function resetBoard() {
     >
       {{ spendLabel }}
     </UButton>
-
-    <USeparator orientation="vertical" class="mx-1 h-6" />
-
-    <UButton
-      icon="i-lucide-rotate-ccw"
-      color="neutral"
-      variant="ghost"
-      size="sm"
-      title="Reset board to sample"
-      @click="resetBoard"
-    />
   </div>
 </template>
