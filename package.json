@@ -11,6 +11,7 @@
     "lint": "oxlint && oxfmt --check .",
     "lint:fix": "oxlint --fix && oxfmt .",
     "dev:backend": "pnpm --filter @cat-factory/deploy-backend run dev",
+    "dev:node": "pnpm --filter @cat-factory/deploy-node run dev",
     "dev:frontend": "pnpm --filter @cat-factory/deploy-frontend run dev",
     "changeset": "changeset",
     "version": "changeset version",

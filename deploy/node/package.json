@@ -1,0 +1,21 @@
+{
+  "name": "@cat-factory/deploy-node",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Example Node.js service deployment of the @cat-factory/node-server library. Carries the Dockerfile + env config; copy this package to deploy the backend as a long-running Node service (Postgres + pg-boss) on your own infrastructure.",
+  "type": "module",
+  "scripts": {
+    "predev": "pnpm --filter @cat-factory/node-server run build",
+    "dev": "node --watch --env-file-if-exists=.env src/main.ts",
+    "prestart": "pnpm --filter @cat-factory/node-server run build",
+    "start": "node --env-file-if-exists=.env src/main.ts",
+    "typecheck": "tsgo -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@cat-factory/node-server": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@typescript/native-preview": "7.0.0-dev.20260616.1"
+  }
+}

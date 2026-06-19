@@ -134,10 +134,11 @@ deploy both halves on their end.
 
 **Deployments** (examples; copy these to deploy on your own infra):
 
-| Path                                   | Package                        | Role                                                                                                                                            |
-| -------------------------------------- | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`deploy/backend`](./deploy/backend)   | `@cat-factory/deploy-backend`  | Worker deployment: re-exports `@cat-factory/worker` + the production `wrangler.toml`. See [its README](./deploy/backend/README.md).             |
-| [`deploy/frontend`](./deploy/frontend) | `@cat-factory/deploy-frontend` | Pages deployment: a thin Nuxt app that `extends` `@cat-factory/app` + the Pages `wrangler.toml`. See [its README](./deploy/frontend/README.md). |
+| Path                                   | Package                        | Role                                                                                                                                                                             |
+| -------------------------------------- | ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`deploy/backend`](./deploy/backend)   | `@cat-factory/deploy-backend`  | Cloudflare Worker deployment: re-exports `@cat-factory/worker` + the production `wrangler.toml`. See [its README](./deploy/backend/README.md).                                   |
+| [`deploy/node`](./deploy/node)         | `@cat-factory/deploy-node`     | Node.js service deployment: calls `@cat-factory/node-server`'s `start()` (Postgres + pg-boss); ships a `Dockerfile` + `.env.example`. See [its README](./deploy/node/README.md). |
+| [`deploy/frontend`](./deploy/frontend) | `@cat-factory/deploy-frontend` | Pages deployment: a thin Nuxt app that `extends` `@cat-factory/app` + the Pages `wrangler.toml`. See [its README](./deploy/frontend/README.md).                                  |
 
 In this repo the deployments depend on the libraries via `workspace:*`; in your
 own copy you swap that for the published npm version. The backend is a hexagonal
@@ -224,9 +225,11 @@ Each capability has a deeper write-up; start here and follow the link.
 ## Deployment
 
 The two halves are deployed from the example packages under `deploy/`. Each
-carries its own `wrangler.toml`: the backend Worker in
+carries its own config: the backend Worker in
 [`deploy/backend/`](./deploy/backend/wrangler.toml) and the frontend Pages
-project in [`deploy/frontend/`](./deploy/frontend/wrangler.toml). To deploy on
+project in [`deploy/frontend/`](./deploy/frontend/wrangler.toml). The backend can
+**alternatively** run as a long-running Node.js service (Postgres + pg-boss) from
+[`deploy/node/`](./deploy/node) — same HTTP API, different runtime. To deploy on
 **your own** infrastructure, copy those directories and swap the `workspace:*`
 dependency for the published npm version — see each package's README. The
 reference deployment below runs on Cloudflare under the `iselwin@gmail.com`
@@ -267,6 +270,27 @@ Worker prints its `*.workers.dev` URL; production traffic reaches it through the
 dashboard, not in `wrangler.toml`). First-time setup (auth, provider, GitHub-App
 and container secrets) is in [`backend/README.md`](./backend/README.md#deploying)
 — **auth is required or the API fails closed.**
+
+### Backend (Node.js service — alternative to the Worker)
+
+Instead of the Worker, run the same backend as a long-running Node.js service over
+**Postgres** (durable jobs on **pg-boss**). It needs only `DATABASE_URL` (the schema
+migrates on boot); all other config is environment-driven and documented in
+[`deploy/node/.env.example`](./deploy/node/.env.example).
+
+```sh
+cd deploy/node
+cp .env.example .env          # set DATABASE_URL, auth, model keys, …
+pnpm start                    # builds @cat-factory/node-server, then runs the service
+
+# or as a container (build from the repo root):
+docker build -f deploy/node/Dockerfile -t cat-factory-node .
+docker run --rm -p 8787:8787 --env-file deploy/node/.env cat-factory-node
+```
+
+Requires **Node 24 or 26** (the entry runs via built-in type stripping; the scripts
+load `.env` with Node's native `--env-file`). See
+[`deploy/node/README.md`](./deploy/node/README.md).
 
 ### Frontend (Nuxt SPA → Pages)
 

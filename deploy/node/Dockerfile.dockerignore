@@ -1,0 +1,9 @@
+# Keep the build context lean + reproducible (let the image install from the lockfile).
+**/node_modules
+**/dist
+**/.nuxt
+**/.output
+**/.turbo
+**/.wrangler
+.git
+**/*.tsbuildinfo

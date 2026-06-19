@@ -10,6 +10,7 @@
   "ignore": [
     "@cat-factory/benchmark-harness",
     "@cat-factory/deploy-backend",
-    "@cat-factory/deploy-frontend"
+    "@cat-factory/deploy-frontend",
+    "@cat-factory/deploy-node"
   ]
 }

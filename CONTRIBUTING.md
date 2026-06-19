@@ -26,6 +26,7 @@ packages (`backend/internal/*`), and example **deployments** (`deploy/*`):
 | `backend/internal/benchmark-harness` | `@cat-factory/benchmark-harness` | no (internal)                   |
 | `backend/internal/conformance`       | `@cat-factory/conformance`       | no (internal test suite)        |
 | `deploy/backend`                     | `@cat-factory/deploy-backend`    | no (example deployment)         |
+| `deploy/node`                        | `@cat-factory/deploy-node`       | no (example deployment)         |
 | `deploy/frontend`                    | `@cat-factory/deploy-frontend`   | no (example deployment)         |
 
 The `deploy/*` packages depend on the libraries via `workspace:*` in this repo;
@@ -41,6 +42,7 @@ pnpm typecheck          # typecheck every package
 pnpm test               # run the unit/integration suites
 pnpm lint               # oxlint + oxfmt (repo-wide)
 pnpm dev:backend        # run the worker locally (deploy/backend)
+pnpm dev:node           # run the Node.js service locally (deploy/node; needs DATABASE_URL)
 pnpm dev:frontend       # run the SPA locally (deploy/frontend)
 ```
 

@@ -10,6 +10,7 @@ packages:
   - 'frontend/app'
   - 'deploy/backend'
   - 'deploy/frontend'
+  - 'deploy/node'
 allowBuilds:
   '@parcel/watcher': true
   esbuild: true
