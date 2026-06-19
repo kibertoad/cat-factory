@@ -20,7 +20,9 @@
   },
   "scripts": {
     "build": "tsgo -b tsconfig.build.json",
-    "typecheck": "tsgo -p tsconfig.json --noEmit"
+    "typecheck": "tsgo -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:run": "vitest run"
   },
   "dependencies": {
     "@cat-factory/agents": "workspace:*",
@@ -35,6 +37,7 @@
     "valibot": "^1.0.0"
   },
   "devDependencies": {
-    "@typescript/native-preview": "7.0.0-dev.20260616.1"
+    "@typescript/native-preview": "7.0.0-dev.20260616.1",
+    "vitest": "^4.1.8"
   }
 }
