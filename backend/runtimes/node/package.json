@@ -1,0 +1,47 @@
+{
+  "name": "@cat-factory/node-server",
+  "version": "1.0.0",
+  "description": "Node.js runtime facade for the Agent Architecture Board: serves the shared @cat-factory/server Hono app via @hono/node-server, wiring Node implementations of the runtime ports (persistence, gateways, model provisioning).",
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsgo -b tsconfig.build.json",
+    "typecheck": "tsgo -p tsconfig.json --noEmit",
+    "bundle": "esbuild src/main.ts --bundle --platform=node --format=esm --outfile=dist/main.js --banner:js=\"import{createRequire}from'module';const require=createRequire(import.meta.url);\"",
+    "start": "node dist/main.js",
+    "dev": "tsx watch src/main.ts"
+  },
+  "dependencies": {
+    "@cat-factory/agents": "workspace:*",
+    "@cat-factory/contracts": "workspace:*",
+    "@cat-factory/integrations": "workspace:*",
+    "@cat-factory/kernel": "workspace:*",
+    "@cat-factory/orchestration": "workspace:*",
+    "@cat-factory/prompt-fragments": "workspace:*",
+    "@cat-factory/provider-bedrock": "workspace:*",
+    "@cat-factory/server": "workspace:*",
+    "@cat-factory/spend": "workspace:*",
+    "@hono/node-server": "^1.13.0",
+    "hono": "^4.6.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@typescript/native-preview": "7.0.0-dev.20260616.1",
+    "esbuild": "^0.25.0",
+    "tsx": "^4.19.0"
+  }
+}

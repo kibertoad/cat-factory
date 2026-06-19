@@ -16,6 +16,7 @@
     { "path": "packages/provider-bedrock/tsconfig.build.json" },
     { "path": "packages/orchestration/tsconfig.build.json" },
     { "path": "packages/server/tsconfig.build.json" },
-    { "path": "runtimes/cloudflare/tsconfig.build.json" }
+    { "path": "runtimes/cloudflare/tsconfig.build.json" },
+    { "path": "runtimes/node/tsconfig.build.json" }
   ]
 }

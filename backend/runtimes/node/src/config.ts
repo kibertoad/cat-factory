@@ -1,0 +1,118 @@
+import type { AgentModelConfig } from '@cat-factory/agents'
+import { effectiveCatalog, resolveModelRef } from '@cat-factory/kernel'
+import type { AppConfig } from '@cat-factory/server'
+import { DEFAULT_SPEND_PRICING } from '@cat-factory/spend'
+
+// Translate the Node process environment into the shared AppConfig contract. This is
+// the Node analogue of the Worker's `loadConfig(env)`: same SHAPE, different source.
+// Integrations (GitHub/documents/tasks/environments/runners/fragment-library) default
+// to disabled in this MVP; the core (board/workspaces/pipelines/executions/spend +
+// auth) is fully configured from env.
+
+const MIN_SESSION_SECRET_LENGTH = 32
+const PRODUCTION_ENVIRONMENTS = new Set(['production', 'prod', 'staging'])
+
+function num(value: string | undefined): number | undefined {
+  if (value === undefined || value.trim() === '') return undefined
+  const n = Number(value)
+  return Number.isFinite(n) ? n : undefined
+}
+
+function csv(value: string | undefined): string[] {
+  return (value ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+}
+
+export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
+  const isDirectAvailable = (keyEnv: string): boolean => !!env[keyEnv]
+
+  // Default unpinned agents to Qwen (direct DashScope when keyed, else its Cloudflare
+  // flavour); the agentic kinds default to GLM-5.2 — mirroring the Worker's routing.
+  const qwenDefault = resolveModelRef('qwen', isDirectAvailable)
+  const defaultConfig: AgentModelConfig = {
+    ref: {
+      provider: env.AGENT_DEFAULT_PROVIDER ?? qwenDefault?.provider ?? 'workers-ai',
+      model: env.AGENT_DEFAULT_MODEL ?? qwenDefault?.model ?? '@cf/qwen/qwen3-30b-a3b-fp8',
+    },
+    temperature: num(env.AGENT_DEFAULT_TEMPERATURE) ?? 0.4,
+    maxOutputTokens: num(env.AGENT_MAX_OUTPUT_TOKENS) ?? 5000,
+  }
+  const agenticDefault: AgentModelConfig = {
+    ref: { provider: 'workers-ai', model: '@cf/zai-org/glm-5.2' },
+    temperature: num(env.AGENT_DEFAULT_TEMPERATURE) ?? 0.3,
+    maxOutputTokens: num(env.AGENT_MAX_OUTPUT_TOKENS) ?? 5000,
+  }
+
+  const sessionSecret = env.AUTH_SESSION_SECRET?.trim() ?? ''
+  const clientId = env.GITHUB_OAUTH_CLIENT_ID?.trim() ?? ''
+  const clientSecret = env.GITHUB_OAUTH_CLIENT_SECRET?.trim() ?? ''
+  const environment = env.ENVIRONMENT?.trim().toLowerCase() ?? ''
+  const ttlHours = num(env.AUTH_SESSION_TTL_HOURS)
+
+  return {
+    agents: {
+      routing: {
+        default: defaultConfig,
+        byKind: { architect: agenticDefault, coder: agenticDefault, reviewer: agenticDefault },
+      },
+      resolveBlockModel: (modelId) => resolveModelRef(modelId, isDirectAvailable),
+    },
+    models: effectiveCatalog(isDirectAvailable),
+    execution: {
+      decisionTimeout: env.DECISION_TIMEOUT?.trim() || '24 hours',
+      jobPollInterval: env.JOB_POLL_INTERVAL?.trim() || '15 seconds',
+      jobMaxPolls: num(env.JOB_MAX_POLLS) ?? 280,
+      jobPollFailureTolerance: num(env.JOB_POLL_FAILURE_TOLERANCE) ?? 6,
+      ciPollInterval: env.CI_POLL_INTERVAL?.trim() || '30 seconds',
+      ciMaxPolls: num(env.CI_MAX_POLLS) ?? 120,
+      containerMaxAgeMs: Math.max(75, num(env.CONTAINER_MAX_AGE_MINUTES) ?? 90) * 60_000,
+    },
+    spend: {
+      ...DEFAULT_SPEND_PRICING,
+      currency: env.SPEND_CURRENCY?.trim() || DEFAULT_SPEND_PRICING.currency,
+      monthlyLimit: num(env.SPEND_MONTHLY_LIMIT) ?? DEFAULT_SPEND_PRICING.monthlyLimit,
+    },
+    github: {
+      enabled: false,
+      appId: env.GITHUB_APP_ID?.trim() ?? '',
+      appSlug: env.GITHUB_APP_SLUG?.trim() ?? '',
+      apiBase: env.GITHUB_API_BASE?.trim() || 'https://api.github.com',
+      setupRedirectUrl: env.GITHUB_SETUP_REDIRECT_URL?.trim() || '/',
+      webhookSecret: env.GITHUB_WEBHOOK_SECRET ?? '',
+    },
+    auth: {
+      enabled:
+        clientId !== '' && clientSecret !== '' && sessionSecret.length >= MIN_SESSION_SECRET_LENGTH,
+      devOpen: env.AUTH_DEV_OPEN?.trim() === 'true' && !PRODUCTION_ENVIRONMENTS.has(environment),
+      clientId,
+      clientSecret,
+      sessionSecret,
+      apiBase: env.GITHUB_API_BASE?.trim() || 'https://api.github.com',
+      oauthBase: env.GITHUB_OAUTH_BASE?.trim() || 'https://github.com',
+      sessionTtlMs: (ttlHours !== undefined && ttlHours > 0 ? ttlHours : 168) * 60 * 60 * 1000,
+      successRedirectUrl: env.AUTH_SUCCESS_REDIRECT_URL?.trim() || '',
+      callbackUrl: env.AUTH_CALLBACK_URL?.trim() || '',
+      allowedLogins: csv(env.AUTH_ALLOWED_LOGINS).map((l) => l.toLowerCase()),
+      allowedOrgs: csv(env.AUTH_ALLOWED_ORGS).map((o) => o.toLowerCase()),
+      allowedRedirectOrigins: csv(env.AUTH_ALLOWED_REDIRECT_ORIGINS).map((o) => {
+        try {
+          return new URL(o).origin
+        } catch {
+          return o
+        }
+      }),
+    },
+    documents: { enabled: false, sources: [], planner: 'headings' },
+    tasks: { enabled: false, sources: [] },
+    environments: { enabled: false },
+    runners: { enabled: false },
+    retention: {
+      tokenUsageMs: (num(env.TOKEN_USAGE_RETENTION_DAYS) ?? 395) * 24 * 60 * 60 * 1000,
+      rateLimitMs: (num(env.GITHUB_RATE_LIMIT_RETENTION_DAYS) ?? 7) * 24 * 60 * 60 * 1000,
+      commitMs: (num(env.GITHUB_COMMIT_RETENTION_DAYS) ?? 90) * 24 * 60 * 60 * 1000,
+    },
+    fragmentLibrary: { enabled: false, selector: 'deterministic' },
+  }
+}

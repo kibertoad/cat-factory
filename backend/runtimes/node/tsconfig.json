@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
+    // Node runtime: relies on the Node globals + Web Platform APIs Node provides
+    // (fetch/Response/crypto/ReadableStream), typed by @types/node.
+    "types": ["node"]
+  },
+  "include": ["src/**/*.ts"]
+}
