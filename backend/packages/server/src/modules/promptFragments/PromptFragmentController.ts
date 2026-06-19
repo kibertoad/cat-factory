@@ -1,6 +1,6 @@
 import { FRAGMENTS } from '@cat-factory/prompt-fragments'
 import { Hono } from 'hono'
-import type { AppEnv } from '../../http/env'
+import type { AppEnv } from '../../http/env.js'
 
 /**
  * Serves the best-practice prompt fragment catalog read-only. The catalog is

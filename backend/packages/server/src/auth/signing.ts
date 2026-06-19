@@ -1,4 +1,4 @@
-import { base64url, base64urlToBytes, timingSafeEqual } from '../crypto/encoding'
+import { base64url, base64urlToBytes, timingSafeEqual } from '../crypto/encoding.js'
 
 // Stateless signed tokens for the auth flow, built on Web Crypto (HMAC-SHA256) —
 // no Node `crypto` module, so it runs in a plain Workers isolate and in Node. The

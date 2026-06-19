@@ -1,9 +1,9 @@
 import type { Context } from 'hono'
 import { Hono } from 'hono'
-import { ContainerSessionService } from '../../containers/ContainerSessionService'
-import type { AppEnv } from '../../http/env'
-import { logger } from '../../observability/logger'
-import type { LlmTokenUsage } from '../../runtime/gateways'
+import { ContainerSessionService } from '../../containers/ContainerSessionService.js'
+import type { AppEnv } from '../../http/env.js'
+import { logger } from '../../observability/logger.js'
+import type { LlmTokenUsage } from '../../runtime/gateways.js'
 
 // The OpenAI Chat Completions-compatible proxy that implementation containers
 // point Pi at. It is the seam that keeps provider secrets out of the container:

@@ -2,9 +2,9 @@ import { replyReviewItemSchema, updateReviewItemStatusSchema } from '@cat-factor
 import { Hono } from 'hono'
 import type { Context } from 'hono'
 import type { RequirementsModule } from '@cat-factory/orchestration'
-import type { AppEnv } from '../../http/env'
-import { param } from '../../http/params'
-import { jsonBody } from '../../http/validation'
+import type { AppEnv } from '../../http/env.js'
+import { param } from '../../http/params.js'
+import { jsonBody } from '../../http/validation.js'
 
 /** Resolve the requirements module or send a 503, returning null when unconfigured. */
 function requireRequirements(c: Context<AppEnv>): RequirementsModule | null {

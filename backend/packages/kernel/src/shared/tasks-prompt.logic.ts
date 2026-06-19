@@ -1,5 +1,5 @@
-import type { TaskComment } from '../domain/types'
-import { buildExcerpt } from './markdown.logic'
+import type { TaskComment } from '../domain/types.js'
+import { buildExcerpt } from './markdown.logic.js'
 
 const MAX_CONTEXT_COMMENTS = 5
 

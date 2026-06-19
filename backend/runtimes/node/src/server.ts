@@ -9,7 +9,7 @@ import {
 } from '@cat-factory/server'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
-import { type NodeContainerOptions, buildNodeContainer } from './container'
+import { type NodeContainerOptions, buildNodeContainer } from './container.js'
 
 // The Node facade: the SAME shared Hono app (controllers + middleware) the Cloudflare
 // Worker mounts, served over `@hono/node-server`. The only Node-specific wiring is the

@@ -12,8 +12,8 @@ import type { RepoProjectionRepository } from '@cat-factory/kernel'
 import type { RepoScanner } from '@cat-factory/kernel'
 import { assertFound } from '@cat-factory/kernel'
 import { requireWorkspace } from '@cat-factory/kernel'
-import type { BoardService } from '../board/BoardService'
-import { countModules, describeNode } from './board-scan.logic'
+import type { BoardService } from '../board/BoardService.js'
+import { countModules, describeNode } from './board-scan.logic.js'
 
 // ---------------------------------------------------------------------------
 // BoardScanService: owns the "scan repository" command and the persisted

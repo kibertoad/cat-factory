@@ -1,8 +1,8 @@
 import type { AgentRunRepository } from '@cat-factory/kernel'
 import type { Core } from '@cat-factory/orchestration'
-import type { SessionPayload } from '../auth/signing'
-import type { AppConfig } from '../config/types'
-import type { RuntimeGateways } from '../runtime/gateways'
+import type { SessionPayload } from '../auth/signing.js'
+import type { AppConfig } from '../config/types.js'
+import type { RuntimeGateways } from '../runtime/gateways.js'
 
 // The runtime-neutral request context shared by every controller. A facade builds a
 // `ServerContainer` per request (the domain `Core` plus the resolved config and the

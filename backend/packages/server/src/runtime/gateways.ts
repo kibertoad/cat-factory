@@ -1,4 +1,4 @@
-import type { Logger } from '../observability/logger'
+import type { Logger } from '../observability/logger.js'
 
 // Runtime "gateway" seams: the differentiator capabilities a controller needs but
 // that are implemented differently per facade. They are carried on the request

@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
-import { HmacSigner, TOKEN_AUDIENCE } from '../../auth/signing'
-import type { AppEnv } from '../../http/env'
-import { param } from '../../http/params'
+import { HmacSigner, TOKEN_AUDIENCE } from '../../auth/signing.js'
+import type { AppEnv } from '../../http/env.js'
+import { param } from '../../http/params.js'
 
 /**
  * Real-time event stream: a WebSocket the SPA subscribes to for live

@@ -6,9 +6,9 @@ import {
 import { Hono } from 'hono'
 import type { Context } from 'hono'
 import type { EnvironmentsModule } from '@cat-factory/orchestration'
-import type { AppEnv } from '../../http/env'
-import { param } from '../../http/params'
-import { jsonBody } from '../../http/validation'
+import type { AppEnv } from '../../http/env.js'
+import { param } from '../../http/params.js'
+import { jsonBody } from '../../http/validation.js'
 
 /** Resolve the environment module or send a 503, returning null when unconfigured. */
 function requireEnvironments(c: Context<AppEnv>): EnvironmentsModule | null {

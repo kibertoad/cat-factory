@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import type { Context } from 'hono'
-import type { AppEnv } from '../../http/env'
-import { param } from '../../http/params'
+import type { AppEnv } from '../../http/env.js'
+import { param } from '../../http/params.js'
 
 const unavailable = (c: Context<AppEnv>, message: string) =>
   c.json({ error: { code: 'unavailable', message } }, 503)

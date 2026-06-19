@@ -3,7 +3,7 @@ import type {
   GitHubProvisioningClient,
   ProvisionedRepo,
 } from '@cat-factory/kernel'
-import { canCreateRepo } from './provisioning.logic'
+import { canCreateRepo } from './provisioning.logic.js'
 
 // Orchestrates "create a repo" under the two-App model (ADR 0005). The caller
 // passes the workspace's bound installation id — for a privileged-tier org that

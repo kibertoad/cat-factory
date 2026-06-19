@@ -1,4 +1,4 @@
-import type { RequirementReview } from '../domain/types'
+import type { RequirementReview } from '../domain/types.js'
 
 // Persistence port for the requirements-review feature. The worker implements it
 // against D1 (migration 0021); tests can supply an in-memory fake. Rows are

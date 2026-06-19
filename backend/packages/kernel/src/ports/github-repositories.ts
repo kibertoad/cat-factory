@@ -5,8 +5,8 @@ import type {
   GitHubIssue,
   GitHubPullRequest,
   GitHubRepo,
-} from '../domain/types'
-import type { RateLimitSnapshot } from './github-client'
+} from '../domain/types.js'
+import type { RateLimitSnapshot } from './github-client.js'
 
 // ---------------------------------------------------------------------------
 // Persistence ports for the GitHub integration. The worker implements these

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isContainerEvictionError, MAX_EVICTION_RECOVERIES } from './job.logic'
+import { isContainerEvictionError, MAX_EVICTION_RECOVERIES } from './job.logic.js'
 
 describe('isContainerEvictionError', () => {
   it('matches the transport 404 eviction message', () => {

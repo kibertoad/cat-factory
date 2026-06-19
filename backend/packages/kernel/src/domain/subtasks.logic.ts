@@ -1,4 +1,4 @@
-import type { StepSubtasks } from './types'
+import type { StepSubtasks } from './types.js'
 
 // Shared subtask-snapshot comparison used by the container-backed flows
 // (execution + bootstrap) to skip redundant re-writes and event broadcasts when

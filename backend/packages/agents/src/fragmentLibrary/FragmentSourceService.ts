@@ -19,7 +19,7 @@ import {
   isMarkdownFile,
   parseFragmentMarkdown,
   slugFromPath,
-} from './fragment-source.logic'
+} from './fragment-source.logic.js'
 
 /**
  * Resolve the GitHub App installation id that can read a tier's repos. A

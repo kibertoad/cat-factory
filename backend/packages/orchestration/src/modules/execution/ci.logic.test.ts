@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { CiCheck } from '@cat-factory/kernel'
-import { aggregateCi, describeFailingChecks, isCiGreen } from './ci.logic'
+import { aggregateCi, describeFailingChecks, isCiGreen } from './ci.logic.js'
 
 const check = (status: string, conclusion: string | null, name = 'build'): CiCheck => ({
   name,

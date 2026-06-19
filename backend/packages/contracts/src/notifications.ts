@@ -1,5 +1,5 @@
 import * as v from 'valibot'
-import { mergeAssessmentSchema } from './merge'
+import { mergeAssessmentSchema } from './merge.js'
 
 // ---------------------------------------------------------------------------
 // Notification wire contracts. A notification is a first-class, human-actionable

@@ -3,7 +3,7 @@ import type { AgentTokenUsage } from '@cat-factory/kernel'
 import type { ModelRef } from '@cat-factory/kernel'
 import type { Clock, IdGenerator } from '@cat-factory/kernel'
 import type { TokenUsageRepository } from '@cat-factory/kernel'
-import { type SpendPricing, estimateCost, startOfMonthUtc } from './pricing'
+import { type SpendPricing, estimateCost, startOfMonthUtc } from './pricing.js'
 
 export interface SpendServiceDependencies {
   tokenUsageRepository: TokenUsageRepository

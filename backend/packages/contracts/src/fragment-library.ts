@@ -1,6 +1,6 @@
 import * as v from 'valibot'
-import { agentKindSchema, blockTypeSchema } from './primitives'
-import { promptFragmentSchema } from './entities'
+import { agentKindSchema, blockTypeSchema } from './primitives.js'
+import { promptFragmentSchema } from './entities.js'
 
 // ---------------------------------------------------------------------------
 // Wire contracts for the tenant-scoped prompt-fragment library (ADR 0006). A

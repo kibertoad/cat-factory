@@ -10,10 +10,10 @@ import type { PipelineStep } from '@cat-factory/kernel'
  * Pure + deterministic so it can be unit-tested without the service's ports. The
  * caller mints the new instance id and re-drives the durable runner.
  */
-export function planResumedSteps(prev: {
+export function planResumedSteps(prev: { steps: PipelineStep[]; currentStep: number }): {
   steps: PipelineStep[]
   currentStep: number
-}): { steps: PipelineStep[]; currentStep: number } {
+} {
   // Resume at the first step that did not complete. A failed run normally parked
   // on `currentStep`, but deriving it from the `done` states is robust to a stale
   // index and means the steps before it are exactly the ones we preserve.

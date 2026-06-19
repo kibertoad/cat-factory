@@ -4,8 +4,8 @@ import type { EnvironmentProvider, ProvisionedEnvironment } from '@cat-factory/k
 import type { SecretCipher } from '@cat-factory/kernel'
 import type { EnvironmentAccessHandle, EnvironmentHandle } from '@cat-factory/kernel'
 import { assertFound } from '@cat-factory/kernel'
-import type { EnvironmentConnectionService } from './EnvironmentConnectionService'
-import { assertSafeEnvironmentUrl, recordToHandle } from './environments.logic'
+import type { EnvironmentConnectionService } from './EnvironmentConnectionService.js'
+import { assertSafeEnvironmentUrl, recordToHandle } from './environments.logic.js'
 
 // EnvironmentProvisioningService: orchestrates provisioning an environment from a
 // workspace's registered provider. Deterministic and side-effecting via the

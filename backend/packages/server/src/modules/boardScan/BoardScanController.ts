@@ -2,9 +2,9 @@ import { scanRepoSchema } from '@cat-factory/contracts'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
 import type { BoardScanModule } from '@cat-factory/orchestration'
-import type { AppEnv } from '../../http/env'
-import { param } from '../../http/params'
-import { jsonBody } from '../../http/validation'
+import type { AppEnv } from '../../http/env.js'
+import { param } from '../../http/params.js'
+import { jsonBody } from '../../http/validation.js'
 
 /** Resolve the board-scan module or send a 503, returning null when unconfigured. */
 function requireBoardScan(c: Context<AppEnv>): BoardScanModule | null {

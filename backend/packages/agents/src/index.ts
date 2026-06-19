@@ -1,10 +1,10 @@
-export { AiAgentExecutor, type AiAgentExecutorDependencies } from './agents/AiAgentExecutor'
+export { AiAgentExecutor, type AiAgentExecutorDependencies } from './agents/AiAgentExecutor.js'
 export {
   type AgentModelConfig,
   type AgentRouting,
   resolveAgentConfig,
-} from './agents/agent-routing'
-export { systemPromptFor, userPromptFor } from './agents/agent-catalog'
+} from './agents/agent-routing.js'
+export { systemPromptFor, userPromptFor } from './agents/agent-catalog.js'
 export {
   type VersionedPrompt,
   type PromptId,
@@ -12,12 +12,12 @@ export {
   REVIEW_SYSTEM_PROMPT,
   promptVersion,
   promptVersionLabel,
-} from './agents/prompt-versions'
+} from './agents/prompt-versions.js'
 export {
   composeSystemPrompt,
   composeBlockSystemPrompt,
   type ComposableBlock,
-} from './agents/prompt-fragments'
+} from './agents/prompt-fragments.js'
 export {
   type StandardPhase,
   STANDARD_PHASES,
@@ -25,15 +25,15 @@ export {
   phaseForKind,
   standardSystemPrompt,
   renderStandardUserPrompt,
-} from './agents/standard-prompts'
+} from './agents/standard-prompts.js'
 export {
   type AcceptanceAgentKind,
   ACCEPTANCE_AGENT_KINDS,
   acceptanceSystemPrompt,
   isAcceptanceKind,
   testApproachSection,
-} from './agents/acceptance-prompts'
-export { MOCK_AGENT_KIND, isMockKind, mockSystemPrompt } from './agents/mock-prompts'
+} from './agents/acceptance-prompts.js'
+export { MOCK_AGENT_KIND, isMockKind, mockSystemPrompt } from './agents/mock-prompts.js'
 export {
   type BusinessLogicAgentKind,
   BUSINESS_LOGIC_AGENT_KINDS,
@@ -42,8 +42,8 @@ export {
   BUSINESS_LOGIC_DOCS_DIR,
   isBusinessLogicKind,
   businessLogicSystemPrompt,
-} from './agents/business-logic-prompts'
-export { CI_RETRY_SANITY_CHECK } from './agents/ci-gate'
+} from './agents/business-logic-prompts.js'
+export { CI_RETRY_SANITY_CHECK } from './agents/ci-gate.js'
 
 // The generic AI provisioning facade: a mixable provider registry + the base,
 // runtime-neutral resolvers. Optional/heavier backends ship as their own packages
@@ -62,23 +62,23 @@ export {
   MOONSHOT_BASE_URL,
   OPENAI_BASE_URL,
   QWEN_BASE_URL,
-} from './providers'
+} from './providers/index.js'
 
 export {
   FragmentLibraryService,
   type FragmentLibraryServiceDependencies,
-} from './fragmentLibrary/FragmentLibraryService'
+} from './fragmentLibrary/FragmentLibraryService.js'
 export {
   FragmentSourceService,
   type FragmentSourceServiceDependencies,
   type ResolveFragmentInstallationId,
-} from './fragmentLibrary/FragmentSourceService'
-export { DeterministicFragmentSelector } from './fragmentLibrary/DeterministicFragmentSelector'
+} from './fragmentLibrary/FragmentSourceService.js'
+export { DeterministicFragmentSelector } from './fragmentLibrary/DeterministicFragmentSelector.js'
 export {
   type ResolvedCatalogEntry,
   mergeCatalog,
   toSelectable,
   entryToFragment,
   selectDeterministic,
-} from './fragmentLibrary/fragment-catalog'
-export * as fragmentSourceLogic from './fragmentLibrary/fragment-source.logic'
+} from './fragmentLibrary/fragment-catalog.js'
+export * as fragmentSourceLogic from './fragmentLibrary/fragment-source.logic.js'

@@ -1,5 +1,5 @@
 import * as v from 'valibot'
-import { agentFailureSchema, stepSubtasksSchema } from './entities'
+import { agentFailureSchema, stepSubtasksSchema } from './entities.js'
 
 // ---------------------------------------------------------------------------
 // Repo-bootstrap wire contracts. A "reference architecture" is a named base repo

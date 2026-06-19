@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
-import { StateSigner } from '../../github/state'
-import type { AppEnv } from '../../http/env'
+import { StateSigner } from '../../github/state.js'
+import type { AppEnv } from '../../http/env.js'
 
 /**
  * Public GitHub-facing endpoints (NOT under /workspaces, since GitHub calls

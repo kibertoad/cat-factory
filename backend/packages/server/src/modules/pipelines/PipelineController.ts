@@ -1,8 +1,8 @@
 import { createPipelineSchema } from '@cat-factory/contracts'
 import { Hono } from 'hono'
-import type { AppEnv } from '../../http/env'
-import { param } from '../../http/params'
-import { jsonBody } from '../../http/validation'
+import type { AppEnv } from '../../http/env.js'
+import { param } from '../../http/params.js'
+import { jsonBody } from '../../http/validation.js'
 
 /** Pipeline palette CRUD. Mounted under `/workspaces/:workspaceId`. */
 export function pipelineController(): Hono<AppEnv> {

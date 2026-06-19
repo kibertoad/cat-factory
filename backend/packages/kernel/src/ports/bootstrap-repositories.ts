@@ -1,4 +1,4 @@
-import type { BootstrapFailure, BootstrapStatus, StepSubtasks } from '../domain/types'
+import type { BootstrapFailure, BootstrapStatus, StepSubtasks } from '../domain/types.js'
 
 // Persistence ports for the repo-bootstrap feature. The worker implements these
 // against D1 (migration 0010); tests supply in-memory fakes. All rows are scoped

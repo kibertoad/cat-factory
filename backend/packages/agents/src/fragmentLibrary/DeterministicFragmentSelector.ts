@@ -3,7 +3,7 @@ import type {
   FragmentSelector,
   SelectableFragment,
 } from '@cat-factory/kernel'
-import { selectDeterministic } from './fragment-catalog'
+import { selectDeterministic } from './fragment-catalog.js'
 
 /**
  * The built-in {@link FragmentSelector}: matches on `appliesTo` + tag overlap

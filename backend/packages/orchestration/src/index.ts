@@ -1,18 +1,18 @@
 // Public surface of the delivery-workflow engine.
 
-export { BoardService, type BoardServiceDependencies } from './modules/board/BoardService'
-export * as boardLogic from './modules/board/board.logic'
+export { BoardService, type BoardServiceDependencies } from './modules/board/BoardService.js'
+export * as boardLogic from './modules/board/board.logic.js'
 
 export {
   PipelineService,
   type PipelineServiceDependencies,
-} from './modules/pipelines/PipelineService'
+} from './modules/pipelines/PipelineService.js'
 
 export {
   ExecutionService,
   type ExecutionServiceDependencies,
-} from './modules/execution/ExecutionService'
-export type { AdvanceOptions, AdvanceResult } from './modules/execution/advance'
+} from './modules/execution/ExecutionService.js'
+export type { AdvanceOptions, AdvanceResult } from './modules/execution/advance.js'
 export {
   aggregateCi,
   isCiGreen,
@@ -23,35 +23,35 @@ export {
   CONFLICTS_AGENT_KIND,
   CONFLICT_RESOLVER_AGENT_KIND,
   type CiVerdict,
-} from './modules/execution/ci.logic'
+} from './modules/execution/ci.logic.js'
 
 export {
   NotificationService,
   type NotificationServiceDependencies,
   type RaiseNotificationInput,
-} from './modules/notifications/NotificationService'
+} from './modules/notifications/NotificationService.js'
 export {
   MergePresetService,
   type MergePresetServiceDependencies,
-} from './modules/merge/MergePresetService'
+} from './modules/merge/MergePresetService.js'
 
 export {
   BootstrapService,
   type BootstrapServiceDependencies,
   type BootstrapPollResult,
-} from './modules/bootstrap/BootstrapService'
+} from './modules/bootstrap/BootstrapService.js'
 
 export {
   BoardScanService,
   type BoardScanServiceDependencies,
-} from './modules/boardScan/BoardScanService'
-export * as boardScanLogic from './modules/boardScan/board-scan.logic'
+} from './modules/boardScan/BoardScanService.js'
+export * as boardScanLogic from './modules/boardScan/board-scan.logic.js'
 
 export {
   RequirementReviewService,
   type RequirementReviewServiceDependencies,
-} from './modules/requirements/RequirementReviewService'
-export * as requirementsLogic from './modules/requirements/requirements.logic'
+} from './modules/requirements/RequirementReviewService.js'
+export * as requirementsLogic from './modules/requirements/requirements.logic.js'
 
 export {
   type Core,
@@ -68,4 +68,4 @@ export {
   type MergePresetsModule,
   type FragmentLibraryModule,
   createCore,
-} from './container'
+} from './container.js'

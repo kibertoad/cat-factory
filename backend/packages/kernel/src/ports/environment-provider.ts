@@ -2,7 +2,7 @@ import type {
   EnvironmentAccessHandle,
   EnvironmentManifest,
   EnvironmentStatus,
-} from '../domain/types'
+} from '../domain/types.js'
 
 // Port for an ephemeral-environment provider: the thing that actually calls an
 // org's self-rolled management API to provision/observe/destroy environments.

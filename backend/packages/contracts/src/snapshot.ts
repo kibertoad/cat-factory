@@ -5,10 +5,10 @@ import {
   pipelineSchema,
   spendStatusSchema,
   workspaceSchema,
-} from './entities'
-import { bootstrapJobSchema } from './bootstrap'
-import { notificationSchema } from './notifications'
-import { mergeThresholdPresetSchema } from './merge'
+} from './entities.js'
+import { bootstrapJobSchema } from './bootstrap.js'
+import { notificationSchema } from './notifications.js'
+import { mergeThresholdPresetSchema } from './merge.js'
 
 // The full board snapshot returned by GET /workspaces/:id (and POST /workspaces).
 // It lives in its own module because it references both ./entities and

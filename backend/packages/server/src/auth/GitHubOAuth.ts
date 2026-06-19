@@ -1,4 +1,4 @@
-import type { SessionUser } from './signing'
+import type { SessionUser } from './signing.js'
 
 // Minimal GitHub OAuth web-flow client (the user-to-server login flow). Works
 // with either a GitHub App's OAuth credentials or a classic OAuth App — both

@@ -1,7 +1,7 @@
 import { createAnthropic } from '@ai-sdk/anthropic'
 import { createOpenAI } from '@ai-sdk/openai'
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
-import type { ModelResolver, ProviderRegistry } from './registry'
+import type { ModelResolver, ProviderRegistry } from './registry.js'
 
 // The base, runtime-neutral resolvers. They depend only on `ai` + the `@ai-sdk/*`
 // vendor packages (no Cloudflare bindings, no Node built-ins), so they run on both

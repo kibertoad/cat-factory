@@ -51,9 +51,9 @@ import type {
   PullRequestProjectionRepository,
   RepoProjectionRepository,
 } from '@cat-factory/kernel'
-import { BoardService } from './modules/board/BoardService'
-import { ExecutionService } from './modules/execution/ExecutionService'
-import { PipelineService } from './modules/pipelines/PipelineService'
+import { BoardService } from './modules/board/BoardService.js'
+import { ExecutionService } from './modules/execution/ExecutionService.js'
+import { PipelineService } from './modules/pipelines/PipelineService.js'
 import { WorkspaceService } from '@cat-factory/workspaces'
 import { AccountService } from '@cat-factory/workspaces'
 import { SpendService, DEFAULT_SPEND_PRICING, type SpendPricing } from '@cat-factory/spend'
@@ -77,11 +77,11 @@ import {
   EnvironmentTeardownService,
   RunnerPoolConnectionService,
 } from '@cat-factory/integrations'
-import { BootstrapService } from './modules/bootstrap/BootstrapService'
-import { BoardScanService } from './modules/boardScan/BoardScanService'
-import { RequirementReviewService } from './modules/requirements/RequirementReviewService'
-import { NotificationService } from './modules/notifications/NotificationService'
-import { MergePresetService } from './modules/merge/MergePresetService'
+import { BootstrapService } from './modules/bootstrap/BootstrapService.js'
+import { BoardScanService } from './modules/boardScan/BoardScanService.js'
+import { RequirementReviewService } from './modules/requirements/RequirementReviewService.js'
+import { NotificationService } from './modules/notifications/NotificationService.js'
+import { MergePresetService } from './modules/merge/MergePresetService.js'
 import { BLUEPRINT_PIPELINE_ID } from '@cat-factory/kernel'
 import {
   FragmentLibraryService,

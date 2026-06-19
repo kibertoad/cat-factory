@@ -12,10 +12,10 @@ import type { GitHubModule } from '@cat-factory/orchestration'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
 import * as v from 'valibot'
-import { StateSigner } from '../../github/state'
-import type { AppEnv } from '../../http/env'
-import { param } from '../../http/params'
-import { jsonBody } from '../../http/validation'
+import { StateSigner } from '../../github/state.js'
+import type { AppEnv } from '../../http/env.js'
+import { param } from '../../http/params.js'
+import { jsonBody } from '../../http/validation.js'
 
 const connectSchema = v.object({ installationId: v.number() })
 

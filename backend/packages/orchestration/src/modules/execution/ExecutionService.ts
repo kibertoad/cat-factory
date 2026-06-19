@@ -29,8 +29,8 @@ import {
   describeFailingChecks,
   isCiGreen,
   MERGER_AGENT_KIND,
-} from './ci.logic'
-import type { NotificationService } from '../notifications/NotificationService'
+} from './ci.logic.js'
+import type { NotificationService } from '../notifications/NotificationService.js'
 import type {
   BlockRepository,
   ExecutionRepository,
@@ -47,13 +47,13 @@ import type { TaskRepository } from '@cat-factory/kernel'
 import type { FragmentResolver } from '@cat-factory/kernel'
 import type { EnvironmentProvisioningService } from '@cat-factory/integrations'
 import { isDeployStep } from '@cat-factory/integrations'
-import { descendantIds, serviceOf } from '../board/board.logic'
-import type { BoardService } from '../board/BoardService'
+import { descendantIds, serviceOf } from '../board/board.logic.js'
+import type { BoardService } from '../board/BoardService.js'
 import type { SpendService } from '@cat-factory/spend'
 import { requireWorkspace } from '@cat-factory/kernel'
-import type { AdvanceOptions, AdvanceResult } from './advance'
-import { planResumedSteps } from './retry.logic'
-import { isContainerEvictionError, MAX_EVICTION_RECOVERIES } from './job.logic'
+import type { AdvanceOptions, AdvanceResult } from './advance.js'
+import { planResumedSteps } from './retry.logic.js'
+import { isContainerEvictionError, MAX_EVICTION_RECOVERIES } from './job.logic.js'
 
 /**
  * "What to do next" guidance per failure kind a pipeline run can produce, shown

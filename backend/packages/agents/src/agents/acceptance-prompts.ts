@@ -1,7 +1,7 @@
 import type { AgentKind, BlockType, TestTarget } from '@cat-factory/kernel'
 import type { AgentRunContext } from '@cat-factory/kernel'
-import { CI_RETRY_SANITY_CHECK } from './ci-gate'
-import { STANDARDS_FOOTER } from './prompt-shared'
+import { CI_RETRY_SANITY_CHECK } from './ci-gate.js'
+import { STANDARDS_FOOTER } from './prompt-shared.js'
 
 // Built-out role prompts for the acceptance-testing agents. These two kinds turn
 // requirements into executable end-to-end coverage in two steps:

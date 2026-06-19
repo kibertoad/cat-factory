@@ -4,8 +4,8 @@ import type { EnvironmentProvider } from '@cat-factory/kernel'
 import type { SecretCipher } from '@cat-factory/kernel'
 import type { EnvironmentHandle } from '@cat-factory/kernel'
 import { assertFound } from '@cat-factory/kernel'
-import type { EnvironmentConnectionService } from './EnvironmentConnectionService'
-import { recordToHandle } from './environments.logic'
+import type { EnvironmentConnectionService } from './EnvironmentConnectionService.js'
+import { recordToHandle } from './environments.logic.js'
 
 // EnvironmentTeardownService: destroys provisioned environments — on demand and,
 // via `sweepExpired`, when their TTL elapses (driven by the cron). Best-effort:

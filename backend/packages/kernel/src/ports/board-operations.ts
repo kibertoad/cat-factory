@@ -4,7 +4,7 @@ import type {
   AddTaskInput,
   UpdateBlockInput,
 } from '@cat-factory/contracts'
-import type { Block } from '../domain/types'
+import type { Block } from '../domain/types.js'
 
 /**
  * The write-side board operations needed by integration packages (e.g.

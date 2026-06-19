@@ -1,7 +1,7 @@
 import { DomainError } from '@cat-factory/kernel'
 import type { Context } from 'hono'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
-import { logger } from '../observability/logger'
+import { logger } from '../observability/logger.js'
 
 const STATUS_BY_CODE: Record<DomainError['code'], ContentfulStatusCode> = {
   not_found: 404,

@@ -4,16 +4,16 @@ import {
   acceptanceSystemPrompt,
   testApproachSection,
   testTargetSection,
-} from './acceptance-prompts'
-import { businessLogicSystemPrompt } from './business-logic-prompts'
-import { mockSystemPrompt } from './mock-prompts'
+} from './acceptance-prompts.js'
+import { businessLogicSystemPrompt } from './business-logic-prompts.js'
+import { mockSystemPrompt } from './mock-prompts.js'
 import {
   environmentSection,
   linkedContextSection,
   phaseForKind,
   renderStandardUserPrompt,
   standardSystemPrompt,
-} from './standard-prompts'
+} from './standard-prompts.js'
 
 // Role definitions and prompt construction for the built-in agent kinds. These
 // turn an agent kind + block context into the system/user prompts handed to the

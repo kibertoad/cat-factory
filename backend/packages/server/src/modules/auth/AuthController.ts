@@ -1,11 +1,11 @@
 import { Hono } from 'hono'
 import type { Context } from 'hono'
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
-import { GitHubOAuth } from '../../auth/GitHubOAuth'
-import { verifySession } from '../../auth/middleware'
-import { HmacSigner, type SessionPayload, TOKEN_AUDIENCE } from '../../auth/signing'
-import type { AuthConfig } from '../../config/types'
-import type { AppEnv } from '../../http/env'
+import { GitHubOAuth } from '../../auth/GitHubOAuth.js'
+import { verifySession } from '../../auth/middleware.js'
+import { HmacSigner, type SessionPayload, TOKEN_AUDIENCE } from '../../auth/signing.js'
+import type { AuthConfig } from '../../config/types.js'
+import type { AppEnv } from '../../http/env.js'
 
 // "Login with GitHub" endpoints. The browser is bounced to GitHub, comes back to
 // /auth/callback, and we hand the SPA a signed session token via the URL

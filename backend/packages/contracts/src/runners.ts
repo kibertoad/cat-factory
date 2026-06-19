@@ -3,7 +3,7 @@ import {
   environmentAuthSchemeSchema,
   environmentRequestTemplateSchema,
   environmentSecretRefSchema,
-} from './environments'
+} from './environments.js'
 
 // ---------------------------------------------------------------------------
 // Self-hosted runner-pool wire contracts ("bring your own infra").

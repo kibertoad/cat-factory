@@ -1,4 +1,10 @@
-import type { AgentFailure, Block, ExecutionInstance, Pipeline, Workspace } from '../domain/types'
+import type {
+  AgentFailure,
+  Block,
+  ExecutionInstance,
+  Pipeline,
+  Workspace,
+} from '../domain/types.js'
 
 // ---------------------------------------------------------------------------
 // Repository ports: persistence interfaces the domain layer depends on. The

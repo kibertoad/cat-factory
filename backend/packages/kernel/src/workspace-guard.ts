@@ -1,6 +1,6 @@
-import { assertFound } from './domain/errors'
-import type { WorkspaceRepository } from './ports/repositories'
-import type { Workspace } from './domain/types'
+import { assertFound } from './domain/errors.js'
+import type { WorkspaceRepository } from './ports/repositories.js'
+import type { Workspace } from './domain/types.js'
 
 export async function requireWorkspace(
   repository: WorkspaceRepository,

@@ -2,8 +2,8 @@ import { Hono } from 'hono'
 import type { Context } from 'hono'
 import type { NotificationsModule } from '@cat-factory/orchestration'
 import { NotFoundError } from '@cat-factory/kernel'
-import type { AppEnv } from '../../http/env'
-import { param } from '../../http/params'
+import type { AppEnv } from '../../http/env.js'
+import { param } from '../../http/params.js'
 
 /** Resolve the notifications module or send a 503, returning null when unconfigured. */
 function requireNotifications(c: Context<AppEnv>): NotificationsModule | null {

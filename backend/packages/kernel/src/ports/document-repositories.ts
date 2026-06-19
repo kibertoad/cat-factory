@@ -1,5 +1,5 @@
-import type { DocumentSourceKind } from '../domain/types'
-import type { DocumentCredentials } from './document-source'
+import type { DocumentSourceKind } from '../domain/types.js'
+import type { DocumentCredentials } from './document-source.js'
 
 // Persistence ports for the document-source integration. The worker implements
 // these against D1 (migration 0012); tests can supply in-memory fakes. All rows

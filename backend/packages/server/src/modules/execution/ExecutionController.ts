@@ -5,9 +5,9 @@ import {
   startExecutionSchema,
 } from '@cat-factory/contracts'
 import { Hono } from 'hono'
-import type { AppEnv } from '../../http/env'
-import { param } from '../../http/params'
-import { jsonBody } from '../../http/validation'
+import type { AppEnv } from '../../http/env.js'
+import { param } from '../../http/params.js'
+import { jsonBody } from '../../http/validation.js'
 
 /**
  * The execution engine endpoints — starting/cancelling runs, resolving decisions

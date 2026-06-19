@@ -1,6 +1,6 @@
-import type { RunnerPoolManifest } from '../domain/types'
-import type { SecretResolver } from './environment-provider'
-import type { RunnerJobView } from './runner-transport'
+import type { RunnerPoolManifest } from '../domain/types.js'
+import type { SecretResolver } from './environment-provider.js'
+import type { RunnerJobView } from './runner-transport.js'
 
 // Port for a self-hosted runner-pool provider: the thing that actually calls an
 // org's pool scheduler API to dispatch/poll/release coding jobs. The worker

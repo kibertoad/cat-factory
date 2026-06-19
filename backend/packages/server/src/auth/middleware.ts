@@ -1,6 +1,6 @@
 import type { Context, MiddlewareHandler } from 'hono'
-import type { AppEnv } from '../http/env'
-import { HmacSigner, TOKEN_AUDIENCE, type SessionPayload } from './signing'
+import type { AppEnv } from '../http/env.js'
+import { HmacSigner, TOKEN_AUDIENCE, type SessionPayload } from './signing.js'
 
 // Bearer-token auth for the API. The session token is minted by the OAuth
 // callback (see the facade's AuthController) and carried by the SPA as

@@ -3,7 +3,7 @@ import {
   githubIssueUrl,
   parseGitHubIssueExternalId,
   parseGitHubIssueRef,
-} from './github-issues.logic'
+} from './github-issues.logic.js'
 
 describe('parseGitHubIssueRef', () => {
   it('parses a full issue URL', () => {

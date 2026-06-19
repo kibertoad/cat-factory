@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import type { AppEnv } from '../../http/env'
+import type { AppEnv } from '../../http/env.js'
 
 /**
  * Serves the model picker catalog read-only. Unlike the prompt-fragment catalog

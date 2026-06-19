@@ -9,7 +9,7 @@ import type { EnvironmentConnection, EnvironmentManifest } from '@cat-factory/ke
 import { ConflictError, ValidationError } from '@cat-factory/kernel'
 import { requireWorkspace } from '@cat-factory/kernel'
 import type { WorkspaceRepository } from '@cat-factory/kernel'
-import { assertSafeEnvironmentUrl } from './environments.logic'
+import { assertSafeEnvironmentUrl } from './environments.logic.js'
 
 // EnvironmentConnectionService: owns the binding between a workspace and an
 // environment provider. Registration stores the validated manifest and an

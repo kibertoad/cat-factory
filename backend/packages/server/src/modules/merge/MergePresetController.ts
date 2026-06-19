@@ -2,9 +2,9 @@ import { createMergePresetSchema, updateMergePresetSchema } from '@cat-factory/c
 import { Hono } from 'hono'
 import type { Context } from 'hono'
 import type { MergePresetsModule } from '@cat-factory/orchestration'
-import type { AppEnv } from '../../http/env'
-import { param } from '../../http/params'
-import { jsonBody } from '../../http/validation'
+import type { AppEnv } from '../../http/env.js'
+import { param } from '../../http/params.js'
+import { jsonBody } from '../../http/validation.js'
 
 /** Resolve the merge-preset module or send a 503, returning null when unconfigured. */
 function requireMergePresets(c: Context<AppEnv>): MergePresetsModule | null {

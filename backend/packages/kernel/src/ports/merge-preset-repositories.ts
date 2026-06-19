@@ -1,4 +1,4 @@
-import type { MergeThresholdPreset } from '../domain/types'
+import type { MergeThresholdPreset } from '../domain/types.js'
 
 // Persistence port for per-workspace merge threshold presets. The worker
 // implements it against D1; tests supply an in-memory fake. Exactly one preset

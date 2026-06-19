@@ -9,7 +9,7 @@ import { assertFound, ValidationError } from '@cat-factory/kernel'
 import type { BlockRepository } from '@cat-factory/kernel'
 import type { DocumentRepository } from '@cat-factory/kernel'
 import type { BoardWritePort } from '@cat-factory/kernel'
-import { toSourceDocument } from './DocumentImportService'
+import { toSourceDocument } from './DocumentImportService.js'
 
 // DocumentLinkService: the write side that connects an imported document to the
 // board. `spawn` materialises a planned structure into real frames, modules and

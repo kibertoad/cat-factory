@@ -1,9 +1,9 @@
 import { addMemberSchema, createAccountSchema } from '@cat-factory/contracts'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
-import type { AppEnv } from '../../http/env'
-import { param } from '../../http/params'
-import { jsonBody } from '../../http/validation'
+import type { AppEnv } from '../../http/env.js'
+import { param } from '../../http/params.js'
+import { jsonBody } from '../../http/validation.js'
 
 /** The signed-in user, narrowed to what the tenancy layer needs. */
 function accountUser(c: Context<AppEnv>) {

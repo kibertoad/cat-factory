@@ -1,4 +1,4 @@
-import type { AccountRole, AccountType } from '../domain/types'
+import type { AccountRole, AccountType } from '../domain/types.js'
 
 // ---------------------------------------------------------------------------
 // Persistence ports for the account tenancy layer (migration 0017). Accounts own

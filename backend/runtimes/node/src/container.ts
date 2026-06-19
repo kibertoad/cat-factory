@@ -1,11 +1,11 @@
 import { AiAgentExecutor } from '@cat-factory/agents'
 import { type CoreDependencies, createCore } from '@cat-factory/orchestration'
 import type { AppConfig, ServerContainer } from '@cat-factory/server'
-import { loadNodeConfig } from './config'
-import { createNodeGateways } from './gateways'
-import { createNodeModelProvider } from './modelProvider'
-import { createInMemoryRepositories } from './repositories/inMemory'
-import { CryptoIdGenerator, SystemClock } from './runtime'
+import { loadNodeConfig } from './config.js'
+import { createNodeGateways } from './gateways.js'
+import { createNodeModelProvider } from './modelProvider.js'
+import { createInMemoryRepositories } from './repositories/inMemory.js'
+import { CryptoIdGenerator, SystemClock } from './runtime.js'
 
 export interface NodeContainerOptions {
   /** Pre-resolved config; defaults to `loadNodeConfig(env)`. */

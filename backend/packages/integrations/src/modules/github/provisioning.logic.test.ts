@@ -5,8 +5,8 @@ import type {
   InstallationPermissions,
   ProvisionedRepo,
 } from '@cat-factory/kernel'
-import { RepoProvisioningService } from './RepoProvisioningService'
-import { canCreateRepo } from './provisioning.logic'
+import { RepoProvisioningService } from './RepoProvisioningService.js'
+import { canCreateRepo } from './provisioning.logic.js'
 
 // The two-App provisioning model (ADR 0005): a workspace's bound installation
 // belongs to either the privileged App (carries Administration: write → direct

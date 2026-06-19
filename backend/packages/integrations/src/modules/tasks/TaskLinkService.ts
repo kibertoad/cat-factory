@@ -2,7 +2,7 @@ import type { Block, SourceTask, TaskSourceKind } from '@cat-factory/kernel'
 import { assertFound } from '@cat-factory/kernel'
 import type { BlockRepository } from '@cat-factory/kernel'
 import type { TaskRepository } from '@cat-factory/kernel'
-import { toSourceTask } from './TaskImportService'
+import { toSourceTask } from './TaskImportService.js'
 
 // TaskLinkService: the write side that attaches an imported issue to the board.
 // `linkToBlock` records the link so the execution engine feeds the issue to

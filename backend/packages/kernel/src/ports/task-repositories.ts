@@ -1,5 +1,5 @@
-import type { TaskSourceKind, TaskComment } from '../domain/types'
-import type { TaskCredentials } from './task-source'
+import type { TaskSourceKind, TaskComment } from '../domain/types.js'
+import type { TaskCredentials } from './task-source.js'
 
 // Persistence ports for the task-source integration. The worker implements
 // these against D1 (migration 0014); tests can supply in-memory fakes. All rows

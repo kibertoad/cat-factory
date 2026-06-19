@@ -7,7 +7,7 @@ import {
   blockTypeSchema,
   positionSchema,
   testTargetSchema,
-} from './primitives'
+} from './primitives.js'
 
 // ---------------------------------------------------------------------------
 // Entity schemas: the single source of truth for the data shapes that travel

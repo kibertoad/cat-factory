@@ -1,4 +1,4 @@
-import type { AgentKind, BlockType, FragmentOwnerKind } from '../domain/types'
+import type { AgentKind, BlockType, FragmentOwnerKind } from '../domain/types.js'
 
 // ---------------------------------------------------------------------------
 // Persistence ports for the prompt-fragment library (ADR 0006). The worker

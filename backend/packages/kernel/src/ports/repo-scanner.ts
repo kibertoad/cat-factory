@@ -1,4 +1,4 @@
-import type { BlueprintService, BlueprintSource } from '../domain/types'
+import type { BlueprintService, BlueprintSource } from '../domain/types.js'
 
 // RepoScanner port: performs the side-effecting half of a "scan repository" run —
 // read the actual codebase (clone / tree) and decompose it into the canonical

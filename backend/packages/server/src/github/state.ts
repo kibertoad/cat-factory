@@ -1,4 +1,4 @@
-import { base64url, base64urlToBytes, timingSafeEqual } from '../crypto/encoding'
+import { base64url, base64urlToBytes, timingSafeEqual } from '../crypto/encoding.js'
 
 // Signs the `state` parameter carried through the GitHub App install flow. The
 // state binds the resulting installation to the workspace that initiated it AND

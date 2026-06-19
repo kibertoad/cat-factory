@@ -1,4 +1,4 @@
-import { HmacSigner, TOKEN_AUDIENCE } from '../auth/signing'
+import { HmacSigner, TOKEN_AUDIENCE } from '../auth/signing.js'
 
 // Short-lived, signed session token handed to an implementation container so it
 // can call the LLM proxy on behalf of one run — without ever holding a provider

@@ -20,9 +20,8 @@
   },
   "scripts": {
     "build": "tsgo -b tsconfig.build.json",
+    "build:watch": "tsgo -b tsconfig.build.json --watch",
     "typecheck": "tsgo -p tsconfig.json --noEmit",
-    "bundle": "esbuild src/main.ts --bundle --platform=node --format=esm --outfile=dist/main.js --banner:js=\"import{createRequire}from'module';const require=createRequire(import.meta.url);\"",
-    "bundle:watch": "pnpm bundle --watch",
     "start": "node dist/main.js",
     "dev": "node --watch dist/main.js"
   },
@@ -41,7 +40,6 @@
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
-    "@typescript/native-preview": "7.0.0-dev.20260616.1",
-    "esbuild": "^0.25.0"
+    "@typescript/native-preview": "7.0.0-dev.20260616.1"
   }
 }

@@ -2,7 +2,7 @@ import { generateText } from 'ai'
 import type { ModelProvider, ModelRef } from '@cat-factory/kernel'
 import type { DocumentRecord } from '@cat-factory/kernel'
 import type { DocumentBoardPlan } from '@cat-factory/kernel'
-import { coercePlan, markdownToText, planFromHeadings } from './documents.logic'
+import { coercePlan, markdownToText, planFromHeadings } from './documents.logic.js'
 
 // DocumentPlannerService: turns an imported document into a proposed board
 // structure (frames → modules → tasks). When a model is configured it asks an
