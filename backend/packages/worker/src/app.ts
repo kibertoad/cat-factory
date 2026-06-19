@@ -1,3 +1,4 @@
+import { registerCoreControllers } from '@cat-factory/server'
 import type { CoreDependencies } from '@cat-factory/orchestration'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
@@ -7,27 +8,9 @@ import { handleError } from './infrastructure/http/errorHandler'
 import type { AppEnv } from './infrastructure/http/types'
 import { requireAuth } from './infrastructure/auth/middleware'
 import { authController } from './modules/auth/AuthController'
-import { boardController } from './modules/board/BoardController'
-import { executionController } from './modules/execution/ExecutionController'
 import { eventsController } from './modules/events/EventsController'
-import { pipelineController } from './modules/pipelines/PipelineController'
-import { workspaceController } from './modules/workspaces/WorkspaceController'
-import { accountController } from './modules/accounts/AccountController'
 import { githubController } from './modules/github/GitHubController'
 import { githubWebhookController } from './modules/github/GitHubWebhookController'
-import { documentSourceController } from './modules/documents/DocumentSourceController'
-import { taskSourceController } from './modules/tasks/TaskSourceController'
-import { environmentController } from './modules/environments/EnvironmentController'
-import { runnerPoolController } from './modules/runners/RunnerPoolController'
-import { bootstrapController } from './modules/bootstrap/BootstrapController'
-import { agentRunController } from './modules/agentRuns/AgentRunController'
-import { boardScanController } from './modules/boardScan/BoardScanController'
-import { requirementReviewController } from './modules/requirements/RequirementReviewController'
-import { notificationController } from './modules/notifications/NotificationController'
-import { mergePresetController } from './modules/merge/MergePresetController'
-import { promptFragmentController } from './modules/promptFragments/PromptFragmentController'
-import { fragmentLibraryController } from './modules/fragmentLibrary/FragmentLibraryController'
-import { modelController } from './modules/models/ModelController'
 import { llmProxyController } from './modules/llmProxy/LlmProxyController'
 
 export interface CreateAppOptions {
@@ -39,6 +22,12 @@ export interface CreateAppOptions {
  * Assembles the Hono application. A per-request middleware builds the DI
  * container from the request's `env` bindings and stashes it on the context, so
  * controllers resolve their services from `c.get('container')`.
+ *
+ * The bulk of the controllers are runtime-neutral and live in @cat-factory/server
+ * (`registerCoreControllers`); the Worker mounts only its own runtime-coupled
+ * controllers — the LLM proxy (Workers AI binding), the WebSocket event stream
+ * (Durable Object), the GitHub webhook (Queue) and connect (Workflow), and the
+ * OAuth login flow.
  */
 export function createApp(options: CreateAppOptions = {}): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
@@ -73,7 +62,7 @@ export function createApp(options: CreateAppOptions = {}): Hono<AppEnv> {
   //               token (ContainerSessionService), not the workspace session.
   //   /github   — GitHub webhooks + setup callback; verified by HMAC signature.
   const PUBLIC_PREFIXES = ['/health', '/auth', '/v1', '/github']
-  const gate = requireAuth()
+  const gate = requireAuth<AppEnv>()
   app.use('*', (c, next) => {
     if (c.req.method === 'OPTIONS') return next()
     const path = c.req.path
@@ -124,12 +113,6 @@ export function createApp(options: CreateAppOptions = {}): Hono<AppEnv> {
     return notFound()
   })
 
-  // Read-only best-practice fragment catalog (gated).
-  app.route('/', promptFragmentController())
-
-  // Read-only model picker catalog (gated; resolved to each model's active flavour).
-  app.route('/', modelController())
-
   // OpenAI-compatible LLM proxy for implementation containers. Authenticated by a
   // signed, model-locked session token (not the workspace session); on the
   // /v1 public-prefix allowlist above so requireAuth doesn't double-gate it.
@@ -138,31 +121,16 @@ export function createApp(options: CreateAppOptions = {}): Hono<AppEnv> {
   // "Login with GitHub" (public; no-op endpoints when auth is unconfigured).
   app.route('/auth', authController())
 
-  // API layer — controllers grouped by module (all behind the default-deny gate).
-  app.route('/', accountController())
-  // Prompt-fragment library: account-scoped (membership-guarded in the controller)
-  // and workspace-scoped (covered by the per-workspace gate above). ADR 0006.
-  app.route('/accounts/:accountId', fragmentLibraryController('account'))
-  app.route('/', workspaceController())
-  app.route('/workspaces/:workspaceId', boardController())
-  app.route('/workspaces/:workspaceId', pipelineController())
-  app.route('/workspaces/:workspaceId', executionController())
-  // Real-time WebSocket event stream (self-authenticates via ?token=; the gate
-  // above bypasses only its exact upgrade shape).
+  // The runtime-neutral API layer — controllers shared across every facade.
+  registerCoreControllers(app)
+
+  // Worker-specific runtime controllers (Durable Objects / Queues / Workflows):
+  //   - the real-time WebSocket event stream (self-authenticates via ?token=; the
+  //     gate above bypasses only its exact upgrade shape),
+  //   - GitHub connect/resync (kicks the backfill Workflow),
+  //   - the GitHub webhook + setup callback (HMAC-verified; enqueues to the sync Queue).
   app.route('/', eventsController())
   app.route('/workspaces/:workspaceId', githubController())
-  app.route('/workspaces/:workspaceId', documentSourceController())
-  app.route('/workspaces/:workspaceId', taskSourceController())
-  app.route('/workspaces/:workspaceId', environmentController())
-  app.route('/workspaces/:workspaceId', runnerPoolController())
-  app.route('/workspaces/:workspaceId', bootstrapController())
-  app.route('/workspaces/:workspaceId', agentRunController())
-  app.route('/workspaces/:workspaceId', boardScanController())
-  app.route('/workspaces/:workspaceId', requirementReviewController())
-  app.route('/workspaces/:workspaceId', notificationController())
-  app.route('/workspaces/:workspaceId', mergePresetController())
-  app.route('/workspaces/:workspaceId', fragmentLibraryController('workspace'))
-  // GitHub-facing (webhooks + setup callback); not workspace-scoped.
   app.route('/github', githubWebhookController())
 
   app.onError(handleError)

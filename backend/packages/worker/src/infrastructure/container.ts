@@ -1,6 +1,5 @@
 import {
   type AgentExecutor,
-  type AgentRunRepository,
   type Clock,
   type DocumentSourceProvider,
   type ExecutionEventPublisher,
@@ -12,7 +11,8 @@ import {
 } from '@cat-factory/kernel'
 import { AiAgentExecutor, resolveAgentConfig } from '@cat-factory/agents'
 import { RunnerPoolConnectionService } from '@cat-factory/integrations'
-import { type Core, type CoreDependencies, createCore } from '@cat-factory/orchestration'
+import { type CoreDependencies, createCore } from '@cat-factory/orchestration'
+import type { ServerContainer } from '@cat-factory/server'
 import { type AppConfig, loadConfig } from './config'
 import type { Env } from './env'
 import { CloudflareModelProvider } from './ai/CloudflareModelProvider'
@@ -89,11 +89,10 @@ import type { D1Database } from '@cloudflare/workers-types'
 // domain core. Built once per request — instantiation is cheap and each request
 // gets its own D1 handle from `env`.
 
-export interface Container extends Core {
-  config: AppConfig
-  /** Kind-spanning view over agent_runs (retry dispatch + the cron sweeper). */
-  agentRunRepository: AgentRunRepository
-}
+// The Worker's container shape is exactly the shared one (domain Core + resolved
+// config + the kind-spanning agent-run repository); the type lives in the shared
+// package so the cross-runtime controllers can reference it.
+export type Container = ServerContainer
 
 /**
  * The Worker's {@link ModelProvider}: the base registry plus any extra provider

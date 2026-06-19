@@ -238,6 +238,12 @@ importers:
       '@cat-factory/kernel':
         specifier: workspace:*
         version: link:../kernel
+      '@cat-factory/orchestration':
+        specifier: workspace:*
+        version: link:../orchestration
+      '@cat-factory/prompt-fragments':
+        specifier: workspace:*
+        version: link:../prompt-fragments
       '@cat-factory/spend':
         specifier: workspace:*
         version: link:../spend

@@ -1,13 +1,12 @@
-import type { Container } from '../container'
+import type { AppEnv as ServerAppEnv } from '@cat-factory/server'
 import type { Env } from '../env'
-import type { SessionPayload } from '../auth/signing'
 
-/** Hono generics shared by the app and every controller. */
+/**
+ * Hono generics for the Worker: the shared request Variables (`container`, `user`)
+ * from @cat-factory/server, plus the Cloudflare `Env` bindings that the Worker's own
+ * runtime controllers (events/webhooks/llm-proxy) read off `c.env`.
+ */
 export type AppEnv = {
   Bindings: Env
-  Variables: {
-    container: Container
-    /** The authenticated user, set by `requireAuth` when auth is enabled. */
-    user?: SessionPayload
-  }
+  Variables: ServerAppEnv['Variables']
 }

@@ -3,6 +3,9 @@
 // helpers, validation envelope, error mapping, CORS policy); the controllers,
 // middleware and the Hono app factory move here in subsequent steps.
 export { logger, type Logger } from './observability/logger'
+export { type AppEnv, type ServerContainer } from './http/env'
+export { bearerToken, requireAuth, verifySession } from './auth/middleware'
+export { registerCoreControllers } from './app'
 export { param } from './http/params'
 export { jsonBody } from './http/validation'
 export { handleError } from './http/errorHandler'
