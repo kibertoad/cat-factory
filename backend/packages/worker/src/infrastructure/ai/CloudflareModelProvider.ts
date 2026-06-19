@@ -1,6 +1,11 @@
-import { createAnthropic } from '@ai-sdk/anthropic'
-import { createOpenAI } from '@ai-sdk/openai'
-import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
+import {
+  CompositeModelProvider,
+  type ModelResolver,
+  type ProviderRegistry,
+  anthropicResolver,
+  openAiCompatibleResolver,
+  openAiResolver,
+} from '@cat-factory/agents'
 import type { ModelProvider, ModelRef } from '@cat-factory/kernel'
 import type { LanguageModel } from 'ai'
 import { createWorkersAI } from 'workers-ai-provider'
@@ -13,69 +18,62 @@ import { baseUrlFor } from './providerEndpoints'
 // DashScope's international endpoint is used (the mainland host differs).
 
 /**
- * Resolves a provider-agnostic {@link ModelRef} into a concrete Vercel AI SDK
- * model. This is the infrastructure binding of the LLM seam: the core asks for
- * `{ provider: 'openai', model: 'gpt-4o-mini' }` and gets back something
- * `generateText` can call, while API keys and the Workers AI binding stay here.
+ * Build the Worker's base provider registry. `workers-ai` is the Cloudflare flavour
+ * (resolved via the in-process `AI` binding); `openai`/`anthropic` and the
+ * OpenAI-compatible vendors (`qwen`/`deepseek`/`moonshot`) are keyed from `env`. Each
+ * resolver throws the same precise "<X> is not configured" message as before when its
+ * credential/binding is missing, so behaviour is unchanged from the old switch.
+ */
+function workerBaseRegistry(env: Env): ProviderRegistry {
+  const compatible = (
+    provider: 'qwen' | 'deepseek' | 'moonshot',
+    apiKey: string | undefined,
+    keyVar: string,
+  ): ModelResolver => {
+    if (!apiKey) {
+      return () => {
+        throw new Error(`${keyVar} is not configured`)
+      }
+    }
+    return openAiCompatibleResolver({ name: provider, apiKey, baseURL: baseUrlFor(provider, env)! })
+  }
+
+  return {
+    openai: openAiResolver({ apiKey: env.OPENAI_API_KEY }),
+    anthropic: anthropicResolver({ apiKey: env.ANTHROPIC_API_KEY }),
+    qwen: compatible('qwen', env.QWEN_API_KEY, 'QWEN_API_KEY'),
+    deepseek: compatible('deepseek', env.DEEPSEEK_API_KEY, 'DEEPSEEK_API_KEY'),
+    moonshot: compatible('moonshot', env.MOONSHOT_API_KEY, 'MOONSHOT_API_KEY'),
+    'workers-ai': (ref) => {
+      if (!env.AI) {
+        throw new Error('Workers AI binding (AI) is not configured')
+      }
+      // workers-ai-provider@3 implements the same provider spec as `ai` v6
+      // (`@ai-sdk/provider` v3), so the model is a real LanguageModel — no cast.
+      const workersai = createWorkersAI({ binding: env.AI })
+      return workersai(ref.model as Parameters<typeof workersai>[0])
+    },
+  }
+}
+
+/**
+ * Resolves a provider-agnostic {@link ModelRef} into a concrete Vercel AI SDK model.
+ * This is the Worker's binding of the LLM seam: the core asks for
+ * `{ provider: 'openai', model: 'gpt-4o-mini' }` and gets back something `generateText`
+ * can call, while API keys and the Workers AI binding stay here.
  *
- * `workers-ai` is the Cloudflare flavour (used as the fallback for every model);
- * `qwen`, `deepseek` and `moonshot` are the direct-provider flavours, selected
- * automatically when their API key is configured.
+ * It is just the Worker's composition of the shared AI provisioning facade
+ * ({@link CompositeModelProvider}): the base registry above plus any `extraRegistries`
+ * an installation mixes in — e.g. `bedrockRegistry()` from `@cat-factory/provider-bedrock`.
  */
 export class CloudflareModelProvider implements ModelProvider {
-  private readonly env: Env
+  private readonly composite: CompositeModelProvider
 
-  constructor({ env }: { env: Env }) {
-    this.env = env
+  constructor({ env, extraRegistries = [] }: { env: Env; extraRegistries?: ProviderRegistry[] }) {
+    this.composite = new CompositeModelProvider(workerBaseRegistry(env), ...extraRegistries)
   }
 
   resolve(ref: ModelRef): LanguageModel {
-    switch (ref.provider) {
-      case 'openai':
-        return createOpenAI({ apiKey: this.env.OPENAI_API_KEY })(ref.model)
-      case 'anthropic':
-        return createAnthropic({ apiKey: this.env.ANTHROPIC_API_KEY })(ref.model)
-      case 'qwen': {
-        if (!this.env.QWEN_API_KEY) {
-          throw new Error('QWEN_API_KEY is not configured')
-        }
-        return createOpenAICompatible({
-          name: 'qwen',
-          apiKey: this.env.QWEN_API_KEY,
-          baseURL: baseUrlFor('qwen', this.env)!,
-        })(ref.model)
-      }
-      case 'deepseek': {
-        if (!this.env.DEEPSEEK_API_KEY) {
-          throw new Error('DEEPSEEK_API_KEY is not configured')
-        }
-        return createOpenAICompatible({
-          name: 'deepseek',
-          apiKey: this.env.DEEPSEEK_API_KEY,
-          baseURL: baseUrlFor('deepseek', this.env)!,
-        })(ref.model)
-      }
-      case 'moonshot': {
-        if (!this.env.MOONSHOT_API_KEY) {
-          throw new Error('MOONSHOT_API_KEY is not configured')
-        }
-        return createOpenAICompatible({
-          name: 'moonshot',
-          apiKey: this.env.MOONSHOT_API_KEY,
-          baseURL: baseUrlFor('moonshot', this.env)!,
-        })(ref.model)
-      }
-      case 'workers-ai': {
-        if (!this.env.AI) {
-          throw new Error('Workers AI binding (AI) is not configured')
-        }
-        // workers-ai-provider@3 implements the same provider spec as `ai` v6
-        // (`@ai-sdk/provider` v3), so the model is a real LanguageModel — no cast.
-        const workersai = createWorkersAI({ binding: this.env.AI })
-        return workersai(ref.model as Parameters<typeof workersai>[0])
-      }
-      default:
-        throw new Error(`Unsupported model provider: ${ref.provider}`)
-    }
+    return this.composite.resolve(ref)
   }
 }

@@ -45,6 +45,25 @@ export {
 } from './agents/business-logic-prompts'
 export { CI_RETRY_SANITY_CHECK } from './agents/ci-gate'
 
+// The generic AI provisioning facade: a mixable provider registry + the base,
+// runtime-neutral resolvers. Optional/heavier backends ship as their own packages
+// (e.g. @cat-factory/provider-bedrock) and are mixed into a CompositeModelProvider.
+export {
+  CompositeModelProvider,
+  type ModelResolver,
+  type ProviderRegistry,
+  anthropicResolver,
+  baseProviderRegistry,
+  cloudflareRestResolver,
+  openAiCompatibleResolver,
+  openAiResolver,
+  DEEPSEEK_BASE_URL,
+  DEFAULT_OPENAI_COMPATIBLE_BASE_URLS,
+  MOONSHOT_BASE_URL,
+  OPENAI_BASE_URL,
+  QWEN_BASE_URL,
+} from './providers'
+
 export {
   FragmentLibraryService,
   type FragmentLibraryServiceDependencies,

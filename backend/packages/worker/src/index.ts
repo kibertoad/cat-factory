@@ -31,6 +31,15 @@ export { ExecutionContainer } from './infrastructure/containers/ExecutionContain
 // Per-workspace WebSocket fan-out hub (real-time execution/board events).
 export { WorkspaceEventsHub } from './infrastructure/durable-objects/WorkspaceEventsHub'
 
+// Installation-level AI provisioning extension point: a deployment registers extra
+// model-provider registries at startup (e.g. AWS Bedrock from
+// @cat-factory/provider-bedrock) and every container build picks them up.
+export {
+  registerModelRegistry,
+  clearModelRegistries,
+  type ModelRegistryFactory,
+} from './infrastructure/ai/registries'
+
 const app = createApp()
 
 /** Compact, log-friendly shape for an unknown caught value. */

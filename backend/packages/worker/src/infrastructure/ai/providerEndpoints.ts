@@ -1,19 +1,19 @@
+import {
+  DEEPSEEK_BASE_URL,
+  MOONSHOT_BASE_URL,
+  OPENAI_BASE_URL,
+  QWEN_BASE_URL,
+} from '@cat-factory/agents'
 import type { Env } from '../env'
 
-// The OpenAI-compatible chat endpoints behind the direct-provider flavours.
-// DashScope (Alibaba/Qwen), DeepSeek and Moonshot (Kimi) all expose the OpenAI
-// `/chat/completions` shape, so both the Vercel-AI model provider
-// (CloudflareModelProvider) and the container LLM proxy (LlmProxyController)
-// resolve them from the same base URLs and keys here — one source of truth for
-// "where does provider X live and which env var holds its key".
-//
-// Each base URL is overridable via env (e.g. QWEN_BASE_URL) so a deployment can
-// point a provider at a self-hosted gateway, a regional endpoint, or — in the
-// acceptance tests — a local stub, without code changes.
-export const QWEN_BASE_URL = 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1'
-export const DEEPSEEK_BASE_URL = 'https://api.deepseek.com/v1'
-export const MOONSHOT_BASE_URL = 'https://api.moonshot.ai/v1'
-export const OPENAI_BASE_URL = 'https://api.openai.com/v1'
+// The OpenAI-compatible chat endpoints behind the direct-provider flavours live in
+// the shared AI provisioning facade (@cat-factory/agents) so the Vercel-AI model
+// provider (CloudflareModelProvider), the container LLM proxy (LlmProxyController)
+// and the Node service all resolve them from one source of truth. This module adds
+// the Worker-specific `env` plumbing: each base URL is overridable via env (e.g.
+// QWEN_BASE_URL) so a deployment can point a provider at a self-hosted gateway, a
+// regional endpoint, or — in the acceptance tests — a local stub, without code changes.
+export { DEEPSEEK_BASE_URL, MOONSHOT_BASE_URL, OPENAI_BASE_URL, QWEN_BASE_URL }
 
 /** The effective base URL for a provider: env override, else the built-in default. */
 export function baseUrlFor(provider: string, env: Env): string | null {

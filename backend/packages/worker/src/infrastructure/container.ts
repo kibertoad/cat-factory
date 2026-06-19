@@ -16,6 +16,7 @@ import { type Core, type CoreDependencies, createCore } from '@cat-factory/orche
 import { type AppConfig, loadConfig } from './config'
 import type { Env } from './env'
 import { CloudflareModelProvider } from './ai/CloudflareModelProvider'
+import { resolveExtraRegistries } from './ai/registries'
 import {
   ContainerAgentExecutor,
   type ResolveRepoTarget,
@@ -95,6 +96,16 @@ export interface Container extends Core {
 }
 
 /**
+ * The Worker's {@link ModelProvider}: the base registry plus any extra provider
+ * registries an installation registered (see ./ai/registries). Used everywhere a
+ * model provider is needed so every path — agent executor, requirements reviewer,
+ * doc planner, fragment selector — sees the same provider set.
+ */
+function buildModelProvider(env: Env): CloudflareModelProvider {
+  return new CloudflareModelProvider({ env, extraRegistries: resolveExtraRegistries(env) })
+}
+
+/**
  * Pick the agent that performs pipeline steps: real LLM work via the Vercel AI
  * SDK, composed with a per-run sandbox for the repo-operating steps (`coder`,
  * `mocker`, `playwright`, …). Container-based implementation is ALWAYS on — the
@@ -115,7 +126,7 @@ function selectAgentExecutor(
   resolveTransport: ResolveRunnerTransport | null,
 ): AgentExecutor {
   const inline = new AiAgentExecutor({
-    modelProvider: new CloudflareModelProvider({ env }),
+    modelProvider: buildModelProvider(env),
     agentRouting: config.agents.routing,
     resolveBlockModel: config.agents.resolveBlockModel,
   })
@@ -495,7 +506,7 @@ function selectDocumentsDeps(
     documentRepository: new D1DocumentRepository({ db }),
     ...(config.documents.planner === 'llm'
       ? {
-          modelProvider: new CloudflareModelProvider({ env }),
+          modelProvider: buildModelProvider(env),
           documentPlannerModel: config.agents.routing.default.ref,
         }
       : {}),
@@ -567,7 +578,7 @@ function selectRequirementsDeps(
 ): Partial<CoreDependencies> {
   return {
     requirementReviewRepository: new D1RequirementReviewRepository({ db }),
-    modelProvider: new CloudflareModelProvider({ env }),
+    modelProvider: buildModelProvider(env),
     // The routing default already resolves to Cloudflare Workers AI unless a
     // direct provider key is set, so the reviewer runs on Cloudflare by default.
     requirementReviewModel: config.agents.routing.default.ref,
@@ -740,7 +751,7 @@ function selectFragmentLibraryDeps(
     ...(config.fragmentLibrary.selector === 'llm'
       ? {
           fragmentSelector: new LlmFragmentSelector({
-            modelProvider: new CloudflareModelProvider({ env }),
+            modelProvider: buildModelProvider(env),
             modelRef: config.agents.routing.default.ref,
           }),
         }

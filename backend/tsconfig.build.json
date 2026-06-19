@@ -13,6 +13,7 @@
     { "path": "packages/integrations/tsconfig.build.json" },
     { "path": "packages/workspaces/tsconfig.build.json" },
     { "path": "packages/agents/tsconfig.build.json" },
+    { "path": "packages/provider-bedrock/tsconfig.build.json" },
     { "path": "packages/orchestration/tsconfig.build.json" },
     { "path": "packages/worker/tsconfig.build.json" }
   ]
