@@ -1,4 +1,4 @@
-import { FakeAgentExecutor } from '@cat-factory/conformance'
+import { AsyncFakeAgentExecutor } from '@cat-factory/conformance'
 import type { ExecutionInstance, WorkspaceSnapshot } from '@cat-factory/kernel'
 import { logger } from '@cat-factory/server'
 import { Pool } from 'pg'
@@ -14,6 +14,8 @@ import { createApp } from '../src/server.js'
 // completion by the pg-boss worker (the Node analogue of the Worker's Cloudflare
 // Workflows driver), exercising `PgBossWorkRunner` + `driveExecution` against a real
 // Postgres + a real pg-boss instance — NOT the NoopWorkRunner the conformance suite uses.
+// The `coder` step runs as a POLLED async job, so `driveExecution`'s real `awaiting_job`
+// poll loop (sleep → pollAgentJob → repeat) is exercised durably, not just inline steps.
 
 const BASE = 'https://cat-factory.test'
 const TEST_ENV: NodeJS.ProcessEnv = { ...process.env, AUTH_DEV_OPEN: 'true', ENVIRONMENT: 'test' }
@@ -39,7 +41,13 @@ describe.skipIf(!databaseUrl)('node durable execution (pg-boss)', () => {
       db,
       boss,
       env: TEST_ENV,
-      overrides: { agentExecutor: new FakeAgentExecutor({ confidence: 1 }) },
+      overrides: {
+        agentExecutor: new AsyncFakeAgentExecutor({
+          confidence: 1,
+          asyncKinds: ['coder'],
+          asyncPolls: 2,
+        }),
+      },
     })
     await startExecutionWorker(
       boss,
@@ -99,5 +107,8 @@ describe.skipIf(!databaseUrl)('node durable execution (pg-boss)', () => {
 
     expect(exec?.status).toBe('done')
     expect(exec?.steps.every((s) => s.state === 'done')).toBe(true)
+    // The coder step could only have reached `done` by the durable driver polling its
+    // async job to completion (startJob → awaiting_job → pollJob → done).
+    expect(exec?.steps.find((s) => s.agentKind === 'coder')?.output).toContain('[coder]')
   }, 30_000)
 })

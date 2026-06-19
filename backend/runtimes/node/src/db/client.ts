@@ -1,3 +1,4 @@
+import { logger } from '@cat-factory/server'
 import { drizzle } from 'drizzle-orm/node-postgres'
 import { Pool } from 'pg'
 
@@ -6,6 +7,14 @@ import { Pool } from 'pg'
 // option is passed (that's only needed for db.query.* in drizzle 1.0).
 function makeDbClient(connectionString: string) {
   const pool = new Pool({ connectionString })
+  // node-postgres emits 'error' on an IDLE client when the backend drops the
+  // connection (Postgres restart, failover, idle timeout). An unhandled 'error' on
+  // the pool's EventEmitter would throw and crash the whole process — defeating the
+  // graceful shutdown in start(). Log and swallow it; the pool transparently opens a
+  // fresh connection on the next query.
+  pool.on('error', (err) => {
+    logger.error({ err: err.message }, 'postgres idle client error')
+  })
   const db = drizzle({ client: pool })
   return { db, pool }
 }

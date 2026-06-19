@@ -1480,6 +1480,33 @@ export class ExecutionService {
   }
 
   /**
+   * Expire a decision no human resolved within the timeout. Safe + idempotent: a no-op
+   * unless the run is still parked (`blocked`) on EXACTLY this decision/approval id, so a
+   * decision already resolved (the run advanced past it) or an already-terminal run is left
+   * untouched. The Node durable driver schedules this `decisionTimeout` after parking on a
+   * decision; the Cloudflare driver instead relies on `waitForEvent`'s own timeout firing
+   * its failRun. Keeping the check here (not in the runtime) means both facades reason about
+   * decision state identically.
+   */
+  async expireDecision(
+    workspaceId: string,
+    executionId: string,
+    decisionId: string,
+  ): Promise<void> {
+    const instance = await this.executionRepository.get(workspaceId, executionId)
+    if (!instance || instance.status !== 'blocked') return
+    const step = instance.steps[instance.currentStep]
+    const pendingId = step?.decision?.id ?? step?.approval?.id
+    if (step?.state !== 'waiting_decision' || pendingId !== decisionId) return
+    await this.failRun(
+      workspaceId,
+      executionId,
+      'Decision timed out awaiting a human response',
+      'decision_timeout',
+    )
+  }
+
+  /**
    * Approve a step's gated proposal: the run advances to the next step, carrying
    * the (optionally human-edited) proposal forward as context. Mirrors
    * {@link resolveDecision}'s durable-wake but *advances* the pipeline instead of

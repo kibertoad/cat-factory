@@ -109,7 +109,20 @@ export function makeApp(
       // decision stays put until it is resolved (then it is running again).
       const active = executions.filter((e) => e.status === 'running' || e.status === 'paused')
       if (active.length === 0) break
-      for (const e of active) await c.executionService.advanceInstance(workspaceId, e.id)
+      for (const e of active) {
+        // Mirror the durable driver: an advance that parks on an async job / CI / conflicts
+        // gate is drained by polling, so a polled (container-style) agent step completes
+        // here exactly as it does under Cloudflare Workflows. Inert for the inline fake
+        // (which never parks on a job — no worker test reaches these gate kinds via drive).
+        let r = await c.executionService.advanceInstance(workspaceId, e.id)
+        for (let hops = 0; hops < 500; hops++) {
+          if (r.kind === 'awaiting_job') r = await c.executionService.pollAgentJob(workspaceId, e.id)
+          else if (r.kind === 'awaiting_ci') r = await c.executionService.pollCi(workspaceId, e.id)
+          else if (r.kind === 'awaiting_conflicts')
+            r = await c.executionService.pollConflicts(workspaceId, e.id)
+          else break
+        }
+      }
     }
     return (await c.workspaceService.snapshot(workspaceId)).executions
   }

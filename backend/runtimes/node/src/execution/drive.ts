@@ -14,12 +14,19 @@ export interface DriveConfig {
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
 
+/** What a drive ended on, so the runner can schedule follow-up work (a decision timeout). */
+export interface DriveOutcome {
+  /** Set when the run parked awaiting a human decision/approval with this id. */
+  parkedDecisionId?: string
+}
+
 /**
  * Drive one run to a standstill, mirroring the Cloudflare ExecutionWorkflow but with
  * plain async sleeps instead of durable steps. It contains NO business logic — every
- * decision lives in `ExecutionService`. On a human decision it parks (returns); the
- * pg-boss runner re-enqueues an advance when the decision is resolved. All run state
- * lives in Postgres, so a re-run after a crash simply reads the current state.
+ * decision lives in `ExecutionService`. On a human decision it parks (returns its id so
+ * the runner can arm a timeout); the pg-boss runner re-enqueues an advance when the
+ * decision is resolved. All run state lives in Postgres, so a re-run after a crash simply
+ * reads the current state.
  */
 export async function driveExecution(
   exec: ExecutionService,
@@ -27,7 +34,7 @@ export async function driveExecution(
   executionId: string,
   cfg: DriveConfig,
   log: Logger,
-): Promise<void> {
+): Promise<DriveOutcome> {
   const fail = (message: string, kind: AgentFailureKind = 'agent') =>
     exec.failRun(workspaceId, executionId, message, kind)
 
@@ -67,59 +74,73 @@ export async function driveExecution(
       result = await exec.advanceInstance(workspaceId, executionId, { rethrowAgentErrors: true })
     } catch (error) {
       await fail(error instanceof Error ? error.message : String(error))
-      return
+      return {}
     }
 
-    if (result.kind === 'awaiting_job') {
-      const next = await pollUntil(
-        'awaiting_job',
-        () => exec.pollAgentJob(workspaceId, executionId),
-        cfg.jobPollIntervalMs,
-        cfg.jobMaxPolls,
-        'Implementation job',
-      )
-      if (!next) return
-      result = next
-    }
-    if (result.kind === 'awaiting_ci') {
-      const next = await pollUntil(
-        'awaiting_ci',
-        () => exec.pollCi(workspaceId, executionId),
-        cfg.ciPollIntervalMs,
-        cfg.ciMaxPolls,
-        'CI',
-      )
-      if (!next) return
-      result = next
-    }
-    if (result.kind === 'awaiting_conflicts') {
-      const next = await pollUntil(
-        'awaiting_conflicts',
-        () => exec.pollConflicts(workspaceId, executionId),
-        cfg.ciPollIntervalMs,
-        cfg.ciMaxPolls,
-        'PR mergeability',
-      )
-      if (!next) return
-      result = next
+    // Drain whatever gate the step parked on. A gate poll can resolve to a DIFFERENT
+    // gate — e.g. a `ci` step that finds CI red dispatches a `ci-fixer` and returns
+    // `awaiting_job` — so loop until the result is no longer an awaiting_* gate rather
+    // than relying on the next `advanceInstance` to re-establish the poll (which is why
+    // the order of these checks must not matter). `pollUntil` itself is bounded, so the
+    // outer guard only backstops a pathological gate↔gate ping-pong.
+    let gateHops = 0
+    const MAX_GATE_HOPS = 64
+    while (gateHops++ < MAX_GATE_HOPS) {
+      if (result.kind === 'awaiting_job') {
+        const next = await pollUntil(
+          'awaiting_job',
+          () => exec.pollAgentJob(workspaceId, executionId),
+          cfg.jobPollIntervalMs,
+          cfg.jobMaxPolls,
+          'Implementation job',
+        )
+        if (!next) return {}
+        result = next
+        continue
+      }
+      if (result.kind === 'awaiting_ci') {
+        const next = await pollUntil(
+          'awaiting_ci',
+          () => exec.pollCi(workspaceId, executionId),
+          cfg.ciPollIntervalMs,
+          cfg.ciMaxPolls,
+          'CI',
+        )
+        if (!next) return {}
+        result = next
+        continue
+      }
+      if (result.kind === 'awaiting_conflicts') {
+        const next = await pollUntil(
+          'awaiting_conflicts',
+          () => exec.pollConflicts(workspaceId, executionId),
+          cfg.ciPollIntervalMs,
+          cfg.ciMaxPolls,
+          'PR mergeability',
+        )
+        if (!next) return {}
+        result = next
+        continue
+      }
+      break
     }
 
     if (result.kind === 'job_failed') {
       await fail(result.error, 'job_failed')
-      return
+      return {}
     }
     if (result.kind === 'job_evicted') {
       await fail(result.error, 'evicted')
-      return
+      return {}
     }
     // done / noop / paused: stop. awaiting_decision: park (resumed on signalDecision).
-    if (result.kind === 'done' || result.kind === 'noop' || result.kind === 'paused') return
+    if (result.kind === 'done' || result.kind === 'noop' || result.kind === 'paused') return {}
     if (result.kind === 'awaiting_decision') {
       log.info(
         { workspaceId, executionId, decisionId: result.decisionId },
         'run parked on decision',
       )
-      return
+      return { parkedDecisionId: result.decisionId }
     }
     // 'continue': loop and advance the next step.
   }

@@ -177,6 +177,36 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         expect(task.parentId).toBe('mod_sessions')
       })
 
+      it('drives an asynchronous (polled) agent job to completion', async () => {
+        // The `coder` step runs as a polled async job (startJob → awaiting_job → pollJob),
+        // so this exercises the durable driver's job-poll loop — Cloudflare Workflows and
+        // pg-boss — through the SAME assertion, the path most likely to drift between them.
+        const app = harness.makeApp({ confidence: 1, asyncKinds: ['coder'], asyncPolls: 2 })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        const start = await app.call<ExecutionInstance>(
+          'POST',
+          `/workspaces/${wsId}/blocks/task_login/executions`,
+          { pipelineId: 'pl_quick' },
+        )
+        expect(start.status).toBe(201)
+
+        const ticked = await app.drive(wsId)
+        const exec = ticked.find((e) => e.blockId === 'task_login')!
+        expect(exec.status).toBe('done')
+        expect(exec.steps.every((s) => s.state === 'done')).toBe(true)
+        // The coder step ran as a polled job but still produced its normal work product.
+        const coder = exec.steps.find((s) => s.agentKind === 'coder')!
+        expect(coder.output).toContain('[coder]')
+        expect(coder.model).toBe('fake')
+
+        const task = (
+          await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+        ).body.blocks.find((b) => b.id === 'task_login')!
+        expect(task.status).toBe('done')
+      })
+
       it('opens a PR when confidence is below threshold, then merges on demand', async () => {
         const app = harness.makeApp({ confidence: 0.5 })
         const { workspace } = await app.createWorkspace()

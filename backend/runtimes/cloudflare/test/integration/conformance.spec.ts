@@ -1,4 +1,5 @@
 import {
+  AsyncFakeAgentExecutor,
   type ConformanceHarness,
   FakeAgentExecutor,
   defineConformanceSuite,
@@ -12,7 +13,12 @@ import { makeApp } from '../helpers'
 
 const harness: ConformanceHarness = {
   name: 'cloudflare',
-  makeApp: (agentOptions) => makeApp(new FakeAgentExecutor(agentOptions)),
+  makeApp: (agentOptions) =>
+    makeApp(
+      agentOptions?.asyncKinds?.length
+        ? new AsyncFakeAgentExecutor(agentOptions)
+        : new FakeAgentExecutor(agentOptions),
+    ),
 }
 
 defineConformanceSuite(harness)

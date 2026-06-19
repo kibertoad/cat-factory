@@ -28,8 +28,8 @@ const PI_MIN_OUTPUT_TOKENS = 16_384
 /** Pull the bearer token from the Authorization header. */
 function bearer(header: string | undefined): string | null {
   if (!header) return null
-  const match = /^Bearer\s+(.+)$/i.exec(header)
-  return match ? match[1]! : null
+  const match = /^Bearer\s+(.+)$/i.exec(header.trim())
+  return match ? match[1]!.trim() : null
 }
 
 /**

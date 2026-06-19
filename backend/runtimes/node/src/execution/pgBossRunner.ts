@@ -11,18 +11,38 @@ import { type DriveConfig, driveExecution } from './drive.js'
 // job, and the stale-run sweeper re-enqueues runs still `running` in storage.
 
 const QUEUE = 'execution.advance'
+// A separate, delayed queue that fails a run still parked on a decision after the
+// `decisionTimeout` window — the Node analogue of the Cloudflare driver's
+// `waitForEvent(..., { timeout })`. Kept off the advance queue so the delay never holds
+// up real drives, and `exclusive` so at most one pending timeout exists per (run, decision).
+const DECISION_TIMEOUT_QUEUE = 'execution.decision-timeout'
+
+// The queue MUST be created with the `exclusive` policy for the dedup below to hold.
+// Under pg-boss's default `standard` policy, `singletonKey` alone enforces NO uniqueness
+// (the singleton unique indexes are policy-gated, and the policy-independent one requires
+// `singletonSeconds`, which we don't set). `exclusive` makes (name, singletonKey) unique
+// across the `created`/`retry`/`active` states, so at most one advance job per run is
+// alive at a time and a duplicate `send` is an `ON CONFLICT DO NOTHING` no-op.
+const QUEUE_POLICY = 'exclusive' as const
 
 interface AdvanceJob {
   workspaceId: string
   executionId: string
 }
 
+interface DecisionTimeoutJob {
+  workspaceId: string
+  executionId: string
+  decisionId: string
+}
+
 /**
- * Send options for an advance job. `singletonKey` (the run id) is the linchpin: while
- * an advance job for a run is active/queued, pg-boss suppresses any duplicate send —
- * so re-enqueues from `signalDecision` and the stale-run sweeper are safe no-ops for a
- * run that is still being driven, and only take effect once the prior job is gone. That
- * lets the sweeper use a short lease without ever double-driving a healthy run.
+ * Send options for an advance job. `singletonKey` (the run id) is the linchpin — but only
+ * because the queue is created `exclusive` (see {@link QUEUE_POLICY}): while an advance job
+ * for a run is active/queued/retrying, pg-boss suppresses any duplicate send — so re-enqueues
+ * from `signalDecision` and the stale-run sweeper are safe no-ops for a run that is still being
+ * driven, and only take effect once the prior job is gone. That lets the sweeper use a short
+ * lease without ever double-driving a healthy run.
  *
  * `expireInSeconds` MUST exceed the longest a single advance can run (a drive can poll
  * a container job for `jobMaxPolls * jobPollInterval`, well past pg-boss's 15s default);
@@ -97,8 +117,9 @@ export class PgBossWorkRunner implements WorkRunner {
  * between polls), so without parallel workers one slow run would block every other run
  * behind it. We deliberately keep `batchSize: 1` rather than raising it: a batch handler
  * completes/fails all its jobs together, which would couple unrelated runs' retries;
- * independent workers keep per-run retry semantics intact. `singletonKey` still prevents
- * the SAME run being driven by two workers at once. Scale `concurrency` with the DB pool
+ * independent workers keep per-run retry semantics intact. The `exclusive` queue policy
+ * still prevents the SAME run being driven by two workers at once (one live advance job per
+ * run id; duplicate sends no-op). Scale `concurrency` with the DB pool
  * (each active drive borrows a connection only for its brief reads/writes between sleeps).
  */
 export async function startExecutionWorker(
@@ -106,9 +127,11 @@ export async function startExecutionWorker(
   container: ServerContainer,
   cfg: DriveConfig,
   log: Logger,
-  concurrency = 10,
+  options: { concurrency?: number; decisionTimeoutSeconds?: number } = {},
 ): Promise<void> {
-  await boss.createQueue(QUEUE)
+  const concurrency = options.concurrency ?? 10
+  const decisionTimeoutSeconds = options.decisionTimeoutSeconds ?? 0
+  await boss.createQueue(QUEUE, { policy: QUEUE_POLICY })
   await boss.work<AdvanceJob>(
     QUEUE,
     { localConcurrency: Math.max(1, concurrency) },
@@ -116,7 +139,26 @@ export async function startExecutionWorker(
       for (const job of jobs) {
         const { workspaceId, executionId } = job.data
         try {
-          await driveExecution(container.executionService, workspaceId, executionId, cfg, log)
+          const outcome = await driveExecution(
+            container.executionService,
+            workspaceId,
+            executionId,
+            cfg,
+            log,
+          )
+          // Arm a decision timeout when the run parked awaiting a human. There is no
+          // event to cancel it on resolution (unlike Cloudflare's waitForEvent), so the
+          // timeout job re-checks state and `expireDecision` no-ops if it was resolved.
+          if (outcome.parkedDecisionId && decisionTimeoutSeconds > 0) {
+            await boss.send(
+              DECISION_TIMEOUT_QUEUE,
+              { workspaceId, executionId, decisionId: outcome.parkedDecisionId },
+              {
+                startAfter: decisionTimeoutSeconds,
+                singletonKey: `${executionId}:${outcome.parkedDecisionId}`,
+              },
+            )
+          }
         } catch (error) {
           log.error(
             {
@@ -125,6 +167,45 @@ export async function startExecutionWorker(
               err: error instanceof Error ? error.message : String(error),
             },
             'execution driver failed',
+          )
+          throw error
+        }
+      }
+    },
+  )
+}
+
+/**
+ * Start the worker that expires overdue decisions. A delayed job (armed by
+ * {@link startExecutionWorker} when a run parks on a decision) fires after the
+ * `decisionTimeout`; `expireDecision` fails the run as `decision_timeout` ONLY if it is
+ * still parked on that exact decision, so a decision resolved meanwhile is a safe no-op
+ * (no driving — that stays on the advance queue). This is the Node analogue of the
+ * Cloudflare driver's `waitForEvent` timeout. Create the queue before the advance worker
+ * so the advance worker's `boss.send` to it always has a target.
+ */
+export async function startDecisionTimeoutWorker(
+  boss: PgBoss,
+  container: ServerContainer,
+  log: Logger,
+): Promise<void> {
+  await boss.createQueue(DECISION_TIMEOUT_QUEUE, { policy: QUEUE_POLICY })
+  await boss.work<DecisionTimeoutJob>(
+    DECISION_TIMEOUT_QUEUE,
+    async (jobs: Job<DecisionTimeoutJob>[]) => {
+      for (const job of jobs) {
+        const { workspaceId, executionId, decisionId } = job.data
+        try {
+          await container.executionService.expireDecision(workspaceId, executionId, decisionId)
+        } catch (error) {
+          log.error(
+            {
+              workspaceId,
+              executionId,
+              decisionId,
+              err: error instanceof Error ? error.message : String(error),
+            },
+            'decision-timeout check failed',
           )
           throw error
         }
@@ -143,8 +224,9 @@ export interface SweeperConfig {
  * Backstop for runs that are still `running` in storage but whose advance job is gone
  * (the worker crashed/was evicted before the job retried). Mirrors the Worker's cron
  * `sweepStuckRuns`: on each tick it re-enqueues every stale `running` execution run.
- * The re-enqueue carries the run's `singletonKey`, so a run that IS still being driven
- * (its advance job active) is a silent no-op — only genuinely orphaned runs re-drive.
+ * The re-enqueue carries the run's `singletonKey` and the queue is `exclusive`, so a run
+ * that IS still being driven (its advance job active/retrying) is a silent no-op — only
+ * genuinely orphaned runs re-drive.
  * Decision-parked (`blocked`) and spend-paused (`paused`) runs aren't `running`, so the
  * sweeper leaves them alone. Returns a stop function (clears the interval).
  */

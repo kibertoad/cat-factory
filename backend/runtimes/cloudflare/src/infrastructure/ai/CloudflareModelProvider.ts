@@ -20,39 +20,40 @@ import { baseUrlFor } from './providerEndpoints'
 /**
  * Build the Worker's base provider registry. `workers-ai` is the Cloudflare flavour
  * (resolved via the in-process `AI` binding); `openai`/`anthropic` and the
- * OpenAI-compatible vendors (`qwen`/`deepseek`/`moonshot`) are keyed from `env`. Each
- * resolver throws the same precise "<X> is not configured" message as before when its
- * credential/binding is missing, so behaviour is unchanged from the old switch.
+ * OpenAI-compatible vendors (`qwen`/`deepseek`/`moonshot`) are keyed from `env`. A
+ * provider is registered ONLY when its credential/binding is present, so an unconfigured
+ * provider resolves to a clear "Unsupported model provider" error (from
+ * {@link CompositeModelProvider}) rather than failing deep in the vendor SDK — matching the
+ * Node facade exactly (the conditional `baseProviderRegistry`), so the two runtimes don't
+ * diverge on a missing key.
  */
 function workerBaseRegistry(env: Env): ProviderRegistry {
   const compatible = (
     provider: 'qwen' | 'deepseek' | 'moonshot',
     apiKey: string | undefined,
-    keyVar: string,
-  ): ModelResolver => {
-    if (!apiKey) {
-      return () => {
-        throw new Error(`${keyVar} is not configured`)
-      }
-    }
-    return openAiCompatibleResolver({ name: provider, apiKey, baseURL: baseUrlFor(provider, env)! })
-  }
+  ): ModelResolver | undefined =>
+    apiKey
+      ? openAiCompatibleResolver({ name: provider, apiKey, baseURL: baseUrlFor(provider, env)! })
+      : undefined
 
   return {
-    openai: openAiResolver({ apiKey: env.OPENAI_API_KEY }),
-    anthropic: anthropicResolver({ apiKey: env.ANTHROPIC_API_KEY }),
-    qwen: compatible('qwen', env.QWEN_API_KEY, 'QWEN_API_KEY'),
-    deepseek: compatible('deepseek', env.DEEPSEEK_API_KEY, 'DEEPSEEK_API_KEY'),
-    moonshot: compatible('moonshot', env.MOONSHOT_API_KEY, 'MOONSHOT_API_KEY'),
-    'workers-ai': (ref) => {
-      if (!env.AI) {
-        throw new Error('Workers AI binding (AI) is not configured')
-      }
-      // workers-ai-provider@3 implements the same provider spec as `ai` v6
-      // (`@ai-sdk/provider` v3), so the model is a real LanguageModel — no cast.
-      const workersai = createWorkersAI({ binding: env.AI })
-      return workersai(ref.model as Parameters<typeof workersai>[0])
-    },
+    openai: env.OPENAI_API_KEY ? openAiResolver({ apiKey: env.OPENAI_API_KEY }) : undefined,
+    anthropic: env.ANTHROPIC_API_KEY
+      ? anthropicResolver({ apiKey: env.ANTHROPIC_API_KEY })
+      : undefined,
+    qwen: compatible('qwen', env.QWEN_API_KEY),
+    deepseek: compatible('deepseek', env.DEEPSEEK_API_KEY),
+    moonshot: compatible('moonshot', env.MOONSHOT_API_KEY),
+    'workers-ai': env.AI
+      ? (ref) => {
+          const binding = env.AI
+          if (!binding) throw new Error('Workers AI binding (AI) is not configured')
+          // workers-ai-provider@3 implements the same provider spec as `ai` v6
+          // (`@ai-sdk/provider` v3), so the model is a real LanguageModel — no cast.
+          const workersai = createWorkersAI({ binding })
+          return workersai(ref.model as Parameters<typeof workersai>[0])
+        }
+      : undefined,
   }
 }
 

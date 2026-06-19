@@ -1,4 +1,5 @@
 import {
+  AsyncFakeAgentExecutor,
   type ConformanceApp,
   FakeAgentExecutor,
   type FakeAgentOptions,
@@ -45,7 +46,9 @@ export async function setupTestDb(): Promise<DrizzleDb> {
  */
 export function makeConformanceApp(db: DrizzleDb, agentOptions?: FakeAgentOptions): ConformanceApp {
   const overrides: Partial<CoreDependencies> = {
-    agentExecutor: new FakeAgentExecutor(agentOptions),
+    agentExecutor: agentOptions?.asyncKinds?.length
+      ? new AsyncFakeAgentExecutor(agentOptions)
+      : new FakeAgentExecutor(agentOptions),
     workRunner: new NoopWorkRunner(),
     bootstrapRunner: new NoopBootstrapRunner(),
   }
@@ -81,7 +84,19 @@ export function makeConformanceApp(db: DrizzleDb, agentOptions?: FakeAgentOption
       // path is out of the cross-runtime conformance suite's scope (see drive.ts).
       const active = executions.filter((e) => e.status === 'running' || e.status === 'paused')
       if (active.length === 0) break
-      for (const e of active) await container.executionService.advanceInstance(workspaceId, e.id)
+      for (const e of active) {
+        // Mirror the durable driver: an advance that parks on an async job / CI / conflicts
+        // gate is drained by polling, so a polled (container-style) agent step completes
+        // here exactly as it does under pg-boss. Inert for the inline fake (never parks).
+        const exec = container.executionService
+        let r = await exec.advanceInstance(workspaceId, e.id)
+        for (let hops = 0; hops < 500; hops++) {
+          if (r.kind === 'awaiting_job') r = await exec.pollAgentJob(workspaceId, e.id)
+          else if (r.kind === 'awaiting_ci') r = await exec.pollCi(workspaceId, e.id)
+          else if (r.kind === 'awaiting_conflicts') r = await exec.pollConflicts(workspaceId, e.id)
+          else break
+        }
+      }
     }
     return (await container.workspaceService.snapshot(workspaceId)).executions
   }

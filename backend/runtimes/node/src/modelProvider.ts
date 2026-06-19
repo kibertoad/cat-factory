@@ -50,15 +50,19 @@ export function createNodeModelProvider(env: NodeJS.ProcessEnv): ModelProvider {
   // Opt-in Bedrock: registered only when a region is configured, so an unconfigured
   // deployment doesn't surface a half-wired provider.
   if (env.BEDROCK_REGION) {
+    // An empty/blank list collapses to `undefined` (allow all) rather than `[]` — a
+    // set-but-blank BEDROCK_MODELS must not silently reject every model (an empty
+    // allow-list would). Only a non-empty list narrows the allow-list.
+    const supportedModels = env.BEDROCK_MODELS?.split(',')
+      .map((m) => m.trim())
+      .filter(Boolean)
     provider.register(
       bedrockRegistry({
         region: env.BEDROCK_REGION,
         accessKeyId: env.AWS_ACCESS_KEY_ID,
         secretAccessKey: env.AWS_SECRET_ACCESS_KEY,
         sessionToken: env.AWS_SESSION_TOKEN,
-        supportedModels: env.BEDROCK_MODELS?.split(',')
-          .map((m) => m.trim())
-          .filter(Boolean),
+        supportedModels: supportedModels?.length ? supportedModels : undefined,
       }),
     )
   }

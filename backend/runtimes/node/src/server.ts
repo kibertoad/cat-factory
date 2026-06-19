@@ -15,7 +15,11 @@ import { type NodeContainerOptions, buildNodeContainer } from './container.js'
 import { createDbClient } from './db/client.js'
 import { migrate } from './db/migrate.js'
 import { executionRuntime } from './execution/config.js'
-import { startExecutionWorker, startStaleRunSweeper } from './execution/pgBossRunner.js'
+import {
+  startDecisionTimeoutWorker,
+  startExecutionWorker,
+  startStaleRunSweeper,
+} from './execution/pgBossRunner.js'
 
 // The Node facade: the SAME shared Hono app (controllers + middleware) the Cloudflare
 // Worker mounts, served over `@hono/node-server`. The middleware order mirrors the
@@ -81,7 +85,13 @@ export async function start(
   const container = buildNodeContainer({ db, boss, env })
 
   const runtime = executionRuntime(container.config, env)
-  await startExecutionWorker(boss, container, runtime.drive, logger, runtime.concurrency)
+  // The decision-timeout worker creates its queue first so the advance worker's send to
+  // it (when a run parks on a decision) always has a target.
+  await startDecisionTimeoutWorker(boss, container, logger)
+  await startExecutionWorker(boss, container, runtime.drive, logger, {
+    concurrency: runtime.concurrency,
+    decisionTimeoutSeconds: runtime.decisionTimeoutSeconds,
+  })
   const stopSweeper = startStaleRunSweeper(boss, container, runtime.sweeper, runtime.queue, logger)
 
   const app = createApp(container, env)

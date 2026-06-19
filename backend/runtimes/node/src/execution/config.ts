@@ -23,6 +23,8 @@ export interface ExecutionRuntime {
   sweeper: SweeperConfig
   /** How many runs the pg-boss worker drives in parallel on this node. */
   concurrency: number
+  /** After this long parked on a human decision, the run is failed `decision_timeout`. */
+  decisionTimeoutSeconds: number
 }
 
 /**
@@ -93,8 +95,9 @@ export function executionRuntime(config: AppConfig, env: NodeJS.ProcessEnv): Exe
   }
 
   const concurrency = Math.max(1, num(env.EXECUTION_CONCURRENCY) ?? 10)
+  const decisionTimeoutSeconds = Math.ceil(durationMs(exec.decisionTimeout, 86_400_000) / 1000)
 
-  return { drive, queue, sweeper, concurrency }
+  return { drive, queue, sweeper, concurrency, decisionTimeoutSeconds }
 }
 
 /** Parse a positive number from an env value; undefined/blank/non-finite → undefined. */
