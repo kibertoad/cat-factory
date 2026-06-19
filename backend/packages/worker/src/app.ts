@@ -7,7 +7,6 @@ import { buildContainer } from './infrastructure/container'
 import { handleError } from './infrastructure/http/errorHandler'
 import type { AppEnv } from './infrastructure/http/types'
 import { requireAuth } from './infrastructure/auth/middleware'
-import { llmProxyController } from './modules/llmProxy/LlmProxyController'
 
 export interface CreateAppOptions {
   /** Override core dependencies — used by tests (e.g. a fake agent executor). */
@@ -109,15 +108,10 @@ export function createApp(options: CreateAppOptions = {}): Hono<AppEnv> {
     return notFound()
   })
 
-  // OpenAI-compatible LLM proxy for implementation containers. Authenticated by a
-  // signed, model-locked session token (not the workspace session); on the
-  // /v1 public-prefix allowlist above so requireAuth doesn't double-gate it.
-  app.route('/', llmProxyController())
-
-  // The runtime-neutral API layer — controllers shared across every facade. This now
-  // includes the real-time event stream and the GitHub controllers, whose runtime
-  // seams (WebSocket upgrade, backfill Workflow, sync Queue) are delegated to the
-  // Worker's gateways (see buildContainer's `gateways`).
+  // The runtime-neutral API layer — every controller is shared across facades. Their
+  // runtime seams (WebSocket upgrade, backfill Workflow, sync Queue, the LLM proxy's
+  // Workers AI binding + upstreams) are delegated to the Worker's gateways (see
+  // buildContainer's `gateways`).
   registerCoreControllers(app)
 
   app.onError(handleError)

@@ -1,3 +1,5 @@
+import type { Logger } from '../observability/logger'
+
 // Runtime "gateway" seams: the differentiator capabilities a controller needs but
 // that are implemented differently per facade. They are carried on the request
 // container (`container.gateways`) so the shared controllers stay free of any
@@ -41,9 +43,56 @@ export interface GitHubWebhookIngest {
   queueRepoResync(workspaceId: string, repoGithubId: number): Promise<boolean>
 }
 
+/** OpenAI-style token usage scraped from an upstream completion, for spend metering. */
+export interface LlmTokenUsage {
+  prompt_tokens?: number
+  completion_tokens?: number
+}
+
+/** A resolved OpenAI-compatible upstream: where to forward, and the key to use. */
+export interface LlmUpstreamEndpoint {
+  baseURL: string
+  apiKey: string
+}
+
+/** What the LLM proxy needs to run a model in-process (e.g. a Workers AI binding). */
+export interface LlmInProcessRequest {
+  /** Locked model id. */
+  model: string
+  /** The (hardened) OpenAI Chat Completions request body. */
+  payload: Record<string, unknown>
+  streaming: boolean
+  /** Meter token usage into the spend ledger. */
+  record: (usage: LlmTokenUsage | null) => Promise<number>
+  /** Schedule post-response work (CF `waitUntil`; a no-op fire-and-forget on Node). */
+  waitUntil: (p: Promise<unknown>) => void
+  /** Correlated logger for this proxied call. */
+  log: Logger
+}
+
+/**
+ * The provider side of the container LLM proxy. The shared controller owns session
+ * verification, the spend gate, request hardening and the OpenAI-compatible HTTP
+ * forward path + metering; this gateway supplies the runtime-specific bits: where an
+ * OpenAI-compatible provider lives (base URL + key), and an optional in-process path
+ * for providers reached through a binding (Cloudflare Workers AI on the Worker; none
+ * on Node, which forwards over HTTP instead).
+ */
+export interface LlmUpstream {
+  /** Resolve an OpenAI-compatible upstream for `provider`, or null when unavailable. */
+  resolveOpenAiCompatible(provider: string): LlmUpstreamEndpoint | null
+  /**
+   * Serve a completion in-process (no external HTTP), returning an OpenAI-shaped
+   * Response — or null when this runtime has no in-process path (the controller then
+   * replies 502 for a provider that requires it, e.g. `workers-ai`).
+   */
+  runInProcess(request: LlmInProcessRequest): Promise<Response> | null
+}
+
 /** The bundle of runtime gateways a facade injects onto every request container. */
 export interface RuntimeGateways {
   realtime: RealtimeGateway
   githubBackfill: GitHubBackfillScheduler
   githubWebhook: GitHubWebhookIngest
+  llmUpstream: LlmUpstream
 }

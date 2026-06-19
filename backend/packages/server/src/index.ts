@@ -7,12 +7,22 @@ export { type AppEnv, type ServerContainer } from './http/env'
 export {
   type GitHubBackfillScheduler,
   type GitHubWebhookIngest,
+  type LlmInProcessRequest,
+  type LlmTokenUsage,
+  type LlmUpstream,
+  type LlmUpstreamEndpoint,
   type RealtimeGateway,
   type RuntimeGateways,
 } from './runtime/gateways'
 export { StateSigner, type InstallState } from './github/state'
 export { GitHubOAuth, type GitHubOAuthDependencies } from './auth/GitHubOAuth'
 export { authController, pickPostLoginRedirect } from './modules/auth/AuthController'
+export {
+  ContainerSessionService,
+  DEFAULT_SESSION_TTL_MS,
+  type ContainerSession,
+  type MintInput,
+} from './containers/ContainerSessionService'
 export { bearerToken, requireAuth, verifySession } from './auth/middleware'
 export { registerCoreControllers } from './app'
 export { param } from './http/params'

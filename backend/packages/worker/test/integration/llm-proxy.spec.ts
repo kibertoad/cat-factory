@@ -131,8 +131,10 @@ describe('llm proxy /v1/chat/completions', () => {
     const res = await app.fetch(chatRequest(token), noBinding as Parameters<typeof app.fetch>[1])
 
     expect(res.status).toBe(502)
+    // With no in-process path available (AI binding removed), the runtime-neutral
+    // controller reports the provider as unavailable rather than forwarding upstream.
     expect(((await res.json()) as { error: { message: string } }).error.message).toMatch(
-      /Workers AI binding/,
+      /Provider 'workers-ai' is not available/,
     )
     // The workers-ai path never reaches the OpenAI-compatible fetch upstream.
     expect(fetchSpy).not.toHaveBeenCalled()

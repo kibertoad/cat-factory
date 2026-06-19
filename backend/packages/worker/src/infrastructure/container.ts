@@ -19,6 +19,7 @@ import { CloudflareModelProvider } from './ai/CloudflareModelProvider'
 import { resolveExtraRegistries } from './ai/registries'
 import { DoRealtimeGateway } from './gateways/DoRealtimeGateway'
 import { CfGitHubWebhookIngest, WorkflowsBackfillScheduler } from './gateways/GitHubGateways'
+import { WorkersAiLlmUpstream } from './ai/WorkersAiLlmUpstream'
 import {
   ContainerAgentExecutor,
   type ResolveRepoTarget,
@@ -828,6 +829,9 @@ export function buildContainer(env: Env, overrides: Partial<CoreDependencies> = 
       // fall back to inline handling when their binding is absent (local/dev/tests).
       githubBackfill: new WorkflowsBackfillScheduler(env.GITHUB_BACKFILL_WORKFLOW),
       githubWebhook: new CfGitHubWebhookIngest(env.GITHUB_SYNC_QUEUE),
+      // LLM proxy upstream: OpenAI-compatible providers from env keys + the in-process
+      // Workers AI binding path (the `workers-ai` provider).
+      llmUpstream: new WorkersAiLlmUpstream(env),
     },
   }
 }

@@ -13,6 +13,7 @@ import { executionController } from './modules/execution/ExecutionController'
 import { fragmentLibraryController } from './modules/fragmentLibrary/FragmentLibraryController'
 import { githubController } from './modules/github/GitHubController'
 import { githubWebhookController } from './modules/github/GitHubWebhookController'
+import { llmProxyController } from './modules/llmProxy/LlmProxyController'
 import { mergePresetController } from './modules/merge/MergePresetController'
 import { modelController } from './modules/models/ModelController'
 import { notificationController } from './modules/notifications/NotificationController'
@@ -32,6 +33,9 @@ import { workspaceController } from './modules/workspaces/WorkspaceController'
  * `Bindings`; the controllers only touch `Variables` (`container`, `user`).
  */
 export function registerCoreControllers<E extends AppEnv>(app: Hono<E>): void {
+  // OpenAI-compatible LLM proxy for implementation containers (authenticated by a
+  // signed, model-locked container token; upstream/in-process via the llmUpstream gateway).
+  app.route('/', llmProxyController())
   // "Login with GitHub" (public; no-op endpoints when auth is unconfigured).
   app.route('/auth', authController())
   // Read-only catalogs + account/workspace roots (gated by the facade's auth middleware).
