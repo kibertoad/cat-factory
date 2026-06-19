@@ -35,8 +35,14 @@ const stepLabel: Record<string, string> = {
 }
 
 /** A gated step parked for approval reads "Needs approval", not "Needs decision". */
-function labelForStep(s: { state: string; approval?: { status: string } | null }) {
+function labelForStep(s: {
+  state: string
+  approval?: { status: string } | null
+  startingContainer?: boolean
+}) {
   if (s.approval?.status === 'pending') return 'Needs approval'
+  // A container-backed step whose container is still cold-booting.
+  if (s.startingContainer) return 'Spinning up…'
   return stepLabel[s.state]
 }
 

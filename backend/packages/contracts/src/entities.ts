@@ -6,6 +6,7 @@ import {
   blockStatusSchema,
   blockTypeSchema,
   positionSchema,
+  sizeSchema,
   testTargetSchema,
 } from './primitives.js'
 
@@ -39,6 +40,13 @@ export const blockSchema = v.object({
   type: blockTypeSchema,
   description: v.string(),
   position: positionSchema,
+  /**
+   * An explicit, user-set pixel size for the block (service frames are resizable
+   * by dragging their borders). Absent means the board auto-sizes the frame from
+   * its contents; present is the dragged size (the client never shrinks it below
+   * the content's natural extent). Only frames carry this today.
+   */
+  size: v.optional(sizeSchema),
   status: blockStatusSchema,
   progress: v.number(),
   dependsOn: v.array(v.string()),
@@ -380,6 +388,16 @@ export const pipelineStepSchema = v.object({
   conflicts: v.optional(v.nullable(conflictsStepStateSchema)),
   /** Live subtask counts while an async (container) step runs; see {@link stepSubtasksSchema}. */
   subtasks: v.optional(stepSubtasksSchema),
+  /**
+   * True while a container-backed step is being dispatched and its per-run
+   * container is cold-booting — i.e. before the container is up and the agent has
+   * begun executing. Set the moment the job is dispatched (the dispatch blocks
+   * until the container accepts the job, so it covers the whole boot window) and
+   * cleared on the first successful poll, when the container is provably up. Lets
+   * the board show an explicit "Spinning up container…" phase instead of a blank
+   * "working" state. Only ever set on async (container) steps.
+   */
+  startingContainer: v.optional(v.boolean()),
   decision: v.nullable(decisionSchema),
   /**
    * Whether a human approval gate fires after this step completes. Copied from

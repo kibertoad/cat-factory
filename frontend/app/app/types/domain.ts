@@ -57,6 +57,12 @@ export interface Block {
   description: string
   /** position relative to the parent container (service or module). */
   position: { x: number; y: number }
+  /**
+   * Explicit, user-dragged pixel size for a resizable frame (Miro-style border
+   * drag). Absent = the board auto-sizes the frame from its contents; present =
+   * the dragged size, never shrunk below the content's natural extent.
+   */
+  size?: { w: number; h: number }
   status: BlockStatus
   /** 0..1 implementation progress, derived from the running execution. */
   progress: number

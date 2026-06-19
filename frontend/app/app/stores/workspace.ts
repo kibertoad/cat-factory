@@ -100,7 +100,7 @@ export const useWorkspaceStore = defineStore(
       } else {
         hydrate(
           await api.createWorkspace({
-            seed: true,
+            seed: false,
             accountId: accounts.activeAccountId ?? undefined,
           }),
         )
@@ -126,7 +126,7 @@ export const useWorkspaceStore = defineStore(
     async function create(name?: string) {
       const accounts = useAccountsStore()
       const snapshot = await api.createWorkspace({
-        seed: true,
+        seed: false,
         name,
         accountId: accounts.activeAccountId ?? undefined,
       })
@@ -158,17 +158,6 @@ export const useWorkspaceStore = defineStore(
       hydrate(await api.getWorkspace(workspaceId.value))
     }
 
-    /** Discard the current workspace and start a fresh, seeded one in this account. */
-    async function reset() {
-      const prev = workspaceId.value
-      workspaceId.value = null
-      await create()
-      if (prev) {
-        workspaces.value = workspaces.value.filter((w) => w.id !== prev)
-        await api.deleteWorkspace(prev).catch(() => {})
-      }
-    }
-
     /** The active workspace id, or throw if the app isn't bootstrapped yet. */
     function requireId(): string {
       if (!workspaceId.value) throw new Error('No active workspace')
@@ -196,7 +185,6 @@ export const useWorkspaceStore = defineStore(
       rename,
       remove,
       refresh,
-      reset,
       requireId,
       resumeSpend,
     }

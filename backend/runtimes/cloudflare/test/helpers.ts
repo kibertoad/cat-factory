@@ -116,7 +116,8 @@ export function makeApp(
         // (which never parks on a job — no worker test reaches these gate kinds via drive).
         let r = await c.executionService.advanceInstance(workspaceId, e.id)
         for (let hops = 0; hops < 500; hops++) {
-          if (r.kind === 'awaiting_job') r = await c.executionService.pollAgentJob(workspaceId, e.id)
+          if (r.kind === 'awaiting_job')
+            r = await c.executionService.pollAgentJob(workspaceId, e.id)
           else if (r.kind === 'awaiting_ci') r = await c.executionService.pollCi(workspaceId, e.id)
           else if (r.kind === 'awaiting_conflicts')
             r = await c.executionService.pollConflicts(workspaceId, e.id)

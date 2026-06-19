@@ -76,6 +76,9 @@ export const blocks = pgTable(
     description: text('description').notNull().default(''),
     pos_x: doublePrecision('pos_x').notNull().default(0),
     pos_y: doublePrecision('pos_y').notNull().default(0),
+    // Explicit, user-dragged frame size; null => the board auto-sizes from content.
+    width: doublePrecision('width'),
+    height: doublePrecision('height'),
     status: text('status').notNull(),
     progress: doublePrecision('progress').notNull().default(0),
     depends_on: text('depends_on').notNull().default('[]'),

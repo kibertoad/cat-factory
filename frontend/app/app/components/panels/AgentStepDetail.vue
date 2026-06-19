@@ -294,6 +294,16 @@ async function copyOutput() {
                   </div>
                 </dl>
 
+                <!-- container cold-boot phase: shown until the container is up and
+                     the agent starts reporting progress -->
+                <div
+                  v-if="step.startingContainer"
+                  class="mt-4 flex items-center gap-2 rounded-lg border border-sky-900/50 bg-sky-950/30 px-3 py-2 text-[12px] text-sky-300"
+                >
+                  <UIcon name="i-lucide-loader-circle" class="h-4 w-4 shrink-0 animate-spin" />
+                  <span>Spinning up container…</span>
+                </div>
+
                 <!-- live subtask breakdown -->
                 <div v-if="step.subtasks && step.subtasks.total > 0" class="mt-4">
                   <div class="text-[11px] uppercase tracking-wide text-slate-500">

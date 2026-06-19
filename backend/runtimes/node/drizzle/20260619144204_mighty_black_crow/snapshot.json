@@ -2,9 +2,7 @@
   "version": "8",
   "dialect": "postgres",
   "id": "c56232ac-9c16-4d9d-9b1f-4e1d29e5201d",
-  "prevIds": [
-    "00000000-0000-0000-0000-000000000000"
-  ],
+  "prevIds": ["00000000-0000-0000-0000-000000000000"],
   "ddl": [
     {
       "isRlsEnabled": false,
@@ -1072,10 +1070,7 @@
       "table": "workspaces"
     },
     {
-      "columns": [
-        "workspace_id",
-        "id"
-      ],
+      "columns": ["workspace_id", "id"],
       "nameExplicit": false,
       "name": "agent_runs_pkey",
       "entityType": "pks",
@@ -1083,10 +1078,7 @@
       "table": "agent_runs"
     },
     {
-      "columns": [
-        "workspace_id",
-        "id"
-      ],
+      "columns": ["workspace_id", "id"],
       "nameExplicit": false,
       "name": "blocks_pkey",
       "entityType": "pks",
@@ -1094,10 +1086,7 @@
       "table": "blocks"
     },
     {
-      "columns": [
-        "account_id",
-        "user_id"
-      ],
+      "columns": ["account_id", "user_id"],
       "nameExplicit": false,
       "name": "memberships_pkey",
       "entityType": "pks",
@@ -1105,10 +1094,7 @@
       "table": "memberships"
     },
     {
-      "columns": [
-        "workspace_id",
-        "id"
-      ],
+      "columns": ["workspace_id", "id"],
       "nameExplicit": false,
       "name": "pipelines_pkey",
       "entityType": "pks",
@@ -1116,9 +1102,7 @@
       "table": "pipelines"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "accounts_pkey",
       "schema": "public",
@@ -1126,9 +1110,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "token_usage_pkey",
       "schema": "public",
@@ -1136,9 +1118,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "workspaces_pkey",
       "schema": "public",

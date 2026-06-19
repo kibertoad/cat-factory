@@ -68,7 +68,25 @@ export function executionController(): Hono<AppEnv> {
     const observability = c.get('container').llmObservability
     const exported = observability
       ? await observability.exportForExecution(param(c, 'workspaceId'), executionId)
-      : { kind: 'cat-factory.llm-metrics-export' as const, version: 1 as const, executionId, generatedAt: 0, totals: { calls: 0, promptTokens: 0, completionTokens: 0, upstreamMs: 0, overheadMs: 0, transportOverheadRatio: null, errors: 0, warnings: 0, truncatedCalls: 0 }, insights: [], calls: [] }
+      : {
+          kind: 'cat-factory.llm-metrics-export' as const,
+          version: 1 as const,
+          executionId,
+          generatedAt: 0,
+          totals: {
+            calls: 0,
+            promptTokens: 0,
+            completionTokens: 0,
+            upstreamMs: 0,
+            overheadMs: 0,
+            transportOverheadRatio: null,
+            errors: 0,
+            warnings: 0,
+            truncatedCalls: 0,
+          },
+          insights: [],
+          calls: [],
+        }
     c.header('content-disposition', `attachment; filename="llm-metrics-${executionId}.json"`)
     return c.json(exported)
   })

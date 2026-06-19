@@ -1,8 +1,8 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "29bd704e-f04f-44cb-bdf5-97411e6d6a3e",
-  "prevIds": ["c56232ac-9c16-4d9d-9b1f-4e1d29e5201d"],
+  "id": "e3a81806-1853-4437-b26e-2cdf30bba817",
+  "prevIds": ["29bd704e-f04f-44cb-bdf5-97411e6d6a3e"],
   "ddl": [
     {
       "isRlsEnabled": false,
@@ -360,6 +360,32 @@
       "generated": null,
       "identity": null,
       "name": "pos_y",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "blocks"
+    },
+    {
+      "type": "double precision",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "width",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "blocks"
+    },
+    {
+      "type": "double precision",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "height",
       "entityType": "columns",
       "schema": "public",
       "table": "blocks"

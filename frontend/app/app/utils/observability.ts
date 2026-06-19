@@ -31,7 +31,9 @@ export function pct(ratio: number): number {
  * closest call consumed (0..1), or null when the ceiling is unknown. 1 (or any
  * truncated call) means a call hit the limit and was cut short.
  */
-export function headroomRatio(m: Pick<StepMetrics, 'peakCompletionTokens' | 'maxOutputTokens'>): number | null {
+export function headroomRatio(
+  m: Pick<StepMetrics, 'peakCompletionTokens' | 'maxOutputTokens'>,
+): number | null {
   if (m.maxOutputTokens == null || m.maxOutputTokens <= 0) return null
   return Math.min(1, m.peakCompletionTokens / m.maxOutputTokens)
 }

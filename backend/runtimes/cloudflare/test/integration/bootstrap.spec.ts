@@ -152,6 +152,11 @@ describe('bootstrap repo', () => {
     expect(fetched.body.repoUrl).toBe('https://github.com/acme/new-service')
     expect(fetched.body.repoOwner).toBe('acme')
 
+    // Success kicks off the blueprint-only mapping run against the new frame; drive
+    // it to completion (the durable runner's job in production) so the mapping-only
+    // run settles the frame back to a ready service.
+    await app.drive(workspaceId)
+
     // The repo is linked to the frame, and the frame becomes a ready service.
     expect(bootstrapper.links).toHaveLength(1)
     expect(bootstrapper.links[0]!.blockId).toBe(job.body.blockId)
@@ -251,6 +256,9 @@ describe('bootstrap repo', () => {
     await app.driveBootstrap(workspaceId, retry.body.run.id)
     const done = await app.call<BootstrapJob>('GET', `${base}/jobs/${retry.body.run.id}`)
     expect(done.body.status).toBe('succeeded')
+    // Success kicks off the blueprint-only mapping run; drive it so the mapping-only
+    // run settles the frame back to a ready service.
+    await app.drive(workspaceId)
     snap = await app.call<WorkspaceSnapshot>('GET', `/workspaces/${workspaceId}`)
     frame = snap.body.blocks.find((b: Block) => b.id === job.body.blockId)
     expect(frame!.status).toBe('ready')

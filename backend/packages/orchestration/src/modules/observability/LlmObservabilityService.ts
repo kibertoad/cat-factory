@@ -76,7 +76,11 @@ export class LlmObservabilityService {
   private readonly idGenerator: IdGenerator
   private readonly clock: Clock
 
-  constructor({ llmCallMetricRepository, idGenerator, clock }: LlmObservabilityServiceDependencies) {
+  constructor({
+    llmCallMetricRepository,
+    idGenerator,
+    clock,
+  }: LlmObservabilityServiceDependencies) {
     this.repository = llmCallMetricRepository
     this.idGenerator = idGenerator
     this.clock = clock
@@ -110,10 +114,7 @@ export class LlmObservabilityService {
   }
 
   /** Per-agent-kind aggregates for a run, for the board step rollups. */
-  summarizeByExecution(
-    workspaceId: string,
-    executionId: string,
-  ): Promise<LlmCallMetricSummary[]> {
+  summarizeByExecution(workspaceId: string, executionId: string): Promise<LlmCallMetricSummary[]> {
     return this.repository.summarizeByExecution(workspaceId, executionId)
   }
 
