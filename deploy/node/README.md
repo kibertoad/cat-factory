@@ -74,6 +74,7 @@ docker build -f deploy/node/Dockerfile -t cat-factory-node .
 docker run --rm -p 8787:8787 --env-file deploy/node/.env cat-factory-node
 ```
 
-It is a two-stage build: stage one installs the workspace, runs `pnpm build`, and uses
-`pnpm deploy --prod` to emit a self-contained app with only this package and its
-production dependencies; stage two is a slim runtime that runs `src/main.ts` directly.
+It installs the workspace, runs `pnpm build`, then re-resolves to **production-only**
+dependencies in place (`pnpm install --prod`, dropping dev tooling) and prunes the
+store — no `pnpm deploy`/`--legacy`. The slim runtime then runs `src/main.ts` directly
+via Node's type stripping.

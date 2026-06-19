@@ -105,10 +105,10 @@ facade so the runtimes can't drift (see "Cross-runtime conformance" below).
   (`[vars]`, the GHCR runner `image`, `migrations_dir` →
   `node_modules/@cat-factory/worker/migrations`).
 - `deploy/node` — example **Node.js service** deployment: a one-line `src/main.ts`
-  calling `@cat-factory/node-server`'s `start()`, a `Dockerfile` (two-stage; builds
-  from the repo root, `pnpm deploy --prod --legacy` → slim runtime), and an
-  `.env.example`. Env-driven (`DATABASE_URL` required); the scripts load `.env` via
-  Node's native `--env-file-if-exists`, and the entry runs via Node 24/26 **type
+  calling `@cat-factory/node-server`'s `start()`, a `Dockerfile` (builds from the repo
+  root, then `pnpm install --prod` prunes to runtime deps — no `pnpm deploy`/`--legacy`),
+  and an `.env.example`. Env-driven (`DATABASE_URL` required); the scripts load `.env`
+  via Node's native `--env-file-if-exists`, and the entry runs via Node 24/26 **type
   stripping** (no build step for this package).
 - `deploy/frontend` — example Pages deployment: a thin Nuxt app that `extends` the
   `@cat-factory/app` layer + the Pages `wrangler.toml`. `NUXT_PUBLIC_API_BASE` is
