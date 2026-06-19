@@ -1,26 +1,56 @@
-import { bigint, doublePrecision, integer, pgTable, primaryKey, text } from 'drizzle-orm/pg-core'
+import { sql } from 'drizzle-orm'
+import {
+  bigint,
+  doublePrecision,
+  index,
+  integer,
+  pgTable,
+  primaryKey,
+  text,
+  uniqueIndex,
+} from 'drizzle-orm/pg-core'
 
 // Postgres schema mirroring the Cloudflare D1 tables column-for-column (snake_case
 // field names = column names) so the shared row<->domain mappers in
 // @cat-factory/server work unchanged against either store. JSON-shaped columns are
 // `text` (the mappers (de)serialise them), and epoch-ms / GitHub-id columns are
-// `bigint({ mode: 'number' })` so they read back as JS numbers.
+// `bigint({ mode: 'number' })` so they read back as JS numbers. The indexes mirror
+// the D1 migrations 1:1 so query plans (and the unique personal-account constraint)
+// match across stores.
 
-export const workspaces = pgTable('workspaces', {
-  id: text('id').primaryKey(),
-  name: text('name').notNull(),
-  created_at: bigint('created_at', { mode: 'number' }).notNull(),
-  account_id: text('account_id'),
-  owner_user_id: bigint('owner_user_id', { mode: 'number' }),
-})
+export const workspaces = pgTable(
+  'workspaces',
+  {
+    id: text('id').primaryKey(),
+    name: text('name').notNull(),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+    account_id: text('account_id'),
+    owner_user_id: bigint('owner_user_id', { mode: 'number' }),
+  },
+  // listVisible filters by owner_user_id (legacy) and account_id (membership scope).
+  (t) => [
+    index('idx_workspaces_owner').on(t.owner_user_id),
+    index('idx_workspaces_account').on(t.account_id),
+  ],
+)
 
-export const accounts = pgTable('accounts', {
-  id: text('id').primaryKey(),
-  type: text('type').notNull(),
-  name: text('name').notNull(),
-  github_account_login: text('github_account_login'),
-  created_at: bigint('created_at', { mode: 'number' }).notNull(),
-})
+export const accounts = pgTable(
+  'accounts',
+  {
+    id: text('id').primaryKey(),
+    type: text('type').notNull(),
+    name: text('name').notNull(),
+    github_account_login: text('github_account_login'),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+  },
+  // Enforce one personal account per GitHub login (a correctness constraint, not just
+  // a lookup index) — the partial unique index `findPersonalByLogin` relies on.
+  (t) => [
+    uniqueIndex('idx_accounts_personal')
+      .on(t.github_account_login)
+      .where(sql`type = 'personal'`),
+  ],
+)
 
 export const memberships = pgTable(
   'memberships',
@@ -30,7 +60,10 @@ export const memberships = pgTable(
     role: text('role').notNull().default('member'),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
   },
-  (t) => [primaryKey({ columns: [t.account_id, t.user_id] })],
+  (t) => [
+    primaryKey({ columns: [t.account_id, t.user_id] }),
+    index('idx_memberships_user').on(t.user_id),
+  ],
 )
 
 export const blocks = pgTable(
@@ -58,7 +91,10 @@ export const blocks = pgTable(
     merge_preset_id: text('merge_preset_id'),
     pipeline_id: text('pipeline_id'),
   },
-  (t) => [primaryKey({ columns: [t.workspace_id, t.id] })],
+  (t) => [
+    primaryKey({ columns: [t.workspace_id, t.id] }),
+    index('idx_blocks_parent').on(t.workspace_id, t.parent_id),
+  ],
 )
 
 export const pipelines = pgTable(
@@ -89,18 +125,28 @@ export const agentRuns = pgTable(
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
     updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
   },
-  (t) => [primaryKey({ columns: [t.workspace_id, t.id] })],
+  (t) => [
+    primaryKey({ columns: [t.workspace_id, t.id] }),
+    // listByWorkspace filters by workspace_id and orders by created_at.
+    index('idx_agent_runs_workspace').on(t.workspace_id, t.created_at),
+    index('idx_agent_runs_status_lease').on(t.status, t.updated_at),
+    index('idx_agent_runs_block').on(t.workspace_id, t.block_id),
+  ],
 )
 
-export const tokenUsage = pgTable('token_usage', {
-  id: text('id').primaryKey(),
-  workspace_id: text('workspace_id').notNull(),
-  execution_id: text('execution_id'),
-  agent_kind: text('agent_kind').notNull(),
-  provider: text('provider').notNull(),
-  model: text('model').notNull(),
-  input_tokens: integer('input_tokens').notNull().default(0),
-  output_tokens: integer('output_tokens').notNull().default(0),
-  cost_estimate: doublePrecision('cost_estimate').notNull().default(0),
-  created_at: bigint('created_at', { mode: 'number' }).notNull(),
-})
+export const tokenUsage = pgTable(
+  'token_usage',
+  {
+    id: text('id').primaryKey(),
+    workspace_id: text('workspace_id').notNull(),
+    execution_id: text('execution_id'),
+    agent_kind: text('agent_kind').notNull(),
+    provider: text('provider').notNull(),
+    model: text('model').notNull(),
+    input_tokens: integer('input_tokens').notNull().default(0),
+    output_tokens: integer('output_tokens').notNull().default(0),
+    cost_estimate: doublePrecision('cost_estimate').notNull().default(0),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+  },
+  (t) => [index('idx_token_usage_created').on(t.created_at)],
+)

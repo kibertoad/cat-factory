@@ -27,11 +27,16 @@ interface AdvanceJob {
  * `expireInSeconds` MUST exceed the longest a single advance can run (a drive can poll
  * a container job for `jobMaxPolls * jobPollInterval`, well past pg-boss's 15s default);
  * otherwise pg-boss would expire a healthy long-running drive, free its singletonKey,
- * and let a second driver start. `retryLimit`/`retryBackoff` make pg-boss itself
- * re-drive a job that throws or expires (a crashed worker), the durable backstop.
+ * and let a second driver start. `heartbeatSeconds` is the separate, fast crash-recovery
+ * lever: a live worker auto-heartbeats its active job, so a crashed worker is detected
+ * (and its job retried) within `heartbeatSeconds` rather than waiting out the large
+ * `expireInSeconds` cap. `retryLimit`/`retryBackoff` make pg-boss itself re-drive a job
+ * that throws, expires, or misses its heartbeat (a crashed worker) — the durable backstop.
+ * See `executionRuntime` for how both are sized.
  */
 export interface AdvanceQueueOptions {
   expireInSeconds: number
+  heartbeatSeconds: number
   retryLimit: number
   retryDelaySeconds: number
 }
@@ -40,6 +45,7 @@ function sendOptions(executionId: string, opts: AdvanceQueueOptions): SendOption
   return {
     singletonKey: executionId,
     expireInSeconds: opts.expireInSeconds,
+    heartbeatSeconds: opts.heartbeatSeconds,
     retryLimit: opts.retryLimit,
     retryDelay: opts.retryDelaySeconds,
     retryBackoff: true,
@@ -81,28 +87,50 @@ export class PgBossWorkRunner implements WorkRunner {
   }
 }
 
-/** Create the execution queue and start the worker that drives runs. */
+/**
+ * Create the execution queue and start the worker that drives runs.
+ *
+ * `concurrency` (pg-boss `localConcurrency`) spawns that many INDEPENDENT workers for
+ * the queue on this node: each polls, fetches one job (`batchSize` stays 1) and acks /
+ * retries it on its own, so up to `concurrency` runs drive in parallel. This is the key
+ * to throughput — a single drive parks for the whole of a step's poll budget (sleeping
+ * between polls), so without parallel workers one slow run would block every other run
+ * behind it. We deliberately keep `batchSize: 1` rather than raising it: a batch handler
+ * completes/fails all its jobs together, which would couple unrelated runs' retries;
+ * independent workers keep per-run retry semantics intact. `singletonKey` still prevents
+ * the SAME run being driven by two workers at once. Scale `concurrency` with the DB pool
+ * (each active drive borrows a connection only for its brief reads/writes between sleeps).
+ */
 export async function startExecutionWorker(
   boss: PgBoss,
   container: ServerContainer,
   cfg: DriveConfig,
   log: Logger,
+  concurrency = 10,
 ): Promise<void> {
   await boss.createQueue(QUEUE)
-  await boss.work<AdvanceJob>(QUEUE, async (jobs: Job<AdvanceJob>[]) => {
-    for (const job of jobs) {
-      const { workspaceId, executionId } = job.data
-      try {
-        await driveExecution(container.executionService, workspaceId, executionId, cfg, log)
-      } catch (error) {
-        log.error(
-          { workspaceId, executionId, err: error instanceof Error ? error.message : String(error) },
-          'execution driver failed',
-        )
-        throw error
+  await boss.work<AdvanceJob>(
+    QUEUE,
+    { localConcurrency: Math.max(1, concurrency) },
+    async (jobs: Job<AdvanceJob>[]) => {
+      for (const job of jobs) {
+        const { workspaceId, executionId } = job.data
+        try {
+          await driveExecution(container.executionService, workspaceId, executionId, cfg, log)
+        } catch (error) {
+          log.error(
+            {
+              workspaceId,
+              executionId,
+              err: error instanceof Error ? error.message : String(error),
+            },
+            'execution driver failed',
+          )
+          throw error
+        }
       }
-    }
-  })
+    },
+  )
 }
 
 /** How often the stale-run sweeper runs, and how stale a `running` run must be to re-drive. */

@@ -75,7 +75,9 @@ class HttpLlmUpstream implements LlmUpstream {
     if (!entry) return null
     const apiKey = this.env[entry.keyEnv]
     if (!apiKey) return null
-    return { baseURL: this.env[entry.baseUrlEnv] ?? entry.baseUrl, apiKey }
+    // `||` not `??`: a set-but-blank base-URL env must fall back to the default, not
+    // collapse to an empty URL the SDK then chokes on.
+    return { baseURL: this.env[entry.baseUrlEnv] || entry.baseUrl, apiKey }
   }
 
   runInProcess(): Promise<Response> | null {

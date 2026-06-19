@@ -18,19 +18,21 @@ import {
 // Cloudflare REST resolver when CLOUDFLARE_ACCOUNT_ID + CLOUDFLARE_API_TOKEN are set.
 
 export function createNodeModelProvider(env: NodeJS.ProcessEnv): ModelProvider {
+  // `||` not `??` on the base URLs: a set-but-blank env var must fall back to the
+  // vendor default rather than collapse to an empty URL.
   const registry: ProviderRegistry = baseProviderRegistry({
     openaiApiKey: env.OPENAI_API_KEY,
-    openaiBaseURL: env.OPENAI_BASE_URL ?? OPENAI_BASE_URL,
+    openaiBaseURL: env.OPENAI_BASE_URL || OPENAI_BASE_URL,
     anthropicApiKey: env.ANTHROPIC_API_KEY,
     openAiCompatible: {
       qwen: env.QWEN_API_KEY
-        ? { apiKey: env.QWEN_API_KEY, baseURL: env.QWEN_BASE_URL ?? QWEN_BASE_URL }
+        ? { apiKey: env.QWEN_API_KEY, baseURL: env.QWEN_BASE_URL || QWEN_BASE_URL }
         : undefined,
       deepseek: env.DEEPSEEK_API_KEY
-        ? { apiKey: env.DEEPSEEK_API_KEY, baseURL: env.DEEPSEEK_BASE_URL ?? DEEPSEEK_BASE_URL }
+        ? { apiKey: env.DEEPSEEK_API_KEY, baseURL: env.DEEPSEEK_BASE_URL || DEEPSEEK_BASE_URL }
         : undefined,
       moonshot: env.MOONSHOT_API_KEY
-        ? { apiKey: env.MOONSHOT_API_KEY, baseURL: env.MOONSHOT_BASE_URL ?? MOONSHOT_BASE_URL }
+        ? { apiKey: env.MOONSHOT_API_KEY, baseURL: env.MOONSHOT_BASE_URL || MOONSHOT_BASE_URL }
         : undefined,
     },
     cloudflareRest:

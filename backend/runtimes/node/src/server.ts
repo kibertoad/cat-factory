@@ -47,7 +47,14 @@ export function createApp(
   return app
 }
 
-/** Build the app from container options (convenience; no durable execution worker). */
+/**
+ * Build the app from container options (convenience, e.g. embedding / tests).
+ *
+ * WARNING: unless a started `boss` is passed in `options`, the container wires the
+ * engine's NoopWorkRunner — a started execution then returns `running` but is never
+ * driven to completion. Use {@link start} for a fully-wired service (durable pg-boss
+ * worker + stale-run sweeper); pass `boss` here only if you drive runs yourself.
+ */
 export function createServer(options: CreateServerOptions): Hono<AppEnv> {
   return createApp(buildNodeContainer(options), options.env)
 }
@@ -66,7 +73,7 @@ export async function start(
     throw new Error('DATABASE_URL is required to start the Node server')
   }
   const { db, pool } = createDbClient(databaseUrl)
-  await migrate(db)
+  await migrate(db, pool)
 
   const boss = new PgBoss(databaseUrl)
   await boss.start()
@@ -74,7 +81,7 @@ export async function start(
   const container = buildNodeContainer({ db, boss, env })
 
   const runtime = executionRuntime(container.config, env)
-  await startExecutionWorker(boss, container, runtime.drive, logger)
+  await startExecutionWorker(boss, container, runtime.drive, logger, runtime.concurrency)
   const stopSweeper = startStaleRunSweeper(boss, container, runtime.sweeper, runtime.queue, logger)
 
   const app = createApp(container, env)

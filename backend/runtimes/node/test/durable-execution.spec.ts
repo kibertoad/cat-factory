@@ -30,7 +30,7 @@ describe.skipIf(!databaseUrl)('node durable execution (pg-boss)', () => {
     const client = createDbClient(databaseUrl!)
     db = client.db
     pool = client.pool
-    await migrate(db)
+    await migrate(db, pool)
 
     boss = new PgBoss(databaseUrl!)
     await boss.start()

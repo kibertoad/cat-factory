@@ -41,9 +41,9 @@ export async function driveExecution(
     label: string,
   ): Promise<AdvanceResult | null> => {
     let readFailures = 0
-    let result: AdvanceResult = { kind: awaiting } as AdvanceResult
     for (let p = 0; p < maxPolls; p++) {
       await sleep(intervalMs)
+      let result: AdvanceResult
       try {
         result = await poll()
       } catch {

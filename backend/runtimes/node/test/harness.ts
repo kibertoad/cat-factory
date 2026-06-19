@@ -33,8 +33,8 @@ export async function setupTestDb(): Promise<DrizzleDb> {
   if (!url) {
     throw new Error('DATABASE_URL is required to run the Node conformance/integration tests')
   }
-  const { db } = createDbClient(url)
-  await migrate(db)
+  const { db, pool } = createDbClient(url)
+  await migrate(db, pool)
   return db
 }
 
@@ -74,6 +74,11 @@ export function makeConformanceApp(db: DrizzleDb, agentOptions?: FakeAgentOption
   async function drive(workspaceId: string, maxRounds = 50): Promise<ExecutionInstance[]> {
     for (let round = 0; round < maxRounds; round++) {
       const { executions } = await container.workspaceService.snapshot(workspaceId)
+      // The suite also advances `paused` (spend-gated) runs so a spend pause→resume is
+      // exercised deterministically. Production diverges intentionally: `driveExecution`
+      // parks on `paused` and the stale-run sweeper only re-drives `running`, so a real
+      // spend-paused run resumes on an explicit signal, not automatically — that resume
+      // path is out of the cross-runtime conformance suite's scope (see drive.ts).
       const active = executions.filter((e) => e.status === 'running' || e.status === 'paused')
       if (active.length === 0) break
       for (const e of active) await container.executionService.advanceInstance(workspaceId, e.id)
