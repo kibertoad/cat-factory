@@ -48,7 +48,7 @@ afterEach(async () => {
 describe('prompt versioning', () => {
   it('resolves built-in prompts to id@vN with their text', () => {
     const r = resolvePromptVariant(defaultVariant('build'))
-    expect(r.label).toBe('build@v1')
+    expect(r.label).toBe('build@v2')
     expect(r.system).toContain('senior engineer')
   })
 

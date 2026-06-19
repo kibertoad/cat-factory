@@ -43,7 +43,7 @@ export {
   isBusinessLogicKind,
   businessLogicSystemPrompt,
 } from './agents/business-logic-prompts.js'
-export { CI_RETRY_SANITY_CHECK } from './agents/ci-gate.js'
+export { PLATFORM_DELIVERY_CONTRACT } from './agents/ci-gate.js'
 
 // The generic AI provisioning facade: a mixable provider registry + the base,
 // runtime-neutral resolvers. Optional/heavier backends ship as their own packages

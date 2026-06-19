@@ -6,7 +6,7 @@ import HandlebarsRuntime from 'handlebars/runtime.js'
 import type { AgentKind } from '@cat-factory/kernel'
 import type { AgentRunContext } from '@cat-factory/kernel'
 import { renderTaskContext } from '@cat-factory/kernel'
-import { CI_RETRY_SANITY_CHECK } from './ci-gate.js'
+import { PLATFORM_DELIVERY_CONTRACT } from './ci-gate.js'
 import { STANDARDS_FOOTER } from './prompt-shared.js'
 import * as templateSpecs from './standard-prompt-templates.generated.js'
 
@@ -51,18 +51,16 @@ export function phaseForKind(kind: AgentKind): StandardPhase | undefined {
 // Static role + approach guidance per phase. Each closes by deferring to the
 // best-practice standards that `composeSystemPrompt` appends below it.
 
-// The build phase ships code through a pull request, so "done" means the PR's CI
-// is green — not merely that an implementation was written. The agent must keep
-// fixing and re-pushing until every required check passes, but the retry loop is
-// bounded by CI_RETRY_SANITY_CHECK so it can't spin forever on a check it cannot
-// make pass.
-const BUILD_CI_GATE = [
-  'Definition of done: this phase is NOT complete until CI on the pull request is green.',
-  '- Open or update the pull request for this work so its CI checks run.',
-  '- Wait for the checks to finish; do not mark the build done while CI is still running.',
-  '- If any required check fails, read the failure, fix the underlying cause, push the fix, and wait for CI again.',
-  '- Repeat that loop until every required check passes — never hand off or report success on a red PR.',
-  CI_RETRY_SANITY_CHECK,
+// The build phase runs in a container on a real checkout and ships its code through
+// a pull request — but the PUSH and the PR are the platform's job, not the agent's
+// (it has no push credentials). "Done" here means a complete implementation that
+// builds and passes its relevant tests locally; the platform then pushes, opens the
+// PR and drives CI (dispatching a CI-fixer if a check fails). The shared
+// PLATFORM_DELIVERY_CONTRACT spells out that boundary so the agent commits its own
+// work, never chases credentials, and bounds its effort.
+const BUILD_DELIVERY_GATE = [
+  'Definition of done: a focused, complete implementation that builds and passes its relevant tests locally.',
+  PLATFORM_DELIVERY_CONTRACT,
 ].join('\n')
 
 const SYSTEM_PROMPTS: Record<StandardPhase, string> = {
@@ -90,7 +88,7 @@ const SYSTEM_PROMPTS: Record<StandardPhase, string> = {
     '- Keep the implementation cohesive and minimal — no speculative abstraction.',
     '- Note any follow-ups or assumptions you had to make.',
     '',
-    BUILD_CI_GATE,
+    BUILD_DELIVERY_GATE,
     '',
     STANDARDS_FOOTER,
   ].join('\n'),

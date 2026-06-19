@@ -60,20 +60,28 @@ describe('standard solution-phase prompts', () => {
       }
     })
 
-    it('gates the build phase on a green PR before it is done', () => {
+    it('defines build "done" as a complete, locally-passing implementation', () => {
       const build = standardSystemPrompt('build')
-      expect(build).toMatch(/NOT complete until CI on the pull request is green/i)
-      expect(build).toMatch(/push the fix, and wait for CI again/i)
-      expect(build).toMatch(/until every required check passes/i)
+      expect(build).toMatch(/a focused, complete implementation that builds and passes/i)
+      expect(build).toMatch(/Run the project build, the linters, and the tests/i)
     })
 
-    it('bounds the build CI-retry loop so it cannot spin forever', () => {
+    it('tells the build agent the platform delivers, so it never pushes or chases credentials', () => {
       const build = standardSystemPrompt('build')
-      // The loop must terminate on an attempt / time / token budget...
-      expect(build).toMatch(/this loop MUST terminate/i)
+      // The agent commits its own work; the platform pushes + opens the PR.
+      expect(build).toMatch(/you commit, the platform delivers/i)
+      expect(build).toMatch(/Commit your changes yourself/i)
+      expect(build).toMatch(/Do NOT run `git push`/i)
+      expect(build).toMatch(/do NOT use the `gh` CLI/i)
+      // The root-cause guard: do not rabbit-hole on credentials / git remotes.
+      expect(build).toMatch(/Do NOT probe the environment for credentials/i)
+    })
+
+    it('bounds the build effort so it cannot spin forever', () => {
+      const build = standardSystemPrompt('build')
+      expect(build).toMatch(/This work MUST terminate/i)
       expect(build).toMatch(/number of attempts/i)
       expect(build).toMatch(/time or token budget/i)
-      // ...and end on a hand-off rather than endless speculative pushes.
       expect(build).toMatch(/STOP iterating/i)
       expect(build).toMatch(/hand off for human review/i)
     })

@@ -72,24 +72,25 @@ describe('acceptance-testing agent prompts', () => {
       }
     })
 
-    it('makes the runnable-tests agent wire its tests into CI before it is done', () => {
+    it('makes the runnable-tests agent wire its tests into the CI config before it is done', () => {
       const prompt = systemPromptFor('playwright')
-      expect(prompt).toMatch(/hooked into CI/i)
+      expect(prompt).toMatch(/hooked into the project CI workflow/i)
       expect(prompt).toMatch(/add or update the CI configuration if it does not yet run them/i)
     })
 
-    it('gates the runnable-tests phase on a green PR with the tests running', () => {
+    it('defines e2e "done" as tests wired into CI config and passing locally', () => {
       const prompt = systemPromptFor('playwright')
       expect(prompt).toMatch(
-        /NOT complete until these tests run in CI and CI on the pull request is green/i,
+        /the acceptance tests are written, wired into the project CI configuration, and pass when you run them locally/i,
       )
-      expect(prompt).toMatch(/push the fix, and wait for CI again/i)
-      expect(prompt).toMatch(/until every required check passes/i)
+      // The agent edits CI config but never pushes or runs CI itself.
+      expect(prompt).toMatch(/running CI is not — the platform does that/i)
+      expect(prompt).toMatch(/Do NOT run `git push`/i)
     })
 
-    it('bounds the e2e CI-retry loop so building it out cannot spin forever', () => {
+    it('bounds the e2e effort so building it out cannot spin forever', () => {
       const prompt = systemPromptFor('playwright')
-      expect(prompt).toMatch(/this loop MUST terminate/i)
+      expect(prompt).toMatch(/This work MUST terminate/i)
       expect(prompt).toMatch(/number of attempts/i)
       expect(prompt).toMatch(/time or token budget/i)
       expect(prompt).toMatch(/STOP iterating/i)

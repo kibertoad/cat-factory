@@ -1,6 +1,6 @@
 import type { AgentKind, BlockType, TestTarget } from '@cat-factory/kernel'
 import type { AgentRunContext } from '@cat-factory/kernel'
-import { CI_RETRY_SANITY_CHECK } from './ci-gate.js'
+import { PLATFORM_DELIVERY_CONTRACT } from './ci-gate.js'
 import { STANDARDS_FOOTER } from './prompt-shared.js'
 
 // Built-out role prompts for the acceptance-testing agents. These two kinds turn
@@ -28,19 +28,15 @@ export type AcceptanceAgentKind = 'acceptance' | 'playwright'
 export const ACCEPTANCE_AGENT_KINDS: readonly AcceptanceAgentKind[] = ['acceptance', 'playwright']
 
 // The runnable-tests step commits tests through a pull request. Tests only earn
-// their keep once they actually run in CI, so "done" means the PR's CI executes
-// these tests AND is green — the agent first wires the suite into CI, then keeps
-// fixing and re-pushing until every required check passes. The retry loop is
-// bounded by CI_RETRY_SANITY_CHECK so building out the e2e suite can't spin
-// forever on a check it cannot make pass.
-const PLAYWRIGHT_CI_GATE = [
-  'Definition of done: this phase is NOT complete until these tests run in CI and CI on the pull request is green.',
-  '- First make sure the tests are hooked into CI: confirm the project workflow actually executes this suite on the pull request, and add or update the CI configuration if it does not yet run them.',
-  '- Open or update the pull request so its CI checks — including the newly added tests — run.',
-  '- Wait for the checks to finish; do not mark the testing phase done while CI is still running.',
-  '- If any required check fails (including a test you just added), read the failure, fix the underlying cause, push the fix, and wait for CI again.',
-  '- Repeat that loop until every required check passes — never hand off or report success while the tests are not running in CI, or while the PR is red.',
-  CI_RETRY_SANITY_CHECK,
+// their keep once they actually run in CI, so "done" means the suite is wired into
+// the project's CI configuration AND passes locally. The agent does NOT push or wait
+// on CI itself (it has no push credentials) — the platform pushes, opens the PR and
+// drives CI per the shared PLATFORM_DELIVERY_CONTRACT; the agent's job is to author
+// the tests and hook them into the CI config.
+const PLAYWRIGHT_DELIVERY_GATE = [
+  'Definition of done: the acceptance tests are written, wired into the project CI configuration, and pass when you run them locally.',
+  '- Make sure the suite is actually hooked into the project CI workflow: confirm the workflow executes this suite on a pull request, and add or update the CI configuration if it does not yet run them. (Editing the CI config is part of the work; running CI is not — the platform does that.)',
+  PLATFORM_DELIVERY_CONTRACT,
 ].join('\n')
 
 const SYSTEM_PROMPTS: Record<AcceptanceAgentKind, string> = {
@@ -75,7 +71,7 @@ const SYSTEM_PROMPTS: Record<AcceptanceAgentKind, string> = {
     '- Reach the system under test at the URL / entry point from the run context; read any access credentials from the harness, never hard-code secrets.',
     '- Output the test files to commit, each in the conventional test directory for its tool (e.g. the e2e/Playwright directory for UI tests), ready to run in CI.',
     '',
-    PLAYWRIGHT_CI_GATE,
+    PLAYWRIGHT_DELIVERY_GATE,
     '',
     STANDARDS_FOOTER,
   ].join('\n'),
