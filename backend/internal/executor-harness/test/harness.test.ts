@@ -5,7 +5,14 @@ import { join } from 'node:path'
 import { promisify } from 'node:util'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { parseBootstrapJob, parseConflictResolverJob, parseJob } from '../src/job.js'
-import { parsePiOutput, parseTodoProgress, summarizePiRun } from '../src/pi.js'
+import {
+  DEFAULT_PROGRESS_GUARD_LIMITS,
+  ProgressGuard,
+  parsePiOutput,
+  parseTodoProgress,
+  progressGuardLimitsFromEnv,
+  summarizePiRun,
+} from '../src/pi.js'
 import {
   authenticatedCloneUrl,
   branchHasChanges,
@@ -531,5 +538,69 @@ describe('parseTodoProgress', () => {
         message: { role: 'toolResult', toolName: 'todo', details: {} },
       }),
     ).toBeUndefined()
+  })
+})
+
+describe('ProgressGuard (anti-rabbithole)', () => {
+  const toolCall = (toolName: string, isError = false) => ({
+    type: 'tool_execution_end',
+    toolName,
+    isError,
+  })
+
+  it('aborts a run that makes many tool calls without ever editing a file', () => {
+    const limits: ProgressGuardLimits = { maxToolCallsWithoutEdit: 5, maxConsecutiveErrors: 99 }
+    const guard = new ProgressGuard(limits)
+    let reason: string | null = null
+    for (let i = 0; i < 5; i++) reason = guard.observe(toolCall('bash'))
+    expect(reason).toMatch(/no progress/i)
+    expect(reason).toMatch(/not one file edit/i)
+  })
+
+  it('does not abort when the agent edits files (resets the no-edit risk)', () => {
+    const limits: ProgressGuardLimits = { maxToolCallsWithoutEdit: 5, maxConsecutiveErrors: 99 }
+    const guard = new ProgressGuard(limits)
+    const seq = ['bash', 'read', 'edit', 'bash', 'read', 'bash', 'write', 'bash']
+    let reason: string | null = null
+    for (const t of seq) reason = guard.observe(toolCall(t))
+    expect(reason).toBeNull()
+  })
+
+  it('skips the no-edit bound for assess-only runs (expectsEdits=false)', () => {
+    const limits: ProgressGuardLimits = { maxToolCallsWithoutEdit: 3, maxConsecutiveErrors: 99 }
+    const guard = new ProgressGuard(limits, false)
+    let reason: string | null = null
+    for (let i = 0; i < 10; i++) reason = guard.observe(toolCall('bash'))
+    expect(reason).toBeNull()
+  })
+
+  it('aborts after too many consecutive failing tool calls', () => {
+    const limits: ProgressGuardLimits = { maxToolCallsWithoutEdit: 999, maxConsecutiveErrors: 3 }
+    const guard = new ProgressGuard(limits)
+    expect(guard.observe(toolCall('bash', true))).toBeNull()
+    expect(guard.observe(toolCall('bash', false))).toBeNull() // resets the streak
+    expect(guard.observe(toolCall('bash', true))).toBeNull()
+    expect(guard.observe(toolCall('bash', true))).toBeNull()
+    expect(guard.observe(toolCall('bash', true))).toMatch(/consecutive failing tool calls/i)
+  })
+
+  it('ignores non-tool events', () => {
+    const guard = new ProgressGuard({ maxToolCallsWithoutEdit: 1, maxConsecutiveErrors: 1 })
+    expect(guard.observe({ type: 'message_end', message: { role: 'assistant' } })).toBeNull()
+    expect(guard.observe({ type: 'agent_end', messages: [] })).toBeNull()
+  })
+
+  it('reads limits from the environment, falling back to defaults', () => {
+    expect(progressGuardLimitsFromEnv({})).toEqual(DEFAULT_PROGRESS_GUARD_LIMITS)
+    expect(
+      progressGuardLimitsFromEnv({
+        JOB_MAX_TOOLCALLS_WITHOUT_EDIT: '7',
+        JOB_MAX_CONSECUTIVE_TOOL_ERRORS: '4',
+      }),
+    ).toEqual({ maxToolCallsWithoutEdit: 7, maxConsecutiveErrors: 4 })
+    // Garbage values fall back rather than disabling the guard.
+    expect(progressGuardLimitsFromEnv({ JOB_MAX_TOOLCALLS_WITHOUT_EDIT: '-3' })).toEqual(
+      DEFAULT_PROGRESS_GUARD_LIMITS,
+    )
   })
 })

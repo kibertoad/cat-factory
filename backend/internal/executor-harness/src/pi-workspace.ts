@@ -46,6 +46,12 @@ export interface AgentRunSpec {
   model: string
   proxyBaseUrl: string
   sessionToken: string
+  /**
+   * Whether this run is expected to edit files. Defaults to true; set false for
+   * assess-only runs (the merger) so the no-progress guard's no-edit bound — which
+   * would otherwise fire on a run that correctly makes zero edits — is skipped.
+   */
+  expectsEdits?: boolean
 }
 
 /**
@@ -68,6 +74,7 @@ export async function runAgentInWorkspace(
     signal,
     onActivity,
     onProgress,
+    expectsEdits: spec.expectsEdits ?? true,
   })
 }
 
