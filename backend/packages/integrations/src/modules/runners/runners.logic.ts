@@ -1,5 +1,5 @@
 import type { RunnerJobState, RunnerPoolManifest } from '@cat-factory/kernel'
-import { assertSafeEnvironmentUrl } from '../environments/environments.logic'
+import { assertSafeEnvironmentUrl } from '../environments/environments.logic.js'
 
 // Pure helpers for the self-hosted runner-pool integration. The generic URL
 // validation, `{{var}}` interpolation and dot-path extraction live in the

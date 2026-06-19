@@ -1,4 +1,4 @@
-import type { EnvironmentStatus } from '../domain/types'
+import type { EnvironmentStatus } from '../domain/types.js'
 
 // Persistence ports for the ephemeral-environment integration. The worker
 // implements these against D1 (migration 0008); tests can supply in-memory

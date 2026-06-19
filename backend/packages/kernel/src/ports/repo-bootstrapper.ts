@@ -1,4 +1,4 @@
-import type { BootstrapFailureKind, StepSubtasks } from '../domain/types'
+import type { BootstrapFailureKind, StepSubtasks } from '../domain/types.js'
 
 // RepoBootstrapper port: performs the side-effecting half of a "bootstrap repo"
 // run — pre-flight the pre-created target repo, then run a bootstrapper agent in a

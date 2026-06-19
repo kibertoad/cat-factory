@@ -1,4 +1,4 @@
-import type { DocumentSourceKind, DocumentSourceDescriptor } from '../domain/types'
+import type { DocumentSourceKind, DocumentSourceDescriptor } from '../domain/types.js'
 
 // Port for a single document source (Confluence, Notion, …). A provider is the
 // only place that knows a source's specifics: how to validate its credentials,

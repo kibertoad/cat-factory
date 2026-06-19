@@ -1,0 +1,502 @@
+import type {
+  AccountRecord,
+  AccountRepository,
+  AgentFailure,
+  AgentRunKind,
+  AgentRunRef,
+  AgentRunRepository,
+  Block,
+  BlockPatch,
+  BlockRepository,
+  Clock,
+  ExecutionInstance,
+  ExecutionRepository,
+  Membership,
+  MembershipRepository,
+  Pipeline,
+  PipelineRepository,
+  RunRef,
+  TokenUsageRecord,
+  TokenUsageRepository,
+  TokenUsageTotals,
+  Workspace,
+  WorkspaceRepository,
+  WorkspaceVisibility,
+} from '@cat-factory/kernel'
+import {
+  type ExecutionRow,
+  blockInsertValues,
+  blockPatchToColumns,
+  rowToBlock,
+  rowToExecution,
+  rowToPipeline,
+  rowToWorkspace,
+} from '@cat-factory/server'
+import { and, desc, eq, gte, inArray, isNull, lt, or, sql } from 'drizzle-orm'
+import type { DrizzleDb } from '../db/client.js'
+import {
+  accounts,
+  agentRuns,
+  blocks,
+  memberships,
+  pipelines,
+  tokenUsage,
+  workspaces,
+} from '../db/schema.js'
+
+// Drizzle/Postgres implementations of the core kernel repository ports. The
+// row<->domain mapping is the SAME shared mapping the Cloudflare D1 repos use
+// (@cat-factory/server), so behaviour matches across stores; this layer only owns
+// the Drizzle queries. This is the single persistence used in dev, test and prod.
+
+class DrizzleWorkspaceRepository implements WorkspaceRepository {
+  constructor(private readonly db: DrizzleDb) {}
+
+  async listVisible(scope: WorkspaceVisibility): Promise<Workspace[]> {
+    if (scope === null) {
+      const rows = await this.db.select().from(workspaces).orderBy(desc(workspaces.created_at))
+      return rows.map(rowToWorkspace)
+    }
+    const legacy = and(
+      isNull(workspaces.account_id),
+      eq(workspaces.owner_user_id, scope.ownerUserId),
+    )
+    const where =
+      scope.accountIds.length > 0
+        ? or(inArray(workspaces.account_id, scope.accountIds), legacy)
+        : legacy
+    const rows = await this.db
+      .select()
+      .from(workspaces)
+      .where(where)
+      .orderBy(desc(workspaces.created_at))
+    return rows.map(rowToWorkspace)
+  }
+
+  async get(id: string): Promise<Workspace | null> {
+    const [row] = await this.db.select().from(workspaces).where(eq(workspaces.id, id))
+    return row ? rowToWorkspace(row) : null
+  }
+
+  async ownerOf(id: string): Promise<number | null | undefined> {
+    const [row] = await this.db
+      .select({ owner: workspaces.owner_user_id })
+      .from(workspaces)
+      .where(eq(workspaces.id, id))
+    return row ? row.owner : undefined
+  }
+
+  async accountOf(id: string): Promise<string | null | undefined> {
+    const [row] = await this.db
+      .select({ account: workspaces.account_id })
+      .from(workspaces)
+      .where(eq(workspaces.id, id))
+    return row ? row.account : undefined
+  }
+
+  async create(
+    workspace: Workspace,
+    ownerUserId: number | null,
+    accountId: string | null,
+  ): Promise<void> {
+    await this.db.insert(workspaces).values({
+      id: workspace.id,
+      name: workspace.name,
+      created_at: workspace.createdAt,
+      owner_user_id: ownerUserId,
+      account_id: accountId,
+    })
+  }
+
+  async rename(id: string, name: string): Promise<void> {
+    await this.db.update(workspaces).set({ name }).where(eq(workspaces.id, id))
+  }
+
+  async delete(id: string): Promise<void> {
+    await this.db.transaction(async (tx) => {
+      await tx.delete(agentRuns).where(eq(agentRuns.workspace_id, id))
+      await tx.delete(blocks).where(eq(blocks.workspace_id, id))
+      await tx.delete(pipelines).where(eq(pipelines.workspace_id, id))
+      await tx.delete(workspaces).where(eq(workspaces.id, id))
+    })
+  }
+}
+
+class DrizzleBlockRepository implements BlockRepository {
+  constructor(private readonly db: DrizzleDb) {}
+
+  async listByWorkspace(workspaceId: string): Promise<Block[]> {
+    const rows = await this.db.select().from(blocks).where(eq(blocks.workspace_id, workspaceId))
+    return rows.map(rowToBlock)
+  }
+
+  async get(workspaceId: string, id: string): Promise<Block | null> {
+    const [row] = await this.db
+      .select()
+      .from(blocks)
+      .where(and(eq(blocks.workspace_id, workspaceId), eq(blocks.id, id)))
+    return row ? rowToBlock(row) : null
+  }
+
+  async insert(workspaceId: string, block: Block): Promise<void> {
+    await this.db.insert(blocks).values({
+      workspace_id: workspaceId,
+      ...blockInsertValues(block),
+    } as typeof blocks.$inferInsert)
+  }
+
+  async update(workspaceId: string, id: string, patch: BlockPatch): Promise<void> {
+    const set = blockPatchToColumns(patch)
+    if (Object.keys(set).length === 0) return
+    await this.db
+      .update(blocks)
+      .set(set as Partial<typeof blocks.$inferInsert>)
+      .where(and(eq(blocks.workspace_id, workspaceId), eq(blocks.id, id)))
+  }
+
+  async deleteMany(workspaceId: string, ids: string[]): Promise<void> {
+    if (ids.length === 0) return
+    await this.db
+      .delete(blocks)
+      .where(and(eq(blocks.workspace_id, workspaceId), inArray(blocks.id, ids)))
+  }
+}
+
+class DrizzlePipelineRepository implements PipelineRepository {
+  constructor(private readonly db: DrizzleDb) {}
+
+  async listByWorkspace(workspaceId: string): Promise<Pipeline[]> {
+    const rows = await this.db
+      .select()
+      .from(pipelines)
+      .where(eq(pipelines.workspace_id, workspaceId))
+    return rows.map(rowToPipeline)
+  }
+
+  async get(workspaceId: string, id: string): Promise<Pipeline | null> {
+    const [row] = await this.db
+      .select()
+      .from(pipelines)
+      .where(and(eq(pipelines.workspace_id, workspaceId), eq(pipelines.id, id)))
+    return row ? rowToPipeline(row) : null
+  }
+
+  async insert(workspaceId: string, pipeline: Pipeline): Promise<void> {
+    await this.db.insert(pipelines).values({
+      workspace_id: workspaceId,
+      id: pipeline.id,
+      name: pipeline.name,
+      agent_kinds: JSON.stringify(pipeline.agentKinds),
+      gates: pipeline.gates ? JSON.stringify(pipeline.gates) : null,
+    })
+  }
+
+  async delete(workspaceId: string, id: string): Promise<void> {
+    await this.db
+      .delete(pipelines)
+      .where(and(eq(pipelines.workspace_id, workspaceId), eq(pipelines.id, id)))
+  }
+}
+
+/** Execution runs live as `kind='execution'` rows of the unified agent_runs table. */
+class DrizzleExecutionRepository implements ExecutionRepository {
+  constructor(
+    private readonly db: DrizzleDb,
+    private readonly clock: Clock,
+  ) {}
+
+  private readonly isExecution = eq(agentRuns.kind, 'execution')
+
+  async listByWorkspace(workspaceId: string): Promise<ExecutionInstance[]> {
+    const rows = await this.db
+      .select()
+      .from(agentRuns)
+      .where(and(eq(agentRuns.workspace_id, workspaceId), this.isExecution))
+      .orderBy(agentRuns.created_at)
+    return rows.map((r) => rowToExecution(r as ExecutionRow))
+  }
+
+  async get(workspaceId: string, id: string): Promise<ExecutionInstance | null> {
+    const [row] = await this.db
+      .select()
+      .from(agentRuns)
+      .where(and(eq(agentRuns.workspace_id, workspaceId), eq(agentRuns.id, id), this.isExecution))
+    return row ? rowToExecution(row as ExecutionRow) : null
+  }
+
+  async getByBlock(workspaceId: string, blockId: string): Promise<ExecutionInstance | null> {
+    const [row] = await this.db
+      .select()
+      .from(agentRuns)
+      .where(
+        and(
+          eq(agentRuns.workspace_id, workspaceId),
+          eq(agentRuns.block_id, blockId),
+          this.isExecution,
+        ),
+      )
+    return row ? rowToExecution(row as ExecutionRow) : null
+  }
+
+  async upsert(workspaceId: string, execution: ExecutionInstance): Promise<void> {
+    const now = this.clock.now()
+    const detail = JSON.stringify({
+      pipelineId: execution.pipelineId,
+      pipelineName: execution.pipelineName,
+      steps: execution.steps,
+      currentStep: execution.currentStep,
+    })
+    await this.db
+      .insert(agentRuns)
+      .values({
+        workspace_id: workspaceId,
+        id: execution.id,
+        kind: 'execution',
+        block_id: execution.blockId,
+        status: execution.status,
+        detail,
+        created_at: now,
+        updated_at: now,
+        workflow_instance_id: execution.id,
+      })
+      // error/failure/workflow_instance_id are left out of the update so they survive
+      // normal step writes (see markFailed) — mirrors the D1 repo.
+      .onConflictDoUpdate({
+        target: [agentRuns.workspace_id, agentRuns.id],
+        set: { block_id: execution.blockId, status: execution.status, detail, updated_at: now },
+      })
+  }
+
+  async deleteByBlock(workspaceId: string, blockId: string): Promise<void> {
+    await this.db
+      .delete(agentRuns)
+      .where(
+        and(
+          eq(agentRuns.workspace_id, workspaceId),
+          eq(agentRuns.block_id, blockId),
+          this.isExecution,
+        ),
+      )
+  }
+
+  async listStale(olderThanEpochMs: number): Promise<RunRef[]> {
+    const rows = await this.db
+      .select({ workspaceId: agentRuns.workspace_id, id: agentRuns.id })
+      .from(agentRuns)
+      .where(
+        and(
+          this.isExecution,
+          eq(agentRuns.status, 'running'),
+          lt(agentRuns.updated_at, olderThanEpochMs),
+        ),
+      )
+      .orderBy(agentRuns.updated_at)
+    return rows
+  }
+
+  async markFailed(workspaceId: string, id: string, failure: AgentFailure): Promise<void> {
+    await this.db
+      .update(agentRuns)
+      .set({
+        status: 'failed',
+        error: failure.message,
+        failure: JSON.stringify(failure),
+        updated_at: this.clock.now(),
+      })
+      .where(and(eq(agentRuns.workspace_id, workspaceId), eq(agentRuns.id, id), this.isExecution))
+  }
+}
+
+class DrizzleAgentRunRepository implements AgentRunRepository {
+  constructor(private readonly db: DrizzleDb) {}
+
+  async getRef(workspaceId: string, id: string): Promise<AgentRunRef | null> {
+    const [row] = await this.db
+      .select({ kind: agentRuns.kind })
+      .from(agentRuns)
+      .where(and(eq(agentRuns.workspace_id, workspaceId), eq(agentRuns.id, id)))
+    return row ? { workspaceId, id, kind: row.kind as AgentRunKind } : null
+  }
+
+  async listStale(olderThanEpochMs: number): Promise<AgentRunRef[]> {
+    const rows = await this.db
+      .select({ workspaceId: agentRuns.workspace_id, id: agentRuns.id, kind: agentRuns.kind })
+      .from(agentRuns)
+      .where(and(eq(agentRuns.status, 'running'), lt(agentRuns.updated_at, olderThanEpochMs)))
+      .orderBy(agentRuns.updated_at)
+    return rows.map((r) => ({ workspaceId: r.workspaceId, id: r.id, kind: r.kind as AgentRunKind }))
+  }
+}
+
+function rowToAccount(row: typeof accounts.$inferSelect): AccountRecord {
+  return {
+    id: row.id,
+    type: row.type === 'org' ? 'org' : 'personal',
+    name: row.name,
+    githubAccountLogin: row.github_account_login,
+    createdAt: row.created_at,
+  }
+}
+
+class DrizzleAccountRepository implements AccountRepository {
+  constructor(private readonly db: DrizzleDb) {}
+
+  async get(id: string): Promise<AccountRecord | null> {
+    const [row] = await this.db.select().from(accounts).where(eq(accounts.id, id))
+    return row ? rowToAccount(row) : null
+  }
+
+  async create(account: AccountRecord): Promise<void> {
+    await this.db.insert(accounts).values({
+      id: account.id,
+      type: account.type,
+      name: account.name,
+      github_account_login: account.githubAccountLogin,
+      created_at: account.createdAt,
+    })
+  }
+
+  async rename(id: string, name: string): Promise<void> {
+    await this.db.update(accounts).set({ name }).where(eq(accounts.id, id))
+  }
+
+  async findPersonalByLogin(login: string): Promise<AccountRecord | null> {
+    const [row] = await this.db
+      .select()
+      .from(accounts)
+      .where(and(eq(accounts.type, 'personal'), eq(accounts.github_account_login, login)))
+    return row ? rowToAccount(row) : null
+  }
+}
+
+function rowToMembership(row: typeof memberships.$inferSelect): Membership {
+  return {
+    accountId: row.account_id,
+    userId: row.user_id,
+    role: row.role === 'owner' ? 'owner' : 'member',
+    createdAt: row.created_at,
+  }
+}
+
+class DrizzleMembershipRepository implements MembershipRepository {
+  constructor(private readonly db: DrizzleDb) {}
+
+  async listByUser(userId: number): Promise<Membership[]> {
+    const rows = await this.db
+      .select()
+      .from(memberships)
+      .where(eq(memberships.user_id, userId))
+      .orderBy(memberships.created_at)
+    return rows.map(rowToMembership)
+  }
+
+  async listByAccount(accountId: string): Promise<Membership[]> {
+    const rows = await this.db
+      .select()
+      .from(memberships)
+      .where(eq(memberships.account_id, accountId))
+      .orderBy(memberships.created_at)
+    return rows.map(rowToMembership)
+  }
+
+  async get(accountId: string, userId: number): Promise<Membership | null> {
+    const [row] = await this.db
+      .select()
+      .from(memberships)
+      .where(and(eq(memberships.account_id, accountId), eq(memberships.user_id, userId)))
+    return row ? rowToMembership(row) : null
+  }
+
+  async upsert(membership: Membership): Promise<void> {
+    await this.db
+      .insert(memberships)
+      .values({
+        account_id: membership.accountId,
+        user_id: membership.userId,
+        role: membership.role,
+        created_at: membership.createdAt,
+      })
+      .onConflictDoUpdate({
+        target: [memberships.account_id, memberships.user_id],
+        set: { role: membership.role },
+      })
+  }
+
+  async remove(accountId: string, userId: number): Promise<void> {
+    await this.db
+      .delete(memberships)
+      .where(and(eq(memberships.account_id, accountId), eq(memberships.user_id, userId)))
+  }
+}
+
+class DrizzleTokenUsageRepository implements TokenUsageRepository {
+  constructor(private readonly db: DrizzleDb) {}
+
+  async record(usage: TokenUsageRecord): Promise<void> {
+    await this.db.insert(tokenUsage).values({
+      id: usage.id,
+      workspace_id: usage.workspaceId,
+      execution_id: usage.executionId,
+      agent_kind: usage.agentKind,
+      provider: usage.provider,
+      model: usage.model,
+      input_tokens: usage.inputTokens,
+      output_tokens: usage.outputTokens,
+      cost_estimate: usage.costEstimate,
+      created_at: usage.createdAt,
+    })
+  }
+
+  async totalsSince(epochMs: number): Promise<TokenUsageTotals> {
+    // sum() of int columns is bigint in Postgres — cast to bigint (NOT int4, which
+    // overflows past ~2.1B tokens) and coerce: node-postgres returns bigint as a
+    // string to avoid precision loss, and token totals stay well within Number's
+    // safe-integer range. Matches the 64-bit sum the D1/SQLite store returns.
+    const [row] = await this.db
+      .select({
+        input: sql<string>`coalesce(sum(${tokenUsage.input_tokens}), 0)::bigint`,
+        output: sql<string>`coalesce(sum(${tokenUsage.output_tokens}), 0)::bigint`,
+        cost: sql<number>`coalesce(sum(${tokenUsage.cost_estimate}), 0)::float8`,
+      })
+      .from(tokenUsage)
+      .where(gte(tokenUsage.created_at, epochMs))
+    return {
+      inputTokens: Number(row?.input ?? 0),
+      outputTokens: Number(row?.output ?? 0),
+      costEstimate: row?.cost ?? 0,
+    }
+  }
+
+  async deleteOlderThan(epochMs: number): Promise<number> {
+    const deleted = await this.db
+      .delete(tokenUsage)
+      .where(lt(tokenUsage.created_at, epochMs))
+      .returning({ id: tokenUsage.id })
+    return deleted.length
+  }
+}
+
+export interface CoreRepositories {
+  workspaceRepository: WorkspaceRepository
+  accountRepository: AccountRepository
+  membershipRepository: MembershipRepository
+  blockRepository: BlockRepository
+  pipelineRepository: PipelineRepository
+  executionRepository: ExecutionRepository
+  tokenUsageRepository: TokenUsageRepository
+  agentRunRepository: AgentRunRepository
+}
+
+/** Build the Drizzle/Postgres-backed core repositories. */
+export function createDrizzleRepositories(db: DrizzleDb, clock: Clock): CoreRepositories {
+  return {
+    workspaceRepository: new DrizzleWorkspaceRepository(db),
+    accountRepository: new DrizzleAccountRepository(db),
+    membershipRepository: new DrizzleMembershipRepository(db),
+    blockRepository: new DrizzleBlockRepository(db),
+    pipelineRepository: new DrizzlePipelineRepository(db),
+    executionRepository: new DrizzleExecutionRepository(db, clock),
+    tokenUsageRepository: new DrizzleTokenUsageRepository(db),
+    agentRunRepository: new DrizzleAgentRunRepository(db),
+  }
+}

@@ -1,4 +1,4 @@
-import { standardSystemPrompt } from './standard-prompts'
+import { standardSystemPrompt } from './standard-prompts.js'
 
 export const REVIEW_SYSTEM_PROMPT =
   'You are a meticulous product / requirements analyst reviewing the collected ' +

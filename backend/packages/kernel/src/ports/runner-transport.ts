@@ -1,4 +1,4 @@
-import type { StepSubtasks } from '../domain/types'
+import type { StepSubtasks } from '../domain/types.js'
 
 // Port for "where a repo-operating coding job actually runs". The
 // ContainerAgentExecutor dispatches each job and polls it through this transport

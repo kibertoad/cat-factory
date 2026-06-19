@@ -9,7 +9,7 @@ import type { RunnerPoolConnection, RunnerPoolManifest } from '@cat-factory/kern
 import { ConflictError, ValidationError } from '@cat-factory/kernel'
 import { requireWorkspace } from '@cat-factory/kernel'
 import type { WorkspaceRepository } from '@cat-factory/kernel'
-import { assertManifestUrlsSafe, referencedSecretKeys } from './runners.logic'
+import { assertManifestUrlsSafe, referencedSecretKeys } from './runners.logic.js'
 
 // RunnerPoolConnectionService: owns the binding between a workspace and a
 // self-hosted runner pool. Registration stores the validated manifest and an

@@ -1,4 +1,4 @@
-import type { AgentRunKind } from '../domain/types'
+import type { AgentRunKind } from '../domain/types.js'
 
 /**
  * A lightweight, kind-tagged reference to an entry in the unified `agent_runs`

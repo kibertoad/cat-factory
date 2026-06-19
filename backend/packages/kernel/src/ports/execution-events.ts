@@ -1,4 +1,4 @@
-import type { Block, BootstrapJob, ExecutionInstance, Notification } from '../domain/types'
+import type { Block, BootstrapJob, ExecutionInstance, Notification } from '../domain/types.js'
 
 // Port for pushing state changes to connected clients in real time, instead of
 // the browser polling for them. The execution engine calls this whenever it

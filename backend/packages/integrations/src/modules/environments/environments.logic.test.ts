@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { ValidationError } from '@cat-factory/kernel'
 import { assertSafeAtlassianBaseUrl } from '@cat-factory/kernel'
-import { assertSafeEnvironmentUrl } from './environments.logic'
+import { assertSafeEnvironmentUrl } from './environments.logic.js'
 
 // SSRF host-classification regression tests (Finding #6b). The guards must block
 // the obfuscated loopback/link-local/RFC1918 encodings that bypass a naive

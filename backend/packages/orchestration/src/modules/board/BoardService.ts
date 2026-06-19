@@ -17,7 +17,7 @@ import type {
 } from '@cat-factory/kernel'
 import type { IdGenerator } from '@cat-factory/kernel'
 import { requireWorkspace } from '@cat-factory/kernel'
-import { canReparent, descendantIds, gridSlot, serviceOf, tasksOf } from './board.logic'
+import { canReparent, descendantIds, gridSlot, serviceOf, tasksOf } from './board.logic.js'
 
 export interface BoardServiceDependencies {
   workspaceRepository: WorkspaceRepository

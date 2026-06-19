@@ -1,4 +1,4 @@
-import type { Notification, NotificationType } from '../domain/types'
+import type { Notification, NotificationType } from '../domain/types.js'
 
 // Persistence port for notifications (the canonical store behind the in-app
 // inbox). The worker implements it against D1; tests supply an in-memory fake.

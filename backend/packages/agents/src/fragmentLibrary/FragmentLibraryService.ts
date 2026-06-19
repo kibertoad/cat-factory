@@ -16,14 +16,14 @@ import type {
 } from '@cat-factory/kernel'
 import type { PromptFragmentRecord, PromptFragmentRepository } from '@cat-factory/kernel'
 import type { WorkspaceRepository } from '@cat-factory/kernel'
-import { DeterministicFragmentSelector } from './DeterministicFragmentSelector'
+import { DeterministicFragmentSelector } from './DeterministicFragmentSelector.js'
 import {
   type ResolvedCatalogEntry,
   entryToFragment,
   mergeCatalog,
   toSelectable,
-} from './fragment-catalog'
-import { slugFromPath } from './fragment-source.logic'
+} from './fragment-catalog.js'
+import { slugFromPath } from './fragment-source.logic.js'
 
 export interface FragmentLibraryServiceDependencies {
   promptFragmentRepository: PromptFragmentRepository

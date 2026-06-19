@@ -5,10 +5,12 @@
 # changesets setup spanning FE + BE.
 packages:
   - 'backend/packages/*'
+  - 'backend/runtimes/*'
   - 'backend/internal/*'
   - 'frontend/app'
   - 'deploy/backend'
   - 'deploy/frontend'
+  - 'deploy/node'
 allowBuilds:
   '@parcel/watcher': true
   esbuild: true

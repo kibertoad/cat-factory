@@ -1,4 +1,4 @@
-import type { BlueprintService, BlueprintSource } from '../domain/types'
+import type { BlueprintService, BlueprintSource } from '../domain/types.js'
 
 // Persistence port for the board-scan feature. The worker implements it against
 // D1 (migration 0011); tests supply an in-memory fake. Rows are scoped by

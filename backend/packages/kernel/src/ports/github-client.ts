@@ -8,7 +8,7 @@ import type {
   GitHubRepo,
   MergePullRequestInput,
   OpenPullRequestInput,
-} from '../domain/types'
+} from '../domain/types.js'
 
 // ---------------------------------------------------------------------------
 // GitHubClient port: the narrow slice of the GitHub REST API the integration

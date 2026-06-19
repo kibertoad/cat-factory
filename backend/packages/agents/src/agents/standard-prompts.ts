@@ -1,10 +1,16 @@
-import Handlebars from 'handlebars/runtime'
+// Runtime VALUE from the codegen-free runtime build (Workers forbid runtime code
+// generation); its Node-ESM specifier needs the explicit `.js`. The TYPE is sourced
+// from the full package (the runtime subpath's types omit `create`), type-only so the
+// compiler is not pulled into the bundle.
+import HandlebarsRuntime from 'handlebars/runtime.js'
 import type { AgentKind } from '@cat-factory/kernel'
 import type { AgentRunContext } from '@cat-factory/kernel'
 import { renderTaskContext } from '@cat-factory/kernel'
-import { CI_RETRY_SANITY_CHECK } from './ci-gate'
-import { STANDARDS_FOOTER } from './prompt-shared'
-import * as templateSpecs from './standard-prompt-templates.generated'
+import { CI_RETRY_SANITY_CHECK } from './ci-gate.js'
+import { STANDARDS_FOOTER } from './prompt-shared.js'
+import * as templateSpecs from './standard-prompt-templates.generated.js'
+
+const Handlebars = HandlebarsRuntime as unknown as typeof import('handlebars')
 
 // Standard, built-out prompts for the four core phases of delivering a solution:
 // designing, building, reviewing and testing. Each phase has a rich, structured

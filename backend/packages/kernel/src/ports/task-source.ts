@@ -1,4 +1,4 @@
-import type { TaskSourceKind, TaskSourceDescriptor, TaskComment } from '../domain/types'
+import type { TaskSourceKind, TaskSourceDescriptor, TaskComment } from '../domain/types.js'
 
 // Port for a single task source (Jira, …). A provider is the only place that
 // knows a source's specifics: how to validate its credentials, how to turn user

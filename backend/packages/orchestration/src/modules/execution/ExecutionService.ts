@@ -29,8 +29,8 @@ import {
   describeFailingChecks,
   isCiGreen,
   MERGER_AGENT_KIND,
-} from './ci.logic'
-import type { NotificationService } from '../notifications/NotificationService'
+} from './ci.logic.js'
+import type { NotificationService } from '../notifications/NotificationService.js'
 import type {
   BlockRepository,
   ExecutionRepository,
@@ -47,13 +47,13 @@ import type { TaskRepository } from '@cat-factory/kernel'
 import type { FragmentResolver } from '@cat-factory/kernel'
 import type { EnvironmentProvisioningService } from '@cat-factory/integrations'
 import { isDeployStep } from '@cat-factory/integrations'
-import { descendantIds, serviceOf } from '../board/board.logic'
-import type { BoardService } from '../board/BoardService'
+import { descendantIds, serviceOf } from '../board/board.logic.js'
+import type { BoardService } from '../board/BoardService.js'
 import type { SpendService } from '@cat-factory/spend'
 import { requireWorkspace } from '@cat-factory/kernel'
-import type { AdvanceOptions, AdvanceResult } from './advance'
-import { planResumedSteps } from './retry.logic'
-import { isContainerEvictionError, MAX_EVICTION_RECOVERIES } from './job.logic'
+import type { AdvanceOptions, AdvanceResult } from './advance.js'
+import { planResumedSteps } from './retry.logic.js'
+import { isContainerEvictionError, MAX_EVICTION_RECOVERIES } from './job.logic.js'
 
 /**
  * "What to do next" guidance per failure kind a pipeline run can produce, shown
@@ -1477,6 +1477,33 @@ export class ExecutionService {
     await this.workRunner.signalDecision(workspaceId, instance.id, decisionId, choice)
     await this.emitInstance(workspaceId, instance)
     return instance
+  }
+
+  /**
+   * Expire a decision no human resolved within the timeout. Safe + idempotent: a no-op
+   * unless the run is still parked (`blocked`) on EXACTLY this decision/approval id, so a
+   * decision already resolved (the run advanced past it) or an already-terminal run is left
+   * untouched. The Node durable driver schedules this `decisionTimeout` after parking on a
+   * decision; the Cloudflare driver instead relies on `waitForEvent`'s own timeout firing
+   * its failRun. Keeping the check here (not in the runtime) means both facades reason about
+   * decision state identically.
+   */
+  async expireDecision(
+    workspaceId: string,
+    executionId: string,
+    decisionId: string,
+  ): Promise<void> {
+    const instance = await this.executionRepository.get(workspaceId, executionId)
+    if (!instance || instance.status !== 'blocked') return
+    const step = instance.steps[instance.currentStep]
+    const pendingId = step?.decision?.id ?? step?.approval?.id
+    if (step?.state !== 'waiting_decision' || pendingId !== decisionId) return
+    await this.failRun(
+      workspaceId,
+      executionId,
+      'Decision timed out awaiting a human response',
+      'decision_timeout',
+    )
   }
 
   /**

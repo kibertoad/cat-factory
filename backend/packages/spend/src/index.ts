@@ -1,6 +1,10 @@
 // Pricing tables and spend metering/gating for @cat-factory.
 
-export { SpendService, type SpendServiceDependencies, type RecordUsageInput } from './SpendService'
+export {
+  SpendService,
+  type SpendServiceDependencies,
+  type RecordUsageInput,
+} from './SpendService.js'
 export {
   type ModelPrice,
   type SpendPricing,
@@ -10,4 +14,4 @@ export {
   priceFor,
   estimateCost,
   startOfMonthUtc,
-} from './pricing'
+} from './pricing.js'

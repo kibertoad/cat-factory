@@ -1,5 +1,5 @@
 import * as v from 'valibot'
-import { credentialFieldSchema } from './documents'
+import { credentialFieldSchema } from './documents.js'
 
 // ---------------------------------------------------------------------------
 // Task-source integration wire contracts. A workspace can connect to one or

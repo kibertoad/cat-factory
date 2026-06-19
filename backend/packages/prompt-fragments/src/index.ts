@@ -1,7 +1,7 @@
 import type { PromptFragment } from '@cat-factory/contracts'
-import { acceptanceFragments } from './collections/acceptance'
-import { nodeFragments } from './collections/node'
-import { reactFragments } from './collections/react'
+import { acceptanceFragments } from './collections/acceptance.js'
+import { nodeFragments } from './collections/node.js'
+import { reactFragments } from './collections/react.js'
 
 // Source of truth for the best-practice prompt fragment catalog. Collections are
 // authored per topic (one module each) and merged here into a single registry.

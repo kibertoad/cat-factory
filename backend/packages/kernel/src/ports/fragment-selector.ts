@@ -1,4 +1,4 @@
-import type { AgentKind, BlockType } from '../domain/types'
+import type { AgentKind, BlockType } from '../domain/types.js'
 
 // ---------------------------------------------------------------------------
 // Relevance-selection ports for the prompt-fragment library (ADR 0006 §5).

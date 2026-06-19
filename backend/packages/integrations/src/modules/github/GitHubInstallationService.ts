@@ -95,7 +95,11 @@ export class GitHubInstallationService {
       deletedAt: null,
     }
     await this.deps.githubInstallationRepository.upsert(installation)
-    return toConnection(installation, this.canCreate(installation), await this.canWorkflows(installation))
+    return toConnection(
+      installation,
+      this.canCreate(installation),
+      await this.canWorkflows(installation),
+    )
   }
 
   /** Whether the privileged App tier can create repos for this installation (ADR 0005). */
@@ -170,7 +174,11 @@ export class GitHubInstallationService {
   async getConnection(workspaceId: string): Promise<GitHubConnection | null> {
     const installation = await this.deps.githubInstallationRepository.getByWorkspace(workspaceId)
     if (!installation || installation.deletedAt) return null
-    return toConnection(installation, this.canCreate(installation), await this.canWorkflows(installation))
+    return toConnection(
+      installation,
+      this.canCreate(installation),
+      await this.canWorkflows(installation),
+    )
   }
 
   /** Resolve the live installation for a workspace, or throw if not connected. */

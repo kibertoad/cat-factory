@@ -6,7 +6,7 @@ import type {
   PullRequestRef,
   StepSubtasks,
   TestTarget,
-} from '../domain/types'
+} from '../domain/types.js'
 
 // Port for "an agent doing its work". The execution engine calls this to perform
 // each pipeline step. An agent either produces a work product or asks for a

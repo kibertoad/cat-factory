@@ -1,5 +1,5 @@
 import * as v from 'valibot'
-import { agentKindSchema, blockTypeSchema, positionSchema, testTargetSchema } from './primitives'
+import { agentKindSchema, blockTypeSchema, positionSchema, testTargetSchema } from './primitives.js'
 
 // Request body schemas. The Hono facade validates inbound JSON against these via
 // @hono/valibot-validator; the frontend API client can import the inferred input

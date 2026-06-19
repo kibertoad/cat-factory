@@ -1,0 +1,43 @@
+{
+  "name": "@cat-factory/server",
+  "version": "1.0.0",
+  "description": "Runtime-neutral HTTP layer for the Agent Architecture Board: the Hono controllers, middleware (auth/authz/CORS/error), request helpers and the gateway seams shared by every deployment facade (Cloudflare Worker, Node service).",
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsgo -b tsconfig.build.json",
+    "typecheck": "tsgo -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:run": "vitest run"
+  },
+  "dependencies": {
+    "@cat-factory/agents": "workspace:*",
+    "@cat-factory/contracts": "workspace:*",
+    "@cat-factory/kernel": "workspace:*",
+    "@cat-factory/orchestration": "workspace:*",
+    "@cat-factory/prompt-fragments": "workspace:*",
+    "@cat-factory/spend": "workspace:*",
+    "@hono/valibot-validator": "^0.5.2",
+    "hono": "^4.6.0",
+    "pino": "^9.5.0",
+    "valibot": "^1.0.0"
+  },
+  "devDependencies": {
+    "@typescript/native-preview": "7.0.0-dev.20260616.1",
+    "vitest": "^4.1.8"
+  }
+}

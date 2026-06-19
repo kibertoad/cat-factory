@@ -19,7 +19,7 @@ import {
   toCommitProjection,
   toIssueProjection,
   toPullRequestProjection,
-} from './projection.logic'
+} from './projection.logic.js'
 
 // ---------------------------------------------------------------------------
 // WebhookService: the *push* side of resync. A verified GitHub webhook delivery

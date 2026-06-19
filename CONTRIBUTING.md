@@ -3,9 +3,9 @@
 ## Repository shape
 
 This is a single pnpm workspace (one lockfile), with packages sorted by
-visibility: published **libraries** (`backend/packages/*` + `frontend/app`),
-**private** packages (`backend/internal/*`), and example **deployments**
-(`deploy/*`):
+visibility: published **libraries** (`backend/packages/*` + `frontend/app`), the
+**runtime facades** (one per deployment target, `backend/runtimes/*`), **private**
+packages (`backend/internal/*`), and example **deployments** (`deploy/*`):
 
 | Path                                 | Package                          | Published?                      |
 | ------------------------------------ | -------------------------------- | ------------------------------- |
@@ -15,13 +15,18 @@ visibility: published **libraries** (`backend/packages/*` + `frontend/app`),
 | `backend/packages/orchestration`     | `@cat-factory/orchestration`     | npm                             |
 | `backend/packages/integrations`      | `@cat-factory/integrations`      | npm                             |
 | `backend/packages/agents`            | `@cat-factory/agents`            | npm                             |
+| `backend/packages/provider-bedrock`  | `@cat-factory/provider-bedrock`  | npm                             |
 | `backend/packages/spend`             | `@cat-factory/spend`             | npm                             |
 | `backend/packages/workspaces`        | `@cat-factory/workspaces`        | npm                             |
-| `backend/packages/worker`            | `@cat-factory/worker`            | npm (Worker library)            |
+| `backend/packages/server`            | `@cat-factory/server`            | npm (shared HTTP layer)         |
+| `backend/runtimes/cloudflare`        | `@cat-factory/worker`            | npm (Cloudflare Worker facade)  |
+| `backend/runtimes/node`              | `@cat-factory/node-server`       | npm (Node.js service facade)    |
 | `frontend/app`                       | `@cat-factory/app`               | npm (Nuxt layer)                |
 | `backend/internal/executor-harness`  | `@cat-factory/executor-harness`  | GHCR image (versioned, not npm) |
 | `backend/internal/benchmark-harness` | `@cat-factory/benchmark-harness` | no (internal)                   |
+| `backend/internal/conformance`       | `@cat-factory/conformance`       | no (internal test suite)        |
 | `deploy/backend`                     | `@cat-factory/deploy-backend`    | no (example deployment)         |
+| `deploy/node`                        | `@cat-factory/deploy-node`       | no (example deployment)         |
 | `deploy/frontend`                    | `@cat-factory/deploy-frontend`   | no (example deployment)         |
 
 The `deploy/*` packages depend on the libraries via `workspace:*` in this repo;
@@ -37,6 +42,7 @@ pnpm typecheck          # typecheck every package
 pnpm test               # run the unit/integration suites
 pnpm lint               # oxlint + oxfmt (repo-wide)
 pnpm dev:backend        # run the worker locally (deploy/backend)
+pnpm dev:node           # run the Node.js service locally (deploy/node; needs DATABASE_URL)
 pnpm dev:frontend       # run the SPA locally (deploy/frontend)
 ```
 

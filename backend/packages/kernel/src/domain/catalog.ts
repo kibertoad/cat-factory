@@ -1,4 +1,4 @@
-import type { BlockType } from './types'
+import type { BlockType } from './types.js'
 
 // Static catalogs and constants used across the domain.
 

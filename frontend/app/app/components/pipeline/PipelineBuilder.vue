@@ -117,11 +117,7 @@ async function save() {
                 <!-- Approval gate: pause after this step so a human reviews (and
                      can edit) its proposal before the next step runs. -->
                 <UButton
-                  :icon="
-                    pipelines.draftGates[i]
-                      ? 'i-lucide-shield-check'
-                      : 'i-lucide-shield'
-                  "
+                  :icon="pipelines.draftGates[i] ? 'i-lucide-shield-check' : 'i-lucide-shield'"
                   :color="pipelines.draftGates[i] ? 'warning' : 'neutral'"
                   variant="ghost"
                   size="xs"

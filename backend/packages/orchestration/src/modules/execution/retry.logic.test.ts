@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { AgentKind, PipelineStep } from '@cat-factory/kernel'
-import { planResumedSteps } from './retry.logic'
+import { planResumedSteps } from './retry.logic.js'
 
 const step = (
   agentKind: AgentKind,

@@ -67,7 +67,7 @@ Two ideas anchor the model:
 ┌──────────────┐   WebSocket events    ┌───────────────────────────┐
 │  Nuxt SPA    │ ◀──── push, not ────  │  Cloudflare Worker        │
 │ (frontend/app)│      polling         │  Hono controllers + D1    │
-│  Vue Flow    │ ───── REST ─────────▶ │  (backend/packages/worker)│
+│  Vue Flow    │ ───── REST ─────────▶ │  (runtimes/cloudflare)    │
 └──────────────┘                       └────────────┬──────────────┘
                                                      │ ports (DI)
                                           ┌──────────▼──────────┐
@@ -88,6 +88,12 @@ persisted transition is **pushed** to the browser through a per-workspace Durabl
 Object. The same shape is reused by execution, bootstrap and blueprints. The
 end-to-end flows are written up in [`CLAUDE.md`](./CLAUDE.md).
 
+The domain + the HTTP layer are **runtime-neutral**, so the same backend serves two
+deployment targets: the Cloudflare Worker above and a **Node.js service**
+(`backend/runtimes/node`, Postgres via Drizzle + pg-boss for durable jobs). Each
+facade supplies only its differentiators; a shared conformance suite runs the same
+assertions against both to keep them from drifting.
+
 ## Repository layout
 
 One pnpm workspace, split into reusable **libraries** (published to npm + a GHCR
@@ -97,18 +103,26 @@ deploy both halves on their end.
 
 **Libraries** (published):
 
-| Path                                                                       | Package                         | Role                                                                                                                                                                                                          |
-| -------------------------------------------------------------------------- | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`frontend/app`](./frontend/app)                                           | `@cat-factory/app`              | Reusable **Nuxt layer** (`ssr: false`) — the board UI, Pinia stores, composables, the WebSocket stream. Consumed via `extends`.                                                                               |
-| [`backend/packages/contracts`](./backend/packages/contracts)               | `@cat-factory/contracts`        | Valibot wire contracts shared by SPA + Worker.                                                                                                                                                                |
-| [`backend/packages/kernel`](./backend/packages/kernel)                     | `@cat-factory/kernel`           | Shared vocabulary: domain types, pure logic + constants, and **all** repository/port interfaces.                                                                                                              |
-| [`backend/packages/orchestration`](./backend/packages/orchestration)       | `@cat-factory/orchestration`    | The delivery-workflow engine + domain **composition root** (`createCore()`): module services for execution, bootstrap, pipelines, board, requirements, merge, …                                               |
-| [`backend/packages/integrations`](./backend/packages/integrations)         | `@cat-factory/integrations`     | Opt-in integration services (GitHub, documents, tasks, environments, runner pools) behind kernel ports.                                                                                                       |
-| [`backend/packages/agents`](./backend/packages/agents)                     | `@cat-factory/agents`           | Agent catalog + prompt composition (`systemPromptFor`/`userPromptFor`, the per-kind roles, prompt-version registry).                                                                                          |
-| [`backend/packages/spend`](./backend/packages/spend)                       | `@cat-factory/spend`            | The spend safeguard: pricing tables + spend metering/gating.                                                                                                                                                   |
-| [`backend/packages/workspaces`](./backend/packages/workspaces)             | `@cat-factory/workspaces`       | Workspace + account services.                                                                                                                                                                                 |
-| [`backend/packages/worker`](./backend/packages/worker)                     | `@cat-factory/worker`           | Reusable Cloudflare Worker **library**: Hono controllers, D1 repos, Durable Objects, Workflows, the DI composition root. Exposes `createApp()` + the handler/DO/Workflow exports; ships the D1 `migrations/`. |
-| [`backend/packages/prompt-fragments`](./backend/packages/prompt-fragments) | `@cat-factory/prompt-fragments` | The built-in tier of best-practice prompt fragments. See [its README](./backend/packages/prompt-fragments/README.md).                                                                                         |
+| Path                                                                       | Package                         | Role                                                                                                                                                                                                              |
+| -------------------------------------------------------------------------- | ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`frontend/app`](./frontend/app)                                           | `@cat-factory/app`              | Reusable **Nuxt layer** (`ssr: false`) — the board UI, Pinia stores, composables, the WebSocket stream. Consumed via `extends`.                                                                                   |
+| [`backend/packages/contracts`](./backend/packages/contracts)               | `@cat-factory/contracts`        | Valibot wire contracts shared by SPA + the backends.                                                                                                                                                              |
+| [`backend/packages/kernel`](./backend/packages/kernel)                     | `@cat-factory/kernel`           | Shared vocabulary: domain types, pure logic + constants, and **all** repository/port interfaces.                                                                                                                  |
+| [`backend/packages/orchestration`](./backend/packages/orchestration)       | `@cat-factory/orchestration`    | The delivery-workflow engine + domain **composition root** (`createCore()`): module services for execution, bootstrap, pipelines, board, requirements, merge, …                                                   |
+| [`backend/packages/integrations`](./backend/packages/integrations)         | `@cat-factory/integrations`     | Opt-in integration services (GitHub, documents, tasks, environments, runner pools) behind kernel ports.                                                                                                           |
+| [`backend/packages/agents`](./backend/packages/agents)                     | `@cat-factory/agents`           | Agent catalog + prompt composition (`systemPromptFor`/`userPromptFor`, the per-kind roles, prompt-version registry) **and the AI provisioning facade** (`CompositeModelProvider` + the neutral resolvers).        |
+| [`backend/packages/provider-bedrock`](./backend/packages/provider-bedrock) | `@cat-factory/provider-bedrock` | Opt-in AWS Bedrock model resolver (`@ai-sdk/amazon-bedrock`) with a supported-model allow-list; mixed into a facade's registry when configured.                                                                   |
+| [`backend/packages/spend`](./backend/packages/spend)                       | `@cat-factory/spend`            | The spend safeguard: pricing tables + spend metering/gating.                                                                                                                                                      |
+| [`backend/packages/workspaces`](./backend/packages/workspaces)             | `@cat-factory/workspaces`       | Workspace + account services.                                                                                                                                                                                     |
+| [`backend/packages/server`](./backend/packages/server)                     | `@cat-factory/server`           | Runtime-neutral **HTTP layer** shared by every facade: all Hono controllers, middleware (auth/authz/CORS/error), request helpers, the gateway seams, the `AppConfig` contract, and the shared row↔domain mappers. |
+| [`backend/packages/prompt-fragments`](./backend/packages/prompt-fragments) | `@cat-factory/prompt-fragments` | The built-in tier of best-practice prompt fragments. See [its README](./backend/packages/prompt-fragments/README.md).                                                                                             |
+
+**Runtime facades** (one per deployment target; serve the same `@cat-factory/server` app):
+
+| Path                                                           | Package                    | Role                                                                                                                                                                                                                 |
+| -------------------------------------------------------------- | -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`backend/runtimes/cloudflare`](./backend/runtimes/cloudflare) | `@cat-factory/worker`      | Cloudflare Worker facade: D1 repos, Durable Objects, Workflows, per-run Containers, queues/cron, the CF gateway impls. Thin `createApp()`/`buildContainer()` over `@cat-factory/server`; ships the D1 `migrations/`. |
+| [`backend/runtimes/node`](./backend/runtimes/node)             | `@cat-factory/node-server` | Node.js service facade: serves the shared app via `@hono/node-server` with Drizzle/Postgres repos + pg-boss durable execution. `start()` / `createServer()`; `DATABASE_URL` selects the database.                    |
 
 **Internal** (private; not published to npm):
 
@@ -116,13 +130,15 @@ deploy both halves on their end.
 | ---------------------------------------------------------------------------- | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [`backend/internal/executor-harness`](./backend/internal/executor-harness)   | `@cat-factory/executor-harness`  | The payload that runs **inside** each per-run container (the Pi coding-agent harness). Published as a **Docker image to GHCR** (not npm). See [its README](./backend/internal/executor-harness/README.md). |
 | [`backend/internal/benchmark-harness`](./backend/internal/benchmark-harness) | `@cat-factory/benchmark-harness` | Headless agent benchmarking (`cat-bench`); internal. See [its README](./backend/internal/benchmark-harness/README.md).                                                                                     |
+| [`backend/internal/conformance`](./backend/internal/conformance)             | `@cat-factory/conformance`       | Cross-runtime conformance suite + the canonical deterministic `FakeAgentExecutor`; run by both runtime facades' test suites to mandate feature parity.                                                     |
 
 **Deployments** (examples; copy these to deploy on your own infra):
 
-| Path                                   | Package                        | Role                                                                                                                                            |
-| -------------------------------------- | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`deploy/backend`](./deploy/backend)   | `@cat-factory/deploy-backend`  | Worker deployment: re-exports `@cat-factory/worker` + the production `wrangler.toml`. See [its README](./deploy/backend/README.md).             |
-| [`deploy/frontend`](./deploy/frontend) | `@cat-factory/deploy-frontend` | Pages deployment: a thin Nuxt app that `extends` `@cat-factory/app` + the Pages `wrangler.toml`. See [its README](./deploy/frontend/README.md). |
+| Path                                   | Package                        | Role                                                                                                                                                                             |
+| -------------------------------------- | ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`deploy/backend`](./deploy/backend)   | `@cat-factory/deploy-backend`  | Cloudflare Worker deployment: re-exports `@cat-factory/worker` + the production `wrangler.toml`. See [its README](./deploy/backend/README.md).                                   |
+| [`deploy/node`](./deploy/node)         | `@cat-factory/deploy-node`     | Node.js service deployment: calls `@cat-factory/node-server`'s `start()` (Postgres + pg-boss); ships a `Dockerfile` + `.env.example`. See [its README](./deploy/node/README.md). |
+| [`deploy/frontend`](./deploy/frontend) | `@cat-factory/deploy-frontend` | Pages deployment: a thin Nuxt app that `extends` `@cat-factory/app` + the Pages `wrangler.toml`. See [its README](./deploy/frontend/README.md).                                  |
 
 In this repo the deployments depend on the libraries via `workspace:*`; in your
 own copy you swap that for the published npm version. The backend is a hexagonal
@@ -209,9 +225,11 @@ Each capability has a deeper write-up; start here and follow the link.
 ## Deployment
 
 The two halves are deployed from the example packages under `deploy/`. Each
-carries its own `wrangler.toml`: the backend Worker in
+carries its own config: the backend Worker in
 [`deploy/backend/`](./deploy/backend/wrangler.toml) and the frontend Pages
-project in [`deploy/frontend/`](./deploy/frontend/wrangler.toml). To deploy on
+project in [`deploy/frontend/`](./deploy/frontend/wrangler.toml). The backend can
+**alternatively** run as a long-running Node.js service (Postgres + pg-boss) from
+[`deploy/node/`](./deploy/node) — same HTTP API, different runtime. To deploy on
 **your own** infrastructure, copy those directories and swap the `workspace:*`
 dependency for the published npm version — see each package's README. The
 reference deployment below runs on Cloudflare under the `iselwin@gmail.com`
@@ -252,6 +270,27 @@ Worker prints its `*.workers.dev` URL; production traffic reaches it through the
 dashboard, not in `wrangler.toml`). First-time setup (auth, provider, GitHub-App
 and container secrets) is in [`backend/README.md`](./backend/README.md#deploying)
 — **auth is required or the API fails closed.**
+
+### Backend (Node.js service — alternative to the Worker)
+
+Instead of the Worker, run the same backend as a long-running Node.js service over
+**Postgres** (durable jobs on **pg-boss**). It needs only `DATABASE_URL` (the schema
+migrates on boot); all other config is environment-driven and documented in
+[`deploy/node/.env.example`](./deploy/node/.env.example).
+
+```sh
+cd deploy/node
+cp .env.example .env          # set DATABASE_URL, auth, model keys, …
+pnpm start                    # builds @cat-factory/node-server, then runs the service
+
+# or as a container (build from the repo root):
+docker build -f deploy/node/Dockerfile -t cat-factory-node .
+docker run --rm -p 8787:8787 --env-file deploy/node/.env cat-factory-node
+```
+
+Requires **Node 24 or 26** (the entry runs via built-in type stripping; the scripts
+load `.env` with Node's native `--env-file`). See
+[`deploy/node/README.md`](./deploy/node/README.md).
 
 ### Frontend (Nuxt SPA → Pages)
 

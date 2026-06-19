@@ -1,4 +1,4 @@
-import type { Notification } from '../domain/types'
+import type { Notification } from '../domain/types.js'
 
 // Port for *delivering* a notification to humans. The NotificationService owns
 // the canonical persistence + lifecycle (raise / list / resolve); a channel is

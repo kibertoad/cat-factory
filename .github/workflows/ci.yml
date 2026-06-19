@@ -43,7 +43,8 @@ jobs:
               - 'backend/internal/executor-harness/**'
               - 'backend/packages/kernel/**'
               - 'backend/packages/spend/**'
-              - 'backend/packages/worker/**'
+              - 'backend/packages/server/**'
+              - 'backend/runtimes/**'
               - 'backend/tsconfig*.json'
               - 'package.json'
               - 'pnpm-lock.yaml'
@@ -114,6 +115,26 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    # Real Postgres for the Node facade's tests (the cross-runtime conformance suite +
+    # the pg-boss durable-execution test) — the same persistence used in dev/prod, so
+    # the Drizzle repos + schema are exercised for real. The Worker tests use a local
+    # D1 inside the Workers pool and ignore this.
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: cat_factory_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/cat_factory_test
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:

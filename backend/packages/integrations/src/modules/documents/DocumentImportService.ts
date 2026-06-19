@@ -5,8 +5,8 @@ import type { SourceDocument, DocumentSourceKind } from '@cat-factory/kernel'
 import { ValidationError } from '@cat-factory/kernel'
 import { requireWorkspace } from '@cat-factory/kernel'
 import type { WorkspaceRepository } from '@cat-factory/kernel'
-import type { DocumentConnectionService } from './DocumentConnectionService'
-import { buildExcerpt } from './documents.logic'
+import type { DocumentConnectionService } from './DocumentConnectionService.js'
+import { buildExcerpt } from './documents.logic.js'
 
 // DocumentImportService: fetches a page from a connected source and persists it
 // as a local document projection. The cached body backs both the planner (doc →

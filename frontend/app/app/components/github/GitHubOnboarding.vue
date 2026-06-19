@@ -13,7 +13,9 @@ const auth = useAuthStore()
 </script>
 
 <template>
-  <div class="flex h-full w-full items-center justify-center overflow-y-auto bg-slate-950 text-slate-100">
+  <div
+    class="flex h-full w-full items-center justify-center overflow-y-auto bg-slate-950 text-slate-100"
+  >
     <div
       class="my-8 w-full max-w-md rounded-xl border border-slate-800 bg-slate-900/80 p-8 backdrop-blur"
     >
@@ -21,8 +23,8 @@ const auth = useAuthStore()
         <UIcon name="i-lucide-github" class="mx-auto mb-3 h-10 w-10 text-indigo-400" />
         <h1 class="mb-1 text-lg font-semibold text-white">Connect cat-factory to GitHub</h1>
         <p class="text-sm text-slate-400">
-          cat-factory works by opening pull requests on your repositories. Install the GitHub App
-          on your account or organization to continue — you can grant it every repository or pick a
+          cat-factory works by opening pull requests on your repositories. Install the GitHub App on
+          your account or organization to continue — you can grant it every repository or pick a
           subset.
         </p>
       </div>

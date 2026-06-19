@@ -1,9 +1,9 @@
 import { generateText } from 'ai'
 import type { AgentExecutor, AgentRunContext, AgentRunResult } from '@cat-factory/kernel'
 import type { ModelProvider, ModelRef } from '@cat-factory/kernel'
-import { systemPromptFor, userPromptFor } from './agent-catalog'
-import { type AgentRouting, resolveAgentConfig } from './agent-routing'
-import { composeBlockSystemPrompt } from './prompt-fragments'
+import { systemPromptFor, userPromptFor } from './agent-catalog.js'
+import { type AgentRouting, resolveAgentConfig } from './agent-routing.js'
+import { composeBlockSystemPrompt } from './prompt-fragments.js'
 
 export interface AiAgentExecutorDependencies {
   modelProvider: ModelProvider

@@ -1,5 +1,5 @@
 import type { ModelOption } from '@cat-factory/contracts'
-import type { ModelRef } from '../ports/model-provider'
+import type { ModelRef } from '../ports/model-provider.js'
 
 // The curated catalog of LLM models a user can pick for a single block. Selection
 // persists as a stable `id` on the block (see `Block.modelId`); at run time the

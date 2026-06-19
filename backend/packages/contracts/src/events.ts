@@ -1,6 +1,6 @@
-import type { Block, ExecutionInstance } from './entities'
-import type { BootstrapJob } from './bootstrap'
-import type { Notification } from './notifications'
+import type { Block, ExecutionInstance } from './entities.js'
+import type { BootstrapJob } from './bootstrap.js'
+import type { Notification } from './notifications.js'
 
 // Real-time events pushed from the per-workspace events hub to subscribed
 // browsers over WebSocket, replacing the old `tick` polling. The shape is shared

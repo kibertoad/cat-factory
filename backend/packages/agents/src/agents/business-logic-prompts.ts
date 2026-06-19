@@ -1,6 +1,6 @@
 import type { AgentKind } from '@cat-factory/kernel'
-import { CI_RETRY_SANITY_CHECK } from './ci-gate'
-import { STANDARDS_FOOTER } from './prompt-shared'
+import { CI_RETRY_SANITY_CHECK } from './ci-gate.js'
+import { STANDARDS_FOOTER } from './prompt-shared.js'
 
 // Built-out role prompts for the business-logic / domain-rules track. Two kinds
 // keep a service's encoded business rules honest and documented:

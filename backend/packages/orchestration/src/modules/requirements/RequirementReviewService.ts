@@ -15,7 +15,7 @@ import {
   buildReviewPrompt,
   coerceReviewItems,
   extractJson,
-} from './requirements.logic'
+} from './requirements.logic.js'
 
 export interface RequirementReviewServiceDependencies {
   requirementReviewRepository: RequirementReviewRepository

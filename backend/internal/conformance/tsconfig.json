@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
+    // Runtime-neutral: the suite runs on both workerd and Node, so it relies only
+    // on Web-standard globals (Request/Response) plus the vitest test API (imported
+    // explicitly, so no ambient `types` are needed).
+    "lib": ["ES2022", "DOM", "DOM.Iterable"]
+  },
+  "include": ["src/**/*.ts"]
+}

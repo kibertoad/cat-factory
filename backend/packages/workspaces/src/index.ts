@@ -3,9 +3,9 @@
 export {
   WorkspaceService,
   type WorkspaceServiceDependencies,
-} from './modules/workspaces/WorkspaceService'
+} from './modules/workspaces/WorkspaceService.js'
 export {
   AccountService,
   type AccountServiceDependencies,
   type AccountUser,
-} from './modules/accounts/AccountService'
+} from './modules/accounts/AccountService.js'

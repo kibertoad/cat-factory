@@ -1,5 +1,5 @@
 import * as v from 'valibot'
-import { blockTypeSchema } from './primitives'
+import { blockTypeSchema } from './primitives.js'
 
 // ---------------------------------------------------------------------------
 // Board-scan wire contracts. The "scan repository" command decomposes an existing

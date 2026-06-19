@@ -5,8 +5,8 @@ import type { SourceTask, TaskSourceKind } from '@cat-factory/kernel'
 import { ValidationError } from '@cat-factory/kernel'
 import { requireWorkspace } from '@cat-factory/kernel'
 import type { WorkspaceRepository } from '@cat-factory/kernel'
-import type { TaskConnectionService } from './TaskConnectionService'
-import { buildTaskExcerpt } from './tasks.logic'
+import type { TaskConnectionService } from './TaskConnectionService.js'
+import { buildTaskExcerpt } from './tasks.logic.js'
 
 // TaskImportService: fetches an issue from a connected source and persists it as
 // a local, structured projection. The cached record backs both the agent-context

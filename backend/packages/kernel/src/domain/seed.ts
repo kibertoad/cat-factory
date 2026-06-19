@@ -1,4 +1,4 @@
-import type { Block, Pipeline } from './types'
+import type { Block, Pipeline } from './types.js'
 
 // Sample architecture used to populate a workspace on creation. Mirrors the
 // frontend's `app/utils/seed.ts`. Block ids are stable strings; because blocks

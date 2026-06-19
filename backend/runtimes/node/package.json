@@ -1,0 +1,57 @@
+{
+  "name": "@cat-factory/node-server",
+  "version": "1.0.0",
+  "description": "Node.js runtime facade for the Agent Architecture Board: serves the shared @cat-factory/server Hono app via @hono/node-server, wiring Node implementations of the runtime ports (persistence, gateways, model provisioning).",
+  "files": [
+    "dist",
+    "drizzle"
+  ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsgo -b tsconfig.build.json",
+    "build:watch": "tsgo -b tsconfig.build.json --watch",
+    "typecheck": "tsgo -p tsconfig.json --noEmit",
+    "start": "node dist/main.js",
+    "dev": "node --watch dist/main.js",
+    "db:generate": "drizzle-kit generate",
+    "db:check": "drizzle-kit check",
+    "test": "vitest run",
+    "test:run": "vitest run"
+  },
+  "dependencies": {
+    "@cat-factory/agents": "workspace:*",
+    "@cat-factory/contracts": "workspace:*",
+    "@cat-factory/integrations": "workspace:*",
+    "@cat-factory/kernel": "workspace:*",
+    "@cat-factory/orchestration": "workspace:*",
+    "@cat-factory/prompt-fragments": "workspace:*",
+    "@cat-factory/provider-bedrock": "workspace:*",
+    "@cat-factory/server": "workspace:*",
+    "@cat-factory/spend": "workspace:*",
+    "@hono/node-server": "^1.13.0",
+    "drizzle-orm": "1.0.0-rc.3",
+    "hono": "^4.6.0",
+    "pg": "^8.13.0",
+    "pg-boss": "^12.0.0"
+  },
+  "devDependencies": {
+    "@cat-factory/conformance": "workspace:*",
+    "@types/node": "^24.0.0",
+    "@types/pg": "^8.11.0",
+    "@typescript/native-preview": "7.0.0-dev.20260616.1",
+    "drizzle-kit": "1.0.0-rc.3",
+    "vitest": "^4.1.8"
+  }
+}

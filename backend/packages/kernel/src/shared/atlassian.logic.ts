@@ -1,4 +1,4 @@
-import { ValidationError } from '../domain/errors'
+import { ValidationError } from '../domain/errors.js'
 
 // Shared, source-agnostic handling of an Atlassian Cloud site base URL, used by
 // every provider that fetches `${baseUrl}/...` with a workspace's Basic-auth

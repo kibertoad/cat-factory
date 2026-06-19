@@ -1,5 +1,5 @@
 import * as v from 'valibot'
-import { blockTypeSchema } from './primitives'
+import { blockTypeSchema } from './primitives.js'
 
 // ---------------------------------------------------------------------------
 // Document-source integration wire contracts. A workspace can connect to one or
