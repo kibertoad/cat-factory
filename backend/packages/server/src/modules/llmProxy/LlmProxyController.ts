@@ -147,7 +147,10 @@ export function llmProxyController(): Hono<AppEnv> {
           })
           // Observability must never break the proxy.
           .catch((err) =>
-            log.warn({ err: err instanceof Error ? err.message : String(err) }, 'llm proxy: failed to record metric'),
+            log.warn(
+              { err: err instanceof Error ? err.message : String(err) },
+              'llm proxy: failed to record metric',
+            ),
           ),
       )
     }

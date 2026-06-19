@@ -77,12 +77,16 @@ export class WorkspaceService {
     }
     await this.workspaceRepository.create(workspace, ownerUserId, accountId)
 
+    // The built-in pipeline catalog is product configuration, not sample data, so
+    // every board gets it — including the empty boards real users start with.
+    for (const pipeline of seedPipelines()) {
+      await this.pipelineRepository.insert(workspace.id, pipeline)
+    }
+    // The sample architecture blocks are opt-in (demo boards + the test fixtures);
+    // production boards start empty (the SPA creates with `seed: false`).
     if (input.seed ?? true) {
       for (const block of seedBlocks()) {
         await this.blockRepository.insert(workspace.id, block)
-      }
-      for (const pipeline of seedPipelines()) {
-        await this.pipelineRepository.insert(workspace.id, pipeline)
       }
     }
     return this.snapshot(workspace.id)

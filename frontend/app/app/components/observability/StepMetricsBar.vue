@@ -29,16 +29,16 @@ const headroomTone = computed(() => headroomColor(headroom.value, m.value.trunca
   <div
     v-if="m.calls > 0"
     class="rounded-lg border border-slate-800 bg-slate-900/40 p-2.5 text-[12px]"
-    :class="clickable ? 'cursor-pointer transition hover:border-slate-700 hover:bg-slate-900/70' : ''"
+    :class="
+      clickable ? 'cursor-pointer transition hover:border-slate-700 hover:bg-slate-900/70' : ''
+    "
     :role="clickable ? 'button' : undefined"
     @click="clickable ? $emit('inspect') : undefined"
   >
     <!-- header line: call count + tokens + warning/error badges -->
     <div class="flex items-center gap-2">
       <UIcon name="i-lucide-activity" class="h-3.5 w-3.5 shrink-0 text-slate-500" />
-      <span class="text-slate-300">
-        {{ m.calls }} {{ m.calls === 1 ? 'call' : 'calls' }}
-      </span>
+      <span class="text-slate-300"> {{ m.calls }} {{ m.calls === 1 ? 'call' : 'calls' }} </span>
       <span class="text-slate-500">·</span>
       <span class="tabular-nums text-slate-400" title="Prompt / completion tokens">
         {{ formatTokens(m.promptTokens) }}↑ {{ formatTokens(m.completionTokens) }}↓
@@ -50,11 +50,7 @@ const headroomTone = computed(() => headroomColor(headroom.value, m.value.trunca
         <UBadge v-if="m.warnings > 0" color="warning" variant="subtle" size="sm">
           {{ m.warnings }} warning{{ m.warnings === 1 ? '' : 's' }}
         </UBadge>
-        <UIcon
-          v-if="clickable"
-          name="i-lucide-chevron-right"
-          class="h-3.5 w-3.5 text-slate-600"
-        />
+        <UIcon v-if="clickable" name="i-lucide-chevron-right" class="h-3.5 w-3.5 text-slate-600" />
       </div>
     </div>
 
@@ -63,8 +59,8 @@ const headroomTone = computed(() => headroomColor(headroom.value, m.value.trunca
       <div class="flex items-center justify-between text-[11px]">
         <span class="text-slate-500">Output limit</span>
         <span class="tabular-nums" :class="headroomTone">
-          {{ formatTokens(m.peakCompletionTokens) }} / {{ formatTokens(m.maxOutputTokens ?? 0) }}
-          ({{ pct(headroom) }}%)
+          {{ formatTokens(m.peakCompletionTokens) }} /
+          {{ formatTokens(m.maxOutputTokens ?? 0) }} ({{ pct(headroom) }}%)
         </span>
       </div>
       <div class="mt-1 h-1 overflow-hidden rounded-full bg-slate-700/60">

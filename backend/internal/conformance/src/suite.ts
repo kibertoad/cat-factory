@@ -34,12 +34,13 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         expect(res.body.executions).toHaveLength(0)
       })
 
-      it('creates an empty board when seed=false', async () => {
+      it('creates a board with no sample blocks when seed=false (pipelines always seeded)', async () => {
         const { call } = harness.makeApp()
         const res = await call<WorkspaceSnapshot>('POST', '/workspaces', { seed: false })
 
         expect(res.body.blocks).toHaveLength(0)
-        expect(res.body.pipelines).toHaveLength(0)
+        // The pipeline catalog is product config, not sample data — always present.
+        expect(res.body.pipelines).toHaveLength(4)
       })
 
       it('lists and deletes boards', async () => {
@@ -200,6 +201,9 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         const coder = exec.steps.find((s) => s.agentKind === 'coder')!
         expect(coder.output).toContain('[coder]')
         expect(coder.model).toBe('fake')
+        // The "spinning up container" phase flag is set at dispatch and must be
+        // cleared once the container is up — a finished step never reads as booting.
+        expect(coder.startingContainer ?? false).toBe(false)
 
         const task = (
           await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)

@@ -9,16 +9,16 @@ export type LlmCallOutcome = 'ok' | 'warning' | 'error'
 
 /** Whether a finish reason is a (non-fatal) warning — output truncated or filtered. */
 export function isWarningFinishReason(finishReason: string | null): boolean {
-  return finishReason != null && (LLM_WARNING_FINISH_REASONS as readonly string[]).includes(finishReason)
+  return (
+    finishReason != null && (LLM_WARNING_FINISH_REASONS as readonly string[]).includes(finishReason)
+  )
 }
 
 /**
  * Classify a recorded call: a non-2xx/failed call is an `error`; a successful call
  * cut short by the output limit or content filter is a `warning`; otherwise `ok`.
  */
-export function classifyCall(
-  metric: Pick<LlmCallMetric, 'ok' | 'finishReason'>,
-): LlmCallOutcome {
+export function classifyCall(metric: Pick<LlmCallMetric, 'ok' | 'finishReason'>): LlmCallOutcome {
   if (!metric.ok) return 'error'
   if (isWarningFinishReason(metric.finishReason)) return 'warning'
   return 'ok'

@@ -193,6 +193,16 @@ const ITEM_ICON: Record<string, string> = {
             class="mt-3"
           />
 
+          <!-- container cold-boot phase: shown until the container is up and the
+               agent starts reporting progress -->
+          <div
+            v-if="s.startingContainer"
+            class="mt-2 flex items-center gap-1.5 text-[11px] text-sky-300"
+          >
+            <UIcon name="i-lucide-loader-circle" class="h-3.5 w-3.5 shrink-0 animate-spin" />
+            <span>Spinning up container…</span>
+          </div>
+
           <!-- live subtask counts from the agent's todo list -->
           <div v-if="s.subtasks && s.subtasks.total > 0" class="mt-2">
             <div class="flex items-center justify-between text-[10px] text-slate-400">

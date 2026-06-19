@@ -50,3 +50,15 @@ export const positionSchema = v.object({
   y: v.number(),
 })
 export type Position = v.InferOutput<typeof positionSchema>
+
+/**
+ * An explicit pixel size for a resizable block (a service frame today). Optional
+ * on a block: when absent the board auto-sizes the frame from its contents; when
+ * present it is the user's dragged size, clamped client-side to never shrink below
+ * the content's natural extent. Strictly positive.
+ */
+export const sizeSchema = v.object({
+  w: v.pipe(v.number(), v.minValue(1)),
+  h: v.pipe(v.number(), v.minValue(1)),
+})
+export type Size = v.InferOutput<typeof sizeSchema>

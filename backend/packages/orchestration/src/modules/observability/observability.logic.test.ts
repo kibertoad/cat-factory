@@ -89,9 +89,32 @@ describe('transportOverheadRatio', () => {
 describe('buildLlmMetricsExport', () => {
   it('aggregates totals + per-agent insights with derived ratios', () => {
     const calls: LlmCallMetric[] = [
-      metric({ id: 'a', agentKind: 'coder', completionTokens: 50, requestMaxTokens: 1000, upstreamMs: 100, overheadMs: 10 }),
-      metric({ id: 'b', agentKind: 'coder', completionTokens: 990, requestMaxTokens: 1000, finishReason: 'length', upstreamMs: 300, overheadMs: 30 }),
-      metric({ id: 'c', agentKind: 'reviewer', ok: false, finishReason: null, completionTokens: 0, upstreamMs: 5, overheadMs: 5 }),
+      metric({
+        id: 'a',
+        agentKind: 'coder',
+        completionTokens: 50,
+        requestMaxTokens: 1000,
+        upstreamMs: 100,
+        overheadMs: 10,
+      }),
+      metric({
+        id: 'b',
+        agentKind: 'coder',
+        completionTokens: 990,
+        requestMaxTokens: 1000,
+        finishReason: 'length',
+        upstreamMs: 300,
+        overheadMs: 30,
+      }),
+      metric({
+        id: 'c',
+        agentKind: 'reviewer',
+        ok: false,
+        finishReason: null,
+        completionTokens: 0,
+        upstreamMs: 5,
+        overheadMs: 5,
+      }),
     ]
     const out = buildLlmMetricsExport('exec-1', calls, 12345)
 

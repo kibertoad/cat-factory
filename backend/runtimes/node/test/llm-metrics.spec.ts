@@ -12,10 +12,7 @@ const databaseUrl = process.env.DATABASE_URL
 if (databaseUrl) {
   const db = await setupTestDb()
   const clock = { now: () => Date.now() }
-  defineLlmMetricsSuite(
-    'node',
-    () => createDrizzleRepositories(db, clock).llmCallMetricRepository,
-  )
+  defineLlmMetricsSuite('node', () => createDrizzleRepositories(db, clock).llmCallMetricRepository)
 } else {
   describe.skip('[node] llm metrics (set DATABASE_URL to run)', () => {
     it('requires Postgres', () => {})

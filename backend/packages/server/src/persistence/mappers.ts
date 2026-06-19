@@ -40,6 +40,8 @@ export interface BlockRow {
   description: string
   pos_x: number
   pos_y: number
+  width: number | null
+  height: number | null
   status: string
   progress: number
   depends_on: string
@@ -70,6 +72,7 @@ export function rowToBlock(row: BlockRow): Block {
     level: row.level as BlockLevel,
     parentId: row.parent_id,
   }
+  if (row.width !== null && row.height !== null) block.size = { w: row.width, h: row.height }
   if (row.confidence !== null) block.confidence = row.confidence
   if (row.module_name !== null) block.moduleName = row.module_name
   if (row.fragment_ids !== null) block.fragmentIds = JSON.parse(row.fragment_ids) as string[]
@@ -90,6 +93,8 @@ export function blockInsertValues(block: Block): Record<string, unknown> {
     description: block.description,
     pos_x: block.position.x,
     pos_y: block.position.y,
+    width: block.size?.w ?? null,
+    height: block.size?.h ?? null,
     status: block.status,
     progress: block.progress,
     depends_on: JSON.stringify(block.dependsOn),
@@ -116,6 +121,10 @@ export function blockPatchToColumns(patch: BlockPatch): Record<string, unknown> 
   if (patch.position !== undefined) {
     set.pos_x = patch.position.x
     set.pos_y = patch.position.y
+  }
+  if (patch.size !== undefined) {
+    set.width = patch.size?.w ?? null
+    set.height = patch.size?.h ?? null
   }
   if (patch.status !== undefined) set.status = patch.status
   if (patch.progress !== undefined) set.progress = patch.progress

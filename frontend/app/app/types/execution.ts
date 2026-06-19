@@ -191,6 +191,12 @@ export interface PipelineStep {
   metrics?: StepMetrics | null
   /** live "N/M done" subtask counts while an async (container) step runs */
   subtasks?: StepSubtasks
+  /**
+   * True while a container-backed step's per-run container is cold-booting (set at
+   * dispatch, cleared once the container is up). Drives the "Spinning up container…"
+   * phase indicator before any execution progress is available.
+   */
+  startingContainer?: boolean
   /** present + unresolved => the step (and block) is blocked */
   decision: Decision | null
   /** whether a human approval gate fires after this step (from the pipeline) */
