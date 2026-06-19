@@ -22,8 +22,9 @@
     "build": "tsgo -b tsconfig.build.json",
     "typecheck": "tsgo -p tsconfig.json --noEmit",
     "bundle": "esbuild src/main.ts --bundle --platform=node --format=esm --outfile=dist/main.js --banner:js=\"import{createRequire}from'module';const require=createRequire(import.meta.url);\"",
+    "bundle:watch": "pnpm bundle --watch",
     "start": "node dist/main.js",
-    "dev": "tsx watch src/main.ts"
+    "dev": "node --watch dist/main.js"
   },
   "dependencies": {
     "@cat-factory/agents": "workspace:*",
@@ -41,7 +42,6 @@
   "devDependencies": {
     "@types/node": "^22.0.0",
     "@typescript/native-preview": "7.0.0-dev.20260616.1",
-    "esbuild": "^0.25.0",
-    "tsx": "^4.19.0"
+    "esbuild": "^0.25.0"
   }
 }
