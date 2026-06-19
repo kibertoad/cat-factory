@@ -4,6 +4,7 @@
 // middleware and the Hono app factory move here in subsequent steps.
 export { logger, type Logger } from './observability/logger'
 export { type AppEnv, type ServerContainer } from './http/env'
+export { type RealtimeGateway, type RuntimeGateways } from './runtime/gateways'
 export { bearerToken, requireAuth, verifySession } from './auth/middleware'
 export { registerCoreControllers } from './app'
 export { param } from './http/params'

@@ -1,13 +1,14 @@
 import { Hono } from 'hono'
-import type { AppEnv } from '../../infrastructure/http/types'
-import { param } from '../../infrastructure/http/params'
-import { HmacSigner, TOKEN_AUDIENCE } from '../../infrastructure/auth/signing'
+import { HmacSigner, TOKEN_AUDIENCE } from '../../auth/signing'
+import type { AppEnv } from '../../http/env'
+import { param } from '../../http/params'
 
 /**
  * Real-time event stream: a WebSocket the SPA subscribes to for live
- * execution/board updates, replacing the old `tick` polling. The connection is
- * forwarded to the per-workspace WorkspaceEventsHub Durable Object, which holds
- * the socket (hibernatable) and broadcasts events the engine publishes.
+ * execution/board updates. The connection is handed to the facade's
+ * {@link RealtimeGateway} (on the Worker: the per-workspace WorkspaceEventsHub
+ * Durable Object; on Node: a WebSocket hub), which holds the socket and broadcasts
+ * events the engine publishes.
  *
  * A browser can't set `Authorization` on a WebSocket handshake, so the handshake
  * authenticates from a `?ticket=` query param. The ticket is NOT the long-lived
@@ -17,8 +18,8 @@ import { HmacSigner, TOKEN_AUDIENCE } from '../../infrastructure/auth/signing'
  * ticket is audience-pinned (`ws`) and bound to one `workspaceId`, so it cannot
  * be replayed as a session, against the LLM proxy, or for another workspace.
  *
- * The default-deny gate in app.ts bypasses only the exact GET upgrade; the
- * per-workspace authorization middleware enforces ownership on the POST mint.
+ * The default-deny gate (in the facade's app) bypasses only the exact GET upgrade;
+ * the per-workspace authorization middleware enforces ownership on the POST mint.
  */
 
 /** Ticket lifetime: just long enough to open the socket. */
@@ -34,8 +35,8 @@ export function eventsController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
 
   // Mint a short-lived, workspace-scoped WS ticket. Reached over the authenticated
-  // REST gate; the per-workspace authorization middleware (app.ts) has already
-  // confirmed the caller owns :workspaceId before this runs.
+  // REST gate; the per-workspace authorization middleware has already confirmed the
+  // caller owns :workspaceId before this runs.
   app.post('/workspaces/:workspaceId/events/ticket', async (c) => {
     const cfg = c.get('container').config.auth
     const workspaceId = param(c, 'workspaceId')
@@ -69,12 +70,11 @@ export function eventsController(): Hono<AppEnv> {
       return c.text('authentication is required but not configured', 503)
     }
 
-    const namespace = c.env.WORKSPACE_EVENTS
-    if (!namespace) return c.text('real-time events are not enabled', 501)
-
-    // Forward the original request so the 101 + live `webSocket` flows back out.
-    const stub = namespace.get(namespace.idFromName(workspaceId))
-    return stub.fetch(c.req.raw)
+    // The actual upgrade is the runtime differentiator (Durable Object on the
+    // Worker, a WebSocket hub on Node) — delegate to the realtime gateway.
+    const upgraded = await c.get('container').gateways.realtime.upgrade(workspaceId, c.req.raw)
+    if (!upgraded) return c.text('real-time events are not enabled', 501)
+    return upgraded
   })
 
   return app

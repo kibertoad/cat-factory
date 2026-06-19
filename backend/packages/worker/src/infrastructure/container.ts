@@ -17,6 +17,7 @@ import { type AppConfig, loadConfig } from './config'
 import type { Env } from './env'
 import { CloudflareModelProvider } from './ai/CloudflareModelProvider'
 import { resolveExtraRegistries } from './ai/registries'
+import { DoRealtimeGateway } from './gateways/DoRealtimeGateway'
 import {
   ContainerAgentExecutor,
   type ResolveRepoTarget,
@@ -818,5 +819,10 @@ export function buildContainer(env: Env, overrides: Partial<CoreDependencies> = 
     ...createCore(dependencies),
     config,
     agentRunRepository: new D1AgentRunRepository({ db }),
+    gateways: {
+      // Real-time event delivery via the per-workspace WorkspaceEventsHub DO (when
+      // the WORKSPACE_EVENTS namespace is bound; absent → the events route 501s).
+      realtime: new DoRealtimeGateway(env.WORKSPACE_EVENTS),
+    },
   }
 }

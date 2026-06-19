@@ -8,7 +8,6 @@ import { handleError } from './infrastructure/http/errorHandler'
 import type { AppEnv } from './infrastructure/http/types'
 import { requireAuth } from './infrastructure/auth/middleware'
 import { authController } from './modules/auth/AuthController'
-import { eventsController } from './modules/events/EventsController'
 import { githubController } from './modules/github/GitHubController'
 import { githubWebhookController } from './modules/github/GitHubWebhookController'
 import { llmProxyController } from './modules/llmProxy/LlmProxyController'
@@ -125,11 +124,10 @@ export function createApp(options: CreateAppOptions = {}): Hono<AppEnv> {
   registerCoreControllers(app)
 
   // Worker-specific runtime controllers (Durable Objects / Queues / Workflows):
-  //   - the real-time WebSocket event stream (self-authenticates via ?token=; the
-  //     gate above bypasses only its exact upgrade shape),
   //   - GitHub connect/resync (kicks the backfill Workflow),
   //   - the GitHub webhook + setup callback (HMAC-verified; enqueues to the sync Queue).
-  app.route('/', eventsController())
+  // (The real-time event stream is now a shared controller; its upgrade is delegated
+  // to the Worker's realtime gateway — see registerCoreControllers + DoRealtimeGateway.)
   app.route('/workspaces/:workspaceId', githubController())
   app.route('/github', githubWebhookController())
 

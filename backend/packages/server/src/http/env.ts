@@ -2,6 +2,7 @@ import type { AgentRunRepository } from '@cat-factory/kernel'
 import type { Core } from '@cat-factory/orchestration'
 import type { SessionPayload } from '../auth/signing'
 import type { AppConfig } from '../config/types'
+import type { RuntimeGateways } from '../runtime/gateways'
 
 // The runtime-neutral request context shared by every controller. A facade builds a
 // `ServerContainer` per request (the domain `Core` plus the resolved config and the
@@ -13,6 +14,8 @@ export interface ServerContainer extends Core {
   config: AppConfig
   /** Kind-spanning view over agent_runs (retry dispatch + the cron sweeper). */
   agentRunRepository: AgentRunRepository
+  /** Per-facade runtime seams (real-time delivery, …) the shared controllers use. */
+  gateways: RuntimeGateways
 }
 
 /** Hono generics shared by the cross-runtime controllers (Variables only — no Bindings). */

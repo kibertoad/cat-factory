@@ -7,6 +7,7 @@ import { boardScanController } from './modules/boardScan/BoardScanController'
 import { bootstrapController } from './modules/bootstrap/BootstrapController'
 import { documentSourceController } from './modules/documents/DocumentSourceController'
 import { environmentController } from './modules/environments/EnvironmentController'
+import { eventsController } from './modules/events/EventsController'
 import { executionController } from './modules/execution/ExecutionController'
 import { fragmentLibraryController } from './modules/fragmentLibrary/FragmentLibraryController'
 import { mergePresetController } from './modules/merge/MergePresetController'
@@ -34,6 +35,10 @@ export function registerCoreControllers<E extends AppEnv>(app: Hono<E>): void {
   app.route('/', accountController())
   app.route('/accounts/:accountId', fragmentLibraryController('account'))
   app.route('/', workspaceController())
+  // Real-time WebSocket event stream (self-authenticates via ?ticket=; the facade's
+  // gate bypasses only its exact upgrade shape). The upgrade is delegated to the
+  // facade's realtime gateway.
+  app.route('/', eventsController())
   // Per-workspace API.
   app.route('/workspaces/:workspaceId', boardController())
   app.route('/workspaces/:workspaceId', pipelineController())
