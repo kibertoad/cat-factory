@@ -8,8 +8,6 @@ import { handleError } from './infrastructure/http/errorHandler'
 import type { AppEnv } from './infrastructure/http/types'
 import { requireAuth } from './infrastructure/auth/middleware'
 import { authController } from './modules/auth/AuthController'
-import { githubController } from './modules/github/GitHubController'
-import { githubWebhookController } from './modules/github/GitHubWebhookController'
 import { llmProxyController } from './modules/llmProxy/LlmProxyController'
 
 export interface CreateAppOptions {
@@ -120,16 +118,11 @@ export function createApp(options: CreateAppOptions = {}): Hono<AppEnv> {
   // "Login with GitHub" (public; no-op endpoints when auth is unconfigured).
   app.route('/auth', authController())
 
-  // The runtime-neutral API layer — controllers shared across every facade.
+  // The runtime-neutral API layer — controllers shared across every facade. This now
+  // includes the real-time event stream and the GitHub controllers, whose runtime
+  // seams (WebSocket upgrade, backfill Workflow, sync Queue) are delegated to the
+  // Worker's gateways (see buildContainer's `gateways`).
   registerCoreControllers(app)
-
-  // Worker-specific runtime controllers (Durable Objects / Queues / Workflows):
-  //   - GitHub connect/resync (kicks the backfill Workflow),
-  //   - the GitHub webhook + setup callback (HMAC-verified; enqueues to the sync Queue).
-  // (The real-time event stream is now a shared controller; its upgrade is delegated
-  // to the Worker's realtime gateway — see registerCoreControllers + DoRealtimeGateway.)
-  app.route('/workspaces/:workspaceId', githubController())
-  app.route('/github', githubWebhookController())
 
   app.onError(handleError)
 

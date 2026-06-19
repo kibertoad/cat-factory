@@ -45,6 +45,8 @@ export interface GitHubConfig {
   apiBase: string
   /** Browser redirect target after a successful connect (falls back to '/'). */
   setupRedirectUrl: string
+  /** HMAC secret for signing the install `state` (and verifying webhooks); '' when unset. */
+  webhookSecret: string
   /** Present only when a privileged App is configured AND its key is supplied. */
   privilegedApp?: PrivilegedAppConfig
 }

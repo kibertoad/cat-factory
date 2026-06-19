@@ -18,6 +18,7 @@ import type { Env } from './env'
 import { CloudflareModelProvider } from './ai/CloudflareModelProvider'
 import { resolveExtraRegistries } from './ai/registries'
 import { DoRealtimeGateway } from './gateways/DoRealtimeGateway'
+import { CfGitHubWebhookIngest, WorkflowsBackfillScheduler } from './gateways/GitHubGateways'
 import {
   ContainerAgentExecutor,
   type ResolveRepoTarget,
@@ -823,6 +824,10 @@ export function buildContainer(env: Env, overrides: Partial<CoreDependencies> = 
       // Real-time event delivery via the per-workspace WorkspaceEventsHub DO (when
       // the WORKSPACE_EVENTS namespace is bound; absent → the events route 501s).
       realtime: new DoRealtimeGateway(env.WORKSPACE_EVENTS),
+      // GitHub backfill via Workflows; webhook/resync ingest via the sync Queue. Both
+      // fall back to inline handling when their binding is absent (local/dev/tests).
+      githubBackfill: new WorkflowsBackfillScheduler(env.GITHUB_BACKFILL_WORKFLOW),
+      githubWebhook: new CfGitHubWebhookIngest(env.GITHUB_SYNC_QUEUE),
     },
   }
 }

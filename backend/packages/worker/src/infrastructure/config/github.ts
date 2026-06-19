@@ -14,6 +14,7 @@ export function loadGitHubConfig(env: Env): GitHubConfig {
     appSlug: env.GITHUB_APP_SLUG?.trim() ?? '',
     apiBase: env.GITHUB_API_BASE?.trim() || 'https://api.github.com',
     setupRedirectUrl: env.GITHUB_SETUP_REDIRECT_URL?.trim() || '/',
+    webhookSecret: env.GITHUB_WEBHOOK_SECRET ?? '',
     privilegedApp: loadPrivilegedApp(env),
   }
 }

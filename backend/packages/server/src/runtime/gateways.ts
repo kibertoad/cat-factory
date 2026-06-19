@@ -19,7 +19,31 @@ export interface RealtimeGateway {
   upgrade(workspaceId: string, request: Request): Promise<Response | null>
 }
 
+/**
+ * Schedules a durable, full-installation GitHub backfill out of band. On the Worker
+ * this is a Cloudflare Workflow; on Node a pg-boss job. The boolean lets the caller
+ * preserve its response semantics (async "started" vs running it inline).
+ */
+export interface GitHubBackfillScheduler {
+  /** Kick a full-installation backfill. `true` = scheduled async; `false` = run it inline. */
+  scheduleBackfill(installationId: number): Promise<boolean>
+}
+
+/**
+ * Hands GitHub sync work to an async consumer so the request can ack fast. On the
+ * Worker this is a Queue; on Node a pg-boss queue. Each method returns whether the
+ * work was enqueued; when `false`, the caller runs it inline (e.g. local/dev).
+ */
+export interface GitHubWebhookIngest {
+  /** Enqueue a verified webhook delivery for async projection. */
+  enqueueWebhook(eventName: string, payload: unknown): Promise<boolean>
+  /** Enqueue an incremental single-repo resync. */
+  queueRepoResync(workspaceId: string, repoGithubId: number): Promise<boolean>
+}
+
 /** The bundle of runtime gateways a facade injects onto every request container. */
 export interface RuntimeGateways {
   realtime: RealtimeGateway
+  githubBackfill: GitHubBackfillScheduler
+  githubWebhook: GitHubWebhookIngest
 }

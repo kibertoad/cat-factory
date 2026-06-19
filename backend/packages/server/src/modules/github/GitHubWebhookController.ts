@@ -1,15 +1,15 @@
 import { Hono } from 'hono'
-import type { AppEnv } from '../../infrastructure/http/types'
-import { StateSigner } from '../../infrastructure/github/state'
+import { StateSigner } from '../../github/state'
+import type { AppEnv } from '../../http/env'
 
 /**
  * Public GitHub-facing endpoints (NOT under /workspaces, since GitHub calls
  * them): the webhook receiver and the App setup callback. Mounted at `/github`.
  *
  * The webhook receiver verifies the HMAC signature over the *raw* body before
- * anything else, acks fast by enqueuing the delivery for async projection
- * (falling back to inline handling when no queue is bound, e.g. local dev), and
- * never blocks GitHub on projection work.
+ * anything else, acks fast by handing the delivery to the facade's webhook-ingest
+ * gateway for async projection (falling back to inline handling when no async
+ * consumer is wired, e.g. local dev), and never blocks GitHub on projection work.
  */
 export function githubWebhookController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
@@ -34,13 +34,12 @@ export function githubWebhookController(): Hono<AppEnv> {
       return c.json({ error: { code: 'validation', message: 'Invalid JSON body' } }, 400)
     }
 
-    const queue = c.env.GITHUB_SYNC_QUEUE
-    if (queue) {
-      await queue.send({ kind: 'webhook', eventName, payload })
-    } else {
-      // No queue bound: apply inline so local/dev still works.
-      await github.webhookService.handle(eventName, payload)
-    }
+    // Hand off for async projection; if no async consumer is wired, apply inline so
+    // local/dev still works.
+    const queued = await c
+      .get('container')
+      .gateways.githubWebhook.enqueueWebhook(eventName, payload)
+    if (!queued) await github.webhookService.handle(eventName, payload)
     return c.body(null, 202)
   })
 
@@ -63,7 +62,7 @@ export function githubWebhookController(): Hono<AppEnv> {
       return c.json({ error: { code: 'validation', message: 'Missing installation_id' } }, 400)
     }
 
-    const signer = new StateSigner(c.env.GITHUB_WEBHOOK_SECRET ?? '')
+    const signer = new StateSigner(container.config.github.webhookSecret)
     const state = await signer.verify(c.req.query('state') ?? null)
     // No (valid) state → only proceed if this installation is already bound;
     // binding a brand-new installation still requires a signed state.

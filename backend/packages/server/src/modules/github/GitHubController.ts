@@ -8,14 +8,14 @@ import {
   openPullRequestSchema,
   resyncRequestSchema,
 } from '@cat-factory/contracts'
-import * as v from 'valibot'
+import type { GitHubModule } from '@cat-factory/orchestration'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
-import type { GitHubModule } from '@cat-factory/orchestration'
-import type { AppEnv } from '../../infrastructure/http/types'
-import { param } from '../../infrastructure/http/params'
-import { jsonBody } from '../../infrastructure/http/validation'
-import { StateSigner } from '../../infrastructure/github/state'
+import * as v from 'valibot'
+import { StateSigner } from '../../github/state'
+import type { AppEnv } from '../../http/env'
+import { param } from '../../http/params'
+import { jsonBody } from '../../http/validation'
 
 const connectSchema = v.object({ installationId: v.number() })
 
@@ -29,8 +29,11 @@ const unavailable = (c: Context<AppEnv>) =>
 
 /**
  * Workspace-scoped GitHub endpoints: connection management, projection reads
- * (served from D1 — fast and rate-limit-free), resync triggers, and repo writes.
- * Mounted under `/workspaces/:workspaceId`.
+ * (served from the local DB — fast and rate-limit-free), resync triggers, and repo
+ * writes. Mounted under `/workspaces/:workspaceId`. Runtime-neutral: the async resync
+ * paths (full backfill, single-repo resync) are delegated to the facade's GitHub
+ * gateways, which schedule out of band (Cloudflare Workflow/Queue or pg-boss) or
+ * report that the caller should run them inline.
  */
 export function githubController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
@@ -43,7 +46,7 @@ export function githubController(): Hono<AppEnv> {
     const github = requireGitHub(c)
     if (!github) return unavailable(c)
     const config = c.get('container').config.github
-    const signer = new StateSigner(c.env.GITHUB_WEBHOOK_SECRET ?? '')
+    const signer = new StateSigner(config.webhookSecret)
     // Bind the install to this workspace AND the signed-in user, with a short
     // expiry. (The per-workspace authorization middleware has already confirmed
     // the caller owns :workspaceId before this handler runs.)
@@ -121,30 +124,20 @@ export function githubController(): Hono<AppEnv> {
     if (!github) return unavailable(c)
     const workspaceId = param(c, 'workspaceId')
     const { repoGithubId, full } = c.req.valid('json')
+    const { gateways } = c.get('container')
 
     if (full) {
       const installation = await github.installationService.requireInstallation(workspaceId)
-      const workflow = c.env.GITHUB_BACKFILL_WORKFLOW
-      if (workflow) {
-        await workflow
-          .create({
-            id: `backfill-${installation.installationId}-${Date.now()}`,
-            params: { installationId: installation.installationId },
-          })
-          .catch(() => {})
-        return c.json({ status: 'backfill_started' }, 202)
-      }
+      const scheduled = await gateways.githubBackfill.scheduleBackfill(installation.installationId)
+      if (scheduled) return c.json({ status: 'backfill_started' }, 202)
       await github.syncService.backfillInstallation(installation.installationId)
       return c.json({ status: 'backfilled' })
     }
 
-    // Incremental: a single repo (optionally via the queue) or the whole workspace.
+    // Incremental: a single repo (optionally out of band) or the whole workspace.
     if (repoGithubId !== undefined) {
-      const queue = c.env.GITHUB_SYNC_QUEUE
-      if (queue) {
-        await queue.send({ kind: 'resync-repo', workspaceId, repoGithubId })
-        return c.json({ status: 'queued' }, 202)
-      }
+      const queued = await gateways.githubWebhook.queueRepoResync(workspaceId, repoGithubId)
+      if (queued) return c.json({ status: 'queued' }, 202)
       await github.syncService.syncRepoById(workspaceId, repoGithubId)
       return c.json({ status: 'synced' })
     }
@@ -183,11 +176,8 @@ export function githubController(): Hono<AppEnv> {
   // ---- writes -------------------------------------------------------------
 
   // Programmatically create a repository under the connected account (privileged
-  // App tier, ADR 0005). Backs the bootstrap modal's "Create repository" button
-  // for privileged orgs; restricted orgs never call this (the button opens
-  // GitHub's new-repo page client-side instead). 503 when no privileged App is
-  // configured; 409 when the account isn't actually privileged (the App isn't
-  // installed there or lacks the grant), so the caller can fall back.
+  // App tier, ADR 0005). 503 when no privileged App is configured; 409 when the
+  // account isn't actually privileged, so the caller can fall back.
   app.post('/github/repos', jsonBody(createRepoRequestSchema), async (c) => {
     const github = requireGitHub(c)
     if (!github) return unavailable(c)

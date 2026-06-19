@@ -10,6 +10,8 @@ import { environmentController } from './modules/environments/EnvironmentControl
 import { eventsController } from './modules/events/EventsController'
 import { executionController } from './modules/execution/ExecutionController'
 import { fragmentLibraryController } from './modules/fragmentLibrary/FragmentLibraryController'
+import { githubController } from './modules/github/GitHubController'
+import { githubWebhookController } from './modules/github/GitHubWebhookController'
 import { mergePresetController } from './modules/merge/MergePresetController'
 import { modelController } from './modules/models/ModelController'
 import { notificationController } from './modules/notifications/NotificationController'
@@ -54,4 +56,7 @@ export function registerCoreControllers<E extends AppEnv>(app: Hono<E>): void {
   app.route('/workspaces/:workspaceId', notificationController())
   app.route('/workspaces/:workspaceId', mergePresetController())
   app.route('/workspaces/:workspaceId', fragmentLibraryController('workspace'))
+  app.route('/workspaces/:workspaceId', githubController())
+  // GitHub-facing (webhooks + setup callback); not workspace-scoped.
+  app.route('/github', githubWebhookController())
 }
