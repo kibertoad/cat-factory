@@ -6,13 +6,17 @@ import {
   TOKEN_AUDIENCE,
   type SessionPayload,
 } from '../../src/infrastructure/auth/signing'
-import { pickPostLoginRedirect } from '../../src/modules/auth/AuthController'
 import { FakeAgentExecutor } from '../fakes/FakeAgentExecutor'
 
 // Auth is opt-in: it only activates when the OAuth credentials + session secret
 // are present in the Worker env. We exercise both states by passing a tailored
 // `env` straight to `app.fetch` (config is derived from `c.env` per request), so
 // the rest of the suite — which runs with auth unconfigured — is unaffected.
+//
+// The pure-logic checks for HmacSigner and pickPostLoginRedirect live in
+// @cat-factory/server's unit suite (they're re-exported shims here); this file keeps
+// only the worker-wiring integration: config gating, the gate, and the OAuth flow.
+// `HmacSigner` is still used below purely to mint session tokens for those tests.
 
 // Must be >= MIN_SESSION_SECRET_LENGTH (32) or auth is treated as misconfigured.
 const SECRET = 'test-session-secret-0123456789abcdef'
@@ -51,89 +55,6 @@ function session(overrides: Partial<SessionPayload> = {}): Promise<string> {
 }
 
 describe('auth', () => {
-  describe('HmacSigner', () => {
-    it('round-trips a signed payload', async () => {
-      const signer = new HmacSigner(SECRET)
-      const token = await signer.sign({ id: 1, exp: Date.now() + 1000 })
-      expect(await signer.verify<{ id: number }>(token)).toMatchObject({ id: 1 })
-    })
-
-    it('rejects a tampered signature', async () => {
-      const signer = new HmacSigner(SECRET)
-      const token = await signer.sign({ id: 1, exp: Date.now() + 1000 })
-      expect(await signer.verify(`${token}x`)).toBeNull()
-    })
-
-    it('rejects a different secret', async () => {
-      const token = await new HmacSigner(SECRET).sign({ id: 1, exp: Date.now() + 1000 })
-      expect(await new HmacSigner('other').verify(token)).toBeNull()
-    })
-
-    it('rejects an expired payload', async () => {
-      const signer = new HmacSigner(SECRET)
-      const token = await signer.sign({ id: 1, exp: Date.now() - 1000 })
-      expect(await signer.verify(token)).toBeNull()
-    })
-
-    it('returns null (never throws) on a malformed base64url signature', async () => {
-      const signer = new HmacSigner(SECRET)
-      // The tail after the dot is not valid base64url; decoding must fail closed.
-      expect(await signer.verify('eyJpZCI6MX0.@@not-base64@@')).toBeNull()
-    })
-  })
-
-  describe('pickPostLoginRedirect', () => {
-    const origin = 'https://cat-factory.test'
-
-    it('returns a fixed success URL when configured, ignoring the query', () => {
-      const url = pickPostLoginRedirect('https://evil.example', origin, {
-        successRedirectUrl: 'https://app.example.com/board',
-        allowedRedirectOrigins: [],
-      })
-      expect(url).toBe('https://app.example.com/board')
-    })
-
-    it('honours a same-origin redirect', () => {
-      const url = pickPostLoginRedirect(`${origin}/board`, origin, {
-        successRedirectUrl: '',
-        allowedRedirectOrigins: [],
-      })
-      expect(url).toBe(`${origin}/board`)
-    })
-
-    it('honours an allowlisted cross-origin redirect', () => {
-      const url = pickPostLoginRedirect('https://app.example.com/x', origin, {
-        successRedirectUrl: '',
-        allowedRedirectOrigins: ['https://app.example.com'],
-      })
-      expect(url).toBe('https://app.example.com/x')
-    })
-
-    it('rejects an unlisted cross-origin redirect (no token leak)', () => {
-      const url = pickPostLoginRedirect('https://evil.example/steal', origin, {
-        successRedirectUrl: '',
-        allowedRedirectOrigins: ['https://app.example.com'],
-      })
-      expect(url).toBe(`${origin}/`)
-    })
-
-    it('rejects a non-http(s) redirect scheme', () => {
-      const url = pickPostLoginRedirect('javascript:alert(1)', origin, {
-        successRedirectUrl: '',
-        allowedRedirectOrigins: [],
-      })
-      expect(url).toBe(`${origin}/`)
-    })
-
-    it('falls back to the request origin for a malformed redirect', () => {
-      const url = pickPostLoginRedirect('not a url', origin, {
-        successRedirectUrl: '',
-        allowedRedirectOrigins: [],
-      })
-      expect(url).toBe(`${origin}/`)
-    })
-  })
-
   describe('config gating', () => {
     it('reports disabled when no OAuth app is configured', async () => {
       const res = await fetchWith(env, { path: '/auth/config' })
