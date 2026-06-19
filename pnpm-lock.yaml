@@ -227,6 +227,28 @@ importers:
         specifier: 7.0.0-dev.20260616.1
         version: 7.0.0-dev.20260616.1
 
+  backend/packages/server:
+    dependencies:
+      '@cat-factory/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+      '@hono/valibot-validator':
+        specifier: ^0.5.2
+        version: 0.5.3(hono@4.12.25)(valibot@1.4.1(typescript@6.0.3))
+      hono:
+        specifier: ^4.6.0
+        version: 4.12.25
+      pino:
+        specifier: ^9.5.0
+        version: 9.14.0
+      valibot:
+        specifier: ^1.0.0
+        version: 1.4.1(typescript@6.0.3)
+    devDependencies:
+      '@typescript/native-preview':
+        specifier: 7.0.0-dev.20260616.1
+        version: 7.0.0-dev.20260616.1
+
   backend/packages/spend:
     dependencies:
       '@cat-factory/contracts':
@@ -269,6 +291,9 @@ importers:
       '@cat-factory/prompt-fragments':
         specifier: workspace:*
         version: link:../prompt-fragments
+      '@cat-factory/server':
+        specifier: workspace:*
+        version: link:../server
       '@cat-factory/spend':
         specifier: workspace:*
         version: link:../spend
@@ -7052,6 +7077,11 @@ snapshots:
       hono: 4.12.25
       valibot: 1.4.1(typescript@5.9.3)
 
+  '@hono/valibot-validator@0.5.3(hono@4.12.25)(valibot@1.4.1(typescript@6.0.3))':
+    dependencies:
+      hono: 4.12.25
+      valibot: 1.4.1(typescript@6.0.3)
+
   '@iconify/collections@1.0.691':
     dependencies:
       '@iconify/types': 2.0.0
@@ -12118,7 +12148,6 @@ snapshots:
   valibot@1.4.1(typescript@6.0.3):
     optionalDependencies:
       typescript: 6.0.3
-    optional: true
 
   vaul-vue@0.4.1(reka-ui@2.9.9(vue@3.5.38(typescript@6.0.3)))(vue@3.5.38(typescript@6.0.3)):
     dependencies:

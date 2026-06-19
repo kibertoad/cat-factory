@@ -14,6 +14,7 @@
     { "path": "../kernel/tsconfig.build.json" },
     { "path": "../orchestration/tsconfig.build.json" },
     { "path": "../prompt-fragments/tsconfig.build.json" },
+    { "path": "../server/tsconfig.build.json" },
     { "path": "../spend/tsconfig.build.json" }
   ]
 }

@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
+    // Runtime-neutral but Web-standard: it runs on both workerd and Node, so it
+    // relies on the Web Platform globals (Response, Request, crypto, fetch,
+    // atob/btoa, TextEncoder, console) rather than any Cloudflare or Node types.
+    "lib": ["ES2022", "DOM", "DOM.Iterable"]
+  },
+  "include": ["src/**/*.ts"]
+}

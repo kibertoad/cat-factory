@@ -15,6 +15,7 @@
     { "path": "packages/agents/tsconfig.build.json" },
     { "path": "packages/provider-bedrock/tsconfig.build.json" },
     { "path": "packages/orchestration/tsconfig.build.json" },
+    { "path": "packages/server/tsconfig.build.json" },
     { "path": "packages/worker/tsconfig.build.json" }
   ]
 }
