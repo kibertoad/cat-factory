@@ -1,4 +1,4 @@
-import { registerCoreControllers } from '@cat-factory/server'
+import { mountAuthGate, registerCoreControllers } from '@cat-factory/server'
 import type { CoreDependencies } from '@cat-factory/orchestration'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
@@ -6,7 +6,6 @@ import { resolveCorsOrigin } from './infrastructure/config/cors'
 import { buildContainer } from './infrastructure/container'
 import { handleError } from './infrastructure/http/errorHandler'
 import type { AppEnv } from './infrastructure/http/types'
-import { requireAuth } from './infrastructure/auth/middleware'
 
 export interface CreateAppOptions {
   /** Override core dependencies — used by tests (e.g. a fake agent executor). */
@@ -46,67 +45,9 @@ export function createApp(options: CreateAppOptions = {}): Hono<AppEnv> {
 
   app.get('/health', (c) => c.json({ status: 'ok' }))
 
-  // Default-deny: every route requires a valid session EXCEPT the prefixes below,
-  // which are either public by necessity or carry their own authentication. The
-  // gate fails closed when auth is unconfigured (503) unless AUTH_DEV_OPEN is set
-  // for local dev — so production is always authenticated, and any new route is
-  // protected unless it is explicitly added to this allowlist.
-  //   /health   — liveness probe (no data).
-  //   /auth     — the login flow itself; can't require a session to obtain one.
-  //   /v1       — container LLM proxy; authenticated by a model-locked session
-  //               token (ContainerSessionService), not the workspace session.
-  //   /github   — GitHub webhooks + setup callback; verified by HMAC signature.
-  const PUBLIC_PREFIXES = ['/health', '/auth', '/v1', '/github']
-  const gate = requireAuth<AppEnv>()
-  app.use('*', (c, next) => {
-    if (c.req.method === 'OPTIONS') return next()
-    const path = c.req.path
-    // The WebSocket event stream authenticates via ?token= inside its handler (a
-    // browser can't set Authorization on a WS handshake). Bypass ONLY the exact
-    // GET upgrade for /workspaces/:id/events; everything else stays default-deny.
-    if (
-      c.req.method === 'GET' &&
-      c.req.header('Upgrade')?.toLowerCase() === 'websocket' &&
-      /^\/workspaces\/[^/]+\/events$/.test(path)
-    ) {
-      return next()
-    }
-    if (PUBLIC_PREFIXES.some((p) => path === p || path.startsWith(`${p}/`))) return next()
-    return gate(c, next)
-  })
-
-  // Per-workspace authorization. The gate above only proves the caller is signed
-  // in; this binds the signed-in user to the `:workspaceId` they are addressing,
-  // so one user cannot read or mutate a board outside the accounts they belong to.
-  //   - Runs only when a user is set: when auth is disabled (dev) or for the
-  //     self-authenticating WS upgrade (gate-bypassed, no user), it is a no-op.
-  //   - `/workspaces` (list/create) has no :id and is skipped here.
-  //   - Access is granted when the user is a member of the board's account; a
-  //     legacy account-less board is still readable by the user who owns it.
-  //   - Anything else — including a board in an account the user doesn't belong to
-  //     — is reported as 404 (not 403) so existence isn't leaked.
-  app.use('*', async (c, next) => {
-    if (c.req.method === 'OPTIONS') return next()
-    const user = c.get('user')
-    if (!user) return next()
-    const match = /^\/workspaces\/([^/]+)(?:\/.*)?$/.exec(c.req.path)
-    if (!match) return next()
-    const workspaceId = decodeURIComponent(match[1]!)
-    const container = c.get('container')
-    const accountId = await container.workspaceService.accountOf(workspaceId)
-    if (accountId === undefined) return next() // missing board → let the handler 404 normally
-
-    const notFound = () =>
-      c.json({ error: { code: 'not_found', message: 'Workspace not found' } }, 404)
-
-    if (accountId === null) {
-      // Legacy/unscoped board: only the user who personally owns it may access it.
-      const owner = await container.workspaceService.ownerOf(workspaceId)
-      return owner === user.id ? next() : notFound()
-    }
-    if (await container.accountService.isMember(accountId, user.id)) return next()
-    return notFound()
-  })
+  // Default-deny session gate + per-workspace authz, shared verbatim with the Node
+  // service (one implementation in @cat-factory/server so the runtimes can't drift).
+  mountAuthGate(app)
 
   // The runtime-neutral API layer — every controller is shared across facades. Their
   // runtime seams (WebSocket upgrade, backfill Workflow, sync Queue, the LLM proxy's

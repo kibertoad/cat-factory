@@ -4,6 +4,7 @@ import type { AppConfig, ServerContainer } from '@cat-factory/server'
 import type { PgBoss } from 'pg-boss'
 import { loadNodeConfig } from './config.js'
 import type { DrizzleDb } from './db/client.js'
+import { executionRuntime } from './execution/config.js'
 import { PgBossWorkRunner } from './execution/pgBossRunner.js'
 import { createNodeGateways } from './gateways.js'
 import { createNodeModelProvider } from './modelProvider.js'
@@ -59,7 +60,9 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     clock,
     agentExecutor,
     spendPricing: config.spend,
-    ...(options.boss ? { workRunner: new PgBossWorkRunner(options.boss) } : {}),
+    ...(options.boss
+      ? { workRunner: new PgBossWorkRunner(options.boss, executionRuntime(config, env).queue) }
+      : {}),
     ...options.overrides,
   }
 

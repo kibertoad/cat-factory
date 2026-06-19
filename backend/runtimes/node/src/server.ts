@@ -4,8 +4,8 @@ import {
   type ServerContainer,
   handleError,
   logger,
+  mountAuthGate,
   registerCoreControllers,
-  requireAuth,
   resolveCorsOrigin,
 } from '@cat-factory/server'
 import { Hono } from 'hono'
@@ -14,8 +14,8 @@ import { PgBoss } from 'pg-boss'
 import { type NodeContainerOptions, buildNodeContainer } from './container.js'
 import { createDbClient } from './db/client.js'
 import { migrate } from './db/migrate.js'
-import type { DriveConfig } from './execution/drive.js'
-import { startExecutionWorker } from './execution/pgBossRunner.js'
+import { executionRuntime } from './execution/config.js'
+import { startExecutionWorker, startStaleRunSweeper } from './execution/pgBossRunner.js'
 
 // The Node facade: the SAME shared Hono app (controllers + middleware) the Cloudflare
 // Worker mounts, served over `@hono/node-server`. The middleware order mirrors the
@@ -38,43 +38,9 @@ export function createApp(
 
   app.get('/health', (c) => c.json({ status: 'ok' }))
 
-  // Default-deny gate, matching the Worker: only the public prefixes (and the exact
-  // WS upgrade) bypass it; everything else requires a valid session.
-  const PUBLIC_PREFIXES = ['/health', '/auth', '/v1', '/github']
-  const gate = requireAuth<AppEnv>()
-  app.use('*', (c, next) => {
-    if (c.req.method === 'OPTIONS') return next()
-    const path = c.req.path
-    if (
-      c.req.method === 'GET' &&
-      c.req.header('Upgrade')?.toLowerCase() === 'websocket' &&
-      /^\/workspaces\/[^/]+\/events$/.test(path)
-    ) {
-      return next()
-    }
-    if (PUBLIC_PREFIXES.some((p) => path === p || path.startsWith(`${p}/`))) return next()
-    return gate(c, next)
-  })
-
-  // Per-workspace authorization (404-not-403 to avoid leaking existence), matching the Worker.
-  app.use('*', async (c, next) => {
-    if (c.req.method === 'OPTIONS') return next()
-    const user = c.get('user')
-    if (!user) return next()
-    const match = /^\/workspaces\/([^/]+)(?:\/.*)?$/.exec(c.req.path)
-    if (!match) return next()
-    const workspaceId = decodeURIComponent(match[1]!)
-    const accountId = await container.workspaceService.accountOf(workspaceId)
-    if (accountId === undefined) return next()
-    const notFound = () =>
-      c.json({ error: { code: 'not_found', message: 'Workspace not found' } }, 404)
-    if (accountId === null) {
-      const owner = await container.workspaceService.ownerOf(workspaceId)
-      return owner === user.id ? next() : notFound()
-    }
-    if (await container.accountService.isMember(accountId, user.id)) return next()
-    return notFound()
-  })
+  // Default-deny session gate + per-workspace authz, shared verbatim with the Worker
+  // (one implementation in @cat-factory/server so the runtimes can't drift).
+  mountAuthGate(app)
 
   registerCoreControllers(app)
   app.onError(handleError)
@@ -86,18 +52,10 @@ export function createServer(options: CreateServerOptions): Hono<AppEnv> {
   return createApp(buildNodeContainer(options), options.env)
 }
 
-/** Parse a Workflows-style duration ("15 seconds", "5 minutes", "24 hours") to ms. */
-function durationMs(value: string, fallback: number): number {
-  const m = /^(\d+)\s*(second|minute|hour)s?$/.exec(value.trim())
-  if (!m) return fallback
-  const n = Number(m[1])
-  const unit = m[2]
-  return n * (unit === 'second' ? 1000 : unit === 'minute' ? 60_000 : 3_600_000)
-}
-
 /**
  * Boot the Node HTTP server: connect to Postgres (`DATABASE_URL`), ensure the schema,
- * start pg-boss + the durable execution worker, build the app, and listen.
+ * start pg-boss + the durable execution worker + the stale-run sweeper, build the app,
+ * and listen. Registers SIGTERM/SIGINT handlers for a clean, ordered shutdown.
  */
 export async function start(
   options: { env?: NodeJS.ProcessEnv } = {},
@@ -115,27 +73,35 @@ export async function start(
 
   const container = buildNodeContainer({ db, boss, env })
 
-  const exec = container.config.execution
-  const driveConfig: DriveConfig = {
-    jobPollIntervalMs: durationMs(exec.jobPollInterval, 15_000),
-    jobMaxPolls: exec.jobMaxPolls,
-    jobPollFailureTolerance: exec.jobPollFailureTolerance,
-    ciPollIntervalMs: durationMs(exec.ciPollInterval, 30_000),
-    ciMaxPolls: exec.ciMaxPolls,
-  }
-  await startExecutionWorker(boss, container, driveConfig, logger)
+  const runtime = executionRuntime(container.config, env)
+  await startExecutionWorker(boss, container, runtime.drive, logger)
+  const stopSweeper = startStaleRunSweeper(boss, container, runtime.sweeper, runtime.queue, logger)
 
   const app = createApp(container, env)
   const port = Number(env.PORT ?? 8787)
   const server = serve({ fetch: app.fetch, port })
   logger.info({ port }, 'cat-factory node server listening')
 
-  const shutdown = () => {
-    void boss.stop()
-    void pool.end()
+  // Ordered graceful shutdown: stop accepting connections, halt the sweeper + pg-boss
+  // worker, release the pool, then exit. Without closing the HTTP server the process
+  // would keep the event loop alive and hang until the orchestrator SIGKILLs it.
+  let shuttingDown = false
+  const shutdown = async (signal: string) => {
+    if (shuttingDown) return
+    shuttingDown = true
+    logger.info({ signal }, 'shutting down cat-factory node server')
+    stopSweeper()
+    await new Promise<void>((resolve) => server.close(() => resolve()))
+    try {
+      await boss.stop()
+      await pool.end()
+    } catch (err) {
+      logger.error({ err: err instanceof Error ? err.message : String(err) }, 'shutdown error')
+    }
+    process.exit(0)
   }
-  process.once('SIGTERM', shutdown)
-  process.once('SIGINT', shutdown)
+  process.once('SIGTERM', () => void shutdown('SIGTERM'))
+  process.once('SIGINT', () => void shutdown('SIGINT'))
 
   return server
 }

@@ -26,6 +26,7 @@ export {
 } from './containers/ContainerSessionService.js'
 export { bearerToken, requireAuth, verifySession } from './auth/middleware.js'
 export { registerCoreControllers } from './app.js'
+export { mountAuthGate } from './http/authGate.js'
 export { param } from './http/params.js'
 export { jsonBody } from './http/validation.js'
 export { handleError } from './http/errorHandler.js'

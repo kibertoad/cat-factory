@@ -5,6 +5,10 @@ import type { DrizzleDb } from './client.js'
 // hand-written `CREATE TABLE IF NOT EXISTS` so the Node service can self-provision a
 // fresh Postgres on first boot and tests get a clean schema with zero tooling. A
 // drizzle-kit migration lineage can replace this when migrations need to evolve.
+
+// A fixed key for the advisory lock that serialises concurrent boots (see migrate).
+const MIGRATION_LOCK_KEY = 776_712_001
+
 const STATEMENTS = [
   `CREATE TABLE IF NOT EXISTS workspaces (
      id TEXT PRIMARY KEY,
@@ -93,9 +97,19 @@ const STATEMENTS = [
   `CREATE INDEX IF NOT EXISTS idx_token_usage_created ON token_usage (created_at)`,
 ]
 
-/** Create the core tables if they don't exist. Safe to call on every boot. */
+/**
+ * Create the core tables if they don't exist. Safe to call on every boot, including
+ * concurrently from multiple replicas: the whole bootstrap runs inside one transaction
+ * holding a transaction-scoped advisory lock, so the `CREATE … IF NOT EXISTS` DDL is
+ * serialised (concurrent `CREATE TYPE`/`CREATE INDEX` can otherwise race in Postgres).
+ * The lock auto-releases on commit, and a single transaction pins one connection — a
+ * pooled session-level lock wouldn't survive across statements.
+ */
 export async function migrate(db: DrizzleDb): Promise<void> {
-  for (const statement of STATEMENTS) {
-    await db.execute(sql.raw(statement))
-  }
+  await db.transaction(async (tx) => {
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(${MIGRATION_LOCK_KEY})`)
+    for (const statement of STATEMENTS) {
+      await tx.execute(sql.raw(statement))
+    }
+  })
 }

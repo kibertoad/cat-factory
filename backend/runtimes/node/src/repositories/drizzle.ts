@@ -448,17 +448,21 @@ class DrizzleTokenUsageRepository implements TokenUsageRepository {
   }
 
   async totalsSince(epochMs: number): Promise<TokenUsageTotals> {
+    // sum() of int columns is bigint in Postgres — cast to bigint (NOT int4, which
+    // overflows past ~2.1B tokens) and coerce: node-postgres returns bigint as a
+    // string to avoid precision loss, and token totals stay well within Number's
+    // safe-integer range. Matches the 64-bit sum the D1/SQLite store returns.
     const [row] = await this.db
       .select({
-        input: sql<number>`coalesce(sum(${tokenUsage.input_tokens}), 0)::int`,
-        output: sql<number>`coalesce(sum(${tokenUsage.output_tokens}), 0)::int`,
+        input: sql<string>`coalesce(sum(${tokenUsage.input_tokens}), 0)::bigint`,
+        output: sql<string>`coalesce(sum(${tokenUsage.output_tokens}), 0)::bigint`,
         cost: sql<number>`coalesce(sum(${tokenUsage.cost_estimate}), 0)::float8`,
       })
       .from(tokenUsage)
       .where(gte(tokenUsage.created_at, epochMs))
     return {
-      inputTokens: row?.input ?? 0,
-      outputTokens: row?.output ?? 0,
+      inputTokens: Number(row?.input ?? 0),
+      outputTokens: Number(row?.output ?? 0),
       costEstimate: row?.cost ?? 0,
     }
   }

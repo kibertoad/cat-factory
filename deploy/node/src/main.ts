@@ -12,7 +12,7 @@
 // Node 24+ runs this TypeScript directly via built-in type stripping — no build step
 // for this entry (the library itself ships compiled `dist`). To run your own
 // deployment, swap the workspace dependency in package.json for the published version,
-// e.g. "@cat-factory/node-server": "^0.1.0".
+// e.g. "@cat-factory/node-server": "^1.0.0".
 import { start } from '@cat-factory/node-server'
 
 start().catch((err: unknown) => {
