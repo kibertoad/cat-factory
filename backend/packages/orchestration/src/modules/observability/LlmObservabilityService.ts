@@ -48,6 +48,7 @@ export interface RecordLlmCallInput {
   toolCount: number
   requestMaxTokens: number | null
   promptTokens: number
+  cachedPromptTokens: number
   completionTokens: number
   totalTokens: number
   finishReason: string | null

@@ -23,6 +23,8 @@ export const llmCallMetricSchema = v.object({
   /** The `max_tokens` the request asked for (the output ceiling), or null. */
   requestMaxTokens: v.nullable(v.number()),
   promptTokens: v.number(),
+  /** Prompt tokens served from the provider's prompt cache (subset of promptTokens). */
+  cachedPromptTokens: v.optional(v.number(), 0),
   completionTokens: v.number(),
   totalTokens: v.number(),
   /** Upstream finish reason (`stop` | `length` | `tool_calls` | `content_filter` | …). */

@@ -259,6 +259,9 @@ function exportJson() {
                     <span>{{ c.toolCount }} tools</span>
                     <span>{{ c.streaming ? 'streamed' : 'buffered' }}</span>
                     <span v-if="c.requestMaxTokens != null">max_tokens {{ c.requestMaxTokens }}</span>
+                    <span v-if="c.cachedPromptTokens > 0" class="text-emerald-400"
+                      >{{ c.cachedPromptTokens }}/{{ c.promptTokens }} prompt cached</span
+                    >
                     <span>total {{ formatMs(c.totalMs) }}</span>
                   </div>
                   <div>

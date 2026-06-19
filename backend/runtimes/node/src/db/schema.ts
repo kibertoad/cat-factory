@@ -170,6 +170,7 @@ export const llmCallMetrics = pgTable(
     tool_count: integer('tool_count').notNull().default(0),
     request_max_tokens: integer('request_max_tokens'),
     prompt_tokens: integer('prompt_tokens').notNull().default(0),
+    cached_prompt_tokens: integer('cached_prompt_tokens').notNull().default(0),
     completion_tokens: integer('completion_tokens').notNull().default(0),
     total_tokens: integer('total_tokens').notNull().default(0),
     finish_reason: text('finish_reason'),

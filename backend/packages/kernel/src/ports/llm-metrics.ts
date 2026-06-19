@@ -36,6 +36,12 @@ export interface LlmCallMetric {
   requestMaxTokens: number | null
   /** Prompt (input) tokens the model reported. */
   promptTokens: number
+  /**
+   * Prompt tokens served from the provider's prompt cache (a subset of
+   * {@link promptTokens}), across the field names providers use. 0 when the provider
+   * reported none or does not cache. Lets the dashboard show the actual cache hit rate.
+   */
+  cachedPromptTokens: number
   /** Completion (output) tokens the model reported. */
   completionTokens: number
   /** Total tokens the model reported. */

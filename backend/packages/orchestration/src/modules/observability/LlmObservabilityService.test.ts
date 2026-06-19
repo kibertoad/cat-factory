@@ -67,6 +67,7 @@ function input(overrides: Partial<RecordLlmCallInput> = {}): RecordLlmCallInput 
     toolCount: 0,
     requestMaxTokens: 1000,
     promptTokens: 100,
+    cachedPromptTokens: 0,
     completionTokens: 50,
     totalTokens: 150,
     finishReason: 'stop',

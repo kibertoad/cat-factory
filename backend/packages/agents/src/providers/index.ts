@@ -13,3 +13,10 @@ export {
   OPENAI_BASE_URL,
   QWEN_BASE_URL,
 } from './endpoints.js'
+export {
+  type CachePolicy,
+  cachedTokensFromUsage,
+  inlineCacheProviderOptions,
+  promptCacheParams,
+  providerCachePolicy,
+} from './cache.js'

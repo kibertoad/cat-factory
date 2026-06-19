@@ -56,6 +56,8 @@ export interface LlmTokenUsage {
  */
 export interface ProxyCallObservation {
   usage: LlmTokenUsage | null
+  /** Prompt tokens served from the provider's cache (subset of usage.prompt_tokens); 0 if none. */
+  cachedPromptTokens?: number
   /** Upstream finish reason (`stop` | `length` | `tool_calls` | `content_filter` | …). */
   finishReason: string | null
   /** The assistant response text (concatenated for streamed calls). */

@@ -127,6 +127,8 @@ export interface LlmCallMetric {
   toolCount: number
   requestMaxTokens: number | null
   promptTokens: number
+  /** prompt tokens served from the provider's prompt cache (subset of promptTokens) */
+  cachedPromptTokens: number
   completionTokens: number
   totalTokens: number
   finishReason: string | null

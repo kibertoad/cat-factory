@@ -62,6 +62,11 @@ export {
   MOONSHOT_BASE_URL,
   OPENAI_BASE_URL,
   QWEN_BASE_URL,
+  type CachePolicy,
+  cachedTokensFromUsage,
+  inlineCacheProviderOptions,
+  promptCacheParams,
+  providerCachePolicy,
 } from './providers/index.js'
 
 export {

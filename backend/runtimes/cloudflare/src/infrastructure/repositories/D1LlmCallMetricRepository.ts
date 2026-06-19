@@ -24,6 +24,7 @@ interface MetricRow {
   tool_count: number
   request_max_tokens: number | null
   prompt_tokens: number
+  cached_prompt_tokens: number
   completion_tokens: number
   total_tokens: number
   finish_reason: string | null
@@ -53,6 +54,7 @@ function rowToMetric(row: MetricRow): LlmCallMetric {
     toolCount: row.tool_count,
     requestMaxTokens: row.request_max_tokens,
     promptTokens: row.prompt_tokens,
+    cachedPromptTokens: row.cached_prompt_tokens,
     completionTokens: row.completion_tokens,
     totalTokens: row.total_tokens,
     finishReason: row.finish_reason,
@@ -83,10 +85,10 @@ export class D1LlmCallMetricRepository implements LlmCallMetricRepository {
         `INSERT INTO llm_call_metrics
            (id, workspace_id, execution_id, agent_kind, provider, model, created_at,
             streaming, message_count, tool_count, request_max_tokens,
-            prompt_tokens, completion_tokens, total_tokens, finish_reason,
+            prompt_tokens, cached_prompt_tokens, completion_tokens, total_tokens, finish_reason,
             upstream_ms, overhead_ms, total_ms, ok, http_status, error_message,
             prompt_text, prompt_prefix_count, prompt_hash, response_text)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .bind(
         metric.id,
@@ -101,6 +103,7 @@ export class D1LlmCallMetricRepository implements LlmCallMetricRepository {
         metric.toolCount,
         metric.requestMaxTokens,
         metric.promptTokens,
+        metric.cachedPromptTokens,
         metric.completionTokens,
         metric.totalTokens,
         metric.finishReason,

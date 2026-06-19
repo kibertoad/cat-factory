@@ -50,6 +50,7 @@ function llmMetric(id: string, createdAt: number, ws: string) {
     toolCount: 0,
     requestMaxTokens: 1000,
     promptTokens: 10,
+    cachedPromptTokens: 0,
     completionTokens: 5,
     totalTokens: 15,
     finishReason: 'stop',
