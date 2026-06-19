@@ -1257,10 +1257,7 @@ export class ExecutionService {
    * sharing a kind get the same rollup. Best-effort and a no-op when the sink is
    * not wired, so it never blocks an emit.
    */
-  private async attachStepMetrics(
-    workspaceId: string,
-    instance: ExecutionInstance,
-  ): Promise<void> {
+  private async attachStepMetrics(workspaceId: string, instance: ExecutionInstance): Promise<void> {
     if (!this.llmObservability) return
     try {
       const summaries = await this.llmObservability.summarizeByExecution(workspaceId, instance.id)

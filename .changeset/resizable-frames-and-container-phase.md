@@ -16,7 +16,7 @@ Board cleanup, resizable service frames, and an explicit container start-up phas
   SPA passes `seed: false`), and the toolbar's "Reset board to sample" button (and
   the `workspace.reset()` action behind it) is gone. The built-in **pipeline
   catalog is still always provisioned** — it is product config, not sample data —
-  so an empty board can still run pipelines. The `seed` flag (now sample *blocks*
+  so an empty board can still run pipelines. The `seed` flag (now sample _blocks_
   only, default true) remains for demo boards and the test fixtures.
 
 - **Resizable service frames (Miro-style).** A frame can be resized by dragging

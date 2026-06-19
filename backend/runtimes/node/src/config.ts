@@ -57,7 +57,12 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
   // intended) but the session secret is missing/too short, which would disable the auth
   // gate and — with no dev-open fallback — make it fail closed, 503-ing every protected
   // route with no hint why. Refuse to boot with a clear message instead.
-  if (clientId !== '' && clientSecret !== '' && sessionSecret.length < MIN_SESSION_SECRET_LENGTH && !devOpen) {
+  if (
+    clientId !== '' &&
+    clientSecret !== '' &&
+    sessionSecret.length < MIN_SESSION_SECRET_LENGTH &&
+    !devOpen
+  ) {
     throw new Error(
       `AUTH_SESSION_SECRET must be at least ${MIN_SESSION_SECRET_LENGTH} characters when GitHub OAuth is configured ` +
         `(got ${sessionSecret.length}). Set a longer secret or enable AUTH_DEV_OPEN in a non-production environment.`,

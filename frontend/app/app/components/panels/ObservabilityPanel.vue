@@ -25,7 +25,9 @@ const calls = computed<LlmCallMetric[]>(() =>
   executionId.value ? observability.callsFor(executionId.value) : [],
 )
 const loading = computed(() => !!executionId.value && observability.isLoading(executionId.value))
-const exporting = computed(() => !!executionId.value && observability.isExporting(executionId.value))
+const exporting = computed(
+  () => !!executionId.value && observability.isExporting(executionId.value),
+)
 const error = computed(() =>
   executionId.value ? (observability.errors[executionId.value] ?? null) : null,
 )
@@ -67,7 +69,13 @@ function toggle(id: string) {
 }
 
 function agentMeta(kind: string) {
-  return AGENT_BY_KIND[kind as keyof typeof AGENT_BY_KIND] ?? { label: kind, color: '#64748b', icon: 'i-lucide-bot' }
+  return (
+    AGENT_BY_KIND[kind as keyof typeof AGENT_BY_KIND] ?? {
+      label: kind,
+      color: '#64748b',
+      icon: 'i-lucide-bot',
+    }
+  )
 }
 function clock(ms: number): string {
   return new Date(ms).toLocaleTimeString()
@@ -149,13 +157,18 @@ function exportJson() {
                   <dd class="mt-0.5 tabular-nums text-slate-200">{{ totals.calls }}</dd>
                 </div>
                 <div>
-                  <dt class="text-[11px] uppercase tracking-wide text-slate-500">Tokens (in / out)</dt>
+                  <dt class="text-[11px] uppercase tracking-wide text-slate-500">
+                    Tokens (in / out)
+                  </dt>
                   <dd class="mt-0.5 tabular-nums text-slate-200">
-                    {{ formatTokens(totals.promptTokens) }} / {{ formatTokens(totals.completionTokens) }}
+                    {{ formatTokens(totals.promptTokens) }} /
+                    {{ formatTokens(totals.completionTokens) }}
                   </dd>
                 </div>
                 <div>
-                  <dt class="text-[11px] uppercase tracking-wide text-slate-500">Transport overhead</dt>
+                  <dt class="text-[11px] uppercase tracking-wide text-slate-500">
+                    Transport overhead
+                  </dt>
                   <dd class="mt-0.5 tabular-nums text-slate-200">
                     <span v-if="totals.transportPct !== null">
                       {{ totals.transportPct }}% · {{ formatMs(totals.overheadMs) }}
@@ -164,8 +177,12 @@ function exportJson() {
                   </dd>
                 </div>
                 <div>
-                  <dt class="text-[11px] uppercase tracking-wide text-slate-500">Model execution</dt>
-                  <dd class="mt-0.5 tabular-nums text-slate-200">{{ formatMs(totals.upstreamMs) }}</dd>
+                  <dt class="text-[11px] uppercase tracking-wide text-slate-500">
+                    Model execution
+                  </dt>
+                  <dd class="mt-0.5 tabular-nums text-slate-200">
+                    {{ formatMs(totals.upstreamMs) }}
+                  </dd>
                 </div>
               </dl>
               <div class="mt-3 flex flex-wrap gap-1.5">
@@ -182,10 +199,17 @@ function exportJson() {
             </section>
 
             <!-- states -->
-            <p v-if="loading" class="flex items-center gap-2 py-8 text-center text-sm text-slate-500 justify-center">
-              <UIcon name="i-lucide-loader-circle" class="h-4 w-4 animate-spin" /> Loading model activity…
+            <p
+              v-if="loading"
+              class="flex items-center gap-2 py-8 text-center text-sm text-slate-500 justify-center"
+            >
+              <UIcon name="i-lucide-loader-circle" class="h-4 w-4 animate-spin" /> Loading model
+              activity…
             </p>
-            <p v-else-if="error" class="rounded-lg border border-dashed border-rose-900/60 py-6 text-center text-sm text-rose-400">
+            <p
+              v-else-if="error"
+              class="rounded-lg border border-dashed border-rose-900/60 py-6 text-center text-sm text-rose-400"
+            >
               {{ error }}
             </p>
             <p
@@ -218,11 +242,18 @@ function exportJson() {
                     :style="{ color: agentMeta(c.agentKind).color }"
                   />
                   <span class="text-[13px] text-slate-200">{{ agentMeta(c.agentKind).label }}</span>
-                  <span class="hidden truncate text-[11px] text-slate-500 sm:inline" :title="c.model">
+                  <span
+                    class="hidden truncate text-[11px] text-slate-500 sm:inline"
+                    :title="c.model"
+                  >
                     {{ c.provider }}:{{ c.model }}
                   </span>
-                  <div class="ml-auto flex items-center gap-2.5 text-[11px] tabular-nums text-slate-400">
-                    <span :title="`${c.promptTokens} prompt / ${c.completionTokens} completion tokens`">
+                  <div
+                    class="ml-auto flex items-center gap-2.5 text-[11px] tabular-nums text-slate-400"
+                  >
+                    <span
+                      :title="`${c.promptTokens} prompt / ${c.completionTokens} completion tokens`"
+                    >
                       {{ formatTokens(c.promptTokens) }}↑ {{ formatTokens(c.completionTokens) }}↓
                     </span>
                     <span v-if="headroomOf(c) !== null" :title="'Output used vs limit'">
@@ -231,12 +262,7 @@ function exportJson() {
                     <span title="Transport overhead / model execution">
                       {{ formatMs(c.overheadMs) }} / {{ formatMs(c.upstreamMs) }}
                     </span>
-                    <UBadge
-                      v-if="!c.ok"
-                      color="error"
-                      variant="subtle"
-                      size="sm"
-                    >
+                    <UBadge v-if="!c.ok" color="error" variant="subtle" size="sm">
                       {{ c.httpStatus ?? 'error' }}
                     </UBadge>
                     <UBadge
@@ -253,21 +279,35 @@ function exportJson() {
                 </button>
 
                 <div v-if="expanded[c.id]" class="border-t border-slate-800 px-4 py-3 space-y-3">
-                  <p v-if="c.errorMessage" class="text-[12px] text-rose-400">{{ c.errorMessage }}</p>
+                  <p v-if="c.errorMessage" class="text-[12px] text-rose-400">
+                    {{ c.errorMessage }}
+                  </p>
                   <div class="flex flex-wrap gap-x-5 gap-y-1 text-[11px] text-slate-500">
                     <span>{{ c.messageCount }} messages</span>
                     <span>{{ c.toolCount }} tools</span>
                     <span>{{ c.streaming ? 'streamed' : 'buffered' }}</span>
-                    <span v-if="c.requestMaxTokens != null">max_tokens {{ c.requestMaxTokens }}</span>
+                    <span v-if="c.requestMaxTokens != null"
+                      >max_tokens {{ c.requestMaxTokens }}</span
+                    >
                     <span>total {{ formatMs(c.totalMs) }}</span>
                   </div>
                   <div>
-                    <div class="mb-1 text-[11px] uppercase tracking-wide text-slate-500">Prompt</div>
-                    <pre class="max-h-72 overflow-auto rounded-lg bg-slate-950/70 p-3 text-[11px] leading-relaxed text-slate-300">{{ prettyPrompt(c.promptText) }}</pre>
+                    <div class="mb-1 text-[11px] uppercase tracking-wide text-slate-500">
+                      Prompt
+                    </div>
+                    <pre
+                      class="max-h-72 overflow-auto rounded-lg bg-slate-950/70 p-3 text-[11px] leading-relaxed text-slate-300"
+                      >{{ prettyPrompt(c.promptText) }}</pre
+                    >
                   </div>
                   <div>
-                    <div class="mb-1 text-[11px] uppercase tracking-wide text-slate-500">Response</div>
-                    <pre class="max-h-72 overflow-auto rounded-lg bg-slate-950/70 p-3 text-[11px] leading-relaxed text-slate-300">{{ c.responseText || '—' }}</pre>
+                    <div class="mb-1 text-[11px] uppercase tracking-wide text-slate-500">
+                      Response
+                    </div>
+                    <pre
+                      class="max-h-72 overflow-auto rounded-lg bg-slate-950/70 p-3 text-[11px] leading-relaxed text-slate-300"
+                      >{{ c.responseText || '—' }}</pre
+                    >
                   </div>
                 </div>
               </li>

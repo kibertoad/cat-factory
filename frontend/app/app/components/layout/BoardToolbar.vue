@@ -37,7 +37,6 @@ const spendLabel = computed(() => {
 })
 const spendColor = computed(() => (spend.value?.exceeded ? 'error' : 'neutral'))
 
-
 const decisionItems = computed(() =>
   execution.openDecisions.map((d) => {
     const b = board.getBlock(d.blockId)

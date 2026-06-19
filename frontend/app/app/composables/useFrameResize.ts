@@ -33,10 +33,8 @@ export function useFrameResize() {
 
     const onMove = (ev: PointerEvent) => {
       const z = ui.zoom || 1
-      const w =
-        edge === 's' ? start.w : Math.max(min.w, start.w + (ev.clientX - startX) / z)
-      const h =
-        edge === 'e' ? start.h : Math.max(min.h, start.h + (ev.clientY - startY) / z)
+      const w = edge === 's' ? start.w : Math.max(min.w, start.w + (ev.clientX - startX) / z)
+      const h = edge === 'e' ? start.h : Math.max(min.h, start.h + (ev.clientY - startY) / z)
       // Optimistic, local-only: mutate the cached block so the frame grows live
       // without a round-trip on every pointer move.
       block.size = { w: Math.round(w), h: Math.round(h) }

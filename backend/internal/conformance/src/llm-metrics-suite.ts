@@ -42,10 +42,7 @@ function metric(overrides: Partial<LlmCallMetric> & Pick<LlmCallMetric, 'id'>): 
  * others. `makeRepo` returns a repo over the runtime's real store; ids are unique
  * per run so the shared database stays isolated between cases.
  */
-export function defineLlmMetricsSuite(
-  name: string,
-  makeRepo: () => LlmCallMetricRepository,
-): void {
+export function defineLlmMetricsSuite(name: string, makeRepo: () => LlmCallMetricRepository): void {
   describe(`[${name}] llm metrics repository parity`, () => {
     // Unique workspace/execution per case so the shared DB doesn't bleed across tests.
     let seq = 0
@@ -133,7 +130,9 @@ export function defineLlmMetricsSuite(
     it('groups summaries by agent kind', async () => {
       const repo = makeRepo()
       const { ws, e1 } = ids()
-      await repo.record(metric({ id: `${ws}-x`, workspaceId: ws, executionId: e1, agentKind: 'coder' }))
+      await repo.record(
+        metric({ id: `${ws}-x`, workspaceId: ws, executionId: e1, agentKind: 'coder' }),
+      )
       await repo.record(
         metric({ id: `${ws}-y`, workspaceId: ws, executionId: e1, agentKind: 'reviewer' }),
       )
@@ -147,7 +146,9 @@ export function defineLlmMetricsSuite(
       // Far-apart timestamps so the cutoff is unambiguous. `deleteOlderThan` is a
       // global (table-wide) retention prune, so its count can include other cases'
       // rows in the shared DB — assert the scoped, deterministic outcome instead.
-      await repo.record(metric({ id: `${ws}-old`, workspaceId: ws, executionId: e1, createdAt: 1_000 }))
+      await repo.record(
+        metric({ id: `${ws}-old`, workspaceId: ws, executionId: e1, createdAt: 1_000 }),
+      )
       await repo.record(
         metric({ id: `${ws}-new`, workspaceId: ws, executionId: e1, createdAt: 9_000_000 }),
       )
