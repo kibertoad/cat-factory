@@ -1,45 +1,8 @@
+import type { AuthConfig } from '@cat-factory/server'
 import type { Env } from '../env'
 import { num } from './utils'
 
-export interface AuthConfig {
-  enabled: boolean
-  /**
-   * Local-dev/test ONLY: permit running with auth unconfigured (open API). Never
-   * set in production, so a misconfigured prod deployment fails closed rather
-   * than serving protected data without a session. See `requireAuth`.
-   */
-  devOpen: boolean
-  clientId: string
-  clientSecret: string
-  sessionSecret: string
-  /** REST API base for reading the user (shared with the GitHub integration). */
-  apiBase: string
-  /** OAuth host (authorize/token endpoints). */
-  oauthBase: string
-  /** Session token lifetime in milliseconds. */
-  sessionTtlMs: number
-  /** Fixed post-login landing URL; '' means honour the request-provided one. */
-  successRedirectUrl: string
-  /** Explicit OAuth redirect_uri; '' means derive it from the request origin. */
-  callbackUrl: string
-  /**
-   * Lowercased GitHub logins permitted to sign in. Combined with `allowedOrgs`
-   * as an OR allowlist; when BOTH are empty, nobody may sign in (fail closed).
-   */
-  allowedLogins: string[]
-  /**
-   * Lowercased GitHub org logins whose members may sign in. A user is admitted
-   * when they belong to any of these orgs (resolved from GitHub at login).
-   * Combined with `allowedLogins` as an OR allowlist; when BOTH are empty,
-   * nobody may sign in (fail closed). See AuthController's callback.
-   */
-  allowedOrgs: string[]
-  /**
-   * Extra origins the post-login `redirect` query may target, beyond the request
-   * origin (which is always allowed). Empty means same-origin only.
-   */
-  allowedRedirectOrigins: string[]
-}
+export type { AuthConfig }
 
 /**
  * Minimum length for AUTH_SESSION_SECRET. The same secret keys the HMAC over

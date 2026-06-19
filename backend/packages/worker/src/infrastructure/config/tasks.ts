@@ -1,20 +1,10 @@
 import type { TaskSourceKind } from '@cat-factory/kernel'
+import type { TasksConfig } from '@cat-factory/server'
 import type { Env } from '../env'
 
-const ALL_SOURCES: readonly TaskSourceKind[] = ['jira', 'github']
+export type { TasksConfig }
 
-export interface TasksConfig {
-  /**
-   * Opt-in flag. Requires `TASKS_ENCRYPTION_KEY`: per-workspace source
-   * credentials are always stored encrypted at rest, so the feature refuses to
-   * assemble without a master key (never a silent plaintext fallback).
-   */
-  enabled: boolean
-  /** Which source providers to register (default: all). */
-  sources: TaskSourceKind[]
-  /** Service-level master key (base64) backing source-credential encryption at rest. */
-  encryptionKey?: string
-}
+const ALL_SOURCES: readonly TaskSourceKind[] = ['jira', 'github']
 
 /** Parse the comma-separated `TASK_SOURCES` allow-list, defaulting to all. */
 function parseSources(raw: string | undefined): TaskSourceKind[] {

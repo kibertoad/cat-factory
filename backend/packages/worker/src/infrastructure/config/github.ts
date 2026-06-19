@@ -1,26 +1,7 @@
+import type { GitHubConfig, PrivilegedAppConfig } from '@cat-factory/server'
 import type { Env } from '../env'
 
-/**
- * The optional privileged App tier (ADR 0005): a second App registration that
- * carries `Administration: write` for creating repos. An org opts in by
- * installing this App (instead of / alongside the default), so the allow-list is
- * GitHub's own install state — no separate org list. Absent when
- * GITHUB_PRIVILEGED_APP_ID/key are unset — then every org runs on the default App.
- */
-export interface PrivilegedAppConfig {
-  appId: string
-}
-
-export interface GitHubConfig {
-  enabled: boolean
-  appId: string
-  appSlug: string
-  apiBase: string
-  /** Browser redirect target after a successful connect (falls back to '/'). */
-  setupRedirectUrl: string
-  /** Present only when a privileged App is configured AND its key is supplied. */
-  privilegedApp?: PrivilegedAppConfig
-}
+export type { GitHubConfig, PrivilegedAppConfig }
 
 export function loadGitHubConfig(env: Env): GitHubConfig {
   // Enabled when the App id and both secrets are present; the integration is

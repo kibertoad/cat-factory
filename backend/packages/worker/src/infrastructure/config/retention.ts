@@ -1,16 +1,8 @@
+import type { RetentionConfig } from '@cat-factory/server'
 import type { Env } from '../env'
 import { retentionMs } from './utils'
 
-/**
- * Retention windows in milliseconds for the tables that don't self-limit. A
- * window of 0 disables pruning for that table (and, for commits, disables the
- * backfill horizon too). See docs/storage-and-retention.md.
- */
-export interface RetentionConfig {
-  tokenUsageMs: number
-  rateLimitMs: number
-  commitMs: number
-}
+export type { RetentionConfig }
 
 export function loadRetentionConfig(env: Env): RetentionConfig {
   return {

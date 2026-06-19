@@ -1,22 +1,10 @@
 import type { DocumentSourceKind } from '@cat-factory/kernel'
+import type { DocumentsConfig } from '@cat-factory/server'
 import type { Env } from '../env'
 
-const ALL_SOURCES: readonly DocumentSourceKind[] = ['confluence', 'notion']
+export type { DocumentsConfig }
 
-export interface DocumentsConfig {
-  /**
-   * Opt-in flag. Requires `DOCUMENTS_ENCRYPTION_KEY`: per-workspace source
-   * credentials are always stored encrypted at rest, so the feature refuses to
-   * assemble without a master key (never a silent plaintext fallback).
-   */
-  enabled: boolean
-  /** Which source providers to register (default: all). */
-  sources: DocumentSourceKind[]
-  /** 'llm' uses the agent model to plan structure; 'headings' forces the parser. */
-  planner: 'llm' | 'headings'
-  /** Service-level master key (base64) backing source-credential encryption at rest. */
-  encryptionKey?: string
-}
+const ALL_SOURCES: readonly DocumentSourceKind[] = ['confluence', 'notion']
 
 /** Parse the comma-separated `DOCUMENT_SOURCES` allow-list, defaulting to all. */
 function parseSources(raw: string | undefined): DocumentSourceKind[] {

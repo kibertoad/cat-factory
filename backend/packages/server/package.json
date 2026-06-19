@@ -23,7 +23,10 @@
     "typecheck": "tsgo -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@cat-factory/agents": "workspace:*",
+    "@cat-factory/contracts": "workspace:*",
     "@cat-factory/kernel": "workspace:*",
+    "@cat-factory/spend": "workspace:*",
     "@hono/valibot-validator": "^0.5.2",
     "hono": "^4.6.0",
     "pino": "^9.5.0",

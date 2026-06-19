@@ -1,6 +1,5 @@
-import type { ModelOption } from '@cat-factory/contracts'
+import type { AppConfig } from '@cat-factory/server'
 import { effectiveCatalog } from '@cat-factory/kernel'
-import { type SpendPricing } from '@cat-factory/spend'
 import type { Env } from '../env'
 import { directKeyAvailable } from './utils'
 import { type AgentsConfig, loadAgentsConfig } from './agents'
@@ -20,8 +19,12 @@ import { type FragmentLibraryConfig, loadFragmentLibraryConfig } from './fragmen
 // for what"). Operators tune behaviour entirely through wrangler vars / secrets.
 // Each concern lives in a sibling module; this barrel composes them.
 
+// The config SHAPE (AppConfig + every sub-config) is the shared contract in
+// @cat-factory/server; this module re-exports it and owns the Worker's env-driven
+// loaders that produce it.
 export type {
   AgentsConfig,
+  AppConfig,
   ExecutionConfig,
   GitHubConfig,
   AuthConfig,
@@ -31,31 +34,6 @@ export type {
   RunnerPoolConfig,
   RetentionConfig,
   FragmentLibraryConfig,
-}
-
-export interface AppConfig {
-  agents: AgentsConfig
-  /** The effective model picker catalog (each model's active flavour). */
-  models: ModelOption[]
-  execution: ExecutionConfig
-  /** Pricing + budget for the spend safeguard. */
-  spend: SpendPricing
-  /** GitHub integration config; `enabled` is false unless a GitHub App is set up. */
-  github: GitHubConfig
-  /** "Login with GitHub" config; `enabled` is false unless an OAuth app is set up. */
-  auth: AuthConfig
-  /** Document-source integration config; `enabled` is false unless opted in. */
-  documents: DocumentsConfig
-  /** Task-source integration config; `enabled` is false unless opted in. */
-  tasks: TasksConfig
-  /** Environment provider integration config; `enabled` is false unless opted in. */
-  environments: EnvironmentsConfig
-  /** Self-hosted runner-pool config; `enabled` is false unless opted in. */
-  runners: RunnerPoolConfig
-  /** Retention windows for the unbounded ledgers/projections (epoch-ms ages). */
-  retention: RetentionConfig
-  /** Prompt-fragment library config; `enabled` is false unless opted in (ADR 0006). */
-  fragmentLibrary: FragmentLibraryConfig
 }
 
 export function loadConfig(env: Env): AppConfig {

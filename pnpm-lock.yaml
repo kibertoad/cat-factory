@@ -229,9 +229,18 @@ importers:
 
   backend/packages/server:
     dependencies:
+      '@cat-factory/agents':
+        specifier: workspace:*
+        version: link:../agents
+      '@cat-factory/contracts':
+        specifier: workspace:*
+        version: link:../contracts
       '@cat-factory/kernel':
         specifier: workspace:*
         version: link:../kernel
+      '@cat-factory/spend':
+        specifier: workspace:*
+        version: link:../spend
       '@hono/valibot-validator':
         specifier: ^0.5.2
         version: 0.5.3(hono@4.12.25)(valibot@1.4.1(typescript@6.0.3))

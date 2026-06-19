@@ -1,17 +1,13 @@
 import type { AgentKind } from '@cat-factory/contracts'
-import { type ModelRef, resolveModelRef } from '@cat-factory/kernel'
-import { type AgentModelConfig, type AgentRouting } from '@cat-factory/agents'
+import { resolveModelRef } from '@cat-factory/kernel'
+import type { AgentModelConfig } from '@cat-factory/agents'
+import type { AgentsConfig } from '@cat-factory/server'
 import type { Env } from '../env'
 import { num } from './utils'
 
-export interface AgentsConfig {
-  routing: AgentRouting
-  /**
-   * Resolve a block's selected model id to a concrete ref, honouring the
-   * direct/Cloudflare fallback based on which provider keys are configured.
-   */
-  resolveBlockModel: (modelId: string | undefined) => ModelRef | undefined
-}
+// The config SHAPE is shared (@cat-factory/server); this module owns the Worker's
+// env-driven loader that produces it.
+export type { AgentsConfig }
 
 function parseModelOverrides(
   raw: string | undefined,
