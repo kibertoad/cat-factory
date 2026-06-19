@@ -17,6 +17,7 @@ export {
 export { StateSigner, type InstallState } from './github/state.js'
 export { GitHubOAuth, type GitHubOAuthDependencies } from './auth/GitHubOAuth.js'
 export { authController, pickPostLoginRedirect } from './modules/auth/AuthController.js'
+export { llmProxyController } from './modules/llmProxy/LlmProxyController.js'
 export {
   ContainerSessionService,
   DEFAULT_SESSION_TTL_MS,

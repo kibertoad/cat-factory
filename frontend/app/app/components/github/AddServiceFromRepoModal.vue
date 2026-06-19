@@ -113,16 +113,12 @@ async function add() {
 </script>
 
 <template>
-  <UModal
-    v-model:open="open"
-    title="Add a service from a repository"
-    :ui="{ content: 'max-w-xl' }"
-  >
+  <UModal v-model:open="open" title="Add a service from a repository" :ui="{ content: 'max-w-xl' }">
     <template #body>
       <div class="space-y-6">
         <p class="text-sm text-slate-400">
-          Pick an existing GitHub repository to add as a board service. No bootstrapping — the
-          repo is linked to a new service frame as-is, and tasks you run on it target that repo.
+          Pick an existing GitHub repository to add as a board service. No bootstrapping — the repo
+          is linked to a new service frame as-is, and tasks you run on it target that repo.
         </p>
 
         <!-- not connected: linking a repo needs the App bound to this workspace -->
@@ -133,8 +129,8 @@ async function add() {
           <div class="flex items-start gap-2">
             <UIcon name="i-lucide-plug-zap" class="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
             <p class="text-sm text-amber-200/90">
-              Connect this workspace to GitHub first. Link an installation the App is already on,
-              or install it.
+              Connect this workspace to GitHub first. Link an installation the App is already on, or
+              install it.
             </p>
           </div>
           <GitHubConnect />

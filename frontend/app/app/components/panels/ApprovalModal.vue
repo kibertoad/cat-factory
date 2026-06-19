@@ -90,7 +90,9 @@ async function requestChanges() {
         </div>
 
         <div>
-          <label class="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+          <label
+            class="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-400"
+          >
             Proposal — review and edit before approving
           </label>
           <UTextarea
@@ -104,7 +106,9 @@ async function requestChanges() {
         </div>
 
         <div v-if="showFeedback">
-          <label class="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+          <label
+            class="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-400"
+          >
             What should change?
           </label>
           <UTextarea

@@ -3,9 +3,18 @@ import type { Server } from 'node:http'
 import { serve } from '@hono/node-server'
 import { Hono } from 'hono'
 import { DEFAULT_SPEND_PRICING, SpendService } from '@cat-factory/spend'
-import { llmProxyController } from '@cat-factory/worker/src/modules/llmProxy/LlmProxyController'
-import { ContainerSessionService } from '@cat-factory/worker/src/infrastructure/containers/ContainerSessionService'
+import { ContainerSessionService, type LlmUpstream, llmProxyController } from '@cat-factory/server'
 import { freePort, listen, streamingLlmStub } from './support'
+
+/** A minimal OpenAI-compatible upstream gateway pointing at the in-test stub. */
+function stubLlmUpstream(baseURL: string): LlmUpstream {
+  return {
+    resolveOpenAiCompatible: (provider) =>
+      provider === 'qwen' ? { baseURL, apiKey: 'real-upstream-key' } : null,
+    // No in-process (binding) path in this test; the proxy forwards over HTTP.
+    runInProcess: () => null,
+  }
+}
 
 // Real-proxy acceptance test: exercises the **actual** production proxy
 // (LlmProxyController) + the real SpendService over real HTTP — the same code a
@@ -47,35 +56,35 @@ async function startRealProxy() {
     pricing: DEFAULT_SPEND_PRICING,
   })
 
-  // Inject env (so the proxy resolves the stub upstream + the real key) and an
-  // execution context (so streamed-usage metering via waitUntil runs).
+  // Provide an execution context so streamed-usage metering via waitUntil is tracked
+  // (Hono exposes the 3rd `app.fetch` arg as `c.executionCtx`); the controller reads
+  // the session secret + the upstream gateway off the request container.
   const pending: Promise<unknown>[] = []
-  const env = {
-    AUTH_SESSION_SECRET: SECRET,
-    QWEN_API_KEY: 'real-upstream-key',
-    QWEN_BASE_URL: `http://127.0.0.1:${upstreamPort}/v1`,
-    SPEND_MONTHLY_LIMIT: '100',
-  }
   const ctx = {
     waitUntil: (p: Promise<unknown>) => pending.push(Promise.resolve(p)),
     passThroughOnException: () => {},
   }
+  const container = {
+    config: { auth: { sessionSecret: SECRET } },
+    spendService,
+    gateways: { llmUpstream: stubLlmUpstream(`http://127.0.0.1:${upstreamPort}/v1`) },
+  }
 
   const app = new Hono()
   app.use('*', async (c, next) => {
-    c.set('container', { spendService } as never)
+    c.set('container', container as never)
     await next()
   })
   app.route('/', llmProxyController())
 
   const port = await freePort()
   const server = serve({
-    fetch: (req: Request) => app.fetch(req, env as never, ctx as never),
+    fetch: (req: Request) => app.fetch(req, {} as never, ctx as never),
     port,
     hostname: '127.0.0.1',
   }) as unknown as Server
 
-  return { upstream, ledger, pending, port, server, spendService, env }
+  return { upstream, ledger, pending, port, server, spendService }
 }
 
 describe('real proxy (in-process LlmProxyController)', () => {
@@ -168,22 +177,21 @@ describe('real proxy (in-process LlmProxyController)', () => {
       clock: { now: () => Date.now() },
       pricing: DEFAULT_SPEND_PRICING,
     })
-    const env = {
-      AUTH_SESSION_SECRET: SECRET,
-      QWEN_API_KEY: 'real-upstream-key',
-      QWEN_BASE_URL: `http://127.0.0.1:${upstreamPort}/v1`,
-      SPEND_MONTHLY_LIMIT: '1',
-    }
     const ctx = { waitUntil: () => {}, passThroughOnException: () => {} }
+    const container = {
+      config: { auth: { sessionSecret: SECRET } },
+      spendService,
+      gateways: { llmUpstream: stubLlmUpstream(`http://127.0.0.1:${upstreamPort}/v1`) },
+    }
     const app = new Hono()
     app.use('*', async (c, next) => {
-      c.set('container', { spendService } as never)
+      c.set('container', container as never)
       await next()
     })
     app.route('/', llmProxyController())
     const port = await freePort()
     const server = serve({
-      fetch: (req: Request) => app.fetch(req, env as never, ctx as never),
+      fetch: (req: Request) => app.fetch(req, {} as never, ctx as never),
       port,
       hostname: '127.0.0.1',
     }) as unknown as Server

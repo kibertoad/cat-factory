@@ -266,7 +266,11 @@ async function add() {
               @click="toggleDoc(docKey(doc))"
             >
               <UIcon
-                :name="selectedDocs.has(docKey(doc)) ? 'i-lucide-check' : (documents.descriptorFor(doc.source)?.icon ?? 'i-lucide-file-text')"
+                :name="
+                  selectedDocs.has(docKey(doc))
+                    ? 'i-lucide-check'
+                    : (documents.descriptorFor(doc.source)?.icon ?? 'i-lucide-file-text')
+                "
                 class="h-3.5 w-3.5 shrink-0 text-indigo-400"
               />
               <span class="truncate">{{ doc.title }}</span>
@@ -287,7 +291,11 @@ async function add() {
               @click="toggleTask(taskKey(task))"
             >
               <UIcon
-                :name="selectedTasks.has(taskKey(task)) ? 'i-lucide-check' : (tasks.descriptorFor(task.source)?.icon ?? 'i-lucide-square-check')"
+                :name="
+                  selectedTasks.has(taskKey(task))
+                    ? 'i-lucide-check'
+                    : (tasks.descriptorFor(task.source)?.icon ?? 'i-lucide-square-check')
+                "
                 class="h-3.5 w-3.5 shrink-0 text-indigo-400"
               />
               <span class="truncate">{{ task.externalId }} · {{ task.title }}</span>

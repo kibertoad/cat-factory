@@ -66,13 +66,13 @@ the failure/teardown handling that calls it.
 
 **When explicit reclaim actually fires:**
 
-| Trigger                          | Execution                                                                | Bootstrap                                                       |
-| -------------------------------- | ------------------------------------------------------------------------ | -------------------------------------------------------------- |
-| Run **fails** (agent fault, etc) | ✅ `failRun` → `stopRunContainer` (single funnel for every failure kind) | ✅ `pollBootstrapJob` failure path → `stopContainer`           |
-| User **stops/cancels** the run   | ✅ `ExecutionService.stopRun`                                            | ✅ `BootstrapService.stop`                                     |
-| Pre-flight / dispatch cleanup    | —                                                                        | ✅ pre-flight / dispatch cleanup                              |
-| Block-tree **delete / teardown** | ✅ `teardownForBlockTree`                                                | (frame removed with job)                                       |
-| Job **succeeds**                 | ✅ `recordStepResult` final step → `stopRunContainer`                    | ✅ `pollBootstrapJob` success path → `stopContainer`          |
+| Trigger                          | Execution                                                                | Bootstrap                                            |
+| -------------------------------- | ------------------------------------------------------------------------ | ---------------------------------------------------- |
+| Run **fails** (agent fault, etc) | ✅ `failRun` → `stopRunContainer` (single funnel for every failure kind) | ✅ `pollBootstrapJob` failure path → `stopContainer` |
+| User **stops/cancels** the run   | ✅ `ExecutionService.stopRun`                                            | ✅ `BootstrapService.stop`                           |
+| Pre-flight / dispatch cleanup    | —                                                                        | ✅ pre-flight / dispatch cleanup                     |
+| Block-tree **delete / teardown** | ✅ `teardownForBlockTree`                                                | (frame removed with job)                             |
+| Job **succeeds**                 | ✅ `recordStepResult` final step → `stopRunContainer`                    | ✅ `pollBootstrapJob` success path → `stopContainer` |
 
 Every terminal path now reclaims explicitly. The success-path reclaim is only safe
 on the **final** step (all pipeline steps share one container keyed by the

@@ -123,7 +123,12 @@ function selectTask() {
     </div>
 
     <!-- a failed run: the shared failure banner + retry, never a stuck bar -->
-    <AgentFailureCard v-if="runFailed && agentRun" :run="agentRun" variant="compact" class="mt-1.5" />
+    <AgentFailureCard
+      v-if="runFailed && agentRun"
+      :run="agentRun"
+      variant="compact"
+      class="mt-1.5"
+    />
 
     <!-- progress while a pipeline runs (suppressed once the run has failed) -->
     <UProgress

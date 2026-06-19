@@ -9,7 +9,7 @@ The build/ci-fix roles commit their work themselves, so by the end of a successf
 run the working tree is often clean — and the harness's trailing `commitAll` then
 found nothing and reported "no changes" (a hard failure for `/run`, a lost fix for
 `/ci-fix`) even though the branch carried real changes. The harness now judges the
-*whole run* against the branch's pre-run tip (`branchHasChanges`): it counts the
+_whole run_ against the branch's pre-run tip (`branchHasChanges`): it counts the
 agent's own commits as well as any still-uncommitted edits, ignores the
 harness-written `AGENTS.md`, and only treats nothing-at-all as a no-op.
 
