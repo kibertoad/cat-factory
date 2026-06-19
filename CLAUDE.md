@@ -19,17 +19,24 @@ many files and are otherwise slow to re-derive.
 ## Layout
 
 One pnpm workspace (single root lockfile). Packages are sorted by visibility:
-**published libraries** live in `backend/packages/*` + `frontend/app`, **private
-packages** (the harnesses) in `backend/internal/*`, and the example
-**deployments** (which carry the `wrangler.toml`s and config and depend on the
-libraries) in `deploy/*`. See [`CONTRIBUTING.md`](./CONTRIBUTING.md) for the
-package/publish table.
+**published libraries** live in `backend/packages/*` + `frontend/app`, the
+**runtime facades** (one per deployment target) in `backend/runtimes/*`, **private
+packages** (the harnesses + the conformance suite) in `backend/internal/*`, and the
+example **deployments** (which carry the `wrangler.toml`s / `Dockerfile` and config
+and depend on the libraries) in `deploy/*`. See [`CONTRIBUTING.md`](./CONTRIBUTING.md)
+for the package/publish table.
+
+The backend is **runtime-neutral by construction**: the domain + the HTTP layer know
+nothing about Cloudflare or Node, and each facade in `backend/runtimes/*` supplies
+only its differentiators (persistence, durable jobs, real-time transport, model
+provisioning). A shared **conformance suite** runs the SAME assertions against every
+facade so the runtimes can't drift (see "Cross-runtime conformance" below).
 
 - `frontend/app` — `@cat-factory/app`, the reusable **Nuxt layer** (`ssr: false`):
   the SPA source under `app/` (stores in `app/stores`, composables in
   `app/composables`, components in `app/components`, wire types in `app/types`).
   Published to npm; consumed by a deployment via `extends: ['@cat-factory/app']`.
-- `backend/packages/contracts` — Valibot wire contracts shared by SPA + Worker.
+- `backend/packages/contracts` — Valibot wire contracts shared by SPA + backends.
 - `backend/packages/prompt-fragments` — versioned best-practice prompt fragments.
 - The framework-agnostic domain is split across several published packages (there
   is **no** `backend/packages/core` any more):
@@ -44,21 +51,55 @@ package/publish table.
   - `backend/packages/integrations` — opt-in integration services (GitHub,
     documents, tasks, environments, runner pools) behind kernel ports.
   - `backend/packages/agents` — agent catalog + prompt composition
-    (`systemPromptFor`/`userPromptFor`, the per-kind `ROLES`).
+    (`systemPromptFor`/`userPromptFor`, the per-kind `ROLES`) **and the AI
+    provisioning facade**: `CompositeModelProvider` + the runtime-neutral
+    single-provider resolvers (`openai`/`anthropic`/the OpenAI-compatible trio +
+    the Cloudflare-over-REST resolver) and `providerEndpoints` (the base-URL/key
+    source of truth, also used by the LLM proxy). Each facade composes the registry
+    from the resolvers it can serve.
+  - `backend/packages/provider-bedrock` — `@cat-factory/provider-bedrock`, the
+    opt-in AWS Bedrock resolver (`@ai-sdk/amazon-bedrock`) with a **supported-model
+    allow-list** that throws `Unsupported Bedrock model` for anything outside it.
+    Mixed into a facade's registry only when configured.
   - `backend/packages/spend` — the spend safeguard; `backend/packages/workspaces`
     — workspace + account services.
-- `backend/packages/worker` — `@cat-factory/worker`, the reusable Cloudflare Worker
-  **library**: Hono controllers (`src/modules/*/?*Controller.ts`), D1 repos + infra
-  (`src/infrastructure/*`), the DI composition root
-  (`src/infrastructure/container.ts`), Durable Objects, Workflows. Exposes
-  `createApp()`, the default fetch/scheduled/queue handler, and the DO/Workflow
-  classes. Ships its D1 `migrations/`. Carries **no** production config; its own
-  `wrangler.toml` is a stripped test/dev config (the vitest workers pool reads it).
+- `backend/packages/server` — `@cat-factory/server`, the **runtime-neutral HTTP
+  layer** shared by every facade (no `@cloudflare/*` dep): all the Hono controllers
+  (`src/modules/*/?*Controller.ts`), middleware (auth/authz/CORS/error), request
+  helpers (`src/http/*`), HMAC signing + the GitHub OAuth helper (`src/auth/*`), the
+  runtime **gateway** interfaces (`src/runtime/gateways.ts` — real-time, GitHub
+  ingest/backfill, LLM upstream), the `AppConfig` contract (`src/config/types.ts`),
+  the dialect-agnostic row↔domain **mappers** (`src/persistence/mappers.ts`, reused
+  by both stores), and `registerCoreControllers(app)` (`src/app.ts`). Controllers
+  resolve everything from `c.get('container')` (a `ServerContainer` = the domain
+  `Core` + `config` + `agentRunRepository` + `gateways`).
+- `backend/runtimes/cloudflare` — `@cat-factory/worker`, the **Cloudflare Worker
+  facade** (formerly `backend/packages/worker`): D1 repos + infra
+  (`src/infrastructure/*`), the DI composition root (`src/infrastructure/container.ts`),
+  Durable Objects, Workflows, Containers, the `scheduled`/`queue` handlers, and the CF
+  gateway impls (`src/infrastructure/gateways/*` — `DoRealtimeGateway`, the GitHub
+  gateways, `WorkersAiLlmUpstream`). `createApp`/`buildContainer` are thin wrappers
+  over `@cat-factory/server`. Exposes the default fetch/scheduled/queue handler + the
+  DO/Workflow classes. Ships its D1 `migrations/`. Carries **no** production config;
+  its own `wrangler.toml` is a stripped test/dev config (the vitest workers pool reads it).
+- `backend/runtimes/node` — `@cat-factory/node-server`, the **Node.js service facade**:
+  serves the same `@cat-factory/server` Hono app via `@hono/node-server`, with
+  **Drizzle/Postgres** repositories (`src/db/*`, `src/repositories/drizzle.ts` — the
+  single persistence used in dev/test/prod), **pg-boss** durable execution
+  (`src/execution/{pgBossRunner,drive}.ts`, the analogue of the Worker's Workflows
+  driver), Node gateways + model provisioning (`loadNodeConfig`,
+  `createNodeModelProvider` = direct vendors + Cloudflare-over-REST + opt-in Bedrock),
+  and `createServer()` / `start()`. `DATABASE_URL` selects the database; `migrate()`
+  bootstraps the schema idempotently on boot.
 - `backend/internal/executor-harness` — the payload that runs **inside** each
   per-run Cloudflare Container (the Pi coding-agent harness). Private (not on npm);
   its Docker image is published to **GHCR** by `docker-publish.yml`.
 - `backend/internal/benchmark-harness` — headless agent benchmarking (`cat-bench`);
   private, not published.
+- `backend/internal/conformance` — `@cat-factory/conformance`, the private
+  **cross-runtime conformance suite** + the single canonical deterministic
+  `FakeAgentExecutor`. `defineConformanceSuite(harness)` runs the key backend
+  behaviour against any facade; both runtimes' test suites invoke it (see below).
 - `deploy/backend` — example Worker deployment: a one-line `src/index.ts`
   re-exporting `@cat-factory/worker` + the full production `wrangler.toml`
   (`[vars]`, the GHCR runner `image`, `migrations_dir` →
@@ -143,7 +184,7 @@ It mirrors the execution pattern above: dispatch → durable poll → push event
   README/.gitignore/license/**AGENTS.md** tolerated, see `isBootstrapBoilerplate`),
   mints GH + proxy tokens, builds the job body, then dispatches via the shared
   `RunnerJobClient` → `resolveTransport(workspaceId).dispatch(jobId, body,
-  'bootstrap')` (no direct `EXEC_CONTAINER`; backend-polymorphic — Cloudflare
+'bootstrap')` (no direct `EXEC_CONTAINER`; backend-polymorphic — Cloudflare
   always, a self-hosted pool throws a clean "unsupported" until it implements the
   kind). `pollBootstrap` `RunnerJobClient.poll`s and maps the `RunnerJobView` to
   running (with subtasks) / done (outcome, from `result.defaultBranch`) / failed
@@ -286,13 +327,13 @@ still open). Two new container agent kinds plus a special gate step implement it
 - **Notifications** — a first-class, human-actionable surface (NOT a mid-pipeline
   gate). `notifications` table (migration 0024) + `NotificationService`
   (orchestration) behind a `NotificationChannel` port: the canonical row is persisted
-  + the in-app `notification` `WorkspaceEvent` is pushed (worker
-  `InAppNotificationChannel` over `DurableObjectEventPublisher.notificationChanged`),
-  with `CompositeNotificationChannel` as the seam for **future email/Slack** channels.
-  `NotificationController` mounts `GET /notifications`, `POST /notifications/:id/act`
-  (merge / confirm / retry by type), `POST …/dismiss`. SPA: `stores/notifications.ts`
-  + the toolbar `NotificationsInbox.vue`; the snapshot carries open notifications +
-  the preset library.
+  - the in-app `notification` `WorkspaceEvent` is pushed (worker
+    `InAppNotificationChannel` over `DurableObjectEventPublisher.notificationChanged`),
+    with `CompositeNotificationChannel` as the seam for **future email/Slack** channels.
+    `NotificationController` mounts `GET /notifications`, `POST /notifications/:id/act`
+    (merge / confirm / retry by type), `POST …/dismiss`. SPA: `stores/notifications.ts`
+  - the toolbar `NotificationsInbox.vue`; the snapshot carries open notifications +
+    the preset library.
 
 ## Unified agent runs (failure + retry surface)
 
@@ -337,13 +378,51 @@ blockId)` (worker `infrastructure/container.ts`): find the `github_repos` row
   `BoardService.reparent()`. Tasks can move into frames or modules; modules into
   frames; frames cannot nest (`canReparent` in `board.logic.ts`).
 
+## Multi-runtime facades & cross-runtime conformance
+
+The backend ships to two deployment targets, both serving the **same**
+`@cat-factory/server` Hono app; each facade in `backend/runtimes/*` supplies only its
+differentiators behind the shared kernel ports + the `container.gateways` seam.
+
+- **Cloudflare Worker** (`runtimes/cloudflare`, `@cat-factory/worker`): D1 (SQLite),
+  Cloudflare **Workflows** for durable execution, Durable Objects for real-time +
+  per-run Containers, queues/cron, the `workers-ai` binding. The gold-standard flows
+  above (execution, bootstrap) run on this facade.
+- **Node service** (`runtimes/node`, `@cat-factory/node-server`): **Postgres via
+  Drizzle** (the single persistence — there is no in-memory store), **pg-boss** for
+  durable execution (`PgBossWorkRunner` enqueues an `execution.advance` job;
+  `driveExecution` runs the same advance/poll loop the `ExecutionWorkflow` does, with
+  plain async sleeps instead of durable steps; `signalDecision` re-enqueues a parked
+  run). `start()` connects to `DATABASE_URL`, runs `migrate()`, boots pg-boss + the
+  execution worker, and serves over `@hono/node-server`. Real-time + async GitHub
+  ingest fall back to the inline/not-enabled paths for now.
+- **Model provisioning** is composed per facade from `@cat-factory/agents`'
+  `CompositeModelProvider` (+ opt-in `@cat-factory/provider-bedrock`): Worker =
+  workers-ai binding + direct vendors + Cloudflare-REST + Bedrock; Node = direct
+  vendors + Cloudflare-REST + Bedrock (no binding). Unconfigured providers aren't
+  registered, so `resolve` throws a clear error instead of failing deep in the SDK.
+
+**Cross-runtime conformance** keeps the two facades behaviourally identical:
+`@cat-factory/conformance` exposes `defineConformanceSuite(harness)` — the key backend
+behaviour (workspaces, board, the execution engine driven via the shared
+`FakeAgentExecutor`) as runtime-neutral assertions parameterised by a
+`ConformanceHarness` (`makeApp(agentOptions) → { call, createWorkspace, drive }`). The
+Worker invokes it from `runtimes/cloudflare/test/integration/conformance.spec.ts`
+(real D1, inside workerd); the Node service from `runtimes/node/test/conformance.spec.ts`
+(real Postgres via `DATABASE_URL`). Both run the **same** assertions, so a repository
+that maps a column differently or an engine path only one facade wires fails a test
+instead of shipping. `runtimes/node/test/durable-execution.spec.ts` additionally
+drives a run to completion through the real pg-boss runner.
+
 ## Conventions
 
-- Hexagonal layering: controllers (worker) → services (orchestration/integrations)
-  → ports (kernel); infra
-  adapters implement ports and are wired in `container.ts` via constructor
-  injection of a single `dependencies` object. Opt-in integrations
-  (GitHub / environments / board-scan / bootstrap) wire only when configured.
-- Integration tests use the real `workerd` + real local D1
-  (`@cloudflare/vitest-pool-workers`); only the LLM is faked. `pnpm test` from
-  `backend/`.
+- Hexagonal layering: controllers (`@cat-factory/server`) → services
+  (orchestration/integrations) → ports (kernel); infra adapters live in each runtime
+  facade and implement the ports + the `gateways` seam, wired in that facade's
+  `container.ts` via constructor injection of a single `dependencies` object. Opt-in
+  integrations (GitHub / environments / board-scan / bootstrap) wire only when configured.
+- The Worker's integration tests use the real `workerd` + real local D1
+  (`@cloudflare/vitest-pool-workers`); the Node tests use real Postgres
+  (`DATABASE_URL`, a Postgres 18 service in CI); only the LLM is faked in both. Run
+  the full backend suite with `pnpm test:run` from the repo root (builds, then runs
+  every package's `test:run`); CI provides the Postgres service for the Node suite.

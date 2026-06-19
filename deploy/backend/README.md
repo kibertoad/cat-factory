@@ -1,7 +1,7 @@
 # deploy/backend — example Cloudflare Worker deployment
 
 This package is the **deployment** half of the backend. The reusable logic lives
-in the published [`@cat-factory/worker`](../../backend/packages/worker) library
+in the published [`@cat-factory/worker`](../../backend/runtimes/cloudflare) library
 (plus `@cat-factory/contracts`, `@cat-factory/kernel`, `@cat-factory/orchestration`
 and the other domain packages); this package carries only the
 **configuration**: a `wrangler.toml`, the per-deployment `[vars]`, secrets

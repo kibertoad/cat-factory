@@ -80,7 +80,7 @@ secrets). With it unconfigured, nothing about the existing system changes.
 - **`projection.logic.ts`** — pure GitHub-JSON → projection-entity mappers, shared by
   the fetch client and the webhook consumer.
 
-### Worker adapters (`backend/packages/worker/src/infrastructure/github`)
+### Worker adapters (`backend/runtimes/cloudflare/src/infrastructure/github`)
 
 - **`GitHubAppAuth`** — RS256 app JWT + installation-token mint/cache, all on Web Crypto.
 - **`FetchGitHubClient`** — the only code that calls `api.github.com`; auth,

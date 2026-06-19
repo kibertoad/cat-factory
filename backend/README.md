@@ -38,13 +38,13 @@ a minimal deployment is just boards + pipelines.
 
 ## Packages
 
-| Package                  | Role                                                                                         |
-| ------------------------ | -------------------------------------------------------------------------------------------- |
-| `@cat-factory/contracts` | Valibot wire contract (entities + request bodies). Shared by the frontend and the backend.   |
-| `@cat-factory/kernel`    | Shared vocabulary: domain types, pure logic + constants, and **all** repository/port interfaces. |
-| `@cat-factory/orchestration` | Domain layer: module services + the composition root (`createCore()`). No framework, no Cloudflare, no LLM SDK. |
-| `@cat-factory/integrations`, `@cat-factory/agents`, `@cat-factory/spend`, `@cat-factory/workspaces` | The rest of the framework-agnostic domain, split by concern (integrations, agent prompts, spend, workspaces). |
-| `@cat-factory/worker`    | Infrastructure + API layer: Hono controllers, D1 repositories, composition root, the Worker. |
+| Package                                                                                             | Role                                                                                                            |
+| --------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `@cat-factory/contracts`                                                                            | Valibot wire contract (entities + request bodies). Shared by the frontend and the backend.                      |
+| `@cat-factory/kernel`                                                                               | Shared vocabulary: domain types, pure logic + constants, and **all** repository/port interfaces.                |
+| `@cat-factory/orchestration`                                                                        | Domain layer: module services + the composition root (`createCore()`). No framework, no Cloudflare, no LLM SDK. |
+| `@cat-factory/integrations`, `@cat-factory/agents`, `@cat-factory/spend`, `@cat-factory/workspaces` | The rest of the framework-agnostic domain, split by concern (integrations, agent prompts, spend, workspaces).   |
+| `@cat-factory/worker`                                                                               | Infrastructure + API layer: Hono controllers, D1 repositories, composition root, the Worker.                    |
 
 ### Layering (per the template's architecture doc)
 
@@ -324,9 +324,9 @@ rationale in [ADR 0004](./docs/adr/0004-self-hosted-runner-pool.md).
 
 ## Persistence & migrations
 
-All state lives in one Cloudflare **D1** database (`cat_factory`, bound as `DB`).
-Migrations are plain SQL under
-[`packages/worker/migrations`](./packages/worker/migrations), applied with
+On the **Cloudflare Worker** facade all state lives in one Cloudflare **D1**
+database (`cat_factory`, bound as `DB`). Migrations are plain SQL under
+[`runtimes/cloudflare/migrations`](./runtimes/cloudflare/migrations), applied with
 `wrangler d1 migrations apply`. The model has grown from `0001_init.sql` (core
 boards/blocks/pipelines/executions) through, notably:
 
@@ -342,6 +342,12 @@ and a cron **sweeper** can re-drive stale runs of either kind. How the data is
 swept/retained is in [`docs/storage-and-retention.md`](./docs/storage-and-retention.md);
 how per-run containers get reclaimed (and where that still leaks) is in
 [`docs/container-reaping.md`](./docs/container-reaping.md).
+
+The **Node.js** facade (`runtimes/node`) maps the same logical schema onto
+**Postgres** via Drizzle (`src/db/schema.ts`; `migrate()` bootstraps it idempotently
+from `DATABASE_URL` on boot), reusing the dialect-agnostic row↔domain mappers from
+`@cat-factory/server`. The two stores are kept semantically in sync and pinned to
+identical behaviour by the cross-runtime conformance suite (`@cat-factory/conformance`).
 
 ## HTTP API (selected)
 
@@ -491,7 +497,7 @@ end-to-end walkthrough (deploy order, migrations, the reference URLs) lives in t
 [`deploy/backend/README.md`](../../deploy/backend/README.md). **This section is the
 configuration reference**: what every var/secret does and how to turn each opt-in
 feature on. The canonical, fully-commented list of bindings + vars is the typed
-`Env` in [`packages/worker/src/infrastructure/env.ts`](./packages/worker/src/infrastructure/env.ts).
+`Env` in [`runtimes/cloudflare/src/infrastructure/env.ts`](./runtimes/cloudflare/src/infrastructure/env.ts).
 
 The short path, from `deploy/backend`:
 
