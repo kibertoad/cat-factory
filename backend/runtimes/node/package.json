@@ -23,7 +23,9 @@
     "build:watch": "tsgo -b tsconfig.build.json --watch",
     "typecheck": "tsgo -p tsconfig.json --noEmit",
     "start": "node dist/main.js",
-    "dev": "node --watch dist/main.js"
+    "dev": "node --watch dist/main.js",
+    "test": "vitest run",
+    "test:run": "vitest run"
   },
   "dependencies": {
     "@cat-factory/agents": "workspace:*",
@@ -42,8 +44,10 @@
     "pg-boss": "^12.0.0"
   },
   "devDependencies": {
+    "@cat-factory/conformance": "workspace:*",
     "@types/node": "^22.0.0",
     "@types/pg": "^8.11.0",
-    "@typescript/native-preview": "7.0.0-dev.20260616.1"
+    "@typescript/native-preview": "7.0.0-dev.20260616.1",
+    "vitest": "^4.1.8"
   }
 }

@@ -70,6 +70,19 @@ importers:
         specifier: ^4.1.8
         version: 4.1.8(@opentelemetry/api@1.9.1)(@types/node@22.19.21)(happy-dom@15.11.7)(vite@7.3.5(@types/node@22.19.21)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0))
 
+  backend/internal/conformance:
+    dependencies:
+      '@cat-factory/kernel':
+        specifier: workspace:*
+        version: link:../../packages/kernel
+    devDependencies:
+      '@typescript/native-preview':
+        specifier: 7.0.0-dev.20260616.1
+        version: 7.0.0-dev.20260616.1
+      vitest:
+        specifier: ^4.1.8
+        version: 4.1.8(@opentelemetry/api@1.9.1)(@types/node@22.19.21)(happy-dom@15.11.7)(vite@7.3.5(@types/node@22.19.21)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0))
+
   backend/internal/executor-harness:
     devDependencies:
       '@cat-factory/spend':
@@ -347,6 +360,9 @@ importers:
         specifier: ^3.2.0
         version: 3.2.0(@ai-sdk/anthropic@3.0.85(zod@3.25.76))(@ai-sdk/openai@3.0.73(zod@3.25.76))(@ai-sdk/provider@3.0.10)(ai@6.0.206(zod@3.25.76))
     devDependencies:
+      '@cat-factory/conformance':
+        specifier: workspace:*
+        version: link:../../internal/conformance
       '@cloudflare/vitest-pool-workers':
         specifier: ^0.16.15
         version: 0.16.16(@cloudflare/workers-types@4.20260616.1)(@vitest/runner@4.1.8)(@vitest/snapshot@4.1.8)(vitest@4.1.8(@opentelemetry/api@1.9.1)(@types/node@22.19.21)(happy-dom@15.11.7)(vite@7.3.5(@types/node@22.19.21)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0)))
@@ -408,6 +424,9 @@ importers:
         specifier: ^12.0.0
         version: 12.19.1
     devDependencies:
+      '@cat-factory/conformance':
+        specifier: workspace:*
+        version: link:../../internal/conformance
       '@types/node':
         specifier: ^22.0.0
         version: 22.19.21
@@ -417,6 +436,9 @@ importers:
       '@typescript/native-preview':
         specifier: 7.0.0-dev.20260616.1
         version: 7.0.0-dev.20260616.1
+      vitest:
+        specifier: ^4.1.8
+        version: 4.1.8(@opentelemetry/api@1.9.1)(@types/node@22.19.21)(happy-dom@15.11.7)(vite@7.3.5(@types/node@22.19.21)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0))
 
   deploy/backend:
     dependencies:

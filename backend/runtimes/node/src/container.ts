@@ -1,8 +1,10 @@
 import { AiAgentExecutor } from '@cat-factory/agents'
 import { type CoreDependencies, createCore } from '@cat-factory/orchestration'
 import type { AppConfig, ServerContainer } from '@cat-factory/server'
+import type { PgBoss } from 'pg-boss'
 import { loadNodeConfig } from './config.js'
 import type { DrizzleDb } from './db/client.js'
+import { PgBossWorkRunner } from './execution/pgBossRunner.js'
 import { createNodeGateways } from './gateways.js'
 import { createNodeModelProvider } from './modelProvider.js'
 import { createDrizzleRepositories } from './repositories/drizzle.js'
@@ -11,6 +13,12 @@ import { CryptoIdGenerator, SystemClock } from './runtime.js'
 export interface NodeContainerOptions {
   /** The Drizzle/Postgres client (the single persistence layer). */
   db: DrizzleDb
+  /**
+   * Started pg-boss instance for durable execution. When present the container wires
+   * a {@link PgBossWorkRunner}; otherwise runs fall back to the engine's NoopWorkRunner
+   * (the caller drives runs itself — e.g. tests).
+   */
+  boss?: PgBoss
   /** Pre-resolved config; defaults to `loadNodeConfig(env)`. */
   config?: AppConfig
   /** Environment source; defaults to `process.env`. */
@@ -51,6 +59,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     clock,
     agentExecutor,
     spendPricing: config.spend,
+    ...(options.boss ? { workRunner: new PgBossWorkRunner(options.boss) } : {}),
     ...options.overrides,
   }
 

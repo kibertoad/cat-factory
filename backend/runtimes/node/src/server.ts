@@ -1,6 +1,7 @@
 import { serve } from '@hono/node-server'
 import {
   type AppEnv,
+  type ServerContainer,
   handleError,
   logger,
   registerCoreControllers,
@@ -9,24 +10,24 @@ import {
 } from '@cat-factory/server'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
+import { PgBoss } from 'pg-boss'
 import { type NodeContainerOptions, buildNodeContainer } from './container.js'
 import { createDbClient } from './db/client.js'
 import { migrate } from './db/migrate.js'
+import type { DriveConfig } from './execution/drive.js'
+import { startExecutionWorker } from './execution/pgBossRunner.js'
 
 // The Node facade: the SAME shared Hono app (controllers + middleware) the Cloudflare
-// Worker mounts, served over `@hono/node-server`. The Node-specific wiring is the
-// container factory (built once, around the Drizzle/Postgres client) and reading
-// CORS / port from process env. The middleware order mirrors the Worker exactly so
-// auth/authz behave identically across runtimes.
+// Worker mounts, served over `@hono/node-server`. The middleware order mirrors the
+// Worker exactly so auth/authz behave identically across runtimes.
 
 export interface CreateServerOptions extends NodeContainerOptions {}
 
-/** Build the Hono app around a (already-migrated) Drizzle client. */
-export function createServer(options: CreateServerOptions): Hono<AppEnv> {
-  const env = options.env ?? process.env
-  // Built once and reused across requests (the DB connection pool lives here).
-  const container = buildNodeContainer(options)
-
+/** Build the Hono app around a ready container (shared by `createServer` + `start`). */
+export function createApp(
+  container: ServerContainer,
+  env: NodeJS.ProcessEnv = process.env,
+): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
 
   app.use('*', cors({ origin: (origin) => resolveCorsOrigin(origin, env.CORS_ALLOWED_ORIGINS) }))
@@ -80,9 +81,23 @@ export function createServer(options: CreateServerOptions): Hono<AppEnv> {
   return app
 }
 
+/** Build the app from container options (convenience; no durable execution worker). */
+export function createServer(options: CreateServerOptions): Hono<AppEnv> {
+  return createApp(buildNodeContainer(options), options.env)
+}
+
+/** Parse a Workflows-style duration ("15 seconds", "5 minutes", "24 hours") to ms. */
+function durationMs(value: string, fallback: number): number {
+  const m = /^(\d+)\s*(second|minute|hour)s?$/.exec(value.trim())
+  if (!m) return fallback
+  const n = Number(m[1])
+  const unit = m[2]
+  return n * (unit === 'second' ? 1000 : unit === 'minute' ? 60_000 : 3_600_000)
+}
+
 /**
  * Boot the Node HTTP server: connect to Postgres (`DATABASE_URL`), ensure the schema,
- * build the app, and listen. Returns the `serve` handle.
+ * start pg-boss + the durable execution worker, build the app, and listen.
  */
 export async function start(
   options: { env?: NodeJS.ProcessEnv } = {},
@@ -95,13 +110,28 @@ export async function start(
   const { db, pool } = createDbClient(databaseUrl)
   await migrate(db)
 
-  const app = createServer({ db, env })
+  const boss = new PgBoss(databaseUrl)
+  await boss.start()
+
+  const container = buildNodeContainer({ db, boss, env })
+
+  const exec = container.config.execution
+  const driveConfig: DriveConfig = {
+    jobPollIntervalMs: durationMs(exec.jobPollInterval, 15_000),
+    jobMaxPolls: exec.jobMaxPolls,
+    jobPollFailureTolerance: exec.jobPollFailureTolerance,
+    ciPollIntervalMs: durationMs(exec.ciPollInterval, 30_000),
+    ciMaxPolls: exec.ciMaxPolls,
+  }
+  await startExecutionWorker(boss, container, driveConfig, logger)
+
+  const app = createApp(container, env)
   const port = Number(env.PORT ?? 8787)
   const server = serve({ fetch: app.fetch, port })
   logger.info({ port }, 'cat-factory node server listening')
 
-  // Close the pool on shutdown so the process exits cleanly.
   const shutdown = () => {
+    void boss.stop()
     void pool.end()
   }
   process.once('SIGTERM', shutdown)

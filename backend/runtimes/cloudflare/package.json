@@ -52,6 +52,7 @@
     "workers-ai-provider": "^3.2.0"
   },
   "devDependencies": {
+    "@cat-factory/conformance": "workspace:*",
     "@cloudflare/vitest-pool-workers": "^0.16.15",
     "@cloudflare/workers-types": "^4.20250620.0",
     "@typescript/native-preview": "7.0.0-dev.20260616.1",

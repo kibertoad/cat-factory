@@ -1,0 +1,30 @@
+{
+  "name": "@cat-factory/conformance",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Runtime-neutral conformance suite: the key cross-runtime behaviour (workspaces, board, execution) asserted identically against every deployment facade (Cloudflare Worker over D1, Node service over Postgres) to mandate feature parity. Also the canonical deterministic FakeAgentExecutor shared by both runtimes.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "tsgo -b tsconfig.build.json",
+    "typecheck": "tsgo -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@cat-factory/kernel": "workspace:*"
+  },
+  "devDependencies": {
+    "@typescript/native-preview": "7.0.0-dev.20260616.1",
+    "vitest": "^4.1.8"
+  },
+  "peerDependencies": {
+    "vitest": "^4.1.8"
+  }
+}
