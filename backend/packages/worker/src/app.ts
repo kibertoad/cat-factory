@@ -7,7 +7,6 @@ import { buildContainer } from './infrastructure/container'
 import { handleError } from './infrastructure/http/errorHandler'
 import type { AppEnv } from './infrastructure/http/types'
 import { requireAuth } from './infrastructure/auth/middleware'
-import { authController } from './modules/auth/AuthController'
 import { llmProxyController } from './modules/llmProxy/LlmProxyController'
 
 export interface CreateAppOptions {
@@ -114,9 +113,6 @@ export function createApp(options: CreateAppOptions = {}): Hono<AppEnv> {
   // signed, model-locked session token (not the workspace session); on the
   // /v1 public-prefix allowlist above so requireAuth doesn't double-gate it.
   app.route('/', llmProxyController())
-
-  // "Login with GitHub" (public; no-op endpoints when auth is unconfigured).
-  app.route('/auth', authController())
 
   // The runtime-neutral API layer — controllers shared across every facade. This now
   // includes the real-time event stream and the GitHub controllers, whose runtime

@@ -2,6 +2,7 @@ import type { Hono } from 'hono'
 import type { AppEnv } from './http/env'
 import { accountController } from './modules/accounts/AccountController'
 import { agentRunController } from './modules/agentRuns/AgentRunController'
+import { authController } from './modules/auth/AuthController'
 import { boardController } from './modules/board/BoardController'
 import { boardScanController } from './modules/boardScan/BoardScanController'
 import { bootstrapController } from './modules/bootstrap/BootstrapController'
@@ -31,6 +32,8 @@ import { workspaceController } from './modules/workspaces/WorkspaceController'
  * `Bindings`; the controllers only touch `Variables` (`container`, `user`).
  */
 export function registerCoreControllers<E extends AppEnv>(app: Hono<E>): void {
+  // "Login with GitHub" (public; no-op endpoints when auth is unconfigured).
+  app.route('/auth', authController())
   // Read-only catalogs + account/workspace roots (gated by the facade's auth middleware).
   app.route('/', promptFragmentController())
   app.route('/', modelController())
