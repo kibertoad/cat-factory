@@ -1,0 +1,221 @@
+import type { BlockPatch } from '@cat-factory/kernel'
+import type {
+  AgentFailure,
+  Block,
+  BlockLevel,
+  BlockStatus,
+  BlockType,
+  ExecutionInstance,
+  ExecutionStatus,
+  Pipeline,
+  PipelineStep,
+  PullRequestRef,
+  TestTarget,
+  Workspace,
+} from '@cat-factory/contracts'
+
+// Row <-> domain mapping for the D1 (SQLite) tables. JSON-shaped columns are
+// (de)serialised here so the repositories stay focused on SQL.
+
+export interface WorkspaceRow {
+  id: string
+  name: string
+  created_at: number
+  account_id: string | null
+}
+
+export function rowToWorkspace(row: WorkspaceRow): Workspace {
+  return {
+    id: row.id,
+    name: row.name,
+    createdAt: row.created_at,
+    accountId: row.account_id ?? null,
+  }
+}
+
+export interface BlockRow {
+  id: string
+  title: string
+  type: string
+  description: string
+  pos_x: number
+  pos_y: number
+  status: string
+  progress: number
+  depends_on: string
+  execution_id: string | null
+  level: string
+  parent_id: string | null
+  confidence: number | null
+  module_name: string | null
+  fragment_ids: string | null
+  model_id: string | null
+  test_target: string | null
+  pull_request: string | null
+  merge_preset_id: string | null
+  pipeline_id: string | null
+}
+
+export function rowToBlock(row: BlockRow): Block {
+  const block: Block = {
+    id: row.id,
+    title: row.title,
+    type: row.type as BlockType,
+    description: row.description,
+    position: { x: row.pos_x, y: row.pos_y },
+    status: row.status as BlockStatus,
+    progress: row.progress,
+    dependsOn: JSON.parse(row.depends_on) as string[],
+    executionId: row.execution_id,
+    level: row.level as BlockLevel,
+    parentId: row.parent_id,
+  }
+  if (row.confidence !== null) block.confidence = row.confidence
+  if (row.module_name !== null) block.moduleName = row.module_name
+  if (row.fragment_ids !== null) block.fragmentIds = JSON.parse(row.fragment_ids) as string[]
+  if (row.model_id !== null) block.modelId = row.model_id
+  if (row.test_target !== null) block.testTarget = row.test_target as TestTarget
+  if (row.pull_request !== null) block.pullRequest = JSON.parse(row.pull_request) as PullRequestRef
+  if (row.merge_preset_id !== null) block.mergePresetId = row.merge_preset_id
+  if (row.pipeline_id !== null) block.pipelineId = row.pipeline_id
+  return block
+}
+
+/** Full column tuple for inserting a block. */
+export function blockInsertValues(block: Block): Record<string, unknown> {
+  return {
+    id: block.id,
+    title: block.title,
+    type: block.type,
+    description: block.description,
+    pos_x: block.position.x,
+    pos_y: block.position.y,
+    status: block.status,
+    progress: block.progress,
+    depends_on: JSON.stringify(block.dependsOn),
+    execution_id: block.executionId,
+    level: block.level,
+    parent_id: block.parentId,
+    confidence: block.confidence ?? null,
+    module_name: block.moduleName ?? null,
+    fragment_ids: block.fragmentIds ? JSON.stringify(block.fragmentIds) : null,
+    model_id: block.modelId ?? null,
+    test_target: block.testTarget ?? null,
+    pull_request: block.pullRequest ? JSON.stringify(block.pullRequest) : null,
+    merge_preset_id: block.mergePresetId ?? null,
+    pipeline_id: block.pipelineId ?? null,
+  }
+}
+
+/** Map a domain patch onto `{ column: value }` pairs for an UPDATE. */
+export function blockPatchToColumns(patch: BlockPatch): Record<string, unknown> {
+  const set: Record<string, unknown> = {}
+  if (patch.title !== undefined) set.title = patch.title
+  if (patch.type !== undefined) set.type = patch.type
+  if (patch.description !== undefined) set.description = patch.description
+  if (patch.position !== undefined) {
+    set.pos_x = patch.position.x
+    set.pos_y = patch.position.y
+  }
+  if (patch.status !== undefined) set.status = patch.status
+  if (patch.progress !== undefined) set.progress = patch.progress
+  if (patch.dependsOn !== undefined) set.depends_on = JSON.stringify(patch.dependsOn)
+  if (patch.executionId !== undefined) set.execution_id = patch.executionId
+  if (patch.level !== undefined) set.level = patch.level
+  if (patch.parentId !== undefined) set.parent_id = patch.parentId
+  if (patch.confidence !== undefined) set.confidence = patch.confidence
+  if (patch.moduleName !== undefined) set.module_name = patch.moduleName
+  if (patch.fragmentIds !== undefined) {
+    set.fragment_ids = patch.fragmentIds ? JSON.stringify(patch.fragmentIds) : null
+  }
+  // An empty string clears the selection (back to the routing default).
+  if (patch.modelId !== undefined) set.model_id = patch.modelId ? patch.modelId : null
+  if (patch.testTarget !== undefined) set.test_target = patch.testTarget ?? null
+  if (patch.pullRequest !== undefined) {
+    set.pull_request = patch.pullRequest ? JSON.stringify(patch.pullRequest) : null
+  }
+  // An empty string clears the selection (back to the workspace default preset).
+  if (patch.mergePresetId !== undefined) {
+    set.merge_preset_id = patch.mergePresetId ? patch.mergePresetId : null
+  }
+  // An empty string clears the pinned pipeline selection.
+  if (patch.pipelineId !== undefined) {
+    set.pipeline_id = patch.pipelineId ? patch.pipelineId : null
+  }
+  return set
+}
+
+export interface PipelineRow {
+  id: string
+  name: string
+  agent_kinds: string
+  /** Nullable JSON array of per-step approval gates (migration 0022). */
+  gates: string | null
+}
+
+export function rowToPipeline(row: PipelineRow): Pipeline {
+  return {
+    id: row.id,
+    name: row.name,
+    agentKinds: JSON.parse(row.agent_kinds) as Pipeline['agentKinds'],
+    ...(row.gates ? { gates: JSON.parse(row.gates) as boolean[] } : {}),
+  }
+}
+
+/**
+ * A `kind='execution'` row of the unified `agent_runs` table (migration 0019).
+ * The pipeline shape (pipelineId/Name, steps, currentStep) lives in the `detail`
+ * JSON column; lifecycle/failure are top-level columns shared with bootstrap.
+ */
+export interface ExecutionRow {
+  id: string
+  block_id: string | null
+  status: string
+  /** JSON {pipelineId,pipelineName,steps,currentStep}. */
+  detail: string
+  error: string | null
+  /** JSON-encoded AgentFailure; null unless the run failed. */
+  failure: string | null
+  // Lease for the cron sweeper; not surfaced on the entity.
+  updated_at: number
+  workflow_instance_id: string | null
+}
+
+/** The execution-specific payload packed into `agent_runs.detail`. */
+interface ExecutionDetail {
+  pipelineId: string
+  pipelineName: string
+  steps: PipelineStep[]
+  currentStep: number
+}
+
+/** Parse the JSON-encoded structured failure column, tolerating null/garbage. */
+function parseAgentFailure(raw: string | null): AgentFailure | null {
+  if (!raw) return null
+  try {
+    const o = JSON.parse(raw) as AgentFailure
+    if (o && typeof o.kind === 'string' && typeof o.message === 'string') return o
+  } catch {
+    // fall through
+  }
+  return null
+}
+
+export function rowToExecution(row: ExecutionRow): ExecutionInstance {
+  let detail: Partial<ExecutionDetail>
+  try {
+    detail = JSON.parse(row.detail) as Partial<ExecutionDetail>
+  } catch {
+    detail = {}
+  }
+  return {
+    id: row.id,
+    blockId: row.block_id ?? '',
+    pipelineId: detail.pipelineId ?? '',
+    pipelineName: detail.pipelineName ?? '',
+    steps: detail.steps ?? [],
+    currentStep: detail.currentStep ?? 0,
+    status: row.status as ExecutionStatus,
+    failure: parseAgentFailure(row.failure),
+  }
+}

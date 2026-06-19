@@ -10,18 +10,21 @@ import {
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { type NodeContainerOptions, buildNodeContainer } from './container.js'
+import { createDbClient } from './db/client.js'
+import { migrate } from './db/migrate.js'
 
 // The Node facade: the SAME shared Hono app (controllers + middleware) the Cloudflare
-// Worker mounts, served over `@hono/node-server`. The only Node-specific wiring is the
-// container factory (built once — see buildNodeContainer) and reading CORS / port from
-// process env. The middleware order mirrors the Worker exactly so auth/authz behave
-// identically across runtimes.
+// Worker mounts, served over `@hono/node-server`. The Node-specific wiring is the
+// container factory (built once, around the Drizzle/Postgres client) and reading
+// CORS / port from process env. The middleware order mirrors the Worker exactly so
+// auth/authz behave identically across runtimes.
 
 export interface CreateServerOptions extends NodeContainerOptions {}
 
-export function createServer(options: CreateServerOptions = {}): Hono<AppEnv> {
+/** Build the Hono app around a (already-migrated) Drizzle client. */
+export function createServer(options: CreateServerOptions): Hono<AppEnv> {
   const env = options.env ?? process.env
-  // Built once and reused across requests (the in-memory store lives here).
+  // Built once and reused across requests (the DB connection pool lives here).
   const container = buildNodeContainer(options)
 
   const app = new Hono<AppEnv>()
@@ -77,11 +80,32 @@ export function createServer(options: CreateServerOptions = {}): Hono<AppEnv> {
   return app
 }
 
-/** Start the Node HTTP server. Returns the underlying `serve` handle. */
-export function start(options: CreateServerOptions = {}): ReturnType<typeof serve> {
-  const app = createServer(options)
-  const port = Number((options.env ?? process.env).PORT ?? 8787)
+/**
+ * Boot the Node HTTP server: connect to Postgres (`DATABASE_URL`), ensure the schema,
+ * build the app, and listen. Returns the `serve` handle.
+ */
+export async function start(
+  options: { env?: NodeJS.ProcessEnv } = {},
+): Promise<ReturnType<typeof serve>> {
+  const env = options.env ?? process.env
+  const databaseUrl = env.DATABASE_URL
+  if (!databaseUrl) {
+    throw new Error('DATABASE_URL is required to start the Node server')
+  }
+  const { db, pool } = createDbClient(databaseUrl)
+  await migrate(db)
+
+  const app = createServer({ db, env })
+  const port = Number(env.PORT ?? 8787)
   const server = serve({ fetch: app.fetch, port })
   logger.info({ port }, 'cat-factory node server listening')
+
+  // Close the pool on shutdown so the process exits cleanly.
+  const shutdown = () => {
+    void pool.end()
+  }
+  process.once('SIGTERM', shutdown)
+  process.once('SIGINT', shutdown)
+
   return server
 }

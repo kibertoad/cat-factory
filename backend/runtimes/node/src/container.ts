@@ -2,12 +2,15 @@ import { AiAgentExecutor } from '@cat-factory/agents'
 import { type CoreDependencies, createCore } from '@cat-factory/orchestration'
 import type { AppConfig, ServerContainer } from '@cat-factory/server'
 import { loadNodeConfig } from './config.js'
+import type { DrizzleDb } from './db/client.js'
 import { createNodeGateways } from './gateways.js'
 import { createNodeModelProvider } from './modelProvider.js'
-import { createInMemoryRepositories } from './repositories/inMemory.js'
+import { createDrizzleRepositories } from './repositories/drizzle.js'
 import { CryptoIdGenerator, SystemClock } from './runtime.js'
 
 export interface NodeContainerOptions {
+  /** The Drizzle/Postgres client (the single persistence layer). */
+  db: DrizzleDb
   /** Pre-resolved config; defaults to `loadNodeConfig(env)`. */
   config?: AppConfig
   /** Environment source; defaults to `process.env`. */
@@ -18,20 +21,17 @@ export interface NodeContainerOptions {
 
 /**
  * The Node composition root: assemble the framework-agnostic domain `Core` with
- * Node implementations of the runtime ports, then attach the shared-controller
- * extras (`config`, the kind-spanning agent-run repo, the runtime gateways).
- *
- * Unlike the Worker — which builds a fresh container per request around a new D1
- * handle — the Node server builds this ONCE and reuses it, so the (currently
- * in-memory) persistence layer is shared across requests. Swapping in a
- * Drizzle/Postgres layer keeps the same shape; the pool is just a singleton too.
+ * Drizzle/Postgres repositories + Node implementations of the runtime ports, then
+ * attach the shared-controller extras (`config`, the kind-spanning agent-run repo,
+ * the runtime gateways). The same persistence is used in dev, test and prod — tests
+ * run against a real Postgres, exactly as the Worker runs against a real D1.
  */
-export function buildNodeContainer(options: NodeContainerOptions = {}): ServerContainer {
+export function buildNodeContainer(options: NodeContainerOptions): ServerContainer {
   const env = options.env ?? process.env
   const config = options.config ?? loadNodeConfig(env)
   const clock = new SystemClock()
   const idGenerator = new CryptoIdGenerator()
-  const repos = createInMemoryRepositories(() => clock.now())
+  const repos = createDrizzleRepositories(options.db, clock)
 
   const agentExecutor = new AiAgentExecutor({
     modelProvider: createNodeModelProvider(env),
