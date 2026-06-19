@@ -580,9 +580,10 @@ class DrizzleLlmCallMetricRepository implements LlmCallMetricRepository {
         upstreamMs: sql<number>`coalesce(sum(${llmCallMetrics.upstream_ms}), 0)::int`,
         overheadMs: sql<number>`coalesce(sum(${llmCallMetrics.overhead_ms}), 0)::int`,
         errors: sql<number>`coalesce(sum(case when ${llmCallMetrics.ok} = 0 then 1 else 0 end), 0)::int`,
-        // Use `inArray` (not a raw `in ${array}` — drizzle binds an array as a single
-        // param, which Postgres won't expand into an IN list) so the warning count is
-        // correct and stays tied to the shared constant.
+        // `inArray` builds the IN-list membership: idiomatic, type-checked, and tied to
+        // the shared constant. (A raw `${...finish_reason} in ${reasons}` renders the same
+        // `in ($1, $2)` on this drizzle version; inArray just documents intent and can't
+        // silently mis-bind the array.)
         warnings: sql<number>`coalesce(sum(case when ${llmCallMetrics.ok} = 1 and ${inArray(llmCallMetrics.finish_reason, reasons)} then 1 else 0 end), 0)::int`,
       })
       .from(llmCallMetrics)
