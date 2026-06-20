@@ -96,13 +96,19 @@ export interface RepoProjectionRepository {
   linkBlock(workspaceId: string, githubId: number, blockId: string | null): Promise<void>
   /** Live repos whose `synced_at` is older than the cutoff, across all workspaces. */
   listStale(olderThanEpochMs: number): Promise<StaleRepoRef[]>
+  /**
+   * Incremental-sync cursors are keyed by **installation** + repo (not workspace):
+   * a repo is fetched from GitHub once per org and the result fanned out to every
+   * workspace that links it, so two teams sharing a repo don't each burn an API
+   * round-trip. See {@link GitHubSyncService}.
+   */
   getCursor(
-    workspaceId: string,
+    installationId: number,
     repoGithubId: number,
     kind: SyncCursorKind,
   ): Promise<SyncCursor | null>
   setCursor(
-    workspaceId: string,
+    installationId: number,
     repoGithubId: number,
     kind: SyncCursorKind,
     cursor: SyncCursor,

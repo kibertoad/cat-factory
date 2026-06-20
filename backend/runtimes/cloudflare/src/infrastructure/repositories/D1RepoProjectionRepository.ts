@@ -122,21 +122,21 @@ export class D1RepoProjectionRepository implements RepoProjectionRepository {
   }
 
   async getCursor(
-    workspaceId: string,
+    installationId: number,
     repoGithubId: number,
     kind: SyncCursorKind,
   ): Promise<SyncCursor | null> {
     const row = await this.db
       .prepare(
-        'SELECT etag, last_synced_at, since_iso FROM github_sync_cursors WHERE workspace_id = ? AND repo_github_id = ? AND kind = ?',
+        'SELECT etag, last_synced_at, since_iso FROM github_sync_cursors WHERE installation_id = ? AND repo_github_id = ? AND kind = ?',
       )
-      .bind(workspaceId, repoGithubId, kind)
+      .bind(installationId, repoGithubId, kind)
       .first<SyncCursorRow>()
     return row ? rowToCursor(row) : null
   }
 
   async setCursor(
-    workspaceId: string,
+    installationId: number,
     repoGithubId: number,
     kind: SyncCursorKind,
     cursor: SyncCursor,
@@ -144,14 +144,14 @@ export class D1RepoProjectionRepository implements RepoProjectionRepository {
     const { sql, binds } = buildUpsert(
       'github_sync_cursors',
       {
-        workspace_id: workspaceId,
+        installation_id: installationId,
         repo_github_id: repoGithubId,
         kind,
         etag: cursor.etag,
         last_synced_at: cursor.lastSyncedAt,
         since_iso: cursor.sinceIso,
       },
-      ['workspace_id', 'repo_github_id', 'kind'],
+      ['installation_id', 'repo_github_id', 'kind'],
     )
     await this.db
       .prepare(sql)
