@@ -2,9 +2,13 @@ import type {
   Clock,
   CommitProjectionRepository,
   LlmCallMetricRepository,
+  PipelineScheduleRepository,
   RateLimitRepository,
   TokenUsageRepository,
 } from '@cat-factory/kernel'
+
+/** Recurring-pipeline run history is kept ~1 week (the inspector's window). */
+export const SCHEDULE_RUN_RETENTION_MS = 7 * 24 * 60 * 60 * 1000
 
 // Retention sweep for the tables that don't self-limit (see
 // docs/storage-and-retention.md): the append-only `token_usage` ledger, the
@@ -26,6 +30,8 @@ export interface RetentionDeps {
   rateLimitRepository: RateLimitRepository
   commitRepository: CommitProjectionRepository
   llmCallMetricRepository: LlmCallMetricRepository
+  /** Optional: prunes recurring-pipeline run history to {@link SCHEDULE_RUN_RETENTION_MS}. */
+  pipelineScheduleRepository?: PipelineScheduleRepository
   clock: Clock
   policy: RetentionPolicy
 }
@@ -36,6 +42,7 @@ export interface RetentionResult {
   rateLimits: number
   commits: number
   llmCallMetrics: number
+  scheduleRuns: number
 }
 
 /** Delete rows older than `now - windowMs`, treating a non-positive window as "disabled". */
@@ -58,6 +65,7 @@ export async function sweepRetention({
   rateLimitRepository,
   commitRepository,
   llmCallMetricRepository,
+  pipelineScheduleRepository,
   clock,
   policy,
 }: RetentionDeps): Promise<RetentionResult> {
@@ -71,5 +79,10 @@ export async function sweepRetention({
     llmCallMetrics: await prune(policy.llmCallMetricsMs, now, (c) =>
       llmCallMetricRepository.deleteOlderThan(c),
     ),
+    scheduleRuns: pipelineScheduleRepository
+      ? await prune(SCHEDULE_RUN_RETENTION_MS, now, (c) =>
+          pipelineScheduleRepository.pruneRunsBefore(c),
+        )
+      : 0,
   }
 }

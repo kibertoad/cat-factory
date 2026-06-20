@@ -9,6 +9,7 @@ import { ContainerInstanceRegistry } from './infrastructure/containers/Container
 import { D1RateLimitRepository } from './infrastructure/repositories/D1RateLimitRepository'
 import { D1TokenUsageRepository } from './infrastructure/repositories/D1TokenUsageRepository'
 import { D1LlmCallMetricRepository } from './infrastructure/repositories/D1LlmCallMetricRepository'
+import { D1PipelineScheduleRepository } from './infrastructure/repositories/D1PipelineScheduleRepository'
 import { buildContainer } from './infrastructure/container'
 import { CryptoIdGenerator, SystemClock } from './infrastructure/runtime'
 import { WorkflowsWorkRunner } from './infrastructure/workflows/WorkflowsWorkRunner'
@@ -86,6 +87,7 @@ export default {
           }),
           commitRepository: new D1CommitProjectionRepository({ db: env.DB }),
           llmCallMetricRepository: new D1LlmCallMetricRepository({ db: env.DB }),
+          pipelineScheduleRepository: new D1PipelineScheduleRepository({ db: env.DB }),
           clock,
           policy: loadConfig(env).retention,
         })
@@ -189,6 +191,24 @@ export default {
           ),
       )
     }
+
+    // Fire any due recurring pipelines (every 2 min; the actual cadence is hours).
+    // Each due schedule starts its pipeline against its reused block, skipping any
+    // whose block already has an active run. No-op when the feature isn't wired.
+    ctx.waitUntil(
+      Promise.resolve(buildContainer(env).recurring?.service.runDue(clock.now()))
+        .then((result) => {
+          if (result && (result.fired > 0 || result.skipped > 0)) {
+            logger.info({ cron: 'recurring-pipelines', ...result }, 'fired recurring pipelines')
+          }
+        })
+        .catch((error) =>
+          logger.error(
+            { cron: 'recurring-pipelines', err: errInfo(error) },
+            'recurring-pipeline sweep failed',
+          ),
+        ),
+    )
 
     // Reconcile GitHub projections that may have missed a webhook (no-op unless
     // the integration is configured).

@@ -76,6 +76,15 @@ export function workspaceController(): Hono<AppEnv> {
     const modelDefaults = container.modelDefaults
       ? await container.modelDefaults.service.get(workspaceId)
       : undefined
+    // The workspace's recurring pipelines + issue-tracker selection, so the board
+    // renders the recurring-task badges and the tracker config on load. No-ops when
+    // the modules aren't configured. Run history is fetched lazily, not here.
+    const recurringPipelines = container.recurring
+      ? await container.recurring.service.list(workspaceId)
+      : undefined
+    const trackerSettings = container.tracker
+      ? await container.tracker.service.get(workspaceId)
+      : undefined
     return c.json({
       ...snapshot,
       spend,
@@ -83,6 +92,8 @@ export function workspaceController(): Hono<AppEnv> {
       ...(notifications ? { notifications } : {}),
       ...(mergePresets ? { mergePresets } : {}),
       ...(modelDefaults ? { modelDefaults } : {}),
+      ...(recurringPipelines ? { recurringPipelines } : {}),
+      ...(trackerSettings ? { trackerSettings } : {}),
     })
   })
 

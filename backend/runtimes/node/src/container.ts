@@ -1,4 +1,5 @@
 import { AiAgentExecutor } from '@cat-factory/agents'
+import { TicketTrackerService } from '@cat-factory/integrations'
 import { type CoreDependencies, createCore } from '@cat-factory/orchestration'
 import type { AppConfig, ServerContainer } from '@cat-factory/server'
 import type { PgBoss } from 'pg-boss'
@@ -68,6 +69,16 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     tokenUsageRepository: repos.tokenUsageRepository,
     llmCallMetricRepository: repos.llmCallMetricRepository,
     modelDefaultsRepository: repos.modelDefaultsRepository,
+    // Recurring pipelines + the workspace tracker selection. The tracker provider
+    // files the tech-debt pipeline's issue; in the Node facade no GitHub client /
+    // Jira credentials are wired yet, so it passes through (Jira's HTTP transport is
+    // the global fetch, available when those credentials are added later).
+    pipelineScheduleRepository: repos.pipelineScheduleRepository,
+    trackerSettingsRepository: repos.trackerSettingsRepository,
+    ticketTrackerProvider: new TicketTrackerService({
+      trackerSettingsRepository: repos.trackerSettingsRepository,
+      fetchImpl: fetch,
+    }),
     idGenerator,
     clock,
     agentExecutor,

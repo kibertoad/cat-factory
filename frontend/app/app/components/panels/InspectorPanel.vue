@@ -9,6 +9,7 @@ import TaskDependencies from '~/components/panels/inspector/TaskDependencies.vue
 import TaskStructure from '~/components/panels/inspector/TaskStructure.vue'
 import TaskRunSettings from '~/components/panels/inspector/TaskRunSettings.vue'
 import TaskExecution from '~/components/panels/inspector/TaskExecution.vue'
+import RecurringScheduleSettings from '~/components/panels/inspector/RecurringScheduleSettings.vue'
 import AgentFailureCard from '~/components/board/AgentFailureCard.vue'
 import AgentStopButton from '~/components/board/AgentStopButton.vue'
 
@@ -21,6 +22,11 @@ const tasks = useTasksStore()
 const fragments = useFragmentsStore()
 const agentRuns = useAgentRunsStore()
 const github = useGitHubStore()
+const recurring = useRecurringPipelinesStore()
+
+// When the selected task block backs a recurring pipeline, the inspector shows the
+// schedule controls + history, and "Delete" removes the schedule (block + history).
+const schedule = computed(() => (block.value ? recurring.byBlock(block.value.id) : undefined))
 
 onMounted(() => {
   fragments.ensureLoaded()
@@ -67,7 +73,13 @@ const runnable = computed(() => (block.value ? board.isRunnable(block.value.id) 
 // The delete control names what it removes, so selecting a task and deleting it
 // reads as "Delete task" rather than ambiguously removing the whole service.
 const deleteLabel = computed(() =>
-  isTask.value ? 'Delete task' : level.value === 'module' ? 'Delete module' : 'Delete service',
+  schedule.value
+    ? 'Delete recurring pipeline'
+    : isTask.value
+      ? 'Delete task'
+      : level.value === 'module'
+        ? 'Delete module'
+        : 'Delete service',
 )
 
 // A task is "started" once a pipeline has been launched on it (it has an
@@ -112,6 +124,13 @@ const runMenu = computed(() =>
 
 function remove() {
   if (!block.value) return
+  // A schedule owns its reused block + run history — removing the schedule deletes
+  // them server-side, so delete the schedule rather than orphaning it.
+  if (schedule.value) {
+    recurring.remove(schedule.value.id).catch(() => {})
+    ui.select(null)
+    return
+  }
   execution.cancel(block.value.id)
   board.removeBlock(block.value.id)
   ui.select(null)
@@ -266,6 +285,7 @@ const runningRun = computed(() => {
 
       <!-- task: dependencies, structure, scenarios, run settings, execution -->
       <template v-else-if="isTask">
+        <RecurringScheduleSettings :block="block" />
         <TaskDependencies :block="block" />
         <TaskStructure :block="block" />
         <TaskScenarios :block="block" />

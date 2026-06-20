@@ -54,6 +54,10 @@ const CONTAINER_KINDS = new Set([
   // The merger clones the PR head branch to assess the diff (complexity/risk/impact)
   // before the engine decides whether to auto-merge — a real-checkout operation.
   'merger',
+  // The tech-debt `analysis` agent clones the repo to inspect it and emit a report.
+  // It is read-only (makes no edits) so the coding-agent harness produces no commit
+  // and opens no PR — but it still needs a real checkout, so it runs in a container.
+  'analysis',
 ])
 
 export class CompositeAgentExecutor implements AsyncAgentExecutor {

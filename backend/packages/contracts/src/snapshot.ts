@@ -10,6 +10,8 @@ import { bootstrapJobSchema } from './bootstrap.js'
 import { notificationSchema } from './notifications.js'
 import { mergeThresholdPresetSchema } from './merge.js'
 import { modelDefaultsSchema } from './model-defaults.js'
+import { pipelineScheduleSchema } from './recurring.js'
+import { trackerSettingsSchema } from './tracker.js'
 
 // The full board snapshot returned by GET /workspaces/:id (and POST /workspaces).
 // It lives in its own module because it references both ./entities and
@@ -51,5 +53,16 @@ export const workspaceSnapshotSchema = v.object({
    * worker, so optional on the wire.
    */
   modelDefaults: v.optional(modelDefaultsSchema),
+  /**
+   * The workspace's recurring pipelines (schedules that re-run a pipeline against
+   * a service on a cadence). Carried in the snapshot so the board renders the
+   * recurring-task badges + inspector on load. Run history is fetched lazily.
+   */
+  recurringPipelines: v.optional(v.array(pipelineScheduleSchema)),
+  /**
+   * The workspace's issue-tracker selection (where the tech-debt pipeline files
+   * its ticket). Attached by the worker, so optional on the wire.
+   */
+  trackerSettings: v.optional(trackerSettingsSchema),
 })
 export type WorkspaceSnapshot = v.InferOutput<typeof workspaceSnapshotSchema>

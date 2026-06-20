@@ -210,3 +210,61 @@ export const llmCallMetrics = pgTable(
     index('idx_llm_call_metrics_created').on(t.created_at),
   ],
 )
+
+// Recurring pipelines (mirror of D1 migration 0029). A schedule attaches a pipeline
+// to a service frame and owns one reused on-board block; the sweeper fires every
+// enabled schedule whose `next_run_at <= now`. `weekdays` is a JSON array (text),
+// epoch-ms columns are bigint. Each fire is recorded in `pipeline_schedule_runs`.
+export const pipelineSchedules = pgTable(
+  'pipeline_schedules',
+  {
+    workspace_id: text('workspace_id').notNull(),
+    id: text('id').notNull(),
+    block_id: text('block_id').notNull(),
+    frame_id: text('frame_id').notNull(),
+    pipeline_id: text('pipeline_id').notNull(),
+    template: text('template').notNull(),
+    name: text('name').notNull(),
+    interval_hours: integer('interval_hours').notNull(),
+    weekdays: text('weekdays').notNull().default('[]'),
+    window_start_hour: integer('window_start_hour'),
+    window_end_hour: integer('window_end_hour'),
+    timezone: text('timezone').notNull().default('UTC'),
+    enabled: integer('enabled').notNull().default(1),
+    last_run_at: bigint('last_run_at', { mode: 'number' }),
+    next_run_at: bigint('next_run_at', { mode: 'number' }).notNull(),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.workspace_id, t.id] }),
+    index('idx_pipeline_schedules_due').on(t.enabled, t.next_run_at),
+    index('idx_pipeline_schedules_block').on(t.workspace_id, t.block_id),
+  ],
+)
+
+export const pipelineScheduleRuns = pgTable(
+  'pipeline_schedule_runs',
+  {
+    workspace_id: text('workspace_id').notNull(),
+    id: text('id').notNull(),
+    schedule_id: text('schedule_id').notNull(),
+    execution_id: text('execution_id'),
+    status: text('status').notNull(),
+    started_at: bigint('started_at', { mode: 'number' }).notNull(),
+    finished_at: bigint('finished_at', { mode: 'number' }),
+    outcome: text('outcome'),
+  },
+  (t) => [
+    primaryKey({ columns: [t.workspace_id, t.id] }),
+    index('idx_schedule_runs_schedule').on(t.workspace_id, t.schedule_id, t.started_at),
+    index('idx_schedule_runs_started').on(t.started_at),
+  ],
+)
+
+// A workspace's issue-tracker selection (mirror of D1 migration 0029).
+export const trackerSettings = pgTable('tracker_settings', {
+  workspace_id: text('workspace_id').primaryKey(),
+  tracker: text('tracker'),
+  jira_project_key: text('jira_project_key'),
+  updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
+})

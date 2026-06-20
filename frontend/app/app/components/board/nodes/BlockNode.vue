@@ -97,6 +97,10 @@ function addTask() {
   ui.openAddTask(props.id)
 }
 
+function addRecurring() {
+  ui.openAddRecurring(props.id)
+}
+
 // A task needs merging → green pulse; a task needs a decision → amber pulse.
 const pulseClass = computed(() => {
   if (frameStatus.value === 'blocked') return 'board-pulse'
@@ -334,6 +338,15 @@ const ITEM_ICON: Record<string, string> = {
               icon="i-lucide-plus"
               title="Add task"
               @click.stop="addTask"
+            />
+            <UButton
+              class="nodrag"
+              size="xs"
+              variant="ghost"
+              color="neutral"
+              icon="i-lucide-repeat"
+              title="Add recurring pipeline"
+              @click.stop="addRecurring"
             />
             <UButton
               class="nodrag"

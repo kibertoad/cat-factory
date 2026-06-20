@@ -178,6 +178,16 @@ export type {
 export type { NotificationRepository } from './notification-repositories.js'
 export type { MergePresetRepository } from './merge-preset-repositories.js'
 export type { ModelDefaultsRepository } from './model-default-repositories.js'
+export type {
+  DueSchedule,
+  PipelineScheduleRepository,
+} from './recurring-repositories.js'
+export type { TrackerSettingsRepository } from './tracker-settings-repositories.js'
+export type {
+  CreateTicketRequest,
+  CreatedTicket,
+  TicketTrackerProvider,
+} from './ticket-tracker.js'
 export {
   type NotificationChannel,
   CompositeNotificationChannel,

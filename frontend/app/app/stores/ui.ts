@@ -40,6 +40,11 @@ export const useUiStore = defineStore('ui', () => {
   // is launched until they explicitly start the created task.
   const addTaskContainerId = ref<string | null>(null)
 
+  // Add-recurring-pipeline modal: the service frame a new recurring pipeline is
+  // being added to, or null when closed (mirrors the add-task flow — a button on
+  // the frame opens it, scoped to that frame).
+  const addRecurringFrameId = ref<string | null>(null)
+
   // Repo-bootstrap modal (manage reference architectures + launch a bootstrap).
   const bootstrapOpen = ref(false)
 
@@ -173,6 +178,12 @@ export const useUiStore = defineStore('ui', () => {
   function closeAddTask() {
     addTaskContainerId.value = null
   }
+  function openAddRecurring(frameId: string) {
+    addRecurringFrameId.value = frameId
+  }
+  function closeAddRecurring() {
+    addRecurringFrameId.value = null
+  }
   function openBootstrap() {
     bootstrapOpen.value = true
   }
@@ -249,6 +260,7 @@ export const useUiStore = defineStore('ui', () => {
     taskConnect,
     taskImport,
     addTaskContainerId,
+    addRecurringFrameId,
     bootstrapOpen,
     addServiceOpen,
     githubOpen,
@@ -284,6 +296,8 @@ export const useUiStore = defineStore('ui', () => {
     closeTaskImport,
     openAddTask,
     closeAddTask,
+    openAddRecurring,
+    closeAddRecurring,
     openBootstrap,
     closeBootstrap,
     openAddService,

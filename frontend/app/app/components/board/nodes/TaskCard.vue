@@ -46,6 +46,11 @@ const prLabel = computed(() => (pr.value?.number ? `PR #${pr.value.number}` : 'P
 const agentRun = computed(() => agentRuns.byBlock[props.taskId])
 const runFailed = computed(() => agentRun.value?.status === 'failed')
 
+// When this task backs a recurring pipeline, surface a small repeat badge so the
+// service shows its scheduled work at a glance (full controls live in the inspector).
+const recurring = useRecurringPipelinesStore()
+const schedule = computed(() => recurring.byBlock(props.taskId))
+
 // Optimistic "Start": flip the button into a spinning "Starting…" state the
 // instant it's clicked, before the server confirms. The button naturally
 // unmounts once the stream pushes the block into `in_progress`; if the start
@@ -116,6 +121,12 @@ function selectTask() {
     <!-- header row -->
     <div class="flex items-center gap-1.5">
       <span class="h-2 w-2 shrink-0 rounded-full" :style="{ backgroundColor: statusMeta.color }" />
+      <UIcon
+        v-if="schedule"
+        name="i-lucide-repeat"
+        class="h-3 w-3 shrink-0 text-indigo-400"
+        :title="schedule.enabled ? 'Recurring pipeline' : 'Recurring pipeline (paused)'"
+      />
       <span class="truncate text-[11px] font-semibold text-slate-100">{{ task.title }}</span>
       <span class="ml-auto shrink-0 text-[9px] uppercase tracking-wide text-slate-500">
         {{ statusMeta.label }}

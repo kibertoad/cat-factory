@@ -18,6 +18,8 @@ import type { ExecutionInstance } from './execution'
 import type { BootstrapJob } from './bootstrap'
 import type { Notification } from './notifications'
 import type { MergeThresholdPreset } from './merge'
+import type { PipelineSchedule } from './recurring'
+import type { TrackerSettings } from './tracker'
 
 /** Lifecycle of an architecture building block. */
 export type BlockStatus =
@@ -138,6 +140,10 @@ export type AgentKind =
   | 'ci'
   | 'ci-fixer'
   | 'merger'
+  // Recurring tech-debt pipeline: read-only code `analysis`, then a special
+  // non-LLM `tracker` step that files a GitHub issue / Jira ticket.
+  | 'analysis'
+  | 'tracker'
 
 /** A draggable agent definition shown in the agent palette. */
 export interface AgentArchetype {
@@ -211,6 +217,10 @@ export interface WorkspaceSnapshot {
   mergePresets?: MergeThresholdPreset[]
   /** Per-agent-kind default model overrides for this workspace (agentKind → model id). */
   modelDefaults?: ModelDefaults
+  /** The workspace's recurring pipelines (schedules shown on the board + inspector). */
+  recurringPipelines?: PipelineSchedule[]
+  /** The workspace's issue-tracker selection (where the tech-debt pipeline files tickets). */
+  trackerSettings?: TrackerSettings
 }
 
 /**
@@ -260,3 +270,5 @@ export type * from './github'
 export type * from './accounts'
 export type * from './notifications'
 export type * from './merge'
+export type * from './recurring'
+export type * from './tracker'

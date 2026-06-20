@@ -22,8 +22,20 @@ export {
   MERGER_AGENT_KIND,
   CONFLICTS_AGENT_KIND,
   CONFLICT_RESOLVER_AGENT_KIND,
+  ANALYSIS_AGENT_KIND,
+  TRACKER_AGENT_KIND,
   type CiVerdict,
 } from './modules/execution/ci.logic.js'
+
+export {
+  RecurringPipelineService,
+  type RecurringPipelineServiceDependencies,
+} from './modules/recurring/RecurringPipelineService.js'
+export {
+  TrackerSettingsService,
+  type TrackerSettingsServiceDependencies,
+} from './modules/recurring/TrackerSettingsService.js'
+export * as scheduleLogic from './modules/recurring/schedule.logic.js'
 
 export {
   NotificationService,
@@ -86,5 +98,7 @@ export {
   type MergePresetsModule,
   type ModelDefaultsModule,
   type FragmentLibraryModule,
+  type RecurringModule,
+  type TrackerModule,
   createCore,
 } from './container.js'

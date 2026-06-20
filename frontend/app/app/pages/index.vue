@@ -16,6 +16,7 @@ import SpawnPreviewModal from '~/components/documents/SpawnPreviewModal.vue'
 import TaskSourceConnectModal from '~/components/tasks/TaskSourceConnectModal.vue'
 import TaskImportModal from '~/components/tasks/TaskImportModal.vue'
 import AddTaskModal from '~/components/board/AddTaskModal.vue'
+import RecurringPipelineModal from '~/components/board/RecurringPipelineModal.vue'
 import BootstrapModal from '~/components/bootstrap/BootstrapModal.vue'
 import AddServiceFromRepoModal from '~/components/github/AddServiceFromRepoModal.vue'
 import GitHubPanel from '~/components/github/GitHubPanel.vue'
@@ -97,6 +98,7 @@ watch(
       <TaskSourceConnectModal />
       <TaskImportModal />
       <AddTaskModal />
+      <RecurringPipelineModal />
       <BootstrapModal />
       <AddServiceFromRepoModal />
       <GitHubPanel />

@@ -30,6 +30,9 @@ function fakeRepos(): {
           return 7
         },
       },
+      // Recurring-pipeline run history prune (fixed ~1-week window). Returns 0 here;
+      // its real behaviour is covered against Postgres by the conformance suite.
+      pipelineScheduleRepository: { pruneRunsBefore: async () => 0 },
     },
   }
 }
@@ -53,7 +56,7 @@ describe('sweepRetention', () => {
 
     expect(cutoffs.tokenUsage).toBe(now - 30 * DAY)
     expect(cutoffs.llmCallMetrics).toBe(now - 3 * DAY)
-    expect(result).toEqual({ tokenUsage: 3, llmCallMetrics: 7 })
+    expect(result).toEqual({ tokenUsage: 3, llmCallMetrics: 7, scheduleRuns: 0 })
   })
 
   it('treats a non-positive window as disabled — no delete, zero reclaimed', async () => {
@@ -62,6 +65,6 @@ describe('sweepRetention', () => {
 
     expect(cutoffs.tokenUsage).toBe(now - 30 * DAY) // still pruned
     expect(cutoffs.llmCallMetrics).toBeNull() // disabled → never called
-    expect(result).toEqual({ tokenUsage: 3, llmCallMetrics: 0 })
+    expect(result).toEqual({ tokenUsage: 3, llmCallMetrics: 0, scheduleRuns: 0 })
   })
 })

@@ -59,6 +59,13 @@ import type {
   CreateMergePresetInput,
   UpdateMergePresetInput,
 } from '~/types/merge'
+import type {
+  PipelineSchedule,
+  ScheduleRun,
+  CreateScheduleInput,
+  UpdateScheduleInput,
+} from '~/types/recurring'
+import type { TrackerSettings, PutTrackerSettingsInput } from '~/types/tracker'
 
 type Position = { x: number; y: number }
 
@@ -490,6 +497,38 @@ export function useApi() {
         method: 'PUT',
         body: { defaults },
       }),
+
+    // ---- recurring pipelines (scheduled runs against a service) -----------
+    listRecurringPipelines: (workspaceId: string) =>
+      http<PipelineSchedule[]>(`${ws(workspaceId)}/recurring-pipelines`),
+
+    createRecurringPipeline: (workspaceId: string, body: CreateScheduleInput) =>
+      http<PipelineSchedule>(`${ws(workspaceId)}/recurring-pipelines`, { method: 'POST', body }),
+
+    updateRecurringPipeline: (workspaceId: string, id: string, body: UpdateScheduleInput) =>
+      http<PipelineSchedule>(`${ws(workspaceId)}/recurring-pipelines/${encodeURIComponent(id)}`, {
+        method: 'PATCH',
+        body,
+      }),
+
+    deleteRecurringPipeline: (workspaceId: string, id: string) =>
+      http(`${ws(workspaceId)}/recurring-pipelines/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+
+    listScheduleRuns: (workspaceId: string, id: string) =>
+      http<ScheduleRun[]>(`${ws(workspaceId)}/recurring-pipelines/${encodeURIComponent(id)}/runs`),
+
+    runScheduleNow: (workspaceId: string, id: string) =>
+      http<PipelineSchedule>(
+        `${ws(workspaceId)}/recurring-pipelines/${encodeURIComponent(id)}/run-now`,
+        { method: 'POST' },
+      ),
+
+    // ---- issue-tracker selection (workspace-level) ------------------------
+    getTrackerSettings: (workspaceId: string) =>
+      http<TrackerSettings>(`${ws(workspaceId)}/tracker-settings`),
+
+    putTrackerSettings: (workspaceId: string, body: PutTrackerSettingsInput) =>
+      http<TrackerSettings>(`${ws(workspaceId)}/tracker-settings`, { method: 'PUT', body }),
 
     // ---- github integration ----------------------------------------------
     // Connection management, projection reads (served from D1 — fast and

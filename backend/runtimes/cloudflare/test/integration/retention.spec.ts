@@ -203,7 +203,13 @@ describe('storage retention sweep', () => {
       policy: { tokenUsageMs: 0, rateLimitMs: 0, commitMs: 0, llmCallMetricsMs: 0 },
     })
 
-    expect(result).toEqual({ tokenUsage: 0, rateLimits: 0, commits: 0, llmCallMetrics: 0 })
+    expect(result).toEqual({
+      tokenUsage: 0,
+      rateLimits: 0,
+      commits: 0,
+      llmCallMetrics: 0,
+      scheduleRuns: 0,
+    })
     expect(await countRows('token_usage', 'id = ?', 'tok_disabled')).toBe(1)
   })
 })

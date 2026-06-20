@@ -10,6 +10,7 @@ import type {
   PipelineStep,
   PullRequestMerger,
   PullRequestMergeabilityProvider,
+  TicketTrackerProvider,
 } from '@cat-factory/kernel'
 import { parseBlueprintService, parseMergeAssessment } from '@cat-factory/contracts'
 import {
@@ -29,6 +30,8 @@ import {
   describeFailingChecks,
   isCiGreen,
   MERGER_AGENT_KIND,
+  TRACKER_AGENT_KIND,
+  ANALYSIS_AGENT_KIND,
 } from './ci.logic.js'
 import type { NotificationService } from '../notifications/NotificationService.js'
 import type { LlmObservabilityService } from '../observability/LlmObservabilityService.js'
@@ -153,6 +156,12 @@ export interface ExecutionServiceDependencies {
    */
   mergePresetRepository?: MergePresetRepository
   /**
+   * Optional: files a GitHub issue / Jira ticket for the `tracker` step (the
+   * tech-debt recurring pipeline). Absent → the `tracker` step passes through
+   * without filing anything, so the engine works unchanged when no tracker is wired.
+   */
+  ticketTrackerProvider?: TicketTrackerProvider
+  /**
    * Optional: the LLM observability sink. When wired, each emit rolls the per-run
    * model-call aggregates onto the matching pipeline steps (`step.metrics`) so the
    * board shows tokens / output-limit headroom / transport-vs-execution latency
@@ -202,6 +211,7 @@ export class ExecutionService {
   private readonly mergeabilityProvider?: PullRequestMergeabilityProvider
   private readonly prMerger?: PullRequestMerger
   private readonly mergePresetRepository?: MergePresetRepository
+  private readonly ticketTrackerProvider?: TicketTrackerProvider
 
   constructor({
     workspaceRepository,
@@ -226,6 +236,7 @@ export class ExecutionService {
     mergeabilityProvider,
     pullRequestMerger,
     mergePresetRepository,
+    ticketTrackerProvider,
   }: ExecutionServiceDependencies) {
     this.workspaceRepository = workspaceRepository
     this.blockRepository = blockRepository
@@ -249,6 +260,7 @@ export class ExecutionService {
     this.mergeabilityProvider = mergeabilityProvider
     this.prMerger = pullRequestMerger
     this.mergePresetRepository = mergePresetRepository
+    this.ticketTrackerProvider = ticketTrackerProvider
   }
 
   private requireWorkspace(workspaceId: string) {
@@ -372,6 +384,15 @@ export class ExecutionService {
     // Otherwise it falls through to the normal agent path.
     if (this.environmentProvisioning && isDeployStep(step.agentKind)) {
       const result = await this.runDeployer(workspaceId, instance, block, options)
+      return this.recordStepResult(workspaceId, instance, step, isFinalStep, result)
+    }
+
+    // A `tracker` step files a GitHub issue / Jira ticket from the preceding
+    // `analysis` output (the tech-debt pipeline) — no LLM of its own. It is a
+    // pass-through when no tracker provider is wired or none is configured for the
+    // workspace. See {@link runTracker}.
+    if (step.agentKind === TRACKER_AGENT_KIND) {
+      const result = await this.runTracker(workspaceId, instance, block)
       return this.recordStepResult(workspaceId, instance, step, isFinalStep, result)
     }
 
@@ -758,6 +779,45 @@ export class ExecutionService {
       return {
         output: `Deployer error: ${getErrorMessage(error)}`,
       }
+    }
+  }
+
+  /**
+   * File a tracking issue/ticket for a `tracker` step from the preceding `analysis`
+   * output. Non-LLM and best-effort: when no provider is wired or none is configured
+   * for the workspace it simply notes the skip; a filing error is folded into the
+   * step output rather than failing the run (the implementation still proceeds).
+   */
+  private async runTracker(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    block: Block,
+  ): Promise<AgentRunResult> {
+    if (!this.ticketTrackerProvider) {
+      return { output: 'No issue tracker configured; skipped ticket creation.' }
+    }
+    // The report to file is the closest preceding `analysis` output, falling back
+    // to the block description when the pipeline has no analysis step.
+    const analysis = instance.steps
+      .slice(0, instance.currentStep)
+      .filter((s) => s.agentKind === ANALYSIS_AGENT_KIND && s.output)
+      .map((s) => s.output as string)
+      .pop()
+    const body = (analysis ?? block.description ?? '').trim() || 'Automated tech-debt remediation.'
+    const frameId = (await this.resolveServiceFrameId(workspaceId, block.id)) ?? block.id
+    try {
+      const ticket = await this.ticketTrackerProvider.createTicket({
+        workspaceId,
+        frameId,
+        title: `Tech debt: ${block.title}`,
+        body,
+      })
+      if (!ticket) {
+        return { output: 'No issue tracker configured; skipped ticket creation.' }
+      }
+      return { output: `Filed tracking ticket ${ticket.externalId}: ${ticket.url}` }
+    } catch (error) {
+      return { output: `Could not file a tracking ticket: ${getErrorMessage(error)}` }
     }
   }
 

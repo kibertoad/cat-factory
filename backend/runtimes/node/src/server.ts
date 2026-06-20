@@ -20,6 +20,7 @@ import {
   startExecutionWorker,
   startStaleRunSweeper,
 } from './execution/pgBossRunner.js'
+import { startScheduleSweeper } from './recurring.js'
 import { createDrizzleRepositories } from './repositories/drizzle.js'
 import { startRetentionSweeper } from './retention.js'
 import { SystemClock } from './runtime.js'
@@ -104,6 +105,8 @@ export async function start(
   // prunes these from cron, Node has none, so a timer mirrors it. Without this the
   // observability sink — full per-call prompt/response — grows forever on Postgres.
   const stopRetention = startRetentionSweeper(repos, container.config.retention, clock, logger)
+  // Fire due recurring pipelines on a one-minute timer (the Worker uses cron).
+  const stopScheduleSweeper = startScheduleSweeper(container, clock, logger)
 
   const app = createApp(container, env)
   const port = Number(env.PORT ?? 8787)
@@ -120,6 +123,7 @@ export async function start(
     logger.info({ signal }, 'shutting down cat-factory node server')
     stopSweeper()
     stopRetention()
+    stopScheduleSweeper()
     await new Promise<void>((resolve) => server.close(() => resolve()))
     try {
       await boss.stop()

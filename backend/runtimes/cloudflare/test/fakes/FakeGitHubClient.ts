@@ -161,6 +161,15 @@ export class FakeGitHubClient implements GitHubClient {
     return { sha: 'fake-commit-sha' }
   }
 
+  async createIssue(
+    _installationId: number,
+    ref: GitHubRepoRef,
+    input: { title: string; body: string },
+  ): Promise<{ number: number; url: string }> {
+    this.writes.push({ method: 'createIssue', ref, args: input })
+    return { number: 4242, url: `https://github.com/${ref.owner}/${ref.repo}/issues/4242` }
+  }
+
   async openPullRequest(
     _installationId: number,
     ref: GitHubRepoRef,

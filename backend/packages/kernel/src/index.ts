@@ -26,7 +26,13 @@ export {
   effectiveCatalog,
   resolveModelRef,
 } from './domain/models.js'
-export { seedBlocks, seedPipelines, BLUEPRINT_PIPELINE_ID } from './domain/seed.js'
+export {
+  seedBlocks,
+  seedPipelines,
+  BLUEPRINT_PIPELINE_ID,
+  DEP_UPDATE_PIPELINE_ID,
+  TECH_DEBT_PIPELINE_ID,
+} from './domain/seed.js'
 
 export * from './ports/index.js'
 
