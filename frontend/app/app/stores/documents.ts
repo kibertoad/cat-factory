@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import type {
   DocumentBoardPlan,
   DocumentConnection,
+  DocumentSearchResult,
   DocumentSourceDescriptor,
   DocumentSourceKind,
   SourceDocument,
@@ -119,6 +120,15 @@ export const useDocumentsStore = defineStore('documents', () => {
     }
   }
 
+  /** Search a connected source's catalogue by free text (title/content). */
+  async function search(
+    source: DocumentSourceKind,
+    query: string,
+  ): Promise<DocumentSearchResult[]> {
+    const { results } = await api.searchDocumentSource(workspace.requireId(), source, query)
+    return results
+  }
+
   /** Preview the board structure a page would expand into (no writes). */
   function plan(source: DocumentSourceKind, externalId: string): Promise<DocumentBoardPlan> {
     return api.planDocument(workspace.requireId(), source, externalId)
@@ -158,6 +168,7 @@ export const useDocumentsStore = defineStore('documents', () => {
     disconnect,
     loadDocuments,
     importDocument,
+    search,
     plan,
     spawn,
     linkToBlock,

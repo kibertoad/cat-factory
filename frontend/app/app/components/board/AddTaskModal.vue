@@ -5,13 +5,12 @@
 // pipeline on it explicitly (and can keep editing it until they do).
 //
 // When the document/task integrations are available, the user can also attach
-// already-imported documents (Confluence / Notion / …) and tracker issues (Jira
-// / GitHub) as extra context up front. Linking needs the block id, so we create
-// the task first, then link the selected items to it before closing — the same
-// context the agents see for every step of the run (see the backend's
-// linkedContextSection).
-import type { SourceDocument, SourceTask } from '~/types/domain'
-
+// external context up front via <ContextPicker>: search a connected source
+// (Confluence / Notion / GitHub repo docs / Jira / GitHub issues) by title or
+// content, paste a page/issue URL, or pick something already imported. Linking
+// needs the block id, so we create the task first, then import-and-link the
+// chosen items to it before closing — the same context the agents see for every
+// step of the run (see the backend's linkedContextSection).
 const ui = useUiStore()
 const board = useBoardStore()
 const documents = useDocumentsStore()
@@ -19,6 +18,8 @@ const tasks = useTasksStore()
 const mergePresets = useMergePresetsStore()
 const pipelines = usePipelinesStore()
 const toast = useToast()
+
+const { linkPending } = useContextLinking()
 
 const open = computed({
   get: () => ui.addTaskContainerId !== null,
@@ -83,21 +84,16 @@ const selectedPipelineLabel = computed(
   () => pipelines.getPipeline(pipelineId.value)?.name ?? 'Choose at run time',
 )
 
-// Pending selections, keyed by `source:externalId` (stable across reloads).
-const selectedDocs = ref<Set<string>>(new Set())
-const selectedTasks = ref<Set<string>>(new Set())
+// Context the user chose to attach to the new task (search hits, pasted URLs,
+// already-imported items), collected by <ContextPicker> and committed on add.
+const pendingContext = ref<PendingContext[]>([])
 
-const docKey = (d: Pick<SourceDocument, 'source' | 'externalId'>) => `${d.source}:${d.externalId}`
-const taskKey = (t: Pick<SourceTask, 'source' | 'externalId'>) => `${t.source}:${t.externalId}`
-
-const showContext = computed(
-  () =>
-    (documents.available && documents.documents.length > 0) ||
-    (tasks.available && tasks.tasks.length > 0),
-)
+// The picker is offered whenever either integration is configured (even with
+// nothing imported yet — you can search/paste a URL to attach the first item).
+const showContext = computed(() => documents.available || tasks.available)
 
 // Reset the form whenever the modal opens for a (new) container, and refresh the
-// imported docs/issues so the latest are selectable.
+// imported docs/issues so the quick-pick list is current.
 watch(open, (isOpen) => {
   if (!isOpen) return
   title.value = ''
@@ -105,49 +101,12 @@ watch(open, (isOpen) => {
   saving.value = false
   mergePresetId.value = ''
   pipelineId.value = ''
-  selectedDocs.value = new Set()
-  selectedTasks.value = new Set()
+  pendingContext.value = []
   documents.loadDocuments().catch(() => {})
   tasks.loadTasks().catch(() => {})
 })
 
-function toggleDoc(key: string) {
-  const next = new Set(selectedDocs.value)
-  if (next.has(key)) next.delete(key)
-  else next.add(key)
-  selectedDocs.value = next
-}
-
-function toggleTask(key: string) {
-  const next = new Set(selectedTasks.value)
-  if (next.has(key)) next.delete(key)
-  else next.add(key)
-  selectedTasks.value = next
-}
-
 const canAdd = computed(() => title.value.trim().length > 0)
-
-/** Link every selected doc/issue to the new block; returns how many failed. */
-async function linkSelections(blockId: string): Promise<number> {
-  let failed = 0
-  for (const doc of documents.documents) {
-    if (!selectedDocs.value.has(docKey(doc))) continue
-    try {
-      await documents.linkToBlock(blockId, doc.source, doc.externalId)
-    } catch {
-      failed++
-    }
-  }
-  for (const task of tasks.tasks) {
-    if (!selectedTasks.value.has(taskKey(task))) continue
-    try {
-      await tasks.linkToBlock(blockId, task.source, task.externalId)
-    } catch {
-      failed++
-    }
-  }
-  return failed
-}
 
 async function add() {
   const containerId = ui.addTaskContainerId
@@ -164,7 +123,7 @@ async function add() {
       },
     )
     if (block) {
-      const failed = await linkSelections(block.id)
+      const failed = await linkPending(block.id, pendingContext.value)
       if (failed > 0) {
         toast.add({
           title: `Task added, but ${failed} attachment${failed === 1 ? '' : 's'} could not be linked`,
@@ -252,62 +211,11 @@ async function add() {
             Extra context (optional)
           </span>
 
-          <div v-if="documents.available && documents.documents.length" class="space-y-1">
-            <button
-              v-for="doc in documents.documents"
-              :key="docKey(doc)"
-              type="button"
-              class="flex w-full items-center gap-1.5 rounded-md border px-2 py-1.5 text-left text-xs"
-              :class="
-                selectedDocs.has(docKey(doc))
-                  ? 'border-indigo-500/60 bg-indigo-500/10 text-slate-200'
-                  : 'border-slate-800 bg-slate-900/60 text-slate-300 hover:bg-slate-800/60'
-              "
-              @click="toggleDoc(docKey(doc))"
-            >
-              <UIcon
-                :name="
-                  selectedDocs.has(docKey(doc))
-                    ? 'i-lucide-check'
-                    : (documents.descriptorFor(doc.source)?.icon ?? 'i-lucide-file-text')
-                "
-                class="h-3.5 w-3.5 shrink-0 text-indigo-400"
-              />
-              <span class="truncate">{{ doc.title }}</span>
-            </button>
-          </div>
-
-          <div v-if="tasks.available && tasks.tasks.length" class="space-y-1">
-            <button
-              v-for="task in tasks.tasks"
-              :key="taskKey(task)"
-              type="button"
-              class="flex w-full items-center gap-1.5 rounded-md border px-2 py-1.5 text-left text-xs"
-              :class="
-                selectedTasks.has(taskKey(task))
-                  ? 'border-indigo-500/60 bg-indigo-500/10 text-slate-200'
-                  : 'border-slate-800 bg-slate-900/60 text-slate-300 hover:bg-slate-800/60'
-              "
-              @click="toggleTask(taskKey(task))"
-            >
-              <UIcon
-                :name="
-                  selectedTasks.has(taskKey(task))
-                    ? 'i-lucide-check'
-                    : (tasks.descriptorFor(task.source)?.icon ?? 'i-lucide-square-check')
-                "
-                class="h-3.5 w-3.5 shrink-0 text-indigo-400"
-              />
-              <span class="truncate">{{ task.externalId }} · {{ task.title }}</span>
-              <UBadge color="neutral" variant="soft" size="xs" class="ml-auto shrink-0">
-                {{ task.status }}
-              </UBadge>
-            </button>
-          </div>
+          <ContextPicker v-model="pendingContext" />
 
           <p class="text-[11px] text-slate-500">
-            Attached documents and issues are fed to every agent step as context. Import more from
-            the sidebar or the task inspector.
+            Search a connected source, paste a page/issue URL, or pick something already imported —
+            it's fed to every agent step as context.
           </p>
         </div>
 

@@ -1,4 +1,4 @@
-import type { DocumentSourceDescriptor } from '@cat-factory/kernel'
+import type { DocumentSearchResult, DocumentSourceDescriptor } from '@cat-factory/kernel'
 
 // Notion-specific pure logic, kept out of the worker so it is unit-testable
 // without a live workspace: parsing/normalizing a page id out of user input, and
@@ -22,6 +22,39 @@ export const NOTION_DESCRIPTOR: DocumentSourceDescriptor = {
   ],
   refLabel: 'Page URL or ID',
   refPlaceholder: 'https://notion.so/Title-abc123…  or  the page id',
+  searchable: true,
+}
+
+interface NotionSearchResponse {
+  results?: {
+    id?: string
+    object?: string
+    url?: string
+    properties?: Record<string, unknown>
+  }[]
+}
+
+/**
+ * Map a Notion `/v1/search` response into lean hits, keeping only pages (the API
+ * also returns databases). The page title is read from its `properties` exactly
+ * as the single-page fetch does, so list + import titles agree.
+ */
+export function parseNotionSearchResults(json: unknown): DocumentSearchResult[] {
+  const body = (json ?? {}) as NotionSearchResponse
+  const out: DocumentSearchResult[] = []
+  for (const row of Array.isArray(body.results) ? body.results : []) {
+    if (row.object && row.object !== 'page') continue
+    const id = row.id
+    if (!id) continue
+    out.push({
+      source: 'notion',
+      externalId: formatNotionId(id.replace(/-/g, '')),
+      title: notionPageTitle(row.properties),
+      url: row.url ?? `https://www.notion.so/${id.replace(/-/g, '')}`,
+      excerpt: '',
+    })
+  }
+  return out
 }
 
 /** Format 32 hex chars as a canonical dashed Notion/UUID id. */

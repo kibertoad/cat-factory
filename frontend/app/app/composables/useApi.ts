@@ -10,6 +10,7 @@ import type {
   BootstrapRepoInput,
   DocumentBoardPlan,
   DocumentConnection,
+  DocumentSearchResult,
   DocumentSourceDescriptor,
   DocumentSourceKind,
   SourceDocument,
@@ -44,6 +45,7 @@ import type {
   ResyncRequest,
   SpawnResult,
   TaskConnection,
+  TaskSearchResult,
   TaskSourceDescriptor,
   TaskSourceKind,
   SourceTask,
@@ -349,6 +351,12 @@ export function useApi() {
         body,
       }),
 
+    searchDocumentSource: (workspaceId: string, source: DocumentSourceKind, query: string) =>
+      http<{ results: DocumentSearchResult[] }>(
+        `${ws(workspaceId)}/document-sources/${source}/search`,
+        { method: 'POST', body: { query } },
+      ),
+
     planDocument: (workspaceId: string, source: DocumentSourceKind, externalId: string) =>
       http<DocumentBoardPlan>(`${ws(workspaceId)}/document-sources/${source}/plan`, {
         method: 'POST',
@@ -398,6 +406,12 @@ export function useApi() {
       http<SourceTask>(`${ws(workspaceId)}/task-sources/${source}/import`, {
         method: 'POST',
         body,
+      }),
+
+    searchTaskSource: (workspaceId: string, source: TaskSourceKind, query: string) =>
+      http<{ results: TaskSearchResult[] }>(`${ws(workspaceId)}/task-sources/${source}/search`, {
+        method: 'POST',
+        body: { query },
       }),
 
     linkTask: (

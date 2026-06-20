@@ -66,6 +66,7 @@ export type {
   CredentialField,
   DocumentConnection,
   SourceDocument,
+  DocumentSearchResult,
   DocumentBoardPlan,
   PlanFrame,
   PlanModule,
@@ -76,6 +77,7 @@ export type {
   TaskConnection,
   TaskComment,
   SourceTask,
+  TaskSearchResult,
   // Ephemeral environment provider shapes.
   EnvironmentSecretRef,
   EnvironmentAuthScheme,

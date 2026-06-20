@@ -41,8 +41,10 @@ export { MapDocumentSourceRegistry } from './modules/documents/documents.logic.j
 export * as documentsLogic from './modules/documents/documents.logic.js'
 export * as confluenceLogic from './modules/documents/confluence.logic.js'
 export * as notionLogic from './modules/documents/notion.logic.js'
+export * as githubDocsLogic from './modules/documents/github-docs.logic.js'
 export { CONFLUENCE_DESCRIPTOR } from './modules/documents/confluence.logic.js'
 export { NOTION_DESCRIPTOR } from './modules/documents/notion.logic.js'
+export { GITHUB_DOCS_DESCRIPTOR } from './modules/documents/github-docs.logic.js'
 
 export {
   TaskConnectionService,

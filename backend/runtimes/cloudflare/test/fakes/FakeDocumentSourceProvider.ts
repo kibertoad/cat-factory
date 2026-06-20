@@ -1,16 +1,22 @@
 import type {
   DocumentContent,
   DocumentCredentials,
+  DocumentSearchResult,
   DocumentSourceDescriptor,
   DocumentSourceKind,
   DocumentSourceProvider,
   NormalizedConnection,
 } from '@cat-factory/kernel'
-import { CONFLUENCE_DESCRIPTOR, NOTION_DESCRIPTOR } from '@cat-factory/integrations'
+import {
+  CONFLUENCE_DESCRIPTOR,
+  GITHUB_DOCS_DESCRIPTOR,
+  NOTION_DESCRIPTOR,
+} from '@cat-factory/integrations'
 
 const DESCRIPTORS: Record<DocumentSourceKind, DocumentSourceDescriptor> = {
   confluence: CONFLUENCE_DESCRIPTOR,
   notion: NOTION_DESCRIPTOR,
+  github: GITHUB_DOCS_DESCRIPTOR,
 }
 
 /**
@@ -25,6 +31,9 @@ export class FakeDocumentSourceProvider implements DocumentSourceProvider {
   readonly descriptor: DocumentSourceDescriptor
   readonly pages = new Map<string, DocumentContent>()
   readonly calls: { credentials: DocumentCredentials; externalId: string }[] = []
+  /** Canned search hits + recorded queries, for the search endpoint tests. */
+  searchResults: DocumentSearchResult[] = []
+  readonly searchCalls: { credentials: DocumentCredentials; query: string }[] = []
 
   constructor(
     readonly kind: DocumentSourceKind = 'confluence',
@@ -71,5 +80,10 @@ export class FakeDocumentSourceProvider implements DocumentSourceProvider {
     }
     this.pages.set(externalId, generated)
     return generated
+  }
+
+  async search(credentials: DocumentCredentials, query: string): Promise<DocumentSearchResult[]> {
+    this.searchCalls.push({ credentials, query })
+    return this.searchResults
   }
 }

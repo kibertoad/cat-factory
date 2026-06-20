@@ -1,4 +1,9 @@
-import type { TaskSourceKind, TaskSourceDescriptor, TaskComment } from '../domain/types.js'
+import type {
+  TaskSourceKind,
+  TaskSourceDescriptor,
+  TaskComment,
+  TaskSearchResult,
+} from '../domain/types.js'
 
 // Port for a single task source (Jira, …). A provider is the only place that
 // knows a source's specifics: how to validate its credentials, how to turn user
@@ -64,6 +69,22 @@ export interface TaskSourceProvider {
   parseRef(input: string): string | null
   /** Fetch a single issue by its key using the connection credentials. */
   fetchTask(credentials: TaskCredentials, externalId: string): Promise<TaskContent>
+  /**
+   * Search the tracker by free text and return lean hits (no description/
+   * comments). Optional: a provider that only supports paste-a-URL import omits
+   * it (and its descriptor sets `searchable: false`). The provider builds the
+   * query and maps the response; the returned `externalId`s are valid import refs.
+   *
+   * `workspaceId` is the workspace whose connection is searching, so a provider
+   * that authenticates per-workspace out-of-band (e.g. the GitHub App, which
+   * ignores `credentials`) can scope the search to that workspace's installation
+   * instead of leaking across tenants.
+   */
+  search?(
+    credentials: TaskCredentials,
+    query: string,
+    workspaceId: string,
+  ): Promise<TaskSearchResult[]>
 }
 
 /** A lookup of the providers wired for this deployment, keyed by source. */

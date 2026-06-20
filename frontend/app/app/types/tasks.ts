@@ -22,6 +22,8 @@ export interface TaskSourceDescriptor {
   credentialFields: CredentialField[]
   refLabel: string
   refPlaceholder: string
+  /** Whether the source supports searching its catalogue by title/content. */
+  searchable?: boolean
 }
 
 /** A workspace's connection to a task source (never carries credentials). */
@@ -64,4 +66,17 @@ export interface SourceTask {
   /** The board block this issue is attached to as context, if any. */
   linkedBlockId: string | null
   syncedAt: number
+}
+
+/** A lean hit from searching a tracker's issues (not yet imported). */
+export interface TaskSearchResult {
+  source: TaskSourceKind
+  /** The source's canonical key for the issue (re-usable as an import ref). */
+  externalId: string
+  title: string
+  url: string
+  /** Workflow status name, e.g. `In Progress` (may be empty). */
+  status: string
+  /** Short plain-text preview (may be empty). */
+  excerpt: string
 }

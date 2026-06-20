@@ -5,6 +5,7 @@ import {
   type GitHubInstallationRepository,
   type TaskContent,
   type TaskCredentials,
+  type TaskSearchResult,
   type TaskSourceProvider,
   type NormalizedTaskConnection,
 } from '@cat-factory/kernel'
@@ -69,6 +70,41 @@ export class GitHubIssuesProvider implements TaskSourceProvider {
       description: detail.body,
       comments: detail.comments,
     }
+  }
+
+  /**
+   * Search issues visible to *this workspace's* GitHub App installation. The
+   * installation token only sees its own account's repos, so scoping to the
+   * workspace's installation keeps results from leaking across tenants — a
+   * deployment may host many installations, but a workspace owns exactly one.
+   * Credentials are unused (the App authenticates), matching `fetchTask`.
+   */
+  async search(
+    _credentials: TaskCredentials,
+    query: string,
+    workspaceId: string,
+  ): Promise<TaskSearchResult[]> {
+    const installation = await this.deps.installations.getByWorkspace(workspaceId)
+    if (!installation) return []
+    const hits = await this.deps.githubClient
+      .searchIssues(installation.installationId, query, 20)
+      .catch(() => [])
+    const out: TaskSearchResult[] = []
+    const seen = new Set<string>()
+    for (const hit of hits) {
+      const externalId = githubIssuesLogic.githubIssueExternalId(hit)
+      if (seen.has(externalId)) continue
+      seen.add(externalId)
+      out.push({
+        source: 'github',
+        externalId,
+        title: hit.title,
+        url: hit.url,
+        status: hit.state,
+        excerpt: '',
+      })
+    }
+    return out.slice(0, 20)
   }
 
   /**

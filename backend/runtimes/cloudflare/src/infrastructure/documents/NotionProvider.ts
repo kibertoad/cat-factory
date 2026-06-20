@@ -2,6 +2,7 @@ import {
   ValidationError,
   type DocumentContent,
   type DocumentCredentials,
+  type DocumentSearchResult,
   type DocumentSourceProvider,
   type NormalizedConnection,
 } from '@cat-factory/kernel'
@@ -167,6 +168,37 @@ export class NotionProvider implements DocumentSourceProvider {
       url: page.url ?? `https://www.notion.so/${page.id.replace(/-/g, '')}`,
       body: notionLogic.notionBlocksToMarkdown(blocks),
     }
+  }
+
+  async search(credentials: DocumentCredentials, query: string): Promise<DocumentSearchResult[]> {
+    const res = await safeFetch(`${API_BASE}/search`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${credentials.apiToken}`,
+        'notion-version': NOTION_VERSION,
+        accept: 'application/json',
+        'content-type': 'application/json',
+        'user-agent': USER_AGENT,
+      },
+      body: JSON.stringify({
+        query,
+        filter: { property: 'object', value: 'page' },
+        page_size: 20,
+      }),
+    })
+    if (!res.ok) {
+      const text = await readCappedText(res, MAX_RESPONSE_BYTES).catch(() => '')
+      throw new NotionApiError(res.status, `Notion search → ${res.status}: ${text.slice(0, 300)}`)
+    }
+    const text = await readCappedText(res, MAX_RESPONSE_BYTES)
+    const json = (() => {
+      try {
+        return JSON.parse(text)
+      } catch {
+        return null
+      }
+    })()
+    return notionLogic.parseNotionSearchResults(json)
   }
 
   /** Page through a page's top-level blocks (bounded), returning them in order. */

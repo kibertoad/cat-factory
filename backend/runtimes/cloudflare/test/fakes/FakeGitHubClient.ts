@@ -3,9 +3,11 @@ import type {
   GitHubBranch,
   GitHubCheckRun,
   GitHubClient,
+  GitHubCodeSearchHit,
   GitHubCommit,
   GitHubIssue,
   GitHubIssueDetail,
+  GitHubIssueSearchHit,
   GitHubPullRequest,
   GitHubRepo,
   GitHubRepoRef,
@@ -128,6 +130,24 @@ export class FakeGitHubClient implements GitHubClient {
       throw new Error(`FakeGitHubClient: no issue ${ref.owner}/${ref.repo}#${issueNumber}`)
     }
     return found
+  }
+
+  /** Canned issue-search hits, returned verbatim by searchIssues. */
+  issueSearchHits: GitHubIssueSearchHit[] = []
+  /** Canned code-search hits, returned verbatim by searchCode. */
+  codeSearchHits: GitHubCodeSearchHit[] = []
+  /** Records each (installationId, query) the search methods were called with. */
+  readonly searchIssuesCalls: { installationId: number; query: string }[] = []
+  readonly searchCodeCalls: { installationId: number; query: string }[] = []
+
+  async searchIssues(installationId: number, query: string): Promise<GitHubIssueSearchHit[]> {
+    this.searchIssuesCalls.push({ installationId, query })
+    return this.issueSearchHits
+  }
+
+  async searchCode(installationId: number, query: string): Promise<GitHubCodeSearchHit[]> {
+    this.searchCodeCalls.push({ installationId, query })
+    return this.codeSearchHits
   }
 
   async listCommits(

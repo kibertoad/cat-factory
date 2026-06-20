@@ -1,4 +1,4 @@
-import type { DocumentSourceDescriptor } from '@cat-factory/kernel'
+import type { DocumentSearchResult, DocumentSourceDescriptor } from '@cat-factory/kernel'
 import { assertSafeAtlassianBaseUrl, normalizeAtlassianBaseUrl } from '@cat-factory/kernel'
 
 // Confluence-specific pure logic, kept out of the worker so it is unit-testable
@@ -30,6 +30,60 @@ export const CONFLUENCE_DESCRIPTOR: DocumentSourceDescriptor = {
   ],
   refLabel: 'Page URL or ID',
   refPlaceholder: 'https://…/pages/12345/Title  or  12345',
+  searchable: true,
+}
+
+/** Escape a user string for embedding inside a CQL double-quoted literal. */
+function escapeCql(query: string): string {
+  return query.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+}
+
+/**
+ * Build the CQL for a free-text page search: match the term anywhere in a page's
+ * text, newest first. Confluence's `text ~` is a fuzzy/word search, which is
+ * exactly what a "find a page" box wants.
+ */
+export function buildConfluenceSearchCql(query: string): string {
+  return `type = page AND text ~ "${escapeCql(query.trim())}" ORDER BY lastmodified DESC`
+}
+
+interface ConfluenceSearchResponse {
+  results?: {
+    id?: string
+    content?: { id?: string; title?: string; type?: string }
+    title?: string
+    _links?: { webui?: string }
+  }[]
+  _links?: { base?: string }
+}
+
+/**
+ * Map a Confluence search response into lean hits. The endpoint nests the page
+ * under `content` (search API) or returns it flat (content/search API); we read
+ * either. URLs are resolved against the response's `base`, falling back to the
+ * site's `/wiki` base when absent.
+ */
+export function parseConfluenceSearchResults(
+  json: unknown,
+  fallbackBase: string,
+): DocumentSearchResult[] {
+  const body = (json ?? {}) as ConfluenceSearchResponse
+  const base = body._links?.base ?? `${fallbackBase.replace(/\/+$/, '')}/wiki`
+  const out: DocumentSearchResult[] = []
+  for (const row of Array.isArray(body.results) ? body.results : []) {
+    const content = row.content ?? row
+    const id = content.id
+    if (!id) continue
+    const webui = row._links?.webui ?? ''
+    out.push({
+      source: 'confluence',
+      externalId: id,
+      title: content.title ?? '(untitled)',
+      url: webui ? `${base}${webui}` : `${base}/pages/${id}`,
+      excerpt: '',
+    })
+  }
+  return out
 }
 
 /** Drop a trailing slash and a trailing `/wiki` so we can build paths uniformly. */
