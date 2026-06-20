@@ -227,13 +227,13 @@ describe('summarizePiRun', () => {
 describe('changedPathsFromPorcelain', () => {
   it('extracts paths, follows renames to the new name, and unquotes', () => {
     const status = [
-      'A  AGENTS.md',
+      'A  README.md',
       ' M src/index.ts',
       'R  old.ts -> new.ts',
       '?? "with space.ts"',
     ].join('\n')
     expect(changedPathsFromPorcelain(status)).toEqual([
-      'AGENTS.md',
+      'README.md',
       'src/index.ts',
       'new.ts',
       'with space.ts',
@@ -255,13 +255,11 @@ describe('producedRepoContent (from-scratch scaffold)', () => {
     await rm(dir, { recursive: true, force: true })
   })
 
-  it('is false when only the harness AGENTS.md exists (the observed no-op)', async () => {
-    await writeFile(join(dir, 'AGENTS.md'), 'context', 'utf8')
+  it('is false when the scaffold dir is empty (the no-op — harness context is out-of-tree)', async () => {
     expect(await producedRepoContent(dir, false)).toBe(false)
   })
 
   it('is true once the agent scaffolds a real file', async () => {
-    await writeFile(join(dir, 'AGENTS.md'), 'context', 'utf8')
     await writeFile(join(dir, 'package.json'), '{}', 'utf8')
     expect(await producedRepoContent(dir, false)).toBe(true)
   })

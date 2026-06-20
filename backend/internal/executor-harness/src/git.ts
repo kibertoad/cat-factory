@@ -248,15 +248,16 @@ export function changedPathsFromPorcelain(status: string): string[] {
 }
 
 /**
- * Whether the agent changed anything in a cloned checkout, ignoring the
- * harness-written `AGENTS.md`. Stages the working tree and inspects the porcelain
- * status: an empty result (or one holding only AGENTS.md) means the bootstrapper
- * made no adaptation — a no-op we must not pass off as a successful push.
+ * Whether the agent changed anything in a cloned checkout. Stages the working
+ * tree and inspects the porcelain status: an empty result means the bootstrapper
+ * made no adaptation — a no-op we must not pass off as a successful push. (The
+ * harness writes its prompt context to Pi's global `~/.pi/agent/AGENTS.md`, never
+ * into the checkout, so every change reported here is a genuine agent edit.)
  */
 export async function hasAgentChanges(dir: string, signal?: AbortSignal): Promise<boolean> {
   await git(['add', '-A'], { cwd: dir, signal })
   const status = await git(['status', '--porcelain'], { cwd: dir, signal })
-  return changedPathsFromPorcelain(status).some((path) => path.toLowerCase() !== 'agents.md')
+  return changedPathsFromPorcelain(status).length > 0
 }
 
 /** The commit SHA at `dir`'s HEAD — captured right after clone as the base tip. */

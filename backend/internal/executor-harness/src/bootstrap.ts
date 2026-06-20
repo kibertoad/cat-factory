@@ -16,9 +16,10 @@ import { log } from './logger.js'
  * Whether the bootstrapper actually produced repository content, so a no-op run
  * (the agent never reached the model / never wrote anything) is failed rather
  * than force-pushed as an empty repo. With a reference architecture, "produced
- * content" means the agent changed the clone (beyond the harness's AGENTS.md);
- * scaffolding from scratch, it means at least one file other than AGENTS.md now
- * exists in the working directory.
+ * content" means the agent changed the clone; scaffolding from scratch, it means
+ * at least one file now exists in the working directory. (The harness writes its
+ * prompt context to Pi's global `~/.pi/agent/AGENTS.md`, never into `dir`, so
+ * nothing here needs to be filtered out as harness boilerplate.)
  */
 export async function producedRepoContent(
   dir: string,
@@ -27,7 +28,7 @@ export async function producedRepoContent(
 ): Promise<boolean> {
   if (hasReference) return hasAgentChanges(dir, signal)
   const entries = await readdir(dir, { recursive: true, withFileTypes: true })
-  return entries.some((entry) => entry.isFile() && entry.name.toLowerCase() !== 'agents.md')
+  return entries.some((entry) => entry.isFile())
 }
 
 /** Human-readable no-op reason, embedding what the agent did so the cause is visible. */
