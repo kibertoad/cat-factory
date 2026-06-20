@@ -1,11 +1,11 @@
 import type {
-  BlockRepository,
   GitHubInstallation,
   GitHubInstallationRepository,
+  GitHubRepo,
+  RepoProjectionRepository,
   RunnerPoolConnectionRecord,
   RunnerPoolConnectionRepository,
 } from '@cat-factory/kernel'
-import type { ResolveRepoTarget } from '@cat-factory/server'
 import { and, eq, isNull } from 'drizzle-orm'
 import type { DrizzleDb } from '../db/client.js'
 import {
@@ -17,10 +17,10 @@ import {
 
 // Drizzle/Postgres adapters for the persistence the container-agent execution path
 // needs on the Node facade: a workspace's self-hosted runner-pool binding, its
-// GitHub App installation, and the repo-target lookup that tells the harness which
-// repo a run operates on. These mirror the Cloudflare D1 repositories
-// (D1RunnerPoolConnectionRepository / D1GitHubInstallationRepository /
-// buildResolveRepoTarget) column-for-column so behaviour matches across stores.
+// GitHub App installation, and the projected repos the shared `buildResolveRepoTarget`
+// reads to tell the harness which repo a run operates on. These mirror the Cloudflare
+// D1 repositories (D1RunnerPoolConnectionRepository / D1GitHubInstallationRepository /
+// D1RepoProjectionRepository) column-for-column so behaviour matches across stores.
 
 /** Postgres-backed store of workspace → runner-pool bindings (mirror of D1 migration 0013). */
 export class DrizzleRunnerPoolConnectionRepository implements RunnerPoolConnectionRepository {
@@ -209,55 +209,33 @@ export class DrizzleGitHubInstallationRepository implements GitHubInstallationRe
   }
 }
 
+function rowToRepo(row: typeof githubRepos.$inferSelect): GitHubRepo {
+  return {
+    githubId: row.github_id,
+    installationId: row.installation_id,
+    owner: row.owner,
+    name: row.name,
+    defaultBranch: row.default_branch,
+    private: row.private !== 0,
+    blockId: row.block_id,
+    syncedAt: row.synced_at,
+  }
+}
+
 /**
- * Resolve which repo (and installation) a run targets, mirroring the Worker's
- * `buildResolveRepoTarget`: find the GitHub installation backing the workspace,
- * then the projected repo linked to the service frame the block sits under (walking
- * up the parent chain). Returns null when GitHub isn't connected; throws when the
- * block isn't under a repo-linked service so the run fails with a clear reason
- * rather than guessing a repo.
+ * Postgres-backed read of a workspace's projected GitHub repos (mirror of D1 migration
+ * 0004). The Node facade has no GitHub sync writer yet, so only the `list` the shared
+ * `buildResolveRepoTarget` needs is implemented (the rest of `RepoProjectionRepository`
+ * has no caller here).
  */
-export function buildNodeResolveRepoTarget(
-  db: DrizzleDb,
-  installationRepository: GitHubInstallationRepository,
-  blockRepository: BlockRepository,
-): ResolveRepoTarget {
-  return async (workspaceId, blockId) => {
-    const installation = await installationRepository.getByWorkspace(workspaceId)
-    if (!installation) return null
-    const repos = await db
+export class DrizzleRepoProjectionRepository implements Pick<RepoProjectionRepository, 'list'> {
+  constructor(private readonly db: DrizzleDb) {}
+
+  async list(workspaceId: string): Promise<GitHubRepo[]> {
+    const rows = await this.db
       .select()
       .from(githubRepos)
       .where(and(eq(githubRepos.workspace_id, workspaceId), isNull(githubRepos.deleted_at)))
-    if (repos.length === 0) return null
-    const linkedIds = new Set(repos.map((r) => r.block_id).filter((id): id is string => !!id))
-
-    let linkedBlockId: string | undefined
-    let cursor: string | null = blockId
-    const seen = new Set<string>()
-    while (cursor && !seen.has(cursor)) {
-      if (linkedIds.has(cursor)) {
-        linkedBlockId = cursor
-        break
-      }
-      seen.add(cursor)
-      const block = await blockRepository.get(workspaceId, cursor)
-      cursor = block?.parentId ?? null
-    }
-
-    const repo = repos.find((r) => r.block_id === linkedBlockId)
-    if (!repo) {
-      throw new Error(
-        `Block '${blockId}' is not under a service linked to a GitHub repository ` +
-          `(workspace '${workspaceId}'). Link the service frame to its repo so execution ` +
-          `targets the right repository instead of guessing one.`,
-      )
-    }
-    return {
-      installationId: installation.installationId,
-      owner: repo.owner,
-      name: repo.name,
-      baseBranch: repo.default_branch ?? 'main',
-    }
+    return rows.map(rowToRepo)
   }
 }

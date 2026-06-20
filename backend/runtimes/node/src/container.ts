@@ -21,6 +21,7 @@ import {
   GitHubAppAuth,
   GitHubAppRegistry,
   WebCryptoSecretCipher,
+  buildResolveRepoTarget,
 } from '@cat-factory/server'
 import type { PgBoss } from 'pg-boss'
 import { loadNodeConfig } from './config.js'
@@ -31,8 +32,8 @@ import { createNodeGateways } from './gateways.js'
 import { createNodeModelProvider } from './modelProvider.js'
 import {
   DrizzleGitHubInstallationRepository,
+  DrizzleRepoProjectionRepository,
   DrizzleRunnerPoolConnectionRepository,
-  buildNodeResolveRepoTarget,
 } from './repositories/containerExecution.js'
 import { createDrizzleRepositories } from './repositories/drizzle.js'
 import { CryptoIdGenerator, SystemClock } from './runtime.js'
@@ -160,7 +161,11 @@ function buildNodeContainerExecutor(
     agentRouting: config.agents.routing,
     resolveBlockModel: config.agents.resolveBlockModel,
     resolveWorkspaceModelDefault,
-    resolveRepoTarget: buildNodeResolveRepoTarget(db, installationRepository, blockRepository),
+    resolveRepoTarget: buildResolveRepoTarget({
+      installationRepository,
+      repoProjectionRepository: new DrizzleRepoProjectionRepository(db),
+      blockRepository,
+    }),
     mintInstallationToken: (id) => registry.installationToken(id),
     sessionService: new ContainerSessionService({ secret: sessionSecret }),
     proxyBaseUrl: `${publicUrl.replace(/\/+$/, '')}/v1`,

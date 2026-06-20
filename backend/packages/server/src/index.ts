@@ -36,6 +36,10 @@ export {
   type MintInstallationToken,
 } from './agents/ContainerAgentExecutor.js'
 export { RunnerJobClient, type ResolveRunnerTransport } from './agents/RunnerJobClient.js'
+export {
+  buildResolveRepoTarget,
+  type ResolveRepoTargetDependencies,
+} from './agents/resolveRepoTarget.js'
 export { bearerToken, requireAuth, verifySession } from './auth/middleware.js'
 export { registerCoreControllers } from './app.js'
 export { mountAuthGate } from './http/authGate.js'

@@ -1,15 +1,29 @@
 import { randomUUID } from 'node:crypto'
+import { buildResolveRepoTarget } from '@cat-factory/server'
 import { beforeAll, describe, expect, it } from 'vitest'
 import type { DrizzleDb } from '../src/db/client.js'
 import { blocks, githubRepos } from '../src/db/schema.js'
 import {
   DrizzleGitHubInstallationRepository,
+  DrizzleRepoProjectionRepository,
   DrizzleRunnerPoolConnectionRepository,
-  buildNodeResolveRepoTarget,
 } from '../src/repositories/containerExecution.js'
 import { createDrizzleRepositories } from '../src/repositories/drizzle.js'
 import { SystemClock } from '../src/runtime.js'
 import { setupTestDb } from './harness.js'
+
+// Bind the shared (runtime-neutral) repo-target resolver to the Node Drizzle adapters,
+// matching how `buildNodeContainer` wires it.
+const nodeResolveRepoTarget = (
+  db: DrizzleDb,
+  installations: DrizzleGitHubInstallationRepository,
+  blockRepository: ReturnType<typeof createDrizzleRepositories>['blockRepository'],
+) =>
+  buildResolveRepoTarget({
+    installationRepository: installations,
+    repoProjectionRepository: new DrizzleRepoProjectionRepository(db),
+    blockRepository,
+  })
 
 // The Postgres persistence + repo-target resolution the Node container-agent
 // execution path relies on, mirroring the Worker's D1 repositories + buildResolveTransport.
@@ -90,7 +104,7 @@ describe('container-execution persistence (Postgres)', () => {
     })
   })
 
-  describe('buildNodeResolveRepoTarget', () => {
+  describe('buildResolveRepoTarget (Node Drizzle adapters)', () => {
     it('resolves the repo linked to the service frame a block sits under', async () => {
       const workspaceId = ws()
       const installations = new DrizzleGitHubInstallationRepository(db)
@@ -141,7 +155,7 @@ describe('container-execution persistence (Postgres)', () => {
         synced_at: 1,
       })
 
-      const resolve = buildNodeResolveRepoTarget(db, installations, blockRepository)
+      const resolve = nodeResolveRepoTarget(db, installations, blockRepository)
       const target = await resolve(workspaceId, 'task1')
       expect(target).toEqual({
         installationId: 77,
@@ -155,7 +169,7 @@ describe('container-execution persistence (Postgres)', () => {
       const workspaceId = ws()
       const installations = new DrizzleGitHubInstallationRepository(db)
       const { blockRepository } = createDrizzleRepositories(db, new SystemClock())
-      const resolve = buildNodeResolveRepoTarget(db, installations, blockRepository)
+      const resolve = nodeResolveRepoTarget(db, installations, blockRepository)
       expect(await resolve(workspaceId, 'whatever')).toBeNull()
     })
 
@@ -196,7 +210,7 @@ describe('container-execution persistence (Postgres)', () => {
         block_id: 'some-other-frame',
         synced_at: 1,
       })
-      const resolve = buildNodeResolveRepoTarget(db, installations, blockRepository)
+      const resolve = nodeResolveRepoTarget(db, installations, blockRepository)
       await expect(resolve(workspaceId, 'orphan')).rejects.toThrow(/not under a service linked/)
     })
   })

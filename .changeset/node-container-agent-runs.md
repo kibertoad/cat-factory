@@ -17,6 +17,10 @@ The container-execution machinery is now shared, not Worker-only:
   `WebCryptoSecretCipher` and GitHub-App auth (`GitHubAppAuth` / `GitHubAppRegistry`).
 - `@cat-factory/integrations` hosts the manifest-driven runner-pool transport
   (`HttpRunnerPoolProvider` / `RunnerPoolTransport`).
+- `@cat-factory/server` also hosts the runtime-neutral `buildResolveRepoTarget` (the
+  security-sensitive block→service→repo ancestry walk, with its no-"first-repo"-fallback
+  policy), so the Worker and Node service single-source it instead of keeping two
+  hand-copied resolvers that could drift. Each facade just binds its own repositories.
 - `@cat-factory/worker` keeps thin re-export shims at the old paths (no API change).
 
 `@cat-factory/node-server` wires a `CompositeAgentExecutor` (inline + container) whose
