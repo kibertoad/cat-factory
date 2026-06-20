@@ -27,12 +27,12 @@ export class D1RepoProjectionRepository implements RepoProjectionRepository {
   async upsertMany(workspaceId: string, repos: GitHubRepo[]): Promise<void> {
     if (repos.length === 0) return
     const statements = repos.map((repo) => {
-      // `block_id` is owned by the board link, not sync — never overwrite it.
+      // `block_id` and `is_monorepo` are owned by the board, not sync — never overwrite them.
       const { sql, binds } = buildUpsert(
         'github_repos',
         repoValues(workspaceId, repo),
         ['workspace_id', 'github_id'],
-        ['block_id'],
+        ['block_id', 'is_monorepo'],
       )
       return this.db.prepare(sql).bind(...binds)
     })
@@ -107,6 +107,13 @@ export class D1RepoProjectionRepository implements RepoProjectionRepository {
     await this.db
       .prepare('UPDATE github_repos SET block_id = ? WHERE workspace_id = ? AND github_id = ?')
       .bind(blockId, workspaceId, githubId)
+      .run()
+  }
+
+  async setMonorepo(workspaceId: string, githubId: number, isMonorepo: boolean): Promise<void> {
+    await this.db
+      .prepare('UPDATE github_repos SET is_monorepo = ? WHERE workspace_id = ? AND github_id = ?')
+      .bind(isMonorepo ? 1 : 0, workspaceId, githubId)
       .run()
   }
 

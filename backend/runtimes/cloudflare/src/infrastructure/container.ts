@@ -309,6 +309,7 @@ function buildResolveRepoTarget(db: D1Database): ResolveRepoTarget {
     installationRepository: new D1GitHubInstallationRepository({ db }),
     repoProjectionRepository: new D1RepoProjectionRepository({ db }),
     blockRepository: new D1BlockRepository({ db }),
+    serviceRepository: new D1ServiceRepository({ db }),
   })
 }
 

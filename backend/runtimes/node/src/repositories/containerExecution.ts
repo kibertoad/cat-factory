@@ -5,6 +5,8 @@ import type {
   RepoProjectionRepository,
   RunnerPoolConnectionRecord,
   RunnerPoolConnectionRepository,
+  Service,
+  ServiceRepository,
 } from '@cat-factory/kernel'
 import { and, eq, isNull } from 'drizzle-orm'
 import type { DrizzleDb } from '../db/client.js'
@@ -12,6 +14,7 @@ import {
   githubInstallations,
   githubRepos,
   runnerPoolConnections,
+  services,
   workspaces,
 } from '../db/schema.js'
 
@@ -218,6 +221,7 @@ function rowToRepo(row: typeof githubRepos.$inferSelect): GitHubRepo {
     defaultBranch: row.default_branch,
     private: row.private !== 0,
     blockId: row.block_id,
+    isMonorepo: row.is_monorepo !== 0,
     syncedAt: row.synced_at,
   }
 }
@@ -237,5 +241,32 @@ export class DrizzleRepoProjectionRepository implements Pick<RepoProjectionRepos
       .from(githubRepos)
       .where(and(eq(githubRepos.workspace_id, workspaceId), isNull(githubRepos.deleted_at)))
     return rows.map(rowToRepo)
+  }
+}
+
+/**
+ * Minimal read adapter the shared `buildResolveRepoTarget` needs to resolve a frame's
+ * service (and, for a monorepo, its pinned subdirectory). Only `getByFrameBlock` is
+ * implemented — the full account-owned service store lives in `drizzle.ts`.
+ */
+export class DrizzleServiceFrameRepository implements Pick<ServiceRepository, 'getByFrameBlock'> {
+  constructor(private readonly db: DrizzleDb) {}
+
+  async getByFrameBlock(frameBlockId: string): Promise<Service | null> {
+    const [row] = await this.db
+      .select()
+      .from(services)
+      .where(eq(services.frame_block_id, frameBlockId))
+    return row
+      ? {
+          id: row.id,
+          accountId: row.account_id,
+          frameBlockId: row.frame_block_id,
+          installationId: row.installation_id,
+          repoGithubId: row.repo_github_id,
+          directory: row.directory,
+          createdAt: row.created_at,
+        }
+      : null
   }
 }

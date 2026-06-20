@@ -127,7 +127,7 @@ behaviour and tests. \`requirements/version.json\` is a tiny staleness manifest.
  */
 export async function writeAgentsContext(
   systemPrompt: string,
-  opts: { webSearch?: boolean; guidance?: string } = {},
+  opts: { webSearch?: boolean; guidance?: string; serviceDirectory?: string } = {},
 ): Promise<void> {
   const dir = join(homedir(), '.pi', 'agent')
   await mkdir(dir, { recursive: true })
@@ -136,11 +136,30 @@ export async function writeAgentsContext(
   // `guidance` is the backend's per-kind nudge; fall back to the generic blurb for jobs
   // that don't carry one (e.g. bootstrap, or an older dispatcher).
   const webTools = opts.webSearch ? (opts.guidance ?? WEB_TOOLS_GUIDANCE) : ''
+  // Tell the agent it's in a monorepo and which subtree is its service, so it scopes
+  // its work (and its build/test commands) there. Only present when the dispatcher
+  // resolved a monorepo service directory; the agent's cwd already points at it.
+  const monorepo = opts.serviceDirectory ? monorepoGuidance(opts.serviceDirectory) : ''
   await writeFile(
     join(dir, 'AGENTS.md'),
-    `${systemPrompt}${BLUEPRINT_GUIDANCE}${REQUIREMENTS_GUIDANCE}${TODO_GUIDANCE}${webTools}`,
+    `${systemPrompt}${BLUEPRINT_GUIDANCE}${REQUIREMENTS_GUIDANCE}${TODO_GUIDANCE}${monorepo}${webTools}`,
     'utf8',
   )
+}
+
+/** The monorepo note appended to AGENTS.md when a run is scoped to a service subdirectory. */
+function monorepoGuidance(serviceDirectory: string): string {
+  return `
+
+## Monorepo service (work within your subdirectory)
+
+This repository is a **monorepo** hosting more than one service. The service you are
+working on lives in \`${serviceDirectory}/\` (relative to the repo root), and your
+working directory is already set there. Confine your changes to that subtree — create
+and edit files under \`${serviceDirectory}/\`, and run that service's own build/test/lint
+commands (defined by the manifest in \`${serviceDirectory}/\`, e.g. its \`package.json\`).
+Do not modify other services' directories, and only touch shared/root files (workspace
+manifests, root config) when the task genuinely requires it.`
 }
 
 /**

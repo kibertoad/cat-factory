@@ -11,7 +11,9 @@ import type { Service, WorkspaceMount } from '../domain/types.js'
 // ---------------------------------------------------------------------------
 
 /** Fields of a service that may be patched (its id and frame are immutable). */
-export type ServicePatch = Partial<Pick<Service, 'accountId' | 'installationId' | 'repoGithubId'>>
+export type ServicePatch = Partial<
+  Pick<Service, 'accountId' | 'installationId' | 'repoGithubId' | 'directory'>
+>
 
 export interface ServiceRepository {
   get(id: string): Promise<Service | null>

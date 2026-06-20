@@ -42,8 +42,11 @@ export const useBoardStore = defineStore('board', () => {
    * service frame, with no bootstrap run. The backend links the repo to the new
    * frame and returns it `ready`; we upsert it onto the board.
    */
-  async function addServiceFromRepo(repoGithubId: number): Promise<Block> {
-    const block = await api.addServiceFromRepo(useWorkspaceStore().requireId(), { repoGithubId })
+  async function addServiceFromRepo(repoGithubId: number, directory?: string): Promise<Block> {
+    const block = await api.addServiceFromRepo(useWorkspaceStore().requireId(), {
+      repoGithubId,
+      ...(directory ? { directory } : {}),
+    })
     upsert(block)
     return block
   }

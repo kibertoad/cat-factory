@@ -9,6 +9,8 @@ export interface Service {
   frameBlockId: string
   installationId: number | null
   repoGithubId: number | null
+  /** Subdirectory within the linked monorepo this service lives in (null = whole repo). */
+  directory?: string | null
   createdAt: number
   /** How many boards mount this service. Set only on the org catalog (for the "Shared" badge). */
   mountCount?: number

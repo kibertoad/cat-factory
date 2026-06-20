@@ -39,6 +39,7 @@ import {
   DrizzleGitHubInstallationRepository,
   DrizzleRepoProjectionRepository,
   DrizzleRunnerPoolConnectionRepository,
+  DrizzleServiceFrameRepository,
 } from './repositories/containerExecution.js'
 import { createDrizzleRepositories } from './repositories/drizzle.js'
 import { DrizzleTaskConnectionRepository, DrizzleTaskRepository } from './repositories/tasks.js'
@@ -172,6 +173,7 @@ function buildNodeContainerExecutor(
       installationRepository,
       repoProjectionRepository: new DrizzleRepoProjectionRepository(db),
       blockRepository,
+      serviceRepository: new DrizzleServiceFrameRepository(db),
     }),
     mintInstallationToken: (id) => registry.installationToken(id),
     sessionService: new ContainerSessionService({ secret: sessionSecret }),
@@ -228,6 +230,7 @@ function buildNodeGitHubIssueFiler(
     installationRepository,
     repoProjectionRepository: new DrizzleRepoProjectionRepository(db),
     blockRepository,
+    serviceRepository: new DrizzleServiceFrameRepository(db),
   })
 
   return async (request) => {

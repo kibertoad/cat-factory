@@ -113,6 +113,8 @@ export const services = pgTable(
     frame_block_id: text('frame_block_id').notNull(),
     installation_id: bigint('installation_id', { mode: 'number' }),
     repo_github_id: bigint('repo_github_id', { mode: 'number' }),
+    // Subdirectory within the linked monorepo this service lives in (NULL = whole repo).
+    directory: text('directory'),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
   },
   (t) => [
@@ -429,6 +431,9 @@ export const githubRepos = pgTable(
     default_branch: text('default_branch'),
     private: integer('private').notNull().default(0),
     block_id: text('block_id'),
+    // Whether the repo is a monorepo hosting several services (board-owned, like
+    // block_id — sync preserves it). See contracts `GitHubRepo.isMonorepo`.
+    is_monorepo: integer('is_monorepo').notNull().default(0),
     etag: text('etag'),
     synced_at: bigint('synced_at', { mode: 'number' }).notNull(),
     deleted_at: bigint('deleted_at', { mode: 'number' }),

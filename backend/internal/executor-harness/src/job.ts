@@ -10,6 +10,12 @@ export interface RepoSpec {
   name: string
   baseBranch: string
   cloneUrl: string
+  /**
+   * For a monorepo service, the subdirectory (relative to the repo root, e.g.
+   * `packages/api`) the agent should run within. Sanitised on parse to a safe
+   * relative path so it can never escape the checkout. Absent ⇒ run at the repo root.
+   */
+  serviceDirectory?: string
 }
 
 export interface PrSpec {
@@ -75,6 +81,41 @@ function str(value: unknown, path: string): string {
     throw new Error(`Invalid job: '${path}' must be a non-empty string`)
   }
   return value
+}
+
+/**
+ * Coerce a body-supplied monorepo service directory into a SAFE relative path, or
+ * undefined when absent/empty. Normalises separators, strips leading/trailing
+ * slashes, and rejects anything that could escape the checkout (absolute paths or a
+ * `..` segment) — the agent's cwd is built from this, so a hostile value must never
+ * point outside the cloned repo.
+ */
+function sanitizeServiceDirectory(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined
+  const normalized = value
+    .trim()
+    .replace(/\\/g, '/')
+    .replace(/^\/+|\/+$/g, '')
+  if (!normalized) return undefined
+  const segments = normalized.split('/').filter((s) => s !== '' && s !== '.')
+  if (segments.length === 0) return undefined
+  if (segments.some((s) => s === '..')) {
+    throw new Error("Invalid job: 'repo.serviceDirectory' must be a path inside the repo")
+  }
+  return segments.join('/')
+}
+
+/** Parse the shared repo spec, including the optional monorepo service subdirectory. */
+function parseRepoSpec(repo: Record<string, unknown>): RepoSpec {
+  const spec: RepoSpec = {
+    owner: str(repo.owner, 'repo.owner'),
+    name: str(repo.name, 'repo.name'),
+    baseBranch: str(repo.baseBranch, 'repo.baseBranch'),
+    cloneUrl: str(repo.cloneUrl, 'repo.cloneUrl'),
+  }
+  const dir = sanitizeServiceDirectory(repo.serviceDirectory)
+  if (dir) spec.serviceDirectory = dir
+  return spec
 }
 
 // ---- Host allowlist -------------------------------------------------------
@@ -276,12 +317,7 @@ export function parseBlueprintJob(input: unknown): BlueprintJob {
     proxyBaseUrl: str(o.proxyBaseUrl, 'proxyBaseUrl'),
     sessionToken: str(o.sessionToken, 'sessionToken'),
     ghToken: str(o.ghToken, 'ghToken'),
-    repo: {
-      owner: str(repo.owner, 'repo.owner'),
-      name: str(repo.name, 'repo.name'),
-      baseBranch: str(repo.baseBranch, 'repo.baseBranch'),
-      cloneUrl: str(repo.cloneUrl, 'repo.cloneUrl'),
-    },
+    repo: parseRepoSpec(repo),
     branch: str(o.branch, 'branch'),
     mode,
     ...(typeof o.githubApiBase === 'string' ? { githubApiBase: o.githubApiBase } : {}),
@@ -368,12 +404,7 @@ export function parseRequirementsJob(input: unknown): RequirementsJob {
     proxyBaseUrl: str(o.proxyBaseUrl, 'proxyBaseUrl'),
     sessionToken: str(o.sessionToken, 'sessionToken'),
     ghToken: str(o.ghToken, 'ghToken'),
-    repo: {
-      owner: str(repo.owner, 'repo.owner'),
-      name: str(repo.name, 'repo.name'),
-      baseBranch: str(repo.baseBranch, 'repo.baseBranch'),
-      cloneUrl: str(repo.cloneUrl, 'repo.cloneUrl'),
-    },
+    repo: parseRepoSpec(repo),
     branch: str(o.branch, 'branch'),
     tasks,
     ...(typeof o.githubApiBase === 'string' ? { githubApiBase: o.githubApiBase } : {}),
@@ -432,12 +463,7 @@ export function parseCiFixerJob(input: unknown): CiFixerJob {
     proxyBaseUrl: str(o.proxyBaseUrl, 'proxyBaseUrl'),
     sessionToken: str(o.sessionToken, 'sessionToken'),
     ghToken: str(o.ghToken, 'ghToken'),
-    repo: {
-      owner: str(repo.owner, 'repo.owner'),
-      name: str(repo.name, 'repo.name'),
-      baseBranch: str(repo.baseBranch, 'repo.baseBranch'),
-      cloneUrl: str(repo.cloneUrl, 'repo.cloneUrl'),
-    },
+    repo: parseRepoSpec(repo),
     branch: str(o.branch, 'branch'),
     ...(typeof o.githubApiBase === 'string' ? { githubApiBase: o.githubApiBase } : {}),
     ...(typeof o.webToolsGuidance === 'string' ? { webToolsGuidance: o.webToolsGuidance } : {}),
@@ -495,12 +521,7 @@ export function parseConflictResolverJob(input: unknown): ConflictResolverJob {
     proxyBaseUrl: str(o.proxyBaseUrl, 'proxyBaseUrl'),
     sessionToken: str(o.sessionToken, 'sessionToken'),
     ghToken: str(o.ghToken, 'ghToken'),
-    repo: {
-      owner: str(repo.owner, 'repo.owner'),
-      name: str(repo.name, 'repo.name'),
-      baseBranch: str(repo.baseBranch, 'repo.baseBranch'),
-      cloneUrl: str(repo.cloneUrl, 'repo.cloneUrl'),
-    },
+    repo: parseRepoSpec(repo),
     branch: str(o.branch, 'branch'),
     ...(typeof o.githubApiBase === 'string' ? { githubApiBase: o.githubApiBase } : {}),
   }
@@ -556,12 +577,7 @@ export function parseMergerJob(input: unknown): MergerJob {
     proxyBaseUrl: str(o.proxyBaseUrl, 'proxyBaseUrl'),
     sessionToken: str(o.sessionToken, 'sessionToken'),
     ghToken: str(o.ghToken, 'ghToken'),
-    repo: {
-      owner: str(repo.owner, 'repo.owner'),
-      name: str(repo.name, 'repo.name'),
-      baseBranch: str(repo.baseBranch, 'repo.baseBranch'),
-      cloneUrl: str(repo.cloneUrl, 'repo.cloneUrl'),
-    },
+    repo: parseRepoSpec(repo),
     branch: str(o.branch, 'branch'),
     ...(typeof o.prNumber === 'number' ? { prNumber: o.prNumber } : {}),
     ...(typeof o.githubApiBase === 'string' ? { githubApiBase: o.githubApiBase } : {}),
@@ -587,12 +603,7 @@ export function parseJob(input: unknown): Job {
     proxyBaseUrl: str(o.proxyBaseUrl, 'proxyBaseUrl'),
     sessionToken: str(o.sessionToken, 'sessionToken'),
     ghToken: str(o.ghToken, 'ghToken'),
-    repo: {
-      owner: str(repo.owner, 'repo.owner'),
-      name: str(repo.name, 'repo.name'),
-      baseBranch: str(repo.baseBranch, 'repo.baseBranch'),
-      cloneUrl: str(repo.cloneUrl, 'repo.cloneUrl'),
-    },
+    repo: parseRepoSpec(repo),
     headBranch: str(o.headBranch, 'headBranch'),
     pr: {
       title: str(pr.title, 'pr.title'),

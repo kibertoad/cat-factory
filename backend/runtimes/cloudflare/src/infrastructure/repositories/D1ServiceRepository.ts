@@ -8,6 +8,7 @@ interface ServiceRow {
   frame_block_id: string
   installation_id: number | null
   repo_github_id: number | null
+  directory: string | null
   created_at: number
 }
 
@@ -18,6 +19,7 @@ function rowToService(row: ServiceRow): Service {
     frameBlockId: row.frame_block_id,
     installationId: row.installation_id,
     repoGithubId: row.repo_github_id,
+    directory: row.directory,
     createdAt: row.created_at,
   }
 }
@@ -81,8 +83,8 @@ export class D1ServiceRepository implements ServiceRepository {
   async insert(service: Service): Promise<void> {
     await this.db
       .prepare(
-        `INSERT INTO services (id, account_id, frame_block_id, installation_id, repo_github_id, created_at)
-         VALUES (?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO services (id, account_id, frame_block_id, installation_id, repo_github_id, directory, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
       )
       .bind(
         service.id,
@@ -90,6 +92,7 @@ export class D1ServiceRepository implements ServiceRepository {
         service.frameBlockId,
         service.installationId,
         service.repoGithubId,
+        service.directory ?? null,
         service.createdAt,
       )
       .run()
@@ -109,6 +112,10 @@ export class D1ServiceRepository implements ServiceRepository {
     if ('repoGithubId' in patch) {
       sets.push('repo_github_id = ?')
       binds.push(patch.repoGithubId ?? null)
+    }
+    if ('directory' in patch) {
+      sets.push('directory = ?')
+      binds.push(patch.directory ?? null)
     }
     if (sets.length === 0) return
     binds.push(id)

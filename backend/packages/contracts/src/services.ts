@@ -33,6 +33,14 @@ export const serviceSchema = v.object({
   installationId: v.nullable(v.number()),
   /** The GitHub numeric id of the linked repo, when connected. */
   repoGithubId: v.nullable(v.number()),
+  /**
+   * The subdirectory within the linked repo this service lives in, relative to the
+   * repo root (e.g. `packages/api`). Set only for services in a monorepo (a repo
+   * flagged {@link GitHubRepo.isMonorepo}); null means the service is the whole repo.
+   * When the repo is a monorepo this path is fed to every agent working on the
+   * service so it operates within (and is told about) the right subtree.
+   */
+  directory: v.optional(v.nullable(v.string())),
   /** Epoch ms the service was created. */
   createdAt: v.number(),
   /**

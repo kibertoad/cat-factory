@@ -7,6 +7,7 @@ import {
   mergePullRequestSchema,
   openPullRequestSchema,
   resyncRequestSchema,
+  setRepoMonorepoSchema,
 } from '@cat-factory/contracts'
 import type { GitHubModule } from '@cat-factory/orchestration'
 import { Hono } from 'hono'
@@ -108,6 +109,33 @@ export function githubController(): Hono<AppEnv> {
       c.req.valid('json').repoGithubIds,
     )
     return c.json(repos)
+  })
+
+  // Flag (or unflag) a linked repo as a monorepo: the board then lets several service
+  // frames target the same repo, each pinned to a subdirectory (the picker below).
+  app.patch('/github/repos/:repoGithubId', jsonBody(setRepoMonorepoSchema), async (c) => {
+    const github = requireGitHub(c)
+    if (!github) return unavailable(c)
+    const repo = await github.syncService.setRepoMonorepo(
+      param(c, 'workspaceId'),
+      Number(param(c, 'repoGithubId')),
+      c.req.valid('json').isMonorepo,
+    )
+    return c.json(repo)
+  })
+
+  // Browse one level of a (monorepo) repo's tree so the service picker can pin a
+  // service to a subdirectory. `path` ('' = root) is the directory to list.
+  app.get('/github/repos/:repoGithubId/tree', async (c) => {
+    const github = requireGitHub(c)
+    if (!github) return unavailable(c)
+    return c.json(
+      await github.syncService.listRepoDirectory(
+        param(c, 'workspaceId'),
+        Number(param(c, 'repoGithubId')),
+        c.req.query('path') ?? '',
+      ),
+    )
   })
 
   app.delete('/github/connection', async (c) => {

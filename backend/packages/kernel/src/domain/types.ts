@@ -61,6 +61,8 @@ export type {
   GitHubPullRequest,
   GitHubPullRequestState,
   GitHubRepo,
+  RepoTreeEntry,
+  SetRepoMonorepoInput,
   CommitFilesInput,
   LinkReposInput,
   OpenPullRequestInput,

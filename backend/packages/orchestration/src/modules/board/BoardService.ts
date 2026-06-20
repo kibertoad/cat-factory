@@ -91,7 +91,7 @@ export class BoardService {
   private registerService(
     workspaceId: string,
     frame: Block,
-    repo?: { installationId: number; githubId: number },
+    repo?: { installationId: number; githubId: number; directory?: string | null },
   ): Promise<string | undefined> {
     return registerServiceForFrame(
       {
@@ -195,16 +195,40 @@ export class BoardService {
       'GitHubRepo',
       String(input.repoGithubId),
     )
-    if (repo.blockId) {
+    // Normalise the requested service subdirectory to a clean, SAFE relative path:
+    // strip slashes/`.` and reject any `..` segment, so a stored directory can never
+    // point an agent's cwd outside the checkout (the harness enforces the same — this
+    // is defence in depth, and surfaces a clean error before the row is written).
+    const directory = normalizeServiceDirectory(input.directory)
+    // A monorepo can back SEVERAL service frames (one per subdirectory), so the
+    // single-service guard applies only to whole-repo (non-monorepo) repos. A monorepo
+    // service MUST name its subdirectory so execution can scope agents to it.
+    if (repo.blockId && !repo.isMonorepo) {
       throw new ValidationError('This repository is already linked to a board service')
     }
+    if (repo.isMonorepo && !directory) {
+      throw new ValidationError('Select a service directory for this monorepo')
+    }
     const blocks = await this.blockRepository.listByWorkspace(workspaceId)
+    // Each subdirectory of a monorepo backs at most one service — reject a duplicate so
+    // two frames don't fight over the same subtree (each resolves to the same repo+dir).
+    if (repo.isMonorepo && directory && this.serviceRepository) {
+      for (const frame of blocks.filter((b) => b.level === 'frame')) {
+        const existing = await this.serviceRepository.getByFrameBlock(frame.id)
+        if (existing?.repoGithubId === repo.githubId && existing.directory === directory) {
+          throw new ValidationError(`A service for '${directory}' already exists in this repository`)
+        }
+      }
+    }
     const frames = blocks.filter((b) => b.level === 'frame').length
+    const title = directory ? (directory.split('/').pop() ?? repo.name) : repo.name
     const block: Block = {
       id: this.idGenerator.next('blk'),
-      title: repo.name,
+      title,
       type: 'service',
-      description: `Service backed by ${repo.owner}/${repo.name}.`,
+      description: directory
+        ? `Service backed by ${repo.owner}/${repo.name} (${directory}/).`
+        : `Service backed by ${repo.owner}/${repo.name}.`,
       position: input.position ?? { x: 80 + (frames % 5) * 48, y: 80 + (frames % 5) * 48 },
       status: 'ready',
       progress: 0,
@@ -216,9 +240,15 @@ export class BoardService {
     const serviceId = await this.registerService(workspaceId, block, {
       installationId: repo.installationId,
       githubId: repo.githubId,
+      directory: directory ?? null,
     })
     await this.blockRepository.insert(workspaceId, block, serviceId)
-    await this.repoProjectionRepository.linkBlock(workspaceId, repo.githubId, block.id)
+    // A monorepo's repo backs several frames, so the projection's single `block_id`
+    // link can't represent it — the Service mapping (read by resolveRepoTarget) is
+    // authoritative there. Keep the legacy link only for a whole-repo service.
+    if (!repo.isMonorepo) {
+      await this.repoProjectionRepository.linkBlock(workspaceId, repo.githubId, block.id)
+    }
     return block
   }
 
@@ -449,4 +479,25 @@ export class BoardService {
     await this.blockRepository.update(homeWorkspaceId, targetId, { dependsOn: next })
     return assertFound(await this.blockRepository.get(homeWorkspaceId, targetId), 'Block', targetId)
   }
+}
+
+/**
+ * Coerce a user-supplied monorepo service subdirectory into a clean, SAFE relative path
+ * (or undefined when absent/empty): normalise separators, drop `.`/empty segments, and
+ * reject any `..` segment or absolute path so the stored value can never escape the repo
+ * checkout when it later becomes an agent's cwd. Mirrors the harness's `sanitizeService
+ * Directory`, kept here so a bad value is rejected before the service row is written.
+ */
+export function normalizeServiceDirectory(raw: string | undefined): string | undefined {
+  if (!raw) return undefined
+  const segments = raw
+    .trim()
+    .replace(/\\/g, '/')
+    .split('/')
+    .filter((s) => s !== '' && s !== '.')
+  if (segments.length === 0) return undefined
+  if (segments.some((s) => s === '..')) {
+    throw new ValidationError('Service directory must be a path inside the repository')
+  }
+  return segments.join('/')
 }

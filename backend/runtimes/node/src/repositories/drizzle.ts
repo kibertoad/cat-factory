@@ -1072,6 +1072,7 @@ function rowToService(row: typeof services.$inferSelect): Service {
     frameBlockId: row.frame_block_id,
     installationId: row.installation_id,
     repoGithubId: row.repo_github_id,
+    directory: row.directory,
     createdAt: row.created_at,
   }
 }
@@ -1137,6 +1138,7 @@ class DrizzleServiceRepository implements ServiceRepository {
       frame_block_id: service.frameBlockId,
       installation_id: service.installationId,
       repo_github_id: service.repoGithubId,
+      directory: service.directory ?? null,
       created_at: service.createdAt,
     })
   }
@@ -1146,6 +1148,7 @@ class DrizzleServiceRepository implements ServiceRepository {
     if ('accountId' in patch) set.account_id = patch.accountId ?? null
     if ('installationId' in patch) set.installation_id = patch.installationId ?? null
     if ('repoGithubId' in patch) set.repo_github_id = patch.repoGithubId ?? null
+    if ('directory' in patch) set.directory = patch.directory ?? null
     if (Object.keys(set).length === 0) return
     await this.db.update(services).set(set).where(eq(services.id, id))
   }
