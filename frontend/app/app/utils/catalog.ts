@@ -235,10 +235,14 @@ export const STATUS_META: Record<
     icon: 'i-lucide-loader',
   },
   blocked: {
-    label: 'Decision needed',
+    // Generic copy: `blocked` is overloaded — a run parks here for a human
+    // decision, an approval gate, OR a terminal failure. Surfaces that know the
+    // specific reason (TaskCard, the inspector) show the precise label/action;
+    // this fallback must NOT imply a decision is the only thing it can be.
+    label: 'Needs attention',
     color: '#f59e0b',
     chip: 'warning',
-    icon: 'i-lucide-circle-help',
+    icon: 'i-lucide-alert-triangle',
   },
   pr_ready: {
     label: 'PR ready',
