@@ -164,6 +164,71 @@ export function seedPipelines(): Pipeline[] {
       gates: [true, true, false, false, false, false, false, false, false, false, false],
     },
     {
+      // The most thorough preset: a complex, full-stack feature run that engages
+      // every valuable agent so no angle is left uncovered. It extends "Full build"
+      // with the up-front researcher, the acceptance-scenario author, the external-
+      // dependency mock builder, the business-logic documenter and the developer
+      // documenter, in addition to the runnable end-to-end (`playwright`) tests:
+      //
+      //   requirements  → analyse + clarify the collected requirements (human gate)
+      //   researcher    → investigate prior art, libraries and constraints
+      //   architect     → design the solution (human gate)
+      //   requirements-writer → aggregate the clarified spec (+ Gherkin) onto the
+      //                         implementation branch BEFORE any code is written
+      //   acceptance    → polish/extend the Gherkin acceptance SCENARIOS
+      //   mocker        → stand up mocks for the external dependencies
+      //   coder         → implement the feature on the implementation branch
+      //   blueprints    → refresh the in-repo service map from the new code
+      //   business-documenter → capture the domain rules the code now encodes
+      //   tester        → define the unit / integration test strategy
+      //   playwright    → author the runnable end-to-end / acceptance TESTS
+      //   reviewer      → review the change for correctness, quality and risk
+      //   documenter    → write the developer-facing documentation
+      //   conflicts → ci → merger → the same mergeability / CI / merge tail as Full build
+      id: 'pl_fullstack',
+      name: 'Complex fullstack feature',
+      agentKinds: [
+        'requirements',
+        'researcher',
+        'architect',
+        'requirements-writer',
+        'acceptance',
+        'mocker',
+        'coder',
+        'blueprints',
+        'business-documenter',
+        'tester',
+        'playwright',
+        'reviewer',
+        'documenter',
+        'conflicts',
+        'ci',
+        'merger',
+      ],
+      // Mirror Full build: only the requirements review (index 0) and the
+      // architecture proposal (index 2) pause for human approval; every other
+      // step — including the self-gating conflicts / ci / merger tail — runs straight
+      // through.
+      gates: [
+        true,
+        false,
+        true,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+      ],
+    },
+    {
       id: 'pl_quick',
       name: 'Quick implement',
       agentKinds: ['coder', 'blueprints', 'tester', 'conflicts', 'ci', 'merger'],

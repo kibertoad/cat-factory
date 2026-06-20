@@ -1,13 +1,14 @@
-import type {
-  Block,
-  ExecutionInstance,
-  ModelDefaults,
-  Pipeline,
-  PipelineSchedule,
-  ScheduleRun,
-  TrackerSettings,
-  Workspace,
-  WorkspaceSnapshot,
+import {
+  type Block,
+  type ExecutionInstance,
+  type ModelDefaults,
+  type Pipeline,
+  type PipelineSchedule,
+  type ScheduleRun,
+  seedPipelines,
+  type TrackerSettings,
+  type Workspace,
+  type WorkspaceSnapshot,
 } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import type { ConformanceHarness } from './harness.js'
@@ -34,7 +35,8 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         expect(res.status).toBe(201)
         expect(res.body.workspace.name).toBe('My board')
         expect(res.body.blocks.find((b) => b.id === 'blk_auth')).toBeTruthy()
-        expect(res.body.pipelines).toHaveLength(7)
+        // Every facade seeds a new board with the full built-in pipeline catalog.
+        expect(res.body.pipelines).toEqual(seedPipelines())
         expect(res.body.executions).toHaveLength(0)
       })
 
@@ -43,8 +45,9 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         const res = await call<WorkspaceSnapshot>('POST', '/workspaces', { seed: false })
 
         expect(res.body.blocks).toHaveLength(0)
-        // The pipeline catalog is product config, not sample data — always present.
-        expect(res.body.pipelines).toHaveLength(7)
+        // The pipeline catalog is product config, not sample data — seeded regardless
+        // of the sample-block flag.
+        expect(res.body.pipelines).toEqual(seedPipelines())
       })
 
       it('lists and deletes boards', async () => {
