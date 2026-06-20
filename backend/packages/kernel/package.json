@@ -19,14 +19,14 @@
     "access": "public"
   },
   "scripts": {
-    "build": "tsgo -b tsconfig.build.json",
-    "typecheck": "tsgo -p tsconfig.json --noEmit"
+    "build": "tsc -b tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "@cat-factory/contracts": "workspace:*",
-    "ai": "^6.0.0"
+    "ai": "^6.0.208"
   },
   "devDependencies": {
-    "@typescript/native-preview": "7.0.0-dev.20260616.1"
+    "typescript": "7.0.1-rc"
   }
 }

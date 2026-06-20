@@ -19,8 +19,8 @@
     "access": "public"
   },
   "scripts": {
-    "build": "tsgo -b tsconfig.build.json",
-    "typecheck": "tsgo -p tsconfig.json --noEmit",
+    "build": "tsc -b tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "test:run": "vitest run"
   },
@@ -31,13 +31,13 @@
     "@cat-factory/orchestration": "workspace:*",
     "@cat-factory/prompt-fragments": "workspace:*",
     "@cat-factory/spend": "workspace:*",
-    "@hono/valibot-validator": "^0.5.2",
-    "hono": "^4.6.0",
-    "pino": "^9.5.0",
-    "valibot": "^1.0.0"
+    "@hono/valibot-validator": "^0.5.3",
+    "hono": "^4.12.26",
+    "pino": "^9.14.0",
+    "valibot": "^1.4.1"
   },
   "devDependencies": {
-    "@typescript/native-preview": "7.0.0-dev.20260616.1",
-    "vitest": "^4.1.8"
+    "typescript": "7.0.1-rc",
+    "vitest": "^4.1.9"
   }
 }

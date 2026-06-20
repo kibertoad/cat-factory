@@ -19,21 +19,21 @@
     "access": "public"
   },
   "scripts": {
-    "build": "tsgo -b tsconfig.build.json",
-    "typecheck": "tsgo -p tsconfig.json --noEmit",
+    "build": "tsc -b tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
     "precompile:templates": "node scripts/precompile-prompts.mjs"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "^3.0.0",
-    "@ai-sdk/openai": "^3.0.0",
-    "@ai-sdk/openai-compatible": "^2.0.0",
+    "@ai-sdk/anthropic": "^3.0.85",
+    "@ai-sdk/openai": "^3.0.73",
+    "@ai-sdk/openai-compatible": "^2.0.51",
     "@cat-factory/contracts": "workspace:*",
     "@cat-factory/kernel": "workspace:*",
     "@cat-factory/prompt-fragments": "workspace:*",
-    "ai": "^6.0.0",
-    "handlebars": "^4.7.8"
+    "ai": "^6.0.208",
+    "handlebars": "^4.7.9"
   },
   "devDependencies": {
-    "@typescript/native-preview": "7.0.0-dev.20260616.1"
+    "typescript": "7.0.1-rc"
   }
 }
