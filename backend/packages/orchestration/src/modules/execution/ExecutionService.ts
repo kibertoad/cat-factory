@@ -63,7 +63,12 @@ import type { SpendService } from '@cat-factory/spend'
 import { requireWorkspace } from '@cat-factory/kernel'
 import type { AdvanceOptions, AdvanceResult } from './advance.js'
 import { planResumedSteps } from './retry.logic.js'
-import { isContainerEvictionError, MAX_EVICTION_RECOVERIES } from './job.logic.js'
+import {
+  isContainerEvictionError,
+  isTransientEviction,
+  MAX_EVICTION_RECOVERIES,
+  MAX_TRANSIENT_EVICTION_RECOVERIES,
+} from './job.logic.js'
 
 /**
  * "What to do next" guidance per failure kind a pipeline run can produce, shown
@@ -76,7 +81,7 @@ const EXECUTION_FAILURE_HINTS: Partial<Record<AgentFailureKind, string>> = {
   job_failed:
     'The implementation container reported a failure. Inspect its logs (Cloudflare Workers Observability, filtered by the run id), then retry to spin a fresh container.',
   evicted:
-    'The implementation container was evicted or crashed repeatedly (it kept vanishing mid-run even after an automatic fresh-container restart). This is often a memory/crash issue on the run — inspect its logs (Cloudflare Workers Observability, filtered by the run id); a heavier container instance type may be needed. Retry to try again.',
+    'The implementation container kept vanishing mid-run even after automatic fresh-container restarts. Most often this is transient: a deploy / new-version rollout draining the container, in which case simply retrying once the rollout has finished succeeds. If it persists, it points at a memory or crash issue on the run — inspect its logs (Cloudflare Workers Observability, filtered by the run id) and consider a heavier container instance type. Retry to try again.',
   timeout:
     'The run exceeded its time budget — a step or the implementation job did not finish in time. Retry to start it again.',
   decision_timeout:
@@ -529,17 +534,28 @@ export class ExecutionService {
     }
 
     if (update.state === 'failed') {
-      // A container eviction/crash (the per-run container vanished, its in-memory
-      // job is gone) is usually transient. Recover it once by dropping the dead
-      // handle and returning `continue`: the driver loops back into `advanceInstance`,
-      // which re-dispatches the SAME step to a fresh container (a new instance boots
-      // under the same id). A second eviction of the same step is treated as
-      // deterministic and fails the run as `evicted`. A genuine agent/job failure is
-      // never recovered — it fails immediately.
+      // A container eviction (the per-run container vanished, its in-memory job is
+      // gone) is usually transient. Recover it by dropping the dead handle and
+      // returning `continue`: the driver loops back into `advanceInstance`, which
+      // re-dispatches the SAME step to a fresh container (a new instance boots under
+      // the same id). Two flavours, with separate budgets:
+      //   - one the runtime facade flagged as transient infra churn (e.g. a deploy
+      //     draining the sandbox) is not a sick run, and can recur several times in a
+      //     short window, so it gets the larger MAX_TRANSIENT_EVICTION_RECOVERIES
+      //     budget (recoveries are naturally spaced by the job poll interval, riding
+      //     out the window);
+      //   - any other eviction (crash/OOM) gets the tight MAX_EVICTION_RECOVERIES.
+      // Once a budget is spent the eviction is treated as deterministic and fails the
+      // run as `evicted`. A genuine agent/job failure is never recovered.
       if (isContainerEvictionError(update.error)) {
-        const recoveries = step.evictionRecoveries ?? 0
-        if (recoveries < MAX_EVICTION_RECOVERIES) {
-          step.evictionRecoveries = recoveries + 1
+        const transient = isTransientEviction(update.error)
+        const limit = transient ? MAX_TRANSIENT_EVICTION_RECOVERIES : MAX_EVICTION_RECOVERIES
+        const recoveries = transient
+          ? (step.transientEvictionRecoveries ?? 0)
+          : (step.evictionRecoveries ?? 0)
+        if (recoveries < limit) {
+          if (transient) step.transientEvictionRecoveries = recoveries + 1
+          else step.evictionRecoveries = recoveries + 1
           step.jobId = undefined
           step.subtasks = undefined
           step.progress = 0
@@ -549,7 +565,9 @@ export class ExecutionService {
         }
         return {
           kind: 'job_evicted',
-          error: `${update.error ?? 'Container evicted'} (still evicting after ${recoveries} automatic container restart${recoveries === 1 ? '' : 's'} — treating as deterministic)`,
+          error: transient
+            ? `${update.error} (still evicting after ${recoveries} automatic restarts through the infrastructure churn — treating as deterministic)`
+            : `${update.error ?? 'Container evicted'} (still evicting after ${recoveries} automatic container restart${recoveries === 1 ? '' : 's'} — treating as deterministic)`,
         }
       }
       return { kind: 'job_failed', error: update.error }

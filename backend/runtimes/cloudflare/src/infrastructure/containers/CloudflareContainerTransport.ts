@@ -1,7 +1,18 @@
 import type { RunnerDispatchKind, RunnerJobView, RunnerTransport } from '@cat-factory/kernel'
+import { TRANSIENT_EVICTION_MARKER } from '@cat-factory/orchestration'
 import type { DurableObjectNamespace } from '@cloudflare/workers-types'
-import type { ExecutionContainer } from './ExecutionContainer'
+import { type ExecutionContainer, isRolloutSignal } from './ExecutionContainer'
 import type { ContainerInstanceRegistry } from './ContainerInstanceRegistry'
+
+// The failed-poll error string the engine classifies as a container eviction. The
+// "(container evicted or crashed)" suffix is matched by job.logic
+// `isContainerEvictionError` (and the bootstrap flow). When THIS facade knows the
+// eviction was a transient new-version rollout (not a crash), it appends the
+// engine's neutral TRANSIENT_EVICTION_MARKER so `isTransientEviction` recovers it on
+// the larger budget. The Cloudflare-specific "rollout ⇒ transient" mapping lives
+// here, in the facade; the engine stays runtime-neutral.
+const EVICTION_ERROR = 'Job not found (container evicted or crashed)'
+const ROLLOUT_EVICTION_ERROR = `${EVICTION_ERROR} (${TRANSIENT_EVICTION_MARKER})`
 
 // The default runner transport: a per-run Cloudflare Container. Each job is one
 // Durable Object instance keyed by the job id (the execution/bootstrap job id); the
@@ -54,19 +65,29 @@ export class CloudflareContainerTransport implements RunnerTransport {
 
   async poll(jobId: string): Promise<RunnerJobView> {
     const stub = this.namespace.get(this.namespace.idFromName(jobId))
-    const res = await stub.fetch(`http://container/jobs/${encodeURIComponent(jobId)}`, {
-      method: 'GET',
-      signal: AbortSignal.timeout(POLL_TIMEOUT_MS),
-    })
+    let res: Response
+    try {
+      res = await stub.fetch(`http://container/jobs/${encodeURIComponent(jobId)}`, {
+        method: 'GET',
+        signal: AbortSignal.timeout(POLL_TIMEOUT_MS),
+      })
+    } catch (err) {
+      // A rollout in flight can make the container fetch itself throw the runtime's
+      // "new version rollout" signal (exit 143) rather than returning a 404. Report it
+      // as a transient rollout eviction so the engine recovers it on the larger
+      // rollout budget instead of failing the run.
+      if (isRolloutSignal(err)) return { state: 'failed', error: ROLLOUT_EVICTION_ERROR }
+      throw err
+    }
     if (res.status === 404) {
       // The job/container vanished (eviction or crash): report failed so the run
       // stops (the run-sweeper may then re-drive it from durable state). The trailing
       // "(container evicted or crashed)" is matched by the bootstrap flow to classify
-      // the fault as `evicted`.
-      return {
-        state: 'failed',
-        error: 'Job not found (container evicted or crashed)',
-      }
+      // the fault as `evicted`. Ask the DO whether it was just drained by a
+      // new-version rollout (a deploy) — if so, tag it so the engine treats it as
+      // transient infra churn rather than a crash/OOM.
+      const rolledOut = await stub.recentlyRolledOut().catch(() => false)
+      return { state: 'failed', error: rolledOut ? ROLLOUT_EVICTION_ERROR : EVICTION_ERROR }
     }
     if (!res.ok) {
       throw new Error(`Container job poll failed (HTTP ${res.status}): ${await safeText(res)}`)

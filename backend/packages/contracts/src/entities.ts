@@ -469,6 +469,15 @@ export const pipelineStepSchema = v.object({
    * `evicted` rather than looping. Absent/0 until the first eviction.
    */
   evictionRecoveries: v.optional(v.number()),
+  /**
+   * How many times this step's container was evicted by *transient infrastructure
+   * churn* — an event the runtime facade flags as not-a-crash (e.g. a deploy
+   * draining the sandbox) — and recovered by re-dispatching a fresh container.
+   * Counted separately from {@link evictionRecoveries} and bounded by a larger
+   * `MAX_TRANSIENT_EVICTION_RECOVERIES`, since such churn can recur several times in
+   * a short window, unlike a crash. Absent/0 until the first transient eviction.
+   */
+  transientEvictionRecoveries: v.optional(v.number()),
 })
 export type PipelineStep = v.InferOutput<typeof pipelineStepSchema>
 
