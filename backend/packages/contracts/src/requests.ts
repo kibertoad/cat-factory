@@ -50,6 +50,12 @@ export type AddFrameInput = v.InferOutput<typeof addFrameSchema>
 export const addServiceFromRepoSchema = v.object({
   repoGithubId: v.number(),
   position: v.optional(positionSchema),
+  /**
+   * For a monorepo repo, the subdirectory (relative to the repo root) this service
+   * lives in, e.g. `packages/api`. Omitted/empty for a whole-repo service. The
+   * frame is titled after the directory's base name when given.
+   */
+  directory: v.optional(v.string()),
 })
 export type AddServiceFromRepoInput = v.InferOutput<typeof addServiceFromRepoSchema>
 

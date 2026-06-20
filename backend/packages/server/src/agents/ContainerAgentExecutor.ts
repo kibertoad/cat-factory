@@ -35,11 +35,34 @@ export interface RepoTarget {
   owner: string
   name: string
   baseBranch: string
+  /**
+   * For a service in a monorepo, the subdirectory (relative to the repo root) the
+   * service lives in, e.g. `packages/api`. Present only when the resolved repo is
+   * flagged a monorepo AND the service pins a directory; the harness then runs the
+   * agent within that subtree and tells it so. Absent ⇒ whole-repo behaviour.
+   */
+  serviceDirectory?: string
 }
 
 export type ResolveRepoTarget = (workspaceId: string, blockId: string) => Promise<RepoTarget | null>
 
 export type MintInstallationToken = (installationId: number) => Promise<string>
+
+/**
+ * The repo spec every container job body carries: clone coordinates plus, for a
+ * monorepo service, the subdirectory the harness should run the agent within. Built
+ * here once so the (six) agent-kind job bodies can't drift on which repo fields they
+ * forward.
+ */
+function buildRepoSpec(repo: RepoTarget) {
+  return {
+    owner: repo.owner,
+    name: repo.name,
+    baseBranch: repo.baseBranch,
+    cloneUrl: `https://github.com/${repo.owner}/${repo.name}.git`,
+    ...(repo.serviceDirectory ? { serviceDirectory: repo.serviceDirectory } : {}),
+  }
+}
 
 export interface ContainerAgentExecutorDependencies {
   /** Resolve which runner backend (Cloudflare container or self-hosted pool) a job runs on. */
@@ -276,12 +299,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
         proxyBaseUrl: this.deps.proxyBaseUrl,
         sessionToken,
         ghToken,
-        repo: {
-          owner: repo.owner,
-          name: repo.name,
-          baseBranch: repo.baseBranch,
-          cloneUrl: `https://github.com/${repo.owner}/${repo.name}.git`,
-        },
+        repo: buildRepoSpec(repo),
         branch,
         mode: context.block.pullRequest?.branch ? 'update' : 'create',
         ...(this.deps.githubApiBase ? { githubApiBase: this.deps.githubApiBase } : {}),
@@ -310,12 +328,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
         proxyBaseUrl: this.deps.proxyBaseUrl,
         sessionToken,
         ghToken,
-        repo: {
-          owner: repo.owner,
-          name: repo.name,
-          baseBranch: repo.baseBranch,
-          cloneUrl: `https://github.com/${repo.owner}/${repo.name}.git`,
-        },
+        repo: buildRepoSpec(repo),
         branch,
         tasks: (context.serviceTasks ?? []).map((t) => ({
           id: t.id,
@@ -342,12 +355,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
         proxyBaseUrl: this.deps.proxyBaseUrl,
         sessionToken,
         ghToken,
-        repo: {
-          owner: repo.owner,
-          name: repo.name,
-          baseBranch: repo.baseBranch,
-          cloneUrl: `https://github.com/${repo.owner}/${repo.name}.git`,
-        },
+        repo: buildRepoSpec(repo),
         branch,
         webToolsGuidance: webResearchGuidanceFor(context.agentKind, { fetch: true }),
         ...(this.deps.webSearchProxyEnabled ? { webSearch: true } : {}),
@@ -374,12 +382,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
         proxyBaseUrl: this.deps.proxyBaseUrl,
         sessionToken,
         ghToken,
-        repo: {
-          owner: repo.owner,
-          name: repo.name,
-          baseBranch: repo.baseBranch,
-          cloneUrl: `https://github.com/${repo.owner}/${repo.name}.git`,
-        },
+        repo: buildRepoSpec(repo),
         branch,
         ...(this.deps.githubApiBase ? { githubApiBase: this.deps.githubApiBase } : {}),
       }
@@ -401,12 +404,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
         proxyBaseUrl: this.deps.proxyBaseUrl,
         sessionToken,
         ghToken,
-        repo: {
-          owner: repo.owner,
-          name: repo.name,
-          baseBranch: repo.baseBranch,
-          cloneUrl: `https://github.com/${repo.owner}/${repo.name}.git`,
-        },
+        repo: buildRepoSpec(repo),
         branch,
         ...(context.block.pullRequest?.number !== undefined
           ? { prNumber: context.block.pullRequest.number }
@@ -440,12 +438,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       proxyBaseUrl: this.deps.proxyBaseUrl,
       sessionToken,
       ghToken,
-      repo: {
-        owner: repo.owner,
-        name: repo.name,
-        baseBranch: repo.baseBranch,
-        cloneUrl: `https://github.com/${repo.owner}/${repo.name}.git`,
-      },
+      repo: buildRepoSpec(repo),
       headBranch,
       pr: {
         title: `${context.block.title} (${context.pipelineName})`,

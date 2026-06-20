@@ -23,6 +23,15 @@ export const githubRepoSchema = v.object({
   private: v.boolean(),
   /** Optional link to a board block this repo backs. */
   blockId: v.nullable(v.string()),
+  /**
+   * Whether this repo is a monorepo hosting more than one service. When true the
+   * board lets several service frames target the same repo, each pinned to its own
+   * subdirectory (carried on the {@link Service}), and that subdirectory is fed to
+   * every agent working on the service. Owned by the board (set explicitly), so —
+   * like `blockId` — sync never overwrites it. Absent/false ⇒ a plain single-service
+   * repo (the historical behaviour).
+   */
+  isMonorepo: v.optional(v.boolean()),
   /** When this projection row was last refreshed (epoch ms). */
   syncedAt: v.number(),
 })
@@ -145,6 +154,8 @@ export const githubAvailableRepoSchema = v.object({
   private: v.boolean(),
   /** Whether this repo is currently linked to (tracked by) this workspace. */
   linked: v.boolean(),
+  /** Whether the (linked) repo is flagged as a monorepo. False for unlinked repos. */
+  isMonorepo: v.optional(v.boolean(), false),
 })
 export type GitHubAvailableRepo = v.InferOutput<typeof githubAvailableRepoSchema>
 
@@ -173,6 +184,27 @@ export const linkReposSchema = v.object({
   repoGithubIds: v.array(v.number()),
 })
 export type LinkReposInput = v.InferOutput<typeof linkReposSchema>
+
+/** Mark (or unmark) a linked repo as a monorepo hosting several services. */
+export const setRepoMonorepoSchema = v.object({
+  isMonorepo: v.boolean(),
+})
+export type SetRepoMonorepoInput = v.InferOutput<typeof setRepoMonorepoSchema>
+
+/**
+ * One directory entry of a repo's tree, used by the monorepo service picker to let
+ * a user browse a repo and pin a service to its subdirectory. Mirrors the slice of
+ * GitHub's contents API the picker needs (it lists a single level at a time).
+ */
+export const repoTreeEntrySchema = v.object({
+  /** Path relative to the repo root, e.g. `packages/api`. */
+  path: v.string(),
+  /** Base name, e.g. `api`. */
+  name: v.string(),
+  /** `file` | `dir` | `symlink` | `submodule`. */
+  type: v.string(),
+})
+export type RepoTreeEntry = v.InferOutput<typeof repoTreeEntrySchema>
 
 /** Trigger a resync. Defaults to an incremental resync of all tracked repos. */
 export const resyncRequestSchema = v.object({

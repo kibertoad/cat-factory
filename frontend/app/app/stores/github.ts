@@ -167,6 +167,21 @@ export const useGitHubStore = defineStore('github', () => {
     return list
   }
 
+  /** Flag (or unflag) a linked repo as a monorepo, reflecting it in local state. */
+  async function setMonorepo(repoGithubId: number, isMonorepo: boolean) {
+    const updated = await api.setGitHubRepoMonorepo(workspace.requireId(), repoGithubId, isMonorepo)
+    repos.value = repos.value.map((r) => (r.githubId === repoGithubId ? updated : r))
+    availableRepos.value = availableRepos.value.map((r) =>
+      r.githubId === repoGithubId ? { ...r, isMonorepo } : r,
+    )
+    return updated
+  }
+
+  /** List one level of a (monorepo) repo's tree, for the service-directory picker. */
+  function loadRepoTree(repoGithubId: number, path = '') {
+    return api.listGitHubRepoTree(workspace.requireId(), repoGithubId, path)
+  }
+
   /** The URL a workspace owner visits to install the App against this workspace. */
   function getInstallUrl(): Promise<string> {
     return api.getGitHubInstallUrl(workspace.requireId()).then((r) => r.url)
@@ -284,6 +299,8 @@ export const useGitHubStore = defineStore('github', () => {
     ensureLoaded,
     loadAvailableRepos,
     setLinkedRepos,
+    setMonorepo,
+    loadRepoTree,
     loadBranches,
     getInstallUrl,
     loadInstallations,

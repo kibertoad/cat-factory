@@ -91,7 +91,7 @@ export class BoardService {
   private registerService(
     workspaceId: string,
     frame: Block,
-    repo?: { installationId: number; githubId: number },
+    repo?: { installationId: number; githubId: number; directory?: string | null },
   ): Promise<string | undefined> {
     return registerServiceForFrame(
       {
@@ -195,16 +195,27 @@ export class BoardService {
       'GitHubRepo',
       String(input.repoGithubId),
     )
-    if (repo.blockId) {
+    // Normalise the requested service subdirectory to a clean relative path.
+    const directory = input.directory?.trim().replace(/^\/+|\/+$/g, '') || undefined
+    // A monorepo can back SEVERAL service frames (one per subdirectory), so the
+    // single-service guard applies only to whole-repo (non-monorepo) repos. A monorepo
+    // service MUST name its subdirectory so execution can scope agents to it.
+    if (repo.blockId && !repo.isMonorepo) {
       throw new ValidationError('This repository is already linked to a board service')
+    }
+    if (repo.isMonorepo && !directory) {
+      throw new ValidationError('Select a service directory for this monorepo')
     }
     const blocks = await this.blockRepository.listByWorkspace(workspaceId)
     const frames = blocks.filter((b) => b.level === 'frame').length
+    const title = directory ? (directory.split('/').pop() ?? repo.name) : repo.name
     const block: Block = {
       id: this.idGenerator.next('blk'),
-      title: repo.name,
+      title,
       type: 'service',
-      description: `Service backed by ${repo.owner}/${repo.name}.`,
+      description: directory
+        ? `Service backed by ${repo.owner}/${repo.name} (${directory}/).`
+        : `Service backed by ${repo.owner}/${repo.name}.`,
       position: input.position ?? { x: 80 + (frames % 5) * 48, y: 80 + (frames % 5) * 48 },
       status: 'ready',
       progress: 0,
@@ -216,9 +227,15 @@ export class BoardService {
     const serviceId = await this.registerService(workspaceId, block, {
       installationId: repo.installationId,
       githubId: repo.githubId,
+      directory: directory ?? null,
     })
     await this.blockRepository.insert(workspaceId, block, serviceId)
-    await this.repoProjectionRepository.linkBlock(workspaceId, repo.githubId, block.id)
+    // A monorepo's repo backs several frames, so the projection's single `block_id`
+    // link can't represent it — the Service mapping (read by resolveRepoTarget) is
+    // authoritative there. Keep the legacy link only for a whole-repo service.
+    if (!repo.isMonorepo) {
+      await this.repoProjectionRepository.linkBlock(workspaceId, repo.githubId, block.id)
+    }
     return block
   }
 

@@ -35,7 +35,7 @@ export async function registerServiceForFrame(
   deps: ServiceRegistrationDeps,
   workspaceId: string,
   frame: Pick<Block, 'id' | 'position' | 'size'>,
-  repo?: { installationId: number; githubId: number },
+  repo?: { installationId: number; githubId: number; directory?: string | null },
 ): Promise<string | undefined> {
   const { serviceRepository, workspaceMountRepository } = deps
   if (!serviceRepository || !workspaceMountRepository) return undefined
@@ -47,6 +47,7 @@ export async function registerServiceForFrame(
     frameBlockId: frame.id,
     installationId: repo?.installationId ?? null,
     repoGithubId: repo?.githubId ?? null,
+    directory: repo?.directory ?? null,
     createdAt: now,
   }
   await serviceRepository.insert(service)

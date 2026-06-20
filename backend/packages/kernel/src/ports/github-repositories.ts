@@ -94,6 +94,12 @@ export interface RepoProjectionRepository {
   ): Promise<void>
   /** Link a projected repo to a board block (does not touch other fields). */
   linkBlock(workspaceId: string, githubId: number, blockId: string | null): Promise<void>
+  /**
+   * Flag (or unflag) a projected repo as a monorepo (does not touch other fields).
+   * Like {@link RepoProjectionRepository.linkBlock} this is board-owned state that
+   * sync preserves rather than overwrites.
+   */
+  setMonorepo(workspaceId: string, githubId: number, isMonorepo: boolean): Promise<void>
   /** Live repos whose `synced_at` is older than the cutoff, across all workspaces. */
   listStale(olderThanEpochMs: number): Promise<StaleRepoRef[]>
   /**

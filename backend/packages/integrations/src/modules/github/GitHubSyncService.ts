@@ -11,7 +11,7 @@ import type {
   SyncCursor,
   SyncCursorKind,
 } from '@cat-factory/kernel'
-import type { GitHubAvailableRepo, GitHubRepo } from '@cat-factory/kernel'
+import type { GitHubAvailableRepo, GitHubRepo, RepoTreeEntry } from '@cat-factory/kernel'
 
 // ---------------------------------------------------------------------------
 // GitHubSyncService: keeps the local projections (repos/branches, PRs/issues,
@@ -59,8 +59,8 @@ export class GitHubSyncService {
     const { items } = await this.deps.githubClient.listInstallationRepos(
       installation.installationId,
     )
-    const linked = new Set(
-      (await this.deps.repoProjectionRepository.list(workspaceId)).map((r) => r.githubId),
+    const tracked = new Map(
+      (await this.deps.repoProjectionRepository.list(workspaceId)).map((r) => [r.githubId, r]),
     )
     return items.map((r) => ({
       githubId: r.githubId,
@@ -68,8 +68,62 @@ export class GitHubSyncService {
       name: r.name,
       defaultBranch: r.defaultBranch,
       private: r.private,
-      linked: linked.has(r.githubId),
+      linked: tracked.has(r.githubId),
+      isMonorepo: tracked.get(r.githubId)?.isMonorepo ?? false,
     }))
+  }
+
+  /**
+   * Mark (or unmark) a tracked repo as a monorepo (hosting several services, each
+   * pinned to a subdirectory). The flag is board-owned state on the projection;
+   * returns the updated repo, or throws if the repo isn't tracked by the workspace.
+   */
+  async setRepoMonorepo(
+    workspaceId: string,
+    repoGithubId: number,
+    isMonorepo: boolean,
+  ): Promise<GitHubRepo> {
+    const existing = await this.deps.repoProjectionRepository.get(workspaceId, repoGithubId)
+    if (!existing) {
+      throw new Error(`Repo ${repoGithubId} is not linked to workspace '${workspaceId}'`)
+    }
+    await this.deps.repoProjectionRepository.setMonorepo(workspaceId, repoGithubId, isMonorepo)
+    return { ...existing, isMonorepo }
+  }
+
+  /**
+   * List the entries of a directory (one level) in a tracked repo, on its default
+   * branch, so the monorepo service picker can browse the repo and pin a service to a
+   * subdirectory. `path` is repo-root-relative ('' = the root). Directories are
+   * returned first (the picker navigates into those), then files for context.
+   */
+  async listRepoDirectory(
+    workspaceId: string,
+    repoGithubId: number,
+    path = '',
+  ): Promise<RepoTreeEntry[]> {
+    const installation = await this.deps.githubInstallationRepository.getByWorkspace(workspaceId)
+    if (!installation || installation.deletedAt) return []
+    const repo = await this.deps.repoProjectionRepository.get(workspaceId, repoGithubId)
+    if (!repo) {
+      throw new Error(`Repo ${repoGithubId} is not linked to workspace '${workspaceId}'`)
+    }
+    const entries = await this.deps.githubClient.listDirectory(
+      installation.installationId,
+      { owner: repo.owner, repo: repo.name },
+      path.replace(/^\/+|\/+$/g, ''),
+      repo.defaultBranch ?? undefined,
+    )
+    const mapped: RepoTreeEntry[] = entries.map((e) => ({
+      path: e.path,
+      name: e.name,
+      type: e.type,
+    }))
+    return mapped.sort((a, b) => {
+      if (a.type === 'dir' && b.type !== 'dir') return -1
+      if (a.type !== 'dir' && b.type === 'dir') return 1
+      return a.name.localeCompare(b.name)
+    })
   }
 
   /**

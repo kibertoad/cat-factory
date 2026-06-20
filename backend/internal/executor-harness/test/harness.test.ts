@@ -121,6 +121,24 @@ describe('parseJob', () => {
     expect(() => parseJob({ ...validBody, repo: { owner: 'o' } })).toThrow(/repo\.name/)
     expect(() => parseJob(null)).toThrow(/object/)
   })
+
+  it('omits serviceDirectory when absent (whole-repo run)', () => {
+    expect(parseJob(validBody).repo.serviceDirectory).toBeUndefined()
+  })
+
+  it('normalises a monorepo serviceDirectory to a clean relative path', () => {
+    const job = parseJob({
+      ...validBody,
+      repo: { ...validBody.repo, serviceDirectory: '/packages/api/' },
+    })
+    expect(job.repo.serviceDirectory).toBe('packages/api')
+  })
+
+  it('rejects a serviceDirectory that escapes the checkout', () => {
+    expect(() =>
+      parseJob({ ...validBody, repo: { ...validBody.repo, serviceDirectory: '../secrets' } }),
+    ).toThrow(/serviceDirectory/)
+  })
 })
 
 describe('authenticatedCloneUrl', () => {

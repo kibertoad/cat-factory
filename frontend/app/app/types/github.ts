@@ -49,7 +49,19 @@ export interface GitHubRepo {
   private: boolean
   /** Optional link to a board block this repo backs. */
   blockId: string | null
+  /** Whether this repo is a monorepo hosting several services (each pinned to a subdirectory). */
+  isMonorepo?: boolean
   syncedAt: number
+}
+
+/** One directory entry of a repo's tree, used by the monorepo service picker. */
+export interface RepoTreeEntry {
+  /** Path relative to the repo root, e.g. `packages/api`. */
+  path: string
+  /** Base name, e.g. `api`. */
+  name: string
+  /** `file` | `dir` | `symlink` | `submodule`. */
+  type: string
 }
 
 export interface GitHubBranch {
@@ -73,6 +85,8 @@ export interface GitHubAvailableRepo {
   defaultBranch: string | null
   private: boolean
   linked: boolean
+  /** Whether the (linked) repo is flagged as a monorepo. */
+  isMonorepo?: boolean
 }
 
 export type GitHubPullRequestState = 'open' | 'closed'

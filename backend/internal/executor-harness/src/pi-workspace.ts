@@ -50,6 +50,13 @@ export interface AgentRunSpec {
   proxyBaseUrl: string
   sessionToken: string
   /**
+   * For a monorepo service, the subdirectory (relative to the repo root) this run
+   * operates within — `spec.dir` already points there. Surfaced to the agent in
+   * AGENTS.md so it knows it's in a monorepo and where its service lives. Absent ⇒
+   * whole-repo run (no monorepo note).
+   */
+  serviceDirectory?: string
+  /**
    * Whether this run is expected to edit files. Defaults to true; set false for
    * assess-only runs (the merger) so the no-progress guard's no-edit bound — which
    * would otherwise fire on a run that correctly makes zero edits — is skipped.
@@ -98,6 +105,7 @@ export async function runAgentInWorkspace(
   await writeAgentsContext(spec.systemPrompt, {
     webSearch: Boolean(webSearch),
     guidance: spec.webToolsGuidance,
+    serviceDirectory: spec.serviceDirectory,
   })
   await writePiModelsConfig({ model: spec.model, proxyBaseUrl: spec.proxyBaseUrl })
   const { signal, onActivity, onProgress } = opts

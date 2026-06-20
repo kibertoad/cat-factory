@@ -2,6 +2,7 @@ import type {
   BlockRepository,
   GitHubInstallationRepository,
   RepoProjectionRepository,
+  ServiceRepository,
 } from '@cat-factory/kernel'
 import type { ResolveRepoTarget } from './ContainerAgentExecutor.js'
 
@@ -13,6 +14,13 @@ export interface ResolveRepoTargetDependencies {
   installationRepository: Pick<GitHubInstallationRepository, 'getByWorkspace'>
   repoProjectionRepository: Pick<RepoProjectionRepository, 'list'>
   blockRepository: Pick<BlockRepository, 'get'>
+  /**
+   * Resolves the {@link Service} owning a frame block, used to find which repo a
+   * frame targets AND (for a monorepo) the subdirectory the service pins. Optional:
+   * a facade/test without in-org services wired falls back to the repo-projection
+   * `block_id` link (one whole-repo service per repo, no subdirectory).
+   */
+  serviceRepository?: Pick<ServiceRepository, 'getByFrameBlock'>
 }
 
 /**
@@ -33,20 +41,45 @@ export interface ResolveRepoTargetDependencies {
  * because each wires its own resolver).
  */
 export function buildResolveRepoTarget(deps: ResolveRepoTargetDependencies): ResolveRepoTarget {
-  const { installationRepository, repoProjectionRepository, blockRepository } = deps
+  const { installationRepository, repoProjectionRepository, blockRepository, serviceRepository } =
+    deps
   return async (workspaceId, blockId) => {
     const installation = await installationRepository.getByWorkspace(workspaceId)
     if (!installation) return null
     const repos = await repoProjectionRepository.list(workspaceId)
     if (repos.length === 0) return null
-    const linkedIds = new Set(repos.map((r) => r.blockId).filter((id): id is string => !!id))
+    const reposByGithubId = new Map(repos.map((r) => [r.githubId, r]))
+    const reposByBlock = new Map(
+      repos.filter((r) => r.blockId).map((r) => [r.blockId as string, r]),
+    )
 
-    let linkedBlockId: string | undefined
+    // Walk up the block's ancestry to the enclosing service frame, then resolve its
+    // repo. Two linkage mechanisms, checked in this order at each level:
+    //  1. The account-owned `Service` for the frame (`getByFrameBlock`) → its
+    //     `repoGithubId`. This is the only mechanism that supports a MONOREPO, where
+    //     several frames each own a service pinned to a different subdirectory of the
+    //     SAME repo (the projection's single `block_id` can't express that), and it is
+    //     the only one carrying the per-service `directory`.
+    //  2. The legacy repo-projection `block_id` link (one whole-repo service per repo),
+    //     for frames created before in-org services / without a service wired.
+    // There is deliberately NO "first repo" fallback: a workspace can have many repos,
+    // and guessing silently pushes work into the wrong one. If nothing in the chain is
+    // linked we throw so the misconfiguration surfaces instead of corrupting another repo.
+    let resolved: { repo: (typeof repos)[number]; directory: string | null } | undefined
     let cursor: string | null = blockId
     const seen = new Set<string>()
     while (cursor && !seen.has(cursor)) {
-      if (linkedIds.has(cursor)) {
-        linkedBlockId = cursor
+      const service = await serviceRepository?.getByFrameBlock(cursor)
+      if (service?.repoGithubId != null) {
+        const repo = reposByGithubId.get(service.repoGithubId)
+        if (repo) {
+          resolved = { repo, directory: service.directory ?? null }
+          break
+        }
+      }
+      const linked = reposByBlock.get(cursor)
+      if (linked) {
+        resolved = { repo: linked, directory: null }
         break
       }
       seen.add(cursor)
@@ -54,19 +87,24 @@ export function buildResolveRepoTarget(deps: ResolveRepoTargetDependencies): Res
       cursor = block?.parentId ?? null
     }
 
-    const repo = repos.find((r) => r.blockId === linkedBlockId)
-    if (!repo) {
+    if (!resolved) {
       throw new Error(
         `Block '${blockId}' is not under a service linked to a GitHub repository ` +
           `(workspace '${workspaceId}'). Link the service frame to its repo so execution ` +
           `targets the right repository instead of guessing one.`,
       )
     }
+    const { repo, directory } = resolved
+    // The subdirectory is fed to agents ONLY when the repo is flagged a monorepo: a
+    // single-service repo's service may carry a stale/irrelevant directory, but its
+    // agents must keep operating on the repo root (the historical behaviour).
+    const serviceDirectory = repo.isMonorepo && directory ? directory : undefined
     return {
       installationId: installation.installationId,
       owner: repo.owner,
       name: repo.name,
       baseBranch: repo.defaultBranch ?? 'main',
+      ...(serviceDirectory ? { serviceDirectory } : {}),
     }
   }
 }

@@ -1,3 +1,5 @@
+import { mkdir } from 'node:fs/promises'
+import { join } from 'node:path'
 import type { RepoSpec } from './job.js'
 import {
   branchHasCommitsSince,
@@ -214,17 +216,27 @@ export async function runCodingAgent(
     }, checkpointIntervalMs())
     checkpoint.unref?.()
 
+    // In a monorepo the service lives in a subdirectory: run Pi with its cwd set to
+    // that subtree (git stays rooted at `dir` so commits/pushes still cover the whole
+    // checkout). Created if missing so a coder scaffolding a brand-new service into an
+    // existing monorepo has a cwd to start in. The agent is also TOLD it's in a
+    // monorepo (and where) via the AGENTS.md context below.
+    const serviceDirectory = spec.repo.serviceDirectory
+    const workDir = serviceDirectory ? join(dir, serviceDirectory) : dir
+    if (serviceDirectory) await mkdir(workDir, { recursive: true })
+
     let outcome: CodingAgentOutcome
     try {
-      log.info('coding-agent: running agent', trace)
+      log.info('coding-agent: running agent', { ...trace, serviceDirectory })
       const { summary, stats, stderrTail } = await runAgentInWorkspace(
         {
-          dir,
+          dir: workDir,
           systemPrompt: spec.systemPrompt,
           userPrompt: spec.userPrompt,
           model: spec.model,
           proxyBaseUrl: spec.proxyBaseUrl,
           sessionToken: spec.sessionToken,
+          serviceDirectory,
           webToolsGuidance: spec.webToolsGuidance,
           webSearchProxy: spec.webSearchProxy,
         },
