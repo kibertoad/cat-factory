@@ -154,6 +154,21 @@ export const tokenUsage = pgTable(
   (t) => [index('idx_token_usage_created').on(t.created_at)],
 )
 
+// Per-workspace, per-agent-kind default model selection (mirror of D1 migration
+// 0028). One row per (workspace, agent kind); the model each kind defaults to,
+// overriding the env routing for that workspace. A kind absent for a workspace
+// falls back to the env routing.
+export const workspaceModelDefaults = pgTable(
+  'workspace_model_defaults',
+  {
+    workspace_id: text('workspace_id').notNull(),
+    agent_kind: text('agent_kind').notNull(),
+    model_id: text('model_id').notNull(),
+    updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.workspace_id, t.agent_kind] })],
+)
+
 // LLM observability sink (mirror of D1 migration 0026). One row per proxied
 // container-agent model call: full prompt/response, output-limit headroom and the
 // transport-vs-execution latency split. Pruned aggressively by retention (the full

@@ -13,6 +13,7 @@ import type {
   ExecutionRepository,
   Membership,
   MembershipRepository,
+  ModelDefaultsRepository,
   LlmCallMetric,
   LlmCallMetricRepository,
   LlmCallMetricSummary,
@@ -46,6 +47,7 @@ import {
   memberships,
   pipelines,
   tokenUsage,
+  workspaceModelDefaults,
   workspaces,
 } from '../db/schema.js'
 
@@ -618,6 +620,59 @@ class DrizzleLlmCallMetricRepository implements LlmCallMetricRepository {
   }
 }
 
+/**
+ * A workspace's per-agent-kind default models, one row per (workspace, agent kind)
+ * in `workspace_model_defaults`. `replace` rewrites the whole map for a workspace
+ * in a transaction (delete-all then insert-each), so a kind omitted is cleared.
+ */
+class DrizzleModelDefaultsRepository implements ModelDefaultsRepository {
+  constructor(private readonly db: DrizzleDb) {}
+
+  async get(workspaceId: string): Promise<Record<string, string>> {
+    const rows = await this.db
+      .select({
+        agentKind: workspaceModelDefaults.agent_kind,
+        modelId: workspaceModelDefaults.model_id,
+      })
+      .from(workspaceModelDefaults)
+      .where(eq(workspaceModelDefaults.workspace_id, workspaceId))
+    const map: Record<string, string> = {}
+    for (const row of rows) map[row.agentKind] = row.modelId
+    return map
+  }
+
+  async getForKind(workspaceId: string, agentKind: string): Promise<string | null> {
+    const [row] = await this.db
+      .select({ modelId: workspaceModelDefaults.model_id })
+      .from(workspaceModelDefaults)
+      .where(
+        and(
+          eq(workspaceModelDefaults.workspace_id, workspaceId),
+          eq(workspaceModelDefaults.agent_kind, agentKind),
+        ),
+      )
+    return row ? row.modelId : null
+  }
+
+  async replace(workspaceId: string, defaults: Record<string, string>): Promise<void> {
+    const updatedAt = Date.now()
+    const values = Object.entries(defaults).map(([agentKind, modelId]) => ({
+      workspace_id: workspaceId,
+      agent_kind: agentKind,
+      model_id: modelId,
+      updated_at: updatedAt,
+    }))
+    // Rewrite the whole per-kind map atomically: clear the workspace's rows, then
+    // insert one per entry, so a reader never sees a partial map.
+    await this.db.transaction(async (tx) => {
+      await tx
+        .delete(workspaceModelDefaults)
+        .where(eq(workspaceModelDefaults.workspace_id, workspaceId))
+      if (values.length > 0) await tx.insert(workspaceModelDefaults).values(values)
+    })
+  }
+}
+
 export interface CoreRepositories {
   workspaceRepository: WorkspaceRepository
   accountRepository: AccountRepository
@@ -628,6 +683,7 @@ export interface CoreRepositories {
   tokenUsageRepository: TokenUsageRepository
   llmCallMetricRepository: LlmCallMetricRepository
   agentRunRepository: AgentRunRepository
+  modelDefaultsRepository: ModelDefaultsRepository
 }
 
 /** Build the Drizzle/Postgres-backed core repositories. */
@@ -642,5 +698,6 @@ export function createDrizzleRepositories(db: DrizzleDb, clock: Clock): CoreRepo
     tokenUsageRepository: new DrizzleTokenUsageRepository(db),
     llmCallMetricRepository: new DrizzleLlmCallMetricRepository(db),
     agentRunRepository: new DrizzleAgentRunRepository(db),
+    modelDefaultsRepository: new DrizzleModelDefaultsRepository(db),
   }
 }

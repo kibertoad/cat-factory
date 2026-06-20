@@ -154,6 +154,41 @@ async function save() {
               </div>
             </li>
           </ol>
+
+          <!-- Saved pipelines: review the library + delete (the run affordance
+               moved to the task card / inspector when the palettes were removed). -->
+          <div v-if="pipelines.pipelines.length" class="mt-4 border-t border-slate-800 pt-3">
+            <h3 class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+              Saved pipelines
+            </h3>
+            <ul class="space-y-1.5">
+              <li
+                v-for="p in pipelines.pipelines"
+                :key="p.id"
+                class="group flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-800/40 px-2 py-1.5"
+              >
+                <span class="flex-1 truncate text-xs text-slate-200">{{ p.name }}</span>
+                <div class="flex items-center gap-0.5">
+                  <template v-for="(k, i) in p.agentKinds" :key="i">
+                    <UIcon
+                      :name="AGENT_BY_KIND[k].icon"
+                      class="h-3.5 w-3.5"
+                      :style="{ color: AGENT_BY_KIND[k].color }"
+                      :title="AGENT_BY_KIND[k].label"
+                    />
+                  </template>
+                </div>
+                <UButton
+                  icon="i-lucide-trash-2"
+                  color="neutral"
+                  variant="ghost"
+                  size="xs"
+                  class="opacity-0 transition group-hover:opacity-100"
+                  @click="pipelines.removePipeline(p.id)"
+                />
+              </li>
+            </ul>
+          </div>
         </div>
       </div>
     </template>

@@ -53,6 +53,14 @@ export const useUiStore = defineStore('ui', () => {
   // linked guideline repos; ADR 0006).
   const fragmentLibraryOpen = ref(false)
 
+  // Command bar (⌘K) — searchable launcher for every navbar action.
+  const commandBarOpen = ref(false)
+
+  // Workspace-settings panels: merge-threshold preset library + per-agent-kind
+  // default model overrides.
+  const mergeThresholdsOpen = ref(false)
+  const modelDefaultsOpen = ref(false)
+
   // Requirements-review panel: the block whose requirements review (questions /
   // gaps / clarifications) to show, or null when closed.
   const requirementReviewBlockId = ref<string | null>(null)
@@ -189,6 +197,27 @@ export const useUiStore = defineStore('ui', () => {
   function closeFragmentLibrary() {
     fragmentLibraryOpen.value = false
   }
+  function openCommandBar() {
+    commandBarOpen.value = true
+  }
+  function closeCommandBar() {
+    commandBarOpen.value = false
+  }
+  function toggleCommandBar() {
+    commandBarOpen.value = !commandBarOpen.value
+  }
+  function openMergeThresholds() {
+    mergeThresholdsOpen.value = true
+  }
+  function closeMergeThresholds() {
+    mergeThresholdsOpen.value = false
+  }
+  function openModelDefaults() {
+    modelDefaultsOpen.value = true
+  }
+  function closeModelDefaults() {
+    modelDefaultsOpen.value = false
+  }
   function openRequirementReview(blockId: string) {
     requirementReviewBlockId.value = blockId
   }
@@ -224,6 +253,9 @@ export const useUiStore = defineStore('ui', () => {
     addServiceOpen,
     githubOpen,
     fragmentLibraryOpen,
+    commandBarOpen,
+    mergeThresholdsOpen,
+    modelDefaultsOpen,
     requirementReviewBlockId,
     stepDetail,
     observabilityInstanceId,
@@ -260,6 +292,13 @@ export const useUiStore = defineStore('ui', () => {
     closeGitHub,
     openFragmentLibrary,
     closeFragmentLibrary,
+    openCommandBar,
+    closeCommandBar,
+    toggleCommandBar,
+    openMergeThresholds,
+    closeMergeThresholds,
+    openModelDefaults,
+    closeModelDefaults,
     openRequirementReview,
     closeRequirementReview,
     openStepDetail,

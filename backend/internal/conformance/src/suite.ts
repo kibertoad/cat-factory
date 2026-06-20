@@ -1,6 +1,7 @@
 import type {
   Block,
   ExecutionInstance,
+  ModelDefaults,
   Pipeline,
   Workspace,
   WorkspaceSnapshot,
@@ -73,6 +74,39 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         expect(a.workspace.id).not.toBe(b.workspace.id)
         expect(a.blocks.find((x) => x.id === 'blk_auth')).toBeTruthy()
         expect(b.blocks.find((x) => x.id === 'blk_auth')).toBeTruthy()
+      })
+    })
+
+    describe('model defaults', () => {
+      it('reads, replaces and surfaces per-agent-kind default models', async () => {
+        const { call, createWorkspace } = harness.makeApp()
+        const { workspace } = await createWorkspace()
+
+        // A fresh workspace pins nothing.
+        const initial = await call<ModelDefaults>(
+          'GET',
+          `/workspaces/${workspace.id}/model-defaults`,
+        )
+        expect(initial.status).toBe(200)
+        expect(initial.body.defaults).toEqual({})
+
+        // Replace the whole map (any string ids — the catalog isn't validated here).
+        const put = await call<ModelDefaults>('PUT', `/workspaces/${workspace.id}/model-defaults`, {
+          defaults: { architect: 'strong-model', tester: 'cheap-model' },
+        })
+        expect(put.status).toBe(200)
+        expect(put.body.defaults.architect).toBe('strong-model')
+
+        // It persisted.
+        const reread = await call<ModelDefaults>(
+          'GET',
+          `/workspaces/${workspace.id}/model-defaults`,
+        )
+        expect(reread.body.defaults).toEqual({ architect: 'strong-model', tester: 'cheap-model' })
+
+        // And it rides along on the workspace snapshot.
+        const snapshot = await call<WorkspaceSnapshot>('GET', `/workspaces/${workspace.id}`)
+        expect(snapshot.body.modelDefaults?.defaults.architect).toBe('strong-model')
       })
     })
 

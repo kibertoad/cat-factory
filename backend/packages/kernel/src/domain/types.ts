@@ -129,6 +129,9 @@ export type {
   MergeThresholdPreset,
   CreateMergePresetInput,
   UpdateMergePresetInput,
+  // Per-workspace, per-agent-kind default model selection.
+  ModelDefaults,
+  SetModelDefaultsInput,
   // Notification shapes.
   Notification,
   NotificationType,

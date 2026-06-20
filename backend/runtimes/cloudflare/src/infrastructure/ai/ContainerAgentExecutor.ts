@@ -46,6 +46,14 @@ export interface ContainerAgentExecutorDependencies {
   agentRouting: AgentRouting
   /** Resolve a block's selected model id to a concrete ref (direct flavour). */
   resolveBlockModel: (modelId: string | undefined) => ModelRef | undefined
+  /**
+   * Resolve the workspace's per-agent-kind default model id, consulted when the
+   * block pins no model. Optional: absent → the env routing for the kind is used.
+   */
+  resolveWorkspaceModelDefault?: (
+    workspaceId: string,
+    agentKind: string,
+  ) => Promise<string | undefined>
   /** Resolve which repo (and installation) a run targets. */
   resolveRepoTarget: ResolveRepoTarget
   /** Mint a short-lived GitHub installation token for cloning + opening the PR. */
@@ -194,7 +202,12 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     // OpenAI-compatible provider or Cloudflare Workers AI (served in-Worker via
     // the AI binding) — and locking it here stops the container choosing another.
     const config = resolveAgentConfig(this.deps.agentRouting, context.agentKind)
-    const ref = this.deps.resolveBlockModel(context.block.modelId) ?? config.ref
+    // Precedence: a block's pinned model wins; else the workspace's per-kind
+    // default; else the env routing for the kind (config.ref).
+    const pinnedId =
+      context.block.modelId ??
+      (await this.deps.resolveWorkspaceModelDefault?.(workspaceId, context.agentKind))
+    const ref = this.deps.resolveBlockModel(pinnedId) ?? config.ref
     if (!isProxyableProvider(ref.provider)) {
       throw new Error(
         `Container implementation needs a model the LLM proxy can serve ` +

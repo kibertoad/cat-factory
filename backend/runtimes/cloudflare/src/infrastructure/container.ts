@@ -65,6 +65,7 @@ import { D1RepoBlueprintRepository } from './repositories/D1RepoBlueprintReposit
 import { D1RequirementReviewRepository } from './repositories/D1RequirementReviewRepository'
 import { D1NotificationRepository } from './repositories/D1NotificationRepository'
 import { D1MergePresetRepository } from './repositories/D1MergePresetRepository'
+import { D1ModelDefaultsRepository } from './repositories/D1ModelDefaultsRepository'
 import { InAppNotificationChannel } from './events/InAppNotificationChannel'
 import { GitHubCiStatusProvider } from './github/GitHubCiStatusProvider'
 import { GitHubMergeabilityProvider } from './github/GitHubMergeabilityProvider'
@@ -330,6 +331,7 @@ function selectMergeLifecycleDeps(
   const deps: Partial<CoreDependencies> = {
     notificationRepository: new D1NotificationRepository({ db }),
     mergePresetRepository: new D1MergePresetRepository({ db }),
+    modelDefaultsRepository: new D1ModelDefaultsRepository({ db }),
   }
   const publisher = selectEventPublisher(env)
   if (publisher) deps.notificationChannel = new InAppNotificationChannel(publisher)
@@ -384,11 +386,16 @@ function buildContainerExecutor(
 
   const registry = buildAppRegistry(env, config, db, clock)
   const resolveRepoTarget = buildResolveRepoTarget(db)
+  // The workspace's per-agent-kind default model, consulted when a block pins none
+  // (block-pinned > workspace per-kind default > env routing > env default).
+  const modelDefaultsRepo = new D1ModelDefaultsRepository({ db })
 
   return new ContainerAgentExecutor({
     resolveTransport,
     agentRouting: config.agents.routing,
     resolveBlockModel: config.agents.resolveBlockModel,
+    resolveWorkspaceModelDefault: (workspaceId, kind) =>
+      modelDefaultsRepo.getForKind(workspaceId, kind).then((v) => v ?? undefined),
     resolveRepoTarget,
     mintInstallationToken: (id) => registry.installationToken(id),
     sessionService: new ContainerSessionService({ secret: env.AUTH_SESSION_SECRET }),

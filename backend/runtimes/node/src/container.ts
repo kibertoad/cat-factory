@@ -62,6 +62,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     executionRepository: repos.executionRepository,
     tokenUsageRepository: repos.tokenUsageRepository,
     llmCallMetricRepository: repos.llmCallMetricRepository,
+    modelDefaultsRepository: repos.modelDefaultsRepository,
     idGenerator,
     clock,
     agentExecutor,

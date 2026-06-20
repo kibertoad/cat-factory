@@ -21,6 +21,9 @@ import AddServiceFromRepoModal from '~/components/github/AddServiceFromRepoModal
 import GitHubPanel from '~/components/github/GitHubPanel.vue'
 import GitHubOnboarding from '~/components/github/GitHubOnboarding.vue'
 import FragmentLibraryPanel from '~/components/fragments/FragmentLibraryPanel.vue'
+import CommandBar from '~/components/layout/CommandBar.vue'
+import MergeThresholdsPanel from '~/components/settings/MergeThresholdsPanel.vue'
+import ModelDefaultsPanel from '~/components/settings/ModelDefaultsPanel.vue'
 
 const workspace = useWorkspaceStore()
 const github = useGitHubStore()
@@ -98,6 +101,9 @@ watch(
       <AddServiceFromRepoModal />
       <GitHubPanel />
       <FragmentLibraryPanel />
+      <CommandBar />
+      <MergeThresholdsPanel />
+      <ModelDefaultsPanel />
     </template>
 
     <!-- Backend unreachable / bootstrap failed -->

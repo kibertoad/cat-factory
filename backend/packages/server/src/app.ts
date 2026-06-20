@@ -15,6 +15,7 @@ import { githubController } from './modules/github/GitHubController.js'
 import { githubWebhookController } from './modules/github/GitHubWebhookController.js'
 import { llmProxyController } from './modules/llmProxy/LlmProxyController.js'
 import { mergePresetController } from './modules/merge/MergePresetController.js'
+import { modelDefaultsController } from './modules/modelDefaults/ModelDefaultsController.js'
 import { modelController } from './modules/models/ModelController.js'
 import { notificationController } from './modules/notifications/NotificationController.js'
 import { pipelineController } from './modules/pipelines/PipelineController.js'
@@ -62,6 +63,7 @@ export function registerCoreControllers<E extends AppEnv>(app: Hono<E>): void {
   app.route('/workspaces/:workspaceId', requirementReviewController())
   app.route('/workspaces/:workspaceId', notificationController())
   app.route('/workspaces/:workspaceId', mergePresetController())
+  app.route('/workspaces/:workspaceId', modelDefaultsController())
   app.route('/workspaces/:workspaceId', fragmentLibraryController('workspace'))
   app.route('/workspaces/:workspaceId', githubController())
   // GitHub-facing (webhooks + setup callback); not workspace-scoped.
