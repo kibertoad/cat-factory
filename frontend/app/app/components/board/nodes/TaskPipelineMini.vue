@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { AgentState } from '~/types/domain'
-import { AGENT_BY_KIND } from '~/utils/catalog'
+import { agentKindMeta } from '~/utils/catalog'
 import { lodAtLeast } from '~/composables/useSemanticZoom'
 
 // Spatial drill-down inside a task card: at the `steps` zoom band the task's
@@ -58,12 +58,12 @@ const ITEM_ICON: Record<string, string> = {
         @click.stop="openStep(i)"
       >
         <UIcon
-          :name="AGENT_BY_KIND[s.agentKind].icon"
+          :name="agentKindMeta(s.agentKind).icon"
           class="h-3 w-3 shrink-0"
-          :style="{ color: AGENT_BY_KIND[s.agentKind].color }"
+          :style="{ color: agentKindMeta(s.agentKind).color }"
         />
         <span class="truncate text-[10px] text-slate-200">
-          {{ AGENT_BY_KIND[s.agentKind].label }}
+          {{ agentKindMeta(s.agentKind).label }}
         </span>
         <UIcon
           v-if="s.output"

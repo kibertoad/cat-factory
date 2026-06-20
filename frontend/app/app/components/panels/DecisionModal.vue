@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { AGENT_BY_KIND } from '~/utils/catalog'
+import { agentKindMeta } from '~/utils/catalog'
 
 const execution = useExecutionStore()
 const board = useBoardStore()
@@ -13,7 +13,7 @@ const step = computed(() =>
 )
 const decision = computed(() => step.value?.decision ?? null)
 const block = computed(() => (instance.value ? board.getBlock(instance.value.blockId) : undefined))
-const agent = computed(() => (step.value ? AGENT_BY_KIND[step.value.agentKind] : null))
+const agent = computed(() => (step.value ? agentKindMeta(step.value.agentKind) : null))
 
 const open = computed({
   get: () => !!ctx.value && !!decision.value,

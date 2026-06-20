@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { AgentState, ExecutionInstance } from '~/types/domain'
-import { AGENT_BY_KIND } from '~/utils/catalog'
+import { agentKindMeta } from '~/utils/catalog'
 import StepMetricsBar from '~/components/observability/StepMetricsBar.vue'
 
 const props = defineProps<{ instance: ExecutionInstance }>()
@@ -59,7 +59,7 @@ const statusMeta = computed(() => STATUS_META[props.instance.status])
 /** The agent the pipeline is currently centred on (for the summary line). */
 const currentAgent = computed(() => {
   const s = steps.value[props.instance.currentStep]
-  return s ? AGENT_BY_KIND[s.agentKind].label : null
+  return s ? agentKindMeta(s.agentKind).label : null
 })
 
 /** Connector below a step is "lit" once that step has completed. */
@@ -157,17 +157,17 @@ const ITEM_ICON: Record<string, string> = {
           >
             <div
               class="flex h-8 w-8 items-center justify-center rounded-lg"
-              :style="{ backgroundColor: AGENT_BY_KIND[s.agentKind].color + '22' }"
+              :style="{ backgroundColor: agentKindMeta(s.agentKind).color + '22' }"
             >
               <UIcon
-                :name="AGENT_BY_KIND[s.agentKind].icon"
+                :name="agentKindMeta(s.agentKind).icon"
                 class="h-4 w-4"
-                :style="{ color: AGENT_BY_KIND[s.agentKind].color }"
+                :style="{ color: agentKindMeta(s.agentKind).color }"
               />
             </div>
             <div class="min-w-0">
               <div class="truncate text-sm font-semibold text-white">
-                {{ AGENT_BY_KIND[s.agentKind].label }}
+                {{ agentKindMeta(s.agentKind).label }}
               </div>
               <div class="text-[10px] uppercase tracking-wide text-slate-500">
                 Step {{ i + 1 }} of {{ total }}
@@ -284,7 +284,7 @@ const ITEM_ICON: Record<string, string> = {
               icon="i-lucide-shield-check"
               @click="emit('openApproval', s.approval.id)"
             >
-              Review &amp; approve {{ AGENT_BY_KIND[s.agentKind].label }}'s proposal
+              Review &amp; approve {{ agentKindMeta(s.agentKind).label }}'s proposal
             </UButton>
           </div>
 

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { AgentState, PipelineStep } from '~/types/domain'
-import { AGENT_BY_KIND } from '~/utils/catalog'
+import { agentKindMeta } from '~/utils/catalog'
 
 const props = defineProps<{
   step: PipelineStep
@@ -8,7 +8,7 @@ const props = defineProps<{
   size?: 'sm' | 'md'
 }>()
 
-const archetype = computed(() => AGENT_BY_KIND[props.step.agentKind])
+const archetype = computed(() => agentKindMeta(props.step.agentKind))
 
 const stateRing: Record<AgentState, string> = {
   pending: 'ring-slate-600/60 opacity-60',

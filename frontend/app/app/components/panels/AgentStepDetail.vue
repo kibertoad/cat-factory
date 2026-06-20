@@ -2,7 +2,7 @@
 import { ref, reactive, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { onKeyStroke } from '@vueuse/core'
 import type { AgentState } from '~/types/domain'
-import { AGENT_BY_KIND } from '~/utils/catalog'
+import { agentKindMeta } from '~/utils/catalog'
 import { parseOutputOutline, sliceSource } from '~/utils/agentOutput'
 import StepMetricsBar from '~/components/observability/StepMetricsBar.vue'
 
@@ -26,7 +26,7 @@ const step = computed(() =>
   ctx.value ? (instance.value?.steps[ctx.value.stepIndex] ?? null) : null,
 )
 const block = computed(() => (instance.value ? board.getBlock(instance.value.blockId) : undefined))
-const agent = computed(() => (step.value ? AGENT_BY_KIND[step.value.agentKind] : null))
+const agent = computed(() => (step.value ? agentKindMeta(step.value.agentKind) : null))
 const open = computed(() => !!ctx.value && !!step.value)
 
 const stepNumber = computed(() => (ctx.value ? ctx.value.stepIndex + 1 : 0))

@@ -2,7 +2,7 @@
 import { computed, reactive, watch } from 'vue'
 import { onKeyStroke } from '@vueuse/core'
 import type { LlmCallMetric } from '~/types/execution'
-import { AGENT_BY_KIND } from '~/utils/catalog'
+import { agentKindMeta } from '~/utils/catalog'
 import { formatMs, formatTokens, pct } from '~/utils/observability'
 
 // Drill-down overlay for a run's LLM activity. Opened via
@@ -69,13 +69,7 @@ function toggle(id: string) {
 }
 
 function agentMeta(kind: string) {
-  return (
-    AGENT_BY_KIND[kind as keyof typeof AGENT_BY_KIND] ?? {
-      label: kind,
-      color: '#64748b',
-      icon: 'i-lucide-bot',
-    }
-  )
+  return agentKindMeta(kind)
 }
 function clock(ms: number): string {
   return new Date(ms).toLocaleTimeString()

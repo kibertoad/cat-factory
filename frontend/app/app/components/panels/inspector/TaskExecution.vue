@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { Block } from '~/types/domain'
-import { AGENT_BY_KIND } from '~/utils/catalog'
+import { agentKindMeta } from '~/utils/catalog'
 import AgentFailureCard from '~/components/board/AgentFailureCard.vue'
 
 const props = defineProps<{ block: Block }>()
@@ -96,12 +96,12 @@ function openStep(i: number) {
               @click="openStep(i)"
             >
               <UIcon
-                :name="AGENT_BY_KIND[s.agentKind].icon"
+                :name="agentKindMeta(s.agentKind).icon"
                 class="h-4 w-4 shrink-0"
-                :style="{ color: AGENT_BY_KIND[s.agentKind].color }"
+                :style="{ color: agentKindMeta(s.agentKind).color }"
               />
               <span class="truncate text-xs text-slate-200">
-                {{ AGENT_BY_KIND[s.agentKind].label }}
+                {{ agentKindMeta(s.agentKind).label }}
               </span>
               <UIcon
                 :name="s.output ? 'i-lucide-book-open-text' : 'i-lucide-info'"
