@@ -97,7 +97,12 @@ describe('pipeline registry', () => {
   it('replaces a built-in pipeline in place when ids collide', () => {
     registerPipeline({ id: 'pl_quick', name: 'Org quick', agentKinds: ['coder', 'merger'] })
     const pipelines = seedPipelines()
-    expect(pipelines.map((p) => p.id)).toEqual(['pl_full', 'pl_quick', 'pl_integrate', 'pl_blueprint'])
+    expect(pipelines.map((p) => p.id)).toEqual([
+      'pl_full',
+      'pl_quick',
+      'pl_integrate',
+      'pl_blueprint',
+    ])
     expect(pipelines.find((p) => p.id === 'pl_quick')?.name).toBe('Org quick')
   })
 })

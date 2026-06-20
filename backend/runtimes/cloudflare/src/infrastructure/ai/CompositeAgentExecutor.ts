@@ -75,8 +75,7 @@ export class CompositeAgentExecutor implements AsyncAgentExecutor {
     // `requiresContainer: true` (e.g. a proprietary org package contributing a
     // repo-operating agent), need a real checkout; everything else runs inline.
     const needsContainer =
-      CONTAINER_KINDS.has(context.agentKind) ||
-      registeredKindRequiresContainer(context.agentKind)
+      CONTAINER_KINDS.has(context.agentKind) || registeredKindRequiresContainer(context.agentKind)
     if (!needsContainer) return this.inline
     if (!this.container) {
       throw new Error(
