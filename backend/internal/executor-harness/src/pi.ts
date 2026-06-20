@@ -432,7 +432,10 @@ export interface ProgressGuardLimits {
   maxConsecutiveWebCalls?: number
 }
 
-export const DEFAULT_PROGRESS_GUARD_LIMITS: ProgressGuardLimits = {
+// `satisfies` (not a type annotation) so each property keeps its concrete `number`
+// type — `maxConsecutiveWebCalls` is optional on the interface (callers may omit it),
+// but the defaults always define it, so consumers reading it off here get a `number`.
+export const DEFAULT_PROGRESS_GUARD_LIMITS = {
   // Counts only non-exploration, non-planning calls (see EXPLORATION_TOOLS), so the
   // ceiling can be generous without risking a false kill on a read-heavy large task.
   maxToolCallsWithoutEdit: 40,
@@ -440,7 +443,7 @@ export const DEFAULT_PROGRESS_GUARD_LIMITS: ProgressGuardLimits = {
   // A genuine research burst is a handful of searches; an uninterrupted run of this
   // many web calls (with no read/edit/bash between) is a search loop, not progress.
   maxConsecutiveWebCalls: 25,
-}
+} satisfies ProgressGuardLimits
 
 // Tool names that mutate files, so a call to one clears the no-edit suspicion. Kept
 // broad on purpose: different models/extensions name the same capability differently
@@ -561,7 +564,7 @@ export class ProgressGuard {
       this.consecutiveWebCalls++
       const webCap =
         this.limits.maxConsecutiveWebCalls ?? DEFAULT_PROGRESS_GUARD_LIMITS.maxConsecutiveWebCalls
-      if (this.consecutiveWebCalls >= (webCap as number)) {
+      if (this.consecutiveWebCalls >= webCap) {
         return (
           `no progress: ${this.consecutiveWebCalls} consecutive web search/fetch calls without ` +
           `any other action — the agent is stuck researching instead of doing the work. Aborting.`
