@@ -29,6 +29,16 @@ export class D1ExecutionRepository implements ExecutionRepository {
     return results.map(rowToExecution)
   }
 
+  async listByService(serviceId: string): Promise<ExecutionInstance[]> {
+    const { results } = await this.db
+      .prepare(
+        `SELECT * FROM agent_runs WHERE service_id = ? AND kind = 'execution' ORDER BY created_at`,
+      )
+      .bind(serviceId)
+      .all<ExecutionRow>()
+    return results.map(rowToExecution)
+  }
+
   async get(workspaceId: string, id: string): Promise<ExecutionInstance | null> {
     const row = await this.db
       .prepare(`SELECT * FROM agent_runs WHERE workspace_id = ? AND id = ? AND kind = 'execution'`)

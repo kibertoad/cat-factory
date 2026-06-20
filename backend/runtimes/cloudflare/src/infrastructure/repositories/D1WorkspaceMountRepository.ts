@@ -49,6 +49,21 @@ export class D1WorkspaceMountRepository implements WorkspaceMountRepository {
     return (results ?? []).map(rowToMount)
   }
 
+  async countByServiceIds(serviceIds: string[]): Promise<Record<string, number>> {
+    if (serviceIds.length === 0) return {}
+    const placeholders = serviceIds.map(() => '?').join(', ')
+    const { results } = await this.db
+      .prepare(
+        `SELECT service_id, COUNT(*) AS n FROM workspace_services
+         WHERE service_id IN (${placeholders}) GROUP BY service_id`,
+      )
+      .bind(...serviceIds)
+      .all<{ service_id: string; n: number }>()
+    const counts: Record<string, number> = {}
+    for (const row of results ?? []) counts[row.service_id] = Number(row.n)
+    return counts
+  }
+
   async get(workspaceId: string, serviceId: string): Promise<WorkspaceMount | null> {
     const row = await this.db
       .prepare(`SELECT * FROM workspace_services WHERE workspace_id = ? AND service_id = ?`)

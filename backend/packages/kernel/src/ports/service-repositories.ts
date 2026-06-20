@@ -41,6 +41,12 @@ export interface WorkspaceMountRepository {
    * every board that shows the changed service.
    */
   listByService(serviceId: string): Promise<WorkspaceMount[]>
+  /**
+   * Mount counts for a set of services in a single query, keyed by service id (services with
+   * no mounts are absent). Backs the org catalog's "Shared" badge without an N+1
+   * {@link WorkspaceMountRepository.listByService} per service on the snapshot hot path.
+   */
+  countByServiceIds(serviceIds: string[]): Promise<Record<string, number>>
   get(workspaceId: string, serviceId: string): Promise<WorkspaceMount | null>
   upsert(mount: WorkspaceMount): Promise<void>
   update(workspaceId: string, serviceId: string, patch: WorkspaceMountPatch): Promise<void>

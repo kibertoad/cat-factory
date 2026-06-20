@@ -73,6 +73,13 @@ export interface BlockRepository {
    */
   insert(workspaceId: string, block: Block, serviceId?: string | null): Promise<void>
   update(workspaceId: string, id: string, patch: BlockPatch): Promise<void>
+  /**
+   * Re-stamp the `service_id` of one or more blocks. Used when a block is reparented into a
+   * different service's frame (`service_id` is not part of {@link BlockPatch}, since it is the
+   * physical scope key, not a domain field): the moved subtree must follow its new owning
+   * service so it renders on — and fans out to — the right boards.
+   */
+  setService(workspaceId: string, ids: string[], serviceId: string | null): Promise<void>
   deleteMany(workspaceId: string, ids: string[]): Promise<void>
 }
 
@@ -91,6 +98,13 @@ export interface RunRef {
 
 export interface ExecutionRepository {
   listByWorkspace(workspaceId: string): Promise<ExecutionInstance[]>
+  /**
+   * Every execution belonging to a service, regardless of which workspace it ran under.
+   * Backs the board snapshot for a service mounted from another workspace in the same org,
+   * so its run progress/status renders identically on every board that mounts it (not just
+   * on its home workspace). Matches the `service_id` column stamped at insert time.
+   */
+  listByService(serviceId: string): Promise<ExecutionInstance[]>
   get(workspaceId: string, id: string): Promise<ExecutionInstance | null>
   getByBlock(workspaceId: string, blockId: string): Promise<ExecutionInstance | null>
   upsert(workspaceId: string, execution: ExecutionInstance): Promise<void>

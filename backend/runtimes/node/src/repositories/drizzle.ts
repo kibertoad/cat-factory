@@ -195,6 +195,14 @@ class DrizzleBlockRepository implements BlockRepository {
       .where(and(eq(blocks.workspace_id, workspaceId), eq(blocks.id, id)))
   }
 
+  async setService(workspaceId: string, ids: string[], serviceId: string | null): Promise<void> {
+    if (ids.length === 0) return
+    await this.db
+      .update(blocks)
+      .set({ service_id: serviceId })
+      .where(and(eq(blocks.workspace_id, workspaceId), inArray(blocks.id, ids)))
+  }
+
   async deleteMany(workspaceId: string, ids: string[]): Promise<void> {
     if (ids.length === 0) return
     await this.db
@@ -253,6 +261,15 @@ class DrizzleExecutionRepository implements ExecutionRepository {
       .select()
       .from(agentRuns)
       .where(and(eq(agentRuns.workspace_id, workspaceId), this.isExecution))
+      .orderBy(agentRuns.created_at)
+    return rows.map((r) => rowToExecution(r as ExecutionRow))
+  }
+
+  async listByService(serviceId: string): Promise<ExecutionInstance[]> {
+    const rows = await this.db
+      .select()
+      .from(agentRuns)
+      .where(and(eq(agentRuns.service_id, serviceId), this.isExecution))
       .orderBy(agentRuns.created_at)
     return rows.map((r) => rowToExecution(r as ExecutionRow))
   }
@@ -1095,6 +1112,18 @@ class DrizzleWorkspaceMountRepository implements WorkspaceMountRepository {
       .where(eq(workspaceServices.service_id, serviceId))
       .orderBy(workspaceServices.created_at)
     return rows.map(rowToMount)
+  }
+
+  async countByServiceIds(serviceIds: string[]): Promise<Record<string, number>> {
+    if (serviceIds.length === 0) return {}
+    const rows = await this.db
+      .select({ serviceId: workspaceServices.service_id, n: sql<number>`count(*)` })
+      .from(workspaceServices)
+      .where(inArray(workspaceServices.service_id, serviceIds))
+      .groupBy(workspaceServices.service_id)
+    const counts: Record<string, number> = {}
+    for (const row of rows) counts[row.serviceId] = Number(row.n)
+    return counts
   }
 
   async get(workspaceId: string, serviceId: string): Promise<WorkspaceMount | null> {

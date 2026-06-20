@@ -67,6 +67,17 @@ export class D1BlockRepository implements BlockRepository {
       .run()
   }
 
+  async setService(workspaceId: string, ids: string[], serviceId: string | null): Promise<void> {
+    if (ids.length === 0) return
+    const placeholders = ids.map(() => '?').join(', ')
+    await this.db
+      .prepare(
+        `UPDATE blocks SET service_id = ? WHERE workspace_id = ? AND id IN (${placeholders})`,
+      )
+      .bind(serviceId, workspaceId, ...ids)
+      .run()
+  }
+
   async deleteMany(workspaceId: string, ids: string[]): Promise<void> {
     if (ids.length === 0) return
     const placeholders = ids.map(() => '?').join(', ')

@@ -1,6 +1,12 @@
 import type { CreateWorkspaceInput } from '@cat-factory/contracts'
 import { requireWorkspace, seedBlocks, seedPipelines } from '@cat-factory/kernel'
-import type { Block, Workspace, WorkspaceSnapshot } from '@cat-factory/kernel'
+import type {
+  Block,
+  ExecutionInstance,
+  Workspace,
+  WorkspaceMount,
+  WorkspaceSnapshot,
+} from '@cat-factory/kernel'
 import type {
   BlockRepository,
   ExecutionRepository,
@@ -120,12 +126,17 @@ export class WorkspaceService {
 
   async snapshot(id: string): Promise<WorkspaceSnapshot> {
     const workspace = await this.require(id)
-    const [localBlocks, pipelines, executions] = await Promise.all([
+    const [localBlocks, pipelines, localExecutions] = await Promise.all([
       this.blockRepository.listByWorkspace(id),
       this.pipelineRepository.listByWorkspace(id),
       this.executionRepository.listByWorkspace(id),
     ])
-    const blocks = await this.composeBoard(id, localBlocks)
+    const mounts =
+      this.workspaceMountRepository && this.serviceRepository
+        ? await this.workspaceMountRepository.listByWorkspace(id)
+        : []
+    const blocks = await this.composeBoard(localBlocks, mounts)
+    const executions = await this.composeExecutions(localExecutions, mounts)
     return { workspace, blocks, pipelines, executions }
   }
 
@@ -134,41 +145,62 @@ export class WorkspaceService {
    * blocks plus the full subtree of any service mounted from another workspace in the
    * same org — so a shared service renders identically on every board, with one physical
    * copy (and therefore one shared task list + status). Each mounted frame's board
-   * position/size is taken from the mount (the per-workspace layout override). When the
-   * service repositories aren't wired this is a no-op and the local blocks stand.
+   * position/size is taken from the mount (the per-workspace layout override) — for a home
+   * frame as much as one mounted from elsewhere, since a service frame's position is always
+   * carried on the mount (that is what `moveBlock` writes). When the service repositories
+   * aren't wired (or nothing is mounted) this is a no-op and the local blocks stand.
    */
-  private async composeBoard(workspaceId: string, localBlocks: Block[]): Promise<Block[]> {
-    if (!this.workspaceMountRepository || !this.serviceRepository) return localBlocks
-    const mounts = await this.workspaceMountRepository.listByWorkspace(workspaceId)
-    if (mounts.length === 0) return localBlocks
+  private async composeBoard(localBlocks: Block[], mounts: WorkspaceMount[]): Promise<Block[]> {
+    if (!this.serviceRepository || mounts.length === 0) return localBlocks
 
     const byId = new Map(localBlocks.map((b) => [b.id, b]))
     const localIds = new Set(byId.keys())
-    // Layout override for the frames of services mounted FROM ELSEWHERE only. A locally
-    // homed frame keeps its own `block.position` (authoritative + movable); an external
-    // frame is positioned by this workspace's mount (its home block.position is the home's
-    // layout, not ours).
-    const externalFrameLayout = new Map<string, { x: number; y: number; w?: number; h?: number }>()
+    // The per-workspace layout override for each mounted service's frame.
+    const frameLayout = new Map<string, { x: number; y: number; w?: number; h?: number }>()
     for (const mount of mounts) {
       const service = await this.serviceRepository.get(mount.serviceId)
-      if (!service || localIds.has(service.frameBlockId)) continue
-      externalFrameLayout.set(service.frameBlockId, {
+      if (!service) continue
+      frameLayout.set(service.frameBlockId, {
         x: mount.position.x,
         y: mount.position.y,
         ...(mount.size ? { w: mount.size.w, h: mount.size.h } : {}),
       })
+      // Pull in the subtree only for services homed in ANOTHER workspace — a local service's
+      // blocks are already in `localBlocks`.
+      if (localIds.has(service.frameBlockId)) continue
       for (const b of await this.blockRepository.listByService(mount.serviceId)) {
         if (!byId.has(b.id)) byId.set(b.id, b)
       }
     }
 
     return [...byId.values()].map((b) => {
-      const layout = externalFrameLayout.get(b.id)
+      const layout = frameLayout.get(b.id)
       if (!layout) return b
       const next: Block = { ...b, position: { x: layout.x, y: layout.y } }
       if (layout.w !== undefined && layout.h !== undefined) next.size = { w: layout.w, h: layout.h }
       return next
     })
+  }
+
+  /**
+   * Compose a workspace's executions from the services it mounts: its own runs plus those of
+   * any service mounted from another workspace, so a shared service's run progress/status
+   * renders on every board that mounts it — not just on its home workspace. Deduplicated by
+   * run id (a home service's runs already appear in the local list). No-op when sharing isn't
+   * wired or nothing is mounted.
+   */
+  private async composeExecutions(
+    localExecutions: ExecutionInstance[],
+    mounts: WorkspaceMount[],
+  ): Promise<ExecutionInstance[]> {
+    if (mounts.length === 0) return localExecutions
+    const byId = new Map(localExecutions.map((e) => [e.id, e]))
+    for (const mount of mounts) {
+      for (const e of await this.executionRepository.listByService(mount.serviceId)) {
+        if (!byId.has(e.id)) byId.set(e.id, e)
+      }
+    }
+    return [...byId.values()]
   }
 
   async delete(id: string): Promise<void> {

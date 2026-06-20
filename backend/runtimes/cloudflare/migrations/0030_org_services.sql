@@ -10,11 +10,10 @@
 --     the per-workspace layout override (frame position/size). The same service may be
 --     mounted onto several workspaces in the same account.
 --
--- The backfill is additive and idempotent: every existing top-level frame becomes a
--- service owned by its workspace's account, mounted into exactly that one workspace at
--- its current board position. Existing workspace-scoped behaviour is unchanged until the
--- read paths switch to service scope in a follow-up; the service id is derived
--- deterministically from (workspace_id, frame_block_id) so a re-run is a no-op.
+-- The backfill is additive: every existing top-level frame becomes a service owned by its
+-- workspace's account, mounted into exactly that one workspace at its current board position.
+-- The service id is derived deterministically from (workspace_id, frame_block_id); the
+-- migration runner applies this once, so the plain INSERTs are safe (no ON CONFLICT needed).
 
 CREATE TABLE services (
   id              TEXT    NOT NULL PRIMARY KEY,

@@ -277,8 +277,19 @@ export class BoardService {
 
   async moveBlock(workspaceId: string, id: string, position: Position): Promise<Block> {
     await this.requireWorkspace(workspaceId)
-    await this.requireBlock(workspaceId, id)
+    const block = await this.requireBlock(workspaceId, id)
     await this.blockRepository.update(workspaceId, id, { position })
+    // A service frame's board position is a PER-WORKSPACE layout override carried on the mount
+    // (the board snapshot renders frames from the mount, so the same shared frame can sit at a
+    // different spot on each board). Mirror the move onto this workspace's mount so it persists
+    // — for a home frame as much as a frame mounted from elsewhere. No-op when sharing isn't
+    // wired (the block position above stands).
+    if (block.level === 'frame' && this.serviceRepository && this.workspaceMountRepository) {
+      const service = await this.serviceRepository.getByFrameBlock(id)
+      if (service && (await this.workspaceMountRepository.get(workspaceId, service.id))) {
+        await this.workspaceMountRepository.update(workspaceId, service.id, { position })
+      }
+    }
     return this.requireBlock(workspaceId, id)
   }
 
@@ -302,6 +313,21 @@ export class BoardService {
       parentId: input.parentId,
       position: input.position,
     })
+    // Reparenting can move a block (and its subtree) into a DIFFERENT service's frame — e.g. a
+    // task dragged from one service onto another. `service_id` is the physical scope key (it
+    // decides which boards render the block and where its events fan out), so re-stamp the moved
+    // subtree to the destination frame's service. No-op when sharing isn't wired or the
+    // destination frame isn't a registered service.
+    if (this.serviceRepository) {
+      const blocks = await this.blockRepository.listByWorkspace(workspaceId)
+      const destService = await this.serviceForContainer(blocks, parent)
+      // descendantIds includes the moved block itself.
+      await this.blockRepository.setService(
+        workspaceId,
+        [...descendantIds(blocks, id)],
+        destService ?? null,
+      )
+    }
     return this.requireBlock(workspaceId, id)
   }
 
@@ -322,6 +348,20 @@ export class BoardService {
         if (repo.blockId && doomed.has(repo.blockId)) {
           await this.repoProjectionRepository.linkBlock(workspaceId, repo.githubId, null)
         }
+      }
+    }
+    // Drop the account-owned service (and every workspace's mount of it) for any doomed
+    // service frame, so deleting a frame doesn't leave an orphaned service lingering in the
+    // org catalog (mountable, badged, yet rendering nothing) on other boards.
+    if (this.serviceRepository && this.workspaceMountRepository) {
+      for (const b of blocks) {
+        if (!doomed.has(b.id) || b.level !== 'frame' || b.parentId !== null) continue
+        const service = await this.serviceRepository.getByFrameBlock(b.id)
+        if (!service) continue
+        for (const mount of await this.workspaceMountRepository.listByService(service.id)) {
+          await this.workspaceMountRepository.remove(mount.workspaceId, service.id)
+        }
+        await this.serviceRepository.delete(service.id)
       }
     }
     await this.blockRepository.deleteMany(workspaceId, [...doomed])

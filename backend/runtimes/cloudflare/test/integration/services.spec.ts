@@ -152,4 +152,76 @@ describe('in-org shared services', () => {
     )
     expect(bList.body.map((s) => s.id)).toContain(schedule.body.id)
   })
+
+  it('persists a home service frame move (frame layout lives on the mount)', async () => {
+    const { call, createWorkspace } = makeApp()
+    const { workspace } = await createWorkspace({ seed: false })
+
+    const frame = await call<Block>('POST', `/workspaces/${workspace.id}/blocks`, {
+      type: 'service',
+      position: { x: 10, y: 20 },
+    })
+    // Move the (locally homed) frame, then re-read the board: the new position must stick.
+    await call('POST', `/workspaces/${workspace.id}/blocks/${frame.body.id}/move`, {
+      position: { x: 99, y: 88 },
+    })
+    const snap = await call<WorkspaceSnapshot>('GET', `/workspaces/${workspace.id}`)
+    expect(snap.body.blocks.find((x) => x.id === frame.body.id)?.position).toEqual({ x: 99, y: 88 })
+    const mounts = await call<WorkspaceMount[]>('GET', `/workspaces/${workspace.id}/services`)
+    const svc = await serviceFor(call, workspace.id, frame.body.id)
+    expect(mounts.body.find((m) => m.serviceId === svc.id)?.position).toEqual({ x: 99, y: 88 })
+  })
+
+  it('re-homes a task to the destination service when reparented across frames', async () => {
+    const { call, createWorkspace } = makeApp()
+    const a = await createWorkspace({ seed: false })
+    const b = await createWorkspace({ seed: false })
+
+    const frameX = await call<Block>('POST', `/workspaces/${a.workspace.id}/blocks`, {
+      type: 'service',
+      position: { x: 0, y: 0 },
+    })
+    const frameY = await call<Block>('POST', `/workspaces/${a.workspace.id}/blocks`, {
+      type: 'service',
+      position: { x: 300, y: 0 },
+    })
+    const task = await call<Block>(
+      'POST',
+      `/workspaces/${a.workspace.id}/blocks/${frameX.body.id}/tasks`,
+      { title: 'Movable task' },
+    )
+
+    // Move the task from service X's frame into service Y's frame.
+    await call('POST', `/workspaces/${a.workspace.id}/blocks/${task.body.id}/reparent`, {
+      parentId: frameY.body.id,
+      position: { x: 1, y: 1 },
+    })
+
+    // Mount ONLY service Y onto B: the reparented task must now render there (it followed Y).
+    const serviceY = await serviceFor(call, a.workspace.id, frameY.body.id)
+    await call('POST', `/workspaces/${b.workspace.id}/services/${serviceY.id}`, {})
+    const bSnap = await call<WorkspaceSnapshot>('GET', `/workspaces/${b.workspace.id}`)
+    expect(bSnap.body.blocks.map((x) => x.id)).toContain(task.body.id)
+  })
+
+  it('drops the service + mounts from the org when its frame is deleted', async () => {
+    const { call, createWorkspace } = makeApp()
+    const a = await createWorkspace({ seed: false })
+    const b = await createWorkspace({ seed: false })
+
+    const frame = await call<Block>('POST', `/workspaces/${a.workspace.id}/blocks`, {
+      type: 'service',
+      position: { x: 0, y: 0 },
+    })
+    const service = await serviceFor(call, a.workspace.id, frame.body.id)
+    await call('POST', `/workspaces/${b.workspace.id}/services/${service.id}`, {})
+
+    // Deleting the frame removes the canonical service, so it leaves the org catalog and B's
+    // mount (no orphan service rendering an empty frame on B's board).
+    await call('DELETE', `/workspaces/${a.workspace.id}/blocks/${frame.body.id}`)
+    const catalog = await call<Service[]>('GET', `/workspaces/${a.workspace.id}/services/catalog`)
+    expect(catalog.body.map((s) => s.id)).not.toContain(service.id)
+    const bMounts = await call<WorkspaceMount[]>('GET', `/workspaces/${b.workspace.id}/services`)
+    expect(bMounts.body.map((m) => m.serviceId)).not.toContain(service.id)
+  })
 })

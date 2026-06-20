@@ -56,12 +56,9 @@ export class ServiceMountService {
    */
   async listForAccount(accountId: string | null): Promise<Service[]> {
     const services = await this.serviceRepository.listByAccount(accountId)
-    return Promise.all(
-      services.map(async (service) => ({
-        ...service,
-        mountCount: (await this.workspaceMountRepository.listByService(service.id)).length,
-      })),
-    )
+    // One grouped count for the whole catalog (not an N+1 listByService per service).
+    const counts = await this.workspaceMountRepository.countByServiceIds(services.map((s) => s.id))
+    return services.map((service) => ({ ...service, mountCount: counts[service.id] ?? 0 }))
   }
 
   /** Services currently mounted onto a workspace board (with their layout overrides). */
