@@ -128,8 +128,13 @@ export type AgentKind =
   | 'mocker'
   | 'business-documenter'
   | 'business-reviewer'
-  // The CI gate (a special, non-LLM step that polls checks + loops the fixer),
-  // the container agent that fixes failing CI, and the PR-scoring merger.
+  // Engine-driven "system" kinds: not user-addable palette archetypes, but they
+  // appear in seeded pipelines and run timelines. The blueprint mapper, the
+  // conflicts gate + its resolver, the CI gate (a special non-LLM step that polls
+  // checks + loops the fixer) + its fixer, and the PR-scoring merger.
+  | 'blueprints'
+  | 'conflicts'
+  | 'conflict-resolver'
   | 'ci'
   | 'ci-fixer'
   | 'merger'
@@ -204,6 +209,17 @@ export interface WorkspaceSnapshot {
   notifications?: Notification[]
   /** The workspace's merge threshold presets (the task preset picker's options). */
   mergePresets?: MergeThresholdPreset[]
+  /** Per-agent-kind default model overrides for this workspace (agentKind → model id). */
+  modelDefaults?: ModelDefaults
+}
+
+/**
+ * A workspace's per-agent-kind default model choice. Keys are agent kinds, values
+ * are model catalog ids (`ModelOption.id`). A kind absent from the map falls back
+ * to the deployment's env-configured routing. Mirrors `@cat-factory/contracts`.
+ */
+export interface ModelDefaults {
+  defaults: Record<string, string>
 }
 
 /**

@@ -34,6 +34,10 @@ export {
   MergePresetService,
   type MergePresetServiceDependencies,
 } from './modules/merge/MergePresetService.js'
+export {
+  ModelDefaultsService,
+  type ModelDefaultsServiceDependencies,
+} from './modules/modelDefaults/ModelDefaultsService.js'
 
 export {
   LlmObservabilityService,
@@ -80,6 +84,7 @@ export {
   type RequirementsModule,
   type NotificationsModule,
   type MergePresetsModule,
+  type ModelDefaultsModule,
   type FragmentLibraryModule,
   createCore,
 } from './container.js'

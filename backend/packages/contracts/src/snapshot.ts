@@ -9,6 +9,7 @@ import {
 import { bootstrapJobSchema } from './bootstrap.js'
 import { notificationSchema } from './notifications.js'
 import { mergeThresholdPresetSchema } from './merge.js'
+import { modelDefaultsSchema } from './model-defaults.js'
 
 // The full board snapshot returned by GET /workspaces/:id (and POST /workspaces).
 // It lives in its own module because it references both ./entities and
@@ -44,5 +45,11 @@ export const workspaceSnapshotSchema = v.object({
    * auto-merge policy from). Attached by the worker, so optional on the wire.
    */
   mergePresets: v.optional(v.array(mergeThresholdPresetSchema)),
+  /**
+   * The workspace's per-agent-kind default models (the model each agent kind
+   * defaults to, overriding the env routing for this workspace). Attached by the
+   * worker, so optional on the wire.
+   */
+  modelDefaults: v.optional(modelDefaultsSchema),
 })
 export type WorkspaceSnapshot = v.InferOutput<typeof workspaceSnapshotSchema>

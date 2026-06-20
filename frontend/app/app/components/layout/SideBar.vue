@@ -1,6 +1,10 @@
 <script setup lang="ts">
-import BlockPalette from '~/components/palettes/BlockPalette.vue'
-import PipelinePalette from '~/components/palettes/PipelinePalette.vue'
+// The left navbar. The old draggable block/pipeline palettes are gone — blocks
+// and pipelines are created through the command bar (⌘K) and the board's own
+// affordances. This panel is now navigation + a command-bar launcher: quick
+// actions, repository management, integration management, the workspace-wide
+// context-fragment library, and workspace configuration (merge thresholds +
+// default models).
 import BoardSwitcher from '~/components/layout/BoardSwitcher.vue'
 import UserMenu from '~/components/auth/UserMenu.vue'
 
@@ -34,25 +38,50 @@ watch(
   >
     <BoardSwitcher />
 
-    <USeparator />
+    <!-- Command bar launcher (⌘K) — the primary way to create blocks / pipelines
+         and reach every action below. -->
+    <button
+      type="button"
+      class="flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-800/60 px-2.5 py-2 text-left text-sm text-slate-400 transition hover:border-slate-500 hover:bg-slate-800"
+      @click="ui.openCommandBar()"
+    >
+      <UIcon name="i-lucide-search" class="h-4 w-4 shrink-0" />
+      <span class="flex-1 truncate">Search or run a command…</span>
+      <UKbd value="⌘K" />
+    </button>
 
     <section>
       <h2 class="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-        Building blocks
+        Create
       </h2>
-      <BlockPalette />
+      <div class="space-y-1.5">
+        <UButton
+          block
+          color="primary"
+          variant="soft"
+          size="sm"
+          icon="i-lucide-workflow"
+          class="justify-start"
+          @click="ui.openBuilder()"
+        >
+          Build a pipeline
+        </UButton>
+        <UButton
+          block
+          color="neutral"
+          variant="soft"
+          size="sm"
+          icon="i-lucide-plus"
+          class="justify-start"
+          @click="ui.openCommandBar()"
+        >
+          Add a block
+        </UButton>
+      </div>
     </section>
 
     <USeparator />
 
-    <section>
-      <h2 class="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-        Pipelines
-      </h2>
-      <PipelinePalette />
-    </section>
-
-    <USeparator />
     <section>
       <h2 class="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
         Repositories
@@ -84,33 +113,15 @@ watch(
       </div>
     </section>
 
-    <template v-if="library.available">
-      <USeparator />
-      <section>
-        <h2 class="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-          Prompt library
-        </h2>
-        <UButton
-          block
-          color="neutral"
-          variant="soft"
-          size="sm"
-          icon="i-lucide-book-marked"
-          class="justify-start"
-          @click="ui.openFragmentLibrary()"
-        >
-          Best-practice fragments
-        </UButton>
-      </section>
-    </template>
+    <USeparator />
 
-    <template v-if="github.available">
-      <USeparator />
-      <section>
-        <h2 class="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-          GitHub
-        </h2>
+    <section>
+      <h2 class="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+        Integrations
+      </h2>
+      <div class="space-y-1.5">
         <UButton
+          v-if="github.available"
           block
           color="neutral"
           variant="soft"
@@ -123,16 +134,8 @@ watch(
             {{ github.connected ? github.connection?.accountLogin : 'Connect GitHub' }}
           </span>
         </UButton>
-      </section>
-    </template>
 
-    <template v-if="documents.available && documents.sources.length">
-      <USeparator />
-      <section>
-        <h2 class="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-          Document sources
-        </h2>
-        <div class="space-y-1.5">
+        <template v-if="documents.available">
           <UButton
             v-for="src in documents.sources"
             :key="src.source"
@@ -160,17 +163,9 @@ watch(
           >
             Import &amp; spawn
           </UButton>
-        </div>
-      </section>
-    </template>
+        </template>
 
-    <template v-if="tasks.available && tasks.sources.length">
-      <USeparator />
-      <section>
-        <h2 class="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-          Task sources
-        </h2>
-        <div class="space-y-1.5">
+        <template v-if="tasks.available">
           <UButton
             v-for="src in tasks.sources"
             :key="src.source"
@@ -198,9 +193,60 @@ watch(
           >
             Import issues
           </UButton>
-        </div>
+        </template>
+      </div>
+    </section>
+
+    <template v-if="library.available">
+      <USeparator />
+      <section>
+        <h2 class="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+          Workspace context
+        </h2>
+        <UButton
+          block
+          color="neutral"
+          variant="soft"
+          size="sm"
+          icon="i-lucide-book-marked"
+          class="justify-start"
+          @click="ui.openFragmentLibrary()"
+        >
+          Context fragments
+        </UButton>
       </section>
     </template>
+
+    <USeparator />
+    <section>
+      <h2 class="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+        Configuration
+      </h2>
+      <div class="space-y-1.5">
+        <UButton
+          block
+          color="neutral"
+          variant="soft"
+          size="sm"
+          icon="i-lucide-git-merge"
+          class="justify-start"
+          @click="ui.openMergeThresholds()"
+        >
+          Merge thresholds
+        </UButton>
+        <UButton
+          block
+          color="neutral"
+          variant="soft"
+          size="sm"
+          icon="i-lucide-cpu"
+          class="justify-start"
+          @click="ui.openModelDefaults()"
+        >
+          Default models
+        </UButton>
+      </div>
+    </section>
 
     <UserMenu class="mt-auto" />
   </aside>

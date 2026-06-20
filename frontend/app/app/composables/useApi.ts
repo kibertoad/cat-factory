@@ -28,6 +28,7 @@ import type {
   GitHubRepo,
   MergePullRequestInput,
   ModelOption,
+  ModelDefaults,
   OpenPullRequestInput,
   Pipeline,
   PromptFragment,
@@ -475,6 +476,19 @@ export function useApi() {
     deleteMergePreset: (workspaceId: string, presetId: string) =>
       http(`${ws(workspaceId)}/merge-presets/${encodeURIComponent(presetId)}`, {
         method: 'DELETE',
+      }),
+
+    // ---- per-agent-kind default models (workspace routing overrides) ------
+    // The workspace's map of agentKind → model id; a kind absent from the map
+    // falls back to the deployment's env routing. `setModelDefaults` replaces the
+    // whole map (the settings panel sends the full set on every change).
+    getModelDefaults: (workspaceId: string) =>
+      http<ModelDefaults>(`${ws(workspaceId)}/model-defaults`),
+
+    setModelDefaults: (workspaceId: string, defaults: Record<string, string>) =>
+      http<ModelDefaults>(`${ws(workspaceId)}/model-defaults`, {
+        method: 'PUT',
+        body: { defaults },
       }),
 
     // ---- github integration ----------------------------------------------

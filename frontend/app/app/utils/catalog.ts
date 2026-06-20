@@ -108,6 +108,81 @@ export const AGENT_BY_KIND: Record<AgentKind, AgentArchetype> = Object.fromEntri
   AGENT_ARCHETYPES.map((a) => [a.kind, a]),
 ) as Record<AgentKind, AgentArchetype>
 
+/**
+ * Display metadata for the engine-driven "system" kinds — the gate/automation
+ * steps (blueprint mapper, conflicts gate + resolver, CI gate + fixer, merger)
+ * that appear in seeded pipelines and run timelines but are NOT user-addable
+ * palette archetypes, so they're intentionally absent from {@link AGENT_ARCHETYPES}
+ * / {@link AGENT_BY_KIND}. Looked up through {@link agentKindMeta}.
+ */
+export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
+  blueprints: {
+    kind: 'blueprints',
+    label: 'Blueprinter',
+    icon: 'i-lucide-map',
+    color: '#22d3ee',
+    description: 'Maps the repository into the service → modules blueprint.',
+  },
+  conflicts: {
+    kind: 'conflicts',
+    label: 'Conflicts Gate',
+    icon: 'i-lucide-git-merge',
+    color: '#f97316',
+    description: 'Ensures the PR is mergeable with its base, looping the resolver on conflicts.',
+  },
+  'conflict-resolver': {
+    kind: 'conflict-resolver',
+    label: 'Conflict Resolver',
+    icon: 'i-lucide-git-merge',
+    color: '#f97316',
+    description: 'Merges the base in and resolves conflicts on the PR branch.',
+  },
+  ci: {
+    kind: 'ci',
+    label: 'CI Gate',
+    icon: 'i-lucide-shield-check',
+    color: '#38bdf8',
+    description: 'Gates the PR on green CI, looping the CI fixer on failure.',
+  },
+  'ci-fixer': {
+    kind: 'ci-fixer',
+    label: 'CI Fixer',
+    icon: 'i-lucide-wrench',
+    color: '#38bdf8',
+    description: 'Fixes failing CI and pushes back to the PR branch.',
+  },
+  merger: {
+    kind: 'merger',
+    label: 'Merger',
+    icon: 'i-lucide-git-pull-request',
+    color: '#a3e635',
+    description: 'Scores the PR and auto-merges within the task thresholds, or asks for review.',
+  },
+}
+
+/** Fallback metadata for any kind with no archetype or system entry (unknown/custom). */
+const FALLBACK_AGENT_META: Omit<AgentArchetype, 'kind'> = {
+  label: 'Agent',
+  icon: 'i-lucide-bot',
+  color: '#94a3b8',
+  description: 'Agent step.',
+}
+
+/**
+ * Resolve display metadata for ANY agent kind — a palette archetype (incl. custom
+ * agents registered into {@link AGENT_BY_KIND}), an engine system kind, or an
+ * unknown one — ALWAYS returning a usable icon/label/color. This is the single
+ * lookup every pipeline / run renderer should use so a kind missing from the
+ * archetype map (e.g. `ci`/`merger`/`blueprints` in a seeded pipeline) can never
+ * blow up a component with an undefined access.
+ */
+export function agentKindMeta(kind: string): AgentArchetype {
+  return (
+    AGENT_BY_KIND[kind as AgentKind] ??
+    SYSTEM_AGENT_META[kind] ?? { kind: kind as AgentKind, ...FALLBACK_AGENT_META }
+  )
+}
+
 /** Visual metadata for each architecture block type. */
 export const BLOCK_TYPE_META: Record<BlockType, { label: string; icon: string; accent: string }> = {
   frontend: { label: 'Frontend', icon: 'i-lucide-monitor', accent: '#60a5fa' },

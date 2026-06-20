@@ -34,6 +34,7 @@ import type { RequirementReviewRepository } from '@cat-factory/kernel'
 import type {
   CiStatusProvider,
   MergePresetRepository,
+  ModelDefaultsRepository,
   NotificationChannel,
   NotificationRepository,
   PullRequestMerger,
@@ -84,6 +85,7 @@ import { BoardScanService } from './modules/boardScan/BoardScanService.js'
 import { RequirementReviewService } from './modules/requirements/RequirementReviewService.js'
 import { NotificationService } from './modules/notifications/NotificationService.js'
 import { MergePresetService } from './modules/merge/MergePresetService.js'
+import { ModelDefaultsService } from './modules/modelDefaults/ModelDefaultsService.js'
 import { BLUEPRINT_PIPELINE_ID } from '@cat-factory/kernel'
 import {
   FragmentLibraryService,
@@ -305,6 +307,13 @@ export interface CoreDependencies {
   pullRequestMerger?: PullRequestMerger
   /** Resolves a task's merge threshold preset (auto-merge ceilings + CI attempt budget). */
   mergePresetRepository?: MergePresetRepository
+  /**
+   * Stores a workspace's per-agent-kind default models (the model each agent kind
+   * defaults to, overriding the env routing for that workspace). Optional and
+   * default-off: absent → the `modelDefaults` module isn't assembled and the env
+   * routing is used everywhere.
+   */
+  modelDefaultsRepository?: ModelDefaultsRepository
 }
 
 /** The GitHub integration's services, present only when the app is configured. */
@@ -373,6 +382,11 @@ export interface MergePresetsModule {
   service: MergePresetService
 }
 
+/** The per-kind default-model feature's service, present only when its repository is wired. */
+export interface ModelDefaultsModule {
+  service: ModelDefaultsService
+}
+
 /** The prompt-fragment library's services, present only when configured (ADR 0006). */
 export interface FragmentLibraryModule {
   /** Per-tier CRUD + the merged-catalog resolver (also the run-path FragmentResolver). */
@@ -410,6 +424,8 @@ export interface Core {
   notifications?: NotificationsModule
   /** Present only when the merge-preset repository is wired (see CoreDependencies). */
   mergePresets?: MergePresetsModule
+  /** Present only when the model-defaults repository is wired (see CoreDependencies). */
+  modelDefaults?: ModelDefaultsModule
   /** Present only when the prompt-fragment library is configured (see CoreDependencies). */
   fragmentLibrary?: FragmentLibraryModule
 }
@@ -719,6 +735,15 @@ function createRequirementsModule(deps: CoreDependencies): RequirementsModule | 
     modelRef: deps.requirementReviewModel ?? deps.documentPlannerModel,
     // Honour a block's pinned model with the direct/Cloudflare fallback, like the executor.
     resolveBlockModel: deps.requirementReviewResolveModel,
+    // Honour the workspace's per-kind default for the `requirements` kind too, so the
+    // reviewer resolves its model exactly like a pipeline step. Reuses the already
+    // wired model-defaults repository; absent → only block-pin + routing default.
+    resolveWorkspaceModelDefault: deps.modelDefaultsRepository
+      ? (workspaceId, agentKind) =>
+          deps
+            .modelDefaultsRepository!.getForKind(workspaceId, agentKind)
+            .then((v) => v ?? undefined)
+      : undefined,
     documentRepository: deps.documentRepository,
     taskRepository: deps.taskRepository,
   })
@@ -791,6 +816,17 @@ function createMergePresetsModule(deps: CoreDependencies): MergePresetsModule | 
   return { service }
 }
 
+/** Assemble the model-defaults module when its repository is present. */
+function createModelDefaultsModule(deps: CoreDependencies): ModelDefaultsModule | undefined {
+  const { modelDefaultsRepository } = deps
+  if (!modelDefaultsRepository) return undefined
+  const service = new ModelDefaultsService({
+    modelDefaultsRepository,
+    workspaceRepository: deps.workspaceRepository,
+  })
+  return { service }
+}
+
 export function createCore(dependencies: CoreDependencies): Core {
   const workRunner = dependencies.workRunner ?? new NoopWorkRunner()
   const executionEventPublisher = dependencies.executionEventPublisher ?? new NoopEventPublisher()
@@ -826,6 +862,7 @@ export function createCore(dependencies: CoreDependencies): Core {
   // pipeline-complete notifications during a run (when the module is configured).
   const notifications = createNotificationsModule(dependencies)
   const mergePresets = createMergePresetsModule(dependencies)
+  const modelDefaults = createModelDefaultsModule(dependencies)
 
   const executionService = new ExecutionService({
     ...dependencies,
@@ -871,6 +908,7 @@ export function createCore(dependencies: CoreDependencies): Core {
     ...(requirements ? { requirements } : {}),
     ...(notifications ? { notifications } : {}),
     ...(mergePresets ? { mergePresets } : {}),
+    ...(modelDefaults ? { modelDefaults } : {}),
     ...(fragmentLibrary ? { fragmentLibrary } : {}),
   }
 }

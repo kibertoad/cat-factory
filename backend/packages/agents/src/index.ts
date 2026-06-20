@@ -2,7 +2,10 @@ export { AiAgentExecutor, type AiAgentExecutorDependencies } from './agents/AiAg
 export {
   type AgentModelConfig,
   type AgentRouting,
+  type StepModelResolvers,
+  type StepModelInputs,
   resolveAgentConfig,
+  resolveStepModelRef,
 } from './agents/agent-routing.js'
 export { systemPromptFor, userPromptFor } from './agents/agent-catalog.js'
 export {

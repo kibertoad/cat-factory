@@ -65,6 +65,7 @@ import { D1RepoBlueprintRepository } from './repositories/D1RepoBlueprintReposit
 import { D1RequirementReviewRepository } from './repositories/D1RequirementReviewRepository'
 import { D1NotificationRepository } from './repositories/D1NotificationRepository'
 import { D1MergePresetRepository } from './repositories/D1MergePresetRepository'
+import { D1ModelDefaultsRepository } from './repositories/D1ModelDefaultsRepository'
 import { InAppNotificationChannel } from './events/InAppNotificationChannel'
 import { GitHubCiStatusProvider } from './github/GitHubCiStatusProvider'
 import { GitHubMergeabilityProvider } from './github/GitHubMergeabilityProvider'
@@ -109,6 +110,20 @@ function buildModelProvider(env: Env): CloudflareModelProvider {
 }
 
 /**
+ * The resolver every executor consults for a workspace's per-agent-kind default
+ * model (block-pinned > workspace per-kind default > env routing > env default).
+ * Backed by the D1 model-defaults repo; shared by the inline LLM executor and the
+ * container executor so both honour the workspace defaults identically.
+ */
+function buildResolveWorkspaceModelDefault(
+  db: D1Database,
+): (workspaceId: string, agentKind: string) => Promise<string | undefined> {
+  const repo = new D1ModelDefaultsRepository({ db })
+  return (workspaceId, agentKind) =>
+    repo.getForKind(workspaceId, agentKind).then((v) => v ?? undefined)
+}
+
+/**
  * Pick the agent that performs pipeline steps: real LLM work via the Vercel AI
  * SDK, composed with a per-run sandbox for the repo-operating steps (`coder`,
  * `mocker`, `playwright`, …). Container-based implementation is ALWAYS on — the
@@ -132,6 +147,10 @@ function selectAgentExecutor(
     modelProvider: buildModelProvider(env),
     agentRouting: config.agents.routing,
     resolveBlockModel: config.agents.resolveBlockModel,
+    // Inline (non-sandbox) kinds honour the workspace's per-kind defaults too, so
+    // the resolution precedence is uniform across every agent kind, not just the
+    // container kinds.
+    resolveWorkspaceModelDefault: buildResolveWorkspaceModelDefault(db),
   })
 
   // The sandbox MUST build — a null here means a prerequisite (GitHub App private
@@ -330,6 +349,7 @@ function selectMergeLifecycleDeps(
   const deps: Partial<CoreDependencies> = {
     notificationRepository: new D1NotificationRepository({ db }),
     mergePresetRepository: new D1MergePresetRepository({ db }),
+    modelDefaultsRepository: new D1ModelDefaultsRepository({ db }),
   }
   const publisher = selectEventPublisher(env)
   if (publisher) deps.notificationChannel = new InAppNotificationChannel(publisher)
@@ -389,6 +409,9 @@ function buildContainerExecutor(
     resolveTransport,
     agentRouting: config.agents.routing,
     resolveBlockModel: config.agents.resolveBlockModel,
+    // The workspace's per-agent-kind default model, consulted when a block pins none
+    // (block-pinned > workspace per-kind default > env routing > env default).
+    resolveWorkspaceModelDefault: buildResolveWorkspaceModelDefault(db),
     resolveRepoTarget,
     mintInstallationToken: (id) => registry.installationToken(id),
     sessionService: new ContainerSessionService({ secret: env.AUTH_SESSION_SECRET }),

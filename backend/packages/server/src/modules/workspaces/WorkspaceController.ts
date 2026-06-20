@@ -71,12 +71,18 @@ export function workspaceController(): Hono<AppEnv> {
     const mergePresets = container.mergePresets
       ? await container.mergePresets.service.list(workspaceId)
       : undefined
+    // The workspace's per-agent-kind default models, so the board renders the
+    // model-defaults settings on load. No-op when the module isn't configured.
+    const modelDefaults = container.modelDefaults
+      ? await container.modelDefaults.service.get(workspaceId)
+      : undefined
     return c.json({
       ...snapshot,
       spend,
       ...(bootstrapJobs ? { bootstrapJobs } : {}),
       ...(notifications ? { notifications } : {}),
       ...(mergePresets ? { mergePresets } : {}),
+      ...(modelDefaults ? { modelDefaults } : {}),
     })
   })
 
