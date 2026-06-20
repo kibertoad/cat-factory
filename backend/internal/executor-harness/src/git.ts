@@ -316,6 +316,36 @@ export async function mergeBranch(
 }
 
 /**
+ * Bring a RESUMED work branch up to the latest `baseBranch` when (and only when) the
+ * two merge cleanly. A resumed branch was cut from an older base, so without this the
+ * agent continues against a stale base and the eventual PR can carry avoidable
+ * conflicts. Fetches the base (the single-branch resume clone doesn't have it),
+ * attempts `git merge --no-edit`, and on a conflict ABORTS — leaving the branch
+ * exactly as it was so the run proceeds on the stale base (the CI/merge gate handles
+ * a genuinely conflicting PR downstream, as before). Returns whether base was merged
+ * in. Best-effort: callers treat a thrown/false result as "continue without refresh".
+ */
+export async function refreshFromBaseIfClean(
+  dir: string,
+  baseBranch: string,
+  ghToken: string,
+  signal?: AbortSignal,
+): Promise<boolean> {
+  await git(['fetch', 'origin', baseBranch], { cwd: dir, signal, env: await authEnv(ghToken) })
+  try {
+    await git(['merge', '--no-edit', 'FETCH_HEAD'], { cwd: dir, signal })
+    return true
+  } catch (err) {
+    if ((await unmergedPaths(dir, signal)).length > 0) {
+      // Conflict — undo the half-done merge and keep the branch on its old base.
+      await git(['merge', '--abort'], { cwd: dir, signal }).catch(() => {})
+      return false
+    }
+    throw err
+  }
+}
+
+/**
  * Push the work branch to origin. The remote URL carries only the username, so
  * the token is supplied here via the askpass env (never in argv).
  */

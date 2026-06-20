@@ -25,7 +25,7 @@ export interface RunOptions {
 
 /** Run one implementation job end to end: clone → Pi implements → push → PR. */
 export async function handleRun(job: Job, opts: RunOptions = {}): Promise<RunResult> {
-  const { summary, stats, stderrTail, pushed } = await runCodingAgent(
+  const { summary, stats, stderrTail, pushed, resumed } = await runCodingAgent(
     {
       kind: 'impl',
       jobId: job.jobId,
@@ -44,6 +44,13 @@ export async function handleRun(job: Job, opts: RunOptions = {}): Promise<RunRes
     },
     opts,
   )
+
+  // Whether this run continued an evicted/failed earlier run's branch is the key
+  // triage signal for "why does this PR already have commits I didn't see produced",
+  // so record it on the job (not just buried in runCodingAgent's debug logs).
+  if (resumed) {
+    log.info('run: resumed an existing work branch', { jobId: job.jobId, branch: job.headBranch })
+  }
 
   // A no-op (nothing changed across the whole run) is an implementation failure.
   if (!pushed) {

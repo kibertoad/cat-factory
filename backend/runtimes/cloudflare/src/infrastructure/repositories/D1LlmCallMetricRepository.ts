@@ -129,9 +129,11 @@ export class D1LlmCallMetricRepository implements LlmCallMetricRepository {
     // The newest call for the conversation; one indexed row, no text columns.
     const row = await this.db
       .prepare(
+        // message_count breaks a same-millisecond createdAt tie in chain order (it
+        // grows monotonically as the conversation appends); id is the last resort.
         `SELECT message_count, prompt_hash FROM llm_call_metrics
          WHERE workspace_id = ? AND execution_id = ? AND agent_kind = ?
-         ORDER BY created_at DESC, id DESC
+         ORDER BY created_at DESC, message_count DESC, id DESC
          LIMIT 1`,
       )
       .bind(workspaceId, executionId, agentKind)

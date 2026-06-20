@@ -8,6 +8,7 @@ import {
   headCommit,
   listUntrackedFiles,
   pushBranch,
+  refreshFromBaseIfClean,
   remoteBranchExists,
 } from './git.js'
 import type { PiRunStats } from './pi.js'
@@ -114,8 +115,9 @@ export async function runCodingAgent(
     //    knowingly run two at once.
     //  - Re-dispatch only NON-terminal runs (failed / evicted / stale-running), whose
     //    branch is by definition unmerged. Resuming a branch whose PR already merged
-    //    (e.g. a merge that left the branch undeleted) could re-introduce merged work;
-    //    that case is avoided by never re-dispatching a `done` block.
+    //    could re-introduce merged work; that is avoided two ways: the platform deletes
+    //    the work branch when its PR merges (GitHubPullRequestMerger), so a re-run finds
+    //    no branch and starts fresh, and a `done` block is never re-dispatched anyway.
     const resumed =
       spec.newBranch != null &&
       (await remoteBranchExists(spec.repo.cloneUrl, spec.newBranch, spec.ghToken, signal))
@@ -140,8 +142,29 @@ export async function runCodingAgent(
     }
     // The branch tip before the agent runs this time. A FRESH run produced work iff
     // the branch advances past it; a RESUMED run already carries prior work, so it is
-    // never a no-op regardless of what this pass adds.
+    // never a no-op regardless of what this pass adds. Captured BEFORE the resume base
+    // refresh below so that refresh's merge commit counts as advancement and is pushed.
     const baseSha = await headCommit(dir, signal)
+
+    // A resumed branch was cut from an OLDER base; merge the latest base in when the
+    // two merge cleanly, so the agent works against current base and the PR stays
+    // current. On a conflict this is a no-op (the run continues on the stale base — the
+    // merge gate handles a conflicting PR downstream, as before), so it never blocks a
+    // resume. Best-effort: any error is treated as "continue without refreshing".
+    if (resumed) {
+      const refreshed = await refreshFromBaseIfClean(
+        dir,
+        spec.cloneBranch,
+        spec.ghToken,
+        signal,
+      ).catch(() => false)
+      if (!refreshed) {
+        log.info('coding-agent: resume base refresh skipped (conflict or error)', {
+          ...trace,
+          base: spec.cloneBranch,
+        })
+      }
+    }
 
     // Serialize all pushes to the work branch through a single in-flight promise.
     // A checkpoint tick and the final push (or two slow checkpoint ticks) must never

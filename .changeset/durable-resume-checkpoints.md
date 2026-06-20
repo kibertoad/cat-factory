@@ -1,5 +1,6 @@
 ---
 '@cat-factory/executor-harness': patch
+'@cat-factory/kernel': minor
 '@cat-factory/worker': patch
 ---
 
@@ -23,3 +24,12 @@ committing files the agent didn't choose.
   A checkpoint only pushes once the branch has actually advanced past its pre-run tip,
   so a run that never commits leaves no empty work branch behind (which would otherwise
   make a later retry treat the base commit as resumable work and fail to open a PR).
+- **Branch torn down on merge.** Because the work branch is deterministic per task, the
+  platform now deletes it when its PR merges (new `GitHubClient.deleteBranch` port +
+  `GitHubPullRequestMerger`), so a later re-run of the same block starts fresh from base
+  instead of resuming on already-merged commits (which a squash/rebase merge would
+  otherwise re-introduce). Best-effort: a failed delete never fails the completed merge.
+- **Resumed branch refreshed against base.** A resumed branch was cut from an older base,
+  so the harness now merges the latest base in when the two merge cleanly
+  (`refreshFromBaseIfClean`), keeping the PR current; on a conflict it aborts and
+  continues on the stale base (the merge gate handles a conflicting PR downstream).

@@ -133,7 +133,14 @@ export function computeStoredPrompt(
  * the input order, with `promptText` set to the full array and `promptPrefixCount` 0.
  */
 export function reconstructPrompts(calls: LlmCallMetric[]): LlmCallMetric[] {
-  const asc = [...calls].sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id))
+  // Order by time, then message count, then id. Records are written off the response
+  // path (`waitUntil`) so two calls can share a `createdAt` millisecond; `messageCount`
+  // is monotonic within an append-only chain, so it breaks such ties in true
+  // conversation order (id is the last resort when even that is equal).
+  const asc = [...calls].sort(
+    (a, b) =>
+      a.createdAt - b.createdAt || a.messageCount - b.messageCount || a.id.localeCompare(b.id),
+  )
   const running = new Map<string, unknown[]>()
   const fullById = new Map<string, string>()
   for (const c of asc) {

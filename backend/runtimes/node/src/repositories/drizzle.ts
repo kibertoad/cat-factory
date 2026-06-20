@@ -566,7 +566,13 @@ class DrizzleLlmCallMetricRepository implements LlmCallMetricRepository {
           eq(llmCallMetrics.agent_kind, agentKind),
         ),
       )
-      .orderBy(desc(llmCallMetrics.created_at), desc(llmCallMetrics.id))
+      // message_count breaks a same-millisecond createdAt tie in chain order (it grows
+      // monotonically as the conversation appends); id is the last resort.
+      .orderBy(
+        desc(llmCallMetrics.created_at),
+        desc(llmCallMetrics.message_count),
+        desc(llmCallMetrics.id),
+      )
       .limit(1)
     const row = rows[0]
     return row ? { messageCount: row.messageCount, promptHash: row.promptHash } : null

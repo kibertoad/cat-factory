@@ -21,6 +21,7 @@ import {
   headCommit,
   mergeBranch,
   redactSecrets,
+  refreshFromBaseIfClean,
   unmergedPaths,
 } from '../src/git.js'
 import { producedRepoContent } from '../src/bootstrap.js'
@@ -420,6 +421,71 @@ describe('mergeBranch / unmergedPaths', () => {
   })
 })
 
+describe('refreshFromBaseIfClean', () => {
+  let origin: string
+  let work: string
+
+  const g = (cwd: string, ...args: string[]): Promise<unknown> => exec('git', args, { cwd })
+
+  beforeEach(async () => {
+    origin = await mkdtemp(join(tmpdir(), 'refresh-origin-'))
+    await g(origin, 'init', '-b', 'main')
+    await g(origin, 'config', 'user.email', 'o@e.com')
+    await g(origin, 'config', 'user.name', 'Origin')
+    await writeFile(join(origin, 'file.txt'), 'base\n', 'utf8')
+    await g(origin, 'add', '-A')
+    await g(origin, 'commit', '-m', 'base')
+
+    work = await mkdtemp(join(tmpdir(), 'refresh-work-'))
+    await exec('git', ['clone', origin, work])
+    await g(work, 'config', 'user.email', 'w@e.com')
+    await g(work, 'config', 'user.name', 'Work')
+  })
+  afterEach(async () => {
+    await rm(origin, { recursive: true, force: true })
+    await rm(work, { recursive: true, force: true })
+  })
+
+  it('merges the latest base into a resumed branch when it merges cleanly', async () => {
+    await g(work, 'checkout', '-b', 'cat-factory/blk')
+    await writeFile(join(work, 'feature.txt'), 'work\n', 'utf8')
+    await g(work, 'add', '-A')
+    await g(work, 'commit', '-m', 'resumed work')
+    // Base advances on origin with a non-overlapping file the resumed clone hasn't seen.
+    await writeFile(join(origin, 'extra.txt'), 'extra\n', 'utf8')
+    await g(origin, 'add', '-A')
+    await g(origin, 'commit', '-m', 'base advanced')
+
+    expect(await refreshFromBaseIfClean(work, 'main', 'token')).toBe(true)
+    // The advanced base file is now present on the resumed branch.
+    const show = String(
+      await exec('git', ['show', 'HEAD:extra.txt'], { cwd: work }).then((r) => r.stdout),
+    )
+    expect(show).toContain('extra')
+    // …and the resumed work is preserved.
+    expect(
+      String(await exec('git', ['show', 'HEAD:feature.txt'], { cwd: work }).then((r) => r.stdout)),
+    ).toContain('work')
+  })
+
+  it('aborts and leaves the branch untouched when base conflicts', async () => {
+    await g(work, 'checkout', '-b', 'cat-factory/blk')
+    await writeFile(join(work, 'file.txt'), 'feature change\n', 'utf8')
+    await g(work, 'add', '-A')
+    await g(work, 'commit', '-m', 'resumed work')
+    const tip = await headCommit(work)
+    // Base changes the SAME line, so a merge would conflict.
+    await writeFile(join(origin, 'file.txt'), 'main change\n', 'utf8')
+    await g(origin, 'add', '-A')
+    await g(origin, 'commit', '-m', 'base advanced (conflicting)')
+
+    expect(await refreshFromBaseIfClean(work, 'main', 'token')).toBe(false)
+    // The aborted merge left no conflict markers and the branch tip unchanged.
+    expect(await unmergedPaths(work)).toEqual([])
+    expect(await headCommit(work)).toBe(tip)
+  })
+})
+
 describe('parseTodoProgress', () => {
   // The real `--mode json` shape: a tool result is a `message_end` event whose
   // message is a `toolResult` (role/toolName/details/isError live on the message).
@@ -582,6 +648,22 @@ describe('ProgressGuard (anti-rabbithole)', () => {
     for (let i = 0; i < 10; i++) reason = guard.observe(toolCall('todo'))
     expect(reason).toBeNull()
     // But real (non-planning) tool calls past the threshold still trip it.
+    for (let i = 0; i < 3; i++) reason = guard.observe(toolCall('bash'))
+    expect(reason).toMatch(/no progress/i)
+  })
+
+  it('does not count read-only exploration (read/grep/glob/…) toward the no-edit bound', () => {
+    const limits: ProgressGuardLimits = { maxToolCallsWithoutEdit: 3, maxConsecutiveErrors: 99 }
+    const guard = new ProgressGuard(limits)
+    let reason: string | null = null
+    // Reading/searching many files before a first edit is legitimate exploration, not
+    // the environment-probing the no-edit bound targets — it must not trip even far
+    // past the threshold.
+    for (const t of ['read', 'grep', 'glob', 'ls', 'search', 'find', 'view']) {
+      for (let i = 0; i < 3; i++) reason = guard.observe(toolCall(t))
+    }
+    expect(reason).toBeNull()
+    // But "action" calls (bash) without an edit past the threshold still trip it.
     for (let i = 0; i < 3; i++) reason = guard.observe(toolCall('bash'))
     expect(reason).toMatch(/no progress/i)
   })

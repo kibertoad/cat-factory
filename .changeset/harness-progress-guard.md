@@ -17,4 +17,8 @@ Blueprinter, which explores the repo and returns the service tree as JSON (the h
 renders the files), so it never calls an edit tool itself. The edit-tool detection
 also recognises alternate names case-insensitively (`apply_patch`/`str_replace`/
 `multiedit`/… in addition to `edit`/`write`) so a model that mutates files under a
-different tool name is not mistaken for one making no edits.
+different tool name is not mistaken for one making no edits. The no-edit bound counts
+only "action" calls (chiefly `bash`, the rabbit-hole's vector): read-only exploration
+(`read`/`grep`/`glob`/…) and planning (`todo`) are excluded, so a large task that
+legitimately reads or searches many files before its first edit is not killed for it
+(the default ceiling is correspondingly generous).

@@ -254,14 +254,16 @@ function toolCallSignal(
 /** Tunable bounds for the {@link ProgressGuard}. */
 export interface ProgressGuardLimits {
   /**
-   * Abort once the agent has made this many tool calls without ever using a
-   * file-editing tool (see `FILE_EDIT_TOOLS`). The signature of a run that explores
-   * or — as in the credential rabbit-hole that motivated this — probes the
-   * environment endlessly without implementing anything. Disabled when `expectsEdits`
-   * is false (e.g. the assess-only merger / Blueprinter, which legitimately edit
-   * nothing). Note this bound only guards the run UNTIL its first edit: once the
-   * agent has edited a file at all, it has demonstrably started the work, so only
-   * `maxConsecutiveErrors` guards a later stall.
+   * Abort once the agent has made this many NON-exploration tool calls without ever
+   * using a file-editing tool (see `FILE_EDIT_TOOLS`). The signature of the credential
+   * rabbit-hole that motivated this: probing the environment (`bash`/exec) endlessly
+   * without implementing anything. Read-only exploration (`read`/`grep`/… — see
+   * `EXPLORATION_TOOLS`) and planning (`todo`) do NOT count, so a large task that
+   * legitimately reads/searches many files before its first edit is not killed for it.
+   * Disabled when `expectsEdits` is false (e.g. the assess-only merger / Blueprinter,
+   * which legitimately edit nothing). Note this bound only guards the run UNTIL its
+   * first edit: once the agent has edited a file at all, it has demonstrably started
+   * the work, so only `maxConsecutiveErrors` guards a later stall.
    */
   maxToolCallsWithoutEdit: number
   /**
@@ -272,7 +274,9 @@ export interface ProgressGuardLimits {
 }
 
 export const DEFAULT_PROGRESS_GUARD_LIMITS: ProgressGuardLimits = {
-  maxToolCallsWithoutEdit: 30,
+  // Counts only non-exploration, non-planning calls (see EXPLORATION_TOOLS), so the
+  // ceiling can be generous without risking a false kill on a read-heavy large task.
+  maxToolCallsWithoutEdit: 40,
   maxConsecutiveErrors: 12,
 }
 
@@ -299,6 +303,28 @@ const FILE_EDIT_TOOLS = new Set([
 // for "no edits" purely from planning calls. They still reset the consecutive-error
 // streak (a successful call means the agent isn't wedged). Matched case-insensitively.
 const PLANNING_TOOLS = new Set(['todo'])
+
+// Read-only exploration tools: reading/searching the repo is legitimate work-up to an
+// edit, NOT the environment-probing the no-edit bound targets, so they don't count
+// toward `maxToolCallsWithoutEdit` (a large task may read/search dozens of files
+// before its first edit). The bound thus counts only "action" calls — chiefly `bash`
+// (the credential rabbit-hole's vector) — that have yet to produce an edit. Kept broad
+// since models/extensions name the same capability differently. Matched case-insensitively.
+const EXPLORATION_TOOLS = new Set([
+  'read',
+  'grep',
+  'search',
+  'glob',
+  'ls',
+  'list',
+  'find',
+  'tree',
+  'cat',
+  'view',
+  'head',
+  'tail',
+  'stat',
+])
 
 /** Read {@link ProgressGuardLimits} from the environment, falling back to the defaults. */
 export function progressGuardLimitsFromEnv(
@@ -353,8 +379,9 @@ export class ProgressGuard {
       )
     }
 
-    // Planning/bookkeeping calls don't count toward the no-edit bound (see PLANNING_TOOLS).
-    if (PLANNING_TOOLS.has(name)) return null
+    // Planning and read-only exploration calls don't count toward the no-edit bound
+    // (see PLANNING_TOOLS / EXPLORATION_TOOLS) — only "action" calls without an edit do.
+    if (PLANNING_TOOLS.has(name) || EXPLORATION_TOOLS.has(name)) return null
     this.toolCalls++
     if (FILE_EDIT_TOOLS.has(name)) this.edits++
 

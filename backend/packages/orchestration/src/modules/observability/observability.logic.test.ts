@@ -233,4 +233,32 @@ describe('computeStoredPrompt', () => {
     const rebuilt = reconstructPrompts(calls)
     rebuilt.forEach((c, i) => expect(c.promptText).toBe(fulls[i]))
   })
+
+  it('reconstructs correctly when calls share a createdAt (ordered by message count)', () => {
+    // Records are written off the response path (waitUntil), so chained calls can land
+    // in the SAME createdAt millisecond — and with ids that sort the wrong way. The
+    // monotonic message count must still replay them in true conversation order.
+    const fulls = [
+      [sys, u],
+      [sys, u, a, u],
+      [sys, u, a, u, a, u],
+    ].map((m) => JSON.stringify(m))
+    let tip: { messageCount: number; promptHash: string } | null = null
+    const calls = fulls.map((full, i) => {
+      const stored = computeStoredPrompt(full, tip)
+      tip = { messageCount: JSON.parse(full).length, promptHash: stored.promptHash }
+      return metric({
+        // Descending ids (c2, c1, c0) so an id-only tiebreak would reverse the chain.
+        id: `c${fulls.length - 1 - i}`,
+        createdAt: 100,
+        messageCount: JSON.parse(full).length,
+        promptText: stored.promptText,
+        promptPrefixCount: stored.promptPrefixCount,
+        promptHash: stored.promptHash,
+      })
+    })
+    const rebuilt = reconstructPrompts(calls)
+    // `rebuilt` preserves input order, so each call still maps to its original full prompt.
+    rebuilt.forEach((c, i) => expect(c.promptText).toBe(fulls[i]))
+  })
 })

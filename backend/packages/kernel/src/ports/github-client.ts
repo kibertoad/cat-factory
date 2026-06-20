@@ -256,6 +256,14 @@ export interface GitHubClient {
     number: number,
     input?: MergePullRequestInput,
   ): Promise<void>
+  /**
+   * Delete a branch (`heads/<branch>` ref). Used to tear down a work branch once its
+   * PR has merged, so a later re-run of the same task starts fresh from base instead
+   * of resuming on already-merged commits (which a squash/rebase merge would otherwise
+   * re-introduce, since those commits are not ancestors of base). Idempotent from the
+   * caller's view: a missing branch (already deleted) is not an error.
+   */
+  deleteBranch(installationId: number, ref: GitHubRepoRef, branch: string): Promise<void>
   /** Add a comment to an issue or pull request (they share the issue-comment API). */
   comment(
     installationId: number,

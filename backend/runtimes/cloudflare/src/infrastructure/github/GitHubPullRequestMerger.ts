@@ -35,5 +35,17 @@ export class GitHubPullRequestMerger implements PullRequestMerger {
       { owner: target.owner, repo: target.name },
       number,
     )
+
+    // Tear down the work branch now that it is merged. The branch is deterministic
+    // per task (`cat-factory/<blockId>`), so leaving it behind would let a later
+    // re-run of this block RESUME on already-merged commits — which a squash/rebase
+    // merge would re-introduce wholesale (those commits are not ancestors of base).
+    // Best-effort: a failed delete must never undo or fail the completed merge.
+    const branch = block?.pullRequest?.branch
+    if (branch) {
+      await this.deps.githubClient
+        .deleteBranch(target.installationId, { owner: target.owner, repo: target.name }, branch)
+        .catch(() => {})
+    }
   }
 }
