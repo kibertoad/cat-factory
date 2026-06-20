@@ -53,6 +53,10 @@ export interface CodingAgentSpec {
   sessionToken: string
   /** Commit message for any work the agent left uncommitted. */
   commitMessage: string
+  /** Per-kind web-search guidance (backend-composed); surfaced only when web search is on. */
+  webToolsGuidance?: string
+  /** Enable proxy-backed web search for this run (see {@link AgentRunSpec.webSearchProxy}). */
+  webSearchProxy?: boolean
 }
 
 /** The outcome of a coding agent run, before each caller maps it to its own result shape. */
@@ -221,6 +225,8 @@ export async function runCodingAgent(
           model: spec.model,
           proxyBaseUrl: spec.proxyBaseUrl,
           sessionToken: spec.sessionToken,
+          webToolsGuidance: spec.webToolsGuidance,
+          webSearchProxy: spec.webSearchProxy,
         },
         opts,
       )

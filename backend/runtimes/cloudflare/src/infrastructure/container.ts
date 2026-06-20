@@ -9,11 +9,16 @@ import {
   type TaskSourceProvider,
   type WorkRunner,
 } from '@cat-factory/kernel'
-import { AiAgentExecutor, resolveAgentConfig } from '@cat-factory/agents'
+import {
+  AiAgentExecutor,
+  inlineWebSearchOptionsFromEnv,
+  resolveAgentConfig,
+} from '@cat-factory/agents'
 import { RunnerPoolConnectionService, TicketTrackerService } from '@cat-factory/integrations'
 import { type CoreDependencies, createCore } from '@cat-factory/orchestration'
 import {
   buildResolveRepoTarget as buildSharedResolveRepoTarget,
+  createWebSearchUpstreamFromEnv,
   type ServerContainer,
 } from '@cat-factory/server'
 import { type AppConfig, loadConfig } from './config'
@@ -157,6 +162,9 @@ function selectAgentExecutor(
     // the resolution precedence is uniform across every agent kind, not just the
     // container kinds.
     resolveWorkspaceModelDefault: buildResolveWorkspaceModelDefault(db),
+    // Opt-in provider web search for the inline design/research kinds (no-op unless
+    // INLINE_WEB_SEARCH_ENABLED and an Anthropic/OpenAI model).
+    webSearch: inlineWebSearchOptionsFromEnv(env),
   })
 
   // The sandbox MUST build — a null here means a prerequisite (GitHub App private
@@ -454,6 +462,9 @@ function buildContainerExecutor(
     mintInstallationToken: (id) => registry.installationToken(id),
     sessionService: new ContainerSessionService({ secret: env.AUTH_SESSION_SECRET }),
     proxyBaseUrl: `${env.WORKER_PUBLIC_URL.replace(/\/+$/, '')}/v1`,
+    // Point container agents' web search at the backend search proxy (no provider key
+    // in the sandbox) whenever an upstream is configured for this deployment.
+    webSearchProxyEnabled: Boolean(createWebSearchUpstreamFromEnv(env)),
     githubApiBase: config.github.apiBase,
   })
 }
@@ -917,6 +928,9 @@ export function buildContainer(env: Env, overrides: Partial<CoreDependencies> = 
       // LLM proxy upstream: OpenAI-compatible providers from env keys + the in-process
       // Workers AI binding path (the `workers-ai` provider).
       llmUpstream: new WorkersAiLlmUpstream(env),
+      // Container web-search proxy upstream (Brave, or a self-hosted SearXNG). Absent
+      // ⇒ the `/v1/web-search` route 503s and container web search stays off.
+      webSearch: createWebSearchUpstreamFromEnv(env),
     },
   }
 }

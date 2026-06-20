@@ -1,4 +1,4 @@
-import { AiAgentExecutor } from '@cat-factory/agents'
+import { AiAgentExecutor, inlineWebSearchOptionsFromEnv } from '@cat-factory/agents'
 import {
   HttpRunnerPoolProvider,
   RunnerPoolConnectionService,
@@ -26,6 +26,7 @@ import {
   GitHubAppRegistry,
   WebCryptoSecretCipher,
   buildResolveRepoTarget,
+  createWebSearchUpstreamFromEnv,
 } from '@cat-factory/server'
 import type { PgBoss } from 'pg-boss'
 import { loadNodeConfig } from './config.js'
@@ -175,6 +176,9 @@ function buildNodeContainerExecutor(
     mintInstallationToken: (id) => registry.installationToken(id),
     sessionService: new ContainerSessionService({ secret: sessionSecret }),
     proxyBaseUrl: `${publicUrl.replace(/\/+$/, '')}/v1`,
+    // Point container agents' web search at the backend search proxy (no provider key
+    // in the sandbox) whenever an upstream is configured for this deployment.
+    webSearchProxyEnabled: Boolean(createWebSearchUpstreamFromEnv(env)),
     githubApiBase: config.github.apiBase,
   })
 }
@@ -279,6 +283,9 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     agentRouting: config.agents.routing,
     resolveBlockModel: config.agents.resolveBlockModel,
     resolveWorkspaceModelDefault,
+    // Opt-in provider web search for the inline design/research kinds (no-op unless
+    // INLINE_WEB_SEARCH_ENABLED and an Anthropic/OpenAI model).
+    webSearch: inlineWebSearchOptionsFromEnv(env),
   })
 
   // Task-source integration (Jira). Opt-in via TASKS_ENABLED + TASKS_ENCRYPTION_KEY;

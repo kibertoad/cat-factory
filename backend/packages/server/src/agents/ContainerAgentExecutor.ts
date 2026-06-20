@@ -14,6 +14,7 @@ import {
   resolveStepModelRef,
   systemPromptFor,
   userPromptFor,
+  webResearchGuidanceFor,
 } from '@cat-factory/agents'
 import {
   CI_FIXER_AGENT_KIND,
@@ -68,6 +69,13 @@ export interface ContainerAgentExecutorDependencies {
   proxyBaseUrl: string
   /** GitHub REST base for opening the PR (GitHub Enterprise / api.github.com). */
   githubApiBase?: string
+  /**
+   * Whether the facade wired a container web-search upstream (the `/v1/web-search`
+   * proxy). When true, coding/ci-fixer jobs are told to point Pi's `web_search` tool
+   * at `${proxyBaseUrl}/web-search` with their session token — so no provider key
+   * reaches the sandbox. Off ⇒ container web search stays disabled.
+   */
+  webSearchProxyEnabled?: boolean
 }
 
 /** Poll cadence for the non-durable `run()` fallback (the durable driver sleeps between polls itself). */
@@ -341,6 +349,8 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
           cloneUrl: `https://github.com/${repo.owner}/${repo.name}.git`,
         },
         branch,
+        webToolsGuidance: webResearchGuidanceFor(context.agentKind, { fetch: true }),
+        ...(this.deps.webSearchProxyEnabled ? { webSearch: true } : {}),
         ...(this.deps.githubApiBase ? { githubApiBase: this.deps.githubApiBase } : {}),
       }
       return { body, model: `${ref.provider}:${ref.model}`, kind: 'ci-fix' }
@@ -441,6 +451,14 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
         title: `${context.block.title} (${context.pipelineName})`,
         body: prBody(context),
       },
+      // Per-kind web-search nudge (coder/mocker/analysis/… and any custom container
+      // kind, which resolves its own hint from the registry). The harness surfaces it
+      // only when web search is configured in the container env.
+      webToolsGuidance: webResearchGuidanceFor(context.agentKind, { fetch: true }),
+      // Turn on the proxy-backed web tools for this run: the harness points Pi's
+      // SearXNG client at `${proxyBaseUrl}/web-search` with the session token, so the
+      // search runs server-side and no provider key ever reaches the sandbox.
+      ...(this.deps.webSearchProxyEnabled ? { webSearch: true } : {}),
       ...(this.deps.githubApiBase ? { githubApiBase: this.deps.githubApiBase } : {}),
     }
     return { body, model: `${ref.provider}:${ref.model}`, kind: 'run' }

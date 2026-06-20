@@ -4,13 +4,14 @@ import {
   OPENAI_BASE_URL,
   QWEN_BASE_URL,
 } from '@cat-factory/agents'
-import type {
-  GitHubBackfillScheduler,
-  GitHubWebhookIngest,
-  LlmUpstream,
-  LlmUpstreamEndpoint,
-  RealtimeGateway,
-  RuntimeGateways,
+import {
+  type GitHubBackfillScheduler,
+  type GitHubWebhookIngest,
+  type LlmUpstream,
+  type LlmUpstreamEndpoint,
+  type RealtimeGateway,
+  type RuntimeGateways,
+  createWebSearchUpstreamFromEnv,
 } from '@cat-factory/server'
 
 // Node implementations of the runtime gateway seams. This MVP keeps them simple and
@@ -92,5 +93,8 @@ export function createNodeGateways(env: NodeJS.ProcessEnv): RuntimeGateways {
     githubBackfill: new InlineGitHubBackfillScheduler(),
     githubWebhook: new InlineGitHubWebhookIngest(),
     llmUpstream: new HttpLlmUpstream(env),
+    // Container web-search proxy upstream (Brave / self-hosted SearXNG from env);
+    // absent ⇒ the `/v1/web-search` route 503s and container web search stays off.
+    webSearch: createWebSearchUpstreamFromEnv(env),
   }
 }

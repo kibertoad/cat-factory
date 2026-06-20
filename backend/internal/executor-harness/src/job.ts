@@ -43,6 +43,21 @@ export interface Job {
   pr: PrSpec
   /** GitHub REST base (override for GitHub Enterprise / tests). Defaults to api.github.com. */
   githubApiBase?: string
+  /**
+   * Per-kind web-search guidance composed by the backend (it knows the agent kind;
+   * the harness doesn't). Surfaced in Pi's context only when web search is configured
+   * in the container env. Optional — older dispatchers omit it and the harness falls
+   * back to a generic blurb.
+   */
+  webToolsGuidance?: string
+  /**
+   * Turn on proxy-backed web search for this run: the backend hosts a SearXNG-
+   * compatible search proxy at `${proxyBaseUrl}/web-search`, so the harness points
+   * Pi's `web_search` tool there with the session token as the bearer — no provider
+   * key in the sandbox. Off/absent ⇒ web search is enabled only if a provider key is
+   * present in the container env (the self-hosted runner-pool path).
+   */
+  webSearch?: boolean
 }
 
 /** The /run response. `error` (when set) marks a job-level failure. */
@@ -388,6 +403,10 @@ export interface CiFixerJob {
   /** The PR head branch to clone and push fixes onto. */
   branch: string
   githubApiBase?: string
+  /** Per-kind web-search guidance (backend-composed); surfaced only when web search is on. */
+  webToolsGuidance?: string
+  /** Enable proxy-backed web search for this run (see {@link Job.webSearch}). */
+  webSearch?: boolean
 }
 
 /** The /ci-fix response. `pushed` says whether a fix commit was pushed. */
@@ -421,6 +440,8 @@ export function parseCiFixerJob(input: unknown): CiFixerJob {
     },
     branch: str(o.branch, 'branch'),
     ...(typeof o.githubApiBase === 'string' ? { githubApiBase: o.githubApiBase } : {}),
+    ...(typeof o.webToolsGuidance === 'string' ? { webToolsGuidance: o.webToolsGuidance } : {}),
+    ...(o.webSearch === true ? { webSearch: true } : {}),
   }
   assertAllowedHost(job.repo.cloneUrl, 'repo.cloneUrl')
   if (job.githubApiBase) assertAllowedHost(job.githubApiBase, 'githubApiBase')
@@ -578,6 +599,8 @@ export function parseJob(input: unknown): Job {
       body: typeof pr.body === 'string' ? pr.body : '',
     },
     ...(typeof o.githubApiBase === 'string' ? { githubApiBase: o.githubApiBase } : {}),
+    ...(typeof o.webToolsGuidance === 'string' ? { webToolsGuidance: o.webToolsGuidance } : {}),
+    ...(o.webSearch === true ? { webSearch: true } : {}),
   }
   // Only after all fields are present: refuse to send the token to a host that
   // isn't an allowed GitHub host.

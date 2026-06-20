@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { promisify } from 'node:util'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { parseBootstrapJob, parseConflictResolverJob, parseJob } from '../src/job.js'
+import { readFile } from 'node:fs/promises'
 import {
   DEFAULT_PROGRESS_GUARD_LIMITS,
   ProgressGuard,
@@ -12,6 +13,10 @@ import {
   parseTodoProgress,
   progressGuardLimitsFromEnv,
   summarizePiRun,
+  webSearchConfigFromEnv,
+  webSearchProxyEnv,
+  writeAgentsContext,
+  writeWebToolsConfig,
 } from '../src/pi.js'
 import {
   authenticatedCloneUrl,
@@ -666,6 +671,42 @@ describe('ProgressGuard (anti-rabbithole)', () => {
     expect(reason).toMatch(/no progress/i)
   })
 
+  it('does not count web search/fetch toward the no-edit bound', () => {
+    const limits: ProgressGuardLimits = { maxToolCallsWithoutEdit: 3, maxConsecutiveErrors: 99 }
+    const guard = new ProgressGuard(limits)
+    let reason: string | null = null
+    // rpiv-web-tools research calls are read-only, like read/grep — they must not
+    // trip the no-edit guard even far past its threshold.
+    for (const t of ['web_search', 'web_fetch']) {
+      for (let i = 0; i < 5; i++) reason = guard.observe(toolCall(t))
+    }
+    expect(reason).toBeNull()
+    // But "action" calls (bash) without an edit past the threshold still trip it.
+    for (let i = 0; i < 3; i++) reason = guard.observe(toolCall('bash'))
+    expect(reason).toMatch(/no progress/i)
+  })
+
+  it('trips on an uninterrupted run of web search/fetch calls (search rabbit-hole)', () => {
+    // Web tools are exempt from the no-edit bound, so a dedicated cap stops a model
+    // looping on searches forever. Any non-web call resets the streak.
+    const limits = {
+      maxToolCallsWithoutEdit: 999,
+      maxConsecutiveErrors: 99,
+      maxConsecutiveWebCalls: 4,
+    }
+    const guard = new ProgressGuard(limits)
+    let reason: string | null = null
+    for (let i = 0; i < 3; i++) reason = guard.observe(toolCall('web_search'))
+    expect(reason).toBeNull()
+    // A non-web call resets the streak, so we don't trip on the next web call.
+    guard.observe(toolCall('read'))
+    for (let i = 0; i < 3; i++) reason = guard.observe(toolCall('web_fetch'))
+    expect(reason).toBeNull()
+    // The 4th consecutive web call now trips the cap.
+    reason = guard.observe(toolCall('web_search'))
+    expect(reason).toMatch(/researching/i)
+  })
+
   it('skips the no-edit bound for assess-only runs (expectsEdits=false)', () => {
     const limits: ProgressGuardLimits = { maxToolCallsWithoutEdit: 3, maxConsecutiveErrors: 99 }
     const guard = new ProgressGuard(limits, false)
@@ -697,10 +738,139 @@ describe('ProgressGuard (anti-rabbithole)', () => {
         JOB_MAX_TOOLCALLS_WITHOUT_EDIT: '7',
         JOB_MAX_CONSECUTIVE_TOOL_ERRORS: '4',
       }),
-    ).toEqual({ maxToolCallsWithoutEdit: 7, maxConsecutiveErrors: 4 })
+    ).toEqual({
+      maxToolCallsWithoutEdit: 7,
+      maxConsecutiveErrors: 4,
+      maxConsecutiveWebCalls: DEFAULT_PROGRESS_GUARD_LIMITS.maxConsecutiveWebCalls,
+    })
+    expect(progressGuardLimitsFromEnv({ JOB_MAX_CONSECUTIVE_WEB_CALLS: '6' })).toEqual({
+      ...DEFAULT_PROGRESS_GUARD_LIMITS,
+      maxConsecutiveWebCalls: 6,
+    })
     // Garbage values fall back rather than disabling the guard.
     expect(progressGuardLimitsFromEnv({ JOB_MAX_TOOLCALLS_WITHOUT_EDIT: '-3' })).toEqual(
       DEFAULT_PROGRESS_GUARD_LIMITS,
     )
+  })
+})
+
+describe('web search (rpiv-web-tools) configuration', () => {
+  it('stays off when no provider is configured', () => {
+    expect(webSearchConfigFromEnv({})).toBeUndefined()
+    expect(webSearchConfigFromEnv({ WEB_SEARCH_PROVIDER: '   ' })).toBeUndefined()
+  })
+
+  it('auto-enables from a configured provider credential', () => {
+    // A provider key present in the env turns web search on with that provider —
+    // no separate on/off flag (mirrors Claude Code / Codex enabling on config).
+    expect(webSearchConfigFromEnv({ TAVILY_API_KEY: 'tvly-x' })).toEqual({ provider: 'tavily' })
+    expect(webSearchConfigFromEnv({ EXA_API_KEY: 'exa-x' })).toEqual({ provider: 'exa' })
+    // Keyless backends are signalled by their base-URL var.
+    expect(webSearchConfigFromEnv({ SEARXNG_URL: 'http://searx.local' })).toEqual({
+      provider: 'searxng',
+    })
+  })
+
+  it('picks the highest-priority provider when several are configured', () => {
+    // brave leads (what Claude Code uses); self-hosted backends come last.
+    expect(
+      webSearchConfigFromEnv({ SEARXNG_URL: 'http://searx.local', BRAVE_SEARCH_API_KEY: 'b' }),
+    ).toEqual({ provider: 'brave' })
+  })
+
+  it('honours WEB_SEARCH_PROVIDER as an explicit override (when its key is present)', () => {
+    // The pin selects the provider regardless of detection order, but still requires
+    // that provider's own credential to be configured.
+    expect(
+      webSearchConfigFromEnv({
+        WEB_SEARCH_PROVIDER: 'Exa',
+        EXA_API_KEY: 'exa-x',
+        BRAVE_SEARCH_API_KEY: 'b',
+      }),
+    ).toEqual({ provider: 'exa' })
+    expect(
+      webSearchConfigFromEnv({ WEB_SEARCH_PROVIDER: ' tavily ', TAVILY_API_KEY: 'tvly' }),
+    ).toEqual({ provider: 'tavily' })
+  })
+
+  it('ignores an explicit provider pin whose credential is missing', () => {
+    // A pin without the matching key would otherwise nudge the agent towards a tool
+    // that errors the moment it's called; treat it as not-configured instead.
+    expect(webSearchConfigFromEnv({ WEB_SEARCH_PROVIDER: 'exa' })).toBeUndefined()
+    expect(
+      webSearchConfigFromEnv({ WEB_SEARCH_PROVIDER: 'tavily', BRAVE_SEARCH_API_KEY: 'b' }),
+    ).toBeUndefined()
+    // An unknown provider id (not in our env table) is taken on trust — we can't
+    // validate a key we don't know the name of.
+    expect(webSearchConfigFromEnv({ WEB_SEARCH_PROVIDER: 'custom-engine' })).toEqual({
+      provider: 'custom-engine',
+    })
+  })
+
+  it('derives the proxy-backed SearXNG env from the proxy base URL + token', () => {
+    // Proxy mode points the SearXNG provider at the backend search proxy with the
+    // session token as the bearer — so detection picks searxng and no key is on disk.
+    const env = webSearchProxyEnv('https://worker.example/v1', 'sess-tok')
+    expect(env).toEqual({
+      SEARXNG_URL: 'https://worker.example/v1/web-search',
+      SEARXNG_API_KEY: 'sess-tok',
+    })
+    expect(webSearchConfigFromEnv({ ...env })).toEqual({ provider: 'searxng' })
+  })
+
+  it('writes only the provider id to the extension config (no secret on disk)', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'home-'))
+    const prevHome = process.env.HOME
+    process.env.HOME = home
+    try {
+      const path = await writeWebToolsConfig({ provider: 'exa' })
+      const written = JSON.parse(await readFile(path, 'utf8')) as Record<string, unknown>
+      // Only the provider — keys/base URLs come from the environment, never written here.
+      expect(written).toEqual({ provider: 'exa' })
+      expect(path).toContain(join('.config', 'rpiv-web-tools', 'config.json'))
+    } finally {
+      if (prevHome === undefined) delete process.env.HOME
+      else process.env.HOME = prevHome
+      await rm(home, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('writeAgentsContext', () => {
+  async function readContext(opts?: { webSearch?: boolean; guidance?: string }): Promise<string> {
+    const home = await mkdtemp(join(tmpdir(), 'home-'))
+    const prevHome = process.env.HOME
+    process.env.HOME = home
+    try {
+      await writeAgentsContext('ROLE PROMPT', opts)
+      return await readFile(join(home, '.pi', 'agent', 'AGENTS.md'), 'utf8')
+    } finally {
+      if (prevHome === undefined) delete process.env.HOME
+      else process.env.HOME = prevHome
+      await rm(home, { recursive: true, force: true })
+    }
+  }
+
+  it('omits the web-tools guidance by default', async () => {
+    const md = await readContext()
+    expect(md).toContain('ROLE PROMPT')
+    expect(md).not.toMatch(/web_search/)
+  })
+
+  it('appends the generic web-tools guidance when enabled with no per-kind text', async () => {
+    const md = await readContext({ webSearch: true })
+    expect(md).toContain('ROLE PROMPT')
+    expect(md).toMatch(/web_search/)
+    expect(md).toMatch(/web_fetch/)
+  })
+
+  it('uses the backend-supplied per-kind guidance when provided', async () => {
+    const md = await readContext({ webSearch: true, guidance: '\n\nSEARCH-THE-CVE-DATABASE' })
+    expect(md).toContain('SEARCH-THE-CVE-DATABASE')
+  })
+
+  it('ignores per-kind guidance when web search is off', async () => {
+    const md = await readContext({ webSearch: false, guidance: '\n\nSEARCH-THE-CVE-DATABASE' })
+    expect(md).not.toContain('SEARCH-THE-CVE-DATABASE')
   })
 })

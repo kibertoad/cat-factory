@@ -118,7 +118,11 @@ function slugify(name: string, fallback: string): string {
 // SAME bytes — no module-global counter that leaks state across jobs (which would
 // make an unchanged doc hash differently on a long-lived harness process and force a
 // spurious version bump + commit). A model-supplied id still wins.
-function coerceAcceptance(value: unknown, reqId: string, index: number): AcceptanceCriterionTree | null {
+function coerceAcceptance(
+  value: unknown,
+  reqId: string,
+  index: number,
+): AcceptanceCriterionTree | null {
   if (typeof value !== 'object' || value === null) return null
   const o = value as Record<string, unknown>
   const given = typeof o.given === 'string' ? o.given.trim() : ''
