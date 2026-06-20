@@ -15,6 +15,7 @@ import {
   tool,
 } from 'ai'
 import { createWorkersAI } from 'workers-ai-provider'
+import { openai as openAiGatewayPlugin } from 'workers-ai-provider/openai'
 import type { Env } from '../env'
 import { resolveOpenAiCompatibleUpstream } from './providerEndpoints'
 
@@ -52,7 +53,12 @@ async function runWorkersAi(args: WorkersAiArgs): Promise<Response> {
   // Model-execution clock for the observability split: the in-process work the proxy
   // attributes to the model (everything else it does is transport overhead).
   const upstreamStart = Date.now()
-  const workersai = createWorkersAI({ binding })
+  // `providers: [openai]` lets a `<provider>/<model>` AI Gateway catalog slug (e.g.
+  // `deepseek/deepseek-v4-pro`, served via Fireworks) route through the account's AI
+  // Gateway delegate; a `@cf/...` Workers AI id is unaffected and still runs in
+  // process on the binding. The catalog route uses the account's `"default"` gateway
+  // unless an id is set; it requires that gateway to exist with catalog billing on.
+  const workersai = createWorkersAI({ binding, providers: [openAiGatewayPlugin] })
   // workers-ai-provider must implement the same provider spec as `ai`
   // (`@ai-sdk/provider`); workers-ai-provider@3 matches `ai` v6, so the model is used
   // directly with no cast. Keep these majors in lockstep.

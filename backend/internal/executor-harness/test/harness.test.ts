@@ -13,6 +13,7 @@ import {
   parseTodoProgress,
   progressGuardLimitsFromEnv,
   summarizePiRun,
+  terminalRunError,
   webSearchConfigFromEnv,
   webSearchProxyEnv,
   writeAgentsContext,
@@ -244,6 +245,37 @@ describe('summarizePiRun', () => {
       assistantChars: 0,
     })
     expect(summarizePiRun('').stats).toEqual({ toolCalls: 0, assistantChars: 0 })
+  })
+})
+
+describe('terminalRunError', () => {
+  it('reports the final error when retries are exhausted (auto_retry_end success:false)', () => {
+    const stdout = [
+      '{"type":"agent_end","messages":[{"role":"assistant","content":[]}],"willRetry":false}',
+      '{"type":"auto_retry_end","success":false,"attempt":3,"finalError":"502 model unreachable"}',
+    ].join('\n')
+    expect(terminalRunError(stdout)).toBe('502 model unreachable')
+  })
+
+  it('reports the message from a terminal agent_end with stopReason error', () => {
+    const stdout =
+      '{"type":"agent_end","stopReason":"error","errorMessage":"boom","messages":[]}'
+    expect(terminalRunError(stdout)).toBe('boom')
+  })
+
+  it('returns undefined for a clean run (no terminal error)', () => {
+    const stdout = [
+      '{"type":"agent_end","stopReason":"stop","messages":[{"role":"assistant","content":[{"type":"text","text":"Done."}]}]}',
+    ].join('\n')
+    expect(terminalRunError(stdout)).toBeUndefined()
+  })
+
+  it('returns undefined when an earlier error was recovered (final retry succeeded)', () => {
+    const stdout = [
+      '{"type":"agent_end","stopReason":"error","errorMessage":"transient","messages":[]}',
+      '{"type":"auto_retry_end","success":true,"attempt":2}',
+    ].join('\n')
+    expect(terminalRunError(stdout)).toBeUndefined()
   })
 })
 

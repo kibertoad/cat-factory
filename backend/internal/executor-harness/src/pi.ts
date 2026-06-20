@@ -761,7 +761,19 @@ export function runPi(opts: {
         )
       } else if (code === 0) {
         const tail = redactSecrets(stderr.trim()).slice(-1500)
-        resolve({ ...summarizePiRun(stdout), ...(tail ? { stderrTail: tail } : {}) })
+        // Pi can exit 0 even when the agent run ended in a hard error (e.g. every
+        // model call failed and its retries were exhausted): the process completed,
+        // but the agent did not. Exit code alone then reads as success, and a run
+        // that RESUMED a branch with prior commits would even open a PR off work this
+        // pass never produced. Inspect the terminal transcript and fail loudly so the
+        // step is marked failed instead of masking a total failure as green.
+        const runError = terminalRunError(stdout)
+        if (runError) {
+          const scrubbed = redactSecrets(runError).slice(0, 1000)
+          reject(new Error(tail ? `${scrubbed} Agent stderr: ${tail}` : scrubbed))
+        } else {
+          resolve({ ...summarizePiRun(stdout), ...(tail ? { stderrTail: tail } : {}) })
+        }
       } else {
         reject(new Error(`pi exited with code ${code}: ${(stderr || stdout).slice(-500)}`))
       }
@@ -782,6 +794,36 @@ function parsePiEvents(stdout: string): Record<string, unknown>[] {
     }
   }
   return events
+}
+
+/**
+ * The terminal-failure message when Pi's run ended in a hard error (the model was
+ * unreachable / refused, and Pi exhausted its auto-retries), else undefined. Only
+ * the FINAL outcome counts: a mid-run hiccup the agent recovered from leaves a clean
+ * terminal `agent_end`, so it returns undefined. Scans from the end and decides on
+ * the first terminal signal it meets — the trailing `auto_retry_end` (its `success`
+ * flag) or the last `agent_end` (its `stopReason`). Pure so it is unit-testable over
+ * a fixed event sequence.
+ */
+export function terminalRunError(stdout: string): string | undefined {
+  const events = parsePiEvents(stdout)
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i]!
+    if (e.type === 'auto_retry_end') {
+      if (e.success === false) {
+        return typeof e.finalError === 'string'
+          ? e.finalError
+          : 'the agent failed after exhausting its retries'
+      }
+      return undefined
+    }
+    if (e.type === 'agent_end') {
+      return e.stopReason === 'error' && typeof e.errorMessage === 'string'
+        ? e.errorMessage
+        : undefined
+    }
+  }
+  return undefined
 }
 
 /**

@@ -52,6 +52,12 @@ export const MODEL_CATALOG: SelectableModel[] = [
     },
   },
   {
+    id: 'kimi-k2.7',
+    label: 'Kimi K2.7',
+    description: "Moonshot AI's latest 1T-param agentic-coding model (structured outputs).",
+    cloudflare: { provider: 'workers-ai', model: '@cf/moonshotai/kimi-k2.7-code' },
+  },
+  {
     id: 'kimi',
     label: 'Kimi K2.6',
     description: "Moonshot AI's frontier-scale agentic model.",
@@ -64,7 +70,7 @@ export const MODEL_CATALOG: SelectableModel[] = [
   },
   {
     id: 'deepseek',
-    label: 'DeepSeek',
+    label: 'DeepSeek R1',
     description: "DeepSeek's reasoning — R1 distill on Cloudflare, flagship chat when direct.",
     cloudflare: { provider: 'workers-ai', model: '@cf/deepseek-ai/deepseek-r1-distill-qwen-32b' },
     direct: {
@@ -72,6 +78,19 @@ export const MODEL_CATALOG: SelectableModel[] = [
       keyEnv: 'DEEPSEEK_API_KEY',
       providerLabel: 'DeepSeek',
     },
+  },
+  {
+    id: 'deepseek-v4-pro',
+    label: 'DeepSeek V4 Pro',
+    description:
+      "DeepSeek's flagship V4 Pro agentic-coding model, served on Cloudflare (131K context).",
+    cloudflare: { provider: 'workers-ai', model: 'deepseek/deepseek-v4-pro' },
+  },
+  {
+    id: 'glm',
+    label: 'GLM-5.2',
+    description: "Z.ai's agentic-coding model: strong function calling with a 262K context.",
+    cloudflare: { provider: 'workers-ai', model: '@cf/zai-org/glm-5.2' },
   },
 ]
 

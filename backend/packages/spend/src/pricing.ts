@@ -44,6 +44,10 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
   openai: { inputPerMillion: 0.14, outputPerMillion: 0.55 },
   // Cloudflare Workers AI is billed per "neuron"; treat it as roughly free.
   'workers-ai': { inputPerMillion: 0.1, outputPerMillion: 0.1 },
+  // DeepSeek V4 Pro runs on Workers AI but is a partner model billed at provider
+  // rates (served via Fireworks), not the near-free neuron rate above, so it needs
+  // its own entry. Approximate (USD→EUR ~0.92); tune via SPEND_MODEL_PRICES.
+  'workers-ai:deepseek/deepseek-v4-pro': { inputPerMillion: 0.5, outputPerMillion: 2 },
   // DeepSeek API (approximate list prices for deepseek-chat, USD→EUR ~0.92).
   'deepseek:deepseek-chat': { inputPerMillion: 0.26, outputPerMillion: 1.01 },
   deepseek: { inputPerMillion: 0.26, outputPerMillion: 1.01 },

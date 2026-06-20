@@ -61,20 +61,33 @@ export function loadAgentsConfig(
   }
 
   // The agentic phases — design (bootstrap/architect), build (coder) and review
-  // (reviewer) — drive long multi-step tool loops, so they default to GLM-5.2,
-  // Cloudflare's agentic-coding model (function calling + 256K context). The
-  // small default MoE (qwen3-30b-a3b) is too weak to sustain that loop and tends
-  // to spin without committing changes. The cheap default still handles the
-  // lighter kinds (e.g. tester, fragment selection, doc planning). An operator's
-  // AGENT_MODELS env entry overrides any of these per kind.
+  // (reviewer) — drive long multi-step tool loops, so they default to a strong
+  // agentic-coding model rather than the small default MoE (qwen3-30b-a3b), which
+  // is too weak to sustain that loop and tends to spin without committing changes.
+  // The cheap default still handles the lighter kinds (e.g. tester, fragment
+  // selection, doc planning). An operator's AGENT_MODELS env entry overrides any
+  // of these per kind.
   const agenticDefault: AgentModelConfig = {
     ref: { provider: 'workers-ai', model: '@cf/zai-org/glm-5.2' },
     temperature: num(env.AGENT_DEFAULT_TEMPERATURE) ?? 0.3,
     maxOutputTokens: num(env.AGENT_MAX_OUTPUT_TOKENS) ?? 5000,
   }
-  const agenticKinds: AgentKind[] = ['architect', 'coder', 'reviewer']
-  const byKind: Partial<Record<AgentKind, AgentModelConfig>> = {}
-  for (const kind of agenticKinds) byKind[kind] = agenticDefault
+  // The coder (implementer) runs the longest, most tool-heavy loop, where GLM-5.2
+  // on Workers AI was observed emitting malformed tool calls (e.g. `write` with no
+  // `path`) and looping until the harness no-progress guard aborted. Kimi K2.7 (a
+  // 1T-param model with structured outputs for agentic workloads, native on Workers
+  // AI) holds up better on that sustained tool loop, so the build phase defaults to
+  // it while design/review stay on GLM-5.2.
+  const coderDefault: AgentModelConfig = {
+    ref: { provider: 'workers-ai', model: '@cf/moonshotai/kimi-k2.7-code' },
+    temperature: num(env.AGENT_DEFAULT_TEMPERATURE) ?? 0.3,
+    maxOutputTokens: num(env.AGENT_MAX_OUTPUT_TOKENS) ?? 5000,
+  }
+  const byKind: Partial<Record<AgentKind, AgentModelConfig>> = {
+    architect: agenticDefault,
+    reviewer: agenticDefault,
+    coder: coderDefault,
+  }
   // Env overrides win over the built-in agentic defaults.
   Object.assign(byKind, parseModelOverrides(env.AGENT_MODELS))
 
