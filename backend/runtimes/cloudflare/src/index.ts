@@ -41,6 +41,18 @@ export {
   type ModelRegistryFactory,
 } from './infrastructure/ai/registries'
 
+// Installation-level extension points for custom agent kinds and predefined pipelines
+// (alongside registerModelRegistry above): a deployment registers these at startup —
+// typically from a proprietary org package — and every prompt build, executor routing
+// decision and new-workspace seed picks them up.
+export {
+  registerAgentKind,
+  registerAgentKinds,
+  clearRegisteredAgentKinds,
+  type AgentKindDefinition,
+} from '@cat-factory/agents'
+export { registerPipeline, registerPipelines, clearRegisteredPipelines } from '@cat-factory/kernel'
+
 const app = createApp()
 
 /** Compact, log-friendly shape for an unknown caught value. */

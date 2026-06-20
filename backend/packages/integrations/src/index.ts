@@ -100,3 +100,12 @@ export {
   type ResolvedRunnerPool,
 } from './modules/runners/RunnerPoolConnectionService.js'
 export * as runnersLogic from './modules/runners/runners.logic.js'
+// The runtime-neutral self-hosted runner-pool transport: a generic manifest
+// interpreter (`HttpRunnerPoolProvider`) and the per-job `RunnerTransport` adapter
+// (`RunnerPoolTransport`) both runtime facades resolve for a workspace's pool.
+export {
+  HttpRunnerPoolProvider,
+  RunnerPoolApiError,
+  type HttpRunnerPoolProviderOptions,
+} from './modules/runners/HttpRunnerPoolProvider.js'
+export { RunnerPoolTransport } from './modules/runners/RunnerPoolTransport.js'

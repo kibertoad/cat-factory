@@ -7,6 +7,7 @@ import {
 } from './acceptance-prompts.js'
 import { businessLogicSystemPrompt } from './business-logic-prompts.js'
 import { mockSystemPrompt } from './mock-prompts.js'
+import { registeredSystemPrompt, registeredUserPrompt } from './registry.js'
 import {
   environmentSection,
   linkedContextSection,
@@ -65,6 +66,10 @@ export function systemPromptFor(kind: AgentKind): string {
   if (mock) return mock
   const businessLogic = businessLogicSystemPrompt(kind)
   if (businessLogic) return businessLogic
+  // Custom kinds registered by a deployment (e.g. a proprietary org package) win over
+  // the generic fallback below, but never shadow the built-in tracks above.
+  const registered = registeredSystemPrompt(kind)
+  if (registered !== undefined) return registered
   return (
     ROLES[kind] ??
     `You are the "${kind}" agent. Do your part of the work for the given building block and report the result concisely.`
@@ -103,6 +108,11 @@ function buildBaseUserPrompt(context: AgentRunContext): string {
   // Standard phases get their built-out, templated user prompt.
   const phase = phaseForKind(context.agentKind)
   if (phase) return renderStandardUserPrompt(phase, context)
+
+  // A registered custom kind may supply its own user prompt; otherwise it falls through
+  // to the generic block-context prompt below, like any other non-standard-phase kind.
+  const registered = registeredUserPrompt(context)
+  if (registered !== undefined) return registered
 
   const { block, pipelineName, priorOutputs, decisions, resolvedDecision } = context
   const lines: string[] = [

@@ -2,5 +2,5 @@
   "$schema": "./node_modules/oxfmt/configuration_schema.json",
   "singleQuote": true,
   "semi": false,
-  "ignorePatterns": ["**/*.generated.ts"]
+  "ignorePatterns": ["**/*.generated.ts", "backend/internal/executor-harness/README.md"]
 }

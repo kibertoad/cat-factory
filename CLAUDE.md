@@ -405,6 +405,20 @@ differentiators behind the shared kernel ports + the `container.gateways` seam.
   run). `start()` connects to `DATABASE_URL`, runs `migrate()`, boots pg-boss + the
   execution worker, and serves over `@hono/node-server`. Real-time + async GitHub
   ingest fall back to the inline/not-enabled paths for now.
+  **Container agent steps** (coder/mocker/playwright/blueprints/ci-fixer/
+  conflict-resolver/merger) run via the **same** shared `CompositeAgentExecutor` +
+  `ContainerAgentExecutor` the Worker uses (now in `@cat-factory/server`),
+  dispatching to a workspace's **self-hosted runner pool** — the Node facade has no
+  built-in per-run container runtime, so it resolves the manifest-driven
+  `RunnerPoolTransport` (in `@cat-factory/integrations`) instead of a Cloudflare
+  Container. Wired in `runtimes/node/src/container.ts` when the prerequisites are set
+  (`GITHUB_APP_ID`/`GITHUB_APP_PRIVATE_KEY`, `PUBLIC_URL`, `AUTH_SESSION_SECRET`,
+  `RUNNERS_ENCRYPTION_KEY`); persistence (`runner_pool_connections`,
+  `github_installations`, `github_repos`) mirrors the D1 tables in `db/schema.ts`. When
+  unconfigured the composite still serves inline kinds but fails container kinds loudly
+  (no silent useless one-shot LLM call). NOTE: populating `github_installations` /
+  `github_repos` still needs the GitHub connect/sync integration on Postgres (the
+  remaining follow-up); the executor reads those rows once present.
 - **Model provisioning** is composed per facade from `@cat-factory/agents`'
   `CompositeModelProvider` (+ opt-in `@cat-factory/provider-bedrock`): Worker =
   workers-ai binding + direct vendors + Cloudflare-REST + Bedrock; Node = direct

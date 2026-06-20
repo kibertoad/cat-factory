@@ -12,7 +12,10 @@ import {
 import { AiAgentExecutor, resolveAgentConfig } from '@cat-factory/agents'
 import { RunnerPoolConnectionService } from '@cat-factory/integrations'
 import { type CoreDependencies, createCore } from '@cat-factory/orchestration'
-import type { ServerContainer } from '@cat-factory/server'
+import {
+  buildResolveRepoTarget as buildSharedResolveRepoTarget,
+  type ServerContainer,
+} from '@cat-factory/server'
 import { type AppConfig, loadConfig } from './config'
 import type { Env } from './env'
 import { CloudflareModelProvider } from './ai/CloudflareModelProvider'
@@ -282,54 +285,18 @@ function buildAppRegistry(
 }
 
 /**
- * Resolve the repo linked to a running block's enclosing service. Repos are
- * linked at the service-frame level (see `linkBlock`), but execution runs at the
- * task/module level, so we walk up the block's ancestry to find the frame's repo.
- * There is deliberately NO "first repo" fallback: a workspace can have many repos,
- * and guessing silently pushes work into the wrong one (this is how a simple-service
- * task ended up force-pushing to butter-spread). If nothing in the chain is linked
- * we throw so the misconfiguration surfaces instead of corrupting another repo.
- * Shared by the container executor, the CI status provider and the PR merger.
+ * Resolve the repo linked to a running block's enclosing service, via the shared
+ * runtime-neutral `buildResolveRepoTarget` (the ancestry walk + no-fallback policy
+ * live in `@cat-factory/server` so the Worker and Node service can't drift). This
+ * wrapper just binds the D1 repositories. Shared by the container executor, the CI
+ * status provider and the PR merger.
  */
 function buildResolveRepoTarget(db: D1Database): ResolveRepoTarget {
-  const installationRepository = new D1GitHubInstallationRepository({ db })
-  const repoRepository = new D1RepoProjectionRepository({ db })
-  const blockRepository = new D1BlockRepository({ db })
-  return async (workspaceId, blockId) => {
-    const installation = await installationRepository.getByWorkspace(workspaceId)
-    if (!installation) return null
-    const repos = await repoRepository.list(workspaceId)
-    if (repos.length === 0) return null
-    const linkedIds = new Set(repos.map((r) => r.blockId).filter((id): id is string => !!id))
-
-    let linkedBlockId: string | undefined
-    let cursor: string | null = blockId
-    const seen = new Set<string>()
-    while (cursor && !seen.has(cursor)) {
-      if (linkedIds.has(cursor)) {
-        linkedBlockId = cursor
-        break
-      }
-      seen.add(cursor)
-      const block = await blockRepository.get(workspaceId, cursor)
-      cursor = block?.parentId ?? null
-    }
-
-    const repo = repos.find((r) => r.blockId === linkedBlockId)
-    if (!repo) {
-      throw new Error(
-        `Block '${blockId}' is not under a service linked to a GitHub repository ` +
-          `(workspace '${workspaceId}'). Link the service frame to its repo so execution ` +
-          `targets the right repository instead of guessing one.`,
-      )
-    }
-    return {
-      installationId: installation.installationId,
-      owner: repo.owner,
-      name: repo.name,
-      baseBranch: repo.defaultBranch ?? 'main',
-    }
-  }
+  return buildSharedResolveRepoTarget({
+    installationRepository: new D1GitHubInstallationRepository({ db }),
+    repoProjectionRepository: new D1RepoProjectionRepository({ db }),
+    blockRepository: new D1BlockRepository({ db }),
+  })
 }
 
 /**
