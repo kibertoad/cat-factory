@@ -11,8 +11,19 @@ import {
   runAgentInWorkspace,
   withWorkspace,
 } from './pi-workspace.js'
+import {
+  type StructuredOutputDiagnostics,
+  diagnosticsSuffix,
+  resolveStructuredOutput,
+} from './structured-output.js'
 import type { RunOptions } from './runner.js'
 import { log } from './logger.js'
+
+/** Compact description of the blueprint-tree shape, fed to the JSON repair call. */
+const BLUEPRINT_SHAPE_HINT =
+  'Expected a service tree: {"type": string, "name": string, "summary": string, ' +
+  '"references": string[], "modules": [{"name": string, "summary": string, ' +
+  '"references": string[]}]}.'
 
 // Runs one "service blueprint" job end to end. The Blueprinter agent gets a fresh
 // clone of the target branch, (re)decomposes the repository into the canonical
@@ -374,17 +385,26 @@ export async function handleBlueprint(
       opts,
     )
 
-    let service: BlueprintServiceTree | null = null
-    try {
-      service = coerceService(extractJsonObject(summary), job.repo.name)
-    } catch (error) {
-      log.error('blueprint: could not parse agent output', {
-        ...trace,
-        error: error instanceof Error ? error.message : String(error),
-      })
-    }
+    // Parse the agent's tree; on a malformed reply, make ONE structured repair call
+    // (see json-repair) before giving up. The failure + repair outcome are logged and
+    // folded into the failure reason for observability.
+    const { value: service, diagnostics } = await resolveStructuredOutput(
+      {
+        label: 'blueprint',
+        shapeHint: BLUEPRINT_SHAPE_HINT,
+        parse: (text) => coerceService(extractJsonObject(text), job.repo.name),
+      },
+      summary,
+      {
+        proxyBaseUrl: job.proxyBaseUrl,
+        sessionToken: job.sessionToken,
+        model: job.model,
+        jobId: job.jobId,
+        signal,
+      },
+    )
     if (!service) {
-      return { summary, stats, error: noBlueprintReason(stats, summary, stderrTail) }
+      return { summary, stats, error: noBlueprintReason(stats, summary, stderrTail, diagnostics) }
     }
 
     const version = nextVersion(service, previousVersion, new Date())
@@ -414,11 +434,13 @@ function noBlueprintReason(
   stats: PiRunStats,
   summary: string,
   stderrTail: string | undefined,
+  diagnostics?: StructuredOutputDiagnostics,
 ): string {
   const cause = agentNeverActed(stats) ? NEVER_ACTED_CAUSE : ''
   return (
     `the blueprint agent produced no usable decomposition ` +
     `(tool calls: ${stats.toolCalls}, assistant output: ${stats.assistantChars} chars).${cause}` +
+    (diagnostics ? diagnosticsSuffix(diagnostics) : '') +
     agentOutputTail(stderrTail, summary)
   )
 }

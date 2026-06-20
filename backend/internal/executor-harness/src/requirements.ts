@@ -18,8 +18,22 @@ import {
   runAgentInWorkspace,
   withWorkspace,
 } from './pi-workspace.js'
+import {
+  type StructuredOutputDiagnostics,
+  diagnosticsSuffix,
+  resolveStructuredOutput,
+} from './structured-output.js'
 import type { RunOptions } from './runner.js'
 import { log } from './logger.js'
+
+/** Compact description of the requirements-document shape, fed to the JSON repair call. */
+const REQUIREMENTS_SHAPE_HINT =
+  'Expected a requirements document: {"service": string, "summary": string, ' +
+  '"groups": [{"name": string, "summary": string, "requirements": [{"id": string, ' +
+  '"title": string, "statement": string, "kind": string, "priority": string, ' +
+  '"sourceBlockIds": string[], "acceptance": [{"given": string, "when": string, ' +
+  '"outcome": string}]}]}], "rules": [{"id": string, "rule": string, "rationale": ' +
+  'string, "sourceBlockIds": string[]}]}.'
 
 // Runs one "requirements" job end to end. The requirements-writer agent gets the
 // implementation branch (created from base when it does not exist yet — this step
@@ -597,17 +611,26 @@ export async function handleRequirements(
       opts,
     )
 
-    let doc: RequirementsDocTree | null = null
-    try {
-      doc = coerceRequirementsDoc(extractJsonObject(summary), job.repo.name)
-    } catch (error) {
-      log.error('requirements: could not parse agent output', {
-        ...trace,
-        error: error instanceof Error ? error.message : String(error),
-      })
-    }
+    // Parse the agent's document; on a malformed reply, make ONE structured repair
+    // call (see json-repair) before giving up. Both the failure and the repair
+    // outcome are logged + folded into the failure reason for observability.
+    const { value: doc, diagnostics } = await resolveStructuredOutput(
+      {
+        label: 'requirements',
+        shapeHint: REQUIREMENTS_SHAPE_HINT,
+        parse: (text) => coerceRequirementsDoc(extractJsonObject(text), job.repo.name),
+      },
+      summary,
+      {
+        proxyBaseUrl: job.proxyBaseUrl,
+        sessionToken: job.sessionToken,
+        model: job.model,
+        jobId: job.jobId,
+        signal,
+      },
+    )
     if (!doc) {
-      return { summary, stats, error: noRequirementsReason(stats, summary, stderrTail) }
+      return { summary, stats, error: noRequirementsReason(stats, summary, stderrTail, diagnostics) }
     }
 
     const version = nextRequirementsVersion(doc, previousVersion, new Date())
@@ -636,11 +659,13 @@ function noRequirementsReason(
   stats: PiRunStats,
   summary: string,
   stderrTail: string | undefined,
+  diagnostics?: StructuredOutputDiagnostics,
 ): string {
   const cause = agentNeverActed(stats) ? NEVER_ACTED_CAUSE : ''
   return (
     `the requirements agent produced no usable document ` +
     `(tool calls: ${stats.toolCalls}, assistant output: ${stats.assistantChars} chars).${cause}` +
+    (diagnostics ? diagnosticsSuffix(diagnostics) : '') +
     agentOutputTail(stderrTail, summary)
   )
 }

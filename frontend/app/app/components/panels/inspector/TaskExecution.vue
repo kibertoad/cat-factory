@@ -11,6 +11,9 @@ const ui = useUiStore()
 const models = useModelsStore()
 
 const instance = computed(() => execution.getInstance(props.block.executionId))
+// A failed run is no longer executing: a step left mid-flight must stop showing
+// its live "Spinning up…" phase (the shared failure banner renders below).
+const runFailed = computed(() => instance.value?.status === 'failed')
 
 // A failed pipeline run surfaces the shared failure banner + retry — the
 // execution failure surface that the old `pr_ready` flip used to hide.
@@ -41,8 +44,9 @@ function labelForStep(s: {
   startingContainer?: boolean
 }) {
   if (s.approval?.status === 'pending') return 'Needs approval'
-  // A container-backed step whose container is still cold-booting.
-  if (s.startingContainer) return 'Spinning up…'
+  // A container-backed step whose container is still cold-booting (only while the
+  // run is live — a failed run's mid-flight step is no longer spinning up).
+  if (s.startingContainer && !runFailed.value) return 'Spinning up…'
   return stepLabel[s.state]
 }
 

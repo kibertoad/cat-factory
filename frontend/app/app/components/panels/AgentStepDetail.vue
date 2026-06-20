@@ -4,6 +4,7 @@ import { onKeyStroke } from '@vueuse/core'
 import type { AgentState } from '~/types/domain'
 import { agentKindMeta } from '~/utils/catalog'
 import { parseOutputOutline, sliceSource } from '~/utils/agentOutput'
+import { subtaskIconClass } from '~/utils/pipelineRender'
 import StepMetricsBar from '~/components/observability/StepMetricsBar.vue'
 
 // Detail overlay for a single pipeline step. Opened by clicking an agent in the
@@ -50,12 +51,21 @@ onUnmounted(() => {
   if (timer) clearInterval(timer)
 })
 
-const isRunning = computed(() => !!step.value?.startedAt && !step.value?.finishedAt)
+// A failed run is no longer executing: a step left mid-flight (state still
+// `working`, no `finishedAt`) must stop looking live — no ticking clock, no
+// "spinning up" phase, no spinner.
+const runFailed = computed(() => instance.value?.status === 'failed')
+const isRunning = computed(
+  () => !!step.value?.startedAt && !step.value?.finishedAt && !runFailed.value,
+)
 /** Elapsed/total execution time in ms — null until the step has started. */
 const durationMs = computed(() => {
   const s = step.value
   if (s?.startedAt == null) return null
-  const end = s.finishedAt ?? nowTick.value
+  // Freeze the clock at the failure time once the run has failed (a mid-flight
+  // step has no `finishedAt`, so the live tick would otherwise count up forever).
+  const end =
+    s.finishedAt ?? (runFailed.value ? (instance.value?.failure?.occurredAt ?? s.startedAt) : nowTick.value)
   return Math.max(0, end - s.startedAt)
 })
 
@@ -486,7 +496,7 @@ watch(
                 <!-- container cold-boot phase: shown until the container is up and
                      the agent starts reporting progress -->
                 <div
-                  v-if="step.startingContainer"
+                  v-if="step.startingContainer && !runFailed"
                   class="mt-4 flex items-center gap-2 rounded-lg border border-sky-900/50 bg-sky-950/30 px-3 py-2 text-[12px] text-sky-300"
                 >
                   <UIcon name="i-lucide-loader-circle" class="h-4 w-4 shrink-0 animate-spin" />
@@ -522,10 +532,7 @@ watch(
                       <UIcon
                         :name="ITEM_ICON[item.status]"
                         class="mt-px h-3 w-3 shrink-0"
-                        :class="[
-                          item.status === 'in_progress' ? 'animate-spin text-indigo-400' : '',
-                          item.status === 'completed' ? 'text-emerald-400' : 'text-slate-500',
-                        ]"
+                        :class="subtaskIconClass(item.status, runFailed)"
                       />
                       <span>{{ item.label }}</span>
                     </li>

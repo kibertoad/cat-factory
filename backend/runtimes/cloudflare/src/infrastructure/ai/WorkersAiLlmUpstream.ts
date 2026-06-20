@@ -12,7 +12,6 @@ import {
   type ToolSet,
   generateText,
   jsonSchema,
-  streamText,
   tool,
 } from 'ai'
 import { createWorkersAI } from 'workers-ai-provider'
@@ -49,7 +48,7 @@ interface WorkersAiArgs extends LlmInProcessRequest {
  * `stream` and always reports usage so spend is metered.
  */
 async function runWorkersAi(args: WorkersAiArgs): Promise<Response> {
-  const { binding, model: modelId, payload, streaming, record, recordMetric, waitUntil, log } = args
+  const { binding, model: modelId, payload, streaming, record, recordMetric, log } = args
   // Model-execution clock for the observability split: the in-process work the proxy
   // attributes to the model (everything else it does is transport overhead).
   const upstreamStart = Date.now()
@@ -85,30 +84,52 @@ async function runWorkersAi(args: WorkersAiArgs): Promise<Response> {
     completion_tokens: u.outputTokens ?? 0,
   })
 
+  // Both the buffered and the streaming response are built from ONE `generateText`
+  // (non-streaming `doGenerate`) call — we deliberately do NOT use
+  // `streamText`/`result.textStream` here.
+  //
+  // Why: production telemetry (an `@cf/qwen/qwen3-*` reasoning model, `stream:true`)
+  // showed the streamed reply arriving with every token duplicated
+  // (`serviceservice…`), which fails every downstream JSON parse
+  // (requirements/blueprint/merger). The metrics localise the fault precisely: the
+  // recorded text was ~2× the reported `completion_tokens`, so the MODEL emitted each
+  // token once and the duplication happened during streamed-delta assembly — not in
+  // generation, not truncation, and not our SSE encoding (`fullText` was accumulated
+  // one `+= delta` per chunk). The exact component in the streaming path that doubles
+  // (the AI SDK, the workers-ai-provider stream decode, or the binding's raw SSE for
+  // this reasoning model) is NOT pinned down, and no upstream issue confirms it. The
+  // buffered path sidesteps the entire streamed-delta assembly, so it is robust
+  // regardless of which one is at fault. When the caller asked to stream we replay the
+  // single generation as one content chunk; Pi (and any OpenAI client) concatenates
+  // deltas, so a one-shot chunk is equivalent — the harness reads the final message,
+  // and live progress comes from the todo tool, not token streaming.
+  const { text, toolCalls, finishReason: rawFinish, usage } = await generateText(common)
+  const u = usageOf(usage)
+  const oaToolCalls = toOpenAiToolCalls(toolCalls)
+  const finishReason = toOpenAiFinish(rawFinish, oaToolCalls.length > 0)
+  log.info(
+    {
+      inputTokens: u.prompt_tokens,
+      outputTokens: u.completion_tokens,
+      textLength: text.length,
+      toolCalls: oaToolCalls.length,
+      finishReason,
+      streaming,
+    },
+    'llm proxy: Workers AI completion ok',
+  )
+  await record(u)
+  recordMetric?.({
+    usage: u,
+    finishReason,
+    responseText: text,
+    ok: true,
+    httpStatus: null,
+    errorMessage: null,
+    upstreamMs: Date.now() - upstreamStart,
+  })
+
   if (!streaming) {
-    const { text, toolCalls, finishReason, usage } = await generateText(common)
-    const u = usageOf(usage)
-    const oaToolCalls = toOpenAiToolCalls(toolCalls)
-    log.info(
-      {
-        inputTokens: u.prompt_tokens,
-        outputTokens: u.completion_tokens,
-        textLength: text.length,
-        toolCalls: oaToolCalls.length,
-        finishReason,
-      },
-      'llm proxy: Workers AI completion ok',
-    )
-    await record(u)
-    recordMetric?.({
-      usage: u,
-      finishReason: toOpenAiFinish(finishReason, oaToolCalls.length > 0),
-      responseText: text,
-      ok: true,
-      httpStatus: null,
-      errorMessage: null,
-      upstreamMs: Date.now() - upstreamStart,
-    })
     const message: Record<string, unknown> = {
       role: 'assistant',
       content: text.length > 0 ? text : null,
@@ -119,103 +140,76 @@ async function runWorkersAi(args: WorkersAiArgs): Promise<Response> {
       object: 'chat.completion',
       created,
       model: modelId,
-      choices: [
-        { index: 0, message, finish_reason: toOpenAiFinish(finishReason, oaToolCalls.length > 0) },
-      ],
+      choices: [{ index: 0, message, finish_reason: finishReason }],
       usage: { ...u, total_tokens: (u.prompt_tokens ?? 0) + (u.completion_tokens ?? 0) },
     }
     return Response.json(body)
   }
 
-  // Streaming: emit OpenAI `chat.completion.chunk` SSE events, then a trailing
-  // usage-only chunk (matching `stream_options.include_usage`) and `[DONE]`.
-  const result = streamText(common)
+  // Streaming: replay the (single, authoritative) generation as OpenAI
+  // `chat.completion.chunk` SSE events (see `buildStreamChunks`), then `[DONE]`.
   const encoder = new TextEncoder()
   const sse = (obj: unknown) => encoder.encode(`data: ${JSON.stringify(obj)}\n\n`)
-  const chunk = (choices: unknown[], usage?: LlmTokenUsage) => ({
-    id,
+  const chunks = buildStreamChunks(
+    { id, created, model: modelId },
+    { text, toolCalls: oaToolCalls, finishReason, usage: u },
+  )
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      for (const c of chunks) controller.enqueue(sse(c))
+      controller.enqueue(encoder.encode('data: [DONE]\n\n'))
+      controller.close()
+    },
+  })
+  return new Response(stream, { headers: { 'content-type': 'text/event-stream' } })
+}
+
+/**
+ * Build the ordered OpenAI `chat.completion.chunk` payloads for a single, completed
+ * generation, replayed as a stream: a role chunk, ONE content chunk (only when there
+ * is text — never per-token, which is the doubling regression this guards against),
+ * the tool-call chunk (if any), the finish chunk, then a trailing usage-only chunk
+ * (matching `stream_options.include_usage`). The `[DONE]` sentinel is appended by the
+ * caller. Pure + synchronous so the streamed shape can be unit-tested without the
+ * `AI` binding or `generateText`.
+ */
+export function buildStreamChunks(
+  meta: { id: string; created: number; model: string },
+  gen: {
+    text: string
+    toolCalls: Array<Record<string, unknown>>
+    finishReason: string
+    usage: LlmTokenUsage
+  },
+): Array<Record<string, unknown>> {
+  const chunk = (choices: unknown[], usageChunk?: LlmTokenUsage) => ({
+    id: meta.id,
     object: 'chat.completion.chunk',
-    created,
-    model: modelId,
+    created: meta.created,
+    model: meta.model,
     choices,
-    ...(usage
+    ...(usageChunk
       ? {
           usage: {
-            ...usage,
-            total_tokens: (usage.prompt_tokens ?? 0) + (usage.completion_tokens ?? 0),
+            ...usageChunk,
+            total_tokens: (usageChunk.prompt_tokens ?? 0) + (usageChunk.completion_tokens ?? 0),
           },
         }
       : {}),
   })
 
-  const stream = new ReadableStream<Uint8Array>({
-    async start(controller) {
-      // Errors raised here happen AFTER the Response has been returned, so the
-      // controller's try/catch can't see them — log + error the stream so the
-      // failure is visible instead of a silent hang.
-      let fullText = ''
-      try {
-        controller.enqueue(
-          sse(chunk([{ index: 0, delta: { role: 'assistant' }, finish_reason: null }])),
-        )
-        for await (const delta of result.textStream) {
-          fullText += delta
-          controller.enqueue(
-            sse(chunk([{ index: 0, delta: { content: delta }, finish_reason: null }])),
-          )
-        }
-        const textLength = fullText.length
-        // After the text stream drains, the tool calls (if any) are resolved. We
-        // relay them in a single delta with complete `arguments`.
-        const oaToolCalls = toOpenAiToolCalls(await result.toolCalls)
-        if (oaToolCalls.length > 0) {
-          controller.enqueue(
-            sse(chunk([{ index: 0, delta: { tool_calls: oaToolCalls }, finish_reason: null }])),
-          )
-        }
-        const finishReason = toOpenAiFinish(await result.finishReason, oaToolCalls.length > 0)
-        controller.enqueue(sse(chunk([{ index: 0, delta: {}, finish_reason: finishReason }])))
-        const usage = usageOf(await result.usage)
-        log.info(
-          {
-            inputTokens: usage.prompt_tokens,
-            outputTokens: usage.completion_tokens,
-            textLength,
-            toolCalls: oaToolCalls.length,
-            finishReason,
-          },
-          'llm proxy: Workers AI stream ok',
-        )
-        controller.enqueue(sse(chunk([], usage)))
-        controller.enqueue(encoder.encode('data: [DONE]\n\n'))
-        controller.close()
-        waitUntil(record(usage))
-        recordMetric?.({
-          usage,
-          finishReason,
-          responseText: fullText,
-          ok: true,
-          httpStatus: null,
-          errorMessage: null,
-          upstreamMs: Date.now() - upstreamStart,
-        })
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err)
-        log.error({ err: message, model: modelId }, 'llm proxy: Workers AI stream failed')
-        recordMetric?.({
-          usage: null,
-          finishReason: null,
-          responseText: fullText,
-          ok: false,
-          httpStatus: null,
-          errorMessage: message,
-          upstreamMs: Date.now() - upstreamStart,
-        })
-        controller.error(err)
-      }
-    },
-  })
-  return new Response(stream, { headers: { 'content-type': 'text/event-stream' } })
+  const chunks: Array<Record<string, unknown>> = [
+    chunk([{ index: 0, delta: { role: 'assistant' }, finish_reason: null }]),
+  ]
+  if (gen.text.length > 0) {
+    chunks.push(chunk([{ index: 0, delta: { content: gen.text }, finish_reason: null }]))
+  }
+  if (gen.toolCalls.length > 0) {
+    chunks.push(chunk([{ index: 0, delta: { tool_calls: gen.toolCalls }, finish_reason: null }]))
+  }
+  chunks.push(chunk([{ index: 0, delta: {}, finish_reason: gen.finishReason }]))
+  chunks.push(chunk([], gen.usage))
+  return chunks
 }
 
 // ---- OpenAI ⇄ AI SDK translation helpers (Workers AI in-process path) -------

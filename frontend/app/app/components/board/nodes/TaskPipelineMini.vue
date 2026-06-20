@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { AgentState } from '~/types/domain'
 import { agentKindMeta } from '~/utils/catalog'
+import { subtaskIconClass } from '~/utils/pipelineRender'
 import { lodAtLeast } from '~/composables/useSemanticZoom'
 
 // Spatial drill-down inside a task card: at the `steps` zoom band the task's
@@ -16,6 +17,10 @@ const { lod } = useSemanticZoom()
 
 const instance = computed(() => execution.getByBlock(props.taskId))
 const steps = computed(() => instance.value?.steps ?? [])
+
+// A failed run is no longer executing: a step left mid-flight (state still
+// `working`) must stop spinning, matching the failure card the task card shows.
+const runFailed = computed(() => instance.value?.status === 'failed')
 
 const showSteps = computed(() => lodAtLeast(lod.value, 'steps') && steps.value.length > 0)
 const showItems = computed(() => lodAtLeast(lod.value, 'subtasks'))
@@ -80,7 +85,7 @@ const ITEM_ICON: Record<string, string> = {
           v-else
           :name="STATE_META[s.state].icon"
           class="ml-auto h-2.5 w-2.5 shrink-0"
-          :class="s.state === 'working' ? 'animate-spin' : ''"
+          :class="s.state === 'working' && !runFailed ? 'animate-spin' : ''"
           :style="{ color: STATE_META[s.state].color }"
         />
       </div>
@@ -124,10 +129,7 @@ const ITEM_ICON: Record<string, string> = {
           <UIcon
             :name="ITEM_ICON[item.status]"
             class="mt-px h-2.5 w-2.5 shrink-0"
-            :class="[
-              item.status === 'in_progress' ? 'animate-spin text-indigo-400' : '',
-              item.status === 'completed' ? 'text-emerald-400' : 'text-slate-500',
-            ]"
+            :class="subtaskIconClass(item.status, runFailed)"
           />
           <span>{{ item.label }}</span>
         </li>
