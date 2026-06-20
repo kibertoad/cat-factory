@@ -262,6 +262,7 @@ export const pipelineSchedules = pgTable(
   {
     workspace_id: text('workspace_id').notNull(),
     id: text('id').notNull(),
+    service_id: text('service_id'),
     block_id: text('block_id').notNull(),
     frame_id: text('frame_id').notNull(),
     pipeline_id: text('pipeline_id').notNull(),
@@ -281,6 +282,7 @@ export const pipelineSchedules = pgTable(
     primaryKey({ columns: [t.workspace_id, t.id] }),
     index('idx_pipeline_schedules_due').on(t.enabled, t.next_run_at),
     index('idx_pipeline_schedules_block').on(t.workspace_id, t.block_id),
+    index('idx_pipeline_schedules_service').on(t.service_id),
   ],
 )
 

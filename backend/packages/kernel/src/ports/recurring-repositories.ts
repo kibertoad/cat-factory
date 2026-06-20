@@ -20,6 +20,12 @@ export interface PipelineScheduleRepository {
   /** All schedules for a workspace (for the snapshot + UI). */
   list(workspaceId: string): Promise<PipelineSchedule[]>
   /**
+   * All schedules owned by a service, regardless of which workspace created them. Backs
+   * the in-org board: a schedule on a shared service shows on every workspace that mounts
+   * it. (Matches the schedule's `service_id` column.)
+   */
+  listByService(serviceId: string): Promise<PipelineSchedule[]>
+  /**
    * Every enabled schedule across ALL workspaces whose `nextRunAt <= asOf`. The
    * sweeper fires each one; the engine skips any whose block already has an active
    * run. Ordered by `nextRunAt` ascending.

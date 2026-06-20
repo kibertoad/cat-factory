@@ -117,4 +117,39 @@ describe('in-org shared services', () => {
     bSnap = await call<WorkspaceSnapshot>('GET', `/workspaces/${b.workspace.id}`)
     expect(bSnap.body.blocks.find((x) => x.id === task.body.id)?.title).toBe('Renamed on A')
   })
+
+  it("surfaces a shared service's recurring schedule on the workspace that mounts it", async () => {
+    const { call, createWorkspace } = makeApp()
+    const a = await createWorkspace({ seed: false })
+    const b = await createWorkspace({ seed: false })
+
+    const frame = await call<Block>('POST', `/workspaces/${a.workspace.id}/blocks`, {
+      type: 'service',
+      position: { x: 0, y: 0 },
+    })
+    const recurrence = {
+      intervalHours: 24,
+      weekdays: [] as number[],
+      windowStartHour: null,
+      windowEndHour: null,
+      timezone: 'UTC',
+    }
+    const schedule = await call<{ id: string; serviceId: string | null }>(
+      'POST',
+      `/workspaces/${a.workspace.id}/recurring-pipelines`,
+      { frameId: frame.body.id, pipelineId: 'pl_dep_update', name: 'Weekly deps', recurrence },
+    )
+    expect(schedule.status).toBe(201)
+    expect(schedule.body.serviceId).toBeTruthy()
+
+    const service = await serviceFor(call, a.workspace.id, frame.body.id)
+    await call('POST', `/workspaces/${b.workspace.id}/services/${service.id}`, {})
+
+    // B mounts the service → B's board lists the shared service's recurring schedule.
+    const bList = await call<{ id: string }[]>(
+      'GET',
+      `/workspaces/${b.workspace.id}/recurring-pipelines`,
+    )
+    expect(bList.body.map((s) => s.id)).toContain(schedule.body.id)
+  })
 })

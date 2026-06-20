@@ -11,6 +11,7 @@ import type { D1Database } from '@cloudflare/workers-types'
 interface ScheduleRow {
   workspace_id: string
   id: string
+  service_id: string | null
   block_id: string
   frame_id: string
   pipeline_id: string
@@ -47,6 +48,7 @@ function rowToSchedule(row: ScheduleRow): PipelineSchedule {
   }
   return {
     id: row.id,
+    serviceId: row.service_id,
     blockId: row.block_id,
     frameId: row.frame_id,
     pipelineId: row.pipeline_id,
@@ -117,6 +119,14 @@ export class D1PipelineScheduleRepository implements PipelineScheduleRepository 
     return results.map(rowToSchedule)
   }
 
+  async listByService(serviceId: string): Promise<PipelineSchedule[]> {
+    const { results } = await this.db
+      .prepare(`SELECT * FROM pipeline_schedules WHERE service_id = ? ORDER BY created_at ASC`)
+      .bind(serviceId)
+      .all<ScheduleRow>()
+    return results.map(rowToSchedule)
+  }
+
   async listDue(asOf: number): Promise<DueSchedule[]> {
     const { results } = await this.db
       .prepare(
@@ -134,11 +144,12 @@ export class D1PipelineScheduleRepository implements PipelineScheduleRepository 
     await this.db
       .prepare(
         `INSERT INTO pipeline_schedules
-           (workspace_id, id, block_id, frame_id, pipeline_id, template, name, interval_hours,
-            weekdays, window_start_hour, window_end_hour, timezone, enabled, last_run_at,
-            next_run_at, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           (workspace_id, id, service_id, block_id, frame_id, pipeline_id, template, name,
+            interval_hours, weekdays, window_start_hour, window_end_hour, timezone, enabled,
+            last_run_at, next_run_at, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (workspace_id, id) DO UPDATE SET
+           service_id = excluded.service_id,
            block_id = excluded.block_id,
            frame_id = excluded.frame_id,
            pipeline_id = excluded.pipeline_id,
@@ -156,6 +167,7 @@ export class D1PipelineScheduleRepository implements PipelineScheduleRepository 
       .bind(
         workspaceId,
         schedule.id,
+        schedule.serviceId,
         schedule.blockId,
         schedule.frameId,
         schedule.pipelineId,

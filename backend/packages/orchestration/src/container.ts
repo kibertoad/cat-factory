@@ -917,6 +917,8 @@ function createRecurringModule(
     executionService,
     idGenerator: deps.idGenerator,
     clock: deps.clock,
+    serviceRepository: deps.serviceRepository,
+    workspaceMountRepository: deps.workspaceMountRepository,
   })
   return { service }
 }

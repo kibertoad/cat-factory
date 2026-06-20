@@ -757,6 +757,7 @@ function rowToSchedule(row: ScheduleRow): PipelineSchedule {
   }
   return {
     id: row.id,
+    serviceId: row.service_id,
     blockId: row.block_id,
     frameId: row.frame_id,
     pipelineId: row.pipeline_id,
@@ -799,6 +800,7 @@ class DrizzlePipelineScheduleRepository implements PipelineScheduleRepository {
     return {
       workspace_id: workspaceId,
       id: schedule.id,
+      service_id: schedule.serviceId,
       block_id: schedule.blockId,
       frame_id: schedule.frameId,
       pipeline_id: schedule.pipelineId,
@@ -846,6 +848,15 @@ class DrizzlePipelineScheduleRepository implements PipelineScheduleRepository {
     return rows.map(rowToSchedule)
   }
 
+  async listByService(serviceId: string): Promise<PipelineSchedule[]> {
+    const rows = await this.db
+      .select()
+      .from(pipelineSchedules)
+      .where(eq(pipelineSchedules.service_id, serviceId))
+      .orderBy(pipelineSchedules.created_at)
+    return rows.map(rowToSchedule)
+  }
+
   async listDue(asOf: number): Promise<DueSchedule[]> {
     const rows = await this.db
       .select()
@@ -863,6 +874,7 @@ class DrizzlePipelineScheduleRepository implements PipelineScheduleRepository {
       .onConflictDoUpdate({
         target: [pipelineSchedules.workspace_id, pipelineSchedules.id],
         set: {
+          service_id: values.service_id,
           block_id: values.block_id,
           frame_id: values.frame_id,
           pipeline_id: values.pipeline_id,
