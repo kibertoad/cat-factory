@@ -46,6 +46,10 @@ const CONTAINER_KINDS = new Set([
   // The Blueprinter step clones the repo, regenerates the in-repo `blueprints/`
   // folder and commits it — a real-checkout operation, so it runs in a container.
   'blueprints',
+  // The requirements-writer clones (or creates) the implementation branch and
+  // commits the in-repo `requirements/` folder onto it — a real-checkout operation,
+  // so it runs in a container. Like the blueprinter it returns a structured doc.
+  'requirements-writer',
   // The CI-fixer clones the PR head branch, runs the failing build/tests, fixes
   // them and pushes back to the same branch — a real-checkout operation. (The `ci`
   // step itself is NOT here: it is a special, non-agent gate handled in the engine

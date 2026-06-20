@@ -143,6 +143,12 @@ export function seedPipelines(): Pipeline[] {
       agentKinds: [
         'requirements',
         'architect',
+        // After the requirements review + architecture are settled, the
+        // requirements-writer aggregates every task's clarified requirements into the
+        // service's unified in-repo `requirements/` document, committed to the
+        // implementation branch BEFORE the coder runs so the spec (and its Gherkin
+        // acceptance scenarios) is present while the code is written.
+        'requirements-writer',
         'researcher',
         'coder',
         'blueprints',
@@ -152,10 +158,10 @@ export function seedPipelines(): Pipeline[] {
         'ci',
         'merger',
       ],
-      // Gate the requirements review and the architecture proposal. `conflicts` /
-      // `ci` / `merger` are never human-gated (they gate/decide themselves), so
-      // their slots are false.
-      gates: [true, true, false, false, false, false, false, false, false, false],
+      // Gate the requirements review and the architecture proposal. The
+      // requirements-writer, `conflicts` / `ci` / `merger` are never human-gated
+      // (they aggregate/gate/decide themselves), so their slots are false.
+      gates: [true, true, false, false, false, false, false, false, false, false, false],
     },
     {
       id: 'pl_quick',
@@ -195,6 +201,9 @@ export function seedPipelines(): Pipeline[] {
     // A blueprint-only pipeline, run after a bootstrap to create the initial
     // service map (and populate the board) from the freshly bootstrapped repo.
     { id: 'pl_blueprint', name: 'Map service', agentKinds: ['blueprints'] },
+    // A requirements-only pipeline, to (re)generate a service's unified in-repo
+    // requirements document (and its Gherkin acceptance scenarios) independently.
+    { id: 'pl_requirements', name: 'Write requirements', agentKinds: ['requirements-writer'] },
   ]
   return mergeRegisteredPipelines(builtins)
 }

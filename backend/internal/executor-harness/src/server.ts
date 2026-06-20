@@ -11,16 +11,20 @@ import {
   type ConflictResolverResult,
   type MergerJob,
   type MergerResult,
+  type RequirementsJob,
+  type RequirementsResult,
   parseBlueprintJob,
   parseBootstrapJob,
   parseCiFixerJob,
   parseConflictResolverJob,
   parseMergerJob,
+  parseRequirementsJob,
   parseJob,
   type RunResult,
 } from './job.js'
 import { handleBootstrap } from './bootstrap.js'
 import { handleBlueprint } from './blueprint.js'
+import { handleRequirements } from './requirements.js'
 import { handleCiFixer } from './ci-fixer.js'
 import { handleConflictResolver } from './conflict-resolver.js'
 import { handleMerger } from './merger.js'
@@ -69,6 +73,10 @@ const limits = loadRunnerLimits()
 const jobs = new JobRegistry(limits)
 const bootstrapJobs = new JobRegistry<BootstrapJob, BootstrapResult>(limits, handleBootstrap)
 const blueprintJobs = new JobRegistry<BlueprintJob, BlueprintResult>(limits, handleBlueprint)
+const requirementsJobs = new JobRegistry<RequirementsJob, RequirementsResult>(
+  limits,
+  handleRequirements,
+)
 const ciFixerJobs = new JobRegistry<CiFixerJob, CiFixerResult>(limits, handleCiFixer)
 const conflictResolverJobs = new JobRegistry<ConflictResolverJob, ConflictResolverResult>(
   limits,
@@ -130,6 +138,20 @@ const server = createServer((req, res) => {
         return send(res, 400, { error: message } satisfies BlueprintResult)
       }
     }
+    // Start (or re-attach to) a requirements job: POST /requirements. Clones (or
+    // creates) the implementation branch, (re)generates the unified requirements
+    // document and commits the `requirements/` folder onto the branch.
+    if (req.method === 'POST' && req.url === '/requirements') {
+      try {
+        const job = parseRequirementsJob(JSON.parse(await readBody(req)))
+        const view = requirementsJobs.start(job.jobId, job)
+        return send(res, 202, { jobId: view.id, state: view.state })
+      } catch (error) {
+        const message = redactSecrets(error instanceof Error ? error.message : String(error))
+        log.error('failed to start requirements', { error: message })
+        return send(res, 400, { error: message } satisfies RequirementsResult)
+      }
+    }
     // Start (or re-attach to) a CI-fixer job: POST /ci-fix. Clones the PR branch,
     // fixes failing CI and pushes back onto the same branch.
     if (req.method === 'POST' && req.url === '/ci-fix') {
@@ -179,6 +201,7 @@ const server = createServer((req, res) => {
         jobs.get(id) ??
         bootstrapJobs.get(id) ??
         blueprintJobs.get(id) ??
+        requirementsJobs.get(id) ??
         ciFixerJobs.get(id) ??
         conflictResolverJobs.get(id) ??
         mergerJobs.get(id)

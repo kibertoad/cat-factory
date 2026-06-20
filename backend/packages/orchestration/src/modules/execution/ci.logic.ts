@@ -3,6 +3,13 @@ import type { CiCheck } from '@cat-factory/kernel'
 /** The agent kind of the special CI-gate step (polls checks, loops the ci-fixer). */
 export const CI_AGENT_KIND = 'ci'
 
+/**
+ * The agent kind of the container agent that writes the service's unified, in-repo
+ * requirements document. It runs BEFORE the coder and aggregates the collected
+ * requirements of every task under the service frame onto the implementation branch.
+ */
+export const REQUIREMENTS_WRITER_AGENT_KIND = 'requirements-writer'
+
 /** The agent kind of the container agent that fixes failing CI on the PR branch. */
 export const CI_FIXER_AGENT_KIND = 'ci-fixer'
 

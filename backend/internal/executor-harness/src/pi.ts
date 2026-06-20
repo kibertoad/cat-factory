@@ -80,6 +80,20 @@ for a module that is directly relevant to your task, when you need its summary a
 exact code references. \`blueprints/version.json\` is a tiny manifest for quick
 staleness checks. Treat the blueprint as orientation, not a task list.`
 
+// Appended to every AGENTS.md so an agent treats the persisted requirements as the
+// PRESCRIPTIVE spec (what must be true) and the acceptance scenarios its work must
+// satisfy. Harmless when no requirements exist yet — the files simply aren't there.
+const REQUIREMENTS_GUIDANCE = `
+
+## Service requirements (the prescriptive spec)
+
+If a \`requirements/\` folder exists, it is the spec for this service. **Read
+\`requirements/overview.md\` first** — it states what MUST be true (the requirements,
+grouped by capability). \`requirements/rules.md\` lists cross-cutting domain
+invariants you must not violate. \`requirements/features/*.feature\` are the Gherkin
+acceptance scenarios your work must satisfy — treat them as the source of truth for
+behaviour and tests. \`requirements/version.json\` is a tiny staleness manifest.`
+
 /**
  * Write the composed system prompt as Pi's GLOBAL agent context
  * (`~/.pi/agent/AGENTS.md`), which Pi reads automatically and concatenates with
@@ -99,7 +113,7 @@ export async function writeAgentsContext(systemPrompt: string): Promise<void> {
   await mkdir(dir, { recursive: true })
   await writeFile(
     join(dir, 'AGENTS.md'),
-    `${systemPrompt}${BLUEPRINT_GUIDANCE}${TODO_GUIDANCE}`,
+    `${systemPrompt}${BLUEPRINT_GUIDANCE}${REQUIREMENTS_GUIDANCE}${TODO_GUIDANCE}`,
     'utf8',
   )
 }

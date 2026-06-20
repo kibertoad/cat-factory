@@ -59,6 +59,7 @@ describe('catalog', () => {
     // Engine system kinds (present in seeded pipelines but not the palette) resolve
     // to their system metadata rather than blowing up an undefined access.
     for (const kind of [
+      'requirements-writer',
       'blueprints',
       'conflicts',
       'conflict-resolver',
