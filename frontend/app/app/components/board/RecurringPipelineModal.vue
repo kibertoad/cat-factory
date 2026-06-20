@@ -153,8 +153,8 @@ async function add() {
             Issue tracker
           </p>
           <p class="text-[11px] text-slate-500">
-            The tech-debt pipeline files a ticket from its analysis before implementing. Choose where
-            (saved for the whole workspace).
+            The tech-debt pipeline files a ticket from its analysis before implementing. Choose
+            where (saved for the whole workspace).
           </p>
           <div class="flex gap-1">
             <UButton

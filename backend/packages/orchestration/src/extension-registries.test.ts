@@ -74,7 +74,14 @@ describe('pipeline registry', () => {
 
   it('seeds built-in pipelines on their own', () => {
     const ids = seedPipelines().map((p) => p.id)
-    expect(ids).toEqual(['pl_full', 'pl_quick', 'pl_integrate', 'pl_blueprint'])
+    expect(ids).toEqual([
+      'pl_full',
+      'pl_quick',
+      'pl_integrate',
+      'pl_dep_update',
+      'pl_tech_debt',
+      'pl_blueprint',
+    ])
   })
 
   it('appends a registered pipeline after the built-ins', () => {
@@ -84,6 +91,8 @@ describe('pipeline registry', () => {
       'pl_full',
       'pl_quick',
       'pl_integrate',
+      'pl_dep_update',
+      'pl_tech_debt',
       'pl_blueprint',
       'pl_org_audit',
     ])
@@ -101,6 +110,8 @@ describe('pipeline registry', () => {
       'pl_full',
       'pl_quick',
       'pl_integrate',
+      'pl_dep_update',
+      'pl_tech_debt',
       'pl_blueprint',
     ])
     expect(pipelines.find((p) => p.id === 'pl_quick')?.name).toBe('Org quick')

@@ -39,7 +39,10 @@ function toggleWindow(enabled: boolean) {
   else patch({ windowStartHour: null, windowEndHour: null })
 }
 
-const hours = Array.from({ length: 24 }, (_, h) => ({ value: h, label: `${String(h).padStart(2, '0')}:00` }))
+const hours = Array.from({ length: 24 }, (_, h) => ({
+  value: h,
+  label: `${String(h).padStart(2, '0')}:00`,
+}))
 
 // A small, common set of IANA zones plus whatever the schedule already uses.
 const TIMEZONES = [

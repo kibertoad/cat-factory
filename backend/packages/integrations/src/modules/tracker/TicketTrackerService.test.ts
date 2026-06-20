@@ -13,7 +13,9 @@ const request: CreateTicketRequest = {
   body: '# Findings\n\n- refactor sessions',
 }
 
-function settingsRepo(settings: TrackerSettings | null): TicketTrackerServiceDependencies['trackerSettingsRepository'] {
+function settingsRepo(
+  settings: TrackerSettings | null,
+): TicketTrackerServiceDependencies['trackerSettingsRepository'] {
   return { get: async () => settings, put: async () => {} }
 }
 
@@ -52,7 +54,9 @@ describe('TicketTrackerService', () => {
       return { ok: true, status: 201, text: async () => '', json: async () => ({ key: 'ENG-42' }) }
     }
     const svc = new TicketTrackerService({
-      trackerSettingsRepository: settingsRepo(makeSettings({ tracker: 'jira', jiraProjectKey: 'ENG' })),
+      trackerSettingsRepository: settingsRepo(
+        makeSettings({ tracker: 'jira', jiraProjectKey: 'ENG' }),
+      ),
       resolveJiraConnection: async () => ({
         baseUrl: 'https://team.atlassian.net/',
         accountEmail: 'me@co.com',
@@ -62,7 +66,10 @@ describe('TicketTrackerService', () => {
     })
 
     const result = await svc.createTicket(request)
-    expect(result).toEqual({ externalId: 'ENG-42', url: 'https://team.atlassian.net/browse/ENG-42' })
+    expect(result).toEqual({
+      externalId: 'ENG-42',
+      url: 'https://team.atlassian.net/browse/ENG-42',
+    })
     expect(captured!.url).toBe('https://team.atlassian.net/rest/api/3/issue')
     expect(captured!.init.headers.authorization).toBe(`Basic ${btoa('me@co.com:tok')}`)
     const payload = JSON.parse(captured!.init.body)
@@ -72,22 +79,40 @@ describe('TicketTrackerService', () => {
 
   it('passes through jira when no project key / connection is set', async () => {
     const svc = new TicketTrackerService({
-      trackerSettingsRepository: settingsRepo(makeSettings({ tracker: 'jira', jiraProjectKey: null })),
+      trackerSettingsRepository: settingsRepo(
+        makeSettings({ tracker: 'jira', jiraProjectKey: null }),
+      ),
       resolveJiraConnection: async () => ({
         baseUrl: 'https://x',
         accountEmail: 'a',
         apiToken: 'b',
       }),
-      fetchImpl: async () => ({ ok: true, status: 200, text: async () => '', json: async () => ({}) }),
+      fetchImpl: async () => ({
+        ok: true,
+        status: 200,
+        text: async () => '',
+        json: async () => ({}),
+      }),
     })
     expect(await svc.createTicket(request)).toBeNull()
   })
 
   it('throws a clear error on a Jira HTTP failure', async () => {
     const svc = new TicketTrackerService({
-      trackerSettingsRepository: settingsRepo(makeSettings({ tracker: 'jira', jiraProjectKey: 'ENG' })),
-      resolveJiraConnection: async () => ({ baseUrl: 'https://x', accountEmail: 'a', apiToken: 'b' }),
-      fetchImpl: async () => ({ ok: false, status: 403, text: async () => 'forbidden', json: async () => null }),
+      trackerSettingsRepository: settingsRepo(
+        makeSettings({ tracker: 'jira', jiraProjectKey: 'ENG' }),
+      ),
+      resolveJiraConnection: async () => ({
+        baseUrl: 'https://x',
+        accountEmail: 'a',
+        apiToken: 'b',
+      }),
+      fetchImpl: async () => ({
+        ok: false,
+        status: 403,
+        text: async () => 'forbidden',
+        json: async () => null,
+      }),
     })
     await expect(svc.createTicket(request)).rejects.toThrow(/403/)
   })

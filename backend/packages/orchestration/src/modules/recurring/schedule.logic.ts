@@ -24,7 +24,15 @@ export function localParts(ms: number, timezone: string): { weekday: number; hou
   let hourStr = parts.find((p) => p.type === 'hour')?.value ?? '0'
   // `hour12: false` can render midnight as "24"; normalize to 0.
   if (hourStr === '24') hourStr = '0'
-  const weekdays: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 }
+  const weekdays: Record<string, number> = {
+    Sun: 0,
+    Mon: 1,
+    Tue: 2,
+    Wed: 3,
+    Thu: 4,
+    Fri: 5,
+    Sat: 6,
+  }
   return { weekday: weekdays[weekdayName] ?? 0, hour: Number(hourStr) }
 }
 

@@ -38,8 +38,7 @@ export class TrackerSettingsService {
     const settings: TrackerSettings = {
       tracker: input.tracker,
       // Only keep a Jira project key when Jira is the selected tracker.
-      jiraProjectKey:
-        input.tracker === 'jira' ? (input.jiraProjectKey?.trim() || null) : null,
+      jiraProjectKey: input.tracker === 'jira' ? input.jiraProjectKey?.trim() || null : null,
       updatedAt: this.clock.now(),
     }
     await this.repo.put(workspaceId, settings)

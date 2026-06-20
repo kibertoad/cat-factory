@@ -892,10 +892,7 @@ class DrizzlePipelineScheduleRepository implements PipelineScheduleRepository {
       .update(pipelineScheduleRuns)
       .set(set)
       .where(
-        and(
-          eq(pipelineScheduleRuns.workspace_id, workspaceId),
-          eq(pipelineScheduleRuns.id, runId),
-        ),
+        and(eq(pipelineScheduleRuns.workspace_id, workspaceId), eq(pipelineScheduleRuns.id, runId)),
       )
   }
 

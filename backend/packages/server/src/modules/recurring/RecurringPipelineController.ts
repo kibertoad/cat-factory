@@ -55,18 +55,13 @@ export function recurringPipelineController(): Hono<AppEnv> {
   app.get('/recurring-pipelines/:scheduleId/runs', async (c) => {
     const recurring = requireRecurring(c)
     if (!recurring) return unavailable(c)
-    return c.json(
-      await recurring.service.listRuns(param(c, 'workspaceId'), param(c, 'scheduleId')),
-    )
+    return c.json(await recurring.service.listRuns(param(c, 'workspaceId'), param(c, 'scheduleId')))
   })
 
   app.post('/recurring-pipelines/:scheduleId/run-now', async (c) => {
     const recurring = requireRecurring(c)
     if (!recurring) return unavailable(c)
-    const schedule = await recurring.service.runNow(
-      param(c, 'workspaceId'),
-      param(c, 'scheduleId'),
-    )
+    const schedule = await recurring.service.runNow(param(c, 'workspaceId'), param(c, 'scheduleId'))
     return c.json(schedule)
   })
 

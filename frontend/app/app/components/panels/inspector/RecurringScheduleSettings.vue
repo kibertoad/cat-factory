@@ -104,9 +104,14 @@ function fmtTime(ms: number) {
 </script>
 
 <template>
-  <div v-if="schedule" class="space-y-2 rounded-lg border border-indigo-900/50 bg-indigo-950/20 p-3">
+  <div
+    v-if="schedule"
+    class="space-y-2 rounded-lg border border-indigo-900/50 bg-indigo-950/20 p-3"
+  >
     <div class="flex items-center justify-between">
-      <span class="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-indigo-300">
+      <span
+        class="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-indigo-300"
+      >
         <UIcon name="i-lucide-repeat" class="h-3.5 w-3.5" />
         Recurring pipeline
       </span>
@@ -121,9 +126,7 @@ function fmtTime(ms: number) {
 
     <template v-if="!editing">
       <p class="text-[11px] text-slate-400">{{ describeCadence(schedule.recurrence) }}</p>
-      <p class="text-[11px] text-slate-500">
-        Next run: {{ fmtTime(schedule.nextRunAt) }}
-      </p>
+      <p class="text-[11px] text-slate-500">Next run: {{ fmtTime(schedule.nextRunAt) }}</p>
       <div class="flex flex-wrap gap-1.5 pt-1">
         <UButton size="xs" variant="soft" icon="i-lucide-play" :loading="busy" @click="runNow">
           Run now
@@ -138,7 +141,13 @@ function fmtTime(ms: number) {
         >
           {{ schedule.enabled ? 'Pause' : 'Resume' }}
         </UButton>
-        <UButton size="xs" variant="ghost" color="neutral" icon="i-lucide-pencil" @click="startEdit">
+        <UButton
+          size="xs"
+          variant="ghost"
+          color="neutral"
+          icon="i-lucide-pencil"
+          @click="startEdit"
+        >
           Edit cadence
         </UButton>
       </div>
@@ -157,11 +166,7 @@ function fmtTime(ms: number) {
       <span class="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
         Recent runs
       </span>
-      <div
-        v-for="run in runs"
-        :key="run.id"
-        class="flex items-center gap-2 text-[11px]"
-      >
+      <div v-for="run in runs" :key="run.id" class="flex items-center gap-2 text-[11px]">
         <span :class="RUN_COLOR[run.status] ?? 'text-slate-400'" class="w-14 shrink-0 capitalize">
           {{ run.status }}
         </span>

@@ -90,7 +90,11 @@ export class RecurringPipelineService {
     if (frame.level !== 'frame') {
       throw new ConflictError('Recurring pipelines can only be attached to a service frame.')
     }
-    assertFound(await this.pipelineRepository.get(workspaceId, input.pipelineId), 'Pipeline', input.pipelineId)
+    assertFound(
+      await this.pipelineRepository.get(workspaceId, input.pipelineId),
+      'Pipeline',
+      input.pipelineId,
+    )
 
     const now = this.clock.now()
     const block: Block = {

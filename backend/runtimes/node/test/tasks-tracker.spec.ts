@@ -33,7 +33,12 @@ if (databaseUrl) {
     return { container, app: createApp(container, TASKS_ENV) }
   }
 
-  async function call<T>(a: ReturnType<typeof createApp>, method: string, path: string, body?: unknown) {
+  async function call<T>(
+    a: ReturnType<typeof createApp>,
+    method: string,
+    path: string,
+    body?: unknown,
+  ) {
     const hasBody = body !== undefined
     const res = await a.fetch(
       new Request(`https://cat-factory.test${path}`, {
@@ -50,7 +55,9 @@ if (databaseUrl) {
     it('assembles the tasks module when TASKS_ENABLED + key are set', () => {
       const { container } = app()
       expect(container.tasks).toBeTruthy()
-      expect(container.tasks!.connectionService.listSources().map((s) => s.source)).toContain('jira')
+      expect(container.tasks!.connectionService.listSources().map((s) => s.source)).toContain(
+        'jira',
+      )
     })
 
     it('stores a tenant Jira connection encrypted and round-trips the credentials', async () => {

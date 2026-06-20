@@ -53,7 +53,9 @@ export class DrizzleTaskConnectionRepository implements TaskConnectionRepository
     }
   }
 
-  private async rowToRecord(row: typeof taskConnections.$inferSelect): Promise<TaskConnectionRecord> {
+  private async rowToRecord(
+    row: typeof taskConnections.$inferSelect,
+  ): Promise<TaskConnectionRecord> {
     return {
       workspaceId: row.workspace_id,
       source: row.source as TaskSourceKind,

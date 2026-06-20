@@ -526,7 +526,9 @@ export function useApi() {
       }),
 
     deleteRecurringPipeline: (workspaceId: string, id: string) =>
-      http(`${ws(workspaceId)}/recurring-pipelines/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+      http(`${ws(workspaceId)}/recurring-pipelines/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+      }),
 
     listScheduleRuns: (workspaceId: string, id: string) =>
       http<ScheduleRun[]>(`${ws(workspaceId)}/recurring-pipelines/${encodeURIComponent(id)}/runs`),

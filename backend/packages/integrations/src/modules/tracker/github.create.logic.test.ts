@@ -57,7 +57,14 @@ describe('createGitHubIssueViaToken', () => {
       json: async () => null,
     })
     await expect(
-      createGitHubIssueViaToken({ fetchImpl, token: 't', owner: 'a', repo: 'b', title: 'T', body: 'B' }),
+      createGitHubIssueViaToken({
+        fetchImpl,
+        token: 't',
+        owner: 'a',
+        repo: 'b',
+        title: 'T',
+        body: 'B',
+      }),
     ).rejects.toThrow(/422/)
   })
 })

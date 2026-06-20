@@ -410,7 +410,10 @@ function selectNodeTasksDeps(
     db,
     // Source credentials are encrypted at rest under a tasks-scoped HKDF info (the
     // same domain the Cloudflare facade uses), keyed by TASKS_ENCRYPTION_KEY.
-    new WebCryptoSecretCipher({ masterKeyBase64: config.tasks.encryptionKey, info: 'cat-factory:tasks' }),
+    new WebCryptoSecretCipher({
+      masterKeyBase64: config.tasks.encryptionKey,
+      info: 'cat-factory:tasks',
+    }),
   )
   return {
     deps: {

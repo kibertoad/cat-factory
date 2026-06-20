@@ -371,7 +371,10 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
           `/workspaces/${wsId}/recurring-pipelines`,
         )
         expect(list.body).toHaveLength(1)
-        const del = await app.call('DELETE', `/workspaces/${wsId}/recurring-pipelines/${created.body.id}`)
+        const del = await app.call(
+          'DELETE',
+          `/workspaces/${wsId}/recurring-pipelines/${created.body.id}`,
+        )
         expect(del.status).toBe(204)
         const after = await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
         expect(after.body.blocks.find((b) => b.id === created.body.blockId)).toBeUndefined()
@@ -393,7 +396,10 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
           { frameId: 'blk_auth', pipelineId: pipeline.body.id, name: 'Nightly', recurrence },
         )
 
-        const fired = await app.call('POST', `/workspaces/${wsId}/recurring-pipelines/${created.body.id}/run-now`)
+        const fired = await app.call(
+          'POST',
+          `/workspaces/${wsId}/recurring-pipelines/${created.body.id}/run-now`,
+        )
         expect(fired.status).toBe(200)
 
         // A running history row pointing at a real execution on the schedule's block.
@@ -415,7 +421,10 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
 
         // A second run-now while the (now-finished) run exists still works; firing
         // twice in a row never starts two concurrent runs on the same block.
-        const again = await app.call('POST', `/workspaces/${wsId}/recurring-pipelines/${created.body.id}/run-now`)
+        const again = await app.call(
+          'POST',
+          `/workspaces/${wsId}/recurring-pipelines/${created.body.id}/run-now`,
+        )
         expect(again.status).toBe(200)
       })
 
@@ -424,7 +433,10 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         const { workspace } = await app.createWorkspace()
         const wsId = workspace.id
 
-        const initial = await app.call<TrackerSettings>('GET', `/workspaces/${wsId}/tracker-settings`)
+        const initial = await app.call<TrackerSettings>(
+          'GET',
+          `/workspaces/${wsId}/tracker-settings`,
+        )
         expect(initial.status).toBe(200)
         expect(initial.body.tracker).toBeNull()
 
