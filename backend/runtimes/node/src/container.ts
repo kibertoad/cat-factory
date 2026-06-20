@@ -340,6 +340,13 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     blockRepository: repos.blockRepository,
     pipelineRepository: repos.pipelineRepository,
     executionRepository: repos.executionRepository,
+    // In-org shared services. NOTE: the Node facade has no real-time transport yet (runs fall
+    // back to the engine's NoopEventPublisher), so it does NOT wrap a FanOutEventPublisher the
+    // way the Cloudflare facade does. When real-time lands here, decorate the publisher with
+    // `FanOutEventPublisher` (from @cat-factory/server) — wired with these two repos — to fan a
+    // shared service's live events out to every board that mounts it.
+    serviceRepository: repos.serviceRepository,
+    workspaceMountRepository: repos.workspaceMountRepository,
     tokenUsageRepository: repos.tokenUsageRepository,
     llmCallMetricRepository: repos.llmCallMetricRepository,
     modelDefaultsRepository: repos.modelDefaultsRepository,

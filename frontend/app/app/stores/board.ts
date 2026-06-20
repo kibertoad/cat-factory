@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type { Block, BlockType } from '~/types/domain'
+import { useServicesStore } from '~/stores/services'
 import { useWorkspaceStore } from '~/stores/workspace'
 import { useBlockQueries } from '~/composables/useBlockQueries'
 
@@ -129,6 +130,16 @@ export const useBoardStore = defineStore('board', () => {
     const b = getBlock(id)
     if (!b) return
     b.position = position // optimistic: keep the drag feeling instant
+    // A mounted service frame's position is a PER-WORKSPACE layout override on the mount, not
+    // on the (shared) block — so route a frame drag there. Other moves write the block.
+    const services = useServicesStore()
+    const mount = services.serviceByFrameBlock[id]
+      ? services.byServiceId[services.serviceByFrameBlock[id]!.id]
+      : undefined
+    if (mount) {
+      await services.updateLayout(mount.serviceId, position)
+      return
+    }
     upsert(await api.moveBlock(useWorkspaceStore().requireId(), id, { position }))
   }
 

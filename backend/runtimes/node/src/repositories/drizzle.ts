@@ -25,6 +25,12 @@ import type {
   DueSchedule,
   Recurrence,
   RunRef,
+  Service,
+  ServicePatch,
+  ServiceRepository,
+  WorkspaceMount,
+  WorkspaceMountPatch,
+  WorkspaceMountRepository,
   ScheduleRun,
   ScheduleTemplate,
   TokenUsageRecord,
@@ -57,9 +63,11 @@ import {
   pipelineScheduleRuns,
   pipelineSchedules,
   pipelines,
+  services,
   tokenUsage,
   trackerSettings,
   workspaceModelDefaults,
+  workspaceServices,
   workspaces,
 } from '../db/schema.js'
 
@@ -149,6 +157,25 @@ class DrizzleBlockRepository implements BlockRepository {
     return rows.map(rowToBlock)
   }
 
+  async listByService(serviceId: string): Promise<Block[]> {
+    const rows = await this.db.select().from(blocks).where(eq(blocks.service_id, serviceId))
+    return rows.map(rowToBlock)
+  }
+
+  async listByServices(serviceIds: string[]): Promise<Block[]> {
+    if (serviceIds.length === 0) return []
+    const out: Block[] = []
+    // Chunk the IN list to stay well under the bind-parameter limit.
+    for (let i = 0; i < serviceIds.length; i += 500) {
+      const rows = await this.db
+        .select()
+        .from(blocks)
+        .where(inArray(blocks.service_id, serviceIds.slice(i, i + 500)))
+      for (const row of rows) out.push(rowToBlock(row))
+    }
+    return out
+  }
+
   async get(workspaceId: string, id: string): Promise<Block | null> {
     const [row] = await this.db
       .select()
@@ -157,9 +184,22 @@ class DrizzleBlockRepository implements BlockRepository {
     return row ? rowToBlock(row) : null
   }
 
-  async insert(workspaceId: string, block: Block): Promise<void> {
+  async findById(
+    blockId: string,
+  ): Promise<{ workspaceId: string; serviceId: string | null; block: Block } | null> {
+    const [row] = await this.db.select().from(blocks).where(eq(blocks.id, blockId)).limit(1)
+    if (!row) return null
+    return {
+      workspaceId: row.workspace_id,
+      serviceId: row.service_id ?? null,
+      block: rowToBlock(row),
+    }
+  }
+
+  async insert(workspaceId: string, block: Block, serviceId?: string | null): Promise<void> {
     await this.db.insert(blocks).values({
       workspace_id: workspaceId,
+      service_id: serviceId ?? null,
       ...blockInsertValues(block),
     } as typeof blocks.$inferInsert)
   }
@@ -171,6 +211,14 @@ class DrizzleBlockRepository implements BlockRepository {
       .update(blocks)
       .set(set as Partial<typeof blocks.$inferInsert>)
       .where(and(eq(blocks.workspace_id, workspaceId), eq(blocks.id, id)))
+  }
+
+  async setService(workspaceId: string, ids: string[], serviceId: string | null): Promise<void> {
+    if (ids.length === 0) return
+    await this.db
+      .update(blocks)
+      .set({ service_id: serviceId })
+      .where(and(eq(blocks.workspace_id, workspaceId), inArray(blocks.id, ids)))
   }
 
   async deleteMany(workspaceId: string, ids: string[]): Promise<void> {
@@ -235,6 +283,30 @@ class DrizzleExecutionRepository implements ExecutionRepository {
     return rows.map((r) => rowToExecution(r as ExecutionRow))
   }
 
+  async listByService(serviceId: string): Promise<ExecutionInstance[]> {
+    const rows = await this.db
+      .select()
+      .from(agentRuns)
+      .where(and(eq(agentRuns.service_id, serviceId), this.isExecution))
+      .orderBy(agentRuns.created_at)
+    return rows.map((r) => rowToExecution(r as ExecutionRow))
+  }
+
+  async listByServices(serviceIds: string[]): Promise<ExecutionInstance[]> {
+    if (serviceIds.length === 0) return []
+    const out: ExecutionInstance[] = []
+    // Chunk the IN list to stay well under the bind-parameter limit.
+    for (let i = 0; i < serviceIds.length; i += 500) {
+      const rows = await this.db
+        .select()
+        .from(agentRuns)
+        .where(and(inArray(agentRuns.service_id, serviceIds.slice(i, i + 500)), this.isExecution))
+        .orderBy(agentRuns.created_at)
+      for (const r of rows) out.push(rowToExecution(r as ExecutionRow))
+    }
+    return out
+  }
+
   async get(workspaceId: string, id: string): Promise<ExecutionInstance | null> {
     const [row] = await this.db
       .select()
@@ -265,6 +337,10 @@ class DrizzleExecutionRepository implements ExecutionRepository {
       steps: execution.steps,
       currentStep: execution.currentStep,
     })
+    // Stamp `service_id` from the run's block (subquery) so a shared service's runs surface on
+    // every board that mounts it via `listByService`; refreshed on every write so it follows a
+    // reparent that re-homes the block. Mirrors the D1 repo.
+    const serviceIdSub = sql`(SELECT ${blocks.service_id} FROM ${blocks} WHERE ${blocks.workspace_id} = ${workspaceId} AND ${blocks.id} = ${execution.blockId})`
     await this.db
       .insert(agentRuns)
       .values({
@@ -277,12 +353,19 @@ class DrizzleExecutionRepository implements ExecutionRepository {
         created_at: now,
         updated_at: now,
         workflow_instance_id: execution.id,
+        service_id: serviceIdSub,
       })
       // error/failure/workflow_instance_id are left out of the update so they survive
       // normal step writes (see markFailed) — mirrors the D1 repo.
       .onConflictDoUpdate({
         target: [agentRuns.workspace_id, agentRuns.id],
-        set: { block_id: execution.blockId, status: execution.status, detail, updated_at: now },
+        set: {
+          block_id: execution.blockId,
+          status: execution.status,
+          detail,
+          updated_at: now,
+          service_id: serviceIdSub,
+        },
       })
   }
 
@@ -735,6 +818,7 @@ function rowToSchedule(row: ScheduleRow): PipelineSchedule {
   }
   return {
     id: row.id,
+    serviceId: row.service_id,
     blockId: row.block_id,
     frameId: row.frame_id,
     pipelineId: row.pipeline_id,
@@ -777,6 +861,7 @@ class DrizzlePipelineScheduleRepository implements PipelineScheduleRepository {
     return {
       workspace_id: workspaceId,
       id: schedule.id,
+      service_id: schedule.serviceId,
       block_id: schedule.blockId,
       frame_id: schedule.frameId,
       pipeline_id: schedule.pipelineId,
@@ -824,6 +909,30 @@ class DrizzlePipelineScheduleRepository implements PipelineScheduleRepository {
     return rows.map(rowToSchedule)
   }
 
+  async listByService(serviceId: string): Promise<PipelineSchedule[]> {
+    const rows = await this.db
+      .select()
+      .from(pipelineSchedules)
+      .where(eq(pipelineSchedules.service_id, serviceId))
+      .orderBy(pipelineSchedules.created_at)
+    return rows.map(rowToSchedule)
+  }
+
+  async listByServices(serviceIds: string[]): Promise<PipelineSchedule[]> {
+    if (serviceIds.length === 0) return []
+    const out: PipelineSchedule[] = []
+    // Chunk the IN list to stay well under the bind-parameter limit.
+    for (let i = 0; i < serviceIds.length; i += 500) {
+      const rows = await this.db
+        .select()
+        .from(pipelineSchedules)
+        .where(inArray(pipelineSchedules.service_id, serviceIds.slice(i, i + 500)))
+        .orderBy(pipelineSchedules.created_at)
+      for (const row of rows) out.push(rowToSchedule(row))
+    }
+    return out
+  }
+
   async listDue(asOf: number): Promise<DueSchedule[]> {
     const rows = await this.db
       .select()
@@ -841,6 +950,7 @@ class DrizzlePipelineScheduleRepository implements PipelineScheduleRepository {
       .onConflictDoUpdate({
         target: [pipelineSchedules.workspace_id, pipelineSchedules.id],
         set: {
+          service_id: values.service_id,
           block_id: values.block_id,
           frame_id: values.frame_id,
           pipeline_id: values.pipeline_id,
@@ -955,6 +1065,243 @@ class DrizzleTrackerSettingsRepository implements TrackerSettingsRepository {
   }
 }
 
+function rowToService(row: typeof services.$inferSelect): Service {
+  return {
+    id: row.id,
+    accountId: row.account_id,
+    frameBlockId: row.frame_block_id,
+    installationId: row.installation_id,
+    repoGithubId: row.repo_github_id,
+    createdAt: row.created_at,
+  }
+}
+
+/** Account-owned services (migration 0030). The canonical, shareable board unit. */
+class DrizzleServiceRepository implements ServiceRepository {
+  constructor(private readonly db: DrizzleDb) {}
+
+  async get(id: string): Promise<Service | null> {
+    const [row] = await this.db.select().from(services).where(eq(services.id, id))
+    return row ? rowToService(row) : null
+  }
+
+  async getByFrameBlock(frameBlockId: string): Promise<Service | null> {
+    const [row] = await this.db
+      .select()
+      .from(services)
+      .where(eq(services.frame_block_id, frameBlockId))
+    return row ? rowToService(row) : null
+  }
+
+  async listByAccount(accountId: string | null): Promise<Service[]> {
+    // NULL-safe match so the legacy/unscoped org (accountId null) lists cleanly.
+    const rows = await this.db
+      .select()
+      .from(services)
+      .where(sql`${services.account_id} IS NOT DISTINCT FROM ${accountId}`)
+      .orderBy(services.created_at)
+    return rows.map(rowToService)
+  }
+
+  async listByIds(ids: string[]): Promise<Service[]> {
+    if (ids.length === 0) return []
+    const out: Service[] = []
+    // Chunk the IN list to stay well under the bind-parameter limit.
+    for (let i = 0; i < ids.length; i += 500) {
+      const rows = await this.db
+        .select()
+        .from(services)
+        .where(inArray(services.id, ids.slice(i, i + 500)))
+      for (const row of rows) out.push(rowToService(row))
+    }
+    return out
+  }
+
+  async getByRepo(installationId: number, repoGithubId: number): Promise<Service | null> {
+    const [row] = await this.db
+      .select()
+      .from(services)
+      .where(
+        and(
+          eq(services.installation_id, installationId),
+          eq(services.repo_github_id, repoGithubId),
+        ),
+      )
+    return row ? rowToService(row) : null
+  }
+
+  async insert(service: Service): Promise<void> {
+    await this.db.insert(services).values({
+      id: service.id,
+      account_id: service.accountId,
+      frame_block_id: service.frameBlockId,
+      installation_id: service.installationId,
+      repo_github_id: service.repoGithubId,
+      created_at: service.createdAt,
+    })
+  }
+
+  async update(id: string, patch: ServicePatch): Promise<void> {
+    const set: Record<string, unknown> = {}
+    if ('accountId' in patch) set.account_id = patch.accountId ?? null
+    if ('installationId' in patch) set.installation_id = patch.installationId ?? null
+    if ('repoGithubId' in patch) set.repo_github_id = patch.repoGithubId ?? null
+    if (Object.keys(set).length === 0) return
+    await this.db.update(services).set(set).where(eq(services.id, id))
+  }
+
+  async delete(id: string): Promise<void> {
+    await this.db.delete(services).where(eq(services.id, id))
+  }
+
+  async deleteMany(ids: string[]): Promise<void> {
+    if (ids.length === 0) return
+    // Chunk the IN list to stay well under the bind-parameter limit.
+    for (let i = 0; i < ids.length; i += 500) {
+      await this.db.delete(services).where(inArray(services.id, ids.slice(i, i + 500)))
+    }
+  }
+}
+
+function rowToMount(row: typeof workspaceServices.$inferSelect): WorkspaceMount {
+  return {
+    workspaceId: row.workspace_id,
+    serviceId: row.service_id,
+    position: { x: row.pos_x, y: row.pos_y },
+    size: row.width !== null && row.height !== null ? { w: row.width, h: row.height } : null,
+    createdAt: row.created_at,
+  }
+}
+
+/** A service mounted onto a workspace board + its per-workspace layout (migration 0030). */
+class DrizzleWorkspaceMountRepository implements WorkspaceMountRepository {
+  constructor(private readonly db: DrizzleDb) {}
+
+  async listByWorkspace(workspaceId: string): Promise<WorkspaceMount[]> {
+    const rows = await this.db
+      .select()
+      .from(workspaceServices)
+      .where(eq(workspaceServices.workspace_id, workspaceId))
+      .orderBy(workspaceServices.created_at)
+    return rows.map(rowToMount)
+  }
+
+  async listByService(serviceId: string): Promise<WorkspaceMount[]> {
+    const rows = await this.db
+      .select()
+      .from(workspaceServices)
+      .where(eq(workspaceServices.service_id, serviceId))
+      .orderBy(workspaceServices.created_at)
+    return rows.map(rowToMount)
+  }
+
+  async listWorkspaceIdsMountingBlock(
+    originWorkspaceId: string,
+    blockId: string,
+  ): Promise<string[]> {
+    // One join: the service owning the block → the workspaces that mount it. A block with no
+    // service makes the subquery NULL, which matches no rows (`service_id = NULL`) → empty.
+    const rows = await this.db
+      .select({ workspaceId: workspaceServices.workspace_id })
+      .from(workspaceServices)
+      .where(
+        sql`${workspaceServices.service_id} = (SELECT ${blocks.service_id} FROM ${blocks} WHERE ${blocks.workspace_id} = ${originWorkspaceId} AND ${blocks.id} = ${blockId})`,
+      )
+    return rows.map((r) => r.workspaceId)
+  }
+
+  async countByServiceIds(serviceIds: string[]): Promise<Record<string, number>> {
+    if (serviceIds.length === 0) return {}
+    const rows = await this.db
+      .select({ serviceId: workspaceServices.service_id, n: sql<number>`count(*)` })
+      .from(workspaceServices)
+      .where(inArray(workspaceServices.service_id, serviceIds))
+      .groupBy(workspaceServices.service_id)
+    const counts: Record<string, number> = {}
+    for (const row of rows) counts[row.serviceId] = Number(row.n)
+    return counts
+  }
+
+  async get(workspaceId: string, serviceId: string): Promise<WorkspaceMount | null> {
+    const [row] = await this.db
+      .select()
+      .from(workspaceServices)
+      .where(
+        and(
+          eq(workspaceServices.workspace_id, workspaceId),
+          eq(workspaceServices.service_id, serviceId),
+        ),
+      )
+    return row ? rowToMount(row) : null
+  }
+
+  async upsert(mount: WorkspaceMount): Promise<void> {
+    await this.db
+      .insert(workspaceServices)
+      .values({
+        workspace_id: mount.workspaceId,
+        service_id: mount.serviceId,
+        pos_x: mount.position.x,
+        pos_y: mount.position.y,
+        width: mount.size?.w ?? null,
+        height: mount.size?.h ?? null,
+        created_at: mount.createdAt,
+      })
+      .onConflictDoUpdate({
+        target: [workspaceServices.workspace_id, workspaceServices.service_id],
+        set: {
+          pos_x: mount.position.x,
+          pos_y: mount.position.y,
+          width: mount.size?.w ?? null,
+          height: mount.size?.h ?? null,
+        },
+      })
+  }
+
+  async update(workspaceId: string, serviceId: string, patch: WorkspaceMountPatch): Promise<void> {
+    const set: Record<string, unknown> = {}
+    if (patch.position) {
+      set.pos_x = patch.position.x
+      set.pos_y = patch.position.y
+    }
+    if ('size' in patch) {
+      set.width = patch.size?.w ?? null
+      set.height = patch.size?.h ?? null
+    }
+    if (Object.keys(set).length === 0) return
+    await this.db
+      .update(workspaceServices)
+      .set(set)
+      .where(
+        and(
+          eq(workspaceServices.workspace_id, workspaceId),
+          eq(workspaceServices.service_id, serviceId),
+        ),
+      )
+  }
+
+  async remove(workspaceId: string, serviceId: string): Promise<void> {
+    await this.db
+      .delete(workspaceServices)
+      .where(
+        and(
+          eq(workspaceServices.workspace_id, workspaceId),
+          eq(workspaceServices.service_id, serviceId),
+        ),
+      )
+  }
+
+  async removeByServices(serviceIds: string[]): Promise<void> {
+    if (serviceIds.length === 0) return
+    // Chunk the IN list to stay well under the bind-parameter limit.
+    for (let i = 0; i < serviceIds.length; i += 500) {
+      await this.db
+        .delete(workspaceServices)
+        .where(inArray(workspaceServices.service_id, serviceIds.slice(i, i + 500)))
+    }
+  }
+}
+
 export interface CoreRepositories {
   workspaceRepository: WorkspaceRepository
   accountRepository: AccountRepository
@@ -968,6 +1315,8 @@ export interface CoreRepositories {
   modelDefaultsRepository: ModelDefaultsRepository
   pipelineScheduleRepository: PipelineScheduleRepository
   trackerSettingsRepository: TrackerSettingsRepository
+  serviceRepository: ServiceRepository
+  workspaceMountRepository: WorkspaceMountRepository
 }
 
 /** Build the Drizzle/Postgres-backed core repositories. */
@@ -985,5 +1334,7 @@ export function createDrizzleRepositories(db: DrizzleDb, clock: Clock): CoreRepo
     modelDefaultsRepository: new DrizzleModelDefaultsRepository(db),
     pipelineScheduleRepository: new DrizzlePipelineScheduleRepository(db),
     trackerSettingsRepository: new DrizzleTrackerSettingsRepository(db),
+    serviceRepository: new DrizzleServiceRepository(db),
+    workspaceMountRepository: new DrizzleWorkspaceMountRepository(db),
   }
 }

@@ -1145,8 +1145,9 @@ export class ExecutionService {
     const frameId = await this.resolveServiceFrameId(workspaceId, blockId)
     await this.blueprintReconciler.reconcileBlueprint(workspaceId, frameId, service)
     // The reconcile may have created/updated module + task blocks that aren't
-    // individually pushed; nudge clients to refresh the board so they appear.
-    await this.events.boardChanged(workspaceId, 'blueprint-reconciled')
+    // individually pushed; nudge clients to refresh the board so they appear. Name the service
+    // frame so the refresh fans out to every board mounting this shared service.
+    await this.events.boardChanged(workspaceId, 'blueprint-reconciled', frameId)
   }
 
   /**
@@ -1634,8 +1635,9 @@ export class ExecutionService {
       })
     }
     // A module node appeared and/or a task changed parent — the per-block event
-    // can't express that hierarchy change, so signal a coarse board refresh.
-    await this.events.boardChanged(workspaceId, 'module')
+    // can't express that hierarchy change, so signal a coarse board refresh. Name the moved
+    // task so the refresh fans out to every board mounting its shared service.
+    await this.events.boardChanged(workspaceId, 'module', taskId)
   }
 
   /** Resolve a pending decision; the run's next step lets the agent finish it. */
@@ -1929,8 +1931,9 @@ export class ExecutionService {
       executionId: null,
     })
     // The run record is gone and the block is back to planned; the client can't
-    // reconstruct that from a per-instance event, so signal a coarse refresh.
-    await this.events.boardChanged(workspaceId, 'cancel')
+    // reconstruct that from a per-instance event, so signal a coarse refresh. Name the block
+    // so the refresh fans out to every board mounting its shared service.
+    await this.events.boardChanged(workspaceId, 'cancel', blockId)
     return this.requireBlock(workspaceId, blockId)
   }
 

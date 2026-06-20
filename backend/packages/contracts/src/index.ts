@@ -1,5 +1,6 @@
 export * from './primitives.js'
 export * from './entities.js'
+export * from './services.js'
 export * from './fragment-library.js'
 export * from './accounts.js'
 export * from './events.js'

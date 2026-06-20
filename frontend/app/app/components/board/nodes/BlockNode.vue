@@ -17,9 +17,12 @@ const board = useBoardStore()
 const execution = useExecutionStore()
 const ui = useUiStore()
 const agentRuns = useAgentRunsStore()
+const services = useServicesStore()
 const { lod } = useSemanticZoom()
 
 const block = computed<Block | undefined>(() => board.getBlock(props.id))
+/** This service frame is mounted on more than one board in the org. */
+const isShared = computed(() => services.isSharedFrame(props.id))
 const typeMeta = computed(() => (block.value ? BLOCK_TYPE_META[block.value.type] : null))
 
 // ---- this service's children (tasks + modules) -----------------------------
@@ -226,6 +229,16 @@ const ITEM_ICON: Record<string, string> = {
             :style="{ color: typeMeta!.accent }"
           />
           <span class="truncate text-sm font-semibold text-white">{{ block.title }}</span>
+          <UBadge
+            v-if="isShared"
+            color="info"
+            variant="subtle"
+            size="sm"
+            class="shrink-0"
+            title="Shared across workspaces in this org"
+          >
+            Shared
+          </UBadge>
         </div>
         <div class="flex items-center justify-between">
           <UBadge :color="statusMeta.chip as any" variant="subtle" size="sm">{{

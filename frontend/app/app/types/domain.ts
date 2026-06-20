@@ -19,6 +19,7 @@ import type { BootstrapJob } from './bootstrap'
 import type { Notification } from './notifications'
 import type { MergeThresholdPreset } from './merge'
 import type { PipelineSchedule } from './recurring'
+import type { Service, WorkspaceMount } from './services'
 import type { TrackerSettings } from './tracker'
 
 /** Lifecycle of an architecture building block. */
@@ -224,6 +225,10 @@ export interface WorkspaceSnapshot {
   recurringPipelines?: PipelineSchedule[]
   /** The workspace's issue-tracker selection (where the tech-debt pipeline files tickets). */
   trackerSettings?: TrackerSettings
+  /** In-org sharing: the services this workspace mounts (with per-board frame layout). */
+  mounts?: WorkspaceMount[]
+  /** In-org sharing: the org's services this board can mount from (with mount counts). */
+  serviceCatalog?: Service[]
 }
 
 /**
@@ -273,5 +278,6 @@ export type * from './github'
 export type * from './accounts'
 export type * from './notifications'
 export type * from './merge'
+export type * from './services'
 export type * from './recurring'
 export type * from './tracker'

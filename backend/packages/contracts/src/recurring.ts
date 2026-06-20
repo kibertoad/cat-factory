@@ -50,6 +50,12 @@ export type Recurrence = v.InferOutput<typeof recurrenceSchema>
  */
 export const pipelineScheduleSchema = v.object({
   id: v.string(),
+  /**
+   * The account-owned service this schedule belongs to (in-org sharing): a schedule on a
+   * shared service is visible on every workspace that mounts it and fires once per org.
+   * Null for a legacy schedule not yet associated with a service.
+   */
+  serviceId: v.nullable(v.string()),
   blockId: v.string(),
   frameId: v.string(),
   pipelineId: v.string(),

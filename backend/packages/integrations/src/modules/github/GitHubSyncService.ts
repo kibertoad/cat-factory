@@ -92,7 +92,9 @@ export class GitHubSyncService {
     if (!match) return null
     const repo: GitHubRepo = { ...match, installationId, syncedAt: this.deps.clock.now() }
     await this.deps.repoProjectionRepository.upsertMany(workspaceId, [repo])
-    await this.syncRepo(workspaceId, repo)
+    // Full pass: the org cursor may already be advanced, so bypass it to populate this
+    // newly-linked workspace.
+    await this.syncRepo(repo, { full: true })
     return this.deps.repoProjectionRepository.get(workspaceId, repoGithubId)
   }
 
@@ -122,7 +124,7 @@ export class GitHubSyncService {
       selected.map((r) => r.githubId),
       this.deps.clock.now(),
     )
-    for (const repo of selected) await this.syncRepo(workspaceId, repo)
+    for (const repo of selected) await this.syncRepo(repo, { full: true })
     return this.deps.repoProjectionRepository.list(workspaceId)
   }
 
@@ -134,9 +136,10 @@ export class GitHubSyncService {
    * derived) are supplied by the callbacks; the cursor bookkeeping is shared.
    */
   private async syncResource<T>(
-    workspaceId: string,
+    installationId: number,
     repoGithubId: number,
     kind: SyncCursorKind,
+    full: boolean,
     fetch: (
       cursor: SyncCursor | null,
     ) => Promise<{ items: T[]; etag?: string | null; notModified?: boolean }>,
@@ -148,11 +151,14 @@ export class GitHubSyncService {
     ) => SyncCursor,
   ): Promise<{ items: T[]; etag?: string | null; notModified?: boolean }> {
     const repos = this.deps.repoProjectionRepository
-    const cursor = await repos.getCursor(workspaceId, repoGithubId, kind)
+    // The cursor is installation-scoped (shared across the org's workspaces). A `full`
+    // pass ignores it (treats it as empty) so a newly-linked workspace gets fully
+    // populated even though the org's cursor is already advanced.
+    const cursor = full ? null : await repos.getCursor(installationId, repoGithubId, kind)
     const res = await fetch(cursor)
     if (!res.notModified && res.items.length > 0) await upsert(res.items)
     await repos.setCursor(
-      workspaceId,
+      installationId,
       repoGithubId,
       kind,
       nextCursor(cursor, res.etag, this.deps.clock.now()),
@@ -160,12 +166,31 @@ export class GitHubSyncService {
     return res
   }
 
-  /** Incrementally resync one repo's branches, PRs, issues, commits and checks. */
-  async syncRepo(workspaceId: string, repo: GitHubRepo): Promise<void> {
+  /** Every workspace in the installation's org that actually links this repo. */
+  private async linkedWorkspaces(installationId: number, repoGithubId: number): Promise<string[]> {
+    const all =
+      await this.deps.githubInstallationRepository.listWorkspacesForInstallation(installationId)
+    // One batched query for the whole org, instead of a `get` per workspace.
+    return this.deps.repoProjectionRepository.linkedWorkspaces(repoGithubId, all)
+  }
+
+  /**
+   * Incrementally resync one repo's branches, PRs, issues, commits and checks. The repo
+   * is fetched from GitHub ONCE (installation-scoped cursor) and each projection is fanned
+   * out to every workspace in the org that links it, so two teams sharing a repo cost one
+   * API round-trip, not two. Pass `full` (at link time) to bypass the shared cursor and
+   * fully populate a freshly-linked workspace.
+   */
+  async syncRepo(repo: GitHubRepo, options: { full?: boolean } = {}): Promise<void> {
+    const full = options.full ?? false
     const ref: GitHubRepoRef = { owner: repo.owner, repo: repo.name }
     const id = repo.githubId
     const installationId = repo.installationId
     const client = this.deps.githubClient
+    const workspaces = await this.linkedWorkspaces(installationId, id)
+    const fanOut = async (apply: (ws: string) => Promise<void>) => {
+      for (const ws of workspaces) await apply(ws)
+    }
 
     // ETag-conditional cursor: carry the prior ETag forward when the fetch
     // returns none. PRs/issues (`stampSince`) additionally record a fresh
@@ -180,11 +205,12 @@ export class GitHubSyncService {
 
     // Branches — conditional GET via ETag.
     const branches = await this.syncResource(
-      workspaceId,
+      installationId,
       id,
       'branches',
+      full,
       (cursor) => client.listBranches(installationId, ref, cursor?.etag ?? undefined),
-      (items) => this.deps.branchProjectionRepository.upsertMany(workspaceId, items),
+      (items) => fanOut((ws) => this.deps.branchProjectionRepository.upsertMany(ws, items)),
       etagCursor(false),
     )
     const defaultBranchSha =
@@ -192,29 +218,31 @@ export class GitHubSyncService {
 
     // Pull requests — delta by `since` (GitHub's updated_at lower bound).
     await this.syncResource(
-      workspaceId,
+      installationId,
       id,
       'pulls',
+      full,
       (cursor) =>
         client.listPullRequests(installationId, ref, {
           since: cursor?.sinceIso ?? undefined,
           etag: cursor?.etag ?? undefined,
         }),
-      (items) => this.deps.pullRequestProjectionRepository.upsertMany(workspaceId, items),
+      (items) => fanOut((ws) => this.deps.pullRequestProjectionRepository.upsertMany(ws, items)),
       etagCursor(true),
     )
 
     // Issues — delta by `since`.
     await this.syncResource(
-      workspaceId,
+      installationId,
       id,
       'issues',
+      full,
       (cursor) =>
         client.listIssues(installationId, ref, {
           since: cursor?.sinceIso ?? undefined,
           etag: cursor?.etag ?? undefined,
         }),
-      (items) => this.deps.issueProjectionRepository.upsertMany(workspaceId, items),
+      (items) => fanOut((ws) => this.deps.issueProjectionRepository.upsertMany(ws, items)),
       etagCursor(true),
     )
 
@@ -226,14 +254,15 @@ export class GitHubSyncService {
         ? new Date(this.deps.clock.now() - this.deps.commitBackfillHorizonMs).toISOString()
         : undefined
     await this.syncResource(
-      workspaceId,
+      installationId,
       id,
       'commits',
+      full,
       (cursor) =>
         client.listCommits(installationId, ref, {
           since: cursor?.sinceIso ?? commitBackfillSince,
         }),
-      (items) => this.deps.commitProjectionRepository.upsertMany(workspaceId, items),
+      (items) => fanOut((ws) => this.deps.commitProjectionRepository.upsertMany(ws, items)),
       (_prev, _etag, now) => ({
         etag: null,
         lastSyncedAt: now,
@@ -245,26 +274,27 @@ export class GitHubSyncService {
     if (defaultBranchSha) {
       const checks = await client.listCheckRuns(installationId, ref, defaultBranchSha)
       if (checks.items.length > 0) {
-        await this.deps.checkRunProjectionRepository.upsertMany(workspaceId, checks.items)
+        await fanOut((ws) => this.deps.checkRunProjectionRepository.upsertMany(ws, checks.items))
       }
     }
 
-    // Stamp the repo row as freshly synced.
-    await this.deps.repoProjectionRepository.upsertMany(workspaceId, [
-      { ...repo, syncedAt: this.deps.clock.now() },
-    ])
+    // Stamp the repo row as freshly synced for every workspace that links it.
+    const now = this.deps.clock.now()
+    await fanOut((ws) =>
+      this.deps.repoProjectionRepository.upsertMany(ws, [{ ...repo, syncedAt: now }]),
+    )
   }
 
   /** Resync a single tracked repo by its GitHub id (used by the queue consumer). */
   async syncRepoById(workspaceId: string, repoGithubId: number): Promise<void> {
     const repo = await this.deps.repoProjectionRepository.get(workspaceId, repoGithubId)
-    if (repo) await this.syncRepo(workspaceId, repo)
+    if (repo) await this.syncRepo(repo)
   }
 
   /** Incremental resync of every repo this workspace links. */
   async resyncWorkspace(workspaceId: string): Promise<void> {
     const repos = await this.deps.repoProjectionRepository.list(workspaceId)
-    for (const repo of repos) await this.syncRepo(workspaceId, repo)
+    for (const repo of repos) await this.syncRepo(repo)
   }
 
   /**

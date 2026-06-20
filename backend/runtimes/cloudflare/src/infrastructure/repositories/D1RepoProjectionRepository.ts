@@ -6,6 +6,7 @@ import type {
   SyncCursorKind,
 } from '@cat-factory/kernel'
 import type { D1Database } from '@cloudflare/workers-types'
+import { chunkForIn } from './chunk'
 import {
   type GitHubRepoRow,
   type SyncCursorRow,
@@ -56,6 +57,24 @@ export class D1RepoProjectionRepository implements RepoProjectionRepository {
       .bind(workspaceId, githubId)
       .first<GitHubRepoRow>()
     return row ? rowToRepo(row) : null
+  }
+
+  async linkedWorkspaces(repoGithubId: number, candidateWorkspaceIds: string[]): Promise<string[]> {
+    if (candidateWorkspaceIds.length === 0) return []
+    const found: string[] = []
+    // Chunk the IN list to stay under D1's bound-parameter limit (plus the leading github_id bind).
+    for (const chunk of chunkForIn(candidateWorkspaceIds)) {
+      const placeholders = chunk.map(() => '?').join(', ')
+      const { results } = await this.db
+        .prepare(
+          `SELECT DISTINCT workspace_id FROM github_repos
+           WHERE github_id = ? AND deleted_at IS NULL AND workspace_id IN (${placeholders})`,
+        )
+        .bind(repoGithubId, ...chunk)
+        .all<{ workspace_id: string }>()
+      for (const row of results ?? []) found.push(row.workspace_id)
+    }
+    return found
   }
 
   async tombstoneMissing(
@@ -122,21 +141,21 @@ export class D1RepoProjectionRepository implements RepoProjectionRepository {
   }
 
   async getCursor(
-    workspaceId: string,
+    installationId: number,
     repoGithubId: number,
     kind: SyncCursorKind,
   ): Promise<SyncCursor | null> {
     const row = await this.db
       .prepare(
-        'SELECT etag, last_synced_at, since_iso FROM github_sync_cursors WHERE workspace_id = ? AND repo_github_id = ? AND kind = ?',
+        'SELECT etag, last_synced_at, since_iso FROM github_sync_cursors WHERE installation_id = ? AND repo_github_id = ? AND kind = ?',
       )
-      .bind(workspaceId, repoGithubId, kind)
+      .bind(installationId, repoGithubId, kind)
       .first<SyncCursorRow>()
     return row ? rowToCursor(row) : null
   }
 
   async setCursor(
-    workspaceId: string,
+    installationId: number,
     repoGithubId: number,
     kind: SyncCursorKind,
     cursor: SyncCursor,
@@ -144,14 +163,14 @@ export class D1RepoProjectionRepository implements RepoProjectionRepository {
     const { sql, binds } = buildUpsert(
       'github_sync_cursors',
       {
-        workspace_id: workspaceId,
+        installation_id: installationId,
         repo_github_id: repoGithubId,
         kind,
         etag: cursor.etag,
         last_synced_at: cursor.lastSyncedAt,
         since_iso: cursor.sinceIso,
       },
-      ['workspace_id', 'repo_github_id', 'kind'],
+      ['installation_id', 'repo_github_id', 'kind'],
     )
     await this.db
       .prepare(sql)

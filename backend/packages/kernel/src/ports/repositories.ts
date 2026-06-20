@@ -53,9 +53,44 @@ export type BlockPatch = Partial<Omit<Block, 'id'>>
 
 export interface BlockRepository {
   listByWorkspace(workspaceId: string): Promise<Block[]>
+  /**
+   * Every block belonging to a service (its frame + modules + tasks), regardless of
+   * which workspace created them. Backs the board composition that renders a service
+   * mounted from another workspace in the same org. Returns the blocks whose
+   * `service_id` column matches (set at insert time when the service repos are wired).
+   */
+  listByService(serviceId: string): Promise<Block[]>
+  /**
+   * Every block belonging to ANY of the given services, in a single (chunked) query — the
+   * batched form of {@link BlockRepository.listByService} used to compose a board from all the
+   * services it mounts without one round-trip per service. Empty input → empty result.
+   */
+  listByServices(serviceIds: string[]): Promise<Block[]>
   get(workspaceId: string, id: string): Promise<Block | null>
-  insert(workspaceId: string, block: Block): Promise<void>
+  /**
+   * Resolve a block by its (globally unique) id, regardless of which workspace homes it,
+   * returning the block plus its home `workspaceId` and its `serviceId` (or null). Backs
+   * the shared-board mutation path: a block belonging to a service mounted from another
+   * workspace is acted on at its home workspace (after the caller authorizes that the
+   * requester mounts the service). Returns null when no block has that id.
+   */
+  findById(
+    blockId: string,
+  ): Promise<{ workspaceId: string; serviceId: string | null; block: Block } | null>
+  /**
+   * Insert a block. `serviceId` stamps the account-owned service the block belongs to
+   * (so it can be rendered on every workspace that mounts the service); omit/undefined
+   * for legacy, workspace-local blocks.
+   */
+  insert(workspaceId: string, block: Block, serviceId?: string | null): Promise<void>
   update(workspaceId: string, id: string, patch: BlockPatch): Promise<void>
+  /**
+   * Re-stamp the `service_id` of one or more blocks. Used when a block is reparented into a
+   * different service's frame (`service_id` is not part of {@link BlockPatch}, since it is the
+   * physical scope key, not a domain field): the moved subtree must follow its new owning
+   * service so it renders on — and fans out to — the right boards.
+   */
+  setService(workspaceId: string, ids: string[], serviceId: string | null): Promise<void>
   deleteMany(workspaceId: string, ids: string[]): Promise<void>
 }
 
@@ -74,6 +109,19 @@ export interface RunRef {
 
 export interface ExecutionRepository {
   listByWorkspace(workspaceId: string): Promise<ExecutionInstance[]>
+  /**
+   * Every execution belonging to a service, regardless of which workspace it ran under.
+   * Backs the board snapshot for a service mounted from another workspace in the same org,
+   * so its run progress/status renders identically on every board that mounts it (not just
+   * on its home workspace). Matches the `service_id` column stamped at insert time.
+   */
+  listByService(serviceId: string): Promise<ExecutionInstance[]>
+  /**
+   * Every execution belonging to ANY of the given services, in a single (chunked) query — the
+   * batched form of {@link ExecutionRepository.listByService} used to compose a board's runs
+   * from all the services it mounts without one round-trip per mount. Empty input → empty.
+   */
+  listByServices(serviceIds: string[]): Promise<ExecutionInstance[]>
   get(workspaceId: string, id: string): Promise<ExecutionInstance | null>
   getByBlock(workspaceId: string, blockId: string): Promise<ExecutionInstance | null>
   upsert(workspaceId: string, execution: ExecutionInstance): Promise<void>

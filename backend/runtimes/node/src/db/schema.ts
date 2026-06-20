@@ -93,10 +93,53 @@ export const blocks = pgTable(
     pull_request: text('pull_request'),
     merge_preset_id: text('merge_preset_id'),
     pipeline_id: text('pipeline_id'),
+    // The account-owned service this block belongs to (migration 0031); will become the
+    // physical scope key once the repositories switch off workspace_id.
+    service_id: text('service_id'),
   },
   (t) => [
     primaryKey({ columns: [t.workspace_id, t.id] }),
     index('idx_blocks_parent').on(t.workspace_id, t.parent_id),
+    index('idx_blocks_service').on(t.service_id),
+  ],
+)
+
+// In-org shared services: account-owned service + per-workspace mount (migration 0030).
+export const services = pgTable(
+  'services',
+  {
+    id: text('id').primaryKey(),
+    account_id: text('account_id'),
+    frame_block_id: text('frame_block_id').notNull(),
+    installation_id: bigint('installation_id', { mode: 'number' }),
+    repo_github_id: bigint('repo_github_id', { mode: 'number' }),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+  },
+  (t) => [
+    index('idx_services_account').on(t.account_id),
+    // One service per frame block *within an account* (the frame↔service mapping is 1:1).
+    // Scoped by account_id, not global: block ids are only unique within a workspace, so a
+    // reused/seeded frame id recurs across workspaces; NULL account ids are SQL-distinct, so
+    // the auth-disabled/local path stays unconstrained while real accounts stay 1:1.
+    uniqueIndex('idx_services_frame').on(t.account_id, t.frame_block_id),
+    index('idx_services_repo').on(t.installation_id, t.repo_github_id),
+  ],
+)
+
+export const workspaceServices = pgTable(
+  'workspace_services',
+  {
+    workspace_id: text('workspace_id').notNull(),
+    service_id: text('service_id').notNull(),
+    pos_x: doublePrecision('pos_x').notNull().default(0),
+    pos_y: doublePrecision('pos_y').notNull().default(0),
+    width: doublePrecision('width'),
+    height: doublePrecision('height'),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.workspace_id, t.service_id] }),
+    index('idx_workspace_services_service').on(t.service_id),
   ],
 )
 
@@ -127,6 +170,8 @@ export const agentRuns = pgTable(
     workflow_instance_id: text('workflow_instance_id'),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
     updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
+    // The service this run targets (migration 0031), derived from its block.
+    service_id: text('service_id'),
   },
   (t) => [
     primaryKey({ columns: [t.workspace_id, t.id] }),
@@ -134,6 +179,7 @@ export const agentRuns = pgTable(
     index('idx_agent_runs_workspace').on(t.workspace_id, t.created_at),
     index('idx_agent_runs_status_lease').on(t.status, t.updated_at),
     index('idx_agent_runs_block').on(t.workspace_id, t.block_id),
+    index('idx_agent_runs_service').on(t.service_id),
   ],
 )
 
@@ -220,6 +266,7 @@ export const pipelineSchedules = pgTable(
   {
     workspace_id: text('workspace_id').notNull(),
     id: text('id').notNull(),
+    service_id: text('service_id'),
     block_id: text('block_id').notNull(),
     frame_id: text('frame_id').notNull(),
     pipeline_id: text('pipeline_id').notNull(),
@@ -239,6 +286,7 @@ export const pipelineSchedules = pgTable(
     primaryKey({ columns: [t.workspace_id, t.id] }),
     index('idx_pipeline_schedules_due').on(t.enabled, t.next_run_at),
     index('idx_pipeline_schedules_block').on(t.workspace_id, t.block_id),
+    index('idx_pipeline_schedules_service').on(t.service_id),
   ],
 )
 

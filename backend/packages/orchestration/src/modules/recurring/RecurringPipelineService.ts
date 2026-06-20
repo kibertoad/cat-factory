@@ -10,7 +10,9 @@ import type {
   PipelineScheduleRepository,
   ScheduleRun,
   ScheduleTemplate,
+  ServiceRepository,
   UpdateScheduleInput,
+  WorkspaceMountRepository,
   WorkspaceRepository,
 } from '@cat-factory/kernel'
 import type { BlockRepository } from '@cat-factory/kernel'
@@ -27,6 +29,14 @@ export interface RecurringPipelineServiceDependencies {
   executionService: ExecutionService
   idGenerator: IdGenerator
   clock: Clock
+  /**
+   * In-org shared services. When wired, a new schedule (and its reused on-board block) is
+   * stamped with the frame's service, and {@link RecurringPipelineService.list} returns the
+   * schedules of every service the workspace mounts — so a shared service's recurring
+   * pipelines appear on every board that mounts it (and still fire once per org).
+   */
+  serviceRepository?: ServiceRepository
+  workspaceMountRepository?: WorkspaceMountRepository
 }
 
 /** Default seed descriptions for the canned recurring templates. */
@@ -54,6 +64,8 @@ export class RecurringPipelineService {
   private readonly executionService: ExecutionService
   private readonly idGenerator: IdGenerator
   private readonly clock: Clock
+  private readonly serviceRepository?: ServiceRepository
+  private readonly workspaceMountRepository?: WorkspaceMountRepository
 
   constructor(deps: RecurringPipelineServiceDependencies) {
     this.schedules = deps.pipelineScheduleRepository
@@ -64,6 +76,8 @@ export class RecurringPipelineService {
     this.executionService = deps.executionService
     this.idGenerator = deps.idGenerator
     this.clock = deps.clock
+    this.serviceRepository = deps.serviceRepository
+    this.workspaceMountRepository = deps.workspaceMountRepository
   }
 
   private requireWorkspace(workspaceId: string) {
@@ -72,7 +86,26 @@ export class RecurringPipelineService {
 
   async list(workspaceId: string): Promise<PipelineSchedule[]> {
     await this.requireWorkspace(workspaceId)
-    return this.schedules.list(workspaceId)
+    // The workspace's own schedules (including legacy/seeded frames with no service) UNION
+    // the schedules of every service it mounts — so a shared service's schedules show on
+    // every board that mounts it. Dedup by id.
+    const seen = new Set<string>()
+    const out: PipelineSchedule[] = []
+    const add = (schedule: PipelineSchedule) => {
+      if (!seen.has(schedule.id)) {
+        seen.add(schedule.id)
+        out.push(schedule)
+      }
+    }
+    for (const schedule of await this.schedules.list(workspaceId)) add(schedule)
+    if (this.workspaceMountRepository) {
+      const mounts = await this.workspaceMountRepository.listByWorkspace(workspaceId)
+      // One batched query for every mounted service's schedules (not one round-trip per mount).
+      for (const schedule of await this.schedules.listByServices(mounts.map((m) => m.serviceId))) {
+        add(schedule)
+      }
+    }
+    return out
   }
 
   /**
@@ -96,6 +129,12 @@ export class RecurringPipelineService {
       input.pipelineId,
     )
 
+    // The owning service (in-org sharing): the schedule + its reused block belong to the
+    // frame's service, so they render on — and are listed by — every workspace that mounts it.
+    const serviceId = this.serviceRepository
+      ? ((await this.serviceRepository.getByFrameBlock(frame.id))?.id ?? null)
+      : null
+
     const now = this.clock.now()
     const block: Block = {
       id: this.idGenerator.next('blk'),
@@ -110,10 +149,11 @@ export class RecurringPipelineService {
       level: 'task',
       parentId: frame.id,
     }
-    await this.blockRepository.insert(workspaceId, block)
+    await this.blockRepository.insert(workspaceId, block, serviceId)
 
     const schedule: PipelineSchedule = {
       id: this.idGenerator.next('sch'),
+      serviceId,
       blockId: block.id,
       frameId: frame.id,
       pipelineId: input.pipelineId,

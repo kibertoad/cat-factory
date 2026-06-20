@@ -11,7 +11,12 @@ import type {
   UpdateReferenceArchitectureInput,
 } from '@cat-factory/kernel'
 import type { Clock, IdGenerator } from '@cat-factory/kernel'
-import type { BlockRepository, WorkspaceRepository } from '@cat-factory/kernel'
+import type {
+  BlockRepository,
+  ServiceRepository,
+  WorkspaceMountRepository,
+  WorkspaceRepository,
+} from '@cat-factory/kernel'
 import type {
   BootstrapJobRecord,
   BootstrapJobRepository,
@@ -22,7 +27,7 @@ import type { RepoBootstrapper } from '@cat-factory/kernel'
 import type { BootstrapRunner } from '@cat-factory/kernel'
 import type { ExecutionEventPublisher } from '@cat-factory/kernel'
 import { assertFound, ConflictError, getErrorMessage, sameSubtasks } from '@cat-factory/kernel'
-import { requireWorkspace } from '@cat-factory/kernel'
+import { registerServiceForFrame, requireWorkspace } from '@cat-factory/kernel'
 
 /** The poll's terminal-ness, returned to the durable driver so it knows when to stop. */
 export interface BootstrapPollResult {
@@ -45,6 +50,13 @@ export interface BootstrapServiceDependencies {
   workspaceRepository: WorkspaceRepository
   /** Board blocks: a bootstrap materialises a provisional service frame up front. */
   blockRepository: BlockRepository
+  /**
+   * In-org shared services. When wired, the provisional service frame is registered as an
+   * account-owned service + mount (so a bootstrapped service is shareable like any other), and
+   * `listJobs` surfaces a shared service's in-flight bootstrap on every board that mounts it.
+   */
+  serviceRepository?: ServiceRepository
+  workspaceMountRepository?: WorkspaceMountRepository
   idGenerator: IdGenerator
   clock: Clock
   /** Performs the side-effecting pre-flight + container bootstrap; optional. */
@@ -173,8 +185,29 @@ export class BootstrapService {
 
   async listJobs(workspaceId: string): Promise<BootstrapJob[]> {
     await requireWorkspace(this.deps.workspaceRepository, workspaceId)
-    const records = await this.deps.bootstrapJobRepository.listByWorkspace(workspaceId)
-    return records.map(toBootstrapJob)
+    // The workspace's own bootstrap runs UNION the runs of every shared service it mounts, so a
+    // service bootstrapped on another board shows its live "bootstrapping…" card here too (the
+    // run is one row that fires once per org). Dedup by id. No mount repo → own runs only.
+    const seen = new Set<string>()
+    const out: BootstrapJob[] = []
+    const add = (record: BootstrapJobRecord) => {
+      if (seen.has(record.id)) return
+      seen.add(record.id)
+      out.push(toBootstrapJob(record))
+    }
+    for (const record of await this.deps.bootstrapJobRepository.listByWorkspace(workspaceId)) {
+      add(record)
+    }
+    if (this.deps.workspaceMountRepository) {
+      const mounts = await this.deps.workspaceMountRepository.listByWorkspace(workspaceId)
+      // One batched query for every mounted service's runs (not one round-trip per mount).
+      for (const record of await this.deps.bootstrapJobRepository.listByServices(
+        mounts.map((m) => m.serviceId),
+      )) {
+        add(record)
+      }
+    }
+    return out
   }
 
   async getJob(workspaceId: string, id: string): Promise<BootstrapJob> {
@@ -512,7 +545,8 @@ export class BootstrapService {
       `Service bootstrapped from ${outcome.owner}/${outcome.name}. Drop tasks here to implement against it.`,
     )
     await this.emitBootstrap(workspaceId, toBootstrapJob({ ...record, ...patch }), block)
-    await this.deps.eventPublisher?.boardChanged(workspaceId, 'bootstrap-succeeded')
+    // Name the service frame so the refresh fans out to every board mounting this service.
+    await this.deps.eventPublisher?.boardChanged(workspaceId, 'bootstrap-succeeded', record.blockId)
 
     // Kick off the initial blueprint run for the new repo (best-effort): it maps
     // the bootstrapped code into the in-repo `blueprints/` folder and reconciles
@@ -594,7 +628,20 @@ export class BootstrapService {
       level: 'frame',
       parentId: null,
     }
-    await this.deps.blockRepository.insert(workspaceId, block)
+    // Register the bootstrapped frame as an account-owned service + mount (no-op when sharing
+    // isn't wired), so a bootstrapped service is shareable and its run is service-discoverable.
+    const serviceId = await registerServiceForFrame(
+      {
+        serviceRepository: this.deps.serviceRepository,
+        workspaceMountRepository: this.deps.workspaceMountRepository,
+        workspaceRepository: this.deps.workspaceRepository,
+        idGenerator: this.deps.idGenerator,
+        clock: this.deps.clock,
+      },
+      workspaceId,
+      block,
+    )
+    await this.deps.blockRepository.insert(workspaceId, block, serviceId)
     return block
   }
 

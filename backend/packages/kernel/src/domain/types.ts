@@ -44,6 +44,11 @@ export type {
   AccountMember,
   CreateAccountInput,
   AddMemberInput,
+  // In-org shared services (account-owned services + per-workspace mounts).
+  Service,
+  WorkspaceMount,
+  MountServiceInput,
+  UpdateMountInput,
   // GitHub integration projections + I/O shapes.
   GitHubBranch,
   GitHubCheckRun,

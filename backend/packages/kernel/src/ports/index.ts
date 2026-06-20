@@ -13,6 +13,12 @@ export type {
   Membership,
   MembershipRepository,
 } from './account-repositories.js'
+export type {
+  ServicePatch,
+  ServiceRepository,
+  WorkspaceMountPatch,
+  WorkspaceMountRepository,
+} from './service-repositories.js'
 export type { Clock, IdGenerator } from './runtime.js'
 export type { RequirementReviewRepository } from './requirement-review-repositories.js'
 export type { AgentRunRef, AgentRunRepository } from './agent-runs.js'

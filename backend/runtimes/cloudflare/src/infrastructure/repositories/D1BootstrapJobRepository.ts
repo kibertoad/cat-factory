@@ -5,6 +5,7 @@ import type {
   BootstrapJobRepository,
 } from '@cat-factory/kernel'
 import type { D1Database } from '@cloudflare/workers-types'
+import { chunkForIn } from './chunk'
 
 /**
  * A row of the unified `agent_runs` table (see migration 0019). This repository
@@ -164,12 +165,15 @@ export class D1BootstrapJobRepository implements BootstrapJobRepository {
       repoUrl: record.repoUrl,
       instructions: record.instructions,
     }
+    // Stamp `service_id` from the materialised service frame (when known) so a shared
+    // service's in-flight bootstrap surfaces on every board that mounts it via `listByService`.
     await this.db
       .prepare(
         `INSERT INTO agent_runs
           (workspace_id, id, kind, block_id, status, detail, subtasks, error, failure,
-           created_at, updated_at)
-         VALUES (?, ?, 'bootstrap', ?, ?, ?, ?, ?, ?, ?, ?)`,
+           created_at, updated_at, service_id)
+         VALUES (?, ?, 'bootstrap', ?, ?, ?, ?, ?, ?, ?, ?,
+            (SELECT service_id FROM blocks WHERE workspace_id = ? AND id = ?))`,
       )
       .bind(
         record.workspaceId,
@@ -182,6 +186,8 @@ export class D1BootstrapJobRepository implements BootstrapJobRepository {
         record.failure == null ? null : JSON.stringify(record.failure),
         record.createdAt,
         record.updatedAt,
+        record.workspaceId,
+        record.blockId,
       )
       .run()
   }
@@ -211,6 +217,17 @@ export class D1BootstrapJobRepository implements BootstrapJobRepository {
       values.push(encodeTopLevel(key, value))
     }
 
+    // The run row is inserted before its service frame exists (block_id is set on a later
+    // patch), so refresh `service_id` from the block whenever block_id is (re)assigned — this
+    // is when a bootstrap becomes service-discoverable on every board mounting the service.
+    const blockIdEntry = entries.find(([key]) => key === 'blockId')
+    if (blockIdEntry) {
+      setClauses.push(
+        'service_id = (SELECT service_id FROM blocks WHERE workspace_id = ? AND id = ?)',
+      )
+      values.push(workspaceId, blockIdEntry[1] as string | null)
+    }
+
     if (setClauses.length === 0) return
     await this.db
       .prepare(
@@ -236,5 +253,32 @@ export class D1BootstrapJobRepository implements BootstrapJobRepository {
       .bind(workspaceId)
       .all<AgentRunRow>()
     return (results ?? []).map(rowToRecord)
+  }
+
+  async listByService(serviceId: string): Promise<BootstrapJobRecord[]> {
+    const { results } = await this.db
+      .prepare(
+        `SELECT * FROM agent_runs WHERE service_id = ? AND kind = 'bootstrap' ORDER BY created_at DESC`,
+      )
+      .bind(serviceId)
+      .all<AgentRunRow>()
+    return (results ?? []).map(rowToRecord)
+  }
+
+  async listByServices(serviceIds: string[]): Promise<BootstrapJobRecord[]> {
+    if (serviceIds.length === 0) return []
+    const out: BootstrapJobRecord[] = []
+    // Chunk the IN list to stay under D1's bound-parameter limit.
+    for (const chunk of chunkForIn(serviceIds)) {
+      const placeholders = chunk.map(() => '?').join(', ')
+      const { results } = await this.db
+        .prepare(
+          `SELECT * FROM agent_runs WHERE service_id IN (${placeholders}) AND kind = 'bootstrap' ORDER BY created_at DESC`,
+        )
+        .bind(...chunk)
+        .all<AgentRunRow>()
+      for (const row of results ?? []) out.push(rowToRecord(row))
+    }
+    return out
   }
 }

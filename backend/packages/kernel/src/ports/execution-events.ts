@@ -22,8 +22,11 @@ export interface ExecutionEventPublisher {
   /**
    * A structural board change the per-instance event can't express (a module
    * materialised, a run cancelled) — a coarse signal that prompts a full refresh.
+   * `blockId` (when known) identifies a block of the affected service so the change can
+   * be fanned out to every workspace that mounts it (in-org sharing); omit it for a
+   * genuinely board-wide signal, which then reaches the originating workspace only.
    */
-  boardChanged(workspaceId: string, reason: string): Promise<void>
+  boardChanged(workspaceId: string, reason: string, blockId?: string | null): Promise<void>
   /**
    * A repo-bootstrap run advanced: push the updated job (with live `subtasks`)
    * and its provisional/linked service frame, so the board patches the
