@@ -9,13 +9,13 @@
     "dev": "node --watch --env-file-if-exists=.env src/main.ts",
     "prestart": "pnpm --filter @cat-factory/node-server run build",
     "start": "node --env-file-if-exists=.env src/main.ts",
-    "typecheck": "tsgo -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "@cat-factory/node-server": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
-    "@typescript/native-preview": "7.0.0-dev.20260616.1"
+    "typescript": "7.0.1-rc"
   }
 }

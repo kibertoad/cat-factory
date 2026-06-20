@@ -24,9 +24,9 @@
     "access": "public"
   },
   "scripts": {
-    "build": "tsgo -b tsconfig.build.json",
+    "build": "tsc -b tsconfig.build.json",
     "dev": "wrangler dev",
-    "typecheck": "tsgo -p tsconfig.build.json --noEmit",
+    "typecheck": "tsc -p tsconfig.build.json --noEmit",
     "test": "vitest",
     "test:run": "vitest run",
     "db:migrate:local": "wrangler d1 migrations apply cat_factory --local"
@@ -55,7 +55,7 @@
     "@cat-factory/conformance": "workspace:*",
     "@cloudflare/vitest-pool-workers": "^0.16.15",
     "@cloudflare/workers-types": "^4.20250620.0",
-    "@typescript/native-preview": "7.0.0-dev.20260616.1",
+    "typescript": "7.0.1-rc",
     "vitest": "^4.1.8",
     "wrangler": "^4.100.0"
   }
