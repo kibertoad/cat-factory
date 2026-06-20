@@ -1,4 +1,4 @@
-import type { Pipeline } from '@cat-factory/kernel'
+import { type Pipeline, seedPipelines } from '@cat-factory/kernel'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { makeApp, type TestApp } from '../helpers'
 
@@ -14,15 +14,27 @@ describe('pipelines', () => {
 
   it('lists the seeded pipelines', async () => {
     const res = await app.call<Pipeline[]>('GET', `/workspaces/${wsId}/pipelines`)
-    expect(res.body.map((p) => p.id)).toEqual([
-      'pl_full',
-      'pl_quick',
-      'pl_integrate',
-      'pl_dep_update',
-      'pl_tech_debt',
-      'pl_blueprint',
-      'pl_requirements',
-    ])
+    // The endpoint returns exactly the built-in catalog the kernel seeds — assert
+    // against that source of truth rather than a hardcoded list, so adding or
+    // removing a built-in pipeline doesn't churn this test.
+    expect(res.body).toEqual(seedPipelines())
+  })
+
+  it('seeds well-formed, usable pipelines', async () => {
+    const res = await app.call<Pipeline[]>('GET', `/workspaces/${wsId}/pipelines`)
+    expect(res.body.length).toBeGreaterThan(0)
+    // Every seeded pipeline must be runnable: a stable id, a name, and at least one
+    // agent step. A gates array (when present) must line up with the steps.
+    const ids = new Set<string>()
+    for (const p of res.body) {
+      expect(p.id).toBeTruthy()
+      expect(ids.has(p.id)).toBe(false) // ids are unique across the catalog
+      ids.add(p.id)
+      expect(p.name.trim()).not.toBe('')
+      expect(p.agentKinds.length).toBeGreaterThan(0)
+      expect(p.agentKinds.every((k) => k.length > 0)).toBe(true)
+      if (p.gates) expect(p.gates.length).toBeLessThanOrEqual(p.agentKinds.length)
+    }
   })
 
   it('creates a custom pipeline', async () => {
