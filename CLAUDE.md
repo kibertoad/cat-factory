@@ -213,8 +213,10 @@ It mirrors the execution pattern above: dispatch → durable poll → push event
   generic registry as `/run`), keyed by the job id; `handleBootstrap()`
   (`executor-harness/src/bootstrap.ts`) threads `onProgress`/`signal` so Pi's
   todo-tool counts surface as `subtasks`. Sequence: clone (or empty dir) →
-  `writeAgentsContext()` writes `AGENTS.md` → `runPi()` adapts → `reinitAndPush()`
-  resets history to one commit and **force-pushes** to the default branch.
+  `writeAgentsContext()` writes the prompt to Pi's **global** `~/.pi/agent/AGENTS.md`
+  (outside the checkout, so it never lands in the bootstrapped repo) → `runPi()`
+  adapts → `reinitAndPush()` resets history to one commit and **force-pushes** to
+  the default branch.
 - Events: `DurableObjectEventPublisher.bootstrapChanged()` → `WorkspaceEventsHub`
   → SPA `useWorkspaceStream.ts` patches `stores/agentRuns.ts` (`upsertBootstrap`)
   - the board block. `BlockNode.vue` reads `agentRuns.byBlock[frameId]` to render
@@ -242,8 +244,9 @@ derived from the blueprint (there is no longer a "feature" granularity level).
   target branch, reads any existing blueprint (update mode), runs Pi to emit the
   tree, renders the files, and **commits onto that branch** (no history reset /
   force-push) via `commitAll`+`pushBranch`. Served at `POST /blueprint`, polled on
-  the shared `/jobs/{id}`. Every agent's `AGENTS.md` carries `BLUEPRINT_GUIDANCE`
-  (pi.ts): read `overview.md` first, open a module file only when relevant.
+  the shared `/jobs/{id}`. Every agent's global `~/.pi/agent/AGENTS.md` carries
+  `BLUEPRINT_GUIDANCE` (pi.ts): read `overview.md` first, open a module file only
+  when relevant.
 - Worker: `ContainerAgentExecutor` builds a blueprint job for the `blueprints` kind
   — branch = the prior `coder` step's PR branch (`block.pullRequest.branch`) when
   present (mode `update`), else the repo default branch (mode `create`) — and

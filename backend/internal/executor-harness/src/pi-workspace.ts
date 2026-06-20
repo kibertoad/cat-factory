@@ -39,7 +39,7 @@ export async function withWorkspace<T>(
 export interface AgentRunSpec {
   /** The prepared working directory (cloned/scaffolded by the caller). */
   dir: string
-  /** Composed role + best-practice fragments; written to AGENTS.md for Pi. */
+  /** Composed role + best-practice fragments; written to Pi's global AGENTS.md context. */
   systemPrompt: string
   /** The concrete task prompt handed to Pi. */
   userPrompt: string
@@ -55,15 +55,16 @@ export interface AgentRunSpec {
 }
 
 /**
- * Write Pi's project context (AGENTS.md) + provider config into `spec.dir`, then
- * run Pi once and return its summary/stats/stderr. The shared middle of every
- * container agent.
+ * Write Pi's global agent context (`~/.pi/agent/AGENTS.md`) + provider config,
+ * then run Pi once in `spec.dir` and return its summary/stats/stderr. The context
+ * lives outside the checkout so it never lands in a commit; the shared middle of
+ * every container agent.
  */
 export async function runAgentInWorkspace(
   spec: AgentRunSpec,
   opts: RunOptions = {},
 ): Promise<PiRunOutcome> {
-  await writeAgentsContext(spec.dir, spec.systemPrompt)
+  await writeAgentsContext(spec.systemPrompt)
   await writePiModelsConfig({ model: spec.model, proxyBaseUrl: spec.proxyBaseUrl })
   const { signal, onActivity, onProgress } = opts
   return runPi({

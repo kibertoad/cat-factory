@@ -1,7 +1,7 @@
 import type { Clock } from '@cat-factory/kernel'
 import type { TaskSourceRegistry } from '@cat-factory/kernel'
 import type { TaskRecord, TaskRepository } from '@cat-factory/kernel'
-import type { SourceTask, TaskSourceKind } from '@cat-factory/kernel'
+import type { SourceTask, TaskSearchResult, TaskSourceKind } from '@cat-factory/kernel'
 import { ValidationError } from '@cat-factory/kernel'
 import { requireWorkspace } from '@cat-factory/kernel'
 import type { WorkspaceRepository } from '@cat-factory/kernel'
@@ -84,6 +84,26 @@ export class TaskImportService {
     }
     await this.deps.taskRepository.upsert(record)
     return toSourceTask(record)
+  }
+
+  /**
+   * Search a tracker by free text, returning lean hits (not yet imported). The
+   * provider authenticates with the workspace's stored credentials and builds/
+   * parses the source-specific query. Throws if the source can't search (no
+   * provider `search`), so the controller can answer cleanly.
+   */
+  async search(
+    workspaceId: string,
+    source: TaskSourceKind,
+    query: string,
+  ): Promise<TaskSearchResult[]> {
+    await requireWorkspace(this.deps.workspaceRepository, workspaceId)
+    const provider = this.requireProvider(source)
+    if (!provider.search) {
+      throw new ValidationError(`The ${source} source does not support search`)
+    }
+    const connection = await this.deps.connectionService.requireConnection(workspaceId, source)
+    return provider.search(connection.credentials, query, workspaceId)
   }
 
   /** Every issue imported into the workspace, across sources, as wire shapes. */

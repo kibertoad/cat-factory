@@ -21,9 +21,9 @@ async function git(args: string[], cwd: string): Promise<string> {
 
 // Implementation candidate: the *real* Pi coding flow, reused from the
 // executor harness but run locally — clone the repo, write the build system
-// prompt as AGENTS.md, point Pi at the chosen OpenAI-compatible endpoint
-// (a direct provider or Cloudflare Workers AI), run it, and capture the diff.
-// Requires the `pi` CLI on PATH; throws a clear error otherwise.
+// prompt as Pi's global AGENTS.md context (outside the checkout), point Pi at the
+// chosen OpenAI-compatible endpoint (a direct provider or Cloudflare Workers AI),
+// run it, and capture the diff. Requires the `pi` CLI on PATH; throws otherwise.
 
 export async function runImplementation(
   input: RunnerInput<ImplementationFixture>,
@@ -36,6 +36,14 @@ export async function runImplementation(
   }
 
   const dir = await mkdtemp(join(tmpdir(), 'cat-bench-impl-'))
+  // `writeAgentsContext`/`writePiModelsConfig` write Pi's GLOBAL context + provider
+  // config under `~/.pi/agent` (resolved from $HOME), and `pi` reads them from the
+  // same place. In a per-run container that home is disposable, but cat-bench runs
+  // on a developer's real machine, so point Pi at a throwaway HOME for the run —
+  // otherwise we'd clobber and leave behind the developer's own `~/.pi/agent`
+  // (AGENTS.md / models.json). Restored + removed in `finally`.
+  const piHome = await mkdtemp(join(tmpdir(), 'cat-bench-pihome-'))
+  const realHome = process.env.HOME
   try {
     await cloneRepo({
       repo: fixture.repo,
@@ -43,7 +51,8 @@ export async function runImplementation(
       dir,
       signal: deps.signal,
     })
-    await writeAgentsContext(dir, prompt.system)
+    process.env.HOME = piHome
+    await writeAgentsContext(prompt.system)
     await writePiModelsConfig({ model: modelRef.model, proxyBaseUrl: endpoint.baseUrl })
 
     const userPrompt = [
@@ -64,7 +73,7 @@ export async function runImplementation(
     })
 
     await git(['add', '-A'], dir)
-    const diff = await git(['diff', '--cached', '--', '.', ':(exclude)AGENTS.md'], dir)
+    const diff = await git(['diff', '--cached', '--', '.'], dir)
     const truncated = diff.length > 60_000 ? `${diff.slice(0, 60_000)}\n... (diff truncated)` : diff
 
     return {
@@ -77,6 +86,9 @@ export async function runImplementation(
       },
     }
   } finally {
+    if (realHome === undefined) delete process.env.HOME
+    else process.env.HOME = realHome
     await rm(dir, { recursive: true, force: true })
+    await rm(piHome, { recursive: true, force: true })
   }
 }

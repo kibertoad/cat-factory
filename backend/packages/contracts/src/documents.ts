@@ -16,7 +16,7 @@ import { blockTypeSchema } from './primitives.js'
 // ---------------------------------------------------------------------------
 
 /** The external document sources cat-factory can link to. */
-export const documentSourceKindSchema = v.picklist(['confluence', 'notion'])
+export const documentSourceKindSchema = v.picklist(['confluence', 'notion', 'github'])
 export type DocumentSourceKind = v.InferOutput<typeof documentSourceKindSchema>
 
 // ---- Provider self-description (drives the generic connect UI) ------------
@@ -52,6 +52,12 @@ export const documentSourceDescriptorSchema = v.object({
   refLabel: v.string(),
   /** Placeholder for the "import a page" input. */
   refPlaceholder: v.string(),
+  /**
+   * Whether this source supports searching its catalogue by title/content (so
+   * the UI offers a search box, not just a paste-a-URL field). Optional for
+   * backward-compatibility; absent is treated as `false`.
+   */
+  searchable: v.optional(v.boolean()),
 })
 export type DocumentSourceDescriptor = v.InferOutput<typeof documentSourceDescriptorSchema>
 
@@ -83,6 +89,24 @@ export const sourceDocumentSchema = v.object({
   syncedAt: v.number(),
 })
 export type SourceDocument = v.InferOutput<typeof sourceDocumentSchema>
+
+/**
+ * A single hit from searching a source's catalogue. A lean shape (no body) used
+ * to populate a picker: selecting one imports it (by `externalId`) and links it
+ * to a block. Distinct from {@link SourceDocument} — a hit is not yet projected
+ * locally, so it carries no `linkedBlockId`/`syncedAt`.
+ */
+export const documentSearchResultSchema = v.object({
+  source: documentSourceKindSchema,
+  /** The source's stable id for the page (re-usable as an import ref). */
+  externalId: v.string(),
+  title: v.string(),
+  /** Canonical URL of the page on the source. */
+  url: v.string(),
+  /** A short plain-text excerpt for the result row (may be empty). */
+  excerpt: v.string(),
+})
+export type DocumentSearchResult = v.InferOutput<typeof documentSearchResultSchema>
 
 // ---- Board plan (doc → structure) -----------------------------------------
 
@@ -143,6 +167,12 @@ export const importDocumentSchema = v.object({
   ref: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(500)),
 })
 export type ImportDocumentInput = v.InferOutput<typeof importDocumentSchema>
+
+/** Search a source's catalogue by free text (title/content). */
+export const searchDocumentsSchema = v.object({
+  query: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200)),
+})
+export type SearchDocumentsInput = v.InferOutput<typeof searchDocumentsSchema>
 
 /** Preview the board structure a page would expand into (no writes). */
 export const planDocumentSchema = v.object({

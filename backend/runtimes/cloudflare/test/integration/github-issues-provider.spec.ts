@@ -27,12 +27,16 @@ function installation(overrides: Partial<GitHubInstallation>): GitHubInstallatio
   }
 }
 
-/** Minimal installation repo: only `listActive` is exercised by the provider. */
+/**
+ * Minimal installation repo: `listActive` backs `fetchTask`'s owner resolution;
+ * `getByWorkspace` backs the workspace-scoped `search`.
+ */
 function installationsRepo(active: GitHubInstallation[]): GitHubInstallationRepository {
   return {
     listActive: async () => active,
     getByInstallationId: async () => null,
-    getByWorkspace: async () => null,
+    getByWorkspace: async (workspaceId) =>
+      active.find((i) => i.workspaceId === workspaceId) ?? null,
     listWorkspacesForInstallation: async () => [],
     upsert: async () => {},
     updateCachedToken: async () => {},
@@ -101,5 +105,53 @@ describe('GitHubIssuesProvider', () => {
   it('errors clearly when no installation owns the repo', async () => {
     const { provider } = providerWith(DETAIL, [installation({ accountLogin: 'other' })])
     await expect(provider.fetchTask({}, 'octo/app#7')).rejects.toThrow(/installation/i)
+  })
+
+  it('scopes search to the workspace own installation, not every installation', async () => {
+    const { provider, client } = providerWith(DETAIL, [
+      installation({ workspaceId: 'ws_1', installationId: 100 }),
+      installation({ workspaceId: 'ws_2', installationId: 200, accountLogin: 'other' }),
+    ])
+    client.issueSearchHits = [
+      {
+        owner: 'octo',
+        repo: 'app',
+        number: 7,
+        title: 'Add CSV export',
+        state: 'open',
+        url: 'https://github.com/octo/app/issues/7',
+      },
+    ]
+    const results = await provider.search({}, 'csv', 'ws_1')
+    expect(results).toEqual([
+      {
+        source: 'github',
+        externalId: 'octo/app#7',
+        title: 'Add CSV export',
+        url: 'https://github.com/octo/app/issues/7',
+        status: 'open',
+        excerpt: '',
+      },
+    ])
+    // Only ws_1's installation (100) was queried — never ws_2's (200).
+    expect(client.searchIssuesCalls).toEqual([{ installationId: 100, query: 'csv' }])
+  })
+
+  it('returns no results when the workspace has no installation', async () => {
+    const { provider, client } = providerWith(DETAIL, [
+      installation({ workspaceId: 'ws_1', installationId: 100 }),
+    ])
+    client.issueSearchHits = [
+      {
+        owner: 'octo',
+        repo: 'app',
+        number: 7,
+        title: 'x',
+        state: 'open',
+        url: 'https://github.com/octo/app/issues/7',
+      },
+    ]
+    expect(await provider.search({}, 'csv', 'ws_unknown')).toEqual([])
+    expect(client.searchIssuesCalls).toEqual([])
   })
 })

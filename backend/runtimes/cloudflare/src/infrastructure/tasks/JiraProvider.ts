@@ -4,6 +4,7 @@ import {
   type TaskComment,
   type TaskContent,
   type TaskCredentials,
+  type TaskSearchResult,
   type TaskSourceProvider,
   type NormalizedTaskConnection,
 } from '@cat-factory/kernel'
@@ -119,5 +120,36 @@ export class JiraProvider implements TaskSourceProvider {
       description: jiraLogic.adfToMarkdown(f.description),
       comments,
     }
+  }
+
+  async search(credentials: TaskCredentials, query: string): Promise<TaskSearchResult[]> {
+    const base = credentials.baseUrl!.replace(/\/+$/, '')
+    // Re-validate the stored base before fetching with the workspace's credentials
+    // (defense-in-depth against a base that became unsafe since connect time).
+    atlassianLogic.assertSafeAtlassianBaseUrl(base)
+    const jql = encodeURIComponent(jiraLogic.buildJiraSearchJql(query))
+    // `/rest/api/3/search/jql` is the current enhanced-search endpoint; the legacy
+    // GET `/rest/api/3/search` was removed by Atlassian (May 2025). The `issues[]`
+    // response shape is unchanged, so `parseJiraSearchResults` still applies.
+    const url = `${base}/rest/api/3/search/jql?jql=${jql}&fields=summary,status&maxResults=20`
+    const auth = btoa(`${credentials.accountEmail}:${credentials.apiToken}`)
+
+    const res = await fetch(url, {
+      method: 'GET',
+      headers: {
+        authorization: `Basic ${auth}`,
+        accept: 'application/json',
+        'user-agent': USER_AGENT,
+      },
+    })
+    if (!res.ok) {
+      const text = await res.text().catch(() => '')
+      throw new JiraApiError(
+        res.status,
+        `Jira search ${url} → ${res.status}: ${text.slice(0, 300)}`,
+      )
+    }
+    const json = await res.json().catch(() => null)
+    return jiraLogic.parseJiraSearchResults(json, base)
   }
 }

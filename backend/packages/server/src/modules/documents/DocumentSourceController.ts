@@ -4,6 +4,7 @@ import {
   importDocumentSchema,
   linkDocumentSchema,
   planDocumentSchema,
+  searchDocumentsSchema,
   spawnDocumentSchema,
   type DocumentSourceKind,
 } from '@cat-factory/contracts'
@@ -103,6 +104,19 @@ export function documentSourceController(): Hono<AppEnv> {
       c.req.valid('json').ref,
     )
     return c.json(document, 201)
+  })
+
+  // Search a source's catalogue by free text (title/content), returning lean hits
+  // the picker can import + link on selection.
+  app.post('/document-sources/:source/search', jsonBody(searchDocumentsSchema), async (c) => {
+    const documents = requireDocuments(c)
+    if (!documents) return unavailable(c)
+    const results = await documents.importService.search(
+      param(c, 'workspaceId'),
+      sourceParam(c),
+      c.req.valid('json').query,
+    )
+    return c.json({ results })
   })
 
   // ---- planning / spawning ------------------------------------------------

@@ -8,7 +8,7 @@
 import type { BlockType } from './domain'
 
 /** The external document sources cat-factory can link to. */
-export type DocumentSourceKind = 'confluence' | 'notion'
+export type DocumentSourceKind = 'confluence' | 'notion' | 'github'
 
 /** One credential a provider needs to connect (rendered as a form field). */
 export interface CredentialField {
@@ -28,6 +28,8 @@ export interface DocumentSourceDescriptor {
   credentialFields: CredentialField[]
   refLabel: string
   refPlaceholder: string
+  /** Whether the source supports searching its catalogue by title/content. */
+  searchable?: boolean
 }
 
 /** A workspace's connection to a document source (never carries credentials). */
@@ -51,6 +53,17 @@ export interface SourceDocument {
   /** The board block this document is attached to as context, if any. */
   linkedBlockId: string | null
   syncedAt: number
+}
+
+/** A lean hit from searching a document source's catalogue (not yet imported). */
+export interface DocumentSearchResult {
+  source: DocumentSourceKind
+  /** The source's stable id for the page (re-usable as an import ref). */
+  externalId: string
+  title: string
+  url: string
+  /** Short plain-text preview (may be empty). */
+  excerpt: string
 }
 
 /** A proposed task within a planned frame/module. */
