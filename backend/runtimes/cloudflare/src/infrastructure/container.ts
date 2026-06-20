@@ -499,7 +499,6 @@ function selectEventPublisher(env: Env, db: D1Database): ExecutionEventPublisher
   // Fan a shared service's live events out to EVERY workspace that mounts it, not just the
   // one the engine addressed (in-org real-time sharing).
   return new FanOutEventPublisher(new DurableObjectEventPublisher(env.WORKSPACE_EVENTS), {
-    blockRepository: new D1BlockRepository({ db }),
     workspaceMountRepository: new D1WorkspaceMountRepository({ db }),
   })
 }

@@ -410,14 +410,17 @@ export class BoardService {
     // service frame, so deleting a frame doesn't leave an orphaned service lingering in the
     // org catalog (mountable, badged, yet rendering nothing) on other boards.
     if (this.serviceRepository && this.workspaceMountRepository) {
+      const doomedServiceIds: string[] = []
       for (const b of blocks) {
         if (!doomed.has(b.id) || b.level !== 'frame' || b.parentId !== null) continue
         const service = await this.serviceRepository.getByFrameBlock(b.id)
-        if (!service) continue
-        for (const mount of await this.workspaceMountRepository.listByService(service.id)) {
-          await this.workspaceMountRepository.remove(mount.workspaceId, service.id)
-        }
-        await this.serviceRepository.delete(service.id)
+        if (service) doomedServiceIds.push(service.id)
+      }
+      if (doomedServiceIds.length > 0) {
+        // Batched: clear every board's mount of the doomed services, then delete the services
+        // (two queries, not a listByService + per-mount remove + per-service delete loop).
+        await this.workspaceMountRepository.removeByServices(doomedServiceIds)
+        await this.serviceRepository.deleteMany(doomedServiceIds)
       }
     }
     await this.blockRepository.deleteMany(homeWorkspaceId, [...doomed])

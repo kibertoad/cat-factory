@@ -7,17 +7,31 @@ const board = useBoardStore()
 const execution = useExecutionStore()
 const workspace = useWorkspaceStore()
 const services = useServicesStore()
+const toast = useToast()
 const { fitView, zoomIn, zoomOut } = useBoardFlow()
+
+async function mountService(serviceId: string, title: string) {
+  try {
+    await services.mount(serviceId)
+    toast.add({ title: `Added ${title}`, icon: 'i-lucide-box', color: 'success' })
+  } catch (e) {
+    toast.add({
+      title: 'Could not add service',
+      description: e instanceof Error ? e.message : String(e),
+      color: 'error',
+    })
+  }
+}
 
 // The org's services not yet on this board — mounting one adds its shared frame here.
 const mountableItems = computed(() =>
   services.mountable.map((s) => {
-    const title = board.getBlock(s.frameBlockId)?.title
+    const title = board.getBlock(s.frameBlockId)?.title ?? s.frameBlockId
     return {
-      label: title ?? s.frameBlockId,
+      label: title,
       icon: 'i-lucide-box',
       onSelect: () => {
-        void services.mount(s.id)
+        void mountService(s.id, title)
       },
     }
   }),

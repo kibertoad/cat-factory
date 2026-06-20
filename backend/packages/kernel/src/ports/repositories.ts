@@ -78,11 +78,6 @@ export interface BlockRepository {
     blockId: string,
   ): Promise<{ workspaceId: string; serviceId: string | null; block: Block } | null>
   /**
-   * The account-owned service a block belongs to (its `service_id`), or null. Used by
-   * the real-time fan-out to resolve which workspaces mount the changed block's service.
-   */
-  serviceIdOf(workspaceId: string, blockId: string): Promise<string | null>
-  /**
    * Insert a block. `serviceId` stamps the account-owned service the block belongs to
    * (so it can be rendered on every workspace that mounts the service); omit/undefined
    * for legacy, workspace-local blocks.
@@ -121,6 +116,12 @@ export interface ExecutionRepository {
    * on its home workspace). Matches the `service_id` column stamped at insert time.
    */
   listByService(serviceId: string): Promise<ExecutionInstance[]>
+  /**
+   * Every execution belonging to ANY of the given services, in a single (chunked) query — the
+   * batched form of {@link ExecutionRepository.listByService} used to compose a board's runs
+   * from all the services it mounts without one round-trip per mount. Empty input → empty.
+   */
+  listByServices(serviceIds: string[]): Promise<ExecutionInstance[]>
   get(workspaceId: string, id: string): Promise<ExecutionInstance | null>
   getByBlock(workspaceId: string, blockId: string): Promise<ExecutionInstance | null>
   upsert(workspaceId: string, execution: ExecutionInstance): Promise<void>

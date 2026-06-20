@@ -1,6 +1,5 @@
 import type {
   Block,
-  BlockRepository,
   BootstrapJob,
   ExecutionEventPublisher,
   ExecutionInstance,
@@ -9,8 +8,7 @@ import type {
 } from '@cat-factory/kernel'
 
 export interface FanOutEventPublisherDependencies {
-  blockRepository: Pick<BlockRepository, 'serviceIdOf'>
-  workspaceMountRepository: Pick<WorkspaceMountRepository, 'listByService'>
+  workspaceMountRepository: Pick<WorkspaceMountRepository, 'listWorkspaceIdsMountingBlock'>
 }
 
 /**
@@ -34,10 +32,13 @@ export class FanOutEventPublisher implements ExecutionEventPublisher {
   /** The set of workspaces a change to `blockId` should reach: the origin + every mount. */
   private async targets(originWorkspaceId: string, blockId?: string | null): Promise<string[]> {
     if (!blockId) return [originWorkspaceId]
-    const serviceId = await this.deps.blockRepository.serviceIdOf(originWorkspaceId, blockId)
-    if (!serviceId) return [originWorkspaceId]
-    const mounts = await this.deps.workspaceMountRepository.listByService(serviceId)
-    return [...new Set([originWorkspaceId, ...mounts.map((m) => m.workspaceId)])]
+    // Single join (block → its service → the workspaces mounting it). Empty when the block has
+    // no service, so the result collapses to the origin only.
+    const mounting = await this.deps.workspaceMountRepository.listWorkspaceIdsMountingBlock(
+      originWorkspaceId,
+      blockId,
+    )
+    return [...new Set([originWorkspaceId, ...mounting])]
   }
 
   async executionChanged(

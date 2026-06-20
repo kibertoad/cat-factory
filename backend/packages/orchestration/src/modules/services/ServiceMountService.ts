@@ -125,7 +125,11 @@ export class ServiceMountService {
   }
 
   private defaultPosition(existing: WorkspaceMount[]): { x: number; y: number } {
+    // Lay new mounts out on a 5-wide grid so they don't pile onto the same point: the column
+    // cycles every 5 (x), the row advances every 5 (y). (The old `(n % 5)` on both axes put
+    // every 5th mount back at the origin and kept them all on the diagonal.)
     const n = existing.length
-    return { x: 80 + (n % 5) * 48, y: 80 + (n % 5) * 48 }
+    const columns = 5
+    return { x: 80 + (n % columns) * 48, y: 80 + Math.floor(n / columns) * 48 }
   }
 }

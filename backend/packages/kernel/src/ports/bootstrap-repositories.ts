@@ -80,4 +80,11 @@ export interface BootstrapJobRepository {
    * `service_id` column stamped from the run's service frame.
    */
   listByService(serviceId: string): Promise<BootstrapJobRecord[]>
+  /**
+   * Every bootstrap run belonging to ANY of the given services, in a single (chunked) query —
+   * the batched form of {@link BootstrapJobRepository.listByService} used to compose a board's
+   * bootstrap runs from all the services it mounts without one round-trip per mount. Empty
+   * input → empty.
+   */
+  listByServices(serviceIds: string[]): Promise<BootstrapJobRecord[]>
 }

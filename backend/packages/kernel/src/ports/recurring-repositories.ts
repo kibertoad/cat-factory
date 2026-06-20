@@ -26,6 +26,13 @@ export interface PipelineScheduleRepository {
    */
   listByService(serviceId: string): Promise<PipelineSchedule[]>
   /**
+   * Every schedule owned by ANY of the given services, in a single (chunked) query — the
+   * batched form of {@link PipelineScheduleRepository.listByService} used to compose a board's
+   * schedules from all the services it mounts without one round-trip per mount. Empty input →
+   * empty.
+   */
+  listByServices(serviceIds: string[]): Promise<PipelineSchedule[]>
+  /**
    * Every enabled schedule across ALL workspaces whose `nextRunAt <= asOf`. The
    * sweeper fires each one; the engine skips any whose block already has an active
    * run. Ordered by `nextRunAt` ascending.

@@ -244,10 +244,9 @@ export class WorkspaceService {
   ): Promise<ExecutionInstance[]> {
     if (mounts.length === 0) return localExecutions
     const byId = new Map(localExecutions.map((e) => [e.id, e]))
-    for (const mount of mounts) {
-      for (const e of await this.executionRepository.listByService(mount.serviceId)) {
-        if (!byId.has(e.id)) byId.set(e.id, e)
-      }
+    // One batched query for every mounted service's runs (not one round-trip per mount).
+    for (const e of await this.executionRepository.listByServices(mounts.map((m) => m.serviceId))) {
+      if (!byId.has(e.id)) byId.set(e.id, e)
     }
     return [...byId.values()]
   }

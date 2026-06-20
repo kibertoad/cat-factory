@@ -39,6 +39,24 @@ export class D1ExecutionRepository implements ExecutionRepository {
     return results.map(rowToExecution)
   }
 
+  async listByServices(serviceIds: string[]): Promise<ExecutionInstance[]> {
+    if (serviceIds.length === 0) return []
+    const out: ExecutionInstance[] = []
+    // Chunk the IN list to stay well under SQLite/D1's bound-parameter limit.
+    for (let i = 0; i < serviceIds.length; i += 500) {
+      const chunk = serviceIds.slice(i, i + 500)
+      const placeholders = chunk.map(() => '?').join(', ')
+      const { results } = await this.db
+        .prepare(
+          `SELECT * FROM agent_runs WHERE service_id IN (${placeholders}) AND kind = 'execution' ORDER BY created_at`,
+        )
+        .bind(...chunk)
+        .all<ExecutionRow>()
+      for (const row of results) out.push(rowToExecution(row))
+    }
+    return out
+  }
+
   async get(workspaceId: string, id: string): Promise<ExecutionInstance | null> {
     const row = await this.db
       .prepare(`SELECT * FROM agent_runs WHERE workspace_id = ? AND id = ? AND kind = 'execution'`)

@@ -33,6 +33,12 @@ export interface ServiceRepository {
   insert(service: Service): Promise<void>
   update(id: string, patch: ServicePatch): Promise<void>
   delete(id: string): Promise<void>
+  /**
+   * Delete a set of services in a single (chunked) query — the batched form of
+   * {@link ServiceRepository.delete} used when a frame deletion dooms one or more services at
+   * once. Empty input → no-op.
+   */
+  deleteMany(ids: string[]): Promise<void>
 }
 
 /** Fields of a mount that may be patched (the per-workspace layout override). */
@@ -47,6 +53,15 @@ export interface WorkspaceMountRepository {
    */
   listByService(serviceId: string): Promise<WorkspaceMount[]>
   /**
+   * The workspace ids that mount the service owning `blockId` (homed in `originWorkspaceId`),
+   * resolved in a SINGLE join — the real-time fan-out's hot path. Folds the
+   * "block → its service → the workspaces mounting it" lookup into one query instead of
+   * resolving the block's service and then its mounts on every event. Empty when the block has
+   * no service (the caller then delivers to the origin only). The origin is NOT implied — the
+   * caller unions it in.
+   */
+  listWorkspaceIdsMountingBlock(originWorkspaceId: string, blockId: string): Promise<string[]>
+  /**
    * Mount counts for a set of services in a single query, keyed by service id (services with
    * no mounts are absent). Backs the org catalog's "Shared" badge without an N+1
    * {@link WorkspaceMountRepository.listByService} per service on the snapshot hot path.
@@ -57,4 +72,10 @@ export interface WorkspaceMountRepository {
   update(workspaceId: string, serviceId: string, patch: WorkspaceMountPatch): Promise<void>
   /** Remove a service from a workspace board (does NOT delete the service). */
   remove(workspaceId: string, serviceId: string): Promise<void>
+  /**
+   * Remove EVERY workspace's mount of the given services in a single (chunked) query — the
+   * batched form of {@link WorkspaceMountRepository.remove} used when a frame deletion dooms a
+   * service: its mounts must be cleaned off every board at once. Empty input → no-op.
+   */
+  removeByServices(serviceIds: string[]): Promise<void>
 }

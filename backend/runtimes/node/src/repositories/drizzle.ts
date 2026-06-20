@@ -184,14 +184,6 @@ class DrizzleBlockRepository implements BlockRepository {
     return row ? rowToBlock(row) : null
   }
 
-  async serviceIdOf(workspaceId: string, blockId: string): Promise<string | null> {
-    const [row] = await this.db
-      .select({ serviceId: blocks.service_id })
-      .from(blocks)
-      .where(and(eq(blocks.workspace_id, workspaceId), eq(blocks.id, blockId)))
-    return row?.serviceId ?? null
-  }
-
   async findById(
     blockId: string,
   ): Promise<{ workspaceId: string; serviceId: string | null; block: Block } | null> {
@@ -298,6 +290,21 @@ class DrizzleExecutionRepository implements ExecutionRepository {
       .where(and(eq(agentRuns.service_id, serviceId), this.isExecution))
       .orderBy(agentRuns.created_at)
     return rows.map((r) => rowToExecution(r as ExecutionRow))
+  }
+
+  async listByServices(serviceIds: string[]): Promise<ExecutionInstance[]> {
+    if (serviceIds.length === 0) return []
+    const out: ExecutionInstance[] = []
+    // Chunk the IN list to stay well under the bind-parameter limit.
+    for (let i = 0; i < serviceIds.length; i += 500) {
+      const rows = await this.db
+        .select()
+        .from(agentRuns)
+        .where(and(inArray(agentRuns.service_id, serviceIds.slice(i, i + 500)), this.isExecution))
+        .orderBy(agentRuns.created_at)
+      for (const r of rows) out.push(rowToExecution(r as ExecutionRow))
+    }
+    return out
   }
 
   async get(workspaceId: string, id: string): Promise<ExecutionInstance | null> {
@@ -911,6 +918,21 @@ class DrizzlePipelineScheduleRepository implements PipelineScheduleRepository {
     return rows.map(rowToSchedule)
   }
 
+  async listByServices(serviceIds: string[]): Promise<PipelineSchedule[]> {
+    if (serviceIds.length === 0) return []
+    const out: PipelineSchedule[] = []
+    // Chunk the IN list to stay well under the bind-parameter limit.
+    for (let i = 0; i < serviceIds.length; i += 500) {
+      const rows = await this.db
+        .select()
+        .from(pipelineSchedules)
+        .where(inArray(pipelineSchedules.service_id, serviceIds.slice(i, i + 500)))
+        .orderBy(pipelineSchedules.created_at)
+      for (const row of rows) out.push(rowToSchedule(row))
+    }
+    return out
+  }
+
   async listDue(asOf: number): Promise<DueSchedule[]> {
     const rows = await this.db
       .select()
@@ -1131,6 +1153,14 @@ class DrizzleServiceRepository implements ServiceRepository {
   async delete(id: string): Promise<void> {
     await this.db.delete(services).where(eq(services.id, id))
   }
+
+  async deleteMany(ids: string[]): Promise<void> {
+    if (ids.length === 0) return
+    // Chunk the IN list to stay well under the bind-parameter limit.
+    for (let i = 0; i < ids.length; i += 500) {
+      await this.db.delete(services).where(inArray(services.id, ids.slice(i, i + 500)))
+    }
+  }
 }
 
 function rowToMount(row: typeof workspaceServices.$inferSelect): WorkspaceMount {
@@ -1163,6 +1193,21 @@ class DrizzleWorkspaceMountRepository implements WorkspaceMountRepository {
       .where(eq(workspaceServices.service_id, serviceId))
       .orderBy(workspaceServices.created_at)
     return rows.map(rowToMount)
+  }
+
+  async listWorkspaceIdsMountingBlock(
+    originWorkspaceId: string,
+    blockId: string,
+  ): Promise<string[]> {
+    // One join: the service owning the block → the workspaces that mount it. A block with no
+    // service makes the subquery NULL, which matches no rows (`service_id = NULL`) → empty.
+    const rows = await this.db
+      .select({ workspaceId: workspaceServices.workspace_id })
+      .from(workspaceServices)
+      .where(
+        sql`${workspaceServices.service_id} = (SELECT ${blocks.service_id} FROM ${blocks} WHERE ${blocks.workspace_id} = ${originWorkspaceId} AND ${blocks.id} = ${blockId})`,
+      )
+    return rows.map((r) => r.workspaceId)
   }
 
   async countByServiceIds(serviceIds: string[]): Promise<Record<string, number>> {
@@ -1244,6 +1289,16 @@ class DrizzleWorkspaceMountRepository implements WorkspaceMountRepository {
           eq(workspaceServices.service_id, serviceId),
         ),
       )
+  }
+
+  async removeByServices(serviceIds: string[]): Promise<void> {
+    if (serviceIds.length === 0) return
+    // Chunk the IN list to stay well under the bind-parameter limit.
+    for (let i = 0; i < serviceIds.length; i += 500) {
+      await this.db
+        .delete(workspaceServices)
+        .where(inArray(workspaceServices.service_id, serviceIds.slice(i, i + 500)))
+    }
   }
 }
 

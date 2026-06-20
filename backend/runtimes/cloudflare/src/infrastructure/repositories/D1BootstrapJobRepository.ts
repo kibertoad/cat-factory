@@ -261,4 +261,22 @@ export class D1BootstrapJobRepository implements BootstrapJobRepository {
       .all<AgentRunRow>()
     return (results ?? []).map(rowToRecord)
   }
+
+  async listByServices(serviceIds: string[]): Promise<BootstrapJobRecord[]> {
+    if (serviceIds.length === 0) return []
+    const out: BootstrapJobRecord[] = []
+    // Chunk the IN list to stay well under SQLite/D1's bound-parameter limit.
+    for (let i = 0; i < serviceIds.length; i += 500) {
+      const chunk = serviceIds.slice(i, i + 500)
+      const placeholders = chunk.map(() => '?').join(', ')
+      const { results } = await this.db
+        .prepare(
+          `SELECT * FROM agent_runs WHERE service_id IN (${placeholders}) AND kind = 'bootstrap' ORDER BY created_at DESC`,
+        )
+        .bind(...chunk)
+        .all<AgentRunRow>()
+      for (const row of results ?? []) out.push(rowToRecord(row))
+    }
+    return out
+  }
 }

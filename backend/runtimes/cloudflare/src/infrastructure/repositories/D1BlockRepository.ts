@@ -50,14 +50,6 @@ export class D1BlockRepository implements BlockRepository {
     return row ? rowToBlock(row) : null
   }
 
-  async serviceIdOf(workspaceId: string, blockId: string): Promise<string | null> {
-    const row = await this.db
-      .prepare('SELECT service_id FROM blocks WHERE workspace_id = ? AND id = ?')
-      .bind(workspaceId, blockId)
-      .first<{ service_id: string | null }>()
-    return row?.service_id ?? null
-  }
-
   async findById(
     blockId: string,
   ): Promise<{ workspaceId: string; serviceId: string | null; block: Block } | null> {

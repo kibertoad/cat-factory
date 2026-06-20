@@ -199,10 +199,12 @@ export class BootstrapService {
       add(record)
     }
     if (this.deps.workspaceMountRepository) {
-      for (const mount of await this.deps.workspaceMountRepository.listByWorkspace(workspaceId)) {
-        for (const record of await this.deps.bootstrapJobRepository.listByService(mount.serviceId)) {
-          add(record)
-        }
+      const mounts = await this.deps.workspaceMountRepository.listByWorkspace(workspaceId)
+      // One batched query for every mounted service's runs (not one round-trip per mount).
+      for (const record of await this.deps.bootstrapJobRepository.listByServices(
+        mounts.map((m) => m.serviceId),
+      )) {
+        add(record)
       }
     }
     return out

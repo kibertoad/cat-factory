@@ -49,6 +49,22 @@ export class D1WorkspaceMountRepository implements WorkspaceMountRepository {
     return (results ?? []).map(rowToMount)
   }
 
+  async listWorkspaceIdsMountingBlock(
+    originWorkspaceId: string,
+    blockId: string,
+  ): Promise<string[]> {
+    // One join: the service owning the block → the workspaces that mount it. A block with no
+    // service makes the subquery NULL, which matches no rows (`service_id = NULL`) → empty.
+    const { results } = await this.db
+      .prepare(
+        `SELECT workspace_id FROM workspace_services
+         WHERE service_id = (SELECT service_id FROM blocks WHERE workspace_id = ? AND id = ?)`,
+      )
+      .bind(originWorkspaceId, blockId)
+      .all<{ workspace_id: string }>()
+    return (results ?? []).map((r) => r.workspace_id)
+  }
+
   async countByServiceIds(serviceIds: string[]): Promise<Record<string, number>> {
     if (serviceIds.length === 0) return {}
     const placeholders = serviceIds.map(() => '?').join(', ')
@@ -121,5 +137,18 @@ export class D1WorkspaceMountRepository implements WorkspaceMountRepository {
       .prepare(`DELETE FROM workspace_services WHERE workspace_id = ? AND service_id = ?`)
       .bind(workspaceId, serviceId)
       .run()
+  }
+
+  async removeByServices(serviceIds: string[]): Promise<void> {
+    if (serviceIds.length === 0) return
+    // Chunk the IN list to stay well under SQLite/D1's bound-parameter limit.
+    for (let i = 0; i < serviceIds.length; i += 500) {
+      const chunk = serviceIds.slice(i, i + 500)
+      const placeholders = chunk.map(() => '?').join(', ')
+      await this.db
+        .prepare(`DELETE FROM workspace_services WHERE service_id IN (${placeholders})`)
+        .bind(...chunk)
+        .run()
+    }
   }
 }

@@ -127,6 +127,24 @@ export class D1PipelineScheduleRepository implements PipelineScheduleRepository 
     return results.map(rowToSchedule)
   }
 
+  async listByServices(serviceIds: string[]): Promise<PipelineSchedule[]> {
+    if (serviceIds.length === 0) return []
+    const out: PipelineSchedule[] = []
+    // Chunk the IN list to stay well under SQLite/D1's bound-parameter limit.
+    for (let i = 0; i < serviceIds.length; i += 500) {
+      const chunk = serviceIds.slice(i, i + 500)
+      const placeholders = chunk.map(() => '?').join(', ')
+      const { results } = await this.db
+        .prepare(
+          `SELECT * FROM pipeline_schedules WHERE service_id IN (${placeholders}) ORDER BY created_at ASC`,
+        )
+        .bind(...chunk)
+        .all<ScheduleRow>()
+      for (const row of results) out.push(rowToSchedule(row))
+    }
+    return out
+  }
+
   async listDue(asOf: number): Promise<DueSchedule[]> {
     const { results } = await this.db
       .prepare(
