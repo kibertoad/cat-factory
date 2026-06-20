@@ -11,5 +11,10 @@ agent makes many tool calls without ever editing a file (the signature of the
 credential rabbit-hole: exploring/probing the environment without implementing) or
 makes too many consecutive failing tool calls. Bounds are env-configurable
 (`JOB_MAX_TOOLCALLS_WITHOUT_EDIT`, `JOB_MAX_CONSECUTIVE_TOOL_ERRORS`); the no-edit
-bound is skipped for assess-only runs (`expectsEdits: false`, used by the merger) so
-a run that correctly makes zero edits is never falsely aborted.
+bound is skipped for assess-only runs (`expectsEdits: false`) so a run that correctly
+makes zero edits is never falsely aborted — this covers both the merger AND the
+Blueprinter, which explores the repo and returns the service tree as JSON (the harness
+renders the files), so it never calls an edit tool itself. The edit-tool detection
+also recognises alternate names case-insensitively (`apply_patch`/`str_replace`/
+`multiedit`/… in addition to `edit`/`write`) so a model that mutates files under a
+different tool name is not mistaken for one making no edits.

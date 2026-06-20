@@ -133,8 +133,18 @@ export async function runCodingAgent(
     // mid-run doesn't lose it (a retry then resumes from the pushed commits). The
     // agent commits its own work; this only PUSHES already-committed commits, so it
     // never races the agent's staging. Best-effort: a failed checkpoint is skipped.
+    //
+    // Only push once the branch has advanced past its pre-run tip: pushing while it
+    // still sits at `baseSha` would create the work branch at the base commit (a
+    // zero-diff branch), which a later retry would see via `remoteBranchExists` and
+    // treat as resumable work — then fail to open a PR ("no commits between base and
+    // head"). So a run that never commits leaves NO branch behind, preserving the
+    // clean no-op outcome.
     const checkpoint = setInterval(() => {
-      void pushBranch(dir, spec.pushBranch, spec.ghToken, signal).catch((err) => {
+      void (async () => {
+        if (!(await branchHasCommitsSince(dir, baseSha, signal))) return
+        await pushBranch(dir, spec.pushBranch, spec.ghToken, signal)
+      })().catch((err) => {
         log.info('coding-agent: checkpoint push skipped', {
           ...trace,
           reason: err instanceof Error ? err.message : String(err),

@@ -15,10 +15,8 @@ import {
 } from '../src/pi.js'
 import {
   authenticatedCloneUrl,
-  branchHasChanges,
   branchHasCommitsSince,
   changedPathsFromPorcelain,
-  commitAll,
   commitTrackedEdits,
   headCommit,
   mergeBranch,
@@ -265,69 +263,6 @@ describe('producedRepoContent (from-scratch scaffold)', () => {
     await writeFile(join(dir, 'AGENTS.md'), 'context', 'utf8')
     await writeFile(join(dir, 'package.json'), '{}', 'utf8')
     expect(await producedRepoContent(dir, false)).toBe(true)
-  })
-})
-
-describe('branchHasChanges', () => {
-  let dir: string
-
-  /** Init a repo with one base commit (a tracked file) and return its base tip SHA. */
-  const initRepo = async (): Promise<string> => {
-    const git = (...args: string[]): Promise<unknown> => exec('git', args, { cwd: dir })
-    await git('init', '-b', 'main')
-    await git('config', 'user.email', 'test@example.com')
-    await git('config', 'user.name', 'Test')
-    // AGENTS.md is the harness-written context; in these repos it is gitignored,
-    // exactly as in the deployments where the no-op false-positive was observed.
-    await writeFile(join(dir, '.gitignore'), 'AGENTS.md\n', 'utf8')
-    await writeFile(join(dir, 'base.txt'), 'base\n', 'utf8')
-    await git('add', '-A')
-    await git('commit', '-m', 'base')
-    return headCommit(dir)
-  }
-
-  beforeEach(async () => {
-    dir = await mkdtemp(join(tmpdir(), 'branch-test-'))
-  })
-  afterEach(async () => {
-    await rm(dir, { recursive: true, force: true })
-  })
-
-  it('is false when the agent produced nothing (only the gitignored AGENTS.md)', async () => {
-    const base = await initRepo()
-    await writeFile(join(dir, 'AGENTS.md'), 'context', 'utf8')
-    expect(await branchHasChanges(dir, base)).toBe(false)
-  })
-
-  it('is true when the agent committed its own work (the observed false-positive)', async () => {
-    const base = await initRepo()
-    // The agent writes AND commits its change itself, leaving a clean working tree
-    // — so a trailing commitAll finds nothing, but the branch has advanced.
-    await writeFile(join(dir, 'feature.ts'), 'export const x = 1\n', 'utf8')
-    await exec('git', ['add', '-A'], { cwd: dir })
-    await exec('git', ['commit', '-m', 'feat'], { cwd: dir })
-    expect(await commitAll(dir, 'noop')).toBe(false)
-    expect(await branchHasChanges(dir, base)).toBe(true)
-  })
-
-  it('is true when the agent left uncommitted edits', async () => {
-    const base = await initRepo()
-    await writeFile(join(dir, 'feature.ts'), 'export const x = 1\n', 'utf8')
-    expect(await branchHasChanges(dir, base)).toBe(true)
-  })
-
-  it('ignores a lone AGENTS.md change even when it is tracked (not gitignored)', async () => {
-    const git = (...args: string[]): Promise<unknown> => exec('git', args, { cwd: dir })
-    await git('init', '-b', 'main')
-    await git('config', 'user.email', 'test@example.com')
-    await git('config', 'user.name', 'Test')
-    await writeFile(join(dir, 'base.txt'), 'base\n', 'utf8')
-    await git('add', '-A')
-    await git('commit', '-m', 'base')
-    const base = await headCommit(dir)
-    // No .gitignore here, so AGENTS.md is tracked; rewriting only it is still a no-op.
-    await writeFile(join(dir, 'AGENTS.md'), 'fresh context', 'utf8')
-    expect(await branchHasChanges(dir, base)).toBe(false)
   })
 })
 
@@ -622,6 +557,17 @@ describe('ProgressGuard (anti-rabbithole)', () => {
     const limits: ProgressGuardLimits = { maxToolCallsWithoutEdit: 5, maxConsecutiveErrors: 99 }
     const guard = new ProgressGuard(limits)
     const seq = ['bash', 'read', 'edit', 'bash', 'read', 'bash', 'write', 'bash']
+    let reason: string | null = null
+    for (const t of seq) reason = guard.observe(toolCall(t))
+    expect(reason).toBeNull()
+  })
+
+  it('recognises alternate edit-tool names, case-insensitively', () => {
+    const limits: ProgressGuardLimits = { maxToolCallsWithoutEdit: 4, maxConsecutiveErrors: 99 }
+    const guard = new ProgressGuard(limits)
+    // An `apply_patch`-style edit (in mixed case) counts as a file edit, so the
+    // no-edit bound never trips even past its threshold.
+    const seq = ['bash', 'read', 'Apply_Patch', 'bash', 'read', 'bash']
     let reason: string | null = null
     for (const t of seq) reason = guard.observe(toolCall(t))
     expect(reason).toBeNull()

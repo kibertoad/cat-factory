@@ -249,35 +249,6 @@ export async function headCommit(dir: string, signal?: AbortSignal): Promise<str
   return (await git(['rev-parse', 'HEAD'], { cwd: dir, signal })).trim()
 }
 
-/**
- * Whether the work branch produced any real change relative to `baseSha` (the base
- * branch tip captured right after clone). Crucially this counts the agent's OWN
- * commits as well as any still-uncommitted edits — the build role tells the agent
- * to commit its work itself, so by the end of a successful run the working tree is
- * often clean and a trailing {@link commitAll} finds nothing even though the branch
- * advanced. Judging the *whole run* against the base tip (and ignoring the
- * harness-written AGENTS.md, as {@link hasAgentChanges} does) is what tells a
- * genuine no-op — the agent never wrote anything — apart from a real run whose
- * changes are already committed. Stages first so newly created files are visible.
- */
-export async function branchHasChanges(
-  dir: string,
-  baseSha: string,
-  signal?: AbortSignal,
-): Promise<boolean> {
-  await git(['add', '-A'], { cwd: dir, signal })
-  const diff = await git(['diff', '--name-only', baseSha], { cwd: dir, signal })
-  return diff
-    .split('\n')
-    .map((line) =>
-      line
-        .replace(/\r$/, '')
-        .trim()
-        .replace(/^"(.*)"$/, '$1'),
-    )
-    .some((path) => path !== '' && path.toLowerCase() !== 'agents.md')
-}
-
 /** Stage everything and commit; returns false when there was nothing to commit. */
 export async function commitAll(
   dir: string,
