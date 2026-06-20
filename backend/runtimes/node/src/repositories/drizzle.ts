@@ -991,11 +991,12 @@ class DrizzleServiceRepository implements ServiceRepository {
     return row ? rowToService(row) : null
   }
 
-  async listByAccount(accountId: string): Promise<Service[]> {
+  async listByAccount(accountId: string | null): Promise<Service[]> {
+    // NULL-safe match so the legacy/unscoped org (accountId null) lists cleanly.
     const rows = await this.db
       .select()
       .from(services)
-      .where(eq(services.account_id, accountId))
+      .where(sql`${services.account_id} IS NOT DISTINCT FROM ${accountId}`)
       .orderBy(services.created_at)
     return rows.map(rowToService)
   }

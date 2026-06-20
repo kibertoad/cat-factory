@@ -1,6 +1,8 @@
 ---
 '@cat-factory/contracts': minor
 '@cat-factory/kernel': minor
+'@cat-factory/orchestration': minor
+'@cat-factory/server': minor
 '@cat-factory/worker': minor
 '@cat-factory/node-server': minor
 ---
@@ -22,6 +24,12 @@ or sync. This is the first (additive) increment:
 - A `service_id` column denormalised onto `blocks` + `agent_runs` (D1 migration
   `0031`; Drizzle migration), backfilled via a recursive CTE from each block's
   top-level frame, in preparation for re-keying the board's physical scope.
+- A **mount API**: every newly created service frame is registered as an
+  account-owned service and mounted onto its workspace; `GET /workspaces/:ws/services`
+  (mounts), `GET /workspaces/:ws/services/catalog` (the org's services),
+  `POST|DELETE /workspaces/:ws/services/:serviceId` (mount/unmount — within the same
+  org only), `PATCH …/layout` (per-workspace frame layout). Backed by the new
+  `ServiceMountService` (orchestration `services` module) wired into both runtimes.
 
-Existing workspace-scoped behaviour is unchanged; the read paths, mount API,
-sync deduplication and real-time fan-out land in follow-up increments.
+The board read path still renders workspace-local blocks; composing a board from its
+mounted services, sync deduplication and real-time fan-out land in follow-up increments.

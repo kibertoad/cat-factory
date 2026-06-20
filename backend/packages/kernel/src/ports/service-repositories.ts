@@ -17,8 +17,12 @@ export interface ServiceRepository {
   get(id: string): Promise<Service | null>
   /** The service that owns a given frame block, or null. */
   getByFrameBlock(frameBlockId: string): Promise<Service | null>
-  /** Every service owned by an account (the org catalog a workspace mounts from). */
-  listByAccount(accountId: string): Promise<Service[]>
+  /**
+   * Every service owned by an account (the org catalog a workspace mounts from).
+   * `null` lists the legacy/unscoped org (the auth-disabled path), matching services
+   * whose `accountId` is NULL.
+   */
+  listByAccount(accountId: string | null): Promise<Service[]>
   /** The service linked to a repo (installation + github id), or null. */
   getByRepo(installationId: number, repoGithubId: number): Promise<Service | null>
   insert(service: Service): Promise<void>

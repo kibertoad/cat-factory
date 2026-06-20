@@ -100,5 +100,6 @@ export {
   type FragmentLibraryModule,
   type RecurringModule,
   type TrackerModule,
+  type ServicesModule,
   createCore,
 } from './container.js'

@@ -11,8 +11,12 @@ import { assertFound, ValidationError } from '@cat-factory/kernel'
 import { BLOCK_TYPE_LABEL } from '@cat-factory/kernel'
 import type {
   BlockRepository,
+  Clock,
   ExecutionRepository,
   RepoProjectionRepository,
+  Service,
+  ServiceRepository,
+  WorkspaceMountRepository,
   WorkspaceRepository,
 } from '@cat-factory/kernel'
 import type { IdGenerator } from '@cat-factory/kernel'
@@ -24,12 +28,21 @@ export interface BoardServiceDependencies {
   blockRepository: BlockRepository
   executionRepository: ExecutionRepository
   idGenerator: IdGenerator
+  clock: Clock
   /**
    * The GitHub repo projection, present only when the GitHub integration is
    * wired. Backs {@link BoardService.addServiceFromRepo}, which links an existing
    * repo to the new service frame; absent → that path reports unavailable.
    */
   repoProjectionRepository?: RepoProjectionRepository
+  /**
+   * In-org shared services. When wired, every new top-level frame is registered as
+   * an account-owned {@link Service} and mounted onto the creating workspace, so it
+   * can be shared with other workspaces in the same org. Absent → frames are plain
+   * workspace-local blocks (legacy behaviour).
+   */
+  serviceRepository?: ServiceRepository
+  workspaceMountRepository?: WorkspaceMountRepository
 }
 
 /**
@@ -43,20 +56,62 @@ export class BoardService {
   private readonly blockRepository: BlockRepository
   private readonly executionRepository: ExecutionRepository
   private readonly idGenerator: IdGenerator
+  private readonly clock: Clock
   private readonly repoProjectionRepository?: RepoProjectionRepository
+  private readonly serviceRepository?: ServiceRepository
+  private readonly workspaceMountRepository?: WorkspaceMountRepository
 
   constructor({
     workspaceRepository,
     blockRepository,
     executionRepository,
     idGenerator,
+    clock,
     repoProjectionRepository,
+    serviceRepository,
+    workspaceMountRepository,
   }: BoardServiceDependencies) {
     this.workspaceRepository = workspaceRepository
     this.blockRepository = blockRepository
     this.executionRepository = executionRepository
     this.idGenerator = idGenerator
+    this.clock = clock
     this.repoProjectionRepository = repoProjectionRepository
+    this.serviceRepository = serviceRepository
+    this.workspaceMountRepository = workspaceMountRepository
+  }
+
+  /**
+   * Register a newly created top-level frame as an account-owned service and mount it
+   * onto the creating workspace (in-org sharing). No-op when the service repositories
+   * aren't wired, so legacy/unconfigured facades keep plain workspace-local frames.
+   * The frame's board position is carried on the mount (the per-workspace layout
+   * override); the block keeps its own position too for the not-yet-composed board.
+   */
+  private async registerService(
+    workspaceId: string,
+    frame: Block,
+    repo?: { installationId: number; githubId: number },
+  ): Promise<void> {
+    if (!this.serviceRepository || !this.workspaceMountRepository) return
+    const accountId = (await this.workspaceRepository.accountOf(workspaceId)) ?? null
+    const now = this.clock.now()
+    const service: Service = {
+      id: this.idGenerator.next('svc'),
+      accountId,
+      frameBlockId: frame.id,
+      installationId: repo?.installationId ?? null,
+      repoGithubId: repo?.githubId ?? null,
+      createdAt: now,
+    }
+    await this.serviceRepository.insert(service)
+    await this.workspaceMountRepository.upsert({
+      workspaceId,
+      serviceId: service.id,
+      position: frame.position,
+      size: frame.size ?? null,
+      createdAt: now,
+    })
   }
 
   private requireWorkspace(workspaceId: string) {
@@ -87,6 +142,7 @@ export class BoardService {
       parentId: null,
     }
     await this.blockRepository.insert(workspaceId, block)
+    await this.registerService(workspaceId, block)
     return block
   }
 
@@ -128,6 +184,10 @@ export class BoardService {
     }
     await this.blockRepository.insert(workspaceId, block)
     await this.repoProjectionRepository.linkBlock(workspaceId, repo.githubId, block.id)
+    await this.registerService(workspaceId, block, {
+      installationId: repo.installationId,
+      githubId: repo.githubId,
+    })
     return block
   }
 

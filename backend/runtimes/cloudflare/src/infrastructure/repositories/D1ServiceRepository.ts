@@ -45,9 +45,10 @@ export class D1ServiceRepository implements ServiceRepository {
     return row ? rowToService(row) : null
   }
 
-  async listByAccount(accountId: string): Promise<Service[]> {
+  async listByAccount(accountId: string | null): Promise<Service[]> {
+    // `IS` matches NULL too, so the legacy/unscoped org (accountId null) lists cleanly.
     const { results } = await this.db
-      .prepare(`SELECT * FROM services WHERE account_id = ? ORDER BY created_at`)
+      .prepare(`SELECT * FROM services WHERE account_id IS ? ORDER BY created_at`)
       .bind(accountId)
       .all<ServiceRow>()
     return (results ?? []).map(rowToService)

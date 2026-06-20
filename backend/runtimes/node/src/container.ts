@@ -333,6 +333,8 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     blockRepository: repos.blockRepository,
     pipelineRepository: repos.pipelineRepository,
     executionRepository: repos.executionRepository,
+    serviceRepository: repos.serviceRepository,
+    workspaceMountRepository: repos.workspaceMountRepository,
     tokenUsageRepository: repos.tokenUsageRepository,
     llmCallMetricRepository: repos.llmCallMetricRepository,
     modelDefaultsRepository: repos.modelDefaultsRepository,

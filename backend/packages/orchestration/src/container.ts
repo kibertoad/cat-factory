@@ -5,6 +5,8 @@ import type {
   WorkspaceRepository,
 } from '@cat-factory/kernel'
 import type { AccountRepository, MembershipRepository } from '@cat-factory/kernel'
+import type { ServiceRepository, WorkspaceMountRepository } from '@cat-factory/kernel'
+import { ServiceMountService } from './modules/services/ServiceMountService.js'
 import type { Clock, IdGenerator } from '@cat-factory/kernel'
 import type { AgentExecutor } from '@cat-factory/kernel'
 import type { TokenUsageRepository } from '@cat-factory/kernel'
@@ -112,6 +114,12 @@ export interface CoreDependencies {
   blockRepository: BlockRepository
   pipelineRepository: PipelineRepository
   executionRepository: ExecutionRepository
+  /**
+   * In-org shared services (account-owned services + per-workspace mounts, 0030).
+   * Optional so facades/tests without them wired keep the feature cleanly opt-in.
+   */
+  serviceRepository?: ServiceRepository
+  workspaceMountRepository?: WorkspaceMountRepository
   idGenerator: IdGenerator
   clock: Clock
   /**
@@ -459,6 +467,26 @@ export interface Core {
   recurring?: RecurringModule
   /** Present only when the tracker-settings repository is wired (see CoreDependencies). */
   tracker?: TrackerModule
+  /** Present only when the service + mount repositories are wired (in-org sharing). */
+  services?: ServicesModule
+}
+
+export interface ServicesModule {
+  service: ServiceMountService
+}
+
+/** Assemble the in-org service-sharing module when its repositories are wired. */
+function createServicesModule(deps: CoreDependencies): ServicesModule | undefined {
+  const { serviceRepository, workspaceMountRepository } = deps
+  if (!serviceRepository || !workspaceMountRepository) return undefined
+  const service = new ServiceMountService({
+    serviceRepository,
+    workspaceMountRepository,
+    workspaceRepository: deps.workspaceRepository,
+    idGenerator: deps.idGenerator,
+    clock: deps.clock,
+  })
+  return { service }
 }
 
 /**
@@ -958,6 +986,7 @@ export function createCore(dependencies: CoreDependencies): Core {
   )
   const tracker = createTrackerModule(dependencies)
   const recurring = createRecurringModule(dependencies, executionService)
+  const services = createServicesModule(dependencies)
 
   return {
     workspaceService,
@@ -981,5 +1010,6 @@ export function createCore(dependencies: CoreDependencies): Core {
     ...(fragmentLibrary ? { fragmentLibrary } : {}),
     ...(recurring ? { recurring } : {}),
     ...(tracker ? { tracker } : {}),
+    ...(services ? { services } : {}),
   }
 }
