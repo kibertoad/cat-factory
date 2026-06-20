@@ -157,6 +157,11 @@ class DrizzleBlockRepository implements BlockRepository {
     return rows.map(rowToBlock)
   }
 
+  async listByService(serviceId: string): Promise<Block[]> {
+    const rows = await this.db.select().from(blocks).where(eq(blocks.service_id, serviceId))
+    return rows.map(rowToBlock)
+  }
+
   async get(workspaceId: string, id: string): Promise<Block | null> {
     const [row] = await this.db
       .select()
@@ -165,9 +170,10 @@ class DrizzleBlockRepository implements BlockRepository {
     return row ? rowToBlock(row) : null
   }
 
-  async insert(workspaceId: string, block: Block): Promise<void> {
+  async insert(workspaceId: string, block: Block, serviceId?: string | null): Promise<void> {
     await this.db.insert(blocks).values({
       workspace_id: workspaceId,
+      service_id: serviceId ?? null,
       ...blockInsertValues(block),
     } as typeof blocks.$inferInsert)
   }

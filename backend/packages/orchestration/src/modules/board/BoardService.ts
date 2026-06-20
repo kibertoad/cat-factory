@@ -83,17 +83,18 @@ export class BoardService {
 
   /**
    * Register a newly created top-level frame as an account-owned service and mount it
-   * onto the creating workspace (in-org sharing). No-op when the service repositories
-   * aren't wired, so legacy/unconfigured facades keep plain workspace-local frames.
-   * The frame's board position is carried on the mount (the per-workspace layout
-   * override); the block keeps its own position too for the not-yet-composed board.
+   * onto the creating workspace (in-org sharing). Returns the new service id so the
+   * frame block can be stamped with it (the block is `listByService`-discoverable on
+   * every workspace that mounts the service). The frame's board position is carried on
+   * the mount (the per-workspace layout override). No-op (returns undefined) when the
+   * service repositories aren't wired.
    */
   private async registerService(
     workspaceId: string,
     frame: Block,
     repo?: { installationId: number; githubId: number },
-  ): Promise<void> {
-    if (!this.serviceRepository || !this.workspaceMountRepository) return
+  ): Promise<string | undefined> {
+    if (!this.serviceRepository || !this.workspaceMountRepository) return undefined
     const accountId = (await this.workspaceRepository.accountOf(workspaceId)) ?? null
     const now = this.clock.now()
     const service: Service = {
@@ -112,6 +113,23 @@ export class BoardService {
       size: frame.size ?? null,
       createdAt: now,
     })
+    return service.id
+  }
+
+  /**
+   * The service id a block being added under `container` belongs to: the service of the
+   * container's enclosing frame. Undefined when the service repos aren't wired or the
+   * frame isn't a registered service (legacy/seeded frame) — the block is then plain
+   * workspace-local.
+   */
+  private async serviceForContainer(
+    blocks: Block[],
+    container: Block,
+  ): Promise<string | undefined> {
+    if (!this.serviceRepository) return undefined
+    const frame = container.level === 'frame' ? container : serviceOf(blocks, container)
+    if (!frame) return undefined
+    return (await this.serviceRepository.getByFrameBlock(frame.id))?.id
   }
 
   private requireWorkspace(workspaceId: string) {
@@ -141,8 +159,8 @@ export class BoardService {
       level: 'frame',
       parentId: null,
     }
-    await this.blockRepository.insert(workspaceId, block)
-    await this.registerService(workspaceId, block)
+    const serviceId = await this.registerService(workspaceId, block)
+    await this.blockRepository.insert(workspaceId, block, serviceId)
     return block
   }
 
@@ -182,12 +200,12 @@ export class BoardService {
       level: 'frame',
       parentId: null,
     }
-    await this.blockRepository.insert(workspaceId, block)
-    await this.repoProjectionRepository.linkBlock(workspaceId, repo.githubId, block.id)
-    await this.registerService(workspaceId, block, {
+    const serviceId = await this.registerService(workspaceId, block, {
       installationId: repo.installationId,
       githubId: repo.githubId,
     })
+    await this.blockRepository.insert(workspaceId, block, serviceId)
+    await this.repoProjectionRepository.linkBlock(workspaceId, repo.githubId, block.id)
     return block
   }
 
@@ -219,7 +237,11 @@ export class BoardService {
     // are treated as "not set" (workspace default preset / no pinned pipeline).
     if (input.mergePresetId) block.mergePresetId = input.mergePresetId
     if (input.pipelineId) block.pipelineId = input.pipelineId
-    await this.blockRepository.insert(workspaceId, block)
+    await this.blockRepository.insert(
+      workspaceId,
+      block,
+      await this.serviceForContainer(blocks, container),
+    )
     return block
   }
 
@@ -245,7 +267,11 @@ export class BoardService {
       level: 'module',
       parentId: serviceId,
     }
-    await this.blockRepository.insert(workspaceId, block)
+    await this.blockRepository.insert(
+      workspaceId,
+      block,
+      await this.serviceForContainer(blocks, service),
+    )
     return block
   }
 

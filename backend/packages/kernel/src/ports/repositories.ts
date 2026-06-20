@@ -53,8 +53,20 @@ export type BlockPatch = Partial<Omit<Block, 'id'>>
 
 export interface BlockRepository {
   listByWorkspace(workspaceId: string): Promise<Block[]>
+  /**
+   * Every block belonging to a service (its frame + modules + tasks), regardless of
+   * which workspace created them. Backs the board composition that renders a service
+   * mounted from another workspace in the same org. Returns the blocks whose
+   * `service_id` column matches (set at insert time when the service repos are wired).
+   */
+  listByService(serviceId: string): Promise<Block[]>
   get(workspaceId: string, id: string): Promise<Block | null>
-  insert(workspaceId: string, block: Block): Promise<void>
+  /**
+   * Insert a block. `serviceId` stamps the account-owned service the block belongs to
+   * (so it can be rendered on every workspace that mounts the service); omit/undefined
+   * for legacy, workspace-local blocks.
+   */
+  insert(workspaceId: string, block: Block, serviceId?: string | null): Promise<void>
   update(workspaceId: string, id: string, patch: BlockPatch): Promise<void>
   deleteMany(workspaceId: string, ids: string[]): Promise<void>
 }

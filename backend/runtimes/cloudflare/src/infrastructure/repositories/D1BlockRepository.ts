@@ -18,6 +18,14 @@ export class D1BlockRepository implements BlockRepository {
     return results.map(rowToBlock)
   }
 
+  async listByService(serviceId: string): Promise<Block[]> {
+    const { results } = await this.db
+      .prepare('SELECT * FROM blocks WHERE service_id = ? ORDER BY rowid')
+      .bind(serviceId)
+      .all<BlockRow>()
+    return results.map(rowToBlock)
+  }
+
   async get(workspaceId: string, id: string): Promise<Block | null> {
     const row = await this.db
       .prepare('SELECT * FROM blocks WHERE workspace_id = ? AND id = ?')
@@ -26,8 +34,12 @@ export class D1BlockRepository implements BlockRepository {
     return row ? rowToBlock(row) : null
   }
 
-  async insert(workspaceId: string, block: Block): Promise<void> {
-    const values = { workspace_id: workspaceId, ...blockInsertValues(block) }
+  async insert(workspaceId: string, block: Block, serviceId?: string | null): Promise<void> {
+    const values = {
+      workspace_id: workspaceId,
+      service_id: serviceId ?? null,
+      ...blockInsertValues(block),
+    }
     const columns = Object.keys(values)
     const placeholders = columns.map(() => '?').join(', ')
     await this.db

@@ -2,6 +2,7 @@
 '@cat-factory/contracts': minor
 '@cat-factory/kernel': minor
 '@cat-factory/orchestration': minor
+'@cat-factory/workspaces': minor
 '@cat-factory/server': minor
 '@cat-factory/worker': minor
 '@cat-factory/node-server': minor
@@ -31,5 +32,14 @@ or sync. This is the first (additive) increment:
   org only), `PATCH …/layout` (per-workspace frame layout). Backed by the new
   `ServiceMountService` (orchestration `services` module) wired into both runtimes.
 
-The board read path still renders workspace-local blocks; composing a board from its
-mounted services, sync deduplication and real-time fan-out land in follow-up increments.
+- **Board composition**: a workspace's board snapshot is now composed from the
+  services it mounts — its own blocks plus the full subtree of any service mounted
+  from another workspace in the same org, so a shared service renders identically on
+  every board (one physical copy ⇒ one shared task list + state). Each externally
+  mounted frame is positioned by this workspace's mount (the per-workspace layout
+  override), while a locally homed frame keeps its own movable position. Block inserts
+  stamp `service_id` (the frame's service for a frame; the enclosing frame's service
+  for tasks/modules) so the subtree is `listByService`-discoverable everywhere.
+
+Sync deduplication, real-time fan-out to all mounting workspaces, and the frontend
+land in follow-up increments.
