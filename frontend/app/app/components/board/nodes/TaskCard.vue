@@ -95,15 +95,52 @@ function merge() {
   execution.mergePr(props.taskId)
 }
 
-// A task with an unresolved decision: clicking it jumps straight to the modal.
+// A `blocked` task is waiting on a human for one of two reasons — an agent-raised
+// decision OR an approval gate — and both must surface here (a failed run is shown
+// separately by the AgentFailureCard above). The board previously only handled
+// decisions, so an approval-gated task was a dead end: it read "Decision needed"
+// (the old generic `blocked` label) with no badge and a click that did nothing.
 const pendingDecision = computed(() =>
   execution.openDecisions.find((d) => d.blockId === props.taskId),
+)
+const pendingApproval = computed(() =>
+  execution.openApprovals.find((a) => a.blockId === props.taskId),
+)
+
+/** What this blocked task actually needs from a human — drives the card's label,
+ * pulse and action. Decision takes precedence over approval (a step never holds
+ * both at once; this is just a stable order). Null when nothing is pending. */
+const attention = computed<{ label: string; icon: string; action: string; open: () => void } | null>(
+  () => {
+    const d = pendingDecision.value
+    if (d)
+      return {
+        label: 'Decision needed',
+        icon: 'i-lucide-circle-help',
+        action: 'Resolve',
+        open: () => ui.openDecision(d.instanceId, d.decision.id),
+      }
+    const a = pendingApproval.value
+    if (a)
+      return {
+        label: 'Approval needed',
+        icon: 'i-lucide-shield-check',
+        action: 'Approve',
+        open: () => ui.openApproval(a.instanceId, a.approval.id),
+      }
+    return null
+  },
+)
+
+/** Specific header copy: a failed run reads "Failed", a parked task reads its
+ * decision/approval reason, otherwise the generic status label. */
+const statusText = computed(() =>
+  runFailed.value ? 'Failed' : (attention.value?.label ?? statusMeta.value?.label ?? ''),
 )
 
 function selectTask() {
   ui.select(props.taskId)
-  const d = pendingDecision.value
-  if (d) ui.openDecision(d.instanceId, d.decision.id)
+  attention.value?.open()
 }
 </script>
 
@@ -114,7 +151,7 @@ function selectTask() {
     class="nodrag w-full cursor-pointer rounded-lg border bg-slate-950/70 p-2 text-left transition"
     :class="[
       selected ? 'border-white' : 'border-slate-700 hover:border-slate-500',
-      task.status === 'pr_ready' ? 'board-pulse-green' : '',
+      task.status === 'pr_ready' ? 'board-pulse-green' : attention ? 'board-pulse' : '',
     ]"
     @click.stop="selectTask"
   >
@@ -128,8 +165,11 @@ function selectTask() {
         :title="schedule.enabled ? 'Recurring pipeline' : 'Recurring pipeline (paused)'"
       />
       <span class="truncate text-[11px] font-semibold text-slate-100">{{ task.title }}</span>
-      <span class="ml-auto shrink-0 text-[9px] uppercase tracking-wide text-slate-500">
-        {{ statusMeta.label }}
+      <span
+        class="ml-auto shrink-0 text-[9px] uppercase tracking-wide"
+        :class="runFailed ? 'text-rose-400' : attention ? 'text-amber-400' : 'text-slate-500'"
+      >
+        {{ statusText }}
       </span>
     </div>
 
@@ -177,6 +217,18 @@ function selectTask() {
 
     <!-- actions by state -->
     <div class="nodrag mt-2 flex flex-wrap items-center gap-1">
+      <!-- parked for a human: a decision to resolve or an approval gate to clear -->
+      <UButton
+        v-if="attention"
+        color="warning"
+        variant="soft"
+        size="xs"
+        :icon="attention.icon"
+        @click.stop="attention.open()"
+      >
+        {{ attention.action }}
+      </UButton>
+
       <template v-if="task.status === 'planned' || task.status === 'ready'">
         <UButton
           :color="runnable ? 'primary' : 'neutral'"
