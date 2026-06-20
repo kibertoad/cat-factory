@@ -363,8 +363,7 @@ export class BoardService {
     const parentBlocks = await this.blockRepository.listByWorkspace(parentHome)
     const destService = (await this.serviceForContainer(parentBlocks, parent)) ?? null
     for (const b of subtree) {
-      const moved =
-        b.id === id ? { ...b, parentId: input.parentId, position: input.position } : b
+      const moved = b.id === id ? { ...b, parentId: input.parentId, position: input.position } : b
       await this.blockRepository.insert(parentHome, moved, destService)
       const exec = await this.executionRepository.getByBlock(blockHome, b.id)
       if (exec) {

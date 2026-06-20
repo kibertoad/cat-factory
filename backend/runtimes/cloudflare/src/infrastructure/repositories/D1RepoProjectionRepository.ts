@@ -58,10 +58,7 @@ export class D1RepoProjectionRepository implements RepoProjectionRepository {
     return row ? rowToRepo(row) : null
   }
 
-  async linkedWorkspaces(
-    repoGithubId: number,
-    candidateWorkspaceIds: string[],
-  ): Promise<string[]> {
+  async linkedWorkspaces(repoGithubId: number, candidateWorkspaceIds: string[]): Promise<string[]> {
     if (candidateWorkspaceIds.length === 0) return []
     const found: string[] = []
     // Chunk the IN list to stay well under SQLite/D1's bound-parameter limit.

@@ -1,8 +1,8 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "bedb09be-855a-44e0-bafd-5782059e02f2",
-  "prevIds": ["f0253aee-0646-4036-b52d-fa0fe0c08512"],
+  "id": "ec4b5b0f-42f5-4658-bf57-b784307b914d",
+  "prevIds": ["bedb09be-855a-44e0-bafd-5782059e02f2"],
   "ddl": [
     {
       "isRlsEnabled": false,
@@ -3068,6 +3068,13 @@
     {
       "nameExplicit": true,
       "columns": [
+        {
+          "value": "account_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
         {
           "value": "frame_block_id",
           "isExpression": false,

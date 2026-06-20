@@ -117,8 +117,11 @@ export const services = pgTable(
   },
   (t) => [
     index('idx_services_account').on(t.account_id),
-    // One service per frame block (the frame↔service mapping is 1:1).
-    uniqueIndex('idx_services_frame').on(t.frame_block_id),
+    // One service per frame block *within an account* (the frame↔service mapping is 1:1).
+    // Scoped by account_id, not global: block ids are only unique within a workspace, so a
+    // reused/seeded frame id recurs across workspaces; NULL account ids are SQL-distinct, so
+    // the auth-disabled/local path stays unconstrained while real accounts stay 1:1.
+    uniqueIndex('idx_services_frame').on(t.account_id, t.frame_block_id),
     index('idx_services_repo').on(t.installation_id, t.repo_github_id),
   ],
 )

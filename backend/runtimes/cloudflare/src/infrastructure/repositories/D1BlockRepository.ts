@@ -58,7 +58,11 @@ export class D1BlockRepository implements BlockRepository {
       .bind(blockId)
       .first<BlockRow & { workspace_id: string; service_id: string | null }>()
     if (!row) return null
-    return { workspaceId: row.workspace_id, serviceId: row.service_id ?? null, block: rowToBlock(row) }
+    return {
+      workspaceId: row.workspace_id,
+      serviceId: row.service_id ?? null,
+      block: rowToBlock(row),
+    }
   }
 
   async insert(workspaceId: string, block: Block, serviceId?: string | null): Promise<void> {

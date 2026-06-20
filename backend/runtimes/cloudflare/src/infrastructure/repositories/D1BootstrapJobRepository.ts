@@ -221,7 +221,9 @@ export class D1BootstrapJobRepository implements BootstrapJobRepository {
     // is when a bootstrap becomes service-discoverable on every board mounting the service.
     const blockIdEntry = entries.find(([key]) => key === 'blockId')
     if (blockIdEntry) {
-      setClauses.push('service_id = (SELECT service_id FROM blocks WHERE workspace_id = ? AND id = ?)')
+      setClauses.push(
+        'service_id = (SELECT service_id FROM blocks WHERE workspace_id = ? AND id = ?)',
+      )
       values.push(workspaceId, blockIdEntry[1] as string | null)
     }
 

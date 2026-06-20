@@ -267,7 +267,10 @@ describe('in-org shared services', () => {
       position: { x: 42, y: 24 },
     })
     aSnap2 = await call<WorkspaceSnapshot>('GET', `/workspaces/${a.workspace.id}`)
-    expect(aSnap2.body.blocks.find((x) => x.id === task.body.id)?.position).toEqual({ x: 42, y: 24 })
+    expect(aSnap2.body.blocks.find((x) => x.id === task.body.id)?.position).toEqual({
+      x: 42,
+      y: 24,
+    })
 
     // B deletes the task it added; it disappears from A's board as well.
     const del = await call('DELETE', `/workspaces/${b.workspace.id}/blocks/${added.body.id}`)
@@ -296,7 +299,10 @@ describe('in-org shared services', () => {
     })
     const aSnap = await call<WorkspaceSnapshot>('GET', `/workspaces/${a.workspace.id}`)
     const bSnap = await call<WorkspaceSnapshot>('GET', `/workspaces/${b.workspace.id}`)
-    expect(aSnap.body.blocks.find((x) => x.id === frame.body.id)?.position).toEqual({ x: 10, y: 10 })
+    expect(aSnap.body.blocks.find((x) => x.id === frame.body.id)?.position).toEqual({
+      x: 10,
+      y: 10,
+    })
     expect(bSnap.body.blocks.find((x) => x.id === frame.body.id)?.position).toEqual({
       x: 600,
       y: 600,
@@ -328,10 +334,14 @@ describe('in-org shared services', () => {
     // Board B mounts BOTH foreign services, then drags the task from X (home A) into Y (home C).
     await call('POST', `/workspaces/${b.workspace.id}/services/${serviceX.id}`, {})
     await call('POST', `/workspaces/${b.workspace.id}/services/${serviceY.id}`, {})
-    const reparented = await call('POST', `/workspaces/${b.workspace.id}/blocks/${task.body.id}/reparent`, {
-      parentId: frameY.body.id,
-      position: { x: 1, y: 1 },
-    })
+    const reparented = await call(
+      'POST',
+      `/workspaces/${b.workspace.id}/blocks/${task.body.id}/reparent`,
+      {
+        parentId: frameY.body.id,
+        position: { x: 1, y: 1 },
+      },
+    )
     expect(reparented.status).toBe(200)
 
     // It now belongs to Y: renders on Y's home board (C) and gone from X's home board (A).

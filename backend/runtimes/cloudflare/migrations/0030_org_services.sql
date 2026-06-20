@@ -24,9 +24,13 @@ CREATE TABLE services (
   created_at      INTEGER NOT NULL
 );
 CREATE INDEX idx_services_account ON services (account_id);
--- One service per frame block: the frame↔service mapping is 1:1 (the backfill inserts one row
--- per top-level frame; `registerServiceForFrame` one per new frame), so enforce it.
-CREATE UNIQUE INDEX idx_services_frame ON services (frame_block_id);
+-- One service per frame block *within an account*: the frame↔service mapping is 1:1 (the
+-- backfill inserts one row per top-level frame; `registerServiceForFrame` one per new frame).
+-- Scoped by account_id (the owning scope) rather than globally, because block ids are only
+-- unique within a workspace (blocks are keyed `(workspace_id, id)`, so a reused/seeded frame id
+-- legitimately recurs across workspaces). SQL treats NULL account ids as distinct, so the
+-- auth-disabled/local path (account_id NULL) is unconstrained while real accounts stay 1:1.
+CREATE UNIQUE INDEX idx_services_frame ON services (account_id, frame_block_id);
 -- Resolve the service that owns a repo (the sync-dedup lookup).
 CREATE INDEX idx_services_repo ON services (installation_id, repo_github_id);
 
