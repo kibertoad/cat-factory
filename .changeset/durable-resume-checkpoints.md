@@ -20,3 +20,6 @@ committing files the agent didn't choose.
   targets the SAME branch; the harness detects it already exists and RESUMES on it
   (cloning it and continuing on its commits) instead of starting over. `openPullRequest`
   is now idempotent (a resumed branch's existing PR is reused, not re-failed).
+  A checkpoint only pushes once the branch has actually advanced past its pre-run tip,
+  so a run that never commits leaves no empty work branch behind (which would otherwise
+  make a later retry treat the base commit as resumable work and fail to open a PR).

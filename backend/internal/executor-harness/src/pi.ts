@@ -255,10 +255,13 @@ function toolCallSignal(
 export interface ProgressGuardLimits {
   /**
    * Abort once the agent has made this many tool calls without ever using a
-   * file-editing tool (`edit`/`write`). The signature of a run that explores or —
-   * as in the credential rabbit-hole that motivated this — probes the environment
-   * endlessly without implementing anything. Disabled when `expectsEdits` is false
-   * (e.g. the assess-only merger, which legitimately edits nothing).
+   * file-editing tool (see `FILE_EDIT_TOOLS`). The signature of a run that explores
+   * or — as in the credential rabbit-hole that motivated this — probes the
+   * environment endlessly without implementing anything. Disabled when `expectsEdits`
+   * is false (e.g. the assess-only merger / Blueprinter, which legitimately edit
+   * nothing). Note this bound only guards the run UNTIL its first edit: once the
+   * agent has edited a file at all, it has demonstrably started the work, so only
+   * `maxConsecutiveErrors` guards a later stall.
    */
   maxToolCallsWithoutEdit: number
   /**
@@ -273,7 +276,21 @@ export const DEFAULT_PROGRESS_GUARD_LIMITS: ProgressGuardLimits = {
   maxConsecutiveErrors: 12,
 }
 
-const FILE_EDIT_TOOLS = new Set(['edit', 'write'])
+// Tool names that mutate files, so a call to one clears the no-edit suspicion. Kept
+// broad on purpose: different models/extensions name the same capability differently
+// (`edit`/`write`, but also `apply_patch`/`patch`/`str_replace`/`multiedit`/`create`),
+// and a false "no edits" reading would kill a run that IS making changes. Matched
+// case-insensitively. NOTE: a file written purely via `bash` (e.g. a heredoc) is not
+// recognised here — broaden or move to a working-tree signal if that becomes common.
+const FILE_EDIT_TOOLS = new Set([
+  'edit',
+  'write',
+  'apply_patch',
+  'patch',
+  'str_replace',
+  'multiedit',
+  'create',
+])
 
 /** Read {@link ProgressGuardLimits} from the environment, falling back to the defaults. */
 export function progressGuardLimitsFromEnv(
@@ -319,7 +336,7 @@ export class ProgressGuard {
     if (!tool) return null
     this.toolCalls++
     this.consecutiveErrors = tool.isError ? this.consecutiveErrors + 1 : 0
-    if (FILE_EDIT_TOOLS.has(tool.name)) this.edits++
+    if (FILE_EDIT_TOOLS.has(tool.name.toLowerCase())) this.edits++
 
     if (
       this.expectsEdits &&
