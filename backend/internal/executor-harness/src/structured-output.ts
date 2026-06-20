@@ -90,16 +90,27 @@ export interface StructuredOutputResult<T> {
 const MAX_DOUBLE_RUN = 24
 
 /**
+ * Cap on how much of a (possibly huge) failed output the doubling heuristic scans.
+ * The corruption is uniform across the whole reply, so a prefix is representative,
+ * and this bounds the otherwise O(n·{@link MAX_DOUBLE_RUN}²) scan on a large
+ * document. The detector only runs on the parse-failure path, so this is belt-and-
+ * braces rather than a hot-path concern.
+ */
+const MAX_DOUBLE_SCAN_CHARS = 20_000
+
+/**
  * Heuristic detector for the token-doubling corruption ("serviceservice",
- * "observobservabilityability", `{\n{\n`). Greedy scan: at each position, find the
- * longest 2..{@link MAX_DOUBLE_RUN}-char run that is immediately repeated and count
- * both copies as "doubled", then measure the doubled fraction of the whole string.
- * Token-doubled text (consecutive `t t` pairs) scores near 1.0; normal JSON/prose
- * scores low (only incidental short repeats). Advisory ONLY — it labels a failure for
- * telemetry, it never mutates output.
+ * "observobservabilityability", `{\n{\n`). Greedy scan over a bounded prefix: at each
+ * position, find the longest 2..{@link MAX_DOUBLE_RUN}-char run that is immediately
+ * repeated and count both copies as "doubled", then measure the doubled fraction of
+ * the scanned text. Token-doubled text (consecutive `t t` pairs) scores near 1.0;
+ * normal JSON/prose scores low (only incidental short repeats). Advisory ONLY — it
+ * labels a failure for telemetry, it never mutates output.
  */
 export function looksTokenDoubled(text: string): { doubled: boolean; ratio: number } {
-  const n = text.length
+  // Scan at most MAX_DOUBLE_SCAN_CHARS; `startsWith` stays within this prefix because
+  // `maxK` bounds each match so `i + matched * 2 <= n`.
+  const n = Math.min(text.length, MAX_DOUBLE_SCAN_CHARS)
   if (n < 40) return { doubled: false, ratio: 0 }
   let covered = 0
   let i = 0

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { AgentState, ExecutionInstance } from '~/types/domain'
 import { agentKindMeta } from '~/utils/catalog'
+import { subtaskIconClass } from '~/utils/pipelineRender'
 import StepMetricsBar from '~/components/observability/StepMetricsBar.vue'
 
 const props = defineProps<{ instance: ExecutionInstance }>()
@@ -247,14 +248,7 @@ const ITEM_ICON: Record<string, string> = {
                 <UIcon
                   :name="ITEM_ICON[item.status]"
                   class="mt-px h-3 w-3 shrink-0"
-                  :class="[
-                    item.status === 'in_progress' && !runFailed
-                      ? 'animate-spin text-indigo-400'
-                      : item.status === 'in_progress'
-                        ? 'text-indigo-400'
-                        : '',
-                    item.status === 'completed' ? 'text-emerald-400' : 'text-slate-500',
-                  ]"
+                  :class="subtaskIconClass(item.status, runFailed)"
                 />
                 <span>{{ item.label }}</span>
               </li>

@@ -147,16 +147,46 @@ async function runWorkersAi(args: WorkersAiArgs): Promise<Response> {
   }
 
   // Streaming: replay the (single, authoritative) generation as OpenAI
-  // `chat.completion.chunk` SSE events — a role chunk, one content chunk, the tool
-  // calls (if any), the finish chunk, then a trailing usage-only chunk (matching
-  // `stream_options.include_usage`) and `[DONE]`.
+  // `chat.completion.chunk` SSE events (see `buildStreamChunks`), then `[DONE]`.
   const encoder = new TextEncoder()
   const sse = (obj: unknown) => encoder.encode(`data: ${JSON.stringify(obj)}\n\n`)
+  const chunks = buildStreamChunks(
+    { id, created, model: modelId },
+    { text, toolCalls: oaToolCalls, finishReason, usage: u },
+  )
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      for (const c of chunks) controller.enqueue(sse(c))
+      controller.enqueue(encoder.encode('data: [DONE]\n\n'))
+      controller.close()
+    },
+  })
+  return new Response(stream, { headers: { 'content-type': 'text/event-stream' } })
+}
+
+/**
+ * Build the ordered OpenAI `chat.completion.chunk` payloads for a single, completed
+ * generation, replayed as a stream: a role chunk, ONE content chunk (only when there
+ * is text — never per-token, which is the doubling regression this guards against),
+ * the tool-call chunk (if any), the finish chunk, then a trailing usage-only chunk
+ * (matching `stream_options.include_usage`). The `[DONE]` sentinel is appended by the
+ * caller. Pure + synchronous so the streamed shape can be unit-tested without the
+ * `AI` binding or `generateText`.
+ */
+export function buildStreamChunks(
+  meta: { id: string; created: number; model: string },
+  gen: {
+    text: string
+    toolCalls: Array<Record<string, unknown>>
+    finishReason: string
+    usage: LlmTokenUsage
+  },
+): Array<Record<string, unknown>> {
   const chunk = (choices: unknown[], usageChunk?: LlmTokenUsage) => ({
-    id,
+    id: meta.id,
     object: 'chat.completion.chunk',
-    created,
-    model: modelId,
+    created: meta.created,
+    model: meta.model,
     choices,
     ...(usageChunk
       ? {
@@ -168,28 +198,18 @@ async function runWorkersAi(args: WorkersAiArgs): Promise<Response> {
       : {}),
   })
 
-  const stream = new ReadableStream<Uint8Array>({
-    start(controller) {
-      controller.enqueue(
-        sse(chunk([{ index: 0, delta: { role: 'assistant' }, finish_reason: null }])),
-      )
-      if (text.length > 0) {
-        controller.enqueue(
-          sse(chunk([{ index: 0, delta: { content: text }, finish_reason: null }])),
-        )
-      }
-      if (oaToolCalls.length > 0) {
-        controller.enqueue(
-          sse(chunk([{ index: 0, delta: { tool_calls: oaToolCalls }, finish_reason: null }])),
-        )
-      }
-      controller.enqueue(sse(chunk([{ index: 0, delta: {}, finish_reason: finishReason }])))
-      controller.enqueue(sse(chunk([], u)))
-      controller.enqueue(encoder.encode('data: [DONE]\n\n'))
-      controller.close()
-    },
-  })
-  return new Response(stream, { headers: { 'content-type': 'text/event-stream' } })
+  const chunks: Array<Record<string, unknown>> = [
+    chunk([{ index: 0, delta: { role: 'assistant' }, finish_reason: null }]),
+  ]
+  if (gen.text.length > 0) {
+    chunks.push(chunk([{ index: 0, delta: { content: gen.text }, finish_reason: null }]))
+  }
+  if (gen.toolCalls.length > 0) {
+    chunks.push(chunk([{ index: 0, delta: { tool_calls: gen.toolCalls }, finish_reason: null }]))
+  }
+  chunks.push(chunk([{ index: 0, delta: {}, finish_reason: gen.finishReason }]))
+  chunks.push(chunk([], gen.usage))
+  return chunks
 }
 
 // ---- OpenAI ⇄ AI SDK translation helpers (Workers AI in-process path) -------

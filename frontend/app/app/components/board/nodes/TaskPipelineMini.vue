@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { AgentState } from '~/types/domain'
 import { agentKindMeta } from '~/utils/catalog'
+import { subtaskIconClass } from '~/utils/pipelineRender'
 import { lodAtLeast } from '~/composables/useSemanticZoom'
 
 // Spatial drill-down inside a task card: at the `steps` zoom band the task's
@@ -128,14 +129,7 @@ const ITEM_ICON: Record<string, string> = {
           <UIcon
             :name="ITEM_ICON[item.status]"
             class="mt-px h-2.5 w-2.5 shrink-0"
-            :class="[
-              item.status === 'in_progress' && !runFailed
-                ? 'animate-spin text-indigo-400'
-                : item.status === 'in_progress'
-                  ? 'text-indigo-400'
-                  : '',
-              item.status === 'completed' ? 'text-emerald-400' : 'text-slate-500',
-            ]"
+            :class="subtaskIconClass(item.status, runFailed)"
           />
           <span>{{ item.label }}</span>
         </li>
