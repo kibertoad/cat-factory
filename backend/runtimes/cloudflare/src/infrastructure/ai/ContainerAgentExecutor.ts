@@ -339,7 +339,14 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     // (engine-resolved tenant catalog when present, else the manual ids).
     const systemPrompt = composeBlockSystemPrompt(systemPromptFor(context.agentKind), context.block)
     const userPrompt = userPromptFor(context)
-    const headBranch = `cat-factory/${blockId}-${shortId()}`
+    // Deterministic per task (block), NOT per dispatch: a retry mints a fresh
+    // executionId but keeps the blockId, and a sweeper re-drive keeps both — so a
+    // stable name means every re-dispatch of this task targets the SAME branch. The
+    // harness checkpoints commits to it during the run and RESUMES on it if it
+    // already exists, so an evicted/failed run's work survives and a retry continues
+    // on top of it rather than starting over. (The branch is thus "preserved on the
+    // task" by construction, with no extra persistence to fall out of sync.)
+    const headBranch = `cat-factory/${blockId}`
 
     // The harness keys the background job (and the poll endpoint) on `jobId`; the
     // execution id gives an idempotent re-attach across durable-driver replays.
@@ -448,10 +455,6 @@ function isProxyableProvider(provider: string): boolean {
     provider === 'moonshot' ||
     provider === 'openai'
   )
-}
-
-function shortId(): string {
-  return crypto.randomUUID().slice(0, 8)
 }
 
 function prBody(context: AgentRunContext): string {

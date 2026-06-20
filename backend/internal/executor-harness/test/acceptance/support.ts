@@ -154,133 +154,30 @@ export interface StubRequest {
   hasTools: boolean
 }
 
-/**
- * A canned OpenAI-compatible streaming endpoint: on the first turn it streams a
- * `write` tool call that creates IMPLEMENTED.md; on the next turn (after the tool
- * result) it streams a final assistant message + stop + a usage chunk. This is
- * the "dummy adapter with hardcoded responses".
- */
-export function streamingLlmStub(summary = 'Created IMPLEMENTED.md as requested.') {
-  const requests: StubRequest[] = []
-  const server = createServer((req, res) => {
-    let body = ''
-    req.on('data', (c) => (body += c))
-    req.on('end', () => {
-      const json = JSON.parse(body || '{}') as {
-        model?: string
-        tools?: unknown[]
-        messages?: { role?: string }[]
-      }
-      requests.push({
-        auth: req.headers.authorization,
-        model: json.model,
-        hasTools: Array.isArray(json.tools),
-      })
-      const sawToolResult = (json.messages ?? []).some((m) => m.role === 'tool')
-      res.writeHead(200, { 'content-type': 'text/event-stream' })
-      const base = {
-        id: 'chatcmpl-x',
-        object: 'chat.completion.chunk',
-        created: 0,
-        model: json.model,
-      }
-      const sse = (o: unknown) => res.write(`data: ${JSON.stringify(o)}\n\n`)
-      if (!sawToolResult) {
-        sse({
-          ...base,
-          choices: [
-            {
-              index: 0,
-              delta: {
-                role: 'assistant',
-                content: null,
-                tool_calls: [
-                  {
-                    index: 0,
-                    id: 'call_1',
-                    type: 'function',
-                    function: { name: 'write', arguments: '' },
-                  },
-                ],
-              },
-              finish_reason: null,
-            },
-          ],
-        })
-        sse({
-          ...base,
-          choices: [
-            {
-              index: 0,
-              delta: {
-                tool_calls: [
-                  {
-                    index: 0,
-                    function: {
-                      arguments: JSON.stringify({
-                        path: 'IMPLEMENTED.md',
-                        content: 'hello from pi\n',
-                      }),
-                    },
-                  },
-                ],
-              },
-              finish_reason: null,
-            },
-          ],
-        })
-        sse({ ...base, choices: [{ index: 0, delta: {}, finish_reason: 'tool_calls' }] })
-      } else {
-        sse({
-          ...base,
-          choices: [
-            { index: 0, delta: { role: 'assistant', content: summary }, finish_reason: null },
-          ],
-        })
-        sse({ ...base, choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] })
-        sse({
-          ...base,
-          choices: [],
-          usage: { prompt_tokens: 12, completion_tokens: 4, total_tokens: 16 },
-        })
-      }
-      res.write('data: [DONE]\n\n')
-      res.end()
-    })
-  })
-  return { server, requests }
-}
-
-/** One scripted tool call the todo-driving stub emits, in order. */
+/** One scripted tool call a streaming stub emits, in order. */
 interface ScriptedCall {
   name: string
   args: Record<string, unknown>
 }
 
-/**
- * A streaming stub that drives a *real* multi-step tool conversation so the
- * container exercises the rpiv-todo extension end to end: it creates a 3-item
- * todo list, completes two items and marks the third in-progress, then writes
- * the file and finishes. Pi runs each call and feeds the tool result back, so
- * the harness sees genuine `todo` `tool_result` events and reports subtask
- * progress. The stub returns the next scripted call per turn, keyed on how many
- * tool results the transcript already carries.
- */
-export function todoDrivingLlmStub(summary = 'Created IMPLEMENTED.md as requested.') {
-  const requests: StubRequest[] = []
-  const script: ScriptedCall[] = [
-    { name: 'todo', args: { action: 'create', subject: 'Set up the workspace' } },
-    { name: 'todo', args: { action: 'create', subject: 'Write IMPLEMENTED.md' } },
-    { name: 'todo', args: { action: 'create', subject: 'Double-check the file' } },
-    { name: 'todo', args: { action: 'update', id: 1, status: 'completed' } },
-    { name: 'todo', args: { action: 'update', id: 2, status: 'completed' } },
-    {
-      name: 'todo',
-      args: { action: 'update', id: 3, status: 'in_progress', activeForm: 'double-checking' },
-    },
-    { name: 'write', args: { path: 'IMPLEMENTED.md', content: 'hello from pi\n' } },
-  ]
+/** OpenAI-style usage a stub reports on its final chunk. */
+interface StubUsage {
+  prompt_tokens: number
+  completion_tokens: number
+  total_tokens: number
+}
 
+/**
+ * The shared canned OpenAI-compatible streaming endpoint behind every stub below.
+ * Per request it emits the next scripted tool call (keyed on how many `tool`
+ * messages the transcript already carries — Pi adds one per completed call), and
+ * once the script is exhausted streams a final assistant message + stop + a usage
+ * chunk. A 1-element script therefore behaves exactly like the original two-turn
+ * stub: first call → the tool, any later call (a tool result is present) → the
+ * final message + usage.
+ */
+function scriptedStreamingStub(script: ScriptedCall[], summary: string, usage: StubUsage) {
+  const requests: StubRequest[] = []
   const server = createServer((req, res) => {
     let body = ''
     req.on('data', (c) => (body += c))
@@ -351,17 +248,86 @@ export function todoDrivingLlmStub(summary = 'Created IMPLEMENTED.md as requeste
           ],
         })
         sse({ ...base, choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] })
-        sse({
-          ...base,
-          choices: [],
-          usage: { prompt_tokens: 20, completion_tokens: 8, total_tokens: 28 },
-        })
+        sse({ ...base, choices: [], usage })
       }
       res.write('data: [DONE]\n\n')
       res.end()
     })
   })
   return { server, requests }
+}
+
+/** Pi's `write` tool call that creates IMPLEMENTED.md. */
+const WRITE_FILE_CALL: ScriptedCall = {
+  name: 'write',
+  args: { path: 'IMPLEMENTED.md', content: 'hello from pi\n' },
+}
+
+/**
+ * The agent commits its OWN work — the harness no longer blanket-stages, so a run
+ * that writes a file but never commits it is (correctly) a no-op. Every stub that
+ * expects a pushed branch + PR therefore drives this commit after the write.
+ */
+const COMMIT_CALL: ScriptedCall = {
+  name: 'bash',
+  args: { command: 'git add IMPLEMENTED.md && git commit -m "Add IMPLEMENTED.md"' },
+}
+
+/**
+ * A canned OpenAI-compatible streaming endpoint: first turn streams a `write` tool
+ * call that creates IMPLEMENTED.md; on the next turn (after the tool result) it
+ * streams a final assistant message + stop + a usage chunk. The "dummy adapter
+ * with hardcoded responses" used to exercise the proxy itself — it stops at the
+ * write, so it does NOT drive a commit/push.
+ */
+export function streamingLlmStub(summary = 'Created IMPLEMENTED.md as requested.') {
+  return scriptedStreamingStub([WRITE_FILE_CALL], summary, {
+    prompt_tokens: 12,
+    completion_tokens: 4,
+    total_tokens: 16,
+  })
+}
+
+/**
+ * Like {@link streamingLlmStub} but it also drives the commit-it-yourself contract:
+ * after the `write` it issues a `bash` tool call that commits the file, so the
+ * harness sees real work on the branch and pushes it + opens the PR. Used by the
+ * full container happy-path E2E.
+ */
+export function committingLlmStub(summary = 'Created IMPLEMENTED.md as requested.') {
+  return scriptedStreamingStub([WRITE_FILE_CALL, COMMIT_CALL], summary, {
+    prompt_tokens: 12,
+    completion_tokens: 4,
+    total_tokens: 16,
+  })
+}
+
+/**
+ * A streaming stub that drives a *real* multi-step tool conversation so the
+ * container exercises the rpiv-todo extension end to end: it creates a 3-item
+ * todo list, completes two items and marks the third in-progress, writes the
+ * file, then commits it. Pi runs each call and feeds the tool result back, so the
+ * harness sees genuine `todo` `tool_result` events and reports subtask progress.
+ */
+export function todoDrivingLlmStub(summary = 'Created IMPLEMENTED.md as requested.') {
+  const script: ScriptedCall[] = [
+    { name: 'todo', args: { action: 'create', subject: 'Set up the workspace' } },
+    { name: 'todo', args: { action: 'create', subject: 'Write IMPLEMENTED.md' } },
+    { name: 'todo', args: { action: 'create', subject: 'Double-check the file' } },
+    { name: 'todo', args: { action: 'update', id: 1, status: 'completed' } },
+    { name: 'todo', args: { action: 'update', id: 2, status: 'completed' } },
+    {
+      name: 'todo',
+      args: { action: 'update', id: 3, status: 'in_progress', activeForm: 'double-checking' },
+    },
+    WRITE_FILE_CALL,
+    COMMIT_CALL,
+  ]
+  return scriptedStreamingStub(script, summary, {
+    prompt_tokens: 20,
+    completion_tokens: 8,
+    total_tokens: 28,
+  })
 }
 
 /** A captured pull-request creation. */

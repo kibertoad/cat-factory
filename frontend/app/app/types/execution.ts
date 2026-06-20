@@ -127,6 +127,8 @@ export interface LlmCallMetric {
   toolCount: number
   requestMaxTokens: number | null
   promptTokens: number
+  /** prompt tokens served from the provider's prompt cache (subset of promptTokens) */
+  cachedPromptTokens: number
   completionTokens: number
   totalTokens: number
   finishReason: string | null
@@ -136,8 +138,15 @@ export interface LlmCallMetric {
   ok: boolean
   httpStatus: number | null
   errorMessage: string | null
-  /** the full request messages, serialised as JSON */
+  /**
+   * the request messages serialised as JSON, stored as a delta — only the messages
+   * this call appended beyond `promptPrefixCount` (the full array when that is 0)
+   */
   promptText: string
+  /** leading messages elided from `promptText` (0 ⇒ it is the full array) */
+  promptPrefixCount: number
+  /** hash of the call's full messages array (chain key for the next call's delta) */
+  promptHash: string
   /** the full assistant response text */
   responseText: string
 }

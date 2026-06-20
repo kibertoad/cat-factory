@@ -84,6 +84,9 @@ export async function handleMerger(job: MergerJob, opts: RunOptions = {}): Promi
         model: job.model,
         proxyBaseUrl: job.proxyBaseUrl,
         sessionToken: job.sessionToken,
+        // The merger only assesses (no commits/edits), so the no-edit guard must
+        // not fire on its legitimately edit-free run.
+        expectsEdits: false,
       },
       opts,
     )

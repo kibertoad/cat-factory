@@ -36,6 +36,12 @@ export interface LlmCallMetric {
   requestMaxTokens: number | null
   /** Prompt (input) tokens the model reported. */
   promptTokens: number
+  /**
+   * Prompt tokens served from the provider's prompt cache (a subset of
+   * {@link promptTokens}), across the field names providers use. 0 when the provider
+   * reported none or does not cache. Lets the dashboard show the actual cache hit rate.
+   */
+  cachedPromptTokens: number
   /** Completion (output) tokens the model reported. */
   completionTokens: number
   /** Total tokens the model reported. */
@@ -54,8 +60,23 @@ export interface LlmCallMetric {
   httpStatus: number | null
   /** A short error message when {@link ok} is false, else null. */
   errorMessage: string | null
-  /** The full request messages, serialised as JSON. */
+  /**
+   * The request messages serialised as JSON — stored as a DELTA: only the messages
+   * this call appended beyond {@link promptPrefixCount}. When `promptPrefixCount` is
+   * 0 this is the full array. Reconstruct the full prompt by replaying a chain's
+   * deltas (see `reconstructPrompts` in orchestration).
+   */
   promptText: string
+  /**
+   * Number of leading messages elided from {@link promptText} (already stored by an
+   * earlier call in this conversation chain). 0 ⇒ {@link promptText} is the full array.
+   */
+  promptPrefixCount: number
+  /**
+   * Hash of this call's FULL messages array, used to verify that the NEXT call in the
+   * chain genuinely extends this one before its prefix is elided.
+   */
+  promptHash: string
   /** The full assistant response text (concatenated for streamed calls). */
   responseText: string
 }
@@ -89,9 +110,27 @@ export interface LlmCallMetricSummary {
   warnings: number
 }
 
+/** The most recent call's chain tip for delta prompt storage. */
+export interface LlmPromptChainTip {
+  /** The call's full message count. */
+  messageCount: number
+  /** The call's {@link LlmCallMetric.promptHash}. */
+  promptHash: string
+}
+
 export interface LlmCallMetricRepository {
   /** Append one metered call. */
   record(metric: LlmCallMetric): Promise<void>
+  /**
+   * The most recent call's chain tip for a `(workspaceId, executionId, agentKind)`
+   * conversation, or null when there is none. Lets the sink store the next call's
+   * prompt as a delta against this one. Cheap: one indexed row, no text columns.
+   */
+  latestChainTip(
+    workspaceId: string,
+    executionId: string,
+    agentKind: string,
+  ): Promise<LlmPromptChainTip | null>
   /**
    * Calls recorded for a run, newest first (full prompt/response included). `limit`
    * caps the rows returned (the bodies are heavy) — newest `limit` calls; omit for

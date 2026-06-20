@@ -29,7 +29,7 @@ export interface VersionedPrompt {
 /** The currently-shipping version of each numbered prompt. */
 export const PROMPT_VERSIONS = {
   'requirement-review': { id: 'requirement-review', version: 1, text: REVIEW_SYSTEM_PROMPT },
-  build: { id: 'build', version: 1, text: standardSystemPrompt('build') },
+  build: { id: 'build', version: 2, text: standardSystemPrompt('build') },
   review: { id: 'review', version: 1, text: standardSystemPrompt('review') },
 } as const satisfies Record<string, VersionedPrompt>
 

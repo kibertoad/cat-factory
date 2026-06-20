@@ -240,6 +240,165 @@ export function parseTodoProgress(event: Record<string, unknown>): TodoProgress 
   return undefined
 }
 
+/** Tool-call signal read off a streamed Pi event, or undefined if not a tool call. */
+function toolCallSignal(
+  event: Record<string, unknown>,
+): { name: string; isError: boolean } | undefined {
+  // `tool_execution_end` is the canonical per-call stream event (statsFromEvents
+  // counts the same one), so the guard reads it and nothing else — no double count.
+  if (event.type !== 'tool_execution_end') return undefined
+  const name = typeof event.toolName === 'string' ? event.toolName : ''
+  return { name, isError: event.isError === true }
+}
+
+/** Tunable bounds for the {@link ProgressGuard}. */
+export interface ProgressGuardLimits {
+  /**
+   * Abort once the agent has made this many NON-exploration tool calls without ever
+   * using a file-editing tool (see `FILE_EDIT_TOOLS`). The signature of the credential
+   * rabbit-hole that motivated this: probing the environment (`bash`/exec) endlessly
+   * without implementing anything. Read-only exploration (`read`/`grep`/… — see
+   * `EXPLORATION_TOOLS`) and planning (`todo`) do NOT count, so a large task that
+   * legitimately reads/searches many files before its first edit is not killed for it.
+   * Disabled when `expectsEdits` is false (e.g. the assess-only merger / Blueprinter,
+   * which legitimately edit nothing). Note this bound only guards the run UNTIL its
+   * first edit: once the agent has edited a file at all, it has demonstrably started
+   * the work, so only `maxConsecutiveErrors` guards a later stall.
+   */
+  maxToolCallsWithoutEdit: number
+  /**
+   * Abort after this many consecutive failing tool calls — the agent is stuck
+   * retrying an operation that keeps failing rather than making progress.
+   */
+  maxConsecutiveErrors: number
+}
+
+export const DEFAULT_PROGRESS_GUARD_LIMITS: ProgressGuardLimits = {
+  // Counts only non-exploration, non-planning calls (see EXPLORATION_TOOLS), so the
+  // ceiling can be generous without risking a false kill on a read-heavy large task.
+  maxToolCallsWithoutEdit: 40,
+  maxConsecutiveErrors: 12,
+}
+
+// Tool names that mutate files, so a call to one clears the no-edit suspicion. Kept
+// broad on purpose: different models/extensions name the same capability differently
+// (`edit`/`write`, but also `apply_patch`/`patch`/`str_replace`/`multiedit`/`create`),
+// and a false "no edits" reading would kill a run that IS making changes. Matched
+// case-insensitively. NOTE: a file written purely via `bash` (e.g. a heredoc) is not
+// recognised here — broaden or move to a working-tree signal if that becomes common.
+const FILE_EDIT_TOOLS = new Set([
+  'edit',
+  'write',
+  'apply_patch',
+  'patch',
+  'str_replace',
+  'multiedit',
+  'create',
+])
+
+// Planning/bookkeeping tools that are neither file edits nor the environment-probing
+// the no-edit bound targets — the todo list the agent maintains as it works. These do
+// NOT count toward `maxToolCallsWithoutEdit`: a run that diligently updates a long
+// todo list before its first edit (common on a large task) would otherwise be killed
+// for "no edits" purely from planning calls. They still reset the consecutive-error
+// streak (a successful call means the agent isn't wedged). Matched case-insensitively.
+const PLANNING_TOOLS = new Set(['todo'])
+
+// Read-only exploration tools: reading/searching the repo is legitimate work-up to an
+// edit, NOT the environment-probing the no-edit bound targets, so they don't count
+// toward `maxToolCallsWithoutEdit` (a large task may read/search dozens of files
+// before its first edit). The bound thus counts only "action" calls — chiefly `bash`
+// (the credential rabbit-hole's vector) — that have yet to produce an edit. Kept broad
+// since models/extensions name the same capability differently. Matched case-insensitively.
+const EXPLORATION_TOOLS = new Set([
+  'read',
+  'grep',
+  'search',
+  'glob',
+  'ls',
+  'list',
+  'find',
+  'tree',
+  'cat',
+  'view',
+  'head',
+  'tail',
+  'stat',
+])
+
+/** Read {@link ProgressGuardLimits} from the environment, falling back to the defaults. */
+export function progressGuardLimitsFromEnv(
+  env: NodeJS.ProcessEnv = process.env,
+): ProgressGuardLimits {
+  const num = (raw: string | undefined, fallback: number): number => {
+    const n = Number(raw)
+    return Number.isFinite(n) && n > 0 ? Math.floor(n) : fallback
+  }
+  return {
+    maxToolCallsWithoutEdit: num(
+      env.JOB_MAX_TOOLCALLS_WITHOUT_EDIT,
+      DEFAULT_PROGRESS_GUARD_LIMITS.maxToolCallsWithoutEdit,
+    ),
+    maxConsecutiveErrors: num(
+      env.JOB_MAX_CONSECUTIVE_TOOL_ERRORS,
+      DEFAULT_PROGRESS_GUARD_LIMITS.maxConsecutiveErrors,
+    ),
+  }
+}
+
+/**
+ * Live anti-rabbithole guard: fed each streamed Pi event, it returns a diagnostic
+ * reason the moment a run has plainly stopped making progress, so the harness can
+ * kill Pi early instead of letting it burn the whole budget (and then surface a
+ * useful failure instead of a generic "no file changes"). Pure and incremental so
+ * it can be unit-tested over a fixed event sequence.
+ */
+export class ProgressGuard {
+  private toolCalls = 0
+  private edits = 0
+  private consecutiveErrors = 0
+
+  constructor(
+    private readonly limits: ProgressGuardLimits,
+    /** When false (assess-only runs like the merger), the no-edit bound is skipped. */
+    private readonly expectsEdits: boolean = true,
+  ) {}
+
+  /** Feed one parsed Pi event; returns a diagnostic reason when the run should abort, else null. */
+  observe(event: Record<string, unknown>): string | null {
+    const tool = toolCallSignal(event)
+    if (!tool) return null
+    const name = tool.name.toLowerCase()
+    // The error streak tracks ANY tool call (a planning call still proves the agent
+    // isn't wedged in a failing-op loop), so it's updated before the planning skip.
+    this.consecutiveErrors = tool.isError ? this.consecutiveErrors + 1 : 0
+    if (this.consecutiveErrors >= this.limits.maxConsecutiveErrors) {
+      return (
+        `no progress: ${this.consecutiveErrors} consecutive failing tool calls — the agent is stuck ` +
+        `retrying a failing operation rather than making progress. Aborting.`
+      )
+    }
+
+    // Planning and read-only exploration calls don't count toward the no-edit bound
+    // (see PLANNING_TOOLS / EXPLORATION_TOOLS) — only "action" calls without an edit do.
+    if (PLANNING_TOOLS.has(name) || EXPLORATION_TOOLS.has(name)) return null
+    this.toolCalls++
+    if (FILE_EDIT_TOOLS.has(name)) this.edits++
+
+    if (
+      this.expectsEdits &&
+      this.edits === 0 &&
+      this.toolCalls >= this.limits.maxToolCallsWithoutEdit
+    ) {
+      return (
+        `no progress: ${this.toolCalls} tool calls and not one file edit — the agent is exploring or ` +
+        `probing the environment without implementing anything. Aborting before it burns the whole run.`
+      )
+    }
+    return null
+  }
+}
+
 /**
  * Run Pi non-interactively against `cwd` and return its assistant summary. Uses
  * print + JSON mode (`-p --mode json`) with `--approve` so it runs unattended.
@@ -262,6 +421,10 @@ export function runPi(opts: {
   onActivity?: () => void
   /** Called with the latest subtask counts each time Pi updates its todo list. */
   onProgress?: (progress: TodoProgress) => void
+  /** No-progress guard bounds; defaults to the env-configured limits. */
+  guardLimits?: ProgressGuardLimits
+  /** Whether this run is expected to edit files (false for assess-only runs like the merger). */
+  expectsEdits?: boolean
 }): Promise<PiRunOutcome> {
   return new Promise((resolve, reject) => {
     if (opts.signal?.aborted) {
@@ -287,36 +450,66 @@ export function runPi(opts: {
     let stdout = ''
     let stderr = ''
     let aborted = false
+    // Set when the no-progress guard kills Pi; carries the diagnostic the run
+    // fails with (distinct from an external watchdog abort).
+    let guardReason: string | undefined
     // Pi's json mode is strict LF-framed JSONL; buffer partial lines across
-    // chunks so we only ever parse complete records for progress.
+    // chunks so we only ever parse complete records for progress + the guard.
     let lineBuffer = ''
+    const guard = new ProgressGuard(
+      opts.guardLimits ?? progressGuardLimitsFromEnv(),
+      opts.expectsEdits ?? true,
+    )
 
-    const emitProgress = (text: string): void => {
-      if (!opts.onProgress) return
+    // SIGTERM first, then SIGKILL if Pi ignores it. Shared by the watchdog abort
+    // and the no-progress guard; the `close` handler turns it into a rejection.
+    const killChild = (): void => {
+      child.kill('SIGTERM')
+      setTimeout(() => {
+        if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL')
+      }, 5_000).unref()
+    }
+
+    // Parse each complete JSONL record once, feeding both the todo-progress
+    // emitter and the no-progress guard. A tripped guard kills Pi with a
+    // diagnostic the run then fails on.
+    const processLine = (line: string): void => {
+      if (!line.startsWith('{')) return
+      let event: Record<string, unknown>
+      try {
+        event = JSON.parse(line) as Record<string, unknown>
+      } catch {
+        return
+      }
+      if (opts.onProgress) {
+        const progress = parseTodoProgress(event)
+        if (progress) opts.onProgress(progress)
+      }
+      if (!guardReason && !aborted) {
+        const reason = guard.observe(event)
+        if (reason) {
+          guardReason = reason
+          killChild()
+        }
+      }
+    }
+
+    const consumeStdout = (text: string): void => {
       lineBuffer += text
       let nl = lineBuffer.indexOf('\n')
       while (nl !== -1) {
         const line = lineBuffer.slice(0, nl).trim()
         lineBuffer = lineBuffer.slice(nl + 1)
         nl = lineBuffer.indexOf('\n')
-        if (!line.startsWith('{')) continue
-        try {
-          const progress = parseTodoProgress(JSON.parse(line) as Record<string, unknown>)
-          if (progress) opts.onProgress(progress)
-        } catch {
-          // Not a complete/valid JSON record; skip.
-        }
+        processLine(line)
       }
     }
 
-    // When the watchdog aborts, terminate Pi: SIGTERM first, then SIGKILL if it
-    // ignores it. The `close` handler then rejects with the abort reason.
+    // When the watchdog aborts, terminate Pi: the `close` handler then rejects
+    // with the abort reason.
     const onAbort = (): void => {
       aborted = true
-      child.kill('SIGTERM')
-      setTimeout(() => {
-        if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL')
-      }, 5_000).unref()
+      killChild()
     }
     opts.signal?.addEventListener('abort', onAbort, { once: true })
 
@@ -324,7 +517,7 @@ export function runPi(opts: {
       const text = chunk.toString()
       if (sink === 'out') {
         stdout += text
-        emitProgress(text)
+        consumeStdout(text)
       } else stderr += text
       // Any output means progress: reset the inactivity watchdog.
       opts.onActivity?.()
@@ -337,7 +530,10 @@ export function runPi(opts: {
     })
     child.on('close', (code) => {
       opts.signal?.removeEventListener('abort', onAbort)
-      if (aborted) {
+      if (guardReason) {
+        const tail = redactSecrets(stderr.trim()).slice(-700)
+        reject(new Error(tail ? `${guardReason} Agent stderr: ${tail}` : guardReason))
+      } else if (aborted) {
         reject(
           new Error(
             opts.signal?.reason instanceof Error ? opts.signal.reason.message : 'pi aborted',

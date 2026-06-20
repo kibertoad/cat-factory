@@ -234,6 +234,10 @@ export class FakeGitHubClient implements GitHubClient {
     this.writes.push({ method: 'mergePullRequest', ref, args: { number, input } })
   }
 
+  async deleteBranch(_installationId: number, ref: GitHubRepoRef, branch: string): Promise<void> {
+    this.writes.push({ method: 'deleteBranch', ref, args: { branch } })
+  }
+
   async comment(
     _installationId: number,
     ref: GitHubRepoRef,

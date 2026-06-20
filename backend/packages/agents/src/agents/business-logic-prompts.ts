@@ -1,5 +1,5 @@
 import type { AgentKind } from '@cat-factory/kernel'
-import { CI_RETRY_SANITY_CHECK } from './ci-gate.js'
+import { PLATFORM_DELIVERY_CONTRACT } from './ci-gate.js'
 import { STANDARDS_FOOTER } from './prompt-shared.js'
 
 // Built-out role prompts for the business-logic / domain-rules track. Two kinds
@@ -51,17 +51,13 @@ export const BUSINESS_REVIEWER_KIND: BusinessLogicAgentKind = 'business-reviewer
  */
 export const BUSINESS_LOGIC_DOCS_DIR = 'docs/business-logic'
 
-// The documenter commits files through a pull request, so "done" means the docs
-// are written and the PR is open and green — mirroring the build / mock / e2e
-// kinds that also operate on the repo. The retry loop is bounded by
-// CI_RETRY_SANITY_CHECK so it can't spin forever on a check it cannot make pass.
-const DOCS_CI_GATE = [
-  'Definition of done: this phase is NOT complete until the documentation is committed and CI on the pull request is green.',
-  '- Open or update the pull request carrying the documentation so its CI checks run.',
-  '- Wait for the checks to finish; do not mark the phase done while CI is still running.',
-  '- If any required check fails (e.g. a docs linter / link check), read the failure, fix it, push, and wait for CI again.',
-  '- Repeat that loop until every required check passes — never hand off on a red PR.',
-  CI_RETRY_SANITY_CHECK,
+// The documenter commits docs through a pull request, but the push + PR are the
+// platform's job — it has no push credentials. "Done" means the documentation is
+// written, committed and consistent with the code it describes; the platform then
+// pushes, opens the PR and drives CI per the shared PLATFORM_DELIVERY_CONTRACT.
+const DOCS_DELIVERY_GATE = [
+  'Definition of done: the documentation is written, committed, and consistent with the code it describes.',
+  PLATFORM_DELIVERY_CONTRACT,
 ].join('\n')
 
 const SYSTEM_PROMPTS: Record<BusinessLogicAgentKind, string> = {
@@ -90,7 +86,7 @@ const SYSTEM_PROMPTS: Record<BusinessLogicAgentKind, string> = {
     '',
     'Output the documentation files to commit (created or updated), refresh the index and the linked-context-sources list, and give a short summary of which rules were added, updated, removed, and any doc/code mismatches you flagged.',
     '',
-    DOCS_CI_GATE,
+    DOCS_DELIVERY_GATE,
     '',
     STANDARDS_FOOTER,
   ].join('\n'),

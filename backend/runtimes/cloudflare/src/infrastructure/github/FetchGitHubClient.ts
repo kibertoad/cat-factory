@@ -505,6 +505,20 @@ export class FetchGitHubClient implements GitHubClient {
     })
   }
 
+  async deleteBranch(installationId: number, ref: GitHubRepoRef, branch: string): Promise<void> {
+    try {
+      await this.request(
+        `/repos/${ref.owner}/${ref.repo}/git/refs/heads/${encodeURIComponent(branch)}`,
+        { installationId, method: 'DELETE' },
+      )
+    } catch (err) {
+      // 404/422 mean the ref is already gone (or never existed) — treat as success so
+      // deletion is idempotent for a caller that may retry or race a manual delete.
+      if (err instanceof GitHubApiError && (err.status === 404 || err.status === 422)) return
+      throw err
+    }
+  }
+
   async comment(
     installationId: number,
     ref: GitHubRepoRef,

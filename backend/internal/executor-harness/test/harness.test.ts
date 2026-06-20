@@ -5,15 +5,23 @@ import { join } from 'node:path'
 import { promisify } from 'node:util'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { parseBootstrapJob, parseConflictResolverJob, parseJob } from '../src/job.js'
-import { parsePiOutput, parseTodoProgress, summarizePiRun } from '../src/pi.js'
+import {
+  DEFAULT_PROGRESS_GUARD_LIMITS,
+  ProgressGuard,
+  parsePiOutput,
+  parseTodoProgress,
+  progressGuardLimitsFromEnv,
+  summarizePiRun,
+} from '../src/pi.js'
 import {
   authenticatedCloneUrl,
-  branchHasChanges,
+  branchHasCommitsSince,
   changedPathsFromPorcelain,
-  commitAll,
+  commitTrackedEdits,
   headCommit,
   mergeBranch,
   redactSecrets,
+  refreshFromBaseIfClean,
   unmergedPaths,
 } from '../src/git.js'
 import { producedRepoContent } from '../src/bootstrap.js'
@@ -259,66 +267,62 @@ describe('producedRepoContent (from-scratch scaffold)', () => {
   })
 })
 
-describe('branchHasChanges', () => {
+describe('commitTrackedEdits + branchHasCommitsSince', () => {
   let dir: string
-
-  /** Init a repo with one base commit (a tracked file) and return its base tip SHA. */
+  const git = (...args: string[]): Promise<unknown> => exec('git', args, { cwd: dir })
   const initRepo = async (): Promise<string> => {
-    const git = (...args: string[]): Promise<unknown> => exec('git', args, { cwd: dir })
     await git('init', '-b', 'main')
     await git('config', 'user.email', 'test@example.com')
     await git('config', 'user.name', 'Test')
-    // AGENTS.md is the harness-written context; in these repos it is gitignored,
-    // exactly as in the deployments where the no-op false-positive was observed.
-    await writeFile(join(dir, '.gitignore'), 'AGENTS.md\n', 'utf8')
-    await writeFile(join(dir, 'base.txt'), 'base\n', 'utf8')
+    await writeFile(join(dir, 'tracked.ts'), 'export const x = 1\n', 'utf8')
     await git('add', '-A')
     await git('commit', '-m', 'base')
     return headCommit(dir)
   }
-
   beforeEach(async () => {
-    dir = await mkdtemp(join(tmpdir(), 'branch-test-'))
+    dir = await mkdtemp(join(tmpdir(), 'commit-test-'))
   })
   afterEach(async () => {
     await rm(dir, { recursive: true, force: true })
   })
 
-  it('is false when the agent produced nothing (only the gitignored AGENTS.md)', async () => {
+  it('commits edits to tracked files but never untracked scratch files', async () => {
     const base = await initRepo()
-    await writeFile(join(dir, 'AGENTS.md'), 'context', 'utf8')
-    expect(await branchHasChanges(dir, base)).toBe(false)
+    // The agent edited a tracked file but forgot to commit it, and left a scratch
+    // script + a build artifact behind (untracked).
+    await writeFile(join(dir, 'tracked.ts'), 'export const x = 2\n', 'utf8')
+    await writeFile(join(dir, 'scratch.sh'), 'echo debugging\n', 'utf8')
+    await writeFile(join(dir, 'out.log'), 'noise\n', 'utf8')
+
+    expect(await commitTrackedEdits(dir, 'safety-net commit')).toBe(true)
+    expect(await branchHasCommitsSince(dir, base)).toBe(true)
+    // The scratch + artifact files were NOT committed (still untracked).
+    const status = String(
+      await exec('git', ['status', '--porcelain'], { cwd: dir }).then((r) => r.stdout),
+    )
+    expect(status).toMatch(/\?\? scratch\.sh/)
+    expect(status).toMatch(/\?\? out\.log/)
+    // The tracked edit landed in the commit.
+    const show = String(
+      await exec('git', ['show', 'HEAD:tracked.ts'], { cwd: dir }).then((r) => r.stdout),
+    )
+    expect(show).toContain('export const x = 2')
   })
 
-  it('is true when the agent committed its own work (the observed false-positive)', async () => {
+  it('is a no-op when only untracked files exist (agent must commit new files itself)', async () => {
     const base = await initRepo()
-    // The agent writes AND commits its change itself, leaving a clean working tree
-    // — so a trailing commitAll finds nothing, but the branch has advanced.
-    await writeFile(join(dir, 'feature.ts'), 'export const x = 1\n', 'utf8')
-    await exec('git', ['add', '-A'], { cwd: dir })
-    await exec('git', ['commit', '-m', 'feat'], { cwd: dir })
-    expect(await commitAll(dir, 'noop')).toBe(false)
-    expect(await branchHasChanges(dir, base)).toBe(true)
+    await writeFile(join(dir, 'new-feature.ts'), 'export const y = 1\n', 'utf8')
+    // No tracked edits ⇒ nothing the safety net should commit; the branch is unchanged.
+    expect(await commitTrackedEdits(dir, 'safety-net commit')).toBe(false)
+    expect(await branchHasCommitsSince(dir, base)).toBe(false)
   })
 
-  it('is true when the agent left uncommitted edits', async () => {
+  it('counts the agent’s own commits as advancing the branch', async () => {
     const base = await initRepo()
-    await writeFile(join(dir, 'feature.ts'), 'export const x = 1\n', 'utf8')
-    expect(await branchHasChanges(dir, base)).toBe(true)
-  })
-
-  it('ignores a lone AGENTS.md change even when it is tracked (not gitignored)', async () => {
-    const git = (...args: string[]): Promise<unknown> => exec('git', args, { cwd: dir })
-    await git('init', '-b', 'main')
-    await git('config', 'user.email', 'test@example.com')
-    await git('config', 'user.name', 'Test')
-    await writeFile(join(dir, 'base.txt'), 'base\n', 'utf8')
-    await git('add', '-A')
-    await git('commit', '-m', 'base')
-    const base = await headCommit(dir)
-    // No .gitignore here, so AGENTS.md is tracked; rewriting only it is still a no-op.
-    await writeFile(join(dir, 'AGENTS.md'), 'fresh context', 'utf8')
-    expect(await branchHasChanges(dir, base)).toBe(false)
+    await writeFile(join(dir, 'new-feature.ts'), 'export const y = 1\n', 'utf8')
+    await git('add', 'new-feature.ts')
+    await git('commit', '-m', 'feat: add feature (by the agent)')
+    expect(await branchHasCommitsSince(dir, base)).toBe(true)
   })
 })
 
@@ -414,6 +418,71 @@ describe('mergeBranch / unmergedPaths', () => {
 
     expect(await mergeBranch(work, 'main')).toBe(false)
     expect(await unmergedPaths(work)).toEqual(['file.txt'])
+  })
+})
+
+describe('refreshFromBaseIfClean', () => {
+  let origin: string
+  let work: string
+
+  const g = (cwd: string, ...args: string[]): Promise<unknown> => exec('git', args, { cwd })
+
+  beforeEach(async () => {
+    origin = await mkdtemp(join(tmpdir(), 'refresh-origin-'))
+    await g(origin, 'init', '-b', 'main')
+    await g(origin, 'config', 'user.email', 'o@e.com')
+    await g(origin, 'config', 'user.name', 'Origin')
+    await writeFile(join(origin, 'file.txt'), 'base\n', 'utf8')
+    await g(origin, 'add', '-A')
+    await g(origin, 'commit', '-m', 'base')
+
+    work = await mkdtemp(join(tmpdir(), 'refresh-work-'))
+    await exec('git', ['clone', origin, work])
+    await g(work, 'config', 'user.email', 'w@e.com')
+    await g(work, 'config', 'user.name', 'Work')
+  })
+  afterEach(async () => {
+    await rm(origin, { recursive: true, force: true })
+    await rm(work, { recursive: true, force: true })
+  })
+
+  it('merges the latest base into a resumed branch when it merges cleanly', async () => {
+    await g(work, 'checkout', '-b', 'cat-factory/blk')
+    await writeFile(join(work, 'feature.txt'), 'work\n', 'utf8')
+    await g(work, 'add', '-A')
+    await g(work, 'commit', '-m', 'resumed work')
+    // Base advances on origin with a non-overlapping file the resumed clone hasn't seen.
+    await writeFile(join(origin, 'extra.txt'), 'extra\n', 'utf8')
+    await g(origin, 'add', '-A')
+    await g(origin, 'commit', '-m', 'base advanced')
+
+    expect(await refreshFromBaseIfClean(work, 'main', 'token')).toBe(true)
+    // The advanced base file is now present on the resumed branch.
+    const show = String(
+      await exec('git', ['show', 'HEAD:extra.txt'], { cwd: work }).then((r) => r.stdout),
+    )
+    expect(show).toContain('extra')
+    // …and the resumed work is preserved.
+    expect(
+      String(await exec('git', ['show', 'HEAD:feature.txt'], { cwd: work }).then((r) => r.stdout)),
+    ).toContain('work')
+  })
+
+  it('aborts and leaves the branch untouched when base conflicts', async () => {
+    await g(work, 'checkout', '-b', 'cat-factory/blk')
+    await writeFile(join(work, 'file.txt'), 'feature change\n', 'utf8')
+    await g(work, 'add', '-A')
+    await g(work, 'commit', '-m', 'resumed work')
+    const tip = await headCommit(work)
+    // Base changes the SAME line, so a merge would conflict.
+    await writeFile(join(origin, 'file.txt'), 'main change\n', 'utf8')
+    await g(origin, 'add', '-A')
+    await g(origin, 'commit', '-m', 'base advanced (conflicting)')
+
+    expect(await refreshFromBaseIfClean(work, 'main', 'token')).toBe(false)
+    // The aborted merge left no conflict markers and the branch tip unchanged.
+    expect(await unmergedPaths(work)).toEqual([])
+    expect(await headCommit(work)).toBe(tip)
   })
 })
 
@@ -531,5 +600,109 @@ describe('parseTodoProgress', () => {
         message: { role: 'toolResult', toolName: 'todo', details: {} },
       }),
     ).toBeUndefined()
+  })
+})
+
+describe('ProgressGuard (anti-rabbithole)', () => {
+  const toolCall = (toolName: string, isError = false) => ({
+    type: 'tool_execution_end',
+    toolName,
+    isError,
+  })
+
+  it('aborts a run that makes many tool calls without ever editing a file', () => {
+    const limits: ProgressGuardLimits = { maxToolCallsWithoutEdit: 5, maxConsecutiveErrors: 99 }
+    const guard = new ProgressGuard(limits)
+    let reason: string | null = null
+    for (let i = 0; i < 5; i++) reason = guard.observe(toolCall('bash'))
+    expect(reason).toMatch(/no progress/i)
+    expect(reason).toMatch(/not one file edit/i)
+  })
+
+  it('does not abort when the agent edits files (resets the no-edit risk)', () => {
+    const limits: ProgressGuardLimits = { maxToolCallsWithoutEdit: 5, maxConsecutiveErrors: 99 }
+    const guard = new ProgressGuard(limits)
+    const seq = ['bash', 'read', 'edit', 'bash', 'read', 'bash', 'write', 'bash']
+    let reason: string | null = null
+    for (const t of seq) reason = guard.observe(toolCall(t))
+    expect(reason).toBeNull()
+  })
+
+  it('recognises alternate edit-tool names, case-insensitively', () => {
+    const limits: ProgressGuardLimits = { maxToolCallsWithoutEdit: 4, maxConsecutiveErrors: 99 }
+    const guard = new ProgressGuard(limits)
+    // An `apply_patch`-style edit (in mixed case) counts as a file edit, so the
+    // no-edit bound never trips even past its threshold.
+    const seq = ['bash', 'read', 'Apply_Patch', 'bash', 'read', 'bash']
+    let reason: string | null = null
+    for (const t of seq) reason = guard.observe(toolCall(t))
+    expect(reason).toBeNull()
+  })
+
+  it('does not count planning (todo) calls toward the no-edit bound', () => {
+    const limits: ProgressGuardLimits = { maxToolCallsWithoutEdit: 3, maxConsecutiveErrors: 99 }
+    const guard = new ProgressGuard(limits)
+    let reason: string | null = null
+    // Ten todo updates are pure planning, not edits or probing — they must not trip
+    // the no-edit guard even well past its threshold.
+    for (let i = 0; i < 10; i++) reason = guard.observe(toolCall('todo'))
+    expect(reason).toBeNull()
+    // But real (non-planning) tool calls past the threshold still trip it.
+    for (let i = 0; i < 3; i++) reason = guard.observe(toolCall('bash'))
+    expect(reason).toMatch(/no progress/i)
+  })
+
+  it('does not count read-only exploration (read/grep/glob/…) toward the no-edit bound', () => {
+    const limits: ProgressGuardLimits = { maxToolCallsWithoutEdit: 3, maxConsecutiveErrors: 99 }
+    const guard = new ProgressGuard(limits)
+    let reason: string | null = null
+    // Reading/searching many files before a first edit is legitimate exploration, not
+    // the environment-probing the no-edit bound targets — it must not trip even far
+    // past the threshold.
+    for (const t of ['read', 'grep', 'glob', 'ls', 'search', 'find', 'view']) {
+      for (let i = 0; i < 3; i++) reason = guard.observe(toolCall(t))
+    }
+    expect(reason).toBeNull()
+    // But "action" calls (bash) without an edit past the threshold still trip it.
+    for (let i = 0; i < 3; i++) reason = guard.observe(toolCall('bash'))
+    expect(reason).toMatch(/no progress/i)
+  })
+
+  it('skips the no-edit bound for assess-only runs (expectsEdits=false)', () => {
+    const limits: ProgressGuardLimits = { maxToolCallsWithoutEdit: 3, maxConsecutiveErrors: 99 }
+    const guard = new ProgressGuard(limits, false)
+    let reason: string | null = null
+    for (let i = 0; i < 10; i++) reason = guard.observe(toolCall('bash'))
+    expect(reason).toBeNull()
+  })
+
+  it('aborts after too many consecutive failing tool calls', () => {
+    const limits: ProgressGuardLimits = { maxToolCallsWithoutEdit: 999, maxConsecutiveErrors: 3 }
+    const guard = new ProgressGuard(limits)
+    expect(guard.observe(toolCall('bash', true))).toBeNull()
+    expect(guard.observe(toolCall('bash', false))).toBeNull() // resets the streak
+    expect(guard.observe(toolCall('bash', true))).toBeNull()
+    expect(guard.observe(toolCall('bash', true))).toBeNull()
+    expect(guard.observe(toolCall('bash', true))).toMatch(/consecutive failing tool calls/i)
+  })
+
+  it('ignores non-tool events', () => {
+    const guard = new ProgressGuard({ maxToolCallsWithoutEdit: 1, maxConsecutiveErrors: 1 })
+    expect(guard.observe({ type: 'message_end', message: { role: 'assistant' } })).toBeNull()
+    expect(guard.observe({ type: 'agent_end', messages: [] })).toBeNull()
+  })
+
+  it('reads limits from the environment, falling back to defaults', () => {
+    expect(progressGuardLimitsFromEnv({})).toEqual(DEFAULT_PROGRESS_GUARD_LIMITS)
+    expect(
+      progressGuardLimitsFromEnv({
+        JOB_MAX_TOOLCALLS_WITHOUT_EDIT: '7',
+        JOB_MAX_CONSECUTIVE_TOOL_ERRORS: '4',
+      }),
+    ).toEqual({ maxToolCallsWithoutEdit: 7, maxConsecutiveErrors: 4 })
+    // Garbage values fall back rather than disabling the guard.
+    expect(progressGuardLimitsFromEnv({ JOB_MAX_TOOLCALLS_WITHOUT_EDIT: '-3' })).toEqual(
+      DEFAULT_PROGRESS_GUARD_LIMITS,
+    )
   })
 })

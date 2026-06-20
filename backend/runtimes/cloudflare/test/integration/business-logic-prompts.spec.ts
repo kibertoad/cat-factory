@@ -87,9 +87,12 @@ describe('business-logic agent prompts', () => {
       expect(prompt).toMatch(/stable[, ].*id/i)
     })
 
-    it('bounds the documenter CI-retry loop so it cannot spin forever', () => {
+    it('tells the documenter the platform delivers and bounds its effort', () => {
       const prompt = systemPromptFor(BUSINESS_DOCUMENTER_KIND)
-      expect(prompt).toMatch(/this loop MUST terminate/i)
+      expect(prompt).toMatch(/consistent with the code it describes/i)
+      expect(prompt).toMatch(/you commit, the platform delivers/i)
+      expect(prompt).toMatch(/Do NOT run `git push`/i)
+      expect(prompt).toMatch(/This work MUST terminate/i)
       expect(prompt).toMatch(/number of attempts/i)
       expect(prompt).toMatch(/time or token budget/i)
       expect(prompt).toMatch(/STOP iterating/i)

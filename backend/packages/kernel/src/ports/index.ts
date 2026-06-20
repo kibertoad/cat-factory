@@ -18,7 +18,12 @@ export type { RequirementReviewRepository } from './requirement-review-repositor
 export type { AgentRunRef, AgentRunRepository } from './agent-runs.js'
 export type { ModelProvider, ModelRef } from './model-provider.js'
 export type { TokenUsageRecord, TokenUsageRepository, TokenUsageTotals } from './token-usage.js'
-export type { LlmCallMetric, LlmCallMetricRepository, LlmCallMetricSummary } from './llm-metrics.js'
+export type {
+  LlmCallMetric,
+  LlmCallMetricRepository,
+  LlmCallMetricSummary,
+  LlmPromptChainTip,
+} from './llm-metrics.js'
 export { LLM_WARNING_FINISH_REASONS } from './llm-metrics.js'
 export type {
   AgentDecisionRequest,

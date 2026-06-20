@@ -1,5 +1,6 @@
 import type { Context } from 'hono'
 import { Hono } from 'hono'
+import { cachedTokensFromUsage, promptCacheParams } from '@cat-factory/agents'
 import { ContainerSessionService } from '../../containers/ContainerSessionService.js'
 import type { AppEnv } from '../../http/env.js'
 import { logger } from '../../observability/logger.js'
@@ -80,10 +81,19 @@ export function llmProxyController(): Hono<AppEnv> {
     }
     payload.model = session.model
 
+    // Prompt caching: route this conversation's calls to the same cached prefix on
+    // providers that support it (keyed on the execution id, stable across the run's
+    // turns). A no-op for providers that cache automatically on the prefix or not at
+    // all — see `promptCacheParams`.
+    Object.assign(payload, promptCacheParams(session.provider, session.executionId))
+
     const streaming = payload.stream === true
     const toolCount = Array.isArray(payload.tools) ? payload.tools.length : 0
     const messageCount = Array.isArray(payload.messages) ? payload.messages.length : 0
-    const requestMaxTokens = typeof payload.max_tokens === 'number' ? payload.max_tokens : null
+    // The EFFECTIVE output ceiling: updated below if the proxy overrides max_tokens
+    // (e.g. the Workers AI floor), so the recorded metric reflects what actually
+    // applied, not just what the client asked for.
+    let requestMaxTokens = typeof payload.max_tokens === 'number' ? payload.max_tokens : null
     const promptText = JSON.stringify(payload.messages ?? [])
 
     // Correlate every proxied call with its run so a bootstrap/execution can be
@@ -109,6 +119,7 @@ export function llmProxyController(): Hono<AppEnv> {
       if (!llmObservability) return
       const promptTokens = obs.usage?.prompt_tokens ?? 0
       const completionTokens = obs.usage?.completion_tokens ?? 0
+      const cachedPromptTokens = obs.cachedPromptTokens ?? cachedTokensFromUsage(obs.usage)
       waitUntil(
         llmObservability
           .record({
@@ -122,6 +133,7 @@ export function llmProxyController(): Hono<AppEnv> {
             toolCount,
             requestMaxTokens,
             promptTokens,
+            cachedPromptTokens,
             completionTokens,
             totalTokens: promptTokens + completionTokens,
             finishReason: obs.finishReason,
@@ -167,7 +179,10 @@ export function llmProxyController(): Hono<AppEnv> {
     // to respect their stricter upstream output caps.
     if (session.provider === 'workers-ai') {
       const asked = typeof payload.max_tokens === 'number' ? payload.max_tokens : 0
-      payload.max_tokens = Math.max(asked, PI_MIN_OUTPUT_TOKENS)
+      const floored = Math.max(asked, PI_MIN_OUTPUT_TOKENS)
+      payload.max_tokens = floored
+      // Record the floor we actually applied, not the (often absent) asked value.
+      requestMaxTokens = floored
     }
 
     const record = (usage: LlmTokenUsage | null): Promise<number> => {

@@ -16,6 +16,7 @@ import type {
   LlmCallMetric,
   LlmCallMetricRepository,
   LlmCallMetricSummary,
+  LlmPromptChainTip,
   Pipeline,
   PipelineRepository,
   RunRef,
@@ -495,6 +496,7 @@ function rowToLlmMetric(row: typeof llmCallMetrics.$inferSelect): LlmCallMetric 
     toolCount: row.tool_count,
     requestMaxTokens: row.request_max_tokens,
     promptTokens: row.prompt_tokens,
+    cachedPromptTokens: row.cached_prompt_tokens,
     completionTokens: row.completion_tokens,
     totalTokens: row.total_tokens,
     finishReason: row.finish_reason,
@@ -505,6 +507,8 @@ function rowToLlmMetric(row: typeof llmCallMetrics.$inferSelect): LlmCallMetric 
     httpStatus: row.http_status,
     errorMessage: row.error_message,
     promptText: row.prompt_text,
+    promptPrefixCount: row.prompt_prefix_count,
+    promptHash: row.prompt_hash,
     responseText: row.response_text,
   }
 }
@@ -526,6 +530,7 @@ class DrizzleLlmCallMetricRepository implements LlmCallMetricRepository {
       tool_count: metric.toolCount,
       request_max_tokens: metric.requestMaxTokens,
       prompt_tokens: metric.promptTokens,
+      cached_prompt_tokens: metric.cachedPromptTokens,
       completion_tokens: metric.completionTokens,
       total_tokens: metric.totalTokens,
       finish_reason: metric.finishReason,
@@ -536,8 +541,41 @@ class DrizzleLlmCallMetricRepository implements LlmCallMetricRepository {
       http_status: metric.httpStatus,
       error_message: metric.errorMessage,
       prompt_text: metric.promptText,
+      prompt_prefix_count: metric.promptPrefixCount,
+      prompt_hash: metric.promptHash,
       response_text: metric.responseText,
     })
+  }
+
+  async latestChainTip(
+    workspaceId: string,
+    executionId: string,
+    agentKind: string,
+  ): Promise<LlmPromptChainTip | null> {
+    // The newest call for the conversation; one indexed row, no text columns.
+    const rows = await this.db
+      .select({
+        messageCount: llmCallMetrics.message_count,
+        promptHash: llmCallMetrics.prompt_hash,
+      })
+      .from(llmCallMetrics)
+      .where(
+        and(
+          eq(llmCallMetrics.workspace_id, workspaceId),
+          eq(llmCallMetrics.execution_id, executionId),
+          eq(llmCallMetrics.agent_kind, agentKind),
+        ),
+      )
+      // message_count breaks a same-millisecond createdAt tie in chain order (it grows
+      // monotonically as the conversation appends); id is the last resort.
+      .orderBy(
+        desc(llmCallMetrics.created_at),
+        desc(llmCallMetrics.message_count),
+        desc(llmCallMetrics.id),
+      )
+      .limit(1)
+    const row = rows[0]
+    return row ? { messageCount: row.messageCount, promptHash: row.promptHash } : null
   }
 
   async listByExecution(

@@ -1,0 +1,1 @@
+ALTER TABLE "llm_call_metrics" ADD COLUMN "cached_prompt_tokens" integer DEFAULT 0 NOT NULL;

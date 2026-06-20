@@ -3,8 +3,11 @@ import type { LlmCallMetric } from '@cat-factory/kernel'
 import {
   buildLlmMetricsExport,
   classifyCall,
+  computeStoredPrompt,
+  hashPrompt,
   isWarningFinishReason,
   outputHeadroomRatio,
+  reconstructPrompts,
   transportOverheadRatio,
 } from './observability.logic.js'
 
@@ -21,6 +24,7 @@ function metric(overrides: Partial<LlmCallMetric> & Pick<LlmCallMetric, 'id'>): 
     toolCount: 1,
     requestMaxTokens: 1000,
     promptTokens: 100,
+    cachedPromptTokens: 0,
     completionTokens: 50,
     totalTokens: 150,
     finishReason: 'stop',
@@ -31,6 +35,8 @@ function metric(overrides: Partial<LlmCallMetric> & Pick<LlmCallMetric, 'id'>): 
     httpStatus: 200,
     errorMessage: null,
     promptText: '[]',
+    promptPrefixCount: 0,
+    promptHash: '',
     responseText: 'ok',
     ...overrides,
   }
@@ -143,5 +149,116 @@ describe('buildLlmMetricsExport', () => {
     expect(out.totals.calls).toBe(0)
     expect(out.totals.transportOverheadRatio).toBeNull()
     expect(out.insights).toEqual([])
+  })
+
+  it('reconstructs full prompts from stored deltas in the export', () => {
+    const sys = { role: 'system' }
+    const u = { role: 'user' }
+    const a = { role: 'assistant' }
+    const full1 = JSON.stringify([sys, u])
+    const c1 = metric({
+      id: 'c1',
+      createdAt: 10,
+      promptText: full1,
+      promptPrefixCount: 0,
+      promptHash: hashPrompt(full1),
+    })
+    // c2 stored as a delta of the two new messages, eliding the 2-message prefix.
+    const c2 = metric({
+      id: 'c2',
+      createdAt: 20,
+      promptText: JSON.stringify([a, u]),
+      promptPrefixCount: 2,
+      promptHash: hashPrompt(JSON.stringify([sys, u, a, u])),
+    })
+    const out = buildLlmMetricsExport('exec-1', [c2, c1], 1)
+    const byId = Object.fromEntries(out.calls.map((c) => [c.id, c]))
+    expect(JSON.parse(byId.c2!.promptText)).toEqual([sys, u, a, u])
+    expect(byId.c2!.promptPrefixCount).toBe(0)
+  })
+})
+
+describe('computeStoredPrompt', () => {
+  const sys = { role: 'system', content: 's' }
+  const u = { role: 'user', content: 'u' }
+  const a = { role: 'assistant', content: 'a' }
+
+  it('stores the full array when there is no previous call', () => {
+    const full = JSON.stringify([sys, u])
+    const stored = computeStoredPrompt(full, null)
+    expect(stored.promptPrefixCount).toBe(0)
+    expect(stored.promptText).toBe(full)
+    expect(stored.promptHash).toBe(hashPrompt(full))
+  })
+
+  it('stores only the appended messages when the call extends the previous one', () => {
+    const prevFull = JSON.stringify([sys, u])
+    const full = JSON.stringify([sys, u, a, u])
+    const stored = computeStoredPrompt(full, {
+      messageCount: 2,
+      promptHash: hashPrompt(prevFull),
+    })
+    expect(stored.promptPrefixCount).toBe(2)
+    expect(JSON.parse(stored.promptText)).toEqual([a, u])
+  })
+
+  it('falls back to full when the prefix hash does not match (compaction / restart)', () => {
+    const full = JSON.stringify([{ role: 'system', content: 'different' }, u])
+    const stored = computeStoredPrompt(full, { messageCount: 1, promptHash: 'stale-hash' })
+    expect(stored.promptPrefixCount).toBe(0)
+    expect(stored.promptText).toBe(full)
+  })
+
+  it('round-trips: a chain of deltas reconstructs to the original full prompts', () => {
+    const fulls = [
+      [sys, u],
+      [sys, u, a, u],
+      [sys, u, a, u, a, u],
+    ].map((m) => JSON.stringify(m))
+    let tip: { messageCount: number; promptHash: string } | null = null
+    const calls = fulls.map((full, i) => {
+      const stored = computeStoredPrompt(full, tip)
+      tip = { messageCount: JSON.parse(full).length, promptHash: stored.promptHash }
+      return metric({
+        id: `c${i}`,
+        createdAt: i,
+        messageCount: JSON.parse(full).length,
+        promptText: stored.promptText,
+        promptPrefixCount: stored.promptPrefixCount,
+        promptHash: stored.promptHash,
+      })
+    })
+    // At least one call was actually compressed (stored a delta).
+    expect(calls.some((c) => c.promptPrefixCount > 0)).toBe(true)
+    const rebuilt = reconstructPrompts(calls)
+    rebuilt.forEach((c, i) => expect(c.promptText).toBe(fulls[i]))
+  })
+
+  it('reconstructs correctly when calls share a createdAt (ordered by message count)', () => {
+    // Records are written off the response path (waitUntil), so chained calls can land
+    // in the SAME createdAt millisecond — and with ids that sort the wrong way. The
+    // monotonic message count must still replay them in true conversation order.
+    const fulls = [
+      [sys, u],
+      [sys, u, a, u],
+      [sys, u, a, u, a, u],
+    ].map((m) => JSON.stringify(m))
+    let tip: { messageCount: number; promptHash: string } | null = null
+    const calls = fulls.map((full, i) => {
+      const stored = computeStoredPrompt(full, tip)
+      tip = { messageCount: JSON.parse(full).length, promptHash: stored.promptHash }
+      return metric({
+        // Descending ids (c2, c1, c0) so an id-only tiebreak would reverse the chain.
+        id: `c${fulls.length - 1 - i}`,
+        createdAt: 100,
+        messageCount: JSON.parse(full).length,
+        promptText: stored.promptText,
+        promptPrefixCount: stored.promptPrefixCount,
+        promptHash: stored.promptHash,
+      })
+    })
+    const rebuilt = reconstructPrompts(calls)
+    // `rebuilt` preserves input order, so each call still maps to its original full prompt.
+    rebuilt.forEach((c, i) => expect(c.promptText).toBe(fulls[i]))
   })
 })

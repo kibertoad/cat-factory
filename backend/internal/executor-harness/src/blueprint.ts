@@ -364,6 +364,12 @@ export async function handleBlueprint(
         model: job.model,
         proxyBaseUrl: job.proxyBaseUrl,
         sessionToken: job.sessionToken,
+        // The Blueprinter explores the repo and RETURNS the service tree as JSON —
+        // the harness renders + commits the `blueprints/` files (below), the agent
+        // itself never calls an edit/write tool. So the no-edit guard must be off
+        // (like the merger), or mapping a non-trivial repo would trip it after many
+        // read calls and kill the run before it could emit the tree.
+        expectsEdits: false,
       },
       opts,
     )

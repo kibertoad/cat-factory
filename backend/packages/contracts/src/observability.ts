@@ -23,6 +23,8 @@ export const llmCallMetricSchema = v.object({
   /** The `max_tokens` the request asked for (the output ceiling), or null. */
   requestMaxTokens: v.nullable(v.number()),
   promptTokens: v.number(),
+  /** Prompt tokens served from the provider's prompt cache (subset of promptTokens). */
+  cachedPromptTokens: v.optional(v.number(), 0),
   completionTokens: v.number(),
   totalTokens: v.number(),
   /** Upstream finish reason (`stop` | `length` | `tool_calls` | `content_filter` | …). */
@@ -36,8 +38,20 @@ export const llmCallMetricSchema = v.object({
   ok: v.boolean(),
   httpStatus: v.nullable(v.number()),
   errorMessage: v.nullable(v.string()),
-  /** The full request messages, serialised as JSON. */
+  /**
+   * The request messages serialised as JSON, stored as a DELTA — only the messages
+   * this call appended beyond `promptPrefixCount` (the full array when that is 0).
+   * The export rebuilds the full prompt from a chain's deltas.
+   */
   promptText: v.string(),
+  /**
+   * Leading messages elided from `promptText` (stored by an earlier call in the same
+   * conversation). 0 ⇒ `promptText` is the full array. Optional/defaulted so exports
+   * predating delta storage still parse.
+   */
+  promptPrefixCount: v.optional(v.number(), 0),
+  /** Hash of the call's full messages array (chain key for the next call's delta). */
+  promptHash: v.optional(v.string(), ''),
   /** The full assistant response text. */
   responseText: v.string(),
 })
