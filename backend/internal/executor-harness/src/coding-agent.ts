@@ -6,6 +6,7 @@ import {
   commitTrackedEdits,
   createBranch,
   headCommit,
+  listUntrackedFiles,
   pushBranch,
   remoteBranchExists,
 } from './git.js'
@@ -102,6 +103,19 @@ export async function runCodingAgent(
     // remote: clone THAT branch and continue on its commits, rather than branching
     // off base and redoing everything. Only the impl path (which creates a fresh
     // `newBranch`) can resume; the ci-fix/conflict paths already clone the PR branch.
+    //
+    // Resume safety relies on two invariants the dispatcher (worker) upholds, since
+    // the harness can't see run/PR state from inside the container:
+    //  - At most ONE active run per block at a time. The work branch is deterministic
+    //    per block (`cat-factory/<blockId>`), so two concurrent runs would target the
+    //    same branch; their pushes race. A plain (non-forced) push fails safely on a
+    //    non-fast-forward rather than clobbering the other run's commits, so the worst
+    //    case is one run failing — never lost work — but the dispatcher should not
+    //    knowingly run two at once.
+    //  - Re-dispatch only NON-terminal runs (failed / evicted / stale-running), whose
+    //    branch is by definition unmerged. Resuming a branch whose PR already merged
+    //    (e.g. a merge that left the branch undeleted) could re-introduce merged work;
+    //    that case is avoided by never re-dispatching a `done` block.
     const resumed =
       spec.newBranch != null &&
       (await remoteBranchExists(spec.repo.cloneUrl, spec.newBranch, spec.ghToken, signal))
@@ -129,10 +143,13 @@ export async function runCodingAgent(
     // never a no-op regardless of what this pass adds.
     const baseSha = await headCommit(dir, signal)
 
-    // Checkpoint the agent's committed work to the branch periodically so an eviction
-    // mid-run doesn't lose it (a retry then resumes from the pushed commits). The
-    // agent commits its own work; this only PUSHES already-committed commits, so it
-    // never races the agent's staging. Best-effort: a failed checkpoint is skipped.
+    // Serialize all pushes to the work branch through a single in-flight promise.
+    // A checkpoint tick and the final push (or two slow checkpoint ticks) must never
+    // run `git push` to the same branch concurrently: overlapping pushes race on the
+    // remote ref and can make a push fail with a ref-lock / non-fast-forward error —
+    // which, on the FINAL push, would fail the whole run even though the work is
+    // committed. `pushWorkOnce` coalesces concurrent callers onto one push and only
+    // pushes once the branch has advanced past `baseSha` (see below).
     //
     // Only push once the branch has advanced past its pre-run tip: pushing while it
     // still sits at `baseSha` would create the work branch at the base commit (a
@@ -140,11 +157,28 @@ export async function runCodingAgent(
     // treat as resumable work — then fail to open a PR ("no commits between base and
     // head"). So a run that never commits leaves NO branch behind, preserving the
     // clean no-op outcome.
-    const checkpoint = setInterval(() => {
-      void (async () => {
+    let pushInFlight: Promise<void> | null = null
+    const pushWorkOnce = (): Promise<void> => {
+      if (pushInFlight) return pushInFlight
+      pushInFlight = (async () => {
         if (!(await branchHasCommitsSince(dir, baseSha, signal))) return
         await pushBranch(dir, spec.pushBranch, spec.ghToken, signal)
-      })().catch((err) => {
+      })().finally(() => {
+        pushInFlight = null
+      })
+      return pushInFlight
+    }
+    // Read the in-flight push, if any. A function (with an explicit return type) so the
+    // value isn't subject to the caller's straight-line narrowing — `pushInFlight` is
+    // only ever assigned inside closures, which flow analysis can't observe.
+    const inFlightPush = (): Promise<void> | null => pushInFlight
+
+    // Checkpoint the agent's committed work to the branch periodically so an eviction
+    // mid-run doesn't lose it (a retry then resumes from the pushed commits). The
+    // agent commits its own work; this only PUSHES already-committed commits, so it
+    // never races the agent's staging. Best-effort: a failed checkpoint is skipped.
+    const checkpoint = setInterval(() => {
+      pushWorkOnce().catch((err) => {
         log.info('coding-agent: checkpoint push skipped', {
           ...trace,
           reason: err instanceof Error ? err.message : String(err),
@@ -172,16 +206,37 @@ export async function runCodingAgent(
       // untracked scratch files/artifacts — the agent owns committing new files).
       await commitTrackedEdits(dir, spec.commitMessage, signal)
 
+      // Stop periodic checkpoints and let any in-flight one settle BEFORE the final
+      // push, so the two never run a concurrent `git push` to the same branch (the
+      // final push below is then a fresh attempt whose failure is the real signal).
+      clearInterval(checkpoint)
+      const inflight = inFlightPush()
+      if (inflight) await inflight.catch(() => {})
+
+      // Surface (don't fail on) untracked, non-ignored files the agent left behind:
+      // `commitTrackedEdits` only captures edits to ALREADY tracked files, so a NEW
+      // file the agent created but forgot to commit is silently dropped. Logging it
+      // makes that loss observable when a PR turns out to be missing a file.
+      const leftover = await listUntrackedFiles(dir, signal)
+      if (leftover.length > 0) {
+        log.warn('coding-agent: uncommitted new files left behind (not pushed)', {
+          ...trace,
+          count: leftover.length,
+          files: leftover.slice(0, 20),
+        })
+      }
+
       const hasWork = resumed || (await branchHasCommitsSince(dir, baseSha, signal))
       if (!hasWork) {
         log.info('coding-agent: no changes produced', { ...trace, ...stats })
         outcome = { pushed: false, resumed, summary, stats, ...(stderrTail ? { stderrTail } : {}) }
       } else {
         log.info('coding-agent: pushing', { ...trace, resumed, ...stats })
-        await pushBranch(dir, spec.pushBranch, spec.ghToken, signal)
+        await pushWorkOnce()
         outcome = { pushed: true, resumed, summary, stats, ...(stderrTail ? { stderrTail } : {}) }
       }
     } finally {
+      // Safety net for the throw path (the happy path already cleared it above).
       clearInterval(checkpoint)
     }
     return outcome

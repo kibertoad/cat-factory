@@ -573,6 +573,19 @@ describe('ProgressGuard (anti-rabbithole)', () => {
     expect(reason).toBeNull()
   })
 
+  it('does not count planning (todo) calls toward the no-edit bound', () => {
+    const limits: ProgressGuardLimits = { maxToolCallsWithoutEdit: 3, maxConsecutiveErrors: 99 }
+    const guard = new ProgressGuard(limits)
+    let reason: string | null = null
+    // Ten todo updates are pure planning, not edits or probing — they must not trip
+    // the no-edit guard even well past its threshold.
+    for (let i = 0; i < 10; i++) reason = guard.observe(toolCall('todo'))
+    expect(reason).toBeNull()
+    // But real (non-planning) tool calls past the threshold still trip it.
+    for (let i = 0; i < 3; i++) reason = guard.observe(toolCall('bash'))
+    expect(reason).toMatch(/no progress/i)
+  })
+
   it('skips the no-edit bound for assess-only runs (expectsEdits=false)', () => {
     const limits: ProgressGuardLimits = { maxToolCallsWithoutEdit: 3, maxConsecutiveErrors: 99 }
     const guard = new ProgressGuard(limits, false)

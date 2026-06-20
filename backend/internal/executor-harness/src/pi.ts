@@ -292,6 +292,14 @@ const FILE_EDIT_TOOLS = new Set([
   'create',
 ])
 
+// Planning/bookkeeping tools that are neither file edits nor the environment-probing
+// the no-edit bound targets — the todo list the agent maintains as it works. These do
+// NOT count toward `maxToolCallsWithoutEdit`: a run that diligently updates a long
+// todo list before its first edit (common on a large task) would otherwise be killed
+// for "no edits" purely from planning calls. They still reset the consecutive-error
+// streak (a successful call means the agent isn't wedged). Matched case-insensitively.
+const PLANNING_TOOLS = new Set(['todo'])
+
 /** Read {@link ProgressGuardLimits} from the environment, falling back to the defaults. */
 export function progressGuardLimitsFromEnv(
   env: NodeJS.ProcessEnv = process.env,
@@ -334,9 +342,21 @@ export class ProgressGuard {
   observe(event: Record<string, unknown>): string | null {
     const tool = toolCallSignal(event)
     if (!tool) return null
-    this.toolCalls++
+    const name = tool.name.toLowerCase()
+    // The error streak tracks ANY tool call (a planning call still proves the agent
+    // isn't wedged in a failing-op loop), so it's updated before the planning skip.
     this.consecutiveErrors = tool.isError ? this.consecutiveErrors + 1 : 0
-    if (FILE_EDIT_TOOLS.has(tool.name.toLowerCase())) this.edits++
+    if (this.consecutiveErrors >= this.limits.maxConsecutiveErrors) {
+      return (
+        `no progress: ${this.consecutiveErrors} consecutive failing tool calls — the agent is stuck ` +
+        `retrying a failing operation rather than making progress. Aborting.`
+      )
+    }
+
+    // Planning/bookkeeping calls don't count toward the no-edit bound (see PLANNING_TOOLS).
+    if (PLANNING_TOOLS.has(name)) return null
+    this.toolCalls++
+    if (FILE_EDIT_TOOLS.has(name)) this.edits++
 
     if (
       this.expectsEdits &&
@@ -346,12 +366,6 @@ export class ProgressGuard {
       return (
         `no progress: ${this.toolCalls} tool calls and not one file edit — the agent is exploring or ` +
         `probing the environment without implementing anything. Aborting before it burns the whole run.`
-      )
-    }
-    if (this.consecutiveErrors >= this.limits.maxConsecutiveErrors) {
-      return (
-        `no progress: ${this.consecutiveErrors} consecutive failing tool calls — the agent is stuck ` +
-        `retrying a failing operation rather than making progress. Aborting.`
       )
     }
     return null

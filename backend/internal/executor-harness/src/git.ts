@@ -203,6 +203,21 @@ export async function commitTrackedEdits(
   return true
 }
 
+/**
+ * The untracked, non-ignored files left in the working tree (`git ls-files --others
+ * --exclude-standard`). The harness deliberately never blanket-stages new files (the
+ * agent owns commit selection), so this is exactly what {@link commitTrackedEdits}
+ * does NOT capture — a NEW file the agent created but forgot to commit. The caller
+ * surfaces it as a warning so that silent loss is at least observable in the logs.
+ */
+export async function listUntrackedFiles(dir: string, signal?: AbortSignal): Promise<string[]> {
+  const out = await git(['ls-files', '--others', '--exclude-standard'], { cwd: dir, signal })
+  return out
+    .split('\n')
+    .map((line) => line.replace(/\r$/, '').trim())
+    .filter((path) => path !== '')
+}
+
 /** Whether the branch advanced past `baseSha` via commits (the agent's own + any safety-net commit). */
 export async function branchHasCommitsSince(
   dir: string,
