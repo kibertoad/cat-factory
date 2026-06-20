@@ -24,10 +24,20 @@ surfaced in the inspector.
   agent that audits the repo, then a special non-LLM `tracker` step that files a
   **GitHub issue or Jira ticket** from the analysis before implementation. The
   tracker is a per-workspace selection (`GET|PUT /workspaces/:ws/tracker-settings`);
-  `GitHubClient` gains `createIssue`, and a runtime-neutral `TicketTrackerService`
-  files GitHub issues (against the service's repo) or Jira tickets (markdown→ADF
-  against the stored Jira connection). Two new seed pipelines: `pl_dep_update`,
-  `pl_tech_debt`.
+  `GitHubClient` gains `createIssue`. The runtime-neutral `TicketTrackerService`
+  resolves each **tenant's own** connected integration (it is injected with a
+  `fileGitHubIssue` filer + a `resolveJiraConnection` resolver, never shared/env
+  credentials): on Cloudflare it files GitHub issues through the workspace's GitHub
+  App installation against the service's repo, and Jira tickets (markdown→ADF) using
+  the workspace's encrypted `task_connections`. Two new seed pipelines:
+  `pl_dep_update`, `pl_tech_debt`.
+- **Per-tenant Jira on the Node facade**: the task-source integration is now wired on
+  Node (opt-in via `TASKS_ENABLED` + `TASKS_ENCRYPTION_KEY`) — a Drizzle
+  `task_connections`/`tasks` store, a Node `WebCryptoSecretCipher`, and the
+  runtime-neutral Jira provider — so each tenant connects its own Jira through the
+  existing UI (credentials encrypted at rest, resolved per-workspace) and the tracker
+  files that workspace's ticket. GitHub-Issue tracking on Node rides on the per-tenant
+  GitHub App installation infra, wired separately.
 - **Persistence + scheduling are symmetric across runtimes**: D1 migration
   `0029_recurring_pipelines.sql` ⇄ Drizzle schema + generated migration; the
   Cloudflare `scheduled` cron fires due schedules (and prunes run history) ⇄ a Node

@@ -268,3 +268,47 @@ export const trackerSettings = pgTable('tracker_settings', {
   jira_project_key: text('jira_project_key'),
   updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
 })
+
+// Task-source integration (mirror of D1 migration 0014): a workspace's connections
+// to external issue trackers (Jira) and local projections of the issues it imported.
+// `credentials` is an encrypted JSON bag (AES-256-GCM envelope), never sent on the
+// wire. At most one live connection per (workspace, source); a `deleted_at` tombstone
+// lets a workspace disconnect/reconnect.
+export const taskConnections = pgTable(
+  'task_connections',
+  {
+    workspace_id: text('workspace_id').notNull(),
+    source: text('source').notNull(),
+    credentials: text('credentials').notNull(),
+    label: text('label').notNull().default(''),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+    deleted_at: bigint('deleted_at', { mode: 'number' }),
+  },
+  (t) => [primaryKey({ columns: [t.workspace_id, t.source] })],
+)
+
+export const tasks = pgTable(
+  'tasks',
+  {
+    workspace_id: text('workspace_id').notNull(),
+    source: text('source').notNull(),
+    external_id: text('external_id').notNull(),
+    title: text('title').notNull(),
+    url: text('url').notNull(),
+    status: text('status').notNull().default(''),
+    type: text('type').notNull().default(''),
+    assignee: text('assignee'),
+    priority: text('priority'),
+    labels: text('labels').notNull().default('[]'),
+    description: text('description').notNull().default(''),
+    comments: text('comments').notNull().default('[]'),
+    excerpt: text('excerpt').notNull().default(''),
+    linked_block_id: text('linked_block_id'),
+    synced_at: bigint('synced_at', { mode: 'number' }).notNull(),
+    deleted_at: bigint('deleted_at', { mode: 'number' }),
+  },
+  (t) => [
+    primaryKey({ columns: [t.workspace_id, t.source, t.external_id] }),
+    index('idx_tasks_block').on(t.workspace_id, t.linked_block_id),
+  ],
+)

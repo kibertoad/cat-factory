@@ -1,5 +1,6 @@
 import { AiAgentExecutor } from '@cat-factory/agents'
 import { TicketTrackerService } from '@cat-factory/integrations'
+import type { TaskConnectionRepository, TaskSourceProvider } from '@cat-factory/kernel'
 import { type CoreDependencies, createCore } from '@cat-factory/orchestration'
 import type { AppConfig, ServerContainer } from '@cat-factory/server'
 import type { PgBoss } from 'pg-boss'
@@ -10,7 +11,10 @@ import { PgBossWorkRunner } from './execution/pgBossRunner.js'
 import { createNodeGateways } from './gateways.js'
 import { createNodeModelProvider } from './modelProvider.js'
 import { createDrizzleRepositories } from './repositories/drizzle.js'
+import { DrizzleTaskConnectionRepository, DrizzleTaskRepository } from './repositories/tasks.js'
 import { CryptoIdGenerator, SystemClock } from './runtime.js'
+import { WebCryptoSecretCipher } from './secretCipher.js'
+import { JiraProvider } from './tasks/JiraProvider.js'
 
 export interface NodeContainerOptions {
   /** The Drizzle/Postgres client (the single persistence layer). */
@@ -59,6 +63,12 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
       repos.modelDefaultsRepository.getForKind(workspaceId, agentKind).then((v) => v ?? undefined),
   })
 
+  // Task-source integration (Jira). Opt-in via TASKS_ENABLED + TASKS_ENCRYPTION_KEY;
+  // tenants connect their own Jira site through the UI and the credentials are stored
+  // per-workspace, encrypted at rest. The tracker resolves each workspace's own
+  // credentials from this same store (multi-tenant), mirroring the Cloudflare facade.
+  const tasks = selectNodeTasksDeps(config, options.db)
+
   const dependencies: CoreDependencies = {
     workspaceRepository: repos.workspaceRepository,
     accountRepository: repos.accountRepository,
@@ -69,15 +79,30 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     tokenUsageRepository: repos.tokenUsageRepository,
     llmCallMetricRepository: repos.llmCallMetricRepository,
     modelDefaultsRepository: repos.modelDefaultsRepository,
+    ...tasks.deps,
     // Recurring pipelines + the workspace tracker selection. The tracker provider
-    // files the tech-debt pipeline's issue; in the Node facade no GitHub client /
-    // Jira credentials are wired yet, so it passes through (Jira's HTTP transport is
-    // the global fetch, available when those credentials are added later).
+    // files the tech-debt pipeline's issue by resolving the *workspace's* connected
+    // integration. Jira resolves per-workspace from the connection store above;
+    // GitHub Issues need the per-tenant GitHub App installation infra (wired
+    // separately, e.g. PR #66), so that tracker still passes through here.
     pipelineScheduleRepository: repos.pipelineScheduleRepository,
     trackerSettingsRepository: repos.trackerSettingsRepository,
     ticketTrackerProvider: new TicketTrackerService({
       trackerSettingsRepository: repos.trackerSettingsRepository,
       fetchImpl: fetch,
+      ...(tasks.taskConnectionRepository
+        ? {
+            resolveJiraConnection: async (workspaceId) => {
+              const connection = await tasks.taskConnectionRepository!.getByWorkspace(
+                workspaceId,
+                'jira',
+              )
+              const { baseUrl, accountEmail, apiToken } = connection?.credentials ?? {}
+              if (!baseUrl || !accountEmail || !apiToken) return null
+              return { baseUrl, accountEmail, apiToken }
+            },
+          }
+        : {}),
     }),
     idGenerator,
     clock,
@@ -94,5 +119,37 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     config,
     agentRunRepository: repos.agentRunRepository,
     gateways: createNodeGateways(env),
+  }
+}
+
+/**
+ * Wire the task-source integration for the Node facade when it is enabled (the
+ * `tasks` module then assembles so tenants can connect Jira through the existing
+ * UI). Returns the `CoreDependencies` fragment plus the connection repository so the
+ * tracker can resolve each workspace's Jira credentials from the same store.
+ * Disabled → `{ deps: {} }` and both the tasks module and the Jira tracker stay off.
+ */
+function selectNodeTasksDeps(
+  config: AppConfig,
+  db: DrizzleDb,
+): { deps: Partial<CoreDependencies>; taskConnectionRepository?: TaskConnectionRepository } {
+  if (!config.tasks.enabled || !config.tasks.encryptionKey) return { deps: {} }
+  const providers: TaskSourceProvider[] = []
+  if (config.tasks.sources.includes('jira')) providers.push(new JiraProvider())
+  if (providers.length === 0) return { deps: {} }
+
+  const taskConnectionRepository = new DrizzleTaskConnectionRepository(
+    db,
+    // Source credentials are encrypted at rest under a tasks-scoped HKDF info (the
+    // same domain the Cloudflare facade uses), keyed by TASKS_ENCRYPTION_KEY.
+    new WebCryptoSecretCipher({ masterKeyBase64: config.tasks.encryptionKey, info: 'cat-factory:tasks' }),
+  )
+  return {
+    deps: {
+      taskSourceProviders: providers,
+      taskConnectionRepository,
+      taskRepository: new DrizzleTaskRepository(db),
+    },
+    taskConnectionRepository,
   }
 }
