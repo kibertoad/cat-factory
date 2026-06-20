@@ -4,6 +4,7 @@ import type {
   WorkspaceMountRepository,
 } from '@cat-factory/kernel'
 import type { D1Database } from '@cloudflare/workers-types'
+import { chunkForIn } from './chunk'
 
 interface MountRow {
   workspace_id: string
@@ -67,16 +68,19 @@ export class D1WorkspaceMountRepository implements WorkspaceMountRepository {
 
   async countByServiceIds(serviceIds: string[]): Promise<Record<string, number>> {
     if (serviceIds.length === 0) return {}
-    const placeholders = serviceIds.map(() => '?').join(', ')
-    const { results } = await this.db
-      .prepare(
-        `SELECT service_id, COUNT(*) AS n FROM workspace_services
-         WHERE service_id IN (${placeholders}) GROUP BY service_id`,
-      )
-      .bind(...serviceIds)
-      .all<{ service_id: string; n: number }>()
     const counts: Record<string, number> = {}
-    for (const row of results ?? []) counts[row.service_id] = Number(row.n)
+    // Chunk the IN list to stay under D1's bound-parameter limit.
+    for (const chunk of chunkForIn(serviceIds)) {
+      const placeholders = chunk.map(() => '?').join(', ')
+      const { results } = await this.db
+        .prepare(
+          `SELECT service_id, COUNT(*) AS n FROM workspace_services
+           WHERE service_id IN (${placeholders}) GROUP BY service_id`,
+        )
+        .bind(...chunk)
+        .all<{ service_id: string; n: number }>()
+      for (const row of results ?? []) counts[row.service_id] = Number(row.n)
+    }
     return counts
   }
 
@@ -141,9 +145,8 @@ export class D1WorkspaceMountRepository implements WorkspaceMountRepository {
 
   async removeByServices(serviceIds: string[]): Promise<void> {
     if (serviceIds.length === 0) return
-    // Chunk the IN list to stay well under SQLite/D1's bound-parameter limit.
-    for (let i = 0; i < serviceIds.length; i += 500) {
-      const chunk = serviceIds.slice(i, i + 500)
+    // Chunk the IN list to stay under D1's bound-parameter limit.
+    for (const chunk of chunkForIn(serviceIds)) {
       const placeholders = chunk.map(() => '?').join(', ')
       await this.db
         .prepare(`DELETE FROM workspace_services WHERE service_id IN (${placeholders})`)

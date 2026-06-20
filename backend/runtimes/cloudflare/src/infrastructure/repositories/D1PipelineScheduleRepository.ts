@@ -7,6 +7,7 @@ import type {
   ScheduleTemplate,
 } from '@cat-factory/kernel'
 import type { D1Database } from '@cloudflare/workers-types'
+import { chunkForIn } from './chunk'
 
 interface ScheduleRow {
   workspace_id: string
@@ -130,9 +131,8 @@ export class D1PipelineScheduleRepository implements PipelineScheduleRepository 
   async listByServices(serviceIds: string[]): Promise<PipelineSchedule[]> {
     if (serviceIds.length === 0) return []
     const out: PipelineSchedule[] = []
-    // Chunk the IN list to stay well under SQLite/D1's bound-parameter limit.
-    for (let i = 0; i < serviceIds.length; i += 500) {
-      const chunk = serviceIds.slice(i, i + 500)
+    // Chunk the IN list to stay under D1's bound-parameter limit.
+    for (const chunk of chunkForIn(serviceIds)) {
       const placeholders = chunk.map(() => '?').join(', ')
       const { results } = await this.db
         .prepare(

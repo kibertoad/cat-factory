@@ -1,6 +1,7 @@
 import type { BlockPatch, BlockRepository } from '@cat-factory/kernel'
 import type { Block } from '@cat-factory/contracts'
 import type { D1Database } from '@cloudflare/workers-types'
+import { chunkForIn } from './chunk'
 import { type BlockRow, blockInsertValues, blockPatchToColumns, rowToBlock } from './mappers'
 
 export class D1BlockRepository implements BlockRepository {
@@ -29,9 +30,8 @@ export class D1BlockRepository implements BlockRepository {
   async listByServices(serviceIds: string[]): Promise<Block[]> {
     if (serviceIds.length === 0) return []
     const out: Block[] = []
-    // Chunk the IN list to stay well under SQLite/D1's bound-parameter limit.
-    for (let i = 0; i < serviceIds.length; i += 500) {
-      const chunk = serviceIds.slice(i, i + 500)
+    // Chunk the IN list to stay under D1's bound-parameter limit.
+    for (const chunk of chunkForIn(serviceIds)) {
       const placeholders = chunk.map(() => '?').join(', ')
       const { results } = await this.db
         .prepare(`SELECT * FROM blocks WHERE service_id IN (${placeholders}) ORDER BY rowid`)

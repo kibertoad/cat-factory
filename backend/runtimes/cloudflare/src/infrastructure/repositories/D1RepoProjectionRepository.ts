@@ -6,6 +6,7 @@ import type {
   SyncCursorKind,
 } from '@cat-factory/kernel'
 import type { D1Database } from '@cloudflare/workers-types'
+import { chunkForIn } from './chunk'
 import {
   type GitHubRepoRow,
   type SyncCursorRow,
@@ -61,9 +62,8 @@ export class D1RepoProjectionRepository implements RepoProjectionRepository {
   async linkedWorkspaces(repoGithubId: number, candidateWorkspaceIds: string[]): Promise<string[]> {
     if (candidateWorkspaceIds.length === 0) return []
     const found: string[] = []
-    // Chunk the IN list to stay well under SQLite/D1's bound-parameter limit.
-    for (let i = 0; i < candidateWorkspaceIds.length; i += 500) {
-      const chunk = candidateWorkspaceIds.slice(i, i + 500)
+    // Chunk the IN list to stay under D1's bound-parameter limit (plus the leading github_id bind).
+    for (const chunk of chunkForIn(candidateWorkspaceIds)) {
       const placeholders = chunk.map(() => '?').join(', ')
       const { results } = await this.db
         .prepare(

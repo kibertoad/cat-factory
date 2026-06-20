@@ -5,6 +5,7 @@ import type {
   BootstrapJobRepository,
 } from '@cat-factory/kernel'
 import type { D1Database } from '@cloudflare/workers-types'
+import { chunkForIn } from './chunk'
 
 /**
  * A row of the unified `agent_runs` table (see migration 0019). This repository
@@ -267,9 +268,8 @@ export class D1BootstrapJobRepository implements BootstrapJobRepository {
   async listByServices(serviceIds: string[]): Promise<BootstrapJobRecord[]> {
     if (serviceIds.length === 0) return []
     const out: BootstrapJobRecord[] = []
-    // Chunk the IN list to stay well under SQLite/D1's bound-parameter limit.
-    for (let i = 0; i < serviceIds.length; i += 500) {
-      const chunk = serviceIds.slice(i, i + 500)
+    // Chunk the IN list to stay under D1's bound-parameter limit.
+    for (const chunk of chunkForIn(serviceIds)) {
       const placeholders = chunk.map(() => '?').join(', ')
       const { results } = await this.db
         .prepare(

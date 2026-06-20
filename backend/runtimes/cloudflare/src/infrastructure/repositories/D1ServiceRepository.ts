@@ -1,5 +1,6 @@
 import type { Service, ServicePatch, ServiceRepository } from '@cat-factory/kernel'
 import type { D1Database } from '@cloudflare/workers-types'
+import { chunkForIn } from './chunk'
 
 interface ServiceRow {
   id: string
@@ -57,9 +58,8 @@ export class D1ServiceRepository implements ServiceRepository {
   async listByIds(ids: string[]): Promise<Service[]> {
     if (ids.length === 0) return []
     const out: Service[] = []
-    // Chunk the IN list to stay well under SQLite/D1's bound-parameter limit.
-    for (let i = 0; i < ids.length; i += 500) {
-      const chunk = ids.slice(i, i + 500)
+    // Chunk the IN list to stay under D1's bound-parameter limit.
+    for (const chunk of chunkForIn(ids)) {
       const placeholders = chunk.map(() => '?').join(', ')
       const { results } = await this.db
         .prepare(`SELECT * FROM services WHERE id IN (${placeholders})`)
@@ -124,9 +124,8 @@ export class D1ServiceRepository implements ServiceRepository {
 
   async deleteMany(ids: string[]): Promise<void> {
     if (ids.length === 0) return
-    // Chunk the IN list to stay well under SQLite/D1's bound-parameter limit.
-    for (let i = 0; i < ids.length; i += 500) {
-      const chunk = ids.slice(i, i + 500)
+    // Chunk the IN list to stay under D1's bound-parameter limit.
+    for (const chunk of chunkForIn(ids)) {
       const placeholders = chunk.map(() => '?').join(', ')
       await this.db
         .prepare(`DELETE FROM services WHERE id IN (${placeholders})`)
