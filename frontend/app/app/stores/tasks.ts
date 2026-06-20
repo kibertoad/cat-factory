@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import type {
   SourceTask,
   TaskConnection,
+  TaskSearchResult,
   TaskSourceDescriptor,
   TaskSourceKind,
 } from '~/types/domain'
@@ -120,6 +121,12 @@ export const useTasksStore = defineStore('tasks', () => {
     }
   }
 
+  /** Search a connected tracker's issues by free text (title/content). */
+  async function search(source: TaskSourceKind, query: string): Promise<TaskSearchResult[]> {
+    const { results } = await api.searchTaskSource(workspace.requireId(), source, query)
+    return results
+  }
+
   /** Attach an imported issue to a block as agent context. */
   async function linkToBlock(blockId: string, source: TaskSourceKind, externalId: string) {
     const task = await api.linkTask(workspace.requireId(), { source, externalId, blockId })
@@ -144,6 +151,7 @@ export const useTasksStore = defineStore('tasks', () => {
     disconnect,
     loadTasks,
     importTask,
+    search,
     linkToBlock,
   }
 })

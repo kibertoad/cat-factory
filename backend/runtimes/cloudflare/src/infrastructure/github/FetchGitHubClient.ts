@@ -4,9 +4,11 @@ import {
   type GitHubBranch,
   type GitHubCheckRun,
   type GitHubClient,
+  type GitHubCodeSearchHit,
   type GitHubCommit,
   type GitHubIssue,
   type GitHubIssueDetail,
+  type GitHubIssueSearchHit,
   type GitHubPullRequest,
   type GitHubRepo,
   type GitHubRepoRef,
@@ -92,6 +94,23 @@ interface GhIssueCommentPayload {
   body?: string
   created_at?: string
   user?: { login?: string } | null
+}
+
+/** The slice of a `/search/issues` item `searchIssues` reads. */
+interface GhSearchIssueItem {
+  number?: number
+  title?: string
+  state?: string
+  html_url?: string
+  /** Present (and truthy) only on pull requests, which we filter out. */
+  pull_request?: unknown
+}
+
+/** The slice of a `/search/code` item `searchCode` reads. */
+interface GhSearchCodeItem {
+  path?: string
+  html_url?: string
+  repository?: { name?: string; owner?: { login?: string } }
 }
 
 export class FetchGitHubClient implements GitHubClient {
@@ -337,6 +356,60 @@ export class FetchGitHubClient implements GitHubClient {
         body: c.body ?? '',
       })),
     }
+  }
+
+  async searchIssues(
+    installationId: number,
+    query: string,
+    limit = 20,
+  ): Promise<GitHubIssueSearchHit[]> {
+    const q = encodeURIComponent(`${query} is:issue`)
+    const per = Math.min(Math.max(limit, 1), 100)
+    const { json } = await this.request(`/search/issues?q=${q}&per_page=${per}`, { installationId })
+    const items = ((json as { items?: GhSearchIssueItem[] } | null)?.items ?? []).filter(
+      (i) => !i.pull_request,
+    )
+    const hits: GitHubIssueSearchHit[] = []
+    for (const item of items) {
+      const parts = parseIssueHtmlUrl(item.html_url ?? '')
+      if (!parts) continue
+      hits.push({
+        owner: parts.owner,
+        repo: parts.repo,
+        number: item.number ?? parts.number,
+        title: item.title ?? '(untitled)',
+        state: item.state ?? '',
+        url: item.html_url ?? '',
+      })
+    }
+    return hits.slice(0, limit)
+  }
+
+  async searchCode(
+    installationId: number,
+    query: string,
+    limit = 20,
+  ): Promise<GitHubCodeSearchHit[]> {
+    const per = Math.min(Math.max(limit, 1), 100)
+    const { json } = await this.request(
+      `/search/code?q=${encodeURIComponent(query)}&per_page=${per}`,
+      { installationId },
+    )
+    const items = (json as { items?: GhSearchCodeItem[] } | null)?.items ?? []
+    const hits: GitHubCodeSearchHit[] = []
+    for (const item of items) {
+      const owner = item.repository?.owner?.login
+      const repo = item.repository?.name
+      const path = item.path
+      if (!owner || !repo || !path) continue
+      hits.push({
+        owner,
+        repo,
+        path,
+        url: item.html_url ?? `https://github.com/${owner}/${repo}/blob/HEAD/${path}`,
+      })
+    }
+    return hits.slice(0, limit)
   }
 
   async listCommits(
@@ -631,6 +704,13 @@ export class GitHubApiError extends Error {
     super(message)
     this.name = 'GitHubApiError'
   }
+}
+
+/** Derive `{owner, repo, number}` from an issue's `html_url`, or null if it doesn't match. */
+function parseIssueHtmlUrl(url: string): { owner: string; repo: string; number: number } | null {
+  const m = url.match(/github\.com\/([^/]+)\/([^/]+)\/issues\/(\d+)/)
+  if (!m) return null
+  return { owner: m[1]!, repo: m[2]!, number: Number(m[3]) }
 }
 
 /** Decode the contents API's base64 (whitespace-laden) payload to a UTF-8 string. */

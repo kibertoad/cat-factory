@@ -1,4 +1,4 @@
-import type { TaskSourceDescriptor } from '@cat-factory/kernel'
+import type { TaskSearchResult, TaskSourceDescriptor } from '@cat-factory/kernel'
 
 // Jira-specific pure logic, kept out of the worker so it is unit-testable
 // without a live site: parsing an issue key out of user input and converting an
@@ -30,6 +30,47 @@ export const JIRA_DESCRIPTOR: TaskSourceDescriptor = {
   ],
   refLabel: 'Issue key or URL',
   refPlaceholder: 'PROJ-123  or  https://…/browse/PROJ-123',
+  searchable: true,
+}
+
+/** Escape a user string for embedding inside a JQL double-quoted literal. */
+function escapeJql(query: string): string {
+  return query.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+}
+
+/**
+ * Build the JQL for a free-text issue search: match the term across summary and
+ * body (`text ~`), newest first. A bare key typed into the box still matches via
+ * `text ~`, so the search box doubles as a quick "jump to issue".
+ */
+export function buildJiraSearchJql(query: string): string {
+  return `text ~ "${escapeJql(query.trim())}" ORDER BY updated DESC`
+}
+
+interface JiraSearchResponse {
+  issues?: {
+    key?: string
+    fields?: { summary?: string; status?: { name?: string } }
+  }[]
+}
+
+/** Map a Jira search response into lean hits; URLs are the canonical `/browse/KEY`. */
+export function parseJiraSearchResults(json: unknown, base: string): TaskSearchResult[] {
+  const body = (json ?? {}) as JiraSearchResponse
+  const cleanBase = base.replace(/\/+$/, '')
+  const out: TaskSearchResult[] = []
+  for (const issue of Array.isArray(body.issues) ? body.issues : []) {
+    if (!issue.key) continue
+    out.push({
+      source: 'jira',
+      externalId: issue.key,
+      title: issue.fields?.summary ?? '(untitled)',
+      url: `${cleanBase}/browse/${issue.key}`,
+      status: issue.fields?.status?.name ?? '',
+      excerpt: '',
+    })
+  }
+  return out
 }
 
 /**

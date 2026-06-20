@@ -79,6 +79,7 @@ import { FetchGitHubProvisioningClient } from './github/FetchGitHubProvisioningC
 import { WebCryptoWebhookVerifier } from './github/WebCryptoWebhookVerifier'
 import { ConfluenceProvider } from './documents/ConfluenceProvider'
 import { NotionProvider } from './documents/NotionProvider'
+import { GitHubDocsProvider } from './documents/GitHubDocsProvider'
 import { JiraProvider } from './tasks/JiraProvider'
 import { GitHubIssuesProvider } from './tasks/GitHubIssuesProvider'
 import { D1TaskConnectionRepository } from './repositories/D1TaskConnectionRepository'
@@ -512,11 +513,32 @@ function selectDocumentsDeps(
   env: Env,
   config: AppConfig,
   db: D1Database,
+  clock: Clock,
+  idGenerator: IdGenerator,
 ): Partial<CoreDependencies> {
   if (!config.documents.enabled) return {}
   const providers: DocumentSourceProvider[] = []
   if (config.documents.sources.includes('confluence')) providers.push(new ConfluenceProvider())
   if (config.documents.sources.includes('notion')) providers.push(new NotionProvider())
+  // GitHub repo docs reuse the workspace's installed GitHub App, so this provider
+  // is wired only when the GitHub integration is also configured — it has no
+  // credentials of its own and resolves the installation per file (mirrors the
+  // GitHub-issues task source).
+  if (config.documents.sources.includes('github') && config.github.enabled) {
+    const registry = buildAppRegistry(env, config, db, clock)
+    providers.push(
+      new GitHubDocsProvider({
+        githubClient: new FetchGitHubClient({
+          registry,
+          rateLimitRepository: new D1RateLimitRepository({ db, idGenerator }),
+          idGenerator,
+          clock,
+          apiBase: config.github.apiBase,
+        }),
+        installations: new D1GitHubInstallationRepository({ db }),
+      }),
+    )
+  }
   if (providers.length === 0) return {}
   return {
     documentSourceProviders: providers,
@@ -833,7 +855,7 @@ export function buildContainer(env: Env, overrides: Partial<CoreDependencies> = 
     repoScanner: selectRepoScanner(env, config, db, clock),
     ...selectGitHubDeps(env, config, db, clock, idGenerator),
     ...selectMergeLifecycleDeps(env, config, db, clock, idGenerator),
-    ...selectDocumentsDeps(env, config, db),
+    ...selectDocumentsDeps(env, config, db, clock, idGenerator),
     ...selectTasksDeps(env, config, db, clock, idGenerator),
     ...selectRequirementsDeps(env, config, db),
     ...selectEnvironmentsDeps(env, config, db),

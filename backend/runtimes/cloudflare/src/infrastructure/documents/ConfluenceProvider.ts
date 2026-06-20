@@ -2,6 +2,7 @@ import {
   ValidationError,
   type DocumentContent,
   type DocumentCredentials,
+  type DocumentSearchResult,
   type DocumentSourceProvider,
   type NormalizedConnection,
 } from '@cat-factory/kernel'
@@ -185,5 +186,41 @@ export class ConfluenceProvider implements DocumentSourceProvider {
       url: `${linkBase}${webui}`,
       body: confluenceLogic.confluenceStorageToMarkdown(json.body?.storage?.value ?? ''),
     }
+  }
+
+  async search(credentials: DocumentCredentials, query: string): Promise<DocumentSearchResult[]> {
+    const base = credentials.baseUrl!.replace(/\/+$/, '')
+    const cql = encodeURIComponent(confluenceLogic.buildConfluenceSearchCql(query))
+    const url = `${base}/wiki/rest/api/content/search?cql=${cql}&limit=20`
+    const auth = btoa(`${credentials.accountEmail}:${credentials.apiToken}`)
+
+    const res = await safeFetch(
+      url,
+      {
+        method: 'GET',
+        headers: {
+          authorization: `Basic ${auth}`,
+          accept: 'application/json',
+          'user-agent': USER_AGENT,
+        },
+      },
+      (u) => confluenceLogic.assertSafeConfluenceBaseUrl(u),
+    )
+    if (!res.ok) {
+      const text = await readCappedText(res, MAX_RESPONSE_BYTES).catch(() => '')
+      throw new ConfluenceApiError(
+        res.status,
+        `Confluence search ${url} → ${res.status}: ${text.slice(0, 300)}`,
+      )
+    }
+    const text = await readCappedText(res, MAX_RESPONSE_BYTES)
+    const json = (() => {
+      try {
+        return JSON.parse(text)
+      } catch {
+        return null
+      }
+    })()
+    return confluenceLogic.parseConfluenceSearchResults(json, base)
   }
 }

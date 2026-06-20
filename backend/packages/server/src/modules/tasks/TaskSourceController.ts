@@ -3,6 +3,7 @@ import {
   taskSourceKindSchema,
   importTaskSchema,
   linkTaskSchema,
+  searchTasksSchema,
   type TaskSourceKind,
 } from '@cat-factory/contracts'
 import * as v from 'valibot'
@@ -96,6 +97,19 @@ export function taskSourceController(): Hono<AppEnv> {
       c.req.valid('json').ref,
     )
     return c.json(task, 201)
+  })
+
+  // Search a tracker's issues by free text (title/content), returning lean hits
+  // the picker can import + link on selection.
+  app.post('/task-sources/:source/search', jsonBody(searchTasksSchema), async (c) => {
+    const tasks = requireTasks(c)
+    if (!tasks) return unavailable(c)
+    const results = await tasks.importService.search(
+      param(c, 'workspaceId'),
+      sourceParam(c),
+      c.req.valid('json').query,
+    )
+    return c.json({ results })
   })
 
   // ---- context links ------------------------------------------------------

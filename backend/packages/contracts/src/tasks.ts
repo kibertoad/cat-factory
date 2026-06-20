@@ -40,6 +40,12 @@ export const taskSourceDescriptorSchema = v.object({
   refLabel: v.string(),
   /** Placeholder for the "import an issue" input. */
   refPlaceholder: v.string(),
+  /**
+   * Whether this source supports searching its catalogue by title/content (so
+   * the UI offers a search box, not just a paste-a-URL field). Optional for
+   * backward-compatibility; absent is treated as `false`.
+   */
+  searchable: v.optional(v.boolean()),
 })
 export type TaskSourceDescriptor = v.InferOutput<typeof taskSourceDescriptorSchema>
 
@@ -98,6 +104,26 @@ export const sourceTaskSchema = v.object({
 })
 export type SourceTask = v.InferOutput<typeof sourceTaskSchema>
 
+/**
+ * A single hit from searching a tracker. A lean shape (no description/comments)
+ * used to populate a picker: selecting one imports it (by `externalId`) and
+ * links it to a block. Distinct from {@link SourceTask} — a hit is not yet
+ * projected locally, so it carries no `linkedBlockId`/`syncedAt`.
+ */
+export const taskSearchResultSchema = v.object({
+  source: taskSourceKindSchema,
+  /** The source's canonical key for the issue (re-usable as an import ref). */
+  externalId: v.string(),
+  title: v.string(),
+  /** Canonical URL of the issue on the source. */
+  url: v.string(),
+  /** Workflow status name, e.g. `In Progress` (may be empty). */
+  status: v.string(),
+  /** A short plain-text excerpt for the result row (may be empty). */
+  excerpt: v.string(),
+})
+export type TaskSearchResult = v.InferOutput<typeof taskSearchResultSchema>
+
 // ---- Request bodies -------------------------------------------------------
 
 /**
@@ -118,6 +144,12 @@ export const importTaskSchema = v.object({
   ref: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(500)),
 })
 export type ImportTaskInput = v.InferOutput<typeof importTaskSchema>
+
+/** Search a tracker's issues by free text (title/content). */
+export const searchTasksSchema = v.object({
+  query: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200)),
+})
+export type SearchTasksInput = v.InferOutput<typeof searchTasksSchema>
 
 /** Attach an imported issue to a task as extra agent context. */
 export const linkTaskSchema = v.object({

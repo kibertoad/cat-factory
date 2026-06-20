@@ -1,6 +1,7 @@
 import type {
   TaskContent,
   TaskCredentials,
+  TaskSearchResult,
   TaskSourceDescriptor,
   TaskSourceKind,
   TaskSourceProvider,
@@ -25,6 +26,9 @@ export class FakeTaskSourceProvider implements TaskSourceProvider {
   readonly descriptor: TaskSourceDescriptor
   readonly issues = new Map<string, TaskContent>()
   readonly calls: { credentials: TaskCredentials; externalId: string }[] = []
+  /** Canned search hits + recorded queries, for the search endpoint tests. */
+  searchResults: TaskSearchResult[] = []
+  readonly searchCalls: { credentials: TaskCredentials; query: string }[] = []
 
   constructor(
     readonly kind: TaskSourceKind = 'jira',
@@ -80,5 +84,10 @@ export class FakeTaskSourceProvider implements TaskSourceProvider {
     }
     this.issues.set(externalId, generated)
     return generated
+  }
+
+  async search(credentials: TaskCredentials, query: string): Promise<TaskSearchResult[]> {
+    this.searchCalls.push({ credentials, query })
+    return this.searchResults
   }
 }

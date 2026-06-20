@@ -5,6 +5,7 @@ import {
   type GitHubInstallationRepository,
   type TaskContent,
   type TaskCredentials,
+  type TaskSearchResult,
   type TaskSourceProvider,
   type NormalizedTaskConnection,
 } from '@cat-factory/kernel'
@@ -69,6 +70,39 @@ export class GitHubIssuesProvider implements TaskSourceProvider {
       description: detail.body,
       comments: detail.comments,
     }
+  }
+
+  /**
+   * Search issues across every installation the App holds. Each installation
+   * token only sees its own account's repos, so we query each (bounded) and merge
+   * — newest-relevance order is preserved per installation. Credentials are
+   * unused (the App authenticates), matching `fetchTask`.
+   */
+  async search(_credentials: TaskCredentials, query: string): Promise<TaskSearchResult[]> {
+    const active = await this.deps.installations.listActive()
+    const out: TaskSearchResult[] = []
+    const seen = new Set<string>()
+    // Bound the fan-out: a handful of installations is the norm.
+    for (const installation of active.slice(0, 5)) {
+      const hits = await this.deps.githubClient
+        .searchIssues(installation.installationId, query, 20)
+        .catch(() => [])
+      for (const hit of hits) {
+        const externalId = githubIssuesLogic.githubIssueExternalId(hit)
+        if (seen.has(externalId)) continue
+        seen.add(externalId)
+        out.push({
+          source: 'github',
+          externalId,
+          title: hit.title,
+          url: hit.url,
+          status: hit.state,
+          excerpt: '',
+        })
+      }
+      if (out.length >= 20) break
+    }
+    return out.slice(0, 20)
   }
 
   /**

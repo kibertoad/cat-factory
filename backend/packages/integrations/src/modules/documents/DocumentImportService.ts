@@ -1,7 +1,7 @@
 import type { Clock } from '@cat-factory/kernel'
 import type { DocumentSourceRegistry } from '@cat-factory/kernel'
 import type { DocumentRecord, DocumentRepository } from '@cat-factory/kernel'
-import type { SourceDocument, DocumentSourceKind } from '@cat-factory/kernel'
+import type { SourceDocument, DocumentSearchResult, DocumentSourceKind } from '@cat-factory/kernel'
 import { ValidationError } from '@cat-factory/kernel'
 import { requireWorkspace } from '@cat-factory/kernel'
 import type { WorkspaceRepository } from '@cat-factory/kernel'
@@ -75,6 +75,26 @@ export class DocumentImportService {
     }
     await this.deps.documentRepository.upsert(record)
     return toSourceDocument(record)
+  }
+
+  /**
+   * Search a source's catalogue by free text, returning lean hits (not yet
+   * imported). The provider authenticates with the workspace's stored credentials
+   * and builds/parses the source-specific query. Throws if the source can't
+   * search (no provider `search`), so the controller can answer cleanly.
+   */
+  async search(
+    workspaceId: string,
+    source: DocumentSourceKind,
+    query: string,
+  ): Promise<DocumentSearchResult[]> {
+    await requireWorkspace(this.deps.workspaceRepository, workspaceId)
+    const provider = this.requireProvider(source)
+    if (!provider.search) {
+      throw new ValidationError(`The ${source} source does not support search`)
+    }
+    const connection = await this.deps.connectionService.requireConnection(workspaceId, source)
+    return provider.search(connection.credentials, query)
   }
 
   /** Every document imported into the workspace, across sources, as wire shapes. */

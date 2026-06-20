@@ -1,4 +1,8 @@
-import type { DocumentSourceKind, DocumentSourceDescriptor } from '../domain/types.js'
+import type {
+  DocumentSourceKind,
+  DocumentSourceDescriptor,
+  DocumentSearchResult,
+} from '../domain/types.js'
 
 // Port for a single document source (Confluence, Notion, …). A provider is the
 // only place that knows a source's specifics: how to validate its credentials,
@@ -47,6 +51,13 @@ export interface DocumentSourceProvider {
   parseRef(input: string): string | null
   /** Fetch a single page by its id using the connection credentials. */
   fetchDocument(credentials: DocumentCredentials, externalId: string): Promise<DocumentContent>
+  /**
+   * Search the source's catalogue by free text and return lean hits (no body).
+   * Optional: a provider that only supports paste-a-URL import omits it (and its
+   * descriptor sets `searchable: false`). The provider builds the query and maps
+   * the response; the returned `externalId`s are valid import refs.
+   */
+  search?(credentials: DocumentCredentials, query: string): Promise<DocumentSearchResult[]>
 }
 
 /** A lookup of the providers wired for this deployment, keyed by source. */

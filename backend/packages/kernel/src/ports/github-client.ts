@@ -121,6 +121,28 @@ export interface GitHubIssueDetail {
   comments: GitHubIssueComment[]
 }
 
+/** A single hit from searching issues across an installation's repos. */
+export interface GitHubIssueSearchHit {
+  owner: string
+  repo: string
+  number: number
+  title: string
+  /** Workflow state, e.g. `open` / `closed`. */
+  state: string
+  /** Canonical web URL (GitHub `html_url`). */
+  url: string
+}
+
+/** A single hit from code-searching an installation's repos for a file. */
+export interface GitHubCodeSearchHit {
+  owner: string
+  repo: string
+  /** Path relative to the repo root, e.g. `docs/architecture.md`. */
+  path: string
+  /** Canonical web URL of the file on its default branch. */
+  url: string
+}
+
 /** Installation metadata captured at connect time (needs the app JWT). */
 export interface InstallationMeta {
   accountLogin: string
@@ -204,6 +226,24 @@ export interface GitHubClient {
     ref: GitHubRepoRef,
     issueNumber: number,
   ): Promise<GitHubIssueDetail>
+  /**
+   * Search issues visible to the installation by free text. `query` is the raw
+   * GitHub search text; the adapter scopes it to issues (`is:issue`) and bounds
+   * the result count. Used by the GitHub-issues task source's search box.
+   */
+  searchIssues(
+    installationId: number,
+    query: string,
+    limit?: number,
+  ): Promise<GitHubIssueSearchHit[]>
+  /**
+   * Code-search files visible to the installation. `query` is the raw GitHub
+   * code-search text and MUST already carry an `org:`/`user:`/`repo:` scope
+   * qualifier (GitHub's code-search API rejects unscoped queries); the caller
+   * builds it from the installation's account. Used by the GitHub repo-doc
+   * document source's search box.
+   */
+  searchCode(installationId: number, query: string, limit?: number): Promise<GitHubCodeSearchHit[]>
   listCommits(
     installationId: number,
     ref: GitHubRepoRef,

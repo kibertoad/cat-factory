@@ -21,6 +21,12 @@ export const GITHUB_ISSUES_DESCRIPTOR: TaskSourceDescriptor = {
   credentialFields: [],
   refLabel: 'Issue URL or owner/repo#number',
   refPlaceholder: 'octo/repo#123  or  https://github.com/octo/repo/issues/123',
+  searchable: true,
+}
+
+/** The canonical `owner/repo#number` external id for an issue's parts. */
+export function githubIssueExternalId(id: GitHubIssueExternalId): string {
+  return `${id.owner}/${id.repo}#${id.number}`
 }
 
 // A GitHub owner/repo segment: letters, digits, '.', '_' and '-'. Deliberately
