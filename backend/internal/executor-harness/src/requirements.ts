@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { access, mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import type { RequirementsJob, RequirementsResult, RequirementsTaskContext } from './job.js'
 import {
@@ -113,8 +113,12 @@ function slugify(name: string, fallback: string): string {
   return slug || fallback
 }
 
-let acceptanceCounter = 0
-function coerceAcceptance(value: unknown): AcceptanceCriterionTree | null {
+// A fallback acceptance id is derived deterministically from its owning
+// requirement id + position (`<reqId>-ac-<n>`), so the SAME doc always renders the
+// SAME bytes — no module-global counter that leaks state across jobs (which would
+// make an unchanged doc hash differently on a long-lived harness process and force a
+// spurious version bump + commit). A model-supplied id still wins.
+function coerceAcceptance(value: unknown, reqId: string, index: number): AcceptanceCriterionTree | null {
   if (typeof value !== 'object' || value === null) return null
   const o = value as Record<string, unknown>
   const given = typeof o.given === 'string' ? o.given.trim() : ''
@@ -129,7 +133,7 @@ function coerceAcceptance(value: unknown): AcceptanceCriterionTree | null {
   // A criterion with no Then clause is not testable; drop it.
   if (outcome === '') return null
   return {
-    id: asString(o.id) ?? `ac-${++acceptanceCounter}`,
+    id: asString(o.id) ?? `${reqId}-ac-${index + 1}`,
     given,
     when,
     outcome,
@@ -148,12 +152,13 @@ function coerceRequirement(value: unknown, index: number): RequirementItemTree |
   const kind = (KINDS as readonly string[]).includes(o.kind as string)
     ? (o.kind as string)
     : 'functional'
+  const id = asString(o.id) ?? `req-${slugify(title ?? statement.slice(0, 40), `${index + 1}`)}`
   const acceptance = (Array.isArray(o.acceptance) ? o.acceptance : [])
-    .map(coerceAcceptance)
+    .map((a, i) => coerceAcceptance(a, id, i))
     .filter((a): a is AcceptanceCriterionTree => a !== null)
     .slice(0, MAX_ACCEPTANCE)
   return {
-    id: asString(o.id) ?? `req-${slugify(title ?? statement.slice(0, 40), `${index + 1}`)}`,
+    id,
     title: title ?? statement.slice(0, 120),
     statement,
     kind,
@@ -188,6 +193,37 @@ function coerceRule(value: unknown, index: number): DomainRuleTree | null {
   }
 }
 
+/** Return `id` if unseen, else the first `id-2` / `id-3` … not already in `used`. */
+function uniqueId(id: string, used: Set<string>): string {
+  if (!used.has(id)) {
+    used.add(id)
+    return id
+  }
+  let n = 2
+  while (used.has(`${id}-${n}`)) n++
+  const unique = `${id}-${n}`
+  used.add(unique)
+  return unique
+}
+
+/**
+ * Force every requirement / acceptance / rule id in the doc to be globally unique
+ * (in place), suffixing `-2`, `-3` … on collision — the same scheme the feature-file
+ * slugs already use. Ids double as Gherkin scenario / test names and provenance
+ * anchors, so duplicates (two requirements sharing a title, a model echoing an id)
+ * would otherwise silently alias. Deterministic: same tree → same ids.
+ */
+function dedupeIds(doc: RequirementsDocTree): void {
+  const used = new Set<string>()
+  for (const g of doc.groups) {
+    for (const r of g.requirements) {
+      r.id = uniqueId(r.id, used)
+      for (const a of r.acceptance) a.id = uniqueId(a.id, used)
+    }
+  }
+  for (const rule of doc.rules) rule.id = uniqueId(rule.id, used)
+}
+
 /**
  * Coerce an agent's parsed JSON into a well-formed {@link RequirementsDocTree},
  * dropping anything malformed. Returns null when no usable service name remains.
@@ -216,7 +252,9 @@ export function coerceRequirementsDoc(
     .map((r, i) => coerceRule(r, i))
     .filter((r): r is DomainRuleTree => r !== null)
     .slice(0, MAX_RULES)
-  return { service, summary: asString(obj.summary) ?? '', groups, rules }
+  const doc = { service, summary: asString(obj.summary) ?? '', groups, rules }
+  dedupeIds(doc)
+  return doc
 }
 
 /** A repo-relative file the harness writes (path + UTF-8 content). */
@@ -466,13 +504,32 @@ function buildUserPrompt(job: RequirementsJob, existing: RequirementsDocTree | n
   return lines.join('\n')
 }
 
-/** Write the rendered files under `dir`, replacing any previous `requirements/` folder. */
-async function writeRequirementsFiles(dir: string, files: RenderedFile[]): Promise<void> {
-  // The whole folder is a generated artifact: wipe it first so a removed group /
-  // feature doesn't leave a stale file behind.
-  await rm(join(dir, REQUIREMENTS_DIR), { recursive: true, force: true })
+async function fileExists(abs: string): Promise<boolean> {
+  try {
+    await access(abs)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Write the rendered files under `dir`. The requirements-writer OWNS the canonical
+ * artifact (`requirements.json`, `overview.md`, `rules.md`, `version.json`) and
+ * always rewrites it. The Gherkin `features/*.feature` files are a TWO-PASS artifact:
+ * this writer only does the mechanical pass-1 SEED, then the `acceptance` agent
+ * polishes them in place (sharpening wording, adding edge/error scenarios). So a
+ * feature file is written only when it does not already exist — never overwritten or
+ * deleted — otherwise a re-run (a later `pl_full`, or a standalone `pl_requirements`)
+ * would clobber the acceptance agent's polished/added scenarios. The trade-off is a
+ * removed group's seed file may linger; that is far cheaper than destroying pass-2
+ * work, and a stale `.feature` is harmless next to the canonical `requirements.json`.
+ */
+export async function writeRequirementsFiles(dir: string, files: RenderedFile[]): Promise<void> {
   for (const file of files) {
     const abs = join(dir, file.path)
+    const isFeature = file.path.startsWith(`${REQUIREMENTS_FEATURES_DIR}/`)
+    if (isFeature && (await fileExists(abs))) continue // seed-once: don't clobber pass-2 polish.
     await mkdir(dirname(abs), { recursive: true })
     await writeFile(abs, file.content, 'utf8')
   }

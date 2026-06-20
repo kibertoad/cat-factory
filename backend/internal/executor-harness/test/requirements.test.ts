@@ -1,3 +1,6 @@
+import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { parseRequirementsJob } from '../src/job.js'
 import {
@@ -9,6 +12,7 @@ import {
   renderFeatureFiles,
   renderRequirementsFiles,
   renderVersionFile,
+  writeRequirementsFiles,
 } from '../src/requirements.js'
 
 const validBody = {
@@ -120,6 +124,62 @@ describe('coerceRequirementsDoc', () => {
   it('returns null when there is no usable service name', () => {
     expect(coerceRequirementsDoc({ groups: [] }, '')).toBeNull()
   })
+
+  it('assigns deterministic acceptance ids derived from the requirement (no global counter leak)', () => {
+    const input = {
+      service: 'X',
+      groups: [
+        {
+          name: 'G',
+          requirements: [
+            {
+              id: 'req-a',
+              title: 'A',
+              statement: 'The system SHALL A.',
+              // No acceptance ids supplied → the harness derives them.
+              acceptance: [
+                { given: 'g', when: 'w', outcome: 'o1' },
+                { given: 'g', when: 'w', outcome: 'o2' },
+              ],
+            },
+          ],
+        },
+      ],
+    }
+    const first = coerceRequirementsDoc(input, 'X')!
+    expect(first.groups[0]?.requirements[0]?.acceptance.map((a) => a.id)).toEqual([
+      'req-a-ac-1',
+      'req-a-ac-2',
+    ])
+    // Coercing again yields the SAME ids — no module-global counter carrying state
+    // across calls (which would force a spurious version bump on an unchanged doc).
+    const second = coerceRequirementsDoc(input, 'X')!
+    expect(second).toEqual(first)
+  })
+
+  it('de-duplicates colliding requirement / acceptance / rule ids', () => {
+    const doc = coerceRequirementsDoc(
+      {
+        service: 'X',
+        groups: [
+          {
+            name: 'G',
+            requirements: [
+              { id: 'req-dup', title: 'A', statement: 'SHALL A.' },
+              { id: 'req-dup', title: 'B', statement: 'SHALL B.' },
+            ],
+          },
+        ],
+        rules: [
+          { id: 'rule-dup', rule: 'R1.' },
+          { id: 'rule-dup', rule: 'R2.' },
+        ],
+      },
+      'X',
+    )!
+    expect(doc.groups[0]?.requirements.map((r) => r.id)).toEqual(['req-dup', 'req-dup-2'])
+    expect(doc.rules.map((r) => r.id)).toEqual(['rule-dup', 'rule-dup-2'])
+  })
 })
 
 describe('extractJsonObject', () => {
@@ -210,6 +270,46 @@ describe('renderFeatureFiles', () => {
       rules: [],
     }
     expect(renderFeatureFiles(doc)).toHaveLength(0)
+  })
+})
+
+describe('writeRequirementsFiles', () => {
+  it('refreshes the canonical files but seeds feature files only once (preserves pass-2 polish)', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'req-write-'))
+    try {
+      // First generation seeds requirements/ including the mechanical feature file.
+      await writeRequirementsFiles(dir, [
+        ...renderRequirementsFiles(sampleDoc),
+        ...renderFeatureFiles(sampleDoc),
+        renderVersionFile(sampleDoc, { version: 1, generatedAt: 'now' }),
+      ])
+      const featurePath = join(dir, 'requirements/features/authentication.feature')
+      expect(await readFile(featurePath, 'utf8')).toContain('Scenario: Login')
+
+      // The acceptance agent polishes the feature file in place (pass 2).
+      const { writeFile } = await import('node:fs/promises')
+      await writeFile(featurePath, 'Feature: Authentication\n\n  Scenario: Polished\n', 'utf8')
+
+      // A second requirements-writer run with a changed canonical doc must NOT clobber
+      // the polished feature file, but MUST refresh requirements.json.
+      const changed: RequirementsDocTree = {
+        ...sampleDoc,
+        summary: 'Manages widgets, revised.',
+      }
+      await writeRequirementsFiles(dir, [
+        ...renderRequirementsFiles(changed),
+        ...renderFeatureFiles(changed),
+        renderVersionFile(changed, { version: 2, generatedAt: 'later' }),
+      ])
+
+      // Polished feature file is preserved.
+      expect(await readFile(featurePath, 'utf8')).toContain('Scenario: Polished')
+      // Canonical files are refreshed.
+      const json = JSON.parse(await readFile(join(dir, 'requirements/requirements.json'), 'utf8'))
+      expect(json.summary).toBe('Manages widgets, revised.')
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
   })
 })
 

@@ -4,6 +4,7 @@
 '@cat-factory/orchestration': minor
 '@cat-factory/server': minor
 '@cat-factory/agents': patch
+'@cat-factory/app': patch
 '@cat-factory/executor-harness': patch
 ---
 

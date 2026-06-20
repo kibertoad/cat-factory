@@ -282,12 +282,16 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     }
 
     // The requirements-writer commits the regenerated `requirements/` folder onto the
-    // implementation branch (`cat-factory/<blockId>`, created from base if it doesn't
-    // exist yet) — the SAME deterministic branch the coder resumes, so the spec is
-    // present before the coder runs. Its body carries the combined requirements of
-    // every task under the service frame (the engine resolves them) so the doc is an
-    // aggregate, not per-task. Targets the harness `/requirements` endpoint.
+    // implementation branch — the earlier `coder` step's PR branch when present, else
+    // the deterministic `cat-factory/<blockId>` the coder WILL resume (created from
+    // base if absent). It NEVER targets the base branch: the requirements are a
+    // prescriptive spec for not-yet-landed work, so — like the feature-time blueprint
+    // — they must merge together WITH the feature, never reach `main` ahead of it.
+    // Its body carries the combined requirements of every task under the service frame
+    // (the engine resolves them) so the doc is an aggregate, not per-task. Targets the
+    // harness `/requirements` endpoint.
     if (context.agentKind === REQUIREMENTS_WRITER_AGENT_KIND) {
+      const branch = context.block.pullRequest?.branch ?? `cat-factory/${blockId}`
       const body = {
         jobId: executionId,
         systemPrompt: REQUIREMENTS_WRITER_SYSTEM_PROMPT,
@@ -304,7 +308,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
           baseBranch: repo.baseBranch,
           cloneUrl: `https://github.com/${repo.owner}/${repo.name}.git`,
         },
-        branch: `cat-factory/${blockId}`,
+        branch,
         tasks: (context.serviceTasks ?? []).map((t) => ({
           id: t.id,
           title: t.title,
