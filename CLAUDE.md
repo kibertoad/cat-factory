@@ -142,6 +142,19 @@ facade so the runtimes can't drift (see "Cross-runtime conformance" below).
 - `.github/workflows/release.yml` runs changesets on push to `main`;
   `docker-publish.yml` republishes the GHCR runner image, gated on image-affecting
   paths (incl. the harness `package.json`, so a version bump re-tags the image).
+- **Any change that affects the runner image MUST bump the image tag** (the harness
+  `src/**`, `Dockerfile`, `tsconfig.json` or the pinned `PI_*` args). Bump
+  `@cat-factory/executor-harness`'s `version` AND the matching tag in BOTH
+  `deploy/backend/package.json` (`image:publish`) and `deploy/backend/wrangler.toml`
+  (`[[containers]] image`), then `pnpm image:publish` + `pnpm deploy` from
+  `deploy/backend`. The deployment serves the **Cloudflare managed-registry** image
+  (`registry.cloudflare.com/<acct>/cat-factory-executor:<tag>`), NOT the GHCR image,
+  so the GHCR auto-publish does not roll it out. Reusing the same tag does NOT
+  deploy: `wrangler deploy` diffs the image by tag string, reports
+  `no changes cat-factory-backend-executioncontainer`, and the container application
+  stays pinned to the OLD digest — so new per-run containers keep running stale code
+  (a missing harness route then 404s as `Container dispatch failed (HTTP 404)`). A
+  fresh, immutable tag is what forces the rollout.
 
 ## Execution flow (the canonical async + observable pattern)
 

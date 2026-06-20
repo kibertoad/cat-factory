@@ -24,11 +24,16 @@
 # mutable tag once the digest can be resolved with registry access.
 FROM node:26-trixie-slim AS build
 WORKDIR /app
+# Install the TS toolchain BEFORE copying src so editing harness source doesn't
+# reinvalidate the dependency layer (helps local rebuilds; CI builds --no-cache).
 COPY tsconfig.json ./
+RUN --mount=type=secret,id=extra_ca,target=/tmp/extra_ca.crt \
+    sh -eu -c 'if [ -s /tmp/extra_ca.crt ]; then export NODE_EXTRA_CA_CERTS=/tmp/extra_ca.crt; fi; \
+    npm install --no-save --no-package-lock typescript@^5.6.0 @types/node@^22.0.0'
 COPY src ./src
 RUN --mount=type=secret,id=extra_ca,target=/tmp/extra_ca.crt \
     sh -eu -c 'if [ -s /tmp/extra_ca.crt ]; then export NODE_EXTRA_CA_CERTS=/tmp/extra_ca.crt; fi; \
-    npm install --no-save --no-package-lock typescript@^5.6.0 @types/node@^22.0.0 && npx tsc -p tsconfig.json'
+    npx tsc -p tsconfig.json'
 
 # ---- runtime: git + the Pi CLI + the compiled wrapper --------------------
 # TODO: pin by @sha256:<digest> (node:26-trixie-slim@sha256:...) instead of the
@@ -43,51 +48,47 @@ ENV NODE_ENV=production
 RUN groupadd --system harness \
     && useradd --system --gid harness --create-home --home-dir /home/harness harness
 ENV HOME=/home/harness
-# git for clone/commit/push; the Pi coding-agent CLI (bring-your-own key at
-# runtime — none is installed here). --ignore-scripts avoids running untrusted
-# install hooks.
-# Pi is pinned to an exact version so the image is reproducible and a bad
-# upstream release can't silently break a build — bump deliberately. node:26 is
-# well past Pi's `legacy-node20` floor, so the default `latest` line applies.
+# Root-only setup in one layer: git for clone/commit/push, the Pi coding-agent
+# CLI (bring-your-own key at runtime — none is installed here; --ignore-scripts
+# avoids running untrusted install hooks), and git's dubious-ownership guard
+# disabled system-wide. This ephemeral container only ever operates on
+# repositories we hand it (a fresh clone, or a mounted repo in tests), so a repo
+# owned by another uid (e.g. a bind-mounted host repo) must not block clone/push;
+# git only honours safe.directory from system/global config, never from env or -c.
+# Pi is pinned to an exact version so the image is reproducible and a bad upstream
+# release can't silently break a build — bump deliberately. node:26 is well past
+# Pi's `legacy-node20` floor, so the default `latest` line applies.
 ARG PI_VERSION=0.79.8
 RUN --mount=type=secret,id=extra_ca,target=/tmp/extra_ca.crt \
     sh -eu -c 'apt-get update && apt-get install -y --no-install-recommends git ca-certificates && rm -rf /var/lib/apt/lists/*; \
     if [ -s /tmp/extra_ca.crt ]; then export NODE_EXTRA_CA_CERTS=/tmp/extra_ca.crt; fi; \
-    npm install -g --ignore-scripts "@earendil-works/pi-coding-agent@${PI_VERSION}"'
+    npm install -g --ignore-scripts "@earendil-works/pi-coding-agent@${PI_VERSION}"; \
+    git config --system --add safe.directory "*"'
 
-# Install the rpiv-todo extension globally so Pi exposes a `todo` tool the model
-# can use to plan multi-step work. We don't read its TUI overlay (headless json
-# mode no-ops the widget); we tap the structured `tool_result` events it emits so
-# the harness can report subtask progress (e.g. "3/8 done") back to the Worker.
-# Pinned for the same reproducibility reason as Pi itself. HOME (set above to the
-# unprivileged user's home) is where `pi install` writes the extension + settings;
-# the final chown hands ownership to that user so it can read them at runtime.
+WORKDIR /app
+# Copy the compiled wrapper owned by the unprivileged user (no recursive chown
+# layer). Done before USER so the build artifact lands owned correctly.
+COPY --chown=harness:harness --from=build /app/dist ./dist
+# Drop privileges before the Pi extension installs so they write to this user's
+# HOME already owned by it — no post-install chown of the extension tree needed.
+USER harness
+
+# Install Pi extensions (as the harness user, into its own HOME). rpiv-todo gives
+# Pi a `todo` tool to plan multi-step work: we don't read its TUI overlay (headless
+# json mode no-ops the widget); we tap the structured `tool_result` events it emits
+# so the harness can report subtask progress (e.g. "3/8 done") to the Worker.
+# rpiv-web-tools (same lockstep monorepo / version) gives Pi `web_search` +
+# `web_fetch`, inert unless a deployment configures a provider in the container env
+# (e.g. BRAVE_SEARCH_API_KEY / TAVILY_API_KEY, or SEARXNG_URL); the harness then
+# auto-detects it, writes the config and nudges the agent to use the tools
+# (WEB_SEARCH_PROVIDER pins the active provider). No key is baked into the image.
+# Both pinned for the same reproducibility reason as Pi itself.
 ARG PI_TODO_EXTENSION_VERSION=1.20.0
-RUN --mount=type=secret,id=extra_ca,target=/tmp/extra_ca.crt \
-    sh -eu -c 'if [ -s /tmp/extra_ca.crt ]; then export NODE_EXTRA_CA_CERTS=/tmp/extra_ca.crt; fi; \
-    pi install "npm:@juicesharp/rpiv-todo@${PI_TODO_EXTENSION_VERSION}"'
-# Install the rpiv-web-tools extension (same lockstep monorepo / version as
-# rpiv-todo) so Pi exposes `web_search` + `web_fetch` tools. The extension is
-# inert unless a deployment configures a provider in the container's env (e.g.
-# BRAVE_SEARCH_API_KEY / TAVILY_API_KEY, or SEARXNG_URL) — the harness then
-# auto-detects it, writes the rpiv-web-tools config and nudges the agent to use
-# the tools; WEB_SEARCH_PROVIDER can pin the active provider explicitly. No key is
-# baked into the image. Pinned for the same reproducibility reason as Pi/rpiv-todo.
 ARG PI_WEB_TOOLS_EXTENSION_VERSION=1.20.0
 RUN --mount=type=secret,id=extra_ca,target=/tmp/extra_ca.crt \
     sh -eu -c 'if [ -s /tmp/extra_ca.crt ]; then export NODE_EXTRA_CA_CERTS=/tmp/extra_ca.crt; fi; \
+    pi install "npm:@juicesharp/rpiv-todo@${PI_TODO_EXTENSION_VERSION}"; \
     pi install "npm:@juicesharp/rpiv-web-tools@${PI_WEB_TOOLS_EXTENSION_VERSION}"'
-# This ephemeral container only ever operates on repositories we hand it (a fresh
-# clone, or a mounted repo in tests). Disable git's dubious-ownership guard
-# system-wide so a repo owned by another uid (e.g. a bind-mounted host repo)
-# doesn't block clone/push. NB: git only honours safe.directory from
-# system/global config, never from env or -c.
-RUN git config --system --add safe.directory '*'
-WORKDIR /app
-COPY --from=build /app/dist ./dist
-# Hand the app dir and the user's home (Pi config/extension) to the unprivileged
-# user, then drop privileges for the running process.
-RUN chown -R harness:harness /app /home/harness
-USER harness
+
 EXPOSE 8080
 ENTRYPOINT ["node", "dist/server.js"]
