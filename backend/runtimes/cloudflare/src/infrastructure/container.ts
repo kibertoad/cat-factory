@@ -18,6 +18,7 @@ import { RunnerPoolConnectionService, TicketTrackerService } from '@cat-factory/
 import { type CoreDependencies, createCore } from '@cat-factory/orchestration'
 import {
   buildResolveRepoTarget as buildSharedResolveRepoTarget,
+  createWebSearchUpstreamFromEnv,
   type ServerContainer,
 } from '@cat-factory/server'
 import { type AppConfig, loadConfig } from './config'
@@ -461,6 +462,9 @@ function buildContainerExecutor(
     mintInstallationToken: (id) => registry.installationToken(id),
     sessionService: new ContainerSessionService({ secret: env.AUTH_SESSION_SECRET }),
     proxyBaseUrl: `${env.WORKER_PUBLIC_URL.replace(/\/+$/, '')}/v1`,
+    // Point container agents' web search at the backend search proxy (no provider key
+    // in the sandbox) whenever an upstream is configured for this deployment.
+    webSearchProxyEnabled: Boolean(createWebSearchUpstreamFromEnv(env)),
     githubApiBase: config.github.apiBase,
   })
 }
@@ -924,6 +928,9 @@ export function buildContainer(env: Env, overrides: Partial<CoreDependencies> = 
       // LLM proxy upstream: OpenAI-compatible providers from env keys + the in-process
       // Workers AI binding path (the `workers-ai` provider).
       llmUpstream: new WorkersAiLlmUpstream(env),
+      // Container web-search proxy upstream (Brave, or a self-hosted SearXNG). Absent
+      // ⇒ the `/v1/web-search` route 503s and container web search stays off.
+      webSearch: createWebSearchUpstreamFromEnv(env),
     },
   }
 }

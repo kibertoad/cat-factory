@@ -147,6 +147,17 @@ export interface Env {
   /** Cap on provider web searches per inline run (Anthropic `maxUses`; default 5). */
   INLINE_WEB_SEARCH_MAX_USES?: string
 
+  // ---- Container agent web search (opt-in; the /v1/web-search proxy) -------
+  // Backend-held search keys for the CONTAINER agents (coder/ci-fixer/…). The key
+  // stays here (next to the model keys); the sandbox reaches search only through the
+  // proxy with its session token, so no provider secret enters the container.
+  /** Brave Search key — enables the container web-search proxy (the recommended path). */
+  WEB_SEARCH_BRAVE_API_KEY?: string
+  /** A self-hosted SearXNG base URL the backend reverse-proxies to (alternative to Brave). */
+  WEB_SEARCH_SEARXNG_URL?: string
+  /** Optional bearer for a SearXNG instance behind an auth proxy. */
+  WEB_SEARCH_SEARXNG_API_KEY?: string
+
   // ---- GitHub integration (see config.ts; opt-in) -------------------------
   /** GitHub App id (numeric). Presence enables the integration. */
   GITHUB_APP_ID?: string

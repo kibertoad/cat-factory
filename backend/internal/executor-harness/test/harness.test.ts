@@ -14,6 +14,7 @@ import {
   progressGuardLimitsFromEnv,
   summarizePiRun,
   webSearchConfigFromEnv,
+  webSearchProxyEnv,
   writeAgentsContext,
   writeWebToolsConfig,
 } from '../src/pi.js'
@@ -685,6 +686,27 @@ describe('ProgressGuard (anti-rabbithole)', () => {
     expect(reason).toMatch(/no progress/i)
   })
 
+  it('trips on an uninterrupted run of web search/fetch calls (search rabbit-hole)', () => {
+    // Web tools are exempt from the no-edit bound, so a dedicated cap stops a model
+    // looping on searches forever. Any non-web call resets the streak.
+    const limits = {
+      maxToolCallsWithoutEdit: 999,
+      maxConsecutiveErrors: 99,
+      maxConsecutiveWebCalls: 4,
+    }
+    const guard = new ProgressGuard(limits)
+    let reason: string | null = null
+    for (let i = 0; i < 3; i++) reason = guard.observe(toolCall('web_search'))
+    expect(reason).toBeNull()
+    // A non-web call resets the streak, so we don't trip on the next web call.
+    guard.observe(toolCall('read'))
+    for (let i = 0; i < 3; i++) reason = guard.observe(toolCall('web_fetch'))
+    expect(reason).toBeNull()
+    // The 4th consecutive web call now trips the cap.
+    reason = guard.observe(toolCall('web_search'))
+    expect(reason).toMatch(/researching/i)
+  })
+
   it('skips the no-edit bound for assess-only runs (expectsEdits=false)', () => {
     const limits: ProgressGuardLimits = { maxToolCallsWithoutEdit: 3, maxConsecutiveErrors: 99 }
     const guard = new ProgressGuard(limits, false)
@@ -716,7 +738,15 @@ describe('ProgressGuard (anti-rabbithole)', () => {
         JOB_MAX_TOOLCALLS_WITHOUT_EDIT: '7',
         JOB_MAX_CONSECUTIVE_TOOL_ERRORS: '4',
       }),
-    ).toEqual({ maxToolCallsWithoutEdit: 7, maxConsecutiveErrors: 4 })
+    ).toEqual({
+      maxToolCallsWithoutEdit: 7,
+      maxConsecutiveErrors: 4,
+      maxConsecutiveWebCalls: DEFAULT_PROGRESS_GUARD_LIMITS.maxConsecutiveWebCalls,
+    })
+    expect(progressGuardLimitsFromEnv({ JOB_MAX_CONSECUTIVE_WEB_CALLS: '6' })).toEqual({
+      ...DEFAULT_PROGRESS_GUARD_LIMITS,
+      maxConsecutiveWebCalls: 6,
+    })
     // Garbage values fall back rather than disabling the guard.
     expect(progressGuardLimitsFromEnv({ JOB_MAX_TOOLCALLS_WITHOUT_EDIT: '-3' })).toEqual(
       DEFAULT_PROGRESS_GUARD_LIMITS,
@@ -748,13 +778,44 @@ describe('web search (rpiv-web-tools) configuration', () => {
     ).toEqual({ provider: 'brave' })
   })
 
-  it('honours WEB_SEARCH_PROVIDER as an explicit override', () => {
+  it('honours WEB_SEARCH_PROVIDER as an explicit override (when its key is present)', () => {
+    // The pin selects the provider regardless of detection order, but still requires
+    // that provider's own credential to be configured.
     expect(
-      webSearchConfigFromEnv({ WEB_SEARCH_PROVIDER: 'Exa', BRAVE_SEARCH_API_KEY: 'b' }),
+      webSearchConfigFromEnv({
+        WEB_SEARCH_PROVIDER: 'Exa',
+        EXA_API_KEY: 'exa-x',
+        BRAVE_SEARCH_API_KEY: 'b',
+      }),
     ).toEqual({ provider: 'exa' })
-    expect(webSearchConfigFromEnv({ WEB_SEARCH_PROVIDER: ' tavily ' })).toEqual({
-      provider: 'tavily',
+    expect(
+      webSearchConfigFromEnv({ WEB_SEARCH_PROVIDER: ' tavily ', TAVILY_API_KEY: 'tvly' }),
+    ).toEqual({ provider: 'tavily' })
+  })
+
+  it('ignores an explicit provider pin whose credential is missing', () => {
+    // A pin without the matching key would otherwise nudge the agent towards a tool
+    // that errors the moment it's called; treat it as not-configured instead.
+    expect(webSearchConfigFromEnv({ WEB_SEARCH_PROVIDER: 'exa' })).toBeUndefined()
+    expect(
+      webSearchConfigFromEnv({ WEB_SEARCH_PROVIDER: 'tavily', BRAVE_SEARCH_API_KEY: 'b' }),
+    ).toBeUndefined()
+    // An unknown provider id (not in our env table) is taken on trust — we can't
+    // validate a key we don't know the name of.
+    expect(webSearchConfigFromEnv({ WEB_SEARCH_PROVIDER: 'custom-engine' })).toEqual({
+      provider: 'custom-engine',
     })
+  })
+
+  it('derives the proxy-backed SearXNG env from the proxy base URL + token', () => {
+    // Proxy mode points the SearXNG provider at the backend search proxy with the
+    // session token as the bearer — so detection picks searxng and no key is on disk.
+    const env = webSearchProxyEnv('https://worker.example/v1', 'sess-tok')
+    expect(env).toEqual({
+      SEARXNG_URL: 'https://worker.example/v1/web-search',
+      SEARXNG_API_KEY: 'sess-tok',
+    })
+    expect(webSearchConfigFromEnv({ ...env })).toEqual({ provider: 'searxng' })
   })
 
   it('writes only the provider id to the extension config (no secret on disk)', async () => {

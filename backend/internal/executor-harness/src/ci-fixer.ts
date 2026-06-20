@@ -34,6 +34,7 @@ export async function handleCiFixer(
       sessionToken: job.sessionToken,
       commitMessage: 'Fix failing CI',
       webToolsGuidance: job.webToolsGuidance,
+      webSearchProxy: job.webSearch,
     },
     opts,
   )

@@ -169,6 +169,17 @@ crons = ["*/2 * * * *", "0 3 * * *"]
 # How long a run may park on a human decision before expiring:
 DECISION_TIMEOUT = "24 hours"
 
+# Web search (optional; off by default). Keys stay on the Worker — never in the
+# per-run container (which can't take injected env vars anyway): container agents
+# reach search through this Worker's proxy at ${WORKER_PUBLIC_URL}/v1/web-search with
+# their session token. Prefer `wrangler secret put` for the keys, not [vars].
+#  - Container agents (coder/ci-fixer/…): set ONE search upstream —
+#      WEB_SEARCH_BRAVE_API_KEY (recommended), or WEB_SEARCH_SEARXNG_URL [+ _API_KEY].
+#  - Inline architect/researcher (Anthropic/OpenAI models only):
+# INLINE_WEB_SEARCH_ENABLED = "true"
+# INLINE_WEB_SEARCH_KINDS = "architect,researcher"
+# INLINE_WEB_SEARCH_MAX_USES = "5"
+
 # Container-based implementation is always on: the repo-operating steps (`coder`,
 # `mocker`, `playwright`, `blueprints`) run in a per-run Pi container that clones
 # the repo, implements the block and opens a PR. The container reaches the LLM only

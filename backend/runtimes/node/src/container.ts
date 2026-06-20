@@ -26,6 +26,7 @@ import {
   GitHubAppRegistry,
   WebCryptoSecretCipher,
   buildResolveRepoTarget,
+  createWebSearchUpstreamFromEnv,
 } from '@cat-factory/server'
 import type { PgBoss } from 'pg-boss'
 import { loadNodeConfig } from './config.js'
@@ -175,6 +176,9 @@ function buildNodeContainerExecutor(
     mintInstallationToken: (id) => registry.installationToken(id),
     sessionService: new ContainerSessionService({ secret: sessionSecret }),
     proxyBaseUrl: `${publicUrl.replace(/\/+$/, '')}/v1`,
+    // Point container agents' web search at the backend search proxy (no provider key
+    // in the sandbox) whenever an upstream is configured for this deployment.
+    webSearchProxyEnabled: Boolean(createWebSearchUpstreamFromEnv(env)),
     githubApiBase: config.github.apiBase,
   })
 }

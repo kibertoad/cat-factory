@@ -97,6 +97,10 @@ export function providerWebSearchTools(
     return { web_search: anthropic.tools.webSearch_20250305({ maxUses }) }
   }
   if (provider === 'openai') {
+    // OpenAI's hosted search runs via the Responses API; `@ai-sdk/openai`'s default
+    // model uses it, so a standard `openai:gpt-…` model resolves correctly. The
+    // per-run cap isn't a tool parameter here (OpenAI manages its own budget), so
+    // `maxUses` only applies to the Anthropic tool above.
     return { web_search: openai.tools.webSearch({}) }
   }
   return undefined

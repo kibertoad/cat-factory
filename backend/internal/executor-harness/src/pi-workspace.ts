@@ -6,6 +6,7 @@ import {
   type PiRunStats,
   runPi,
   webSearchConfigFromEnv,
+  webSearchProxyEnv,
   writeAgentsContext,
   writePiModelsConfig,
   writeWebToolsConfig,
@@ -60,6 +61,14 @@ export interface AgentRunSpec {
    * absent ⇒ the generic blurb is used. See `writeAgentsContext`.
    */
   webToolsGuidance?: string
+  /**
+   * Enable proxy-backed web search: point the rpiv-web-tools SearXNG provider at the
+   * backend's search proxy (`${proxyBaseUrl}/web-search`) with the session token as
+   * the bearer — so the search runs server-side under the deployment's key and no
+   * provider secret reaches the sandbox. Off ⇒ web search is on only if a provider key
+   * is present directly in the container env (the self-hosted runner-pool path).
+   */
+  webSearchProxy?: boolean
 }
 
 /**
@@ -72,9 +81,19 @@ export async function runAgentInWorkspace(
   spec: AgentRunSpec,
   opts: RunOptions = {},
 ): Promise<PiRunOutcome> {
-  // Opt-in web search/fetch (rpiv-web-tools): when a provider is configured, select
-  // it on disk and tell the agent the tools exist; otherwise behave exactly as before.
-  const webSearch = webSearchConfigFromEnv()
+  // Opt-in web search/fetch (rpiv-web-tools). Two ways it turns on, both no-ops by
+  // default:
+  //  - proxy-backed (the Cloudflare/managed path): the backend set `webSearchProxy`,
+  //    so point the SearXNG provider at `${proxyBaseUrl}/web-search` with the session
+  //    token — the search runs server-side, no provider key in the sandbox.
+  //  - direct (the self-hosted runner-pool path): a provider key is present in the
+  //    container env, which `webSearchConfigFromEnv` autodetects.
+  // The proxy vars are handed to Pi's child via `extraEnv` (not the harness's own
+  // process.env), so detection runs against the same merged view the extension sees.
+  const extraEnv: Record<string, string> = spec.webSearchProxy
+    ? webSearchProxyEnv(spec.proxyBaseUrl, spec.sessionToken)
+    : {}
+  const webSearch = webSearchConfigFromEnv({ ...process.env, ...extraEnv })
   if (webSearch) await writeWebToolsConfig(webSearch)
   await writeAgentsContext(spec.systemPrompt, {
     webSearch: Boolean(webSearch),
@@ -91,6 +110,7 @@ export async function runAgentInWorkspace(
     onActivity,
     onProgress,
     expectsEdits: spec.expectsEdits ?? true,
+    extraEnv,
   })
 }
 

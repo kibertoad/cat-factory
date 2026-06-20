@@ -168,18 +168,45 @@ const WEB_SEARCH_PROVIDER_ENV: ReadonlyArray<{ provider: string; envVar: string 
  * is CONDITIONAL on a provider being configured: if any provider's credential/URL
  * env var is present, web search turns on with that provider (highest-priority one
  * when several are set). `WEB_SEARCH_PROVIDER` is an explicit override that pins the
- * active provider regardless of detection. No key passes through here — the
- * extension reads each provider's own env var directly.
+ * active provider regardless of detection — but only when that provider's own
+ * credential/URL is also present, so a pin without a key never nudges the agent
+ * towards a tool that would error the moment it's called. No key passes through here
+ * — the extension reads each provider's own env var directly.
  */
 export function webSearchConfigFromEnv(
   env: NodeJS.ProcessEnv = process.env,
 ): WebSearchConfig | undefined {
   const explicit = env.WEB_SEARCH_PROVIDER?.trim().toLowerCase()
-  if (explicit) return { provider: explicit }
+  if (explicit) {
+    // A pinned provider still needs its credential/URL present. For a provider we
+    // know the env var for, require it; an unknown provider id is taken on trust
+    // (its env var isn't in our table, so we can't validate it).
+    const known = WEB_SEARCH_PROVIDER_ENV.find((p) => p.provider === explicit)
+    if (known && !env[known.envVar]?.trim()) return undefined
+    return { provider: explicit }
+  }
   for (const { provider, envVar } of WEB_SEARCH_PROVIDER_ENV) {
     if (env[envVar]?.trim()) return { provider }
   }
   return undefined
+}
+
+/**
+ * The env that points the rpiv-web-tools SearXNG provider at the backend's
+ * search proxy: `SEARXNG_URL` = `${proxyBaseUrl}/web-search` (the controller mounted
+ * under the LLM proxy's `/v1`), and `SEARXNG_API_KEY` = the per-job session token,
+ * which the proxy verifies exactly like the LLM proxy. Handed to Pi's child via
+ * `runPi`'s `extraEnv`, so the search key never has to enter the sandbox — the search
+ * runs server-side under the deployment's own provider key.
+ */
+export function webSearchProxyEnv(
+  proxyBaseUrl: string,
+  sessionToken: string,
+): { SEARXNG_URL: string; SEARXNG_API_KEY: string } {
+  return {
+    SEARXNG_URL: `${proxyBaseUrl.replace(/\/+$/, '')}/web-search`,
+    SEARXNG_API_KEY: sessionToken,
+  }
 }
 
 /**
@@ -380,6 +407,15 @@ export interface ProgressGuardLimits {
    * retrying an operation that keeps failing rather than making progress.
    */
   maxConsecutiveErrors: number
+  /**
+   * Abort after this many consecutive web-search/web-fetch calls with no other tool
+   * call in between. Web tools are read-only exploration (they don't count toward the
+   * no-edit bound), so without this a model could rabbit-hole on searches indefinitely
+   * without ever tripping a guard. Any non-web tool call resets the streak. Optional:
+   * defaults to {@link DEFAULT_PROGRESS_GUARD_LIMITS} when a caller builds limits
+   * without it.
+   */
+  maxConsecutiveWebCalls?: number
 }
 
 export const DEFAULT_PROGRESS_GUARD_LIMITS: ProgressGuardLimits = {
@@ -387,6 +423,9 @@ export const DEFAULT_PROGRESS_GUARD_LIMITS: ProgressGuardLimits = {
   // ceiling can be generous without risking a false kill on a read-heavy large task.
   maxToolCallsWithoutEdit: 40,
   maxConsecutiveErrors: 12,
+  // A genuine research burst is a handful of searches; an uninterrupted run of this
+  // many web calls (with no read/edit/bash between) is a search loop, not progress.
+  maxConsecutiveWebCalls: 25,
 }
 
 // Tool names that mutate files, so a call to one clears the no-edit suspicion. Kept
@@ -439,6 +478,10 @@ const EXPLORATION_TOOLS = new Set([
   'web_fetch',
 ])
 
+// The rpiv-web-tools calls, tracked separately so an unbounded run of them (with no
+// other tool call between) can be caught as a search loop — see `maxConsecutiveWebCalls`.
+const WEB_TOOLS = new Set(['web_search', 'web_fetch'])
+
 /** Read {@link ProgressGuardLimits} from the environment, falling back to the defaults. */
 export function progressGuardLimitsFromEnv(
   env: NodeJS.ProcessEnv = process.env,
@@ -456,6 +499,10 @@ export function progressGuardLimitsFromEnv(
       env.JOB_MAX_CONSECUTIVE_TOOL_ERRORS,
       DEFAULT_PROGRESS_GUARD_LIMITS.maxConsecutiveErrors,
     ),
+    maxConsecutiveWebCalls: num(
+      env.JOB_MAX_CONSECUTIVE_WEB_CALLS,
+      DEFAULT_PROGRESS_GUARD_LIMITS.maxConsecutiveWebCalls,
+    ),
   }
 }
 
@@ -470,6 +517,7 @@ export class ProgressGuard {
   private toolCalls = 0
   private edits = 0
   private consecutiveErrors = 0
+  private consecutiveWebCalls = 0
 
   constructor(
     private readonly limits: ProgressGuardLimits,
@@ -490,6 +538,23 @@ export class ProgressGuard {
         `no progress: ${this.consecutiveErrors} consecutive failing tool calls — the agent is stuck ` +
         `retrying a failing operation rather than making progress. Aborting.`
       )
+    }
+
+    // Web search/fetch loop: web tools are read-only (they don't count toward the
+    // no-edit bound), so guard them separately — an uninterrupted streak of them is a
+    // research rabbit-hole. Any non-web tool call resets the streak.
+    if (WEB_TOOLS.has(name)) {
+      this.consecutiveWebCalls++
+      const webCap =
+        this.limits.maxConsecutiveWebCalls ?? DEFAULT_PROGRESS_GUARD_LIMITS.maxConsecutiveWebCalls
+      if (this.consecutiveWebCalls >= (webCap as number)) {
+        return (
+          `no progress: ${this.consecutiveWebCalls} consecutive web search/fetch calls without ` +
+          `any other action — the agent is stuck researching instead of doing the work. Aborting.`
+        )
+      }
+    } else {
+      this.consecutiveWebCalls = 0
     }
 
     // Planning and read-only exploration calls don't count toward the no-edit bound
@@ -538,6 +603,12 @@ export function runPi(opts: {
   guardLimits?: ProgressGuardLimits
   /** Whether this run is expected to edit files (false for assess-only runs like the merger). */
   expectsEdits?: boolean
+  /**
+   * Extra environment for Pi's child process, merged over `process.env` (but under the
+   * proxy token). Used to hand the rpiv-web-tools extension its proxy-backed SearXNG
+   * config (`SEARXNG_URL` / `SEARXNG_API_KEY`) without mutating the harness's own env.
+   */
+  extraEnv?: Record<string, string>
 }): Promise<PiRunOutcome> {
   return new Promise((resolve, reject) => {
     if (opts.signal?.aborted) {
@@ -549,7 +620,7 @@ export function runPi(opts: {
       ['-p', '--mode', 'json', '--model', `proxy/${opts.model}`, '--approve'],
       {
         cwd: opts.cwd,
-        env: { ...process.env, PI_PROXY_TOKEN: opts.sessionToken },
+        env: { ...process.env, ...opts.extraEnv, PI_PROXY_TOKEN: opts.sessionToken },
         // stdin is piped (not 'ignore') so the prompt is delivered out-of-band
         // rather than on argv — see the function doc for the injection rationale.
         stdio: ['pipe', 'pipe', 'pipe'],
