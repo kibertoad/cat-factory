@@ -268,23 +268,28 @@ function connect(src: SourceOption) {
         v-for="r in results"
         :key="`${r.source}:${r.externalId}`"
         type="button"
-        class="flex w-full items-center gap-1.5 rounded-md border border-slate-800 bg-slate-900/60 px-2 py-1.5 text-left text-xs text-slate-300 hover:bg-slate-800/60"
+        class="w-full rounded-md border border-slate-800 bg-slate-900/60 px-2 py-1.5 text-left text-xs text-slate-300 hover:bg-slate-800/60"
         @click="pickResult(selected!, r)"
       >
-        <UIcon
-          :name="selected?.icon ?? 'i-lucide-file-text'"
-          class="h-3.5 w-3.5 shrink-0 text-indigo-400"
-        />
-        <span class="truncate">{{ r.title }}</span>
-        <UBadge
-          v-if="'status' in r && r.status"
-          color="neutral"
-          variant="soft"
-          size="xs"
-          class="ml-auto shrink-0"
-        >
-          {{ r.status }}
-        </UBadge>
+        <span class="flex items-center gap-1.5">
+          <UIcon
+            :name="selected?.icon ?? 'i-lucide-file-text'"
+            class="h-3.5 w-3.5 shrink-0 text-indigo-400"
+          />
+          <span class="truncate">{{ r.title }}</span>
+          <UBadge
+            v-if="'status' in r && r.status"
+            color="neutral"
+            variant="soft"
+            size="xs"
+            class="ml-auto shrink-0"
+          >
+            {{ r.status }}
+          </UBadge>
+        </span>
+        <span v-if="r.excerpt" class="mt-0.5 block truncate pl-5 text-[11px] text-slate-500">
+          {{ r.excerpt }}
+        </span>
       </button>
       <p
         v-if="selected?.searchable && !searching && !results.length"

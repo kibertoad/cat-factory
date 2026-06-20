@@ -94,7 +94,7 @@ export class DocumentImportService {
       throw new ValidationError(`The ${source} source does not support search`)
     }
     const connection = await this.deps.connectionService.requireConnection(workspaceId, source)
-    return provider.search(connection.credentials, query)
+    return provider.search(connection.credentials, query, workspaceId)
   }
 
   /** Every document imported into the workspace, across sources, as wire shapes. */

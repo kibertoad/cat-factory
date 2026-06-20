@@ -72,38 +72,42 @@ export class GitHubDocsProvider implements DocumentSourceProvider {
     }
   }
 
-  async search(_credentials: DocumentCredentials, query: string): Promise<DocumentSearchResult[]> {
-    const active = await this.deps.installations.listActive()
+  async search(
+    _credentials: DocumentCredentials,
+    query: string,
+    workspaceId: string,
+  ): Promise<DocumentSearchResult[]> {
+    // Scope to *this workspace's* installation so docs never leak across tenants
+    // (a deployment may host many installations; a workspace owns exactly one).
+    // Code search is account-scoped anyway (GitHub requires an org/user
+    // qualifier), which we build from the installation's account.
+    const installation = await this.deps.installations.getByWorkspace(workspaceId)
+    if (!installation) return []
+    const scoped = githubDocsLogic.buildGitHubCodeSearchQuery(
+      query,
+      installation.accountLogin,
+      installation.targetType,
+    )
+    const hits = await this.deps.githubClient
+      .searchCode(installation.installationId, scoped, 20)
+      .catch(() => [])
     const out: DocumentSearchResult[] = []
     const seen = new Set<string>()
-    // Code search is account-scoped (GitHub requires an org/user qualifier), so
-    // we query each installation's account and merge. Bound the fan-out.
-    for (const installation of active.slice(0, 5)) {
-      const scoped = githubDocsLogic.buildGitHubCodeSearchQuery(
-        query,
-        installation.accountLogin,
-        installation.targetType,
-      )
-      const hits = await this.deps.githubClient
-        .searchCode(installation.installationId, scoped, 20)
-        .catch(() => [])
-      for (const hit of hits) {
-        const externalId = githubDocsLogic.githubDocExternalId({
-          owner: hit.owner,
-          repo: hit.repo,
-          path: hit.path,
-        })
-        if (seen.has(externalId)) continue
-        seen.add(externalId)
-        out.push({
-          source: 'github',
-          externalId,
-          title: githubDocsLogic.githubDocTitle(hit.path),
-          url: hit.url,
-          excerpt: '',
-        })
-      }
-      if (out.length >= 20) break
+    for (const hit of hits) {
+      const externalId = githubDocsLogic.githubDocExternalId({
+        owner: hit.owner,
+        repo: hit.repo,
+        path: hit.path,
+      })
+      if (seen.has(externalId)) continue
+      seen.add(externalId)
+      out.push({
+        source: 'github',
+        externalId,
+        title: githubDocsLogic.githubDocTitle(hit.path),
+        url: hit.url,
+        excerpt: '',
+      })
     }
     return out.slice(0, 20)
   }

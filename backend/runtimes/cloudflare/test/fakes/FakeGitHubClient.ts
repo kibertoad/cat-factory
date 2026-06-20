@@ -136,12 +136,17 @@ export class FakeGitHubClient implements GitHubClient {
   issueSearchHits: GitHubIssueSearchHit[] = []
   /** Canned code-search hits, returned verbatim by searchCode. */
   codeSearchHits: GitHubCodeSearchHit[] = []
+  /** Records each (installationId, query) the search methods were called with. */
+  readonly searchIssuesCalls: { installationId: number; query: string }[] = []
+  readonly searchCodeCalls: { installationId: number; query: string }[] = []
 
-  async searchIssues(): Promise<GitHubIssueSearchHit[]> {
+  async searchIssues(installationId: number, query: string): Promise<GitHubIssueSearchHit[]> {
+    this.searchIssuesCalls.push({ installationId, query })
     return this.issueSearchHits
   }
 
-  async searchCode(): Promise<GitHubCodeSearchHit[]> {
+  async searchCode(installationId: number, query: string): Promise<GitHubCodeSearchHit[]> {
+    this.searchCodeCalls.push({ installationId, query })
     return this.codeSearchHits
   }
 

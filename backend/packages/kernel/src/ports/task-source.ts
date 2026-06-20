@@ -74,8 +74,17 @@ export interface TaskSourceProvider {
    * comments). Optional: a provider that only supports paste-a-URL import omits
    * it (and its descriptor sets `searchable: false`). The provider builds the
    * query and maps the response; the returned `externalId`s are valid import refs.
+   *
+   * `workspaceId` is the workspace whose connection is searching, so a provider
+   * that authenticates per-workspace out-of-band (e.g. the GitHub App, which
+   * ignores `credentials`) can scope the search to that workspace's installation
+   * instead of leaking across tenants.
    */
-  search?(credentials: TaskCredentials, query: string): Promise<TaskSearchResult[]>
+  search?(
+    credentials: TaskCredentials,
+    query: string,
+    workspaceId: string,
+  ): Promise<TaskSearchResult[]>
 }
 
 /** A lookup of the providers wired for this deployment, keyed by source. */

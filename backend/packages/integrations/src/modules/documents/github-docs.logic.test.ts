@@ -15,10 +15,20 @@ describe('parseGitHubDocRef', () => {
     ).toBe('octo/my-repo:docs/architecture.md')
   })
 
-  it('parses a blob URL on a non-default branch', () => {
+  it('parses a blob URL on a single-segment non-default branch', () => {
+    expect(parseGitHubDocRef('https://github.com/octo/my-repo/blob/develop/docs/x.md')).toBe(
+      'octo/my-repo:docs/x.md',
+    )
+  })
+
+  it('mis-parses a slash-named branch (known limitation) — use the shorthand instead', () => {
+    // The branch/path boundary is unrecoverable from the URL, so `feat` is taken
+    // as the ref and `x/README.md` as the path. Documented in parseGitHubDocRef.
     expect(parseGitHubDocRef('https://github.com/octo/my-repo/blob/feat/x/README.md')).toBe(
       'octo/my-repo:x/README.md',
     )
+    // The shorthand is unambiguous for files on such branches.
+    expect(parseGitHubDocRef('octo/my-repo:README.md')).toBe('octo/my-repo:README.md')
   })
 
   it('parses a raw.githubusercontent URL', () => {

@@ -124,8 +124,14 @@ export class JiraProvider implements TaskSourceProvider {
 
   async search(credentials: TaskCredentials, query: string): Promise<TaskSearchResult[]> {
     const base = credentials.baseUrl!.replace(/\/+$/, '')
+    // Re-validate the stored base before fetching with the workspace's credentials
+    // (defense-in-depth against a base that became unsafe since connect time).
+    atlassianLogic.assertSafeAtlassianBaseUrl(base)
     const jql = encodeURIComponent(jiraLogic.buildJiraSearchJql(query))
-    const url = `${base}/rest/api/3/search?jql=${jql}&fields=summary,status&maxResults=20`
+    // `/rest/api/3/search/jql` is the current enhanced-search endpoint; the legacy
+    // GET `/rest/api/3/search` was removed by Atlassian (May 2025). The `issues[]`
+    // response shape is unchanged, so `parseJiraSearchResults` still applies.
+    const url = `${base}/rest/api/3/search/jql?jql=${jql}&fields=summary,status&maxResults=20`
     const auth = btoa(`${credentials.accountEmail}:${credentials.apiToken}`)
 
     const res = await fetch(url, {

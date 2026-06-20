@@ -51,6 +51,13 @@ export function githubDocExternalId(id: GitHubDocExternalId): string {
  * The branch/ref in a URL is dropped — the provider reads the default branch — so
  * the external id (and thus a re-import's identity) is branch-stable. Returns
  * null when nothing parses. Owner/repo/path are kept verbatim (case-preserving).
+ *
+ * KNOWN LIMITATION: a URL whose branch name itself contains a slash
+ * (`…/blob/feature/x/README.md`) is ambiguous — the branch/path boundary cannot
+ * be recovered from the URL alone, so the first segment after `blob/` (or the
+ * ref slot of a raw URL) is assumed to be the whole ref and the rest the path.
+ * For files on a slash-named branch, use the unambiguous `owner/repo:path`
+ * shorthand instead. (The default branch is what the provider actually reads.)
  */
 export function parseGitHubDocRef(input: string): string | null {
   const trimmed = input.trim()
