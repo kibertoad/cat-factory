@@ -83,6 +83,12 @@ const isMonorepo = computed(() => selectedRepo.value?.isMonorepo === true)
 
 // ---- monorepo flag + directory browser ----------------------------------
 
+// The monorepo flag is board-owned state on the repo projection, NOT modal-local: the
+// backend reads it to allow several services on one repo and to require a directory, so
+// the toggle persists immediately (the directory browser and `add` both depend on it
+// being set server-side). Flipping it on and then closing the modal without adding a
+// service intentionally leaves the repo flagged — it's benign (the subdirectory only
+// reaches agents once a directory-pinned service exists) and is undone by toggling off.
 const settingMonorepo = ref(false)
 async function toggleMonorepo(value: boolean) {
   if (selectedRepoId.value === undefined) return

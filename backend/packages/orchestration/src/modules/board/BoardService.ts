@@ -195,8 +195,11 @@ export class BoardService {
       'GitHubRepo',
       String(input.repoGithubId),
     )
-    // Normalise the requested service subdirectory to a clean relative path.
-    const directory = input.directory?.trim().replace(/^\/+|\/+$/g, '') || undefined
+    // Normalise the requested service subdirectory to a clean, SAFE relative path:
+    // strip slashes/`.` and reject any `..` segment, so a stored directory can never
+    // point an agent's cwd outside the checkout (the harness enforces the same — this
+    // is defence in depth, and surfaces a clean error before the row is written).
+    const directory = normalizeServiceDirectory(input.directory)
     // A monorepo can back SEVERAL service frames (one per subdirectory), so the
     // single-service guard applies only to whole-repo (non-monorepo) repos. A monorepo
     // service MUST name its subdirectory so execution can scope agents to it.
@@ -207,6 +210,16 @@ export class BoardService {
       throw new ValidationError('Select a service directory for this monorepo')
     }
     const blocks = await this.blockRepository.listByWorkspace(workspaceId)
+    // Each subdirectory of a monorepo backs at most one service — reject a duplicate so
+    // two frames don't fight over the same subtree (each resolves to the same repo+dir).
+    if (repo.isMonorepo && directory && this.serviceRepository) {
+      for (const frame of blocks.filter((b) => b.level === 'frame')) {
+        const existing = await this.serviceRepository.getByFrameBlock(frame.id)
+        if (existing?.repoGithubId === repo.githubId && existing.directory === directory) {
+          throw new ValidationError(`A service for '${directory}' already exists in this repository`)
+        }
+      }
+    }
     const frames = blocks.filter((b) => b.level === 'frame').length
     const title = directory ? (directory.split('/').pop() ?? repo.name) : repo.name
     const block: Block = {
@@ -466,4 +479,25 @@ export class BoardService {
     await this.blockRepository.update(homeWorkspaceId, targetId, { dependsOn: next })
     return assertFound(await this.blockRepository.get(homeWorkspaceId, targetId), 'Block', targetId)
   }
+}
+
+/**
+ * Coerce a user-supplied monorepo service subdirectory into a clean, SAFE relative path
+ * (or undefined when absent/empty): normalise separators, drop `.`/empty segments, and
+ * reject any `..` segment or absolute path so the stored value can never escape the repo
+ * checkout when it later becomes an agent's cwd. Mirrors the harness's `sanitizeService
+ * Directory`, kept here so a bad value is rejected before the service row is written.
+ */
+export function normalizeServiceDirectory(raw: string | undefined): string | undefined {
+  if (!raw) return undefined
+  const segments = raw
+    .trim()
+    .replace(/\\/g, '/')
+    .split('/')
+    .filter((s) => s !== '' && s !== '.')
+  if (segments.length === 0) return undefined
+  if (segments.some((s) => s === '..')) {
+    throw new ValidationError('Service directory must be a path inside the repository')
+  }
+  return segments.join('/')
 }

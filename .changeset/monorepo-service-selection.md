@@ -21,10 +21,17 @@ modal gains a monorepo toggle and a **directory browser** (`GET
 directory of the service you want — and add several (a subset of the repo's services).
 `PATCH /workspaces/:ws/github/repos/:id` sets the monorepo flag.
 
-The chosen subdirectory is **fed to every agent that works on the service** when the
-repo is a monorepo: `buildResolveRepoTarget` resolves a frame's service (so multiple
-frames can target one repo) and returns its `serviceDirectory`, which flows through the
-container job body into the harness — the coding agents (coder/mocker/tester/ci-fixer/
-conflict-resolver) run with their working directory set to that subtree and are told, in
-their AGENTS.md context, that they're in a monorepo and to scope their work (and build/
-test commands) to it. Non-monorepo repos keep the historical whole-repo behaviour.
+The chosen subdirectory is **fed to the agents that build the service** when the repo is
+a monorepo: `buildResolveRepoTarget` resolves a frame's service (so multiple frames can
+target one repo) and returns its `serviceDirectory`, which flows through the container
+job body into the harness. The implementation agents — **coder, mocker and ci-fixer**
+(everything routed through `runCodingAgent`) — run with their working directory set to
+that subtree and are told, in their AGENTS.md context, that they're in a monorepo and to
+scope their work (and build/test commands) to it. The cross-cutting agents keep operating
+at the repo root by design: the **conflict-resolver** and **merger** act on the whole
+merge / diff, and the **blueprint** and **requirements** agents write repo-root artifacts.
+Non-monorepo repos keep the historical whole-repo behaviour.
+
+Known limitation: the in-repo blueprint (`blueprints/`) and requirements (`requirements/`)
+artifacts are still written at the repo root, so two services backed by the same monorepo
+share — and would overwrite — those files. Per-service artifact paths are a follow-up.
