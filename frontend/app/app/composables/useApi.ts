@@ -43,6 +43,7 @@ import type {
   FragmentSyncResult,
   ReferenceArchitecture,
   ResyncRequest,
+  Service,
   SpawnResult,
   TaskConnection,
   TaskSearchResult,
@@ -51,6 +52,7 @@ import type {
   SourceTask,
   UpdateReferenceArchitectureInput,
   Workspace,
+  WorkspaceMount,
   WorkspaceSnapshot,
 } from '~/types/domain'
 import type { LlmCallMetric, LlmMetricsExport } from '~/types/execution'
@@ -538,6 +540,34 @@ export function useApi() {
         `${ws(workspaceId)}/recurring-pipelines/${encodeURIComponent(id)}/run-now`,
         { method: 'POST' },
       ),
+
+    // ---- in-org shared services (mount/unmount + org catalog) -------------
+    // The services this workspace mounts, and the org catalog it can mount from. A 503
+    // means the feature isn't wired (the store hides its UI on any error here).
+    listServiceMounts: (workspaceId: string) =>
+      http<WorkspaceMount[]>(`${ws(workspaceId)}/services`),
+
+    listServiceCatalog: (workspaceId: string) =>
+      http<Service[]>(`${ws(workspaceId)}/services/catalog`),
+
+    mountService: (workspaceId: string, serviceId: string, body: { position?: Position } = {}) =>
+      http<WorkspaceMount>(`${ws(workspaceId)}/services/${encodeURIComponent(serviceId)}`, {
+        method: 'POST',
+        body,
+      }),
+
+    unmountService: (workspaceId: string, serviceId: string) =>
+      http(`${ws(workspaceId)}/services/${encodeURIComponent(serviceId)}`, { method: 'DELETE' }),
+
+    updateMountLayout: (
+      workspaceId: string,
+      serviceId: string,
+      body: { position?: Position; size?: { w: number; h: number } | null },
+    ) =>
+      http<WorkspaceMount>(`${ws(workspaceId)}/services/${encodeURIComponent(serviceId)}/layout`, {
+        method: 'PATCH',
+        body,
+      }),
 
     // ---- issue-tracker selection (workspace-level) ------------------------
     getTrackerSettings: (workspaceId: string) =>

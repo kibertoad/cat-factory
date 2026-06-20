@@ -6,7 +6,22 @@ const ui = useUiStore()
 const board = useBoardStore()
 const execution = useExecutionStore()
 const workspace = useWorkspaceStore()
+const services = useServicesStore()
 const { fitView, zoomIn, zoomOut } = useBoardFlow()
+
+// The org's services not yet on this board — mounting one adds its shared frame here.
+const mountableItems = computed(() =>
+  services.mountable.map((s) => {
+    const title = board.getBlock(s.frameBlockId)?.title
+    return {
+      label: title ?? s.frameBlockId,
+      icon: 'i-lucide-box',
+      onSelect: () => {
+        void services.mount(s.id)
+      },
+    }
+  }),
+)
 
 const zoomPct = computed(() => Math.round(ui.zoom * 100))
 const lodLabel = computed(
@@ -83,6 +98,13 @@ const decisionItems = computed(() =>
         {{ execution.pendingDecisionCount }} decision{{
           execution.pendingDecisionCount === 1 ? '' : 's'
         }}
+      </UButton>
+    </UDropdownMenu>
+
+    <!-- in-org sharing: add an existing org service to this board -->
+    <UDropdownMenu v-if="mountableItems.length" :items="mountableItems">
+      <UButton color="neutral" variant="ghost" size="sm" icon="i-lucide-plus-circle">
+        Add service
       </UButton>
     </UDropdownMenu>
 

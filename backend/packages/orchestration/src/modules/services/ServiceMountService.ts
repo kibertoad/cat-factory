@@ -50,11 +50,18 @@ export class ServiceMountService {
   }
 
   /**
-   * The org catalog: every service owned by an account (or the legacy/unscoped org
-   * when `accountId` is null) — the set a workspace in that org can mount from.
+   * The org catalog: every service owned by an account (or the legacy/unscoped org when
+   * `accountId` is null) — the set a workspace in that org can mount from. Each service is
+   * annotated with `mountCount` (how many boards mount it) so the UI can badge a shared one.
    */
   async listForAccount(accountId: string | null): Promise<Service[]> {
-    return this.serviceRepository.listByAccount(accountId)
+    const services = await this.serviceRepository.listByAccount(accountId)
+    return Promise.all(
+      services.map(async (service) => ({
+        ...service,
+        mountCount: (await this.workspaceMountRepository.listByService(service.id)).length,
+      })),
+    )
   }
 
   /** Services currently mounted onto a workspace board (with their layout overrides). */

@@ -10,6 +10,7 @@ import { useNotificationsStore } from '~/stores/notifications'
 import { useMergePresetsStore } from '~/stores/mergePresets'
 import { useModelDefaultsStore } from '~/stores/modelDefaults'
 import { useRecurringPipelinesStore } from '~/stores/recurringPipelines'
+import { useServicesStore } from '~/stores/services'
 import { useTrackerStore } from '~/stores/tracker'
 
 /**
@@ -68,6 +69,7 @@ export const useWorkspaceStore = defineStore(
       useModelDefaultsStore().hydrate(snapshot.modelDefaults?.defaults)
       useRecurringPipelinesStore().hydrate(snapshot.recurringPipelines ?? [])
       useTrackerStore().hydrate(snapshot.trackerSettings)
+      useServicesStore().hydrate(snapshot.mounts ?? [], snapshot.serviceCatalog ?? [])
     }
 
     /** Resolve accounts + boards, then open the right board for the active account. */

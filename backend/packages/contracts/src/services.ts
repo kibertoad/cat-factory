@@ -35,6 +35,12 @@ export const serviceSchema = v.object({
   repoGithubId: v.nullable(v.number()),
   /** Epoch ms the service was created. */
   createdAt: v.number(),
+  /**
+   * How many workspaces currently mount this service. Derived (not persisted); set only on
+   * the org catalog so the board can badge a frame mounted on >1 board as "Shared". Absent
+   * means "not computed".
+   */
+  mountCount: v.optional(v.number()),
 })
 export type Service = v.InferOutput<typeof serviceSchema>
 

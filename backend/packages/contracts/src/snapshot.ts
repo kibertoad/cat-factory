@@ -11,6 +11,7 @@ import { notificationSchema } from './notifications.js'
 import { mergeThresholdPresetSchema } from './merge.js'
 import { modelDefaultsSchema } from './model-defaults.js'
 import { pipelineScheduleSchema } from './recurring.js'
+import { serviceSchema, workspaceMountSchema } from './services.js'
 import { trackerSettingsSchema } from './tracker.js'
 
 // The full board snapshot returned by GET /workspaces/:id (and POST /workspaces).
@@ -64,5 +65,13 @@ export const workspaceSnapshotSchema = v.object({
    * its ticket). Attached by the worker, so optional on the wire.
    */
   trackerSettings: v.optional(trackerSettingsSchema),
+  /**
+   * In-org shared services. `mounts` are the services this workspace mounts (with the
+   * per-workspace frame layout); `serviceCatalog` is the org's services the board can
+   * mount from (each annotated with `mountCount` so the UI can badge a shared frame).
+   * Attached by the worker when the services module is wired, so optional on the wire.
+   */
+  mounts: v.optional(v.array(workspaceMountSchema)),
+  serviceCatalog: v.optional(v.array(serviceSchema)),
 })
 export type WorkspaceSnapshot = v.InferOutput<typeof workspaceSnapshotSchema>

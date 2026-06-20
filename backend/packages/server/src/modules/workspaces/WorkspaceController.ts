@@ -85,6 +85,18 @@ export function workspaceController(): Hono<AppEnv> {
     const trackerSettings = container.tracker
       ? await container.tracker.service.get(workspaceId)
       : undefined
+    // In-org shared services: the workspace's mounts + the org catalog it can mount from
+    // (each catalog service annotated with its mount count for the "Shared" badge).
+    const mounts = container.services
+      ? await container.services.service.listMounts(workspaceId)
+      : undefined
+    const accountId = container.services
+      ? await container.workspaceService.accountOf(workspaceId)
+      : undefined
+    const serviceCatalog =
+      container.services && accountId !== undefined
+        ? await container.services.service.listForAccount(accountId)
+        : undefined
     return c.json({
       ...snapshot,
       spend,
@@ -94,6 +106,8 @@ export function workspaceController(): Hono<AppEnv> {
       ...(modelDefaults ? { modelDefaults } : {}),
       ...(recurringPipelines ? { recurringPipelines } : {}),
       ...(trackerSettings ? { trackerSettings } : {}),
+      ...(mounts ? { mounts } : {}),
+      ...(serviceCatalog ? { serviceCatalog } : {}),
     })
   })
 
