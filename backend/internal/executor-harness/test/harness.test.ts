@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { promisify } from 'node:util'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { parseBootstrapJob, parseConflictResolverJob, parseJob } from '../src/job.js'
+import { readFile } from 'node:fs/promises'
 import {
   DEFAULT_PROGRESS_GUARD_LIMITS,
   ProgressGuard,
@@ -12,6 +13,9 @@ import {
   parseTodoProgress,
   progressGuardLimitsFromEnv,
   summarizePiRun,
+  webSearchConfigFromEnv,
+  writeAgentsContext,
+  writeWebToolsConfig,
 } from '../src/pi.js'
 import {
   authenticatedCloneUrl,
@@ -666,6 +670,21 @@ describe('ProgressGuard (anti-rabbithole)', () => {
     expect(reason).toMatch(/no progress/i)
   })
 
+  it('does not count web search/fetch toward the no-edit bound', () => {
+    const limits: ProgressGuardLimits = { maxToolCallsWithoutEdit: 3, maxConsecutiveErrors: 99 }
+    const guard = new ProgressGuard(limits)
+    let reason: string | null = null
+    // rpiv-web-tools research calls are read-only, like read/grep — they must not
+    // trip the no-edit guard even far past its threshold.
+    for (const t of ['web_search', 'web_fetch']) {
+      for (let i = 0; i < 5; i++) reason = guard.observe(toolCall(t))
+    }
+    expect(reason).toBeNull()
+    // But "action" calls (bash) without an edit past the threshold still trip it.
+    for (let i = 0; i < 3; i++) reason = guard.observe(toolCall('bash'))
+    expect(reason).toMatch(/no progress/i)
+  })
+
   it('skips the no-edit bound for assess-only runs (expectsEdits=false)', () => {
     const limits: ProgressGuardLimits = { maxToolCallsWithoutEdit: 3, maxConsecutiveErrors: 99 }
     const guard = new ProgressGuard(limits, false)
@@ -702,5 +721,85 @@ describe('ProgressGuard (anti-rabbithole)', () => {
     expect(progressGuardLimitsFromEnv({ JOB_MAX_TOOLCALLS_WITHOUT_EDIT: '-3' })).toEqual(
       DEFAULT_PROGRESS_GUARD_LIMITS,
     )
+  })
+})
+
+describe('web search (rpiv-web-tools) configuration', () => {
+  it('stays off when no provider is configured', () => {
+    expect(webSearchConfigFromEnv({})).toBeUndefined()
+    expect(webSearchConfigFromEnv({ WEB_SEARCH_PROVIDER: '   ' })).toBeUndefined()
+  })
+
+  it('auto-enables from a configured provider credential', () => {
+    // A provider key present in the env turns web search on with that provider —
+    // no separate on/off flag (mirrors Claude Code / Codex enabling on config).
+    expect(webSearchConfigFromEnv({ TAVILY_API_KEY: 'tvly-x' })).toEqual({ provider: 'tavily' })
+    expect(webSearchConfigFromEnv({ EXA_API_KEY: 'exa-x' })).toEqual({ provider: 'exa' })
+    // Keyless backends are signalled by their base-URL var.
+    expect(webSearchConfigFromEnv({ SEARXNG_URL: 'http://searx.local' })).toEqual({
+      provider: 'searxng',
+    })
+  })
+
+  it('picks the highest-priority provider when several are configured', () => {
+    // brave leads (what Claude Code uses); self-hosted backends come last.
+    expect(
+      webSearchConfigFromEnv({ SEARXNG_URL: 'http://searx.local', BRAVE_SEARCH_API_KEY: 'b' }),
+    ).toEqual({ provider: 'brave' })
+  })
+
+  it('honours WEB_SEARCH_PROVIDER as an explicit override', () => {
+    expect(
+      webSearchConfigFromEnv({ WEB_SEARCH_PROVIDER: 'Exa', BRAVE_SEARCH_API_KEY: 'b' }),
+    ).toEqual({ provider: 'exa' })
+    expect(webSearchConfigFromEnv({ WEB_SEARCH_PROVIDER: ' tavily ' })).toEqual({
+      provider: 'tavily',
+    })
+  })
+
+  it('writes only the provider id to the extension config (no secret on disk)', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'home-'))
+    const prevHome = process.env.HOME
+    process.env.HOME = home
+    try {
+      const path = await writeWebToolsConfig({ provider: 'exa' })
+      const written = JSON.parse(await readFile(path, 'utf8')) as Record<string, unknown>
+      // Only the provider — keys/base URLs come from the environment, never written here.
+      expect(written).toEqual({ provider: 'exa' })
+      expect(path).toContain(join('.config', 'rpiv-web-tools', 'config.json'))
+    } finally {
+      if (prevHome === undefined) delete process.env.HOME
+      else process.env.HOME = prevHome
+      await rm(home, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('writeAgentsContext', () => {
+  async function readContext(opts?: { webSearch?: boolean }): Promise<string> {
+    const home = await mkdtemp(join(tmpdir(), 'home-'))
+    const prevHome = process.env.HOME
+    process.env.HOME = home
+    try {
+      await writeAgentsContext('ROLE PROMPT', opts)
+      return await readFile(join(home, '.pi', 'agent', 'AGENTS.md'), 'utf8')
+    } finally {
+      if (prevHome === undefined) delete process.env.HOME
+      else process.env.HOME = prevHome
+      await rm(home, { recursive: true, force: true })
+    }
+  }
+
+  it('omits the web-tools guidance by default', async () => {
+    const md = await readContext()
+    expect(md).toContain('ROLE PROMPT')
+    expect(md).not.toMatch(/web_search/)
+  })
+
+  it('appends the web-tools guidance only when web search is enabled', async () => {
+    const md = await readContext({ webSearch: true })
+    expect(md).toContain('ROLE PROMPT')
+    expect(md).toMatch(/web_search/)
+    expect(md).toMatch(/web_fetch/)
   })
 })

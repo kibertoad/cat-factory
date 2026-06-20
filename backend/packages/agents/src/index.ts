@@ -1,5 +1,13 @@
 export { AiAgentExecutor, type AiAgentExecutorDependencies } from './agents/AiAgentExecutor.js'
 export {
+  type InlineWebSearchOptions,
+  DEFAULT_INLINE_WEB_SEARCH_KINDS,
+  DEFAULT_INLINE_WEB_SEARCH_MAX_USES,
+  WEB_SEARCH_GUIDANCE,
+  inlineWebSearchOptionsFromEnv,
+  providerWebSearchTools,
+} from './agents/web-search.js'
+export {
   type AgentModelConfig,
   type AgentRouting,
   type StepModelResolvers,

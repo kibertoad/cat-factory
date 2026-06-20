@@ -66,6 +66,17 @@ ARG PI_TODO_EXTENSION_VERSION=1.20.0
 RUN --mount=type=secret,id=extra_ca,target=/tmp/extra_ca.crt \
     sh -eu -c 'if [ -s /tmp/extra_ca.crt ]; then export NODE_EXTRA_CA_CERTS=/tmp/extra_ca.crt; fi; \
     pi install "npm:@juicesharp/rpiv-todo@${PI_TODO_EXTENSION_VERSION}"'
+# Install the rpiv-web-tools extension (same lockstep monorepo / version as
+# rpiv-todo) so Pi exposes `web_search` + `web_fetch` tools. The extension is
+# inert unless a deployment configures a provider in the container's env (e.g.
+# BRAVE_SEARCH_API_KEY / TAVILY_API_KEY, or SEARXNG_URL) — the harness then
+# auto-detects it, writes the rpiv-web-tools config and nudges the agent to use
+# the tools; WEB_SEARCH_PROVIDER can pin the active provider explicitly. No key is
+# baked into the image. Pinned for the same reproducibility reason as Pi/rpiv-todo.
+ARG PI_WEB_TOOLS_EXTENSION_VERSION=1.20.0
+RUN --mount=type=secret,id=extra_ca,target=/tmp/extra_ca.crt \
+    sh -eu -c 'if [ -s /tmp/extra_ca.crt ]; then export NODE_EXTRA_CA_CERTS=/tmp/extra_ca.crt; fi; \
+    pi install "npm:@juicesharp/rpiv-web-tools@${PI_WEB_TOOLS_EXTENSION_VERSION}"'
 # This ephemeral container only ever operates on repositories we hand it (a fresh
 # clone, or a mounted repo in tests). Disable git's dubious-ownership guard
 # system-wide so a repo owned by another uid (e.g. a bind-mounted host repo)

@@ -1,4 +1,4 @@
-import { AiAgentExecutor } from '@cat-factory/agents'
+import { AiAgentExecutor, inlineWebSearchOptionsFromEnv } from '@cat-factory/agents'
 import {
   HttpRunnerPoolProvider,
   RunnerPoolConnectionService,
@@ -279,6 +279,9 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     agentRouting: config.agents.routing,
     resolveBlockModel: config.agents.resolveBlockModel,
     resolveWorkspaceModelDefault,
+    // Opt-in provider web search for the inline design/research kinds (no-op unless
+    // INLINE_WEB_SEARCH_ENABLED and an Anthropic/OpenAI model).
+    webSearch: inlineWebSearchOptionsFromEnv(env),
   })
 
   // Task-source integration (Jira). Opt-in via TASKS_ENABLED + TASKS_ENCRYPTION_KEY;

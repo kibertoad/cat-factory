@@ -4,6 +4,11 @@ import type { ModelProvider, ModelRef } from '@cat-factory/kernel'
 import { systemPromptFor, userPromptFor } from './agent-catalog.js'
 import { type AgentRouting, resolveAgentConfig, resolveStepModelRef } from './agent-routing.js'
 import { composeBlockSystemPrompt } from './prompt-fragments.js'
+import {
+  type InlineWebSearchOptions,
+  WEB_SEARCH_GUIDANCE,
+  providerWebSearchTools,
+} from './web-search.js'
 
 export interface AiAgentExecutorDependencies {
   modelProvider: ModelProvider
@@ -25,6 +30,13 @@ export interface AiAgentExecutorDependencies {
     workspaceId: string,
     agentKind: string,
   ) => Promise<string | undefined>
+  /**
+   * Opt-in provider-hosted web search for the design/research inline kinds. When
+   * supplied (and the resolved model's provider has a hosted search — Anthropic /
+   * OpenAI), the allow-listed kinds get a `web_search` tool plus a usage nudge.
+   * Absent ⇒ inline agents make a plain one-shot completion, exactly as before.
+   */
+  webSearch?: InlineWebSearchOptions
 }
 
 /**
@@ -42,17 +54,20 @@ export class AiAgentExecutor implements AgentExecutor {
     workspaceId: string,
     agentKind: string,
   ) => Promise<string | undefined>
+  private readonly webSearch?: InlineWebSearchOptions
 
   constructor({
     modelProvider,
     agentRouting,
     resolveBlockModel,
     resolveWorkspaceModelDefault,
+    webSearch,
   }: AiAgentExecutorDependencies) {
     this.modelProvider = modelProvider
     this.agentRouting = agentRouting
     this.resolveBlockModel = resolveBlockModel ?? (() => undefined)
     this.resolveWorkspaceModelDefault = resolveWorkspaceModelDefault
+    this.webSearch = webSearch
   }
 
   async run(context: AgentRunContext): Promise<AgentRunResult> {
@@ -76,7 +91,17 @@ export class AiAgentExecutor implements AgentExecutor {
     // Base role prompt, then fold in the best-practice fragments selected for the
     // block — the engine-resolved tenant catalog when present, else the manual ids.
     const baseSystem = config.system ?? systemPromptFor(context.agentKind)
-    const system = composeBlockSystemPrompt(baseSystem, context.block)
+    const composed = composeBlockSystemPrompt(baseSystem, context.block)
+
+    // Provider-hosted web search for the allow-listed design/research kinds, when
+    // enabled AND the resolved provider has one. The usage nudge is appended only
+    // when the tool is actually attached, so the model is never told about a tool
+    // it lacks (mirrors the harness's AGENTS.md guidance gating).
+    const tools =
+      this.webSearch && this.webSearch.kinds.has(context.agentKind)
+        ? providerWebSearchTools(ref.provider, this.webSearch.maxUses)
+        : undefined
+    const system = tools ? `${composed}${WEB_SEARCH_GUIDANCE}` : composed
 
     const { text, usage } = await generateText({
       model,
@@ -84,6 +109,7 @@ export class AiAgentExecutor implements AgentExecutor {
       prompt: userPromptFor(context),
       temperature: config.temperature,
       maxOutputTokens: config.maxOutputTokens,
+      ...(tools ? { tools } : {}),
     })
 
     return {

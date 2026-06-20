@@ -64,6 +64,23 @@ each one \`in_progress\` when you begin it and \`completed\` when it's done (act
 "update"). Keep the list accurate — it is the only signal the system has for how
 far along the run is.`
 
+// Appended to AGENTS.md only when the rpiv-web-tools extension is configured (an
+// active web-search provider is set — see `webSearchConfigFromEnv`). Without a
+// nudge a model rarely reaches for the tools, so it would keep relying on stale
+// training data. Kept deliberately conservative: search is for facts that genuinely
+// change or that the agent is unsure of, NOT a substitute for reading the repo.
+const WEB_TOOLS_GUIDANCE = `
+
+## Web search & fetch (use sparingly)
+
+You have \`web_search\` (returns titled result snippets for a query) and \`web_fetch\`
+(reads a URL as text) tools. Reach for them ONLY when the repository itself can't
+answer the question: to confirm a current library/API signature, a breaking change,
+an exact error message, or a security advisory. Prefer first-party documentation,
+and cite the source URL when a decision rests on what you found. Do NOT browse for
+anything already discoverable in the checkout, and don't let searching replace
+reading the code.`
+
 // Appended to every AGENTS.md so an agent orients off the persisted service
 // blueprint before touching code, but stays shallow by default: read the
 // high-level overview first, and only open a module's deep-dive when the task
@@ -94,14 +111,89 @@ staleness checks. Treat the blueprint as orientation, not a task list.`
  * (`-p`) runs without a trust prompt. That contract is pinned by `PI_VERSION` in
  * the Dockerfile — revisit this if that bump changes context-file resolution.
  */
-export async function writeAgentsContext(systemPrompt: string): Promise<void> {
+export async function writeAgentsContext(
+  systemPrompt: string,
+  opts: { webSearch?: boolean } = {},
+): Promise<void> {
   const dir = join(homedir(), '.pi', 'agent')
   await mkdir(dir, { recursive: true })
+  // Only nudge towards the web tools when they're actually configured, so an agent
+  // is never told about tools that would error (no provider key) the moment it calls them.
+  const webTools = opts.webSearch ? WEB_TOOLS_GUIDANCE : ''
   await writeFile(
     join(dir, 'AGENTS.md'),
-    `${systemPrompt}${BLUEPRINT_GUIDANCE}${TODO_GUIDANCE}`,
+    `${systemPrompt}${BLUEPRINT_GUIDANCE}${TODO_GUIDANCE}${webTools}`,
     'utf8',
   )
+}
+
+/**
+ * The active web-search backend for the rpiv-web-tools extension. Only the
+ * provider id is persisted to disk: the per-provider credential (and any base URL
+ * — `SEARXNG_URL`, `OLLAMA_HOST`) is read by the extension straight from the
+ * environment, so no key is ever written to the container's filesystem.
+ */
+export interface WebSearchConfig {
+  /** rpiv-web-tools provider id, e.g. `brave`, `tavily`, `exa`, `searxng`. */
+  provider: string
+}
+
+/**
+ * The env var whose presence configures each rpiv-web-tools provider, in selection
+ * priority order. Used to AUTO-ENABLE web search whenever a deployment has wired up
+ * a provider — there's no separate on/off flag, mirroring how Claude Code / Codex
+ * turn search on once a backend is configured. `brave` leads (it's what Claude Code
+ * uses); the self-hosted backends (searxng/ollama) come last. For the keyless
+ * backends it is the base-URL var that signals "configured".
+ */
+const WEB_SEARCH_PROVIDER_ENV: ReadonlyArray<{ provider: string; envVar: string }> = [
+  { provider: 'brave', envVar: 'BRAVE_SEARCH_API_KEY' },
+  { provider: 'tavily', envVar: 'TAVILY_API_KEY' },
+  { provider: 'exa', envVar: 'EXA_API_KEY' },
+  { provider: 'serper', envVar: 'SERPER_API_KEY' },
+  { provider: 'perplexity', envVar: 'PERPLEXITY_API_KEY' },
+  { provider: 'youcom', envVar: 'YOUCOM_API_KEY' },
+  { provider: 'jina', envVar: 'JINA_API_KEY' },
+  { provider: 'firecrawl', envVar: 'FIRECRAWL_API_KEY' },
+  { provider: 'searxng', envVar: 'SEARXNG_URL' },
+  { provider: 'ollama', envVar: 'OLLAMA_HOST' },
+]
+
+/**
+ * Resolve the web-search configuration from the environment, or undefined when no
+ * provider is configured (⇒ the harness writes no rpiv-web-tools config and never
+ * nudges the agent towards the tools, so runs behave exactly as before). Enablement
+ * is CONDITIONAL on a provider being configured: if any provider's credential/URL
+ * env var is present, web search turns on with that provider (highest-priority one
+ * when several are set). `WEB_SEARCH_PROVIDER` is an explicit override that pins the
+ * active provider regardless of detection. No key passes through here — the
+ * extension reads each provider's own env var directly.
+ */
+export function webSearchConfigFromEnv(
+  env: NodeJS.ProcessEnv = process.env,
+): WebSearchConfig | undefined {
+  const explicit = env.WEB_SEARCH_PROVIDER?.trim().toLowerCase()
+  if (explicit) return { provider: explicit }
+  for (const { provider, envVar } of WEB_SEARCH_PROVIDER_ENV) {
+    if (env[envVar]?.trim()) return { provider }
+  }
+  return undefined
+}
+
+/**
+ * Select the active rpiv-web-tools provider by writing
+ * `~/.config/rpiv-web-tools/config.json` (the file the extension reads, falling
+ * back to `brave` when `provider` is absent). Only the provider id is written —
+ * credentials and base URLs come from the environment (env wins over the file in
+ * the extension's own resolution order), so no secret is committed to disk. Written
+ * 0600 to match the extension's own permissions for that path.
+ */
+export async function writeWebToolsConfig(config: WebSearchConfig): Promise<string> {
+  const dir = join(homedir(), '.config', 'rpiv-web-tools')
+  await mkdir(dir, { recursive: true })
+  const path = join(dir, 'config.json')
+  await writeFile(path, JSON.stringify({ provider: config.provider }, null, 2), { mode: 0o600 })
+  return path
 }
 
 /** One entry of the agent's todo list — its subject and current status. */
@@ -339,6 +431,10 @@ const EXPLORATION_TOOLS = new Set([
   'head',
   'tail',
   'stat',
+  // rpiv-web-tools: querying/reading the web is read-only research up to an edit,
+  // not the environment-probing the no-edit bound targets, so it doesn't count.
+  'web_search',
+  'web_fetch',
 ])
 
 /** Read {@link ProgressGuardLimits} from the environment, falling back to the defaults. */

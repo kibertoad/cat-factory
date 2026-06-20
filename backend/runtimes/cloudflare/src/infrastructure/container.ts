@@ -9,7 +9,11 @@ import {
   type TaskSourceProvider,
   type WorkRunner,
 } from '@cat-factory/kernel'
-import { AiAgentExecutor, resolveAgentConfig } from '@cat-factory/agents'
+import {
+  AiAgentExecutor,
+  inlineWebSearchOptionsFromEnv,
+  resolveAgentConfig,
+} from '@cat-factory/agents'
 import { RunnerPoolConnectionService, TicketTrackerService } from '@cat-factory/integrations'
 import { type CoreDependencies, createCore } from '@cat-factory/orchestration'
 import {
@@ -157,6 +161,9 @@ function selectAgentExecutor(
     // the resolution precedence is uniform across every agent kind, not just the
     // container kinds.
     resolveWorkspaceModelDefault: buildResolveWorkspaceModelDefault(db),
+    // Opt-in provider web search for the inline design/research kinds (no-op unless
+    // INLINE_WEB_SEARCH_ENABLED and an Anthropic/OpenAI model).
+    webSearch: inlineWebSearchOptionsFromEnv(env),
   })
 
   // The sandbox MUST build — a null here means a prerequisite (GitHub App private

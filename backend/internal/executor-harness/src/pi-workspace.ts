@@ -5,8 +5,10 @@ import {
   type PiRunOutcome,
   type PiRunStats,
   runPi,
+  webSearchConfigFromEnv,
   writeAgentsContext,
   writePiModelsConfig,
+  writeWebToolsConfig,
 } from './pi.js'
 import type { RunOptions } from './runner.js'
 
@@ -64,7 +66,11 @@ export async function runAgentInWorkspace(
   spec: AgentRunSpec,
   opts: RunOptions = {},
 ): Promise<PiRunOutcome> {
-  await writeAgentsContext(spec.systemPrompt)
+  // Opt-in web search/fetch (rpiv-web-tools): when a provider is configured, select
+  // it on disk and tell the agent the tools exist; otherwise behave exactly as before.
+  const webSearch = webSearchConfigFromEnv()
+  if (webSearch) await writeWebToolsConfig(webSearch)
+  await writeAgentsContext(spec.systemPrompt, { webSearch: Boolean(webSearch) })
   await writePiModelsConfig({ model: spec.model, proxyBaseUrl: spec.proxyBaseUrl })
   const { signal, onActivity, onProgress } = opts
   return runPi({
