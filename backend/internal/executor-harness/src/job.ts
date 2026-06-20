@@ -25,7 +25,7 @@ export interface Job {
    * duplicate, and the Worker polls `GET /jobs/{jobId}` with the same value.
    */
   jobId: string
-  /** Composed role + best-practice fragments; written to AGENTS.md for Pi. */
+  /** Composed role + best-practice fragments; written to Pi's global AGENTS.md context. */
   systemPrompt: string
   /** The concrete task prompt handed to Pi. */
   userPrompt: string
@@ -135,7 +135,7 @@ export interface BootstrapJob {
    * starting a duplicate, and the Worker polls `GET /jobs/{jobId}` with it.
    */
   jobId: string
-  /** Bootstrapper role prompt; written to AGENTS.md for Pi. */
+  /** Bootstrapper role prompt; written to Pi's global AGENTS.md context. */
   systemPrompt: string
   /** Free-form instructions handed to Pi as the task prompt. */
   instructions: string
@@ -220,7 +220,7 @@ export type BlueprintMode = 'create' | 'update'
 export interface BlueprintJob {
   /** Stable job id (the blueprint run id); keys the background job + poll endpoint. */
   jobId: string
-  /** Blueprinter role prompt; written to AGENTS.md for Pi. */
+  /** Blueprinter role prompt; written to Pi's global AGENTS.md context. */
   systemPrompt: string
   /** Free-form guidance handed to Pi as the task prompt (focus areas, granularity). */
   instructions: string

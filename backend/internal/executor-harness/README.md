@@ -41,7 +41,9 @@ The implementation job (`POST /run`) is the canonical sequence:
 
 1. **clone** the target repo (shallow) with a short-lived GitHub installation token,
 2. write the composed system prompt (role + the block's best-practice fragments)
-   to `AGENTS.md`, and point Pi at the Worker's LLM proxy via
+   to Pi's **global** context file `~/.pi/agent/AGENTS.md` (outside the checkout,
+   so it never lands in a commit and never clobbers a repo's own `AGENTS.md` —
+   Pi reads and concatenates both), and point Pi at the Worker's LLM proxy via
    `~/.pi/agent/models.json` (provider `proxy`, `api: openai-completions`),
 3. **run Pi** non-interactively (`pi -p --mode json --model proxy/<model> --approve`),
 4. **commit, push** a branch and **open a PR**, returning `{ prUrl, branch, summary }`.
@@ -66,7 +68,7 @@ Kimi / DeepSeek) and meters spend. The provider key never enters the container.
 | `src/server.ts`    | HTTP entry point; routes `/health`, `/run`, `/bootstrap`, `/blueprint`, `/jobs/{id}`.                   |
 | `src/runner.ts`    | `JobRegistry` — async job lifecycle, idempotent on `jobId`, progress tracking.                          |
 | `src/job.ts`       | Request types + validators for the job specs.                                                           |
-| `src/pi.ts`        | Pi provider config, non-interactive run, JSON-line event + todo-progress parsing, `AGENTS.md` guidance. |
+| `src/pi.ts`        | Pi provider config, non-interactive run, JSON-line event + todo-progress parsing, global `AGENTS.md` guidance. |
 | `src/git.ts`       | clone / branch / commit / push + GitHub PR creation; bootstrap history reset + force-push.              |
 | `src/bootstrap.ts` | The `/bootstrap` handler (clone-or-empty → adapt → reinit + force-push).                                |
 | `src/blueprint.ts` | The `/blueprint` handler (decompose → render `blueprints/` → commit on branch).                         |

@@ -44,7 +44,7 @@ export interface CodingAgentSpec {
   /** Branch the produced change is pushed to. */
   pushBranch: string
   ghToken: string
-  /** Composed role + best-practice fragments; written to AGENTS.md for Pi. */
+  /** Composed role + best-practice fragments; written to Pi's global AGENTS.md context. */
   systemPrompt: string
   /** The concrete task prompt handed to Pi. */
   userPrompt: string

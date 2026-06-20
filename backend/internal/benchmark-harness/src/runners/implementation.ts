@@ -21,9 +21,9 @@ async function git(args: string[], cwd: string): Promise<string> {
 
 // Implementation candidate: the *real* Pi coding flow, reused from the
 // executor harness but run locally — clone the repo, write the build system
-// prompt as AGENTS.md, point Pi at the chosen OpenAI-compatible endpoint
-// (a direct provider or Cloudflare Workers AI), run it, and capture the diff.
-// Requires the `pi` CLI on PATH; throws a clear error otherwise.
+// prompt as Pi's global AGENTS.md context (outside the checkout), point Pi at the
+// chosen OpenAI-compatible endpoint (a direct provider or Cloudflare Workers AI),
+// run it, and capture the diff. Requires the `pi` CLI on PATH; throws otherwise.
 
 export async function runImplementation(
   input: RunnerInput<ImplementationFixture>,
@@ -43,7 +43,7 @@ export async function runImplementation(
       dir,
       signal: deps.signal,
     })
-    await writeAgentsContext(dir, prompt.system)
+    await writeAgentsContext(prompt.system)
     await writePiModelsConfig({ model: modelRef.model, proxyBaseUrl: endpoint.baseUrl })
 
     const userPrompt = [
@@ -64,7 +64,7 @@ export async function runImplementation(
     })
 
     await git(['add', '-A'], dir)
-    const diff = await git(['diff', '--cached', '--', '.', ':(exclude)AGENTS.md'], dir)
+    const diff = await git(['diff', '--cached', '--', '.'], dir)
     const truncated = diff.length > 60_000 ? `${diff.slice(0, 60_000)}\n... (diff truncated)` : diff
 
     return {

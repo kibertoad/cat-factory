@@ -80,10 +80,19 @@ for a module that is directly relevant to your task, when you need its summary a
 exact code references. \`blueprints/version.json\` is a tiny manifest for quick
 staleness checks. Treat the blueprint as orientation, not a task list.`
 
-/** Write the composed system prompt as project context Pi reads automatically. */
-export async function writeAgentsContext(cwd: string, systemPrompt: string): Promise<void> {
+/**
+ * Write the composed system prompt as Pi's GLOBAL agent context
+ * (`~/.pi/agent/AGENTS.md`), which Pi reads automatically and concatenates with
+ * any `AGENTS.md` the repo itself ships. Deliberately OUTSIDE the checkout (the
+ * same `~/.pi/agent` dir `writePiModelsConfig` already uses) so the harness's
+ * instructions never enter the git working tree — they can't be committed into a
+ * PR and they never clobber a repo's own committed `AGENTS.md`.
+ */
+export async function writeAgentsContext(systemPrompt: string): Promise<void> {
+  const dir = join(homedir(), '.pi', 'agent')
+  await mkdir(dir, { recursive: true })
   await writeFile(
-    join(cwd, 'AGENTS.md'),
+    join(dir, 'AGENTS.md'),
     `${systemPrompt}${BLUEPRINT_GUIDANCE}${TODO_GUIDANCE}`,
     'utf8',
   )
