@@ -68,6 +68,17 @@ export {
 export * as tasksLogic from './modules/tasks/tasks.logic.js'
 export * as jiraLogic from './modules/tasks/jira.logic.js'
 export { JIRA_DESCRIPTOR } from './modules/tasks/jira.logic.js'
+export {
+  TicketTrackerService,
+  type TicketTrackerServiceDependencies,
+  type JiraConnection,
+  type FetchLike,
+} from './modules/tracker/TicketTrackerService.js'
+export * as jiraCreateLogic from './modules/tracker/jira.create.logic.js'
+export {
+  createGitHubIssueViaToken,
+  type GitHubIssueTokenRequest,
+} from './modules/tracker/github.create.logic.js'
 export * as githubIssuesLogic from './modules/tasks/github-issues.logic.js'
 export { GITHUB_ISSUES_DESCRIPTOR } from './modules/tasks/github-issues.logic.js'
 

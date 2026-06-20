@@ -18,6 +18,8 @@ describe('pipelines', () => {
       'pl_full',
       'pl_quick',
       'pl_integrate',
+      'pl_dep_update',
+      'pl_tech_debt',
       'pl_blueprint',
     ])
   })

@@ -22,6 +22,21 @@ export const CONFLICTS_AGENT_KIND = 'conflicts'
 export const CONFLICT_RESOLVER_AGENT_KIND = 'conflict-resolver'
 
 /**
+ * The agent kind of the read-only code-analysis agent that opens the tech-debt
+ * recurring pipeline: it inspects the repo and emits a prioritized markdown report
+ * (no commits). Reuses the generic container run path — no special engine handling.
+ */
+export const ANALYSIS_AGENT_KIND = 'analysis'
+
+/**
+ * The agent kind of the special `tracker` step: a non-LLM step that files a GitHub
+ * issue / Jira ticket from the preceding `analysis` output before implementation,
+ * mirroring the special handling of the `ci` gate. Passes through when no tracker
+ * is configured for the workspace.
+ */
+export const TRACKER_AGENT_KIND = 'tracker'
+
+/**
  * The aggregate CI verdict for a PR head commit, derived from its check runs:
  *  - `none`    — no checks reported (nothing to gate; treated as green).
  *  - `pending` — at least one check is still queued/in-progress and none failed.

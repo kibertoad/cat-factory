@@ -72,21 +72,22 @@ describe('agent-kind registry', () => {
 describe('pipeline registry', () => {
   afterEach(() => clearRegisteredPipelines())
 
-  it('seeds built-in pipelines on their own', () => {
+  // These assert the registry BEHAVIOUR (append / replace-in-place) against a
+  // baseline captured at runtime, not a hardcoded list of built-in ids — so adding
+  // or removing a seeded pipeline never churns this file.
+
+  it('seeds the built-in pipelines with unique ids', () => {
     const ids = seedPipelines().map((p) => p.id)
-    expect(ids).toEqual(['pl_full', 'pl_quick', 'pl_integrate', 'pl_blueprint'])
+    expect(ids.length).toBeGreaterThan(0)
+    // No duplicate ids, so the registry's replace-by-id semantics are unambiguous.
+    expect(new Set(ids).size).toBe(ids.length)
   })
 
-  it('appends a registered pipeline after the built-ins', () => {
+  it('appends a registered (new-id) pipeline after the built-ins', () => {
+    const builtins = seedPipelines().map((p) => p.id)
     registerPipeline({ id: 'pl_org_audit', name: 'Audit & ship', agentKinds: ['org-auditor'] })
     const pipelines = seedPipelines()
-    expect(pipelines.map((p) => p.id)).toEqual([
-      'pl_full',
-      'pl_quick',
-      'pl_integrate',
-      'pl_blueprint',
-      'pl_org_audit',
-    ])
+    expect(pipelines.map((p) => p.id)).toEqual([...builtins, 'pl_org_audit'])
     expect(pipelines.at(-1)).toEqual({
       id: 'pl_org_audit',
       name: 'Audit & ship',
@@ -95,14 +96,12 @@ describe('pipeline registry', () => {
   })
 
   it('replaces a built-in pipeline in place when ids collide', () => {
+    const builtins = seedPipelines().map((p) => p.id)
+    expect(builtins).toContain('pl_quick') // precondition: overriding an existing built-in
     registerPipeline({ id: 'pl_quick', name: 'Org quick', agentKinds: ['coder', 'merger'] })
     const pipelines = seedPipelines()
-    expect(pipelines.map((p) => p.id)).toEqual([
-      'pl_full',
-      'pl_quick',
-      'pl_integrate',
-      'pl_blueprint',
-    ])
+    // Same ids in the same order — replaced in place, not appended.
+    expect(pipelines.map((p) => p.id)).toEqual(builtins)
     expect(pipelines.find((p) => p.id === 'pl_quick')?.name).toBe('Org quick')
   })
 })

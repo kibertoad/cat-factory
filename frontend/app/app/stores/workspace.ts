@@ -9,6 +9,8 @@ import { useAgentRunsStore } from '~/stores/agentRuns'
 import { useNotificationsStore } from '~/stores/notifications'
 import { useMergePresetsStore } from '~/stores/mergePresets'
 import { useModelDefaultsStore } from '~/stores/modelDefaults'
+import { useRecurringPipelinesStore } from '~/stores/recurringPipelines'
+import { useTrackerStore } from '~/stores/tracker'
 
 /**
  * Owns the active workspace and bootstraps the app against the backend. On load
@@ -64,6 +66,8 @@ export const useWorkspaceStore = defineStore(
       useNotificationsStore().hydrate(snapshot.notifications ?? [])
       useMergePresetsStore().hydrate(snapshot.mergePresets ?? [])
       useModelDefaultsStore().hydrate(snapshot.modelDefaults?.defaults)
+      useRecurringPipelinesStore().hydrate(snapshot.recurringPipelines ?? [])
+      useTrackerStore().hydrate(snapshot.trackerSettings)
     }
 
     /** Resolve accounts + boards, then open the right board for the active account. */

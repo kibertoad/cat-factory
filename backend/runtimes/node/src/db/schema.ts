@@ -211,6 +211,108 @@ export const llmCallMetrics = pgTable(
   ],
 )
 
+// Recurring pipelines (mirror of D1 migration 0029). A schedule attaches a pipeline
+// to a service frame and owns one reused on-board block; the sweeper fires every
+// enabled schedule whose `next_run_at <= now`. `weekdays` is a JSON array (text),
+// epoch-ms columns are bigint. Each fire is recorded in `pipeline_schedule_runs`.
+export const pipelineSchedules = pgTable(
+  'pipeline_schedules',
+  {
+    workspace_id: text('workspace_id').notNull(),
+    id: text('id').notNull(),
+    block_id: text('block_id').notNull(),
+    frame_id: text('frame_id').notNull(),
+    pipeline_id: text('pipeline_id').notNull(),
+    template: text('template').notNull(),
+    name: text('name').notNull(),
+    interval_hours: integer('interval_hours').notNull(),
+    weekdays: text('weekdays').notNull().default('[]'),
+    window_start_hour: integer('window_start_hour'),
+    window_end_hour: integer('window_end_hour'),
+    timezone: text('timezone').notNull().default('UTC'),
+    enabled: integer('enabled').notNull().default(1),
+    last_run_at: bigint('last_run_at', { mode: 'number' }),
+    next_run_at: bigint('next_run_at', { mode: 'number' }).notNull(),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.workspace_id, t.id] }),
+    index('idx_pipeline_schedules_due').on(t.enabled, t.next_run_at),
+    index('idx_pipeline_schedules_block').on(t.workspace_id, t.block_id),
+  ],
+)
+
+export const pipelineScheduleRuns = pgTable(
+  'pipeline_schedule_runs',
+  {
+    workspace_id: text('workspace_id').notNull(),
+    id: text('id').notNull(),
+    schedule_id: text('schedule_id').notNull(),
+    execution_id: text('execution_id'),
+    status: text('status').notNull(),
+    started_at: bigint('started_at', { mode: 'number' }).notNull(),
+    finished_at: bigint('finished_at', { mode: 'number' }),
+    outcome: text('outcome'),
+  },
+  (t) => [
+    primaryKey({ columns: [t.workspace_id, t.id] }),
+    index('idx_schedule_runs_schedule').on(t.workspace_id, t.schedule_id, t.started_at),
+    index('idx_schedule_runs_started').on(t.started_at),
+  ],
+)
+
+// A workspace's issue-tracker selection (mirror of D1 migration 0029).
+export const trackerSettings = pgTable('tracker_settings', {
+  workspace_id: text('workspace_id').primaryKey(),
+  tracker: text('tracker'),
+  jira_project_key: text('jira_project_key'),
+  updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
+})
+
+// Task-source integration (mirror of D1 migration 0014): a workspace's connections
+// to external issue trackers (Jira) and local projections of the issues it imported.
+// `credentials` is an encrypted JSON bag (AES-256-GCM envelope), never sent on the
+// wire. At most one live connection per (workspace, source); a `deleted_at` tombstone
+// lets a workspace disconnect/reconnect.
+export const taskConnections = pgTable(
+  'task_connections',
+  {
+    workspace_id: text('workspace_id').notNull(),
+    source: text('source').notNull(),
+    credentials: text('credentials').notNull(),
+    label: text('label').notNull().default(''),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+    deleted_at: bigint('deleted_at', { mode: 'number' }),
+  },
+  (t) => [primaryKey({ columns: [t.workspace_id, t.source] })],
+)
+
+export const tasks = pgTable(
+  'tasks',
+  {
+    workspace_id: text('workspace_id').notNull(),
+    source: text('source').notNull(),
+    external_id: text('external_id').notNull(),
+    title: text('title').notNull(),
+    url: text('url').notNull(),
+    status: text('status').notNull().default(''),
+    type: text('type').notNull().default(''),
+    assignee: text('assignee'),
+    priority: text('priority'),
+    labels: text('labels').notNull().default('[]'),
+    description: text('description').notNull().default(''),
+    comments: text('comments').notNull().default('[]'),
+    excerpt: text('excerpt').notNull().default(''),
+    linked_block_id: text('linked_block_id'),
+    synced_at: bigint('synced_at', { mode: 'number' }).notNull(),
+    deleted_at: bigint('deleted_at', { mode: 'number' }),
+  },
+  (t) => [
+    primaryKey({ columns: [t.workspace_id, t.source, t.external_id] }),
+    index('idx_tasks_block').on(t.workspace_id, t.linked_block_id),
+  ],
+)
+
 // A workspace's binding to a self-hosted runner pool (mirror of D1 migration 0013):
 // the validated manifest + the encrypted scheduler-API secret bundle. The container
 // agent executor dispatches repo-operating jobs to this pool when one is registered.

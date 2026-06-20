@@ -16,6 +16,19 @@ many files and are otherwise slow to re-derive.
   non-worker package with a vitest setup, e.g. `integrations`) to verify pure-logic changes;
   the worker integration suite only runs cleanly on Linux/macOS.
 
+## Keep the runtimes symmetric
+
+**Any change to one runtime facade (`backend/runtimes/cloudflare` or
+`backend/runtimes/node`) MUST be accompanied by the symmetric change in every other
+runtime.** The two facades serve the same `@cat-factory/server` app behind the same
+kernel ports, so a new repository, port implementation, persisted table, migration,
+scheduled/cron task, gateway, or wiring added to one runtime has to land in the other
+too (D1 migration ⇄ Drizzle schema + a `pnpm db:generate` migration; a Cloudflare
+`scheduled` cron handler ⇄ a Node `setInterval` sweeper; a D1 repo ⇄ a Drizzle repo).
+The cross-runtime conformance suite (see "Multi-runtime facades & cross-runtime
+conformance" below) exists to catch drift — add assertions there for any new shared
+behaviour so a facade that forgot the symmetric change fails a test instead of shipping.
+
 ## Layout
 
 One pnpm workspace (single root lockfile). Packages are sorted by visibility:

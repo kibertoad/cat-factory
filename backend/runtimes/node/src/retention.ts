@@ -1,5 +1,13 @@
-import type { Clock, LlmCallMetricRepository, TokenUsageRepository } from '@cat-factory/kernel'
+import type {
+  Clock,
+  LlmCallMetricRepository,
+  PipelineScheduleRepository,
+  TokenUsageRepository,
+} from '@cat-factory/kernel'
 import type { Logger, RetentionConfig } from '@cat-factory/server'
+
+/** Recurring-pipeline run history is kept ~1 week (the inspector's window). */
+export const SCHEDULE_RUN_RETENTION_MS = 7 * 24 * 60 * 60 * 1000
 
 // Retention sweep for the Node facade's unbounded tables. The Worker prunes these from
 // its every-2-min cron (see the Worker's `sweepRetention`); the Node service has no
@@ -13,12 +21,14 @@ import type { Logger, RetentionConfig } from '@cat-factory/server'
 export interface RetentionRepos {
   tokenUsageRepository: Pick<TokenUsageRepository, 'deleteOlderThan'>
   llmCallMetricRepository: Pick<LlmCallMetricRepository, 'deleteOlderThan'>
+  pipelineScheduleRepository: Pick<PipelineScheduleRepository, 'pruneRunsBefore'>
 }
 
 /** Rows reclaimed from each table, for logging. */
 export interface RetentionResult {
   tokenUsage: number
   llmCallMetrics: number
+  scheduleRuns: number
 }
 
 /**
@@ -55,6 +65,10 @@ export async function sweepRetention(
     llmCallMetrics: await prune(retention.llmCallMetricsMs, now, (c) =>
       repos.llmCallMetricRepository.deleteOlderThan(c),
     ),
+    // Fixed ~1-week window (not part of the configurable retention policy).
+    scheduleRuns: await prune(SCHEDULE_RUN_RETENTION_MS, now, (c) =>
+      repos.pipelineScheduleRepository.pruneRunsBefore(c),
+    ),
   }
 }
 
@@ -72,9 +86,13 @@ export function startRetentionSweeper(
 ): () => void {
   const tick = async () => {
     try {
-      const { tokenUsage, llmCallMetrics } = await sweepRetention(repos, retention, clock.now())
-      if (tokenUsage > 0 || llmCallMetrics > 0) {
-        log.info({ tokenUsage, llmCallMetrics }, 'retention sweep reclaimed rows')
+      const { tokenUsage, llmCallMetrics, scheduleRuns } = await sweepRetention(
+        repos,
+        retention,
+        clock.now(),
+      )
+      if (tokenUsage > 0 || llmCallMetrics > 0 || scheduleRuns > 0) {
+        log.info({ tokenUsage, llmCallMetrics, scheduleRuns }, 'retention sweep reclaimed rows')
       }
     } catch (error) {
       log.error(

@@ -3,12 +3,16 @@ import {
   HttpRunnerPoolProvider,
   RunnerPoolConnectionService,
   RunnerPoolTransport,
+  TicketTrackerService,
+  createGitHubIssueViaToken,
 } from '@cat-factory/integrations'
 import type {
   AgentExecutor,
   BlockRepository,
   Clock,
   GitHubInstallationRepository,
+  TaskConnectionRepository,
+  TaskSourceProvider,
 } from '@cat-factory/kernel'
 import { type CoreDependencies, createCore } from '@cat-factory/orchestration'
 import {
@@ -36,7 +40,9 @@ import {
   DrizzleRunnerPoolConnectionRepository,
 } from './repositories/containerExecution.js'
 import { createDrizzleRepositories } from './repositories/drizzle.js'
+import { DrizzleTaskConnectionRepository, DrizzleTaskRepository } from './repositories/tasks.js'
 import { CryptoIdGenerator, SystemClock } from './runtime.js'
+import { JiraProvider } from './tasks/JiraProvider.js'
 
 // HKDF domain tag separating runner-pool scheduler secrets from any other use of
 // the same master key (mirrors the Worker's `cat-factory:runners`).
@@ -173,6 +179,76 @@ function buildNodeContainerExecutor(
   })
 }
 
+/** Files a GitHub issue for a service frame, or null when none can be resolved. */
+type GitHubIssueFiler = (request: {
+  workspaceId: string
+  frameId: string
+  title: string
+  body: string
+}) => Promise<{ externalId: string; url: string } | null>
+
+/**
+ * Build the GitHub-issue tracker filer for the tech-debt pipeline when the GitHub
+ * App is configured. It resolves the service's repo from the workspace's
+ * `github_repos` projection and mints a short-lived token from that workspace's OWN
+ * App installation (per-tenant) — the same infra the container executor uses — then
+ * files the issue via the token. Returns undefined when the App isn't configured (the
+ * GitHub tracker then passes through). A run whose service isn't linked to a repo
+ * resolves to null (a clean pass-through, not a run failure).
+ */
+function buildNodeGitHubIssueFiler(
+  env: NodeJS.ProcessEnv,
+  config: AppConfig,
+  db: DrizzleDb,
+  clock: Clock,
+  installationRepository: GitHubInstallationRepository,
+  blockRepository: BlockRepository,
+): GitHubIssueFiler | undefined {
+  const privateKeyPem = env.GITHUB_APP_PRIVATE_KEY?.trim()
+  if (!config.github.enabled || !privateKeyPem) return undefined
+
+  const registry = new GitHubAppRegistry({
+    default: {
+      appId: config.github.appId,
+      auth: new GitHubAppAuth({
+        appId: config.github.appId,
+        privateKeyPem,
+        installationRepository,
+        clock,
+        apiBase: config.github.apiBase,
+      }),
+    },
+    installationRepository,
+  })
+  const resolveRepoTarget = buildResolveRepoTarget({
+    installationRepository,
+    repoProjectionRepository: new DrizzleRepoProjectionRepository(db),
+    blockRepository,
+  })
+
+  return async (request) => {
+    let repo: Awaited<ReturnType<typeof resolveRepoTarget>>
+    try {
+      repo = await resolveRepoTarget(request.workspaceId, request.frameId)
+    } catch {
+      // The service isn't linked to a repo — nothing to file against; pass through.
+      return null
+    }
+    if (!repo) return null
+    const token = await registry.installationToken(repo.installationId)
+    const issue = await createGitHubIssueViaToken({
+      fetchImpl: fetch,
+      token,
+      owner: repo.owner,
+      repo: repo.name,
+      title: request.title,
+      body: request.body,
+      apiBase: config.github.apiBase,
+    })
+    return { externalId: `${repo.owner}/${repo.name}#${issue.number}`, url: issue.url }
+  }
+}
+
 /**
  * The Node composition root: assemble the framework-agnostic domain `Core` with
  * Drizzle/Postgres repositories + Node implementations of the runtime ports, then
@@ -205,6 +281,12 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     resolveWorkspaceModelDefault,
   })
 
+  // Task-source integration (Jira). Opt-in via TASKS_ENABLED + TASKS_ENCRYPTION_KEY;
+  // tenants connect their own Jira site through the UI and the credentials are stored
+  // per-workspace, encrypted at rest. The tracker resolves each workspace's own
+  // credentials from this same store (multi-tenant), mirroring the Cloudflare facade.
+  const tasks = selectNodeTasksDeps(config, options.db)
+
   // Persistence the container-execution path needs (built from the same db). The
   // runner-pool repo also backs the `runners` Core module so a pool is registrable
   // via the API; the installation repo backs both token minting and repo resolution.
@@ -232,6 +314,18 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   // route to the container (and fail loudly when its prerequisites are unconfigured).
   const agentExecutor = new CompositeAgentExecutor(inline, container)
 
+  // GitHub-issue tracker: file the tech-debt pipeline's issue through the workspace's
+  // own GitHub App installation (per-tenant), resolving the service's repo from the
+  // github_repos projection — the same per-tenant infra the container executor uses.
+  const fileGitHubIssue = buildNodeGitHubIssueFiler(
+    env,
+    config,
+    options.db,
+    clock,
+    githubInstallationRepository,
+    repos.blockRepository,
+  )
+
   const dependencies: CoreDependencies = {
     workspaceRepository: repos.workspaceRepository,
     accountRepository: repos.accountRepository,
@@ -242,6 +336,31 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     tokenUsageRepository: repos.tokenUsageRepository,
     llmCallMetricRepository: repos.llmCallMetricRepository,
     modelDefaultsRepository: repos.modelDefaultsRepository,
+    ...tasks.deps,
+    // Recurring pipelines + the workspace tracker selection. The tracker provider
+    // files the tech-debt pipeline's issue by resolving the *workspace's* connected
+    // integration: GitHub issues through the workspace's GitHub App installation,
+    // Jira tickets from the per-workspace encrypted connection store — both per-tenant.
+    pipelineScheduleRepository: repos.pipelineScheduleRepository,
+    trackerSettingsRepository: repos.trackerSettingsRepository,
+    ticketTrackerProvider: new TicketTrackerService({
+      trackerSettingsRepository: repos.trackerSettingsRepository,
+      fetchImpl: fetch,
+      ...(fileGitHubIssue ? { fileGitHubIssue } : {}),
+      ...(tasks.taskConnectionRepository
+        ? {
+            resolveJiraConnection: async (workspaceId) => {
+              const connection = await tasks.taskConnectionRepository!.getByWorkspace(
+                workspaceId,
+                'jira',
+              )
+              const { baseUrl, accountEmail, apiToken } = connection?.credentials ?? {}
+              if (!baseUrl || !accountEmail || !apiToken) return null
+              return { baseUrl, accountEmail, apiToken }
+            },
+          }
+        : {}),
+    }),
     idGenerator,
     clock,
     agentExecutor,
@@ -268,5 +387,40 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     config,
     agentRunRepository: repos.agentRunRepository,
     gateways: createNodeGateways(env),
+  }
+}
+
+/**
+ * Wire the task-source integration for the Node facade when it is enabled (the
+ * `tasks` module then assembles so tenants can connect Jira through the existing
+ * UI). Returns the `CoreDependencies` fragment plus the connection repository so the
+ * tracker can resolve each workspace's Jira credentials from the same store.
+ * Disabled → `{ deps: {} }` and both the tasks module and the Jira tracker stay off.
+ */
+function selectNodeTasksDeps(
+  config: AppConfig,
+  db: DrizzleDb,
+): { deps: Partial<CoreDependencies>; taskConnectionRepository?: TaskConnectionRepository } {
+  if (!config.tasks.enabled || !config.tasks.encryptionKey) return { deps: {} }
+  const providers: TaskSourceProvider[] = []
+  if (config.tasks.sources.includes('jira')) providers.push(new JiraProvider())
+  if (providers.length === 0) return { deps: {} }
+
+  const taskConnectionRepository = new DrizzleTaskConnectionRepository(
+    db,
+    // Source credentials are encrypted at rest under a tasks-scoped HKDF info (the
+    // same domain the Cloudflare facade uses), keyed by TASKS_ENCRYPTION_KEY.
+    new WebCryptoSecretCipher({
+      masterKeyBase64: config.tasks.encryptionKey,
+      info: 'cat-factory:tasks',
+    }),
+  )
+  return {
+    deps: {
+      taskSourceProviders: providers,
+      taskConnectionRepository,
+      taskRepository: new DrizzleTaskRepository(db),
+    },
+    taskConnectionRepository,
   }
 }

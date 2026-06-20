@@ -268,6 +268,16 @@ export interface GitHubClient {
     ref: GitHubRepoRef,
     input: CommitFilesInput,
   ): Promise<CommitFilesResult>
+  /**
+   * Create an issue. Used by the recurring tech-debt pipeline's `tracker` step to
+   * file the issue it raises before implementation. Returns the new issue's number
+   * and canonical web URL.
+   */
+  createIssue(
+    installationId: number,
+    ref: GitHubRepoRef,
+    input: { title: string; body: string },
+  ): Promise<{ number: number; url: string }>
   openPullRequest(
     installationId: number,
     ref: GitHubRepoRef,

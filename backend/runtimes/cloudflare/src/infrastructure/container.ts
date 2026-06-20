@@ -10,7 +10,7 @@ import {
   type WorkRunner,
 } from '@cat-factory/kernel'
 import { AiAgentExecutor, resolveAgentConfig } from '@cat-factory/agents'
-import { RunnerPoolConnectionService } from '@cat-factory/integrations'
+import { RunnerPoolConnectionService, TicketTrackerService } from '@cat-factory/integrations'
 import { type CoreDependencies, createCore } from '@cat-factory/orchestration'
 import {
   buildResolveRepoTarget as buildSharedResolveRepoTarget,
@@ -68,6 +68,8 @@ import { D1RepoBlueprintRepository } from './repositories/D1RepoBlueprintReposit
 import { D1RequirementReviewRepository } from './repositories/D1RequirementReviewRepository'
 import { D1NotificationRepository } from './repositories/D1NotificationRepository'
 import { D1MergePresetRepository } from './repositories/D1MergePresetRepository'
+import { D1PipelineScheduleRepository } from './repositories/D1PipelineScheduleRepository'
+import { D1TrackerSettingsRepository } from './repositories/D1TrackerSettingsRepository'
 import { D1ModelDefaultsRepository } from './repositories/D1ModelDefaultsRepository'
 import { InAppNotificationChannel } from './events/InAppNotificationChannel'
 import { GitHubCiStatusProvider } from './github/GitHubCiStatusProvider'
@@ -350,6 +352,74 @@ function selectMergeLifecycleDeps(
     })
   }
   return deps
+}
+
+/**
+ * Wire the recurring-pipeline + issue-tracker ports. The schedule + tracker-setting
+ * repositories are always available (the feature is workspace-scoped CRUD); the
+ * `ticketTrackerProvider` files the tech-debt pipeline's issue and degrades
+ * gracefully — it files GitHub issues only when the App is configured (so it can
+ * resolve the service's repo + mint a token) and Jira only when the tasks
+ * integration's encryption key is set (so it can read the workspace's stored Jira
+ * credentials). With neither, the `tracker` step passes through.
+ */
+function selectRecurringDeps(
+  env: Env,
+  config: AppConfig,
+  db: D1Database,
+  clock: Clock,
+  idGenerator: IdGenerator,
+): Partial<CoreDependencies> {
+  const trackerDeps: ConstructorParameters<typeof TicketTrackerService>[0] = {
+    trackerSettingsRepository: new D1TrackerSettingsRepository({ db }),
+    // workerd exposes a global fetch; the Jira create call uses it.
+    fetchImpl: fetch,
+  }
+  // GitHub issues: file through the App-authenticated client against the service's
+  // linked repo (resolved from the github_repos projection). Only when the App is configured.
+  if (config.github.enabled && env.GITHUB_APP_PRIVATE_KEY) {
+    const registry = buildAppRegistry(env, config, db, clock)
+    const githubClient = new FetchGitHubClient({
+      registry,
+      rateLimitRepository: new D1RateLimitRepository({ db, idGenerator }),
+      idGenerator,
+      clock,
+      apiBase: config.github.apiBase,
+    })
+    const resolveRepoTarget = buildResolveRepoTarget(db)
+    trackerDeps.fileGitHubIssue = async (request) => {
+      const repo = await resolveRepoTarget(request.workspaceId, request.frameId)
+      if (!repo) return null
+      const issue = await githubClient.createIssue(
+        repo.installationId,
+        { owner: repo.owner, repo: repo.name },
+        { title: request.title, body: request.body },
+      )
+      return { externalId: `${repo.owner}/${repo.name}#${issue.number}`, url: issue.url }
+    }
+  }
+  // Jira: read the workspace's stored connection credentials (when the tasks
+  // integration's encryption key is configured).
+  if (config.tasks.encryptionKey) {
+    const taskConnectionRepository = new D1TaskConnectionRepository({
+      db,
+      cipher: new WebCryptoSecretCipher({
+        masterKeyBase64: config.tasks.encryptionKey,
+        info: 'cat-factory:tasks',
+      }),
+    })
+    trackerDeps.resolveJiraConnection = async (workspaceId) => {
+      const connection = await taskConnectionRepository.getByWorkspace(workspaceId, 'jira')
+      const { baseUrl, accountEmail, apiToken } = connection?.credentials ?? {}
+      if (!baseUrl || !accountEmail || !apiToken) return null
+      return { baseUrl, accountEmail, apiToken }
+    }
+  }
+  return {
+    pipelineScheduleRepository: new D1PipelineScheduleRepository({ db }),
+    trackerSettingsRepository: new D1TrackerSettingsRepository({ db }),
+    ticketTrackerProvider: new TicketTrackerService(trackerDeps),
+  }
 }
 
 function buildContainerExecutor(
@@ -822,6 +892,7 @@ export function buildContainer(env: Env, overrides: Partial<CoreDependencies> = 
     repoScanner: selectRepoScanner(env, config, db, clock),
     ...selectGitHubDeps(env, config, db, clock, idGenerator),
     ...selectMergeLifecycleDeps(env, config, db, clock, idGenerator),
+    ...selectRecurringDeps(env, config, db, clock, idGenerator),
     ...selectDocumentsDeps(env, config, db, clock, idGenerator),
     ...selectTasksDeps(env, config, db, clock, idGenerator),
     ...selectRequirementsDeps(env, config, db),

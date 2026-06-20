@@ -20,6 +20,8 @@ import { modelController } from './modules/models/ModelController.js'
 import { notificationController } from './modules/notifications/NotificationController.js'
 import { pipelineController } from './modules/pipelines/PipelineController.js'
 import { promptFragmentController } from './modules/promptFragments/PromptFragmentController.js'
+import { recurringPipelineController } from './modules/recurring/RecurringPipelineController.js'
+import { trackerSettingsController } from './modules/recurring/TrackerSettingsController.js'
 import { requirementReviewController } from './modules/requirements/RequirementReviewController.js'
 import { runnerPoolController } from './modules/runners/RunnerPoolController.js'
 import { taskSourceController } from './modules/tasks/TaskSourceController.js'
@@ -64,6 +66,8 @@ export function registerCoreControllers<E extends AppEnv>(app: Hono<E>): void {
   app.route('/workspaces/:workspaceId', notificationController())
   app.route('/workspaces/:workspaceId', mergePresetController())
   app.route('/workspaces/:workspaceId', modelDefaultsController())
+  app.route('/workspaces/:workspaceId', recurringPipelineController())
+  app.route('/workspaces/:workspaceId', trackerSettingsController())
   app.route('/workspaces/:workspaceId', fragmentLibraryController('workspace'))
   app.route('/workspaces/:workspaceId', githubController())
   // GitHub-facing (webhooks + setup callback); not workspace-scoped.

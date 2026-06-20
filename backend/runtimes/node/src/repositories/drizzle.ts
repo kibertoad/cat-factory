@@ -20,10 +20,18 @@ import type {
   LlmPromptChainTip,
   Pipeline,
   PipelineRepository,
+  PipelineSchedule,
+  PipelineScheduleRepository,
+  DueSchedule,
+  Recurrence,
   RunRef,
+  ScheduleRun,
+  ScheduleTemplate,
   TokenUsageRecord,
   TokenUsageRepository,
   TokenUsageTotals,
+  TrackerSettings,
+  TrackerSettingsRepository,
   Workspace,
   WorkspaceRepository,
   WorkspaceVisibility,
@@ -46,8 +54,11 @@ import {
   blocks,
   llmCallMetrics,
   memberships,
+  pipelineScheduleRuns,
+  pipelineSchedules,
   pipelines,
   tokenUsage,
+  trackerSettings,
   workspaceModelDefaults,
   workspaces,
 } from '../db/schema.js'
@@ -711,6 +722,239 @@ class DrizzleModelDefaultsRepository implements ModelDefaultsRepository {
   }
 }
 
+type ScheduleRow = typeof pipelineSchedules.$inferSelect
+type RunRow = typeof pipelineScheduleRuns.$inferSelect
+
+function rowToSchedule(row: ScheduleRow): PipelineSchedule {
+  const recurrence: Recurrence = {
+    intervalHours: row.interval_hours,
+    weekdays: safeWeekdays(row.weekdays),
+    windowStartHour: row.window_start_hour,
+    windowEndHour: row.window_end_hour,
+    timezone: row.timezone,
+  }
+  return {
+    id: row.id,
+    blockId: row.block_id,
+    frameId: row.frame_id,
+    pipelineId: row.pipeline_id,
+    template: row.template as ScheduleTemplate,
+    name: row.name,
+    recurrence,
+    enabled: row.enabled === 1,
+    lastRunAt: row.last_run_at,
+    nextRunAt: row.next_run_at,
+    createdAt: row.created_at,
+  }
+}
+
+function safeWeekdays(value: string): number[] {
+  try {
+    const parsed = JSON.parse(value)
+    return Array.isArray(parsed) ? parsed.filter((n) => typeof n === 'number') : []
+  } catch {
+    return []
+  }
+}
+
+function rowToRun(row: RunRow): ScheduleRun {
+  return {
+    id: row.id,
+    scheduleId: row.schedule_id,
+    executionId: row.execution_id,
+    status: row.status as ScheduleRun['status'],
+    startedAt: row.started_at,
+    finishedAt: row.finished_at,
+    outcome: row.outcome,
+  }
+}
+
+class DrizzlePipelineScheduleRepository implements PipelineScheduleRepository {
+  constructor(private readonly db: DrizzleDb) {}
+
+  private values(workspaceId: string, schedule: PipelineSchedule) {
+    const r = schedule.recurrence
+    return {
+      workspace_id: workspaceId,
+      id: schedule.id,
+      block_id: schedule.blockId,
+      frame_id: schedule.frameId,
+      pipeline_id: schedule.pipelineId,
+      template: schedule.template,
+      name: schedule.name,
+      interval_hours: r.intervalHours,
+      weekdays: JSON.stringify(r.weekdays),
+      window_start_hour: r.windowStartHour,
+      window_end_hour: r.windowEndHour,
+      timezone: r.timezone,
+      enabled: schedule.enabled ? 1 : 0,
+      last_run_at: schedule.lastRunAt,
+      next_run_at: schedule.nextRunAt,
+      created_at: schedule.createdAt,
+    }
+  }
+
+  async get(workspaceId: string, id: string): Promise<PipelineSchedule | null> {
+    const [row] = await this.db
+      .select()
+      .from(pipelineSchedules)
+      .where(and(eq(pipelineSchedules.workspace_id, workspaceId), eq(pipelineSchedules.id, id)))
+    return row ? rowToSchedule(row) : null
+  }
+
+  async getByBlock(workspaceId: string, blockId: string): Promise<PipelineSchedule | null> {
+    const [row] = await this.db
+      .select()
+      .from(pipelineSchedules)
+      .where(
+        and(
+          eq(pipelineSchedules.workspace_id, workspaceId),
+          eq(pipelineSchedules.block_id, blockId),
+        ),
+      )
+    return row ? rowToSchedule(row) : null
+  }
+
+  async list(workspaceId: string): Promise<PipelineSchedule[]> {
+    const rows = await this.db
+      .select()
+      .from(pipelineSchedules)
+      .where(eq(pipelineSchedules.workspace_id, workspaceId))
+      .orderBy(pipelineSchedules.created_at)
+    return rows.map(rowToSchedule)
+  }
+
+  async listDue(asOf: number): Promise<DueSchedule[]> {
+    const rows = await this.db
+      .select()
+      .from(pipelineSchedules)
+      .where(and(eq(pipelineSchedules.enabled, 1), lt(pipelineSchedules.next_run_at, asOf + 1)))
+      .orderBy(pipelineSchedules.next_run_at)
+    return rows.map((row) => ({ workspaceId: row.workspace_id, schedule: rowToSchedule(row) }))
+  }
+
+  async upsert(workspaceId: string, schedule: PipelineSchedule): Promise<void> {
+    const values = this.values(workspaceId, schedule)
+    await this.db
+      .insert(pipelineSchedules)
+      .values(values)
+      .onConflictDoUpdate({
+        target: [pipelineSchedules.workspace_id, pipelineSchedules.id],
+        set: {
+          block_id: values.block_id,
+          frame_id: values.frame_id,
+          pipeline_id: values.pipeline_id,
+          template: values.template,
+          name: values.name,
+          interval_hours: values.interval_hours,
+          weekdays: values.weekdays,
+          window_start_hour: values.window_start_hour,
+          window_end_hour: values.window_end_hour,
+          timezone: values.timezone,
+          enabled: values.enabled,
+          last_run_at: values.last_run_at,
+          next_run_at: values.next_run_at,
+        },
+      })
+  }
+
+  async remove(workspaceId: string, id: string): Promise<void> {
+    await this.db
+      .delete(pipelineSchedules)
+      .where(and(eq(pipelineSchedules.workspace_id, workspaceId), eq(pipelineSchedules.id, id)))
+  }
+
+  async insertRun(workspaceId: string, run: ScheduleRun): Promise<void> {
+    await this.db.insert(pipelineScheduleRuns).values({
+      workspace_id: workspaceId,
+      id: run.id,
+      schedule_id: run.scheduleId,
+      execution_id: run.executionId,
+      status: run.status,
+      started_at: run.startedAt,
+      finished_at: run.finishedAt,
+      outcome: run.outcome,
+    })
+  }
+
+  async updateRun(
+    workspaceId: string,
+    runId: string,
+    patch: Partial<Pick<ScheduleRun, 'status' | 'finishedAt' | 'outcome' | 'executionId'>>,
+  ): Promise<void> {
+    const set: Record<string, unknown> = {}
+    if (patch.status !== undefined) set.status = patch.status
+    if (patch.finishedAt !== undefined) set.finished_at = patch.finishedAt
+    if (patch.outcome !== undefined) set.outcome = patch.outcome
+    if (patch.executionId !== undefined) set.execution_id = patch.executionId
+    if (Object.keys(set).length === 0) return
+    await this.db
+      .update(pipelineScheduleRuns)
+      .set(set)
+      .where(
+        and(eq(pipelineScheduleRuns.workspace_id, workspaceId), eq(pipelineScheduleRuns.id, runId)),
+      )
+  }
+
+  async listRuns(workspaceId: string, scheduleId: string): Promise<ScheduleRun[]> {
+    const rows = await this.db
+      .select()
+      .from(pipelineScheduleRuns)
+      .where(
+        and(
+          eq(pipelineScheduleRuns.workspace_id, workspaceId),
+          eq(pipelineScheduleRuns.schedule_id, scheduleId),
+        ),
+      )
+      .orderBy(desc(pipelineScheduleRuns.started_at))
+    return rows.map(rowToRun)
+  }
+
+  async pruneRunsBefore(before: number): Promise<number> {
+    const rows = await this.db
+      .delete(pipelineScheduleRuns)
+      .where(lt(pipelineScheduleRuns.started_at, before))
+      .returning({ id: pipelineScheduleRuns.id })
+    return rows.length
+  }
+}
+
+class DrizzleTrackerSettingsRepository implements TrackerSettingsRepository {
+  constructor(private readonly db: DrizzleDb) {}
+
+  async get(workspaceId: string): Promise<TrackerSettings | null> {
+    const [row] = await this.db
+      .select()
+      .from(trackerSettings)
+      .where(eq(trackerSettings.workspace_id, workspaceId))
+    if (!row) return null
+    return {
+      tracker: (row.tracker as TrackerSettings['tracker']) ?? null,
+      jiraProjectKey: row.jira_project_key,
+      updatedAt: row.updated_at,
+    }
+  }
+
+  async put(workspaceId: string, settings: TrackerSettings): Promise<void> {
+    await this.db
+      .insert(trackerSettings)
+      .values({
+        workspace_id: workspaceId,
+        tracker: settings.tracker,
+        jira_project_key: settings.jiraProjectKey,
+        updated_at: settings.updatedAt,
+      })
+      .onConflictDoUpdate({
+        target: trackerSettings.workspace_id,
+        set: {
+          tracker: settings.tracker,
+          jira_project_key: settings.jiraProjectKey,
+          updated_at: settings.updatedAt,
+        },
+      })
+  }
+}
+
 export interface CoreRepositories {
   workspaceRepository: WorkspaceRepository
   accountRepository: AccountRepository
@@ -722,6 +966,8 @@ export interface CoreRepositories {
   llmCallMetricRepository: LlmCallMetricRepository
   agentRunRepository: AgentRunRepository
   modelDefaultsRepository: ModelDefaultsRepository
+  pipelineScheduleRepository: PipelineScheduleRepository
+  trackerSettingsRepository: TrackerSettingsRepository
 }
 
 /** Build the Drizzle/Postgres-backed core repositories. */
@@ -737,5 +983,7 @@ export function createDrizzleRepositories(db: DrizzleDb, clock: Clock): CoreRepo
     llmCallMetricRepository: new DrizzleLlmCallMetricRepository(db),
     agentRunRepository: new DrizzleAgentRunRepository(db),
     modelDefaultsRepository: new DrizzleModelDefaultsRepository(db),
+    pipelineScheduleRepository: new DrizzlePipelineScheduleRepository(db),
+    trackerSettingsRepository: new DrizzleTrackerSettingsRepository(db),
   }
 }

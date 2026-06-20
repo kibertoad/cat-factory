@@ -37,8 +37,11 @@ import type {
   ModelDefaultsRepository,
   NotificationChannel,
   NotificationRepository,
+  PipelineScheduleRepository,
   PullRequestMerger,
   PullRequestMergeabilityProvider,
+  TicketTrackerProvider,
+  TrackerSettingsRepository,
 } from '@cat-factory/kernel'
 import type { SecretCipher } from '@cat-factory/kernel'
 import type { FragmentSourceRepository, PromptFragmentRepository } from '@cat-factory/kernel'
@@ -86,6 +89,8 @@ import { RequirementReviewService } from './modules/requirements/RequirementRevi
 import { NotificationService } from './modules/notifications/NotificationService.js'
 import { MergePresetService } from './modules/merge/MergePresetService.js'
 import { ModelDefaultsService } from './modules/modelDefaults/ModelDefaultsService.js'
+import { RecurringPipelineService } from './modules/recurring/RecurringPipelineService.js'
+import { TrackerSettingsService } from './modules/recurring/TrackerSettingsService.js'
 import { BLUEPRINT_PIPELINE_ID } from '@cat-factory/kernel'
 import {
   FragmentLibraryService,
@@ -314,6 +319,18 @@ export interface CoreDependencies {
    * routing is used everywhere.
    */
   modelDefaultsRepository?: ModelDefaultsRepository
+
+  // ---- Recurring pipelines + issue tracker (optional; wired when configured) -
+  // The recurring-pipeline feature (scheduled runs of a pipeline against a
+  // service) assembles when `pipelineScheduleRepository` is present. The
+  // tracker-settings feature (the workspace's GitHub/Jira selection) assembles
+  // when `trackerSettingsRepository` is present. `ticketTrackerProvider` is the
+  // write port the tech-debt pipeline's `tracker` step uses to file an issue;
+  // absent → that step passes through. All default-off so unconfigured facades and
+  // tests are unaffected.
+  pipelineScheduleRepository?: PipelineScheduleRepository
+  trackerSettingsRepository?: TrackerSettingsRepository
+  ticketTrackerProvider?: TicketTrackerProvider
 }
 
 /** The GitHub integration's services, present only when the app is configured. */
@@ -387,6 +404,16 @@ export interface ModelDefaultsModule {
   service: ModelDefaultsService
 }
 
+/** The recurring-pipeline feature's service, present only when its repository is wired. */
+export interface RecurringModule {
+  service: RecurringPipelineService
+}
+
+/** The issue-tracker-settings feature's service, present only when its repository is wired. */
+export interface TrackerModule {
+  service: TrackerSettingsService
+}
+
 /** The prompt-fragment library's services, present only when configured (ADR 0006). */
 export interface FragmentLibraryModule {
   /** Per-tier CRUD + the merged-catalog resolver (also the run-path FragmentResolver). */
@@ -428,6 +455,10 @@ export interface Core {
   modelDefaults?: ModelDefaultsModule
   /** Present only when the prompt-fragment library is configured (see CoreDependencies). */
   fragmentLibrary?: FragmentLibraryModule
+  /** Present only when the recurring-pipeline repository is wired (see CoreDependencies). */
+  recurring?: RecurringModule
+  /** Present only when the tracker-settings repository is wired (see CoreDependencies). */
+  tracker?: TrackerModule
 }
 
 /**
@@ -827,6 +858,41 @@ function createModelDefaultsModule(deps: CoreDependencies): ModelDefaultsModule 
   return { service }
 }
 
+/** Assemble the tracker-settings module when its repository is present. */
+function createTrackerModule(deps: CoreDependencies): TrackerModule | undefined {
+  const { trackerSettingsRepository } = deps
+  if (!trackerSettingsRepository) return undefined
+  const service = new TrackerSettingsService({
+    trackerSettingsRepository,
+    workspaceRepository: deps.workspaceRepository,
+    clock: deps.clock,
+  })
+  return { service }
+}
+
+/**
+ * Assemble the recurring-pipeline module when its repository is present. Built
+ * after the execution engine since each fire starts a pipeline through it.
+ */
+function createRecurringModule(
+  deps: CoreDependencies,
+  executionService: ExecutionService,
+): RecurringModule | undefined {
+  const { pipelineScheduleRepository } = deps
+  if (!pipelineScheduleRepository) return undefined
+  const service = new RecurringPipelineService({
+    pipelineScheduleRepository,
+    workspaceRepository: deps.workspaceRepository,
+    pipelineRepository: deps.pipelineRepository,
+    blockRepository: deps.blockRepository,
+    executionRepository: deps.executionRepository,
+    executionService,
+    idGenerator: deps.idGenerator,
+    clock: deps.clock,
+  })
+  return { service }
+}
+
 export function createCore(dependencies: CoreDependencies): Core {
   const workRunner = dependencies.workRunner ?? new NoopWorkRunner()
   const executionEventPublisher = dependencies.executionEventPublisher ?? new NoopEventPublisher()
@@ -877,6 +943,7 @@ export function createCore(dependencies: CoreDependencies): Core {
     blueprintReconciler: boardScan?.service,
     notificationService: notifications?.service,
     llmObservability,
+    ticketTrackerProvider: dependencies.ticketTrackerProvider,
   })
 
   const github = createGitHubModule(dependencies)
@@ -889,6 +956,8 @@ export function createCore(dependencies: CoreDependencies): Core {
   const bootstrap = createBootstrapModule(dependencies, executionEventPublisher, (ws, blockId) =>
     executionService.start(ws, blockId, BLUEPRINT_PIPELINE_ID).then(() => undefined),
   )
+  const tracker = createTrackerModule(dependencies)
+  const recurring = createRecurringModule(dependencies, executionService)
 
   return {
     workspaceService,
@@ -910,5 +979,7 @@ export function createCore(dependencies: CoreDependencies): Core {
     ...(mergePresets ? { mergePresets } : {}),
     ...(modelDefaults ? { modelDefaults } : {}),
     ...(fragmentLibrary ? { fragmentLibrary } : {}),
+    ...(recurring ? { recurring } : {}),
+    ...(tracker ? { tracker } : {}),
   }
 }

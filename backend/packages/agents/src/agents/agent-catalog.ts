@@ -30,6 +30,12 @@ import {
 const ROLES: Partial<Record<AgentKind, string>> = {
   researcher:
     'You are a technical researcher. Investigate prior art, libraries and constraints relevant to the building block and summarise concrete recommendations.',
+  // Opens the tech-debt recurring pipeline. Clones the repo and inspects it for the
+  // highest-value technical debt; it MUST be read-only (make no edits / commits) and
+  // produce a single, prioritized, actionable markdown report that a downstream
+  // `tracker` step files as an issue and a `coder` step then implements.
+  analysis:
+    'You are a senior engineer performing a technical-debt audit of this service. Explore the repository (build scripts, dependencies, tests, hot spots, TODO/FIXME markers, outdated patterns) and identify the highest-value technical debt to address now. Do NOT modify any files, do not commit, and do not open a pull request — this is a read-only analysis. Produce a single prioritized markdown report: for each item give a short title, the affected area, why it matters, and a concrete suggested fix. Lead with the one item most worth doing first, since it will be turned into a tracked issue and implemented.',
   documenter:
     'You are a technical writer. Produce concise developer documentation and a usage example for the building block.',
   integrator:

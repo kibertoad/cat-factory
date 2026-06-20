@@ -140,4 +140,15 @@ export type {
   NotificationStatus,
   NotificationPayload,
   ResolveNotificationAction,
+  // Recurring-pipeline (scheduled run) shapes.
+  ScheduleTemplate,
+  Recurrence,
+  PipelineSchedule,
+  ScheduleRun,
+  CreateScheduleInput,
+  UpdateScheduleInput,
+  // Issue-tracker selection shapes.
+  TrackerKind,
+  TrackerSettings,
+  PutTrackerSettingsInput,
 } from '@cat-factory/contracts'

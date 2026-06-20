@@ -167,6 +167,31 @@ export function seedPipelines(): Pipeline[] {
       name: 'Integrate & ship',
       agentKinds: ['integrator', 'tester', 'documenter'],
     },
+    // Recurring-pipeline presets. "Dependency updates" is a plain implement →
+    // review → merge run; "Tech debt" first runs a read-only `analysis` agent and
+    // a special `tracker` step (files a GitHub issue / Jira ticket from the
+    // analysis) before implementation. Both are picked when creating a recurring
+    // pipeline on a service.
+    {
+      id: 'pl_dep_update',
+      name: 'Dependency updates',
+      agentKinds: ['coder', 'blueprints', 'tester', 'reviewer', 'conflicts', 'ci', 'merger'],
+    },
+    {
+      id: 'pl_tech_debt',
+      name: 'Tech debt',
+      agentKinds: [
+        'analysis',
+        'tracker',
+        'coder',
+        'blueprints',
+        'tester',
+        'reviewer',
+        'conflicts',
+        'ci',
+        'merger',
+      ],
+    },
     // A blueprint-only pipeline, run after a bootstrap to create the initial
     // service map (and populate the board) from the freshly bootstrapped repo.
     { id: 'pl_blueprint', name: 'Map service', agentKinds: ['blueprints'] },
@@ -176,3 +201,7 @@ export function seedPipelines(): Pipeline[] {
 
 /** Pipeline id of the blueprint-only run kicked off after a successful bootstrap. */
 export const BLUEPRINT_PIPELINE_ID = 'pl_blueprint'
+
+/** Pipeline ids of the built-in recurring-pipeline presets. */
+export const DEP_UPDATE_PIPELINE_ID = 'pl_dep_update'
+export const TECH_DEBT_PIPELINE_ID = 'pl_tech_debt'

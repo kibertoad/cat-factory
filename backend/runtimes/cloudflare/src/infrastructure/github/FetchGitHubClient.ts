@@ -530,6 +530,20 @@ export class FetchGitHubClient implements GitHubClient {
     return gp.toPullRequestProjection(p, gp.pullRepoGithubId(p) ?? 0, this.deps.clock.now())
   }
 
+  async createIssue(
+    installationId: number,
+    ref: GitHubRepoRef,
+    input: { title: string; body: string },
+  ): Promise<{ number: number; url: string }> {
+    const { json } = await this.request(`/repos/${ref.owner}/${ref.repo}/issues`, {
+      installationId,
+      method: 'POST',
+      body: { title: input.title, body: input.body },
+    })
+    const issue = (json ?? {}) as { number?: number; html_url?: string }
+    return { number: issue.number ?? 0, url: issue.html_url ?? '' }
+  }
+
   async updatePullRequest(
     installationId: number,
     ref: GitHubRepoRef,

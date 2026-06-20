@@ -1,6 +1,7 @@
 import type { AgentModelConfig } from '@cat-factory/agents'
 import { effectiveCatalog, resolveModelRef } from '@cat-factory/kernel'
-import type { AppConfig } from '@cat-factory/server'
+import type { TaskSourceKind } from '@cat-factory/kernel'
+import type { AppConfig, TasksConfig } from '@cat-factory/server'
 import { DEFAULT_SPEND_PRICING } from '@cat-factory/spend'
 
 // Translate the Node process environment into the shared AppConfig contract. This is
@@ -23,6 +24,29 @@ function csv(value: string | undefined): string[] {
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean)
+}
+
+// Node only ships the runtime-neutral Jira provider today; GitHub Issues need the
+// per-tenant GitHub App installation infra, wired separately.
+const NODE_TASK_SOURCES: readonly TaskSourceKind[] = ['jira']
+
+/**
+ * Task-source integration config, mirroring the Worker's `loadTasksConfig`: opt-in,
+ * fail-closed on encryption (no plaintext credential fallback). Enabled when
+ * `TASKS_ENABLED=true` and a `TASKS_ENCRYPTION_KEY` is present; `TASK_SOURCES`
+ * narrows the registered providers (defaults to all Node-supported sources).
+ */
+function loadTasksConfig(env: NodeJS.ProcessEnv): TasksConfig {
+  const requested = csv(env.TASK_SOURCES).map((s) => s.toLowerCase())
+  const sources =
+    requested.length > 0
+      ? NODE_TASK_SOURCES.filter((s) => requested.includes(s))
+      : [...NODE_TASK_SOURCES]
+  return {
+    enabled: env.TASKS_ENABLED === 'true' && !!env.TASKS_ENCRYPTION_KEY?.trim(),
+    sources: sources.length > 0 ? sources : [...NODE_TASK_SOURCES],
+    encryptionKey: env.TASKS_ENCRYPTION_KEY?.trim(),
+  }
 }
 
 export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
@@ -133,7 +157,7 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
       }),
     },
     documents: { enabled: false, sources: [], planner: 'headings' },
-    tasks: { enabled: false, sources: [] },
+    tasks: loadTasksConfig(env),
     environments: { enabled: false },
     runners: runnersEncryptionKey
       ? { enabled: true, encryptionKey: runnersEncryptionKey }

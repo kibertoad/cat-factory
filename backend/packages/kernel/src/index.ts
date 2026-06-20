@@ -26,7 +26,13 @@ export {
   effectiveCatalog,
   resolveModelRef,
 } from './domain/models.js'
-export { seedBlocks, seedPipelines, BLUEPRINT_PIPELINE_ID } from './domain/seed.js'
+export {
+  seedBlocks,
+  seedPipelines,
+  BLUEPRINT_PIPELINE_ID,
+  DEP_UPDATE_PIPELINE_ID,
+  TECH_DEBT_PIPELINE_ID,
+} from './domain/seed.js'
 // Installation-level extension point for predefined pipelines (mirrors the custom
 // agent-kind / model-provider registry seams): a deployment registers extra pipelines at
 // startup and `seedPipelines()` seeds them into every new workspace.

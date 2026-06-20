@@ -3,6 +3,9 @@ import type {
   ExecutionInstance,
   ModelDefaults,
   Pipeline,
+  PipelineSchedule,
+  ScheduleRun,
+  TrackerSettings,
   Workspace,
   WorkspaceSnapshot,
 } from '@cat-factory/kernel'
@@ -31,7 +34,7 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         expect(res.status).toBe(201)
         expect(res.body.workspace.name).toBe('My board')
         expect(res.body.blocks.find((b) => b.id === 'blk_auth')).toBeTruthy()
-        expect(res.body.pipelines).toHaveLength(4)
+        expect(res.body.pipelines).toHaveLength(6)
         expect(res.body.executions).toHaveLength(0)
       })
 
@@ -41,7 +44,7 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
 
         expect(res.body.blocks).toHaveLength(0)
         // The pipeline catalog is product config, not sample data — always present.
-        expect(res.body.pipelines).toHaveLength(4)
+        expect(res.body.pipelines).toHaveLength(6)
       })
 
       it('lists and deletes boards', async () => {
@@ -329,6 +332,123 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         expect(step.approval?.status).toBe('pending')
         expect(step.approval?.proposal).toBe(step.output)
         expect(exec.steps[1]!.state).toBe('pending')
+      })
+    })
+
+    describe('recurring pipelines', () => {
+      const recurrence = {
+        intervalHours: 24,
+        weekdays: [] as number[],
+        windowStartHour: null,
+        windowEndHour: null,
+        timezone: 'UTC',
+      }
+
+      it('creates a schedule with a reused block and surfaces it on the snapshot', async () => {
+        const app = harness.makeApp()
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        const created = await app.call<PipelineSchedule>(
+          'POST',
+          `/workspaces/${wsId}/recurring-pipelines`,
+          { frameId: 'blk_auth', pipelineId: 'pl_dep_update', name: 'Weekly deps', recurrence },
+        )
+        expect(created.status).toBe(201)
+        expect(created.body.frameId).toBe('blk_auth')
+        expect(created.body.nextRunAt).toBeGreaterThan(0)
+
+        // The schedule materialised a reused task block under the service frame.
+        const snapshot = await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+        const block = snapshot.body.blocks.find((b) => b.id === created.body.blockId)
+        expect(block?.parentId).toBe('blk_auth')
+        expect(block?.level).toBe('task')
+        expect(snapshot.body.recurringPipelines?.map((s) => s.id)).toContain(created.body.id)
+
+        // Listing + deletion (which removes the reused block too).
+        const list = await app.call<PipelineSchedule[]>(
+          'GET',
+          `/workspaces/${wsId}/recurring-pipelines`,
+        )
+        expect(list.body).toHaveLength(1)
+        const del = await app.call(
+          'DELETE',
+          `/workspaces/${wsId}/recurring-pipelines/${created.body.id}`,
+        )
+        expect(del.status).toBe(204)
+        const after = await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+        expect(after.body.blocks.find((b) => b.id === created.body.blockId)).toBeUndefined()
+      })
+
+      it('run-now starts an execution on the reused block and records run history', async () => {
+        const app = harness.makeApp({ confidence: 1 })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        // A single-step inline pipeline keeps the run deterministic across runtimes.
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Recurring inline',
+          agentKinds: ['architect'],
+        })
+        const created = await app.call<PipelineSchedule>(
+          'POST',
+          `/workspaces/${wsId}/recurring-pipelines`,
+          { frameId: 'blk_auth', pipelineId: pipeline.body.id, name: 'Nightly', recurrence },
+        )
+
+        const fired = await app.call(
+          'POST',
+          `/workspaces/${wsId}/recurring-pipelines/${created.body.id}/run-now`,
+        )
+        expect(fired.status).toBe(200)
+
+        // A running history row pointing at a real execution on the schedule's block.
+        const running = await app.call<ScheduleRun[]>(
+          'GET',
+          `/workspaces/${wsId}/recurring-pipelines/${created.body.id}/runs`,
+        )
+        expect(running.body).toHaveLength(1)
+        expect(running.body[0]!.executionId).toBeTruthy()
+
+        // Drive it to completion; the history (overlaid with live status) shows done.
+        const driven = await app.drive(wsId)
+        expect(driven.find((e) => e.blockId === created.body.blockId)?.status).toBe('done')
+        const done = await app.call<ScheduleRun[]>(
+          'GET',
+          `/workspaces/${wsId}/recurring-pipelines/${created.body.id}/runs`,
+        )
+        expect(done.body[0]!.status).toBe('done')
+
+        // A second run-now while the (now-finished) run exists still works; firing
+        // twice in a row never starts two concurrent runs on the same block.
+        const again = await app.call(
+          'POST',
+          `/workspaces/${wsId}/recurring-pipelines/${created.body.id}/run-now`,
+        )
+        expect(again.status).toBe(200)
+      })
+
+      it('reads and writes the workspace tracker selection', async () => {
+        const app = harness.makeApp()
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        const initial = await app.call<TrackerSettings>(
+          'GET',
+          `/workspaces/${wsId}/tracker-settings`,
+        )
+        expect(initial.status).toBe(200)
+        expect(initial.body.tracker).toBeNull()
+
+        const put = await app.call<TrackerSettings>('PUT', `/workspaces/${wsId}/tracker-settings`, {
+          tracker: 'jira',
+          jiraProjectKey: 'ENG',
+        })
+        expect(put.body.tracker).toBe('jira')
+        expect(put.body.jiraProjectKey).toBe('ENG')
+
+        const snapshot = await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+        expect(snapshot.body.trackerSettings?.tracker).toBe('jira')
       })
     })
   })
