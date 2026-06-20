@@ -24,6 +24,18 @@ export {
   type ContainerSession,
   type MintInput,
 } from './containers/ContainerSessionService.js'
+// Runtime-neutral container-agent execution machinery, shared by both facades: the
+// composite that routes repo-operating kinds to a sandbox, the container executor
+// that builds + dispatches the harness job, and the backend-polymorphic job client.
+export { CompositeAgentExecutor } from './agents/CompositeAgentExecutor.js'
+export {
+  ContainerAgentExecutor,
+  type ContainerAgentExecutorDependencies,
+  type RepoTarget,
+  type ResolveRepoTarget,
+  type MintInstallationToken,
+} from './agents/ContainerAgentExecutor.js'
+export { RunnerJobClient, type ResolveRunnerTransport } from './agents/RunnerJobClient.js'
 export { bearerToken, requireAuth, verifySession } from './auth/middleware.js'
 export { registerCoreControllers } from './app.js'
 export { mountAuthGate } from './http/authGate.js'
@@ -32,6 +44,19 @@ export { jsonBody } from './http/validation.js'
 export { handleError } from './http/errorHandler.js'
 export { parseAllowedOrigins, resolveCorsOrigin } from './http/cors.js'
 export { base64url, base64urlToBytes, pkcs8PemToDer, timingSafeEqual } from './crypto/encoding.js'
+// Runtime-neutral (Web Crypto) credential encryption + GitHub-App authentication,
+// shared by both facades so the Node service can mint installation tokens and
+// encrypt runner-pool secrets at rest exactly as the Worker does.
+export {
+  WebCryptoSecretCipher,
+  type WebCryptoSecretCipherOptions,
+} from './crypto/WebCryptoSecretCipher.js'
+export { GitHubAppAuth, type GitHubAppAuthDependencies } from './github/GitHubAppAuth.js'
+export {
+  GitHubAppRegistry,
+  type GitHubAppRegistryDependencies,
+  type RegisteredApp,
+} from './github/GitHubAppRegistry.js'
 export {
   HmacSigner,
   TOKEN_AUDIENCE,

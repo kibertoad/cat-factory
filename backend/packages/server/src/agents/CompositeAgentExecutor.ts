@@ -1,0 +1,133 @@
+import {
+  type AgentExecutor,
+  type AgentJobHandle,
+  type AgentJobUpdate,
+  type AgentRunContext,
+  type AgentRunResult,
+  type AsyncAgentExecutor,
+  isAsyncAgentExecutor,
+} from '@cat-factory/kernel'
+import { registeredKindRequiresContainer } from '@cat-factory/agents'
+
+// Routes each pipeline step to the right executor by agent kind. The kinds that
+// produce and commit files against a real checkout — implementation (`coder`),
+// the external-dependency mock builder (`mocker`), the Playwright e2e test
+// writer (`playwright`) and the business-logic documenter (`business-documenter`,
+// which reads the implementation and commits domain-rules docs) — run in a real
+// sandbox via the container executor; every other kind (architect, reviewer,
+// tester, the `acceptance` scenario writer, the `business-reviewer` that reports
+// on a change, custom) stays on the inline LLM executor. This keeps container
+// cost/latency to the phases that actually need a real workspace to operate on
+// repo contents, while pure design/review/analysis steps remain single-shot LLM
+// calls.
+//
+// There is deliberately NO inline fallback for the container kinds: a one-shot
+// LLM call cannot clone a repo, edit files, commit and open a PR, so routing an
+// implementer step to the inline executor produces plausible-looking text that is
+// silently useless. When no sandbox is wired (`container` is null), the container
+// kinds throw instead — the run fails loudly rather than pretending to succeed.
+//
+// Runtime-neutral: both the Cloudflare Worker and the Node service wire this
+// composite (inline `AiAgentExecutor` + a container executor backed by a
+// per-run Cloudflare Container or an org's self-hosted runner pool).
+
+/**
+ * Agent kinds that need a real checkout to operate on repo contents (clone,
+ * edit/commit files, open a PR) and so run in a container rather than inline:
+ * code implementation (`coder`), WireMock mock building (`mocker`), Playwright
+ * end-to-end test authoring (`playwright`) and business-logic documentation
+ * (`business-documenter`, which reads the code and commits the domain-rules docs).
+ */
+const CONTAINER_KINDS = new Set([
+  'coder',
+  'mocker',
+  'playwright',
+  'business-documenter',
+  // The Blueprinter step clones the repo, regenerates the in-repo `blueprints/`
+  // folder and commits it — a real-checkout operation, so it runs in a container.
+  'blueprints',
+  // The CI-fixer clones the PR head branch, runs the failing build/tests, fixes
+  // them and pushes back to the same branch — a real-checkout operation. (The `ci`
+  // step itself is NOT here: it is a special, non-agent gate handled in the engine
+  // that *dispatches* a `ci-fixer` job; only the fixer reaches this executor.)
+  'ci-fixer',
+  // The conflict-resolver clones the PR head branch, merges the base in and resolves
+  // the conflicts on the same branch — a real-checkout operation. (The `conflicts`
+  // gate itself is NOT here: like `ci` it is a non-agent engine gate that *dispatches*
+  // a `conflict-resolver` job; only the resolver reaches this executor.)
+  'conflict-resolver',
+  // The merger clones the PR head branch to assess the diff (complexity/risk/impact)
+  // before the engine decides whether to auto-merge — a real-checkout operation.
+  'merger',
+])
+
+export class CompositeAgentExecutor implements AsyncAgentExecutor {
+  constructor(
+    private readonly inline: AgentExecutor,
+    // null when no sandbox is wired — container kinds then fail loudly (see below)
+    // rather than silently degrading to a useless one-shot inline call.
+    private readonly container: AgentExecutor | null,
+  ) {}
+
+  /**
+   * The executor that handles a given step's kind. Container kinds REQUIRE a real
+   * sandbox: with none wired we throw rather than fall back to the inline executor,
+   * because a one-shot LLM call cannot operate on repo contents.
+   */
+  private pick(context: AgentRunContext): AgentExecutor {
+    // Built-in container kinds, plus any custom kind a deployment registered with
+    // `requiresContainer: true` (e.g. a proprietary org package contributing a
+    // repo-operating agent), need a real checkout; everything else runs inline.
+    const needsContainer =
+      CONTAINER_KINDS.has(context.agentKind) || registeredKindRequiresContainer(context.agentKind)
+    if (!needsContainer) return this.inline
+    if (!this.container) {
+      throw new Error(
+        `Agent kind '${context.agentKind}' needs a real checkout (clone/edit/commit/PR) ` +
+          'and cannot run as a one-shot LLM call. Its sandbox prerequisites must be wired: ' +
+          'a runner backend (the EXEC_CONTAINER binding on the Worker, or a registered ' +
+          'runner pool with RUNNERS_ENABLED), plus the GitHub App, the public proxy URL ' +
+          'and AUTH_SESSION_SECRET.',
+      )
+    }
+    return this.container
+  }
+
+  run(context: AgentRunContext): Promise<AgentRunResult> {
+    return this.pick(context).run(context)
+  }
+
+  /** Async only for container kinds whose executor actually supports polling. */
+  runsAsync(context: AgentRunContext): boolean {
+    const executor = this.pick(context)
+    return isAsyncAgentExecutor(executor) && executor.runsAsync(context)
+  }
+
+  startJob(context: AgentRunContext): Promise<AgentJobHandle> {
+    const executor = this.pick(context)
+    if (!isAsyncAgentExecutor(executor)) {
+      throw new Error(`No async executor for agent kind '${context.agentKind}'`)
+    }
+    return executor.startJob(context)
+  }
+
+  pollJob(handle: AgentJobHandle): Promise<AgentJobUpdate> {
+    // Only the container executor runs async jobs, so polls route there.
+    if (!this.container || !isAsyncAgentExecutor(this.container)) {
+      throw new Error('Container executor does not support async jobs')
+    }
+    return this.container.pollJob(handle)
+  }
+
+  /**
+   * Best-effort container reclaim. The engine narrows the composite (not the inner
+   * container executor) when stopping a run, so the composite must forward stopJob
+   * to the container — otherwise the Layer-2 reclaim silently no-ops and leaks a
+   * warm instance. Delegates only when a container that supports it is wired.
+   */
+  async stopJob(handle: AgentJobHandle): Promise<void> {
+    if (this.container && isAsyncAgentExecutor(this.container) && this.container.stopJob) {
+      await this.container.stopJob(handle)
+    }
+  }
+}

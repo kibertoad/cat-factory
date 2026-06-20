@@ -2,7 +2,11 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "rootDir": "src",
-    "outDir": "dist"
+    "outDir": "dist",
+    // The runner-pool transport (HttpRunnerPoolProvider) drives an org's scheduler
+    // over the Web-standard globals (fetch, AbortSignal, URLSearchParams, btoa),
+    // available on both workerd and Node — so type against them, as @cat-factory/server does.
+    "lib": ["ES2022", "DOM", "DOM.Iterable"]
   },
   "include": ["src/**/*.ts"]
 }
