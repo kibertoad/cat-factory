@@ -41,13 +41,15 @@ RUN --mount=type=secret,id=extra_ca,target=/tmp/extra_ca.crt \
 FROM node:26-trixie-slim AS runtime
 ENV NODE_ENV=production
 
-# Defense-in-depth: run as an unprivileged user, not root. Created before the Pi
-# installs so HOME points at this user's home and the extension/config land in a
-# location it owns and can read+write at runtime. The work checkout lives in an
-# os.tmpdir() mkdtemp dir, owned by this user, so clone/commit/push stay writable.
+# Defense-in-depth: run as an unprivileged user, not root. Created up front so the
+# extension installs below run as it and the config lands in a home it owns and can
+# read+write at runtime. The work checkout lives in an os.tmpdir() mkdtemp dir,
+# owned by this user, so clone/commit/push stay writable. HOME is set only AFTER the
+# root setup below: with HOME=/home/harness during the root `npm install -g`, npm
+# would seed a root-owned cache in /home/harness/.npm that the later as-harness
+# `pi install` could not write (EACCES).
 RUN groupadd --system harness \
     && useradd --system --gid harness --create-home --home-dir /home/harness harness
-ENV HOME=/home/harness
 # Root-only setup in one layer: git for clone/commit/push, the Pi coding-agent
 # CLI (bring-your-own key at runtime — none is installed here; --ignore-scripts
 # avoids running untrusted install hooks), and git's dubious-ownership guard
@@ -71,6 +73,8 @@ WORKDIR /app
 COPY --chown=harness:harness --from=build /app/dist ./dist
 # Drop privileges before the Pi extension installs so they write to this user's
 # HOME already owned by it — no post-install chown of the extension tree needed.
+# HOME is set here (not before the root steps) so the as-harness npm cache is clean.
+ENV HOME=/home/harness
 USER harness
 
 # Install Pi extensions (as the harness user, into its own HOME). rpiv-todo gives
