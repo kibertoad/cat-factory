@@ -9,8 +9,18 @@ import {
   runAgentInWorkspace,
   withWorkspace,
 } from './pi-workspace.js'
+import {
+  type StructuredOutputDiagnostics,
+  diagnosticsSuffix,
+  resolveStructuredOutput,
+} from './structured-output.js'
 import type { RunOptions } from './runner.js'
 import { log } from './logger.js'
+
+/** Compact description of the merge-assessment shape, fed to the JSON repair call. */
+const ASSESSMENT_SHAPE_HINT =
+  'Expected a merge assessment: {"complexity": number 0..1, "risk": number 0..1, ' +
+  '"impact": number 0..1, "rationale": string}.'
 
 // Async job execution for the merger. The engine dispatches this as the last
 // pipeline step: clone the PR HEAD branch, have Pi assess the change vs the base
@@ -91,26 +101,41 @@ export async function handleMerger(job: MergerJob, opts: RunOptions = {}): Promi
       opts,
     )
 
-    let parsed: unknown
-    try {
-      parsed = extractJsonObject(summary)
-    } catch (error) {
-      log.error('merge: could not parse agent output', {
-        ...trace,
-        error: error instanceof Error ? error.message : String(error),
-      })
-      return { summary, stats, error: noAssessmentReason(stats, stderrTail) }
+    // Parse the agent's assessment; on a malformed reply, make ONE structured repair
+    // call (see structured-output) before giving up. `coerceAssessment` only yields
+    // null when no JSON object could be extracted at all (it defaults conservatively
+    // otherwise), so a usable-but-vague reply still routes to human review as before.
+    const { value: assessment, diagnostics } = await resolveStructuredOutput(
+      {
+        label: 'merger',
+        shapeHint: ASSESSMENT_SHAPE_HINT,
+        parse: (text) => coerceAssessment(extractJsonObject(text), text),
+      },
+      summary,
+      {
+        proxyBaseUrl: job.proxyBaseUrl,
+        sessionToken: job.sessionToken,
+        model: job.model,
+        jobId: job.jobId,
+        signal: opts.signal,
+      },
+    )
+    if (!assessment) {
+      return { summary, stats, error: noAssessmentReason(stats, stderrTail, diagnostics) }
     }
-    const assessment = coerceAssessment(parsed, summary)
     log.info('merge: assessed', { ...trace, ...assessment })
     return { assessment, summary, stats }
   })
 }
 
 /** Human-readable reason a merger run produced no usable assessment. */
-function noAssessmentReason(stats: PiRunStats, stderrTail: string | undefined): string {
+function noAssessmentReason(
+  stats: PiRunStats,
+  stderrTail: string | undefined,
+  diagnostics?: StructuredOutputDiagnostics,
+): string {
   const cause = agentNeverActed(stats)
     ? NEVER_ACTED_CAUSE
     : ' The agent did not return a parseable JSON assessment.'
-  return `Merger produced no assessment.${cause}${agentOutputTail(stderrTail)}`
+  return `Merger produced no assessment.${cause}${diagnostics ? diagnosticsSuffix(diagnostics) : ''}${agentOutputTail(stderrTail)}`
 }

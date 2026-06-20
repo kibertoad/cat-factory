@@ -38,6 +38,15 @@ const STATUS_META: Record<ExecutionInstance['status'], { label: string; chip: st
 const steps = computed(() => props.instance.steps)
 const total = computed(() => steps.value.length)
 
+// A failed run is no longer executing: a step left mid-flight (state still
+// `working`, `startingContainer` still set) must stop looking live — no spinner,
+// no pulse, no "spinning up container" phase.
+const runFailed = computed(() => props.instance.status === 'failed')
+/** A step that is genuinely, currently working (not a stale mid-flight step). */
+function liveWorking(state: AgentState) {
+  return state === 'working' && !runFailed.value
+}
+
 /** A step counts as fully complete only once its state is `done`. */
 const completedCount = computed(() => steps.value.filter((s) => s.state === 'done').length)
 
@@ -129,13 +138,13 @@ const ITEM_ICON: Record<string, string> = {
         <!-- rail node -->
         <span
           class="relative z-10 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 bg-slate-950"
-          :class="s.state === 'working' ? 'step-active' : ''"
+          :class="liveWorking(s.state) ? 'step-active' : ''"
           :style="{ borderColor: STATE_META[s.state].color }"
         >
           <UIcon
             :name="STATE_META[s.state].icon"
             class="h-4 w-4"
-            :class="s.state === 'working' ? 'animate-spin' : ''"
+            :class="liveWorking(s.state) ? 'animate-spin' : ''"
             :style="{ color: STATE_META[s.state].color }"
           />
         </span>
@@ -196,7 +205,7 @@ const ITEM_ICON: Record<string, string> = {
           <!-- container cold-boot phase: shown until the container is up and the
                agent starts reporting progress -->
           <div
-            v-if="s.startingContainer"
+            v-if="s.startingContainer && !runFailed"
             class="mt-2 flex items-center gap-1.5 text-[11px] text-sky-300"
           >
             <UIcon name="i-lucide-loader-circle" class="h-3.5 w-3.5 shrink-0 animate-spin" />
@@ -239,7 +248,11 @@ const ITEM_ICON: Record<string, string> = {
                   :name="ITEM_ICON[item.status]"
                   class="mt-px h-3 w-3 shrink-0"
                   :class="[
-                    item.status === 'in_progress' ? 'animate-spin text-indigo-400' : '',
+                    item.status === 'in_progress' && !runFailed
+                      ? 'animate-spin text-indigo-400'
+                      : item.status === 'in_progress'
+                        ? 'text-indigo-400'
+                        : '',
                     item.status === 'completed' ? 'text-emerald-400' : 'text-slate-500',
                   ]"
                 />
