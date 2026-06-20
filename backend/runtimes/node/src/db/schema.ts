@@ -100,6 +100,41 @@ export const blocks = pgTable(
   ],
 )
 
+// In-org shared services: account-owned service + per-workspace mount (migration 0030).
+export const services = pgTable(
+  'services',
+  {
+    id: text('id').primaryKey(),
+    account_id: text('account_id'),
+    frame_block_id: text('frame_block_id').notNull(),
+    installation_id: bigint('installation_id', { mode: 'number' }),
+    repo_github_id: bigint('repo_github_id', { mode: 'number' }),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+  },
+  (t) => [
+    index('idx_services_account').on(t.account_id),
+    index('idx_services_frame').on(t.frame_block_id),
+    index('idx_services_repo').on(t.installation_id, t.repo_github_id),
+  ],
+)
+
+export const workspaceServices = pgTable(
+  'workspace_services',
+  {
+    workspace_id: text('workspace_id').notNull(),
+    service_id: text('service_id').notNull(),
+    pos_x: doublePrecision('pos_x').notNull().default(0),
+    pos_y: doublePrecision('pos_y').notNull().default(0),
+    width: doublePrecision('width'),
+    height: doublePrecision('height'),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.workspace_id, t.service_id] }),
+    index('idx_workspace_services_service').on(t.service_id),
+  ],
+)
+
 export const pipelines = pgTable(
   'pipelines',
   {

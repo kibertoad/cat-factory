@@ -25,6 +25,12 @@ import type {
   DueSchedule,
   Recurrence,
   RunRef,
+  Service,
+  ServicePatch,
+  ServiceRepository,
+  WorkspaceMount,
+  WorkspaceMountPatch,
+  WorkspaceMountRepository,
   ScheduleRun,
   ScheduleTemplate,
   TokenUsageRecord,
@@ -57,9 +63,11 @@ import {
   pipelineScheduleRuns,
   pipelineSchedules,
   pipelines,
+  services,
   tokenUsage,
   trackerSettings,
   workspaceModelDefaults,
+  workspaceServices,
   workspaces,
 } from '../db/schema.js'
 
@@ -955,6 +963,183 @@ class DrizzleTrackerSettingsRepository implements TrackerSettingsRepository {
   }
 }
 
+function rowToService(row: typeof services.$inferSelect): Service {
+  return {
+    id: row.id,
+    accountId: row.account_id,
+    frameBlockId: row.frame_block_id,
+    installationId: row.installation_id,
+    repoGithubId: row.repo_github_id,
+    createdAt: row.created_at,
+  }
+}
+
+/** Account-owned services (migration 0030). The canonical, shareable board unit. */
+class DrizzleServiceRepository implements ServiceRepository {
+  constructor(private readonly db: DrizzleDb) {}
+
+  async get(id: string): Promise<Service | null> {
+    const [row] = await this.db.select().from(services).where(eq(services.id, id))
+    return row ? rowToService(row) : null
+  }
+
+  async getByFrameBlock(frameBlockId: string): Promise<Service | null> {
+    const [row] = await this.db
+      .select()
+      .from(services)
+      .where(eq(services.frame_block_id, frameBlockId))
+    return row ? rowToService(row) : null
+  }
+
+  async listByAccount(accountId: string): Promise<Service[]> {
+    const rows = await this.db
+      .select()
+      .from(services)
+      .where(eq(services.account_id, accountId))
+      .orderBy(services.created_at)
+    return rows.map(rowToService)
+  }
+
+  async getByRepo(installationId: number, repoGithubId: number): Promise<Service | null> {
+    const [row] = await this.db
+      .select()
+      .from(services)
+      .where(
+        and(
+          eq(services.installation_id, installationId),
+          eq(services.repo_github_id, repoGithubId),
+        ),
+      )
+    return row ? rowToService(row) : null
+  }
+
+  async insert(service: Service): Promise<void> {
+    await this.db.insert(services).values({
+      id: service.id,
+      account_id: service.accountId,
+      frame_block_id: service.frameBlockId,
+      installation_id: service.installationId,
+      repo_github_id: service.repoGithubId,
+      created_at: service.createdAt,
+    })
+  }
+
+  async update(id: string, patch: ServicePatch): Promise<void> {
+    const set: Record<string, unknown> = {}
+    if ('accountId' in patch) set.account_id = patch.accountId ?? null
+    if ('installationId' in patch) set.installation_id = patch.installationId ?? null
+    if ('repoGithubId' in patch) set.repo_github_id = patch.repoGithubId ?? null
+    if (Object.keys(set).length === 0) return
+    await this.db.update(services).set(set).where(eq(services.id, id))
+  }
+
+  async delete(id: string): Promise<void> {
+    await this.db.delete(services).where(eq(services.id, id))
+  }
+}
+
+function rowToMount(row: typeof workspaceServices.$inferSelect): WorkspaceMount {
+  return {
+    workspaceId: row.workspace_id,
+    serviceId: row.service_id,
+    position: { x: row.pos_x, y: row.pos_y },
+    size: row.width !== null && row.height !== null ? { w: row.width, h: row.height } : null,
+    createdAt: row.created_at,
+  }
+}
+
+/** A service mounted onto a workspace board + its per-workspace layout (migration 0030). */
+class DrizzleWorkspaceMountRepository implements WorkspaceMountRepository {
+  constructor(private readonly db: DrizzleDb) {}
+
+  async listByWorkspace(workspaceId: string): Promise<WorkspaceMount[]> {
+    const rows = await this.db
+      .select()
+      .from(workspaceServices)
+      .where(eq(workspaceServices.workspace_id, workspaceId))
+      .orderBy(workspaceServices.created_at)
+    return rows.map(rowToMount)
+  }
+
+  async listByService(serviceId: string): Promise<WorkspaceMount[]> {
+    const rows = await this.db
+      .select()
+      .from(workspaceServices)
+      .where(eq(workspaceServices.service_id, serviceId))
+      .orderBy(workspaceServices.created_at)
+    return rows.map(rowToMount)
+  }
+
+  async get(workspaceId: string, serviceId: string): Promise<WorkspaceMount | null> {
+    const [row] = await this.db
+      .select()
+      .from(workspaceServices)
+      .where(
+        and(
+          eq(workspaceServices.workspace_id, workspaceId),
+          eq(workspaceServices.service_id, serviceId),
+        ),
+      )
+    return row ? rowToMount(row) : null
+  }
+
+  async upsert(mount: WorkspaceMount): Promise<void> {
+    await this.db
+      .insert(workspaceServices)
+      .values({
+        workspace_id: mount.workspaceId,
+        service_id: mount.serviceId,
+        pos_x: mount.position.x,
+        pos_y: mount.position.y,
+        width: mount.size?.w ?? null,
+        height: mount.size?.h ?? null,
+        created_at: mount.createdAt,
+      })
+      .onConflictDoUpdate({
+        target: [workspaceServices.workspace_id, workspaceServices.service_id],
+        set: {
+          pos_x: mount.position.x,
+          pos_y: mount.position.y,
+          width: mount.size?.w ?? null,
+          height: mount.size?.h ?? null,
+        },
+      })
+  }
+
+  async update(workspaceId: string, serviceId: string, patch: WorkspaceMountPatch): Promise<void> {
+    const set: Record<string, unknown> = {}
+    if (patch.position) {
+      set.pos_x = patch.position.x
+      set.pos_y = patch.position.y
+    }
+    if ('size' in patch) {
+      set.width = patch.size?.w ?? null
+      set.height = patch.size?.h ?? null
+    }
+    if (Object.keys(set).length === 0) return
+    await this.db
+      .update(workspaceServices)
+      .set(set)
+      .where(
+        and(
+          eq(workspaceServices.workspace_id, workspaceId),
+          eq(workspaceServices.service_id, serviceId),
+        ),
+      )
+  }
+
+  async remove(workspaceId: string, serviceId: string): Promise<void> {
+    await this.db
+      .delete(workspaceServices)
+      .where(
+        and(
+          eq(workspaceServices.workspace_id, workspaceId),
+          eq(workspaceServices.service_id, serviceId),
+        ),
+      )
+  }
+}
+
 export interface CoreRepositories {
   workspaceRepository: WorkspaceRepository
   accountRepository: AccountRepository
@@ -968,6 +1153,8 @@ export interface CoreRepositories {
   modelDefaultsRepository: ModelDefaultsRepository
   pipelineScheduleRepository: PipelineScheduleRepository
   trackerSettingsRepository: TrackerSettingsRepository
+  serviceRepository: ServiceRepository
+  workspaceMountRepository: WorkspaceMountRepository
 }
 
 /** Build the Drizzle/Postgres-backed core repositories. */
@@ -985,5 +1172,7 @@ export function createDrizzleRepositories(db: DrizzleDb, clock: Clock): CoreRepo
     modelDefaultsRepository: new DrizzleModelDefaultsRepository(db),
     pipelineScheduleRepository: new DrizzlePipelineScheduleRepository(db),
     trackerSettingsRepository: new DrizzleTrackerSettingsRepository(db),
+    serviceRepository: new DrizzleServiceRepository(db),
+    workspaceMountRepository: new DrizzleWorkspaceMountRepository(db),
   }
 }
