@@ -21,6 +21,8 @@ export interface RunnerJobResult {
   error?: string
   /** A Blueprinter job's decomposition tree (the `/blueprint` endpoint's product). */
   service?: unknown
+  /** A requirements-writer job's prescriptive requirements doc (the `/requirements` endpoint's product). */
+  requirements?: unknown
   /** A bootstrap job's pushed default branch (the `/bootstrap` endpoint's product). */
   defaultBranch?: string
   /** A `merger` job's PR assessment (the `/merge` endpoint's product). */
@@ -45,6 +47,7 @@ export interface RunnerJobResult {
 export type RunnerDispatchKind =
   | 'run'
   | 'blueprint'
+  | 'requirements'
   | 'bootstrap'
   | 'ci-fix'
   | 'resolve-conflicts'

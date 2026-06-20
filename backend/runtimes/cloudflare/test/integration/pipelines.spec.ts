@@ -21,6 +21,7 @@ describe('pipelines', () => {
       'pl_dep_update',
       'pl_tech_debt',
       'pl_blueprint',
+      'pl_requirements',
     ])
   })
 

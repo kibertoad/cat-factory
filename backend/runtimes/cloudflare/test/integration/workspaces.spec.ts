@@ -10,7 +10,7 @@ describe('workspaces', () => {
     expect(res.status).toBe(201)
     expect(res.body.workspace.name).toBe('My board')
     expect(res.body.blocks.find((b) => b.id === 'blk_auth')).toBeTruthy()
-    expect(res.body.pipelines).toHaveLength(6)
+    expect(res.body.pipelines).toHaveLength(7)
     expect(res.body.executions).toHaveLength(0)
   })
 
@@ -20,7 +20,7 @@ describe('workspaces', () => {
 
     expect(res.body.blocks).toHaveLength(0)
     // The pipeline catalog is product config, not sample data — always present.
-    expect(res.body.pipelines).toHaveLength(6)
+    expect(res.body.pipelines).toHaveLength(7)
   })
 
   it('lists and deletes boards', async () => {

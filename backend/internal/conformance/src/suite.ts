@@ -34,7 +34,7 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         expect(res.status).toBe(201)
         expect(res.body.workspace.name).toBe('My board')
         expect(res.body.blocks.find((b) => b.id === 'blk_auth')).toBeTruthy()
-        expect(res.body.pipelines).toHaveLength(6)
+        expect(res.body.pipelines).toHaveLength(7)
         expect(res.body.executions).toHaveLength(0)
       })
 
@@ -44,7 +44,7 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
 
         expect(res.body.blocks).toHaveLength(0)
         // The pipeline catalog is product config, not sample data — always present.
-        expect(res.body.pipelines).toHaveLength(6)
+        expect(res.body.pipelines).toHaveLength(7)
       })
 
       it('lists and deletes boards', async () => {
@@ -213,6 +213,67 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         expect(task.confidence).toBe(1)
         // task_login is assigned to the existing "Sessions" module → moved inside it.
         expect(task.parentId).toBe('mod_sessions')
+      })
+
+      it('aggregates all tasks and ingests the requirements-writer document', async () => {
+        // The requirements-writer step runs on the implementation branch BEFORE the
+        // coder, aggregating EVERY task under the service frame into the service's
+        // unified requirements doc. Driving it identically on both runtimes pins the
+        // engine's `serviceTasks` aggregation + strict ingest so they can't drift.
+        const requirementsDoc = {
+          service: 'Auth',
+          summary: 'Authentication service',
+          groups: [
+            {
+              name: 'Login',
+              requirements: [
+                {
+                  id: 'req-login',
+                  title: 'Login',
+                  statement: 'The system SHALL let a user log in.',
+                  kind: 'functional',
+                  priority: 'must',
+                  acceptance: [
+                    {
+                      id: 'ac-1',
+                      given: 'a registered user',
+                      when: 'they sign in',
+                      outcome: 'a session starts',
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+          rules: [],
+        }
+        const app = harness.makeApp({ requirementsDoc })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Requirements only',
+          agentKinds: ['requirements-writer'],
+        })
+        expect(pipeline.status).toBe(201)
+
+        const start = await app.call<ExecutionInstance>(
+          'POST',
+          `/workspaces/${wsId}/blocks/task_login/executions`,
+          { pipelineId: pipeline.body.id },
+        )
+        expect(start.status).toBe(201)
+
+        const ticked = await app.drive(wsId)
+        const exec = ticked.find((e) => e.blockId === 'task_login')!
+        expect(exec.status).toBe('done')
+        const step = exec.steps.find((s) => s.agentKind === 'requirements-writer')!
+        expect(step.state).toBe('done')
+        // The engine populated `serviceTasks` with at least the running task, and the
+        // doc parsed + ingested cleanly (a strict-parse failure would not throw, but a
+        // completed step with this output proves the happy path ran end to end).
+        expect(step.output).toContain('[requirements-writer]')
+        expect(step.output).toMatch(/from [1-9]\d* task/)
       })
 
       it('drives an asynchronous (polled) agent job to completion', async () => {
