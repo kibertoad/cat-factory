@@ -13,8 +13,9 @@ other boards saw the update only on reload. `FanOutEventPublisher` (a decorator 
 per-workspace publisher) resolves the changed block's service and re-publishes the event to
 **every** workspace that mounts it, so all boards update live.
 
-- New `BlockRepository.serviceIdOf(workspaceId, blockId)` (D1 + Drizzle) resolves the block's
-  service for the fan-out.
+- `WorkspaceMountRepository.listWorkspaceIdsMountingBlock(workspaceId, blockId)` (D1 + Drizzle)
+  resolves the fan-out's target workspaces — the service owning the block and the boards that
+  mount it — in a single join.
 - The Cloudflare facade wraps its `DurableObjectEventPublisher` with `FanOutEventPublisher`.
   Best-effort and self-isolating (the persisted row stays the source of truth); a block with
   no service, or a coarse block-less `boardChanged`, falls back to the originating workspace.
