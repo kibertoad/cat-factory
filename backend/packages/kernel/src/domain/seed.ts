@@ -1,3 +1,4 @@
+import { mergeRegisteredPipelines } from './pipeline-registry.js'
 import type { Block, Pipeline } from './types.js'
 
 // Sample architecture used to populate a workspace on creation. Mirrors the
@@ -119,9 +120,13 @@ export function seedBlocks(): Block[] {
   ]
 }
 
-/** Reusable pipelines shown in the pipeline palette on first load. */
+/**
+ * Reusable pipelines shown in the pipeline palette on first load: the built-in catalog
+ * plus any pipelines a deployment registered via `registerPipeline` (e.g. a proprietary
+ * org package), merged by id.
+ */
 export function seedPipelines(): Pipeline[] {
-  return [
+  const builtins: Pipeline[] = [
     {
       id: 'pl_full',
       name: 'Full build',
@@ -191,6 +196,7 @@ export function seedPipelines(): Pipeline[] {
     // service map (and populate the board) from the freshly bootstrapped repo.
     { id: 'pl_blueprint', name: 'Map service', agentKinds: ['blueprints'] },
   ]
+  return mergeRegisteredPipelines(builtins)
 }
 
 /** Pipeline id of the blueprint-only run kicked off after a successful bootstrap. */

@@ -33,6 +33,15 @@ export {
   DEP_UPDATE_PIPELINE_ID,
   TECH_DEBT_PIPELINE_ID,
 } from './domain/seed.js'
+// Installation-level extension point for predefined pipelines (mirrors the custom
+// agent-kind / model-provider registry seams): a deployment registers extra pipelines at
+// startup and `seedPipelines()` seeds them into every new workspace.
+export {
+  registerPipeline,
+  registerPipelines,
+  registeredPipelines,
+  clearRegisteredPipelines,
+} from './domain/pipeline-registry.js'
 
 export * from './ports/index.js'
 

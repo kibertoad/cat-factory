@@ -8,6 +8,18 @@ export {
   resolveStepModelRef,
 } from './agents/agent-routing.js'
 export { systemPromptFor, userPromptFor } from './agents/agent-catalog.js'
+// Installation-level extension point for custom agent kinds (mirrors the model-provider
+// registry seam): a deployment registers extra kinds at startup and the prompt catalog +
+// the Worker's executor routing pick them up.
+export {
+  type AgentKindDefinition,
+  registerAgentKind,
+  registerAgentKinds,
+  registeredAgentKind,
+  registeredAgentKinds,
+  registeredKindRequiresContainer,
+  clearRegisteredAgentKinds,
+} from './agents/registry.js'
 export {
   type VersionedPrompt,
   type PromptId,

@@ -70,6 +70,16 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
   }
 
   const sessionSecret = env.AUTH_SESSION_SECRET?.trim() ?? ''
+  // The GitHub App (private key + app id) backs container-agent runs: it mints the
+  // short-lived push token the harness clones/pushes with. Enable the integration
+  // only when both are present (the container executor also requires it — see
+  // container.ts), so a partial config doesn't half-enable repo-operating steps.
+  const githubAppId = env.GITHUB_APP_ID?.trim() ?? ''
+  const githubAppConfigured =
+    githubAppId !== '' && (env.GITHUB_APP_PRIVATE_KEY?.trim() ?? '') !== ''
+  // Self-hosted runner pools encrypt their scheduler credentials at rest; opt-in
+  // strictly on the encryption key (no silent plaintext fallback), mirroring the Worker.
+  const runnersEncryptionKey = env.RUNNERS_ENCRYPTION_KEY?.trim() ?? ''
   const clientId = env.GITHUB_OAUTH_CLIENT_ID?.trim() ?? ''
   const clientSecret = env.GITHUB_OAUTH_CLIENT_SECRET?.trim() ?? ''
   const environment = env.ENVIRONMENT?.trim().toLowerCase() ?? ''
@@ -117,7 +127,7 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
       monthlyLimit: num(env.SPEND_MONTHLY_LIMIT) ?? DEFAULT_SPEND_PRICING.monthlyLimit,
     },
     github: {
-      enabled: false,
+      enabled: githubAppConfigured,
       appId: env.GITHUB_APP_ID?.trim() ?? '',
       appSlug: env.GITHUB_APP_SLUG?.trim() ?? '',
       apiBase: env.GITHUB_API_BASE?.trim() || 'https://api.github.com',
@@ -149,7 +159,9 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
     documents: { enabled: false, sources: [], planner: 'headings' },
     tasks: loadTasksConfig(env),
     environments: { enabled: false },
-    runners: { enabled: false },
+    runners: runnersEncryptionKey
+      ? { enabled: true, encryptionKey: runnersEncryptionKey }
+      : { enabled: false },
     retention: {
       tokenUsageMs: (num(env.TOKEN_USAGE_RETENTION_DAYS) ?? 395) * 24 * 60 * 60 * 1000,
       rateLimitMs: (num(env.GITHUB_RATE_LIMIT_RETENTION_DAYS) ?? 7) * 24 * 60 * 60 * 1000,

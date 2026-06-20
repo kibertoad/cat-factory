@@ -312,3 +312,81 @@ export const tasks = pgTable(
     index('idx_tasks_block').on(t.workspace_id, t.linked_block_id),
   ],
 )
+
+// A workspace's binding to a self-hosted runner pool (mirror of D1 migration 0013):
+// the validated manifest + the encrypted scheduler-API secret bundle. The container
+// agent executor dispatches repo-operating jobs to this pool when one is registered.
+// `secrets_cipher` is opaque ciphertext (WebCryptoSecretCipher); never plaintext.
+export const runnerPoolConnections = pgTable(
+  'runner_pool_connections',
+  {
+    workspace_id: text('workspace_id').notNull(),
+    provider_id: text('provider_id').notNull(),
+    label: text('label').notNull(),
+    base_url: text('base_url').notNull(),
+    manifest_json: text('manifest_json').notNull(),
+    secrets_cipher: text('secrets_cipher').notNull(),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+    deleted_at: bigint('deleted_at', { mode: 'number' }),
+  },
+  (t) => [
+    primaryKey({ columns: [t.workspace_id, t.provider_id] }),
+    // A workspace has at most one live pool (the partial unique mirrors D1).
+    uniqueIndex('idx_runner_pool_conn_workspace')
+      .on(t.workspace_id)
+      .where(sql`deleted_at IS NULL`),
+  ],
+)
+
+// GitHub App installation bindings (mirror of D1 migration 0004 + the account_id /
+// app_id columns from 0017 / 0019). The container executor reads this to resolve a
+// run's installation id and mint a short-lived push token; tokens are cached
+// in-memory by the auth adapter, never persisted here.
+export const githubInstallations = pgTable(
+  'github_installations',
+  {
+    installation_id: bigint('installation_id', { mode: 'number' }).primaryKey(),
+    workspace_id: text('workspace_id').notNull(),
+    account_id: text('account_id'),
+    account_login: text('account_login').notNull(),
+    target_type: text('target_type').notNull(),
+    app_id: text('app_id'),
+    cached_token: text('cached_token'),
+    token_expires_at: bigint('token_expires_at', { mode: 'number' }),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+    deleted_at: bigint('deleted_at', { mode: 'number' }),
+  },
+  (t) => [
+    uniqueIndex('idx_gh_install_workspace')
+      .on(t.workspace_id)
+      .where(sql`deleted_at IS NULL`),
+    index('idx_gh_install_account')
+      .on(t.account_id)
+      .where(sql`deleted_at IS NULL`),
+  ],
+)
+
+// Projection of a workspace's GitHub repositories (mirror of D1 migration 0004).
+// `block_id` links a repo to a board service frame and is owned by the board link
+// (never overwritten by sync). The container executor resolves a run's target repo
+// from the service frame the block sits under.
+export const githubRepos = pgTable(
+  'github_repos',
+  {
+    workspace_id: text('workspace_id').notNull(),
+    github_id: bigint('github_id', { mode: 'number' }).notNull(),
+    installation_id: bigint('installation_id', { mode: 'number' }).notNull(),
+    owner: text('owner').notNull(),
+    name: text('name').notNull(),
+    default_branch: text('default_branch'),
+    private: integer('private').notNull().default(0),
+    block_id: text('block_id'),
+    etag: text('etag'),
+    synced_at: bigint('synced_at', { mode: 'number' }).notNull(),
+    deleted_at: bigint('deleted_at', { mode: 'number' }),
+  },
+  (t) => [
+    primaryKey({ columns: [t.workspace_id, t.github_id] }),
+    index('idx_gh_repos_install').on(t.installation_id),
+  ],
+)

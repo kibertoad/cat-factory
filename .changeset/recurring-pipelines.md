@@ -31,13 +31,14 @@ surfaced in the inspector.
   App installation against the service's repo, and Jira tickets (markdown→ADF) using
   the workspace's encrypted `task_connections`. Two new seed pipelines:
   `pl_dep_update`, `pl_tech_debt`.
-- **Per-tenant Jira on the Node facade**: the task-source integration is now wired on
-  Node (opt-in via `TASKS_ENABLED` + `TASKS_ENCRYPTION_KEY`) — a Drizzle
-  `task_connections`/`tasks` store, a Node `WebCryptoSecretCipher`, and the
-  runtime-neutral Jira provider — so each tenant connects its own Jira through the
-  existing UI (credentials encrypted at rest, resolved per-workspace) and the tracker
-  files that workspace's ticket. GitHub-Issue tracking on Node rides on the per-tenant
-  GitHub App installation infra, wired separately.
+- **Per-tenant tracker on the Node facade**: both trackers now work on Node, each
+  resolving the **workspace's own** integration. Jira: the task-source integration is
+  wired on Node (opt-in via `TASKS_ENABLED` + `TASKS_ENCRYPTION_KEY`) — a Drizzle
+  `task_connections`/`tasks` store + the runtime-neutral Jira provider — so each tenant
+  connects its own Jira through the existing UI (credentials encrypted at rest). GitHub:
+  the filer mints a short-lived token from that workspace's own GitHub App installation
+  (reusing the per-tenant App infra) and resolves the service's repo from the
+  `github_repos` projection — no shared/env credentials.
 - **Persistence + scheduling are symmetric across runtimes**: D1 migration
   `0029_recurring_pipelines.sql` ⇄ Drizzle schema + generated migration; the
   Cloudflare `scheduled` cron fires due schedules (and prunes run history) ⇄ a Node

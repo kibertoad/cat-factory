@@ -8,6 +8,18 @@ export { buildNodeContainer, type NodeContainerOptions } from './container.js'
 export { loadNodeConfig } from './config.js'
 export { createNodeGateways } from './gateways.js'
 export { createNodeModelProvider } from './modelProvider.js'
+
+// Installation-level extension points (mirroring the Worker facade): a deployment —
+// typically a proprietary org package — registers custom agent kinds and predefined
+// pipelines at startup (before `start()`), and the shared prompt catalog / workspace
+// seeding pick them up. Bedrock-style model providers mix in via createNodeModelProvider.
+export {
+  registerAgentKind,
+  registerAgentKinds,
+  clearRegisteredAgentKinds,
+  type AgentKindDefinition,
+} from '@cat-factory/agents'
+export { registerPipeline, registerPipelines, clearRegisteredPipelines } from '@cat-factory/kernel'
 export { createDbClient, type DbClient, type DrizzleDb } from './db/client.js'
 export { migrate } from './db/migrate.js'
 export { createDrizzleRepositories, type CoreRepositories } from './repositories/drizzle.js'
