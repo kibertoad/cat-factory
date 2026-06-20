@@ -92,6 +92,19 @@ const sourceMenu = computed<DropdownMenuItem[][]>(() => [
   })),
 ])
 
+// The "set up a new integration" menu: every configured source, so the user can
+// connect (or reconnect) one without leaving the add-task popup. Unconnected
+// sources come first — those are the ones you'd typically be setting up here.
+const connectMenu = computed<DropdownMenuItem[][]>(() => [
+  [...sources.value]
+    .sort((a, b) => Number(a.connected) - Number(b.connected))
+    .map((s) => ({
+      label: s.connected ? `${s.label} (reconnect)` : `Connect ${s.label}`,
+      icon: s.icon,
+      onSelect: () => connect(s),
+    })),
+])
+
 // ---- search / import-by-ref ----------------------------------------------
 
 const query = ref('')
@@ -201,7 +214,7 @@ function connect(src: SourceOption) {
   if (src.kind === 'document') ui.openDocumentConnect(src.source as DocumentSourceKind)
   else ui.openTaskConnect(src.source as TaskSourceKind)
   toast.add({
-    title: `Connect ${src.label}, then reopen this picker`,
+    title: `Connect ${src.label} — it'll be ready here once connected`,
     icon: 'i-lucide-plug',
   })
 }
@@ -235,6 +248,19 @@ function connect(src: SourceOption) {
         icon="i-lucide-search"
         @keydown.enter.prevent="addByRef"
       />
+
+      <UDropdownMenu :items="connectMenu" class="ml-auto shrink-0">
+        <UButton
+          color="neutral"
+          variant="ghost"
+          size="sm"
+          icon="i-lucide-plus"
+          trailing-icon="i-lucide-chevron-down"
+          title="Connect an integration"
+        >
+          Connect a source
+        </UButton>
+      </UDropdownMenu>
     </div>
 
     <!-- not-connected affordance -->
