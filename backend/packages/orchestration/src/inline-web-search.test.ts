@@ -1,9 +1,12 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import {
   DEFAULT_INLINE_WEB_SEARCH_KINDS,
   DEFAULT_INLINE_WEB_SEARCH_MAX_USES,
+  clearRegisteredAgentKinds,
   inlineWebSearchOptionsFromEnv,
   providerWebSearchTools,
+  registerAgentKind,
+  webResearchGuidanceFor,
 } from '@cat-factory/agents'
 
 // Provider-hosted web search for the INLINE design/research agents (architect /
@@ -65,5 +68,37 @@ describe('providerWebSearchTools', () => {
     expect(providerWebSearchTools('workers-ai')).toBeUndefined()
     expect(providerWebSearchTools('qwen')).toBeUndefined()
     expect(providerWebSearchTools('mock')).toBeUndefined()
+  })
+})
+
+describe('webResearchGuidanceFor', () => {
+  afterEach(() => clearRegisteredAgentKinds())
+
+  it('mentions web_fetch only for the container variant (fetch:true)', () => {
+    expect(webResearchGuidanceFor('coder', { fetch: true })).toMatch(/web_fetch/)
+    // Inline agents get web_search only (the provider tool has no fetch companion).
+    expect(webResearchGuidanceFor('architect', { fetch: false })).not.toMatch(/web_fetch/)
+    expect(webResearchGuidanceFor('architect', { fetch: false })).toMatch(/web_search/)
+  })
+
+  it('tailors the nudge to the built-in kind', () => {
+    expect(webResearchGuidanceFor('ci-fixer', { fetch: true })).toMatch(/error message/i)
+    expect(webResearchGuidanceFor('mocker', { fetch: true })).toMatch(/third-party API/i)
+    expect(webResearchGuidanceFor('researcher')).toMatch(/primary tool/i)
+  })
+
+  it('falls back to a generic nudge for an unknown kind', () => {
+    expect(webResearchGuidanceFor('totally-made-up-kind')).toMatch(/verify a fact/i)
+  })
+
+  it('lets a registered (proprietary) kind supply its own hint, which wins', () => {
+    // The shared library never names this kind; the org package declares its own
+    // web-research hint at registration and the composer picks it up.
+    registerAgentKind({
+      kind: 'security-auditor',
+      systemPrompt: 'You audit security.',
+      webResearchHint: 'check the CVE database for the exact advisory id',
+    })
+    expect(webResearchGuidanceFor('security-auditor', { fetch: true })).toMatch(/CVE database/i)
   })
 })

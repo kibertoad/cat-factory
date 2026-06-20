@@ -3,7 +3,7 @@ export {
   type InlineWebSearchOptions,
   DEFAULT_INLINE_WEB_SEARCH_KINDS,
   DEFAULT_INLINE_WEB_SEARCH_MAX_USES,
-  WEB_SEARCH_GUIDANCE,
+  webResearchGuidanceFor,
   inlineWebSearchOptionsFromEnv,
   providerWebSearchTools,
 } from './agents/web-search.js'

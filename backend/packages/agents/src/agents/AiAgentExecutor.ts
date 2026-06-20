@@ -6,8 +6,8 @@ import { type AgentRouting, resolveAgentConfig, resolveStepModelRef } from './ag
 import { composeBlockSystemPrompt } from './prompt-fragments.js'
 import {
   type InlineWebSearchOptions,
-  WEB_SEARCH_GUIDANCE,
   providerWebSearchTools,
+  webResearchGuidanceFor,
 } from './web-search.js'
 
 export interface AiAgentExecutorDependencies {
@@ -101,7 +101,11 @@ export class AiAgentExecutor implements AgentExecutor {
       this.webSearch && this.webSearch.kinds.has(context.agentKind)
         ? providerWebSearchTools(ref.provider, this.webSearch.maxUses)
         : undefined
-    const system = tools ? `${composed}${WEB_SEARCH_GUIDANCE}` : composed
+    // Inline tool is web_search only (no web_fetch); the per-kind hint is resolved
+    // from the registry/catalog so a custom kind gets its own nudge.
+    const system = tools
+      ? `${composed}${webResearchGuidanceFor(context.agentKind, { fetch: false })}`
+      : composed
 
     const { text, usage } = await generateText({
       model,

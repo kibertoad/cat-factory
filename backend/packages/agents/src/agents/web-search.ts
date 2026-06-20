@@ -1,6 +1,7 @@
 import { anthropic } from '@ai-sdk/anthropic'
 import { openai } from '@ai-sdk/openai'
 import type { ToolSet } from 'ai'
+import { registeredWebResearchHint } from './registry.js'
 
 // Provider-hosted web search for the INLINE agents (architect / researcher), which
 // run a single `generateText` call via the AI SDK rather than going through the Pi
@@ -27,21 +28,60 @@ export interface InlineWebSearchOptions {
   maxUses: number
 }
 
+// Per-kind reason an agent reaches for web search, so the nudge speaks to what that
+// agent is actually doing rather than a generic "verify facts". These are the defaults
+// for the BUILT-IN kinds; a custom/proprietary kind supplies its own via the registry
+// (`AgentKindDefinition.webResearchHint`), which wins — so the shared composition here
+// never needs to know a proprietary kind exists. Resolution order is registry → these
+// built-in defaults → GENERIC_WEB_RESEARCH_HINT (see `webResearchGuidanceFor`).
+const BUILTIN_WEB_RESEARCH_HINTS: Record<string, string> = {
+  coder:
+    'confirm a current library/API signature before you rely on it, and check for a known breaking change when an import or call behaves unexpectedly',
+  'ci-fixer':
+    "search the exact failing error message, or a dependency's changelog/known issues, to find the real fix instead of guessing at versions",
+  mocker:
+    "fetch the real third-party API's reference (endpoints, status codes, payload shapes, error formats) so the stubs match production behaviour",
+  analysis:
+    'check whether a dependency is deprecated, end-of-life, or has a known CVE / newer major version when judging technical debt',
+  'business-documenter':
+    'verify domain or regulatory terminology when documenting business rules, so the captured rules use the correct, current vocabulary',
+  playwright:
+    "confirm a current testing-framework or locator API when the project's version differs from what you remember",
+  architect:
+    'compare current library/framework options and their trade-offs, and verify a capability or version is real before you design around it',
+  researcher:
+    'this is your primary tool — survey prior art, candidate libraries, benchmarks and known pitfalls, and ground every recommendation in a cited source',
+}
+
+const GENERIC_WEB_RESEARCH_HINT =
+  "verify a fact that genuinely changes — a library version, an API, a recent breaking change, a security advisory — when the repository itself can't answer it"
+
 /**
- * Guidance appended to an inline agent's system prompt ONLY when a web_search tool
- * is actually attached, so the model is never told about a tool it doesn't have.
- * Mirrors the harness's `WEB_TOOLS_GUIDANCE`: search is for facts that genuinely
- * change or that the agent is unsure of, not a reflex.
+ * The web-search guidance appended to an agent's context ONLY when the tools are
+ * actually available, so the model is never told about a tool it lacks. The hint is
+ * tailored to `kind`; `fetch` controls whether the companion `web_fetch` tool (the Pi
+ * container path has it; the inline provider tool does not) is mentioned. Mirrors the
+ * harness's own conservative framing: search is for things that change or that the
+ * agent is unsure of, not a reflex, and never a substitute for reading the code.
  */
-export const WEB_SEARCH_GUIDANCE = `
+export function webResearchGuidanceFor(kind: string, opts: { fetch?: boolean } = {}): string {
+  // A proprietary/custom kind's own hint wins (it knows its job; the shared library
+  // doesn't); then the built-in defaults; then the generic fallback.
+  const hint =
+    registeredWebResearchHint(kind) ?? BUILTIN_WEB_RESEARCH_HINTS[kind] ?? GENERIC_WEB_RESEARCH_HINT
+  const tools = opts.fetch
+    ? '`web_search` (titled result snippets for a query) and `web_fetch` (read a URL as text)'
+    : 'a `web_search` tool'
+  const them = opts.fetch ? 'them' : 'it'
+  return `
 
 ## Web search (use sparingly)
 
-You have a \`web_search\` tool. Use it ONLY to verify things that genuinely change or
-that you are unsure of — a current library/API signature, a recent breaking change, a
-version, or a security advisory — not as a reflex. Prefer first-party documentation,
-and cite the source URL when a recommendation rests on what you found. Do not search
-for anything already answered by the context you were given.`
+You have ${tools}. Use ${them} mainly to ${hint}. Prefer first-party documentation, and
+cite the source URL when a decision rests on what you find. Do not search for anything
+already in the checkout or the context you were given, and don't let searching replace
+reading the code.`
+}
 
 /**
  * The provider-hosted web_search tool set for a provider, or undefined when the

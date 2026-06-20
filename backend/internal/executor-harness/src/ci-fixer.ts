@@ -33,6 +33,7 @@ export async function handleCiFixer(
       proxyBaseUrl: job.proxyBaseUrl,
       sessionToken: job.sessionToken,
       commitMessage: 'Fix failing CI',
+      webToolsGuidance: job.webToolsGuidance,
     },
     opts,
   )

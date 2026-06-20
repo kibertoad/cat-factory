@@ -776,7 +776,7 @@ describe('web search (rpiv-web-tools) configuration', () => {
 })
 
 describe('writeAgentsContext', () => {
-  async function readContext(opts?: { webSearch?: boolean }): Promise<string> {
+  async function readContext(opts?: { webSearch?: boolean; guidance?: string }): Promise<string> {
     const home = await mkdtemp(join(tmpdir(), 'home-'))
     const prevHome = process.env.HOME
     process.env.HOME = home
@@ -796,10 +796,20 @@ describe('writeAgentsContext', () => {
     expect(md).not.toMatch(/web_search/)
   })
 
-  it('appends the web-tools guidance only when web search is enabled', async () => {
+  it('appends the generic web-tools guidance when enabled with no per-kind text', async () => {
     const md = await readContext({ webSearch: true })
     expect(md).toContain('ROLE PROMPT')
     expect(md).toMatch(/web_search/)
     expect(md).toMatch(/web_fetch/)
+  })
+
+  it('uses the backend-supplied per-kind guidance when provided', async () => {
+    const md = await readContext({ webSearch: true, guidance: '\n\nSEARCH-THE-CVE-DATABASE' })
+    expect(md).toContain('SEARCH-THE-CVE-DATABASE')
+  })
+
+  it('ignores per-kind guidance when web search is off', async () => {
+    const md = await readContext({ webSearch: false, guidance: '\n\nSEARCH-THE-CVE-DATABASE' })
+    expect(md).not.toContain('SEARCH-THE-CVE-DATABASE')
   })
 })

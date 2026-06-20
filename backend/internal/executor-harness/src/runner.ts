@@ -41,6 +41,7 @@ export async function handleRun(job: Job, opts: RunOptions = {}): Promise<RunRes
       proxyBaseUrl: job.proxyBaseUrl,
       sessionToken: job.sessionToken,
       commitMessage: job.pr.title,
+      webToolsGuidance: job.webToolsGuidance,
     },
     opts,
   )

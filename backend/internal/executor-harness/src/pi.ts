@@ -113,13 +113,15 @@ staleness checks. Treat the blueprint as orientation, not a task list.`
  */
 export async function writeAgentsContext(
   systemPrompt: string,
-  opts: { webSearch?: boolean } = {},
+  opts: { webSearch?: boolean; guidance?: string } = {},
 ): Promise<void> {
   const dir = join(homedir(), '.pi', 'agent')
   await mkdir(dir, { recursive: true })
-  // Only nudge towards the web tools when they're actually configured, so an agent
-  // is never told about tools that would error (no provider key) the moment it calls them.
-  const webTools = opts.webSearch ? WEB_TOOLS_GUIDANCE : ''
+  // Only nudge towards the web tools when they're actually configured, so an agent is
+  // never told about tools that would error (no provider key) the moment it calls them.
+  // `guidance` is the backend's per-kind nudge; fall back to the generic blurb for jobs
+  // that don't carry one (e.g. bootstrap, or an older dispatcher).
+  const webTools = opts.webSearch ? (opts.guidance ?? WEB_TOOLS_GUIDANCE) : ''
   await writeFile(
     join(dir, 'AGENTS.md'),
     `${systemPrompt}${BLUEPRINT_GUIDANCE}${TODO_GUIDANCE}${webTools}`,

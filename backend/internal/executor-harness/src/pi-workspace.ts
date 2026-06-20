@@ -54,6 +54,12 @@ export interface AgentRunSpec {
    * would otherwise fire on a run that correctly makes zero edits — is skipped.
    */
   expectsEdits?: boolean
+  /**
+   * Per-kind web-search guidance composed by the backend (so it can speak to what
+   * this agent kind does). Surfaced in AGENTS.md only when web search is configured;
+   * absent ⇒ the generic blurb is used. See `writeAgentsContext`.
+   */
+  webToolsGuidance?: string
 }
 
 /**
@@ -70,7 +76,10 @@ export async function runAgentInWorkspace(
   // it on disk and tell the agent the tools exist; otherwise behave exactly as before.
   const webSearch = webSearchConfigFromEnv()
   if (webSearch) await writeWebToolsConfig(webSearch)
-  await writeAgentsContext(spec.systemPrompt, { webSearch: Boolean(webSearch) })
+  await writeAgentsContext(spec.systemPrompt, {
+    webSearch: Boolean(webSearch),
+    guidance: spec.webToolsGuidance,
+  })
   await writePiModelsConfig({ model: spec.model, proxyBaseUrl: spec.proxyBaseUrl })
   const { signal, onActivity, onProgress } = opts
   return runPi({
