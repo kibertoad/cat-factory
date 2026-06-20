@@ -1,10 +1,11 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import type {
   AgentJobHandle,
   AgentExecutor,
   AgentRunContext,
   AgentRunResult,
 } from '@cat-factory/kernel'
+import { clearRegisteredAgentKinds, registerAgentKind } from '@cat-factory/agents'
 import { CompositeAgentExecutor } from '../../src/infrastructure/ai/CompositeAgentExecutor'
 
 // CompositeAgentExecutor must send the repo-operating steps — implementation
@@ -88,6 +89,30 @@ describe('CompositeAgentExecutor', () => {
     // Non-sandbox kinds still run inline even with no container.
     expect((await noSandbox.run(ctx('architect'))).output).toBe('inline')
   })
+
+  it('routes a registered container kind to the container executor', async () => {
+    registerAgentKind({
+      kind: 'org-security-auditor',
+      systemPrompt: 'You audit the change for security issues.',
+      requiresContainer: true,
+    })
+    // A registered inline kind (no requiresContainer) stays on the inline executor.
+    registerAgentKind({ kind: 'org-planner', systemPrompt: 'You plan the work.' })
+    expect((await composite.run(ctx('org-security-auditor'))).output).toBe('container')
+    expect((await composite.run(ctx('org-planner'))).output).toBe('inline')
+  })
+
+  it('throws for a registered container kind when no container is wired', () => {
+    registerAgentKind({
+      kind: 'org-security-auditor',
+      systemPrompt: 'You audit the change.',
+      requiresContainer: true,
+    })
+    const noSandbox = new CompositeAgentExecutor(new Tagged('inline'), null)
+    expect(() => noSandbox.run(ctx('org-security-auditor'))).toThrow(/needs a real checkout/)
+  })
+
+  afterEach(() => clearRegisteredAgentKinds())
 
   it('forwards stopJob to the container executor', async () => {
     const container = new StoppableContainer()

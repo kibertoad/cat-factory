@@ -7,6 +7,7 @@ import {
   type AsyncAgentExecutor,
   isAsyncAgentExecutor,
 } from '@cat-factory/kernel'
+import { registeredKindRequiresContainer } from '@cat-factory/agents'
 
 // Routes each pipeline step to the right executor by agent kind. The kinds that
 // produce and commit files against a real checkout — implementation (`coder`),
@@ -70,7 +71,13 @@ export class CompositeAgentExecutor implements AsyncAgentExecutor {
    * because a one-shot LLM call cannot operate on repo contents.
    */
   private pick(context: AgentRunContext): AgentExecutor {
-    if (!CONTAINER_KINDS.has(context.agentKind)) return this.inline
+    // Built-in container kinds, plus any custom kind a deployment registered with
+    // `requiresContainer: true` (e.g. a proprietary org package contributing a
+    // repo-operating agent), need a real checkout; everything else runs inline.
+    const needsContainer =
+      CONTAINER_KINDS.has(context.agentKind) ||
+      registeredKindRequiresContainer(context.agentKind)
+    if (!needsContainer) return this.inline
     if (!this.container) {
       throw new Error(
         `Agent kind '${context.agentKind}' needs a real checkout (clone/edit/commit/PR) ` +
