@@ -25,3 +25,53 @@ export interface AgentRouting {
 export function resolveAgentConfig(routing: AgentRouting, kind: AgentKind): AgentModelConfig {
   return routing.byKind[kind] ?? routing.default
 }
+
+/** The resolvers a caller supplies so a step's model is picked the same way everywhere. */
+export interface StepModelResolvers {
+  agentRouting: AgentRouting
+  /** Resolve a model catalog id to a concrete ref; unknown/absent ids return undefined. */
+  resolveBlockModel: (modelId: string | undefined) => ModelRef | undefined
+  /**
+   * Resolve a workspace's per-agent-kind default model id, consulted when the block
+   * pins no usable model. Optional: absent → the env routing for the kind is used.
+   */
+  resolveWorkspaceModelDefault?: (
+    workspaceId: string,
+    agentKind: string,
+  ) => Promise<string | undefined>
+}
+
+/** What a step needs to resolve its model: which kind, the block's pin, the workspace. */
+export interface StepModelInputs {
+  agentKind: string
+  /** The model catalog id pinned on the block, if any. */
+  blockModelId: string | undefined
+  /** The workspace the step runs in; required to consult a per-kind default. */
+  workspaceId?: string
+}
+
+/**
+ * Resolve the concrete model ref for a pipeline step with the ONE canonical
+ * precedence used across every executor (the inline LLM executor, the container
+ * executor and the requirements reviewer): a block's pinned model wins, else the
+ * workspace's per-agent-kind default, else the env routing for the kind. Each
+ * candidate id is run through {@link StepModelResolvers.resolveBlockModel}, so an
+ * unresolvable pin (e.g. a stale id) falls through to the next source rather than
+ * silently skipping the workspace default.
+ */
+export async function resolveStepModelRef(
+  resolvers: StepModelResolvers,
+  inputs: StepModelInputs,
+): Promise<ModelRef> {
+  const fromBlock = resolvers.resolveBlockModel(inputs.blockModelId)
+  if (fromBlock) return fromBlock
+  if (resolvers.resolveWorkspaceModelDefault && inputs.workspaceId) {
+    const defaultId = await resolvers.resolveWorkspaceModelDefault(
+      inputs.workspaceId,
+      inputs.agentKind,
+    )
+    const fromDefault = resolvers.resolveBlockModel(defaultId)
+    if (fromDefault) return fromDefault
+  }
+  return resolveAgentConfig(resolvers.agentRouting, inputs.agentKind).ref
+}

@@ -18,3 +18,12 @@ overrides for the workspace — hydrated from the snapshot's `modelDefaults` and
 edited via the new `modelDefaults` store against `GET|PUT
 /workspaces/:ws/model-defaults`. Saved-pipeline management (list + delete) moved
 into the pipeline builder.
+
+Agent-kind icon rendering is consolidated into one safe path: a new
+`agentKindMeta()` accessor (total over palette archetypes, the engine "system"
+kinds — `ci`/`ci-fixer`/`merger`/`blueprints`/`conflicts` — and unknown/custom
+kinds) backs a reusable `AgentKindIcon.vue` used everywhere the pipeline builder
+lists steps. This fixes a crash where the saved-pipelines list indexed
+`AGENT_BY_KIND` for a system kind present in every seeded pipeline. The default-
+models panel also no longer mislabels a pinned-but-uncatalogued model as
+"Deployment default".

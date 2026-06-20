@@ -25,9 +25,12 @@ watch(open, (isOpen) => {
 })
 
 function modelLabel(id: string | undefined): string {
+  // No pin → the deployment routing default. A pinned-but-uncatalogued id (e.g. a
+  // model whose provider key was since removed) shows the raw id rather than
+  // masquerading as "Deployment default", so the active state isn't misrepresented.
+  if (!id) return 'Deployment default'
   const m = models.getModel(id)
-  if (!m) return 'Deployment default'
-  return `${m.label} · ${m.providerLabel}`
+  return m ? `${m.label} · ${m.providerLabel}` : id
 }
 
 function menuFor(kind: AgentKind) {
@@ -69,8 +72,8 @@ async function choose(kind: AgentKind, modelId: string | null) {
     <template #body>
       <div class="space-y-4">
         <p class="text-xs text-slate-400">
-          Pin which model each agent kind runs on for this workspace — e.g. a strong reasoning
-          model for the architect, a cheaper one for the documenter. A kind left on
+          Pin which model each agent kind runs on for this workspace — e.g. a strong reasoning model
+          for the architect, a cheaper one for the documenter. A kind left on
           <span class="text-slate-300">Deployment default</span> uses the server's configured
           routing. A model pinned on an individual task still overrides these.
         </p>

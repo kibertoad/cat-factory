@@ -27,9 +27,16 @@ export type ModelDefaults = v.InferOutput<typeof modelDefaultsSchema>
 
 /**
  * Replace a workspace's per-kind default models. Sending the full map replaces it
- * wholesale (a kind omitted is cleared). Each value is a trimmed, non-empty model id.
+ * wholesale (a kind omitted is cleared). Keys (agent kinds) and values (model ids)
+ * are both trimmed and must be non-empty — agent kinds are an open set (custom
+ * agents are allowed), so keys aren't checked against a closed list, and model ids
+ * aren't validated against the catalog here (an unresolvable id simply falls back
+ * to the env routing at run time).
  */
 export const setModelDefaultsSchema = v.object({
-  defaults: v.record(v.string(), v.pipe(v.string(), v.trim(), v.minLength(1))),
+  defaults: v.record(
+    v.pipe(v.string(), v.trim(), v.minLength(1)),
+    v.pipe(v.string(), v.trim(), v.minLength(1)),
+  ),
 })
 export type SetModelDefaultsInput = v.InferOutput<typeof setModelDefaultsSchema>

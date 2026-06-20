@@ -37,6 +37,15 @@ export interface RequirementReviewServiceDependencies {
    * block pins a model the reviewer runs it; otherwise it falls back to `modelRef`.
    */
   resolveBlockModel?: (modelId: string | undefined) => ModelRef | undefined
+  /**
+   * Resolve the workspace's per-agent-kind default model id, consulted when the
+   * block pins none — so the reviewer honours a workspace default for the
+   * `requirements` kind exactly like a pipeline step. Absent → `modelRef` is used.
+   */
+  resolveWorkspaceModelDefault?: (
+    workspaceId: string,
+    agentKind: string,
+  ) => Promise<string | undefined>
   /** Linked PRD/RFC documents (optional; only when the documents integration is on). */
   documentRepository?: DocumentRepository
   /** Linked tracker issues (optional; only when the task-source integration is on). */
@@ -45,6 +54,9 @@ export interface RequirementReviewServiceDependencies {
 
 /** Settled items no longer need a human; both gate-pass the incorporate step. */
 const SETTLED: ReviewItemStatus[] = ['resolved', 'dismissed']
+
+/** The agent kind the reviewer runs as — keys its per-workspace default model. */
+const REQUIREMENTS_AGENT_KIND = 'requirements'
 
 /**
  * The requirements-review agent. Stateless and synchronous (no container, no
@@ -69,12 +81,21 @@ export class RequirementReviewService {
   }
 
   /**
-   * The model to run for a block: its pinned selection (resolved with the
-   * direct/Cloudflare fallback) when present, else the routing default. Mirrors
-   * how {@link AiAgentExecutor} picks a step's model.
+   * The model to run for a block, with the same precedence as a pipeline step: the
+   * block's pinned selection wins, else the workspace's per-kind default for the
+   * `requirements` kind, else the routing default. Each candidate id is run through
+   * {@link resolveBlockModel} so a stale id falls through to the next source.
    */
-  private modelFor(block: Block): ModelRef | undefined {
-    return this.deps.resolveBlockModel?.(block.modelId) ?? this.deps.modelRef
+  private async modelFor(workspaceId: string, block: Block): Promise<ModelRef | undefined> {
+    const fromBlock = this.deps.resolveBlockModel?.(block.modelId)
+    if (fromBlock) return fromBlock
+    const defaultId = await this.deps.resolveWorkspaceModelDefault?.(
+      workspaceId,
+      REQUIREMENTS_AGENT_KIND,
+    )
+    const fromDefault = this.deps.resolveBlockModel?.(defaultId)
+    if (fromDefault) return fromDefault
+    return this.deps.modelRef
   }
 
   /** The current review for a block, or null if none has been run. */
@@ -94,7 +115,7 @@ export class RequirementReviewService {
       blockId,
     )
     const { modelProvider } = this.deps
-    const ref = this.modelFor(block)
+    const ref = await this.modelFor(workspaceId, block)
     if (!modelProvider || !ref) {
       throw new ValidationError('No model is configured for the requirements reviewer')
     }
@@ -195,7 +216,7 @@ export class RequirementReviewService {
       )
     }
     const { modelProvider } = this.deps
-    const ref = this.modelFor(block)
+    const ref = await this.modelFor(workspaceId, block)
     if (!modelProvider || !ref) {
       throw new ValidationError('No model is configured for the requirements reviewer')
     }

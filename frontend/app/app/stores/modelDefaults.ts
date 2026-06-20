@@ -16,7 +16,7 @@ export const useModelDefaultsStore = defineStore('modelDefaults', () => {
   const defaults = ref<Record<string, string>>({})
 
   function hydrate(map: Record<string, string> | undefined) {
-    defaults.value = { ...(map ?? {}) }
+    defaults.value = { ...map }
   }
 
   /** The model id chosen for a kind, or undefined when it falls back to routing. */

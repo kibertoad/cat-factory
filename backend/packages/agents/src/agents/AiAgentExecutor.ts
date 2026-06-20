@@ -2,7 +2,7 @@ import { generateText } from 'ai'
 import type { AgentExecutor, AgentRunContext, AgentRunResult } from '@cat-factory/kernel'
 import type { ModelProvider, ModelRef } from '@cat-factory/kernel'
 import { systemPromptFor, userPromptFor } from './agent-catalog.js'
-import { type AgentRouting, resolveAgentConfig } from './agent-routing.js'
+import { type AgentRouting, resolveAgentConfig, resolveStepModelRef } from './agent-routing.js'
 import { composeBlockSystemPrompt } from './prompt-fragments.js'
 
 export interface AiAgentExecutorDependencies {
@@ -15,6 +15,16 @@ export interface AiAgentExecutorDependencies {
    * agent routing. Defaults to "no per-block override".
    */
   resolveBlockModel?: (modelId: string | undefined) => ModelRef | undefined
+  /**
+   * Resolve the workspace's per-agent-kind default model id, consulted when the
+   * block pins no usable model. Optional: absent → the env routing for the kind is
+   * used. Supplying it makes the inline kinds honour the workspace defaults exactly
+   * like the container executor (block-pinned > workspace default > env routing).
+   */
+  resolveWorkspaceModelDefault?: (
+    workspaceId: string,
+    agentKind: string,
+  ) => Promise<string | undefined>
 }
 
 /**
@@ -28,18 +38,39 @@ export class AiAgentExecutor implements AgentExecutor {
   private readonly modelProvider: ModelProvider
   private readonly agentRouting: AgentRouting
   private readonly resolveBlockModel: (modelId: string | undefined) => ModelRef | undefined
+  private readonly resolveWorkspaceModelDefault?: (
+    workspaceId: string,
+    agentKind: string,
+  ) => Promise<string | undefined>
 
-  constructor({ modelProvider, agentRouting, resolveBlockModel }: AiAgentExecutorDependencies) {
+  constructor({
+    modelProvider,
+    agentRouting,
+    resolveBlockModel,
+    resolveWorkspaceModelDefault,
+  }: AiAgentExecutorDependencies) {
     this.modelProvider = modelProvider
     this.agentRouting = agentRouting
     this.resolveBlockModel = resolveBlockModel ?? (() => undefined)
+    this.resolveWorkspaceModelDefault = resolveWorkspaceModelDefault
   }
 
   async run(context: AgentRunContext): Promise<AgentRunResult> {
     const config = resolveAgentConfig(this.agentRouting, context.agentKind)
-    // A model picked for the block overrides the routing default; an unknown or
-    // absent selection falls back to the configured routing for the agent kind.
-    const ref = this.resolveBlockModel(context.block.modelId) ?? config.ref
+    // The model is resolved with the shared step precedence: a block's pinned model
+    // wins, else the workspace's per-kind default, else the env routing for the kind.
+    const ref = await resolveStepModelRef(
+      {
+        agentRouting: this.agentRouting,
+        resolveBlockModel: this.resolveBlockModel,
+        resolveWorkspaceModelDefault: this.resolveWorkspaceModelDefault,
+      },
+      {
+        agentKind: context.agentKind,
+        blockModelId: context.block.modelId,
+        workspaceId: context.workspaceId,
+      },
+    )
     const model = this.modelProvider.resolve(ref)
 
     // Base role prompt, then fold in the best-practice fragments selected for the

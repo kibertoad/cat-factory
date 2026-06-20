@@ -249,24 +249,52 @@ async function create() {
           </p>
           <div class="flex flex-wrap items-end gap-3">
             <label class="block min-w-40 flex-1">
-              <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">Name</span>
+              <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500"
+                >Name</span
+              >
               <UInput v-model="draft.name" size="sm" placeholder="e.g. Cautious" />
             </label>
             <label class="block w-20">
-              <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">Cmplx%</span>
-              <UInput v-model.number="draft.maxComplexity" type="number" :min="0" :max="100" size="sm" />
+              <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500"
+                >Cmplx%</span
+              >
+              <UInput
+                v-model.number="draft.maxComplexity"
+                type="number"
+                :min="0"
+                :max="100"
+                size="sm"
+              />
             </label>
             <label class="block w-20">
-              <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">Risk%</span>
+              <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500"
+                >Risk%</span
+              >
               <UInput v-model.number="draft.maxRisk" type="number" :min="0" :max="100" size="sm" />
             </label>
             <label class="block w-20">
-              <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">Impact%</span>
-              <UInput v-model.number="draft.maxImpact" type="number" :min="0" :max="100" size="sm" />
+              <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500"
+                >Impact%</span
+              >
+              <UInput
+                v-model.number="draft.maxImpact"
+                type="number"
+                :min="0"
+                :max="100"
+                size="sm"
+              />
             </label>
             <label class="block w-20">
-              <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">CI-fix</span>
-              <UInput v-model.number="draft.ciMaxAttempts" type="number" :min="0" :max="50" size="sm" />
+              <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500"
+                >CI-fix</span
+              >
+              <UInput
+                v-model.number="draft.ciMaxAttempts"
+                type="number"
+                :min="0"
+                :max="50"
+                size="sm"
+              />
             </label>
             <UButton
               color="primary"

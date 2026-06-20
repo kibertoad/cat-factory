@@ -735,6 +735,15 @@ function createRequirementsModule(deps: CoreDependencies): RequirementsModule | 
     modelRef: deps.requirementReviewModel ?? deps.documentPlannerModel,
     // Honour a block's pinned model with the direct/Cloudflare fallback, like the executor.
     resolveBlockModel: deps.requirementReviewResolveModel,
+    // Honour the workspace's per-kind default for the `requirements` kind too, so the
+    // reviewer resolves its model exactly like a pipeline step. Reuses the already
+    // wired model-defaults repository; absent → only block-pin + routing default.
+    resolveWorkspaceModelDefault: deps.modelDefaultsRepository
+      ? (workspaceId, agentKind) =>
+          deps
+            .modelDefaultsRepository!.getForKind(workspaceId, agentKind)
+            .then((v) => v ?? undefined)
+      : undefined,
     documentRepository: deps.documentRepository,
     taskRepository: deps.taskRepository,
   })

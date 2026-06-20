@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import type { AgentKind } from '~/types/domain'
-import { AGENT_BY_KIND } from '~/utils/catalog'
 import AgentPalette from '~/components/palettes/AgentPalette.vue'
+import AgentKindIcon from '~/components/pipeline/AgentKindIcon.vue'
 
 const pipelines = usePipelinesStore()
 const agents = useAgentsStore()
@@ -107,12 +107,7 @@ async function save() {
               class="flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-800/60 p-2"
             >
               <span class="w-4 text-center text-[10px] text-slate-500">{{ i + 1 }}</span>
-              <UIcon
-                :name="AGENT_BY_KIND[kind].icon"
-                class="h-4 w-4"
-                :style="{ color: AGENT_BY_KIND[kind].color }"
-              />
-              <span class="text-xs text-slate-100">{{ AGENT_BY_KIND[kind].label }}</span>
+              <AgentKindIcon :kind="kind" show-label />
               <div class="ml-auto flex items-center">
                 <!-- Approval gate: pause after this step so a human reviews (and
                      can edit) its proposal before the next step runs. -->
@@ -169,14 +164,12 @@ async function save() {
               >
                 <span class="flex-1 truncate text-xs text-slate-200">{{ p.name }}</span>
                 <div class="flex items-center gap-0.5">
-                  <template v-for="(k, i) in p.agentKinds" :key="i">
-                    <UIcon
-                      :name="AGENT_BY_KIND[k].icon"
-                      class="h-3.5 w-3.5"
-                      :style="{ color: AGENT_BY_KIND[k].color }"
-                      :title="AGENT_BY_KIND[k].label"
-                    />
-                  </template>
+                  <AgentKindIcon
+                    v-for="(k, i) in p.agentKinds"
+                    :key="i"
+                    :kind="k"
+                    icon-class="h-3.5 w-3.5"
+                  />
                 </div>
                 <UButton
                   icon="i-lucide-trash-2"

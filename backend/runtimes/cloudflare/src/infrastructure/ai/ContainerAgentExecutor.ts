@@ -11,7 +11,7 @@ import {
 import {
   type AgentRouting,
   composeBlockSystemPrompt,
-  resolveAgentConfig,
+  resolveStepModelRef,
   systemPromptFor,
   userPromptFor,
 } from '@cat-factory/agents'
@@ -201,13 +201,16 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     // Lock the model to a provider the proxy can serve — either a direct
     // OpenAI-compatible provider or Cloudflare Workers AI (served in-Worker via
     // the AI binding) — and locking it here stops the container choosing another.
-    const config = resolveAgentConfig(this.deps.agentRouting, context.agentKind)
-    // Precedence: a block's pinned model wins; else the workspace's per-kind
-    // default; else the env routing for the kind (config.ref).
-    const pinnedId =
-      context.block.modelId ??
-      (await this.deps.resolveWorkspaceModelDefault?.(workspaceId, context.agentKind))
-    const ref = this.deps.resolveBlockModel(pinnedId) ?? config.ref
+    // The shared step precedence: a block's pinned model wins; else the workspace's
+    // per-kind default; else the env routing for the kind.
+    const ref = await resolveStepModelRef(
+      {
+        agentRouting: this.deps.agentRouting,
+        resolveBlockModel: this.deps.resolveBlockModel,
+        resolveWorkspaceModelDefault: this.deps.resolveWorkspaceModelDefault,
+      },
+      { agentKind: context.agentKind, blockModelId: context.block.modelId, workspaceId },
+    )
     if (!isProxyableProvider(ref.provider)) {
       throw new Error(
         `Container implementation needs a model the LLM proxy can serve ` +

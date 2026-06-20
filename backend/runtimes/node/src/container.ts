@@ -51,6 +51,11 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     modelProvider: createNodeModelProvider(env),
     agentRouting: config.agents.routing,
     resolveBlockModel: config.agents.resolveBlockModel,
+    // Honour the workspace's per-agent-kind defaults at run time (block-pinned >
+    // workspace per-kind default > env routing). The Node facade runs every kind
+    // inline, so without this the stored defaults would never take effect.
+    resolveWorkspaceModelDefault: (workspaceId, agentKind) =>
+      repos.modelDefaultsRepository.getForKind(workspaceId, agentKind).then((v) => v ?? undefined),
   })
 
   const dependencies: CoreDependencies = {
