@@ -90,7 +90,7 @@ export function systemPromptFor(kind: AgentKind): string {
 function withRevision(prompt: string, context: AgentRunContext): string {
   const revision = context.revision
   if (!revision) return prompt
-  return [
+  const lines = [
     prompt,
     '',
     'A human reviewed your previous proposal and requested changes. Revise that',
@@ -102,7 +102,22 @@ function withRevision(prompt: string, context: AgentRunContext): string {
     '',
     'Reviewer feedback:',
     revision.feedback || '(none given)',
-  ].join('\n')
+  ]
+  // Per-block comments the reviewer left on specific parts of the proposal. Each
+  // quotes the exact text it targets, so the agent can locate and revise it.
+  if (revision.comments?.length) {
+    lines.push('', 'Comments on specific parts of your proposal:')
+    for (const c of revision.comments) {
+      lines.push(
+        '',
+        'On this part:',
+        c.quotedSource || '(empty)',
+        'Comment:',
+        c.body || '(none given)',
+      )
+    }
+  }
+  return lines.join('\n')
 }
 
 /** Build the user prompt from the block context and the run so far. */

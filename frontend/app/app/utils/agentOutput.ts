@@ -12,6 +12,41 @@
 // it is independent of markdown-it's token internals.
 import MarkdownIt from 'markdown-it'
 
+/**
+ * Stamp every TOP-LEVEL block element with its source line range
+ * (`data-src-start`/`data-src-end`, 0-based, end-exclusive — straight from
+ * markdown-it's `token.map`). The approval-mode reader uses these to let a human
+ * comment on a specific block and quote that block's verbatim raw markdown back to
+ * the agent on a "request changes" re-run. Only top-level blocks are tagged (depth
+ * tracked over the flat token stream) so a comment targets a whole paragraph/list/
+ * heading rather than a nested fragment.
+ */
+function sourceLinePlugin(md: MarkdownIt): void {
+  md.core.ruler.push('source_lines', (state) => {
+    let depth = 0
+    for (const token of state.tokens) {
+      const atTopLevel = depth === 0
+      // Annotate a top-level block's opening token (nesting 1) or a self-contained
+      // block token (nesting 0, e.g. fence/hr/code_block/html_block).
+      if (atTopLevel && token.block && token.type !== 'inline' && token.map && token.nesting >= 0) {
+        token.attrSet('data-src-start', String(token.map[0]))
+        token.attrSet('data-src-end', String(token.map[1]))
+      }
+      if (token.nesting === 1) depth++
+      else if (token.nesting === -1) depth--
+    }
+    return true
+  })
+}
+
+/**
+ * The verbatim raw-markdown source of a block, given the original output text and a
+ * 0-based, end-exclusive line range (as captured from `data-src-start/end`).
+ */
+export function sliceSource(output: string, start: number, end: number): string {
+  return (output ?? '').split('\n').slice(start, end).join('\n')
+}
+
 /** One heading-delimited section. `depth` 0 / empty `title` is the preamble that
  * precedes the first heading (rendered, but never shown in the ToC). */
 export interface OutputSection {
@@ -38,7 +73,7 @@ const md = new MarkdownIt({
   linkify: true, // turn bare URLs into links
   breaks: true, // single newlines → <br>, matching how agents lay out prose
   typographer: true,
-})
+}).use(sourceLinePlugin)
 
 const HEADINGS = new Set(['H1', 'H2', 'H3', 'H4', 'H5', 'H6'])
 const LINK_CLASS = 'text-indigo-300 underline decoration-indigo-500/40 hover:text-indigo-200'

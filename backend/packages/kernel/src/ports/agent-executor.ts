@@ -123,9 +123,15 @@ export interface AgentRunContext {
    * When a human reviewed this step's gated proposal and requested changes, the
    * previous proposal plus their feedback. Present only on a re-run triggered by
    * "Request changes"; the agent should revise its previous proposal to address
-   * the feedback rather than start from scratch.
+   * the feedback rather than start from scratch. `comments` are GitHub-review-style
+   * notes on specific blocks of the proposal (each carries the verbatim source it
+   * targets), folded into the prompt alongside the freeform `feedback`.
    */
-  revision?: { previousProposal: string; feedback: string }
+  revision?: {
+    previousProposal: string
+    feedback: string
+    comments?: { quotedSource: string; body: string }[]
+  }
 }
 
 /** A point at which the agent needs a human to choose before continuing. */

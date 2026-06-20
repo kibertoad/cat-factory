@@ -225,22 +225,43 @@ export const stepSubtasksSchema = v.object({
 export type StepSubtasks = v.InferOutput<typeof stepSubtasksSchema>
 
 /**
+ * One GitHub-review-style comment a human left on a specific block of an agent's
+ * proposal while reviewing an approval gate. `quotedSource` is the verbatim raw
+ * markdown of the block the comment targets (sliced from the proposal by its
+ * source line range), so a "request changes" re-run can quote the agent's own
+ * text back to it rather than a re-rendered approximation.
+ */
+export const stepReviewCommentSchema = v.object({
+  /** Verbatim raw-markdown source of the commented block. */
+  quotedSource: v.string(),
+  /** 0-based source line range [start, end) of the block, for best-effort re-anchoring. */
+  srcStart: v.number(),
+  srcEnd: v.number(),
+  /** The reviewer's note on this block. */
+  body: v.string(),
+})
+export type StepReviewComment = v.InferOutput<typeof stepReviewCommentSchema>
+
+/**
  * A human approval gate raised after a step whose pipeline marked it
  * `requiresApproval`. Unlike a {@link Decision} (which an agent raises and which
  * re-runs the same step on resolution), an approval gate fires once the step has
  * already produced its `proposal`; approving advances the run (carrying the —
- * possibly edited — proposal forward as context), while requesting changes
- * re-runs the same step with the human's `feedback`.
+ * possibly edited — proposal forward as context), requesting changes re-runs the
+ * same step with the human's `feedback` (+ per-block `comments`), and rejecting
+ * stops the run entirely (a terminal `rejected` failure the board can retry).
  */
 export const stepApprovalSchema = v.object({
   /** Unique id of this gate; the durable run parks on it like a decision. */
   id: v.string(),
-  /** `pending` while awaiting the human; terminal `approved`; `changes_requested` re-runs the step. */
-  status: v.picklist(['pending', 'approved', 'changes_requested']),
+  /** `pending` while awaiting the human; terminal `approved`/`rejected`; `changes_requested` re-runs the step. */
+  status: v.picklist(['pending', 'approved', 'changes_requested', 'rejected']),
   /** The agent's output the human is reviewing (editable before approval). */
   proposal: v.string(),
-  /** When changes were requested, the human's guidance fed into the re-run. */
+  /** When changes were requested, the human's freeform guidance fed into the re-run. */
   feedback: v.optional(v.string()),
+  /** When changes were requested, per-block review comments fed into the re-run. */
+  comments: v.optional(v.array(stepReviewCommentSchema)),
 })
 export type StepApproval = v.InferOutput<typeof stepApprovalSchema>
 
@@ -264,6 +285,7 @@ export type AgentRunKind = v.InferOutput<typeof agentRunKindSchema>
  *   - `agent`            — the agent / git push reported a failure.
  *   - `job_failed`       — an async container job came back failed. [execution]
  *   - `decision_timeout` — a human decision was not answered in time. [execution]
+ *   - `rejected`         — a human rejected a gated proposal, stopping the run. [execution]
  *   - `cancelled`        — the user (or an orphan sweep) explicitly stopped the run.
  *   - `unknown`          — anything not otherwise classified.
  */
@@ -275,6 +297,7 @@ export const agentFailureKindSchema = v.picklist([
   'agent',
   'job_failed',
   'decision_timeout',
+  'rejected',
   'cancelled',
   'unknown',
 ])

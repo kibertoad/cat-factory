@@ -397,6 +397,79 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         expect(step.approval?.proposal).toBe(step.output)
         expect(exec.steps[1]!.state).toBe('pending')
       })
+
+      it('re-runs a gated step with freeform feedback and per-block comments', async () => {
+        const app = harness.makeApp({ confidence: 1 })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        const gated = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Gated',
+          agentKinds: ['architect', 'coder'],
+          gates: [true, false],
+        })
+        await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+          pipelineId: gated.body.id,
+        })
+
+        const blocked = await app.drive(wsId)
+        const exec = blocked.find((e) => e.blockId === 'task_login')!
+        const approvalId = exec.steps[0]!.approval!.id
+
+        const res = await app.call(
+          'POST',
+          `/workspaces/${wsId}/executions/${exec.id}/steps/${approvalId}/request-changes`,
+          {
+            feedback: 'tighten the plan',
+            comments: [
+              { quotedSource: '## Summary', srcStart: 0, srcEnd: 1, body: 'be specific here' },
+            ],
+          },
+        )
+        expect(res.status).toBe(200)
+
+        // The re-run folds the feedback + comment into the agent context; the fake
+        // executor echoes both so we can assert they reached the agent.
+        const reran = await app.drive(wsId)
+        const after = reran.find((e) => e.blockId === 'task_login')!
+        expect(after.steps[0]!.output).toContain('revised: tighten the plan')
+        expect(after.steps[0]!.output).toContain('+1 comments')
+        expect(after.steps[0]!.approval?.status).toBe('pending')
+      })
+
+      it('rejects a gated proposal, failing the run and blocking the task', async () => {
+        const app = harness.makeApp({ confidence: 1 })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        const gated = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Gated',
+          agentKinds: ['architect', 'coder'],
+          gates: [true, false],
+        })
+        await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+          pipelineId: gated.body.id,
+        })
+
+        const blocked = await app.drive(wsId)
+        const exec = blocked.find((e) => e.blockId === 'task_login')!
+        const approvalId = exec.steps[0]!.approval!.id
+
+        const res = await app.call<ExecutionInstance>(
+          'POST',
+          `/workspaces/${wsId}/executions/${exec.id}/steps/${approvalId}/reject`,
+          { reason: 'wrong direction' },
+        )
+        expect(res.status).toBe(200)
+        expect(res.body.status).toBe('failed')
+        expect(res.body.failure?.kind).toBe('rejected')
+        expect(res.body.steps[0]!.approval?.status).toBe('rejected')
+
+        const task = (
+          await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+        ).body.blocks.find((b) => b.id === 'task_login')!
+        expect(task.status).toBe('blocked')
+      })
     })
 
     describe('recurring pipelines', () => {

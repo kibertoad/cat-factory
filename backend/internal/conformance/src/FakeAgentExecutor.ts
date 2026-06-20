@@ -112,8 +112,12 @@ export class FakeAgentExecutor implements AgentExecutor {
       }
     }
 
-    // Surface revision feedback so a "request changes" re-run can be asserted.
-    const revisionSuffix = context.revision ? ` [revised: ${context.revision.feedback}]` : ''
+    // Surface revision feedback (and any per-block comment count) so a "request
+    // changes" re-run — freeform and/or comment-driven — can be asserted.
+    const commentCount = context.revision?.comments?.length ?? 0
+    const revisionSuffix = context.revision
+      ? ` [revised: ${context.revision.feedback ?? ''}${commentCount ? ` +${commentCount} comments` : ''}]`
+      : ''
     return {
       output: `[${context.agentKind}] processed "${context.block.title}"${revisionSuffix}`,
       model: 'fake',

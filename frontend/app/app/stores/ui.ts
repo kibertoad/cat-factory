@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { DocumentSourceKind, TaskSourceKind, LodLevel } from '~/types/domain'
 import { zoomToLod, lodAtLeast } from '~/composables/useSemanticZoom'
+import { useExecutionStore } from '~/stores/execution'
 
 /** Transient UI state: selection, panels, zoom level. */
 export const useUiStore = defineStore('ui', () => {
@@ -9,8 +10,6 @@ export const useUiStore = defineStore('ui', () => {
   const focusBlockId = ref<string | null>(null)
   const builderOpen = ref(false)
   const decisionContext = ref<{ instanceId: string; decisionId: string } | null>(null)
-  // Approval-gate modal: the run + gate a human is reviewing, or null when closed.
-  const approvalContext = ref<{ instanceId: string; approvalId: string } | null>(null)
 
   // Document-source integration modals, keyed by source. `documentImport` and
   // `spawnPreview` carry an optional target frame, so structure spawned from a
@@ -128,11 +127,16 @@ export const useUiStore = defineStore('ui', () => {
     decisionContext.value = null
   }
 
-  function openApproval(instanceId: string, approvalId: string) {
-    approvalContext.value = { instanceId, approvalId }
-  }
-  function closeApproval() {
-    approvalContext.value = null
+  /**
+   * Open a pending approval gate in the conclusions reader (approval mode). Resolves
+   * the step index from the gate id so every board/inspector entry point can keep
+   * passing the approval id it already has.
+   */
+  function openApprovalDetail(instanceId: string, approvalId: string) {
+    const execution = useExecutionStore()
+    const instance = execution.getInstance(instanceId)
+    const idx = instance?.steps.findIndex((s) => s.approval?.id === approvalId) ?? -1
+    if (idx >= 0) stepDetail.value = { instanceId, stepIndex: idx }
   }
 
   function openDocumentConnect(source: DocumentSourceKind) {
@@ -253,7 +257,6 @@ export const useUiStore = defineStore('ui', () => {
     focusBlockId,
     builderOpen,
     decisionContext,
-    approvalContext,
     documentConnect,
     documentImport,
     spawnPreview,
@@ -282,8 +285,7 @@ export const useUiStore = defineStore('ui', () => {
     openBuilder,
     openDecision,
     closeDecision,
-    openApproval,
-    closeApproval,
+    openApprovalDetail,
     openDocumentConnect,
     closeDocumentConnect,
     openDocumentImport,

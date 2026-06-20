@@ -1,5 +1,6 @@
 import {
   approveStepSchema,
+  rejectStepSchema,
   requestStepChangesSchema,
   resolveDecisionSchema,
   startExecutionSchema,
@@ -133,18 +134,37 @@ export function executionController(): Hono<AppEnv> {
     },
   )
 
-  // Request changes on a gated proposal: the step re-runs with this feedback.
+  // Request changes on a gated proposal: the step re-runs with the reviewer's
+  // freeform feedback and/or per-block comments.
   app.post(
     '/executions/:executionId/steps/:approvalId/request-changes',
     jsonBody(requestStepChangesSchema),
     async (c) => {
+      const { feedback, comments } = c.req.valid('json')
       const instance = await c
         .get('container')
         .executionService.requestStepChanges(
           param(c, 'workspaceId'),
           param(c, 'executionId'),
           param(c, 'approvalId'),
-          c.req.valid('json').feedback,
+          { feedback, comments },
+        )
+      return c.json(instance)
+    },
+  )
+
+  // Reject a gated proposal: the run stops entirely (a terminal, retryable failure).
+  app.post(
+    '/executions/:executionId/steps/:approvalId/reject',
+    jsonBody(rejectStepSchema),
+    async (c) => {
+      const instance = await c
+        .get('container')
+        .executionService.rejectStep(
+          param(c, 'workspaceId'),
+          param(c, 'executionId'),
+          param(c, 'approvalId'),
+          c.req.valid('json').reason,
         )
       return c.json(instance)
     },

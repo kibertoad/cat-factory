@@ -10,6 +10,7 @@ import type {
   PipelineStep,
   PullRequestMerger,
   PullRequestMergeabilityProvider,
+  StepReviewComment,
   TicketTrackerProvider,
 } from '@cat-factory/kernel'
 import {
@@ -80,6 +81,8 @@ const EXECUTION_FAILURE_HINTS: Partial<Record<AgentFailureKind, string>> = {
     'The run exceeded its time budget — a step or the implementation job did not finish in time. Retry to start it again.',
   decision_timeout:
     'A required decision was not answered in time, so the run was stopped. Retry to re-run the pipeline.',
+  rejected:
+    'You rejected this step’s proposal, stopping the run. Retry to re-run the pipeline from the rejected step.',
   cancelled: 'You stopped this run; its container was killed. Retry to start it again.',
   unknown: 'The run failed for an unclassified reason. Review the run, then retry.',
 }
@@ -1264,6 +1267,14 @@ export class ExecutionService {
             revision: {
               previousProposal: step.approval.proposal,
               feedback: step.approval.feedback ?? '',
+              ...(step.approval.comments?.length
+                ? {
+                    comments: step.approval.comments.map((c) => ({
+                      quotedSource: c.quotedSource,
+                      body: c.body,
+                    })),
+                  }
+                : {}),
             },
           }
         : {}),
@@ -1752,15 +1763,17 @@ export class ExecutionService {
 
   /**
    * Request changes on a step's gated proposal: the same step re-runs with the
-   * human's feedback (and its prior proposal) folded into the agent's context (see
-   * `buildAgentContext`). The run is left `running` on the same step; on the
-   * re-run's completion the gate is raised afresh.
+   * human's freeform feedback and/or per-block comments (and its prior proposal)
+   * folded into the agent's context (see `buildAgentContext`). The run is left
+   * `running` on the same step; on the re-run's completion the gate is raised
+   * afresh. At least one of `feedback`/`comments` is expected (the controller
+   * validates this), but an empty review is harmless — the agent simply re-runs.
    */
   async requestStepChanges(
     workspaceId: string,
     executionId: string,
     approvalId: string,
-    feedback: string,
+    review: { feedback?: string; comments?: StepReviewComment[] },
   ): Promise<ExecutionInstance> {
     await this.requireWorkspace(workspaceId)
     const instance = assertFound(
@@ -1773,9 +1786,13 @@ export class ExecutionService {
     if (step.approval.status === 'approved') {
       throw new ConflictError(`Approval '${approvalId}' is already approved`)
     }
+    if (step.approval.status === 'rejected') {
+      throw new ConflictError(`Approval '${approvalId}' was rejected`)
+    }
 
     step.approval.status = 'changes_requested'
-    step.approval.feedback = feedback
+    step.approval.feedback = review.feedback
+    step.approval.comments = review.comments?.length ? review.comments : undefined
     // Drop the live job handle so the re-run dispatches fresh work rather than
     // re-attaching to the finished job (async steps); inline steps ignore this.
     step.jobId = undefined
@@ -1789,6 +1806,53 @@ export class ExecutionService {
     await this.workRunner.signalDecision(workspaceId, instance.id, approvalId, 'changes_requested')
     await this.emitInstance(workspaceId, instance)
     return instance
+  }
+
+  /**
+   * Reject a step's gated proposal: the run stops entirely. The gate is marked
+   * `rejected` and the run is failed with a dedicated `rejected` failure kind, so
+   * the board surfaces it via the shared failure banner (block → `blocked`) with a
+   * Retry affordance. The parked durable run is woken so it observes the now-terminal
+   * status and stops (the workflow's advance loop no-ops on a non-running run).
+   * Idempotent — rejecting an already-terminal gate is a no-op.
+   */
+  async rejectStep(
+    workspaceId: string,
+    executionId: string,
+    approvalId: string,
+    reason?: string,
+  ): Promise<ExecutionInstance> {
+    await this.requireWorkspace(workspaceId)
+    const instance = assertFound(
+      await this.executionRepository.get(workspaceId, executionId),
+      'Execution',
+      executionId,
+    )
+    const step = instance.steps.find((s) => s.approval?.id === approvalId)
+    if (!step || !step.approval) throw new NotFoundError('Approval', approvalId)
+    if (step.approval.status === 'approved') {
+      throw new ConflictError(`Approval '${approvalId}' is already approved`)
+    }
+    // Already rejected (and the run already failed): return as-is.
+    if (step.approval.status === 'rejected') {
+      return (await this.executionRepository.get(workspaceId, executionId)) ?? instance
+    }
+
+    step.approval.status = 'rejected'
+    if (reason) step.approval.feedback = reason
+    await this.executionRepository.upsert(workspaceId, instance)
+    const message = reason
+      ? `A reviewer rejected the proposal: ${reason}`
+      : 'A reviewer rejected the proposal, stopping the run.'
+    // failRun persists the terminal failure + flips the block to `blocked` and emits.
+    await this.failRun(workspaceId, executionId, message, 'rejected')
+    // Wake the parked durable run; it re-reads the now-terminal status and stops.
+    await this.workRunner.signalDecision(workspaceId, instance.id, approvalId, 'rejected')
+    return assertFound(
+      await this.executionRepository.get(workspaceId, executionId),
+      'Execution',
+      executionId,
+    )
   }
 
   /** Merge an open PR: a block moves from `pr_ready` to `done`. */

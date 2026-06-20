@@ -5,6 +5,7 @@ import type {
   ExecutionInstance,
   Pipeline,
   PipelineStep,
+  ReviewComment,
   StepApproval,
 } from '~/types/domain'
 import { useWorkspaceStore } from '~/stores/workspace'
@@ -119,10 +120,21 @@ export const useExecutionStore = defineStore('execution', () => {
     await ws.refresh()
   }
 
-  /** Request changes on a gated proposal; the step re-runs with `feedback`. */
-  async function requestStepChanges(instanceId: string, approvalId: string, feedback: string) {
+  /** Request changes on a gated proposal; the step re-runs with the review. */
+  async function requestStepChanges(
+    instanceId: string,
+    approvalId: string,
+    review: { feedback?: string; comments?: ReviewComment[] },
+  ) {
     const ws = useWorkspaceStore()
-    await api.requestStepChanges(ws.requireId(), instanceId, approvalId, { feedback })
+    await api.requestStepChanges(ws.requireId(), instanceId, approvalId, review)
+    await ws.refresh()
+  }
+
+  /** Reject a gated proposal; the run stops entirely (a retryable failure). */
+  async function rejectStep(instanceId: string, approvalId: string, reason?: string) {
+    const ws = useWorkspaceStore()
+    await api.rejectStep(ws.requireId(), instanceId, approvalId, { reason })
     await ws.refresh()
   }
 
@@ -164,6 +176,7 @@ export const useExecutionStore = defineStore('execution', () => {
     resolveDecision,
     approveStep,
     requestStepChanges,
+    rejectStep,
     mergePr,
     cancel,
   }

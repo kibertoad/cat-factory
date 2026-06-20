@@ -56,7 +56,7 @@ import type {
   WorkspaceMount,
   WorkspaceSnapshot,
 } from '~/types/domain'
-import type { LlmCallMetric, LlmMetricsExport } from '~/types/execution'
+import type { LlmCallMetric, LlmMetricsExport, ReviewComment } from '~/types/execution'
 import type { RequirementReview, ReviewItemStatus } from '~/types/requirements'
 import type { Notification } from '~/types/notifications'
 import type {
@@ -304,10 +304,21 @@ export function useApi() {
       workspaceId: string,
       executionId: string,
       approvalId: string,
-      body: { feedback: string },
+      body: { feedback?: string; comments?: ReviewComment[] },
     ) =>
       http<ExecutionInstance>(
         `${ws(workspaceId)}/executions/${executionId}/steps/${approvalId}/request-changes`,
+        { method: 'POST', body },
+      ),
+
+    rejectStep: (
+      workspaceId: string,
+      executionId: string,
+      approvalId: string,
+      body: { reason?: string },
+    ) =>
+      http<ExecutionInstance>(
+        `${ws(workspaceId)}/executions/${executionId}/steps/${approvalId}/reject`,
         { method: 'POST', body },
       ),
 

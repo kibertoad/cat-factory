@@ -6,7 +6,6 @@ import SpendWarningBanner from '~/components/layout/SpendWarningBanner.vue'
 import PipelineBuilder from '~/components/pipeline/PipelineBuilder.vue'
 import InspectorPanel from '~/components/panels/InspectorPanel.vue'
 import DecisionModal from '~/components/panels/DecisionModal.vue'
-import ApprovalModal from '~/components/panels/ApprovalModal.vue'
 import AgentStepDetail from '~/components/panels/AgentStepDetail.vue'
 import ObservabilityPanel from '~/components/panels/ObservabilityPanel.vue'
 import BlockFocusView from '~/components/focus/BlockFocusView.vue'
@@ -89,7 +88,6 @@ watch(
 
       <PipelineBuilder />
       <DecisionModal />
-      <ApprovalModal />
       <AgentStepDetail />
       <ObservabilityPanel />
       <DocumentSourceConnectModal />

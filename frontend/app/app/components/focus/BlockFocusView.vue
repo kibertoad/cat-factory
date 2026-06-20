@@ -44,7 +44,7 @@ function openDecisionFor(decisionId: string) {
 }
 
 function openApprovalFor(approvalId: string) {
-  if (instance.value) ui.openApproval(instance.value.id, approvalId)
+  if (instance.value) ui.openApprovalDetail(instance.value.id, approvalId)
 }
 </script>
 

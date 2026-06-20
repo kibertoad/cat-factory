@@ -3,7 +3,7 @@ import { ref, reactive, computed, watch, nextTick, onMounted, onUnmounted } from
 import { onKeyStroke } from '@vueuse/core'
 import type { AgentState } from '~/types/domain'
 import { AGENT_BY_KIND } from '~/utils/catalog'
-import { parseOutputOutline } from '~/utils/agentOutput'
+import { parseOutputOutline, sliceSource } from '~/utils/agentOutput'
 import StepMetricsBar from '~/components/observability/StepMetricsBar.vue'
 
 // Detail overlay for a single pipeline step. Opened by clicking an agent in the
@@ -104,6 +104,11 @@ watch(
   (key) => {
     for (const k of Object.keys(collapsed)) delete collapsed[k]
     activeId.value = 'step-details'
+    // Reset the review draft whenever a different gate/step opens.
+    reviewComments.value = []
+    feedback.value = ''
+    draftTarget.value = null
+    draftBody.value = ''
     if (key) void nextTick(() => scrollEl.value?.scrollTo({ top: 0 }))
   },
 )
@@ -148,6 +153,129 @@ function onScroll() {
 async function copyOutput() {
   if (step.value?.output) await navigator.clipboard?.writeText(step.value.output)
 }
+
+// --- approval mode (GitHub-style review of a pending gate) -------------------
+// When the step's gate is pending the reader doubles as the approval surface: the
+// human can comment on individual blocks of the output (the rendered markdown
+// carries `data-src-start/end` from agentOutput), leave overall feedback, then
+// Approve / Request changes / Reject.
+interface DraftComment {
+  srcStart: number
+  srcEnd: number
+  quotedSource: string
+  body: string
+}
+const approvalPending = computed(() => step.value?.approval?.status === 'pending')
+const approvalId = computed(() => step.value?.approval?.id ?? null)
+const reviewComments = ref<DraftComment[]>([])
+const feedback = ref('')
+const submitting = ref(false)
+const draftTarget = ref<{ srcStart: number; srcEnd: number; quotedSource: string } | null>(null)
+const draftBody = ref('')
+
+const blockKey = (c: { srcStart: number; srcEnd: number }) => `${c.srcStart}:${c.srcEnd}`
+
+/** Toggle the highlight classes on commented / selected blocks within the reader. */
+function syncHighlights() {
+  const root = scrollEl.value
+  if (!root) return
+  const commented = new Set(reviewComments.value.map(blockKey))
+  const selected = draftTarget.value ? blockKey(draftTarget.value) : null
+  for (const el of Array.from(root.querySelectorAll('[data-src-start]'))) {
+    const key = `${el.getAttribute('data-src-start')}:${el.getAttribute('data-src-end')}`
+    el.classList.toggle('cf-commented', commented.has(key))
+    el.classList.toggle('cf-selected', key === selected)
+  }
+}
+
+/** Click a rendered block to start commenting on it (links keep working). */
+function onProseClick(e: MouseEvent) {
+  if (!approvalPending.value) return
+  const target = e.target as HTMLElement
+  if (target.closest('a')) return
+  const blockEl = target.closest('[data-src-start]') as HTMLElement | null
+  if (!blockEl) return
+  const srcStart = Number(blockEl.getAttribute('data-src-start'))
+  const srcEnd = Number(blockEl.getAttribute('data-src-end'))
+  if (Number.isNaN(srcStart) || Number.isNaN(srcEnd)) return
+  draftTarget.value = {
+    srcStart,
+    srcEnd,
+    quotedSource: sliceSource(step.value?.output ?? '', srcStart, srcEnd),
+  }
+  draftBody.value = ''
+  void nextTick(syncHighlights)
+}
+
+function addDraftComment() {
+  if (!draftTarget.value || !draftBody.value.trim()) return
+  reviewComments.value.push({ ...draftTarget.value, body: draftBody.value.trim() })
+  draftTarget.value = null
+  draftBody.value = ''
+  void nextTick(syncHighlights)
+}
+function cancelDraft() {
+  draftTarget.value = null
+  draftBody.value = ''
+  void nextTick(syncHighlights)
+}
+function removeComment(idx: number) {
+  reviewComments.value.splice(idx, 1)
+  void nextTick(syncHighlights)
+}
+
+const canRequestChanges = computed(
+  () => !!feedback.value.trim() || reviewComments.value.length > 0,
+)
+
+async function approve() {
+  if (!ctx.value || !approvalId.value || submitting.value) return
+  submitting.value = true
+  try {
+    await execution.approveStep(ctx.value.instanceId, approvalId.value)
+    close()
+  } finally {
+    submitting.value = false
+  }
+}
+async function requestChanges() {
+  if (!ctx.value || !approvalId.value || submitting.value || !canRequestChanges.value) return
+  submitting.value = true
+  try {
+    await execution.requestStepChanges(ctx.value.instanceId, approvalId.value, {
+      feedback: feedback.value.trim() || undefined,
+      comments: reviewComments.value.length
+        ? reviewComments.value.map((c) => ({
+            quotedSource: c.quotedSource,
+            srcStart: c.srcStart,
+            srcEnd: c.srcEnd,
+            body: c.body,
+          }))
+        : undefined,
+    })
+    close()
+  } finally {
+    submitting.value = false
+  }
+}
+async function reject() {
+  if (!ctx.value || !approvalId.value || submitting.value) return
+  if (!window.confirm('Reject this proposal and stop the run entirely?')) return
+  submitting.value = true
+  try {
+    await execution.rejectStep(ctx.value.instanceId, approvalId.value, feedback.value.trim() || undefined)
+    close()
+  } finally {
+    submitting.value = false
+  }
+}
+
+// Keep the in-document highlights in sync as the output renders or comments change.
+watch(
+  [approvalPending, () => step.value?.output, reviewComments, draftTarget],
+  () => void nextTick(syncHighlights),
+  { deep: true },
+)
 </script>
 
 <template>
@@ -213,6 +341,16 @@ async function copyOutput() {
               <p v-if="block" class="truncate text-xs text-slate-500">{{ block.title }}</p>
             </div>
             <div class="ml-auto flex items-center gap-1.5">
+              <UBadge
+                v-if="approvalPending"
+                color="warning"
+                variant="subtle"
+                size="sm"
+                class="mr-1"
+              >
+                <UIcon name="i-lucide-shield-check" class="mr-1 h-3 w-3" />
+                Approval required
+              </UBadge>
               <UButton
                 v-if="outline.sections.length"
                 :icon="allCollapsed ? 'i-lucide-unfold-vertical' : 'i-lucide-fold-vertical'"
@@ -435,10 +573,12 @@ async function copyOutput() {
                       v-html="s.titleHtml"
                     />
                   </button>
+                  <!-- eslint-disable-next-line vue/no-v-html -->
                   <div
                     v-show="!collapsed[s.id]"
                     class="reader-prose mt-1 text-[13px] leading-relaxed text-slate-300"
-                    :class="s.depth > 0 ? 'pl-6' : ''"
+                    :class="[s.depth > 0 ? 'pl-6' : '', approvalPending ? 'review-mode' : '']"
+                    @click="onProseClick"
                     v-html="s.bodyHtml"
                   />
                 </section>
@@ -453,6 +593,142 @@ async function copyOutput() {
             </div>
           </div>
         </div>
+
+        <!-- review rail (approval mode): per-block comments + overall feedback +
+             Approve / Request changes / Reject -->
+        <aside
+          v-if="approvalPending"
+          class="hidden w-96 shrink-0 flex-col border-l border-slate-800 bg-slate-900/60 lg:flex"
+        >
+          <div class="border-b border-slate-800 px-4 py-3">
+            <div class="text-[11px] font-semibold uppercase tracking-wide text-amber-400">
+              Review &amp; approve
+            </div>
+            <p class="mt-1 text-[12px] text-slate-400">
+              Click any block in the output to comment on it, or leave overall feedback below.
+            </p>
+          </div>
+
+          <div class="flex-1 space-y-3 overflow-auto px-4 py-3">
+            <!-- composer for the block the human just clicked -->
+            <div
+              v-if="draftTarget"
+              class="rounded-lg border border-indigo-500/40 bg-indigo-500/5 p-3"
+            >
+              <div class="mb-1 text-[10px] uppercase tracking-wide text-indigo-300">
+                Commenting on
+              </div>
+              <pre
+                class="mb-2 max-h-24 overflow-auto whitespace-pre-wrap rounded bg-slate-950/60 p-2 text-[11px] text-slate-300"
+                >{{ draftTarget.quotedSource }}</pre
+              >
+              <UTextarea
+                v-model="draftBody"
+                :rows="3"
+                autoresize
+                size="sm"
+                class="w-full"
+                placeholder="Leave a comment on this block…"
+              />
+              <div class="mt-2 flex justify-end gap-2">
+                <UButton color="neutral" variant="ghost" size="xs" @click="cancelDraft">
+                  Cancel
+                </UButton>
+                <UButton
+                  color="primary"
+                  size="xs"
+                  :disabled="!draftBody.trim()"
+                  @click="addDraftComment"
+                >
+                  Add comment
+                </UButton>
+              </div>
+            </div>
+
+            <!-- comments added so far -->
+            <div
+              v-for="(c, idx) in reviewComments"
+              :key="idx"
+              class="rounded-lg border border-slate-800 bg-slate-900/50 p-3"
+            >
+              <div class="mb-1 flex items-start justify-between gap-2">
+                <div class="text-[10px] uppercase tracking-wide text-slate-500">
+                  Comment {{ idx + 1 }}
+                </div>
+                <button
+                  class="text-slate-500 transition hover:text-rose-400"
+                  title="Remove comment"
+                  @click="removeComment(idx)"
+                >
+                  <UIcon name="i-lucide-x" class="h-3.5 w-3.5" />
+                </button>
+              </div>
+              <pre
+                class="mb-1 max-h-20 overflow-auto whitespace-pre-wrap rounded bg-slate-950/50 p-1.5 text-[10px] text-slate-400"
+                >{{ c.quotedSource }}</pre
+              >
+              <p class="text-[12px] text-slate-200">{{ c.body }}</p>
+            </div>
+
+            <div>
+              <label
+                class="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-400"
+              >
+                Overall feedback / reject reason
+              </label>
+              <UTextarea
+                v-model="feedback"
+                :rows="3"
+                autoresize
+                size="sm"
+                class="w-full"
+                placeholder="Describe the changes the agent should make (optional if you left per-block comments)…"
+              />
+            </div>
+          </div>
+
+          <div class="space-y-2 border-t border-slate-800 px-4 py-3">
+            <UButton
+              color="primary"
+              size="sm"
+              icon="i-lucide-check"
+              block
+              :loading="submitting"
+              @click="approve"
+            >
+              Approve &amp; proceed
+            </UButton>
+            <div class="flex gap-2">
+              <UButton
+                color="warning"
+                variant="soft"
+                size="sm"
+                icon="i-lucide-rotate-ccw"
+                class="flex-1"
+                :disabled="!canRequestChanges"
+                :loading="submitting"
+                @click="requestChanges"
+              >
+                Request changes
+              </UButton>
+              <UButton
+                color="error"
+                variant="soft"
+                size="sm"
+                icon="i-lucide-ban"
+                class="flex-1"
+                :loading="submitting"
+                @click="reject"
+              >
+                Reject
+              </UButton>
+            </div>
+            <p class="text-[10px] text-slate-500">
+              Request changes re-runs this step with your feedback &amp; comments. Reject stops
+              the run entirely.
+            </p>
+          </div>
+        </aside>
       </div>
     </Transition>
   </Teleport>
@@ -466,6 +742,48 @@ async function copyOutput() {
 .reader-fade-enter-from,
 .reader-fade-leave-to {
   opacity: 0;
+}
+
+/* Approval mode: each source-mapped block becomes a comment target — a hover
+   highlight + a "+" gutter affordance, GitHub-review style. */
+.reader-prose.review-mode :deep([data-src-start]) {
+  position: relative;
+  cursor: pointer;
+  border-radius: 0.375rem;
+  transition: background 0.12s ease;
+}
+.reader-prose.review-mode :deep([data-src-start]:hover) {
+  background: rgb(99 102 241 / 0.08);
+  box-shadow: inset 2px 0 0 rgb(99 102 241 / 0.5);
+}
+.reader-prose.review-mode :deep([data-src-start])::before {
+  content: '+';
+  position: absolute;
+  left: -1.4rem;
+  top: 0.1rem;
+  display: none;
+  height: 1.1rem;
+  width: 1.1rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.25rem;
+  background: rgb(99 102 241);
+  color: white;
+  font-size: 0.8rem;
+  line-height: 1;
+}
+.reader-prose.review-mode :deep([data-src-start]:hover)::before {
+  display: flex;
+}
+/* Persistent markers: amber for a block that already has a comment, indigo for
+   the block whose composer is currently open. */
+.reader-prose :deep(.cf-commented) {
+  background: rgb(234 179 8 / 0.1);
+  box-shadow: inset 2px 0 0 rgb(234 179 8 / 0.6);
+}
+.reader-prose :deep(.cf-selected) {
+  background: rgb(99 102 241 / 0.12);
+  box-shadow: inset 2px 0 0 rgb(99 102 241 / 0.8);
 }
 
 /* Styling for the markdown HTML injected via v-html (out of scoped reach without

@@ -72,7 +72,7 @@ const blockApprovals = computed(() =>
 
 function openFirstApproval() {
   const a = blockApprovals.value[0]
-  if (a) ui.openApproval(a.instanceId, a.approval.id)
+  if (a) ui.openApprovalDetail(a.instanceId, a.approval.id)
 }
 
 function toggleExpand() {
