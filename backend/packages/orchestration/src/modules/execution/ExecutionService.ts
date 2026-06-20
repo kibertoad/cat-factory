@@ -1789,6 +1789,11 @@ export class ExecutionService {
     if (step.approval.status === 'rejected') {
       throw new ConflictError(`Approval '${approvalId}' was rejected`)
     }
+    // A re-run is already in flight (and will raise a fresh gate on completion);
+    // acting on this now-stale gate id would dispatch duplicate work.
+    if (step.approval.status === 'changes_requested') {
+      throw new ConflictError(`Approval '${approvalId}' is already being re-run`)
+    }
 
     step.approval.status = 'changes_requested'
     step.approval.feedback = review.feedback
@@ -1832,6 +1837,11 @@ export class ExecutionService {
     if (!step || !step.approval) throw new NotFoundError('Approval', approvalId)
     if (step.approval.status === 'approved') {
       throw new ConflictError(`Approval '${approvalId}' is already approved`)
+    }
+    // A re-run is in flight; this gate id is stale (a fresh one is raised on its
+    // completion). Reject the current gate via that fresh id, not this one.
+    if (step.approval.status === 'changes_requested') {
+      throw new ConflictError(`Approval '${approvalId}' is being re-run`)
     }
     // Already rejected (and the run already failed): return as-is.
     if (step.approval.status === 'rejected') {

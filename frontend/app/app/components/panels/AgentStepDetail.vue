@@ -109,11 +109,19 @@ watch(
     feedback.value = ''
     draftTarget.value = null
     draftBody.value = ''
+    rejectArmed.value = false
+    editing.value = false
+    draftProposal.value = ''
     if (key) void nextTick(() => scrollEl.value?.scrollTo({ top: 0 }))
   },
 )
 
 function close() {
+  // Reset the new approval-mode sub-states so reopening the same step is clean
+  // (the step-change watch only fires when the step key actually changes).
+  editing.value = false
+  draftProposal.value = ''
+  rejectArmed.value = false
   ui.closeStepDetail()
 }
 onKeyStroke('Escape', () => {
@@ -190,7 +198,7 @@ function syncHighlights() {
 
 /** Click a rendered block to start commenting on it (links keep working). */
 function onProseClick(e: MouseEvent) {
-  if (!approvalPending.value) return
+  if (!approvalPending.value || editing.value) return
   const target = e.target as HTMLElement
   if (target.closest('a')) return
   const blockEl = target.closest('[data-src-start]') as HTMLElement | null
@@ -224,15 +232,44 @@ function removeComment(idx: number) {
   void nextTick(syncHighlights)
 }
 
-const canRequestChanges = computed(
-  () => !!feedback.value.trim() || reviewComments.value.length > 0,
-)
+const canRequestChanges = computed(() => !!feedback.value.trim() || reviewComments.value.length > 0)
 
+// Plain approve: accept the agent's proposal verbatim and advance.
 async function approve() {
   if (!ctx.value || !approvalId.value || submitting.value) return
   submitting.value = true
   try {
     await execution.approveStep(ctx.value.instanceId, approvalId.value)
+    close()
+  } finally {
+    submitting.value = false
+  }
+}
+
+// --- "Approve with corrections" (edit-then-approve) --------------------------
+// A deliberate mode distinct from the read-only review: the human edits the
+// conclusions directly and those edits flow forward as the approved proposal. It
+// CANNOT be mixed with the request-changes/comments path — manual edits only ever
+// happen *together with* approving (the backend's `approveStep` proposal override).
+const editing = ref(false)
+const draftProposal = ref('')
+function startEditing() {
+  draftProposal.value = step.value?.output ?? ''
+  editing.value = true
+  // Editing and the review/reject path are mutually exclusive — clear the other.
+  rejectArmed.value = false
+  draftTarget.value = null
+  void nextTick(syncHighlights)
+}
+function cancelEditing() {
+  editing.value = false
+  draftProposal.value = ''
+}
+async function approveWithEdits() {
+  if (!ctx.value || !approvalId.value || submitting.value) return
+  submitting.value = true
+  try {
+    await execution.approveStep(ctx.value.instanceId, approvalId.value, draftProposal.value)
     close()
   } finally {
     submitting.value = false
@@ -258,15 +295,29 @@ async function requestChanges() {
     submitting.value = false
   }
 }
+// Reject stops the whole run, so it's a two-step inline confirm (no native dialog,
+// consistent with the rest of the Nuxt-UI surface): `armReject` reveals the confirm
+// row, `reject` performs it.
+const rejectArmed = ref(false)
+function armReject() {
+  rejectArmed.value = true
+}
+function disarmReject() {
+  rejectArmed.value = false
+}
 async function reject() {
   if (!ctx.value || !approvalId.value || submitting.value) return
-  if (!window.confirm('Reject this proposal and stop the run entirely?')) return
   submitting.value = true
   try {
-    await execution.rejectStep(ctx.value.instanceId, approvalId.value, feedback.value.trim() || undefined)
+    await execution.rejectStep(
+      ctx.value.instanceId,
+      approvalId.value,
+      feedback.value.trim() || undefined,
+    )
     close()
   } finally {
     submitting.value = false
+    rejectArmed.value = false
   }
 }
 
@@ -548,8 +599,26 @@ watch(
                 </div>
               </section>
 
+              <!-- edit-then-approve: a direct editor over the raw conclusions; the
+                   edits become the approved proposal that flows to the next step -->
+              <section v-if="editing" class="scroll-mt-4">
+                <div class="mb-2 flex items-center gap-1.5 text-[11px] text-amber-400">
+                  <UIcon name="i-lucide-pencil" class="h-3.5 w-3.5" />
+                  <span class="font-semibold uppercase tracking-wide">Editing the conclusions</span>
+                </div>
+                <UTextarea
+                  v-model="draftProposal"
+                  :rows="22"
+                  autoresize
+                  size="sm"
+                  class="w-full"
+                  :ui="{ base: 'font-mono text-[12px] leading-relaxed' }"
+                  placeholder="Edit the agent's conclusions; your edits are saved when you approve…"
+                />
+              </section>
+
               <!-- the agent's prose output, sectioned + collapsible -->
-              <template v-if="hasOutput">
+              <template v-else-if="hasOutput">
                 <section
                   v-for="s in outline.sections"
                   :id="s.id"
@@ -577,7 +646,10 @@ watch(
                   <div
                     v-show="!collapsed[s.id]"
                     class="reader-prose mt-1 text-[13px] leading-relaxed text-slate-300"
-                    :class="[s.depth > 0 ? 'pl-6' : '', approvalPending ? 'review-mode' : '']"
+                    :class="[
+                      s.depth > 0 ? 'pl-6' : '',
+                      approvalPending && !editing ? 'review-mode' : '',
+                    ]"
                     @click="onProseClick"
                     v-html="s.bodyHtml"
                   />
@@ -595,110 +667,192 @@ watch(
         </div>
 
         <!-- review rail (approval mode): per-block comments + overall feedback +
-             Approve / Request changes / Reject -->
+             Approve / Request changes / Reject. A right-side rail on wide screens; a
+             bottom sheet (still reachable) below lg, so the gate is always actionable. -->
         <aside
           v-if="approvalPending"
-          class="hidden w-96 shrink-0 flex-col border-l border-slate-800 bg-slate-900/60 lg:flex"
+          class="absolute inset-x-0 bottom-0 z-10 flex max-h-[70vh] flex-col rounded-t-2xl border-t border-slate-700 bg-slate-900/95 shadow-2xl backdrop-blur lg:static lg:inset-auto lg:z-auto lg:max-h-none lg:w-96 lg:shrink-0 lg:rounded-none lg:border-l lg:border-t-0 lg:border-slate-800 lg:bg-slate-900/60 lg:shadow-none lg:backdrop-blur-none"
         >
           <div class="border-b border-slate-800 px-4 py-3">
             <div class="text-[11px] font-semibold uppercase tracking-wide text-amber-400">
-              Review &amp; approve
+              {{ editing ? 'Approve with corrections' : 'Review & approve' }}
             </div>
             <p class="mt-1 text-[12px] text-slate-400">
-              Click any block in the output to comment on it, or leave overall feedback below.
+              {{
+                editing
+                  ? 'Edit the conclusions on the left; your edits are saved when you approve.'
+                  : 'Click any block in the output to comment on it, or leave overall feedback below.'
+              }}
             </p>
           </div>
 
           <div class="flex-1 space-y-3 overflow-auto px-4 py-3">
-            <!-- composer for the block the human just clicked -->
-            <div
-              v-if="draftTarget"
-              class="rounded-lg border border-indigo-500/40 bg-indigo-500/5 p-3"
+            <p
+              v-if="editing"
+              class="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-[12px] leading-relaxed text-amber-200/90"
             >
-              <div class="mb-1 text-[10px] uppercase tracking-wide text-indigo-300">
-                Commenting on
-              </div>
-              <pre
-                class="mb-2 max-h-24 overflow-auto whitespace-pre-wrap rounded bg-slate-950/60 p-2 text-[11px] text-slate-300"
-                >{{ draftTarget.quotedSource }}</pre
+              You're editing the conclusions directly. Manual edits can't be combined with per-block
+              comments — approve to save them, or cancel to return to review.
+            </p>
+            <template v-else>
+              <!-- composer for the block the human just clicked -->
+              <div
+                v-if="draftTarget"
+                class="rounded-lg border border-indigo-500/40 bg-indigo-500/5 p-3"
               >
-              <UTextarea
-                v-model="draftBody"
-                :rows="3"
-                autoresize
-                size="sm"
-                class="w-full"
-                placeholder="Leave a comment on this block…"
-              />
-              <div class="mt-2 flex justify-end gap-2">
-                <UButton color="neutral" variant="ghost" size="xs" @click="cancelDraft">
-                  Cancel
-                </UButton>
-                <UButton
-                  color="primary"
-                  size="xs"
-                  :disabled="!draftBody.trim()"
-                  @click="addDraftComment"
-                >
-                  Add comment
-                </UButton>
-              </div>
-            </div>
-
-            <!-- comments added so far -->
-            <div
-              v-for="(c, idx) in reviewComments"
-              :key="idx"
-              class="rounded-lg border border-slate-800 bg-slate-900/50 p-3"
-            >
-              <div class="mb-1 flex items-start justify-between gap-2">
-                <div class="text-[10px] uppercase tracking-wide text-slate-500">
-                  Comment {{ idx + 1 }}
+                <div class="mb-1 text-[10px] uppercase tracking-wide text-indigo-300">
+                  Commenting on
                 </div>
-                <button
-                  class="text-slate-500 transition hover:text-rose-400"
-                  title="Remove comment"
-                  @click="removeComment(idx)"
+                <pre
+                  class="mb-2 max-h-24 overflow-auto whitespace-pre-wrap rounded bg-slate-950/60 p-2 text-[11px] text-slate-300"
+                  >{{ draftTarget.quotedSource }}</pre
                 >
-                  <UIcon name="i-lucide-x" class="h-3.5 w-3.5" />
-                </button>
+                <UTextarea
+                  v-model="draftBody"
+                  :rows="3"
+                  autoresize
+                  size="sm"
+                  class="w-full"
+                  placeholder="Leave a comment on this block…"
+                />
+                <div class="mt-2 flex justify-end gap-2">
+                  <UButton color="neutral" variant="ghost" size="xs" @click="cancelDraft">
+                    Cancel
+                  </UButton>
+                  <UButton
+                    color="primary"
+                    size="xs"
+                    :disabled="!draftBody.trim()"
+                    @click="addDraftComment"
+                  >
+                    Add comment
+                  </UButton>
+                </div>
               </div>
-              <pre
-                class="mb-1 max-h-20 overflow-auto whitespace-pre-wrap rounded bg-slate-950/50 p-1.5 text-[10px] text-slate-400"
-                >{{ c.quotedSource }}</pre
-              >
-              <p class="text-[12px] text-slate-200">{{ c.body }}</p>
-            </div>
 
-            <div>
-              <label
-                class="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-400"
+              <!-- comments added so far -->
+              <div
+                v-for="(c, idx) in reviewComments"
+                :key="idx"
+                class="rounded-lg border border-slate-800 bg-slate-900/50 p-3"
               >
-                Overall feedback / reject reason
-              </label>
-              <UTextarea
-                v-model="feedback"
-                :rows="3"
-                autoresize
-                size="sm"
-                class="w-full"
-                placeholder="Describe the changes the agent should make (optional if you left per-block comments)…"
-              />
-            </div>
+                <div class="mb-1 flex items-start justify-between gap-2">
+                  <div class="text-[10px] uppercase tracking-wide text-slate-500">
+                    Comment {{ idx + 1 }}
+                  </div>
+                  <button
+                    class="text-slate-500 transition hover:text-rose-400"
+                    title="Remove comment"
+                    @click="removeComment(idx)"
+                  >
+                    <UIcon name="i-lucide-x" class="h-3.5 w-3.5" />
+                  </button>
+                </div>
+                <pre
+                  class="mb-1 max-h-20 overflow-auto whitespace-pre-wrap rounded bg-slate-950/50 p-1.5 text-[10px] text-slate-400"
+                  >{{ c.quotedSource }}</pre
+                >
+                <p class="text-[12px] text-slate-200">{{ c.body }}</p>
+              </div>
+
+              <div>
+                <label
+                  class="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-400"
+                >
+                  Overall feedback / reject reason
+                </label>
+                <UTextarea
+                  v-model="feedback"
+                  :rows="3"
+                  autoresize
+                  size="sm"
+                  class="w-full"
+                  placeholder="Describe the changes the agent should make (optional if you left per-block comments)…"
+                />
+              </div>
+            </template>
           </div>
 
-          <div class="space-y-2 border-t border-slate-800 px-4 py-3">
+          <!-- edit-then-approve actions -->
+          <div v-if="editing" class="space-y-2 border-t border-slate-800 px-4 py-3">
             <UButton
               color="primary"
               size="sm"
               icon="i-lucide-check"
               block
               :loading="submitting"
+              @click="approveWithEdits"
+            >
+              Approve with these edits
+            </UButton>
+            <UButton
+              color="neutral"
+              variant="ghost"
+              size="sm"
+              block
+              :disabled="submitting"
+              @click="cancelEditing"
+            >
+              Cancel edits
+            </UButton>
+          </div>
+
+          <div v-else class="space-y-2 border-t border-slate-800 px-4 py-3">
+            <UButton
+              color="primary"
+              size="sm"
+              icon="i-lucide-check"
+              block
+              :disabled="rejectArmed"
+              :loading="submitting"
               @click="approve"
             >
               Approve &amp; proceed
             </UButton>
-            <div class="flex gap-2">
+            <UButton
+              color="primary"
+              variant="soft"
+              size="sm"
+              icon="i-lucide-pencil"
+              block
+              :disabled="rejectArmed || submitting"
+              @click="startEditing"
+            >
+              Approve with corrections
+            </UButton>
+
+            <!-- destructive: a two-step inline confirm instead of a native dialog -->
+            <div
+              v-if="rejectArmed"
+              class="rounded-lg border border-rose-500/40 bg-rose-500/5 p-2.5"
+            >
+              <p class="mb-2 text-[11px] text-rose-200">
+                Reject this proposal and stop the run entirely?
+              </p>
+              <div class="flex gap-2">
+                <UButton
+                  color="neutral"
+                  variant="ghost"
+                  size="xs"
+                  class="flex-1"
+                  :disabled="submitting"
+                  @click="disarmReject"
+                >
+                  Cancel
+                </UButton>
+                <UButton
+                  color="error"
+                  size="xs"
+                  icon="i-lucide-ban"
+                  class="flex-1"
+                  :loading="submitting"
+                  @click="reject"
+                >
+                  Confirm reject
+                </UButton>
+              </div>
+            </div>
+            <div v-else class="flex gap-2">
               <UButton
                 color="warning"
                 variant="soft"
@@ -717,15 +871,15 @@ watch(
                 size="sm"
                 icon="i-lucide-ban"
                 class="flex-1"
-                :loading="submitting"
-                @click="reject"
+                :disabled="submitting"
+                @click="armReject"
               >
                 Reject
               </UButton>
             </div>
             <p class="text-[10px] text-slate-500">
-              Request changes re-runs this step with your feedback &amp; comments. Reject stops
-              the run entirely.
+              Request changes re-runs this step with your feedback &amp; comments. Reject stops the
+              run entirely.
             </p>
           </div>
         </aside>

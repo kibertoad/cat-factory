@@ -28,4 +28,16 @@ quotes that block's verbatim raw markdown), leave overall freeform feedback, the
   (`stepReviewCommentSchema`). No migration: approvals live in the execution
   `detail` JSON.
 
+- **Approve with corrections** opens an inline editor over the conclusions; the
+  human's edits become the approved proposal carried forward (the existing
+  `approveStep` proposal override — no backend change). Manual edits are a distinct
+  mode and can't be combined with per-block comments / request-changes — they only
+  happen *together with* approving.
+
+The review surface is responsive — a right-side rail on wide screens, a bottom
+sheet below `lg` — so a pending gate is always actionable. Reject uses a two-step
+inline confirm (no native dialog). `requestStepChanges`/`rejectStep` reject a stale
+gate id whose step is already being re-run (`changes_requested`) so a double-submit
+can't dispatch duplicate work.
+
 Cross-runtime conformance gains assertions for reject and comment-driven re-runs.
