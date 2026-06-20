@@ -88,6 +88,16 @@ export interface AgentRunContext {
      */
     pullRequest?: PullRequestRef
   }
+  /**
+   * The collected requirements of every task under this block's service frame —
+   * each task block's title + (clarified) description. Populated by the engine ONLY
+   * for the `requirements-writer` step, which aggregates them into the service's
+   * unified in-repo requirements document. The block descriptions already carry the
+   * incorporated/clarified requirements (the per-task review's `incorporate` rewrote
+   * them), so this is the "combined requirement context for all tasks". Absent for
+   * every other agent kind.
+   */
+  serviceTasks?: { id: string; title: string; description: string }[]
   /** Outputs produced by earlier steps in the same run, in order. */
   priorOutputs: { agentKind: AgentKind; output: string }[]
   /** Decisions resolved earlier in this run, for context. */
@@ -152,6 +162,14 @@ export interface AgentRunResult {
    * engine parses it with the authoritative Valibot schema before use.
    */
   blueprintService?: unknown
+  /**
+   * The unified, prescriptive requirements doc a `requirements-writer` step produced
+   * and committed to the implementation branch. The engine strictly validates it
+   * (against the contracts schema) and may surface it on the board. Carried as
+   * `unknown` so the core port stays free of the contracts schema; the engine parses
+   * it before use.
+   */
+  requirementsDoc?: unknown
   /**
    * A `merger` step's structured PR assessment (complexity / risk / impact +
    * rationale). The engine validates it, compares the scores against the task's

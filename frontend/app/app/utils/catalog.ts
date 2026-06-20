@@ -116,6 +116,14 @@ export const AGENT_BY_KIND: Record<AgentKind, AgentArchetype> = Object.fromEntri
  * / {@link AGENT_BY_KIND}. Looked up through {@link agentKindMeta}.
  */
 export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
+  'requirements-writer': {
+    kind: 'requirements-writer',
+    label: 'Requirements Writer',
+    icon: 'i-lucide-clipboard-list',
+    color: '#c084fc',
+    description:
+      "Aggregates every task's clarified requirements into the service's in-repo requirements spec and Gherkin scenarios.",
+  },
   blueprints: {
     kind: 'blueprints',
     label: 'Blueprinter',

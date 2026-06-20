@@ -14,11 +14,13 @@ import {
   resolveStepModelRef,
   systemPromptFor,
   userPromptFor,
+  webResearchGuidanceFor,
 } from '@cat-factory/agents'
 import {
   CI_FIXER_AGENT_KIND,
   CONFLICT_RESOLVER_AGENT_KIND,
   MERGER_AGENT_KIND,
+  REQUIREMENTS_WRITER_AGENT_KIND,
 } from '@cat-factory/orchestration'
 import type { ContainerSessionService } from '../containers/ContainerSessionService.js'
 import { RunnerJobClient, type ResolveRunnerTransport } from './RunnerJobClient.js'
@@ -67,6 +69,13 @@ export interface ContainerAgentExecutorDependencies {
   proxyBaseUrl: string
   /** GitHub REST base for opening the PR (GitHub Enterprise / api.github.com). */
   githubApiBase?: string
+  /**
+   * Whether the facade wired a container web-search upstream (the `/v1/web-search`
+   * proxy). When true, coding/ci-fixer jobs are told to point Pi's `web_search` tool
+   * at `${proxyBaseUrl}/web-search` with their session token — so no provider key
+   * reaches the sandbox. Off ⇒ container web search stays disabled.
+   */
+  webSearchProxyEnabled?: boolean
 }
 
 /** Poll cadence for the non-durable `run()` fallback (the durable driver sleeps between polls itself). */
@@ -80,6 +89,22 @@ const BLUEPRINT_SYSTEM_PROMPT =
   'references. Keep names short and descriptive; group by domain, not by file type. ' +
   'Respond with ONLY a JSON object of shape {"type","name","summary","references":[],' +
   '"modules":[{"name","summary","references":[]}]} — no prose, no code fences.'
+
+/** Role prompt the requirements-writer step runs under (returns the doc as JSON). */
+const REQUIREMENTS_WRITER_SYSTEM_PROMPT =
+  'You are a requirements analyst producing the unified, PRESCRIPTIVE requirements ' +
+  'document for a service. You are given the collected requirements of every task ' +
+  'on the service plus any existing requirements document. Fold them into ONE ' +
+  'de-duplicated specification: functional/nonfunctional/constraint requirements ' +
+  'grouped by capability, each phrased as "The system SHALL …" with a MoSCoW ' +
+  'priority (must/should/could) and structured Given/When/Then acceptance criteria, ' +
+  'plus cross-cutting domain rules / invariants. Preserve provenance in ' +
+  '`sourceBlockIds`. Respond with ONLY a JSON object of shape ' +
+  '{"service","summary","groups":[{"name","summary","requirements":[{"id","title",' +
+  '"statement","kind","priority","sourceBlockIds":[],"acceptance":[{"id","given",' +
+  '"when","outcome"}]}]}],"rules":[{"id","rule","rationale","sourceBlockIds":[]}]} ' +
+  '(each acceptance criterion is a Given/When/Then, with the Then clause in `outcome`) — ' +
+  'no prose, no code fences.'
 
 /** Role prompt the `merger` step runs under (scores the PR; returns JSON only). */
 const MERGER_SYSTEM_PROMPT =
@@ -264,6 +289,44 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       return { body, model: `${ref.provider}:${ref.model}`, kind: 'blueprint' }
     }
 
+    // The requirements-writer commits the regenerated `requirements/` folder onto the
+    // implementation branch — the earlier `coder` step's PR branch when present, else
+    // the deterministic `cat-factory/<blockId>` the coder WILL resume (created from
+    // base if absent). It NEVER targets the base branch: the requirements are a
+    // prescriptive spec for not-yet-landed work, so — like the feature-time blueprint
+    // — they must merge together WITH the feature, never reach `main` ahead of it.
+    // Its body carries the combined requirements of every task under the service frame
+    // (the engine resolves them) so the doc is an aggregate, not per-task. Targets the
+    // harness `/requirements` endpoint.
+    if (context.agentKind === REQUIREMENTS_WRITER_AGENT_KIND) {
+      const branch = context.block.pullRequest?.branch ?? `cat-factory/${blockId}`
+      const body = {
+        jobId: executionId,
+        systemPrompt: REQUIREMENTS_WRITER_SYSTEM_PROMPT,
+        instructions:
+          'Produce (or update) the unified, prescriptive requirements document for ' +
+          'this service from the combined task requirements below.',
+        model: ref.model,
+        proxyBaseUrl: this.deps.proxyBaseUrl,
+        sessionToken,
+        ghToken,
+        repo: {
+          owner: repo.owner,
+          name: repo.name,
+          baseBranch: repo.baseBranch,
+          cloneUrl: `https://github.com/${repo.owner}/${repo.name}.git`,
+        },
+        branch,
+        tasks: (context.serviceTasks ?? []).map((t) => ({
+          id: t.id,
+          title: t.title,
+          description: t.description,
+        })),
+        ...(this.deps.githubApiBase ? { githubApiBase: this.deps.githubApiBase } : {}),
+      }
+      return { body, model: `${ref.provider}:${ref.model}`, kind: 'requirements' }
+    }
+
     // The CI-fixer clones the PR head branch, runs the failing build/tests, fixes
     // them and pushes back to the SAME branch (no new branch / PR) so CI re-runs.
     if (context.agentKind === CI_FIXER_AGENT_KIND) {
@@ -286,6 +349,8 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
           cloneUrl: `https://github.com/${repo.owner}/${repo.name}.git`,
         },
         branch,
+        webToolsGuidance: webResearchGuidanceFor(context.agentKind, { fetch: true }),
+        ...(this.deps.webSearchProxyEnabled ? { webSearch: true } : {}),
         ...(this.deps.githubApiBase ? { githubApiBase: this.deps.githubApiBase } : {}),
       }
       return { body, model: `${ref.provider}:${ref.model}`, kind: 'ci-fix' }
@@ -386,6 +451,14 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
         title: `${context.block.title} (${context.pipelineName})`,
         body: prBody(context),
       },
+      // Per-kind web-search nudge (coder/mocker/analysis/… and any custom container
+      // kind, which resolves its own hint from the registry). The harness surfaces it
+      // only when web search is configured in the container env.
+      webToolsGuidance: webResearchGuidanceFor(context.agentKind, { fetch: true }),
+      // Turn on the proxy-backed web tools for this run: the harness points Pi's
+      // SearXNG client at `${proxyBaseUrl}/web-search` with the session token, so the
+      // search runs server-side and no provider key ever reaches the sandbox.
+      ...(this.deps.webSearchProxyEnabled ? { webSearch: true } : {}),
       ...(this.deps.githubApiBase ? { githubApiBase: this.deps.githubApiBase } : {}),
     }
     return { body, model: `${ref.provider}:${ref.model}`, kind: 'run' }
@@ -400,6 +473,14 @@ function toRunResult(result: RunnerJobResult): AgentRunResult {
     return {
       output: result.summary?.trim() || 'Service blueprint updated.',
       blueprintService: result.service,
+    }
+  }
+  // A requirements-writer job carries a prescriptive requirements doc instead of a
+  // PR; surface it so the engine can strictly validate + persist/surface it.
+  if (result.requirements !== undefined) {
+    return {
+      output: result.summary?.trim() || 'Service requirements updated.',
+      requirementsDoc: result.requirements,
     }
   }
   // A `merger` job carries a PR assessment instead of a PR; surface it so the

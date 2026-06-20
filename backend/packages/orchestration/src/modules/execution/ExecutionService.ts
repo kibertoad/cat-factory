@@ -12,7 +12,11 @@ import type {
   PullRequestMergeabilityProvider,
   TicketTrackerProvider,
 } from '@cat-factory/kernel'
-import { parseBlueprintService, parseMergeAssessment } from '@cat-factory/contracts'
+import {
+  parseBlueprintService,
+  parseMergeAssessment,
+  parseRequirementsDoc,
+} from '@cat-factory/contracts'
 import {
   assertFound,
   ConflictError,
@@ -30,6 +34,7 @@ import {
   describeFailingChecks,
   isCiGreen,
   MERGER_AGENT_KIND,
+  REQUIREMENTS_WRITER_AGENT_KIND,
   TRACKER_AGENT_KIND,
   ANALYSIS_AGENT_KIND,
 } from './ci.logic.js'
@@ -692,6 +697,13 @@ export class ExecutionService {
       await this.ingestBlueprint(workspaceId, instance.blockId, result.blueprintService)
     }
 
+    // A requirements-writer step produced the service's unified requirements doc and
+    // committed it to the implementation branch. Strict-validate it (a bad payload
+    // must never be trusted), then nudge clients to refresh.
+    if (result.requirementsDoc !== undefined) {
+      await this.ingestRequirements(workspaceId, result.requirementsDoc)
+    }
+
     // Human approval gate: a step the pipeline marked `requiresApproval` pauses
     // here once its proposal is ready, so a human can review (and edit) it before
     // the next step runs. We reuse the durable decision wait — returning
@@ -1138,6 +1150,44 @@ export class ExecutionService {
     await this.events.boardChanged(workspaceId, 'blueprint-reconciled', frameId)
   }
 
+  /**
+   * Strictly validate a requirements-writer step's unified document. The canonical
+   * record is the in-repo `requirements/` files the harness already committed; this
+   * is the trust boundary (a malformed payload is dropped, never trusted) plus a
+   * client refresh nudge. A persisted board projection is a deliberate later phase.
+   */
+  private async ingestRequirements(workspaceId: string, rawDoc: unknown): Promise<void> {
+    try {
+      parseRequirementsDoc(rawDoc)
+    } catch {
+      // A malformed doc must not fail the step (the in-repo files are already
+      // committed); skip the refresh.
+      return
+    }
+    // Nudge clients to refresh so they can re-read the service's requirements files.
+    await this.events.boardChanged(workspaceId, 'requirements-updated')
+  }
+
+  /**
+   * The collected requirements of every task under `block`'s service frame, for the
+   * requirements-writer step to aggregate. Each task block's description already
+   * carries its clarified requirements (the per-task review's `incorporate` rewrote
+   * it), so this is the combined requirement context for all tasks. Returns an empty
+   * list when the block has no service frame (the writer then has only the prior doc).
+   */
+  private async gatherServiceTasks(
+    workspaceId: string,
+    block: Block,
+  ): Promise<{ id: string; title: string; description: string }[]> {
+    const blocks = await this.blockRepository.listByWorkspace(workspaceId)
+    const frame = serviceOf(blocks, block)
+    if (!frame) return []
+    const within = descendantIds(blocks, frame.id)
+    return blocks
+      .filter((b) => within.has(b.id) && b.level === 'task')
+      .map((b) => ({ id: b.id, title: b.title, description: b.description }))
+  }
+
   /** Walk up `parentId` from a block to its top-level service frame id (or itself). */
   private async resolveServiceFrameId(
     workspaceId: string,
@@ -1171,6 +1221,12 @@ export class ExecutionService {
     // library (when configured): the merged catalog selected for this block/agent,
     // unioned with the block's manual pins. Recorded on the step for observability.
     const resolved = await this.resolveFragments(workspaceId, step, block, priorOutputs)
+    // The requirements-writer aggregates the collected requirements of EVERY task
+    // under the service frame; gather them only for that kind (a no-op otherwise).
+    const serviceTasks =
+      step.agentKind === REQUIREMENTS_WRITER_AGENT_KIND
+        ? await this.gatherServiceTasks(workspaceId, block)
+        : undefined
     return {
       agentKind: step.agentKind,
       pipelineName: instance.pipelineName,
@@ -1192,6 +1248,7 @@ export class ExecutionService {
         ...(contextTasks.length ? { contextTasks } : {}),
       },
       ...(environment ? { environment } : {}),
+      ...(serviceTasks ? { serviceTasks } : {}),
       priorOutputs,
       decisions: instance.steps
         .filter((s, i) => i < instance.currentStep && s.decision?.chosen)

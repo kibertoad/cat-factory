@@ -23,6 +23,7 @@ import { promptFragmentController } from './modules/promptFragments/PromptFragme
 import { recurringPipelineController } from './modules/recurring/RecurringPipelineController.js'
 import { trackerSettingsController } from './modules/recurring/TrackerSettingsController.js'
 import { requirementReviewController } from './modules/requirements/RequirementReviewController.js'
+import { webSearchProxyController } from './modules/webSearch/WebSearchProxyController.js'
 import { runnerPoolController } from './modules/runners/RunnerPoolController.js'
 import { serviceMountController } from './modules/services/ServiceMountController.js'
 import { taskSourceController } from './modules/tasks/TaskSourceController.js'
@@ -40,6 +41,11 @@ export function registerCoreControllers<E extends AppEnv>(app: Hono<E>): void {
   // OpenAI-compatible LLM proxy for implementation containers (authenticated by a
   // signed, model-locked container token; upstream/in-process via the llmUpstream gateway).
   app.route('/', llmProxyController())
+  // SearXNG-compatible web-search proxy for implementation containers (same
+  // model-locked container token; the search runs server-side under the deployment's
+  // own key via the `webSearch` gateway, so no provider key reaches the sandbox). A
+  // no-op 503 when no upstream is wired.
+  app.route('/', webSearchProxyController())
   // "Login with GitHub" (public; no-op endpoints when auth is unconfigured).
   app.route('/auth', authController())
   // Read-only catalogs + account/workspace roots (gated by the facade's auth middleware).

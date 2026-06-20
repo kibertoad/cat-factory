@@ -136,6 +136,28 @@ export interface Env {
   MOONSHOT_BASE_URL?: string
   OPENAI_BASE_URL?: string
 
+  // ---- Inline agent web search (opt-in; design/research kinds) -------------
+  // Provider-hosted web search for the INLINE architect/researcher steps (the
+  // container/Pi steps configure rpiv-web-tools separately, by provider key). Only
+  // takes effect on Anthropic/OpenAI models, which expose a server-executed search.
+  /** Truthy (`true`/`1`/`yes`) enables provider web search for the inline design/research kinds. */
+  INLINE_WEB_SEARCH_ENABLED?: string
+  /** Comma-separated override of the default `architect,researcher` allow-list. */
+  INLINE_WEB_SEARCH_KINDS?: string
+  /** Cap on provider web searches per inline run (Anthropic `maxUses`; default 5). */
+  INLINE_WEB_SEARCH_MAX_USES?: string
+
+  // ---- Container agent web search (opt-in; the /v1/web-search proxy) -------
+  // Backend-held search keys for the CONTAINER agents (coder/ci-fixer/…). The key
+  // stays here (next to the model keys); the sandbox reaches search only through the
+  // proxy with its session token, so no provider secret enters the container.
+  /** Brave Search key — enables the container web-search proxy (the recommended path). */
+  WEB_SEARCH_BRAVE_API_KEY?: string
+  /** A self-hosted SearXNG base URL the backend reverse-proxies to (alternative to Brave). */
+  WEB_SEARCH_SEARXNG_URL?: string
+  /** Optional bearer for a SearXNG instance behind an auth proxy. */
+  WEB_SEARCH_SEARXNG_API_KEY?: string
+
   // ---- GitHub integration (see config.ts; opt-in) -------------------------
   /** GitHub App id (numeric). Presence enables the integration. */
   GITHUB_APP_ID?: string

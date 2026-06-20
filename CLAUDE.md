@@ -81,7 +81,8 @@ facade so the runtimes can't drift (see "Cross-runtime conformance" below).
   (`src/modules/*/?*Controller.ts`), middleware (auth/authz/CORS/error), request
   helpers (`src/http/*`), HMAC signing + the GitHub OAuth helper (`src/auth/*`), the
   runtime **gateway** interfaces (`src/runtime/gateways.ts` — real-time, GitHub
-  ingest/backfill, LLM upstream), the `AppConfig` contract (`src/config/types.ts`),
+  ingest/backfill, LLM upstream, **web-search upstream**), the `AppConfig` contract
+  (`src/config/types.ts`),
   the dialect-agnostic row↔domain **mappers** (`src/persistence/mappers.ts`, reused
   by both stores), and `registerCoreControllers(app)` (`src/app.ts`). Controllers
   resolve everything from `c.get('container')` (a `ServerContainer` = the domain

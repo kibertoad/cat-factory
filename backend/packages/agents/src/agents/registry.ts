@@ -32,6 +32,15 @@ export interface AgentKindDefinition {
    * end-to-end with no harness changes.
    */
   requiresContainer?: boolean
+  /**
+   * Optional one-clause reason this kind should reach for web search, phrased to
+   * complete "Use it mainly to …" (e.g. "verify the vendor's current API contract
+   * before generating a client"). When web search is enabled for the deployment, this
+   * is folded into the kind's web-search guidance so a proprietary kind gets a nudge
+   * tailored to its job — without the shared library needing to know the kind exists.
+   * Omitted ⇒ the generic "verify a fact that changes" hint. See `webResearchGuidanceFor`.
+   */
+  webResearchHint?: string
 }
 
 // Process-wide registry, mirroring the Worker's model-provider registry. Registration
@@ -81,4 +90,9 @@ export function registeredSystemPrompt(kind: AgentKind): string | undefined {
 /** A registered kind's user prompt, or undefined when the kind is not registered / has no builder. */
 export function registeredUserPrompt(context: AgentRunContext): string | undefined {
   return registry.get(context.agentKind)?.userPrompt?.(context)
+}
+
+/** A registered kind's web-research hint, or undefined when unregistered / not supplied. */
+export function registeredWebResearchHint(kind: AgentKind): string | undefined {
+  return registry.get(kind)?.webResearchHint
 }

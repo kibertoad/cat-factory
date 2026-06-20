@@ -13,7 +13,16 @@ export {
   type LlmUpstreamEndpoint,
   type RealtimeGateway,
   type RuntimeGateways,
+  type WebSearchResponse,
+  type WebSearchResult,
+  type WebSearchUpstream,
 } from './runtime/gateways.js'
+export {
+  BraveWebSearchUpstream,
+  SearxngWebSearchUpstream,
+  createWebSearchUpstreamFromEnv,
+  DEFAULT_WEB_SEARCH_COUNT,
+} from './modules/webSearch/upstreams.js'
 export { StateSigner, type InstallState } from './github/state.js'
 export { GitHubOAuth, type GitHubOAuthDependencies } from './auth/GitHubOAuth.js'
 export { authController, pickPostLoginRedirect } from './modules/auth/AuthController.js'

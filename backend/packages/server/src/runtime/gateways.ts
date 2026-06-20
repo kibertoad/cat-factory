@@ -115,10 +115,47 @@ export interface LlmUpstream {
   runInProcess(request: LlmInProcessRequest): Promise<Response> | null
 }
 
+/** One web-search hit, normalised to the SearXNG result shape Pi's web tools read. */
+export interface WebSearchResult {
+  /** Result page URL. */
+  url: string
+  /** Result title. */
+  title: string
+  /** Snippet/description (SearXNG's `content` field). */
+  content: string
+}
+
+/** A normalised web-search response (the subset the container's SearXNG client reads). */
+export interface WebSearchResponse {
+  /** Echo of the query, as SearXNG returns it. */
+  query: string
+  results: WebSearchResult[]
+}
+
+/**
+ * The backend side of the CONTAINER web-search proxy: the seam that keeps a
+ * search-provider key out of the sandbox the same way `LlmUpstream` keeps model
+ * keys out. The container's Pi `web_search` tool (rpiv-web-tools, SearXNG provider)
+ * is pointed at `${proxyBaseUrl}/web-search` with its per-job session token as the
+ * bearer; the shared `webSearchProxyController` verifies that token and delegates to
+ * this gateway, which performs the actual search server-side under the deployment's
+ * own provider key. Absent ⇒ the proxy route is not enabled (no container web search).
+ */
+export interface WebSearchUpstream {
+  /** Run a web search server-side, returning results in the normalised shape. */
+  search(query: string, opts?: { count?: number; signal?: AbortSignal }): Promise<WebSearchResponse>
+}
+
 /** The bundle of runtime gateways a facade injects onto every request container. */
 export interface RuntimeGateways {
   realtime: RealtimeGateway
   githubBackfill: GitHubBackfillScheduler
   githubWebhook: GitHubWebhookIngest
   llmUpstream: LlmUpstream
+  /**
+   * Optional container web-search upstream. When present, the `/v1/web-search`
+   * proxy route is live and container agents get `web_search` with no provider key
+   * in the sandbox; absent ⇒ the route replies 503 and container web search is off.
+   */
+  webSearch?: WebSearchUpstream
 }

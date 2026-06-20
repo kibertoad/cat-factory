@@ -32,6 +32,11 @@ export interface FakeAgentOptions {
    */
   blueprintService?: unknown
   /**
+   * A requirements doc the `requirements-writer` step reports, so the engine's
+   * strict-parse + ingest can be exercised without a real container.
+   */
+  requirementsDoc?: unknown
+  /**
    * The assessment the `merger` step reports. When omitted, the fake derives one
    * from `confidence` so existing tests keep their semantics: high confidence
    * (≥ 0.8) yields a within-threshold assessment (auto-merge → `done`), and low
@@ -70,6 +75,18 @@ export class FakeAgentExecutor implements AgentExecutor {
         output: `[blueprints] mapped "${context.block.title}"`,
         model: 'fake',
         blueprintService: this.options.blueprintService,
+      }
+    }
+
+    // Mimic the container requirements-writer step returning the unified doc, and
+    // surface the aggregated task context it was given so the engine's population of
+    // `serviceTasks` can be asserted.
+    if (context.agentKind === 'requirements-writer' && this.options.requirementsDoc !== undefined) {
+      const tasks = context.serviceTasks?.length ?? 0
+      return {
+        output: `[requirements-writer] wrote requirements for "${context.block.title}" from ${tasks} task(s)`,
+        model: 'fake',
+        requirementsDoc: this.options.requirementsDoc,
       }
     }
 
