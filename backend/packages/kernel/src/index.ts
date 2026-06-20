@@ -45,6 +45,11 @@ export {
 
 export * from './ports/index.js'
 
+export {
+  type ServiceRegistrationDeps,
+  registerServiceForFrame,
+} from './domain/service-registration.js'
+
 export { MapSourceRegistry } from './shared/source-registry.logic.js'
 export * as atlassianLogic from './shared/atlassian.logic.js'
 export { markdownToText, buildExcerpt } from './shared/markdown.logic.js'

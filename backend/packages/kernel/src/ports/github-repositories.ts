@@ -97,6 +97,12 @@ export interface RepoProjectionRepository {
   /** Live repos whose `synced_at` is older than the cutoff, across all workspaces. */
   listStale(olderThanEpochMs: number): Promise<StaleRepoRef[]>
   /**
+   * Of the given candidate workspaces, those that currently link this repo — a single
+   * (chunked) query backing the sync fan-out (which workspaces a one-per-org fetch must
+   * update), instead of one `get` per candidate. Empty input → empty result.
+   */
+  linkedWorkspaces(repoGithubId: number, candidateWorkspaceIds: string[]): Promise<string[]>
+  /**
    * Incremental-sync cursors are keyed by **installation** + repo (not workspace):
    * a repo is fetched from GitHub once per org and the result fanned out to every
    * workspace that links it, so two teams sharing a repo don't each burn an API

@@ -69,17 +69,23 @@ export class D1ExecutionRepository implements ExecutionRepository {
       steps: execution.steps,
       currentStep: execution.currentStep,
     })
+    // Stamp `service_id` from the run's block so the run is discoverable by service (in-org
+    // sharing): a shared service's runs surface on every board that mounts it via
+    // `listByService`. Derived here (not carried on ExecutionInstance) and refreshed on every
+    // write so it follows a reparent that re-homes the block to another service.
     await this.db
       .prepare(
         `INSERT INTO agent_runs
            (workspace_id, id, kind, block_id, status, detail, created_at, updated_at,
-            workflow_instance_id)
-         VALUES (?, ?, 'execution', ?, ?, ?, ?, ?, ?)
+            workflow_instance_id, service_id)
+         VALUES (?, ?, 'execution', ?, ?, ?, ?, ?, ?,
+            (SELECT service_id FROM blocks WHERE workspace_id = ? AND id = ?))
          ON CONFLICT (workspace_id, id) DO UPDATE SET
            block_id = excluded.block_id,
            status = excluded.status,
            detail = excluded.detail,
-           updated_at = excluded.updated_at`,
+           updated_at = excluded.updated_at,
+           service_id = excluded.service_id`,
       )
       .bind(
         workspaceId,
@@ -91,6 +97,8 @@ export class D1ExecutionRepository implements ExecutionRepository {
         now,
         // Instance id == execution id today; stored for forward-compatibility.
         execution.id,
+        workspaceId,
+        execution.blockId,
       )
       .run()
   }

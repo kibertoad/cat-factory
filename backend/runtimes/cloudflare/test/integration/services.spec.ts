@@ -224,4 +224,138 @@ describe('in-org shared services', () => {
     const bMounts = await call<WorkspaceMount[]>('GET', `/workspaces/${b.workspace.id}/services`)
     expect(bMounts.body.map((m) => m.serviceId)).not.toContain(service.id)
   })
+
+  // --- a mounting board is fully interactive on the shared service -----------
+
+  it('edits, adds, moves and deletes a shared service from the mounting board', async () => {
+    const { call, createWorkspace } = makeApp()
+    const a = await createWorkspace({ seed: false })
+    const b = await createWorkspace({ seed: false })
+
+    const frame = await call<Block>('POST', `/workspaces/${a.workspace.id}/blocks`, {
+      type: 'service',
+      position: { x: 0, y: 0 },
+    })
+    const task = await call<Block>(
+      'POST',
+      `/workspaces/${a.workspace.id}/blocks/${frame.body.id}/tasks`,
+      { title: 'Original' },
+    )
+    const service = await serviceFor(call, a.workspace.id, frame.body.id)
+    await call('POST', `/workspaces/${b.workspace.id}/services/${service.id}`, {})
+
+    // B edits the shared task — no 404, and the one shared copy changes for A too.
+    const edited = await call('PATCH', `/workspaces/${b.workspace.id}/blocks/${task.body.id}`, {
+      title: 'Edited on B',
+    })
+    expect(edited.status).toBe(200)
+    const aSnap = await call<WorkspaceSnapshot>('GET', `/workspaces/${a.workspace.id}`)
+    expect(aSnap.body.blocks.find((x) => x.id === task.body.id)?.title).toBe('Edited on B')
+
+    // B adds a task to the shared frame; it renders on A (the home) too.
+    const added = await call<Block>(
+      'POST',
+      `/workspaces/${b.workspace.id}/blocks/${frame.body.id}/tasks`,
+      { title: 'Added on B' },
+    )
+    expect(added.status).toBe(201)
+    let aSnap2 = await call<WorkspaceSnapshot>('GET', `/workspaces/${a.workspace.id}`)
+    expect(aSnap2.body.blocks.map((x) => x.id)).toContain(added.body.id)
+
+    // B moves the shared task; the move lands on the shared copy.
+    await call('POST', `/workspaces/${b.workspace.id}/blocks/${task.body.id}/move`, {
+      position: { x: 42, y: 24 },
+    })
+    aSnap2 = await call<WorkspaceSnapshot>('GET', `/workspaces/${a.workspace.id}`)
+    expect(aSnap2.body.blocks.find((x) => x.id === task.body.id)?.position).toEqual({ x: 42, y: 24 })
+
+    // B deletes the task it added; it disappears from A's board as well.
+    const del = await call('DELETE', `/workspaces/${b.workspace.id}/blocks/${added.body.id}`)
+    expect(del.status).toBe(204)
+    const aSnap3 = await call<WorkspaceSnapshot>('GET', `/workspaces/${a.workspace.id}`)
+    expect(aSnap3.body.blocks.map((x) => x.id)).not.toContain(added.body.id)
+  })
+
+  it('moving a shared frame on one board does not move it on another', async () => {
+    const { call, createWorkspace } = makeApp()
+    const a = await createWorkspace({ seed: false })
+    const b = await createWorkspace({ seed: false })
+
+    const frame = await call<Block>('POST', `/workspaces/${a.workspace.id}/blocks`, {
+      type: 'service',
+      position: { x: 10, y: 10 },
+    })
+    const service = await serviceFor(call, a.workspace.id, frame.body.id)
+    await call('POST', `/workspaces/${b.workspace.id}/services/${service.id}`, {
+      position: { x: 500, y: 500 },
+    })
+
+    // B drags the shared frame — that is B's per-board layout override, not A's.
+    await call('POST', `/workspaces/${b.workspace.id}/blocks/${frame.body.id}/move`, {
+      position: { x: 600, y: 600 },
+    })
+    const aSnap = await call<WorkspaceSnapshot>('GET', `/workspaces/${a.workspace.id}`)
+    const bSnap = await call<WorkspaceSnapshot>('GET', `/workspaces/${b.workspace.id}`)
+    expect(aSnap.body.blocks.find((x) => x.id === frame.body.id)?.position).toEqual({ x: 10, y: 10 })
+    expect(bSnap.body.blocks.find((x) => x.id === frame.body.id)?.position).toEqual({
+      x: 600,
+      y: 600,
+    })
+  })
+
+  it('reparents a task across services homed in different workspaces (from a third board)', async () => {
+    const { call, createWorkspace } = makeApp()
+    const a = await createWorkspace({ seed: false })
+    const c = await createWorkspace({ seed: false })
+    const b = await createWorkspace({ seed: false })
+
+    const frameX = await call<Block>('POST', `/workspaces/${a.workspace.id}/blocks`, {
+      type: 'service',
+      position: { x: 0, y: 0 },
+    })
+    const frameY = await call<Block>('POST', `/workspaces/${c.workspace.id}/blocks`, {
+      type: 'service',
+      position: { x: 0, y: 0 },
+    })
+    const task = await call<Block>(
+      'POST',
+      `/workspaces/${a.workspace.id}/blocks/${frameX.body.id}/tasks`,
+      { title: 'Crosser' },
+    )
+    const serviceX = await serviceFor(call, a.workspace.id, frameX.body.id)
+    const serviceY = await serviceFor(call, c.workspace.id, frameY.body.id)
+
+    // Board B mounts BOTH foreign services, then drags the task from X (home A) into Y (home C).
+    await call('POST', `/workspaces/${b.workspace.id}/services/${serviceX.id}`, {})
+    await call('POST', `/workspaces/${b.workspace.id}/services/${serviceY.id}`, {})
+    const reparented = await call('POST', `/workspaces/${b.workspace.id}/blocks/${task.body.id}/reparent`, {
+      parentId: frameY.body.id,
+      position: { x: 1, y: 1 },
+    })
+    expect(reparented.status).toBe(200)
+
+    // It now belongs to Y: renders on Y's home board (C) and gone from X's home board (A).
+    const cSnap = await call<WorkspaceSnapshot>('GET', `/workspaces/${c.workspace.id}`)
+    expect(cSnap.body.blocks.find((x) => x.id === task.body.id)?.parentId).toBe(frameY.body.id)
+    const aSnap = await call<WorkspaceSnapshot>('GET', `/workspaces/${a.workspace.id}`)
+    expect(aSnap.body.blocks.map((x) => x.id)).not.toContain(task.body.id)
+  })
+
+  it('registers seeded demo frames as shareable services', async () => {
+    const { call, createWorkspace } = makeApp()
+    const seeded = await createWorkspace({ seed: true })
+    const other = await createWorkspace({ seed: false })
+
+    // Each seeded top-level frame is an account-owned service in the org catalog.
+    const snap = await call<WorkspaceSnapshot>('GET', `/workspaces/${seeded.workspace.id}`)
+    const seededFrames = snap.body.blocks.filter((b) => b.level === 'frame' && b.parentId === null)
+    expect(seededFrames.length).toBeGreaterThan(0)
+    const catalog = await call<Service[]>(
+      'GET',
+      `/workspaces/${other.workspace.id}/services/catalog`,
+    )
+    for (const frame of seededFrames) {
+      expect(catalog.body.map((s) => s.frameBlockId)).toContain(frame.id)
+    }
+  })
 })

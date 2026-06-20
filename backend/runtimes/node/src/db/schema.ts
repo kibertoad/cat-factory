@@ -117,7 +117,8 @@ export const services = pgTable(
   },
   (t) => [
     index('idx_services_account').on(t.account_id),
-    index('idx_services_frame').on(t.frame_block_id),
+    // One service per frame block (the frame↔service mapping is 1:1).
+    uniqueIndex('idx_services_frame').on(t.frame_block_id),
     index('idx_services_repo').on(t.installation_id, t.repo_github_id),
   ],
 )

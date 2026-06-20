@@ -24,7 +24,9 @@ CREATE TABLE services (
   created_at      INTEGER NOT NULL
 );
 CREATE INDEX idx_services_account ON services (account_id);
-CREATE INDEX idx_services_frame ON services (frame_block_id);
+-- One service per frame block: the frame↔service mapping is 1:1 (the backfill inserts one row
+-- per top-level frame; `registerServiceForFrame` one per new frame), so enforce it.
+CREATE UNIQUE INDEX idx_services_frame ON services (frame_block_id);
 -- Resolve the service that owns a repo (the sync-dedup lookup).
 CREATE INDEX idx_services_repo ON services (installation_id, repo_github_id);
 

@@ -54,6 +54,22 @@ export class D1ServiceRepository implements ServiceRepository {
     return (results ?? []).map(rowToService)
   }
 
+  async listByIds(ids: string[]): Promise<Service[]> {
+    if (ids.length === 0) return []
+    const out: Service[] = []
+    // Chunk the IN list to stay well under SQLite/D1's bound-parameter limit.
+    for (let i = 0; i < ids.length; i += 500) {
+      const chunk = ids.slice(i, i + 500)
+      const placeholders = chunk.map(() => '?').join(', ')
+      const { results } = await this.db
+        .prepare(`SELECT * FROM services WHERE id IN (${placeholders})`)
+        .bind(...chunk)
+        .all<ServiceRow>()
+      for (const row of results ?? []) out.push(rowToService(row))
+    }
+    return out
+  }
+
   async getByRepo(installationId: number, repoGithubId: number): Promise<Service | null> {
     const row = await this.db
       .prepare(`SELECT * FROM services WHERE installation_id = ? AND repo_github_id = ?`)

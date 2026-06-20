@@ -170,11 +170,8 @@ export class GitHubSyncService {
   private async linkedWorkspaces(installationId: number, repoGithubId: number): Promise<string[]> {
     const all =
       await this.deps.githubInstallationRepository.listWorkspacesForInstallation(installationId)
-    const linked: string[] = []
-    for (const ws of all) {
-      if (await this.deps.repoProjectionRepository.get(ws, repoGithubId)) linked.push(ws)
-    }
-    return linked
+    // One batched query for the whole org, instead of a `get` per workspace.
+    return this.deps.repoProjectionRepository.linkedWorkspaces(repoGithubId, all)
   }
 
   /**

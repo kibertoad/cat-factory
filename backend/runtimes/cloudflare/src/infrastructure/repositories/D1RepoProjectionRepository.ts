@@ -58,6 +58,28 @@ export class D1RepoProjectionRepository implements RepoProjectionRepository {
     return row ? rowToRepo(row) : null
   }
 
+  async linkedWorkspaces(
+    repoGithubId: number,
+    candidateWorkspaceIds: string[],
+  ): Promise<string[]> {
+    if (candidateWorkspaceIds.length === 0) return []
+    const found: string[] = []
+    // Chunk the IN list to stay well under SQLite/D1's bound-parameter limit.
+    for (let i = 0; i < candidateWorkspaceIds.length; i += 500) {
+      const chunk = candidateWorkspaceIds.slice(i, i + 500)
+      const placeholders = chunk.map(() => '?').join(', ')
+      const { results } = await this.db
+        .prepare(
+          `SELECT DISTINCT workspace_id FROM github_repos
+           WHERE github_id = ? AND deleted_at IS NULL AND workspace_id IN (${placeholders})`,
+        )
+        .bind(repoGithubId, ...chunk)
+        .all<{ workspace_id: string }>()
+      for (const row of results ?? []) found.push(row.workspace_id)
+    }
+    return found
+  }
+
   async tombstoneMissing(
     workspaceId: string,
     installationId: number,

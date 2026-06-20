@@ -88,4 +88,17 @@ describe('FanOutEventPublisher', () => {
     await fanOut.boardChanged('wsA', 'module-materialised')
     expect(inner.boards).toEqual(['wsA'])
   })
+
+  it('fans a boardChanged naming a shared block out to every mounting workspace', async () => {
+    const inner = new RecordingPublisher()
+    const fanOut = new FanOutEventPublisher(inner, {
+      blockRepository: { serviceIdOf: async () => 'svc1' },
+      workspaceMountRepository: {
+        listByService: async () => [mount('wsA', 'svc1'), mount('wsB', 'svc1')],
+      },
+    })
+    // A structural change to a shared service (named by one of its blocks) reaches both boards.
+    await fanOut.boardChanged('wsA', 'blueprint-reconciled', 'frame1')
+    expect(inner.boards.sort()).toEqual(['wsA', 'wsB'])
+  })
 })

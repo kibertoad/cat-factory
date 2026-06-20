@@ -162,6 +162,20 @@ class DrizzleBlockRepository implements BlockRepository {
     return rows.map(rowToBlock)
   }
 
+  async listByServices(serviceIds: string[]): Promise<Block[]> {
+    if (serviceIds.length === 0) return []
+    const out: Block[] = []
+    // Chunk the IN list to stay well under the bind-parameter limit.
+    for (let i = 0; i < serviceIds.length; i += 500) {
+      const rows = await this.db
+        .select()
+        .from(blocks)
+        .where(inArray(blocks.service_id, serviceIds.slice(i, i + 500)))
+      for (const row of rows) out.push(rowToBlock(row))
+    }
+    return out
+  }
+
   async get(workspaceId: string, id: string): Promise<Block | null> {
     const [row] = await this.db
       .select()
@@ -176,6 +190,18 @@ class DrizzleBlockRepository implements BlockRepository {
       .from(blocks)
       .where(and(eq(blocks.workspace_id, workspaceId), eq(blocks.id, blockId)))
     return row?.serviceId ?? null
+  }
+
+  async findById(
+    blockId: string,
+  ): Promise<{ workspaceId: string; serviceId: string | null; block: Block } | null> {
+    const [row] = await this.db.select().from(blocks).where(eq(blocks.id, blockId)).limit(1)
+    if (!row) return null
+    return {
+      workspaceId: row.workspace_id,
+      serviceId: row.service_id ?? null,
+      block: rowToBlock(row),
+    }
   }
 
   async insert(workspaceId: string, block: Block, serviceId?: string | null): Promise<void> {
@@ -304,6 +330,10 @@ class DrizzleExecutionRepository implements ExecutionRepository {
       steps: execution.steps,
       currentStep: execution.currentStep,
     })
+    // Stamp `service_id` from the run's block (subquery) so a shared service's runs surface on
+    // every board that mounts it via `listByService`; refreshed on every write so it follows a
+    // reparent that re-homes the block. Mirrors the D1 repo.
+    const serviceIdSub = sql`(SELECT ${blocks.service_id} FROM ${blocks} WHERE ${blocks.workspace_id} = ${workspaceId} AND ${blocks.id} = ${execution.blockId})`
     await this.db
       .insert(agentRuns)
       .values({
@@ -316,12 +346,19 @@ class DrizzleExecutionRepository implements ExecutionRepository {
         created_at: now,
         updated_at: now,
         workflow_instance_id: execution.id,
+        service_id: serviceIdSub,
       })
       // error/failure/workflow_instance_id are left out of the update so they survive
       // normal step writes (see markFailed) — mirrors the D1 repo.
       .onConflictDoUpdate({
         target: [agentRuns.workspace_id, agentRuns.id],
-        set: { block_id: execution.blockId, status: execution.status, detail, updated_at: now },
+        set: {
+          block_id: execution.blockId,
+          status: execution.status,
+          detail,
+          updated_at: now,
+          service_id: serviceIdSub,
+        },
       })
   }
 
@@ -1042,6 +1079,20 @@ class DrizzleServiceRepository implements ServiceRepository {
       .where(sql`${services.account_id} IS NOT DISTINCT FROM ${accountId}`)
       .orderBy(services.created_at)
     return rows.map(rowToService)
+  }
+
+  async listByIds(ids: string[]): Promise<Service[]> {
+    if (ids.length === 0) return []
+    const out: Service[] = []
+    // Chunk the IN list to stay well under the bind-parameter limit.
+    for (let i = 0; i < ids.length; i += 500) {
+      const rows = await this.db
+        .select()
+        .from(services)
+        .where(inArray(services.id, ids.slice(i, i + 500)))
+      for (const row of rows) out.push(rowToService(row))
+    }
+    return out
   }
 
   async getByRepo(installationId: number, repoGithubId: number): Promise<Service | null> {

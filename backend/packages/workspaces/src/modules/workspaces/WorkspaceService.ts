@@ -1,5 +1,10 @@
 import type { CreateWorkspaceInput } from '@cat-factory/contracts'
-import { requireWorkspace, seedBlocks, seedPipelines } from '@cat-factory/kernel'
+import {
+  registerServiceForFrame,
+  requireWorkspace,
+  seedBlocks,
+  seedPipelines,
+} from '@cat-factory/kernel'
 import type {
   Block,
   ExecutionInstance,
@@ -106,11 +111,50 @@ export class WorkspaceService {
     // The sample architecture blocks are opt-in (demo boards + the test fixtures);
     // production boards start empty (the SPA creates with `seed: false`).
     if (input.seed ?? true) {
-      for (const block of seedBlocks()) {
-        await this.blockRepository.insert(workspace.id, block)
-      }
+      await this.seedBoard(workspace.id)
     }
     return this.snapshot(workspace.id)
+  }
+
+  /**
+   * Seed the demo architecture, registering each top-level frame as an account-owned service
+   * (so seeded frames are shareable across the org exactly like ones created on the board) and
+   * stamping every seeded block with its frame's service. A no-op service registration when
+   * in-org sharing isn't wired leaves plain workspace-local blocks (legacy behaviour).
+   */
+  private async seedBoard(workspaceId: string): Promise<void> {
+    const blocks = seedBlocks()
+    const byId = new Map(blocks.map((b) => [b.id, b]))
+    const topFrameOf = (b: Block): Block | undefined => {
+      let cur: Block | undefined = b
+      while (cur && !(cur.level === 'frame' && cur.parentId === null)) {
+        cur = cur.parentId ? byId.get(cur.parentId) : undefined
+      }
+      return cur
+    }
+    const serviceByFrame = new Map<string, string | undefined>()
+    for (const b of blocks) {
+      if (b.level === 'frame' && b.parentId === null) {
+        serviceByFrame.set(
+          b.id,
+          await registerServiceForFrame(
+            {
+              serviceRepository: this.serviceRepository,
+              workspaceMountRepository: this.workspaceMountRepository,
+              workspaceRepository: this.workspaceRepository,
+              idGenerator: this.idGenerator,
+              clock: this.clock,
+            },
+            workspaceId,
+            b,
+          ),
+        )
+      }
+    }
+    for (const b of blocks) {
+      const frame = topFrameOf(b)
+      await this.blockRepository.insert(workspaceId, b, frame ? serviceByFrame.get(frame.id) : null)
+    }
   }
 
   /** Rename a board. */
@@ -157,20 +201,25 @@ export class WorkspaceService {
     const localIds = new Set(byId.keys())
     // The per-workspace layout override for each mounted service's frame.
     const frameLayout = new Map<string, { x: number; y: number; w?: number; h?: number }>()
+    // Resolve every mounted service in one batched query (not a `get` per mount).
+    const services = await this.serviceRepository.listByIds(mounts.map((m) => m.serviceId))
+    const frameOf = new Map(services.map((s) => [s.id, s.frameBlockId]))
+    const foreignServiceIds: string[] = []
     for (const mount of mounts) {
-      const service = await this.serviceRepository.get(mount.serviceId)
-      if (!service) continue
-      frameLayout.set(service.frameBlockId, {
+      const frameBlockId = frameOf.get(mount.serviceId)
+      if (!frameBlockId) continue
+      frameLayout.set(frameBlockId, {
         x: mount.position.x,
         y: mount.position.y,
         ...(mount.size ? { w: mount.size.w, h: mount.size.h } : {}),
       })
       // Pull in the subtree only for services homed in ANOTHER workspace — a local service's
       // blocks are already in `localBlocks`.
-      if (localIds.has(service.frameBlockId)) continue
-      for (const b of await this.blockRepository.listByService(mount.serviceId)) {
-        if (!byId.has(b.id)) byId.set(b.id, b)
-      }
+      if (!localIds.has(frameBlockId)) foreignServiceIds.push(mount.serviceId)
+    }
+    // One batched query for all foreign subtrees (not one per service).
+    for (const b of await this.blockRepository.listByServices(foreignServiceIds)) {
+      if (!byId.has(b.id)) byId.set(b.id, b)
     }
 
     return [...byId.values()].map((b) => {

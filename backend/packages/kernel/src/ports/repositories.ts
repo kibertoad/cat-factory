@@ -60,7 +60,23 @@ export interface BlockRepository {
    * `service_id` column matches (set at insert time when the service repos are wired).
    */
   listByService(serviceId: string): Promise<Block[]>
+  /**
+   * Every block belonging to ANY of the given services, in a single (chunked) query — the
+   * batched form of {@link BlockRepository.listByService} used to compose a board from all the
+   * services it mounts without one round-trip per service. Empty input → empty result.
+   */
+  listByServices(serviceIds: string[]): Promise<Block[]>
   get(workspaceId: string, id: string): Promise<Block | null>
+  /**
+   * Resolve a block by its (globally unique) id, regardless of which workspace homes it,
+   * returning the block plus its home `workspaceId` and its `serviceId` (or null). Backs
+   * the shared-board mutation path: a block belonging to a service mounted from another
+   * workspace is acted on at its home workspace (after the caller authorizes that the
+   * requester mounts the service). Returns null when no block has that id.
+   */
+  findById(
+    blockId: string,
+  ): Promise<{ workspaceId: string; serviceId: string | null; block: Block } | null>
   /**
    * The account-owned service a block belongs to (its `service_id`), or null. Used by
    * the real-time fan-out to resolve which workspaces mount the changed block's service.

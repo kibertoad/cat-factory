@@ -14,13 +14,12 @@ import type {
   Clock,
   ExecutionRepository,
   RepoProjectionRepository,
-  Service,
   ServiceRepository,
   WorkspaceMountRepository,
   WorkspaceRepository,
 } from '@cat-factory/kernel'
 import type { IdGenerator } from '@cat-factory/kernel'
-import { requireWorkspace } from '@cat-factory/kernel'
+import { registerServiceForFrame, requireWorkspace } from '@cat-factory/kernel'
 import { canReparent, descendantIds, gridSlot, serviceOf, tasksOf } from './board.logic.js'
 
 export interface BoardServiceDependencies {
@@ -89,31 +88,23 @@ export class BoardService {
    * the mount (the per-workspace layout override). No-op (returns undefined) when the
    * service repositories aren't wired.
    */
-  private async registerService(
+  private registerService(
     workspaceId: string,
     frame: Block,
     repo?: { installationId: number; githubId: number },
   ): Promise<string | undefined> {
-    if (!this.serviceRepository || !this.workspaceMountRepository) return undefined
-    const accountId = (await this.workspaceRepository.accountOf(workspaceId)) ?? null
-    const now = this.clock.now()
-    const service: Service = {
-      id: this.idGenerator.next('svc'),
-      accountId,
-      frameBlockId: frame.id,
-      installationId: repo?.installationId ?? null,
-      repoGithubId: repo?.githubId ?? null,
-      createdAt: now,
-    }
-    await this.serviceRepository.insert(service)
-    await this.workspaceMountRepository.upsert({
+    return registerServiceForFrame(
+      {
+        serviceRepository: this.serviceRepository,
+        workspaceMountRepository: this.workspaceMountRepository,
+        workspaceRepository: this.workspaceRepository,
+        idGenerator: this.idGenerator,
+        clock: this.clock,
+      },
       workspaceId,
-      serviceId: service.id,
-      position: frame.position,
-      size: frame.size ?? null,
-      createdAt: now,
-    })
-    return service.id
+      frame,
+      repo,
+    )
   }
 
   /**
@@ -136,8 +127,30 @@ export class BoardService {
     return requireWorkspace(this.workspaceRepository, workspaceId)
   }
 
-  private async requireBlock(workspaceId: string, id: string): Promise<Block> {
-    return assertFound(await this.blockRepository.get(workspaceId, id), 'Block', id)
+  /**
+   * Resolve a block the requesting workspace is allowed to mutate, returning the block plus
+   * the workspace that physically homes it. A block created locally resolves to this
+   * workspace; a block belonging to a service this workspace MOUNTS (in-org sharing) resolves
+   * to the service's home workspace, so a shared board is fully interactive — edits, moves,
+   * adds and deletes act on the one shared copy. Throws NotFound when the workspace neither
+   * homes the block nor mounts its service (or sharing isn't wired and it isn't local).
+   */
+  private async resolveBlock(
+    workspaceId: string,
+    id: string,
+  ): Promise<{ homeWorkspaceId: string; block: Block }> {
+    const local = await this.blockRepository.get(workspaceId, id)
+    if (local) return { homeWorkspaceId: workspaceId, block: local }
+    if (this.serviceRepository && this.workspaceMountRepository) {
+      const found = await this.blockRepository.findById(id)
+      if (
+        found?.serviceId &&
+        (await this.workspaceMountRepository.get(workspaceId, found.serviceId))
+      ) {
+        return { homeWorkspaceId: found.workspaceId, block: found.block }
+      }
+    }
+    return assertFound<{ homeWorkspaceId: string; block: Block }>(null, 'Block', id)
   }
 
   /** Add a top-level frame (service/api/database/…) to the board. */
@@ -212,11 +225,13 @@ export class BoardService {
   /** Add a task inside a container (a service frame or a module). */
   async addTask(workspaceId: string, containerId: string, input: AddTaskInput): Promise<Block> {
     await this.requireWorkspace(workspaceId)
-    const container = await this.requireBlock(workspaceId, containerId)
+    // The container may be a frame/module of a service mounted from another workspace; create
+    // the task in that service's home workspace so it joins the one shared subtree.
+    const { homeWorkspaceId, block: container } = await this.resolveBlock(workspaceId, containerId)
     if (container.level === 'task') {
       throw new ValidationError('Tasks cannot contain other tasks')
     }
-    const blocks = await this.blockRepository.listByWorkspace(workspaceId)
+    const blocks = await this.blockRepository.listByWorkspace(homeWorkspaceId)
     const siblings = tasksOf(blocks, containerId).length
     const service = serviceOf(blocks, container)
     const block: Block = {
@@ -238,7 +253,7 @@ export class BoardService {
     if (input.mergePresetId) block.mergePresetId = input.mergePresetId
     if (input.pipelineId) block.pipelineId = input.pipelineId
     await this.blockRepository.insert(
-      workspaceId,
+      homeWorkspaceId,
       block,
       await this.serviceForContainer(blocks, container),
     )
@@ -248,11 +263,12 @@ export class BoardService {
   /** Add a module (sub-frame) inside a service. */
   async addModule(workspaceId: string, serviceId: string, input: AddModuleInput): Promise<Block> {
     await this.requireWorkspace(workspaceId)
-    const service = await this.requireBlock(workspaceId, serviceId)
+    // The service frame may be mounted from another workspace; create the module in its home.
+    const { homeWorkspaceId, block: service } = await this.resolveBlock(workspaceId, serviceId)
     if (service.level !== 'frame') {
       throw new ValidationError('Modules can only be added to a service frame')
     }
-    const blocks = await this.blockRepository.listByWorkspace(workspaceId)
+    const blocks = await this.blockRepository.listByWorkspace(homeWorkspaceId)
     const n = blocks.filter((b) => b.parentId === serviceId && b.level === 'module').length
     const block: Block = {
       id: this.idGenerator.next('mod'),
@@ -268,7 +284,7 @@ export class BoardService {
       parentId: serviceId,
     }
     await this.blockRepository.insert(
-      workspaceId,
+      homeWorkspaceId,
       block,
       await this.serviceForContainer(blocks, service),
     )
@@ -277,76 +293,116 @@ export class BoardService {
 
   async moveBlock(workspaceId: string, id: string, position: Position): Promise<Block> {
     await this.requireWorkspace(workspaceId)
-    const block = await this.requireBlock(workspaceId, id)
-    await this.blockRepository.update(workspaceId, id, { position })
+    const { homeWorkspaceId, block } = await this.resolveBlock(workspaceId, id)
     // A service frame's board position is a PER-WORKSPACE layout override carried on the mount
-    // (the board snapshot renders frames from the mount, so the same shared frame can sit at a
-    // different spot on each board). Mirror the move onto this workspace's mount so it persists
-    // — for a home frame as much as a frame mounted from elsewhere. No-op when sharing isn't
-    // wired (the block position above stands).
+    // (the snapshot renders frames from the mount, so the same shared frame can sit at a
+    // different spot on each board). Write it onto THIS workspace's mount — for a home frame as
+    // much as one mounted from elsewhere — and leave the shared block untouched.
     if (block.level === 'frame' && this.serviceRepository && this.workspaceMountRepository) {
       const service = await this.serviceRepository.getByFrameBlock(id)
       if (service && (await this.workspaceMountRepository.get(workspaceId, service.id))) {
         await this.workspaceMountRepository.update(workspaceId, service.id, { position })
+        return { ...block, position }
       }
     }
-    return this.requireBlock(workspaceId, id)
+    // A non-frame block, or a legacy frame with no mount: move the shared block at its home.
+    await this.blockRepository.update(homeWorkspaceId, id, { position })
+    return assertFound(await this.blockRepository.get(homeWorkspaceId, id), 'Block', id)
   }
 
   async updateBlock(workspaceId: string, id: string, patch: UpdateBlockInput): Promise<Block> {
     await this.requireWorkspace(workspaceId)
-    await this.requireBlock(workspaceId, id)
-    await this.blockRepository.update(workspaceId, id, patch)
-    return this.requireBlock(workspaceId, id)
+    const { homeWorkspaceId } = await this.resolveBlock(workspaceId, id)
+    await this.blockRepository.update(homeWorkspaceId, id, patch)
+    return assertFound(await this.blockRepository.get(homeWorkspaceId, id), 'Block', id)
   }
 
   /** Move a block into a new container at a new local position. */
   async reparent(workspaceId: string, id: string, input: ReparentInput): Promise<Block> {
     await this.requireWorkspace(workspaceId)
-    const block = await this.requireBlock(workspaceId, id)
+    const { homeWorkspaceId: blockHome, block } = await this.resolveBlock(workspaceId, id)
     if (id === input.parentId) throw new ValidationError('A block cannot contain itself')
-    const parent = await this.requireBlock(workspaceId, input.parentId)
+    const { homeWorkspaceId: parentHome, block: parent } = await this.resolveBlock(
+      workspaceId,
+      input.parentId,
+    )
     if (!canReparent(block.level, parent)) {
       throw new ValidationError(`A ${block.level} cannot be placed inside a ${parent.level}`)
     }
-    await this.blockRepository.update(workspaceId, id, {
-      parentId: input.parentId,
-      position: input.position,
-    })
-    // Reparenting can move a block (and its subtree) into a DIFFERENT service's frame — e.g. a
-    // task dragged from one service onto another. `service_id` is the physical scope key (it
-    // decides which boards render the block and where its events fan out), so re-stamp the moved
-    // subtree to the destination frame's service. No-op when sharing isn't wired or the
+
+    // Same physical home (the common case, incl. two of the workspace's own services): move in
+    // place and re-stamp `service_id`, the physical scope key that decides which boards render
+    // the subtree and where its events fan out. No-op re-stamp when sharing isn't wired or the
     // destination frame isn't a registered service.
-    if (this.serviceRepository) {
-      const blocks = await this.blockRepository.listByWorkspace(workspaceId)
-      const destService = await this.serviceForContainer(blocks, parent)
-      // descendantIds includes the moved block itself.
-      await this.blockRepository.setService(
-        workspaceId,
-        [...descendantIds(blocks, id)],
-        destService ?? null,
-      )
+    if (blockHome === parentHome) {
+      await this.blockRepository.update(blockHome, id, {
+        parentId: input.parentId,
+        position: input.position,
+      })
+      if (this.serviceRepository) {
+        const blocks = await this.blockRepository.listByWorkspace(blockHome)
+        const destService = await this.serviceForContainer(blocks, parent)
+        await this.blockRepository.setService(
+          blockHome,
+          [...descendantIds(blocks, id)],
+          destService ?? null,
+        )
+      }
+      return assertFound(await this.blockRepository.get(blockHome, id), 'Block', id)
     }
-    return this.requireBlock(workspaceId, id)
+
+    // Cross-home: the block and its new parent belong to two services homed in different
+    // workspaces (both mounted on this board). Keep the invariant that a service's blocks live
+    // in its home workspace by MOVING the subtree's rows — and any executions on them — to the
+    // destination service's home, re-stamped with the destination service.
+    const srcBlocks = await this.blockRepository.listByWorkspace(blockHome)
+    const ids = [...descendantIds(srcBlocks, id)]
+    const subtree = ids
+      .map((bid) => srcBlocks.find((b) => b.id === bid))
+      .filter((b): b is Block => b !== undefined)
+    const parentBlocks = await this.blockRepository.listByWorkspace(parentHome)
+    const destService = (await this.serviceForContainer(parentBlocks, parent)) ?? null
+    for (const b of subtree) {
+      const moved =
+        b.id === id ? { ...b, parentId: input.parentId, position: input.position } : b
+      await this.blockRepository.insert(parentHome, moved, destService)
+      const exec = await this.executionRepository.getByBlock(blockHome, b.id)
+      if (exec) {
+        await this.executionRepository.deleteByBlock(blockHome, b.id)
+        await this.executionRepository.upsert(parentHome, exec)
+      }
+    }
+    await this.blockRepository.deleteMany(blockHome, ids)
+    // Drop dependency edges in the source workspace that now dangle to the moved subtree.
+    const moved = new Set(ids)
+    for (const b of srcBlocks) {
+      if (moved.has(b.id)) continue
+      const next = b.dependsOn.filter((d) => !moved.has(d))
+      if (next.length !== b.dependsOn.length) {
+        await this.blockRepository.update(blockHome, b.id, { dependsOn: next })
+      }
+    }
+    return assertFound(await this.blockRepository.get(parentHome, id), 'Block', id)
   }
 
   /** Delete a block and all its descendants, dropping dangling dependencies. */
   async removeBlock(workspaceId: string, id: string): Promise<void> {
     await this.requireWorkspace(workspaceId)
-    await this.requireBlock(workspaceId, id)
-    const blocks = await this.blockRepository.listByWorkspace(workspaceId)
+    // Resolve the block at its home so a shared service's block can be deleted from any board
+    // that mounts it (the delete then applies to the one shared copy everywhere).
+    const { homeWorkspaceId } = await this.resolveBlock(workspaceId, id)
+    const blocks = await this.blockRepository.listByWorkspace(homeWorkspaceId)
     const doomed = descendantIds(blocks, id)
 
-    await this.executionRepository.deleteByBlock(workspaceId, id)
+    await this.executionRepository.deleteByBlock(homeWorkspaceId, id)
     // Unlink any repo backing a doomed service frame so the repo becomes
     // addable again (otherwise its github_repos.block_id dangles to a deleted
     // block: the repo shows "already on board" yet nothing renders it).
     if (this.repoProjectionRepository) {
-      const repos = await this.repoProjectionRepository.list(workspaceId)
+      const repos = await this.repoProjectionRepository.list(homeWorkspaceId)
       for (const repo of repos) {
         if (repo.blockId && doomed.has(repo.blockId)) {
-          await this.repoProjectionRepository.linkBlock(workspaceId, repo.githubId, null)
+          await this.repoProjectionRepository.linkBlock(homeWorkspaceId, repo.githubId, null)
         }
       }
     }
@@ -364,13 +420,13 @@ export class BoardService {
         await this.serviceRepository.delete(service.id)
       }
     }
-    await this.blockRepository.deleteMany(workspaceId, [...doomed])
+    await this.blockRepository.deleteMany(homeWorkspaceId, [...doomed])
 
     for (const b of blocks) {
       if (doomed.has(b.id)) continue
       const next = b.dependsOn.filter((d) => !doomed.has(d))
       if (next.length !== b.dependsOn.length) {
-        await this.blockRepository.update(workspaceId, b.id, { dependsOn: next })
+        await this.blockRepository.update(homeWorkspaceId, b.id, { dependsOn: next })
       }
     }
   }
@@ -381,12 +437,14 @@ export class BoardService {
     if (targetId === sourceId) {
       throw new ValidationError('A block cannot depend on itself')
     }
-    const target = await this.requireBlock(workspaceId, targetId)
-    await this.requireBlock(workspaceId, sourceId)
+    const { homeWorkspaceId, block: target } = await this.resolveBlock(workspaceId, targetId)
+    // The source need only be visible to this board (it may be homed elsewhere); the edge is
+    // stored as an id on the target, which lives at `homeWorkspaceId`.
+    await this.resolveBlock(workspaceId, sourceId)
     const i = target.dependsOn.indexOf(sourceId)
     const next =
       i >= 0 ? target.dependsOn.filter((d) => d !== sourceId) : [...target.dependsOn, sourceId]
-    await this.blockRepository.update(workspaceId, targetId, { dependsOn: next })
-    return this.requireBlock(workspaceId, targetId)
+    await this.blockRepository.update(homeWorkspaceId, targetId, { dependsOn: next })
+    return assertFound(await this.blockRepository.get(homeWorkspaceId, targetId), 'Block', targetId)
   }
 }

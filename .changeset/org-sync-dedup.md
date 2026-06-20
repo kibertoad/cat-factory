@@ -20,3 +20,7 @@ round-trips for one repo per org.
 
 Projection reads stay per-workspace and unchanged. Verified: the worker GitHub suite
 (28 tests) passes with the installation-scoped cursor + fan-out.
+
+Operational note: migration `0032` rebuilds `github_sync_cursors` (the rows are pure sync
+bookkeeping, no user data), so the first reconcile pass after deploy runs cursorless and
+re-fetches each repo once — a one-time cost that settles back to conditional `304`s.

@@ -32,7 +32,9 @@ export class DurableObjectEventPublisher implements ExecutionEventPublisher {
     })
   }
 
-  async boardChanged(workspaceId: string, reason: string): Promise<void> {
+  async boardChanged(workspaceId: string, reason: string, _blockId?: string | null): Promise<void> {
+    // `_blockId` is used by the FanOutEventPublisher decorator to resolve which workspaces a
+    // shared service's change reaches; the per-workspace publish itself is block-agnostic.
     await this.publish(workspaceId, { type: 'board', reason, at: Date.now() })
   }
 

@@ -23,6 +23,11 @@ export interface ServiceRepository {
    * whose `accountId` is NULL.
    */
   listByAccount(accountId: string | null): Promise<Service[]>
+  /**
+   * Services by id, in a single (chunked) query. Used to resolve every service a workspace
+   * mounts when composing its board, without one round-trip per mount. Empty input → empty.
+   */
+  listByIds(ids: string[]): Promise<Service[]>
   /** The service linked to a repo (installation + github id), or null. */
   getByRepo(installationId: number, repoGithubId: number): Promise<Service | null>
   insert(service: Service): Promise<void>

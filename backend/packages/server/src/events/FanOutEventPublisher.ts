@@ -50,10 +50,14 @@ export class FanOutEventPublisher implements ExecutionEventPublisher {
     }
   }
 
-  async boardChanged(workspaceId: string, reason: string): Promise<void> {
-    // Coarse, block-less refresh signal: deliver to the originating workspace. Mounting
-    // boards pick up structural changes on their next snapshot.
-    await this.inner.boardChanged(workspaceId, reason)
+  async boardChanged(workspaceId: string, reason: string, blockId?: string | null): Promise<void> {
+    // A structural change to a shared service (a module materialised, a run cancelled, a
+    // bootstrap finished) must prompt a refresh on EVERY board that mounts it. When the caller
+    // names a block of the affected service we resolve it to that set; a genuinely block-less
+    // signal falls back to the originating workspace only.
+    for (const ws of await this.targets(workspaceId, blockId)) {
+      await this.inner.boardChanged(ws, reason, blockId)
+    }
   }
 
   async bootstrapChanged(

@@ -737,6 +737,8 @@ function createBootstrapModule(
     bootstrapJobRepository,
     workspaceRepository: deps.workspaceRepository,
     blockRepository: deps.blockRepository,
+    serviceRepository: deps.serviceRepository,
+    workspaceMountRepository: deps.workspaceMountRepository,
     idGenerator: deps.idGenerator,
     clock: deps.clock,
     repoBootstrapper: deps.repoBootstrapper,

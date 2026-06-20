@@ -164,12 +164,15 @@ export class D1BootstrapJobRepository implements BootstrapJobRepository {
       repoUrl: record.repoUrl,
       instructions: record.instructions,
     }
+    // Stamp `service_id` from the materialised service frame (when known) so a shared
+    // service's in-flight bootstrap surfaces on every board that mounts it via `listByService`.
     await this.db
       .prepare(
         `INSERT INTO agent_runs
           (workspace_id, id, kind, block_id, status, detail, subtasks, error, failure,
-           created_at, updated_at)
-         VALUES (?, ?, 'bootstrap', ?, ?, ?, ?, ?, ?, ?, ?)`,
+           created_at, updated_at, service_id)
+         VALUES (?, ?, 'bootstrap', ?, ?, ?, ?, ?, ?, ?, ?,
+            (SELECT service_id FROM blocks WHERE workspace_id = ? AND id = ?))`,
       )
       .bind(
         record.workspaceId,
@@ -182,6 +185,8 @@ export class D1BootstrapJobRepository implements BootstrapJobRepository {
         record.failure == null ? null : JSON.stringify(record.failure),
         record.createdAt,
         record.updatedAt,
+        record.workspaceId,
+        record.blockId,
       )
       .run()
   }
@@ -211,6 +216,15 @@ export class D1BootstrapJobRepository implements BootstrapJobRepository {
       values.push(encodeTopLevel(key, value))
     }
 
+    // The run row is inserted before its service frame exists (block_id is set on a later
+    // patch), so refresh `service_id` from the block whenever block_id is (re)assigned — this
+    // is when a bootstrap becomes service-discoverable on every board mounting the service.
+    const blockIdEntry = entries.find(([key]) => key === 'blockId')
+    if (blockIdEntry) {
+      setClauses.push('service_id = (SELECT service_id FROM blocks WHERE workspace_id = ? AND id = ?)')
+      values.push(workspaceId, blockIdEntry[1] as string | null)
+    }
+
     if (setClauses.length === 0) return
     await this.db
       .prepare(
@@ -234,6 +248,16 @@ export class D1BootstrapJobRepository implements BootstrapJobRepository {
         `SELECT * FROM agent_runs WHERE workspace_id = ? AND kind = 'bootstrap' ORDER BY created_at DESC`,
       )
       .bind(workspaceId)
+      .all<AgentRunRow>()
+    return (results ?? []).map(rowToRecord)
+  }
+
+  async listByService(serviceId: string): Promise<BootstrapJobRecord[]> {
+    const { results } = await this.db
+      .prepare(
+        `SELECT * FROM agent_runs WHERE service_id = ? AND kind = 'bootstrap' ORDER BY created_at DESC`,
+      )
+      .bind(serviceId)
       .all<AgentRunRow>()
     return (results ?? []).map(rowToRecord)
   }

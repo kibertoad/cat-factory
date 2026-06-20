@@ -26,6 +26,22 @@ export class D1BlockRepository implements BlockRepository {
     return results.map(rowToBlock)
   }
 
+  async listByServices(serviceIds: string[]): Promise<Block[]> {
+    if (serviceIds.length === 0) return []
+    const out: Block[] = []
+    // Chunk the IN list to stay well under SQLite/D1's bound-parameter limit.
+    for (let i = 0; i < serviceIds.length; i += 500) {
+      const chunk = serviceIds.slice(i, i + 500)
+      const placeholders = chunk.map(() => '?').join(', ')
+      const { results } = await this.db
+        .prepare(`SELECT * FROM blocks WHERE service_id IN (${placeholders}) ORDER BY rowid`)
+        .bind(...chunk)
+        .all<BlockRow>()
+      for (const row of results) out.push(rowToBlock(row))
+    }
+    return out
+  }
+
   async get(workspaceId: string, id: string): Promise<Block | null> {
     const row = await this.db
       .prepare('SELECT * FROM blocks WHERE workspace_id = ? AND id = ?')
@@ -40,6 +56,17 @@ export class D1BlockRepository implements BlockRepository {
       .bind(workspaceId, blockId)
       .first<{ service_id: string | null }>()
     return row?.service_id ?? null
+  }
+
+  async findById(
+    blockId: string,
+  ): Promise<{ workspaceId: string; serviceId: string | null; block: Block } | null> {
+    const row = await this.db
+      .prepare('SELECT * FROM blocks WHERE id = ? LIMIT 1')
+      .bind(blockId)
+      .first<BlockRow & { workspace_id: string; service_id: string | null }>()
+    if (!row) return null
+    return { workspaceId: row.workspace_id, serviceId: row.service_id ?? null, block: rowToBlock(row) }
   }
 
   async insert(workspaceId: string, block: Block, serviceId?: string | null): Promise<void> {
