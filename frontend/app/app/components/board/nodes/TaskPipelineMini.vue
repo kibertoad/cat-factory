@@ -85,12 +85,12 @@ const ITEM_ICON: Record<string, string> = {
         />
       </div>
 
-      <!-- pending approval gate: jump straight to the review modal -->
+      <!-- pending approval gate: jump straight to the conclusions reader -->
       <button
         v-if="s.approval && s.approval.status === 'pending' && instance"
         type="button"
         class="mt-1 flex w-full items-center justify-center gap-1 rounded bg-amber-500 px-1.5 py-0.5 text-[9px] font-semibold text-amber-950 transition hover:bg-amber-400"
-        @click.stop="ui.openApproval(instance.id, s.approval.id)"
+        @click.stop="ui.openApprovalDetail(instance.id, s.approval.id)"
       >
         <UIcon name="i-lucide-shield-check" class="h-2.5 w-2.5" />
         Review &amp; approve

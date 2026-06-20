@@ -22,6 +22,7 @@ export type {
   PullRequestRef,
   SpendStatus,
   StepApproval,
+  StepReviewComment,
   StepSubtasks,
   TestTarget,
   Workspace,

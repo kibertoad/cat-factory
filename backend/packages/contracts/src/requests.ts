@@ -142,8 +142,33 @@ export const approveStepSchema = v.object({
 })
 export type ApproveStepInput = v.InferOutput<typeof approveStepSchema>
 
-/** Request changes on a gated proposal: the step re-runs with this feedback. */
-export const requestStepChangesSchema = v.object({
-  feedback: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(10000)),
+/** One GitHub-review-style comment on a block of the proposal (request body). */
+const reviewCommentInputSchema = v.object({
+  quotedSource: v.pipe(v.string(), v.maxLength(20000)),
+  srcStart: v.number(),
+  srcEnd: v.number(),
+  body: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(5000)),
 })
+
+/**
+ * Request changes on a gated proposal: the step re-runs with the reviewer's
+ * freeform `feedback` and/or per-block `comments`. At least one of the two must
+ * be present — an empty review changes nothing.
+ */
+export const requestStepChangesSchema = v.pipe(
+  v.object({
+    feedback: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(10000))),
+    comments: v.optional(v.array(reviewCommentInputSchema)),
+  }),
+  v.check(
+    (input) => Boolean(input.feedback?.length) || Boolean(input.comments?.length),
+    'Provide freeform feedback or at least one comment',
+  ),
+)
 export type RequestStepChangesInput = v.InferOutput<typeof requestStepChangesSchema>
+
+/** Reject a gated proposal: the run stops entirely (a terminal failure). */
+export const rejectStepSchema = v.object({
+  reason: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(2000))),
+})
+export type RejectStepInput = v.InferOutput<typeof rejectStepSchema>

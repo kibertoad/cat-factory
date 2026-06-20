@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseOutputOutline } from '~/utils/agentOutput'
+import { parseOutputOutline, sliceSource } from '~/utils/agentOutput'
 
 describe('parseOutputOutline', () => {
   it('splits on headings and builds a ToC', () => {
@@ -12,7 +12,8 @@ describe('parseOutputOutline', () => {
     expect(out.sections[0]!.depth).toBe(1)
     expect(out.sections[1]!.depth).toBe(2)
     const findings = out.sections[1]!.bodyHtml
-    expect(findings).toContain('<ul>')
+    // top-level blocks now carry data-src-* anchors, so match the open tag loosely
+    expect(findings).toContain('<ul')
     expect(findings).toContain('<li>a</li>')
   })
 
@@ -71,5 +72,57 @@ describe('parseOutputOutline', () => {
   it('tolerates empty / nullish input', () => {
     expect(parseOutputOutline('').sections).toHaveLength(0)
     expect(parseOutputOutline(undefined as unknown as string).sections).toHaveLength(0)
+  })
+})
+
+describe('sliceSource', () => {
+  it('returns the verbatim line range (0-based, end-exclusive)', () => {
+    const text = ['line0', 'line1', 'line2', 'line3'].join('\n')
+    expect(sliceSource(text, 1, 3)).toBe('line1\nline2')
+    expect(sliceSource(text, 0, 1)).toBe('line0')
+  })
+
+  it('tolerates nullish input', () => {
+    expect(sliceSource(undefined as unknown as string, 0, 1)).toBe('')
+  })
+})
+
+describe('source-line stamping (approval-mode block anchors)', () => {
+  // Find a rendered block by its text and round-trip its `data-src-*` range back
+  // through `sliceSource` against the ORIGINAL output — this is the contract the
+  // approval reader relies on to quote the agent's own markdown back to it.
+  const blockFor = (output: string, contains: string) => {
+    const { sections } = parseOutputOutline(output)
+    const host = document.createElement('div')
+    host.innerHTML = sections.map((s) => s.bodyHtml).join('\n')
+    const el = Array.from(host.querySelectorAll('[data-src-start]')).find((e) =>
+      (e.textContent ?? '').includes(contains),
+    )
+    if (!el) throw new Error(`no source-stamped block containing "${contains}"`)
+    return {
+      start: Number(el.getAttribute('data-src-start')),
+      end: Number(el.getAttribute('data-src-end')),
+    }
+  }
+
+  it('round-trips a paragraph block to its original source lines', () => {
+    const output = ['## Summary', '', 'First paragraph.', '', 'Second paragraph here.'].join('\n')
+    const { start, end } = blockFor(output, 'First paragraph.')
+    expect(sliceSource(output, start, end)).toBe('First paragraph.')
+  })
+
+  it('round-trips a multi-line fenced code block verbatim', () => {
+    const code = ['```ts', 'const x = 1', 'const y = 2', '```'].join('\n')
+    const output = ['## Code', '', code].join('\n')
+    const { start, end } = blockFor(output, 'const x = 1')
+    expect(sliceSource(output, start, end)).toBe(code)
+  })
+
+  it('stamps top-level blocks only (a comment targets a whole block, not a nested item)', () => {
+    const output = ['Intro paragraph.', '', '- item one', '- item two'].join('\n')
+    const { start, end } = blockFor(output, 'item one')
+    // The whole list is the top-level block, so the slice spans both items.
+    expect(sliceSource(output, start, end)).toContain('- item one')
+    expect(sliceSource(output, start, end)).toContain('- item two')
   })
 })

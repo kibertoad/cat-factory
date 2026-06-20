@@ -126,7 +126,7 @@ const attention = computed<{ label: string; icon: string; action: string; open: 
         label: 'Approval needed',
         icon: 'i-lucide-shield-check',
         action: 'Approve',
-        open: () => ui.openApproval(a.instanceId, a.approval.id),
+        open: () => ui.openApprovalDetail(a.instanceId, a.approval.id),
       }
     return null
   },

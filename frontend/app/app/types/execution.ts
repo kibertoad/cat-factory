@@ -55,6 +55,8 @@ export type AgentFailureKind =
   | 'agent'
   | 'job_failed'
   | 'decision_timeout'
+  | 'rejected'
+  | 'cancelled'
   | 'unknown'
 
 /** Structured diagnostics captured when an agent run fails. */
@@ -73,17 +75,34 @@ export interface AgentFailure {
 }
 
 /**
+ * One GitHub-review-style comment on a block of an agent's proposal (mirrors
+ * `stepReviewCommentSchema` in contracts). `quotedSource` is the verbatim raw
+ * markdown of the commented block, so a "request changes" re-run quotes the
+ * agent's own text back to it.
+ */
+export interface ReviewComment {
+  quotedSource: string
+  /** 0-based source line range [start, end) of the commented block. */
+  srcStart: number
+  srcEnd: number
+  body: string
+}
+
+/**
  * A human approval gate on a step (mirrors `stepApprovalSchema` in contracts).
- * Raised once a gated step's proposal is ready; the human reviews/edits it, then
- * approves (advance) or requests changes (re-run with feedback).
+ * Raised once a gated step's proposal is ready; the human reviews it in the
+ * conclusions reader, then approves (advance), requests changes (re-run with
+ * freeform feedback + per-block comments) or rejects (stop the run).
  */
 export interface StepApproval {
   id: string
-  status: 'pending' | 'approved' | 'changes_requested'
-  /** the agent's output the human reviews (editable before approval) */
+  status: 'pending' | 'approved' | 'changes_requested' | 'rejected'
+  /** the agent's output the human reviews */
   proposal: string
-  /** the human's guidance when changes were requested */
+  /** the human's freeform guidance when changes were requested */
   feedback?: string
+  /** per-block review comments when changes were requested */
+  comments?: ReviewComment[]
 }
 
 /**
