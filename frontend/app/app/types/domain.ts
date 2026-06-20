@@ -131,9 +131,12 @@ export type AgentKind =
   | 'business-documenter'
   | 'business-reviewer'
   // Engine-driven "system" kinds: not user-addable palette archetypes, but they
-  // appear in seeded pipelines and run timelines. The blueprint mapper, the
-  // conflicts gate + its resolver, the CI gate (a special non-LLM step that polls
-  // checks + loops the fixer) + its fixer, and the PR-scoring merger.
+  // appear in seeded pipelines and run timelines. The requirements-writer (aggregates
+  // every task's clarified requirements into the service's in-repo `requirements/`
+  // spec before the coder runs), the blueprint mapper, the conflicts gate + its
+  // resolver, the CI gate (a special non-LLM step that polls checks + loops the
+  // fixer) + its fixer, and the PR-scoring merger.
+  | 'requirements-writer'
   | 'blueprints'
   | 'conflicts'
   | 'conflict-resolver'

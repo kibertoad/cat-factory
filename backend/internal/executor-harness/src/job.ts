@@ -291,6 +291,98 @@ export function parseBlueprintJob(input: unknown): BlueprintJob {
   return job
 }
 
+// ---- Requirements-writer job (POST /requirements) -------------------------
+
+/** One task's collected (clarified) requirements, aggregated into the service doc. */
+export interface RequirementsTaskContext {
+  /** Board block id of the task (provenance / traceability). */
+  id: string
+  title: string
+  description: string
+}
+
+/**
+ * The job the Worker's ContainerAgentExecutor POSTs to /requirements. The
+ * requirements-writer agent clones `branch` (the implementation branch the coder
+ * will resume — created from `repo.baseBranch` if it does not exist yet), reads any
+ * existing `requirements/requirements.json`, and (re)generates the unified,
+ * PRESCRIPTIVE requirements document for the service from the combined `tasks`
+ * context. The harness deterministically renders that document into the in-repo
+ * `requirements/` folder (the canonical `requirements.json`, the `overview.md` /
+ * `rules.md` markdown, the `version.json` manifest and the Gherkin
+ * `features/*.feature` files) and commits it onto `branch`. Like the blueprint it
+ * adds one commit to a branch — it never resets history or force-pushes.
+ */
+export interface RequirementsJob {
+  /** Stable job id (the execution id); keys the background job + poll endpoint. */
+  jobId: string
+  /** Requirements-writer role prompt; written to Pi's global AGENTS.md context. */
+  systemPrompt: string
+  /** Free-form guidance handed to Pi as the task prompt. */
+  instructions: string
+  model: string
+  proxyBaseUrl: string
+  sessionToken: string
+  ghToken: string
+  repo: RepoSpec
+  /** Branch to clone (or create from base) and commit the requirements onto. */
+  branch: string
+  /** The collected requirements of every task under the service frame (for aggregation). */
+  tasks: RequirementsTaskContext[]
+  githubApiBase?: string
+}
+
+/** The /requirements response. `requirements` (when set) is the doc to ingest. */
+export interface RequirementsResult {
+  /** The unified requirements document the agent produced (for board ingest). */
+  requirements?: unknown
+  summary?: string
+  stats?: PiRunStats
+  error?: string
+}
+
+/** Validate + narrow an untrusted body into a {@link RequirementsJob}, throwing on bad input. */
+export function parseRequirementsJob(input: unknown): RequirementsJob {
+  if (typeof input !== 'object' || input === null) {
+    throw new Error('Invalid job: body must be an object')
+  }
+  const o = input as Record<string, unknown>
+  const repo = (o.repo ?? {}) as Record<string, unknown>
+  // `tasks` is lenient: drop anything malformed rather than reject the whole job —
+  // the worst case is a thinner aggregation context, not a failed run.
+  const tasks: RequirementsTaskContext[] = Array.isArray(o.tasks)
+    ? (o.tasks as unknown[])
+        .filter((t): t is Record<string, unknown> => typeof t === 'object' && t !== null)
+        .map((t) => ({
+          id: typeof t.id === 'string' ? t.id : '',
+          title: typeof t.title === 'string' ? t.title : '',
+          description: typeof t.description === 'string' ? t.description : '',
+        }))
+        .filter((t) => t.title !== '' || t.description !== '')
+    : []
+  const job: RequirementsJob = {
+    jobId: str(o.jobId, 'jobId'),
+    systemPrompt: str(o.systemPrompt, 'systemPrompt'),
+    instructions: str(o.instructions, 'instructions'),
+    model: str(o.model, 'model'),
+    proxyBaseUrl: str(o.proxyBaseUrl, 'proxyBaseUrl'),
+    sessionToken: str(o.sessionToken, 'sessionToken'),
+    ghToken: str(o.ghToken, 'ghToken'),
+    repo: {
+      owner: str(repo.owner, 'repo.owner'),
+      name: str(repo.name, 'repo.name'),
+      baseBranch: str(repo.baseBranch, 'repo.baseBranch'),
+      cloneUrl: str(repo.cloneUrl, 'repo.cloneUrl'),
+    },
+    branch: str(o.branch, 'branch'),
+    tasks,
+    ...(typeof o.githubApiBase === 'string' ? { githubApiBase: o.githubApiBase } : {}),
+  }
+  assertAllowedHost(job.repo.cloneUrl, 'repo.cloneUrl')
+  if (job.githubApiBase) assertAllowedHost(job.githubApiBase, 'githubApiBase')
+  return job
+}
+
 // ---- CI-fixer job (POST /ci-fix) ------------------------------------------
 
 /**
