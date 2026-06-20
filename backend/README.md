@@ -634,6 +634,34 @@ so container runs work out of the box on Workers AI. Setting a direct-provider k
 upgrades the same blocks to that provider; the proxy then forwards to its OpenAI-compatible
 endpoint instead. Either way the container is unchanged and holds no credentials.
 
+##### Web search (optional; same key-out-of-the-sandbox seam)
+
+Container agents (coder / ci-fixer / mocker / …) can use `web_search` / `web_fetch` (the
+`@juicesharp/rpiv-web-tools` Pi extension in the image), and — exactly like the LLM proxy —
+**no search key enters the container**. The Worker hosts a SearXNG-compatible **web-search proxy**
+at `${WORKER_PUBLIC_URL}/v1/web-search`; the container reaches it with the **same** model-locked
+session token it uses for the LLM proxy, and the Worker runs the search server-side under the
+deployment's own key (the `webSearch` runtime gateway). Enable it by setting **one** upstream on
+the Worker (not in the container):
+
+- `WEB_SEARCH_BRAVE_API_KEY` — Brave Search (recommended; what Claude Code uses), **or**
+- `WEB_SEARCH_SEARXNG_URL` (+ optional `WEB_SEARCH_SEARXNG_API_KEY`) — reverse-proxy to a
+  self-hosted SearXNG instance.
+
+Off by default: with neither set, `/v1/web-search` replies 503 and container runs behave exactly as
+before. When configured, `ContainerAgentExecutor` flags the coding/ci-fixer job and the harness
+points the extension's SearXNG provider at the proxy (the session token as its bearer). The two web
+tools count as read-only exploration for the no-edit guard, but a dedicated cap
+(`JOB_MAX_CONSECUTIVE_WEB_CALLS`, default 25) stops a search rabbit-hole. Adding another search
+vendor is a new `WebSearchUpstream` implementation behind the gateway — the container side never
+changes. (A **self-hosted runner pool** controls its own container env, so it may instead set any
+`rpiv-web-tools` provider key — `BRAVE_SEARCH_API_KEY`, `TAVILY_API_KEY`, `SEARXNG_URL`, … —
+directly; the harness auto-detects it.)
+
+Separately, the **inline** design/research agents (architect / researcher) can use the
+provider-hosted `web_search` tool on Anthropic / OpenAI models via `INLINE_WEB_SEARCH_ENABLED`
+(see `INLINE_WEB_SEARCH_KINDS` / `INLINE_WEB_SEARCH_MAX_USES`); it is a no-op on other providers.
+
 #### Repo bootstrap (creating a new repo from a reference architecture)
 
 The "bootstrap repo" task adapts a reference architecture (or scaffolds from scratch) into a
