@@ -24,7 +24,7 @@
   },
   "dependencies": {
     "@cat-factory/contracts": "workspace:*",
-    "ai": "^6.0.0"
+    "ai": "^6.0.208"
   },
   "devDependencies": {
     "typescript": "7.0.1-rc"

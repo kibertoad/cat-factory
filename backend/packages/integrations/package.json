@@ -27,10 +27,10 @@
   "dependencies": {
     "@cat-factory/contracts": "workspace:*",
     "@cat-factory/kernel": "workspace:*",
-    "ai": "^6.0.0"
+    "ai": "^6.0.208"
   },
   "devDependencies": {
     "typescript": "7.0.1-rc",
-    "vitest": "^4.1.8"
+    "vitest": "^4.1.9"
   }
 }

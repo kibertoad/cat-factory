@@ -23,7 +23,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "valibot": "^1.0.0"
+    "valibot": "^1.4.1"
   },
   "devDependencies": {
     "typescript": "7.0.1-rc"

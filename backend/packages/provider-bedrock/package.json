@@ -23,10 +23,10 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@ai-sdk/amazon-bedrock": "^4.0.0",
+    "@ai-sdk/amazon-bedrock": "^4.0.119",
     "@cat-factory/agents": "workspace:*",
     "@cat-factory/kernel": "workspace:*",
-    "ai": "^6.0.0"
+    "ai": "^6.0.208"
   },
   "devDependencies": {
     "typescript": "7.0.1-rc"
