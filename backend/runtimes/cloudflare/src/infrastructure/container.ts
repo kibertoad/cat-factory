@@ -14,6 +14,7 @@ import { RunnerPoolConnectionService, TicketTrackerService } from '@cat-factory/
 import { type CoreDependencies, createCore } from '@cat-factory/orchestration'
 import {
   buildResolveRepoTarget as buildSharedResolveRepoTarget,
+  FanOutEventPublisher,
   type ServerContainer,
 } from '@cat-factory/server'
 import { type AppConfig, loadConfig } from './config'
@@ -323,7 +324,7 @@ function selectMergeLifecycleDeps(
     mergePresetRepository: new D1MergePresetRepository({ db }),
     modelDefaultsRepository: new D1ModelDefaultsRepository({ db }),
   }
-  const publisher = selectEventPublisher(env)
+  const publisher = selectEventPublisher(env, db)
   if (publisher) deps.notificationChannel = new InAppNotificationChannel(publisher)
 
   if (config.github.enabled && env.GITHUB_APP_PRIVATE_KEY) {
@@ -482,9 +483,14 @@ function selectWorkRunner(env: Env): WorkRunner {
  *   - otherwise                        → undefined (core falls back to a no-op)
  * Tests leave the binding unset; the engine simply pushes nothing.
  */
-function selectEventPublisher(env: Env): ExecutionEventPublisher | undefined {
+function selectEventPublisher(env: Env, db: D1Database): ExecutionEventPublisher | undefined {
   if (!env.WORKSPACE_EVENTS) return undefined
-  return new DurableObjectEventPublisher(env.WORKSPACE_EVENTS)
+  // Fan a shared service's live events out to EVERY workspace that mounts it, not just the
+  // one the engine addressed (in-org real-time sharing).
+  return new FanOutEventPublisher(new DurableObjectEventPublisher(env.WORKSPACE_EVENTS), {
+    blockRepository: new D1BlockRepository({ db }),
+    workspaceMountRepository: new D1WorkspaceMountRepository({ db }),
+  })
 }
 
 /**
@@ -878,7 +884,7 @@ export function buildContainer(env: Env, overrides: Partial<CoreDependencies> = 
     agentExecutor:
       overrides.agentExecutor ?? selectAgentExecutor(env, config, db, clock, resolveTransport),
     workRunner: selectWorkRunner(env),
-    executionEventPublisher: selectEventPublisher(env),
+    executionEventPublisher: selectEventPublisher(env, db),
     spendPricing: config.spend,
     // Repo-bootstrap repositories are wired unconditionally (reference-architecture
     // CRUD is always available); the run path additionally needs the bootstrapper.

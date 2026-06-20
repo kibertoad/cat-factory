@@ -170,6 +170,14 @@ class DrizzleBlockRepository implements BlockRepository {
     return row ? rowToBlock(row) : null
   }
 
+  async serviceIdOf(workspaceId: string, blockId: string): Promise<string | null> {
+    const [row] = await this.db
+      .select({ serviceId: blocks.service_id })
+      .from(blocks)
+      .where(and(eq(blocks.workspace_id, workspaceId), eq(blocks.id, blockId)))
+    return row?.serviceId ?? null
+  }
+
   async insert(workspaceId: string, block: Block, serviceId?: string | null): Promise<void> {
     await this.db.insert(blocks).values({
       workspace_id: workspaceId,

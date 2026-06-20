@@ -62,6 +62,11 @@ export interface BlockRepository {
   listByService(serviceId: string): Promise<Block[]>
   get(workspaceId: string, id: string): Promise<Block | null>
   /**
+   * The account-owned service a block belongs to (its `service_id`), or null. Used by
+   * the real-time fan-out to resolve which workspaces mount the changed block's service.
+   */
+  serviceIdOf(workspaceId: string, blockId: string): Promise<string | null>
+  /**
    * Insert a block. `serviceId` stamps the account-owned service the block belongs to
    * (so it can be rendered on every workspace that mounts the service); omit/undefined
    * for legacy, workspace-local blocks.
