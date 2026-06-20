@@ -83,10 +83,16 @@ staleness checks. Treat the blueprint as orientation, not a task list.`
 /**
  * Write the composed system prompt as Pi's GLOBAL agent context
  * (`~/.pi/agent/AGENTS.md`), which Pi reads automatically and concatenates with
- * any `AGENTS.md` the repo itself ships. Deliberately OUTSIDE the checkout (the
- * same `~/.pi/agent` dir `writePiModelsConfig` already uses) so the harness's
+ * any `AGENTS.md`/`CLAUDE.md` the repo itself ships (global file first, then the
+ * ones walked up from the run cwd). Deliberately OUTSIDE the checkout (the same
+ * `~/.pi/agent` dir `writePiModelsConfig` already uses) so the harness's
  * instructions never enter the git working tree — they can't be committed into a
  * PR and they never clobber a repo's own committed `AGENTS.md`.
+ *
+ * This relies on Pi's context-file resolution: the global `~/.pi/agent/AGENTS.md`
+ * is loaded before the project-trust decision, so it applies in non-interactive
+ * (`-p`) runs without a trust prompt. That contract is pinned by `PI_VERSION` in
+ * the Dockerfile — revisit this if that bump changes context-file resolution.
  */
 export async function writeAgentsContext(systemPrompt: string): Promise<void> {
   const dir = join(homedir(), '.pi', 'agent')

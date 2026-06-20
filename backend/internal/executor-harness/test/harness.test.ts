@@ -227,13 +227,13 @@ describe('summarizePiRun', () => {
 describe('changedPathsFromPorcelain', () => {
   it('extracts paths, follows renames to the new name, and unquotes', () => {
     const status = [
-      'A  AGENTS.md',
+      'A  README.md',
       ' M src/index.ts',
       'R  old.ts -> new.ts',
       '?? "with space.ts"',
     ].join('\n')
     expect(changedPathsFromPorcelain(status)).toEqual([
-      'AGENTS.md',
+      'README.md',
       'src/index.ts',
       'new.ts',
       'with space.ts',

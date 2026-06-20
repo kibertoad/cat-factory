@@ -36,6 +36,14 @@ export async function runImplementation(
   }
 
   const dir = await mkdtemp(join(tmpdir(), 'cat-bench-impl-'))
+  // `writeAgentsContext`/`writePiModelsConfig` write Pi's GLOBAL context + provider
+  // config under `~/.pi/agent` (resolved from $HOME), and `pi` reads them from the
+  // same place. In a per-run container that home is disposable, but cat-bench runs
+  // on a developer's real machine, so point Pi at a throwaway HOME for the run —
+  // otherwise we'd clobber and leave behind the developer's own `~/.pi/agent`
+  // (AGENTS.md / models.json). Restored + removed in `finally`.
+  const piHome = await mkdtemp(join(tmpdir(), 'cat-bench-pihome-'))
+  const realHome = process.env.HOME
   try {
     await cloneRepo({
       repo: fixture.repo,
@@ -43,6 +51,7 @@ export async function runImplementation(
       dir,
       signal: deps.signal,
     })
+    process.env.HOME = piHome
     await writeAgentsContext(prompt.system)
     await writePiModelsConfig({ model: modelRef.model, proxyBaseUrl: endpoint.baseUrl })
 
@@ -77,6 +86,9 @@ export async function runImplementation(
       },
     }
   } finally {
+    if (realHome === undefined) delete process.env.HOME
+    else process.env.HOME = realHome
     await rm(dir, { recursive: true, force: true })
+    await rm(piHome, { recursive: true, force: true })
   }
 }
