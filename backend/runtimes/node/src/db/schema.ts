@@ -93,10 +93,14 @@ export const blocks = pgTable(
     pull_request: text('pull_request'),
     merge_preset_id: text('merge_preset_id'),
     pipeline_id: text('pipeline_id'),
+    // The account-owned service this block belongs to (migration 0031); will become the
+    // physical scope key once the repositories switch off workspace_id.
+    service_id: text('service_id'),
   },
   (t) => [
     primaryKey({ columns: [t.workspace_id, t.id] }),
     index('idx_blocks_parent').on(t.workspace_id, t.parent_id),
+    index('idx_blocks_service').on(t.service_id),
   ],
 )
 
@@ -162,6 +166,8 @@ export const agentRuns = pgTable(
     workflow_instance_id: text('workflow_instance_id'),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
     updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
+    // The service this run targets (migration 0031), derived from its block.
+    service_id: text('service_id'),
   },
   (t) => [
     primaryKey({ columns: [t.workspace_id, t.id] }),
@@ -169,6 +175,7 @@ export const agentRuns = pgTable(
     index('idx_agent_runs_workspace').on(t.workspace_id, t.created_at),
     index('idx_agent_runs_status_lease').on(t.status, t.updated_at),
     index('idx_agent_runs_block').on(t.workspace_id, t.block_id),
+    index('idx_agent_runs_service').on(t.service_id),
   ],
 )
 
