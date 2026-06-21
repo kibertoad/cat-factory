@@ -21,8 +21,8 @@ export interface RunnerJobResult {
   error?: string
   /** A Blueprinter job's decomposition tree (the `/blueprint` endpoint's product). */
   service?: unknown
-  /** A requirements-writer job's prescriptive requirements doc (the `/requirements` endpoint's product). */
-  requirements?: unknown
+  /** A spec-writer job's prescriptive specification doc (the `/spec` endpoint's product). */
+  spec?: unknown
   /** A bootstrap job's pushed default branch (the `/bootstrap` endpoint's product). */
   defaultBranch?: string
   /** A `merger` job's PR assessment (the `/merge` endpoint's product). */
@@ -46,16 +46,20 @@ export interface RunnerJobResult {
 
 /**
  * Which harness endpoint a dispatch targets (a coding run, a blueprint run, a
- * repo-bootstrap run, a CI fix, a merge-conflict resolution, or a merge
- * assessment). All are dispatched + polled identically through this transport;
- * `kind` only selects the harness endpoint (e.g. `/run` | `/blueprint` |
- * `/resolve-conflicts`). The Cloudflare backend serves all of them; a self-hosted
- * pool serves only `run` and rejects the rest until it implements them.
+ * read-only repo exploration, a repo-bootstrap run, a CI fix, a merge-conflict
+ * resolution, or a merge assessment). All are dispatched + polled identically
+ * through this transport; `kind` only selects the harness endpoint (e.g. `/run` |
+ * `/blueprint` | `/explore` | `/resolve-conflicts`). The Cloudflare backend serves
+ * all of them; a self-hosted pool serves only `run` and rejects the rest until it
+ * implements them.
  */
 export type RunnerDispatchKind =
   | 'run'
   | 'blueprint'
-  | 'requirements'
+  | 'spec'
+  // Read-only exploration (architect / analysis): clone + explore + return prose;
+  // no work branch, no commit, no PR, and an edit-free run is not a failure.
+  | 'explore'
   | 'bootstrap'
   | 'ci-fix'
   | 'resolve-conflicts'

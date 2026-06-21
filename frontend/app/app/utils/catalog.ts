@@ -8,12 +8,12 @@ export function uid(prefix = 'id'): string {
 /** The agent palette — the building blocks of a development pipeline. */
 export const AGENT_ARCHETYPES: AgentArchetype[] = [
   {
-    kind: 'requirements',
+    kind: 'requirements-review',
     label: 'Requirements Reviewer',
     icon: 'i-lucide-clipboard-check',
     color: '#f59e0b',
     description:
-      'Reviews the collected requirements for gaps, ambiguities, assumptions and risks before the architect starts.',
+      'Reviews the collected context (description + linked PRDs/RFCs) for gaps, ambiguities, assumptions and risks before the architect starts.',
   },
   {
     kind: 'architect',
@@ -45,10 +45,11 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
   },
   {
     kind: 'reviewer',
-    label: 'Reviewer',
+    label: 'Reviewer (companion)',
     icon: 'i-lucide-scan-eye',
     color: '#f472b6',
-    description: 'Reviews the implementation for quality and correctness.',
+    description:
+      "Coder's companion: rates the change for quality/correctness and loops it back for automatic rework below the threshold.",
   },
   {
     kind: 'documenter',
@@ -65,11 +66,20 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
     description: 'Wires the block into the surrounding system.',
   },
   {
-    kind: 'acceptance',
-    label: 'Acceptance Author',
-    icon: 'i-lucide-clipboard-check',
+    kind: 'architect-companion',
+    label: 'Architect Companion',
+    icon: 'i-lucide-bug-play',
+    color: '#c084fc',
+    description:
+      "Challenges the architect's design for quality and completeness, looping it back for rework below the threshold before a human reviews it.",
+  },
+  {
+    kind: 'spec-companion',
+    label: 'Spec Companion',
+    icon: 'i-lucide-list-checks',
     color: '#2dd4bf',
-    description: 'Turns requirements / PRDs into Given/When/Then acceptance scenarios.',
+    description:
+      'Challenges the spec — especially acceptance-scenario coverage — looping it back for rework below the threshold before a human reviews it.',
   },
   {
     kind: 'playwright',
@@ -116,13 +126,13 @@ export const AGENT_BY_KIND: Record<AgentKind, AgentArchetype> = Object.fromEntri
  * / {@link AGENT_BY_KIND}. Looked up through {@link agentKindMeta}.
  */
 export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
-  'requirements-writer': {
-    kind: 'requirements-writer',
-    label: 'Requirements Writer',
+  'spec-writer': {
+    kind: 'spec-writer',
+    label: 'Spec Writer',
     icon: 'i-lucide-clipboard-list',
     color: '#c084fc',
     description:
-      "Aggregates every task's clarified requirements into the service's in-repo requirements spec and Gherkin scenarios.",
+      "Aggregates every task's clarified requirements into the service's in-repo specification (spec.json) with full acceptance-scenario coverage, derived into Gherkin.",
   },
   blueprints: {
     kind: 'blueprints',

@@ -1,11 +1,12 @@
 import type { PromptFragment } from '@cat-factory/contracts'
 
-// Best-practice fragments for the acceptance-testing track: writing acceptance
-// scenarios from requirements, and turning them into runnable tests. The
-// runnable-tests step uses Playwright for user-facing blocks and the project's
-// own test framework for backend blocks, so there is one fragment per surface,
-// scoped by block type. Selected per block, these bodies are injected verbatim
-// into the acceptance / playwright agents' system prompts.
+// Best-practice fragments for the acceptance-testing track: authoring the
+// structured Given/When/Then acceptance scenarios as part of the service spec (the
+// `spec-writer`), and turning the derived Gherkin into runnable tests (the
+// `playwright` step). The runnable-tests step uses Playwright for user-facing blocks
+// and the project's own test framework for backend blocks, so there is one fragment
+// per surface, scoped by block type. Selected per block, these bodies are injected
+// verbatim into the relevant agents' system prompts.
 
 export const acceptanceFragments: PromptFragment[] = [
   {
@@ -22,7 +23,7 @@ export const acceptanceFragments: PromptFragment[] = [
       '- Keep scenarios independent and deterministic: each sets up its own state and asserts user-visible outcomes, never internals.',
       '- Call out any requirement that is ambiguous or untestable instead of guessing at the intended behaviour.',
     ].join('\n'),
-    appliesTo: { agentKinds: ['acceptance'] },
+    appliesTo: { agentKinds: ['spec-writer'] },
   },
   {
     id: 'playwright.e2e',

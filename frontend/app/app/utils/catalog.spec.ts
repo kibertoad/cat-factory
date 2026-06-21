@@ -11,7 +11,7 @@ import {
 } from '~/utils/catalog'
 
 const AGENT_KINDS: AgentKind[] = [
-  'requirements',
+  'requirements-review',
   'architect',
   'researcher',
   'coder',
@@ -19,7 +19,8 @@ const AGENT_KINDS: AgentKind[] = [
   'reviewer',
   'documenter',
   'integrator',
-  'acceptance',
+  'architect-companion',
+  'spec-companion',
   'playwright',
   'mocker',
   'business-documenter',
@@ -59,7 +60,7 @@ describe('catalog', () => {
     // Engine system kinds (present in seeded pipelines but not the palette) resolve
     // to their system metadata rather than blowing up an undefined access.
     for (const kind of [
-      'requirements-writer',
+      'spec-writer',
       'blueprints',
       'conflicts',
       'conflict-resolver',

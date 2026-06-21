@@ -1,5 +1,10 @@
 import { generateText } from 'ai'
-import type { Block, RequirementReview, ReviewItemStatus } from '@cat-factory/kernel'
+import type {
+  Block,
+  CompanionVerdict,
+  RequirementReview,
+  ReviewItemStatus,
+} from '@cat-factory/kernel'
 import { assertFound, ValidationError } from '@cat-factory/kernel'
 import type { BlockRepository } from '@cat-factory/kernel'
 import type { Clock, IdGenerator } from '@cat-factory/kernel'
@@ -8,10 +13,13 @@ import type { DocumentRepository } from '@cat-factory/kernel'
 import type { TaskRepository } from '@cat-factory/kernel'
 import type { RequirementReviewRepository } from '@cat-factory/kernel'
 import { REVIEW_SYSTEM_PROMPT, REWORK_SYSTEM_PROMPT } from '@cat-factory/agents'
+import { DEFAULT_COMPANION_THRESHOLD, safeParseCompanionAssessment } from '@cat-factory/contracts'
 import {
   type RequirementsContext,
   buildReviewPrompt,
   buildReworkPrompt,
+  REWORK_COMPANION_SYSTEM_PROMPT,
+  buildReworkCompanionPrompt,
   coerceReviewItems,
   extractJson,
 } from './requirements.logic.js'
@@ -158,6 +166,7 @@ export class RequirementReviewService {
       items,
       model: `${ref.provider}:${ref.model}`,
       incorporatedRequirements: null,
+      companionVerdicts: [],
       createdAt: now,
       updatedAt: now,
     }
@@ -230,6 +239,12 @@ export class RequirementReviewService {
     }
 
     const context = await this.gatherContext(workspaceId, block)
+    // A prior rework rejected by the companion feeds its challenge into this attempt so
+    // the regenerated document addresses the gaps rather than repeating them.
+    const lastVerdict = review.companionVerdicts.at(-1)
+    if (lastVerdict && !lastVerdict.passed) {
+      context.companionFeedback = lastVerdict.feedback
+    }
     let revised: string
     let finishReason: string
     try {
@@ -268,15 +283,59 @@ export class RequirementReviewService {
       )
     }
 
+    // Companion gate: a quality companion challenges the reworked document before it
+    // becomes the spec every downstream agent trusts. Below the threshold the rework is
+    // NOT accepted — the review stays `ready` and the companion's challenge is surfaced
+    // (and fed into the next rework). A companion failure / unparseable verdict passes
+    // through (a broken critic must never wedge the human's flow).
+    const verdict = await this.gradeRework(modelProvider, ref, context, revised)
+
     const now = this.deps.clock.now()
+    const passed = verdict.passed
     const updated: RequirementReview = {
       ...review,
-      status: 'incorporated',
-      incorporatedRequirements: revised,
+      status: passed ? 'incorporated' : 'ready',
+      incorporatedRequirements: passed ? revised : null,
+      // Append this cycle's verdict so the whole correction sequence is preserved.
+      companionVerdicts: [...review.companionVerdicts, verdict],
       updatedAt: now,
     }
     await this.deps.requirementReviewRepository.upsert(workspaceId, updated)
     return { review: updated }
+  }
+
+  /**
+   * Grade a reworked requirements document with the quality companion. Returns the
+   * companion verdict (rating, threshold, pass/fail, feedback). A model failure or an
+   * unparseable response yields a passing verdict so a broken critic never blocks the
+   * human — the truncation + empty-doc guards already caught the dangerous cases.
+   */
+  private async gradeRework(
+    modelProvider: ModelProvider,
+    ref: ModelRef,
+    context: RequirementsContext,
+    reworked: string,
+  ): Promise<CompanionVerdict> {
+    const threshold = DEFAULT_COMPANION_THRESHOLD
+    try {
+      const result = await generateText({
+        model: modelProvider.resolve(ref),
+        system: REWORK_COMPANION_SYSTEM_PROMPT,
+        prompt: buildReworkCompanionPrompt(context, reworked),
+        temperature: 0.1,
+        maxOutputTokens: 2_000,
+      })
+      const assessment = safeParseCompanionAssessment(extractJson(result.text))
+      if (!assessment) return { rating: 1, threshold, passed: true, feedback: '' }
+      return {
+        rating: assessment.rating,
+        threshold,
+        passed: assessment.rating >= threshold,
+        feedback: assessment.summary,
+      }
+    } catch {
+      return { rating: 1, threshold, passed: true, feedback: '' }
+    }
   }
 
   // ---- internals ----------------------------------------------------------

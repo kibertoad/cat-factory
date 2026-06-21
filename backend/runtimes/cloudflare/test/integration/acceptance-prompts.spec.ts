@@ -11,15 +11,16 @@ import {
 import { FRAGMENTS } from '@cat-factory/prompt-fragments'
 import { describe, expect, it } from 'vitest'
 
-// The acceptance-testing track adds two built-out agent kinds — `acceptance`
-// (scenarios from requirements) and `playwright` (runnable tests from
-// scenarios) — that sit alongside the four standard solution phases. The
-// runnable-tests step uses Playwright only for user-facing blocks and the
-// project's own test framework for backend blocks.
+// The acceptance-testing track now has a single built-out agent kind — `playwright`
+// (runnable tests from the spec's derived Gherkin scenarios) — that sits alongside the
+// standard solution phases. The structured acceptance SCENARIOS are authored in the
+// service spec (by the `spec-writer`, reviewed there); the runnable-tests step uses
+// Playwright only for user-facing blocks and the project's own test framework for
+// backend blocks.
 
 function ctx(overrides: Partial<AgentRunContext> = {}): AgentRunContext {
   return {
-    agentKind: 'acceptance',
+    agentKind: 'playwright',
     pipelineName: 'Acceptance pass',
     stepIndex: 0,
     isFinalStep: false,
@@ -32,21 +33,17 @@ function ctx(overrides: Partial<AgentRunContext> = {}): AgentRunContext {
 }
 
 describe('acceptance-testing agent prompts', () => {
-  it('recognises the acceptance track kinds and nothing else', () => {
-    expect([...ACCEPTANCE_AGENT_KINDS]).toEqual(['acceptance', 'playwright'])
-    expect(isAcceptanceKind('acceptance')).toBe(true)
+  it('recognises the acceptance track kind and nothing else', () => {
+    expect([...ACCEPTANCE_AGENT_KINDS]).toEqual(['playwright'])
     expect(isAcceptanceKind('playwright')).toBe(true)
     expect(isAcceptanceKind('coder')).toBe(false)
-    // The track kinds are not standard solution phases.
-    expect(phaseForKind('acceptance')).toBeUndefined()
+    // The track kind is not a standard solution phase.
     expect(phaseForKind('playwright')).toBeUndefined()
   })
 
   describe('system prompts', () => {
-    it('serves the built-out role prompt for each track kind', () => {
-      expect(systemPromptFor('acceptance')).toBe(acceptanceSystemPrompt('acceptance'))
+    it('serves the built-out role prompt for the track kind', () => {
       expect(systemPromptFor('playwright')).toBe(acceptanceSystemPrompt('playwright'))
-      expect(systemPromptFor('acceptance')).toContain('Given / When / Then')
       expect(systemPromptFor('playwright')).toContain('Playwright')
     })
 
@@ -64,6 +61,10 @@ describe('acceptance-testing agent prompts', () => {
       expect(prompt).toMatch(/Frontend \/ user-facing UI: write Playwright/i)
       expect(prompt).toMatch(/project's EXISTING test framework/i)
       expect(prompt).toMatch(/Do not pull in Playwright or a browser for behaviour that has no UI/i)
+    })
+
+    it('points the playwright agent at the spec-derived Gherkin scenarios', () => {
+      expect(systemPromptFor('playwright')).toContain('spec/features/*.feature')
     })
 
     it('defers to the appended best-practice standards', () => {
@@ -106,7 +107,7 @@ describe('acceptance-testing agent prompts', () => {
   })
 
   describe('user prompts', () => {
-    it('folds linked requirement documents into the acceptance prompt', () => {
+    it('folds linked requirement documents into the playwright prompt', () => {
       const prompt = userPromptFor(
         ctx({
           block: {
@@ -127,14 +128,14 @@ describe('acceptance-testing agent prompts', () => {
       expect(prompt).toContain('Users sign in with email + password.')
     })
 
-    it('passes the acceptance scenarios to the playwright agent as prior output', () => {
+    it('passes upstream scenarios to the playwright agent as prior output', () => {
       const prompt = userPromptFor(
         ctx({
           agentKind: 'playwright',
-          priorOutputs: [{ agentKind: 'acceptance', output: 'Scenario: Successful login' }],
+          priorOutputs: [{ agentKind: 'spec-writer', output: 'Scenario: Successful login' }],
         }),
       )
-      expect(prompt).toContain('### acceptance')
+      expect(prompt).toContain('### spec-writer')
       expect(prompt).toContain('Scenario: Successful login')
     })
 
@@ -208,10 +209,10 @@ describe('acceptance-testing agent prompts', () => {
       expect(prompt).not.toContain('Playwright end-to-end tests.')
     })
 
-    it('omits the test-approach section for the scenario-writing (acceptance) kind', () => {
+    it('omits the test-approach section for a non-track kind', () => {
       const prompt = userPromptFor(
         ctx({
-          agentKind: 'acceptance',
+          agentKind: 'documenter',
           block: { title: 'Login', type: 'frontend', description: 'Auth' },
         }),
       )

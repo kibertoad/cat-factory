@@ -5,6 +5,9 @@ import {
   testApproachSection,
   testTargetSection,
 } from './acceptance-prompts.js'
+import { companionSystemPrompt } from './companion-prompts.js'
+import { companionTargets, isCompanionKind } from './companions.js'
+import { READ_ONLY_GUARDRAIL, isReadOnlyAgentKind } from './read-only.js'
 import { businessLogicSystemPrompt } from './business-logic-prompts.js'
 import { mockSystemPrompt } from './mock-prompts.js'
 import { registeredSystemPrompt, registeredUserPrompt } from './registry.js'
@@ -35,16 +38,16 @@ const ROLES: Partial<Record<AgentKind, string>> = {
   // produce a single, prioritized, actionable markdown report that a downstream
   // `tracker` step files as an issue and a `coder` step then implements.
   analysis:
-    'You are a senior engineer performing a technical-debt audit of this service. Explore the repository (build scripts, dependencies, tests, hot spots, TODO/FIXME markers, outdated patterns) and identify the highest-value technical debt to address now. Do NOT modify any files, do not commit, and do not open a pull request — this is a read-only analysis. Produce a single prioritized markdown report: for each item give a short title, the affected area, why it matters, and a concrete suggested fix. Lead with the one item most worth doing first, since it will be turned into a tracked issue and implemented.',
+    'You are a senior engineer performing a technical-debt audit of this service. Explore the repository (build scripts, dependencies, tests, hot spots, TODO/FIXME markers, outdated patterns) and identify the highest-value technical debt to address now. Produce a single prioritized markdown report: for each item give a short title, the affected area, why it matters, and a concrete suggested fix. Lead with the one item most worth doing first, since it will be turned into a tracked issue and implemented.',
   documenter:
     'You are a technical writer. Produce concise developer documentation and a usage example for the building block.',
   integrator:
     'You are an integration engineer. Describe how to wire this building block into the surrounding system, including contracts and rollout.',
-  // Runs before the architect: reviews the collected requirements and surfaces
-  // what would block confident implementation. Its findings are presented to a
-  // human at an approval gate (to reject items or supply missing information)
+  // Runs before the architect: reviews the collected CONTEXT (the linked-prose brief)
+  // and surfaces what would block confident implementation. Its findings are presented
+  // to a human at an approval gate (to reject items or supply missing information)
   // before the architect proceeds, so it must read as a clear, editable list.
-  requirements:
+  'requirements-review':
     'You are a meticulous product / requirements analyst reviewing the collected requirements for a single building block before an engineer designs or builds it. Surface everything that would block confident implementation: missing information (gaps), ambiguities that need clarification, unstated assumptions, risks, and open questions. Be specific, concrete and actionable, and phrase each item so a product owner can answer it directly. Do NOT invent answers or requirements. Group your findings under clear headings and present a concise, readable markdown list — a human will review and edit it before the architect proceeds.',
   // Runs in a container against the PR head branch when CI is red. It must make the
   // failing build/tests pass with the smallest correct change and push to the same
@@ -64,6 +67,17 @@ const ROLES: Partial<Record<AgentKind, string>> = {
 }
 
 export function systemPromptFor(kind: AgentKind): string {
+  const base = baseSystemPromptFor(kind)
+  // Read-only kinds (architect, analysis) explore a real checkout but must never edit
+  // it; append the shared guardrail so the harness `/explore` run stays edit-free.
+  return isReadOnlyAgentKind(kind) ? `${base}\n\n${READ_ONLY_GUARDRAIL}` : base
+}
+
+function baseSystemPromptFor(kind: AgentKind): string {
+  // Companion kinds (reviewer, architect-companion, spec-companion, …) win over every
+  // built-in track: they grade a prior step's output and return a JSON rating.
+  const companion = companionSystemPrompt(kind)
+  if (companion) return companion
   const phase = phaseForKind(kind)
   if (phase) return standardSystemPrompt(phase)
   const acceptance = acceptanceSystemPrompt(kind)
@@ -141,6 +155,10 @@ function buildBaseUserPrompt(context: AgentRunContext): string {
     `Block: ${block.title} (${block.type})`,
     `Description: ${block.description || '(none provided)'}`,
   ]
+  // A companion grades a specific preceding producer; name it explicitly so the
+  // model rates the right output rather than guessing among the prior-agent sections.
+  const companionTarget = companionTargetSection(context)
+  if (companionTarget) lines.push(companionTarget)
   const linked = linkedContextSection(context)
   if (linked) lines.push(linked)
   const envSection = environmentSection(context)
@@ -162,4 +180,26 @@ function buildBaseUserPrompt(context: AgentRunContext): string {
   }
   lines.push('', 'Produce your contribution. Be concise and concrete.')
   return lines.join('\n')
+}
+
+/**
+ * For a companion step, name the specific producer output it must grade: the NEAREST
+ * preceding step whose kind is one of the companion's targets. Without this the model
+ * has to infer which "### <agentKind>" section is the one under review — fine when the
+ * producer is adjacent, ambiguous when other steps sit in between. Undefined for
+ * non-companion kinds or when no target output is present yet.
+ */
+function companionTargetSection(context: AgentRunContext): string | undefined {
+  if (!isCompanionKind(context.agentKind)) return undefined
+  const targets = companionTargets(context.agentKind)
+  for (let i = context.priorOutputs.length - 1; i >= 0; i--) {
+    const produced = context.priorOutputs[i]!
+    if (targets.includes(produced.agentKind)) {
+      return (
+        `You are grading the output of the \`${produced.agentKind}\` step (shown under ` +
+        `"### ${produced.agentKind}" below). Base your rating on THAT output.`
+      )
+    }
+  }
+  return undefined
 }

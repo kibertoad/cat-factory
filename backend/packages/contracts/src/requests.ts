@@ -120,6 +120,12 @@ export const createPipelineSchema = v.object({
    * omitted means no gates (the pipeline runs straight through).
    */
   gates: v.optional(v.array(v.boolean())),
+  /**
+   * Per-step companion quality thresholds (0..1), parallel to {@link agentKinds}.
+   * Only meaningful on companion steps; `null`/omitted means "use the companion's
+   * default threshold". Optional.
+   */
+  thresholds: v.optional(v.array(v.nullable(v.pipe(v.number(), v.minValue(0), v.maxValue(1))))),
 })
 export type CreatePipelineInput = v.InferOutput<typeof createPipelineSchema>
 

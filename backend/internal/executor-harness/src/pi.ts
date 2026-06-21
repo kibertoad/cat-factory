@@ -97,19 +97,19 @@ for a module that is directly relevant to your task, when you need its summary a
 exact code references. \`blueprints/version.json\` is a tiny manifest for quick
 staleness checks. Treat the blueprint as orientation, not a task list.`
 
-// Appended to every AGENTS.md so an agent treats the persisted requirements as the
-// PRESCRIPTIVE spec (what must be true) and the acceptance scenarios its work must
-// satisfy. Harmless when no requirements exist yet — the files simply aren't there.
-const REQUIREMENTS_GUIDANCE = `
+// Appended to every AGENTS.md so an agent treats the persisted spec as the
+// PRESCRIPTIVE source (what must be true) and the acceptance scenarios its work must
+// satisfy. Harmless when no spec exists yet — the files simply aren't there.
+const SPEC_GUIDANCE = `
 
-## Service requirements (the prescriptive spec)
+## Service specification (the prescriptive spec)
 
-If a \`requirements/\` folder exists, it is the spec for this service. **Read
-\`requirements/overview.md\` first** — it states what MUST be true (the requirements,
-grouped by capability). \`requirements/rules.md\` lists cross-cutting domain
-invariants you must not violate. \`requirements/features/*.feature\` are the Gherkin
-acceptance scenarios your work must satisfy — treat them as the source of truth for
-behaviour and tests. \`requirements/version.json\` is a tiny staleness manifest.`
+If a \`spec/\` folder exists, it is the specification for this service. **Read
+\`spec/overview.md\` first** — it states what MUST be true (the requirements, grouped
+by capability). \`spec/rules.md\` lists cross-cutting domain invariants you must not
+violate. \`spec/features/*.feature\` are the Gherkin acceptance scenarios your work
+must satisfy — treat them as the source of truth for behaviour and tests.
+\`spec/version.json\` is a tiny staleness manifest.`
 
 /**
  * Write the composed system prompt as Pi's GLOBAL agent context
@@ -142,7 +142,7 @@ export async function writeAgentsContext(
   const monorepo = opts.serviceDirectory ? monorepoGuidance(opts.serviceDirectory) : ''
   await writeFile(
     join(dir, 'AGENTS.md'),
-    `${systemPrompt}${BLUEPRINT_GUIDANCE}${REQUIREMENTS_GUIDANCE}${TODO_GUIDANCE}${monorepo}${webTools}`,
+    `${systemPrompt}${BLUEPRINT_GUIDANCE}${SPEC_GUIDANCE}${TODO_GUIDANCE}${monorepo}${webTools}`,
     'utf8',
   )
 }

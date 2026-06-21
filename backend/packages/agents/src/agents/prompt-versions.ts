@@ -13,7 +13,7 @@ export const REVIEW_SYSTEM_PROMPT =
  * The "requirements rework" agent. Given a block's collected requirements plus the
  * answers / dismissals a human gave to the reviewer's findings, it folds everything
  * into ONE self-contained requirements document. The output is emitted in a fixed,
- * standard structure so the service-level requirements-writer can aggregate it with
+ * standard structure so the service-level spec-writer can aggregate it with
  * minimal synthesis (it mirrors that writer's own expectations: "The system SHALL …"
  * statements, MoSCoW priorities, Given/When/Then acceptance criteria, and
  * cross-cutting domain rules). It must produce this standard document even when the

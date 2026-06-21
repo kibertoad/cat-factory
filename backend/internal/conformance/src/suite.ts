@@ -287,12 +287,12 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         expect(task.parentId).toBe('mod_sessions')
       })
 
-      it('aggregates all tasks and ingests the requirements-writer document', async () => {
-        // The requirements-writer step runs on the implementation branch BEFORE the
+      it('aggregates all tasks and ingests the spec-writer document', async () => {
+        // The spec-writer step runs on the implementation branch BEFORE the
         // coder, aggregating EVERY task under the service frame into the service's
-        // unified requirements doc. Driving it identically on both runtimes pins the
+        // unified spec doc. Driving it identically on both runtimes pins the
         // engine's `serviceTasks` aggregation + strict ingest so they can't drift.
-        const requirementsDoc = {
+        const spec = {
           service: 'Auth',
           summary: 'Authentication service',
           groups: [
@@ -319,13 +319,13 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
           ],
           rules: [],
         }
-        const app = harness.makeApp({ requirementsDoc })
+        const app = harness.makeApp({ spec })
         const { workspace } = await app.createWorkspace()
         const wsId = workspace.id
 
         const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
           name: 'Requirements only',
-          agentKinds: ['requirements-writer'],
+          agentKinds: ['spec-writer'],
         })
         expect(pipeline.status).toBe(201)
 
@@ -339,12 +339,12 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         const ticked = await app.drive(wsId)
         const exec = ticked.find((e) => e.blockId === 'task_login')!
         expect(exec.status).toBe('done')
-        const step = exec.steps.find((s) => s.agentKind === 'requirements-writer')!
+        const step = exec.steps.find((s) => s.agentKind === 'spec-writer')!
         expect(step.state).toBe('done')
         // The engine populated `serviceTasks` with at least the running task, and the
         // doc parsed + ingested cleanly (a strict-parse failure would not throw, but a
         // completed step with this output proves the happy path ran end to end).
-        expect(step.output).toContain('[requirements-writer]')
+        expect(step.output).toContain('[spec-writer]')
         expect(step.output).toMatch(/from [1-9]\d* task/)
       })
 
@@ -380,6 +380,87 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         expect(step.state).toBe('done')
         // The agent was handed the reworked document, not the seeded task's description.
         expect(step.output).toContain(`[desc]${REWORKED}[/desc]`)
+      })
+
+      it('passes a companion gate when the rating clears the threshold', async () => {
+        // A companion step grades the prior producer; at/above its threshold the run
+        // proceeds. `reviewer` is the coder's companion, so ['coder','reviewer'] runs the
+        // coder then grades it — a passing rating (default 1) finishes the run.
+        const app = harness.makeApp({ confidence: 1 })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Build + companion',
+          agentKinds: ['coder', 'reviewer'],
+        })
+        const start = await app.call<ExecutionInstance>(
+          'POST',
+          `/workspaces/${wsId}/blocks/task_login/executions`,
+          { pipelineId: pipeline.body.id },
+        )
+        expect(start.status).toBe(201)
+        const ticked = await app.drive(wsId)
+        const exec = ticked.find((e) => e.blockId === 'task_login')!
+        expect(exec.status).toBe('done')
+        const companionStep = exec.steps.find((s) => s.agentKind === 'reviewer')!
+        const verdict = companionStep.companion?.verdicts.at(-1)
+        expect(verdict?.rating).toBe(1)
+        expect(verdict?.passed).toBe(true)
+      })
+
+      it('fails the run when a companion stays below threshold past its rework budget', async () => {
+        // Below the threshold the companion loops the producer back for automatic rework;
+        // once the budget is spent the run fails (`companion_rejected`) for human
+        // attention. A fixed low rating drives straight to that terminal state.
+        const app = harness.makeApp({ confidence: 1, companionRating: 0.4 })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Build + strict companion',
+          agentKinds: ['coder', 'reviewer'],
+        })
+        const start = await app.call<ExecutionInstance>(
+          'POST',
+          `/workspaces/${wsId}/blocks/task_login/executions`,
+          { pipelineId: pipeline.body.id },
+        )
+        expect(start.status).toBe(201)
+        const ticked = await app.drive(wsId)
+        const exec = ticked.find((e) => e.blockId === 'task_login')!
+        expect(exec.status).toBe('failed')
+        expect(exec.failure?.kind).toBe('companion_rejected')
+      })
+
+      it('reworks an earlier producer through an intermediate step, then recovers', async () => {
+        // The companion reviews the NEAREST target producer, which may sit several
+        // steps back: ['coder','tester','reviewer'] has `tester` between the coder and
+        // its `reviewer` companion. A first failing grade loops the coder back; the
+        // coder AND the intermediate `tester` re-run, then the re-grade passes and the
+        // run completes — exercising the multi-step rework reset (every step from the
+        // producer up to the companion is reset and re-run, not just the producer).
+        const app = harness.makeApp({ confidence: 1, companionRatings: [0.4, 1] })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Build + gap companion',
+          agentKinds: ['coder', 'tester', 'reviewer'],
+        })
+        const start = await app.call<ExecutionInstance>(
+          'POST',
+          `/workspaces/${wsId}/blocks/task_login/executions`,
+          { pipelineId: pipeline.body.id },
+        )
+        expect(start.status).toBe(201)
+        const ticked = await app.drive(wsId)
+        const exec = ticked.find((e) => e.blockId === 'task_login')!
+        expect(exec.status).toBe('done')
+        // The intermediate tester re-ran after the rework and finished cleanly.
+        expect(exec.steps.find((s) => s.agentKind === 'tester')!.state).toBe('done')
+        // The companion recorded both cycles: the rejected first grade then the pass.
+        const companionStep = exec.steps.find((s) => s.agentKind === 'reviewer')!
+        expect(companionStep.companion?.verdicts.map((v) => v.passed)).toEqual([false, true])
+        // Exactly one automatic rework was consumed from the budget.
+        expect(companionStep.companion?.attempts).toBe(1)
       })
 
       it('drives an asynchronous (polled) agent job to completion', async () => {

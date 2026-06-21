@@ -6,6 +6,7 @@ import {
   integer,
   pgTable,
   primaryKey,
+  serial,
   text,
   uniqueIndex,
 } from 'drizzle-orm/pg-core'
@@ -153,6 +154,12 @@ export const pipelines = pgTable(
     name: text('name').notNull(),
     agent_kinds: text('agent_kinds').notNull().default('[]'),
     gates: text('gates'),
+    thresholds: text('thresholds'),
+    // Monotonic insert sequence (Postgres has no SQLite rowid): a workspace's pipelines
+    // are read back in the order they were seeded — the curated `seedPipelines()` order
+    // — so the catalog order (and the UI's default `pipelines[0]`) is deterministic and
+    // matches the Cloudflare facade (which orders by `rowid`). Auto-assigned on insert.
+    seq: serial('seq').notNull(),
   },
   (t) => [primaryKey({ columns: [t.workspace_id, t.id] })],
 )
@@ -326,6 +333,9 @@ export const requirementReviews = pgTable(
     items: text('items').notNull().default('[]'),
     model: text('model'),
     incorporated_requirements: text('incorporated_requirements'),
+    // JSON ARRAY of { rating, threshold, passed, feedback } — the companion's verdicts
+    // across every rework cycle (migration 0036). Null until a rework has been gated.
+    companion: text('companion'),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
     updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
   },

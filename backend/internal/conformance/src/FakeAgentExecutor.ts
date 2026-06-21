@@ -8,6 +8,7 @@ import type {
   PullRequestRef,
 } from '@cat-factory/kernel'
 import type { AgentExecutor } from '@cat-factory/kernel'
+import { isCompanionKind } from '@cat-factory/agents'
 
 export interface FakeAgentOptions {
   /** Confidence reported on the final step (drives auto-merge vs PR). Default 1. */
@@ -38,10 +39,23 @@ export interface FakeAgentOptions {
    */
   blueprintService?: unknown
   /**
-   * A requirements doc the `requirements-writer` step reports, so the engine's
-   * strict-parse + ingest can be exercised without a real container.
+   * A spec doc the `spec-writer` step reports, so the engine's strict-parse + ingest
+   * can be exercised without a real container.
    */
-  requirementsDoc?: unknown
+  spec?: unknown
+  /**
+   * Overall quality rating (0..1) every companion step returns, so the engine's
+   * companion review + rework loop can be exercised deterministically. When omitted a
+   * companion returns a passing rating of 1.
+   */
+  companionRating?: number
+  /**
+   * A SEQUENCE of companion ratings, one per successive companion grading call (the
+   * last value repeats once exhausted). Lets a test drive the rework loop and then
+   * recover — e.g. `[0.4, 1]` fails the first grade (looping the producer back) then
+   * passes the re-grade. Takes precedence over `companionRating` when set.
+   */
+  companionRatings?: number[]
   /**
    * The assessment the `merger` step reports. When omitted, the fake derives one
    * from `confidence` so existing tests keep their semantics: high confidence
@@ -61,6 +75,9 @@ export interface FakeAgentOptions {
  */
 export class FakeAgentExecutor implements AgentExecutor {
   constructor(private readonly options: FakeAgentOptions = {}) {}
+
+  /** Count of companion grading calls so far, to walk `companionRatings` in order. */
+  private companionCalls = 0
 
   // Matches the `model: 'fake'` every result carries, so the engine's up-front
   // model preview (shown on the first "spinning up container" / querying emit)
@@ -91,15 +108,34 @@ export class FakeAgentExecutor implements AgentExecutor {
       }
     }
 
-    // Mimic the container requirements-writer step returning the unified doc, and
-    // surface the aggregated task context it was given so the engine's population of
+    // Mimic the container spec-writer step returning the unified doc, and surface the
+    // aggregated task context it was given so the engine's population of
     // `serviceTasks` can be asserted.
-    if (context.agentKind === 'requirements-writer' && this.options.requirementsDoc !== undefined) {
+    if (context.agentKind === 'spec-writer' && this.options.spec !== undefined) {
       const tasks = context.serviceTasks?.length ?? 0
       return {
-        output: `[requirements-writer] wrote requirements for "${context.block.title}" from ${tasks} task(s)`,
+        output: `[spec-writer] wrote spec for "${context.block.title}" from ${tasks} task(s)`,
         model: 'fake',
-        requirementsDoc: this.options.requirementsDoc,
+        spec: this.options.spec,
+      }
+    }
+
+    // Mimic a companion step grading the prior producer: return the configured rating
+    // (default 1 = pass) as the JSON assessment the engine parses. A `companionRatings`
+    // sequence walks one rating per grade (last repeats) so a test can fail then pass.
+    if (isCompanionKind(context.agentKind)) {
+      const seq = this.options.companionRatings
+      const rating = seq?.length
+        ? (seq[Math.min(this.companionCalls, seq.length - 1)] ?? 1)
+        : (this.options.companionRating ?? 1)
+      this.companionCalls += 1
+      return {
+        output: JSON.stringify({
+          rating,
+          summary: `[${context.agentKind}] rated ${(rating * 100).toFixed(0)}%`,
+        }),
+        model: 'fake',
+        usage: this.options.usage,
       }
     }
 

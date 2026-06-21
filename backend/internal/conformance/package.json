@@ -18,6 +18,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@cat-factory/agents": "workspace:*",
     "@cat-factory/kernel": "workspace:*"
   },
   "devDependencies": {

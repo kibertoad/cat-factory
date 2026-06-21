@@ -13,7 +13,7 @@ import { D1RequirementReviewRepository } from '../../src/infrastructure/reposito
 
 // Once a block's requirements have been reworked ("incorporated"), that
 // standard-format document — not the original description + linked docs/tasks — is
-// what every agent step (and the requirements-writer) consumes. These specs drive
+// what every agent step (and the spec-writer) consumes. These specs drive
 // real executions through a recording agent to assert the substitution.
 
 const REWORKED = '# Login — Requirements\n\n## Overview\nThe system SHALL keep sessions for 24h.'
@@ -34,6 +34,7 @@ function incorporatedReview(blockId: string): RequirementReview {
     status: 'incorporated',
     model: 'mock:mock',
     incorporatedRequirements: REWORKED,
+    companionVerdicts: [{ rating: 1, threshold: 0.8, passed: true, feedback: '' }],
     createdAt: 1,
     updatedAt: 2,
     items: [],
@@ -95,7 +96,7 @@ describe('reworked requirements as agent context', () => {
     expect(ctx!.block.contextTasks).toBeUndefined()
   })
 
-  it('feeds the reworked text (not the description) to the requirements-writer', async () => {
+  it('feeds the reworked text (not the description) to the spec-writer', async () => {
     const recorder = new RecordingAgentExecutor()
     const app = makeApp(recorder)
     const { workspace } = await app.createWorkspace({ seed: false })
@@ -116,14 +117,14 @@ describe('reworked requirements as agent context', () => {
 
     const pipeline = await app.call<{ id: string }>('POST', `/workspaces/${ws}/pipelines`, {
       name: 'Spec',
-      agentKinds: ['requirements-writer'],
+      agentKinds: ['spec-writer'],
     })
     await app.call('POST', `/workspaces/${ws}/blocks/${task.body.id}/executions`, {
       pipelineId: pipeline.body.id,
     })
     await app.drive(ws)
 
-    const ctx = recorder.contexts.find((c) => c.agentKind === 'requirements-writer')
+    const ctx = recorder.contexts.find((c) => c.agentKind === 'spec-writer')
     expect(ctx).toBeDefined()
     const aggregated = ctx!.serviceTasks ?? []
     const seeded = aggregated.find((t) => t.id === task.body.id)

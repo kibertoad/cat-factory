@@ -11,6 +11,10 @@ export class D1PipelineRepository implements PipelineRepository {
   }
 
   async listByWorkspace(workspaceId: string): Promise<Pipeline[]> {
+    // Order by rowid: SQLite's monotonic insert sequence, so a workspace's pipelines
+    // come back in the deterministic order they were seeded (the curated
+    // `seedPipelines()` catalog order). The Postgres facade reproduces this with an
+    // explicit `seq` column (it has no rowid) — see DrizzlePipelineRepository.
     const { results } = await this.db
       .prepare('SELECT * FROM pipelines WHERE workspace_id = ? ORDER BY rowid')
       .bind(workspaceId)
@@ -29,7 +33,7 @@ export class D1PipelineRepository implements PipelineRepository {
   async insert(workspaceId: string, pipeline: Pipeline): Promise<void> {
     await this.db
       .prepare(
-        'INSERT INTO pipelines (workspace_id, id, name, agent_kinds, gates) VALUES (?, ?, ?, ?, ?)',
+        'INSERT INTO pipelines (workspace_id, id, name, agent_kinds, gates, thresholds) VALUES (?, ?, ?, ?, ?, ?)',
       )
       .bind(
         workspaceId,
@@ -37,6 +41,7 @@ export class D1PipelineRepository implements PipelineRepository {
         pipeline.name,
         JSON.stringify(pipeline.agentKinds),
         pipeline.gates ? JSON.stringify(pipeline.gates) : null,
+        pipeline.thresholds ? JSON.stringify(pipeline.thresholds) : null,
       )
       .run()
   }

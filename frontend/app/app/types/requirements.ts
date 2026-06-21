@@ -26,6 +26,21 @@ export interface RequirementReviewItem {
 
 export type RequirementReviewStatus = 'ready' | 'incorporated'
 
+/**
+ * A quality companion's verdict on one reworked requirements document — the shared
+ * standardized shape stored by every companion site.
+ */
+export interface CompanionVerdict {
+  /** Overall quality of the reworked requirements (0..1, higher = better). */
+  rating: number
+  /** The quality bar the rating had to reach to pass. */
+  threshold: number
+  /** Whether the rating met the threshold (the reworked doc was accepted). */
+  passed: boolean
+  /** The companion's challenge, shown to the human and fed into the next rework. */
+  feedback: string
+}
+
 export interface RequirementReview {
   id: string
   blockId: string
@@ -33,6 +48,8 @@ export interface RequirementReview {
   items: RequirementReviewItem[]
   model: string | null
   incorporatedRequirements: string | null
+  /** One verdict per rework cycle, in order — the full correction sequence. Last is latest. */
+  companionVerdicts: CompanionVerdict[]
   createdAt: number
   updatedAt: number
 }

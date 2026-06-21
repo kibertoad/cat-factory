@@ -14,6 +14,7 @@ import { SUBSCRIPTION_VENDORS, subscriptionOptionFor } from '@cat-factory/kernel
 import {
   type AgentRouting,
   composeBlockSystemPrompt,
+  isReadOnlyAgentKind,
   resolveStepModelRef,
   systemPromptFor,
   userPromptFor,
@@ -23,7 +24,7 @@ import {
   CI_FIXER_AGENT_KIND,
   CONFLICT_RESOLVER_AGENT_KIND,
   MERGER_AGENT_KIND,
-  REQUIREMENTS_WRITER_AGENT_KIND,
+  SPEC_WRITER_AGENT_KIND,
 } from '@cat-factory/orchestration'
 import type { ContainerSessionService } from '../containers/ContainerSessionService.js'
 import { RunnerJobClient, type ResolveRunnerTransport } from './RunnerJobClient.js'
@@ -149,19 +150,22 @@ const BLUEPRINT_SYSTEM_PROMPT =
   'Respond with ONLY a JSON object of shape {"type","name","summary","references":[],' +
   '"modules":[{"name","summary","references":[]}]} — no prose, no code fences.'
 
-/** Role prompt the requirements-writer step runs under (returns the doc as JSON). */
-const REQUIREMENTS_WRITER_SYSTEM_PROMPT =
-  'You are a requirements analyst producing the unified, PRESCRIPTIVE requirements ' +
-  'document for a service. You are given the collected requirements of every task ' +
-  'on the service plus any existing requirements document. Fold them into ONE ' +
-  'de-duplicated specification: functional/nonfunctional/constraint requirements ' +
-  'grouped by capability, each phrased as "The system SHALL …" with a MoSCoW ' +
-  'priority (must/should/could) and structured Given/When/Then acceptance criteria, ' +
-  'plus cross-cutting domain rules / invariants. Preserve provenance in ' +
-  '`sourceBlockIds`. Respond with ONLY a JSON object of shape ' +
-  '{"service","summary","groups":[{"name","summary","requirements":[{"id","title",' +
-  '"statement","kind","priority","sourceBlockIds":[],"acceptance":[{"id","given",' +
-  '"when","outcome"}]}]}],"rules":[{"id","rule","rationale","sourceBlockIds":[]}]} ' +
+/** Role prompt the spec-writer step runs under (returns the spec doc as JSON). */
+const SPEC_WRITER_SYSTEM_PROMPT =
+  'You are a requirements analyst producing the unified, PRESCRIPTIVE specification ' +
+  'for a service. You are given the collected requirements of every task on the ' +
+  'service plus any existing specification. Fold them into ONE de-duplicated spec: ' +
+  'functional/nonfunctional/constraint requirements grouped by capability, each ' +
+  'phrased as "The system SHALL …" with a MoSCoW priority (must/should/could) and ' +
+  'structured Given/When/Then acceptance criteria, plus cross-cutting domain rules / ' +
+  'invariants. Acceptance-scenario coverage is a FIRST-CLASS deliverable, not an ' +
+  'afterthought: every requirement MUST carry complete acceptance criteria — the ' +
+  'happy path AND the invalid-input / error / edge / boundary cases — since the ' +
+  'Gherkin `.feature` files and the runnable tests are derived mechanically from ' +
+  'them. Preserve provenance in `sourceBlockIds`. Respond with ONLY a JSON object of ' +
+  'shape {"service","summary","groups":[{"name","summary","requirements":[{"id",' +
+  '"title","statement","kind","priority","sourceBlockIds":[],"acceptance":[{"id",' +
+  '"given","when","outcome"}]}]}],"rules":[{"id","rule","rationale","sourceBlockIds":[]}]} ' +
   '(each acceptance criterion is a Given/When/Then, with the Then clause in `outcome`) — ' +
   'no prose, no code fences.'
 
@@ -489,23 +493,24 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       return { subscriptionTokenId, body, model: `${ref.provider}:${ref.model}`, kind: 'blueprint' }
     }
 
-    // The requirements-writer commits the regenerated `requirements/` folder onto the
-    // implementation branch — the earlier `coder` step's PR branch when present, else
-    // the deterministic `cat-factory/<blockId>` the coder WILL resume (created from
-    // base if absent). It NEVER targets the base branch: the requirements are a
-    // prescriptive spec for not-yet-landed work, so — like the feature-time blueprint
-    // — they must merge together WITH the feature, never reach `main` ahead of it.
-    // Its body carries the combined requirements of every task under the service frame
-    // (the engine resolves them) so the doc is an aggregate, not per-task. Targets the
-    // harness `/requirements` endpoint.
-    if (context.agentKind === REQUIREMENTS_WRITER_AGENT_KIND) {
+    // The spec-writer commits the regenerated `spec/` folder onto the implementation
+    // branch — the earlier `coder` step's PR branch when present, else the
+    // deterministic `cat-factory/<blockId>` the coder WILL resume (created from base if
+    // absent). It NEVER targets the base branch: the spec is a prescriptive document
+    // for not-yet-landed work, so — like the feature-time blueprint — it must merge
+    // together WITH the feature, never reach `main` ahead of it. Its body carries the
+    // combined requirements of every task under the service frame (the engine resolves
+    // them) so the doc is an aggregate, not per-task. Targets the harness `/spec`
+    // endpoint.
+    if (context.agentKind === SPEC_WRITER_AGENT_KIND) {
       const branch = context.block.pullRequest?.branch ?? `cat-factory/${blockId}`
       const body = {
         jobId: executionId,
-        systemPrompt: REQUIREMENTS_WRITER_SYSTEM_PROMPT,
+        systemPrompt: SPEC_WRITER_SYSTEM_PROMPT,
         instructions:
-          'Produce (or update) the unified, prescriptive requirements document for ' +
-          'this service from the combined task requirements below.',
+          'Produce (or update) the unified, prescriptive specification for this ' +
+          'service from the combined task requirements below, with COMPLETE ' +
+          'acceptance-scenario coverage per requirement.',
         model: ref.model,
         ...auth,
         ghToken,
@@ -522,7 +527,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
         subscriptionTokenId,
         body,
         model: `${ref.provider}:${ref.model}`,
-        kind: 'requirements',
+        kind: 'spec',
       }
     }
 
@@ -602,6 +607,31 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       return { subscriptionTokenId, body, model: `${ref.provider}:${ref.model}`, kind: 'merge' }
     }
 
+    // Read-only agents (architect, analysis) explore a real checkout but never edit
+    // it: they clone a branch, produce a prose report/proposal and return it as
+    // `output`. They target the harness `/explore` endpoint — which opens no branch,
+    // makes no commit, opens no PR, and (unlike `/run`) does NOT treat an edit-free
+    // run as a failure. One shared body for every read-only kind. The branch explored
+    // is the implementation PR branch when one already exists (a re-run), else base.
+    if (isReadOnlyAgentKind(context.agentKind)) {
+      const branch = context.block.pullRequest?.branch ?? repo.baseBranch
+      const body = {
+        jobId: executionId,
+        kind: context.agentKind,
+        systemPrompt: composeBlockSystemPrompt(systemPromptFor(context.agentKind), context.block),
+        userPrompt: userPromptFor(context),
+        model: ref.model,
+        ...auth,
+        ghToken,
+        repo: buildRepoSpec(repo),
+        branch,
+        webToolsGuidance: webResearchGuidanceFor(context.agentKind, { fetch: true }),
+        ...(this.deps.webSearchProxyEnabled ? { webSearch: true } : {}),
+        ...(this.deps.githubApiBase ? { githubApiBase: this.deps.githubApiBase } : {}),
+      }
+      return { subscriptionTokenId, body, model: `${ref.provider}:${ref.model}`, kind: 'explore' }
+    }
+
     // The "extra context" Pi runs with: the build-phase role plus the block's
     // selected best-practice fragments, exactly as the inline executor composes
     // (engine-resolved tenant catalog when present, else the manual ids).
@@ -655,12 +685,12 @@ function toRunResult(result: RunnerJobResult): AgentRunResult {
       blueprintService: result.service,
     }
   }
-  // A requirements-writer job carries a prescriptive requirements doc instead of a
-  // PR; surface it so the engine can strictly validate + persist/surface it.
-  if (result.requirements !== undefined) {
+  // A spec-writer job carries a prescriptive specification doc instead of a PR;
+  // surface it so the engine can strictly validate + persist/surface it.
+  if (result.spec !== undefined) {
     return {
-      output: result.summary?.trim() || 'Service requirements updated.',
-      requirementsDoc: result.requirements,
+      output: result.summary?.trim() || 'Service specification updated.',
+      spec: result.spec,
     }
   }
   // A `merger` job carries a PR assessment instead of a PR; surface it so the

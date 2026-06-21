@@ -91,8 +91,8 @@ export interface AgentRunContext {
   /**
    * The collected requirements of every task under this block's service frame —
    * each task block's title + (clarified) description. Populated by the engine ONLY
-   * for the `requirements-writer` step, which aggregates them into the service's
-   * unified in-repo requirements document. The block descriptions already carry the
+   * for the `spec-writer` step, which aggregates them into the service's unified
+   * in-repo specification document. The block descriptions already carry the
    * incorporated/clarified requirements (the per-task review's `incorporate` rewrote
    * them), so this is the "combined requirement context for all tasks". Absent for
    * every other agent kind.
@@ -169,13 +169,13 @@ export interface AgentRunResult {
    */
   blueprintService?: unknown
   /**
-   * The unified, prescriptive requirements doc a `requirements-writer` step produced
-   * and committed to the implementation branch. The engine strictly validates it
-   * (against the contracts schema) and may surface it on the board. Carried as
-   * `unknown` so the core port stays free of the contracts schema; the engine parses
-   * it before use.
+   * The unified, prescriptive specification doc a `spec-writer` step produced and
+   * committed to the implementation branch (the `spec.json` tree). The engine
+   * strictly validates it (against the contracts schema) and may surface it on the
+   * board. Carried as `unknown` so the core port stays free of the contracts schema;
+   * the engine parses it before use.
    */
-  requirementsDoc?: unknown
+  spec?: unknown
   /**
    * A `merger` step's structured PR assessment (complexity / risk / impact +
    * rationale). The engine validates it, compares the scores against the task's

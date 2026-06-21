@@ -14,12 +14,12 @@ import { registeredKindRequiresContainer } from '@cat-factory/agents'
 // the external-dependency mock builder (`mocker`), the Playwright e2e test
 // writer (`playwright`) and the business-logic documenter (`business-documenter`,
 // which reads the implementation and commits domain-rules docs) — run in a real
-// sandbox via the container executor; every other kind (architect, reviewer,
-// tester, the `acceptance` scenario writer, the `business-reviewer` that reports
-// on a change, custom) stays on the inline LLM executor. This keeps container
-// cost/latency to the phases that actually need a real workspace to operate on
-// repo contents, while pure design/review/analysis steps remain single-shot LLM
-// calls.
+// sandbox via the container executor. The `architect` also runs in a container, but
+// read-only: it explores the repo before proposing (no commits, like `analysis`).
+// Every other kind (reviewer and the other companions, tester, the
+// `business-reviewer` that reports on a change, custom) stays on the inline LLM
+// executor. This keeps container cost/latency to the phases that actually need a real
+// workspace, while pure review/companion steps remain single-shot LLM calls.
 //
 // There is deliberately NO inline fallback for the container kinds: a one-shot
 // LLM call cannot clone a repo, edit files, commit and open a PR, so routing an
@@ -46,10 +46,14 @@ const CONTAINER_KINDS = new Set([
   // The Blueprinter step clones the repo, regenerates the in-repo `blueprints/`
   // folder and commits it — a real-checkout operation, so it runs in a container.
   'blueprints',
-  // The requirements-writer clones (or creates) the implementation branch and
-  // commits the in-repo `requirements/` folder onto it — a real-checkout operation,
-  // so it runs in a container. Like the blueprinter it returns a structured doc.
-  'requirements-writer',
+  // The spec-writer clones (or creates) the implementation branch and commits the
+  // in-repo `spec/` folder onto it — a real-checkout operation, so it runs in a
+  // container. Like the blueprinter it returns a structured doc.
+  'spec-writer',
+  // The architect explores the repository (read-only) before proposing a design, so
+  // it needs a real checkout. Like `analysis` it makes no edits — the harness produces
+  // no commit and opens no PR — and returns its proposal as prose `output`.
+  'architect',
   // The CI-fixer clones the PR head branch, runs the failing build/tests, fixes
   // them and pushes back to the same branch — a real-checkout operation. (The `ci`
   // step itself is NOT here: it is a special, non-agent gate handled in the engine
