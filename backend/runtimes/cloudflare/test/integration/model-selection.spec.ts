@@ -10,77 +10,80 @@ import { makeApp, type TestApp } from '../helpers'
 const noKeys = () => false
 const allKeys = () => true
 
+// Derive expectations from the catalog itself rather than hardcoding its members, so
+// these stay green as models are added/removed/renamed — they assert the resolution
+// *behaviour*, not a snapshot of the model list.
+const directModels = MODEL_CATALOG.filter((m) => m.direct)
+const cloudflareOnlyModels = MODEL_CATALOG.filter((m) => !m.direct)
+
 describe('per-block model selection', () => {
   describe('catalog resolution', () => {
     it('falls back to the Cloudflare flavour when no direct key is configured', () => {
-      expect(resolveModelRef('cloudflare-llama', noKeys)).toEqual({
-        provider: 'workers-ai',
-        model: '@cf/meta/llama-3.1-8b-instruct',
-      })
-      expect(resolveModelRef('qwen', noKeys)).toEqual({
-        provider: 'workers-ai',
-        model: '@cf/qwen/qwen3-30b-a3b-fp8',
-      })
-      expect(resolveModelRef('kimi', noKeys)).toEqual({
-        provider: 'workers-ai',
-        model: '@cf/moonshotai/kimi-k2.6',
-      })
-      expect(resolveModelRef('deepseek', noKeys)).toEqual({
-        provider: 'workers-ai',
-        model: '@cf/deepseek-ai/deepseek-r1-distill-qwen-32b',
-      })
+      // Every model resolves to its always-available Cloudflare variant.
+      for (const model of MODEL_CATALOG) {
+        expect(resolveModelRef(model.id, noKeys)).toEqual(model.cloudflare)
+      }
     })
 
     it('uses the direct flavour when the provider key is configured', () => {
-      expect(resolveModelRef('qwen', allKeys)).toEqual({ provider: 'qwen', model: 'qwen3-max' })
-      expect(resolveModelRef('kimi', allKeys)).toEqual({ provider: 'moonshot', model: 'kimi-k2.6' })
-      expect(resolveModelRef('deepseek', allKeys)).toEqual({
-        provider: 'deepseek',
-        model: 'deepseek-chat',
-      })
-      // Llama has no direct variant, so it stays on Cloudflare even with keys.
-      expect(resolveModelRef('cloudflare-llama', allKeys)).toEqual({
-        provider: 'workers-ai',
-        model: '@cf/meta/llama-3.1-8b-instruct',
-      })
+      // A model with a direct variant switches to it; one without stays on Cloudflare.
+      expect(directModels.length).toBeGreaterThan(0)
+      for (const model of MODEL_CATALOG) {
+        expect(resolveModelRef(model.id, allKeys)).toEqual(model.direct?.ref ?? model.cloudflare)
+      }
     })
 
     it('honours each key independently', () => {
-      const onlyDeepseek = (keyEnv: string) => keyEnv === 'DEEPSEEK_API_KEY'
-      expect(resolveModelRef('deepseek', onlyDeepseek)).toEqual({
-        provider: 'deepseek',
-        model: 'deepseek-chat',
-      })
-      // Qwen's key is absent, so it stays on Cloudflare.
-      expect(resolveModelRef('qwen', onlyDeepseek)?.provider).toBe('workers-ai')
+      // With only one provider's key present, only that model goes direct; every other
+      // model — including other direct-capable ones — stays on Cloudflare.
+      const target = directModels[0]
+      expect(target).toBeDefined()
+      const onlyTarget = (keyEnv: string) => keyEnv === target!.direct!.keyEnv
+
+      expect(resolveModelRef(target!.id, onlyTarget)).toEqual(target!.direct!.ref)
+
+      const otherDirect = directModels.find((m) => m.direct!.keyEnv !== target!.direct!.keyEnv)
+      if (otherDirect) {
+        expect(resolveModelRef(otherDirect.id, onlyTarget)?.provider).toBe('workers-ai')
+      }
     })
 
     it('reports the active flavour in the effective catalog', () => {
+      // The effective catalog is the catalog projected onto its in-use flavours: one
+      // option per model, same ids, same order.
       const cloud = effectiveCatalog(noKeys)
-      expect(cloud.map((m) => m.id)).toEqual(['cloudflare-llama', 'qwen', 'kimi', 'deepseek'])
+      expect(cloud.map((m) => m.id)).toEqual(MODEL_CATALOG.map((m) => m.id))
       expect(cloud.every((m) => m.flavor === 'cloudflare')).toBe(true)
       expect(cloud.every((m) => m.providerLabel === 'Cloudflare')).toBe(true)
 
       const direct = effectiveCatalog(allKeys)
-      expect(direct.find((m) => m.id === 'qwen')).toMatchObject({
-        flavor: 'direct',
-        providerLabel: 'DashScope',
-        provider: 'qwen',
-        model: 'qwen3-max',
-      })
-      // Llama has no direct variant, so it is always Cloudflare.
-      expect(direct.find((m) => m.id === 'cloudflare-llama')?.flavor).toBe('cloudflare')
+      for (const model of MODEL_CATALOG) {
+        const option = direct.find((o) => o.id === model.id)!
+        if (model.direct) {
+          expect(option).toMatchObject({
+            flavor: 'direct',
+            providerLabel: model.direct.providerLabel,
+            provider: model.direct.ref.provider,
+            model: model.direct.ref.model,
+          })
+        } else {
+          // No direct variant → always Cloudflare, even with every key configured.
+          expect(option.flavor).toBe('cloudflare')
+        }
+      }
+      // The two flavour branches above are only meaningful if the catalog exercises both.
+      expect(directModels.length).toBeGreaterThan(0)
+      expect(cloudflareOnlyModels.length).toBeGreaterThan(0)
     })
 
     it('returns undefined for unknown/empty ids so the caller falls back', () => {
       expect(resolveModelRef('does-not-exist', allKeys)).toBeUndefined()
       expect(resolveModelRef('', allKeys)).toBeUndefined()
-      expect(MODEL_CATALOG.map((m) => m.id)).toEqual([
-        'cloudflare-llama',
-        'qwen',
-        'kimi',
-        'deepseek',
-      ])
+      // The inverse holds: every real catalog id resolves, and ids are unique.
+      const ids = MODEL_CATALOG.map((m) => m.id)
+      expect(ids.length).toBeGreaterThan(0)
+      expect(new Set(ids).size).toBe(ids.length)
+      for (const id of ids) expect(resolveModelRef(id, noKeys)).toBeDefined()
     })
   })
 
@@ -90,13 +93,19 @@ describe('per-block model selection', () => {
       const res = await app.call<ModelOption[]>('GET', '/models')
       expect(res.status).toBe(200)
       expect(() => v.parse(modelCatalogSchema, res.body)).not.toThrow()
-      // The test env configures no direct keys, so every model is Cloudflare.
-      expect(res.body.map((m) => m.id)).toEqual(['cloudflare-llama', 'qwen', 'kimi', 'deepseek'])
+      // The endpoint serves the effective catalog; the test env configures no direct
+      // keys, so it matches the keyless projection and every model is Cloudflare.
+      expect(res.body.map((m) => m.id)).toEqual(effectiveCatalog(noKeys).map((m) => m.id))
+      expect(res.body.length).toBeGreaterThan(0)
       expect(res.body.every((m) => m.flavor === 'cloudflare')).toBe(true)
     })
   })
 
   describe('persistence', () => {
+    // Pick concrete selectable ids from the catalog rather than naming specific models.
+    const SELECTED_MODEL_ID = MODEL_CATALOG[0]!.id
+    const OTHER_MODEL_ID = MODEL_CATALOG[1]?.id ?? MODEL_CATALOG[0]!.id
+
     let app: TestApp
     let wsId: string
 
@@ -108,14 +117,14 @@ describe('per-block model selection', () => {
 
     it('round-trips modelId through D1 and clears it on empty string', async () => {
       const patched = await app.call<Block>('PATCH', `/workspaces/${wsId}/blocks/task_login`, {
-        modelId: 'kimi',
+        modelId: SELECTED_MODEL_ID,
       })
-      expect(patched.body.modelId).toBe('kimi')
+      expect(patched.body.modelId).toBe(SELECTED_MODEL_ID)
 
       // Re-read from the snapshot to confirm it persisted, not just echoed.
       const snap = await app.call<{ blocks: Block[] }>('GET', `/workspaces/${wsId}`)
       const task = snap.body.blocks.find((b) => b.id === 'task_login')!
-      expect(task.modelId).toBe('kimi')
+      expect(task.modelId).toBe(SELECTED_MODEL_ID)
 
       // An empty string resets back to the default routing (no selection).
       const cleared = await app.call<Block>('PATCH', `/workspaces/${wsId}/blocks/task_login`, {
@@ -125,7 +134,7 @@ describe('per-block model selection', () => {
     })
 
     it('feeds the selected modelId into the agent run context', async () => {
-      await app.call('PATCH', `/workspaces/${wsId}/blocks/task_login`, { modelId: 'deepseek' })
+      await app.call('PATCH', `/workspaces/${wsId}/blocks/task_login`, { modelId: OTHER_MODEL_ID })
 
       const seen: AgentRunContext[] = []
       const capturing: AgentExecutor = {
@@ -142,7 +151,7 @@ describe('per-block model selection', () => {
       await capturingApp.drive(wsId)
 
       expect(seen.length).toBeGreaterThan(0)
-      expect(seen[0]!.block.modelId).toBe('deepseek')
+      expect(seen[0]!.block.modelId).toBe(OTHER_MODEL_ID)
     })
   })
 })

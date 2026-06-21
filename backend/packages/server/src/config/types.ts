@@ -77,7 +77,11 @@ export interface AuthConfig {
 }
 
 export interface DocumentsConfig {
-  /** Opt-in flag. Requires an encryption key (no silent plaintext fallback). */
+  /**
+   * Always on where the runtime serves documents: there is no enable flag, and an
+   * encryption key is mandatory (config load fails loudly without it). False only on
+   * facades that do not serve documents at all (e.g. the Node MVP).
+   */
   enabled: boolean
   /** Which source providers to register (default: all). */
   sources: DocumentSourceKind[]
@@ -88,7 +92,10 @@ export interface DocumentsConfig {
 }
 
 export interface TasksConfig {
-  /** Opt-in flag. Requires an encryption key (no silent plaintext fallback). */
+  /**
+   * Always on where the runtime serves task sources: there is no enable flag, and an
+   * encryption key is mandatory (config load fails loudly without it).
+   */
   enabled: boolean
   /** Which source providers to register (default: all). */
   sources: TaskSourceKind[]
@@ -139,9 +146,9 @@ export interface AppConfig {
   github: GitHubConfig
   /** "Login with GitHub" config; `enabled` is false unless an OAuth app is set up. */
   auth: AuthConfig
-  /** Document-source integration config; `enabled` is false unless opted in. */
+  /** Document-source integration config; always on where the runtime serves documents. */
   documents: DocumentsConfig
-  /** Task-source integration config; `enabled` is false unless opted in. */
+  /** Task-source integration config; always on where the runtime serves task sources. */
   tasks: TasksConfig
   /** Environment provider integration config; `enabled` is false unless opted in. */
   environments: EnvironmentsConfig

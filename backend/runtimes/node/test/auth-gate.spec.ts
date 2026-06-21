@@ -15,15 +15,21 @@ import { createApp } from '../src/server.js'
 
 const BASE = 'https://cat-factory.test'
 
+// The always-on task-source integration makes `loadNodeConfig` require ENCRYPTION_KEY
+// or it throws at config load — supply it in every env that builds a container.
+const ENCRYPTION_KEY = Buffer.alloc(32).toString('base64')
+
 const AUTH_ENABLED: NodeJS.ProcessEnv = {
   GITHUB_OAUTH_CLIENT_ID: 'client-id',
   GITHUB_OAUTH_CLIENT_SECRET: 'client-secret',
   AUTH_SESSION_SECRET: 'x'.repeat(32),
   ENVIRONMENT: 'production', // disables the dev-open escape hatch
+  ENCRYPTION_KEY,
 }
 
 const AUTH_UNCONFIGURED: NodeJS.ProcessEnv = {
   ENVIRONMENT: 'production', // no OAuth creds, no dev-open → fail closed
+  ENCRYPTION_KEY,
 }
 
 function makeApp(env: NodeJS.ProcessEnv) {

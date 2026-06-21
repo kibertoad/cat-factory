@@ -18,12 +18,22 @@ function parseSources(raw: string | undefined): TaskSourceKind[] {
 }
 
 export function loadTasksConfig(env: Env): TasksConfig {
-  // Opt-in, matching the document-source integration's default-off convention.
-  // Requires the encryption key so source credentials are never stored in
-  // plaintext (mirrors the documents/environments fail-closed gate).
+  // The task-source integration (Jira / GitHub issues) is always on: tenants connect
+  // their own trackers interactively through the UI, so there is no service-level
+  // enable flag. It still requires a master key to encrypt those per-workspace
+  // credentials at rest, so we fail loudly at config load when it is missing rather
+  // than silently disabling the feature (mirrors the document-source integration).
+  const encryptionKey = env.ENCRYPTION_KEY?.trim()
+  if (!encryptionKey) {
+    throw new Error(
+      'ENCRYPTION_KEY is required: the task-source integration (Jira, …) encrypts ' +
+        'per-workspace source credentials at rest. Set it to a base64-encoded key of at ' +
+        'least 32 bytes.',
+    )
+  }
   return {
-    enabled: env.TASKS_ENABLED === 'true' && !!env.TASKS_ENCRYPTION_KEY,
+    enabled: true,
     sources: parseSources(env.TASK_SOURCES),
-    encryptionKey: env.TASKS_ENCRYPTION_KEY,
+    encryptionKey,
   }
 }

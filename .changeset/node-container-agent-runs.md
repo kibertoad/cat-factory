@@ -29,5 +29,5 @@ container executor dispatches to a workspace's registered runner pool
 installation token exactly as the Worker does. New Postgres tables
 (`runner_pool_connections`, `github_installations`, `github_repos`) mirror the D1
 schema. It activates when `GITHUB_APP_ID` / `GITHUB_APP_PRIVATE_KEY`, `PUBLIC_URL`,
-`AUTH_SESSION_SECRET` and `RUNNERS_ENCRYPTION_KEY` are configured; otherwise inline
+`AUTH_SESSION_SECRET` and `ENCRYPTION_KEY` are configured; otherwise inline
 kinds still work and container kinds fail loudly rather than faking success.

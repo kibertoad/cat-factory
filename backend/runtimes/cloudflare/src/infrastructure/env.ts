@@ -246,16 +246,17 @@ export interface Env {
    */
   CORS_ALLOWED_ORIGINS?: string
 
-  // ---- Document-source integration (see config.ts; opt-in) ----------------
-  /** Enables the document-source integration ('true'). Per-workspace creds live in D1. */
-  DOCUMENTS_ENABLED?: string
   /**
-   * Service-level master key (base64, ≥32 bytes decoded) for encrypting the
-   * per-workspace source credentials (e.g. Notion/Confluence tokens) at rest.
-   * Required when the integration is enabled (secret); without it the feature
-   * fails closed rather than persisting credentials in plaintext.
+   * Shared master key (base64, ≥32 bytes decoded; a secret) for encrypting every
+   * integration's per-workspace credentials at rest. ONE key backs them all: the
+   * cipher domain-separates per integration via its HKDF `info` tag, so document,
+   * task, environment and runner credentials never share a derived key. The always-on
+   * document/task integrations require it and FAIL config load without it; the opt-in
+   * environment/runner integrations need it (plus their enable flag) to assemble.
    */
-  DOCUMENTS_ENCRYPTION_KEY?: string
+  ENCRYPTION_KEY?: string
+
+  // ---- Document-source integration (see config.ts; always on) -------------
   /**
    * Comma-separated allow-list of sources to register (e.g. `confluence,notion`).
    * Defaults to all known sources when unset.
@@ -267,16 +268,7 @@ export interface Env {
    */
   DOCUMENT_PLANNER?: string
 
-  // ---- Task-source integration (see config.ts; opt-in) --------------------
-  /** Enables the task-source integration ('true'). Per-workspace creds live in D1. */
-  TASKS_ENABLED?: string
-  /**
-   * Service-level master key (base64, ≥32 bytes decoded) for encrypting the
-   * per-workspace source credentials (e.g. Jira tokens) at rest. Required when
-   * the integration is enabled (secret); without it the feature fails closed
-   * rather than persisting credentials in plaintext.
-   */
-  TASKS_ENCRYPTION_KEY?: string
+  // ---- Task-source integration (see config.ts; always on) -----------------
   /**
    * Comma-separated allow-list of sources to register (e.g. `jira`). Defaults to
    * all known sources when unset.
@@ -286,15 +278,10 @@ export interface Env {
   // ---- Ephemeral environment integration (see config.ts; opt-in) ----------
   /**
    * Enables the environment provider integration ('true'). Per-workspace provider
-   * manifests and their (encrypted) secret bundles live in D1, not here.
+   * manifests and their (encrypted) secret bundles live in D1, not here. Secrets are
+   * sealed with the shared `ENCRYPTION_KEY`.
    */
   ENVIRONMENTS_ENABLED?: string
-  /**
-   * Service-level master key (base64, ≥32 bytes decoded) for encrypting the
-   * per-tenant provider secrets and provisioned-env access creds at rest. The
-   * only env secret this feature needs; required when enabled (secret).
-   */
-  ENVIRONMENTS_ENCRYPTION_KEY?: string
 
   // ---- Self-hosted runner pool ("bring your own infra"; opt-in) -----------
   /**
@@ -306,15 +293,10 @@ export interface Env {
    * binding. Container-based implementation is always on, so when no
    * `EXEC_CONTAINER` binding is present a registered pool is the mandatory runner
    * backend. Requires a configured GitHub App, WORKER_PUBLIC_URL and the session
-   * secret, exactly like the Cloudflare container path.
+   * secret, exactly like the Cloudflare container path. Scheduler secrets are sealed
+   * with the shared `ENCRYPTION_KEY`.
    */
   RUNNERS_ENABLED?: string
-  /**
-   * Service-level master key (base64, ≥32 bytes decoded) for encrypting the
-   * per-tenant runner-pool scheduler-API secrets at rest. The only env secret
-   * this feature needs; required when enabled (secret).
-   */
-  RUNNERS_ENCRYPTION_KEY?: string
 
   // ---- Prompt-fragment library (see config.ts; opt-in; ADR 0006) ----------
   /**
