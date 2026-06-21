@@ -339,11 +339,30 @@ jobs:
       - name: Build libraries
         run: pnpm build
 
-      # Builds and launches the executor Docker image and drives a full
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
+
+      # Pre-build the executor image with a cross-run GHA layer cache and load it
+      # into the daemon. The expensive layers (apt git, the global Pi CLI install,
+      # the two Pi extensions) restore from cache instead of rebuilding every run.
+      # The suite then skips its own (uncached) `docker build` via the env flag.
+      - name: Build executor image (cached)
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
+        with:
+          context: backend/internal/executor-harness
+          file: backend/internal/executor-harness/Dockerfile
+          tags: cat-factory-impl-acceptance
+          load: true
+          cache-from: type=gha,scope=executor-harness
+          cache-to: type=gha,mode=max,scope=executor-harness
+
+      # Launches the pre-built executor image and drives a full
       # clone → Pi → commit → push → PR against a dummy streaming LLM proxy and a
       # stub GitHub API (no real provider/GitHub). The runner has Docker +
       # host-gateway, so the suite runs rather than self-skipping.
       - name: Container acceptance tests
+        env:
+          ACCEPTANCE_PREBUILT_IMAGE: '1'
         run: pnpm --filter @cat-factory/executor-harness run test:acceptance
 
   changeset:

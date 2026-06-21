@@ -41,6 +41,10 @@ export async function freePort(): Promise<number> {
 
 /** Build the executor image. Passes the sandbox proxy CA as a build secret when present. */
 export function buildImage(): void {
+  // In CI the image is pre-built with layer caching in a dedicated workflow step
+  // (docker/build-push-action with a GHA cache) and loaded into the daemon under
+  // IMAGE, so skip the redundant — and uncached — local rebuild here.
+  if (process.env.ACCEPTANCE_PREBUILT_IMAGE === '1') return
   const ca = process.env.NODE_EXTRA_CA_CERTS
   const caArgs = ca && existsSync(ca) ? ['--secret', `id=extra_ca,src=${ca}`] : []
   execFileSync('docker', ['build', ...caArgs, '-f', 'Dockerfile', '-t', IMAGE, '.'], {
