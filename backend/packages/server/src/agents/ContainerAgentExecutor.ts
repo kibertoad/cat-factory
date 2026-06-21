@@ -654,9 +654,9 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     // withheld greenlight). Targets the harness `/test` endpoint; mapped to `testReport`.
     if (context.agentKind === TESTER_AGENT_KIND) {
       const branch = context.block.pullRequest?.branch ?? repo.baseBranch
-      const env = context.block.agentConfig?.['tester.environment'] === 'ephemeral'
-        ? 'ephemeral'
-        : 'local'
+      const env = context.block.agentConfig?.['tester.environment'] === 'local'
+        ? 'local'
+        : 'ephemeral'
       const service = context.service
       const body = {
         jobId: executionId,

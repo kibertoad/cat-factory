@@ -287,6 +287,120 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         expect(task.parentId).toBe('mod_sessions')
       })
 
+      it('persists task agent-config and surfaces the contribution catalog', async () => {
+        const app = harness.makeApp()
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        // The catalog is derived from the seeded pipelines' agent kinds — which include
+        // `tester`, so its `tester.environment` descriptor must be present on BOTH stores.
+        const snap0 = (await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)).body
+        expect(snap0.agentConfigCatalog?.some((d) => d.id === 'tester.environment')).toBe(true)
+
+        // A task created with an explicit agent-config value round-trips through the store.
+        const created = await app.call<Block>(
+          'POST',
+          `/workspaces/${wsId}/blocks/mod_sessions/tasks`,
+          { title: 'Configured task', agentConfig: { 'tester.environment': 'local' } },
+        )
+        expect(created.status).toBe(201)
+        expect(created.body.agentConfig).toEqual({ 'tester.environment': 'local' })
+
+        const snap = (await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)).body
+        const task = snap.blocks.find((b) => b.id === created.body.id)!
+        expect(task.agentConfig).toEqual({ 'tester.environment': 'local' })
+      })
+
+      it('blocks a local-mode Tester pipeline until the service test infra is configured', async () => {
+        const app = harness.makeApp()
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Code + test',
+          agentKinds: ['coder', 'tester'],
+        })
+        // Opt the task into LOCAL testing without configuring the service's infra.
+        await app.call('PATCH', `/workspaces/${wsId}/blocks/task_login`, {
+          agentConfig: { 'tester.environment': 'local' },
+        })
+        const blocked = await app.call(
+          'POST',
+          `/workspaces/${wsId}/blocks/task_login/executions`,
+          { pipelineId: pipeline.body.id },
+        )
+        expect(blocked.status).toBeGreaterThanOrEqual(400)
+
+        // Mark the service frame as having no infra dependencies → the start succeeds.
+        const blocks = (await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)).body.blocks
+        const frame = blocks.find((b) => b.id === 'task_login')!
+        // task_login → mod_sessions → its service frame; configure that frame.
+        const moduleId = frame.parentId!
+        const serviceFrameId = blocks.find((b) => b.id === moduleId)!.parentId!
+        await app.call('PATCH', `/workspaces/${wsId}/blocks/${serviceFrameId}`, {
+          noInfraDependencies: true,
+        })
+        const ok = await app.call<ExecutionInstance>(
+          'POST',
+          `/workspaces/${wsId}/blocks/task_login/executions`,
+          { pipelineId: pipeline.body.id },
+        )
+        expect(ok.status).toBe(201)
+      })
+
+      it('loops the fixer until the tester greenlights, then completes', async () => {
+        // Drive the Tester→Fixer loop on BOTH runtimes: the first report withholds its
+        // greenlight (the engine dispatches the fixer and re-tests), the second greenlights.
+        const notGreen = {
+          greenlight: false,
+          summary: 'found a bug',
+          tested: ['login'],
+          outcomes: [{ name: 'login', status: 'failed' as const, detail: 'returns 500' }],
+          concerns: [
+            { title: 'Login 500', detail: 'unhandled error', severity: 'high' as const },
+          ],
+        }
+        const green = {
+          greenlight: true,
+          summary: 'all good',
+          tested: ['login'],
+          outcomes: [{ name: 'login', status: 'passed' as const }],
+          concerns: [],
+        }
+        const app = harness.makeApp({
+          asyncKinds: ['coder', 'tester', 'fixer'],
+          asyncPolls: 1,
+          testReports: [notGreen, green],
+          pullRequest: { url: 'https://gh/pr/1', number: 1, branch: 'cat-factory/task_login' },
+        })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Code + test loop',
+          agentKinds: ['coder', 'tester'],
+        })
+        // Ephemeral mode keeps the start guard happy without service infra config.
+        await app.call('PATCH', `/workspaces/${wsId}/blocks/task_login`, {
+          agentConfig: { 'tester.environment': 'ephemeral' },
+        })
+        const start = await app.call<ExecutionInstance>(
+          'POST',
+          `/workspaces/${wsId}/blocks/task_login/executions`,
+          { pipelineId: pipeline.body.id },
+        )
+        expect(start.status).toBe(201)
+
+        const ticked = await app.drive(wsId)
+        const exec = ticked.find((e) => e.blockId === 'task_login')!
+        expect(exec.status).toBe('done')
+        const testerStep = exec.steps.find((s) => s.agentKind === 'tester')!
+        expect(testerStep.state).toBe('done')
+        // One fixer attempt was dispatched, and the final report greenlit.
+        expect(testerStep.test?.attempts).toBe(1)
+        expect(testerStep.test?.lastReport?.greenlight).toBe(true)
+      })
+
       it('aggregates all tasks and ingests the spec-writer document', async () => {
         // The spec-writer step runs on the implementation branch BEFORE the
         // coder, aggregating EVERY task under the service frame into the service's

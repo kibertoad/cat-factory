@@ -21,10 +21,12 @@ const BUILTIN_CONFIG_CONTRIBUTIONS: Partial<Record<AgentKind, AgentConfigDescrip
         "Where the Tester runs the suite: with the service's dependencies stood up locally via docker-compose, or against the provisioned ephemeral environment.",
       type: 'select',
       options: [
-        { value: 'local', label: 'Local (docker-compose infra)' },
         { value: 'ephemeral', label: 'Ephemeral environment' },
+        { value: 'local', label: 'Local (docker-compose infra)' },
       ],
-      default: 'local',
+      // Ephemeral is the zero-config default; local is an opt-in that requires the
+      // service's test infra to be configured (a compose path or the no-infra flag).
+      default: 'ephemeral',
     },
   ],
   playwright: [

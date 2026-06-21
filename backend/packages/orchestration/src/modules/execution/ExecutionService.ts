@@ -353,8 +353,9 @@ export class ExecutionService {
    * {@link ConflictError} (surfaced as an actionable message) when neither is set.
    */
   private async assertTesterInfraConfigured(workspaceId: string, block: Block): Promise<void> {
-    // Default is local; only ephemeral mode skips the local-infra requirement.
-    if (block.agentConfig?.['tester.environment'] === 'ephemeral') return
+    // The local-infra requirement applies only when the Tester runs in LOCAL mode.
+    // Ephemeral is the default, so an unset choice needs no service infra config.
+    if (block.agentConfig?.['tester.environment'] !== 'local') return
     const service = await this.resolveServiceConfig(workspaceId, block)
     if (service?.noInfraDependencies || service?.testComposePath) return
     throw new ConflictError(
@@ -715,6 +716,10 @@ export class ExecutionService {
       step.test.phase = 'testing'
       const block = await this.blockRepository.get(workspaceId, instance.blockId)
       if (!block) return { kind: 'noop' }
+      // Reclaim the finished Fixer container before re-dispatching the Tester so it
+      // boots fresh against the just-pushed fixes (rather than re-attaching to the
+      // completed job by run id).
+      await this.stopRunContainer(workspaceId, instance.id)
       return this.dispatchTester(workspaceId, instance, step, block)
     }
 
@@ -1401,6 +1406,10 @@ export class ExecutionService {
     // Withheld greenlight: loop the fixer if any budget remains, else give up.
     const executor = this.agentExecutor
     if (isAsyncAgentExecutor(executor) && block && step.test.attempts < step.test.maxAttempts) {
+      // Reclaim the finished Tester container before dispatching the Fixer so the
+      // next job boots fresh — the per-run container would otherwise re-attach to the
+      // completed Tester job (idempotent dispatch by run id), replaying its result.
+      await this.stopRunContainer(workspaceId, instance.id)
       return this.dispatchFixer(workspaceId, instance, step, block, report)
     }
     step.output = report.summary || 'Tester withheld its greenlight.'

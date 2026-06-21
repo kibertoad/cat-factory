@@ -6,6 +6,7 @@ import type {
   AgentRunResult,
   AsyncAgentExecutor,
   PullRequestRef,
+  TestReport,
 } from '@cat-factory/kernel'
 import type { AgentExecutor } from '@cat-factory/kernel'
 import { isCompanionKind } from '@cat-factory/agents'
@@ -63,6 +64,13 @@ export interface FakeAgentOptions {
    * confidence yields a severe assessment (raise `merge_review` → `pr_ready`).
    */
   mergeAssessment?: { complexity: number; risk: number; impact: number; rationale: string }
+  /**
+   * A SEQUENCE of test reports the `tester` step returns, one per successive Tester
+   * call (the last repeats once exhausted). Lets a test drive the Tester→Fixer loop:
+   * e.g. a first report that withholds its greenlight (the engine loops the `fixer`),
+   * then a greenlit one. When omitted the Tester greenlights immediately.
+   */
+  testReports?: TestReport[]
 }
 
 /**
@@ -78,6 +86,9 @@ export class FakeAgentExecutor implements AgentExecutor {
 
   /** Count of companion grading calls so far, to walk `companionRatings` in order. */
   private companionCalls = 0
+
+  /** Count of Tester calls so far, to walk `testReports` in order. */
+  private testerCalls = 0
 
   // Matches the `model: 'fake'` every result carries, so the engine's up-front
   // model preview (shown on the first "spinning up container" / querying emit)
@@ -139,6 +150,27 @@ export class FakeAgentExecutor implements AgentExecutor {
       }
     }
 
+    // The `tester` step returns a structured report. A `testReports` sequence walks
+    // one report per Tester call (last repeats) so a test can drive a withheld
+    // greenlight → fixer loop → greenlight; omitted ⇒ greenlight immediately.
+    if (context.agentKind === 'tester') {
+      const seq = this.options.testReports
+      const report: TestReport = seq?.length
+        ? (seq[Math.min(this.testerCalls, seq.length - 1)] ?? greenReport())
+        : greenReport()
+      this.testerCalls += 1
+      return {
+        output: `[tester] ${report.greenlight ? 'greenlit' : 'found issues for'} "${context.block.title}"`,
+        model: 'fake',
+        testReport: report,
+      }
+    }
+
+    // The `fixer` step just reports success so the engine re-dispatches the Tester.
+    if (context.agentKind === 'fixer') {
+      return { output: `[fixer] applied fixes for "${context.block.title}"`, model: 'fake' }
+    }
+
     const confidence = this.options.confidence ?? 1
 
     // The `merger` step returns a PR assessment the engine compares to the task's
@@ -181,6 +213,17 @@ export class FakeAgentExecutor implements AgentExecutor {
   }
 }
 
+/** A passing test report (no concerns, greenlit) — the Tester's default outcome. */
+function greenReport(): TestReport {
+  return {
+    greenlight: true,
+    summary: 'fake: all tests passed',
+    tested: ['fake requirement'],
+    outcomes: [{ name: 'fake requirement', status: 'passed' }],
+    concerns: [],
+  }
+}
+
 /**
  * A {@link FakeAgentExecutor} that additionally drives the configured `asyncKinds` as
  * POLLED jobs — the deterministic analogue of the container executor. It reports
@@ -216,6 +259,18 @@ export class AsyncFakeAgentExecutor extends FakeAgentExecutor implements AsyncAg
     const jobId = this.jobIdFor(context)
     if (!this.jobs.has(jobId)) this.jobs.set(jobId, { polled: 0, context })
     return { jobId, model: 'fake', workspaceId: context.workspaceId }
+  }
+
+  /**
+   * Release the run's jobs — the deterministic analogue of reclaiming the per-run
+   * container. The engine releases by run id (executionId) between Tester→Fixer loop
+   * iterations so the next job runs fresh; clearing every slot for the run lets the
+   * re-dispatched job re-run (and the `testReports` sequence advance) rather than
+   * re-attaching to a finished result.
+   */
+  async stopJob(handle: AgentJobHandle): Promise<void> {
+    const prefix = `fakejob:${handle.jobId}:`
+    for (const id of [...this.jobs.keys()]) if (id.startsWith(prefix)) this.jobs.delete(id)
   }
 
   async pollJob(handle: AgentJobHandle): Promise<AgentJobUpdate> {
