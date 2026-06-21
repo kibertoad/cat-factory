@@ -36,5 +36,15 @@ make Mocker always precede Tester.
   docker-compose path / "no infra dependencies" toggle (a Tester pipeline can't start
   until one is set), plus a cloud provider and abstract instance size that resolve to
   the concrete instance-type id forwarded to the runner (Cloudflare instance type, or
-  a self-hosted pool that self-provisions). Accounts gain a default cloud provider.
+  a self-hosted pool that self-provisions).
+- **Account default cloud provider (fully wired):** accounts carry a
+  `defaultCloudProvider` new services inherit — persisted on both runtimes, settable
+  via `PATCH /accounts/:id` (owner-only) and the account menu, returned on the account
+  wire, and pre-filled as the service editor's provider default.
+- **Local mode is 100% Docker/Podman:** a new first-class `docker` cloud provider
+  represents the local daemon. The local runner backend sizes each per-job container
+  from the abstract instance size (`--memory`/`--cpus`) and runs the Tester job
+  `--privileged` so it stands its docker-compose infra up with Docker-in-Docker on the
+  host daemon — never Cloudflare. A Tester-only pipeline with no PR branch now fails
+  cleanly (no fixer to push to) instead of throwing.
 - Mirrored across both runtimes (D1 migration ⇄ Drizzle schema + migration).

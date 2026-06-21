@@ -1,8 +1,10 @@
 import type {
   AccountRecord,
   AccountRepository,
+  AccountSettingsPatch,
   AgentFailure,
   AgentRunKind,
+  CloudProvider,
   AgentRunRef,
   AgentRunRepository,
   Block,
@@ -447,6 +449,9 @@ function rowToAccount(row: typeof accounts.$inferSelect): AccountRecord {
     name: row.name,
     githubAccountLogin: row.github_account_login,
     createdAt: row.created_at,
+    ...(row.default_cloud_provider
+      ? { defaultCloudProvider: row.default_cloud_provider as CloudProvider }
+      : {}),
   }
 }
 
@@ -465,11 +470,20 @@ class DrizzleAccountRepository implements AccountRepository {
       name: account.name,
       github_account_login: account.githubAccountLogin,
       created_at: account.createdAt,
+      default_cloud_provider: account.defaultCloudProvider ?? null,
     })
   }
 
   async rename(id: string, name: string): Promise<void> {
     await this.db.update(accounts).set({ name }).where(eq(accounts.id, id))
+  }
+
+  async updateSettings(id: string, patch: AccountSettingsPatch): Promise<void> {
+    if (!('defaultCloudProvider' in patch)) return
+    await this.db
+      .update(accounts)
+      .set({ default_cloud_provider: patch.defaultCloudProvider ?? null })
+      .where(eq(accounts.id, id))
   }
 
   async findPersonalByLogin(login: string): Promise<AccountRecord | null> {

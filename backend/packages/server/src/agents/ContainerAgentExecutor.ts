@@ -416,6 +416,9 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     return {
       instanceTypeId: resolveInstanceTypeId(provider, size),
       ...(provider ? { provider } : {}),
+      // Forward the abstract size too, so the local Docker/Podman backend can size
+      // the per-job container (`--memory`/`--cpus`) without decoding the cloud id.
+      ...(size ? { instanceSize: size } : {}),
     }
   }
 
@@ -654,9 +657,8 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     // withheld greenlight). Targets the harness `/test` endpoint; mapped to `testReport`.
     if (context.agentKind === TESTER_AGENT_KIND) {
       const branch = context.block.pullRequest?.branch ?? repo.baseBranch
-      const env = context.block.agentConfig?.['tester.environment'] === 'local'
-        ? 'local'
-        : 'ephemeral'
+      const env =
+        context.block.agentConfig?.['tester.environment'] === 'local' ? 'local' : 'ephemeral'
       const service = context.service
       const body = {
         jobId: executionId,

@@ -91,7 +91,8 @@ export function rowToBlock(row: BlockRow): Block {
   if (row.pull_request !== null) block.pullRequest = JSON.parse(row.pull_request) as PullRequestRef
   if (row.merge_preset_id !== null) block.mergePresetId = row.merge_preset_id
   if (row.pipeline_id !== null) block.pipelineId = row.pipeline_id
-  if (row.agent_config !== null) block.agentConfig = JSON.parse(row.agent_config) as AgentConfigValues
+  if (row.agent_config !== null)
+    block.agentConfig = JSON.parse(row.agent_config) as AgentConfigValues
   if (row.test_compose_path !== null) block.testComposePath = row.test_compose_path
   if (row.no_infra_dependencies !== null)
     block.noInfraDependencies = row.no_infra_dependencies === 1

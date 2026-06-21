@@ -10,6 +10,7 @@ export type {
 export type {
   AccountRecord,
   AccountRepository,
+  AccountSettingsPatch,
   Membership,
   MembershipRepository,
 } from './account-repositories.js'

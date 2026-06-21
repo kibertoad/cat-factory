@@ -700,7 +700,10 @@ watch(
                     >
                   </span>
                 </div>
-                <p v-if="testReport.summary" class="mb-3 text-[13px] leading-relaxed text-slate-300">
+                <p
+                  v-if="testReport.summary"
+                  class="mb-3 text-[13px] leading-relaxed text-slate-300"
+                >
                   {{ testReport.summary }}
                 </p>
 
@@ -723,7 +726,8 @@ watch(
                       :style="{ backgroundColor: OUTCOME_COLOR[o.status] ?? '#64748b' }"
                     />
                     <span class="text-slate-300"
-                      >{{ o.name }}<span v-if="o.detail" class="text-slate-500"> — {{ o.detail }}</span></span
+                      >{{ o.name
+                      }}<span v-if="o.detail" class="text-slate-500"> — {{ o.detail }}</span></span
                     >
                   </div>
                 </div>

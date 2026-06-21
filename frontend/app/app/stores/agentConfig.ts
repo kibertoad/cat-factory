@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { computed, ref } from 'vue'
+import { ref } from 'vue'
 import type { AgentConfigDescriptor } from '~/types/domain'
 import { usePipelinesStore } from '~/stores/pipelines'
 

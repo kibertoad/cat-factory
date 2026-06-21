@@ -1,4 +1,4 @@
-import type { AccountRole, AccountType } from '../domain/types.js'
+import type { AccountRole, AccountType, CloudProvider } from '../domain/types.js'
 
 // ---------------------------------------------------------------------------
 // Persistence ports for the account tenancy layer (migration 0017). Accounts own
@@ -15,6 +15,17 @@ export interface AccountRecord {
   name: string
   githubAccountLogin: string | null
   createdAt: number
+  /**
+   * The cloud provider new services in this account default to (a service may
+   * override it per-frame). Absent ⇒ the built-in {@link DEFAULT_CLOUD_PROVIDER}.
+   */
+  defaultCloudProvider?: CloudProvider
+}
+
+/** Mutable account settings a member-owner can change (see {@link AccountRepository.updateSettings}). */
+export interface AccountSettingsPatch {
+  /** `null` clears the override (back to the built-in default); `undefined` leaves it. */
+  defaultCloudProvider?: CloudProvider | null
 }
 
 export interface Membership {
@@ -28,6 +39,8 @@ export interface AccountRepository {
   get(id: string): Promise<AccountRecord | null>
   create(account: AccountRecord): Promise<void>
   rename(id: string, name: string): Promise<void>
+  /** Apply a settings patch (today: the default cloud provider). A no-op for an empty patch. */
+  updateSettings(id: string, patch: AccountSettingsPatch): Promise<void>
   /** The existing personal account for a GitHub login, if one was already created. */
   findPersonalByLogin(login: string): Promise<AccountRecord | null>
 }

@@ -1,7 +1,13 @@
 import { execFile } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
 import { promisify } from 'node:util'
-import type { RunnerDispatchKind, RunnerJobView, RunnerTransport } from '@cat-factory/kernel'
+import type {
+  RunnerDispatchKind,
+  RunnerDispatchOptions,
+  RunnerJobView,
+  RunnerTransport,
+} from '@cat-factory/kernel'
+import { resolveDockerResources } from '@cat-factory/contracts'
 
 const execFileAsync = promisify(execFile)
 
@@ -79,6 +85,18 @@ export interface LocalDockerRunnerTransportOptions {
   readyTimeoutMs?: number
   /** Per-HTTP-call timeout. Default 30s. */
   requestTimeoutMs?: number
+  /**
+   * Run the Tester (`test`) job container with `--privileged` so its in-container
+   * Docker-in-Docker daemon can start and the Tester can `docker compose up` the
+   * service's local infra. This is the local analogue of the Cloudflare harness's
+   * rootless-dockerd path, but reliable: on a developer machine privileged DinD
+   * "just works", keeping the service's dependencies on the job container's own
+   * `localhost` (exactly what the Tester prompt assumes). Default true; set false to
+   * fall back to the harness's best-effort rootless daemon (e.g. under Podman, whose
+   * rootless containers can run nested Podman without `--privileged`). Only the
+   * `test` kind gets it — every other kind runs unprivileged. See entrypoint.sh.
+   */
+  privilegedTestJobs?: boolean
 }
 
 const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
@@ -94,6 +112,7 @@ export class LocalDockerRunnerTransport implements RunnerTransport {
   private readonly fetchImpl: typeof fetch
   private readonly readyTimeoutMs: number
   private readonly requestTimeoutMs: number
+  private readonly privilegedTestJobs: boolean
 
   /** jobId → resolved container handle, to spare a `docker` lookup on the hot poll path. */
   private readonly cache = new Map<string, { containerId: string; port: number }>()
@@ -110,12 +129,14 @@ export class LocalDockerRunnerTransport implements RunnerTransport {
     this.fetchImpl = options.fetchImpl ?? fetch
     this.readyTimeoutMs = options.readyTimeoutMs ?? 60_000
     this.requestTimeoutMs = options.requestTimeoutMs ?? 30_000
+    this.privilegedTestJobs = options.privilegedTestJobs ?? true
   }
 
   async dispatch(
     jobId: string,
     spec: Record<string, unknown>,
     kind: RunnerDispatchKind = 'run',
+    options?: RunnerDispatchOptions,
   ): Promise<void> {
     let resolved = await this.resolve(jobId)
     if (!resolved) {
@@ -136,6 +157,18 @@ export class LocalDockerRunnerTransport implements RunnerTransport {
         '-e',
         `HARNESS_SHARED_SECRET=${this.sharedSecret}`,
       ]
+      // Size the per-job container on the host daemon from the service's abstract
+      // instance size — the local backend never touches a cloud, it just provisions a
+      // bigger/smaller Docker container (`--memory`/`--cpus`).
+      if (options?.instanceSize) {
+        const { memory, cpus } = resolveDockerResources(options.instanceSize)
+        args.push('--memory', memory, '--cpus', cpus)
+      }
+      // The Tester stands its infra up with `docker compose` INSIDE the job container
+      // (Docker-in-Docker), so the dependencies sit on the container's own localhost.
+      // Run that one kind privileged so the in-container daemon can start. No other
+      // kind needs Docker, so none other gets elevated.
+      if (kind === 'test' && this.privilegedTestJobs) args.push('--privileged')
       if (this.addHostGateway) args.push('--add-host=host.docker.internal:host-gateway')
       if (this.network) args.push('--network', this.network)
       for (const [k, v] of Object.entries(this.extraEnv)) args.push('-e', `${k}=${v}`)

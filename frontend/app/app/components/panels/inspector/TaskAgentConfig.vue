@@ -42,7 +42,7 @@ function valueOf(id: string, fallback: string): string {
 }
 
 function setValue(id: string, value: string) {
-  const next = { ...(props.block.agentConfig ?? {}), [id]: value }
+  const next = { ...props.block.agentConfig, [id]: value }
   board.updateBlock(props.block.id, { agentConfig: next })
 }
 </script>

@@ -1,4 +1,4 @@
-import { addMemberSchema, createAccountSchema } from '@cat-factory/contracts'
+import { addMemberSchema, createAccountSchema, updateAccountSchema } from '@cat-factory/contracts'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
 import type { AppEnv } from '../../http/env.js'
@@ -34,6 +34,15 @@ export function accountController(): Hono<AppEnv> {
     if (!user) return signInRequired(c)
     const account = await c.get('container').accountService.createOrg(user, c.req.valid('json'))
     return c.json(account, 201)
+  })
+
+  app.patch('/accounts/:accountId', jsonBody(updateAccountSchema), async (c) => {
+    const user = accountUser(c)
+    if (!user) return signInRequired(c)
+    const account = await c
+      .get('container')
+      .accountService.updateSettings(param(c, 'accountId'), user.id, c.req.valid('json'))
+    return c.json(account)
   })
 
   app.get('/accounts/:accountId/members', async (c) => {

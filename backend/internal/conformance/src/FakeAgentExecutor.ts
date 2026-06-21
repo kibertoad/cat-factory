@@ -270,7 +270,7 @@ export class AsyncFakeAgentExecutor extends FakeAgentExecutor implements AsyncAg
    */
   async stopJob(handle: AgentJobHandle): Promise<void> {
     const prefix = `fakejob:${handle.jobId}:`
-    for (const id of [...this.jobs.keys()]) if (id.startsWith(prefix)) this.jobs.delete(id)
+    for (const id of this.jobs.keys()) if (id.startsWith(prefix)) this.jobs.delete(id)
   }
 
   async pollJob(handle: AgentJobHandle): Promise<AgentJobUpdate> {

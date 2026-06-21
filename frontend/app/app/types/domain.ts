@@ -118,7 +118,7 @@ export interface PullRequestRef {
 }
 
 /** The cloud provider a service's container jobs run on (per service; account default otherwise). */
-export type CloudProvider = 'cloudflare' | 'aws' | 'gcp' | 'azure' | 'custom'
+export type CloudProvider = 'cloudflare' | 'docker' | 'aws' | 'gcp' | 'azure' | 'custom'
 
 /** Abstract, cloud-neutral instance size selectable per service. */
 export type InstanceSize = 'small' | 'medium' | 'large' | 'xlarge'

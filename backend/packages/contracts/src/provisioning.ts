@@ -16,11 +16,21 @@ import * as v from 'valibot'
 
 /**
  * Where a service's container jobs run. `cloudflare` is the built-in per-run
- * Container backend; `aws`/`gcp`/`azure`/`custom` all route to a self-hosted
- * runner pool that provisions on that cloud — we only forward the resolved
- * instance-type id, we never call those clouds' APIs directly.
+ * Container backend; `docker` is the local Docker/Podman daemon the local-mode
+ * facade drives directly (no cloud at all — the abstract size maps to container
+ * resource limits, and the Tester stands its infra up with Docker-in-Docker);
+ * `aws`/`gcp`/`azure`/`custom` all route to a self-hosted runner pool that
+ * provisions on that cloud — we only forward the resolved instance-type id, we
+ * never call those clouds' APIs directly.
  */
-export const cloudProviderSchema = v.picklist(['cloudflare', 'aws', 'gcp', 'azure', 'custom'])
+export const cloudProviderSchema = v.picklist([
+  'cloudflare',
+  'docker',
+  'aws',
+  'gcp',
+  'azure',
+  'custom',
+])
 export type CloudProvider = v.InferOutput<typeof cloudProviderSchema>
 
 /** Abstract, cloud-neutral instance size selectable per service. */
@@ -65,9 +75,16 @@ export const INSTANCE_TYPE_IDS: Record<CloudProvider, Record<InstanceSize, strin
     large: 'Standard_D4s_v5',
     xlarge: 'Standard_D8s_v5',
   },
-  // Pass-through: the abstract size id is forwarded verbatim to the custom pool,
-  // which maps it via its own manifest.
+  // Pass-through: the abstract size id is forwarded verbatim (to the custom pool's
+  // manifest, or — for `docker` — to the local transport, which maps it to concrete
+  // container resource limits via `DOCKER_RESOURCE_LIMITS`).
   custom: {
+    small: 'small',
+    medium: 'medium',
+    large: 'large',
+    xlarge: 'xlarge',
+  },
+  docker: {
     small: 'small',
     medium: 'medium',
     large: 'large',
@@ -81,4 +98,32 @@ export function resolveInstanceTypeId(
   size: InstanceSize = DEFAULT_INSTANCE_SIZE,
 ): string {
   return INSTANCE_TYPE_IDS[provider][size]
+}
+
+/**
+ * Concrete container resource limits per abstract size, used by the local
+ * Docker/Podman runner backend (`--memory` / `--cpus` on `docker run`). The
+ * local facade never provisions cloud instances — it sizes the per-job container
+ * on the host daemon — so the abstract `InstanceSize` maps straight to limits here
+ * rather than to a cloud instance-type id.
+ */
+export interface DockerResourceLimits {
+  /** `--memory` value (e.g. `2g`). */
+  memory: string
+  /** `--cpus` value (e.g. `2`). */
+  cpus: string
+}
+
+export const DOCKER_RESOURCE_LIMITS: Record<InstanceSize, DockerResourceLimits> = {
+  small: { memory: '1g', cpus: '1' },
+  medium: { memory: '2g', cpus: '2' },
+  large: { memory: '4g', cpus: '4' },
+  xlarge: { memory: '8g', cpus: '8' },
+}
+
+/** Resolve the local container resource limits for a service's abstract size. */
+export function resolveDockerResources(
+  size: InstanceSize = DEFAULT_INSTANCE_SIZE,
+): DockerResourceLimits {
+  return DOCKER_RESOURCE_LIMITS[size]
 }

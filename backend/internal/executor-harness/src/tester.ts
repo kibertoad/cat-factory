@@ -46,14 +46,20 @@ const SEVERITIES = new Set(['low', 'medium', 'high', 'critical'])
 const STATUSES = new Set(['passed', 'failed', 'skipped'])
 
 /** Coerce the agent's JSON into a well-formed report, defaulting conservatively. */
-function coerceReport(raw: unknown, summary: string, env: TesterTestSpec['environment']): TestReportShape {
+function coerceReport(
+  raw: unknown,
+  summary: string,
+  env: TesterTestSpec['environment'],
+): TestReportShape {
   const o = (typeof raw === 'object' && raw !== null ? raw : {}) as Record<string, unknown>
   const outcomes = Array.isArray(o.outcomes)
     ? (o.outcomes as unknown[])
         .filter((x): x is Record<string, unknown> => typeof x === 'object' && x !== null)
         .map((x) => ({
           name: typeof x.name === 'string' ? x.name : '(unnamed)',
-          status: (STATUSES.has(x.status as string) ? x.status : 'skipped') as TestReportShape['outcomes'][number]['status'],
+          status: (STATUSES.has(x.status as string)
+            ? x.status
+            : 'skipped') as TestReportShape['outcomes'][number]['status'],
           ...(typeof x.detail === 'string' && x.detail ? { detail: x.detail } : {}),
         }))
     : []
@@ -63,7 +69,9 @@ function coerceReport(raw: unknown, summary: string, env: TesterTestSpec['enviro
         .map((x) => ({
           title: typeof x.title === 'string' ? x.title : '(concern)',
           detail: typeof x.detail === 'string' ? x.detail : '',
-          severity: (SEVERITIES.has(x.severity as string) ? x.severity : 'medium') as TestReportShape['concerns'][number]['severity'],
+          severity: (SEVERITIES.has(x.severity as string)
+            ? x.severity
+            : 'medium') as TestReportShape['concerns'][number]['severity'],
         }))
     : []
   // A greenlight is only honoured when no concerns were raised — never auto-pass a
@@ -72,7 +80,9 @@ function coerceReport(raw: unknown, summary: string, env: TesterTestSpec['enviro
   return {
     greenlight,
     summary: typeof o.summary === 'string' && o.summary ? o.summary : summary.slice(0, 2000),
-    tested: Array.isArray(o.tested) ? (o.tested as unknown[]).filter((t): t is string => typeof t === 'string') : [],
+    tested: Array.isArray(o.tested)
+      ? (o.tested as unknown[]).filter((t): t is string => typeof t === 'string')
+      : [],
     outcomes,
     concerns,
     environment: env,
@@ -95,7 +105,7 @@ function buildUserPrompt(job: TesterJob): string {
     )
   } else {
     lines.push(
-      'Run mode: local. The service\'s infra dependencies from its docker-compose file have been started and are reachable on localhost. Read the README to learn how to configure the service against them, run any migrations, start the service and exercise it.',
+      "Run mode: local. The service's infra dependencies from its docker-compose file have been started and are reachable on localhost. Read the README to learn how to configure the service against them, run any migrations, start the service and exercise it.",
     )
   }
   lines.push('', 'Respond with ONLY the JSON test report described in your instructions.')
@@ -208,7 +218,11 @@ export async function handleTester(job: TesterJob, opts: RunOptions = {}): Promi
           ...(usage ? { usage } : {}),
         }
       }
-      log.info('test: reported', { ...trace, greenlight: report.greenlight, concerns: report.concerns.length })
+      log.info('test: reported', {
+        ...trace,
+        greenlight: report.greenlight,
+        concerns: report.concerns.length,
+      })
       return { report, summary, stats, ...(usage ? { usage } : {}) }
     } finally {
       await tearDownInfra(dir, job.test)

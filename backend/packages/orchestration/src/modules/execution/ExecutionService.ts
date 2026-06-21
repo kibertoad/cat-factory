@@ -1440,6 +1440,21 @@ export class ExecutionService {
     if (!isAsyncAgentExecutor(executor)) {
       return { kind: 'job_failed', error: 'No async executor available to fix test failures.' }
     }
+    // The fixer pushes its commits onto the implementation PR branch, so it can only
+    // run once a coder/integrator step opened one. A Tester-only pipeline (or one whose
+    // earlier step never produced a PR) can't be auto-fixed — fail cleanly with the
+    // report instead of letting the job-body builder throw out of the advance.
+    if (!block.pullRequest?.branch) {
+      step.output = report.summary || 'Tester withheld its greenlight.'
+      this.finishStep(step)
+      await this.executionRepository.upsert(workspaceId, instance)
+      await this.emitInstance(workspaceId, instance)
+      return {
+        kind: 'job_failed',
+        error:
+          `Tester withheld its greenlight and there is no PR branch for the fixer to push to. ${describeTestConcerns(report)}`.trim(),
+      }
+    }
     const isFinalStep = instance.currentStep === instance.steps.length - 1
     const base = await this.buildAgentContext(workspaceId, instance, step, isFinalStep, block)
     const context: AgentRunContext = {

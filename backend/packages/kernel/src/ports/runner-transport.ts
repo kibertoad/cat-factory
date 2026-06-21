@@ -1,4 +1,4 @@
-import type { CloudProvider, StepSubtasks } from '../domain/types.js'
+import type { CloudProvider, InstanceSize, StepSubtasks } from '../domain/types.js'
 
 // Port for "where a repo-operating coding job actually runs". The
 // ContainerAgentExecutor dispatches each job and polls it through this transport
@@ -83,6 +83,13 @@ export interface RunnerDispatchOptions {
   instanceTypeId?: string
   /** The cloud provider the service selected, for a self-provisioning pool. */
   provider?: CloudProvider
+  /**
+   * The abstract t-shirt size the service selected, forwarded verbatim so a
+   * resource-sizing transport (the local Docker/Podman backend) can map it to
+   * concrete `--memory` / `--cpus` limits without reverse-engineering a cloud
+   * instance-type id.
+   */
+  instanceSize?: InstanceSize
 }
 
 /** A job's current state, as the harness/pool reports it. */

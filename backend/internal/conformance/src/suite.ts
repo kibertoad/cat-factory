@@ -324,19 +324,19 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         await app.call('PATCH', `/workspaces/${wsId}/blocks/task_login`, {
           agentConfig: { 'tester.environment': 'local' },
         })
-        const blocked = await app.call(
-          'POST',
-          `/workspaces/${wsId}/blocks/task_login/executions`,
-          { pipelineId: pipeline.body.id },
-        )
+        const blocked = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+          pipelineId: pipeline.body.id,
+        })
         expect(blocked.status).toBeGreaterThanOrEqual(400)
 
         // Mark the service frame as having no infra dependencies → the start succeeds.
         const blocks = (await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)).body.blocks
-        const frame = blocks.find((b) => b.id === 'task_login')!
-        // task_login → mod_sessions → its service frame; configure that frame.
-        const moduleId = frame.parentId!
-        const serviceFrameId = blocks.find((b) => b.id === moduleId)!.parentId!
+        const task = blocks.find((b) => b.id === 'task_login')!
+        // In the seed `task_login` is a task directly under the `blk_auth` service
+        // frame (no intervening module), so its parent IS the service frame to
+        // configure — matching how the engine resolves service config (walk up to the
+        // nearest `level:'frame'` ancestor).
+        const serviceFrameId = task.parentId!
         await app.call('PATCH', `/workspaces/${wsId}/blocks/${serviceFrameId}`, {
           noInfraDependencies: true,
         })
@@ -356,9 +356,7 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
           summary: 'found a bug',
           tested: ['login'],
           outcomes: [{ name: 'login', status: 'failed' as const, detail: 'returns 500' }],
-          concerns: [
-            { title: 'Login 500', detail: 'unhandled error', severity: 'high' as const },
-          ],
+          concerns: [{ title: 'Login 500', detail: 'unhandled error', severity: 'high' as const }],
         }
         const green = {
           greenlight: true,

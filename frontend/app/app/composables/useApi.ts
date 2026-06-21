@@ -2,6 +2,7 @@ import type {
   Account,
   AccountMember,
   AddMemberInput,
+  UpdateAccountInput,
   AgentRunKind,
   AuthUser,
   Block,
@@ -203,6 +204,9 @@ export function useApi() {
 
     createAccount: (body: { name: string; githubAccountLogin?: string }) =>
       http<Account>('/accounts', { method: 'POST', body }),
+
+    updateAccount: (accountId: string, body: UpdateAccountInput) =>
+      http<Account>(`/accounts/${encodeURIComponent(accountId)}`, { method: 'PATCH', body }),
 
     listAccountMembers: (accountId: string) =>
       http<AccountMember[]>(`/accounts/${encodeURIComponent(accountId)}/members`),

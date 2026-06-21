@@ -10,9 +10,16 @@ import type { Block, CloudProvider, InstanceSize } from '~/types/domain'
 const props = defineProps<{ block: Block }>()
 
 const board = useBoardStore()
+const accounts = useAccountsStore()
 
 const composePath = computed(() => props.block.testComposePath ?? '')
 const noInfra = computed(() => props.block.noInfraDependencies === true)
+
+// A service with no explicit provider inherits the active account's default (else the
+// built-in `cloudflare`); show that as the selected chip so the inherited value is visible.
+const effectiveProvider = computed<CloudProvider>(
+  () => props.block.cloudProvider ?? accounts.activeAccount?.defaultCloudProvider ?? 'cloudflare',
+)
 
 function setComposePath(value: string) {
   board.updateBlock(props.block.id, { testComposePath: value.trim() })
@@ -23,6 +30,7 @@ function toggleNoInfra(value: boolean) {
 
 const PROVIDERS: { value: CloudProvider; label: string }[] = [
   { value: 'cloudflare', label: 'Cloudflare' },
+  { value: 'docker', label: 'Docker (local)' },
   { value: 'aws', label: 'AWS' },
   { value: 'gcp', label: 'GCP' },
   { value: 'azure', label: 'Azure' },
@@ -75,8 +83,8 @@ const missingInfra = computed(() => !noInfra.value && composePath.value.trim() =
     </label>
 
     <p v-if="missingInfra" class="text-[11px] leading-snug text-amber-500">
-      Set a docker-compose path or enable “no infra dependencies”, otherwise a pipeline
-      with a Tester won't start.
+      Set a docker-compose path or enable “no infra dependencies”, otherwise a pipeline with a
+      Tester won't start.
     </p>
 
     <div class="space-y-1">
@@ -85,8 +93,8 @@ const missingInfra = computed(() => !noInfra.value && composePath.value.trim() =
         <UButton
           v-for="p in PROVIDERS"
           :key="p.value"
-          :color="(block.cloudProvider ?? 'cloudflare') === p.value ? 'primary' : 'neutral'"
-          :variant="(block.cloudProvider ?? 'cloudflare') === p.value ? 'soft' : 'ghost'"
+          :color="effectiveProvider === p.value ? 'primary' : 'neutral'"
+          :variant="effectiveProvider === p.value ? 'soft' : 'ghost'"
           size="xs"
           @click="setProvider(p.value)"
         >
