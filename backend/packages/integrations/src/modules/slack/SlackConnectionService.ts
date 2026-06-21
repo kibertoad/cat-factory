@@ -83,7 +83,7 @@ export class SlackConnectionService {
       teamName: info.teamName,
       teamIconUrl: null,
       botUserId: info.botUserId,
-      scopes: [],
+      scopes: info.scopes,
       token,
     })
   }

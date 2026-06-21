@@ -192,12 +192,13 @@ describe('SlackNotificationChannel', () => {
     expect(blocks).not.toContain('<@42>')
   })
 
-  it('never throws on a delivery failure (best-effort)', async () => {
+  it('never throws on a delivery failure (best-effort) but surfaces it via onError', async () => {
     const throwingClient = new SlackApiClient({
       fetchImpl: (async () => {
         throw new Error('network down')
       }) as unknown as typeof fetch,
     })
+    const errors: { error: unknown; context: Record<string, unknown> }[] = []
     const channel = new SlackNotificationChannel({
       workspaceRepository: workspaceRepo('acc_1'),
       slackConnectionRepository: connectionRepo(connection),
@@ -211,8 +212,18 @@ describe('SlackNotificationChannel', () => {
       membershipRepository: membershipRepo([]),
       secretCipher: reversingCipher,
       slackClient: throwingClient,
+      onError: (error, context) => errors.push({ error, context }),
     })
 
+    // Best-effort: the lifecycle is never broken...
     await expect(channel.deliver('ws_1', notification)).resolves.toBeUndefined()
+    // ...but the swallowed failure is observable, not silently dropped.
+    expect(errors).toHaveLength(1)
+    expect((errors[0]!.error as Error).message).toBe('network down')
+    expect(errors[0]!.context).toEqual({
+      workspaceId: 'ws_1',
+      notificationId: 'ntf_1',
+      type: 'merge_review',
+    })
   })
 })

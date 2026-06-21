@@ -195,7 +195,6 @@ export type {
   SlackConnectionRepository,
   SlackSettingsRecord,
   SlackSettingsRepository,
-  SlackMemberMappingRecord,
   SlackMemberMappingRepository,
 } from './slack-repositories.js'
 export type { MergePresetRepository } from './merge-preset-repositories.js'

@@ -12,8 +12,11 @@ import { param } from '../../http/params.js'
 import { jsonBody } from '../../http/validation.js'
 
 // The bot scopes the "Add to Slack" flow requests: post messages + read channels
-// (public + private) so the routing picker can list them.
-const SLACK_BOT_SCOPES = ['chat:write', 'channels:read', 'groups:read']
+// (public + private) so the routing picker can list them. `chat:write.public` lets
+// the bot post to PUBLIC channels it hasn't been explicitly invited to — without it
+// a routed public channel silently rejects every message (`not_in_channel`).
+// Private channels still require an invite (Slack offers no public-write analogue).
+const SLACK_BOT_SCOPES = ['chat:write', 'chat:write.public', 'channels:read', 'groups:read']
 
 /** Resolve the Slack module or send a 503, returning null when unconfigured. */
 function requireSlack(c: Context<AppEnv>): SlackModule | null {

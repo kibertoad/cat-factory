@@ -28,6 +28,7 @@ import {
   buildResolveRepoTarget as buildSharedResolveRepoTarget,
   FanOutEventPublisher,
   createWebSearchUpstreamFromEnv,
+  logger,
   type ServerContainer,
 } from '@cat-factory/server'
 import { type AppConfig, loadConfig } from './config'
@@ -392,22 +393,45 @@ function selectMergeLifecycleDeps(
 }
 
 /**
+ * Construct the Slack repositories + bot-token cipher once, when the integration is
+ * enabled — the single source of truth shared by both the delivery channel and the
+ * management module so neither duplicates the wiring. Null when Slack is off.
+ */
+function buildSlackInfra(config: AppConfig, db: D1Database) {
+  if (!config.slack.enabled || !config.slack.encryptionKey) return null
+  return {
+    connectionRepository: new D1SlackConnectionRepository({ db }),
+    settingsRepository: new D1SlackSettingsRepository({ db }),
+    memberMappingRepository: new D1SlackMemberMappingRepository({ db }),
+    cipher: new WebCryptoSecretCipher({
+      masterKeyBase64: config.slack.encryptionKey,
+      info: SLACK_CIPHER_INFO,
+    }),
+  }
+}
+
+/**
  * Build the Slack notification channel when the integration is enabled — a
  * runtime-neutral transport (fetch + decrypt + D1 reads) composed alongside the
  * in-app channel. Null when Slack is off (then nothing Slack-related is wired).
  */
 function buildSlackChannel(config: AppConfig, db: D1Database): SlackNotificationChannel | null {
-  if (!config.slack.enabled || !config.slack.encryptionKey) return null
+  const infra = buildSlackInfra(config, db)
+  if (!infra) return null
   return new SlackNotificationChannel({
     workspaceRepository: new D1WorkspaceRepository({ db }),
-    slackConnectionRepository: new D1SlackConnectionRepository({ db }),
-    slackSettingsRepository: new D1SlackSettingsRepository({ db }),
-    slackMemberMappingRepository: new D1SlackMemberMappingRepository({ db }),
+    slackConnectionRepository: infra.connectionRepository,
+    slackSettingsRepository: infra.settingsRepository,
+    slackMemberMappingRepository: infra.memberMappingRepository,
     membershipRepository: new D1MembershipRepository({ db }),
-    secretCipher: new WebCryptoSecretCipher({
-      masterKeyBase64: config.slack.encryptionKey,
-      info: SLACK_CIPHER_INFO,
-    }),
+    secretCipher: infra.cipher,
+    // Best-effort delivery still surfaces failures (revoked token, missing channel
+    // invite) through the structured logger so a broken route is diagnosable.
+    onError: (error, ctx) =>
+      logger.warn(
+        { err: error instanceof Error ? error.message : String(error), ...ctx },
+        'slack notification delivery failed',
+      ),
   })
 }
 
@@ -418,15 +442,13 @@ function buildSlackChannel(config: AppConfig, db: D1Database): SlackNotification
  * are optional — manual bot-token onboarding works without them.
  */
 function selectSlackDeps(config: AppConfig, db: D1Database): Partial<CoreDependencies> {
-  if (!config.slack.enabled || !config.slack.encryptionKey) return {}
+  const infra = buildSlackInfra(config, db)
+  if (!infra) return {}
   return {
-    slackConnectionRepository: new D1SlackConnectionRepository({ db }),
-    slackSettingsRepository: new D1SlackSettingsRepository({ db }),
-    slackMemberMappingRepository: new D1SlackMemberMappingRepository({ db }),
-    slackSecretCipher: new WebCryptoSecretCipher({
-      masterKeyBase64: config.slack.encryptionKey,
-      info: SLACK_CIPHER_INFO,
-    }),
+    slackConnectionRepository: infra.connectionRepository,
+    slackSettingsRepository: infra.settingsRepository,
+    slackMemberMappingRepository: infra.memberMappingRepository,
+    slackSecretCipher: infra.cipher,
     ...(config.slack.oauth ? { slackOAuth: config.slack.oauth } : {}),
   }
 }

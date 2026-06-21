@@ -59,14 +59,11 @@ export interface SlackSettingsRepository {
   upsert(record: SlackSettingsRecord): Promise<void>
 }
 
-/** An account's opt-in GitHub-user-id → Slack-member-id map. */
-export interface SlackMemberMappingRecord {
-  accountId: string
-  /** The `SlackMemberMapping.entries` array, serialized as JSON. */
-  entriesJson: string
-  updatedAt: number
-}
-
+/**
+ * An account's opt-in GitHub-user-id → Slack-member-id map. The repository returns
+ * the decoded `SlackMemberMappingEntry[]` directly (each store serializes it to its
+ * own JSON column), so there is no separate persisted-record shape here.
+ */
 export interface SlackMemberMappingRepository {
   /** An account's mapping entries (empty when none configured). */
   getByAccount(accountId: string): Promise<SlackMemberMappingEntry[]>

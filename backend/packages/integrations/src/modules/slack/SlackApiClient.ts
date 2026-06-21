@@ -11,6 +11,8 @@ export interface SlackAuthInfo {
   teamName: string
   botUserId: string | null
   url: string | null
+  /** OAuth scopes granted to the token, read from the `x-oauth-scopes` header. */
+  scopes: string[]
 }
 
 /** Result of an `oauth.v2.access` exchange. */
@@ -56,14 +58,22 @@ export class SlackApiClient {
     this.apiBase = (options.apiBase ?? 'https://slack.com/api').replace(/\/+$/, '')
   }
 
-  /** Validate a bot token and read the team it belongs to (`auth.test`). */
+  /**
+   * Validate a bot token and read the team it belongs to (`auth.test`). The granted
+   * OAuth scopes aren't in the body — Slack returns them in the `x-oauth-scopes`
+   * response header on any Web API call — so we read them here too, which lets the
+   * manual-token onboarding path capture real scopes (not an empty list).
+   */
   async authTest(token: string): Promise<SlackAuthInfo> {
-    const data = await this.postJson('auth.test', token, {})
+    const res = await this.request('auth.test', token, {})
+    const data = (await res.json()) as SlackResponse
+    if (!data.ok) throw new SlackApiError('auth.test', data.error ?? 'unknown_error')
     return {
       teamId: String(data.team_id ?? ''),
       teamName: String(data.team ?? ''),
       botUserId: data.user_id ? String(data.user_id) : null,
       url: data.url ? String(data.url) : null,
+      scopes: parseScopeHeader(res.headers.get('x-oauth-scopes')),
     }
   }
 
@@ -107,23 +117,47 @@ export class SlackApiClient {
 
   /**
    * List the channels the bot can see (`conversations.list`), for the routing
-   * picker. Public + private, excluding archived; a single page (Slack's default
-   * limit) is plenty for a dropdown.
+   * picker. Public + private, excluding archived. Follows the cursor so a workspace
+   * with more than one page of channels (>1000) isn't silently truncated, with a
+   * page cap as a safety bound against an unbounded loop.
    */
   async conversationsList(token: string): Promise<SlackChannel[]> {
-    const data = await this.postJson('conversations.list', token, {
-      types: 'public_channel,private_channel',
-      exclude_archived: true,
-      limit: 1000,
-    })
-    const channels = Array.isArray(data.channels) ? data.channels : []
-    return channels.map((c) => {
-      const channel = c as { id?: string; name?: string; is_private?: boolean }
-      return {
-        id: String(channel.id ?? ''),
-        name: String(channel.name ?? ''),
-        isPrivate: Boolean(channel.is_private),
+    const result: SlackChannel[] = []
+    let cursor: string | undefined
+    const MAX_PAGES = 20
+    for (let page = 0; page < MAX_PAGES; page++) {
+      const data = await this.postJson('conversations.list', token, {
+        types: 'public_channel,private_channel',
+        exclude_archived: true,
+        limit: 1000,
+        ...(cursor ? { cursor } : {}),
+      })
+      const channels = Array.isArray(data.channels) ? data.channels : []
+      for (const c of channels) {
+        const channel = c as { id?: string; name?: string; is_private?: boolean }
+        result.push({
+          id: String(channel.id ?? ''),
+          name: String(channel.name ?? ''),
+          isPrivate: Boolean(channel.is_private),
+        })
       }
+      const meta = data.response_metadata as { next_cursor?: string } | undefined
+      const next = meta?.next_cursor
+      if (!next) break
+      cursor = next
+    }
+    return result
+  }
+
+  /** POST a JSON body to a Slack method with a bearer token (raw response). */
+  private request(method: string, token: string, body: Record<string, unknown>): Promise<Response> {
+    return this.fetchImpl(`${this.apiBase}/${method}`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${token}`,
+        'content-type': 'application/json; charset=utf-8',
+      },
+      body: JSON.stringify(body),
     })
   }
 
@@ -133,16 +167,18 @@ export class SlackApiClient {
     token: string,
     body: Record<string, unknown>,
   ): Promise<SlackResponse> {
-    const res = await this.fetchImpl(`${this.apiBase}/${method}`, {
-      method: 'POST',
-      headers: {
-        authorization: `Bearer ${token}`,
-        'content-type': 'application/json; charset=utf-8',
-      },
-      body: JSON.stringify(body),
-    })
+    const res = await this.request(method, token, body)
     const data = (await res.json()) as SlackResponse
     if (!data.ok) throw new SlackApiError(method, data.error ?? 'unknown_error')
     return data
   }
+}
+
+/** Parse Slack's comma-separated `x-oauth-scopes` header into a trimmed list. */
+function parseScopeHeader(header: string | null): string[] {
+  if (!header) return []
+  return header
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0)
 }

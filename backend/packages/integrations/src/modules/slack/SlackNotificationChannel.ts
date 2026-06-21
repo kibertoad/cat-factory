@@ -35,6 +35,17 @@ export interface SlackNotificationChannelDependencies {
   secretCipher: SecretCipher
   /** Slack Web API client; defaults to a fetch-backed one. */
   slackClient?: SlackApiClient
+  /**
+   * Optional observability hook invoked when a delivery attempt fails. Delivery is
+   * best-effort (a Slack outage/misconfig must never break the notification
+   * lifecycle), but a swallowed failure should still be diagnosable — the facades
+   * wire this to their structured logger so a broken Slack route (a revoked token,
+   * a channel the bot was never invited to) surfaces instead of vanishing.
+   */
+  onError?: (
+    error: unknown,
+    context: { workspaceId: string; notificationId: string; type: string },
+  ) => void
 }
 
 export class SlackNotificationChannel implements NotificationChannel {
@@ -47,9 +58,16 @@ export class SlackNotificationChannel implements NotificationChannel {
   async deliver(workspaceId: string, notification: Notification): Promise<void> {
     try {
       await this.post(workspaceId, notification)
-    } catch {
+    } catch (error) {
       // Best-effort: never let a Slack outage/misconfig break the notification
-      // lifecycle. (CompositeNotificationChannel also isolates us, belt-and-braces.)
+      // lifecycle (CompositeNotificationChannel also isolates us, belt-and-braces).
+      // Surface it through the optional observability hook so the failure is
+      // diagnosable instead of silently dropped.
+      this.deps.onError?.(error, {
+        workspaceId,
+        notificationId: notification.id,
+        type: notification.type,
+      })
     }
   }
 
@@ -78,8 +96,12 @@ export class SlackNotificationChannel implements NotificationChannel {
   }
 
   /**
-   * Resolve the Slack member ids to @-mention: every account member that has a
-   * configured GitHub→Slack mapping. Best-effort — unmapped members are skipped.
+   * Resolve the Slack member ids to @-mention. cat-factory notifications carry no
+   * single "owner" to ping — they are team-level events (a PR needs a merge review,
+   * CI is red) — so when a workspace OPTS IN to mentions (`mentionsEnabled`), every
+   * account member that has a configured GitHub→Slack mapping is tagged: a
+   * deliberate team broadcast. Unmapped members are skipped; an empty map means no
+   * mentions even when enabled.
    */
   private async resolveMentions(accountKey: string): Promise<string[]> {
     const [members, mapping] = await Promise.all([

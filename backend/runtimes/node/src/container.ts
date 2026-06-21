@@ -37,6 +37,7 @@ import {
   WebCryptoSecretCipher,
   buildResolveRepoTarget,
   createWebSearchUpstreamFromEnv,
+  logger,
 } from '@cat-factory/server'
 import type { PgBoss } from 'pg-boss'
 import { loadNodeConfig } from './config.js'
@@ -96,6 +97,13 @@ function selectNodeSlackDeps(
       slackMemberMappingRepository,
       membershipRepository: repos.membershipRepository,
       secretCipher,
+      // Best-effort delivery still surfaces failures (revoked token, missing channel
+      // invite) through the structured logger so a broken route is diagnosable.
+      onError: (error, ctx) =>
+        logger.warn(
+          { err: error instanceof Error ? error.message : String(error), ...ctx },
+          'slack notification delivery failed',
+        ),
     }),
     slackConnectionRepository,
     slackSettingsRepository,
