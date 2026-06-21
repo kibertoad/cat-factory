@@ -129,24 +129,26 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         expect(initial.status).toBe(200)
         expect(initial.body.credentials).toEqual([])
 
-        // Add two tokens for the same vendor (a pool) — the raw token is write-only.
+        // Add two tokens (a pool) for poolable, commercial coding-plan vendors — the
+        // raw token is write-only. (Claude is individual-usage only and is NOT poolable;
+        // it is asserted separately below.)
         const first = await call<{ id: string; vendor: string; label: string }>('POST', base, {
-          vendor: 'claude',
-          label: 'primary',
-          token: 'sk-ant-oat01-secret-one',
+          vendor: 'codex',
+          label: 'chatgpt',
+          token: '{"auth_mode":"chatgpt","tokens":{"access_token":"secret-one"}}',
         })
         expect(first.status).toBe(201)
-        expect(first.body.vendor).toBe('claude')
+        expect(first.body.vendor).toBe('codex')
         // The secret is never echoed back.
         expect(JSON.stringify(first.body)).not.toContain('secret-one')
         const second = await call<{ id: string }>('POST', base, {
-          vendor: 'codex',
-          label: 'chatgpt',
-          token: '{"auth_mode":"chatgpt","tokens":{"access_token":"secret-two"}}',
+          vendor: 'kimi',
+          label: 'moonshot',
+          token: 'kimi-coding-plan-secret-two',
         })
         expect(second.status).toBe(201)
-        // A Claude-Code-flavour vendor beyond claude/codex (GLM/Kimi/DeepSeek): the
-        // unfiltered list MUST include it, not just the headline two vendors.
+        // A Claude-Code-flavour vendor beyond codex/kimi (GLM/DeepSeek): the unfiltered
+        // list MUST include it too.
         const third = await call<{ id: string; vendor: string }>('POST', base, {
           vendor: 'glm',
           label: 'zai',
@@ -159,9 +161,9 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         const listed = await call<{ credentials: { id: string; vendor: string }[] }>('GET', base)
         expect(listed.body.credentials).toHaveLength(3)
         expect(listed.body.credentials.map((c) => c.vendor).sort()).toEqual([
-          'claude',
           'codex',
           'glm',
+          'kimi',
         ])
         expect(JSON.stringify(listed.body)).not.toContain('secret-')
 
@@ -174,13 +176,14 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         )
       })
 
-      it('refuses an individual-only (Claude) subscription for an org-owned workspace', async () => {
-        const { call, createOrgWorkspace } = harness.makeApp()
-        const { workspace } = await createOrgWorkspace()
+      it('refuses to pool an individual-usage (Claude) subscription on any workspace', async () => {
+        const { call, createWorkspace } = harness.makeApp()
+        const { workspace } = await createWorkspace()
         const base = `/workspaces/${workspace.id}/vendor-credentials`
 
         // Anthropic's consumer Claude subscription is licensed for individual use only,
-        // so an org-owned workspace may not connect one (409 ConflictError).
+        // so it is never poolable on a workspace (409 ConflictError) — it is stored
+        // per-user via the personal-subscription endpoints instead.
         const claude = await call('POST', base, {
           vendor: 'claude',
           label: 'shared',
@@ -188,7 +191,7 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         })
         expect(claude.status).toBe(409)
 
-        // A commercial coding-plan vendor (GLM) carries no individual-only restriction.
+        // A commercial coding-plan vendor (GLM) carries no individual-usage restriction.
         const glm = await call<{ vendor: string }>('POST', base, {
           vendor: 'glm',
           label: 'zai',

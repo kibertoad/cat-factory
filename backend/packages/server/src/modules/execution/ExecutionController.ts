@@ -9,6 +9,7 @@ import { Hono } from 'hono'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
 import { jsonBody } from '../../http/validation.js'
+import { personalGateForBlock } from '../providers/personalCredentialGate.js'
 
 /**
  * The execution engine endpoints — starting/cancelling runs, resolving decisions
@@ -20,13 +21,27 @@ export function executionController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
 
   app.post('/blocks/:blockId/executions', jsonBody(startExecutionSchema), async (c) => {
-    const instance = await c
-      .get('container')
-      .executionService.start(
-        param(c, 'workspaceId'),
-        param(c, 'blockId'),
-        c.req.valid('json').pipelineId,
-      )
+    const container = c.get('container')
+    const workspaceId = param(c, 'workspaceId')
+    const blockId = param(c, 'blockId')
+    const { pipelineId, password } = c.req.valid('json')
+    // Individual-usage models (Claude) require the initiator's personal subscription:
+    // resolve the initiator + an activation closure (throws 428 when a password is
+    // needed). A non-individual run gets a no-op gate.
+    const { initiatedBy, activate } = await personalGateForBlock(
+      container,
+      workspaceId,
+      blockId,
+      c.get('user'),
+      password,
+    )
+    const instance = await container.executionService.start(
+      workspaceId,
+      blockId,
+      pipelineId,
+      initiatedBy,
+      activate,
+    )
     return c.json(instance, 201)
   })
 

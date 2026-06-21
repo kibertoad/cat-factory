@@ -7,13 +7,22 @@ const STATUS_BY_CODE: Record<DomainError['code'], ContentfulStatusCode> = {
   not_found: 404,
   validation: 422,
   conflict: 409,
+  // Precondition Required: a user-scoped personal credential (password/subscription)
+  // must be supplied before the action can proceed (individual-usage restricted mode).
+  credential_required: 428,
 }
 
 /** Maps domain errors to HTTP responses; anything else is a 500. */
 export function handleError(error: unknown, c: Context): Response {
   if (error instanceof DomainError) {
     return c.json(
-      { error: { code: error.code, message: error.message } },
+      {
+        error: {
+          code: error.code,
+          message: error.message,
+          ...(error.details ? { details: error.details } : {}),
+        },
+      },
       STATUS_BY_CODE[error.code],
     )
   }

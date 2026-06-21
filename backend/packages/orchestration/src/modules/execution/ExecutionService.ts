@@ -11,6 +11,7 @@ import type {
   PullRequestMerger,
   PullRequestMergeabilityProvider,
   StepReviewComment,
+  SubscriptionActivationRepository,
   TicketTrackerProvider,
 } from '@cat-factory/kernel'
 import {
@@ -27,8 +28,10 @@ import {
   assertFound,
   ConflictError,
   getErrorMessage,
+  individualVendorForModelId,
   NotFoundError,
   sameSubtasks,
+  type SubscriptionVendor,
 } from '@cat-factory/kernel'
 import { DEFAULT_MERGE_PRESET } from '@cat-factory/kernel'
 import {
@@ -174,6 +177,13 @@ export interface ExecutionServiceDependencies {
    */
   requirementReviewRepository?: RequirementReviewRepository
   /**
+   * Optional: when the individual-usage subscription store is configured, a finished
+   * run's per-run credential activation is deleted here the moment it reaches a terminal
+   * state, bounding standing exposure to the run's own lifetime (the TTL sweep is the
+   * backstop). Absent → activations are reclaimed by the TTL sweep alone.
+   */
+  subscriptionActivationRepository?: SubscriptionActivationRepository
+  /**
    * Optional: when the environment integration is configured, a `deployer` step
    * provisions an ephemeral environment deterministically through this service
    * (no LLM), and downstream steps discover the resulting env via it.
@@ -280,6 +290,7 @@ export class ExecutionService {
   private readonly prMerger?: PullRequestMerger
   private readonly mergePresetRepository?: MergePresetRepository
   private readonly ticketTrackerProvider?: TicketTrackerProvider
+  private readonly subscriptionActivations?: SubscriptionActivationRepository
 
   constructor({
     workspaceRepository,
@@ -306,6 +317,7 @@ export class ExecutionService {
     pullRequestMerger,
     mergePresetRepository,
     ticketTrackerProvider,
+    subscriptionActivationRepository,
   }: ExecutionServiceDependencies) {
     this.workspaceRepository = workspaceRepository
     this.blockRepository = blockRepository
@@ -331,6 +343,7 @@ export class ExecutionService {
     this.prMerger = pullRequestMerger
     this.mergePresetRepository = mergePresetRepository
     this.ticketTrackerProvider = ticketTrackerProvider
+    this.subscriptionActivations = subscriptionActivationRepository
   }
 
   private requireWorkspace(workspaceId: string) {
@@ -342,10 +355,49 @@ export class ExecutionService {
   }
 
   /** Start a pipeline against a block, replacing any prior run on it. */
+  /**
+   * The individual-usage subscription vendor (Claude) a block's pinned model runs on,
+   * or null. The controller uses it to gate a run on the initiator's personal
+   * subscription (require + activate their password) before starting. Pure: derived
+   * from the block's `modelId` via the catalog, so no token/workspace state is touched.
+   */
+  async individualVendorForBlock(
+    workspaceId: string,
+    blockId: string,
+  ): Promise<SubscriptionVendor | null> {
+    const block = await this.requireBlock(workspaceId, blockId)
+    return individualVendorForModelId(block.modelId)
+  }
+
+  /** The individual-usage vendor a failed run's block uses (for the retry gate), or null. */
+  async individualVendorForRun(
+    workspaceId: string,
+    executionId: string,
+  ): Promise<SubscriptionVendor | null> {
+    const run = await this.executionRepository.get(workspaceId, executionId)
+    if (!run) return null
+    const block = await this.blockRepository.get(workspaceId, run.blockId)
+    return block ? individualVendorForModelId(block.modelId) : null
+  }
+
   async start(
     workspaceId: string,
     blockId: string,
     pipelineId: string,
+    /**
+     * GitHub user id of the initiator. Recorded on the run so an individual-usage
+     * model (Claude) uses this user's OWN personal subscription. Absent for
+     * system-initiated runs (recurring schedules) and auth-disabled dev.
+     */
+    initiatedBy?: number | null,
+    /**
+     * Mint the per-run personal-credential activation for an individual-usage model.
+     * Invoked with the new run's id BEFORE it is persisted/dispatched, so the async
+     * steps can lease it; a throw (wrong/missing password) aborts the start cleanly
+     * with nothing persisted. The server layer supplies this (the personal store lives
+     * outside the domain Core); absent for non-individual runs.
+     */
+    activate?: (executionId: string) => Promise<void>,
   ): Promise<ExecutionInstance> {
     await this.requireWorkspace(workspaceId)
     await this.requireBlock(workspaceId, blockId)
@@ -354,6 +406,11 @@ export class ExecutionService {
       'Pipeline',
       pipelineId,
     )
+
+    // Mint the activation first: if the credential can't be unlocked, fail before
+    // tearing down the block's prior run or creating a new one.
+    const executionId = this.idGenerator.next('exec')
+    await activate?.(executionId)
 
     await this.executionRepository.deleteByBlock(workspaceId, blockId)
 
@@ -383,13 +440,14 @@ export class ExecutionService {
       }
     })
     const instance: ExecutionInstance = {
-      id: this.idGenerator.next('exec'),
+      id: executionId,
       blockId,
       pipelineId: pipeline.id,
       pipelineName: pipeline.name,
       steps,
       currentStep: 0,
       status: 'running',
+      initiatedBy: initiatedBy ?? null,
     }
     await this.executionRepository.upsert(workspaceId, instance)
     await this.blockRepository.update(workspaceId, blockId, {
@@ -1621,6 +1679,9 @@ export class ExecutionService {
       pipelineName: instance.pipelineName,
       workspaceId,
       executionId: instance.id,
+      // Carry the run initiator so the container executor can lease their OWN personal
+      // (individual-usage) subscription for the step. Null on system/dev runs.
+      ...(instance.initiatedBy != null ? { initiatedByUserId: instance.initiatedBy } : {}),
       stepIndex: instance.currentStep,
       isFinalStep,
       block: {
@@ -1751,6 +1812,21 @@ export class ExecutionService {
       this.blockRepository.get(workspaceId, instance.blockId),
     ])
     await this.events.executionChanged(workspaceId, instance, block)
+    // When a run reaches a terminal state, delete its per-run personal-credential
+    // activation immediately (individual-usage subscriptions) so the system-encrypted
+    // token copy doesn't linger to its TTL. Best-effort + idempotent — a missing repo or
+    // a re-emit of an already-cleared run is a no-op, and a failure here must never
+    // derail the emit.
+    if (
+      this.subscriptionActivations &&
+      (instance.status === 'done' || instance.status === 'failed')
+    ) {
+      try {
+        await this.subscriptionActivations.deleteByExecution(instance.id)
+      } catch {
+        // swallow — the TTL sweep will reclaim it
+      }
+    }
   }
 
   /**
@@ -2347,7 +2423,15 @@ export class ExecutionService {
    * work. Mirrors {@link BootstrapService.retry}; both are reached via the unified
    * `POST /agent-runs/:id/retry` endpoint.
    */
-  async retry(workspaceId: string, executionId: string): Promise<ExecutionInstance> {
+  async retry(
+    workspaceId: string,
+    executionId: string,
+    /** The retrying user (their personal subscription is used for individual-usage
+     *  models). Falls back to the original initiator when omitted. */
+    initiatedBy?: number | null,
+    /** Mint the per-run personal-credential activation (see {@link start}). */
+    activate?: (executionId: string) => Promise<void>,
+  ): Promise<ExecutionInstance> {
     await this.requireWorkspace(workspaceId)
     const previous = assertFound(
       await this.executionRepository.get(workspaceId, executionId),
@@ -2360,17 +2444,22 @@ export class ExecutionService {
     await this.requireBlock(workspaceId, previous.blockId)
 
     const { steps, currentStep } = planResumedSteps(previous)
+    // Mint the activation before replacing the failed run, so a bad password aborts
+    // the retry without losing the retryable terminal run.
+    const newId = this.idGenerator.next('exec')
+    await activate?.(newId)
     // Replace the terminal failed run for this block with the resumed one (single
     // run per block, matching the board's by-block projection).
     await this.executionRepository.deleteByBlock(workspaceId, previous.blockId)
     const instance: ExecutionInstance = {
-      id: this.idGenerator.next('exec'),
+      id: newId,
       blockId: previous.blockId,
       pipelineId: previous.pipelineId,
       pipelineName: previous.pipelineName,
       steps,
       currentStep,
       status: 'running',
+      initiatedBy: initiatedBy ?? previous.initiatedBy ?? null,
     }
     await this.executionRepository.upsert(workspaceId, instance)
     const done = steps.filter((s) => s.state === 'done').length

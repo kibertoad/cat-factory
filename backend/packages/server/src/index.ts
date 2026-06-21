@@ -68,6 +68,7 @@ export {
   WebCryptoSecretCipher,
   type WebCryptoSecretCipherOptions,
 } from './crypto/WebCryptoSecretCipher.js'
+export { WebCryptoPersonalSecretCipher } from './crypto/WebCryptoPersonalSecretCipher.js'
 export { GitHubAppAuth, type GitHubAppAuthDependencies } from './github/GitHubAppAuth.js'
 export {
   GitHubAppRegistry,

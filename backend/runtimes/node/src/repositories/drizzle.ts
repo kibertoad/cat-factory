@@ -52,6 +52,7 @@ import {
   blockPatchToColumns,
   rowToBlock,
   rowToExecution,
+  executionToDetail,
   rowToPipeline,
   rowToWorkspace,
 } from '@cat-factory/server'
@@ -341,12 +342,7 @@ class DrizzleExecutionRepository implements ExecutionRepository {
 
   async upsert(workspaceId: string, execution: ExecutionInstance): Promise<void> {
     const now = this.clock.now()
-    const detail = JSON.stringify({
-      pipelineId: execution.pipelineId,
-      pipelineName: execution.pipelineName,
-      steps: execution.steps,
-      currentStep: execution.currentStep,
-    })
+    const detail = executionToDetail(execution)
     // Stamp `service_id` from the run's block (subquery) so a shared service's runs surface on
     // every board that mounts it via `listByService`; refreshed on every write so it follows a
     // reparent that re-homes the block. Mirrors the D1 repo.

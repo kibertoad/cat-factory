@@ -2,7 +2,7 @@ import type { AgentFailure, Clock, ExecutionRepository, RunRef } from '@cat-fact
 import type { ExecutionInstance } from '@cat-factory/contracts'
 import type { D1Database } from '@cloudflare/workers-types'
 import { chunkForIn } from './chunk'
-import { type ExecutionRow, rowToExecution } from './mappers'
+import { type ExecutionRow, executionToDetail, rowToExecution } from './mappers'
 
 /**
  * Execution runs, stored as `kind='execution'` rows of the unified `agent_runs`
@@ -81,12 +81,7 @@ export class D1ExecutionRepository implements ExecutionRepository {
     // `error`/`failure`/`workflow_instance_id` are deliberately left out of the
     // conflict update so they survive normal step writes (see markFailed).
     const now = this.clock.now()
-    const detail = JSON.stringify({
-      pipelineId: execution.pipelineId,
-      pipelineName: execution.pipelineName,
-      steps: execution.steps,
-      currentStep: execution.currentStep,
-    })
+    const detail = executionToDetail(execution)
     // Stamp `service_id` from the run's block so the run is discoverable by service (in-org
     // sharing): a shared service's runs surface on every board that mounts it via
     // `listByService`. Derived here (not carried on ExecutionInstance) and refreshed on every

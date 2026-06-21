@@ -10,7 +10,12 @@ import {
   type RunnerJobResult,
   type SubscriptionVendor,
 } from '@cat-factory/kernel'
-import { SUBSCRIPTION_VENDORS, subscriptionOptionFor } from '@cat-factory/kernel'
+import {
+  CredentialRequiredError,
+  SUBSCRIPTION_VENDORS,
+  isIndividualVendor,
+  subscriptionOptionFor,
+} from '@cat-factory/kernel'
 import {
   type AgentRouting,
   composeBlockSystemPrompt,
@@ -64,6 +69,19 @@ export type LeaseSubscriptionToken = (
   vendor: SubscriptionVendor,
 ) => Promise<LeasedSubscriptionToken>
 
+/**
+ * Lease the run-initiator's OWN activated personal credential for an individual-usage
+ * vendor (Claude). Scoped to the run + user (not pooled); throws a
+ * `CredentialRequiredError` when the run has no live activation (the user must re-enter
+ * their password). Returns just the raw secret — no token id, since there is no pool
+ * rotation/usage to attribute for a single-user credential.
+ */
+export type LeasePersonalSubscriptionToken = (
+  executionId: string,
+  userId: number,
+  vendor: SubscriptionVendor,
+) => Promise<{ secret: string }>
+
 /** Fold a finished subscription job's usage into the leased token + telemetry. */
 export type RecordSubscriptionUsage = (
   workspaceId: string,
@@ -114,6 +132,12 @@ export interface ContainerAgentExecutorDependencies {
    * subscription-only model fails loudly at dispatch.
    */
   leaseSubscriptionToken?: LeaseSubscriptionToken
+  /**
+   * Lease the run-initiator's personal (individual-usage) credential for a vendor like
+   * Claude. Required to run an individual-usage model; absent ⇒ such models fail loudly
+   * at dispatch (the per-user personal store isn't wired on this deployment).
+   */
+  leasePersonalSubscriptionToken?: LeasePersonalSubscriptionToken
   /** Attribute a finished subscription job's usage to its leased token (usage-aware rotation). */
   recordSubscriptionUsage?: RecordSubscriptionUsage
   /**
@@ -463,14 +487,51 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       })
       auth = { harness, proxyBaseUrl: this.deps.proxyBaseUrl, sessionToken }
     } else {
-      if (!this.deps.leaseSubscriptionToken || !subscriptionVendor) {
+      if (!subscriptionVendor) {
         throw new Error(
           `The ${harness} harness is not configured on this deployment; connect a ` +
             `subscription token or pick a different model.`,
         )
       }
-      const leased = await this.deps.leaseSubscriptionToken(workspaceId, subscriptionVendor)
-      subscriptionTokenId = leased.tokenId
+      // Individual-usage vendors (Claude) are NOT pooled: lease the run-initiator's OWN
+      // activated personal credential. Pooled vendors (GLM/Kimi/DeepSeek/Codex) lease
+      // from the workspace pool. Either path hands the RAW credential to the resolved
+      // runner transport (see the trust note below).
+      let secret: string
+      if (isIndividualVendor(subscriptionVendor)) {
+        if (!this.deps.leasePersonalSubscriptionToken) {
+          throw new Error(
+            `Personal ${subscriptionVendor} subscriptions are not configured on this ` +
+              `deployment (no ENCRYPTION_KEY); pick a different model.`,
+          )
+        }
+        if (!context.initiatedByUserId) {
+          // No identified initiator (auth-disabled/local dev): an individual-usage
+          // credential is owned by a specific user and can't be resolved without one.
+          throw new CredentialRequiredError(
+            `Running a ${subscriptionVendor} model requires a signed-in user with a personal subscription.`,
+            { vendor: subscriptionVendor, reason: 'no_subscription' },
+          )
+        }
+        // Throws CredentialRequiredError(password_required) when the run has no live
+        // activation — the dispatch path surfaces it as a clear, retriable failure.
+        const leased = await this.deps.leasePersonalSubscriptionToken(
+          executionId,
+          context.initiatedByUserId,
+          subscriptionVendor,
+        )
+        secret = leased.secret
+      } else {
+        if (!this.deps.leaseSubscriptionToken) {
+          throw new Error(
+            `The ${harness} harness is not configured on this deployment; connect a ` +
+              `subscription token or pick a different model.`,
+          )
+        }
+        const leased = await this.deps.leaseSubscriptionToken(workspaceId, subscriptionVendor)
+        subscriptionTokenId = leased.tokenId
+        secret = leased.secret
+      }
       // SECURITY/TRUST: unlike the Pi harness (short-lived, model-locked proxy session
       // token) this hands the RAW, long-lived subscription credential — a Claude OAuth
       // token or a full ChatGPT auth.json — to the resolved runner transport. For the
@@ -484,7 +545,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       const baseUrl = SUBSCRIPTION_VENDORS[subscriptionVendor].baseUrl
       auth = {
         harness,
-        subscriptionToken: leased.secret,
+        subscriptionToken: secret,
         ...(baseUrl ? { subscriptionBaseUrl: baseUrl } : {}),
       }
     }

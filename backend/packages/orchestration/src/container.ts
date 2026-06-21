@@ -33,6 +33,7 @@ import type { BootstrapRunner } from '@cat-factory/kernel'
 import type { RepoBlueprintRepository } from '@cat-factory/kernel'
 import type { RepoScanner } from '@cat-factory/kernel'
 import type { RequirementReviewRepository } from '@cat-factory/kernel'
+import type { SubscriptionActivationRepository } from '@cat-factory/kernel'
 import type {
   CiStatusProvider,
   MergePresetRepository,
@@ -288,6 +289,12 @@ export interface CoreDependencies {
   // The document/task repositories above are reused, when wired, to fold linked
   // PRDs and tracker issues into the reviewed requirements.
   requirementReviewRepository?: RequirementReviewRepository
+  /**
+   * Optional: per-run personal-credential activations (individual-usage subscriptions).
+   * Passed through to the ExecutionService so a finished run's activation is cleared
+   * promptly. Both runtime facades wire it when ENCRYPTION_KEY is present.
+   */
+  subscriptionActivationRepository?: SubscriptionActivationRepository
   /**
    * Default model the requirements reviewer uses when a block pins none.
    * Independent of the documents config so the reviewer works whenever a model

@@ -5,6 +5,7 @@ import type { Env, ExecutionStartMessage, GitHubSyncMessage } from './infrastruc
 import { D1AgentRunRepository } from './infrastructure/repositories/D1AgentRunRepository'
 import { D1CommitProjectionRepository } from './infrastructure/repositories/D1CommitProjectionRepository'
 import { D1LiveContainerRepository } from './infrastructure/repositories/D1LiveContainerRepository'
+import { D1SubscriptionActivationRepository } from './infrastructure/repositories/D1PersonalSubscriptionRepository'
 import { ContainerInstanceRegistry } from './infrastructure/containers/ContainerInstanceRegistry'
 import { D1RateLimitRepository } from './infrastructure/repositories/D1RateLimitRepository'
 import { D1TokenUsageRepository } from './infrastructure/repositories/D1TokenUsageRepository'
@@ -170,6 +171,25 @@ export default {
           })
           .catch((error) =>
             logger.error({ cron: 'run-sweeper', err: errInfo(error) }, 'run sweep failed'),
+          ),
+      )
+    }
+
+    // Reclaim expired personal-credential activations (individual-usage subscriptions).
+    // Each is a short-lived, system-encrypted per-run copy of a user's token; the TTL
+    // bounds standing exposure and a finished run's rows are deleted at completion, but
+    // this backstop also clears any that outlived their TTL. The table always exists.
+    {
+      const activations = new D1SubscriptionActivationRepository({ db: env.DB })
+      ctx.waitUntil(
+        activations
+          .deleteExpired(clock.now())
+          .then((reclaimed) => {
+            if (reclaimed > 0)
+              logger.info({ cron: 'activation-sweeper', reclaimed }, 'reclaimed activations')
+          })
+          .catch((error) =>
+            logger.error({ cron: 'activation-sweeper', err: errInfo(error) }, 'activation sweep failed'),
           ),
       )
     }

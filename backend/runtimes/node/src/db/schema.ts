@@ -515,6 +515,52 @@ export const providerSubscriptionTokens = pgTable(
   (t) => [index('idx_provider_subs_pool').on(t.workspace_id, t.vendor, t.deleted_at)],
 )
 
+// Individual-usage subscriptions (Claude): per-USER, never pooled (mirror of D1
+// migration 0039). The credential is double-encrypted (password layer inside the
+// system layer).
+export const personalSubscriptions = pgTable(
+  'personal_subscriptions',
+  {
+    id: text('id').primaryKey(),
+    user_id: bigint('user_id', { mode: 'number' }).notNull(),
+    vendor: text('vendor').notNull(),
+    label: text('label').notNull(),
+    token_cipher: text('token_cipher').notNull(),
+    expires_at: bigint('expires_at', { mode: 'number' }),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+    updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
+    last_used_at: bigint('last_used_at', { mode: 'number' }),
+    deleted_at: bigint('deleted_at', { mode: 'number' }),
+  },
+  (t) => [
+    uniqueIndex('idx_personal_subs_user_vendor')
+      .on(t.user_id, t.vendor)
+      .where(sql`${t.deleted_at} IS NULL`),
+    index('idx_personal_subs_expiry')
+      .on(t.expires_at)
+      .where(sql`${t.deleted_at} IS NULL`),
+  ],
+)
+
+// Per-run activations of a personal credential: the raw token re-encrypted with the
+// system key only, scoped to one execution with a TTL (mirror of D1 migration 0039).
+export const subscriptionActivations = pgTable(
+  'subscription_activations',
+  {
+    id: text('id').primaryKey(),
+    execution_id: text('execution_id').notNull(),
+    user_id: bigint('user_id', { mode: 'number' }).notNull(),
+    vendor: text('vendor').notNull(),
+    token_cipher: text('token_cipher').notNull(),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+    expires_at: bigint('expires_at', { mode: 'number' }).notNull(),
+  },
+  (t) => [
+    uniqueIndex('idx_sub_activations_run').on(t.execution_id, t.user_id, t.vendor),
+    index('idx_sub_activations_expiry').on(t.expires_at),
+  ],
+)
+
 // GitHub App installation bindings (mirror of D1 migration 0004 + the account_id /
 // app_id columns from 0017 / 0019). The container executor reads this to resolve a
 // run's installation id and mint a short-lived push token; tokens are cached

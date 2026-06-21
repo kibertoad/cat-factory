@@ -126,6 +126,7 @@ export type {
   FragmentResolver,
 } from './fragment-selector.js'
 export type { SecretCipher } from './secret-cipher.js'
+export type { PersonalSecretCipher } from './personal-secret-cipher.js'
 export type {
   EnvironmentProvider,
   ProvisionEnvironmentRequest,
@@ -181,6 +182,12 @@ export type {
   ProviderSubscriptionTokenRecord,
   ProviderSubscriptionTokenRepository,
 } from './provider-subscription-repositories.js'
+export type {
+  PersonalSubscriptionRecord,
+  PersonalSubscriptionRepository,
+  SubscriptionActivationRecord,
+  SubscriptionActivationRepository,
+} from './personal-subscription-repositories.js'
 export type { BoardWritePort } from './board-operations.js'
 export type { PullRequestMerger } from './pr-merger.js'
 export type { CiCheck, CiStatusReport, CiStatusProvider } from './ci-status.js'

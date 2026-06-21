@@ -202,6 +202,8 @@ interface ExecutionDetail {
   pipelineName: string
   steps: PipelineStep[]
   currentStep: number
+  /** GitHub user id of the run's initiator (individual-usage credential ownership). */
+  initiatedBy: number | null
 }
 
 /** Parse the JSON-encoded structured failure column, tolerating null/garbage. */
@@ -232,5 +234,17 @@ export function rowToExecution(row: ExecutionRow): ExecutionInstance {
     currentStep: detail.currentStep ?? 0,
     status: row.status as ExecutionStatus,
     failure: parseAgentFailure(row.failure),
+    initiatedBy: detail.initiatedBy ?? null,
   }
+}
+
+/** Build the `agent_runs.detail` JSON for an execution instance (shared by both repos). */
+export function executionToDetail(instance: ExecutionInstance): string {
+  return JSON.stringify({
+    pipelineId: instance.pipelineId,
+    pipelineName: instance.pipelineName,
+    steps: instance.steps,
+    currentStep: instance.currentStep,
+    initiatedBy: instance.initiatedBy ?? null,
+  } satisfies ExecutionDetail)
 }

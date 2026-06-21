@@ -343,6 +343,24 @@ export function subscriptionOptionFor(
   return { vendor: model.subscription.vendor, ref: model.subscription.ref }
 }
 
+/** Whether a vendor's subscription is licensed for individual use only (e.g. `claude`). */
+export function isIndividualVendor(vendor: SubscriptionVendor): boolean {
+  return SUBSCRIPTION_VENDORS[vendor].individualOnly === true
+}
+
+/**
+ * The individual-usage vendor a catalog model id runs on, or null. A model triggers
+ * the individual-usage restricted mode (per-user credential, no recurring, etc.) only
+ * when it has a subscription flavour AND that vendor is `individualOnly`. Used by the
+ * engine/controllers to gate a run on the initiator's personal subscription.
+ */
+export function individualVendorForModelId(
+  id: string | undefined | null,
+): SubscriptionVendor | null {
+  const sub = subscriptionOptionFor(id)
+  return sub && isIndividualVendor(sub.vendor) ? sub.vendor : null
+}
+
 /**
  * The effective catalog for a deployment: each model resolved to the flavour that
  * is actually in use given which direct-provider keys are configured. Served to

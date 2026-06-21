@@ -17,6 +17,7 @@ import {
   resolveAgentConfig,
 } from '@cat-factory/agents'
 import {
+  PersonalSubscriptionService,
   ProviderSubscriptionService,
   RunnerPoolConnectionService,
   SLACK_CIPHER_INFO,
@@ -27,6 +28,7 @@ import { type CoreDependencies, createCore } from '@cat-factory/orchestration'
 import {
   buildResolveRepoTarget as buildSharedResolveRepoTarget,
   FanOutEventPublisher,
+  WebCryptoPersonalSecretCipher,
   createWebSearchUpstreamFromEnv,
   logger,
   type ServerContainer,
@@ -50,6 +52,10 @@ import { HttpRunnerPoolProvider } from './runners/HttpRunnerPoolProvider'
 import { RunnerPoolTransport } from './runners/RunnerPoolTransport'
 import { D1RunnerPoolConnectionRepository } from './repositories/D1RunnerPoolConnectionRepository'
 import { D1ProviderSubscriptionTokenRepository } from './repositories/D1ProviderSubscriptionTokenRepository'
+import {
+  D1PersonalSubscriptionRepository,
+  D1SubscriptionActivationRepository,
+} from './repositories/D1PersonalSubscriptionRepository'
 import { ContainerRepoBootstrapper } from './ai/ContainerRepoBootstrapper'
 import { ContainerRepoScanner } from './ai/ContainerRepoScanner'
 import { CompositeAgentExecutor } from './ai/CompositeAgentExecutor'
@@ -172,6 +178,7 @@ function selectAgentExecutor(
   clock: Clock,
   resolveTransport: ResolveRunnerTransport | null,
   subscriptions?: ProviderSubscriptionService,
+  personalSubscriptions?: PersonalSubscriptionService,
 ): AgentExecutor {
   const inline = new AiAgentExecutor({
     modelProvider: buildModelProvider(env),
@@ -191,7 +198,15 @@ function selectAgentExecutor(
   // EXEC_CONTAINER binding or a registered runner pool) is missing. We refuse to
   // start with a half-configured implementer rather than quietly running the
   // repo-operating steps as useless one-shot LLM calls.
-  const container = buildContainerExecutor(env, config, db, clock, resolveTransport, subscriptions)
+  const container = buildContainerExecutor(
+    env,
+    config,
+    db,
+    clock,
+    resolveTransport,
+    subscriptions,
+    personalSubscriptions,
+  )
   if (!container) {
     throw new Error(
       'Container-based implementation is required but its prerequisites are missing. ' +
@@ -536,11 +551,37 @@ function buildSubscriptionService(
   return new ProviderSubscriptionService({
     providerSubscriptionTokenRepository: new D1ProviderSubscriptionTokenRepository({ db }),
     workspaceRepository: new D1WorkspaceRepository({ db }),
-    accountRepository: new D1AccountRepository({ db }),
     secretCipher: new WebCryptoSecretCipher({
       masterKeyBase64,
       info: 'cat-factory:provider-subscriptions',
     }),
+    idGenerator: new CryptoIdGenerator(),
+    clock,
+  })
+}
+
+/**
+ * Build the per-USER individual-usage subscription service (Claude), or undefined when
+ * no ENCRYPTION_KEY is configured. Uses the system SecretCipher (master key, scoped
+ * info) for the outer layer and the password-derived PersonalSecretCipher for the inner
+ * layer of the double-encrypted credential. Shared by the personal-subscription
+ * controller and the container executor's personal lease.
+ */
+function buildPersonalSubscriptionService(
+  env: Env,
+  db: D1Database,
+  clock: Clock,
+): PersonalSubscriptionService | undefined {
+  const masterKeyBase64 = env.ENCRYPTION_KEY?.trim()
+  if (!masterKeyBase64) return undefined
+  return new PersonalSubscriptionService({
+    personalSubscriptionRepository: new D1PersonalSubscriptionRepository({ db }),
+    subscriptionActivationRepository: new D1SubscriptionActivationRepository({ db }),
+    secretCipher: new WebCryptoSecretCipher({
+      masterKeyBase64,
+      info: 'cat-factory:personal-subscriptions',
+    }),
+    personalCipher: new WebCryptoPersonalSecretCipher(),
     idGenerator: new CryptoIdGenerator(),
     clock,
   })
@@ -553,6 +594,7 @@ function buildContainerExecutor(
   clock: Clock,
   resolveTransport: ResolveRunnerTransport | null,
   subscriptions?: ProviderSubscriptionService,
+  personalSubscriptions?: PersonalSubscriptionService,
 ): AgentExecutor | null {
   if (
     !config.github.enabled ||
@@ -589,6 +631,14 @@ function buildContainerExecutor(
             subscriptions.recordTokenUsage(workspaceId, tokenId, usage),
           hasSubscriptionToken: (workspaceId, vendor) =>
             subscriptions.hasToken(workspaceId, vendor),
+        }
+      : {}),
+    // Individual-usage harnesses (Claude) lease the run-initiator's OWN activated
+    // personal credential; absent ⇒ such models fail loudly at dispatch.
+    ...(personalSubscriptions
+      ? {
+          leasePersonalSubscriptionToken: (executionId, userId, vendor) =>
+            personalSubscriptions.leaseForRun(executionId, userId, vendor),
         }
       : {}),
     proxyBaseUrl: `${env.WORKER_PUBLIC_URL.replace(/\/+$/, '')}/v1`,
@@ -1004,6 +1054,10 @@ export function buildContainer(env: Env, overrides: Partial<CoreDependencies> = 
   // vendor-credential controller, so both read the same pool.
   const subscriptions = buildSubscriptionService(env, db, clock)
 
+  // The per-user individual-usage subscription store (Claude) — shared by the
+  // personal-subscription controller and the container executor's personal lease.
+  const personalSubscriptions = buildPersonalSubscriptionService(env, db, clock)
+
   const dependencies: CoreDependencies = {
     workspaceRepository: new D1WorkspaceRepository({ db }),
     accountRepository: new D1AccountRepository({ db }),
@@ -1011,6 +1065,8 @@ export function buildContainer(env: Env, overrides: Partial<CoreDependencies> = 
     blockRepository: new D1BlockRepository({ db }),
     pipelineRepository: new D1PipelineRepository({ db }),
     executionRepository: new D1ExecutionRepository({ db, clock }),
+    // Clear a finished run's personal-credential activation promptly (TTL sweep is the backstop).
+    subscriptionActivationRepository: new D1SubscriptionActivationRepository({ db }),
     serviceRepository: new D1ServiceRepository({ db }),
     workspaceMountRepository: new D1WorkspaceMountRepository({ db }),
     tokenUsageRepository: new D1TokenUsageRepository({ db }),
@@ -1024,7 +1080,15 @@ export function buildContainer(env: Env, overrides: Partial<CoreDependencies> = 
     // production but must not fire for tests that never reach the real executor.
     agentExecutor:
       overrides.agentExecutor ??
-      selectAgentExecutor(env, config, db, clock, resolveTransport, subscriptions),
+      selectAgentExecutor(
+        env,
+        config,
+        db,
+        clock,
+        resolveTransport,
+        subscriptions,
+        personalSubscriptions,
+      ),
     workRunner: selectWorkRunner(env),
     executionEventPublisher: selectEventPublisher(env, db),
     spendPricing: config.spend,
@@ -1062,6 +1126,9 @@ export function buildContainer(env: Env, overrides: Partial<CoreDependencies> = 
     // The vendor-credential (subscription token pool) service the shared controller
     // reads; present when the shared ENCRYPTION_KEY is configured.
     subscriptions,
+    // The per-user individual-usage subscription store (Claude); present when the
+    // shared ENCRYPTION_KEY is configured.
+    personalSubscriptions,
     gateways: {
       // Real-time event delivery via the per-workspace WorkspaceEventsHub DO (when
       // the WORKSPACE_EVENTS namespace is bound; absent → the events route 501s).
