@@ -139,6 +139,13 @@ export interface CoreDependencies {
    */
   llmCallMetricRepository?: LlmCallMetricRepository
   /**
+   * Whether the LLM observability sink persists the full prompt body with each metric.
+   * Defaults to true; set false (via `LLM_RECORD_PROMPTS=false`) to keep the numeric
+   * telemetry while storing the complete prompts empty. Only meaningful when
+   * `llmCallMetricRepository` is wired.
+   */
+  recordLlmPrompts?: boolean
+  /**
    * Drives runs durably outside the starting request. Defaults to a no-op (tests);
    * the worker wires WorkflowsWorkRunner when the Workflows binding is present.
    */
@@ -948,6 +955,7 @@ export function createCore(dependencies: CoreDependencies): Core {
         llmCallMetricRepository: dependencies.llmCallMetricRepository,
         idGenerator: dependencies.idGenerator,
         clock: dependencies.clock,
+        recordPrompts: dependencies.recordLlmPrompts ?? true,
       })
     : undefined
   const environments = createEnvironmentsModule(dependencies)

@@ -329,6 +329,15 @@ export interface Env {
    */
   PROMPT_LIBRARY_SELECTOR?: string
 
+  // ---- LLM observability ----------------------------------------------------
+  /**
+   * Whether the LLM observability sink records the complete prompts sent to the model
+   * ('false' to disable). Default true. When disabled the numeric telemetry (tokens,
+   * timing, finish reason, counts) is still captured, but the prompt body is stored
+   * empty — for deployments that must not retain (potentially sensitive) prompt text.
+   */
+  LLM_RECORD_PROMPTS?: string
+
   // ---- Storage retention (see config.ts and docs/storage-and-retention.md) -
   /**
    * Days of `token_usage` ledger history to keep. The spend budget only reads the

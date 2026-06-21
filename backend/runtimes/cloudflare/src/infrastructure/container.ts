@@ -886,6 +886,7 @@ export function buildContainer(env: Env, overrides: Partial<CoreDependencies> = 
     workspaceMountRepository: new D1WorkspaceMountRepository({ db }),
     tokenUsageRepository: new D1TokenUsageRepository({ db }),
     llmCallMetricRepository: new D1LlmCallMetricRepository({ db }),
+    recordLlmPrompts: config.observability.recordPrompts,
     idGenerator,
     clock,
     // When a caller injects its own agentExecutor (tests pass a FakeAgentExecutor)

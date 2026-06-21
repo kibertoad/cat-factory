@@ -90,6 +90,7 @@ export type {
   ExecutionConfig,
   FragmentLibraryConfig,
   GitHubConfig,
+  ObservabilityConfig,
   PrivilegedAppConfig,
   RetentionConfig,
   RunnerPoolConfig,

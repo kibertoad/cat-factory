@@ -13,6 +13,7 @@ import { type EnvironmentsConfig, loadEnvironmentsConfig } from './environments'
 import { type RunnerPoolConfig, loadRunnerPoolConfig } from './runners'
 import { type RetentionConfig, loadRetentionConfig } from './retention'
 import { type FragmentLibraryConfig, loadFragmentLibraryConfig } from './fragmentLibrary'
+import { type ObservabilityConfig, loadObservabilityConfig } from './observability'
 
 // Translates the flat, string-typed Worker environment into a structured app
 // config — in particular the agent model routing ("which LLM, with what config,
@@ -34,6 +35,7 @@ export type {
   RunnerPoolConfig,
   RetentionConfig,
   FragmentLibraryConfig,
+  ObservabilityConfig,
 }
 
 export function loadConfig(env: Env): AppConfig {
@@ -51,5 +53,6 @@ export function loadConfig(env: Env): AppConfig {
     runners: loadRunnerPoolConfig(env),
     retention: loadRetentionConfig(env),
     fragmentLibrary: loadFragmentLibraryConfig(env),
+    observability: loadObservabilityConfig(env),
   }
 }

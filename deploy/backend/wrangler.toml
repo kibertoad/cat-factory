@@ -232,6 +232,12 @@ SPEND_CURRENCY = "EUR"
 # GITHUB_RATE_LIMIT_RETENTION_DAYS = "7"
 # GITHUB_COMMIT_RETENTION_DAYS = "90"
 
+# LLM observability. The proxy records one metric per container-agent model call.
+# By default each metric keeps the complete prompt sent to the model; set this to
+# "false" to drop the prompt body (the numeric telemetry — tokens, timing, finish
+# reason, counts — is still recorded) for deployments that must not retain prompt text.
+# LLM_RECORD_PROMPTS = "false"
+
 # GitHub App integration. Off until an App is configured: set the App id/slug here
 # and the private key (PKCS#8 PEM) + webhook secret as secrets:
 #   wrangler secret put GITHUB_APP_PRIVATE_KEY

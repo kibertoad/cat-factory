@@ -128,6 +128,17 @@ export interface FragmentLibraryConfig {
   selector: 'llm' | 'deterministic'
 }
 
+export interface ObservabilityConfig {
+  /**
+   * Whether the LLM observability sink persists the full prompt body with each
+   * metric. Default true. When false (`LLM_RECORD_PROMPTS=false`) the numeric
+   * telemetry (tokens, timing, finish reason, message/tool counts) is still recorded,
+   * but the prompt text is stored empty — for deployments that must not retain the
+   * (potentially sensitive) complete prompts sent to the model.
+   */
+  recordPrompts: boolean
+}
+
 export interface AppConfig {
   agents: AgentsConfig
   /** The effective model picker catalog (each model's active flavour). */
@@ -151,4 +162,6 @@ export interface AppConfig {
   retention: RetentionConfig
   /** Prompt-fragment library config; `enabled` is false unless opted in (ADR 0006). */
   fragmentLibrary: FragmentLibraryConfig
+  /** LLM observability config (e.g. whether complete prompts are recorded). */
+  observability: ObservabilityConfig
 }
