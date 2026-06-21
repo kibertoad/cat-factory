@@ -9,6 +9,7 @@ import type { SubscriptionVendor } from '~/types/domain'
 
 const ui = useUiStore()
 const workspace = useWorkspaceStore()
+const accounts = useAccountsStore()
 const creds = useVendorCredentialsStore()
 const toast = useToast()
 
@@ -27,7 +28,34 @@ const VENDORS: { value: SubscriptionVendor; label: string; harness: string }[] =
   { value: 'codex', label: 'ChatGPT (Plus/Pro)', harness: 'Codex' },
 ]
 
+// Anthropic's consumer Claude subscription is licensed for individual use only, so it
+// may not be pooled on a board owned by an organization account — the backend refuses
+// it (see ProviderSubscriptionService). Drop it from the picker for org boards so the
+// option isn't offered at all (legacy connected tokens still list/remove below). The
+// other vendors sell commercial coding-plan keys, so they stay available.
+const isOrgWorkspace = computed(() => {
+  const accountId = workspace.activeWorkspace?.accountId
+  if (!accountId) return false
+  return accounts.accounts.find((a) => a.id === accountId)?.type === 'org'
+})
+
+const visibleVendors = computed(() =>
+  VENDORS.filter((v) => !(isOrgWorkspace.value && v.value === 'claude')),
+)
+
 const vendor = ref<SubscriptionVendor>('claude')
+
+// Keep the selection valid when Claude is hidden (org board): fall back to the first
+// offered vendor so the form never sits on an unselectable option.
+watch(
+  visibleVendors,
+  (vendors) => {
+    if (!vendors.some((v) => v.value === vendor.value)) {
+      vendor.value = vendors[0]?.value ?? 'codex'
+    }
+  },
+  { immediate: true },
+)
 const os = ref<Os>('mac')
 const label = ref('')
 const token = ref('')
@@ -140,12 +168,18 @@ function vendorLabel(v: SubscriptionVendor): string {
           are flat-rate quota — they don’t draw on your spend budget.
         </p>
 
+        <p v-if="isOrgWorkspace" class="text-sm text-amber-400/90">
+          This board belongs to an organization. The Claude (Pro/Max) subscription is licensed for
+          individual use only, so it can’t be connected here — use a commercial coding-plan vendor or
+          an API-key model instead.
+        </p>
+
         <!-- vendor + (codex) OS pickers -->
         <div class="flex flex-wrap items-end gap-3">
           <UFormField label="Vendor">
             <USelect
               v-model="vendor"
-              :items="VENDORS.map((v) => ({ label: v.label, value: v.value }))"
+              :items="visibleVendors.map((v) => ({ label: v.label, value: v.value }))"
               class="w-64"
             />
           </UFormField>

@@ -3,6 +3,7 @@
 '@cat-factory/integrations': minor
 '@cat-factory/worker': patch
 '@cat-factory/node-server': patch
+'@cat-factory/app': patch
 ---
 
 Block individual-only subscriptions (Claude) on organization-owned workspaces.
@@ -19,3 +20,7 @@ the commercial coding-plan vendors (GLM/Kimi/DeepSeek) stay available to orgs.
 The rule is wired symmetrically into both runtimes (Cloudflare + Node/local resolve
 the owning account via the shared `AccountRepository`) and asserted in the
 cross-runtime conformance suite against an org-owned workspace.
+
+The LLM Vendors UI also drops the Claude option (and shows a short note explaining
+why) for org-owned boards, so the disallowed vendor is never offered; the backend
+remains the authoritative gate.
