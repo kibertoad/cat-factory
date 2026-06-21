@@ -1,4 +1,5 @@
 import * as v from 'valibot'
+import { companionVerdictSchema, type CompanionVerdict } from './entities.js'
 
 // ---------------------------------------------------------------------------
 // Requirements-review wire contracts. A stateless reviewer agent inspects a
@@ -66,21 +67,11 @@ export const requirementReviewStatusSchema = v.picklist(['ready', 'incorporated'
 export type RequirementReviewStatus = v.InferOutput<typeof requirementReviewStatusSchema>
 
 /**
- * A companion agent's verdict on the last reworked requirements document: an overall
- * quality rating (0..1) and, when below the threshold, the prose challenge the human
- * must address before reworking again. Null until a rework has been gated.
+ * A companion agent's verdict on the last reworked requirements document — the SAME
+ * standardized {@link companionVerdictSchema} every companion site stores (the
+ * pipeline companion step uses it too). Null until a rework has been gated.
  */
-export const requirementReviewCompanionSchema = v.object({
-  /** Overall quality of the reworked requirements (0..1, higher = better). */
-  rating: v.pipe(v.number(), v.minValue(0), v.maxValue(1)),
-  /** The quality bar the rating had to reach to pass the gate. */
-  threshold: v.pipe(v.number(), v.minValue(0), v.maxValue(1)),
-  /** Whether the rating met the threshold (the reworked doc was accepted). */
-  passed: v.boolean(),
-  /** The companion's challenge / justification, surfaced to the human and fed into the next rework. */
-  feedback: v.string(),
-})
-export type RequirementReviewCompanion = v.InferOutput<typeof requirementReviewCompanionSchema>
+export type RequirementReviewCompanion = CompanionVerdict
 
 /** A completed requirements review for one board block. */
 export const requirementReviewSchema = v.object({
@@ -98,7 +89,7 @@ export const requirementReviewSchema = v.object({
    */
   incorporatedRequirements: v.nullable(v.string()),
   /** The companion's verdict on the last rework (see schema); null before any rework. */
-  companion: v.optional(v.nullable(requirementReviewCompanionSchema)),
+  companion: v.optional(v.nullable(companionVerdictSchema)),
   createdAt: v.number(),
   updatedAt: v.number(),
 })

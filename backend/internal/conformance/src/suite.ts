@@ -343,7 +343,8 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         const exec = ticked.find((e) => e.blockId === 'task_login')!
         expect(exec.status).toBe('done')
         const companionStep = exec.steps.find((s) => s.agentKind === 'reviewer')!
-        expect(companionStep.companion?.rating).toBe(1)
+        expect(companionStep.companion?.verdict?.rating).toBe(1)
+        expect(companionStep.companion?.verdict?.passed).toBe(true)
       })
 
       it('fails the run when a companion stays below threshold past its rework budget', async () => {

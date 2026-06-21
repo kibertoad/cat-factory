@@ -262,6 +262,26 @@ export const stepReviewCommentSchema = v.object({
 export type StepReviewComment = v.InferOutput<typeof stepReviewCommentSchema>
 
 /**
+ * The standardized, stored verdict a quality companion produced for an output it
+ * graded — shared by every companion site (the pipeline companion step and the
+ * requirements-rework gate). The raw model response is {@link companionAssessmentSchema}
+ * (rating + summary + comments); this is the persisted, self-describing record of how
+ * that assessment was applied: the `rating`, the `threshold` it was judged against,
+ * whether it `passed`, and the `feedback` surfaced to the human / fed into a rework.
+ */
+export const companionVerdictSchema = v.object({
+  /** Overall quality of the graded output (0..1, higher = better). */
+  rating: v.pipe(v.number(), v.minValue(0), v.maxValue(1)),
+  /** The quality bar the rating had to reach to pass. */
+  threshold: v.pipe(v.number(), v.minValue(0), v.maxValue(1)),
+  /** Whether the rating met the threshold. */
+  passed: v.boolean(),
+  /** The companion's challenge / justification (its assessment summary). */
+  feedback: v.string(),
+})
+export type CompanionVerdict = v.InferOutput<typeof companionVerdictSchema>
+
+/**
  * A human approval gate raised after a step whose pipeline marked it
  * `requiresApproval`. Unlike a {@link Decision} (which an agent raises and which
  * re-runs the same step on resolution), an approval gate fires once the step has
@@ -466,10 +486,14 @@ export const pipelineStepSchema = v.object({
   companion: v.optional(
     v.nullable(
       v.object({
-        rating: v.optional(v.number()),
+        /** The quality bar (0..1) this step's rating must reach; seeded from the pipeline. */
         threshold: v.number(),
+        /** How many times the companion has graded so far (the rework budget counter). */
         attempts: v.number(),
+        /** The rework budget: once `attempts` hits this the run fails (`companion_rejected`). */
         maxAttempts: v.number(),
+        /** The latest standardized verdict (see {@link companionVerdictSchema}); null before the first grade. */
+        verdict: v.optional(v.nullable(companionVerdictSchema)),
       }),
     ),
   ),

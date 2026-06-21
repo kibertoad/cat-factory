@@ -142,8 +142,9 @@ export type {
   RequirementGroup,
   SpecDoc,
   SpecVersion,
-  // Companion-agent assessment shapes.
+  // Companion-agent shapes: the raw model assessment + the standardized stored verdict.
   CompanionAssessment,
+  CompanionVerdict,
   // CI gate / merge-policy shapes.
   CiStepState,
   MergeAssessment,

@@ -972,10 +972,17 @@ export class ExecutionService {
     // A broken critic (no producer to grade, or an unparseable verdict) passes through
     // rather than wedging the run: record a perfect score and advance.
     const rating = assessment && producerIndex >= 0 ? assessment.rating : 1
+    const feedback = assessment?.summary ?? ''
     companion.attempts += 1
-    companion.rating = rating
+    // Record the standardized verdict (the same shape the requirements-rework gate stores).
+    companion.verdict = {
+      rating,
+      threshold: companion.threshold,
+      passed: rating >= companion.threshold,
+      feedback,
+    }
     step.companion = companion
-    step.output = assessment?.summary ?? result.output ?? ''
+    step.output = feedback || result.output || ''
 
     // PASS: the producer cleared the bar.
     if (rating >= companion.threshold) {
