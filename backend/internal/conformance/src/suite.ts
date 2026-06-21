@@ -217,7 +217,10 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         const querying = app
           .executionEmits('task_login')
           .find((e) => e.steps[0]?.state === 'working' && e.steps[0]?.model === 'fake')
-        expect(querying, 'expected an emit with the first step querying and its model set').toBeTruthy()
+        expect(
+          querying,
+          'expected an emit with the first step querying and its model set',
+        ).toBeTruthy()
 
         const snap = (await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)).body
         const task = snap.blocks.find((b) => b.id === 'task_login')!

@@ -1,5 +1,10 @@
 import { generateText } from 'ai'
-import type { Block, CompanionVerdict, RequirementReview, ReviewItemStatus } from '@cat-factory/kernel'
+import type {
+  Block,
+  CompanionVerdict,
+  RequirementReview,
+  ReviewItemStatus,
+} from '@cat-factory/kernel'
 import { assertFound, ValidationError } from '@cat-factory/kernel'
 import type { BlockRepository } from '@cat-factory/kernel'
 import type { Clock, IdGenerator } from '@cat-factory/kernel'

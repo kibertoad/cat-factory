@@ -12,7 +12,7 @@ failing as `evicted`: a rollout can cycle the container two or more times in sec
 which exhausted the single crash-eviction recovery budget and tripped the
 "deterministic" path. This is transient infrastructure churn, not a sick run.
 
-The execution engine now distinguishes a *transient* eviction from a crash/OOM and
+The execution engine now distinguishes a _transient_ eviction from a crash/OOM and
 recovers it on a larger budget (`MAX_TRANSIENT_EVICTION_RECOVERIES`), tracked on its
 own `PipelineStep.transientEvictionRecoveries` counter; recoveries are naturally
 spaced by the job poll interval, so a bounded handful rides out a normal rollout

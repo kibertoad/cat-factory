@@ -26,7 +26,8 @@ function rowToReview(row: RequirementReviewRow): RequirementReview {
   if (row.companion) {
     try {
       const parsed = JSON.parse(row.companion)
-      if (Array.isArray(parsed)) companionVerdicts = parsed as RequirementReview['companionVerdicts']
+      if (Array.isArray(parsed))
+        companionVerdicts = parsed as RequirementReview['companionVerdicts']
     } catch {
       companionVerdicts = []
     }

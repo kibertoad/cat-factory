@@ -45,7 +45,14 @@ describe('standard solution-phase prompts', () => {
   describe('system prompts', () => {
     it('routes the standard kinds through the built-out phase prompts', () => {
       expect(systemPromptFor('coder')).toBe(standardSystemPrompt('build'))
-      expect(systemPromptFor('reviewer')).toBe(standardSystemPrompt('review'))
+      expect(systemPromptFor('architect')).toBe(standardSystemPrompt('design'))
+      expect(systemPromptFor('tester')).toBe(standardSystemPrompt('test'))
+    })
+
+    it('routes `reviewer` through the companion prompt (it is now the coder’s companion)', () => {
+      // `reviewer` is a companion, so it grades the coder's output rather than serving
+      // the standard `review` phase prompt.
+      expect(systemPromptFor('reviewer')).toContain('quality companion')
     })
 
     it('still serves thin roles for non-standard and custom kinds', () => {

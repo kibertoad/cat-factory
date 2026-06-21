@@ -7,7 +7,7 @@ from universally reading "Decision needed".
 
 A task parked on a step's **approval gate** (`requiresApproval`) showed up on the
 board as "Decision needed" with no badge and a click that did nothing — the task
-card only ever handled agent-raised *decisions*, never approvals, so an
+card only ever handled agent-raised _decisions_, never approvals, so an
 approval-gated run looked stuck with nothing to act on. (The frame badge,
 inspector and focus view already surfaced it; only the task card was a dead end.)
 

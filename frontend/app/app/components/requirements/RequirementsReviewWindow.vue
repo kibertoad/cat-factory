@@ -356,7 +356,8 @@ async function rework() {
                     : 'border-emerald-500/30 bg-emerald-500/5'
                 "
               >
-                <div class="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide"
+                <div
+                  class="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide"
                   :class="companionRejected ? 'text-amber-400' : 'text-emerald-400'"
                 >
                   <UIcon
@@ -374,13 +375,10 @@ async function rework() {
                 >
                   {{ companion.feedback }}
                 </p>
-                <p
-                  v-if="companionRejected"
-                  class="mt-2 text-[11px] text-slate-400"
-                >
+                <p v-if="companionRejected" class="mt-2 text-[11px] text-slate-400">
                   The reworked requirements were not accepted. Address the points above (answer or
-                  refine the findings), then re-run the rework — the companion's feedback is fed back
-                  into it.
+                  refine the findings), then re-run the rework — the companion's feedback is fed
+                  back into it.
                 </p>
                 <p v-else class="mt-1 text-[11px] text-slate-400">
                   The reworked requirements cleared the quality bar and now feed every downstream
@@ -388,8 +386,13 @@ async function rework() {
                 </p>
 
                 <!-- full correction sequence: every rework cycle's verdict, in order -->
-                <div v-if="companionVerdicts.length > 1" class="mt-3 border-t border-slate-800/60 pt-2">
-                  <div class="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                <div
+                  v-if="companionVerdicts.length > 1"
+                  class="mt-3 border-t border-slate-800/60 pt-2"
+                >
+                  <div
+                    class="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500"
+                  >
                     Correction history · {{ companionVerdicts.length }} iteration(s)
                   </div>
                   <ol class="space-y-1.5">
@@ -400,7 +403,11 @@ async function rework() {
                     >
                       <span
                         class="mt-px inline-flex h-4 shrink-0 items-center rounded px-1 font-mono tabular-nums"
-                        :class="v.passed ? 'bg-emerald-500/15 text-emerald-300' : 'bg-amber-500/15 text-amber-300'"
+                        :class="
+                          v.passed
+                            ? 'bg-emerald-500/15 text-emerald-300'
+                            : 'bg-amber-500/15 text-amber-300'
+                        "
                       >
                         {{ i + 1 }}
                       </span>
@@ -408,7 +415,9 @@ async function rework() {
                         <span :class="v.passed ? 'text-emerald-300' : 'text-amber-300'">
                           {{ pctOf(v.rating) }} {{ v.passed ? '≥' : '<' }} {{ pctOf(v.threshold) }}
                         </span>
-                        <span v-if="v.feedback" class="ml-1 text-slate-400">— {{ v.feedback }}</span>
+                        <span v-if="v.feedback" class="ml-1 text-slate-400"
+                          >— {{ v.feedback }}</span
+                        >
                       </div>
                     </li>
                   </ol>

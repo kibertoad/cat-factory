@@ -81,7 +81,14 @@ describe('CompositeAgentExecutor', () => {
 
   it('throws for repo-operating kinds when no container is wired (no inline fallback)', async () => {
     const noSandbox = new CompositeAgentExecutor(new Tagged('inline'), null)
-    for (const kind of ['coder', 'mocker', 'playwright', 'blueprints', 'business-documenter', 'architect']) {
+    for (const kind of [
+      'coder',
+      'mocker',
+      'playwright',
+      'blueprints',
+      'business-documenter',
+      'architect',
+    ]) {
       // pick() throws synchronously, so run()/runsAsync()/startJob() all throw.
       expect(() => noSandbox.run(ctx(kind))).toThrow(/needs a real checkout/)
       expect(() => noSandbox.runsAsync(ctx(kind))).toThrow(/needs a real checkout/)

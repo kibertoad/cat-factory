@@ -70,7 +70,8 @@ const durationMs = computed(() => {
   // Freeze the clock at the failure time once the run has failed (a mid-flight
   // step has no `finishedAt`, so the live tick would otherwise count up forever).
   const end =
-    s.finishedAt ?? (runFailed.value ? (instance.value?.failure?.occurredAt ?? s.startedAt) : nowTick.value)
+    s.finishedAt ??
+    (runFailed.value ? (instance.value?.failure?.occurredAt ?? s.startedAt) : nowTick.value)
   return Math.max(0, end - s.startedAt)
 })
 
@@ -633,7 +634,11 @@ watch(
                     >
                       <span
                         class="mt-px inline-flex h-4 shrink-0 items-center rounded px-1 font-mono text-[11px] tabular-nums"
-                        :class="v.passed ? 'bg-emerald-500/15 text-emerald-300' : 'bg-amber-500/15 text-amber-300'"
+                        :class="
+                          v.passed
+                            ? 'bg-emerald-500/15 text-emerald-300'
+                            : 'bg-amber-500/15 text-amber-300'
+                        "
                       >
                         {{ i + 1 }}
                       </span>
@@ -641,14 +646,13 @@ watch(
                         <span :class="v.passed ? 'text-emerald-300' : 'text-amber-300'">
                           {{ pctOf(v.rating) }} {{ v.passed ? '≥' : '<' }} {{ pctOf(v.threshold) }}
                         </span>
-                        <span v-if="v.feedback" class="ml-1 text-slate-400">— {{ v.feedback }}</span>
+                        <span v-if="v.feedback" class="ml-1 text-slate-400"
+                          >— {{ v.feedback }}</span
+                        >
                       </div>
                     </li>
                   </ol>
-                  <p
-                    v-if="companionVerdicts.length > 1"
-                    class="mt-1 text-[11px] text-slate-500"
-                  >
+                  <p v-if="companionVerdicts.length > 1" class="mt-1 text-[11px] text-slate-500">
                     {{ companionVerdicts.length }} correction iteration(s).
                   </p>
                 </div>

@@ -48,7 +48,9 @@ describe('buildStreamChunks', () => {
 
     // Penultimate carries the finish reason; the last is usage-only (empty choices).
     const finishChunk = chunks.at(-2)!
-    expect((finishChunk.choices as Array<{ finish_reason?: string }>)[0]!.finish_reason).toBe('stop')
+    expect((finishChunk.choices as Array<{ finish_reason?: string }>)[0]!.finish_reason).toBe(
+      'stop',
+    )
     const usageChunk = chunks.at(-1)!
     expect(usageChunk.choices).toEqual([])
     expect(usageChunk.usage).toEqual({ prompt_tokens: 11, completion_tokens: 7, total_tokens: 18 })
@@ -92,7 +94,9 @@ describe('buildStreamChunks', () => {
     })
 
     const kinds = chunks.map((c) => {
-      const choice = (c.choices as Array<{ delta?: Record<string, unknown>; finish_reason?: unknown }>)[0]
+      const choice = (
+        c.choices as Array<{ delta?: Record<string, unknown>; finish_reason?: unknown }>
+      )[0]
       if (!choice) return 'usage'
       if (choice.delta?.role) return 'role'
       if (choice.delta?.content) return 'content'

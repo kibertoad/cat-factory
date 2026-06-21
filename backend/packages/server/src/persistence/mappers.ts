@@ -170,9 +170,7 @@ export function rowToPipeline(row: PipelineRow): Pipeline {
     name: row.name,
     agentKinds: JSON.parse(row.agent_kinds) as Pipeline['agentKinds'],
     ...(row.gates ? { gates: JSON.parse(row.gates) as boolean[] } : {}),
-    ...(row.thresholds
-      ? { thresholds: JSON.parse(row.thresholds) as Pipeline['thresholds'] }
-      : {}),
+    ...(row.thresholds ? { thresholds: JSON.parse(row.thresholds) as Pipeline['thresholds'] } : {}),
   }
 }
 

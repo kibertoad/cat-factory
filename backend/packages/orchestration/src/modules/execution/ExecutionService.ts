@@ -2156,7 +2156,12 @@ export class ExecutionService {
         instance.currentStep = producerIndex
         if (instance.status === 'blocked') instance.status = 'running'
         await this.executionRepository.upsert(workspaceId, instance)
-        await this.workRunner.signalDecision(workspaceId, instance.id, approvalId, 'changes_requested')
+        await this.workRunner.signalDecision(
+          workspaceId,
+          instance.id,
+          approvalId,
+          'changes_requested',
+        )
         await this.emitInstance(workspaceId, instance)
         return instance
       }

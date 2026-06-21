@@ -97,13 +97,19 @@ describe('resolveStructuredOutput', () => {
   })
 
   it('makes a structured repair call when the primary is unparseable and recovers', async () => {
-    const fetchMock = vi.fn(async () => jsonResponse({ choices: [{ message: { content: '{"ok":true,"v":2}' } }] }))
+    const fetchMock = vi.fn(async () =>
+      jsonResponse({ choices: [{ message: { content: '{"ok":true,"v":2}' } }] }),
+    )
     vi.stubGlobal('fetch', fetchMock)
 
     const res = await resolveStructuredOutput(spec, 'this is not json at all', access)
 
     expect(res.value).toEqual({ ok: true, v: 2 })
-    expect(res.diagnostics).toMatchObject({ parsedOn: 'repair', repairAttempted: true, repairSucceeded: true })
+    expect(res.diagnostics).toMatchObject({
+      parsedOn: 'repair',
+      repairAttempted: true,
+      repairSucceeded: true,
+    })
 
     // The repair call hits the proxy's chat-completions route with json_object + a bearer token.
     expect(fetchMock).toHaveBeenCalledTimes(1)
@@ -122,7 +128,9 @@ describe('resolveStructuredOutput', () => {
       // First call (with response_format) is rejected by the upstream.
       .mockResolvedValueOnce(new Response('unsupported response_format', { status: 400 }))
       // Retry without response_format succeeds.
-      .mockResolvedValueOnce(jsonResponse({ choices: [{ message: { content: '{"ok":true,"v":7}' } }] }))
+      .mockResolvedValueOnce(
+        jsonResponse({ choices: [{ message: { content: '{"ok":true,"v":7}' } }] }),
+      )
     vi.stubGlobal('fetch', fetchMock)
 
     const res = await resolveStructuredOutput(spec, 'not json', access)
@@ -131,7 +139,9 @@ describe('resolveStructuredOutput', () => {
     expect(res.diagnostics).toMatchObject({ parsedOn: 'repair', repairSucceeded: true })
     expect(fetchMock).toHaveBeenCalledTimes(2)
     // First body asks for json_object; the fallback drops it.
-    expect(JSON.parse((fetchMock.mock.calls[0]![1] as RequestInit).body as string).response_format).toEqual({
+    expect(
+      JSON.parse((fetchMock.mock.calls[0]![1] as RequestInit).body as string).response_format,
+    ).toEqual({
       type: 'json_object',
     })
     expect(
@@ -140,7 +150,10 @@ describe('resolveStructuredOutput', () => {
   })
 
   it('reports unrecoverable when the repair output still does not parse', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({ choices: [{ message: { content: 'still broken' } }] })))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse({ choices: [{ message: { content: 'still broken' } }] })),
+    )
 
     const res = await resolveStructuredOutput(spec, '<garbage>', access)
 

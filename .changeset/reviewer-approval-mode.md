@@ -32,7 +32,7 @@ quotes that block's verbatim raw markdown), leave overall freeform feedback, the
   human's edits become the approved proposal carried forward (the existing
   `approveStep` proposal override — no backend change). Manual edits are a distinct
   mode and can't be combined with per-block comments / request-changes — they only
-  happen *together with* approving.
+  happen _together with_ approving.
 
 The review surface is responsive — a right-side rail on wide screens, a bottom
 sheet below `lg` — so a pending gate is always actionable. Reject uses a two-step

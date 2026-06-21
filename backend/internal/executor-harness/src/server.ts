@@ -73,10 +73,7 @@ const limits = loadRunnerLimits()
 const jobs = new JobRegistry(limits)
 const bootstrapJobs = new JobRegistry<BootstrapJob, BootstrapResult>(limits, handleBootstrap)
 const blueprintJobs = new JobRegistry<BlueprintJob, BlueprintResult>(limits, handleBlueprint)
-const specJobs = new JobRegistry<SpecJob, SpecResult>(
-  limits,
-  handleSpec,
-)
+const specJobs = new JobRegistry<SpecJob, SpecResult>(limits, handleSpec)
 const ciFixerJobs = new JobRegistry<CiFixerJob, CiFixerResult>(limits, handleCiFixer)
 const conflictResolverJobs = new JobRegistry<ConflictResolverJob, ConflictResolverResult>(
   limits,

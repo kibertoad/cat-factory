@@ -91,9 +91,7 @@ describe('coerceSpecDoc', () => {
   })
 
   it('unwraps a { requirements: {...} } envelope', () => {
-    expect(coerceSpecDoc({ requirements: { service: 'API' } }, 'fallback')?.service).toBe(
-      'API',
-    )
+    expect(coerceSpecDoc({ requirements: { service: 'API' } }, 'fallback')?.service).toBe('API')
   })
 
   it('drops acceptance criteria with no Then clause', () => {
@@ -229,9 +227,7 @@ const sampleDoc: SpecDocTree = {
 
 describe('renderSpecFiles', () => {
   it('renders the canonical JSON, an overview, and a rules file', () => {
-    const byPath = Object.fromEntries(
-      renderSpecFiles(sampleDoc).map((f) => [f.path, f.content]),
-    )
+    const byPath = Object.fromEntries(renderSpecFiles(sampleDoc).map((f) => [f.path, f.content]))
     expect(JSON.parse(byPath['spec/spec.json']!)).toEqual(sampleDoc)
 
     const overview = byPath['spec/overview.md']!

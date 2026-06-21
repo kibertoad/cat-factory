@@ -250,10 +250,7 @@ function dedupeIds(doc: SpecDocTree): void {
  * Tolerates either a bare doc object or `{ requirements: {...} }`. The Worker
  * re-validates the returned doc against the strict Valibot schema before use.
  */
-export function coerceSpecDoc(
-  parsed: unknown,
-  fallbackName: string,
-): SpecDocTree | null {
+export function coerceSpecDoc(parsed: unknown, fallbackName: string): SpecDocTree | null {
   if (typeof parsed !== 'object' || parsed === null) return null
   const root = parsed as Record<string, unknown>
   const obj =
@@ -325,10 +322,7 @@ async function readExistingVersion(dir: string): Promise<SpecVersionTree | null>
 }
 
 /** Read + parse the existing requirements doc, if any (so the agent refines in place). */
-async function readExistingSpec(
-  dir: string,
-  fallbackName: string,
-): Promise<SpecDocTree | null> {
+async function readExistingSpec(dir: string, fallbackName: string): Promise<SpecDocTree | null> {
   try {
     const raw = await readFile(join(dir, SPEC_JSON_PATH), 'utf8')
     return coerceSpecDoc(JSON.parse(raw), fallbackName)
@@ -591,10 +585,7 @@ async function checkoutOrCreateBranch(
 }
 
 /** Run one requirements job end to end. */
-export async function handleSpec(
-  job: SpecJob,
-  opts: RunOptions = {},
-): Promise<SpecResult> {
+export async function handleSpec(job: SpecJob, opts: RunOptions = {}): Promise<SpecResult> {
   const { signal } = opts
   const trace = { jobId: job.jobId, repo: `${job.repo.owner}/${job.repo.name}`, branch: job.branch }
   return withWorkspace('requirements', async (dir) => {
@@ -640,7 +631,11 @@ export async function handleSpec(
       },
     )
     if (!doc) {
-      return { summary, stats, error: noRequirementsReason(stats, summary, stderrTail, diagnostics) }
+      return {
+        summary,
+        stats,
+        error: noRequirementsReason(stats, summary, stderrTail, diagnostics),
+      }
     }
 
     const version = nextSpecVersion(doc, previousVersion, new Date())
