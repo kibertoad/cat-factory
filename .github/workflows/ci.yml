@@ -4,6 +4,8 @@ on:
   push:
     branches: [main]
   pull_request:
+  # Allow manual runs on any branch so CI changes can be measured before merge.
+  workflow_dispatch:
 
 # Cancel superseded runs on the same ref to save CI minutes.
 concurrency:
@@ -70,6 +72,25 @@ jobs:
           node-version: 24
           cache: pnpm
 
+      - name: Cache node_modules
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          # Dependency dirs + Nuxt's prepared types (.nuxt), so `pnpm install`
+          # is a near-no-op on a hit and the frontend typecheck still resolves.
+          path: |
+            node_modules
+            backend/packages/*/node_modules
+            backend/runtimes/*/node_modules
+            backend/internal/*/node_modules
+            frontend/app/node_modules
+            frontend/app/.nuxt
+            deploy/backend/node_modules
+            deploy/frontend/node_modules
+            deploy/frontend/.nuxt
+            deploy/node/node_modules
+            deploy/local/node_modules
+          key: node-modules-${{ runner.os }}-node24-${{ hashFiles('pnpm-lock.yaml') }}
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
@@ -95,6 +116,25 @@ jobs:
           node-version: 24
           cache: pnpm
 
+      - name: Cache node_modules
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          # Dependency dirs + Nuxt's prepared types (.nuxt), so `pnpm install`
+          # is a near-no-op on a hit and the frontend typecheck still resolves.
+          path: |
+            node_modules
+            backend/packages/*/node_modules
+            backend/runtimes/*/node_modules
+            backend/internal/*/node_modules
+            frontend/app/node_modules
+            frontend/app/.nuxt
+            deploy/backend/node_modules
+            deploy/frontend/node_modules
+            deploy/frontend/.nuxt
+            deploy/node/node_modules
+            deploy/local/node_modules
+          key: node-modules-${{ runner.os }}-node24-${{ hashFiles('pnpm-lock.yaml') }}
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
@@ -110,15 +150,72 @@ jobs:
       - name: Typecheck frontend layer
         run: pnpm --filter @cat-factory/app run typecheck
 
-  test:
-    name: Test
+  # The Cloudflare worker suite (58 files) is the dominant test cost, and its
+  # per-file overhead is intrinsic pool-workers isolate setup — embarrassingly
+  # parallel across jobs but not within one. Split it into 2 shards via vitest
+  # --shard (deterministic file partition); each shard runs in its own miniflare
+  # local D1, so there is no cross-shard contention. No Postgres here — the
+  # worker uses a local D1 inside the Workers pool.
+  test-worker:
+    name: Test worker (shard ${{ matrix.shard }})
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    # Real Postgres for the Node facade's tests (the cross-runtime conformance suite +
-    # the pg-boss durable-execution test) — the same persistence used in dev/prod, so
-    # the Drizzle repos + schema are exercised for real. The Worker tests use a local
-    # D1 inside the Workers pool and ignore this.
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6.0.8
+
+      - name: Set up Node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Cache node_modules
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          # Dependency dirs + Nuxt's prepared types (.nuxt), so `pnpm install`
+          # is a near-no-op on a hit and the frontend typecheck still resolves.
+          path: |
+            node_modules
+            backend/packages/*/node_modules
+            backend/runtimes/*/node_modules
+            backend/internal/*/node_modules
+            frontend/app/node_modules
+            frontend/app/.nuxt
+            deploy/backend/node_modules
+            deploy/frontend/node_modules
+            deploy/frontend/.nuxt
+            deploy/node/node_modules
+            deploy/local/node_modules
+          key: node-modules-${{ runner.os }}-node24-${{ hashFiles('pnpm-lock.yaml') }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Per-package tests resolve workspace deps against built dist, so build first.
+      - name: Build libraries
+        run: pnpm build
+
+      - name: Run worker shard
+        run: pnpm --filter @cat-factory/worker exec vitest run --shard=${{ matrix.shard }}/2
+
+  # Everything except the worker: the Postgres-backed Node/Local conformance
+  # suites (the only tests that need a database) plus every pure-unit package.
+  # Postgres is scoped to this job so the worker shards don't pay its ~20s init.
+  test-rest:
+    name: Test rest (node/local + units)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
     services:
       postgres:
         image: postgres:18
@@ -149,11 +246,50 @@ jobs:
           node-version: 24
           cache: pnpm
 
+      - name: Cache node_modules
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          # Dependency dirs + Nuxt's prepared types (.nuxt), so `pnpm install`
+          # is a near-no-op on a hit and the frontend typecheck still resolves.
+          path: |
+            node_modules
+            backend/packages/*/node_modules
+            backend/runtimes/*/node_modules
+            backend/internal/*/node_modules
+            frontend/app/node_modules
+            frontend/app/.nuxt
+            deploy/backend/node_modules
+            deploy/frontend/node_modules
+            deploy/frontend/.nuxt
+            deploy/node/node_modules
+            deploy/local/node_modules
+          key: node-modules-${{ runner.os }}-node24-${{ hashFiles('pnpm-lock.yaml') }}
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Run tests
-        run: pnpm test:run
+      - name: Build libraries
+        run: pnpm build
+
+      - name: Run non-worker tests
+        run: pnpm --filter='!@cat-factory/worker' -r run test:run
+
+  # Single aggregated status named "Test" so branch protection can require one
+  # check regardless of the job/shard layout. Fails unless every test job passed.
+  test-gate:
+    name: Test
+    needs: [test-worker, test-rest]
+    if: always()
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Verify all test jobs passed
+        env:
+          WORKER: ${{ needs.test-worker.result }}
+          REST: ${{ needs.test-rest.result }}
+        run: |
+          echo "worker shards: $WORKER | rest: $REST"
+          test "$WORKER" = "success" && test "$REST" = "success"
 
   acceptance:
     name: Container acceptance (Docker)
@@ -170,11 +306,37 @@ jobs:
       - name: Install pnpm
         uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6.0.8
 
+      # zizmor flags cache-poisoning because this job also builds an image
+      # (docker/build-push-action below). It is a false positive here: these host
+      # caches (pnpm store + node_modules) never feed that image — the Dockerfile
+      # runs its own npm install inside Docker — and the image is loaded for the
+      # acceptance test only, never pushed/published. The published runner image
+      # is built separately with no-cache (docker-publish.yml). Caching is for the
+      # host-side test scaffolding only.
       - name: Set up Node
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0 # zizmor: ignore[cache-poisoning]
         with:
           node-version: 24
           cache: pnpm
+
+      - name: Cache node_modules
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3 # zizmor: ignore[cache-poisoning]
+        with:
+          # Dependency dirs + Nuxt's prepared types (.nuxt), so `pnpm install`
+          # is a near-no-op on a hit and the frontend typecheck still resolves.
+          path: |
+            node_modules
+            backend/packages/*/node_modules
+            backend/runtimes/*/node_modules
+            backend/internal/*/node_modules
+            frontend/app/node_modules
+            frontend/app/.nuxt
+            deploy/backend/node_modules
+            deploy/frontend/node_modules
+            deploy/frontend/.nuxt
+            deploy/node/node_modules
+            deploy/local/node_modules
+          key: node-modules-${{ runner.os }}-node24-${{ hashFiles('pnpm-lock.yaml') }}
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -184,11 +346,30 @@ jobs:
       - name: Build libraries
         run: pnpm build
 
-      # Builds and launches the executor Docker image and drives a full
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
+
+      # Pre-build the executor image with a cross-run GHA layer cache and load it
+      # into the daemon. The expensive layers (apt git, the global Pi CLI install,
+      # the two Pi extensions) restore from cache instead of rebuilding every run.
+      # The suite then skips its own (uncached) `docker build` via the env flag.
+      - name: Build executor image (cached)
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
+        with:
+          context: backend/internal/executor-harness
+          file: backend/internal/executor-harness/Dockerfile
+          tags: cat-factory-impl-acceptance
+          load: true
+          cache-from: type=gha,scope=executor-harness
+          cache-to: type=gha,mode=max,scope=executor-harness
+
+      # Launches the pre-built executor image and drives a full
       # clone → Pi → commit → push → PR against a dummy streaming LLM proxy and a
       # stub GitHub API (no real provider/GitHub). The runner has Docker +
       # host-gateway, so the suite runs rather than self-skipping.
       - name: Container acceptance tests
+        env:
+          ACCEPTANCE_PREBUILT_IMAGE: '1'
         run: pnpm --filter @cat-factory/executor-harness run test:acceptance
 
   changeset:
@@ -212,6 +393,25 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
+
+      - name: Cache node_modules
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          # Dependency dirs + Nuxt's prepared types (.nuxt), so `pnpm install`
+          # is a near-no-op on a hit and the frontend typecheck still resolves.
+          path: |
+            node_modules
+            backend/packages/*/node_modules
+            backend/runtimes/*/node_modules
+            backend/internal/*/node_modules
+            frontend/app/node_modules
+            frontend/app/.nuxt
+            deploy/backend/node_modules
+            deploy/frontend/node_modules
+            deploy/frontend/.nuxt
+            deploy/node/node_modules
+            deploy/local/node_modules
+          key: node-modules-${{ runner.os }}-node24-${{ hashFiles('pnpm-lock.yaml') }}
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
