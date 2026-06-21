@@ -161,6 +161,7 @@ function selectAgentExecutor(
   db: D1Database,
   clock: Clock,
   resolveTransport: ResolveRunnerTransport | null,
+  subscriptions?: ProviderSubscriptionService,
 ): AgentExecutor {
   const inline = new AiAgentExecutor({
     modelProvider: buildModelProvider(env),
@@ -180,7 +181,7 @@ function selectAgentExecutor(
   // EXEC_CONTAINER binding or a registered runner pool) is missing. We refuse to
   // start with a half-configured implementer rather than quietly running the
   // repo-operating steps as useless one-shot LLM calls.
-  const container = buildContainerExecutor(env, config, db, clock, resolveTransport)
+  const container = buildContainerExecutor(env, config, db, clock, resolveTransport, subscriptions)
   if (!container) {
     throw new Error(
       'Container-based implementation is required but its prerequisites are missing. ' +
@@ -469,6 +470,7 @@ function buildContainerExecutor(
   db: D1Database,
   clock: Clock,
   resolveTransport: ResolveRunnerTransport | null,
+  subscriptions?: ProviderSubscriptionService,
 ): AgentExecutor | null {
   if (
     !config.github.enabled ||
@@ -483,7 +485,6 @@ function buildContainerExecutor(
 
   const registry = buildAppRegistry(env, config, db, clock)
   const resolveRepoTarget = buildResolveRepoTarget(db)
-  const subscriptions = buildSubscriptionService(env, db, clock)
 
   return new ContainerAgentExecutor({
     resolveTransport,
@@ -916,6 +917,11 @@ export function buildContainer(env: Env, overrides: Partial<CoreDependencies> = 
   // Cloudflare transport for free. Null when no backend is configured.
   const resolveTransport = buildResolveTransport(env, config, db, clock)
 
+  // The subscription-token pool (Claude Code / Codex credentials) — built once and
+  // shared by the container executor (lease + usage feedback) and the
+  // vendor-credential controller, so both read the same pool.
+  const subscriptions = buildSubscriptionService(env, db, clock)
+
   const dependencies: CoreDependencies = {
     workspaceRepository: new D1WorkspaceRepository({ db }),
     accountRepository: new D1AccountRepository({ db }),
@@ -935,7 +941,8 @@ export function buildContainer(env: Env, overrides: Partial<CoreDependencies> = 
     // in but its prerequisites are missing, which is the desired loud failure in
     // production but must not fire for tests that never reach the real executor.
     agentExecutor:
-      overrides.agentExecutor ?? selectAgentExecutor(env, config, db, clock, resolveTransport),
+      overrides.agentExecutor ??
+      selectAgentExecutor(env, config, db, clock, resolveTransport, subscriptions),
     workRunner: selectWorkRunner(env),
     executionEventPublisher: selectEventPublisher(env, db),
     spendPricing: config.spend,
@@ -971,7 +978,7 @@ export function buildContainer(env: Env, overrides: Partial<CoreDependencies> = 
     agentRunRepository: new D1AgentRunRepository({ db }),
     // The vendor-credential (subscription token pool) service the shared controller
     // reads; present when the shared ENCRYPTION_KEY is configured.
-    subscriptions: buildSubscriptionService(env, db, clock),
+    subscriptions,
     gateways: {
       // Real-time event delivery via the per-workspace WorkspaceEventsHub DO (when
       // the WORKSPACE_EVENTS namespace is bound; absent → the events route 501s).

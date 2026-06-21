@@ -595,7 +595,7 @@ export async function handleRequirements(
     const previousVersion = await readExistingVersion(dir)
 
     log.info('requirements: running agent', { ...trace, tasks: job.tasks.length })
-    const { summary, stats, stderrTail } = await runAgentInWorkspace(
+    const { summary, stats, stderrTail, usage } = await runAgentInWorkspace(
       {
         dir,
         systemPrompt: job.systemPrompt,
@@ -640,6 +640,7 @@ export async function handleRequirements(
         summary,
         stats,
         error: noRequirementsReason(stats, summary, stderrTail, diagnostics),
+        ...(usage ? { usage } : {}),
       }
     }
 
@@ -660,7 +661,7 @@ export async function handleRequirements(
       log.info('requirements: no changes to push (requirements unchanged)', trace)
     }
 
-    return { requirements: doc, summary, stats }
+    return { requirements: doc, summary, stats, ...(usage ? { usage } : {}) }
   })
 }
 

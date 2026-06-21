@@ -354,6 +354,8 @@ export interface BlueprintResult {
   summary?: string
   stats?: PiRunStats
   error?: string
+  /** Subscription-harness CLI token usage (absent for the proxy-metered Pi harness). */
+  usage?: { inputTokens: number; outputTokens: number }
 }
 
 /** Validate + narrow an untrusted body into a {@link BlueprintJob}, throwing on bad input. */
@@ -429,6 +431,8 @@ export interface RequirementsResult {
   summary?: string
   stats?: PiRunStats
   error?: string
+  /** Subscription-harness CLI token usage (absent for the proxy-metered Pi harness). */
+  usage?: { inputTokens: number; outputTokens: number }
 }
 
 /** Validate + narrow an untrusted body into a {@link RequirementsJob}, throwing on bad input. */
@@ -499,6 +503,8 @@ export interface CiFixerResult {
   summary?: string
   stats?: PiRunStats
   error?: string
+  /** Subscription-harness CLI token usage (absent for the proxy-metered Pi harness). */
+  usage?: { inputTokens: number; outputTokens: number }
 }
 
 /** Validate + narrow an untrusted body into a {@link CiFixerJob}, throwing on bad input. */
@@ -556,6 +562,8 @@ export interface ConflictResolverResult {
   summary?: string
   stats?: PiRunStats
   error?: string
+  /** Subscription-harness CLI token usage (absent for the proxy-metered Pi harness). */
+  usage?: { inputTokens: number; outputTokens: number }
 }
 
 /** Validate + narrow an untrusted body into a {@link ConflictResolverJob}, throwing on bad input. */
@@ -611,6 +619,8 @@ export interface MergerResult {
   summary?: string
   stats?: PiRunStats
   error?: string
+  /** Subscription-harness CLI token usage (absent for the proxy-metered Pi harness). */
+  usage?: { inputTokens: number; outputTokens: number }
 }
 
 /** Validate + narrow an untrusted body into a {@link MergerJob}, throwing on bad input. */

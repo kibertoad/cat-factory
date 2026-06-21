@@ -107,23 +107,35 @@ export class D1ProviderSubscriptionTokenRepository implements ProviderSubscripti
     at: number,
     windowMs: number,
   ): Promise<void> {
-    const row = await this.db
-      .prepare('SELECT * FROM provider_subscription_tokens WHERE id = ?')
-      .bind(id)
-      .first<ProviderSubscriptionTokenRow>()
-    if (!row) return
-    const windowActive = row.window_started_at != null && at - row.window_started_at < windowMs
-    const windowStartedAt = windowActive ? row.window_started_at : at
-    const inputTokens = (windowActive ? row.input_tokens : 0) + usage.inputTokens
-    const outputTokens = (windowActive ? row.output_tokens : 0) + usage.outputTokens
-    const requestCount = (windowActive ? row.request_count : 0) + 1
+    // A single atomic statement (no read-modify-write) so two jobs finishing on the
+    // same token can't lose each other's counters. The window-active test
+    // (`window_started_at` set AND younger than `windowMs`) is evaluated against the
+    // row's pre-update values in every branch, so a stale window resets to `at` and
+    // its counters start from this run; an active one accumulates.
+    const active = '(window_started_at IS NOT NULL AND ? - window_started_at < ?)'
     await this.db
       .prepare(
         `UPDATE provider_subscription_tokens
-          SET window_started_at = ?, input_tokens = ?, output_tokens = ?, request_count = ?
+          SET window_started_at = CASE WHEN ${active} THEN window_started_at ELSE ? END,
+              input_tokens      = CASE WHEN ${active} THEN input_tokens  ELSE 0 END + ?,
+              output_tokens     = CASE WHEN ${active} THEN output_tokens ELSE 0 END + ?,
+              request_count     = CASE WHEN ${active} THEN request_count ELSE 0 END + 1
           WHERE id = ?`,
       )
-      .bind(windowStartedAt, inputTokens, outputTokens, requestCount, id)
+      .bind(
+        at,
+        windowMs,
+        at,
+        at,
+        windowMs,
+        usage.inputTokens,
+        at,
+        windowMs,
+        usage.outputTokens,
+        at,
+        windowMs,
+        id,
+      )
       .run()
   }
 

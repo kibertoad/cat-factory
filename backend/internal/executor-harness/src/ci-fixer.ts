@@ -18,7 +18,7 @@ export async function handleCiFixer(
   job: CiFixerJob,
   opts: RunOptions = {},
 ): Promise<CiFixerResult> {
-  const { summary, stats, stderrTail, pushed } = await runCodingAgent(
+  const { summary, stats, stderrTail, pushed, usage } = await runCodingAgent(
     {
       kind: 'ci-fix',
       jobId: job.jobId,
@@ -50,7 +50,8 @@ export async function handleCiFixer(
       summary,
       stats,
       error: noChangesReason('No CI fix produced', stats, stderrTail),
+      ...(usage ? { usage } : {}),
     }
   }
-  return { pushed: true, summary, stats }
+  return { pushed: true, summary, stats, ...(usage ? { usage } : {}) }
 }

@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process'
-import { mkdir, writeFile } from 'node:fs/promises'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { PiRunOutcome, PiRunStats, TodoProgress } from './pi.js'
 
@@ -60,10 +61,16 @@ function redact(text: string, secret: string): string {
  * through `onEvent`. Mirrors `runPi`'s lifecycle: prompt over stdin (out-of-band,
  * never argv), `onActivity` on every chunk, abort kills the child, and the close
  * handler resolves/rejects. The caller's `onEvent` accumulates the outcome.
+ *
+ * `prompt` is fed over stdin: for Claude Code that is just the task prompt (the
+ * system prompt rides `--append-system-prompt`); for Codex — which has no
+ * system-prompt flag — the caller prepends the composed system prompt to it so
+ * the role + best-practice context is not lost.
  */
 function streamCli(
   command: string,
   args: string[],
+  prompt: string,
   opts: SubscriptionRunOptions,
   env: Record<string, string>,
   onEvent: (event: Record<string, unknown>) => void,
@@ -79,7 +86,7 @@ function streamCli(
       stdio: ['pipe', 'pipe', 'pipe'],
     })
     child.stdin.on('error', () => {})
-    child.stdin.end(opts.userPrompt)
+    child.stdin.end(prompt)
 
     let stderr = ''
     let aborted = false
@@ -213,13 +220,18 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
       '--output-format',
       'stream-json',
       '--verbose',
+      // The per-run container IS the sandbox, and the run is fully headless (no one
+      // to approve a tool call) — so bypass permissions entirely. `acceptEdits`
+      // would auto-accept file edits but still gate Bash, which in `-p` mode is then
+      // denied, leaving the agent unable to run builds/tests/git to verify its work.
       '--permission-mode',
-      'acceptEdits',
+      'bypassPermissions',
       '--model',
       opts.model,
       '--append-system-prompt',
       opts.systemPrompt,
     ],
+    opts.userPrompt,
     opts,
     env,
     onEvent,
@@ -270,10 +282,13 @@ export async function runCodex(opts: SubscriptionRunOptions): Promise<PiRunOutco
   let usage: { inputTokens: number; outputTokens: number } | undefined
 
   // Codex reads its credentials from $CODEX_HOME/auth.json with file-backed
-  // storage. Write the leased bundle into an isolated, per-run home under the
-  // workspace so concurrent jobs don't share credentials.
-  const codexHome = join(opts.cwd, '.codex-home')
-  await mkdir(codexHome, { recursive: true })
+  // storage. CRITICAL: this home must live OUTSIDE the cloned checkout (`opts.cwd`)
+  // — the blueprint/requirements/conflict-resolver handlers finish with
+  // `git add -A` + push, which would otherwise stage and publish the decrypted
+  // subscription `auth.json` (access + refresh tokens) to the PR branch. An
+  // isolated, per-run temp dir keeps the credential out of the working tree and is
+  // removed in `finally`.
+  const codexHome = await mkdtemp(join(tmpdir(), 'cf-codex-'))
   await writeFile(join(codexHome, 'auth.json'), opts.subscriptionToken, { mode: 0o600 })
   await writeFile(join(codexHome, 'config.toml'), 'cli_auth_credentials_store = "file"\n', 'utf8')
 
@@ -295,15 +310,37 @@ export async function runCodex(opts: SubscriptionRunOptions): Promise<PiRunOutco
     if (turnUsage) usage = turnUsage
   }
 
-  const { stderrTail } = await streamCli(
-    'codex',
-    ['exec', '--json', '--skip-git-repo-check', '--model', opts.model, '-'],
-    opts,
-    { CODEX_HOME: codexHome },
-    onEvent,
-  )
+  // Codex has no system-prompt flag, so fold the composed role + best-practice
+  // context into the prompt itself (Claude Code instead rides --append-system-prompt).
+  const prompt = opts.systemPrompt
+    ? `${opts.systemPrompt}\n\n---\n\n${opts.userPrompt}`
+    : opts.userPrompt
 
-  return { summary, stats, stderrTail, ...(usage ? { usage } : {}) }
+  try {
+    const { stderrTail } = await streamCli(
+      'codex',
+      [
+        'exec',
+        '--json',
+        '--skip-git-repo-check',
+        // The per-run container IS the sandbox; let Codex write files and reach the
+        // vendor unrestricted, with no approval prompts (the run is headless).
+        '--dangerously-bypass-approvals-and-sandbox',
+        '--model',
+        opts.model,
+        '-',
+      ],
+      prompt,
+      opts,
+      { CODEX_HOME: codexHome },
+      onEvent,
+    )
+
+    return { summary, stats, stderrTail, ...(usage ? { usage } : {}) }
+  } finally {
+    // Never leave the decrypted credential on disk past the run.
+    await rm(codexHome, { recursive: true, force: true }).catch(() => {})
+  }
 }
 
 /** Best-effort: pull a textual message out of a Codex event. */
