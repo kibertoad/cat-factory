@@ -2,7 +2,6 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type { RequirementReview, ReviewItemStatus } from '~/types/requirements'
 import { useWorkspaceStore } from '~/stores/workspace'
-import { useBoardStore } from '~/stores/board'
 
 /**
  * Requirements-review state: the stateless reviewer agent's findings per block.
@@ -16,7 +15,6 @@ import { useBoardStore } from '~/stores/board'
 export const useRequirementsStore = defineStore('requirements', () => {
   const api = useApi()
   const workspace = useWorkspaceStore()
-  const board = useBoardStore()
 
   /** null = unknown (not probed), true/false = feature on/off. */
   const available = ref<boolean | null>(null)
@@ -44,6 +42,14 @@ export const useRequirementsStore = defineStore('requirements', () => {
   /** Whether every item is settled, so the answers can be incorporated. */
   function allSettled(review: RequirementReview): boolean {
     return review.items.length > 0 && openCount(review) === 0
+  }
+  /**
+   * Whether the requirements can be reworked: no finding is still open. True even
+   * when the reviewer raised zero findings (the "no challenges" path), so a clean
+   * standardized document can still be produced.
+   */
+  function canRework(review: RequirementReview): boolean {
+    return openCount(review) === 0
   }
 
   function store(review: RequirementReview) {
@@ -98,19 +104,19 @@ export const useRequirementsStore = defineStore('requirements', () => {
   }
 
   /**
-   * Fold the answers back into the block's requirements. Patches the board with
-   * the returned (rewritten) block so the inspector/description reflect it.
+   * Rework the answers into one standard-format requirements document. The block's
+   * own description is left untouched; the reworked text lives on the review and is
+   * what subsequent agent steps (and the requirements-writer) consume.
    */
   async function incorporate(review: RequirementReview) {
     withFlag(incorporating, review.id, true)
     try {
-      const { review: updated, block } = await api.incorporateRequirements(
+      const { review: updated } = await api.incorporateRequirements(
         workspace.requireId(),
         review.id,
       )
       store(updated)
-      board.upsert(block)
-      return { review: updated, block }
+      return { review: updated }
     } finally {
       withFlag(incorporating, review.id, false)
     }
@@ -124,6 +130,7 @@ export const useRequirementsStore = defineStore('requirements', () => {
     isIncorporating,
     openCount,
     allSettled,
+    canRework,
     load,
     review,
     reply,

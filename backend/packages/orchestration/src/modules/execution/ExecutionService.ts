@@ -54,6 +54,7 @@ import type { WorkRunner } from '@cat-factory/kernel'
 import type { ExecutionEventPublisher } from '@cat-factory/kernel'
 import type { DocumentRepository } from '@cat-factory/kernel'
 import type { TaskRepository } from '@cat-factory/kernel'
+import type { RequirementReviewRepository } from '@cat-factory/kernel'
 import type { FragmentResolver } from '@cat-factory/kernel'
 import type { EnvironmentProvisioningService } from '@cat-factory/integrations'
 import { isDeployStep } from '@cat-factory/integrations'
@@ -119,6 +120,14 @@ export interface ExecutionServiceDependencies {
    * linked to a block are resolved here and fed to the agent as extra context.
    */
   taskRepository?: TaskRepository
+  /**
+   * Optional: when the requirements-review feature is configured, a block's
+   * reworked ("incorporated") requirements are read here. When present they REPLACE
+   * the block's description + linked docs/tasks as the agent context (for every
+   * step) and become the per-task input the requirements-writer aggregates. Absent
+   * → the engine uses the original description + docs/tasks unchanged.
+   */
+  requirementReviewRepository?: RequirementReviewRepository
   /**
    * Optional: when the environment integration is configured, a `deployer` step
    * provisions an ephemeral environment deterministically through this service
@@ -215,6 +224,7 @@ export class ExecutionService {
   private readonly spend: SpendService
   private readonly documents?: DocumentRepository
   private readonly tasks?: TaskRepository
+  private readonly requirementReviews?: RequirementReviewRepository
   private readonly environmentProvisioning?: EnvironmentProvisioningService
   private readonly fragmentResolver?: FragmentResolver
   private readonly blueprintReconciler?: BlueprintReconciler
@@ -240,6 +250,7 @@ export class ExecutionService {
     spendService,
     documentRepository,
     taskRepository,
+    requirementReviewRepository,
     environmentProvisioning,
     fragmentResolver,
     blueprintReconciler,
@@ -264,6 +275,7 @@ export class ExecutionService {
     this.spend = spendService
     this.documents = documentRepository
     this.tasks = taskRepository
+    this.requirementReviews = requirementReviewRepository
     this.environmentProvisioning = environmentProvisioning
     this.fragmentResolver = fragmentResolver
     this.blueprintReconciler = blueprintReconciler
@@ -1223,10 +1235,11 @@ export class ExecutionService {
 
   /**
    * The collected requirements of every task under `block`'s service frame, for the
-   * requirements-writer step to aggregate. Each task block's description already
-   * carries its clarified requirements (the per-task review's `incorporate` rewrote
-   * it), so this is the combined requirement context for all tasks. Returns an empty
-   * list when the block has no service frame (the writer then has only the prior doc).
+   * requirements-writer step to aggregate. Each task contributes its reworked
+   * ("incorporated") requirements when present — the standard-format document the
+   * rework step produced — and falls back to its plain description otherwise. Returns
+   * an empty list when the block has no service frame (the writer then has only the
+   * prior doc).
    */
   private async gatherServiceTasks(
     workspaceId: string,
@@ -1236,9 +1249,32 @@ export class ExecutionService {
     const frame = serviceOf(blocks, block)
     if (!frame) return []
     const within = descendantIds(blocks, frame.id)
-    return blocks
-      .filter((b) => within.has(b.id) && b.level === 'task')
-      .map((b) => ({ id: b.id, title: b.title, description: b.description }))
+    const tasks = blocks.filter((b) => within.has(b.id) && b.level === 'task')
+    return Promise.all(
+      tasks.map(async (b) => ({
+        id: b.id,
+        title: b.title,
+        description: (await this.resolveReworkedRequirements(workspaceId, b.id)) ?? b.description,
+      })),
+    )
+  }
+
+  /**
+   * The reworked ("incorporated") requirements for a block — the standard-format
+   * document the requirements-rework step produced — or `null` when the feature is
+   * unwired or the block has no incorporated review yet. Used both to substitute the
+   * agent context for every step and to feed the requirements-writer.
+   */
+  private async resolveReworkedRequirements(
+    workspaceId: string,
+    blockId: string,
+  ): Promise<string | null> {
+    if (!this.requirementReviews) return null
+    const review = await this.requirementReviews.getByBlock(workspaceId, blockId)
+    if (review?.status === 'incorporated' && review.incorporatedRequirements) {
+      return review.incorporatedRequirements
+    }
+    return null
   }
 
   /** Walk up `parentId` from a block to its top-level service frame id (or itself). */
@@ -1263,8 +1299,14 @@ export class ExecutionService {
     isFinalStep: boolean,
     block: Block,
   ): Promise<AgentRunContext> {
-    const contextDocs = await this.resolveContextDocs(workspaceId, block.id)
-    const contextTasks = await this.resolveContextTasks(workspaceId, block.id)
+    // When a block's requirements have been reworked, that standardized document is
+    // the single source of truth for every agent step: it already folds in the
+    // description plus the linked docs / tracker issues, so it REPLACES the
+    // description and the (now-redundant) doc/task context.
+    const reworked = await this.resolveReworkedRequirements(workspaceId, block.id)
+    const description = reworked ?? block.description
+    const contextDocs = reworked ? [] : await this.resolveContextDocs(workspaceId, block.id)
+    const contextTasks = reworked ? [] : await this.resolveContextTasks(workspaceId, block.id)
     const environment = await this.resolveEnvironment(workspaceId, block.id)
     const priorOutputs = instance.steps
       .slice(0, instance.currentStep)
@@ -1291,7 +1333,7 @@ export class ExecutionService {
         id: block.id,
         title: block.title,
         type: block.type,
-        description: block.description,
+        description,
         fragmentIds: block.fragmentIds,
         ...(resolved ? { resolvedFragments: resolved.fragments } : {}),
         modelId: block.modelId,

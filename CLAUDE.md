@@ -286,39 +286,58 @@ derived from the blueprint (there is no longer a "feature" granularity level).
 A **reviewer** agent inspects a block's "collected requirements" — its
 description plus any linked PRD/RFC docs and tracker issues — and raises a list of
 review items (gaps / clarifications / assumptions / risks / questions). A human
-answers or dismisses each; once all are settled the agent folds the answers back
-into the block's description. Unlike `execution` / `bootstrap` this flow is
-**stateless and synchronous**: no container, no durable driver, no real-time
+**reacts** to each finding (answers the relevant ones, dismisses the irrelevant);
+once every finding is settled a **requirements-rework** agent folds the answers
+into ONE standard-format requirements document. That reworked document is stored on
+the review (NOT written back over the block description) and **replaces** the
+original description + linked docs/tasks as the context every subsequent agent step
+(and the requirements-writer) consumes. Unlike `execution` / `bootstrap` this flow
+is **stateless and synchronous**: no container, no durable driver, no real-time
 events — every call runs an LLM inline (via the `ModelProvider` port, like the
 document planner) and returns the updated entity, which the SPA patches directly.
 
 - Wire contracts: `contracts/src/requirements.ts` (`RequirementReview` +
   `RequirementReviewItem`, item `category`/`severity`/`status`, request bodies).
-  One **live review per block** (a new run replaces the prior one).
+  One **live review per block** (a new run replaces the prior one). The reworked
+  text lives on `review.incorporatedRequirements`; `status` flips to `incorporated`.
 - Core: `RequirementReviewService` (`modules/requirements/`) — `review()` gathers
   context + LLM-generates items, `replyToItem()`/`setItemStatus()` mutate items,
-  `incorporate()` requires every item settled (resolved/dismissed) then rewrites
-  the block description via `blockRepository.update`. Pure prompt/parse logic is in
+  `incorporate()` requires every finding settled (an EMPTY findings list passes, so
+  a clean standardized doc is still produced) then runs the rework LLM call and
+  stores the result on the review — **without** touching the block description.
+  `REWORK_SYSTEM_PROMPT` (`@cat-factory/agents`, versioned `requirement-rework`)
+  enforces the standard structure (SHALL statements + MoSCoW + Given/When/Then
+  acceptance + domain rules) so the requirements-writer can aggregate it directly.
+  Pure prompt/parse logic (`buildReviewPrompt`/`buildReworkPrompt`/…) is in
   `requirements.logic.ts`. Assembled by `createRequirementsModule` whenever
-  `requirementReviewRepository` is wired; the model + linked doc/task repos are
-  optional within the module.
+  `requirementReviewRepository` is wired.
+- Downstream consumption: `ExecutionService.resolveReworkedRequirements` reads the
+  block's incorporated review (optional `requirementReviewRepository` dep). When
+  present, `buildAgentContext` uses it as the block description and **drops**
+  `contextDocs`/`contextTasks` (already folded in); `gatherServiceTasks` feeds it
+  (not the raw description) to the requirements-writer. Absent → original behavior.
 - Persistence: `requirement_reviews` D1 table (migration `0021`,
   `D1RequirementReviewRepository`) — items as a JSON column, keyed by review id,
-  `getByBlock` returns the current one.
+  `getByBlock` returns the current one. Cloudflare-only today (no Drizzle repo in
+  `runtimes/node`); the downstream dep is optional so the Node facade degrades to
+  the original description + docs/tasks unchanged.
 - Worker: `RequirementReviewController` (`modules/requirements/`) mounts
   `GET|POST /blocks/:blockId/requirement-review`,
   `POST /requirement-reviews/:id/items/:itemId/reply`,
-  `PATCH …/items/:itemId`, `POST …/:id/incorporate`. `selectRequirementsDeps`
-  wires the repo + a `CloudflareModelProvider` + the agents' routing default ref +
-  `resolveBlockModel`, so the reviewer resolves its model exactly like an agent
-  step: a block's pinned model wins, else the default — which falls back to
-  **Cloudflare Workers AI** unless a direct provider key is set (no key required).
+  `PATCH …/items/:itemId`, `POST …/:id/incorporate` (returns `{ review }`).
+  `selectRequirementsDeps` wires the repo + a `CloudflareModelProvider` + the
+  agents' routing default ref + `resolveBlockModel`, so the reviewer resolves its
+  model exactly like an agent step: a block's pinned model wins, else the default —
+  which falls back to **Cloudflare Workers AI** unless a direct provider key is set.
 - Frontend: `stores/requirements.ts` (load/review/reply/setItemStatus/incorporate;
-  patches the board with the rewritten block on incorporate),
-  `components/requirements/RequirementReviewModal.vue` (triggered from
-  `InspectorPanel.vue`'s "Review requirements" button; shows an open-item count
-  badge), `ui.requirementReviewBlockId` drives the modal. No stream event — the
-  responses carry the updated review.
+  `incorporate` does NOT patch the board — the description is preserved),
+  `components/requirements/RequirementsReviewWindow.vue` — a full-screen review
+  window modelled on the prose review window (`AgentStepDetail.vue`): react to the
+  findings, then "Rework requirements" (enabled once every finding is settled, and
+  immediately for a zero-findings review); the reworked document renders as
+  collapsible markdown. Triggered from `InspectorPanel.vue`'s "Review requirements"
+  button (open-finding count badge); `ui.requirementReviewBlockId` drives it. No
+  stream event — the responses carry the updated review.
 
 ## Merge lifecycle flow (CI gate → CI-fixer → merger → notifications)
 

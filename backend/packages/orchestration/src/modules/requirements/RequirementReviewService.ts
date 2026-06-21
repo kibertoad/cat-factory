@@ -7,12 +7,11 @@ import type { ModelProvider, ModelRef } from '@cat-factory/kernel'
 import type { DocumentRepository } from '@cat-factory/kernel'
 import type { TaskRepository } from '@cat-factory/kernel'
 import type { RequirementReviewRepository } from '@cat-factory/kernel'
-import { REVIEW_SYSTEM_PROMPT } from '@cat-factory/agents'
+import { REVIEW_SYSTEM_PROMPT, REWORK_SYSTEM_PROMPT } from '@cat-factory/agents'
 import {
   type RequirementsContext,
-  INCORPORATE_SYSTEM_PROMPT,
-  buildIncorporatePrompt,
   buildReviewPrompt,
+  buildReworkPrompt,
   coerceReviewItems,
   extractJson,
 } from './requirements.logic.js'
@@ -190,15 +189,16 @@ export class RequirementReviewService {
   }
 
   /**
-   * Fold the answers back into the block's requirements. Requires every item to
-   * be settled (resolved or dismissed); rewrites the block description from the
-   * answers and marks the review `incorporated`. Returns the updated review and
-   * the updated block.
+   * Rework the block's requirements: fold the human's answers (and dismissals) into
+   * one self-contained, standard-format requirements document. Requires every
+   * finding to be settled (resolved or dismissed) — an empty findings list (no
+   * challenges raised) passes, so a clean standardized doc is still produced. The
+   * reworked text is stored on the review (`incorporatedRequirements`); the block's
+   * own description and linked docs/tasks are left untouched. Downstream agent steps
+   * and the requirements-writer consume the reworked text instead (see
+   * `ExecutionService`). Returns the updated review.
    */
-  async incorporate(
-    workspaceId: string,
-    reviewId: string,
-  ): Promise<{ review: RequirementReview; block: Block }> {
+  async incorporate(workspaceId: string, reviewId: string): Promise<{ review: RequirementReview }> {
     const review = assertFound(
       await this.deps.requirementReviewRepository.get(workspaceId, reviewId),
       'Requirement review',
@@ -212,7 +212,7 @@ export class RequirementReviewService {
     const unsettled = review.items.filter((i) => !SETTLED.includes(i.status))
     if (unsettled.length > 0) {
       throw new ValidationError(
-        `Resolve or dismiss all ${unsettled.length} remaining item(s) before incorporating`,
+        `Resolve or dismiss all ${unsettled.length} remaining item(s) before reworking`,
       )
     }
     const { modelProvider } = this.deps
@@ -227,8 +227,8 @@ export class RequirementReviewService {
       const model = modelProvider.resolve(ref)
       const result = await generateText({
         model,
-        system: INCORPORATE_SYSTEM_PROMPT,
-        prompt: buildIncorporatePrompt(context, review.items),
+        system: REWORK_SYSTEM_PROMPT,
+        prompt: buildReworkPrompt(context, review.items),
         temperature: 0.2,
         maxOutputTokens: 5000,
       })
@@ -245,7 +245,6 @@ export class RequirementReviewService {
     }
 
     const now = this.deps.clock.now()
-    await this.deps.blockRepository.update(workspaceId, block.id, { description: revised })
     const updated: RequirementReview = {
       ...review,
       status: 'incorporated',
@@ -253,12 +252,7 @@ export class RequirementReviewService {
       updatedAt: now,
     }
     await this.deps.requirementReviewRepository.upsert(workspaceId, updated)
-    const nextBlock = assertFound(
-      await this.deps.blockRepository.get(workspaceId, block.id),
-      'Block',
-      block.id,
-    )
-    return { review: updated, block: nextBlock }
+    return { review: updated }
   }
 
   // ---- internals ----------------------------------------------------------

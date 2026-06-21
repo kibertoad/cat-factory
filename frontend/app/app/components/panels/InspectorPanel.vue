@@ -23,6 +23,7 @@ const fragments = useFragmentsStore()
 const agentRuns = useAgentRunsStore()
 const github = useGitHubStore()
 const recurring = useRecurringPipelinesStore()
+const requirements = useRequirementsStore()
 
 // When the selected task block backs a recurring pipeline, the inspector shows the
 // schedule controls + history, and "Delete" removes the schedule (block + history).
@@ -153,6 +154,20 @@ const runningRun = computed(() => {
   const run = block.value ? agentRuns.byBlock[block.value.id] : undefined
   return run && run.status === 'running' ? run : null
 })
+
+// ---- requirements review (collected requirements → react → rework) ----------
+// Probe + cache the block's review when a task is selected, so the entry point can
+// show its open-finding count (and hide entirely when the feature is unconfigured).
+watch(
+  () => (isTask.value ? block.value?.id : undefined),
+  (id) => {
+    if (id) void requirements.load(id)
+  },
+  { immediate: true },
+)
+const reqReview = computed(() => (block.value ? requirements.reviewFor(block.value.id) : null))
+const reqOpenCount = computed(() => (reqReview.value ? requirements.openCount(reqReview.value) : 0))
+const reqReworked = computed(() => reqReview.value?.status === 'incorporated')
 </script>
 
 <template>
@@ -291,6 +306,38 @@ const runningRun = computed(() => {
         <TaskScenarios :block="block" />
         <TaskRunSettings :block="block" />
         <TaskExecution :block="block" />
+
+        <!-- requirements review: react to the reviewer's findings, then rework the
+             collected requirements into one standard-format document the agents use. -->
+        <UButton
+          v-if="requirements.available !== false"
+          color="neutral"
+          variant="soft"
+          size="sm"
+          block
+          icon="i-lucide-clipboard-check"
+          @click="ui.openRequirementReview(block.id)"
+        >
+          Review requirements
+          <UBadge
+            v-if="reqOpenCount > 0"
+            color="warning"
+            variant="subtle"
+            size="xs"
+            class="ml-auto"
+          >
+            {{ reqOpenCount }} open
+          </UBadge>
+          <UBadge
+            v-else-if="reqReworked"
+            color="success"
+            variant="subtle"
+            size="xs"
+            class="ml-auto"
+          >
+            reworked
+          </UBadge>
+        </UButton>
       </template>
 
       <!-- actions -->
