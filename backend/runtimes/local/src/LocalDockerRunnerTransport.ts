@@ -396,5 +396,9 @@ export function createLocalDockerTransportFromEnv(
     sharedSecret: env.HARNESS_SHARED_SECRET?.trim() || undefined,
     network: env.LOCAL_DOCKER_NETWORK?.trim() || undefined,
     addHostGateway: env.LOCAL_DOCKER_ADD_HOST_GATEWAY?.trim() !== 'false',
+    // Default on: the Tester stands its docker-compose infra up via Docker-in-Docker,
+    // which needs a privileged job container. Set to `false` for runtimes that run
+    // nested containers without it (e.g. rootless Podman).
+    privilegedTestJobs: env.LOCAL_DOCKER_PRIVILEGED_TEST_JOBS?.trim() !== 'false',
   })
 }
