@@ -440,7 +440,7 @@ differentiators behind the shared kernel ports + the `container.gateways` seam.
   `RunnerPoolTransport` (in `@cat-factory/integrations`) instead of a Cloudflare
   Container. Wired in `runtimes/node/src/container.ts` when the prerequisites are set
   (`GITHUB_APP_ID`/`GITHUB_APP_PRIVATE_KEY`, `PUBLIC_URL`, `AUTH_SESSION_SECRET`,
-  `RUNNERS_ENCRYPTION_KEY`); persistence (`runner_pool_connections`,
+  `ENCRYPTION_KEY`); persistence (`runner_pool_connections`,
   `github_installations`, `github_repos`) mirrors the D1 tables in `db/schema.ts`. When
   unconfigured the composite still serves inline kinds but fails container kinds loudly
   (no silent useless one-shot LLM call). NOTE: populating `github_installations` /

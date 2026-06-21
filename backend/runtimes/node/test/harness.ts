@@ -22,6 +22,10 @@ const TEST_ENV: NodeJS.ProcessEnv = {
   ...process.env,
   AUTH_DEV_OPEN: 'true',
   ENVIRONMENT: 'test',
+  // The always-on task-source integration makes `loadNodeConfig` require the shared
+  // ENCRYPTION_KEY (32 zero bytes, base64) or it throws at config load. Integration
+  // toggles that need extra wiring (GitHub/runners) stay off — matching Node defaults.
+  ENCRYPTION_KEY: Buffer.alloc(32).toString('base64'),
 }
 
 /**

@@ -77,9 +77,9 @@ Mirrors ADR 0003: the manifest references the scheduler-API credentials by
 **logical key** only; the org supplies the values at registration, and they are
 stored **encrypted at rest in D1** (AES-256-GCM via the `SecretCipher` port /
 `WebCryptoSecretCipher`, with a per-record salt and IV, an HKDF-derived key under
-the `cat-factory:runners` info, and a versioned envelope). The single env secret
-is the service-level master key (`RUNNERS_ENCRYPTION_KEY`), distinct from the
-environment module's; the feature refuses to assemble without it (never a silent
+the `cat-factory:runners` info, and a versioned envelope). The env secret is the
+shared service-level master key (`ENCRYPTION_KEY`), domain-separated from the other
+modules by that `info`; the feature refuses to assemble without it (never a silent
 plaintext fallback).
 
 The **per-job** GitHub installation token and the model-locked LLM-proxy session

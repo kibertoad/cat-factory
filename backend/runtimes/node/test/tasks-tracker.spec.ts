@@ -19,9 +19,9 @@ const TASKS_ENV: NodeJS.ProcessEnv = {
   ...process.env,
   AUTH_DEV_OPEN: 'true',
   ENVIRONMENT: 'test',
-  TASKS_ENABLED: 'true',
-  // 32 zero bytes, base64 — a valid master key for the test cipher.
-  TASKS_ENCRYPTION_KEY: Buffer.alloc(32).toString('base64'),
+  // The task-source integration is always on; the only requirement is the shared
+  // ENCRYPTION_KEY (32 zero bytes, base64 — a valid master key for the test cipher).
+  ENCRYPTION_KEY: Buffer.alloc(32).toString('base64'),
   TASK_SOURCES: 'jira',
 }
 
@@ -52,7 +52,7 @@ if (databaseUrl) {
   }
 
   describe('[node] per-tenant Jira + tracker', () => {
-    it('assembles the tasks module when TASKS_ENABLED + key are set', () => {
+    it('assembles the tasks module (always on) when the encryption key is set', () => {
       const { container } = app()
       expect(container.tasks).toBeTruthy()
       expect(container.tasks!.connectionService.listSources().map((s) => s.source)).toContain(

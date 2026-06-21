@@ -278,34 +278,33 @@ AUTH_ALLOWED_LOGINS = "kibertoad"
 # pinning is defense-in-depth. No trailing slash.
 CORS_ALLOWED_ORIGINS = "https://catfactory.kiberion.com"
 
-# Document-source integration. Off by default. Turn it on to let workspaces link
-# requirements/RFCs/PRDs from Confluence, Notion and the like. Per-workspace
-# credentials are entered in the app and stored ENCRYPTED in D1. The one secret
-# this feature needs is the service-level master key used to encrypt them at rest:
-#   openssl rand -base64 32 | wrangler secret put DOCUMENTS_ENCRYPTION_KEY
-DOCUMENTS_ENABLED = "false"
+# Credential encryption. ONE shared master key (a secret) encrypts every integration's
+# per-workspace credentials at rest — documents, tasks, environments and runner pools.
+# The cipher domain-separates per integration internally, so a single key is safe:
+#   openssl rand -base64 32 | wrangler secret put ENCRYPTION_KEY
+
+# Document-source integration. ALWAYS ON — workspaces connect Confluence/Notion/… for
+# requirements/RFCs/PRDs through the app, and per-workspace credentials are stored
+# ENCRYPTED in D1. REQUIRES the ENCRYPTION_KEY above; the worker fails to boot (loud
+# config error) without it.
 DOCUMENT_SOURCES = "confluence,notion"
 DOCUMENT_PLANNER = "llm"
 
-# Task-source integration. Off by default. Turn it on to let workspaces link
-# individual issues from a tracker (Jira, …) to a board block as extra agent
-# context. Per-workspace credentials are entered in the app and stored ENCRYPTED
-# in D1. The one secret this feature needs:
-#   openssl rand -base64 32 | wrangler secret put TASKS_ENCRYPTION_KEY
-TASKS_ENABLED = "false"
+# Task-source integration. ALWAYS ON — workspaces connect a tracker (Jira, …) through
+# the app to link individual issues to a board block as extra agent context.
+# Per-workspace credentials are stored ENCRYPTED in D1. REQUIRES the ENCRYPTION_KEY
+# above; the worker fails to boot without it.
 TASK_SOURCES = "jira"
 
 # Ephemeral environment provider integration. Off by default. Turn it on to let a
 # workspace register its own self-rolled environment management API so a
 # `deployer` agent can provision ephemeral environments a `tester` then runs
-# against. The one secret this feature needs:
-#   openssl rand -base64 32 | wrangler secret put ENVIRONMENTS_ENCRYPTION_KEY
+# against. Its secrets are sealed with the shared ENCRYPTION_KEY above.
 ENVIRONMENTS_ENABLED = "false"
 
 # Self-hosted runner pool — "bring your own infra". Off by default. Turn it on to
 # let a workspace register its OWN container runner pool and run the repo-operating
 # coding jobs there instead of per-run Cloudflare Containers. When on, a registered
 # pool can stand in for the EXEC_CONTAINER binding as the mandatory runner backend.
-# The one secret this feature needs:
-#   openssl rand -base64 32 | wrangler secret put RUNNERS_ENCRYPTION_KEY
+# Its scheduler secrets are sealed with the shared ENCRYPTION_KEY above.
 RUNNERS_ENABLED = "false"
