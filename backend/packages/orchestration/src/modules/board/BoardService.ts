@@ -255,7 +255,12 @@ export class BoardService {
   }
 
   /** Add a task inside a container (a service frame or a module). */
-  async addTask(workspaceId: string, containerId: string, input: AddTaskInput): Promise<Block> {
+  async addTask(
+    workspaceId: string,
+    containerId: string,
+    input: AddTaskInput,
+    createdBy?: number | null,
+  ): Promise<Block> {
     await this.requireWorkspace(workspaceId)
     // The container may be a frame/module of a service mounted from another workspace; create
     // the task in that service's home workspace so it joins the one shared subtree.
@@ -279,6 +284,9 @@ export class BoardService {
       level: 'task',
       parentId: containerId,
     }
+    // The signed-in user who created the task, for "notify the task creator"
+    // notification routing. Null with auth disabled (local/dev).
+    if (createdBy != null) block.createdBy = createdBy
     // Optional run configuration chosen at creation: which merge policy governs the
     // task's auto-merge, and the pipeline its Run controls default to. Empty strings
     // are treated as "not set" (workspace default preset / no pinned pipeline).

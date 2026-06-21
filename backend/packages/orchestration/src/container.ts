@@ -819,7 +819,10 @@ function createBoardScanModule(
  * and the document/task repositories are reused, when wired, to fold linked PRDs
  * and tracker issues into the reviewed requirements.
  */
-function createRequirementsModule(deps: CoreDependencies): RequirementsModule | undefined {
+function createRequirementsModule(
+  deps: CoreDependencies,
+  notificationService?: NotificationService,
+): RequirementsModule | undefined {
   const { requirementReviewRepository } = deps
   if (!requirementReviewRepository) return undefined
 
@@ -828,6 +831,9 @@ function createRequirementsModule(deps: CoreDependencies): RequirementsModule | 
     blockRepository: deps.blockRepository,
     idGenerator: deps.idGenerator,
     clock: deps.clock,
+    // Tell product people + the task creator to react to a review's findings (when
+    // the notifications subsystem is wired). Best-effort; absent → no notification.
+    notificationService,
     modelProvider: deps.modelProvider,
     // The dedicated reviewer ref, else the document planner's (both the agents' default).
     modelRef: deps.requirementReviewModel ?? deps.documentPlannerModel,
@@ -1062,7 +1068,7 @@ export function createCore(dependencies: CoreDependencies): Core {
   const github = createGitHubModule(dependencies)
   const documents = createDocumentsModule(dependencies, boardService)
   const tasks = createTasksModule(dependencies)
-  const requirements = createRequirementsModule(dependencies)
+  const requirements = createRequirementsModule(dependencies, notifications?.service)
   const runners = createRunnersModule(dependencies)
   // After a bootstrap succeeds, map the new repo into a blueprint + the board by
   // starting the blueprint-only pipeline against the service frame.

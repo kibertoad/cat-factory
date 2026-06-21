@@ -1,6 +1,6 @@
 import type {
-  Membership,
-  MembershipRepository,
+  Block,
+  BlockRepository,
   Notification,
   SecretCipher,
   SlackConnectionRecord,
@@ -43,14 +43,10 @@ function mappingRepo(entries: SlackMemberMappingEntry[]): SlackMemberMappingRepo
   return { getByAccount: async () => entries, upsert: async () => {} }
 }
 
-function membershipRepo(members: Membership[]): MembershipRepository {
-  return {
-    listByAccount: async () => members,
-    listByUser: async () => [],
-    get: async () => null,
-    upsert: async () => {},
-    remove: async () => {},
-  }
+/** A BlockRepository whose `get` returns a task block with the given creator. */
+function blockRepo(createdBy: number | null): BlockRepository {
+  const block = { id: 'blk_1', createdBy } as unknown as Block
+  return { get: async () => block } as unknown as BlockRepository
 }
 
 const connection: SlackConnectionRecord = {
@@ -77,6 +73,16 @@ const notification: Notification = {
   createdAt: 0,
   resolvedAt: null,
 }
+
+const enabledRoute = (channel: string): SlackSettingsRecord => ({
+  workspaceId: 'ws_1',
+  routesJson: JSON.stringify({
+    merge_review: { enabled: true, channel },
+    requirement_review: { enabled: true, channel },
+  }),
+  mentionsEnabled: true,
+  updatedAt: 0,
+})
 
 /** A SlackApiClient over a fetch stub that records the chat.postMessage call. */
 function recordingClient() {
@@ -106,7 +112,7 @@ describe('SlackNotificationChannel', () => {
         updatedAt: 0,
       }),
       slackMemberMappingRepository: mappingRepo([]),
-      membershipRepository: membershipRepo([]),
+      blockRepository: blockRepo(null),
       secretCipher: reversingCipher,
       slackClient: client,
     })
@@ -131,7 +137,7 @@ describe('SlackNotificationChannel', () => {
         updatedAt: 0,
       }),
       slackMemberMappingRepository: mappingRepo([]),
-      membershipRepository: membershipRepo([]),
+      blockRepository: blockRepo(null),
       secretCipher: reversingCipher,
       slackClient: client,
     })
@@ -145,14 +151,9 @@ describe('SlackNotificationChannel', () => {
     const channel = new SlackNotificationChannel({
       workspaceRepository: workspaceRepo('acc_1'),
       slackConnectionRepository: connectionRepo(null),
-      slackSettingsRepository: settingsRepo({
-        workspaceId: 'ws_1',
-        routesJson: JSON.stringify({ merge_review: { enabled: true, channel: '#releases' } }),
-        mentionsEnabled: false,
-        updatedAt: 0,
-      }),
+      slackSettingsRepository: settingsRepo(enabledRoute('#releases')),
       slackMemberMappingRepository: mappingRepo([]),
-      membershipRepository: membershipRepo([]),
+      blockRepository: blockRepo(7),
       secretCipher: reversingCipher,
       slackClient: client,
     })
@@ -161,35 +162,50 @@ describe('SlackNotificationChannel', () => {
     expect(calls).toHaveLength(0)
   })
 
-  it('tags mapped account members when mentions are enabled', async () => {
+  it('mentions ONLY the task creator on an engineering notification', async () => {
     const { client, calls } = recordingClient()
     const channel = new SlackNotificationChannel({
       workspaceRepository: workspaceRepo('acc_1'),
       slackConnectionRepository: connectionRepo(connection),
-      slackSettingsRepository: settingsRepo({
-        workspaceId: 'ws_1',
-        routesJson: JSON.stringify({ merge_review: { enabled: true, channel: '#releases' } }),
-        mentionsEnabled: true,
-        updatedAt: 0,
-      }),
+      slackSettingsRepository: settingsRepo(enabledRoute('#releases')),
       slackMemberMappingRepository: mappingRepo([
-        { githubUserId: 7, slackUserId: 'U7' },
-        { githubUserId: 9, slackUserId: 'U9' },
+        { githubUserId: 7, slackUserId: 'U7', role: 'engineering' },
+        { githubUserId: 9, slackUserId: 'U9', role: 'product' },
       ]),
-      membershipRepository: membershipRepo([
-        { accountId: 'acc_1', userId: 7, role: 'owner', createdAt: 0 },
-        { accountId: 'acc_1', userId: 42, role: 'member', createdAt: 0 }, // unmapped → skipped
-      ]),
+      blockRepository: blockRepo(7), // task created by github user 7
       secretCipher: reversingCipher,
       slackClient: client,
     })
 
-    await channel.deliver('ws_1', notification)
+    await channel.deliver('ws_1', notification) // merge_review (engineering)
     expect(calls).toHaveLength(1)
     const blocks = JSON.stringify((calls[0]!.body as { blocks: unknown }).blocks)
-    expect(blocks).toContain('<@U7>')
-    expect(blocks).not.toContain('<@U9>') // U9 is mapped but not an account member
-    expect(blocks).not.toContain('<@42>')
+    expect(blocks).toContain('<@U7>') // the creator
+    expect(blocks).not.toContain('<@U9>') // product person is NOT pinged on engineering work
+  })
+
+  it('mentions product people AND the creator on a requirement review', async () => {
+    const { client, calls } = recordingClient()
+    const channel = new SlackNotificationChannel({
+      workspaceRepository: workspaceRepo('acc_1'),
+      slackConnectionRepository: connectionRepo(connection),
+      slackSettingsRepository: settingsRepo(enabledRoute('#product')),
+      slackMemberMappingRepository: mappingRepo([
+        { githubUserId: 7, slackUserId: 'U7', role: 'engineering' }, // the creator
+        { githubUserId: 9, slackUserId: 'U9', role: 'product' },
+        { githubUserId: 10, slackUserId: 'U10', role: 'product' },
+      ]),
+      blockRepository: blockRepo(7),
+      secretCipher: reversingCipher,
+      slackClient: client,
+    })
+
+    await channel.deliver('ws_1', { ...notification, type: 'requirement_review' })
+    expect(calls).toHaveLength(1)
+    const blocks = JSON.stringify((calls[0]!.body as { blocks: unknown }).blocks)
+    expect(blocks).toContain('<@U9>') // product
+    expect(blocks).toContain('<@U10>') // product
+    expect(blocks).toContain('<@U7>') // the creator, even though engineering-role
   })
 
   it('never throws on a delivery failure (best-effort) but surfaces it via onError', async () => {
@@ -202,14 +218,9 @@ describe('SlackNotificationChannel', () => {
     const channel = new SlackNotificationChannel({
       workspaceRepository: workspaceRepo('acc_1'),
       slackConnectionRepository: connectionRepo(connection),
-      slackSettingsRepository: settingsRepo({
-        workspaceId: 'ws_1',
-        routesJson: JSON.stringify({ merge_review: { enabled: true, channel: '#releases' } }),
-        mentionsEnabled: false,
-        updatedAt: 0,
-      }),
+      slackSettingsRepository: settingsRepo(enabledRoute('#releases')),
       slackMemberMappingRepository: mappingRepo([]),
-      membershipRepository: membershipRepo([]),
+      blockRepository: blockRepo(null),
       secretCipher: reversingCipher,
       slackClient: throwingClient,
       onError: (error, context) => errors.push({ error, context }),

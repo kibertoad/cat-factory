@@ -97,6 +97,9 @@ export const blocks = pgTable(
     // The account-owned service this block belongs to (migration 0031); will become the
     // physical scope key once the repositories switch off workspace_id.
     service_id: text('service_id'),
+    // GitHub user id of the block's creator (migration 0038); drives "notify the task
+    // creator" routing. Nullable — legacy blocks / auth-disabled dev have no creator.
+    created_by: bigint('created_by', { mode: 'number' }),
   },
   (t) => [
     primaryKey({ columns: [t.workspace_id, t.id] }),

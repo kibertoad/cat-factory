@@ -1,5 +1,5 @@
 import type {
-  MembershipRepository,
+  BlockRepository,
   Notification,
   NotificationChannel,
   SecretCipher,
@@ -9,7 +9,12 @@ import type {
   WorkspaceRepository,
 } from '@cat-factory/kernel'
 import { SlackApiClient } from './SlackApiClient.js'
-import { defaultSlackSettings, renderNotificationMessage, resolveRoute } from './slack.logic.js'
+import {
+  defaultSlackSettings,
+  renderNotificationMessage,
+  resolveMentionTargets,
+  resolveRoute,
+} from './slack.logic.js'
 
 // SlackNotificationChannel: an additional delivery transport for the existing
 // notification mechanism. It implements the same `NotificationChannel` port as
@@ -23,15 +28,16 @@ import { defaultSlackSettings, renderNotificationMessage, resolveRoute } from '.
 //
 // On deliver: resolve the workspace's account → its Slack connection (decrypt the
 // bot token), read the workspace's routing, bail unless the notification's type
-// is enabled with a channel, optionally resolve @-mentions from the per-account
-// member map, render, and post.
+// is enabled with a channel, resolve the audience-scoped @-mentions (role-matched
+// members for the type, plus the task's creator), render, and post.
 
 export interface SlackNotificationChannelDependencies {
   workspaceRepository: WorkspaceRepository
   slackConnectionRepository: SlackConnectionRepository
   slackSettingsRepository: SlackSettingsRepository
   slackMemberMappingRepository: SlackMemberMappingRepository
-  membershipRepository: MembershipRepository
+  /** Resolves a notification's block to read its creator for creator-mentions. */
+  blockRepository: BlockRepository
   secretCipher: SecretCipher
   /** Slack Web API client; defaults to a fetch-backed one. */
   slackClient?: SlackApiClient
@@ -89,33 +95,41 @@ export class SlackNotificationChannel implements NotificationChannel {
     const channel = resolveRoute(settings, notification.type)
     if (!channel) return
 
-    const mentions = settings.mentionsEnabled ? await this.resolveMentions(accountKey) : []
+    const mentions = settings.mentionsEnabled
+      ? await this.resolveMentions(accountKey, workspaceId, notification)
+      : []
     const token = await this.deps.secretCipher.decrypt(connection.tokenCipher)
     const message = renderNotificationMessage(notification, channel, mentions)
     await this.slack.chatPostMessage(token, message as unknown as Record<string, unknown>)
   }
 
   /**
-   * Resolve the Slack member ids to @-mention. cat-factory notifications carry no
-   * single "owner" to ping — they are team-level events (a PR needs a merge review,
-   * CI is red) — so when a workspace OPTS IN to mentions (`mentionsEnabled`), every
-   * account member that has a configured GitHub→Slack mapping is tagged: a
-   * deliberate team broadcast. Unmapped members are skipped; an empty map means no
-   * mentions even when enabled.
+   * Resolve the Slack member ids to @-mention, scoped to the notification's
+   * audience (see {@link resolveMentionTargets}): role-matched mapped members for
+   * the type (product people on a requirement review) plus the task's creator. So
+   * an engineering notification pings only the person who created the task, and a
+   * requirement review pings the product folks who own those decisions — never the
+   * whole workspace. Unmapped people are skipped; an empty map means no mentions.
    */
-  private async resolveMentions(accountKey: string): Promise<string[]> {
-    const [members, mapping] = await Promise.all([
-      this.deps.membershipRepository.listByAccount(accountKey),
-      this.deps.slackMemberMappingRepository.getByAccount(accountKey),
-    ])
-    if (members.length === 0 || mapping.length === 0) return []
-    const slackByGithub = new Map(mapping.map((m) => [m.githubUserId, m.slackUserId]))
-    const ids: string[] = []
-    for (const member of members) {
-      const slackId = slackByGithub.get(member.userId)
-      if (slackId) ids.push(slackId)
-    }
-    return ids
+  private async resolveMentions(
+    accountKey: string,
+    workspaceId: string,
+    notification: Notification,
+  ): Promise<string[]> {
+    const mapping = await this.deps.slackMemberMappingRepository.getByAccount(accountKey)
+    if (mapping.length === 0) return []
+    const creatorGithubId = await this.resolveCreator(workspaceId, notification.blockId)
+    return resolveMentionTargets(notification.type, mapping, creatorGithubId)
+  }
+
+  /** The GitHub user id of the block's creator, or null when unknown. */
+  private async resolveCreator(
+    workspaceId: string,
+    blockId: string | null,
+  ): Promise<number | null> {
+    if (!blockId) return null
+    const block = await this.deps.blockRepository.get(workspaceId, blockId)
+    return block?.createdBy ?? null
   }
 
   private parseRoutes(routesJson: string): ReturnType<typeof defaultSlackSettings>['routes'] {

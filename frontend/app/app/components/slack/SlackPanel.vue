@@ -6,7 +6,7 @@
 //   - Mentions (per-account): toggle + GitHub-user-id → Slack-member-id map.
 import { computed, reactive, ref, watch } from 'vue'
 import type { NotificationType } from '~/types/notifications'
-import type { SlackMemberMappingEntry, SlackRoute } from '~/types/slack'
+import type { SlackMemberMappingEntry, SlackMemberRole, SlackRoute } from '~/types/slack'
 
 const ui = useUiStore()
 const slack = useSlackStore()
@@ -21,13 +21,18 @@ const ROUTABLE: { type: NotificationType; label: string }[] = [
   { type: 'merge_review', label: 'Merge review' },
   { type: 'pipeline_complete', label: 'Pipeline complete' },
   { type: 'ci_failed', label: 'CI failed' },
+  { type: 'requirement_review', label: 'Requirement review' },
 ]
+
+/** Notification-role options for a mapped member (drives who gets @-mentioned). */
+const ROLE_OPTIONS: SlackMemberRole[] = ['engineering', 'product']
 
 // Local editable copies, synced from the store on load.
 const routes = reactive<Record<NotificationType, SlackRoute>>({
   merge_review: { enabled: false, channel: '' },
   pipeline_complete: { enabled: false, channel: '' },
   ci_failed: { enabled: false, channel: '' },
+  requirement_review: { enabled: false, channel: '' },
 })
 const mentionsEnabled = ref(false)
 const mapping = ref<SlackMemberMappingEntry[]>([])
@@ -54,7 +59,7 @@ watch(
         routes[type] = slack.settings?.routes[type] ?? { enabled: false, channel: '' }
       }
       mentionsEnabled.value = slack.settings?.mentionsEnabled ?? false
-      mapping.value = slack.memberMapping.map((e) => ({ ...e }))
+      mapping.value = slack.memberMapping.map((e) => ({ role: 'engineering', ...e }))
     } catch (e) {
       notifyError('Could not load Slack settings', e)
     }
@@ -104,7 +109,7 @@ async function saveRouting() {
 }
 
 function addMapping() {
-  mapping.value.push({ githubUserId: 0, slackUserId: '' })
+  mapping.value.push({ githubUserId: 0, slackUserId: '', role: 'engineering' })
 }
 function removeMapping(index: number) {
   mapping.value.splice(index, 1)
@@ -236,12 +241,16 @@ async function saveMapping() {
             <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
               Member map (GitHub user id → Slack member id)
             </p>
+            <p class="text-[11px] leading-snug text-slate-500">
+              <span class="font-medium text-slate-400">Product</span> people are mentioned on
+              requirement-review findings; everyone else only when they created the task.
+            </p>
             <div v-for="(entry, i) in mapping" :key="i" class="flex items-center gap-2">
               <UInput
                 v-model.number="entry.githubUserId"
                 type="number"
                 size="sm"
-                class="w-40"
+                class="w-32"
                 placeholder="GitHub user id"
               />
               <UInput
@@ -250,6 +259,7 @@ async function saveMapping() {
                 class="flex-1"
                 placeholder="Slack member id (U…)"
               />
+              <USelect v-model="entry.role" :items="ROLE_OPTIONS" size="sm" class="w-32" />
               <UButton
                 color="error"
                 variant="ghost"

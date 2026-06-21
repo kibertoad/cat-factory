@@ -165,6 +165,7 @@ export type {
   SlackRoute,
   SlackNotificationSettings,
   SlackMemberMappingEntry,
+  SlackMemberRole,
   SlackMemberMapping,
   SlackChannel,
   ConnectSlackByTokenInput,

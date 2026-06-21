@@ -95,7 +95,7 @@ function selectNodeSlackDeps(
       slackConnectionRepository,
       slackSettingsRepository,
       slackMemberMappingRepository,
-      membershipRepository: repos.membershipRepository,
+      blockRepository: repos.blockRepository,
       secretCipher,
       // Best-effort delivery still surfaces failures (revoked token, missing channel
       // invite) through the structured logger so a broken route is diagnosable.

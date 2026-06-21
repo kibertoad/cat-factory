@@ -35,9 +35,17 @@ export interface SlackNotificationSettings {
 }
 
 /** One GitHub user id → Slack member id mapping entry. */
+export type SlackMemberRole = 'product' | 'engineering'
+
 export interface SlackMemberMappingEntry {
   githubUserId: number
   slackUserId: string
+  /**
+   * Notification role: `product` people are @-mentioned on requirement-review
+   * findings; everyone else (`engineering`) only when they created the task.
+   * Absent means `engineering`.
+   */
+  role?: SlackMemberRole
 }
 
 /** A Slack channel option for the routing picker. */

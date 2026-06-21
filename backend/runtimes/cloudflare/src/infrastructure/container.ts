@@ -423,7 +423,7 @@ function buildSlackChannel(config: AppConfig, db: D1Database): SlackNotification
     slackConnectionRepository: infra.connectionRepository,
     slackSettingsRepository: infra.settingsRepository,
     slackMemberMappingRepository: infra.memberMappingRepository,
-    membershipRepository: new D1MembershipRepository({ db }),
+    blockRepository: new D1BlockRepository({ db }),
     secretCipher: infra.cipher,
     // Best-effort delivery still surfaces failures (revoked token, missing channel
     // invite) through the structured logger so a broken route is diagnosable.

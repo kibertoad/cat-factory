@@ -93,6 +93,8 @@ export interface Block {
   mergePresetId?: string
   /** task-only: pinned default pipeline id picked at creation; absent = none. */
   pipelineId?: string
+  /** GitHub user id of the task's creator; drives "notify the task creator" routing. */
+  createdBy?: number | null
 }
 
 /**

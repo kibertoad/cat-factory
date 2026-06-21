@@ -28,8 +28,15 @@ Two scopes, mirroring the GitHub-App precedent:
   with manual bot-token paste always available as a fallback.
 - Notification **routing** (which types post, to which channel) is configured
   **per-workspace**.
-- Optional **@-mentions** resolve from an opt-in per-account map of GitHub user id →
-  Slack member id.
+- Optional **@-mentions** are **role- and audience-aware**, not a workspace
+  broadcast. The per-account member map tags each member `product` or `engineering`,
+  and each notification type mentions a specific audience: requirement-review
+  findings ping **product** people **plus the task's creator**, while the engineering
+  notifications (merge_review / pipeline_complete / ci_failed) ping **only the task's
+  creator**. This adds a `requirement_review` notification type (raised by the
+  requirements reviewer when it produces findings) and records a `createdBy` on
+  blocks (a new nullable column on both runtimes), captured from the authenticated
+  user at task creation.
 
 New surface: the `slack` contracts, the kernel Slack repository ports, the
 `@cat-factory/integrations` Slack module (`SlackNotificationChannel`,

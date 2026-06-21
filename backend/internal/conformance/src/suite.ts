@@ -841,9 +841,9 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
           `/workspaces/${wsId}/slack/member-mapping`,
           {
             entries: [
-              { githubUserId: 1, slackUserId: 'U1' },
-              { githubUserId: 1, slackUserId: 'U1b' },
-              { githubUserId: 2, slackUserId: 'U2' },
+              { githubUserId: 1, slackUserId: 'U1', role: 'engineering' },
+              { githubUserId: 1, slackUserId: 'U1b', role: 'product' },
+              { githubUserId: 2, slackUserId: 'U2', role: 'product' },
             ],
           },
         )
@@ -857,6 +857,9 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
           `/workspaces/${wsId}/slack/member-mapping`,
         )
         expect(after.body.entries).toHaveLength(2)
+        // The notification role round-trips on both stores (drives @-mention audience).
+        expect(after.body.entries.find((e) => e.githubUserId === 1)?.role).toBe('product')
+        expect(after.body.entries.find((e) => e.githubUserId === 2)?.role).toBe('product')
       })
     })
   })

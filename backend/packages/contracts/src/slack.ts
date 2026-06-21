@@ -62,10 +62,21 @@ export const slackNotificationSettingsSchema = v.object({
 })
 export type SlackNotificationSettings = v.InferOutput<typeof slackNotificationSettingsSchema>
 
-/** One GitHub user id → Slack member id mapping entry. */
+/**
+ * Which kinds of notification a mapped member cares about. `product` people are
+ * @-mentioned on requirement-review findings (and otherwise left alone); everyone
+ * else is `engineering` and is only @-mentioned when they are the task's creator.
+ * Absent on a legacy entry means `engineering` (see {@link resolveMemberRole}).
+ */
+export const slackMemberRoleSchema = v.picklist(['product', 'engineering'])
+export type SlackMemberRole = v.InferOutput<typeof slackMemberRoleSchema>
+
+/** One GitHub user id → Slack member id mapping entry, with the member's role. */
 export const slackMemberMappingEntrySchema = v.object({
   githubUserId: v.number(),
   slackUserId: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(64)),
+  /** Notification role (default `engineering` when absent). */
+  role: v.optional(slackMemberRoleSchema),
 })
 export type SlackMemberMappingEntry = v.InferOutput<typeof slackMemberMappingEntrySchema>
 
