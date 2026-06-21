@@ -110,15 +110,29 @@ jobs:
       - name: Typecheck frontend layer
         run: pnpm --filter @cat-factory/app run typecheck
 
+  # The test suite is the critical path of CI; the 59-file Cloudflare worker suite
+  # dominates it. Split into 2 parallel shards: each runs half the worker suite
+  # (vitest --shard splits the file list deterministically; every shard runs in its
+  # own miniflare local D1, so there is no cross-shard contention) plus a balancing
+  # subset of the other packages. Shard 1 carries the Postgres-backed Node/Local
+  # conformance suites; shard 2 carries the remaining unit packages.
   test:
-    name: Test
+    name: Test (shard ${{ matrix.shard }})
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    # Real Postgres for the Node facade's tests (the cross-runtime conformance suite +
-    # the pg-boss durable-execution test) — the same persistence used in dev/prod, so
-    # the Drizzle repos + schema are exercised for real. The Worker tests use a local
-    # D1 inside the Workers pool and ignore this.
+    strategy:
+      # Run both shards to completion even if one fails, so a failure is never
+      # masked and both shards' timings are always observable.
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    # Real Postgres for the Node/Local facades' tests (the cross-runtime conformance
+    # suite + the pg-boss durable-execution test) — the same persistence used in
+    # dev/prod, so the Drizzle repos + schema are exercised for real. Only shard 1
+    # runs those suites, but `services` can't be declared per-matrix-value, so both
+    # shards spin it up; the ~20s init runs in parallel with the rest of setup. The
+    # Worker tests use a local D1 inside the Workers pool and ignore this.
     services:
       postgres:
         image: postgres:18
@@ -152,8 +166,42 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Run tests
-        run: pnpm test:run
+      # Each shard runs individual packages' tests directly (not the root
+      # `pnpm test:run`, which builds first), so build the workspace dist the
+      # tests resolve their workspace deps against here.
+      - name: Build libraries
+        run: pnpm build
+
+      # Shard 1: half the worker suite + the Postgres-backed Node/Local suites.
+      - name: Run tests (shard 1)
+        if: matrix.shard == 1
+        run: |
+          pnpm --filter @cat-factory/worker exec vitest run --shard=1/2
+          pnpm --filter @cat-factory/node-server --filter @cat-factory/local-server run test:run
+
+      # Shard 2: the other half of the worker suite + every remaining package's
+      # tests (pure unit suites; no Postgres needed).
+      - name: Run tests (shard 2)
+        if: matrix.shard == 2
+        run: |
+          pnpm --filter @cat-factory/worker exec vitest run --shard=2/2
+          pnpm --filter='!@cat-factory/worker' --filter='!@cat-factory/node-server' --filter='!@cat-factory/local-server' -r run test:run
+
+  # Single aggregated status named "Test" so branch protection can require one
+  # check regardless of the shard count. Fails unless every shard succeeded.
+  test-gate:
+    name: Test
+    needs: test
+    if: always()
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Verify all test shards passed
+        env:
+          RESULT: ${{ needs.test.result }}
+        run: |
+          echo "Aggregated test matrix result: $RESULT"
+          test "$RESULT" = "success"
 
   acceptance:
     name: Container acceptance (Docker)
