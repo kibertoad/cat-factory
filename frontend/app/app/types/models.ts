@@ -47,6 +47,37 @@ export interface ModelOption {
   }
 }
 
+/**
+ * Status of a user's personal (individual-usage) subscription — Claude consumer
+ * subscriptions are licensed per individual, so they're stored per-user (not pooled)
+ * and unlocked with a personal password. Metadata only; never the token.
+ */
+export interface PersonalSubscriptionStatus {
+  vendor: SubscriptionVendor
+  label: string
+  createdAt: number
+  updatedAt: number
+  lastUsedAt: number | null
+  /** Subscription's own expiry (null = no fixed end date). */
+  expiresAt: number | null
+  /** Whole days until `expiresAt` (negative once lapsed; null when no expiry). */
+  expiresInDays: number | null
+  expired: boolean
+  /** Whether renewal should be surfaced now (expiry within the warning window). */
+  renewSoon: boolean
+}
+
+/** Connect (or replace) the signed-in user's personal subscription for a vendor. */
+export interface StorePersonalSubscriptionInput {
+  vendor: SubscriptionVendor
+  label: string
+  token: string
+  /** Personal password gating the second encryption layer; never stored. */
+  password: string
+  /** Epoch ms the subscription expires (for renewal warnings); optional. */
+  expiresAt?: number | null
+}
+
 /** A connected subscription credential (metadata + usage), never the secret. */
 export interface VendorCredential {
   id: string

@@ -96,8 +96,13 @@ export const useAgentRunsStore = defineStore('agentRuns', () => {
    */
   async function retry(runId: string) {
     const ws = useWorkspaceStore()
-    await api.retryAgentRun(ws.requireId(), runId)
-    await ws.refresh()
+    const personal = usePersonalSubscriptionsStore()
+    // A failed run on a Claude-pinned block needs the retrying user's personal password;
+    // supplied from cache and prompted (then retried) on a 428, exactly like start.
+    await personal.withCredential(async (password) => {
+      await api.retryAgentRun(ws.requireId(), runId, password)
+      await ws.refresh()
+    })
   }
 
   /**

@@ -9,7 +9,6 @@ import type { SubscriptionVendor } from '~/types/domain'
 
 const ui = useUiStore()
 const workspace = useWorkspaceStore()
-const accounts = useAccountsStore()
 const creds = useVendorCredentialsStore()
 const toast = useToast()
 
@@ -20,42 +19,19 @@ const open = computed({
 
 type Os = 'mac' | 'linux' | 'windows'
 
+// Anthropic's consumer Claude subscription is licensed for INDIVIDUAL use only, so it is
+// never pooled here — it is connected per-user in the "Personal subscription" section
+// below (PersonalSubscriptionSection). Only commercial coding-plan vendors are poolable.
 const VENDORS: { value: SubscriptionVendor; label: string; harness: string }[] = [
-  { value: 'claude', label: 'Claude (Pro/Max)', harness: 'Claude Code' },
   { value: 'glm', label: 'GLM — Z.ai coding plan', harness: 'Claude Code' },
   { value: 'kimi', label: 'Kimi — Moonshot coding plan', harness: 'Claude Code' },
   { value: 'deepseek', label: 'DeepSeek — coding plan', harness: 'Claude Code' },
   { value: 'codex', label: 'ChatGPT (Plus/Pro)', harness: 'Codex' },
 ]
 
-// Anthropic's consumer Claude subscription is licensed for individual use only, so it
-// may not be pooled on a board owned by an organization account — the backend refuses
-// it (see ProviderSubscriptionService). Drop it from the picker for org boards so the
-// option isn't offered at all (legacy connected tokens still list/remove below). The
-// other vendors sell commercial coding-plan keys, so they stay available.
-const isOrgWorkspace = computed(() => {
-  const accountId = workspace.activeWorkspace?.accountId
-  if (!accountId) return false
-  return accounts.accounts.find((a) => a.id === accountId)?.type === 'org'
-})
+const visibleVendors = computed(() => VENDORS)
 
-const visibleVendors = computed(() =>
-  VENDORS.filter((v) => !(isOrgWorkspace.value && v.value === 'claude')),
-)
-
-const vendor = ref<SubscriptionVendor>('claude')
-
-// Keep the selection valid when Claude is hidden (org board): fall back to the first
-// offered vendor so the form never sits on an unselectable option.
-watch(
-  visibleVendors,
-  (vendors) => {
-    if (!vendors.some((v) => v.value === vendor.value)) {
-      vendor.value = vendors[0]?.value ?? 'codex'
-    }
-  },
-  { immediate: true },
-)
+const vendor = ref<SubscriptionVendor>('codex')
 const os = ref<Os>('mac')
 const label = ref('')
 const token = ref('')
@@ -77,12 +53,6 @@ const codexPath = computed(
 /** Step-by-step instructions for the selected vendor (+ OS for Codex). */
 const steps = computed<string[]>(() => {
   switch (vendor.value) {
-    case 'claude':
-      return [
-        'Install Claude Code and sign in with your Claude Pro/Max account: run `claude` once and complete the browser login.',
-        'Generate a long-lived token: run `claude setup-token` and copy the printed token.',
-        'Paste the token below. It authenticates Claude Code against api.anthropic.com on your subscription.',
-      ]
     case 'glm':
       return [
         'Open your Z.ai coding-plan dashboard and create an API key for the Anthropic-compatible endpoint.',
@@ -107,15 +77,16 @@ const steps = computed<string[]>(() => {
         `Open the credentials file Codex wrote at ${codexPath.value} (set \`cli_auth_credentials_store = "file"\` in ~/.codex/config.toml first if it used the OS keychain).`,
         'Copy the entire contents of auth.json and paste it below.',
       ]
+    default:
+      // Claude is individual-usage only (the personal section); not poolable here.
+      return []
   }
 })
 
 const tokenPlaceholder = computed(() =>
   vendor.value === 'codex'
     ? '{ "auth_mode": "chatgpt", "tokens": { … } }'
-    : vendor.value === 'claude'
-      ? 'sk-ant-oat01-…'
-      : 'your coding-plan API key',
+    : 'your coding-plan API key',
 )
 
 async function add() {
@@ -163,16 +134,14 @@ function vendorLabel(v: SubscriptionVendor): string {
     <template #body>
       <div class="space-y-5">
         <p class="text-sm text-slate-400">
-          Connect a subscription to run agent steps on the Claude Code / Codex harnesses instead of
-          an API key. Tokens are stored encrypted, pooled, and rotated by usage. Subscription models
-          are flat-rate quota — they don’t draw on your spend budget.
+          Connect a commercial coding-plan subscription to run agent steps on the Claude Code /
+          Codex harnesses instead of an API key. Tokens are stored encrypted, pooled, and rotated by
+          usage. Subscription models are flat-rate quota — they don’t draw on your spend budget.
         </p>
 
-        <p v-if="isOrgWorkspace" class="text-sm text-amber-400/90">
-          This board belongs to an organization. The Claude (Pro/Max) subscription is licensed for
-          individual use only, so it can’t be connected here — use a commercial coding-plan vendor or
-          an API-key model instead.
-        </p>
+        <h4 class="text-xs font-semibold uppercase tracking-wide text-slate-500">
+          Workspace pool (commercial coding plans)
+        </h4>
 
         <!-- vendor + (codex) OS pickers -->
         <div class="flex flex-wrap items-end gap-3">
@@ -249,6 +218,11 @@ function vendorLabel(v: SubscriptionVendor): string {
               @click="remove(c.id)"
             />
           </div>
+        </div>
+
+        <!-- personal (individual-usage) subscription: Claude, per-user -->
+        <div class="border-t border-slate-800 pt-5">
+          <ProvidersPersonalSubscriptionSection />
         </div>
       </div>
     </template>

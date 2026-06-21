@@ -30,6 +30,8 @@ import type {
   MergePullRequestInput,
   ModelOption,
   ModelDefaults,
+  PersonalSubscriptionStatus,
+  StorePersonalSubscriptionInput,
   SubscriptionVendor,
   VendorCredential,
   OpenPullRequestInput,
@@ -202,6 +204,18 @@ export function useApi() {
     removeVendorCredential: (workspaceId: string, id: string) =>
       http(`${ws(workspaceId)}/vendor-credentials/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 
+    // ---- personal (individual-usage) subscriptions (per-user, e.g. Claude) ----
+    // Stored per signed-in user, double-encrypted under their personal password.
+    // Metadata only is returned (never the token). User-scoped (no workspace).
+    listPersonalSubscriptions: () =>
+      http<{ subscriptions: PersonalSubscriptionStatus[] }>('/personal-subscriptions'),
+
+    storePersonalSubscription: (body: StorePersonalSubscriptionInput) =>
+      http<PersonalSubscriptionStatus>('/personal-subscriptions', { method: 'POST', body }),
+
+    removePersonalSubscription: (vendor: SubscriptionVendor) =>
+      http(`/personal-subscriptions/${encodeURIComponent(vendor)}`, { method: 'DELETE' }),
+
     // ---- accounts (tenancy) -----------------------------------------------
     // The accounts the user can switch between (personal + orgs), org creation
     // and membership management. Empty when auth is disabled (dev).
@@ -284,7 +298,11 @@ export function useApi() {
       http(`${ws(workspaceId)}/pipelines/${pipelineId}`, { method: 'DELETE' }),
 
     // ---- executions -------------------------------------------------------
-    startExecution: (workspaceId: string, blockId: string, body: { pipelineId: string }) =>
+    startExecution: (
+      workspaceId: string,
+      blockId: string,
+      body: { pipelineId: string; password?: string },
+    ) =>
       http<ExecutionInstance>(`${ws(workspaceId)}/blocks/${blockId}/executions`, {
         method: 'POST',
         body,
@@ -791,10 +809,10 @@ export function useApi() {
     // ---- agent runs (unified failure + retry) -----------------------------
     // Retry any failed run (bootstrap or execution); the backend resolves the
     // kind from the unified `agent_runs` table and re-drives the right flow.
-    retryAgentRun: (workspaceId: string, runId: string) =>
+    retryAgentRun: (workspaceId: string, runId: string, password?: string) =>
       http<{ kind: AgentRunKind; run: ExecutionInstance | BootstrapJob }>(
         `${ws(workspaceId)}/agent-runs/${encodeURIComponent(runId)}/retry`,
-        { method: 'POST' },
+        { method: 'POST', body: password ? { password } : undefined },
       ),
 
     // Explicitly stop a running run (bootstrap or execution): the backend kills the

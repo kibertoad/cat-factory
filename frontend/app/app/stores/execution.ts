@@ -100,11 +100,19 @@ export const useExecutionStore = defineStore('execution', () => {
     return out
   })
 
-  /** Start `pipeline` against a block; the server marks the block in-progress. */
+  /**
+   * Start `pipeline` against a block; the server marks the block in-progress. A block
+   * pinned to an individual-usage model (Claude) needs the initiator's personal
+   * password — supplied transparently from the local cache, and prompted via the
+   * credential modal (then retried) when the server replies 428.
+   */
   async function start(blockId: string, pipeline: Pipeline) {
     const ws = useWorkspaceStore()
-    await api.startExecution(ws.requireId(), blockId, { pipelineId: pipeline.id })
-    await ws.refresh()
+    const personal = usePersonalSubscriptionsStore()
+    await personal.withCredential(async (password) => {
+      await api.startExecution(ws.requireId(), blockId, { pipelineId: pipeline.id, password })
+      await ws.refresh()
+    })
   }
 
   async function resolveDecision(instanceId: string, decisionId: string, choice: string) {

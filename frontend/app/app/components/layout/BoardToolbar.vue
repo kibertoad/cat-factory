@@ -2,6 +2,7 @@
 import { useBoardFlow } from '~/composables/useBoardFlow'
 import NotificationsInbox from '~/components/layout/NotificationsInbox.vue'
 import VendorCredentialsModal from '~/components/providers/VendorCredentialsModal.vue'
+import PersonalCredentialModal from '~/components/providers/PersonalCredentialModal.vue'
 
 const ui = useUiStore()
 const board = useBoardStore()
@@ -138,6 +139,7 @@ const decisionItems = computed(() =>
       Vendors
     </UButton>
     <VendorCredentialsModal />
+    <PersonalCredentialModal />
 
     <!-- spend safeguard usage -->
     <UButton

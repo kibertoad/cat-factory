@@ -157,11 +157,12 @@ reviewer/rework so the two paths can't drift.
 
 ## 6. Subscriptions (the vendor token pool)
 
-A workspace can connect one or more **subscription credentials per vendor**
-(`claude`, `codex`, `glm`, `kimi`, `deepseek`) so agent steps run on the Claude Code /
-Codex harnesses instead of an API key. See
+A workspace can connect one or more **subscription credentials per vendor** for the
+**commercial coding-plan vendors** (`codex`, `glm`, `kimi`, `deepseek`) so agent steps
+run on the Claude Code / Codex harnesses instead of an API key. See
 [`SUBSCRIPTION_VENDORS`](../packages/kernel/src/domain/models.ts) for the
-vendor→harness map and base URLs.
+vendor→harness map and base URLs. **Claude is NOT in this pool** — it is licensed for
+individual use only and stored per-user (see below).
 
 - **Storage**: a per-workspace pool (`provider_subscription_tokens`, D1 + Postgres),
   **encrypted at rest** under an `ENCRYPTION_KEY`-derived key; tokens are write-only
@@ -172,33 +173,27 @@ vendor→harness map and base URLs.
 - **Rotation**: leasing is usage-aware (least-loaded token wins, round-robin by
   `lastUsedAt`); the pool is capped per vendor.
 - **What each vendor is**:
-  - `claude` — a long-lived OAuth token from `claude setup-token`
-    (`CLAUDE_CODE_OAUTH_TOKEN`, talks to api.anthropic.com).
   - `glm`/`kimi`/`deepseek` — a coding-plan API key driven by Claude Code against the
     vendor's Anthropic-compatible endpoint (Z.ai / Moonshot / DeepSeek).
   - `codex` — the full ChatGPT `auth.json` bundle.
+- `addToken`/`leaseToken` throw a `ConflictError` (HTTP 409) for any `individualOnly`
+  vendor (Claude) — those never enter the pool.
 
-### Individual-only vendors: Claude is blocked on org workspaces
+### Individual-usage subscriptions: Claude is per-user, not pooled
 
-Anthropic's consumer Claude subscription is licensed for **individual use only**, so a
-pooled Claude OAuth token may **not** be shared across an organization. This is
-modelled by an `individualOnly` flag on the vendor config (set for `claude`); the
-service enforces it by resolving the workspace's owning **account** (`AccountRepository`)
-and refusing the vendor when the account `type === 'org'`:
+Anthropic's consumer Claude subscription is licensed for **individual use only**, so it
+is never pooled or shared. Instead each user stores their **own** credential and only
+that user's runs may use it. It is gated by the `individualOnly` flag on the vendor
+config (set for `claude`) and implemented as a separate, per-user **individual-usage
+restricted mode**:
 
-- `addToken` / `leaseToken` throw a `ConflictError` (HTTP 409) for an
-  individual-only vendor on an org-owned workspace.
-- `hasToken` reports it unavailable, so the "subscriptions always win" router never
-  auto-selects a vendor that lease would then reject.
-- The **LLM Vendors** UI drops the Claude option (with an explanatory note) for org
-  boards; legacy connected tokens still list and remove.
-- **Scope**: only `claude`. `codex` (ChatGPT) permits org usage and stays available;
-  the commercial coding-plan vendors (GLM/Kimi/DeepSeek) sell API keys and are
-  unrestricted. Personal and legacy/unscoped workspaces are unaffected.
+- Stored per-user, **double-encrypted** (a personal-password layer inside the system
+  layer) and unlocked with the user's password at task start/retry; a short-lived
+  per-run activation lets the async container steps run without the user present.
+- **Recurring schedules** can't use it (no unattended unlock).
 
-The rule lives in the shared service and is wired symmetrically into both runtimes
-(Cloudflare D1 + Node/local Drizzle), with a cross-runtime conformance assertion so a
-facade can't drift.
+The full model, the safeguards, and the request flow are documented in
+**[individual-subscription-usage.md](./individual-subscription-usage.md)**.
 
 ---
 
@@ -264,12 +259,12 @@ Block.modelId ──► resolveStepModelRef
   2. ws default  ├─► catalog model ──► effectiveVariant (direct? else cloudflare)
   3. env default ─┘                         │
                                             ├─ dual-mode + workspace has token ─► subscription flavour ("subscriptions win")
-                                            │     └─ vendor individual-only + org workspace ─► blocked (no token leased)
+                                            │     └─ individual-only vendor (claude) ─► initiator's PERSONAL subscription (per-run activation)
                                             │
                        ┌────────────────────┴────────────────────┐
                   container step                              inline step
                   harness pi  ─► LLM proxy (proxyable only)   inlineModelRef: non-pi harness ─► env routing default
-                  harness claude-code/codex ─► lease pool token, direct to vendor (quota-based)
+                  harness claude-code/codex ─► lease pool token (or personal activation for claude), direct to vendor (quota-based)
 ```
 
 ---
