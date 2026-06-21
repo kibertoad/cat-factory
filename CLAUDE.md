@@ -104,10 +104,14 @@ facade so the runtimes can't drift (see "Cross-runtime conformance" below).
   driver), Node gateways + model provisioning (`loadNodeConfig`,
   `createNodeModelProvider` = direct vendors + Cloudflare-over-REST + opt-in Bedrock),
   and `createServer()` / `start()`. `DATABASE_URL` selects the database; `migrate()`
-  bootstraps the schema idempotently on boot. Exposes two composition seams used by
-  the local facade (both default to the existing Node behaviour): `buildNodeContainer`
-  accepts an injected `resolveTransport` + `mintInstallationToken`, and `start()` an
-  injected `buildContainer`.
+  bootstraps the schema idempotently on boot. Exposes composition seams used by
+  the local facade (all default to the existing Node behaviour): `buildNodeContainer`
+  accepts an injected `resolveTransport`, `mintInstallationToken` and `githubClient`,
+  and `start()` an injected `buildContainer` + a `host` bind address (else `HOST` from
+  the env, else all interfaces). When the GitHub App is configured, Node now builds its
+  own `FetchGitHubClient` from the shared App registry to wire the **CI gate + merge /
+  mergeability** providers — so a stock Node-with-App deployment gates on real Actions
+  CI and merges for real, exactly like the Worker (previously only local mode did).
 - `backend/runtimes/local` — `@cat-factory/local-server`, the **local-mode facade**:
   the Node facade with two differentiators so a developer can run the whole product on
   their own machine. Agent jobs run as **per-job local Docker/Podman containers** (the

@@ -6,6 +6,7 @@ import { linkRepo } from './linkRepo.js'
 // exercised against Postgres by the conformance/integration runs.
 function fakeDb() {
   const writes: { table: string; values: Record<string, unknown> }[] = []
+  let deletes = 0
   const db = {
     insert(table: { tableName: string } | unknown) {
       // drizzle pg tables expose their name via a symbol; tests don't need it precisely,
@@ -25,13 +26,23 @@ function fakeDb() {
         },
       }
     },
+    // linkRepo clears any stale installation row for the workspace (different id) before
+    // upserting; the fake just records that the delete chain ran.
+    delete(_table: unknown) {
+      return {
+        where(_predicate: unknown) {
+          deletes++
+          return Promise.resolve()
+        },
+      }
+    },
   }
-  return { db, writes }
+  return { db, writes, deletes: () => deletes }
 }
 
 describe('linkRepo', () => {
   it('fetches repo metadata with the PAT and seeds installation + repo rows', async () => {
-    const { db, writes } = fakeDb()
+    const { db, writes, deletes } = fakeDb()
     const fetchImpl = vi.fn(
       async (_input: string | URL | Request, _init?: RequestInit) =>
         new Response(
@@ -52,6 +63,9 @@ describe('linkRepo', () => {
       db: db as never,
       fetchImpl: fetchImpl as unknown as typeof fetch,
     })
+
+    // Any stale installation row for the workspace (different id) is cleared first.
+    expect(deletes()).toBe(1)
 
     expect(fetchImpl).toHaveBeenCalledOnce()
     const [url, init] = fetchImpl.mock.calls[0]!

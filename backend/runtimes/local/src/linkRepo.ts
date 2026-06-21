@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto'
 import { type DrizzleDb, createDbClient, schema } from '@cat-factory/node-server'
+import { and, eq, ne } from 'drizzle-orm'
 
 // Link a real GitHub repo to a board service frame for LOCAL mode. Container agent
 // steps resolve which repo to operate on from the `github_repos` /
@@ -115,6 +116,19 @@ export async function linkRepo(options: LinkRepoOptions): Promise<LinkedRepo> {
       created_at: now,
       deleted_at: null,
     }
+    // `github_installations` has a partial UNIQUE index on (workspace_id) WHERE
+    // deleted_at IS NULL, so a pre-existing live row for this workspace under a DIFFERENT
+    // id (e.g. from a real GitHub-App connect) would collide with our synthetic-id
+    // insert — and the upsert below keys on installation_id, not workspace_id, so it
+    // wouldn't catch it. Clear any such row first so re-linking is robust.
+    await db
+      .delete(schema.githubInstallations)
+      .where(
+        and(
+          eq(schema.githubInstallations.workspace_id, options.workspaceId),
+          ne(schema.githubInstallations.installation_id, installationId),
+        ),
+      )
     await db.insert(schema.githubInstallations).values(installationValues).onConflictDoUpdate({
       target: schema.githubInstallations.installation_id,
       set: installationValues,

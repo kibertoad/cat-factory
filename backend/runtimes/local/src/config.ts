@@ -23,7 +23,9 @@ export function applyLocalDefaults(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   const port = env.PORT?.trim() || DEFAULT_PORT
   return {
     ...env,
-    AUTH_DEV_OPEN: env.AUTH_DEV_OPEN ?? 'true',
+    // `|| 'true'` (not `??`) so an explicit empty `AUTH_DEV_OPEN=` still defaults open,
+    // consistent with the other fields here; set `AUTH_DEV_OPEN=false` to close the gate.
+    AUTH_DEV_OPEN: env.AUTH_DEV_OPEN?.trim() || 'true',
     // Stable within a process; only signs short-lived proxy tokens for local jobs.
     AUTH_SESSION_SECRET: env.AUTH_SESSION_SECRET?.trim() || randomBytes(32).toString('hex'),
     // The harness (inside Docker) posts to `${PUBLIC_URL}/v1`; host.docker.internal

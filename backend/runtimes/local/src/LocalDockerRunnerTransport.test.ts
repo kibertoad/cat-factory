@@ -184,4 +184,98 @@ describe('LocalDockerRunnerTransport', () => {
     const t2 = new LocalDockerRunnerTransport({ image: 'i', exec: empty.exec })
     await expect(t2.release('missing')).resolves.toBeUndefined()
   })
+
+  it('maps a 404 job view (container up, job unknown/reaped) to an eviction', async () => {
+    const { exec } = fakeDocker()
+    const fetchImpl = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input)
+      if (url.endsWith('/health')) return new Response('ok', { status: 200 })
+      if (url.includes('/jobs/')) return new Response('not found', { status: 404 })
+      return jsonResponse({ state: 'running' }, 202)
+    })
+    const transport = new LocalDockerRunnerTransport({
+      image: 'harness:test',
+      exec,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    })
+    await transport.dispatch('job-404', {}, 'run')
+    const view = await transport.poll('job-404')
+    expect(view.state).toBe('failed')
+    expect(view.error).toMatch(/container evicted or crashed/)
+  })
+
+  it('throws (does not evict) when dispatch gets a non-OK HTTP response', async () => {
+    const { exec } = fakeDocker()
+    const fetchImpl = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input)
+      if (url.endsWith('/health')) return new Response('ok', { status: 200 })
+      return new Response('boom', { status: 500 })
+    })
+    const transport = new LocalDockerRunnerTransport({
+      image: 'harness:test',
+      exec,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    })
+    await expect(transport.dispatch('job-500', {}, 'run')).rejects.toThrow(/HTTP 500/)
+  })
+
+  it('removes a lingering container for the same job id before starting a fresh one', async () => {
+    // resolve() returns undefined (ps finds an id but `port` is unmapped → exited), so
+    // dispatch must `rm -f` the stale container before `docker run`.
+    let firstPortLookup = true
+    const calls: string[][] = []
+    const exec: DockerExec = (args) => {
+      calls.push(args)
+      const sub = args[0]
+      if (sub === 'run') return Promise.resolve({ stdout: 'fresh-container\n', stderr: '' })
+      if (sub === 'ps') return Promise.resolve({ stdout: 'stale-container\n', stderr: '' })
+      if (sub === 'port') {
+        // First lookup (resolve of the stale container) is unmapped; later lookups
+        // (the fresh container's waitForPort) succeed.
+        if (firstPortLookup) {
+          firstPortLookup = false
+          return Promise.resolve({ stdout: '\n', stderr: '' })
+        }
+        return Promise.resolve({ stdout: '127.0.0.1:49180\n', stderr: '' })
+      }
+      return Promise.resolve({ stdout: '', stderr: '' })
+    }
+    const fetchImpl = vi.fn(async (input: string | URL | Request) => {
+      if (String(input).endsWith('/health')) return new Response('ok', { status: 200 })
+      return jsonResponse({ state: 'running' }, 202)
+    })
+    const transport = new LocalDockerRunnerTransport({
+      image: 'harness:test',
+      exec,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    })
+    await transport.dispatch('job-stale', {}, 'run')
+    // The stale container was force-removed, then a fresh one was started.
+    expect(calls.some((c) => c[0] === 'rm' && c.includes('stale-container'))).toBe(true)
+    expect(calls.some((c) => c[0] === 'run')).toBe(true)
+  })
+
+  it('reapExited force-removes exited managed containers and returns the count', async () => {
+    const calls: string[][] = []
+    const exec: DockerExec = (args) => {
+      calls.push(args)
+      if (args[0] === 'ps') return Promise.resolve({ stdout: 'c1\nc2\n', stderr: '' })
+      return Promise.resolve({ stdout: '', stderr: '' })
+    }
+    const transport = new LocalDockerRunnerTransport({ image: 'harness:test', exec })
+    const reaped = await transport.reapExited()
+    expect(reaped).toBe(2)
+    const psCall = calls.find((c) => c[0] === 'ps')!
+    expect(psCall).toContain('status=exited')
+    expect(psCall.join(' ')).toContain('label=cat-factory.managed=local-docker')
+    const rmCall = calls.find((c) => c[0] === 'rm')!
+    expect(rmCall).toEqual(['rm', '-f', 'c1', 'c2'])
+  })
+
+  it('reapExited is a no-op (count 0) when no exited containers exist', async () => {
+    const { exec, calls } = fakeDocker({ ps: '' })
+    const transport = new LocalDockerRunnerTransport({ image: 'harness:test', exec })
+    expect(await transport.reapExited()).toBe(0)
+    expect(calls.some((c) => c[0] === 'rm')).toBe(false)
+  })
 })

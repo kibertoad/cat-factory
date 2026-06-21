@@ -82,6 +82,14 @@ export async function start(
      * differentiators (e.g. the local Docker transport + PAT token source).
      */
     buildContainer?: (options: NodeContainerOptions) => ServerContainer
+    /**
+     * The address to bind the HTTP listener to. Defaults to `HOST` from the env, else
+     * all interfaces. A facade or operator can pass `127.0.0.1` to keep the service off
+     * the LAN — but note repo-operating agent containers reach this service's LLM proxy
+     * via `PUBLIC_URL`, so on native Linux Docker (where that resolves to the bridge
+     * gateway, not loopback) a loopback-only bind makes the proxy unreachable to them.
+     */
+    host?: string
   } = {},
 ): Promise<ReturnType<typeof serve>> {
   const env = options.env ?? process.env
@@ -120,8 +128,9 @@ export async function start(
 
   const app = createApp(container, env)
   const port = Number(env.PORT ?? 8787)
-  const server = serve({ fetch: app.fetch, port })
-  logger.info({ port }, 'cat-factory node server listening')
+  const host = options.host ?? env.HOST?.trim() ?? undefined
+  const server = serve({ fetch: app.fetch, port, ...(host ? { hostname: host } : {}) })
+  logger.info({ port, host: host ?? '0.0.0.0' }, 'cat-factory node server listening')
 
   // Ordered graceful shutdown: stop accepting connections, halt the sweeper + pg-boss
   // worker, release the pool, then exit. Without closing the HTTP server the process

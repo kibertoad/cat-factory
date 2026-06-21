@@ -1,9 +1,12 @@
 import { buildNodeContainer, loadNodeConfig } from '@cat-factory/node-server'
 import type { NodeContainerOptions } from '@cat-factory/node-server'
-import type { ServerContainer } from '@cat-factory/server'
+import type { ResolveRunnerTransport, ServerContainer } from '@cat-factory/server'
 import { applyLocalDefaults } from './config.js'
 import { createLocalGitHubClient } from './github.js'
-import { createLocalDockerTransportFromEnv } from './LocalDockerRunnerTransport.js'
+import {
+  type LocalDockerRunnerTransport,
+  createLocalDockerTransportFromEnv,
+} from './LocalDockerRunnerTransport.js'
 
 // The local-mode composition root. It is intentionally thin: the ENTIRE Drizzle/
 // Postgres persistence, pg-boss durable execution, gateways and model provisioning
@@ -23,7 +26,16 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
   const env = applyLocalDefaults(options.env ?? process.env)
   const config = options.config ?? loadNodeConfig(env)
   const pat = env.GITHUB_PAT?.trim()
-  const transport = createLocalDockerTransportFromEnv(env)
+
+  // The Docker transport is constructed LAZILY on first container-job dispatch, so the
+  // service still boots to serve the board (and inline kinds) when LOCAL_HARNESS_IMAGE
+  // is unset — only repo-operating kinds then fail, loudly and with a clear message,
+  // mirroring how the Node facade treats a missing runner backend.
+  let transport: LocalDockerRunnerTransport | undefined
+  const resolveTransport: ResolveRunnerTransport = () => {
+    transport ??= createLocalDockerTransportFromEnv(env)
+    return Promise.resolve(transport)
+  }
 
   return buildNodeContainer({
     ...options,
@@ -31,7 +43,7 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
     config,
     // Always dispatch container jobs to the local Docker transport (a constant
     // resolver, ignoring workspace — local mode has no per-workspace runner pools).
-    resolveTransport: () => Promise.resolve(transport),
+    resolveTransport,
     // Authenticate git with the developer's PAT when present. Absent → the executor
     // falls back to the GitHub App path (and is null without it), so container kinds
     // fail loudly rather than silently mis-running.

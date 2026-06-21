@@ -116,6 +116,11 @@ export class LocalDockerRunnerTransport implements RunnerTransport {
   ): Promise<void> {
     let resolved = await this.resolve(jobId)
     if (!resolved) {
+      // A prior attempt may have left an exited/dead container under this job label
+      // (resolve() returns undefined for one whose port is no longer published). Remove
+      // any such container first so it can't shadow the fresh one in later label lookups
+      // (findContainer returns the first match).
+      await this.removeContainersForJob(jobId)
       const args = [
         'run',
         '-d',
@@ -201,7 +206,48 @@ export class LocalDockerRunnerTransport implements RunnerTransport {
     await this.exec(['rm', '-f', containerId]).catch(() => undefined)
   }
 
+  /**
+   * Reap exited per-job containers this transport manages — orphans a crash or hard
+   * kill left behind (release() never ran for them). Best-effort; returns the count
+   * removed. Call once at boot, before any job is in flight.
+   */
+  async reapExited(): Promise<number> {
+    const { stdout } = await this.exec([
+      'ps',
+      '-aq',
+      '--filter',
+      `label=${LABEL_MANAGED}`,
+      '--filter',
+      'status=exited',
+    ])
+    const ids = stdout
+      .trim()
+      .split('\n')
+      .map((s) => s.trim())
+      .filter(Boolean)
+    if (ids.length) await this.exec(['rm', '-f', ...ids]).catch(() => undefined)
+    return ids.length
+  }
+
   // --- internals ----------------------------------------------------------
+
+  /** Force-remove every (running or exited) container labelled with this job id. */
+  private async removeContainersForJob(jobId: string): Promise<void> {
+    const { stdout } = await this.exec([
+      'ps',
+      '-aq',
+      '--filter',
+      `label=${LABEL_JOB}=${jobId}`,
+      '--filter',
+      `label=${LABEL_MANAGED}`,
+    ])
+    const ids = stdout
+      .trim()
+      .split('\n')
+      .map((s) => s.trim())
+      .filter(Boolean)
+    if (ids.length) await this.exec(['rm', '-f', ...ids]).catch(() => undefined)
+  }
 
   private url(port: number, path: string): string {
     return `http://127.0.0.1:${port}${path}`
