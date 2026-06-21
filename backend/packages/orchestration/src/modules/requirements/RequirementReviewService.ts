@@ -5,7 +5,7 @@ import type {
   RequirementReview,
   ReviewItemStatus,
 } from '@cat-factory/kernel'
-import { assertFound, ValidationError } from '@cat-factory/kernel'
+import { assertFound, inlineModelRef, ValidationError } from '@cat-factory/kernel'
 import type { BlockRepository } from '@cat-factory/kernel'
 import type { Clock, IdGenerator } from '@cat-factory/kernel'
 import type { ModelProvider, ModelRef } from '@cat-factory/kernel'
@@ -102,15 +102,24 @@ export class RequirementReviewService {
    * {@link resolveBlockModel} so a stale id falls through to the next source.
    */
   private async modelFor(workspaceId: string, block: Block): Promise<ModelRef | undefined> {
+    const fallback = this.deps.modelRef
+    const resolve = (ref: ModelRef): ModelRef =>
+      // The reviewer is an INLINE LLM call: a pinned subscription model (Claude Code /
+      // Codex) runs only in the container harness and has no provider key here, so
+      // degrade it to the routing default the reviewer always carries — the same seam
+      // the inline agent executor uses, so the two can't drift. (`fallback ?? ref`
+      // keeps a non-degradable ref when no default is wired; that path already errors
+      // cleanly below with "No model is configured".)
+      inlineModelRef(ref, fallback ?? ref)
     const fromBlock = this.deps.resolveBlockModel?.(block.modelId)
-    if (fromBlock) return fromBlock
+    if (fromBlock) return resolve(fromBlock)
     const defaultId = await this.deps.resolveWorkspaceModelDefault?.(
       workspaceId,
       REQUIREMENTS_AGENT_KIND,
     )
     const fromDefault = this.deps.resolveBlockModel?.(defaultId)
-    if (fromDefault) return fromDefault
-    return this.deps.modelRef
+    if (fromDefault) return resolve(fromDefault)
+    return fallback
   }
 
   /** The current review for a block, or null if none has been run. */

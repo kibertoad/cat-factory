@@ -28,6 +28,22 @@ export interface ModelRef {
   contextTokens?: number
 }
 
+/**
+ * Degrade a model ref that demands a container-only subscription harness
+ * (`claude-code` / `codex`) to an inline-servable `fallback`. Such a ref names a
+ * vendor with NO provider key (the credential is a pooled subscription token used
+ * only inside the per-run container), so resolving it through a {@link ModelProvider}
+ * for an INLINE LLM call would fail. A block's model is shared by every step of its
+ * pipeline (container AND inline), so this is the single seam every inline path (the
+ * inline agent executor, the requirements reviewer/rework) routes a pinned
+ * subscription model through: the container steps keep the harness, the inline steps
+ * fall back to a provider model. A `pi` (or absent) harness is already inline-servable
+ * and passes through unchanged.
+ */
+export function inlineModelRef(ref: ModelRef, fallback: ModelRef): ModelRef {
+  return ref.harness && ref.harness !== 'pi' ? fallback : ref
+}
+
 export interface ModelProvider {
   /** Resolve a model handle the AI SDK can call, or throw if unconfigured. */
   resolve(ref: ModelRef): LanguageModel

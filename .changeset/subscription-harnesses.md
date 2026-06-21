@@ -3,6 +3,7 @@
 '@cat-factory/contracts': minor
 '@cat-factory/agents': patch
 '@cat-factory/server': minor
+'@cat-factory/orchestration': minor
 '@cat-factory/integrations': minor
 '@cat-factory/spend': patch
 '@cat-factory/worker': minor
@@ -32,8 +33,15 @@ the Pi proxy harness.
   subscription flavour, and `ModelOption` now carries per-flavour cost, context
   window, and a `quotaBased` flag (subscription usage is flat-rate quota, never
   billed against the spend budget).
-- An inline agent step pinned (via its block) to a subscription-only model now
-  degrades gracefully to the step's env-routing default model instead of hard-failing,
-  and the claude-code subscription harness repairs malformed structured output through
-  the vendor's own Anthropic-compatible endpoint (the Pi harness still uses the proxy;
-  Codex keeps the graceful no-repair path).
+- A block's model is shared by all its pipeline steps, so a pin to a subscription-only
+  model (Claude Code / Codex — container-only, no provider key) is degraded to the
+  step's env-routing default for every INLINE LLM path through one shared seam
+  (`inlineModelRef` / `resolveInlineModelRef`): both the inline agent executor and the
+  requirements reviewer/rework, so the inline steps run instead of hard-failing and the
+  two paths can't drift. The claude-code subscription harness repairs malformed
+  structured output through the vendor's own Anthropic-compatible endpoint (the Pi
+  harness still uses the proxy; Codex keeps the graceful no-repair path).
+- Hardening: the per-vendor token pool is capped to bound growth; the leased
+  subscription credential is scrubbed from subscription-repair error details (not just
+  GitHub-shaped secrets); and Codex token usage is read from its cumulative
+  `total_token_usage` so multi-turn runs attribute usage correctly for rotation.

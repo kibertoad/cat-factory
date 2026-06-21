@@ -23,6 +23,7 @@ export type { Clock, IdGenerator } from './runtime.js'
 export type { RequirementReviewRepository } from './requirement-review-repositories.js'
 export type { AgentRunRef, AgentRunRepository } from './agent-runs.js'
 export type { HarnessKind, ModelProvider, ModelRef } from './model-provider.js'
+export { inlineModelRef } from './model-provider.js'
 export type { TokenUsageRecord, TokenUsageRepository, TokenUsageTotals } from './token-usage.js'
 export type {
   LlmCallMetric,

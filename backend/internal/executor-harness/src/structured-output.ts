@@ -1,4 +1,5 @@
 import { redactSecrets } from './git.js'
+import { redactAll, secretsToRedact } from './agent-runner.js'
 import { log } from './logger.js'
 
 // A reusable abstraction for the "agent returns a structured JSON document as its
@@ -362,7 +363,11 @@ async function callSubscriptionRepair<T>(
     signal: access.signal,
   })
   if (!res.ok) {
-    const detail = redactSecrets((await res.text().catch(() => '')).slice(0, 300))
+    // A vendor 4xx body can echo the API key/token back; `redactSecrets` only knows
+    // GitHub-shaped creds, so ALSO scrub the leased subscription credential (the raw
+    // value, and — for a JSON auth bundle — its nested token leaves) before surfacing.
+    const raw = (await res.text().catch(() => '')).slice(0, 300)
+    const detail = redactAll(redactSecrets(raw), secretsToRedact(access.subscriptionToken ?? ''))
     throw new Error(
       `subscription repair call failed: HTTP ${res.status}${detail ? ` — ${detail}` : ''}`,
     )

@@ -18,6 +18,12 @@ import { DEFAULT_USAGE_WINDOW_MS, chooseToken } from './providers.logic.js'
 // hardcoded subset here silently hides newly-supported vendors' pooled tokens.
 const ALL_VENDORS = Object.keys(SUBSCRIPTION_VENDORS) as SubscriptionVendor[]
 
+// Upper bound on live tokens per workspace+vendor. The rotation pool is meant to hold
+// a handful of subscriptions for quota headroom; a generous ceiling keeps the feature
+// usable while bounding accidental/abusive unbounded growth (every lease lists the
+// whole live pool, so an unbounded pool would also bloat that read).
+const MAX_TOKENS_PER_VENDOR = 25
+
 // ProviderSubscriptionService: owns a workspace's pool of subscription
 // credentials per vendor. Tokens are stored *encrypted* (the raw secret is the
 // CLAUDE_CODE_OAUTH_TOKEN string for `claude` or the full auth.json blob for
@@ -67,6 +73,16 @@ export class ProviderSubscriptionService {
     input: { vendor: SubscriptionVendor; label: string; token: string },
   ): Promise<VendorCredentialSummary> {
     await requireWorkspace(this.deps.workspaceRepository, workspaceId)
+    const existing = await this.deps.providerSubscriptionTokenRepository.listByVendor(
+      workspaceId,
+      input.vendor,
+    )
+    if (existing.length >= MAX_TOKENS_PER_VENDOR) {
+      throw new ConflictError(
+        `Workspace '${workspaceId}' already has the maximum of ${MAX_TOKENS_PER_VENDOR} ` +
+          `${input.vendor} subscription tokens; remove one before adding another`,
+      )
+    }
     const tokenCipher = await this.deps.secretCipher.encrypt(input.token)
     const now = this.deps.clock.now()
     const record: ProviderSubscriptionTokenRecord = {

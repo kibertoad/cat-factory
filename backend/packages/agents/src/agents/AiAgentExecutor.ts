@@ -2,7 +2,7 @@ import { generateText } from 'ai'
 import type { AgentExecutor, AgentRunContext, AgentRunResult } from '@cat-factory/kernel'
 import type { ModelProvider, ModelRef } from '@cat-factory/kernel'
 import { systemPromptFor, userPromptFor } from './agent-catalog.js'
-import { type AgentRouting, resolveAgentConfig, resolveStepModelRef } from './agent-routing.js'
+import { type AgentRouting, resolveAgentConfig, resolveInlineModelRef } from './agent-routing.js'
 import { composeBlockSystemPrompt } from './prompt-fragments.js'
 import {
   type InlineWebSearchOptions,
@@ -73,10 +73,14 @@ export class AiAgentExecutor implements AgentExecutor {
   /**
    * Resolve the step's model ref with the shared step precedence: a block's pinned
    * model wins, else the workspace's per-kind default, else the env routing for the
-   * kind. Side-effect-free, so it backs both `run` and the up-front `resolveModel`.
+   * kind. A pinned subscription model (Claude Code / Codex), which can run only in
+   * the container harness, is degraded to the kind's env-routing default here — this
+   * is an inline executor — via the shared `resolveInlineModelRef` seam. Side-effect-
+   * free, so it backs both `run` and the up-front `resolveModel` (which thus reports
+   * the model that will actually run, not the un-servable subscription ref).
    */
   private resolveRef(context: AgentRunContext): Promise<ModelRef> {
-    return resolveStepModelRef(
+    return resolveInlineModelRef(
       {
         agentRouting: this.agentRouting,
         resolveBlockModel: this.resolveBlockModel,
@@ -98,19 +102,10 @@ export class AiAgentExecutor implements AgentExecutor {
 
   async run(context: AgentRunContext): Promise<AgentRunResult> {
     const config = resolveAgentConfig(this.agentRouting, context.agentKind)
-    let ref = await this.resolveRef(context)
-    // Subscription models (Claude Code / Codex) run ONLY in the container harness
-    // with a pooled token — there is no provider key for them, so resolving one
-    // through the ModelProvider here would either fail deep in the SDK or, worse,
-    // call a different vendor's API with a CLI-only model id. A block's model is
-    // shared by ALL its pipeline steps (container AND inline), so a task legitimately
-    // pinned to a subscription model for its coder step would otherwise hard-fail its
-    // inline steps (reviewer / requirements-rework / document-planner). Degrade
-    // gracefully instead: fall back to this kind's env-routing default model (a
-    // provider model the ModelProvider can serve) rather than failing the step.
-    if (ref.harness && ref.harness !== 'pi') {
-      ref = config.ref
-    }
+    // `resolveRef` already degrades a pinned subscription model (Claude Code / Codex,
+    // which run only in the container harness and have no provider key here) to this
+    // kind's env-routing default, so the ModelProvider always gets a servable ref.
+    const ref = await this.resolveRef(context)
     const model = this.modelProvider.resolve(ref)
 
     // Base role prompt, then fold in the best-practice fragments selected for the

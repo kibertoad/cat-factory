@@ -347,7 +347,7 @@ function claudeUsage(raw: unknown): { inputTokens: number; outputTokens: number 
  * Run the Codex CLI headlessly against `opts.cwd`, authenticated with the leased
  * ChatGPT `auth.json` bundle written to an isolated CODEX_HOME, talking direct to
  * the ChatGPT backend. Streams `codex exec --json`, mapping plan/todo updates onto
- * subtask progress and the terminal turn's usage onto the outcome.
+ * subtask progress and the running cumulative token usage onto the outcome.
  */
 export async function runCodex(opts: SubscriptionRunOptions): Promise<PiRunOutcome> {
   const stats: PiRunStats = { toolCalls: 0, assistantChars: 0 }
@@ -458,15 +458,23 @@ function codexPlanProgress(event: Record<string, unknown>): TodoProgress | undef
   return { completed, inProgress, total: items.length, items }
 }
 
-/** Best-effort: pull token usage out of a Codex turn-completed event. */
+/**
+ * Best-effort: pull token usage out of a Codex usage event. Codex `exec --json`
+ * reports a running CUMULATIVE total on `token_count` events under
+ * `info.total_token_usage` (it also carries the per-turn `last_token_usage`); older /
+ * other shapes put it on `usage` / `info.usage` directly. We read the cumulative
+ * total when present so the caller can simply overwrite (not sum) — summing
+ * cumulative totals across events would multiply-count. Checked most-likely first.
+ */
 function codexUsage(
   event: Record<string, unknown>,
 ): { inputTokens: number; outputTokens: number } | undefined {
-  const raw = isObject(event.usage)
-    ? event.usage
-    : isObject(event.info) && isObject((event.info as Record<string, unknown>).usage)
-      ? ((event.info as Record<string, unknown>).usage as Record<string, unknown>)
-      : undefined
+  const info = isObject(event.info) ? (event.info as Record<string, unknown>) : undefined
+  const raw =
+    (info && isObject(info.total_token_usage) ? info.total_token_usage : undefined) ??
+    (isObject(event.total_token_usage) ? event.total_token_usage : undefined) ??
+    (isObject(event.usage) ? event.usage : undefined) ??
+    (info && isObject(info.usage) ? info.usage : undefined)
   if (!isObject(raw)) return undefined
   const input = numberOf(raw.input_tokens) + numberOf(raw.cached_input_tokens)
   const output = numberOf(raw.output_tokens)
