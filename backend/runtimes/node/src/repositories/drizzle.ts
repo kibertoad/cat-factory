@@ -24,6 +24,9 @@ import type {
   PipelineScheduleRepository,
   DueSchedule,
   Recurrence,
+  RequirementReview,
+  RequirementReviewItem,
+  RequirementReviewRepository,
   RunRef,
   Service,
   ServicePatch,
@@ -63,6 +66,7 @@ import {
   pipelineScheduleRuns,
   pipelineSchedules,
   pipelines,
+  requirementReviews,
   services,
   tokenUsage,
   trackerSettings,
@@ -1305,6 +1309,103 @@ class DrizzleWorkspaceMountRepository implements WorkspaceMountRepository {
   }
 }
 
+type RequirementReviewRow = typeof requirementReviews.$inferSelect
+
+function rowToRequirementReview(row: RequirementReviewRow): RequirementReview {
+  let items: RequirementReviewItem[] = []
+  try {
+    const parsed = JSON.parse(row.items)
+    if (Array.isArray(parsed)) items = parsed as RequirementReviewItem[]
+  } catch {
+    items = []
+  }
+  return {
+    id: row.id,
+    blockId: row.block_id,
+    status: row.status as RequirementReview['status'],
+    items,
+    model: row.model,
+    incorporatedRequirements: row.incorporated_requirements,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }
+}
+
+/**
+ * Requirements reviews over Postgres (the Drizzle mirror of the Worker's
+ * `D1RequirementReviewRepository`, migration 0021). The reviewed items live as a JSON
+ * array in `items`; the service keeps at most one live review per block (it deletes
+ * the block's prior review before inserting a fresh one), so `getByBlock` returns the
+ * latest. Behaviourally identical to the D1 repo so the cross-runtime conformance
+ * suite asserts the same requirements-rework substitution against both stores.
+ */
+export class DrizzleRequirementReviewRepository implements RequirementReviewRepository {
+  constructor(private readonly db: DrizzleDb) {}
+
+  async getByBlock(workspaceId: string, blockId: string): Promise<RequirementReview | null> {
+    const rows = await this.db
+      .select()
+      .from(requirementReviews)
+      .where(
+        and(
+          eq(requirementReviews.workspace_id, workspaceId),
+          eq(requirementReviews.block_id, blockId),
+        ),
+      )
+      .orderBy(desc(requirementReviews.created_at))
+      .limit(1)
+    return rows[0] ? rowToRequirementReview(rows[0]) : null
+  }
+
+  async get(workspaceId: string, id: string): Promise<RequirementReview | null> {
+    const rows = await this.db
+      .select()
+      .from(requirementReviews)
+      .where(and(eq(requirementReviews.workspace_id, workspaceId), eq(requirementReviews.id, id)))
+      .limit(1)
+    return rows[0] ? rowToRequirementReview(rows[0]) : null
+  }
+
+  async upsert(workspaceId: string, review: RequirementReview): Promise<void> {
+    const values = {
+      workspace_id: workspaceId,
+      id: review.id,
+      block_id: review.blockId,
+      status: review.status,
+      items: JSON.stringify(review.items),
+      model: review.model,
+      incorporated_requirements: review.incorporatedRequirements,
+      created_at: review.createdAt,
+      updated_at: review.updatedAt,
+    }
+    await this.db
+      .insert(requirementReviews)
+      .values(values)
+      .onConflictDoUpdate({
+        target: [requirementReviews.workspace_id, requirementReviews.id],
+        set: {
+          block_id: values.block_id,
+          status: values.status,
+          items: values.items,
+          model: values.model,
+          incorporated_requirements: values.incorporated_requirements,
+          updated_at: values.updated_at,
+        },
+      })
+  }
+
+  async deleteByBlock(workspaceId: string, blockId: string): Promise<void> {
+    await this.db
+      .delete(requirementReviews)
+      .where(
+        and(
+          eq(requirementReviews.workspace_id, workspaceId),
+          eq(requirementReviews.block_id, blockId),
+        ),
+      )
+  }
+}
+
 export interface CoreRepositories {
   workspaceRepository: WorkspaceRepository
   accountRepository: AccountRepository
@@ -1320,6 +1421,7 @@ export interface CoreRepositories {
   trackerSettingsRepository: TrackerSettingsRepository
   serviceRepository: ServiceRepository
   workspaceMountRepository: WorkspaceMountRepository
+  requirementReviewRepository: RequirementReviewRepository
 }
 
 /** Build the Drizzle/Postgres-backed core repositories. */
@@ -1339,5 +1441,6 @@ export function createDrizzleRepositories(db: DrizzleDb, clock: Clock): CoreRepo
     trackerSettingsRepository: new DrizzleTrackerSettingsRepository(db),
     serviceRepository: new DrizzleServiceRepository(db),
     workspaceMountRepository: new DrizzleWorkspaceMountRepository(db),
+    requirementReviewRepository: new DrizzleRequirementReviewRepository(db),
   }
 }

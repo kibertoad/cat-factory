@@ -353,6 +353,17 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     tokenUsageRepository: repos.tokenUsageRepository,
     llmCallMetricRepository: repos.llmCallMetricRepository,
     modelDefaultsRepository: repos.modelDefaultsRepository,
+    // Requirements-review feature (stateless reviewer + the requirements-rework
+    // step). Wired identically to the Cloudflare facade's `selectRequirementsDeps`
+    // so both runtimes serve the review/rework API AND substitute a block's reworked
+    // requirements into the agent context (the cross-runtime conformance suite asserts
+    // the substitution against both stores). The reviewer's model resolves exactly
+    // like a pipeline step: block-pin > workspace per-kind default > routing default
+    // (which falls back to Cloudflare Workers AI unless a direct key is set).
+    requirementReviewRepository: repos.requirementReviewRepository,
+    modelProvider: createNodeModelProvider(env),
+    requirementReviewModel: config.agents.routing.default.ref,
+    requirementReviewResolveModel: config.agents.resolveBlockModel,
     ...tasks.deps,
     // Recurring pipelines + the workspace tracker selection. The tracker provider
     // files the tech-debt pipeline's issue by resolving the *workspace's* connected

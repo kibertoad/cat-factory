@@ -24,6 +24,12 @@ export interface FakeAgentOptions {
   asyncPolls?: number
   /** Token usage reported per call, so the spend safeguard can be exercised. */
   usage?: { inputTokens: number; outputTokens: number }
+  /**
+   * When set, the (generic-kind) agent echoes the description it was handed into its
+   * output as `[desc]…[/desc]`, so a test can assert WHICH requirements text the engine
+   * fed it — e.g. that a block's reworked requirements replaced its raw description.
+   */
+  echoDescription?: boolean
   /** A PR the (container-flavoured) agent reports opening, so persistence can be exercised. */
   pullRequest?: PullRequestRef
   /**
@@ -125,8 +131,11 @@ export class FakeAgentExecutor implements AgentExecutor {
     const revisionSuffix = context.revision
       ? ` [revised: ${context.revision.feedback ?? ''}${commentCount ? ` +${commentCount} comments` : ''}]`
       : ''
+    const descSuffix = this.options.echoDescription
+      ? ` [desc]${context.block.description}[/desc]`
+      : ''
     return {
-      output: `[${context.agentKind}] processed "${context.block.title}"${revisionSuffix}`,
+      output: `[${context.agentKind}] processed "${context.block.title}"${revisionSuffix}${descSuffix}`,
       model: 'fake',
       confidence: context.isFinalStep ? confidence : undefined,
       usage: this.options.usage,

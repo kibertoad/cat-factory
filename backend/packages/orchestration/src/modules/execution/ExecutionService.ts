@@ -1302,8 +1302,11 @@ export class ExecutionService {
     // When a block's requirements have been reworked, that standardized document is
     // the single source of truth for every agent step: it already folds in the
     // description plus the linked docs / tracker issues, so it REPLACES the
-    // description and the (now-redundant) doc/task context.
-    const reworked = await this.resolveReworkedRequirements(workspaceId, block.id)
+    // description and the (now-redundant) doc/task context. Reviews are only ever run
+    // on task blocks, so skip the lookup entirely for frames/modules — that keeps the
+    // extra read off every container/frame step rather than on the whole hot path.
+    const reworked =
+      block.level === 'task' ? await this.resolveReworkedRequirements(workspaceId, block.id) : null
     const description = reworked ?? block.description
     const contextDocs = reworked ? [] : await this.resolveContextDocs(workspaceId, block.id)
     const contextTasks = reworked ? [] : await this.resolveContextTasks(workspaceId, block.id)

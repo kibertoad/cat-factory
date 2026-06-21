@@ -54,6 +54,14 @@ export interface RequirementReviewServiceDependencies {
 /** Settled items no longer need a human; both gate-pass the incorporate step. */
 const SETTLED: ReviewItemStatus[] = ['resolved', 'dismissed']
 
+/**
+ * Output budget for the requirements-rework generation. The reworked doc is a full
+ * standard-format spec that becomes the only requirements context fed to every
+ * downstream agent step, so it needs ample room; a `length` finish is rejected
+ * (see `incorporate`) rather than persisted as a truncated spec.
+ */
+const REWORK_MAX_OUTPUT_TOKENS = 16_000
+
 /** The agent kind the reviewer runs as — keys its per-workspace default model. */
 const REQUIREMENTS_AGENT_KIND = 'requirements'
 
@@ -223,6 +231,7 @@ export class RequirementReviewService {
 
     const context = await this.gatherContext(workspaceId, block)
     let revised: string
+    let finishReason: string
     try {
       const model = modelProvider.resolve(ref)
       const result = await generateText({
@@ -230,9 +239,15 @@ export class RequirementReviewService {
         system: REWORK_SYSTEM_PROMPT,
         prompt: buildReworkPrompt(context, review.items),
         temperature: 0.2,
-        maxOutputTokens: 5000,
+        // The reworked doc is a full standard-format spec (overview + functional +
+        // non-functional requirements with Given/When/Then acceptance + domain rules +
+        // assumptions + out-of-scope), and it becomes the SOLE source of truth fed to
+        // every downstream agent step (the description + linked docs are then dropped).
+        // A generous budget keeps a real spec from being cut off mid-document.
+        maxOutputTokens: REWORK_MAX_OUTPUT_TOKENS,
       })
       revised = result.text.trim()
+      finishReason = result.finishReason
     } catch (e) {
       throw new ValidationError(
         `The requirements reviewer (${ref.provider}:${ref.model}) failed: ${
@@ -242,6 +257,15 @@ export class RequirementReviewService {
     }
     if (!revised) {
       throw new ValidationError('The reviewer produced no revised requirements')
+    }
+    // A length-truncated document would become a silently-incomplete spec that every
+    // downstream agent then treats as authoritative. Reject it loudly instead of
+    // persisting a half-written requirements doc.
+    if (finishReason === 'length') {
+      throw new ValidationError(
+        'The reworked requirements were cut off before completion (model output limit ' +
+          'reached). Try splitting this work into smaller tasks, then rework again.',
+      )
     }
 
     const now = this.deps.clock.now()

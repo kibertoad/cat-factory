@@ -29,6 +29,17 @@ The cross-runtime conformance suite (see "Multi-runtime facades & cross-runtime
 conformance" below) exists to catch drift — add assertions there for any new shared
 behaviour so a facade that forgot the symmetric change fails a test instead of shipping.
 
+**A facade-parity gap is a critical showstopper, not a follow-up.** Wiring a shared
+behaviour (a new repository, an optional core dependency, a domain-engine path) into
+only one runtime is a bug, even when the second runtime "degrades gracefully" — a task
+that gets reworked requirements on Cloudflare but the raw description on Node is exactly
+the silent divergence this rule exists to prevent. Do NOT land a change that wires a
+shared behaviour into one facade and defer the other: land both runtimes together AND a
+conformance assertion in the SAME change, or do not land it. "Node has no X persistence
+yet" is acceptable ONLY for behaviour that genuinely cannot exist on a runtime (e.g. a
+Cloudflare-Container-only execution path), never for runtime-neutral domain behaviour
+that merely needs a repository wired.
+
 ## Layout
 
 One pnpm workspace (single root lockfile). Packages are sorted by visibility:
@@ -313,22 +324,30 @@ document planner) and returns the updated entity, which the SPA patches directly
   `requirementReviewRepository` is wired.
 - Downstream consumption: `ExecutionService.resolveReworkedRequirements` reads the
   block's incorporated review (optional `requirementReviewRepository` dep). When
-  present, `buildAgentContext` uses it as the block description and **drops**
-  `contextDocs`/`contextTasks` (already folded in); `gatherServiceTasks` feeds it
-  (not the raw description) to the requirements-writer. Absent → original behavior.
-- Persistence: `requirement_reviews` D1 table (migration `0021`,
-  `D1RequirementReviewRepository`) — items as a JSON column, keyed by review id,
-  `getByBlock` returns the current one. Cloudflare-only today (no Drizzle repo in
-  `runtimes/node`); the downstream dep is optional so the Node facade degrades to
-  the original description + docs/tasks unchanged.
-- Worker: `RequirementReviewController` (`modules/requirements/`) mounts
-  `GET|POST /blocks/:blockId/requirement-review`,
+  present, `buildAgentContext` uses it as the block description (only for `task`-level
+  blocks — reviews are task-scoped, so frame/module steps skip the lookup) and
+  **drops** `contextDocs`/`contextTasks` (already folded in); `gatherServiceTasks`
+  feeds it (not the raw description) to the requirements-writer. Absent → original
+  behavior. The rework LLM call rejects a length-truncated document (it would become a
+  silently-incomplete spec for every downstream agent) rather than persisting it.
+- Persistence: `requirement_reviews`, mirrored on **both** runtimes (parity is
+  mandatory, see "Keep the runtimes symmetric"): the Cloudflare D1 table (migration
+  `0021`, `D1RequirementReviewRepository`) and the Node Postgres table (Drizzle
+  `requirementReviews` in `db/schema.ts` + `DrizzleRequirementReviewRepository`, its
+  generated migration under `runtimes/node/drizzle/`). Items as a JSON column, keyed
+  by review id, `getByBlock` returns the current one. Both facades wire the repo +
+  model provider into the core, so the review/rework API AND the agent-context
+  substitution work identically; the cross-runtime conformance suite asserts the
+  substitution against both stores.
+- Controller (shared `@cat-factory/server`): `RequirementReviewController`
+  (`modules/requirements/`) mounts `GET|POST /blocks/:blockId/requirement-review`,
   `POST /requirement-reviews/:id/items/:itemId/reply`,
   `PATCH …/items/:itemId`, `POST …/:id/incorporate` (returns `{ review }`).
-  `selectRequirementsDeps` wires the repo + a `CloudflareModelProvider` + the
-  agents' routing default ref + `resolveBlockModel`, so the reviewer resolves its
-  model exactly like an agent step: a block's pinned model wins, else the default —
-  which falls back to **Cloudflare Workers AI** unless a direct provider key is set.
+  Each facade supplies the requirements deps: Cloudflare's `selectRequirementsDeps`
+  and the Node container both wire the review repo + a model provider + the agents'
+  routing default ref + `resolveBlockModel`, so the reviewer resolves its model
+  exactly like an agent step: a block's pinned model wins, else the default — which
+  falls back to **Cloudflare Workers AI** unless a direct provider key is set.
 - Frontend: `stores/requirements.ts` (load/review/reply/setItemStatus/incorporate;
   `incorporate` does NOT patch the board — the description is preserved),
   `components/requirements/RequirementsReviewWindow.vue` — a full-screen review
@@ -336,8 +355,11 @@ document planner) and returns the updated entity, which the SPA patches directly
   findings, then "Rework requirements" (enabled once every finding is settled, and
   immediately for a zero-findings review); the reworked document renders as
   collapsible markdown. Triggered from `InspectorPanel.vue`'s "Review requirements"
-  button (open-finding count badge); `ui.requirementReviewBlockId` drives it. No
-  stream event — the responses carry the updated review.
+  button (open-finding count badge); `ui.requirementReviewBlockId` drives it. Once a
+  task is reworked the inspector **freezes** its raw description: the standardized
+  requirements take focus and the original is read-only behind an "Original
+  description (frozen)" expander (it is no longer what agents consume). No stream
+  event — the responses carry the updated review.
 
 ## Merge lifecycle flow (CI gate → CI-fixer → merger → notifications)
 
