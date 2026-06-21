@@ -57,12 +57,30 @@ export const requirementReviewItemSchema = v.object({
 export type RequirementReviewItem = v.InferOutput<typeof requirementReviewItemSchema>
 
 /**
- * Lifecycle of the review as a whole: `ready` once items are generated and
- * awaiting human answers, `incorporated` once the answers have been folded back
- * into the block's requirements.
+ * Lifecycle of the review as a whole: `ready` once items are generated and awaiting
+ * human answers (also the state a rework returns to when its companion gate fails, so
+ * the human can address the companion's challenge and rework again), `incorporated`
+ * once a reworked doc has cleared the companion's quality bar.
  */
 export const requirementReviewStatusSchema = v.picklist(['ready', 'incorporated'])
 export type RequirementReviewStatus = v.InferOutput<typeof requirementReviewStatusSchema>
+
+/**
+ * A companion agent's verdict on the last reworked requirements document: an overall
+ * quality rating (0..1) and, when below the threshold, the prose challenge the human
+ * must address before reworking again. Null until a rework has been gated.
+ */
+export const requirementReviewCompanionSchema = v.object({
+  /** Overall quality of the reworked requirements (0..1, higher = better). */
+  rating: v.pipe(v.number(), v.minValue(0), v.maxValue(1)),
+  /** The quality bar the rating had to reach to pass the gate. */
+  threshold: v.pipe(v.number(), v.minValue(0), v.maxValue(1)),
+  /** Whether the rating met the threshold (the reworked doc was accepted). */
+  passed: v.boolean(),
+  /** The companion's challenge / justification, surfaced to the human and fed into the next rework. */
+  feedback: v.string(),
+})
+export type RequirementReviewCompanion = v.InferOutput<typeof requirementReviewCompanionSchema>
 
 /** A completed requirements review for one board block. */
 export const requirementReviewSchema = v.object({
@@ -73,10 +91,14 @@ export const requirementReviewSchema = v.object({
   /** `provider:model` that produced the review, for transparency; null in tests. */
   model: v.nullable(v.string()),
   /**
-   * The revised requirements text the reviewer last folded the answers into (the
-   * new block description). Null until an incorporate run has completed.
+   * The revised requirements text the reviewer last folded the answers into. Set once
+   * a reworked doc has CLEARED the companion gate (status `incorporated`); null while
+   * still `ready` (including after a companion-rejected rework). Consumed by every
+   * downstream agent step + the spec-writer.
    */
   incorporatedRequirements: v.nullable(v.string()),
+  /** The companion's verdict on the last rework (see schema); null before any rework. */
+  companion: v.optional(v.nullable(requirementReviewCompanionSchema)),
   createdAt: v.number(),
   updatedAt: v.number(),
 })

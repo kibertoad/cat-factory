@@ -66,6 +66,12 @@ const settledCount = computed(() =>
 )
 const canRework = computed(() => !!review.value && requirements.canRework(review.value))
 const reworked = computed(() => review.value?.status === 'incorporated')
+// The quality companion's verdict on the last rework. When it REJECTED the document
+// (passed === false) the rework was not accepted — its challenge is surfaced for the
+// human to address before reworking again.
+const companion = computed(() => review.value?.companion ?? null)
+const companionRejected = computed(() => companion.value?.passed === false)
+const pctOf = (n: number) => `${Math.round(n * 100)}%`
 
 // The reworked requirements rendered as collapsible markdown (same reader the prose
 // review window uses), shown once the rework agent has produced them.
@@ -339,6 +345,48 @@ async function rework() {
                 </div>
               </div>
 
+              <!-- companion verdict on the last rework -->
+              <section
+                v-if="companion"
+                class="mt-6 rounded-lg border p-3"
+                :class="
+                  companionRejected
+                    ? 'border-amber-500/40 bg-amber-500/5'
+                    : 'border-emerald-500/30 bg-emerald-500/5'
+                "
+              >
+                <div class="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide"
+                  :class="companionRejected ? 'text-amber-400' : 'text-emerald-400'"
+                >
+                  <UIcon
+                    :name="companionRejected ? 'i-lucide-shield-alert' : 'i-lucide-shield-check'"
+                    class="h-3.5 w-3.5"
+                  />
+                  <span>
+                    Quality companion · {{ pctOf(companion.rating) }}
+                    {{ companionRejected ? '<' : '≥' }} {{ pctOf(companion.threshold) }}
+                  </span>
+                </div>
+                <p
+                  v-if="companionRejected"
+                  class="mt-2 whitespace-pre-line text-[12px] leading-relaxed text-amber-200/90"
+                >
+                  {{ companion.feedback }}
+                </p>
+                <p
+                  v-if="companionRejected"
+                  class="mt-2 text-[11px] text-slate-400"
+                >
+                  The reworked requirements were not accepted. Address the points above (answer or
+                  refine the findings), then re-run the rework — the companion's feedback is fed back
+                  into it.
+                </p>
+                <p v-else class="mt-1 text-[11px] text-slate-400">
+                  The reworked requirements cleared the quality bar and now feed every downstream
+                  agent step.
+                </p>
+              </section>
+
               <!-- reworked result: the standard-format requirements document -->
               <section v-if="outline" class="mt-6 border-t border-slate-800 pt-5">
                 <div class="mb-3 flex items-center gap-1.5 text-[11px] text-emerald-400">
@@ -400,7 +448,7 @@ async function rework() {
                   :disabled="!canRework"
                   @click="rework"
                 >
-                  {{ reworked ? 'Re-run rework' : 'Rework requirements' }}
+                  {{ reworked || companionRejected ? 'Re-run rework' : 'Rework requirements' }}
                 </UButton>
                 <p class="mt-2 text-[11px] leading-relaxed text-slate-500">
                   <template v-if="reworked">

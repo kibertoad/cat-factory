@@ -9,7 +9,7 @@
     "dev": "wrangler dev",
     "predeploy": "pnpm --filter @cat-factory/worker run build",
     "deploy": "wrangler deploy",
-    "image:publish": "wrangler containers build ../../backend/internal/executor-harness -t cat-factory-executor:1.0.5 --push",
+    "image:publish": "wrangler containers build ../../backend/internal/executor-harness -t cat-factory-executor:1.0.6 --push",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "db:migrate:local": "wrangler d1 migrations apply cat_factory --local",
     "db:migrate:remote": "wrangler d1 migrations apply cat_factory --remote"

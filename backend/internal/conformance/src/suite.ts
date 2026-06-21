@@ -322,6 +322,53 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         expect(step.output).toContain(`[desc]${REWORKED}[/desc]`)
       })
 
+      it('passes a companion gate when the rating clears the threshold', async () => {
+        // A companion step grades the prior producer; at/above its threshold the run
+        // proceeds. `reviewer` is the coder's companion, so ['coder','reviewer'] runs the
+        // coder then grades it — a passing rating (default 1) finishes the run.
+        const app = harness.makeApp({ confidence: 1 })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Build + companion',
+          agentKinds: ['coder', 'reviewer'],
+        })
+        const start = await app.call<ExecutionInstance>(
+          'POST',
+          `/workspaces/${wsId}/blocks/task_login/executions`,
+          { pipelineId: pipeline.body.id },
+        )
+        expect(start.status).toBe(201)
+        const ticked = await app.drive(wsId)
+        const exec = ticked.find((e) => e.blockId === 'task_login')!
+        expect(exec.status).toBe('done')
+        const companionStep = exec.steps.find((s) => s.agentKind === 'reviewer')!
+        expect(companionStep.companion?.rating).toBe(1)
+      })
+
+      it('fails the run when a companion stays below threshold past its rework budget', async () => {
+        // Below the threshold the companion loops the producer back for automatic rework;
+        // once the budget is spent the run fails (`companion_rejected`) for human
+        // attention. A fixed low rating drives straight to that terminal state.
+        const app = harness.makeApp({ confidence: 1, companionRating: 0.4 })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Build + strict companion',
+          agentKinds: ['coder', 'reviewer'],
+        })
+        const start = await app.call<ExecutionInstance>(
+          'POST',
+          `/workspaces/${wsId}/blocks/task_login/executions`,
+          { pipelineId: pipeline.body.id },
+        )
+        expect(start.status).toBe(201)
+        const ticked = await app.drive(wsId)
+        const exec = ticked.find((e) => e.blockId === 'task_login')!
+        expect(exec.status).toBe('failed')
+        expect(exec.failure?.kind).toBe('companion_rejected')
+      })
+
       it('drives an asynchronous (polled) agent job to completion', async () => {
         // The `coder` step runs as a polled async job (startJob → awaiting_job → pollJob),
         // so this exercises the durable driver's job-poll loop — Cloudflare Workflows and

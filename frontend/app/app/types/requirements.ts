@@ -26,6 +26,18 @@ export interface RequirementReviewItem {
 
 export type RequirementReviewStatus = 'ready' | 'incorporated'
 
+/** A quality companion's verdict on the last reworked requirements document. */
+export interface RequirementReviewCompanion {
+  /** Overall quality of the reworked requirements (0..1, higher = better). */
+  rating: number
+  /** The quality bar the rating had to reach to pass. */
+  threshold: number
+  /** Whether the rating met the threshold (the reworked doc was accepted). */
+  passed: boolean
+  /** The companion's challenge, shown to the human and fed into the next rework. */
+  feedback: string
+}
+
 export interface RequirementReview {
   id: string
   blockId: string
@@ -33,6 +45,8 @@ export interface RequirementReview {
   items: RequirementReviewItem[]
   model: string | null
   incorporatedRequirements: string | null
+  /** The companion's verdict on the last rework; null before any rework. */
+  companion: RequirementReviewCompanion | null
   createdAt: number
   updatedAt: number
 }

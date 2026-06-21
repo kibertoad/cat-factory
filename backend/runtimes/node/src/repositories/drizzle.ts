@@ -1320,6 +1320,14 @@ function rowToRequirementReview(row: RequirementReviewRow): RequirementReview {
   } catch {
     items = []
   }
+  let companion: RequirementReview['companion'] = null
+  if (row.companion) {
+    try {
+      companion = JSON.parse(row.companion) as RequirementReview['companion']
+    } catch {
+      companion = null
+    }
+  }
   return {
     id: row.id,
     blockId: row.block_id,
@@ -1327,6 +1335,7 @@ function rowToRequirementReview(row: RequirementReviewRow): RequirementReview {
     items,
     model: row.model,
     incorporatedRequirements: row.incorporated_requirements,
+    companion,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -1376,6 +1385,7 @@ export class DrizzleRequirementReviewRepository implements RequirementReviewRepo
       items: JSON.stringify(review.items),
       model: review.model,
       incorporated_requirements: review.incorporatedRequirements,
+      companion: review.companion ? JSON.stringify(review.companion) : null,
       created_at: review.createdAt,
       updated_at: review.updatedAt,
     }
@@ -1390,6 +1400,7 @@ export class DrizzleRequirementReviewRepository implements RequirementReviewRepo
           items: values.items,
           model: values.model,
           incorporated_requirements: values.incorporated_requirements,
+          companion: values.companion,
           updated_at: values.updated_at,
         },
       })
