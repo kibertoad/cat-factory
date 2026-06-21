@@ -1,0 +1,117 @@
+import type {
+  Notification,
+  NotificationType,
+  SlackNotificationSettings,
+  SlackRoute,
+} from '@cat-factory/kernel'
+
+// Pure helpers for the Slack notification transport: default settings, route
+// resolution, and rendering a notification into a Slack `chat.postMessage` body.
+// No I/O here — unit-testable and shared by both runtime facades.
+
+/** HKDF domain-separation tag for the Slack bot-token cipher. */
+export const SLACK_CIPHER_INFO = 'cat-factory:slack'
+
+/** The notification types Slack routing can target (mirrors the closed set). */
+export const SLACK_ROUTABLE_TYPES: NotificationType[] = [
+  'merge_review',
+  'pipeline_complete',
+  'ci_failed',
+]
+
+/**
+ * The default settings for a workspace that has never configured Slack: every
+ * type present but unrouted (empty channel) and disabled, mentions off. So a
+ * fresh workspace posts nothing until a human sets a channel.
+ */
+export function defaultSlackSettings(updatedAt: number): SlackNotificationSettings {
+  const routes: Partial<Record<NotificationType, SlackRoute>> = {}
+  for (const type of SLACK_ROUTABLE_TYPES) {
+    routes[type] = { enabled: false, channel: '' }
+  }
+  return {
+    routes: routes as SlackNotificationSettings['routes'],
+    mentionsEnabled: false,
+    updatedAt,
+  }
+}
+
+/**
+ * Resolve the channel a notification should post to, or null when it must not
+ * post (no settings, type missing/disabled, or empty channel).
+ */
+export function resolveRoute(
+  settings: SlackNotificationSettings,
+  type: NotificationType,
+): string | null {
+  const route = settings.routes[type]
+  if (!route || !route.enabled) return null
+  const channel = route.channel.trim()
+  return channel.length > 0 ? channel : null
+}
+
+/** A short per-type prefix so a Slack reader can triage at a glance. */
+const TYPE_LABEL: Record<NotificationType, string> = {
+  merge_review: ':eyes: Merge review',
+  pipeline_complete: ':white_check_mark: Pipeline complete',
+  ci_failed: ':rotating_light: CI failed',
+}
+
+/** Format a percentage from a 0..1 score for the assessment context line. */
+function pct(score: number): string {
+  return `${Math.round(score * 100)}%`
+}
+
+export interface SlackMessageBody {
+  channel: string
+  text: string
+  blocks: unknown[]
+}
+
+/**
+ * Render a notification into a Slack message. `mentions` are pre-resolved Slack
+ * member ids (already filtered to those configured); they are prefixed to the
+ * body as `<@id>` so the people are tagged. `text` is the notification fallback
+ * (for push/preview); `blocks` carry the rich layout.
+ */
+export function renderNotificationMessage(
+  notification: Notification,
+  channel: string,
+  mentions: string[],
+): SlackMessageBody {
+  const label = TYPE_LABEL[notification.type]
+  const mentionPrefix = mentions.length ? `${mentions.map((id) => `<@${id}>`).join(' ')} ` : ''
+
+  const bodyLines: string[] = [`*${notification.title}*`]
+  if (notification.body) bodyLines.push(notification.body)
+
+  const blocks: unknown[] = [
+    { type: 'section', text: { type: 'mrkdwn', text: `${label}` } },
+    { type: 'section', text: { type: 'mrkdwn', text: `${mentionPrefix}${bodyLines.join('\n')}` } },
+  ]
+
+  const contextElements: { type: 'mrkdwn'; text: string }[] = []
+  const payload = notification.payload
+  if (payload?.pipelineName) {
+    contextElements.push({ type: 'mrkdwn', text: `Pipeline: ${payload.pipelineName}` })
+  }
+  if (payload?.assessment) {
+    const a = payload.assessment
+    contextElements.push({
+      type: 'mrkdwn',
+      text: `Complexity ${pct(a.complexity)} · Risk ${pct(a.risk)} · Impact ${pct(a.impact)}`,
+    })
+  }
+  if (payload?.prUrl) {
+    contextElements.push({ type: 'mrkdwn', text: `<${payload.prUrl}|View PR>` })
+  }
+  if (contextElements.length) {
+    blocks.push({ type: 'context', elements: contextElements })
+  }
+
+  return {
+    channel,
+    text: `${label}: ${notification.title}`,
+    blocks,
+  }
+}

@@ -91,6 +91,18 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
   // Self-hosted runner pools encrypt their scheduler credentials at rest; opt-in via
   // the enable flag, sealed with the shared ENCRYPTION_KEY (mirroring the Worker).
   const runnersEncryptionKey = env.ENCRYPTION_KEY?.trim() ?? ''
+  // Slack notification transport: opt-in (SLACK_ENABLED), the per-account bot token
+  // sealed with the shared ENCRYPTION_KEY. OAuth credentials are optional (manual
+  // bot-token onboarding works without them); when set they enable "Add to Slack".
+  const slackEnabled = env.SLACK_ENABLED?.trim() === 'true'
+  const slackEncryptionKey = env.ENCRYPTION_KEY?.trim() ?? ''
+  const slackClientId = env.SLACK_CLIENT_ID?.trim() ?? ''
+  const slackClientSecret = env.SLACK_CLIENT_SECRET?.trim() ?? ''
+  const slackRedirectUrl = env.SLACK_REDIRECT_URL?.trim() ?? ''
+  const slackOAuth =
+    slackClientId && slackClientSecret && slackRedirectUrl
+      ? { clientId: slackClientId, clientSecret: slackClientSecret, redirectUrl: slackRedirectUrl }
+      : undefined
   const clientId = env.GITHUB_OAUTH_CLIENT_ID?.trim() ?? ''
   const clientSecret = env.GITHUB_OAUTH_CLIENT_SECRET?.trim() ?? ''
   const environment = env.ENVIRONMENT?.trim().toLowerCase() ?? ''
@@ -177,6 +189,14 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
     runners: runnersEncryptionKey
       ? { enabled: true, encryptionKey: runnersEncryptionKey }
       : { enabled: false },
+    slack:
+      slackEnabled && slackEncryptionKey
+        ? {
+            enabled: true,
+            encryptionKey: slackEncryptionKey,
+            ...(slackOAuth ? { oauth: slackOAuth } : {}),
+          }
+        : { enabled: false },
     retention: {
       tokenUsageMs: (num(env.TOKEN_USAGE_RETENTION_DAYS) ?? 395) * 24 * 60 * 60 * 1000,
       rateLimitMs: (num(env.GITHUB_RATE_LIMIT_RETENTION_DAYS) ?? 7) * 24 * 60 * 60 * 1000,

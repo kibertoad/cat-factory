@@ -53,6 +53,9 @@ export const useUiStore = defineStore('ui', () => {
   // GitHub integration panel (connection management + repo/PR/issue browsing).
   const githubOpen = ref(false)
 
+  // Slack integration panel (connect the account's Slack + per-workspace routing).
+  const slackOpen = ref(false)
+
   // Prompt-fragment library panel (manage the board's best-practice catalog +
   // linked guideline repos; ADR 0006).
   const fragmentLibraryOpen = ref(false)
@@ -206,6 +209,12 @@ export const useUiStore = defineStore('ui', () => {
   function closeGitHub() {
     githubOpen.value = false
   }
+  function openSlack() {
+    slackOpen.value = true
+  }
+  function closeSlack() {
+    slackOpen.value = false
+  }
   function openFragmentLibrary() {
     fragmentLibraryOpen.value = true
   }
@@ -267,6 +276,7 @@ export const useUiStore = defineStore('ui', () => {
     bootstrapOpen,
     addServiceOpen,
     githubOpen,
+    slackOpen,
     fragmentLibraryOpen,
     commandBarOpen,
     mergeThresholdsOpen,
@@ -306,6 +316,8 @@ export const useUiStore = defineStore('ui', () => {
     closeAddService,
     openGitHub,
     closeGitHub,
+    openSlack,
+    closeSlack,
     openFragmentLibrary,
     closeFragmentLibrary,
     openCommandBar,

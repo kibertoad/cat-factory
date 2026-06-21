@@ -6,6 +6,8 @@ import {
   type PipelineSchedule,
   type ScheduleRun,
   seedPipelines,
+  type SlackMemberMappingEntry,
+  type SlackNotificationSettings,
   type TrackerSettings,
   type Workspace,
   type WorkspaceSnapshot,
@@ -723,6 +725,81 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
 
         const snapshot = await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
         expect(snapshot.body.trackerSettings?.tracker).toBe('jira')
+      })
+    })
+
+    // Slack is an extra notification transport; both facades wire the same module +
+    // channel. These assert the per-workspace routing and the per-account member map
+    // persist + read back identically on each store (the persistence-parity concern).
+    // Connecting a workspace (auth.test / OAuth) needs real Slack network, so it is
+    // exercised by the integration package's unit tests, not here.
+    describe('slack', () => {
+      it('round-trips per-workspace notification routing', async () => {
+        const app = harness.makeApp()
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        // A workspace that never configured Slack reads back the (no-op) defaults.
+        const initial = await app.call<SlackNotificationSettings>(
+          'GET',
+          `/workspaces/${wsId}/slack/settings`,
+        )
+        expect(initial.status).toBe(200)
+        expect(initial.body.mentionsEnabled).toBe(false)
+
+        const put = await app.call<SlackNotificationSettings>(
+          'PUT',
+          `/workspaces/${wsId}/slack/settings`,
+          {
+            routes: { merge_review: { enabled: true, channel: '#releases' } },
+            mentionsEnabled: true,
+          },
+        )
+        expect(put.status).toBe(200)
+        expect(put.body.routes.merge_review).toEqual({ enabled: true, channel: '#releases' })
+        expect(put.body.mentionsEnabled).toBe(true)
+
+        const after = await app.call<SlackNotificationSettings>(
+          'GET',
+          `/workspaces/${wsId}/slack/settings`,
+        )
+        expect(after.body.routes.merge_review?.channel).toBe('#releases')
+        expect(after.body.mentionsEnabled).toBe(true)
+      })
+
+      it('round-trips the per-account member mapping (de-duped by github user id)', async () => {
+        const app = harness.makeApp()
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        const empty = await app.call<{ entries: SlackMemberMappingEntry[] }>(
+          'GET',
+          `/workspaces/${wsId}/slack/member-mapping`,
+        )
+        expect(empty.status).toBe(200)
+        expect(empty.body.entries).toEqual([])
+
+        const put = await app.call<{ entries: SlackMemberMappingEntry[] }>(
+          'PUT',
+          `/workspaces/${wsId}/slack/member-mapping`,
+          {
+            entries: [
+              { githubUserId: 1, slackUserId: 'U1' },
+              { githubUserId: 1, slackUserId: 'U1b' },
+              { githubUserId: 2, slackUserId: 'U2' },
+            ],
+          },
+        )
+        expect(put.status).toBe(200)
+        // De-duped by github user id (last write wins): 2 entries, not 3.
+        expect(put.body.entries).toHaveLength(2)
+        expect(put.body.entries.find((e) => e.githubUserId === 1)?.slackUserId).toBe('U1b')
+
+        const after = await app.call<{ entries: SlackMemberMappingEntry[] }>(
+          'GET',
+          `/workspaces/${wsId}/slack/member-mapping`,
+        )
+        expect(after.body.entries).toHaveLength(2)
       })
     })
   })

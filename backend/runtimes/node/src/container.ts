@@ -3,6 +3,8 @@ import {
   HttpRunnerPoolProvider,
   RunnerPoolConnectionService,
   RunnerPoolTransport,
+  SLACK_CIPHER_INFO,
+  SlackNotificationChannel,
   TicketTrackerService,
   createGitHubIssueViaToken,
 } from '@cat-factory/integrations'
@@ -49,6 +51,12 @@ import {
   DrizzleServiceFrameRepository,
 } from './repositories/containerExecution.js'
 import { createDrizzleRepositories } from './repositories/drizzle.js'
+import { DrizzleNotificationRepository } from './repositories/notifications.js'
+import {
+  DrizzleSlackConnectionRepository,
+  DrizzleSlackMemberMappingRepository,
+  DrizzleSlackSettingsRepository,
+} from './repositories/slack.js'
 import { DrizzleTaskConnectionRepository, DrizzleTaskRepository } from './repositories/tasks.js'
 import { CryptoIdGenerator, SystemClock } from './runtime.js'
 import { JiraProvider } from './tasks/JiraProvider.js'
@@ -56,6 +64,44 @@ import { JiraProvider } from './tasks/JiraProvider.js'
 // HKDF domain tag separating runner-pool scheduler secrets from any other use of
 // the same master key (mirrors the Worker's `cat-factory:runners`).
 const RUNNERS_CIPHER_INFO = 'cat-factory:runners'
+
+/**
+ * Wire the Slack integration when enabled: the notification *channel* (an extra
+ * delivery transport composed onto the notification mechanism — Node has no in-app
+ * channel, so this is its only one) plus the management repositories (per-account
+ * connect + per-workspace routing + member map) and the bot-token cipher. The
+ * per-account bot token is sealed with the shared ENCRYPTION_KEY under a
+ * slack-scoped HKDF info, mirroring the Worker. OAuth credentials are optional.
+ */
+function selectNodeSlackDeps(
+  config: AppConfig,
+  db: DrizzleDb,
+  repos: ReturnType<typeof createDrizzleRepositories>,
+): Partial<CoreDependencies> {
+  if (!config.slack.enabled || !config.slack.encryptionKey) return {}
+  const secretCipher = new WebCryptoSecretCipher({
+    masterKeyBase64: config.slack.encryptionKey,
+    info: SLACK_CIPHER_INFO,
+  })
+  const slackConnectionRepository = new DrizzleSlackConnectionRepository(db)
+  const slackSettingsRepository = new DrizzleSlackSettingsRepository(db)
+  const slackMemberMappingRepository = new DrizzleSlackMemberMappingRepository(db)
+  return {
+    notificationChannel: new SlackNotificationChannel({
+      workspaceRepository: repos.workspaceRepository,
+      slackConnectionRepository,
+      slackSettingsRepository,
+      slackMemberMappingRepository,
+      membershipRepository: repos.membershipRepository,
+      secretCipher,
+    }),
+    slackConnectionRepository,
+    slackSettingsRepository,
+    slackMemberMappingRepository,
+    slackSecretCipher: secretCipher,
+    ...(config.slack.oauth ? { slackOAuth: config.slack.oauth } : {}),
+  }
+}
 
 /**
  * Rate-limit accounting is best-effort telemetry the Worker persists to D1; the Node
@@ -445,6 +491,10 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     modelProvider: createNodeModelProvider(env),
     requirementReviewModel: config.agents.routing.default.ref,
     requirementReviewResolveModel: config.agents.resolveBlockModel,
+    // Notifications subsystem (parity with the Worker, which wires it unconditionally):
+    // the inbox + the human-action surfaces. Node has no real-time push, so the rows
+    // persist (inbox + snapshot) and any channel composed below — e.g. Slack — delivers.
+    notificationRepository: new DrizzleNotificationRepository(options.db),
     ...tasks.deps,
     // Recurring pipelines + the workspace tracker selection. The tracker provider
     // files the tech-debt pipeline's issue by resolving the *workspace's* connected
@@ -489,6 +539,10 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
       ? { workRunner: new PgBossWorkRunner(options.boss, executionRuntime(config, env).queue) }
       : {}),
     ...githubGateDeps,
+    // Slack: an extra notification transport (the channel) + its management module.
+    // Default-off; when enabled it composes the Slack channel onto the notification
+    // mechanism, identically to the Worker.
+    ...selectNodeSlackDeps(config, options.db, repos),
     ...options.overrides,
   }
 

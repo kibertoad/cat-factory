@@ -20,6 +20,7 @@ interface Command {
 const ui = useUiStore()
 const board = useBoardStore()
 const github = useGitHubStore()
+const slack = useSlackStore()
 const documents = useDocumentsStore()
 const tasks = useTasksStore()
 const library = useFragmentLibraryStore()
@@ -98,6 +99,16 @@ const commands = computed<Command[]>(() => {
       icon: 'i-lucide-github',
       keywords: 'git repos pull requests issues',
       run: () => ui.openGitHub(),
+    })
+  }
+  if (slack.available) {
+    list.push({
+      id: 'slack',
+      label: slack.connected ? 'Manage Slack notifications' : 'Connect Slack',
+      group: 'Integrations',
+      icon: 'i-lucide-slack',
+      keywords: 'slack notifications channel mentions',
+      run: () => ui.openSlack(),
     })
   }
   if (documents.available) {

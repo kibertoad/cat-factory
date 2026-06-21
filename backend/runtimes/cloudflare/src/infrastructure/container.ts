@@ -1,10 +1,12 @@
 import {
   type AgentExecutor,
   type Clock,
+  CompositeNotificationChannel,
   type DocumentSourceProvider,
   type ExecutionEventPublisher,
   type FragmentOwnerKind,
   type IdGenerator,
+  type NotificationChannel,
   NoopWorkRunner,
   type TaskSourceProvider,
   type WorkRunner,
@@ -14,7 +16,12 @@ import {
   inlineWebSearchOptionsFromEnv,
   resolveAgentConfig,
 } from '@cat-factory/agents'
-import { RunnerPoolConnectionService, TicketTrackerService } from '@cat-factory/integrations'
+import {
+  RunnerPoolConnectionService,
+  SLACK_CIPHER_INFO,
+  SlackNotificationChannel,
+  TicketTrackerService,
+} from '@cat-factory/integrations'
 import { type CoreDependencies, createCore } from '@cat-factory/orchestration'
 import {
   buildResolveRepoTarget as buildSharedResolveRepoTarget,
@@ -55,6 +62,11 @@ import { D1WorkspaceMountRepository } from './repositories/D1WorkspaceMountRepos
 import { D1TokenUsageRepository } from './repositories/D1TokenUsageRepository'
 import { D1LlmCallMetricRepository } from './repositories/D1LlmCallMetricRepository'
 import { D1WorkspaceRepository } from './repositories/D1WorkspaceRepository'
+import {
+  D1SlackConnectionRepository,
+  D1SlackMemberMappingRepository,
+  D1SlackSettingsRepository,
+} from './repositories/D1SlackRepositories'
 import { D1AccountRepository } from './repositories/D1AccountRepository'
 import { D1MembershipRepository } from './repositories/D1MembershipRepository'
 import { D1GitHubInstallationRepository } from './repositories/D1GitHubInstallationRepository'
@@ -333,8 +345,18 @@ function selectMergeLifecycleDeps(
     mergePresetRepository: new D1MergePresetRepository({ db }),
     modelDefaultsRepository: new D1ModelDefaultsRepository({ db }),
   }
+  // Compose the delivery channels: in-app push (when the events binding is present)
+  // and Slack (when the integration is enabled) implement the same NotificationChannel
+  // port and fan out via CompositeNotificationChannel — realizing the seam the kernel
+  // port documents, with no change to the engine call sites that raise notifications.
+  const channels: NotificationChannel[] = []
   const publisher = selectEventPublisher(env, db)
-  if (publisher) deps.notificationChannel = new InAppNotificationChannel(publisher)
+  if (publisher) channels.push(new InAppNotificationChannel(publisher))
+  const slackChannel = buildSlackChannel(config, db)
+  if (slackChannel) channels.push(slackChannel)
+  if (channels.length === 1) deps.notificationChannel = channels[0]
+  else if (channels.length > 1)
+    deps.notificationChannel = new CompositeNotificationChannel(channels)
 
   if (config.github.enabled && env.GITHUB_APP_PRIVATE_KEY) {
     const registry = buildAppRegistry(env, config, db, clock)
@@ -364,6 +386,46 @@ function selectMergeLifecycleDeps(
     })
   }
   return deps
+}
+
+/**
+ * Build the Slack notification channel when the integration is enabled — a
+ * runtime-neutral transport (fetch + decrypt + D1 reads) composed alongside the
+ * in-app channel. Null when Slack is off (then nothing Slack-related is wired).
+ */
+function buildSlackChannel(config: AppConfig, db: D1Database): SlackNotificationChannel | null {
+  if (!config.slack.enabled || !config.slack.encryptionKey) return null
+  return new SlackNotificationChannel({
+    workspaceRepository: new D1WorkspaceRepository({ db }),
+    slackConnectionRepository: new D1SlackConnectionRepository({ db }),
+    slackSettingsRepository: new D1SlackSettingsRepository({ db }),
+    slackMemberMappingRepository: new D1SlackMemberMappingRepository({ db }),
+    membershipRepository: new D1MembershipRepository({ db }),
+    secretCipher: new WebCryptoSecretCipher({
+      masterKeyBase64: config.slack.encryptionKey,
+      info: SLACK_CIPHER_INFO,
+    }),
+  })
+}
+
+/**
+ * Wire the Slack management module (per-account connect + per-workspace routing +
+ * member map). Wired only when the integration is enabled; the actual delivery is
+ * the channel composed in by {@link selectMergeLifecycleDeps}. OAuth credentials
+ * are optional — manual bot-token onboarding works without them.
+ */
+function selectSlackDeps(config: AppConfig, db: D1Database): Partial<CoreDependencies> {
+  if (!config.slack.enabled || !config.slack.encryptionKey) return {}
+  return {
+    slackConnectionRepository: new D1SlackConnectionRepository({ db }),
+    slackSettingsRepository: new D1SlackSettingsRepository({ db }),
+    slackMemberMappingRepository: new D1SlackMemberMappingRepository({ db }),
+    slackSecretCipher: new WebCryptoSecretCipher({
+      masterKeyBase64: config.slack.encryptionKey,
+      info: SLACK_CIPHER_INFO,
+    }),
+    ...(config.slack.oauth ? { slackOAuth: config.slack.oauth } : {}),
+  }
 }
 
 /**
@@ -912,6 +974,7 @@ export function buildContainer(env: Env, overrides: Partial<CoreDependencies> = 
     repoScanner: selectRepoScanner(env, config, db, clock),
     ...selectGitHubDeps(env, config, db, clock, idGenerator),
     ...selectMergeLifecycleDeps(env, config, db, clock, idGenerator),
+    ...selectSlackDeps(config, db),
     ...selectRecurringDeps(env, config, db, clock, idGenerator),
     ...selectDocumentsDeps(env, config, db, clock, idGenerator),
     ...selectTasksDeps(env, config, db, clock, idGenerator),

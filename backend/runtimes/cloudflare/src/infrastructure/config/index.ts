@@ -11,6 +11,7 @@ import { type DocumentsConfig, loadDocumentsConfig } from './documents'
 import { type TasksConfig, loadTasksConfig } from './tasks'
 import { type EnvironmentsConfig, loadEnvironmentsConfig } from './environments'
 import { type RunnerPoolConfig, loadRunnerPoolConfig } from './runners'
+import { type SlackConfig, loadSlackConfig } from './slack'
 import { type RetentionConfig, loadRetentionConfig } from './retention'
 import { type FragmentLibraryConfig, loadFragmentLibraryConfig } from './fragmentLibrary'
 import { type ObservabilityConfig, loadObservabilityConfig } from './observability'
@@ -33,6 +34,7 @@ export type {
   TasksConfig,
   EnvironmentsConfig,
   RunnerPoolConfig,
+  SlackConfig,
   RetentionConfig,
   FragmentLibraryConfig,
   ObservabilityConfig,
@@ -51,6 +53,7 @@ export function loadConfig(env: Env): AppConfig {
     tasks: loadTasksConfig(env),
     environments: loadEnvironmentsConfig(env),
     runners: loadRunnerPoolConfig(env),
+    slack: loadSlackConfig(env),
     retention: loadRetentionConfig(env),
     fragmentLibrary: loadFragmentLibraryConfig(env),
     observability: loadObservabilityConfig(env),
