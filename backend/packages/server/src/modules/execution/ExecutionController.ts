@@ -6,10 +6,22 @@ import {
   startExecutionSchema,
 } from '@cat-factory/contracts'
 import { Hono } from 'hono'
+import type { Context } from 'hono'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
 import { jsonBody } from '../../http/validation.js'
 import { personalGateForBlock } from '../providers/personalCredentialGate.js'
+
+/**
+ * Best-effort: when a user interacts with a running individual-usage run (resolving a
+ * decision, approving a step), extend its personal-credential activation TTL if it's at
+ * least half spent, so an actively-tended long run doesn't lapse. Never throws.
+ */
+function refreshActivation(c: Context<AppEnv>, executionId: string): void {
+  const personal = c.get('container').personalSubscriptions
+  const user = c.get('user')
+  if (personal && user) void personal.refreshActivations(executionId, user.id).catch(() => {})
+}
 
 /**
  * The execution engine endpoints — starting/cancelling runs, resolving decisions
@@ -127,6 +139,7 @@ export function executionController(): Hono<AppEnv> {
           param(c, 'decisionId'),
           c.req.valid('json').choice,
         )
+      refreshActivation(c, param(c, 'executionId'))
       return c.json(instance)
     },
   )
@@ -145,6 +158,7 @@ export function executionController(): Hono<AppEnv> {
           param(c, 'approvalId'),
           { proposal: c.req.valid('json').proposal },
         )
+      refreshActivation(c, param(c, 'executionId'))
       return c.json(instance)
     },
   )
