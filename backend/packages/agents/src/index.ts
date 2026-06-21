@@ -33,6 +33,7 @@ export {
   type PromptId,
   PROMPT_VERSIONS,
   REVIEW_SYSTEM_PROMPT,
+  REWORK_SYSTEM_PROMPT,
   promptVersion,
   promptVersionLabel,
 } from './agents/prompt-versions.js'

@@ -77,7 +77,9 @@ export function requirementReviewController(): Hono<AppEnv> {
     },
   )
 
-  // Fold the answers back into the block's requirements (all items must be settled).
+  // Rework the requirements: fold the answers into one standard-format document
+  // (every finding must be settled; an empty findings list passes). Returns
+  // `{ review }`; the block's own description is left untouched.
   app.post('/requirement-reviews/:reviewId/incorporate', async (c) => {
     const requirements = requireRequirements(c)
     if (!requirements) return unavailable(c)

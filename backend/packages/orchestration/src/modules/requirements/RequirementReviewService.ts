@@ -7,12 +7,11 @@ import type { ModelProvider, ModelRef } from '@cat-factory/kernel'
 import type { DocumentRepository } from '@cat-factory/kernel'
 import type { TaskRepository } from '@cat-factory/kernel'
 import type { RequirementReviewRepository } from '@cat-factory/kernel'
-import { REVIEW_SYSTEM_PROMPT } from '@cat-factory/agents'
+import { REVIEW_SYSTEM_PROMPT, REWORK_SYSTEM_PROMPT } from '@cat-factory/agents'
 import {
   type RequirementsContext,
-  INCORPORATE_SYSTEM_PROMPT,
-  buildIncorporatePrompt,
   buildReviewPrompt,
+  buildReworkPrompt,
   coerceReviewItems,
   extractJson,
 } from './requirements.logic.js'
@@ -54,6 +53,14 @@ export interface RequirementReviewServiceDependencies {
 
 /** Settled items no longer need a human; both gate-pass the incorporate step. */
 const SETTLED: ReviewItemStatus[] = ['resolved', 'dismissed']
+
+/**
+ * Output budget for the requirements-rework generation. The reworked doc is a full
+ * standard-format spec that becomes the only requirements context fed to every
+ * downstream agent step, so it needs ample room; a `length` finish is rejected
+ * (see `incorporate`) rather than persisted as a truncated spec.
+ */
+const REWORK_MAX_OUTPUT_TOKENS = 16_000
 
 /** The agent kind the reviewer runs as — keys its per-workspace default model. */
 const REQUIREMENTS_AGENT_KIND = 'requirements'
@@ -190,15 +197,16 @@ export class RequirementReviewService {
   }
 
   /**
-   * Fold the answers back into the block's requirements. Requires every item to
-   * be settled (resolved or dismissed); rewrites the block description from the
-   * answers and marks the review `incorporated`. Returns the updated review and
-   * the updated block.
+   * Rework the block's requirements: fold the human's answers (and dismissals) into
+   * one self-contained, standard-format requirements document. Requires every
+   * finding to be settled (resolved or dismissed) — an empty findings list (no
+   * challenges raised) passes, so a clean standardized doc is still produced. The
+   * reworked text is stored on the review (`incorporatedRequirements`); the block's
+   * own description and linked docs/tasks are left untouched. Downstream agent steps
+   * and the requirements-writer consume the reworked text instead (see
+   * `ExecutionService`). Returns the updated review.
    */
-  async incorporate(
-    workspaceId: string,
-    reviewId: string,
-  ): Promise<{ review: RequirementReview; block: Block }> {
+  async incorporate(workspaceId: string, reviewId: string): Promise<{ review: RequirementReview }> {
     const review = assertFound(
       await this.deps.requirementReviewRepository.get(workspaceId, reviewId),
       'Requirement review',
@@ -212,7 +220,7 @@ export class RequirementReviewService {
     const unsettled = review.items.filter((i) => !SETTLED.includes(i.status))
     if (unsettled.length > 0) {
       throw new ValidationError(
-        `Resolve or dismiss all ${unsettled.length} remaining item(s) before incorporating`,
+        `Resolve or dismiss all ${unsettled.length} remaining item(s) before reworking`,
       )
     }
     const { modelProvider } = this.deps
@@ -223,16 +231,23 @@ export class RequirementReviewService {
 
     const context = await this.gatherContext(workspaceId, block)
     let revised: string
+    let finishReason: string
     try {
       const model = modelProvider.resolve(ref)
       const result = await generateText({
         model,
-        system: INCORPORATE_SYSTEM_PROMPT,
-        prompt: buildIncorporatePrompt(context, review.items),
+        system: REWORK_SYSTEM_PROMPT,
+        prompt: buildReworkPrompt(context, review.items),
         temperature: 0.2,
-        maxOutputTokens: 5000,
+        // The reworked doc is a full standard-format spec (overview + functional +
+        // non-functional requirements with Given/When/Then acceptance + domain rules +
+        // assumptions + out-of-scope), and it becomes the SOLE source of truth fed to
+        // every downstream agent step (the description + linked docs are then dropped).
+        // A generous budget keeps a real spec from being cut off mid-document.
+        maxOutputTokens: REWORK_MAX_OUTPUT_TOKENS,
       })
       revised = result.text.trim()
+      finishReason = result.finishReason
     } catch (e) {
       throw new ValidationError(
         `The requirements reviewer (${ref.provider}:${ref.model}) failed: ${
@@ -243,9 +258,17 @@ export class RequirementReviewService {
     if (!revised) {
       throw new ValidationError('The reviewer produced no revised requirements')
     }
+    // A length-truncated document would become a silently-incomplete spec that every
+    // downstream agent then treats as authoritative. Reject it loudly instead of
+    // persisting a half-written requirements doc.
+    if (finishReason === 'length') {
+      throw new ValidationError(
+        'The reworked requirements were cut off before completion (model output limit ' +
+          'reached). Try splitting this work into smaller tasks, then rework again.',
+      )
+    }
 
     const now = this.deps.clock.now()
-    await this.deps.blockRepository.update(workspaceId, block.id, { description: revised })
     const updated: RequirementReview = {
       ...review,
       status: 'incorporated',
@@ -253,12 +276,7 @@ export class RequirementReviewService {
       updatedAt: now,
     }
     await this.deps.requirementReviewRepository.upsert(workspaceId, updated)
-    const nextBlock = assertFound(
-      await this.deps.blockRepository.get(workspaceId, block.id),
-      'Block',
-      block.id,
-    )
-    return { review: updated, block: nextBlock }
+    return { review: updated }
   }
 
   // ---- internals ----------------------------------------------------------

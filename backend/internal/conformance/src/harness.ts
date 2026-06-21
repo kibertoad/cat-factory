@@ -60,6 +60,14 @@ export interface ConformanceApp {
    * transitions `drive`'s final state can't show. Optionally filtered to one block.
    */
   executionEmits(blockId?: string): ExecutionInstance[]
+  /**
+   * Seed an already-"incorporated" requirements review for a block straight into the
+   * facade's real review store, so the suite can assert the engine substitutes the
+   * reworked requirements into the agent context — on EVERY runtime, not just the one
+   * a feature-specific spec happens to cover. (The review/rework run themselves call a
+   * real LLM, so the suite seeds the persisted outcome rather than driving them.)
+   */
+  seedIncorporatedReview(workspaceId: string, blockId: string, requirements: string): Promise<void>
 }
 
 export interface ConformanceHarness {

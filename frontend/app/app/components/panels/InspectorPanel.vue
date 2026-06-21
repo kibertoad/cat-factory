@@ -23,6 +23,7 @@ const fragments = useFragmentsStore()
 const agentRuns = useAgentRunsStore()
 const github = useGitHubStore()
 const recurring = useRecurringPipelinesStore()
+const requirements = useRequirementsStore()
 
 // When the selected task block backs a recurring pipeline, the inspector shows the
 // schedule controls + history, and "Delete" removes the schedule (block + history).
@@ -153,6 +154,26 @@ const runningRun = computed(() => {
   const run = block.value ? agentRuns.byBlock[block.value.id] : undefined
   return run && run.status === 'running' ? run : null
 })
+
+// ---- requirements review (collected requirements → react → rework) ----------
+// Probe + cache the block's review when a task is selected, so the entry point can
+// show its open-finding count (and hide entirely when the feature is unconfigured).
+watch(
+  () => (isTask.value ? block.value?.id : undefined),
+  (id) => {
+    if (id) void requirements.load(id)
+  },
+  { immediate: true },
+)
+const reqReview = computed(() => (block.value ? requirements.reviewFor(block.value.id) : null))
+const reqOpenCount = computed(() => (reqReview.value ? requirements.openCount(reqReview.value) : 0))
+const reqReworked = computed(() => reqReview.value?.status === 'incorporated')
+const reqReworkedText = computed(() => reqReview.value?.incorporatedRequirements ?? '')
+// Once a task's requirements have been reworked, the standardized document is what
+// every agent step consumes — so the raw description is frozen (read-only) and hidden
+// behind an expander, with the reworked requirements taking focus instead.
+const frozenByRework = computed(() => isTask.value && reqReworked.value)
+const showOriginalDescription = ref(false)
 </script>
 
 <template>
@@ -194,10 +215,12 @@ const runningRun = computed(() => {
       </div>
 
       <!-- editable identity: title + description. Edits persist to the backend.
-           A task's details lock once it has been started (a pipeline launched). -->
+           A task's details lock once it has been started (a pipeline launched), and
+           once its requirements have been reworked the description is frozen in favour
+           of the standardized requirements document. -->
       <div class="space-y-2">
         <UInput
-          v-if="editable"
+          v-if="editable && !frozenByRework"
           v-model="block.title"
           size="sm"
           class="w-full"
@@ -205,21 +228,72 @@ const runningRun = computed(() => {
           @change="saveTitle"
           @blur="saveTitle"
         />
-        <UTextarea
-          v-model="block.description"
-          :rows="2"
-          autoresize
-          size="sm"
-          class="w-full"
-          :disabled="!editable"
-          placeholder="Describe this block…"
-          @change="saveDescription"
-          @blur="saveDescription"
-        />
-        <p v-if="isTask && !editable" class="flex items-center gap-1 text-[11px] text-slate-500">
-          <UIcon name="i-lucide-lock" class="h-3 w-3" />
-          This task has started — its details are locked.
-        </p>
+
+        <!-- reworked: the standardized requirements document takes focus; the raw
+             description is frozen and tucked behind an expander. -->
+        <template v-if="frozenByRework">
+          <div class="rounded-lg border border-emerald-900/60 bg-emerald-950/20 p-3">
+            <div
+              class="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-emerald-400"
+            >
+              <UIcon name="i-lucide-file-check-2" class="h-3.5 w-3.5" />
+              Reworked requirements
+            </div>
+            <p class="line-clamp-5 whitespace-pre-line text-[13px] leading-relaxed text-slate-300">
+              {{ reqReworkedText }}
+            </p>
+            <div class="mt-2 flex items-center justify-between gap-2">
+              <p class="text-[11px] text-slate-500">Agent steps use this document.</p>
+              <UButton
+                color="neutral"
+                variant="link"
+                size="xs"
+                icon="i-lucide-maximize-2"
+                @click="ui.openRequirementReview(block.id)"
+              >
+                Open
+              </UButton>
+            </div>
+          </div>
+          <UButton
+            color="neutral"
+            variant="ghost"
+            size="xs"
+            :icon="showOriginalDescription ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
+            @click="showOriginalDescription = !showOriginalDescription"
+          >
+            Original description (frozen)
+          </UButton>
+          <UTextarea
+            v-if="showOriginalDescription"
+            :model-value="block.description"
+            :rows="2"
+            autoresize
+            size="sm"
+            class="w-full"
+            disabled
+            placeholder="No description"
+          />
+        </template>
+
+        <!-- normal: editable (or started-locked) description -->
+        <template v-else>
+          <UTextarea
+            v-model="block.description"
+            :rows="2"
+            autoresize
+            size="sm"
+            class="w-full"
+            :disabled="!editable"
+            placeholder="Describe this block…"
+            @change="saveDescription"
+            @blur="saveDescription"
+          />
+          <p v-if="isTask && !editable" class="flex items-center gap-1 text-[11px] text-slate-500">
+            <UIcon name="i-lucide-lock" class="h-3 w-3" />
+            This task has started — its details are locked.
+          </p>
+        </template>
       </div>
 
       <!-- failed run (bootstrap or execution): shared failure banner + retry -->
@@ -291,6 +365,38 @@ const runningRun = computed(() => {
         <TaskScenarios :block="block" />
         <TaskRunSettings :block="block" />
         <TaskExecution :block="block" />
+
+        <!-- requirements review: react to the reviewer's findings, then rework the
+             collected requirements into one standard-format document the agents use. -->
+        <UButton
+          v-if="requirements.available !== false"
+          color="neutral"
+          variant="soft"
+          size="sm"
+          block
+          icon="i-lucide-clipboard-check"
+          @click="ui.openRequirementReview(block.id)"
+        >
+          Review requirements
+          <UBadge
+            v-if="reqOpenCount > 0"
+            color="warning"
+            variant="subtle"
+            size="xs"
+            class="ml-auto"
+          >
+            {{ reqOpenCount }} open
+          </UBadge>
+          <UBadge
+            v-else-if="reqReworked"
+            color="success"
+            variant="subtle"
+            size="xs"
+            class="ml-auto"
+          >
+            reworked
+          </UBadge>
+        </UButton>
       </template>
 
       <!-- actions -->
