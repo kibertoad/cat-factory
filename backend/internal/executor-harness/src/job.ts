@@ -413,6 +413,71 @@ export function parseSpecJob(input: unknown): SpecJob {
   return job
 }
 
+// ---- Read-only exploration job (POST /explore) ----------------------------
+
+/**
+ * The job the Worker's ContainerAgentExecutor POSTs to /explore for the read-only
+ * agents (architect, analysis). The agent clones `branch`, explores the checkout and
+ * returns a prose report/proposal — it makes NO edits, opens NO branch or PR, and an
+ * edit-free run is the expected outcome (NOT a failure, unlike /run). Mirrors the
+ * merger's non-pushing shape; the `summary` it returns is the deliverable.
+ */
+export interface ExploreJob {
+  jobId: string
+  /** Short label for the temp dir + logs (e.g. the agent kind). */
+  kind?: string
+  /** Composed role + best-practice fragments; written to Pi's global AGENTS.md context. */
+  systemPrompt: string
+  /** The concrete task prompt handed to Pi. */
+  userPrompt: string
+  model: string
+  proxyBaseUrl: string
+  sessionToken: string
+  ghToken: string
+  repo: RepoSpec
+  /** Branch to clone and explore read-only (no branch is created and nothing is pushed). */
+  branch: string
+  /** Per-kind web-search guidance; surfaced only when web search is configured. */
+  webToolsGuidance?: string
+  /** Enable proxy-backed web search for this run. */
+  webSearch?: boolean
+  githubApiBase?: string
+}
+
+/** The /explore response: `summary` carries the agent's prose report/proposal. */
+export interface ExploreResult {
+  summary?: string
+  stats?: PiRunStats
+  error?: string
+}
+
+/** Validate + narrow an untrusted body into an {@link ExploreJob}, throwing on bad input. */
+export function parseExploreJob(input: unknown): ExploreJob {
+  if (typeof input !== 'object' || input === null) {
+    throw new Error('Invalid job: body must be an object')
+  }
+  const o = input as Record<string, unknown>
+  const repo = (o.repo ?? {}) as Record<string, unknown>
+  const job: ExploreJob = {
+    jobId: str(o.jobId, 'jobId'),
+    systemPrompt: str(o.systemPrompt, 'systemPrompt'),
+    userPrompt: str(o.userPrompt, 'userPrompt'),
+    model: str(o.model, 'model'),
+    proxyBaseUrl: str(o.proxyBaseUrl, 'proxyBaseUrl'),
+    sessionToken: str(o.sessionToken, 'sessionToken'),
+    ghToken: str(o.ghToken, 'ghToken'),
+    repo: parseRepoSpec(repo),
+    branch: str(o.branch, 'branch'),
+    ...(typeof o.kind === 'string' && o.kind ? { kind: o.kind } : {}),
+    ...(typeof o.webToolsGuidance === 'string' ? { webToolsGuidance: o.webToolsGuidance } : {}),
+    ...(o.webSearch === true ? { webSearch: true } : {}),
+    ...(typeof o.githubApiBase === 'string' ? { githubApiBase: o.githubApiBase } : {}),
+  }
+  assertAllowedHost(job.repo.cloneUrl, 'repo.cloneUrl')
+  if (job.githubApiBase) assertAllowedHost(job.githubApiBase, 'githubApiBase')
+  return job
+}
+
 // ---- CI-fixer job (POST /ci-fix) ------------------------------------------
 
 /**

@@ -2,6 +2,7 @@ import type { AgentRunContext } from '@cat-factory/kernel'
 import {
   composeSystemPrompt,
   phaseForKind,
+  READ_ONLY_GUARDRAIL,
   renderStandardUserPrompt,
   STANDARD_PHASE_BY_KIND,
   standardSystemPrompt,
@@ -45,8 +46,16 @@ describe('standard solution-phase prompts', () => {
   describe('system prompts', () => {
     it('routes the standard kinds through the built-out phase prompts', () => {
       expect(systemPromptFor('coder')).toBe(standardSystemPrompt('build'))
-      expect(systemPromptFor('architect')).toBe(standardSystemPrompt('design'))
       expect(systemPromptFor('tester')).toBe(standardSystemPrompt('test'))
+    })
+
+    it('builds the architect on the design phase prompt plus the read-only guardrail', () => {
+      // `architect` now runs read-only in a container (it explores before proposing),
+      // so its system prompt is the design phase prompt with the shared read-only
+      // guardrail appended (no edits / commits / PR).
+      const prompt = systemPromptFor('architect')
+      expect(prompt).toContain(standardSystemPrompt('design'))
+      expect(prompt).toContain(READ_ONLY_GUARDRAIL)
     })
 
     it('routes `reviewer` through the companion prompt (it is now the coder’s companion)', () => {

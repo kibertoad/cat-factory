@@ -327,8 +327,8 @@ export const requirementReviews = pgTable(
     items: text('items').notNull().default('[]'),
     model: text('model'),
     incorporated_requirements: text('incorporated_requirements'),
-    // JSON { rating, threshold, passed, feedback } — the companion's verdict on the
-    // last rework (migration 0036). Null until a rework has been gated.
+    // JSON ARRAY of { rating, threshold, passed, feedback } — the companion's verdicts
+    // across every rework cycle (migration 0036). Null until a rework has been gated.
     companion: text('companion'),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
     updated_at: bigint('updated_at', { mode: 'number' }).notNull(),

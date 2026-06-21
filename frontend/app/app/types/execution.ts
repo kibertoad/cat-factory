@@ -8,10 +8,12 @@ import type { CompanionVerdict } from './requirements'
 
 /** Live companion state on a companion step: the bar, the budget, and every verdict. */
 export interface StepCompanion {
-  /** the quality bar (0..1) the rating must reach */
+  /** the quality bar (0..1) the latest verdict's rating must reach */
   threshold: number
-  /** the rework budget: once `verdicts.length` hits this the run fails */
+  /** the automatic rework budget: once `attempts` reaches this the run fails */
   maxAttempts: number
+  /** how many AUTOMATIC reworks have run (human "request changes" cycles don't count) */
+  attempts?: number
   /** one verdict per correction cycle, in order; the last is the latest */
   verdicts: CompanionVerdict[]
 }

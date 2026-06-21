@@ -374,6 +374,38 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         expect(exec.failure?.kind).toBe('companion_rejected')
       })
 
+      it('reworks an earlier producer through an intermediate step, then recovers', async () => {
+        // The companion reviews the NEAREST target producer, which may sit several
+        // steps back: ['coder','tester','reviewer'] has `tester` between the coder and
+        // its `reviewer` companion. A first failing grade loops the coder back; the
+        // coder AND the intermediate `tester` re-run, then the re-grade passes and the
+        // run completes — exercising the multi-step rework reset (every step from the
+        // producer up to the companion is reset and re-run, not just the producer).
+        const app = harness.makeApp({ confidence: 1, companionRatings: [0.4, 1] })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Build + gap companion',
+          agentKinds: ['coder', 'tester', 'reviewer'],
+        })
+        const start = await app.call<ExecutionInstance>(
+          'POST',
+          `/workspaces/${wsId}/blocks/task_login/executions`,
+          { pipelineId: pipeline.body.id },
+        )
+        expect(start.status).toBe(201)
+        const ticked = await app.drive(wsId)
+        const exec = ticked.find((e) => e.blockId === 'task_login')!
+        expect(exec.status).toBe('done')
+        // The intermediate tester re-ran after the rework and finished cleanly.
+        expect(exec.steps.find((s) => s.agentKind === 'tester')!.state).toBe('done')
+        // The companion recorded both cycles: the rejected first grade then the pass.
+        const companionStep = exec.steps.find((s) => s.agentKind === 'reviewer')!
+        expect(companionStep.companion?.verdicts.map((v) => v.passed)).toEqual([false, true])
+        // Exactly one automatic rework was consumed from the budget.
+        expect(companionStep.companion?.attempts).toBe(1)
+      })
+
       it('drives an asynchronous (polled) agent job to completion', async () => {
         // The `coder` step runs as a polled async job (startJob → awaiting_job → pollJob),
         // so this exercises the durable driver's job-poll loop — Cloudflare Workflows and

@@ -11,6 +11,7 @@ import {
 import {
   type AgentRouting,
   composeBlockSystemPrompt,
+  isReadOnlyAgentKind,
   resolveStepModelRef,
   systemPromptFor,
   userPromptFor,
@@ -437,6 +438,32 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
         ...(this.deps.githubApiBase ? { githubApiBase: this.deps.githubApiBase } : {}),
       }
       return { body, model: `${ref.provider}:${ref.model}`, kind: 'merge' }
+    }
+
+    // Read-only agents (architect, analysis) explore a real checkout but never edit
+    // it: they clone a branch, produce a prose report/proposal and return it as
+    // `output`. They target the harness `/explore` endpoint — which opens no branch,
+    // makes no commit, opens no PR, and (unlike `/run`) does NOT treat an edit-free
+    // run as a failure. One shared body for every read-only kind. The branch explored
+    // is the implementation PR branch when one already exists (a re-run), else base.
+    if (isReadOnlyAgentKind(context.agentKind)) {
+      const branch = context.block.pullRequest?.branch ?? repo.baseBranch
+      const body = {
+        jobId: executionId,
+        kind: context.agentKind,
+        systemPrompt: composeBlockSystemPrompt(systemPromptFor(context.agentKind), context.block),
+        userPrompt: userPromptFor(context),
+        model: ref.model,
+        proxyBaseUrl: this.deps.proxyBaseUrl,
+        sessionToken,
+        ghToken,
+        repo: buildRepoSpec(repo),
+        branch,
+        webToolsGuidance: webResearchGuidanceFor(context.agentKind, { fetch: true }),
+        ...(this.deps.webSearchProxyEnabled ? { webSearch: true } : {}),
+        ...(this.deps.githubApiBase ? { githubApiBase: this.deps.githubApiBase } : {}),
+      }
+      return { body, model: `${ref.provider}:${ref.model}`, kind: 'explore' }
     }
 
     // The "extra context" Pi runs with: the build-phase role plus the block's

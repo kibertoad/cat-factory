@@ -22,6 +22,7 @@ import {
   type CompanionAssessment,
 } from '@cat-factory/contracts'
 import { companionFor, companionTargets, isCompanionKind } from '@cat-factory/agents'
+import { extractJson } from '../requirements/requirements.logic.js'
 import {
   assertFound,
   ConflictError,
@@ -100,23 +101,6 @@ const EXECUTION_FAILURE_HINTS: Partial<Record<AgentFailureKind, string>> = {
 }
 
 /**
- * Tolerantly pull a JSON object out of a model's text response: strip code fences,
- * then parse the first balanced `{…}` span. Returns `undefined` when none parses, so
- * callers can treat an unparseable verdict as a soft failure.
- */
-function extractJsonObject(text: string): unknown {
-  const cleaned = text.replace(/```(?:json)?/gi, '').trim()
-  const start = cleaned.indexOf('{')
-  const end = cleaned.lastIndexOf('}')
-  if (start === -1 || end <= start) return undefined
-  try {
-    return JSON.parse(cleaned.slice(start, end + 1))
-  } catch {
-    return undefined
-  }
-}
-
-/**
  * The `revision` slice of an agent context when a step is being re-run with feedback
  * — either a human's "request changes" on its approval gate, or a downstream
  * companion's automatic rework (`step.rework`). The companion path wins when both are
@@ -185,7 +169,7 @@ export interface ExecutionServiceDependencies {
    * Optional: when the requirements-review feature is configured, a block's
    * reworked ("incorporated") requirements are read here. When present they REPLACE
    * the block's description + linked docs/tasks as the agent context (for every
-   * step) and become the per-task input the requirements-writer aggregates. Absent
+   * step) and become the per-task input the spec-writer aggregates. Absent
    * → the engine uses the original description + docs/tasks unchanged.
    */
   requirementReviewRepository?: RequirementReviewRepository
@@ -391,6 +375,7 @@ export class ExecutionService {
               companion: {
                 threshold: pipeline.thresholds?.[i] ?? companionDef.defaultThreshold,
                 maxAttempts: DEFAULT_COMPANION_MAX_ATTEMPTS,
+                attempts: 0,
                 verdicts: [],
               },
             }
@@ -961,11 +946,12 @@ export class ExecutionService {
     const companion = step.companion ?? {
       threshold: companionFor(step.agentKind)?.defaultThreshold ?? 0.8,
       maxAttempts: DEFAULT_COMPANION_MAX_ATTEMPTS,
+      attempts: 0,
       verdicts: [],
     }
     let assessment: CompanionAssessment | undefined
     try {
-      assessment = parseCompanionAssessment(extractJsonObject(result.output ?? ''))
+      assessment = parseCompanionAssessment(extractJson(result.output ?? ''))
     } catch {
       assessment = undefined
     }
@@ -1021,15 +1007,17 @@ export class ExecutionService {
       return { kind: 'continue' }
     }
 
-    // BELOW THRESHOLD, budget spent → fail the run for human attention.
-    if (companion.verdicts.length >= companion.maxAttempts) {
+    // BELOW THRESHOLD, automatic budget spent → fail the run for human attention.
+    // Only AUTOMATIC reworks count against the budget (`attempts`); human "request
+    // changes" cycles on the companion's gate re-run the producer without consuming it.
+    if (companion.attempts >= companion.maxAttempts) {
       const detail = assessment?.summary ?? 'No further detail.'
       await this.failRun(
         workspaceId,
         instance.id,
         `Companion "${step.agentKind}" rated the output ${(rating * 100).toFixed(0)}% ` +
           `(below the ${(companion.threshold * 100).toFixed(0)}% bar) after ` +
-          `${companion.verdicts.length} attempt(s).`,
+          `${companion.attempts} automatic rework attempt(s).`,
         'companion_rejected',
         detail,
       )
@@ -1040,28 +1028,61 @@ export class ExecutionService {
     // in (the automatic analogue of a human "request changes"). `producerIndex` is
     // guaranteed >= 0 here (rating < threshold only when a producer was found and the
     // verdict parsed; otherwise rating defaulted to 1 and we passed above).
+    companion.attempts += 1
     const producer = instance.steps[producerIndex]!
-    producer.rework = {
-      previousProposal: producer.output ?? '',
+    const previousProposal = producer.output ?? ''
+    this.rerunProducerThrough(instance, producerIndex, instance.currentStep, {
+      previousProposal,
       feedback: assessment?.summary ?? '',
       ...(assessment?.comments?.length ? { comments: assessment.comments } : {}),
-    }
-    producer.jobId = undefined
-    producer.startedAt = null
-    producer.finishedAt = null
-    producer.approval = null
-    // Reset this companion so it re-grades after the producer re-runs (attempts kept).
-    step.state = 'pending'
-    step.startedAt = null
-    step.finishedAt = null
-    step.output = undefined
-    this.startStep(producer)
-    instance.currentStep = producerIndex
+    })
     if (instance.status === 'blocked') instance.status = 'running'
     await this.updateBlockProgress(workspaceId, instance, 'in_progress')
     await this.executionRepository.upsert(workspaceId, instance)
     await this.emitInstance(workspaceId, instance)
     return { kind: 'continue' }
+  }
+
+  /**
+   * Reset a step so the durable driver re-runs it from scratch: clear its live
+   * container job handle (so it dispatches FRESH work rather than re-attaching to a
+   * finished or evicted job), its timings, approval gate, live subtasks and last
+   * output, and drop it back to `pending`. Preserves the step's identity
+   * (`agentKind` / `requiresApproval`) and any companion budget/verdict history.
+   */
+  private resetStepForRerun(step: PipelineStep): void {
+    step.state = 'pending'
+    step.startedAt = null
+    step.finishedAt = null
+    step.jobId = undefined
+    step.approval = null
+    step.subtasks = undefined
+    step.progress = 0
+    step.output = undefined
+    step.rework = undefined
+  }
+
+  /**
+   * Loop a producer step back for rework and re-run every step from it up to and
+   * including the companion at `companionIndex`: each one is reset (crucially clearing
+   * stale container job handles so an intermediate container step re-dispatches fresh
+   * work instead of re-attaching to its evicted job), the producer is handed the
+   * `rework` feedback + started, and the instance cursor is moved back to the producer.
+   * Shared by the automatic companion loop and the human "request changes" path.
+   */
+  private rerunProducerThrough(
+    instance: ExecutionInstance,
+    producerIndex: number,
+    companionIndex: number,
+    rework: NonNullable<PipelineStep['rework']>,
+  ): void {
+    for (let i = producerIndex; i <= companionIndex; i++) {
+      this.resetStepForRerun(instance.steps[i]!)
+    }
+    const producer = instance.steps[producerIndex]!
+    producer.rework = rework
+    this.startStep(producer)
+    instance.currentStep = producerIndex
   }
 
   /**
@@ -1474,7 +1495,7 @@ export class ExecutionService {
 
   /**
    * The collected requirements of every task under `block`'s service frame, for the
-   * requirements-writer step to aggregate. Each task contributes its reworked
+   * spec-writer step to aggregate. Each task contributes its reworked
    * ("incorporated") requirements when present — the standard-format document the
    * rework step produced — and falls back to its plain description otherwise. Returns
    * an empty list when the block has no service frame (the writer then has only the
@@ -1502,7 +1523,7 @@ export class ExecutionService {
    * The reworked ("incorporated") requirements for a block — the standard-format
    * document the requirements-rework step produced — or `null` when the feature is
    * unwired or the block has no incorporated review yet. Used both to substitute the
-   * agent context for every step and to feed the requirements-writer.
+   * agent context for every step and to feed the spec-writer.
    */
   private async resolveReworkedRequirements(
     workspaceId: string,
@@ -2138,22 +2159,15 @@ export class ExecutionService {
       }
       const producer = producerIndex >= 0 ? instance.steps[producerIndex]! : undefined
       if (producer) {
-        producer.rework = {
-          previousProposal: producer.output ?? step.approval.proposal,
+        // Re-run the producer (with the human's feedback) and every step up to and
+        // including the companion, then the companion re-grades. Does NOT touch the
+        // companion's automatic-rework budget — a human-driven iteration is unbounded.
+        const previousProposal = producer.output ?? step.approval.proposal
+        this.rerunProducerThrough(instance, producerIndex, stepIndex, {
+          previousProposal,
           feedback: review.feedback ?? '',
           ...(review.comments?.length ? { comments: review.comments } : {}),
-        }
-        producer.jobId = undefined
-        producer.startedAt = null
-        producer.finishedAt = null
-        producer.approval = null
-        // Reset the companion so it re-grades once the producer re-runs.
-        step.state = 'pending'
-        step.startedAt = null
-        step.finishedAt = null
-        step.output = undefined
-        this.startStep(producer)
-        instance.currentStep = producerIndex
+        })
         if (instance.status === 'blocked') instance.status = 'running'
         await this.executionRepository.upsert(workspaceId, instance)
         await this.workRunner.signalDecision(

@@ -38,16 +38,20 @@ export interface RunnerJobResult {
 
 /**
  * Which harness endpoint a dispatch targets (a coding run, a blueprint run, a
- * repo-bootstrap run, a CI fix, a merge-conflict resolution, or a merge
- * assessment). All are dispatched + polled identically through this transport;
- * `kind` only selects the harness endpoint (e.g. `/run` | `/blueprint` |
- * `/resolve-conflicts`). The Cloudflare backend serves all of them; a self-hosted
- * pool serves only `run` and rejects the rest until it implements them.
+ * read-only repo exploration, a repo-bootstrap run, a CI fix, a merge-conflict
+ * resolution, or a merge assessment). All are dispatched + polled identically
+ * through this transport; `kind` only selects the harness endpoint (e.g. `/run` |
+ * `/blueprint` | `/explore` | `/resolve-conflicts`). The Cloudflare backend serves
+ * all of them; a self-hosted pool serves only `run` and rejects the rest until it
+ * implements them.
  */
 export type RunnerDispatchKind =
   | 'run'
   | 'blueprint'
   | 'spec'
+  // Read-only exploration (architect / analysis): clone + explore + return prose;
+  // no work branch, no commit, no PR, and an edit-free run is not a failure.
+  | 'explore'
   | 'bootstrap'
   | 'ci-fix'
   | 'resolve-conflicts'

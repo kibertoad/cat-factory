@@ -26,7 +26,8 @@ const execFileAsync = promisify(execFile)
 const KIND_ROUTE: Record<RunnerDispatchKind, string> = {
   run: '/run',
   blueprint: '/blueprint',
-  requirements: '/requirements',
+  spec: '/spec',
+  explore: '/explore',
   bootstrap: '/bootstrap',
   'ci-fix': '/ci-fix',
   'resolve-conflicts': '/resolve-conflicts',

@@ -50,6 +50,13 @@ export interface FakeAgentOptions {
    */
   companionRating?: number
   /**
+   * A SEQUENCE of companion ratings, one per successive companion grading call (the
+   * last value repeats once exhausted). Lets a test drive the rework loop and then
+   * recover — e.g. `[0.4, 1]` fails the first grade (looping the producer back) then
+   * passes the re-grade. Takes precedence over `companionRating` when set.
+   */
+  companionRatings?: number[]
+  /**
    * The assessment the `merger` step reports. When omitted, the fake derives one
    * from `confidence` so existing tests keep their semantics: high confidence
    * (≥ 0.8) yields a within-threshold assessment (auto-merge → `done`), and low
@@ -68,6 +75,9 @@ export interface FakeAgentOptions {
  */
 export class FakeAgentExecutor implements AgentExecutor {
   constructor(private readonly options: FakeAgentOptions = {}) {}
+
+  /** Count of companion grading calls so far, to walk `companionRatings` in order. */
+  private companionCalls = 0
 
   // Matches the `model: 'fake'` every result carries, so the engine's up-front
   // model preview (shown on the first "spinning up container" / querying emit)
@@ -111,9 +121,14 @@ export class FakeAgentExecutor implements AgentExecutor {
     }
 
     // Mimic a companion step grading the prior producer: return the configured rating
-    // (default 1 = pass) as the JSON assessment the engine parses.
+    // (default 1 = pass) as the JSON assessment the engine parses. A `companionRatings`
+    // sequence walks one rating per grade (last repeats) so a test can fail then pass.
     if (isCompanionKind(context.agentKind)) {
-      const rating = this.options.companionRating ?? 1
+      const seq = this.options.companionRatings
+      const rating = seq?.length
+        ? (seq[Math.min(this.companionCalls, seq.length - 1)] ?? 1)
+        : (this.options.companionRating ?? 1)
+      this.companionCalls += 1
       return {
         output: JSON.stringify({
           rating,

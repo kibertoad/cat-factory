@@ -91,8 +91,8 @@ export interface AgentRunContext {
   /**
    * The collected requirements of every task under this block's service frame —
    * each task block's title + (clarified) description. Populated by the engine ONLY
-   * for the `requirements-writer` step, which aggregates them into the service's
-   * unified in-repo requirements document. The block descriptions already carry the
+   * for the `spec-writer` step, which aggregates them into the service's unified
+   * in-repo specification document. The block descriptions already carry the
    * incorporated/clarified requirements (the per-task review's `incorporate` rewrote
    * them), so this is the "combined requirement context for all tasks". Absent for
    * every other agent kind.

@@ -35,11 +35,11 @@ const SPEC_SHAPE_HINT =
   '"outcome": string}]}]}], "rules": [{"id": string, "rule": string, "rationale": ' +
   'string, "sourceBlockIds": string[]}]}.'
 
-// Runs one "requirements" job end to end. The requirements-writer agent gets the
-// implementation branch (created from base when it does not exist yet — this step
-// runs BEFORE the coder, seeding the branch the coder then resumes), reads any
-// existing requirements doc, and (re)generates the unified PRESCRIPTIVE
-// requirements document for the service from the combined task context. The harness
+// Runs one "spec" job end to end. The spec-writer agent gets the implementation
+// branch (created from base when it does not exist yet — this step runs BEFORE the
+// coder, seeding the branch the coder then resumes), reads any existing spec, and
+// (re)generates the unified PRESCRIPTIVE specification document for the service from
+// the combined task context. The harness
 // deterministically renders that document into the in-repo `spec/` folder
 // (a machine-readable `spec.json`, the `overview.md` / `rules.md` markdown,
 // a `version.json` manifest and the Gherkin `features/*.feature` files), then
@@ -536,16 +536,14 @@ async function fileExists(abs: string): Promise<boolean> {
 }
 
 /**
- * Write the rendered files under `dir`. The requirements-writer OWNS the canonical
- * artifact (`spec.json`, `overview.md`, `rules.md`, `version.json`) and
- * always rewrites it. The Gherkin `features/*.feature` files are a TWO-PASS artifact:
- * this writer only does the mechanical pass-1 SEED, then the `acceptance` agent
- * polishes them in place (sharpening wording, adding edge/error scenarios). So a
- * feature file is written only when it does not already exist — never overwritten or
- * deleted — otherwise a re-run (a later `pl_full`, or a standalone `pl_requirements`)
- * would clobber the acceptance agent's polished/added scenarios. The trade-off is a
- * removed group's seed file may linger; that is far cheaper than destroying pass-2
- * work, and a stale `.feature` is harmless next to the canonical `spec.json`.
+ * Write the rendered files under `dir`. The spec-writer OWNS the canonical artifact
+ * (`spec.json`, `overview.md`, `rules.md`, `version.json`) and always rewrites it.
+ * The Gherkin `features/*.feature` files are SEEDED from the spec's acceptance
+ * criteria: a feature file is written only when it does not already exist — never
+ * overwritten or deleted — so any later manual refinement of a scenario survives a
+ * re-run (a later `pl_full`, or a standalone `pl_spec`) rather than being clobbered.
+ * The trade-off is a removed group's seed file may linger; that is harmless next to
+ * the canonical `spec.json`, and far cheaper than destroying hand-edited scenarios.
  */
 export async function writeRequirementsFiles(dir: string, files: RenderedFile[]): Promise<void> {
   for (const file of files) {

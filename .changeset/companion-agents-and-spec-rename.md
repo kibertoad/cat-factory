@@ -8,6 +8,7 @@
 '@cat-factory/app': minor
 '@cat-factory/worker': patch
 '@cat-factory/node-server': patch
+'@cat-factory/local-server': patch
 '@cat-factory/executor-harness': minor
 ---
 
@@ -37,7 +38,17 @@ longer the same word.
   writes the runnable tests. `spec-writer`'s prompt now treats complete
   acceptance-scenario coverage as a first-class deliverable.
 - **`architect` is now a container agent** that explores the repo (read-only, like
-  `analysis`) before proposing.
+  `analysis`) before proposing. Both read-only kinds share one reusable execution
+  path: a new harness `/explore` endpoint (dispatch kind `explore`) clones the branch,
+  runs the agent read-only and returns its prose report/proposal — making no commit,
+  opening no PR, and (unlike `/run`) NOT treating an edit-free run as a failure. A
+  shared read-only guardrail is appended to their system prompts.
+- **Companion rework correctness.** When a companion loops a producer back, EVERY step
+  between the producer and the companion is now reset and re-run (clearing stale
+  container job handles), so an intermediate container step re-dispatches fresh work
+  instead of re-attaching to its evicted job. The automatic rework budget now counts
+  only automatic attempts (`companion.attempts`); a human "request changes" on a
+  companion's gate re-runs the producer without consuming it.
 - **Rename: requirements → spec** for the structured family. In-repo `requirements/`
   → `spec/` (`spec.json`, `spec/features/*.feature`; legacy `requirements/`
   relocated on first run); `RequirementsDoc` → `SpecDoc`; `requirements-writer` →

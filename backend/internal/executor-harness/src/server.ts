@@ -13,18 +13,22 @@ import {
   type MergerResult,
   type SpecJob,
   type SpecResult,
+  type ExploreJob,
+  type ExploreResult,
   parseBlueprintJob,
   parseBootstrapJob,
   parseCiFixerJob,
   parseConflictResolverJob,
   parseMergerJob,
   parseSpecJob,
+  parseExploreJob,
   parseJob,
   type RunResult,
 } from './job.js'
 import { handleBootstrap } from './bootstrap.js'
 import { handleBlueprint } from './blueprint.js'
 import { handleSpec } from './spec.js'
+import { handleExplore } from './explore.js'
 import { handleCiFixer } from './ci-fixer.js'
 import { handleConflictResolver } from './conflict-resolver.js'
 import { handleMerger } from './merger.js'
@@ -74,6 +78,7 @@ const jobs = new JobRegistry(limits)
 const bootstrapJobs = new JobRegistry<BootstrapJob, BootstrapResult>(limits, handleBootstrap)
 const blueprintJobs = new JobRegistry<BlueprintJob, BlueprintResult>(limits, handleBlueprint)
 const specJobs = new JobRegistry<SpecJob, SpecResult>(limits, handleSpec)
+const exploreJobs = new JobRegistry<ExploreJob, ExploreResult>(limits, handleExplore)
 const ciFixerJobs = new JobRegistry<CiFixerJob, CiFixerResult>(limits, handleCiFixer)
 const conflictResolverJobs = new JobRegistry<ConflictResolverJob, ConflictResolverResult>(
   limits,
@@ -149,6 +154,20 @@ const server = createServer((req, res) => {
         return send(res, 400, { error: message } satisfies SpecResult)
       }
     }
+    // Start (or re-attach to) a read-only exploration job: POST /explore. Clones the
+    // branch, explores it read-only (architect / analysis) and returns prose — no
+    // branch, no commit, no PR; an edit-free run is success.
+    if (req.method === 'POST' && req.url === '/explore') {
+      try {
+        const job = parseExploreJob(JSON.parse(await readBody(req)))
+        const view = exploreJobs.start(job.jobId, job)
+        return send(res, 202, { jobId: view.id, state: view.state })
+      } catch (error) {
+        const message = redactSecrets(error instanceof Error ? error.message : String(error))
+        log.error('failed to start explore', { error: message })
+        return send(res, 400, { error: message } satisfies ExploreResult)
+      }
+    }
     // Start (or re-attach to) a CI-fixer job: POST /ci-fix. Clones the PR branch,
     // fixes failing CI and pushes back onto the same branch.
     if (req.method === 'POST' && req.url === '/ci-fix') {
@@ -199,6 +218,7 @@ const server = createServer((req, res) => {
         bootstrapJobs.get(id) ??
         blueprintJobs.get(id) ??
         specJobs.get(id) ??
+        exploreJobs.get(id) ??
         ciFixerJobs.get(id) ??
         conflictResolverJobs.get(id) ??
         mergerJobs.get(id)

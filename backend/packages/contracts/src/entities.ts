@@ -476,24 +476,32 @@ export const pipelineStepSchema = v.object({
    */
   approval: v.optional(v.nullable(stepApprovalSchema)),
   /**
-   * Live state of a companion step that reviews the immediately-preceding producer
-   * step. Set when this step's `agentKind` is a companion kind. `rating` is the
-   * companion's last overall quality score (0..1); `threshold` is the bar it must
-   * reach; `attempts`/`maxAttempts` track the automatic rework budget. Below
-   * threshold the producer is re-run; the run fails once `attempts` hits
-   * `maxAttempts`. Absent for non-companion steps.
+   * Live state of a companion step that reviews a preceding producer step. Set when
+   * this step's `agentKind` is a companion kind. `threshold` is the quality bar the
+   * companion's latest rating (the last `verdicts` entry) must reach; `attempts`
+   * counts only the AUTOMATIC reworks performed, and the run fails once it reaches
+   * `maxAttempts`. A human "request changes" on the companion's gate also re-runs the
+   * producer but does NOT consume `attempts` (only the automatic loop is budgeted).
+   * Absent for non-companion steps.
    */
   companion: v.optional(
     v.nullable(
       v.object({
-        /** The quality bar (0..1) this step's rating must reach; seeded from the pipeline. */
+        /** The quality bar (0..1) the latest verdict's rating must reach; seeded from the pipeline. */
         threshold: v.number(),
-        /** The rework budget: once `verdicts.length` hits this the run fails (`companion_rejected`). */
+        /** The automatic rework budget: once `attempts` reaches this the run fails (`companion_rejected`). */
         maxAttempts: v.number(),
+        /**
+         * How many AUTOMATIC reworks the companion has driven so far (the producer is
+         * looped back once per failed verdict). Human "request changes" cycles are not
+         * counted. Defaults to 0; the run fails once it reaches `maxAttempts`.
+         */
+        attempts: v.optional(v.number(), 0),
         /**
          * One standardized {@link companionVerdictSchema} per grading cycle, in order —
          * the full sequence of correction iterations (the producer is re-run after each
-         * rejected verdict). Empty before the first grade; the last entry is the latest.
+         * rejected verdict), including any human-driven ones. Empty before the first
+         * grade; the last entry is the latest.
          */
         verdicts: v.array(companionVerdictSchema),
       }),

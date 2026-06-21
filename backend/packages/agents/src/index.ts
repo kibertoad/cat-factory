@@ -65,6 +65,11 @@ export {
   companionTargets,
 } from './agents/companions.js'
 export { companionSystemPrompt } from './agents/companion-prompts.js'
+export {
+  READ_ONLY_AGENT_KINDS,
+  READ_ONLY_GUARDRAIL,
+  isReadOnlyAgentKind,
+} from './agents/read-only.js'
 export { MOCK_AGENT_KIND, isMockKind, mockSystemPrompt } from './agents/mock-prompts.js'
 export {
   type BusinessLogicAgentKind,
