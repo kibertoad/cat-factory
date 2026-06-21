@@ -14,7 +14,11 @@ import {
   inlineWebSearchOptionsFromEnv,
   resolveAgentConfig,
 } from '@cat-factory/agents'
-import { RunnerPoolConnectionService, TicketTrackerService } from '@cat-factory/integrations'
+import {
+  ProviderSubscriptionService,
+  RunnerPoolConnectionService,
+  TicketTrackerService,
+} from '@cat-factory/integrations'
 import { type CoreDependencies, createCore } from '@cat-factory/orchestration'
 import {
   buildResolveRepoTarget as buildSharedResolveRepoTarget,
@@ -40,6 +44,7 @@ import { D1LiveContainerRepository } from './repositories/D1LiveContainerReposit
 import { HttpRunnerPoolProvider } from './runners/HttpRunnerPoolProvider'
 import { RunnerPoolTransport } from './runners/RunnerPoolTransport'
 import { D1RunnerPoolConnectionRepository } from './repositories/D1RunnerPoolConnectionRepository'
+import { D1ProviderSubscriptionTokenRepository } from './repositories/D1ProviderSubscriptionTokenRepository'
 import { ContainerRepoBootstrapper } from './ai/ContainerRepoBootstrapper'
 import { ContainerRepoScanner } from './ai/ContainerRepoScanner'
 import { CompositeAgentExecutor } from './ai/CompositeAgentExecutor'
@@ -156,6 +161,7 @@ function selectAgentExecutor(
   db: D1Database,
   clock: Clock,
   resolveTransport: ResolveRunnerTransport | null,
+  subscriptions?: ProviderSubscriptionService,
 ): AgentExecutor {
   const inline = new AiAgentExecutor({
     modelProvider: buildModelProvider(env),
@@ -175,7 +181,7 @@ function selectAgentExecutor(
   // EXEC_CONTAINER binding or a registered runner pool) is missing. We refuse to
   // start with a half-configured implementer rather than quietly running the
   // repo-operating steps as useless one-shot LLM calls.
-  const container = buildContainerExecutor(env, config, db, clock, resolveTransport)
+  const container = buildContainerExecutor(env, config, db, clock, resolveTransport, subscriptions)
   if (!container) {
     throw new Error(
       'Container-based implementation is required but its prerequisites are missing. ' +
@@ -434,12 +440,37 @@ function selectRecurringDeps(
   }
 }
 
+/**
+ * Build the workspace subscription-token pool service (Claude Code / Codex
+ * credentials), or undefined when the shared ENCRYPTION_KEY is absent. Tokens are
+ * sealed under a subscriptions-scoped HKDF info of the shared master key.
+ */
+function buildSubscriptionService(
+  env: Env,
+  db: D1Database,
+  clock: Clock,
+): ProviderSubscriptionService | undefined {
+  const masterKeyBase64 = env.ENCRYPTION_KEY?.trim()
+  if (!masterKeyBase64) return undefined
+  return new ProviderSubscriptionService({
+    providerSubscriptionTokenRepository: new D1ProviderSubscriptionTokenRepository({ db }),
+    workspaceRepository: new D1WorkspaceRepository({ db }),
+    secretCipher: new WebCryptoSecretCipher({
+      masterKeyBase64,
+      info: 'cat-factory:provider-subscriptions',
+    }),
+    idGenerator: new CryptoIdGenerator(),
+    clock,
+  })
+}
+
 function buildContainerExecutor(
   env: Env,
   config: AppConfig,
   db: D1Database,
   clock: Clock,
   resolveTransport: ResolveRunnerTransport | null,
+  subscriptions?: ProviderSubscriptionService,
 ): AgentExecutor | null {
   if (
     !config.github.enabled ||
@@ -465,6 +496,19 @@ function buildContainerExecutor(
     resolveRepoTarget,
     mintInstallationToken: (id) => registry.installationToken(id),
     sessionService: new ContainerSessionService({ secret: env.AUTH_SESSION_SECRET }),
+    // The subscription harnesses (Claude Code / Codex) lease a pooled token and
+    // attribute usage back for usage-aware rotation; absent ⇒ those harnesses are
+    // unavailable and a subscription-only model fails loudly at dispatch.
+    ...(subscriptions
+      ? {
+          leaseSubscriptionToken: (workspaceId, vendor) =>
+            subscriptions.leaseToken(workspaceId, vendor),
+          recordSubscriptionUsage: (workspaceId, tokenId, usage) =>
+            subscriptions.recordTokenUsage(workspaceId, tokenId, usage),
+          hasSubscriptionToken: (workspaceId, vendor) =>
+            subscriptions.hasToken(workspaceId, vendor),
+        }
+      : {}),
     proxyBaseUrl: `${env.WORKER_PUBLIC_URL.replace(/\/+$/, '')}/v1`,
     // Point container agents' web search at the backend search proxy (no provider key
     // in the sandbox) whenever an upstream is configured for this deployment.
@@ -873,6 +917,11 @@ export function buildContainer(env: Env, overrides: Partial<CoreDependencies> = 
   // Cloudflare transport for free. Null when no backend is configured.
   const resolveTransport = buildResolveTransport(env, config, db, clock)
 
+  // The subscription-token pool (Claude Code / Codex credentials) — built once and
+  // shared by the container executor (lease + usage feedback) and the
+  // vendor-credential controller, so both read the same pool.
+  const subscriptions = buildSubscriptionService(env, db, clock)
+
   const dependencies: CoreDependencies = {
     workspaceRepository: new D1WorkspaceRepository({ db }),
     accountRepository: new D1AccountRepository({ db }),
@@ -892,7 +941,8 @@ export function buildContainer(env: Env, overrides: Partial<CoreDependencies> = 
     // in but its prerequisites are missing, which is the desired loud failure in
     // production but must not fire for tests that never reach the real executor.
     agentExecutor:
-      overrides.agentExecutor ?? selectAgentExecutor(env, config, db, clock, resolveTransport),
+      overrides.agentExecutor ??
+      selectAgentExecutor(env, config, db, clock, resolveTransport, subscriptions),
     workRunner: selectWorkRunner(env),
     executionEventPublisher: selectEventPublisher(env, db),
     spendPricing: config.spend,
@@ -926,6 +976,9 @@ export function buildContainer(env: Env, overrides: Partial<CoreDependencies> = 
     ...createCore(dependencies),
     config,
     agentRunRepository: new D1AgentRunRepository({ db }),
+    // The vendor-credential (subscription token pool) service the shared controller
+    // reads; present when the shared ENCRYPTION_KEY is configured.
+    subscriptions,
     gateways: {
       // Real-time event delivery via the per-workspace WorkspaceEventsHub DO (when
       // the WORKSPACE_EVENTS namespace is bound; absent → the events route 501s).

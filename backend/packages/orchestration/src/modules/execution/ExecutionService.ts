@@ -434,16 +434,21 @@ export class ExecutionService {
     const step = instance.steps[instance.currentStep]
     if (!step) return { kind: 'noop' }
 
-    // Spend gate: don't incur LLM cost once the budget is exhausted. Pause the
-    // run (so the frontend can flag it) and stop here. A previously-paused run
-    // that finds the budget has freed up resumes and proceeds.
+    // Spend gate: don't incur monetary LLM cost once the budget is exhausted. Pause
+    // the run (so the frontend can flag it) and stop here. A previously-paused run
+    // that finds the budget has freed up resumes and proceeds. EXEMPTION: a step that
+    // runs on a flat-rate subscription (quota) model — Claude Code / Codex on a pooled
+    // token — incurs no metered monetary cost and never contributes to the budget, so
+    // it must not be held hostage by a budget other (metered) models exhausted.
     if (await this.spend.isOverBudget()) {
-      if (instance.status !== 'paused') {
-        instance.status = 'paused'
-        await this.executionRepository.upsert(workspaceId, instance)
-        await this.emitInstance(workspaceId, instance)
+      if (!(await this.currentStepIsQuotaBased(workspaceId, instance, step))) {
+        if (instance.status !== 'paused') {
+          instance.status = 'paused'
+          await this.executionRepository.upsert(workspaceId, instance)
+          await this.emitInstance(workspaceId, instance)
+        }
+        return { kind: 'paused' }
       }
-      return { kind: 'paused' }
     }
     if (instance.status === 'paused') instance.status = 'running'
 
@@ -566,6 +571,32 @@ export class ExecutionService {
       return await this.agentExecutor.resolveModel(context)
     } catch {
       return undefined
+    }
+  }
+
+  /**
+   * Whether the current step will run on a flat-rate subscription (quota) model, so
+   * the spend gate can let it proceed even when the monetary budget is exhausted.
+   * Resolved through the executor (the authority on the "subscriptions always win"
+   * routing) off a full step context. Best-effort and side-effect-free: an executor
+   * without the capability, a missing block, or any resolution error all report false
+   * (the step is treated as budget-metered, the prior behaviour). Only consulted on
+   * the over-budget path, so the extra context build never touches the happy path.
+   */
+  private async currentStepIsQuotaBased(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    step: ExecutionInstance['steps'][number],
+  ): Promise<boolean> {
+    if (!this.agentExecutor.isQuotaBased) return false
+    try {
+      const block = await this.blockRepository.get(workspaceId, instance.blockId)
+      if (!block) return false
+      const isFinalStep = instance.currentStep === instance.steps.length - 1
+      const context = await this.buildAgentContext(workspaceId, instance, step, isFinalStep, block)
+      return await this.agentExecutor.isQuotaBased(context)
+    } catch {
+      return false
     }
   }
 

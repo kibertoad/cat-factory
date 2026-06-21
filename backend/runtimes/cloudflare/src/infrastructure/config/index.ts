@@ -1,5 +1,6 @@
 import type { AppConfig } from '@cat-factory/server'
 import { effectiveCatalog } from '@cat-factory/kernel'
+import { modelCostResolver } from '@cat-factory/spend'
 import type { Env } from '../env'
 import { directKeyAvailable } from './utils'
 import { type AgentsConfig, loadAgentsConfig } from './agents'
@@ -40,11 +41,13 @@ export type {
 
 export function loadConfig(env: Env): AppConfig {
   const isDirectAvailable = directKeyAvailable(env)
+  const spend = loadSpendPricing(env)
   return {
     agents: loadAgentsConfig(env, isDirectAvailable),
-    models: effectiveCatalog(isDirectAvailable),
+    // Surface each model's informational list cost in the picker (from spend pricing).
+    models: effectiveCatalog(isDirectAvailable, modelCostResolver(spend)),
     execution: loadExecutionConfig(env),
-    spend: loadSpendPricing(env),
+    spend,
     github: loadGitHubConfig(env),
     auth: loadAuthConfig(env),
     documents: loadDocumentsConfig(env),

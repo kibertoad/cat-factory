@@ -18,7 +18,7 @@ export async function handleCiFixer(
   job: CiFixerJob,
   opts: RunOptions = {},
 ): Promise<CiFixerResult> {
-  const { summary, stats, stderrTail, pushed } = await runCodingAgent(
+  const { summary, stats, stderrTail, pushed, usage } = await runCodingAgent(
     {
       kind: 'ci-fix',
       jobId: job.jobId,
@@ -30,6 +30,9 @@ export async function handleCiFixer(
       systemPrompt: job.systemPrompt,
       userPrompt: job.userPrompt,
       model: job.model,
+      harness: job.harness,
+      subscriptionToken: job.subscriptionToken,
+      subscriptionBaseUrl: job.subscriptionBaseUrl,
       proxyBaseUrl: job.proxyBaseUrl,
       sessionToken: job.sessionToken,
       commitMessage: 'Fix failing CI',
@@ -47,7 +50,8 @@ export async function handleCiFixer(
       summary,
       stats,
       error: noChangesReason('No CI fix produced', stats, stderrTail),
+      ...(usage ? { usage } : {}),
     }
   }
-  return { pushed: true, summary, stats }
+  return { pushed: true, summary, stats, ...(usage ? { usage } : {}) }
 }

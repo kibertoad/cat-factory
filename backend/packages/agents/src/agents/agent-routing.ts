@@ -1,5 +1,6 @@
 import type { AgentKind } from '@cat-factory/kernel'
 import type { ModelRef } from '@cat-factory/kernel'
+import { inlineModelRef } from '@cat-factory/kernel'
 
 // "Which LLM, with what configuration, for what." Routing maps each agent kind
 // to a model and generation settings, with a mandatory default fallback. The
@@ -74,4 +75,22 @@ export async function resolveStepModelRef(
     if (fromDefault) return fromDefault
   }
   return resolveAgentConfig(resolvers.agentRouting, inputs.agentKind).ref
+}
+
+/**
+ * Resolve the model ref for an INLINE LLM call (one that runs through the
+ * {@link ModelProvider}, not a container harness). Identical precedence to
+ * {@link resolveStepModelRef}, but a pinned subscription model — one whose ref
+ * carries a container-only `claude-code` / `codex` harness, for which no provider
+ * key exists — is degraded to the kind's env-routing default (a provider model the
+ * ModelProvider can serve). This is the single place every inline executor routes a
+ * block's model through, so a task pinned to a subscription model for its container
+ * steps still runs its inline steps instead of hard-failing. See {@link inlineModelRef}.
+ */
+export async function resolveInlineModelRef(
+  resolvers: StepModelResolvers,
+  inputs: StepModelInputs,
+): Promise<ModelRef> {
+  const ref = await resolveStepModelRef(resolvers, inputs)
+  return inlineModelRef(ref, resolveAgentConfig(resolvers.agentRouting, inputs.agentKind).ref)
 }

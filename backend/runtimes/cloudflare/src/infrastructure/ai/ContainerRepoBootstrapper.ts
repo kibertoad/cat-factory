@@ -185,6 +185,11 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
           ? 'Adapt the reference architecture for the new service.'
           : 'Scaffold a new repository for the service.'),
       model: this.deps.model.model,
+      // Bootstrap runs on the Pi harness only (proxy + session token); it does not
+      // select a subscription harness. The job schema tolerates `harness` (shared
+      // HarnessAuthFields), but bootstrap is the one container flow that always uses
+      // the deployment's proxyable model rather than a workspace's pooled subscription
+      // token — there is no per-block model selection on a not-yet-existing repo.
       proxyBaseUrl: this.deps.proxyBaseUrl,
       sessionToken,
       ghToken,

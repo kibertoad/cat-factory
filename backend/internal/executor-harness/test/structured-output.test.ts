@@ -178,6 +178,48 @@ describe('resolveStructuredOutput', () => {
     expect(res.diagnostics.parsedOn).toBe('none')
     expect(res.diagnostics.repairError).toContain('HTTP 502')
   })
+
+  it('repairs via the claude-code subscription endpoint when there is no proxy', async () => {
+    const fetchMock = vi.fn(async () =>
+      jsonResponse({ content: [{ type: 'text', text: '{"ok":true,"v":9}' }] }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    // No proxy; an Anthropic-compatible vendor (GLM/Kimi/DeepSeek) with a leased token.
+    const subAccess: ProxyAccess = {
+      model: 'glm-5.2',
+      jobId: 'job_sub',
+      harness: 'claude-code',
+      subscriptionToken: 'glm-key-secret',
+      subscriptionBaseUrl: 'https://api.z.ai/api/anthropic',
+    }
+    const res = await resolveStructuredOutput(spec, 'not json', subAccess)
+
+    expect(res.value).toEqual({ ok: true, v: 9 })
+    expect(res.diagnostics).toMatchObject({ parsedOn: 'repair', repairSucceeded: true })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    const [url, init] = fetchMock.mock.calls[0]!
+    expect(url).toBe('https://api.z.ai/api/anthropic/v1/messages')
+    // API-token vendors authenticate with x-api-key, not a bearer session token.
+    expect((init as RequestInit).headers).toMatchObject({ 'x-api-key': 'glm-key-secret' })
+  })
+
+  it('does not attempt repair for the codex harness (no proxy, no JSON API)', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+
+    const codexAccess: ProxyAccess = {
+      model: 'gpt-5.5-codex',
+      jobId: 'job_codex',
+      harness: 'codex',
+      subscriptionToken: '{"auth_mode":"chatgpt"}',
+    }
+    const res = await resolveStructuredOutput(spec, 'not json', codexAccess)
+
+    expect(res.value).toBeNull()
+    expect(res.diagnostics).toMatchObject({ parsedOn: 'none', repairAttempted: false })
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
 })
 
 describe('diagnosticsSuffix', () => {

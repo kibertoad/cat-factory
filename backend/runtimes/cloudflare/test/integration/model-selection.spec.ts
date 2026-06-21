@@ -14,22 +14,36 @@ const allKeys = () => true
 // these stay green as models are added/removed/renamed — they assert the resolution
 // *behaviour*, not a snapshot of the model list.
 const directModels = MODEL_CATALOG.filter((m) => m.direct)
-const cloudflareOnlyModels = MODEL_CATALOG.filter((m) => !m.direct)
+// Models with an always-available base (a Cloudflare and/or direct variant); they
+// resolve to that base flavour. Subscription-only models (no base — Claude
+// Opus/Sonnet, GPT via Codex) have ONLY a subscription variant, so they resolve to
+// it (flavor `subscription`, flat-rate quota). The base resolver never applies the
+// "subscriptions always win" override — that is a per-workspace, token-aware step in
+// the executor — so a dual-mode base model (GLM/Kimi) still resolves to its base here.
+const cloudflareOnlyModels = MODEL_CATALOG.filter((m) => m.cloudflare && !m.direct)
+const subscriptionOnlyModels = MODEL_CATALOG.filter((m) => !m.cloudflare && !m.direct)
+
+/** The ref the base resolver lands on with no direct key (Cloudflare base, else the
+ *  subscription ref for a subscription-only model). */
+const baseRef = (m: (typeof MODEL_CATALOG)[number]) => m.cloudflare ?? m.subscription?.ref
 
 describe('per-block model selection', () => {
   describe('catalog resolution', () => {
-    it('falls back to the Cloudflare flavour when no direct key is configured', () => {
-      // Every model resolves to its always-available Cloudflare variant.
+    it('falls back to the base flavour when no direct key is configured', () => {
+      // A model with a base resolves to its always-available Cloudflare variant; a
+      // subscription-only model (no base) resolves to its subscription ref.
       for (const model of MODEL_CATALOG) {
-        expect(resolveModelRef(model.id, noKeys)).toEqual(model.cloudflare)
+        expect(resolveModelRef(model.id, noKeys)).toEqual(baseRef(model))
       }
     })
 
     it('uses the direct flavour when the provider key is configured', () => {
-      // A model with a direct variant switches to it; one without stays on Cloudflare.
+      // A model with a direct variant switches to it; a base-only model stays on
+      // Cloudflare; a subscription-only model has no key-gated flavour and stays on
+      // its subscription ref regardless of keys.
       expect(directModels.length).toBeGreaterThan(0)
       for (const model of MODEL_CATALOG) {
-        expect(resolveModelRef(model.id, allKeys)).toEqual(model.direct?.ref ?? model.cloudflare)
+        expect(resolveModelRef(model.id, allKeys)).toEqual(model.direct?.ref ?? baseRef(model))
       }
     })
 
@@ -53,8 +67,18 @@ describe('per-block model selection', () => {
       // option per model, same ids, same order.
       const cloud = effectiveCatalog(noKeys)
       expect(cloud.map((m) => m.id)).toEqual(MODEL_CATALOG.map((m) => m.id))
-      expect(cloud.every((m) => m.flavor === 'cloudflare')).toBe(true)
-      expect(cloud.every((m) => m.providerLabel === 'Cloudflare')).toBe(true)
+      for (const model of MODEL_CATALOG) {
+        const option = cloud.find((o) => o.id === model.id)!
+        if (model.cloudflare || model.direct) {
+          // A base-having model projects to its Cloudflare flavour when no key is set.
+          expect(option.flavor).toBe('cloudflare')
+          expect(option.providerLabel).toBe('Cloudflare')
+        } else {
+          // Subscription-only: no base, so its flavour IS the (flat-rate quota) subscription.
+          expect(option.flavor).toBe('subscription')
+          expect(option.quotaBased).toBe(true)
+        }
+      }
 
       const direct = effectiveCatalog(allKeys)
       for (const model of MODEL_CATALOG) {
@@ -66,14 +90,18 @@ describe('per-block model selection', () => {
             provider: model.direct.ref.provider,
             model: model.direct.ref.model,
           })
-        } else {
+        } else if (model.cloudflare) {
           // No direct variant → always Cloudflare, even with every key configured.
           expect(option.flavor).toBe('cloudflare')
+        } else {
+          // Subscription-only stays on its subscription flavour regardless of keys.
+          expect(option.flavor).toBe('subscription')
         }
       }
-      // The two flavour branches above are only meaningful if the catalog exercises both.
+      // The three flavour branches above are only meaningful if the catalog exercises each.
       expect(directModels.length).toBeGreaterThan(0)
       expect(cloudflareOnlyModels.length).toBeGreaterThan(0)
+      expect(subscriptionOnlyModels.length).toBeGreaterThan(0)
     })
 
     it('returns undefined for unknown/empty ids so the caller falls back', () => {
@@ -94,10 +122,12 @@ describe('per-block model selection', () => {
       expect(res.status).toBe(200)
       expect(() => v.parse(modelCatalogSchema, res.body)).not.toThrow()
       // The endpoint serves the effective catalog; the test env configures no direct
-      // keys, so it matches the keyless projection and every model is Cloudflare.
-      expect(res.body.map((m) => m.id)).toEqual(effectiveCatalog(noKeys).map((m) => m.id))
+      // keys, so it matches the keyless projection id-for-id and flavour-for-flavour
+      // (base models → `cloudflare`, subscription-only → `subscription`).
+      const keyless = effectiveCatalog(noKeys)
+      expect(res.body.map((m) => m.id)).toEqual(keyless.map((m) => m.id))
+      expect(res.body.map((m) => m.flavor)).toEqual(keyless.map((m) => m.flavor))
       expect(res.body.length).toBeGreaterThan(0)
-      expect(res.body.every((m) => m.flavor === 'cloudflare')).toBe(true)
     })
   })
 

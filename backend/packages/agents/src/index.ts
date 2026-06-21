@@ -14,6 +14,7 @@ export {
   type StepModelInputs,
   resolveAgentConfig,
   resolveStepModelRef,
+  resolveInlineModelRef,
 } from './agents/agent-routing.js'
 export { systemPromptFor, userPromptFor } from './agents/agent-catalog.js'
 // Installation-level extension point for custom agent kinds (mirrors the model-provider

@@ -594,12 +594,15 @@ export async function handleSpec(job: SpecJob, opts: RunOptions = {}): Promise<S
     const previousVersion = await readExistingVersion(dir)
 
     log.info('requirements: running agent', { ...trace, tasks: job.tasks.length })
-    const { summary, stats, stderrTail } = await runAgentInWorkspace(
+    const { summary, stats, stderrTail, usage } = await runAgentInWorkspace(
       {
         dir,
         systemPrompt: job.systemPrompt,
         userPrompt: buildUserPrompt(job, existing),
         model: job.model,
+        harness: job.harness,
+        subscriptionToken: job.subscriptionToken,
+        subscriptionBaseUrl: job.subscriptionBaseUrl,
         proxyBaseUrl: job.proxyBaseUrl,
         sessionToken: job.sessionToken,
         // The agent RETURNS the requirements document as JSON — the harness renders
@@ -621,6 +624,9 @@ export async function handleSpec(job: SpecJob, opts: RunOptions = {}): Promise<S
       },
       summary,
       {
+        harness: job.harness,
+        subscriptionToken: job.subscriptionToken,
+        subscriptionBaseUrl: job.subscriptionBaseUrl,
         proxyBaseUrl: job.proxyBaseUrl,
         sessionToken: job.sessionToken,
         model: job.model,
@@ -633,6 +639,7 @@ export async function handleSpec(job: SpecJob, opts: RunOptions = {}): Promise<S
         summary,
         stats,
         error: noRequirementsReason(stats, summary, stderrTail, diagnostics),
+        ...(usage ? { usage } : {}),
       }
     }
 
@@ -653,7 +660,7 @@ export async function handleSpec(job: SpecJob, opts: RunOptions = {}): Promise<S
       log.info('requirements: no changes to push (requirements unchanged)', trace)
     }
 
-    return { spec: doc, summary, stats }
+    return { spec: doc, summary, stats, ...(usage ? { usage } : {}) }
   })
 }
 

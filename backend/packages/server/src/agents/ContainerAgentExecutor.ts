@@ -4,10 +4,13 @@ import {
   type AgentRunContext,
   type AgentRunResult,
   type AsyncAgentExecutor,
+  type HarnessKind,
   type ModelRef,
   type RunnerDispatchKind,
   type RunnerJobResult,
+  type SubscriptionVendor,
 } from '@cat-factory/kernel'
+import { SUBSCRIPTION_VENDORS, subscriptionOptionFor } from '@cat-factory/kernel'
 import {
   type AgentRouting,
   composeBlockSystemPrompt,
@@ -49,6 +52,25 @@ export type ResolveRepoTarget = (workspaceId: string, blockId: string) => Promis
 
 export type MintInstallationToken = (installationId: number) => Promise<string>
 
+/** A subscription token leased from the workspace's pool for a vendor. */
+export interface LeasedSubscriptionToken {
+  tokenId: string
+  secret: string
+}
+
+/** Lease the least-loaded subscription token for a vendor, or throw if none. */
+export type LeaseSubscriptionToken = (
+  workspaceId: string,
+  vendor: SubscriptionVendor,
+) => Promise<LeasedSubscriptionToken>
+
+/** Fold a finished subscription job's usage into the leased token + telemetry. */
+export type RecordSubscriptionUsage = (
+  workspaceId: string,
+  tokenId: string,
+  usage: { inputTokens: number; outputTokens: number },
+) => Promise<void>
+
 /**
  * The repo spec every container job body carries: clone coordinates plus, for a
  * monorepo service, the subdirectory the harness should run the agent within. Built
@@ -84,8 +106,22 @@ export interface ContainerAgentExecutorDependencies {
   resolveRepoTarget: ResolveRepoTarget
   /** Mint a short-lived GitHub installation token for cloning + opening the PR. */
   mintInstallationToken: MintInstallationToken
-  /** Mints the signed LLM-proxy session token the container uses. */
+  /** Mints the signed LLM-proxy session token the container uses (Pi harness). */
   sessionService: ContainerSessionService
+  /**
+   * Lease a pooled subscription token for a vendor. Required for the Claude Code /
+   * Codex subscription harnesses; absent ⇒ those harnesses are unavailable and a
+   * subscription-only model fails loudly at dispatch.
+   */
+  leaseSubscriptionToken?: LeaseSubscriptionToken
+  /** Attribute a finished subscription job's usage to its leased token (usage-aware rotation). */
+  recordSubscriptionUsage?: RecordSubscriptionUsage
+  /**
+   * Whether the workspace has a pooled token for a vendor. Drives "subscriptions
+   * always win": a step pinned to a dual-mode model (GLM/Kimi with a Cloudflare
+   * base) is auto-routed to its subscription flavour when this returns true.
+   */
+  hasSubscriptionToken?: (workspaceId: string, vendor: SubscriptionVendor) => Promise<boolean>
   /**
    * Public base URL of the facade's OpenAI-compatible LLM proxy, including the
    * `/v1` suffix — Pi posts to `${proxyBaseUrl}/chat/completions`.
@@ -160,6 +196,18 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
   /** Shared backend-polymorphic dispatch/poll/release plumbing (see RunnerJobClient). */
   private readonly jobs: RunnerJobClient
 
+  /**
+   * Job ids whose subscription usage has already been folded into the leased token.
+   * `recordSubscriptionUsage` is additive, and the durable driver polls a finished
+   * job inside a retriable step — so a poll that records usage and then throws (or
+   * whose surrounding upsert/emit throws) would replay and double-count, unfairly
+   * penalising the token in the usage-aware rotation. Recording once per job id
+   * guards that. Best-effort + bounded: cleared wholesale past a cap, and it cannot
+   * survive a cold isolate replay — a re-record there is the documented, benign
+   * worst case (one extra job's tokens on one row), never silent over-counting.
+   */
+  private readonly recordedUsageJobs = new Set<string>()
+
   constructor(private readonly deps: ContainerAgentExecutorDependencies) {
     this.jobs = new RunnerJobClient(deps.resolveTransport)
   }
@@ -177,11 +225,18 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
    */
   async startJob(context: AgentRunContext): Promise<AgentJobHandle> {
     const { workspaceId, executionId } = this.requireIds(context)
-    const { body, model, kind } = await this.buildJobBody(context)
+    const { body, model, kind, subscriptionTokenId } = await this.buildJobBody(context)
     await this.jobs.dispatch(workspaceId, executionId, body, kind)
     // Carry the workspace on the handle so the poll site can resolve the same
-    // backend (Cloudflare container vs. self-hosted pool) given only the job id.
-    return { jobId: executionId, model, workspaceId }
+    // backend (Cloudflare container vs. self-hosted pool) given only the job id;
+    // carry the leased subscription token id so a finished subscription job can
+    // attribute its usage back to the right pool row.
+    return {
+      jobId: executionId,
+      model,
+      workspaceId,
+      ...(subscriptionTokenId ? { subscriptionTokenId } : {}),
+    }
   }
 
   /** Poll a dispatched job for its state, mapping the runner view into an update. */
@@ -198,6 +253,28 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     // Completed: a structured `error` (e.g. "no file changes") is still a failure.
     const result = view.result ?? {}
     if (result.error) return { state: 'failed', error: `Implementation failed: ${result.error}` }
+    // Attribute a subscription harness's reported usage to its leased pool token
+    // (usage-aware rotation) and the telemetry sink. Best-effort: a missing usage
+    // signal or unconfigured recorder is a no-op; recorded at most once per job id
+    // so a retried/replayed poll can't double-count (see `recordedUsageJobs`).
+    if (
+      handle.subscriptionTokenId &&
+      handle.workspaceId &&
+      result.usage &&
+      this.deps.recordSubscriptionUsage &&
+      !this.recordedUsageJobs.has(handle.jobId)
+    ) {
+      await this.deps.recordSubscriptionUsage(
+        handle.workspaceId,
+        handle.subscriptionTokenId,
+        result.usage,
+      )
+      // Mark only AFTER a successful write: a failed record is left to retry rather
+      // than silently dropped. Bound the set so a long-lived process can't grow it
+      // unboundedly (clearing only risks a benign re-record on a later retry).
+      if (this.recordedUsageJobs.size >= 10_000) this.recordedUsageJobs.clear()
+      this.recordedUsageJobs.add(handle.jobId)
+    }
     return { state: 'done', result: toRunResult(result) }
   }
 
@@ -252,6 +329,23 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
   }
 
   /**
+   * The canonical catalog model id the step resolves to (block pin > workspace
+   * per-kind default), or undefined when it falls through to the env routing
+   * default (a raw ref with no canonical id). Used to look up the model's
+   * subscription path for the "subscriptions always win" override.
+   */
+  private async resolveCanonicalModelId(context: AgentRunContext): Promise<string | undefined> {
+    if (context.block.modelId) return context.block.modelId
+    if (this.deps.resolveWorkspaceModelDefault && context.workspaceId) {
+      return (
+        (await this.deps.resolveWorkspaceModelDefault(context.workspaceId, context.agentKind)) ??
+        undefined
+      )
+    }
+    return undefined
+  }
+
+  /**
    * Preview the model this job will run, without dispatching the container. The
    * proxyable-provider guard is deliberately left to `buildJobBody` (the dispatch
    * path) so an unservable model still fails loudly there; this only names it.
@@ -259,6 +353,49 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
   async resolveModel(context: AgentRunContext): Promise<string> {
     const ref = await this.resolveRef(context)
     return `${ref.provider}:${ref.model}`
+  }
+
+  /**
+   * Resolve the step's EFFECTIVE model ref plus the subscription vendor (if any) it
+   * will run on, applying the "subscriptions always win" override: a subscription-only
+   * model carries its harness already; a dual-mode model (GLM/Kimi) is switched to its
+   * subscription flavour when the workspace has a token for the vendor. Shared by
+   * {@link buildJobBody} (which dispatches the resolved ref) and {@link isQuotaBased}
+   * (which reports whether the resulting run is flat-rate quota) so the two can't drift.
+   */
+  private async resolveEffectiveRef(
+    context: AgentRunContext,
+    workspaceId: string,
+  ): Promise<{ ref: ModelRef; subscriptionVendor?: SubscriptionVendor }> {
+    let ref = await this.resolveRef(context)
+    let subscriptionVendor: SubscriptionVendor | undefined
+    const subOption = subscriptionOptionFor(await this.resolveCanonicalModelId(context))
+    if (subOption) {
+      if (ref.harness) {
+        subscriptionVendor = subOption.vendor
+      } else if (
+        this.deps.hasSubscriptionToken &&
+        (await this.deps.hasSubscriptionToken(workspaceId, subOption.vendor))
+      ) {
+        ref = subOption.ref
+        subscriptionVendor = subOption.vendor
+      }
+    }
+    return { ref, ...(subscriptionVendor ? { subscriptionVendor } : {}) }
+  }
+
+  /**
+   * Whether this step will run on a flat-rate subscription (quota) model — it
+   * resolves to a Claude Code / Codex harness (a subscription-only model, or a
+   * dual-mode model auto-routed to its subscription flavour because the workspace has
+   * a token). The engine's spend gate consults this so a quota run is not paused by
+   * an exhausted monetary budget it never contributes to. Best-effort: without a
+   * workspace id it reports false.
+   */
+  async isQuotaBased(context: AgentRunContext): Promise<boolean> {
+    if (!context.workspaceId) return false
+    const { ref } = await this.resolveEffectiveRef(context, context.workspaceId)
+    return ref.harness === 'claude-code' || ref.harness === 'codex'
   }
 
   /** Validate the ids every container job needs, narrowing them to non-empty strings. */
@@ -276,16 +413,26 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
   }
 
   /** Resolve tokens/prompts/target and assemble the harness job body for `context`. */
-  private async buildJobBody(
-    context: AgentRunContext,
-  ): Promise<{ body: Record<string, unknown>; model: string; kind: RunnerDispatchKind }> {
+  private async buildJobBody(context: AgentRunContext): Promise<{
+    body: Record<string, unknown>
+    model: string
+    kind: RunnerDispatchKind
+    subscriptionTokenId?: string
+  }> {
     const { workspaceId, executionId, blockId } = this.requireIds(context)
 
-    // Lock the model to a provider the proxy can serve — either a direct
-    // OpenAI-compatible provider or Cloudflare Workers AI (served in-Worker via
-    // the AI binding) — and locking it here stops the container choosing another.
-    const ref = await this.resolveRef(context)
-    if (!isProxyableProvider(ref.provider)) {
+    // "Subscriptions always win": a subscription-only model carries its harness; a
+    // dual-mode GLM/Kimi step pinned to its Cloudflare base is auto-routed to Claude
+    // Code when the workspace has a pooled token for the vendor. Shared with
+    // isQuotaBased so the dispatch and the spend gate agree on what the step runs.
+    const { ref, subscriptionVendor } = await this.resolveEffectiveRef(context, workspaceId)
+    const harness: HarnessKind = ref.harness ?? 'pi'
+
+    // The Pi harness reaches models through the LLM proxy, so its model must be a
+    // provider the proxy can serve; locking it here stops the container choosing
+    // another. The subscription harnesses (Claude Code / Codex) talk direct to the
+    // vendor with a pooled token, so the proxyable guard does not apply to them.
+    if (harness === 'pi' && !isProxyableProvider(ref.provider)) {
       throw new Error(
         `Container implementation needs a model the LLM proxy can serve ` +
           `(Workers AI, or a direct OpenAI-compatible provider); ` +
@@ -300,13 +447,47 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     }
 
     const ghToken = await this.deps.mintInstallationToken(repo.installationId)
-    const sessionToken = await this.deps.sessionService.mint({
-      workspaceId,
-      executionId,
-      agentKind: context.agentKind,
-      provider: ref.provider,
-      model: ref.model,
-    })
+
+    // Resolve the per-job auth the harness carries: the proxy session token for Pi,
+    // or a leased subscription token for Claude Code / Codex. `auth` is spread into
+    // every job body so the per-kind bodies can't drift on which auth they forward.
+    let auth: Record<string, unknown>
+    let subscriptionTokenId: string | undefined
+    if (harness === 'pi') {
+      const sessionToken = await this.deps.sessionService.mint({
+        workspaceId,
+        executionId,
+        agentKind: context.agentKind,
+        provider: ref.provider,
+        model: ref.model,
+      })
+      auth = { harness, proxyBaseUrl: this.deps.proxyBaseUrl, sessionToken }
+    } else {
+      if (!this.deps.leaseSubscriptionToken || !subscriptionVendor) {
+        throw new Error(
+          `The ${harness} harness is not configured on this deployment; connect a ` +
+            `subscription token or pick a different model.`,
+        )
+      }
+      const leased = await this.deps.leaseSubscriptionToken(workspaceId, subscriptionVendor)
+      subscriptionTokenId = leased.tokenId
+      // SECURITY/TRUST: unlike the Pi harness (short-lived, model-locked proxy session
+      // token) this hands the RAW, long-lived subscription credential — a Claude OAuth
+      // token or a full ChatGPT auth.json — to the resolved runner transport. For the
+      // Cloudflare backend that is an ephemeral, managed per-run container. For a
+      // self-hosted runner pool it is the WORKSPACE'S OWN BYO infra (it connected the
+      // pool), so the credential stays within the workspace's trust domain — but a
+      // workspace should only point its subscription-harness steps at a runner pool it
+      // operates, since the credential leaves the backend to reach it.
+      // Non-Anthropic Claude-Code vendors (GLM/Kimi/DeepSeek) need their Anthropic-
+      // compatible base URL; Anthropic itself uses the OAuth token against api.anthropic.com.
+      const baseUrl = SUBSCRIPTION_VENDORS[subscriptionVendor].baseUrl
+      auth = {
+        harness,
+        subscriptionToken: leased.secret,
+        ...(baseUrl ? { subscriptionBaseUrl: baseUrl } : {}),
+      }
+    }
 
     // The Blueprinter step commits the regenerated `blueprints/` folder onto an
     // existing branch (the earlier `coder` step's PR branch when present, else the
@@ -321,15 +502,14 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
           'Map (or update) this repository into the canonical service → modules ' +
           'blueprint, anchored to real file/directory references.',
         model: ref.model,
-        proxyBaseUrl: this.deps.proxyBaseUrl,
-        sessionToken,
+        ...auth,
         ghToken,
         repo: buildRepoSpec(repo),
         branch,
         mode: context.block.pullRequest?.branch ? 'update' : 'create',
         ...(this.deps.githubApiBase ? { githubApiBase: this.deps.githubApiBase } : {}),
       }
-      return { body, model: `${ref.provider}:${ref.model}`, kind: 'blueprint' }
+      return { subscriptionTokenId, body, model: `${ref.provider}:${ref.model}`, kind: 'blueprint' }
     }
 
     // The spec-writer commits the regenerated `spec/` folder onto the implementation
@@ -351,8 +531,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
           'service from the combined task requirements below, with COMPLETE ' +
           'acceptance-scenario coverage per requirement.',
         model: ref.model,
-        proxyBaseUrl: this.deps.proxyBaseUrl,
-        sessionToken,
+        ...auth,
         ghToken,
         repo: buildRepoSpec(repo),
         branch,
@@ -363,7 +542,12 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
         })),
         ...(this.deps.githubApiBase ? { githubApiBase: this.deps.githubApiBase } : {}),
       }
-      return { body, model: `${ref.provider}:${ref.model}`, kind: 'spec' }
+      return {
+        subscriptionTokenId,
+        body,
+        model: `${ref.provider}:${ref.model}`,
+        kind: 'spec',
+      }
     }
 
     // The CI-fixer clones the PR head branch, runs the failing build/tests, fixes
@@ -378,8 +562,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
         systemPrompt: composeBlockSystemPrompt(systemPromptFor(context.agentKind), context.block),
         userPrompt: userPromptFor(context),
         model: ref.model,
-        proxyBaseUrl: this.deps.proxyBaseUrl,
-        sessionToken,
+        ...auth,
         ghToken,
         repo: buildRepoSpec(repo),
         branch,
@@ -387,7 +570,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
         ...(this.deps.webSearchProxyEnabled ? { webSearch: true } : {}),
         ...(this.deps.githubApiBase ? { githubApiBase: this.deps.githubApiBase } : {}),
       }
-      return { body, model: `${ref.provider}:${ref.model}`, kind: 'ci-fix' }
+      return { subscriptionTokenId, body, model: `${ref.provider}:${ref.model}`, kind: 'ci-fix' }
     }
 
     // The conflict-resolver clones the PR head branch, merges the base in, resolves
@@ -405,14 +588,18 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
         systemPrompt: composeBlockSystemPrompt(systemPromptFor(context.agentKind), context.block),
         userPrompt: userPromptFor(context),
         model: ref.model,
-        proxyBaseUrl: this.deps.proxyBaseUrl,
-        sessionToken,
+        ...auth,
         ghToken,
         repo: buildRepoSpec(repo),
         branch,
         ...(this.deps.githubApiBase ? { githubApiBase: this.deps.githubApiBase } : {}),
       }
-      return { body, model: `${ref.provider}:${ref.model}`, kind: 'resolve-conflicts' }
+      return {
+        subscriptionTokenId,
+        body,
+        model: `${ref.provider}:${ref.model}`,
+        kind: 'resolve-conflicts',
+      }
     }
 
     // The merger clones the PR head branch to assess the diff vs base; it makes no
@@ -427,8 +614,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
           'Assess the pull request on the head branch against the base branch and ' +
           'return the complexity / risk / impact scores + rationale as JSON.',
         model: ref.model,
-        proxyBaseUrl: this.deps.proxyBaseUrl,
-        sessionToken,
+        ...auth,
         ghToken,
         repo: buildRepoSpec(repo),
         branch,
@@ -437,7 +623,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
           : {}),
         ...(this.deps.githubApiBase ? { githubApiBase: this.deps.githubApiBase } : {}),
       }
-      return { body, model: `${ref.provider}:${ref.model}`, kind: 'merge' }
+      return { subscriptionTokenId, body, model: `${ref.provider}:${ref.model}`, kind: 'merge' }
     }
 
     // Read-only agents (architect, analysis) explore a real checkout but never edit
@@ -454,8 +640,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
         systemPrompt: composeBlockSystemPrompt(systemPromptFor(context.agentKind), context.block),
         userPrompt: userPromptFor(context),
         model: ref.model,
-        proxyBaseUrl: this.deps.proxyBaseUrl,
-        sessionToken,
+        ...auth,
         ghToken,
         repo: buildRepoSpec(repo),
         branch,
@@ -463,7 +648,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
         ...(this.deps.webSearchProxyEnabled ? { webSearch: true } : {}),
         ...(this.deps.githubApiBase ? { githubApiBase: this.deps.githubApiBase } : {}),
       }
-      return { body, model: `${ref.provider}:${ref.model}`, kind: 'explore' }
+      return { subscriptionTokenId, body, model: `${ref.provider}:${ref.model}`, kind: 'explore' }
     }
 
     // The "extra context" Pi runs with: the build-phase role plus the block's
@@ -487,8 +672,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       systemPrompt,
       userPrompt,
       model: ref.model,
-      proxyBaseUrl: this.deps.proxyBaseUrl,
-      sessionToken,
+      ...auth,
       ghToken,
       repo: buildRepoSpec(repo),
       headBranch,
@@ -506,7 +690,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       ...(this.deps.webSearchProxyEnabled ? { webSearch: true } : {}),
       ...(this.deps.githubApiBase ? { githubApiBase: this.deps.githubApiBase } : {}),
     }
-    return { body, model: `${ref.provider}:${ref.model}`, kind: 'run' }
+    return { subscriptionTokenId, body, model: `${ref.provider}:${ref.model}`, kind: 'run' }
   }
 }
 

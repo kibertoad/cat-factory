@@ -1,6 +1,7 @@
 import { AiAgentExecutor, inlineWebSearchOptionsFromEnv } from '@cat-factory/agents'
 import {
   HttpRunnerPoolProvider,
+  ProviderSubscriptionService,
   RunnerPoolConnectionService,
   RunnerPoolTransport,
   TicketTrackerService,
@@ -48,6 +49,7 @@ import {
   DrizzleRunnerPoolConnectionRepository,
   DrizzleServiceFrameRepository,
 } from './repositories/containerExecution.js'
+import { DrizzleProviderSubscriptionTokenRepository } from './repositories/providerSubscription.js'
 import { createDrizzleRepositories } from './repositories/drizzle.js'
 import { DrizzleTaskConnectionRepository, DrizzleTaskRepository } from './repositories/tasks.js'
 import { CryptoIdGenerator, SystemClock } from './runtime.js'
@@ -209,6 +211,7 @@ function buildNodeContainerExecutor(
     agentKind: string,
   ) => Promise<string | undefined>,
   mintInstallationTokenOverride?: (installationId: number) => Promise<string>,
+  subscriptions?: ProviderSubscriptionService,
 ): AgentExecutor | null {
   // The harness reaches models only through this service's LLM proxy; `PUBLIC_URL`
   // is this service's externally reachable base (the runner pool / local container
@@ -233,11 +236,50 @@ function buildNodeContainerExecutor(
     resolveRepoTarget,
     mintInstallationToken,
     sessionService: new ContainerSessionService({ secret: sessionSecret }),
+    // The subscription harnesses (Claude Code / Codex) lease a pooled token and
+    // attribute usage back for usage-aware rotation; absent ⇒ those harnesses are
+    // unavailable and a subscription-only model fails loudly at dispatch.
+    ...(subscriptions
+      ? {
+          leaseSubscriptionToken: (workspaceId, vendor) =>
+            subscriptions.leaseToken(workspaceId, vendor),
+          recordSubscriptionUsage: (workspaceId, tokenId, usage) =>
+            subscriptions.recordTokenUsage(workspaceId, tokenId, usage),
+          hasSubscriptionToken: (workspaceId, vendor) =>
+            subscriptions.hasToken(workspaceId, vendor),
+        }
+      : {}),
     proxyBaseUrl: `${publicUrl.replace(/\/+$/, '')}/v1`,
     // Point container agents' web search at the backend search proxy (no provider key
     // in the sandbox) whenever an upstream is configured for this deployment.
     webSearchProxyEnabled: Boolean(createWebSearchUpstreamFromEnv(env)),
     githubApiBase: config.github.apiBase,
+  })
+}
+
+/**
+ * Build the workspace subscription-token pool service for the Node/local facade
+ * (Postgres-backed), or undefined when the shared ENCRYPTION_KEY is absent. Tokens
+ * are sealed under a subscriptions-scoped HKDF info of the shared master key.
+ */
+function buildNodeSubscriptionService(
+  env: NodeJS.ProcessEnv,
+  db: DrizzleDb,
+  workspaceRepository: CoreDependencies['workspaceRepository'],
+  idGenerator: CoreDependencies['idGenerator'],
+  clock: Clock,
+): ProviderSubscriptionService | undefined {
+  const masterKeyBase64 = env.ENCRYPTION_KEY?.trim()
+  if (!masterKeyBase64) return undefined
+  return new ProviderSubscriptionService({
+    providerSubscriptionTokenRepository: new DrizzleProviderSubscriptionTokenRepository(db),
+    workspaceRepository,
+    secretCipher: new WebCryptoSecretCipher({
+      masterKeyBase64,
+      info: 'cat-factory:provider-subscriptions',
+    }),
+    idGenerator,
+    clock,
   })
 }
 
@@ -361,6 +403,16 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
           repos.workspaceRepository,
           clock,
         )
+  // The subscription-token pool (Claude Code / Codex credentials), shared by the
+  // container executor (lease + usage feedback) and the vendor-credential controller.
+  const subscriptions = buildNodeSubscriptionService(
+    env,
+    options.db,
+    repos.workspaceRepository,
+    idGenerator,
+    clock,
+  )
+
   const container = buildNodeContainerExecutor(
     env,
     config,
@@ -369,6 +421,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     resolveTransport,
     resolveWorkspaceModelDefault,
     options.mintInstallationToken,
+    subscriptions,
   )
 
   // Always a composite: inline kinds run as one-shot LLM calls; repo-operating kinds
@@ -497,6 +550,9 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     config,
     agentRunRepository: repos.agentRunRepository,
     gateways: createNodeGateways(env),
+    // The vendor-credential (subscription token pool) service the shared controller
+    // reads; present when the shared ENCRYPTION_KEY is configured.
+    subscriptions,
   }
 }
 

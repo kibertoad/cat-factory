@@ -5,20 +5,58 @@
 
 import type { AgentKind, BlockType } from './domain'
 
+/** Subscription vendors whose pooled tokens drive the Claude Code / Codex harnesses. */
+export type SubscriptionVendor = 'claude' | 'codex' | 'glm' | 'kimi' | 'deepseek'
+
+/** Informational list price (per 1M tokens) for a model flavour. */
+export interface ModelCost {
+  inputPerMillion: number
+  outputPerMillion: number
+  currency: string
+}
+
 /**
- * A selectable LLM model, resolved to the flavour actually in use for this
- * deployment (served by `GET /models`). `flavor` is `direct` when the model's
- * own provider key is configured, else `cloudflare`. Mirrors `ModelOption` in
- * `@cat-factory/contracts`.
+ * A selectable LLM model, resolved to the flavour in use for this deployment
+ * (served by `GET /models`). Mirrors `ModelOption` in `@cat-factory/contracts`.
+ * The base `flavor`/`provider`/`model` is the always-available fallback
+ * (cloudflare/direct), or the subscription itself for subscription-only models.
+ * `subscription` (when present) is the alternative the picker prefers once the
+ * workspace has a token for its vendor.
  */
 export interface ModelOption {
   id: string
   label: string
   description: string
-  flavor: 'cloudflare' | 'direct'
+  flavor: 'cloudflare' | 'direct' | 'subscription'
   providerLabel: string
   provider: string
   model: string
+  vendor?: SubscriptionVendor
+  cost?: ModelCost
+  contextTokens?: number
+  /** True when the effective flavour is flat-rate quota (not budget-metered). */
+  quotaBased?: boolean
+  /** The alternative subscription flavour for a dual-mode model (GLM/Kimi). */
+  subscription?: {
+    vendor: SubscriptionVendor
+    providerLabel: string
+    provider: string
+    model: string
+    cost?: ModelCost
+    contextTokens?: number
+  }
+}
+
+/** A connected subscription credential (metadata + usage), never the secret. */
+export interface VendorCredential {
+  id: string
+  vendor: SubscriptionVendor
+  label: string
+  createdAt: number
+  lastUsedAt: number | null
+  inputTokens: number
+  outputTokens: number
+  requestCount: number
 }
 
 /**
