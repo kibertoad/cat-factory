@@ -255,6 +255,7 @@ class DrizzlePipelineRepository implements PipelineRepository {
       name: pipeline.name,
       agent_kinds: JSON.stringify(pipeline.agentKinds),
       gates: pipeline.gates ? JSON.stringify(pipeline.gates) : null,
+      thresholds: pipeline.thresholds ? JSON.stringify(pipeline.thresholds) : null,
     })
   }
 

@@ -118,26 +118,31 @@ export type TestTarget = 'github_actions' | 'ephemeral_env'
 
 /** The kinds of agents available in the agent palette. */
 export type AgentKind =
-  | 'requirements'
+  | 'requirements-review'
   | 'architect'
   | 'researcher'
   | 'coder'
   | 'tester'
+  // `reviewer` is the coder's companion: it rates the change and loops it back for
+  // automatic rework below the quality threshold (see companions below).
   | 'reviewer'
   | 'documenter'
   | 'integrator'
-  | 'acceptance'
   | 'playwright'
   | 'mocker'
   | 'business-documenter'
   | 'business-reviewer'
+  // Companion agents: they grade a prior producer step's output (0..1), loop it back
+  // for automatic rework below threshold, then raise the human gate on a pass.
+  | 'architect-companion'
+  | 'spec-companion'
   // Engine-driven "system" kinds: not user-addable palette archetypes, but they
-  // appear in seeded pipelines and run timelines. The requirements-writer (aggregates
-  // every task's clarified requirements into the service's in-repo `requirements/`
-  // spec before the coder runs), the blueprint mapper, the conflicts gate + its
-  // resolver, the CI gate (a special non-LLM step that polls checks + loops the
+  // appear in seeded pipelines and run timelines. The spec-writer (aggregates every
+  // task's clarified requirements + acceptance scenarios into the service's in-repo
+  // `spec/` document before the coder runs), the blueprint mapper, the conflicts gate
+  // + its resolver, the CI gate (a special non-LLM step that polls checks + loops the
   // fixer) + its fixer, and the PR-scoring merger.
-  | 'requirements-writer'
+  | 'spec-writer'
   | 'blueprints'
   | 'conflicts'
   | 'conflict-resolver'
@@ -172,6 +177,11 @@ export interface Pipeline {
    * means no gates.
    */
   gates?: boolean[]
+  /**
+   * Per-step companion quality thresholds (0..1), parallel to `agentKinds`. Only
+   * meaningful on companion steps; `null`/absent ⇒ use the companion's default bar.
+   */
+  thresholds?: (number | null)[]
 }
 
 /**

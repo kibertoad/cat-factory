@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import { access, mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
-import type { RequirementsJob, RequirementsResult, RequirementsTaskContext } from './job.js'
+import type { SpecJob, SpecResult, SpecTaskContext } from './job.js'
 import {
   cloneExistingBranch,
   cloneRepo,
@@ -27,7 +27,7 @@ import type { RunOptions } from './runner.js'
 import { log } from './logger.js'
 
 /** Compact description of the requirements-document shape, fed to the JSON repair call. */
-const REQUIREMENTS_SHAPE_HINT =
+const SPEC_SHAPE_HINT =
   'Expected a requirements document: {"service": string, "summary": string, ' +
   '"groups": [{"name": string, "summary": string, "requirements": [{"id": string, ' +
   '"title": string, "statement": string, "kind": string, "priority": string, ' +
@@ -40,8 +40,8 @@ const REQUIREMENTS_SHAPE_HINT =
 // runs BEFORE the coder, seeding the branch the coder then resumes), reads any
 // existing requirements doc, and (re)generates the unified PRESCRIPTIVE
 // requirements document for the service from the combined task context. The harness
-// deterministically renders that document into the in-repo `requirements/` folder
-// (a machine-readable `requirements.json`, the `overview.md` / `rules.md` markdown,
+// deterministically renders that document into the in-repo `spec/` folder
+// (a machine-readable `spec.json`, the `overview.md` / `rules.md` markdown,
 // a `version.json` manifest and the Gherkin `features/*.feature` files), then
 // commits the result onto the branch. The document is also returned to the Worker
 // so it can persist + surface it.
@@ -52,14 +52,16 @@ const REQUIREMENTS_SHAPE_HINT =
 // progress callback.
 
 // The folder + file layout, kept in lockstep with @cat-factory/contracts
-// (REQUIREMENTS_DIR / REQUIREMENTS_JSON_PATH / …). Duplicated here because the
-// harness image is deliberately self-contained (no @cat-factory/contracts dep).
-const REQUIREMENTS_DIR = 'requirements'
-const REQUIREMENTS_JSON_PATH = `${REQUIREMENTS_DIR}/requirements.json`
-const REQUIREMENTS_OVERVIEW_PATH = `${REQUIREMENTS_DIR}/overview.md`
-const REQUIREMENTS_RULES_PATH = `${REQUIREMENTS_DIR}/rules.md`
-const REQUIREMENTS_VERSION_PATH = `${REQUIREMENTS_DIR}/version.json`
-const REQUIREMENTS_FEATURES_DIR = `${REQUIREMENTS_DIR}/features`
+// (SPEC_DIR / SPEC_JSON_PATH / …). Duplicated here because the harness image is
+// deliberately self-contained (no @cat-factory/contracts dep).
+const SPEC_DIR = 'spec'
+const SPEC_JSON_PATH = `${SPEC_DIR}/spec.json`
+const SPEC_OVERVIEW_PATH = `${SPEC_DIR}/overview.md`
+const SPEC_RULES_PATH = `${SPEC_DIR}/rules.md`
+const SPEC_VERSION_PATH = `${SPEC_DIR}/version.json`
+const SPEC_FEATURES_DIR = `${SPEC_DIR}/features`
+// Legacy folder name the spec lived under before the rename; relocated on first run.
+const LEGACY_SPEC_DIR = 'requirements'
 
 // Coercion limits so a committed doc can never balloon past what the schema accepts.
 const MAX_GROUPS = 40
@@ -97,7 +99,7 @@ export interface DomainRuleTree {
   rationale: string
   sourceBlockIds: string[]
 }
-export interface RequirementsDocTree {
+export interface SpecDocTree {
   service: string
   summary: string
   groups: RequirementGroupTree[]
@@ -231,7 +233,7 @@ function uniqueId(id: string, used: Set<string>): string {
  * anchors, so duplicates (two requirements sharing a title, a model echoing an id)
  * would otherwise silently alias. Deterministic: same tree → same ids.
  */
-function dedupeIds(doc: RequirementsDocTree): void {
+function dedupeIds(doc: SpecDocTree): void {
   const used = new Set<string>()
   for (const g of doc.groups) {
     for (const r of g.requirements) {
@@ -243,15 +245,15 @@ function dedupeIds(doc: RequirementsDocTree): void {
 }
 
 /**
- * Coerce an agent's parsed JSON into a well-formed {@link RequirementsDocTree},
+ * Coerce an agent's parsed JSON into a well-formed {@link SpecDocTree},
  * dropping anything malformed. Returns null when no usable service name remains.
  * Tolerates either a bare doc object or `{ requirements: {...} }`. The Worker
  * re-validates the returned doc against the strict Valibot schema before use.
  */
-export function coerceRequirementsDoc(
+export function coerceSpecDoc(
   parsed: unknown,
   fallbackName: string,
-): RequirementsDocTree | null {
+): SpecDocTree | null {
   if (typeof parsed !== 'object' || parsed === null) return null
   const root = parsed as Record<string, unknown>
   const obj =
@@ -281,22 +283,22 @@ export interface RenderedFile {
   content: string
 }
 
-/** The exact canonical JSON bytes written to `requirements.json` (and hashed). */
-export function canonicalRequirementsJson(doc: RequirementsDocTree): string {
+/** The exact canonical JSON bytes written to `spec.json` (and hashed). */
+export function canonicalSpecJson(doc: SpecDocTree): string {
   return `${JSON.stringify(doc, null, 2)}\n`
 }
 
 /** A stable content hash of the requirements doc, used for quick staleness checks. */
-export function hashRequirements(doc: RequirementsDocTree): string {
-  return createHash('sha256').update(canonicalRequirementsJson(doc)).digest('hex')
+export function hashSpec(doc: SpecDocTree): string {
+  return createHash('sha256').update(canonicalSpecJson(doc)).digest('hex')
 }
 
 /** Total requirement count across all groups. */
-function countRequirements(doc: RequirementsDocTree): number {
+function countRequirements(doc: SpecDocTree): number {
   return doc.groups.reduce((n, g) => n + g.requirements.length, 0)
 }
 
-export interface RequirementsVersionTree {
+export interface SpecVersionTree {
   version: number
   generatedAt: string
   hash: string
@@ -305,10 +307,10 @@ export interface RequirementsVersionTree {
 }
 
 /** Read the prior version manifest, if any (to bump the counter / detect no-ops). */
-async function readExistingVersion(dir: string): Promise<RequirementsVersionTree | null> {
+async function readExistingVersion(dir: string): Promise<SpecVersionTree | null> {
   try {
-    const raw = await readFile(join(dir, REQUIREMENTS_VERSION_PATH), 'utf8')
-    const parsed = JSON.parse(raw) as Partial<RequirementsVersionTree>
+    const raw = await readFile(join(dir, SPEC_VERSION_PATH), 'utf8')
+    const parsed = JSON.parse(raw) as Partial<SpecVersionTree>
     if (typeof parsed.version !== 'number' || typeof parsed.hash !== 'string') return null
     return {
       version: parsed.version,
@@ -323,15 +325,23 @@ async function readExistingVersion(dir: string): Promise<RequirementsVersionTree
 }
 
 /** Read + parse the existing requirements doc, if any (so the agent refines in place). */
-async function readExistingRequirements(
+async function readExistingSpec(
   dir: string,
   fallbackName: string,
-): Promise<RequirementsDocTree | null> {
+): Promise<SpecDocTree | null> {
   try {
-    const raw = await readFile(join(dir, REQUIREMENTS_JSON_PATH), 'utf8')
-    return coerceRequirementsDoc(JSON.parse(raw), fallbackName)
+    const raw = await readFile(join(dir, SPEC_JSON_PATH), 'utf8')
+    return coerceSpecDoc(JSON.parse(raw), fallbackName)
   } catch {
-    return null
+    // Back-compat: before the rename the spec lived under `requirements/`. If the new
+    // `spec/` file is absent, fall back to the legacy file so an existing repo migrates
+    // cleanly (the regenerated files are written under `spec/`).
+    try {
+      const legacy = await readFile(join(dir, LEGACY_SPEC_DIR, 'requirements.json'), 'utf8')
+      return coerceSpecDoc(JSON.parse(legacy), fallbackName)
+    } catch {
+      return null
+    }
   }
 }
 
@@ -341,12 +351,12 @@ async function readExistingRequirements(
  * an unchanged doc produces no diff and no commit); otherwise the counter is bumped
  * and the timestamp refreshed. Mirrors the blueprint's `nextVersion`.
  */
-export function nextRequirementsVersion(
-  doc: RequirementsDocTree,
-  previous: RequirementsVersionTree | null,
+export function nextSpecVersion(
+  doc: SpecDocTree,
+  previous: SpecVersionTree | null,
   now: Date,
 ): { version: number; generatedAt: string } {
-  if (previous && previous.hash === hashRequirements(doc)) {
+  if (previous && previous.hash === hashSpec(doc)) {
     return { version: previous.version, generatedAt: previous.generatedAt }
   }
   return { version: (previous?.version ?? 0) + 1, generatedAt: now.toISOString() }
@@ -354,29 +364,29 @@ export function nextRequirementsVersion(
 
 /** Render the lightweight `version.json` manifest for `doc`. */
 export function renderVersionFile(
-  doc: RequirementsDocTree,
+  doc: SpecDocTree,
   meta: { version: number; generatedAt: string },
 ): RenderedFile {
-  const manifest: RequirementsVersionTree = {
+  const manifest: SpecVersionTree = {
     version: meta.version,
     generatedAt: meta.generatedAt,
-    hash: hashRequirements(doc),
+    hash: hashSpec(doc),
     requirements: countRequirements(doc),
     rules: doc.rules.length,
   }
-  return { path: REQUIREMENTS_VERSION_PATH, content: `${JSON.stringify(manifest, null, 2)}\n` }
+  return { path: SPEC_VERSION_PATH, content: `${JSON.stringify(manifest, null, 2)}\n` }
 }
 
 /**
  * Deterministically render a requirements doc into the in-repo artifact files: the
- * canonical `requirements.json`, a high-level `overview.md` (intent + every group's
+ * canonical `spec.json`, a high-level `overview.md` (intent + every group's
  * requirements — what agents read first), and a `rules.md` of the cross-cutting
  * domain rules. Pure: same doc → same bytes.
  */
-export function renderRequirementsFiles(doc: RequirementsDocTree): RenderedFile[] {
+export function renderSpecFiles(doc: SpecDocTree): RenderedFile[] {
   const files: RenderedFile[] = []
 
-  files.push({ path: REQUIREMENTS_JSON_PATH, content: canonicalRequirementsJson(doc) })
+  files.push({ path: SPEC_JSON_PATH, content: canonicalSpecJson(doc) })
 
   // overview.md — the default read.
   const overview: string[] = [`# ${doc.service} — Requirements`, '']
@@ -401,7 +411,7 @@ export function renderRequirementsFiles(doc: RequirementsDocTree): RenderedFile[
       overview.push('')
     }
   }
-  files.push({ path: REQUIREMENTS_OVERVIEW_PATH, content: `${overview.join('\n').trimEnd()}\n` })
+  files.push({ path: SPEC_OVERVIEW_PATH, content: `${overview.join('\n').trimEnd()}\n` })
 
   // rules.md — domain rules / invariants / constraints.
   const rules: string[] = [`# ${doc.service} — Domain rules`, '']
@@ -415,7 +425,7 @@ export function renderRequirementsFiles(doc: RequirementsDocTree): RenderedFile[
       if (r.rationale) rules.push(`  - _Why:_ ${r.rationale}`)
     }
   }
-  files.push({ path: REQUIREMENTS_RULES_PATH, content: `${rules.join('\n').trimEnd()}\n` })
+  files.push({ path: SPEC_RULES_PATH, content: `${rules.join('\n').trimEnd()}\n` })
 
   return files
 }
@@ -423,11 +433,11 @@ export function renderRequirementsFiles(doc: RequirementsDocTree): RenderedFile[
 /**
  * Pass-1 (mechanical) Gherkin render: one `.feature` file per requirement group,
  * one `Scenario` per acceptance criterion. Deterministic (same doc → same bytes),
- * so the feature files can never silently drift from `requirements.json`; a `must`
+ * so the feature files can never silently drift from `spec.json`; a `must`
  * requirement's scenarios are tagged `@must`. The `acceptance` agent later polishes
  * these (pass 2). Groups with no acceptance criteria produce no feature file.
  */
-export function renderFeatureFiles(doc: RequirementsDocTree): RenderedFile[] {
+export function renderFeatureFiles(doc: SpecDocTree): RenderedFile[] {
   const files: RenderedFile[] = []
   const used = new Set<string>()
   for (const g of doc.groups) {
@@ -455,7 +465,7 @@ export function renderFeatureFiles(doc: RequirementsDocTree): RenderedFile[] {
     lines.push('')
     lines.push(...scenarios)
     files.push({
-      path: `${REQUIREMENTS_FEATURES_DIR}/${slug}.feature`,
+      path: `${SPEC_FEATURES_DIR}/${slug}.feature`,
       content: `${lines.join('\n').trimEnd()}\n`,
     })
   }
@@ -480,7 +490,7 @@ export function extractJsonObject(text: string): unknown {
 }
 
 /** Render the aggregated task context the agent folds into the service requirements. */
-function renderTasks(tasks: RequirementsTaskContext[]): string {
+function renderTasks(tasks: SpecTaskContext[]): string {
   if (tasks.length === 0) return '_No task requirements supplied._'
   return tasks
     .map((t) => {
@@ -491,7 +501,7 @@ function renderTasks(tasks: RequirementsTaskContext[]): string {
 }
 
 /** Compose the task prompt: the worker's guidance, the prior doc, and the task context. */
-function buildUserPrompt(job: RequirementsJob, existing: RequirementsDocTree | null): string {
+function buildUserPrompt(job: SpecJob, existing: SpecDocTree | null): string {
   const lines = [job.instructions.trim()]
   lines.push(
     '',
@@ -533,7 +543,7 @@ async function fileExists(abs: string): Promise<boolean> {
 
 /**
  * Write the rendered files under `dir`. The requirements-writer OWNS the canonical
- * artifact (`requirements.json`, `overview.md`, `rules.md`, `version.json`) and
+ * artifact (`spec.json`, `overview.md`, `rules.md`, `version.json`) and
  * always rewrites it. The Gherkin `features/*.feature` files are a TWO-PASS artifact:
  * this writer only does the mechanical pass-1 SEED, then the `acceptance` agent
  * polishes them in place (sharpening wording, adding edge/error scenarios). So a
@@ -541,12 +551,12 @@ async function fileExists(abs: string): Promise<boolean> {
  * deleted — otherwise a re-run (a later `pl_full`, or a standalone `pl_requirements`)
  * would clobber the acceptance agent's polished/added scenarios. The trade-off is a
  * removed group's seed file may linger; that is far cheaper than destroying pass-2
- * work, and a stale `.feature` is harmless next to the canonical `requirements.json`.
+ * work, and a stale `.feature` is harmless next to the canonical `spec.json`.
  */
 export async function writeRequirementsFiles(dir: string, files: RenderedFile[]): Promise<void> {
   for (const file of files) {
     const abs = join(dir, file.path)
-    const isFeature = file.path.startsWith(`${REQUIREMENTS_FEATURES_DIR}/`)
+    const isFeature = file.path.startsWith(`${SPEC_FEATURES_DIR}/`)
     if (isFeature && (await fileExists(abs))) continue // seed-once: don't clobber pass-2 polish.
     await mkdir(dirname(abs), { recursive: true })
     await writeFile(abs, file.content, 'utf8')
@@ -561,7 +571,7 @@ export async function writeRequirementsFiles(dir: string, files: RenderedFile[])
  * coder uses. Returns once the checkout in `dir` is on `branch` with commit identity set.
  */
 async function checkoutOrCreateBranch(
-  job: RequirementsJob,
+  job: SpecJob,
   dir: string,
   signal?: AbortSignal,
 ): Promise<void> {
@@ -581,17 +591,17 @@ async function checkoutOrCreateBranch(
 }
 
 /** Run one requirements job end to end. */
-export async function handleRequirements(
-  job: RequirementsJob,
+export async function handleSpec(
+  job: SpecJob,
   opts: RunOptions = {},
-): Promise<RequirementsResult> {
+): Promise<SpecResult> {
   const { signal } = opts
   const trace = { jobId: job.jobId, repo: `${job.repo.owner}/${job.repo.name}`, branch: job.branch }
   return withWorkspace('requirements', async (dir) => {
     log.info('requirements: checking out implementation branch', trace)
     await checkoutOrCreateBranch(job, dir, signal)
 
-    const existing = await readExistingRequirements(dir, job.repo.name)
+    const existing = await readExistingSpec(dir, job.repo.name)
     const previousVersion = await readExistingVersion(dir)
 
     log.info('requirements: running agent', { ...trace, tasks: job.tasks.length })
@@ -617,8 +627,8 @@ export async function handleRequirements(
     const { value: doc, diagnostics } = await resolveStructuredOutput(
       {
         label: 'requirements',
-        shapeHint: REQUIREMENTS_SHAPE_HINT,
-        parse: (text) => coerceRequirementsDoc(extractJsonObject(text), job.repo.name),
+        shapeHint: SPEC_SHAPE_HINT,
+        parse: (text) => coerceSpecDoc(extractJsonObject(text), job.repo.name),
       },
       summary,
       {
@@ -633,9 +643,9 @@ export async function handleRequirements(
       return { summary, stats, error: noRequirementsReason(stats, summary, stderrTail, diagnostics) }
     }
 
-    const version = nextRequirementsVersion(doc, previousVersion, new Date())
+    const version = nextSpecVersion(doc, previousVersion, new Date())
     await writeRequirementsFiles(dir, [
-      ...renderRequirementsFiles(doc),
+      ...renderSpecFiles(doc),
       ...renderFeatureFiles(doc),
       renderVersionFile(doc, version),
     ])
@@ -650,7 +660,7 @@ export async function handleRequirements(
       log.info('requirements: no changes to push (requirements unchanged)', trace)
     }
 
-    return { requirements: doc, summary, stats }
+    return { spec: doc, summary, stats }
   })
 }
 

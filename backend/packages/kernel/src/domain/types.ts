@@ -124,7 +124,7 @@ export type {
   ScanRepoInput,
   ScanRepoResult,
   BoardScanSpawnResult,
-  // Requirements-review (stateless reviewer agent) shapes.
+  // Requirements-review (stateless context reviewer agent) shapes.
   ReviewItemCategory,
   ReviewItemSeverity,
   ReviewItemStatus,
@@ -133,6 +133,17 @@ export type {
   RequirementReview,
   ReplyReviewItemInput,
   UpdateReviewItemStatusInput,
+  // Structured in-repo specification (`spec.json`) shapes.
+  RequirementPriority,
+  RequirementKind,
+  AcceptanceCriterion,
+  RequirementItem,
+  DomainRule,
+  RequirementGroup,
+  SpecDoc,
+  SpecVersion,
+  // Companion-agent assessment shapes.
+  CompanionAssessment,
   // CI gate / merge-policy shapes.
   CiStepState,
   MergeAssessment,

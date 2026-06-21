@@ -227,12 +227,12 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         expect(task.parentId).toBe('mod_sessions')
       })
 
-      it('aggregates all tasks and ingests the requirements-writer document', async () => {
-        // The requirements-writer step runs on the implementation branch BEFORE the
+      it('aggregates all tasks and ingests the spec-writer document', async () => {
+        // The spec-writer step runs on the implementation branch BEFORE the
         // coder, aggregating EVERY task under the service frame into the service's
-        // unified requirements doc. Driving it identically on both runtimes pins the
+        // unified spec doc. Driving it identically on both runtimes pins the
         // engine's `serviceTasks` aggregation + strict ingest so they can't drift.
-        const requirementsDoc = {
+        const spec = {
           service: 'Auth',
           summary: 'Authentication service',
           groups: [
@@ -259,13 +259,13 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
           ],
           rules: [],
         }
-        const app = harness.makeApp({ requirementsDoc })
+        const app = harness.makeApp({ spec })
         const { workspace } = await app.createWorkspace()
         const wsId = workspace.id
 
         const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
           name: 'Requirements only',
-          agentKinds: ['requirements-writer'],
+          agentKinds: ['spec-writer'],
         })
         expect(pipeline.status).toBe(201)
 
@@ -279,12 +279,12 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         const ticked = await app.drive(wsId)
         const exec = ticked.find((e) => e.blockId === 'task_login')!
         expect(exec.status).toBe('done')
-        const step = exec.steps.find((s) => s.agentKind === 'requirements-writer')!
+        const step = exec.steps.find((s) => s.agentKind === 'spec-writer')!
         expect(step.state).toBe('done')
         // The engine populated `serviceTasks` with at least the running task, and the
         // doc parsed + ingested cleanly (a strict-parse failure would not throw, but a
         // completed step with this output proves the happy path ran end to end).
-        expect(step.output).toContain('[requirements-writer]')
+        expect(step.output).toContain('[spec-writer]')
         expect(step.output).toMatch(/from [1-9]\d* task/)
       })
 

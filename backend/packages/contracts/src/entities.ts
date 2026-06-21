@@ -186,6 +186,14 @@ export const pipelineSchema = v.object({
    * pipelines run straight through unchanged.
    */
   gates: v.optional(v.array(v.boolean())),
+  /**
+   * Per-step companion quality thresholds, parallel to {@link agentKinds}: when step
+   * `i` is a companion kind, `thresholds[i]` is the minimum rating (0..1) its review
+   * must reach for the run to proceed; below it the preceding producer is re-run, and
+   * the run fails once the rework budget is spent. `null`/absent on a companion step
+   * means "use the companion's default threshold"; ignored on non-companion steps.
+   */
+  thresholds: v.optional(v.array(v.nullable(v.pipe(v.number(), v.minValue(0), v.maxValue(1))))),
 })
 export type Pipeline = v.InferOutput<typeof pipelineSchema>
 
@@ -232,12 +240,23 @@ export type StepSubtasks = v.InferOutput<typeof stepSubtasksSchema>
  * text back to it rather than a re-rendered approximation.
  */
 export const stepReviewCommentSchema = v.object({
-  /** Verbatim raw-markdown source of the commented block. */
+  /** Verbatim raw-markdown source of the commented block (or the rendered item text). */
   quotedSource: v.string(),
-  /** 0-based source line range [start, end) of the block, for best-effort re-anchoring. */
-  srcStart: v.number(),
-  srcEnd: v.number(),
-  /** The reviewer's note on this block. */
+  /**
+   * 0-based source line range [start, end) of the commented prose block, for
+   * best-effort re-anchoring. Optional: a comment may instead anchor to a structured
+   * item via {@link anchorId} (e.g. a spec requirement/acceptance-criterion id), where
+   * there is no prose line range.
+   */
+  srcStart: v.optional(v.number()),
+  srcEnd: v.optional(v.number()),
+  /**
+   * Stable id of the structured item the comment targets (e.g. a spec
+   * requirement/criterion id), when the reviewed output is rendered as structured
+   * items rather than free prose. Absent for prose-range comments.
+   */
+  anchorId: v.optional(v.string()),
+  /** The reviewer's note on this block / item. */
   body: v.string(),
 })
 export type StepReviewComment = v.InferOutput<typeof stepReviewCommentSchema>
@@ -298,6 +317,9 @@ export const agentFailureKindSchema = v.picklist([
   'job_failed',
   'decision_timeout',
   'rejected',
+  // A companion agent's quality rating stayed below the step's threshold after the
+  // automatic rework budget was exhausted, so the run was failed for human attention.
+  'companion_rejected',
   'cancelled',
   'unknown',
 ])
@@ -433,6 +455,42 @@ export const pipelineStepSchema = v.object({
    * otherwise.
    */
   approval: v.optional(v.nullable(stepApprovalSchema)),
+  /**
+   * Live state of a companion step that reviews the immediately-preceding producer
+   * step. Set when this step's `agentKind` is a companion kind. `rating` is the
+   * companion's last overall quality score (0..1); `threshold` is the bar it must
+   * reach; `attempts`/`maxAttempts` track the automatic rework budget. Below
+   * threshold the producer is re-run; the run fails once `attempts` hits
+   * `maxAttempts`. Absent for non-companion steps.
+   */
+  companion: v.optional(
+    v.nullable(
+      v.object({
+        rating: v.optional(v.number()),
+        threshold: v.number(),
+        attempts: v.number(),
+        maxAttempts: v.number(),
+      }),
+    ),
+  ),
+  /**
+   * Transient rework feedback carried on a PRODUCER step while it is being re-run by
+   * a downstream companion (the analogue of an approval's `changes_requested`
+   * feedback for the automatic path). Folded into the agent's revision context on the
+   * re-run, then cleared. Absent when no companion rework is in flight.
+   */
+  rework: v.optional(
+    v.nullable(
+      v.object({
+        /** The producer's previous proposal the companion challenged. */
+        previousProposal: v.string(),
+        /** The companion's prose feedback driving the rework. */
+        feedback: v.string(),
+        /** Optional per-item / per-block challenges to address. */
+        comments: v.optional(v.array(stepReviewCommentSchema)),
+      }),
+    ),
+  ),
   /** Text the agent produced for this step (when LLM execution is enabled). */
   output: v.optional(v.string()),
   /** Identifier of the model that produced `output`, for transparency. */

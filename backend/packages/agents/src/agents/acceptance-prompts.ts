@@ -3,29 +3,26 @@ import type { AgentRunContext } from '@cat-factory/kernel'
 import { PLATFORM_DELIVERY_CONTRACT } from './ci-gate.js'
 import { STANDARDS_FOOTER } from './prompt-shared.js'
 
-// Built-out role prompts for the acceptance-testing agents. These two kinds turn
-// requirements into executable end-to-end coverage in two steps:
+// Built-out role prompt for the acceptance-test authoring agent. The structured
+// acceptance SCENARIOS now live in the service spec (`spec.json`, authored by the
+// `spec-writer` and reviewed there) and are rendered deterministically into Gherkin
+// `spec/features/*.feature` files. The single remaining agent here:
 //
-//   - `acceptance` reads the block intent and any linked requirements / PRDs and
-//     writes black-box acceptance test SCENARIOS in Given / When / Then form.
-//   - `playwright` reads those scenarios and emits runnable acceptance TESTS,
-//     committed to the repository, adding only tests that do not exist yet. It
-//     reaches for Playwright only when the block has a user-facing UI; for
-//     backend behaviour it writes the tests with the project's own test
+//   - `playwright` reads those derived Gherkin scenarios and emits runnable
+//     acceptance TESTS, committed to the repository, adding only tests that do not
+//     exist yet. It reaches for Playwright only when the block has a user-facing UI;
+//     for backend behaviour it writes the tests with the project's own test
 //     framework, which `testApproachSection` selects from the block type.
 //
 // Like the standard solution phases, "what the agent should do" lives here and
-// "which extra standards apply" stays in @cat-factory/prompt-fragments: each
-// prompt closes by deferring to the best-practice fragments that
-// `composeSystemPrompt` appends below it. The dynamic run context (the block,
-// its features, linked requirement docs and the prior agents' output) is folded
-// in by the generic `userPromptFor`, which already surfaces linked context
-// documents — exactly the requirements these agents work from.
+// "which extra standards apply" stays in @cat-factory/prompt-fragments: the prompt
+// closes by deferring to the best-practice fragments that `composeSystemPrompt`
+// appends below it.
 
 /** The agent kinds that make up the acceptance-testing track. */
-export type AcceptanceAgentKind = 'acceptance' | 'playwright'
+export type AcceptanceAgentKind = 'playwright'
 
-export const ACCEPTANCE_AGENT_KINDS: readonly AcceptanceAgentKind[] = ['acceptance', 'playwright']
+export const ACCEPTANCE_AGENT_KINDS: readonly AcceptanceAgentKind[] = ['playwright']
 
 // The runnable-tests step commits tests through a pull request. Tests only earn
 // their keep once they actually run in CI, so "done" means the suite is wired into
@@ -40,22 +37,6 @@ const PLAYWRIGHT_DELIVERY_GATE = [
 ].join('\n')
 
 const SYSTEM_PROMPTS: Record<AcceptanceAgentKind, string> = {
-  acceptance: [
-    'You are a QA analyst owning the ACCEPTANCE TEST SCENARIOS for a building block.',
-    'Turn the requirements and the block intent into a concise set of black-box, user-facing acceptance scenarios.',
-    '',
-    'Approach:',
-    "- If a `requirements/features/` folder exists, it holds mechanically generated Gherkin `.feature` files derived from the service's requirements. Treat them as your starting point: review and POLISH them — sharpen wording, and ADD the missing edge / error / boundary scenarios — rather than writing from a blank page. Keep them as `.feature` files in place.",
-    '- Read `requirements/overview.md` and `requirements/rules.md` first for the prescriptive spec and the domain invariants the scenarios must respect.',
-    '- Work only from the stated requirements, the linked context documents (requirements / PRDs) and the block intent; do not invent features that were not asked for.',
-    '- Cover the happy path first, then the important alternative flows, error cases and boundary conditions.',
-    '- Write each scenario as a titled Given / When / Then: Given the preconditions, When the user acts, Then the observable outcome.',
-    '- Keep each scenario independent, deterministic and asserted on observable behaviour — never on internal implementation.',
-    '- Group related scenarios by the requirement or behaviour they verify so the set reads coherently.',
-    '- Flag any requirement that is ambiguous or untestable as written rather than guessing at it.',
-    '',
-    STANDARDS_FOOTER,
-  ].join('\n'),
   playwright: [
     'You are a test automation engineer owning the runnable ACCEPTANCE TESTS for a building block.',
     'Translate the agreed acceptance scenarios into runnable tests that live in the repository.',
@@ -66,7 +47,7 @@ const SYSTEM_PROMPTS: Record<AcceptanceAgentKind, string> = {
     'The run context below states the test approach for this specific block; follow it.',
     '',
     'Approach:',
-    '- Treat the acceptance scenarios as the source of truth: prefer the Gherkin scenarios in `requirements/features/*.feature` when present (each `Scenario` becomes one runnable test, named after it), else the scenarios provided above. One test per scenario so the mapping is obvious.',
+    '- Treat the acceptance scenarios as the source of truth: prefer the Gherkin scenarios in `spec/features/*.feature` when present (each `Scenario` becomes one runnable test, named after it), else the scenarios provided above. One test per scenario so the mapping is obvious.',
     '- Be additive and idempotent: only create tests for scenarios that do not already have one; never duplicate or silently rewrite an existing test.',
     '- Exercise the system through its outermost interface and assert on observable behaviour — user-facing locators (roles, labels, text) for UI, public API / HTTP / message contracts for backend — never on internal implementation.',
     '- Keep tests isolated and deterministic: no shared mutable state, await every action, and rely on auto-retrying assertions instead of fixed sleeps.',
@@ -81,7 +62,7 @@ const SYSTEM_PROMPTS: Record<AcceptanceAgentKind, string> = {
 
 /** True when the agent kind is part of the acceptance-testing track. */
 export function isAcceptanceKind(kind: AgentKind): kind is AcceptanceAgentKind {
-  return kind === 'acceptance' || kind === 'playwright'
+  return kind === 'playwright'
 }
 
 /**

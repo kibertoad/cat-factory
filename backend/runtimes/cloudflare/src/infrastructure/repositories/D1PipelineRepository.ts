@@ -29,7 +29,7 @@ export class D1PipelineRepository implements PipelineRepository {
   async insert(workspaceId: string, pipeline: Pipeline): Promise<void> {
     await this.db
       .prepare(
-        'INSERT INTO pipelines (workspace_id, id, name, agent_kinds, gates) VALUES (?, ?, ?, ?, ?)',
+        'INSERT INTO pipelines (workspace_id, id, name, agent_kinds, gates, thresholds) VALUES (?, ?, ?, ?, ?, ?)',
       )
       .bind(
         workspaceId,
@@ -37,6 +37,7 @@ export class D1PipelineRepository implements PipelineRepository {
         pipeline.name,
         JSON.stringify(pipeline.agentKinds),
         pipeline.gates ? JSON.stringify(pipeline.gates) : null,
+        pipeline.thresholds ? JSON.stringify(pipeline.thresholds) : null,
       )
       .run()
   }

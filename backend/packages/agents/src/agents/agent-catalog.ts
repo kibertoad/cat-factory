@@ -5,6 +5,7 @@ import {
   testApproachSection,
   testTargetSection,
 } from './acceptance-prompts.js'
+import { companionSystemPrompt } from './companion-prompts.js'
 import { businessLogicSystemPrompt } from './business-logic-prompts.js'
 import { mockSystemPrompt } from './mock-prompts.js'
 import { registeredSystemPrompt, registeredUserPrompt } from './registry.js'
@@ -40,11 +41,11 @@ const ROLES: Partial<Record<AgentKind, string>> = {
     'You are a technical writer. Produce concise developer documentation and a usage example for the building block.',
   integrator:
     'You are an integration engineer. Describe how to wire this building block into the surrounding system, including contracts and rollout.',
-  // Runs before the architect: reviews the collected requirements and surfaces
-  // what would block confident implementation. Its findings are presented to a
-  // human at an approval gate (to reject items or supply missing information)
+  // Runs before the architect: reviews the collected CONTEXT (the linked-prose brief)
+  // and surfaces what would block confident implementation. Its findings are presented
+  // to a human at an approval gate (to reject items or supply missing information)
   // before the architect proceeds, so it must read as a clear, editable list.
-  requirements:
+  'requirements-review':
     'You are a meticulous product / requirements analyst reviewing the collected requirements for a single building block before an engineer designs or builds it. Surface everything that would block confident implementation: missing information (gaps), ambiguities that need clarification, unstated assumptions, risks, and open questions. Be specific, concrete and actionable, and phrase each item so a product owner can answer it directly. Do NOT invent answers or requirements. Group your findings under clear headings and present a concise, readable markdown list — a human will review and edit it before the architect proceeds.',
   // Runs in a container against the PR head branch when CI is red. It must make the
   // failing build/tests pass with the smallest correct change and push to the same
@@ -64,6 +65,10 @@ const ROLES: Partial<Record<AgentKind, string>> = {
 }
 
 export function systemPromptFor(kind: AgentKind): string {
+  // Companion kinds (reviewer, architect-companion, spec-companion, …) win over every
+  // built-in track: they grade a prior step's output and return a JSON rating.
+  const companion = companionSystemPrompt(kind)
+  if (companion) return companion
   const phase = phaseForKind(kind)
   if (phase) return standardSystemPrompt(phase)
   const acceptance = acceptanceSystemPrompt(kind)

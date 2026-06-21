@@ -16,8 +16,12 @@ import type {
 import {
   parseBlueprintService,
   parseMergeAssessment,
-  parseRequirementsDoc,
+  parseSpecDoc,
+  parseCompanionAssessment,
+  DEFAULT_COMPANION_MAX_ATTEMPTS,
+  type CompanionAssessment,
 } from '@cat-factory/contracts'
+import { companionFor, companionTargets, isCompanionKind } from '@cat-factory/agents'
 import {
   assertFound,
   ConflictError,
@@ -35,7 +39,7 @@ import {
   describeFailingChecks,
   isCiGreen,
   MERGER_AGENT_KIND,
-  REQUIREMENTS_WRITER_AGENT_KIND,
+  SPEC_WRITER_AGENT_KIND,
   TRACKER_AGENT_KIND,
   ANALYSIS_AGENT_KIND,
 } from './ci.logic.js'
@@ -88,8 +92,65 @@ const EXECUTION_FAILURE_HINTS: Partial<Record<AgentFailureKind, string>> = {
     'A required decision was not answered in time, so the run was stopped. Retry to re-run the pipeline.',
   rejected:
     'You rejected this step’s proposal, stopping the run. Retry to re-run the pipeline from the rejected step.',
+  companion_rejected:
+    'A companion agent kept rating the output below its quality threshold after the automatic rework attempts were spent. Review the companion’s feedback on the run, address it (or lower the threshold in the pipeline), then retry.',
   cancelled: 'You stopped this run; its container was killed. Retry to start it again.',
   unknown: 'The run failed for an unclassified reason. Review the run, then retry.',
+}
+
+/**
+ * Tolerantly pull a JSON object out of a model's text response: strip code fences,
+ * then parse the first balanced `{…}` span. Returns `undefined` when none parses, so
+ * callers can treat an unparseable verdict as a soft failure.
+ */
+function extractJsonObject(text: string): unknown {
+  const cleaned = text.replace(/```(?:json)?/gi, '').trim()
+  const start = cleaned.indexOf('{')
+  const end = cleaned.lastIndexOf('}')
+  if (start === -1 || end <= start) return undefined
+  try {
+    return JSON.parse(cleaned.slice(start, end + 1))
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * The `revision` slice of an agent context when a step is being re-run with feedback
+ * — either a human's "request changes" on its approval gate, or a downstream
+ * companion's automatic rework (`step.rework`). The companion path wins when both are
+ * present. Empty object when neither applies (no revision context).
+ */
+function buildRevisionContext(step: PipelineStep): {
+  revision?: {
+    previousProposal: string
+    feedback: string
+    comments?: { quotedSource: string; body: string }[]
+  }
+} {
+  const source = step.rework
+    ? {
+        previousProposal: step.rework.previousProposal,
+        feedback: step.rework.feedback,
+        comments: step.rework.comments,
+      }
+    : step.approval?.status === 'changes_requested'
+      ? {
+          previousProposal: step.approval.proposal,
+          feedback: step.approval.feedback ?? '',
+          comments: step.approval.comments,
+        }
+      : undefined
+  if (!source) return {}
+  return {
+    revision: {
+      previousProposal: source.previousProposal,
+      feedback: source.feedback,
+      ...(source.comments?.length
+        ? { comments: source.comments.map((c) => ({ quotedSource: c.quotedSource, body: c.body })) }
+        : {}),
+    },
+  }
 }
 
 /** Format a 0..1 score as a rounded percentage for notification copy. */
@@ -300,16 +361,30 @@ export class ExecutionService {
 
     await this.executionRepository.deleteByBlock(workspaceId, blockId)
 
-    const steps: PipelineStep[] = pipeline.agentKinds.map((kind, i) => ({
-      agentKind: kind,
-      state: i === 0 ? 'working' : 'pending',
-      progress: 0,
-      decision: null,
-      // A gated step pauses for human approval once its proposal is ready (see
-      // recordStepResult). Copied from the pipeline definition at run start.
-      requiresApproval: pipeline.gates?.[i] ?? false,
-      approval: null,
-    }))
+    const steps: PipelineStep[] = pipeline.agentKinds.map((kind, i) => {
+      const companionDef = companionFor(kind)
+      return {
+        agentKind: kind,
+        state: i === 0 ? 'working' : 'pending',
+        progress: 0,
+        decision: null,
+        // A gated step pauses for human approval once its proposal is ready (see
+        // recordStepResult). Copied from the pipeline definition at run start.
+        requiresApproval: pipeline.gates?.[i] ?? false,
+        approval: null,
+        // A companion step carries its quality bar + rework budget, seeded from the
+        // pipeline's per-step threshold (else the companion's default).
+        ...(companionDef
+          ? {
+              companion: {
+                threshold: pipeline.thresholds?.[i] ?? companionDef.defaultThreshold,
+                attempts: 0,
+                maxAttempts: DEFAULT_COMPANION_MAX_ATTEMPTS,
+              },
+            }
+          : {}),
+      }
+    })
     const instance: ExecutionInstance = {
       id: this.idGenerator.next('exec'),
       blockId,
@@ -423,6 +498,13 @@ export class ExecutionService {
     // See {@link evaluateConflicts}.
     if (step.agentKind === CONFLICTS_AGENT_KIND) {
       return this.evaluateConflicts(workspaceId, instance, step, block, isFinalStep)
+    }
+
+    // A companion step grades the nearest preceding producer of one of its target
+    // kinds, looping it back for automatic rework below the threshold (and failing
+    // the run once the budget is spent) before any human gate. See evaluateCompanion.
+    if (isCompanionKind(step.agentKind)) {
+      return this.evaluateCompanion(workspaceId, instance, step, block, isFinalStep, options)
     }
 
     // Async (container) steps don't block: dispatch the job and park. The durable
@@ -733,6 +815,10 @@ export class ExecutionService {
     // Live subtask counts only describe an in-flight run; drop them now the step
     // is done so the board doesn't show a stale "3/8" against a finished step.
     step.subtasks = undefined
+    // A companion-driven rework was just consumed by this re-run; clear it so a later
+    // unrelated re-run doesn't re-apply stale feedback (the companion sets fresh
+    // feedback if it still rejects the new output).
+    step.rework = undefined
 
     // A repo-operating step (the container "implementer" agent) opened a PR for
     // its work. Record it on the block so the board can surface and link to it,
@@ -750,11 +836,11 @@ export class ExecutionService {
       await this.ingestBlueprint(workspaceId, instance.blockId, result.blueprintService)
     }
 
-    // A requirements-writer step produced the service's unified requirements doc and
-    // committed it to the implementation branch. Strict-validate it (a bad payload
+    // A spec-writer step produced the service's unified specification (`spec.json`)
+    // and committed it to the implementation branch. Strict-validate it (a bad payload
     // must never be trusted), then nudge clients to refresh.
-    if (result.requirementsDoc !== undefined) {
-      await this.ingestRequirements(workspaceId, result.requirementsDoc)
+    if (result.spec !== undefined) {
+      await this.ingestSpec(workspaceId, result.spec)
     }
 
     // Human approval gate: a step the pipeline marked `requiresApproval` pauses
@@ -807,6 +893,152 @@ export class ExecutionService {
     instance.currentStep += 1
     const next = instance.steps[instance.currentStep]
     if (next) this.startStep(next)
+    await this.updateBlockProgress(workspaceId, instance, 'in_progress')
+    await this.executionRepository.upsert(workspaceId, instance)
+    await this.emitInstance(workspaceId, instance)
+    return { kind: 'continue' }
+  }
+
+  /**
+   * Run a companion step: an inline LLM that grades the nearest preceding producer
+   * of one of its target kinds, returning an overall quality rating (0..1) + prose
+   * feedback. The rating is compared to the step's threshold:
+   *   - at/above  → the companion finishes; if it is itself gated it raises the human
+   *                 approval gate on the producer's output, else the run advances.
+   *   - below, budget left → the producer is re-run with the companion's feedback
+   *                 folded in (the automatic analogue of "request changes").
+   *   - below, budget spent → the run fails (`companion_rejected`) for a human.
+   * The companion's own JSON output is parsed as the assessment; a malformed payload
+   * is treated as a pass (a broken critic must never wedge a run).
+   */
+  private async evaluateCompanion(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    step: PipelineStep,
+    block: Block,
+    isFinalStep: boolean,
+    options: AdvanceOptions,
+  ): Promise<AdvanceResult> {
+    const targets = companionTargets(step.agentKind)
+    // The nearest earlier step whose kind this companion reviews (the producer).
+    let producerIndex = -1
+    for (let i = instance.currentStep - 1; i >= 0; i--) {
+      if (targets.includes(instance.steps[i]!.agentKind)) {
+        producerIndex = i
+        break
+      }
+    }
+
+    // Run the companion as a normal inline LLM step: its prompt asks for the rating
+    // JSON and `priorOutputs` already carries the producer's output for it to grade.
+    const context = await this.buildAgentContext(workspaceId, instance, step, isFinalStep, block)
+    const previewModel = await this.previewStepModel(context)
+    if (previewModel && previewModel !== step.model) step.model = previewModel
+    const result = await this.runAgent(context, options)
+    if (result.usage) {
+      await this.spend.record({
+        workspaceId,
+        executionId: instance.id,
+        agentKind: step.agentKind,
+        model: result.model ?? 'unknown',
+        usage: result.usage,
+      })
+    }
+    if (result.model) step.model = result.model
+
+    const companion = step.companion ?? {
+      threshold: companionFor(step.agentKind)?.defaultThreshold ?? 0.8,
+      attempts: 0,
+      maxAttempts: DEFAULT_COMPANION_MAX_ATTEMPTS,
+    }
+    let assessment: CompanionAssessment | undefined
+    try {
+      assessment = parseCompanionAssessment(extractJsonObject(result.output ?? ''))
+    } catch {
+      assessment = undefined
+    }
+    // A broken critic (no producer to grade, or an unparseable verdict) passes through
+    // rather than wedging the run: record a perfect score and advance.
+    const rating = assessment && producerIndex >= 0 ? assessment.rating : 1
+    companion.attempts += 1
+    companion.rating = rating
+    step.companion = companion
+    step.output = assessment?.summary ?? result.output ?? ''
+
+    // PASS: the producer cleared the bar.
+    if (rating >= companion.threshold) {
+      this.finishStep(step)
+      step.progress = 1
+      // A gated companion now raises the HUMAN approval gate on the producer's output
+      // (the human reviews what the companion just cleared). Never on the final step.
+      if (step.requiresApproval && !isFinalStep && step.approval?.status !== 'approved') {
+        const producer = producerIndex >= 0 ? instance.steps[producerIndex] : undefined
+        step.approval = {
+          id: this.idGenerator.next('appr'),
+          status: 'pending',
+          proposal: producer?.output ?? step.output,
+        }
+        step.state = 'waiting_decision'
+        instance.status = 'blocked'
+        await this.updateBlockProgress(workspaceId, instance, 'blocked')
+        await this.executionRepository.upsert(workspaceId, instance)
+        await this.emitInstance(workspaceId, instance)
+        return { kind: 'awaiting_decision', decisionId: step.approval.id }
+      }
+      if (isFinalStep) {
+        instance.status = 'done'
+        await this.finalizeBlock(workspaceId, instance, undefined)
+        await this.executionRepository.upsert(workspaceId, instance)
+        await this.emitInstance(workspaceId, instance)
+        await this.stopRunContainer(workspaceId, instance.id)
+        return { kind: 'done' }
+      }
+      instance.currentStep += 1
+      const next = instance.steps[instance.currentStep]
+      if (next) this.startStep(next)
+      await this.updateBlockProgress(workspaceId, instance, 'in_progress')
+      await this.executionRepository.upsert(workspaceId, instance)
+      await this.emitInstance(workspaceId, instance)
+      return { kind: 'continue' }
+    }
+
+    // BELOW THRESHOLD, budget spent → fail the run for human attention.
+    if (companion.attempts >= companion.maxAttempts) {
+      const detail = assessment?.summary ?? 'No further detail.'
+      await this.failRun(
+        workspaceId,
+        instance.id,
+        `Companion "${step.agentKind}" rated the output ${(rating * 100).toFixed(0)}% ` +
+          `(below the ${(companion.threshold * 100).toFixed(0)}% bar) after ` +
+          `${companion.attempts} attempt(s).`,
+        'companion_rejected',
+        detail,
+      )
+      return { kind: 'job_failed', error: 'companion_rejected' }
+    }
+
+    // BELOW THRESHOLD, budget left → loop the producer back with the feedback folded
+    // in (the automatic analogue of a human "request changes"). `producerIndex` is
+    // guaranteed >= 0 here (rating < threshold only when a producer was found and the
+    // verdict parsed; otherwise rating defaulted to 1 and we passed above).
+    const producer = instance.steps[producerIndex]!
+    producer.rework = {
+      previousProposal: producer.output ?? '',
+      feedback: assessment?.summary ?? '',
+      ...(assessment?.comments?.length ? { comments: assessment.comments } : {}),
+    }
+    producer.jobId = undefined
+    producer.startedAt = null
+    producer.finishedAt = null
+    producer.approval = null
+    // Reset this companion so it re-grades after the producer re-runs (attempts kept).
+    step.state = 'pending'
+    step.startedAt = null
+    step.finishedAt = null
+    step.output = undefined
+    this.startStep(producer)
+    instance.currentStep = producerIndex
+    if (instance.status === 'blocked') instance.status = 'running'
     await this.updateBlockProgress(workspaceId, instance, 'in_progress')
     await this.executionRepository.upsert(workspaceId, instance)
     await this.emitInstance(workspaceId, instance)
@@ -1204,20 +1436,20 @@ export class ExecutionService {
   }
 
   /**
-   * Strictly validate a requirements-writer step's unified document. The canonical
-   * record is the in-repo `requirements/` files the harness already committed; this
-   * is the trust boundary (a malformed payload is dropped, never trusted) plus a
-   * client refresh nudge. A persisted board projection is a deliberate later phase.
+   * Strictly validate a spec-writer step's unified specification. The canonical record
+   * is the in-repo `spec/` files the harness already committed; this is the trust
+   * boundary (a malformed payload is dropped, never trusted) plus a client refresh
+   * nudge. A persisted board projection is a deliberate later phase.
    */
-  private async ingestRequirements(workspaceId: string, rawDoc: unknown): Promise<void> {
+  private async ingestSpec(workspaceId: string, rawDoc: unknown): Promise<void> {
     try {
-      parseRequirementsDoc(rawDoc)
+      parseSpecDoc(rawDoc)
     } catch {
       // A malformed doc must not fail the step (the in-repo files are already
       // committed); skip the refresh.
       return
     }
-    // Nudge clients to refresh so they can re-read the service's requirements files.
+    // Nudge clients to refresh so they can re-read the service's spec files.
     await this.events.boardChanged(workspaceId, 'requirements-updated')
   }
 
@@ -1274,10 +1506,10 @@ export class ExecutionService {
     // library (when configured): the merged catalog selected for this block/agent,
     // unioned with the block's manual pins. Recorded on the step for observability.
     const resolved = await this.resolveFragments(workspaceId, step, block, priorOutputs)
-    // The requirements-writer aggregates the collected requirements of EVERY task
-    // under the service frame; gather them only for that kind (a no-op otherwise).
+    // The spec-writer aggregates the collected requirements of EVERY task under the
+    // service frame; gather them only for that kind (a no-op otherwise).
     const serviceTasks =
-      step.agentKind === REQUIREMENTS_WRITER_AGENT_KIND
+      step.agentKind === SPEC_WRITER_AGENT_KIND
         ? await this.gatherServiceTasks(workspaceId, block)
         : undefined
     return {
@@ -1309,25 +1541,13 @@ export class ExecutionService {
       resolvedDecision: step.decision?.chosen
         ? { question: step.decision.question, chosen: step.decision.chosen }
         : null,
-      // A re-run triggered by "Request changes" on this step's approval gate:
-      // hand the agent its previous proposal plus the human's feedback so it
-      // revises rather than starting over.
-      ...(step.approval?.status === 'changes_requested'
-        ? {
-            revision: {
-              previousProposal: step.approval.proposal,
-              feedback: step.approval.feedback ?? '',
-              ...(step.approval.comments?.length
-                ? {
-                    comments: step.approval.comments.map((c) => ({
-                      quotedSource: c.quotedSource,
-                      body: c.body,
-                    })),
-                  }
-                : {}),
-            },
-          }
-        : {}),
+      // A re-run triggered either by a human "Request changes" on this step's
+      // approval gate OR by a downstream companion looping it back for rework: hand
+      // the agent its previous proposal plus the feedback so it revises rather than
+      // starting over. The companion's automatic rework (`step.rework`) and the
+      // human's gate feedback share one revision shape; the companion path takes
+      // precedence when both are present.
+      ...buildRevisionContext(step),
     }
   }
 
@@ -1845,9 +2065,51 @@ export class ExecutionService {
       throw new ConflictError(`Approval '${approvalId}' is already being re-run`)
     }
 
+    const stepIndex = instance.steps.findIndex((s) => s.approval?.id === approvalId)
+
     step.approval.status = 'changes_requested'
     step.approval.feedback = review.feedback
     step.approval.comments = review.comments?.length ? review.comments : undefined
+
+    // A companion's gate reviews the PRODUCER's output, not the companion's own work:
+    // requesting changes here must re-run the producer (with the human's feedback
+    // folded in) and re-grade, NOT re-run the companion. Redirect the rework to the
+    // nearest preceding step of one of the companion's target kinds.
+    if (isCompanionKind(step.agentKind)) {
+      const targets = companionTargets(step.agentKind)
+      let producerIndex = -1
+      for (let i = stepIndex - 1; i >= 0; i--) {
+        if (targets.includes(instance.steps[i]!.agentKind)) {
+          producerIndex = i
+          break
+        }
+      }
+      const producer = producerIndex >= 0 ? instance.steps[producerIndex]! : undefined
+      if (producer) {
+        producer.rework = {
+          previousProposal: producer.output ?? step.approval.proposal,
+          feedback: review.feedback ?? '',
+          ...(review.comments?.length ? { comments: review.comments } : {}),
+        }
+        producer.jobId = undefined
+        producer.startedAt = null
+        producer.finishedAt = null
+        producer.approval = null
+        // Reset the companion so it re-grades once the producer re-runs.
+        step.state = 'pending'
+        step.startedAt = null
+        step.finishedAt = null
+        step.output = undefined
+        this.startStep(producer)
+        instance.currentStep = producerIndex
+        if (instance.status === 'blocked') instance.status = 'running'
+        await this.executionRepository.upsert(workspaceId, instance)
+        await this.workRunner.signalDecision(workspaceId, instance.id, approvalId, 'changes_requested')
+        await this.emitInstance(workspaceId, instance)
+        return instance
+      }
+    }
+
     // Drop the live job handle so the re-run dispatches fresh work rather than
     // re-attaching to the finished job (async steps); inline steps ignore this.
     step.jobId = undefined
@@ -1939,6 +2201,7 @@ export class ExecutionService {
     executionId: string,
     message: string,
     kind: AgentFailureKind = 'agent',
+    detail: string | null = null,
   ): Promise<void> {
     const instance = await this.executionRepository.get(workspaceId, executionId)
     if (!instance) return
@@ -1950,7 +2213,7 @@ export class ExecutionService {
     const failure: AgentFailure = {
       kind,
       message,
-      detail: null,
+      detail,
       hint: EXECUTION_FAILURE_HINTS[kind] ?? null,
       occurredAt: this.clock.now(),
       lastSubtasks: instance.steps[instance.currentStep]?.subtasks ?? null,

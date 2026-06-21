@@ -8,6 +8,7 @@ import type {
   PullRequestRef,
 } from '@cat-factory/kernel'
 import type { AgentExecutor } from '@cat-factory/kernel'
+import { isCompanionKind } from '@cat-factory/agents'
 
 export interface FakeAgentOptions {
   /** Confidence reported on the final step (drives auto-merge vs PR). Default 1. */
@@ -32,10 +33,16 @@ export interface FakeAgentOptions {
    */
   blueprintService?: unknown
   /**
-   * A requirements doc the `requirements-writer` step reports, so the engine's
-   * strict-parse + ingest can be exercised without a real container.
+   * A spec doc the `spec-writer` step reports, so the engine's strict-parse + ingest
+   * can be exercised without a real container.
    */
-  requirementsDoc?: unknown
+  spec?: unknown
+  /**
+   * Overall quality rating (0..1) every companion step returns, so the engine's
+   * companion review + rework loop can be exercised deterministically. When omitted a
+   * companion returns a passing rating of 1.
+   */
+  companionRating?: number
   /**
    * The assessment the `merger` step reports. When omitted, the fake derives one
    * from `confidence` so existing tests keep their semantics: high confidence
@@ -85,15 +92,29 @@ export class FakeAgentExecutor implements AgentExecutor {
       }
     }
 
-    // Mimic the container requirements-writer step returning the unified doc, and
-    // surface the aggregated task context it was given so the engine's population of
+    // Mimic the container spec-writer step returning the unified doc, and surface the
+    // aggregated task context it was given so the engine's population of
     // `serviceTasks` can be asserted.
-    if (context.agentKind === 'requirements-writer' && this.options.requirementsDoc !== undefined) {
+    if (context.agentKind === 'spec-writer' && this.options.spec !== undefined) {
       const tasks = context.serviceTasks?.length ?? 0
       return {
-        output: `[requirements-writer] wrote requirements for "${context.block.title}" from ${tasks} task(s)`,
+        output: `[spec-writer] wrote spec for "${context.block.title}" from ${tasks} task(s)`,
         model: 'fake',
-        requirementsDoc: this.options.requirementsDoc,
+        spec: this.options.spec,
+      }
+    }
+
+    // Mimic a companion step grading the prior producer: return the configured rating
+    // (default 1 = pass) as the JSON assessment the engine parses.
+    if (isCompanionKind(context.agentKind)) {
+      const rating = this.options.companionRating ?? 1
+      return {
+        output: JSON.stringify({
+          rating,
+          summary: `[${context.agentKind}] rated ${(rating * 100).toFixed(0)}%`,
+        }),
+        model: 'fake',
+        usage: this.options.usage,
       }
     }
 

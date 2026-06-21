@@ -56,6 +56,14 @@ export {
   isAcceptanceKind,
   testApproachSection,
 } from './agents/acceptance-prompts.js'
+export {
+  type CompanionDefinition,
+  COMPANIONS,
+  isCompanionKind,
+  companionFor,
+  companionTargets,
+} from './agents/companions.js'
+export { companionSystemPrompt } from './agents/companion-prompts.js'
 export { MOCK_AGENT_KIND, isMockKind, mockSystemPrompt } from './agents/mock-prompts.js'
 export {
   type BusinessLogicAgentKind,

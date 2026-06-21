@@ -3,7 +3,7 @@ import type { Block, BlockStatus } from '~/types/domain'
 import { BLOCK_TYPE_META, STATUS_META } from '~/utils/catalog'
 import TaskContextDocs from '~/components/documents/TaskContextDocs.vue'
 import TaskContextIssues from '~/components/tasks/TaskContextIssues.vue'
-import TaskScenarios from '~/components/scenarios/TaskScenarios.vue'
+import TaskTestTarget from '~/components/panels/inspector/TaskTestTarget.vue'
 import ContainerSummary from '~/components/panels/inspector/ContainerSummary.vue'
 import TaskDependencies from '~/components/panels/inspector/TaskDependencies.vue'
 import TaskStructure from '~/components/panels/inspector/TaskStructure.vue'
@@ -283,12 +283,12 @@ const runningRun = computed(() => {
       <!-- service / module: tasks summary -->
       <ContainerSummary v-if="isContainer" :block="block" />
 
-      <!-- task: dependencies, structure, scenarios, run settings, execution -->
+      <!-- task: dependencies, structure, test target, run settings, execution -->
       <template v-else-if="isTask">
         <RecurringScheduleSettings :block="block" />
         <TaskDependencies :block="block" />
         <TaskStructure :block="block" />
-        <TaskScenarios :block="block" />
+        <TaskTestTarget :block="block" />
         <TaskRunSettings :block="block" />
         <TaskExecution :block="block" />
       </template>

@@ -153,6 +153,7 @@ export const pipelines = pgTable(
     name: text('name').notNull(),
     agent_kinds: text('agent_kinds').notNull().default('[]'),
     gates: text('gates'),
+    thresholds: text('thresholds'),
   },
   (t) => [primaryKey({ columns: [t.workspace_id, t.id] })],
 )
