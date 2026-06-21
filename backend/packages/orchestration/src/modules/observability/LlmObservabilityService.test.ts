@@ -16,6 +16,7 @@ import {
 /** A minimal in-memory repo capturing recorded metrics. */
 class MemoryRepo implements LlmCallMetricRepository {
   recorded: LlmCallMetric[] = []
+  chainTipReads = 0
   async record(metric: LlmCallMetric): Promise<void> {
     this.recorded.push(metric)
   }
@@ -29,6 +30,7 @@ class MemoryRepo implements LlmCallMetricRepository {
     executionId: string,
     agentKind: string,
   ): Promise<LlmPromptChainTip | null> {
+    this.chainTipReads++
     const chain = this.recorded
       .filter(
         (m) =>
@@ -166,6 +168,47 @@ describe('LlmObservabilityService.record', () => {
     // The second call cannot chain onto the first (prefix mismatch) ⇒ stored full.
     expect(repo.recorded[1]!.promptPrefixCount).toBe(0)
     expect(JSON.parse(repo.recorded[1]!.promptText)).toHaveLength(2)
+  })
+
+  it('stores the prompt empty (and skips the chain-tip read) when prompt recording is off', async () => {
+    const repo = new MemoryRepo()
+    const service = new LlmObservabilityService({
+      llmCallMetricRepository: repo,
+      idGenerator: seqIdGenerator,
+      clock: seqClock,
+      recordPrompts: false,
+    })
+    const sys = { role: 'system', content: 'you are a coder' }
+    const u1 = { role: 'user', content: 'do the thing' }
+    await service.record(input({ promptText: JSON.stringify([sys, u1]), messageCount: 2 }))
+    await service.record(
+      input({ promptText: JSON.stringify([sys, u1, sys]), messageCount: 3, completionTokens: 70 }),
+    )
+
+    // Prompt body is dropped on every call — including the delta metadata.
+    for (const m of repo.recorded) {
+      expect(m.promptText).toBe('')
+      expect(m.promptPrefixCount).toBe(0)
+      expect(m.promptHash).toBe('')
+    }
+    // The numeric telemetry is still captured.
+    expect(repo.recorded[0]!.promptTokens).toBe(100)
+    expect(repo.recorded[1]!.completionTokens).toBe(70)
+    expect(repo.recorded[1]!.overheadMs).toBe(50)
+    // No delta chaining work is done when prompts aren't recorded.
+    expect(repo.chainTipReads).toBe(0)
+  })
+
+  it('records the prompt by default (prompt recording on)', async () => {
+    const repo = new MemoryRepo()
+    const service = new LlmObservabilityService({
+      llmCallMetricRepository: repo,
+      idGenerator,
+      clock,
+    })
+    await service.record(input({ promptText: JSON.stringify([{ role: 'user', content: 'hi' }]) }))
+    expect(repo.recorded[0]!.promptText).not.toBe('')
+    expect(repo.chainTipReads).toBe(1)
   })
 
   it('never derives a negative overhead', async () => {

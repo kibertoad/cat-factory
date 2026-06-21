@@ -5,12 +5,20 @@ import type {
   LlmCallMetricSummary,
 } from '@cat-factory/kernel'
 import type { LlmMetricsExport } from '@cat-factory/contracts'
+import type { StoredPrompt } from './observability.logic.js'
 import { buildLlmMetricsExport, computeStoredPrompt } from './observability.logic.js'
 
 export interface LlmObservabilityServiceDependencies {
   llmCallMetricRepository: LlmCallMetricRepository
   idGenerator: IdGenerator
   clock: Clock
+  /**
+   * Whether to persist the full prompt body with each metric. Defaults to true. When
+   * false, every numeric field (tokens, timing, finish reason, message/tool counts)
+   * is still recorded but the prompt is stored empty — for deployments that must not
+   * retain the complete prompts sent to the model. Governed by `LLM_RECORD_PROMPTS`.
+   */
+  recordPrompts?: boolean
 }
 
 /**
@@ -30,6 +38,9 @@ function clampBody(text: string): string {
 
 /** Default cap on how many (newest) calls a list/export returns. */
 export const DEFAULT_LIST_LIMIT = 1000
+
+/** What to store for a call's prompt when prompt recording is turned off: nothing. */
+const EMPTY_STORED_PROMPT: StoredPrompt = { promptText: '', promptPrefixCount: 0, promptHash: '' }
 
 /**
  * Details of one proxied LLM call, handed in by the LLM proxy. The proxy owns the
@@ -76,37 +87,37 @@ export class LlmObservabilityService {
   private readonly repository: LlmCallMetricRepository
   private readonly idGenerator: IdGenerator
   private readonly clock: Clock
+  private readonly recordPrompts: boolean
 
   constructor({
     llmCallMetricRepository,
     idGenerator,
     clock,
+    recordPrompts = true,
   }: LlmObservabilityServiceDependencies) {
     this.repository = llmCallMetricRepository
     this.idGenerator = idGenerator
     this.clock = clock
+    this.recordPrompts = recordPrompts
   }
 
   /**
    * Persist one metered call, assigning its id + timestamp and deriving the overhead.
-   * The prompt is stored as a DELTA against the previous call in the same
-   * `(execution, agentKind)` conversation — a container agent re-sends its whole
-   * growing history every call, so storing only the new messages collapses ~21× of
-   * redundant prompt bytes (see `computeStoredPrompt`). The full prompt is rebuilt on
-   * export. The chain-tip lookup is off the response path (the proxy records via
-   * `waitUntil`), so the extra read is free of user latency.
+   * When prompt recording is enabled, the prompt is stored as a DELTA against the
+   * previous call in the same `(execution, agentKind)` conversation — a container
+   * agent re-sends its whole growing history every call, so storing only the new
+   * messages collapses ~21× of redundant prompt bytes (see `computeStoredPrompt`). The
+   * full prompt is rebuilt on export. The chain-tip lookup is off the response path
+   * (the proxy records via `waitUntil`), so the extra read is free of user latency.
+   * When prompt recording is disabled (`recordPrompts: false`) the prompt body is
+   * stored empty and the chain-tip read is skipped entirely — the numeric telemetry is
+   * still recorded.
    */
   async record(input: RecordLlmCallInput): Promise<void> {
     const overheadMs = Math.max(0, input.totalMs - input.upstreamMs)
-    const prev =
-      input.executionId != null
-        ? await this.repository.latestChainTip(
-            input.workspaceId,
-            input.executionId,
-            input.agentKind,
-          )
-        : null
-    const stored = computeStoredPrompt(input.promptText, prev)
+    const stored = this.recordPrompts
+      ? await this.computeStoredPromptForChain(input)
+      : EMPTY_STORED_PROMPT
     const metric: LlmCallMetric = {
       id: this.idGenerator.next('llm'),
       createdAt: this.clock.now(),
@@ -119,6 +130,23 @@ export class LlmObservabilityService {
       responseText: clampBody(input.responseText),
     }
     await this.repository.record(metric)
+  }
+
+  /**
+   * Resolve this call's prompt to a delta against the chain tip of its
+   * `(workspace, execution, agentKind)` conversation (or the full array when it can't
+   * be chained). Only reached when prompt recording is enabled.
+   */
+  private async computeStoredPromptForChain(input: RecordLlmCallInput): Promise<StoredPrompt> {
+    const prev =
+      input.executionId != null
+        ? await this.repository.latestChainTip(
+            input.workspaceId,
+            input.executionId,
+            input.agentKind,
+          )
+        : null
+    return computeStoredPrompt(input.promptText, prev)
   }
 
   /**

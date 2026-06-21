@@ -185,5 +185,8 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
       llmCallMetricsMs: (num(env.LLM_CALL_METRICS_RETENTION_DAYS) ?? 3) * 24 * 60 * 60 * 1000,
     },
     fragmentLibrary: { enabled: false, selector: 'deterministic' },
+    // Recording the complete prompts is on by default; opt out with
+    // `LLM_RECORD_PROMPTS=false` to keep the numeric telemetry but drop the prompt body.
+    observability: { recordPrompts: env.LLM_RECORD_PROMPTS?.trim() !== 'false' },
   }
 }

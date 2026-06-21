@@ -352,6 +352,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     workspaceMountRepository: repos.workspaceMountRepository,
     tokenUsageRepository: repos.tokenUsageRepository,
     llmCallMetricRepository: repos.llmCallMetricRepository,
+    recordLlmPrompts: config.observability.recordPrompts,
     modelDefaultsRepository: repos.modelDefaultsRepository,
     ...tasks.deps,
     // Recurring pipelines + the workspace tracker selection. The tracker provider
