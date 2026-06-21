@@ -24,6 +24,7 @@ packages (`backend/internal/*`), and example **deployments** (`deploy/*`):
 | `frontend/app`                       | `@cat-factory/app`               | npm (Nuxt layer)                |
 | `backend/internal/executor-harness`  | `@cat-factory/executor-harness`  | GHCR image (versioned, not npm) |
 | `backend/internal/benchmark-harness` | `@cat-factory/benchmark-harness` | no (internal)                   |
+| `backend/internal/smoketest-harness` | `@cat-factory/smoketest-harness` | no (internal)                   |
 | `backend/internal/conformance`       | `@cat-factory/conformance`       | no (internal test suite)        |
 | `deploy/backend`                     | `@cat-factory/deploy-backend`    | no (example deployment)         |
 | `deploy/node`                        | `@cat-factory/deploy-node`       | no (example deployment)         |

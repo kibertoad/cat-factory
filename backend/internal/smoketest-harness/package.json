@@ -1,0 +1,28 @@
+{
+  "name": "@cat-factory/smoketest-harness",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Headless smoketest harness for cat-factory's Pi coding agent: runs real coding tasks through the actual Pi setup against Cloudflare AI, captures the full prompt/response transcript, and analyses it for breakage, dead-ends and non-productive loops. No grading.",
+  "bin": {
+    "cat-smoke": "./src/cli.ts"
+  },
+  "type": "module",
+  "main": "./src/index.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "smoke": "node --experimental-strip-types src/cli.ts"
+  },
+  "dependencies": {
+    "@cat-factory/benchmark-harness": "workspace:*",
+    "@cat-factory/executor-harness": "workspace:*",
+    "@cat-factory/kernel": "workspace:*",
+    "valibot": "^1.4.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.21",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.9"
+  }
+}

@@ -635,6 +635,15 @@ export function runPi(opts: {
   onActivity?: () => void
   /** Called with the latest subtask counts each time Pi updates its todo list. */
   onProgress?: (progress: TodoProgress) => void
+  /**
+   * Called with every parsed Pi `--mode json` event, in stream order — the raw
+   * observability seam over the run. Used by offline tooling (the smoketest
+   * harness) to capture the full prompt/response/tool-call transcript for
+   * analysis; the container payload doesn't pass it, so production behaviour is
+   * unchanged. Throwing handlers are swallowed so a faulty observer can't break
+   * the run.
+   */
+  onEvent?: (event: Record<string, unknown>) => void
   /** No-progress guard bounds; defaults to the env-configured limits. */
   guardLimits?: ProgressGuardLimits
   /** Whether this run is expected to edit files (false for assess-only runs like the merger). */
@@ -700,6 +709,13 @@ export function runPi(opts: {
         event = JSON.parse(line) as Record<string, unknown>
       } catch {
         return
+      }
+      if (opts.onEvent) {
+        try {
+          opts.onEvent(event)
+        } catch {
+          // A faulty observer must never break the run.
+        }
       }
       if (opts.onProgress) {
         const progress = parseTodoProgress(event)
