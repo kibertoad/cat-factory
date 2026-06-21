@@ -14,7 +14,11 @@ import {
   inlineWebSearchOptionsFromEnv,
   resolveAgentConfig,
 } from '@cat-factory/agents'
-import { RunnerPoolConnectionService, TicketTrackerService } from '@cat-factory/integrations'
+import {
+  ProviderSubscriptionService,
+  RunnerPoolConnectionService,
+  TicketTrackerService,
+} from '@cat-factory/integrations'
 import { type CoreDependencies, createCore } from '@cat-factory/orchestration'
 import {
   buildResolveRepoTarget as buildSharedResolveRepoTarget,
@@ -40,6 +44,7 @@ import { D1LiveContainerRepository } from './repositories/D1LiveContainerReposit
 import { HttpRunnerPoolProvider } from './runners/HttpRunnerPoolProvider'
 import { RunnerPoolTransport } from './runners/RunnerPoolTransport'
 import { D1RunnerPoolConnectionRepository } from './repositories/D1RunnerPoolConnectionRepository'
+import { D1ProviderSubscriptionTokenRepository } from './repositories/D1ProviderSubscriptionTokenRepository'
 import { ContainerRepoBootstrapper } from './ai/ContainerRepoBootstrapper'
 import { ContainerRepoScanner } from './ai/ContainerRepoScanner'
 import { CompositeAgentExecutor } from './ai/CompositeAgentExecutor'
@@ -434,6 +439,30 @@ function selectRecurringDeps(
   }
 }
 
+/**
+ * Build the workspace subscription-token pool service (Claude Code / Codex
+ * credentials), or undefined when the shared ENCRYPTION_KEY is absent. Tokens are
+ * sealed under a subscriptions-scoped HKDF info of the shared master key.
+ */
+function buildSubscriptionService(
+  env: Env,
+  db: D1Database,
+  clock: Clock,
+): ProviderSubscriptionService | undefined {
+  const masterKeyBase64 = env.ENCRYPTION_KEY?.trim()
+  if (!masterKeyBase64) return undefined
+  return new ProviderSubscriptionService({
+    providerSubscriptionTokenRepository: new D1ProviderSubscriptionTokenRepository({ db }),
+    workspaceRepository: new D1WorkspaceRepository({ db }),
+    secretCipher: new WebCryptoSecretCipher({
+      masterKeyBase64,
+      info: 'cat-factory:provider-subscriptions',
+    }),
+    idGenerator: new CryptoIdGenerator(),
+    clock,
+  })
+}
+
 function buildContainerExecutor(
   env: Env,
   config: AppConfig,
@@ -454,6 +483,7 @@ function buildContainerExecutor(
 
   const registry = buildAppRegistry(env, config, db, clock)
   const resolveRepoTarget = buildResolveRepoTarget(db)
+  const subscriptions = buildSubscriptionService(env, db, clock)
 
   return new ContainerAgentExecutor({
     resolveTransport,
@@ -465,6 +495,19 @@ function buildContainerExecutor(
     resolveRepoTarget,
     mintInstallationToken: (id) => registry.installationToken(id),
     sessionService: new ContainerSessionService({ secret: env.AUTH_SESSION_SECRET }),
+    // The subscription harnesses (Claude Code / Codex) lease a pooled token and
+    // attribute usage back for usage-aware rotation; absent ⇒ those harnesses are
+    // unavailable and a subscription-only model fails loudly at dispatch.
+    ...(subscriptions
+      ? {
+          leaseSubscriptionToken: (workspaceId, vendor) =>
+            subscriptions.leaseToken(workspaceId, vendor),
+          recordSubscriptionUsage: (tokenId, usage) =>
+            subscriptions.recordTokenUsage(tokenId, usage),
+          hasSubscriptionToken: (workspaceId, vendor) =>
+            subscriptions.hasToken(workspaceId, vendor),
+        }
+      : {}),
     proxyBaseUrl: `${env.WORKER_PUBLIC_URL.replace(/\/+$/, '')}/v1`,
     // Point container agents' web search at the backend search proxy (no provider key
     // in the sandbox) whenever an upstream is configured for this deployment.
@@ -926,6 +969,9 @@ export function buildContainer(env: Env, overrides: Partial<CoreDependencies> = 
     ...createCore(dependencies),
     config,
     agentRunRepository: new D1AgentRunRepository({ db }),
+    // The vendor-credential (subscription token pool) service the shared controller
+    // reads; present when the shared ENCRYPTION_KEY is configured.
+    subscriptions: buildSubscriptionService(env, db, clock),
     gateways: {
       // Real-time event delivery via the per-workspace WorkspaceEventsHub DO (when
       // the WORKSPACE_EVENTS namespace is bound; absent → the events route 501s).

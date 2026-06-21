@@ -65,7 +65,8 @@ const durationMs = computed(() => {
   // Freeze the clock at the failure time once the run has failed (a mid-flight
   // step has no `finishedAt`, so the live tick would otherwise count up forever).
   const end =
-    s.finishedAt ?? (runFailed.value ? (instance.value?.failure?.occurredAt ?? s.startedAt) : nowTick.value)
+    s.finishedAt ??
+    (runFailed.value ? (instance.value?.failure?.occurredAt ?? s.startedAt) : nowTick.value)
   return Math.max(0, end - s.startedAt)
 })
 

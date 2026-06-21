@@ -20,11 +20,16 @@ export {
 export {
   type SelectableModel,
   type ModelVariant,
+  type SubscriptionVariant,
+  type SubscriptionVendorConfig,
   type DirectKeyAvailable,
+  type ModelCostResolver,
   MODEL_CATALOG,
+  SUBSCRIPTION_VENDORS,
   getSelectableModel,
   effectiveCatalog,
   resolveModelRef,
+  subscriptionOptionFor,
 } from './domain/models.js'
 export {
   seedBlocks,

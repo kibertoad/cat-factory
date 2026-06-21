@@ -1,6 +1,6 @@
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
-import type { RepoSpec } from './job.js'
+import type { HarnessAuthFields, RepoSpec } from './job.js'
 import {
   branchHasCommitsSince,
   cloneExistingBranch,
@@ -33,7 +33,7 @@ import { log } from './logger.js'
 // GitHub + proxy tokens arrive in the spec and live only for the job's duration.
 
 /** What a coding agent run needs: where to clone, what to run, where to push. */
-export interface CodingAgentSpec {
+export interface CodingAgentSpec extends HarnessAuthFields {
   /** Short label for the temp dir + log lines (e.g. 'impl', 'ci-fix'). */
   kind: string
   /** The job id, threaded into every log line for end-to-end tracing. */
@@ -51,8 +51,6 @@ export interface CodingAgentSpec {
   /** The concrete task prompt handed to Pi. */
   userPrompt: string
   model: string
-  proxyBaseUrl: string
-  sessionToken: string
   /** Commit message for any work the agent left uncommitted. */
   commitMessage: string
   /** Per-kind web-search guidance (backend-composed); surfaced only when web search is on. */
@@ -70,6 +68,8 @@ export interface CodingAgentOutcome {
   summary: string
   stats: PiRunStats
   stderrTail?: string
+  /** Token usage from a subscription harness's CLI stream (absent for Pi). */
+  usage?: { inputTokens: number; outputTokens: number }
 }
 
 /**
@@ -228,12 +228,15 @@ export async function runCodingAgent(
     let outcome: CodingAgentOutcome
     try {
       log.info('coding-agent: running agent', { ...trace, serviceDirectory })
-      const { summary, stats, stderrTail } = await runAgentInWorkspace(
+      const { summary, stats, stderrTail, usage } = await runAgentInWorkspace(
         {
           dir: workDir,
           systemPrompt: spec.systemPrompt,
           userPrompt: spec.userPrompt,
           model: spec.model,
+          harness: spec.harness,
+          subscriptionToken: spec.subscriptionToken,
+          subscriptionBaseUrl: spec.subscriptionBaseUrl,
           proxyBaseUrl: spec.proxyBaseUrl,
           sessionToken: spec.sessionToken,
           serviceDirectory,
@@ -270,11 +273,25 @@ export async function runCodingAgent(
       const hasWork = resumed || (await branchHasCommitsSince(dir, baseSha, signal))
       if (!hasWork) {
         log.info('coding-agent: no changes produced', { ...trace, ...stats })
-        outcome = { pushed: false, resumed, summary, stats, ...(stderrTail ? { stderrTail } : {}) }
+        outcome = {
+          pushed: false,
+          resumed,
+          summary,
+          stats,
+          ...(stderrTail ? { stderrTail } : {}),
+          ...(usage ? { usage } : {}),
+        }
       } else {
         log.info('coding-agent: pushing', { ...trace, resumed, ...stats })
         await pushWorkOnce()
-        outcome = { pushed: true, resumed, summary, stats, ...(stderrTail ? { stderrTail } : {}) }
+        outcome = {
+          pushed: true,
+          resumed,
+          summary,
+          stats,
+          ...(stderrTail ? { stderrTail } : {}),
+          ...(usage ? { usage } : {}),
+        }
       }
     } finally {
       // Safety net for the throw path (the happy path already cleared it above).

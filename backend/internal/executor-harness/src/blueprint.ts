@@ -373,6 +373,9 @@ export async function handleBlueprint(
         systemPrompt: job.systemPrompt,
         userPrompt: buildUserPrompt(job, existing),
         model: job.model,
+        harness: job.harness,
+        subscriptionToken: job.subscriptionToken,
+        subscriptionBaseUrl: job.subscriptionBaseUrl,
         proxyBaseUrl: job.proxyBaseUrl,
         sessionToken: job.sessionToken,
         // The Blueprinter explores the repo and RETURNS the service tree as JSON —
@@ -396,6 +399,9 @@ export async function handleBlueprint(
       },
       summary,
       {
+        harness: job.harness,
+        subscriptionToken: job.subscriptionToken,
+        subscriptionBaseUrl: job.subscriptionBaseUrl,
         proxyBaseUrl: job.proxyBaseUrl,
         sessionToken: job.sessionToken,
         model: job.model,

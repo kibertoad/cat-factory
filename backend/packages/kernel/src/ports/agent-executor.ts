@@ -223,6 +223,12 @@ export interface AgentJobHandle {
    * Containers — can resolve the same backend when polling, given only the job id.
    */
   workspaceId?: string
+  /**
+   * For a subscription-harness job, the id of the pooled token leased for it, so
+   * the poll site can attribute the run's usage back to the right pool row
+   * (usage-aware rotation). Absent for proxy-metered Pi jobs.
+   */
+  subscriptionTokenId?: string
 }
 
 /** The outcome of polling an {@link AgentJobHandle}. */

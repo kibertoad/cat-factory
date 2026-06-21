@@ -1,6 +1,67 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { ModelOption } from '~/types/domain'
+import type { ModelCost, ModelOption, SubscriptionVendor } from '~/types/domain'
+
+/** The flavour of a model to actually display/run, given configured subscriptions. */
+export interface DisplayFlavor {
+  providerLabel: string
+  provider: string
+  model: string
+  contextTokens?: number
+  cost?: ModelCost
+  /** True ⇒ flat-rate quota; its cost is a quota burn rate, not budget spend. */
+  quotaBased: boolean
+  vendor?: SubscriptionVendor
+}
+
+/**
+ * The flavour a model resolves to in the picker given the workspace's configured
+ * subscription vendors. A dual-mode model (GLM/Kimi) collapses to its subscription
+ * flavour once that vendor is connected ("subscriptions always win"); otherwise the
+ * base (cloudflare/direct, or the subscription itself for subscription-only models).
+ */
+export function displayFlavor(m: ModelOption, configured: Set<SubscriptionVendor>): DisplayFlavor {
+  if (m.subscription && configured.has(m.subscription.vendor)) {
+    return {
+      providerLabel: m.subscription.providerLabel,
+      provider: m.subscription.provider,
+      model: m.subscription.model,
+      contextTokens: m.subscription.contextTokens,
+      cost: m.subscription.cost,
+      quotaBased: true,
+      vendor: m.subscription.vendor,
+    }
+  }
+  return {
+    providerLabel: m.providerLabel,
+    provider: m.provider,
+    model: m.model,
+    contextTokens: m.contextTokens,
+    cost: m.cost,
+    quotaBased: m.quotaBased ?? false,
+    vendor: m.vendor,
+  }
+}
+
+/** A model is selectable unless it's subscription-only with no connected vendor token. */
+export function isSelectable(m: ModelOption, configured: Set<SubscriptionVendor>): boolean {
+  if (m.flavor === 'subscription' && m.vendor) return configured.has(m.vendor)
+  return true
+}
+
+/** Compact context-window label, e.g. `200K`. */
+export function contextLabel(tokens: number | undefined): string | undefined {
+  if (!tokens) return undefined
+  return tokens >= 1000 ? `${Math.round(tokens / 1000)}K` : `${tokens}`
+}
+
+/** One-line cost/quota suffix for the picker. */
+export function costLabel(flavor: DisplayFlavor): string | undefined {
+  if (!flavor.cost) return undefined
+  const { inputPerMillion, outputPerMillion, currency } = flavor.cost
+  const body = `${inputPerMillion}/${outputPerMillion} ${currency} per Mtok`
+  return flavor.quotaBased ? `quota burn ~${body}` : body
+}
 
 /**
  * The model picker catalog. Served by `GET /models`, where each model is already

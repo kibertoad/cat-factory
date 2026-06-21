@@ -601,6 +601,9 @@ export async function handleRequirements(
         systemPrompt: job.systemPrompt,
         userPrompt: buildUserPrompt(job, existing),
         model: job.model,
+        harness: job.harness,
+        subscriptionToken: job.subscriptionToken,
+        subscriptionBaseUrl: job.subscriptionBaseUrl,
         proxyBaseUrl: job.proxyBaseUrl,
         sessionToken: job.sessionToken,
         // The agent RETURNS the requirements document as JSON — the harness renders
@@ -622,6 +625,9 @@ export async function handleRequirements(
       },
       summary,
       {
+        harness: job.harness,
+        subscriptionToken: job.subscriptionToken,
+        subscriptionBaseUrl: job.subscriptionBaseUrl,
         proxyBaseUrl: job.proxyBaseUrl,
         sessionToken: job.sessionToken,
         model: job.model,
@@ -630,7 +636,11 @@ export async function handleRequirements(
       },
     )
     if (!doc) {
-      return { summary, stats, error: noRequirementsReason(stats, summary, stderrTail, diagnostics) }
+      return {
+        summary,
+        stats,
+        error: noRequirementsReason(stats, summary, stderrTail, diagnostics),
+      }
     }
 
     const version = nextRequirementsVersion(doc, previousVersion, new Date())

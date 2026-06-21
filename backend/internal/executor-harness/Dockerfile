@@ -60,11 +60,19 @@ RUN groupadd --system harness \
 # Pi is pinned to an exact version so the image is reproducible and a bad upstream
 # release can't silently break a build — bump deliberately. node:26 is well past
 # Pi's `legacy-node20` floor, so the default `latest` line applies.
+# In addition to Pi, the image bundles the two SUBSCRIPTION harnesses — Claude
+# Code and Codex — selected per job by the `harness` field of the job body. They
+# carry no credentials either: a leased subscription OAuth token (Claude) /
+# auth.json bundle (Codex) is handed over per job and the CLI talks DIRECT to the
+# vendor (no proxy). All three pinned to exact versions for reproducibility — bump
+# deliberately, and bump the image tag (see CONTRIBUTING / CLAUDE.md) when you do.
 ARG PI_VERSION=0.79.8
+ARG CLAUDE_CODE_VERSION=2.0.30
+ARG CODEX_VERSION=0.47.0
 RUN --mount=type=secret,id=extra_ca,target=/tmp/extra_ca.crt \
     sh -eu -c 'apt-get update && apt-get install -y --no-install-recommends git ca-certificates && rm -rf /var/lib/apt/lists/*; \
     if [ -s /tmp/extra_ca.crt ]; then export NODE_EXTRA_CA_CERTS=/tmp/extra_ca.crt; fi; \
-    npm install -g --ignore-scripts "@earendil-works/pi-coding-agent@${PI_VERSION}"; \
+    npm install -g --ignore-scripts "@earendil-works/pi-coding-agent@${PI_VERSION}" "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}" "@openai/codex@${CODEX_VERSION}"; \
     git config --system --add safe.directory "*"'
 
 WORKDIR /app

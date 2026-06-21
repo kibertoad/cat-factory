@@ -1,9 +1,33 @@
 import type { PiRunStats } from './pi.js'
+import type { HarnessKind } from './pi-workspace.js'
 
 // The job the Worker's ContainerAgentExecutor POSTs to /run. Kept as plain
 // types with a hand-rolled validator so the image needs no schema dependency.
-// `ghToken` and `sessionToken` are secrets: they are consumed (moved into env /
-// git config) and never logged.
+// `ghToken`, `sessionToken` and `subscriptionToken` are secrets: they are
+// consumed (moved into env / git config) and never logged.
+
+/**
+ * Per-job auth fields, shared across every job shape. The Pi harness carries the
+ * proxy base URL + a model-locked session token; the subscription harnesses
+ * (Claude Code / Codex) carry a leased subscription token instead and talk direct
+ * to the vendor. `harness` selects which; absent ⇒ Pi.
+ */
+export interface HarnessAuthFields {
+  harness?: HarnessKind
+  /** Worker LLM proxy base URL, including /v1 (Pi harness only). */
+  proxyBaseUrl?: string
+  /** Signed, model-locked proxy session token (Pi harness only). */
+  sessionToken?: string
+  /** Leased subscription credential (Claude Code OAuth token / Codex auth.json). */
+  subscriptionToken?: string
+  /**
+   * Anthropic-compatible base URL for a non-Anthropic Claude-Code vendor (GLM via
+   * Z.ai, Kimi via Moonshot). Present ⇒ the claude-code runner points
+   * ANTHROPIC_BASE_URL there with ANTHROPIC_AUTH_TOKEN; absent ⇒ Anthropic itself
+   * (CLAUDE_CODE_OAUTH_TOKEN against api.anthropic.com).
+   */
+  subscriptionBaseUrl?: string
+}
 
 export interface RepoSpec {
   owner: string
@@ -23,7 +47,7 @@ export interface PrSpec {
   body: string
 }
 
-export interface Job {
+export interface Job extends HarnessAuthFields {
   /**
    * Stable identifier for this run's job, supplied by the Worker (the execution
    * id). The harness keys the background job on it so a re-dispatched `/run`
@@ -38,9 +62,9 @@ export interface Job {
   /** Upstream model id Pi should request (the proxy locks it anyway). */
   model: string
   /** Worker LLM proxy base URL, including /v1. */
-  proxyBaseUrl: string
+  proxyBaseUrl?: string
   /** Signed, model-locked proxy session token (carries no provider key). */
-  sessionToken: string
+  sessionToken?: string
   /** Short-lived GitHub installation token for clone + PR. */
   ghToken: string
   repo: RepoSpec
@@ -74,6 +98,12 @@ export interface RunResult {
   /** What the agent actually did this run (surfaces no-op runs on the job view). */
   stats?: PiRunStats
   error?: string
+  /**
+   * Token usage from a subscription harness's CLI stream (absent for the
+   * proxy-metered Pi harness). The backend folds it into the leased token's
+   * rolling-window usage for usage-aware rotation + telemetry.
+   */
+  usage?: { inputTokens: number; outputTokens: number }
 }
 
 function str(value: unknown, path: string): string {
@@ -81,6 +111,32 @@ function str(value: unknown, path: string): string {
     throw new Error(`Invalid job: '${path}' must be a non-empty string`)
   }
   return value
+}
+
+/**
+ * Parse the shared per-job auth fields, validating per harness: a subscription
+ * harness (`claude-code` / `codex`) requires `subscriptionToken`; the default Pi
+ * harness requires `proxyBaseUrl` + `sessionToken`.
+ */
+function parseHarnessAuth(o: Record<string, unknown>): HarnessAuthFields {
+  const harness =
+    o.harness === 'claude-code' || o.harness === 'codex' || o.harness === 'pi'
+      ? (o.harness as HarnessKind)
+      : undefined
+  if (harness === 'claude-code' || harness === 'codex') {
+    return {
+      harness,
+      subscriptionToken: str(o.subscriptionToken, 'subscriptionToken'),
+      ...(typeof o.subscriptionBaseUrl === 'string' && o.subscriptionBaseUrl
+        ? { subscriptionBaseUrl: o.subscriptionBaseUrl }
+        : {}),
+    }
+  }
+  return {
+    harness,
+    proxyBaseUrl: str(o.proxyBaseUrl, 'proxyBaseUrl'),
+    sessionToken: str(o.sessionToken, 'sessionToken'),
+  }
 }
 
 /**
@@ -183,7 +239,7 @@ export interface BootstrapTargetSpec {
 }
 
 /** The job the Worker's ContainerRepoBootstrapper POSTs to /bootstrap. */
-export interface BootstrapJob {
+export interface BootstrapJob extends HarnessAuthFields {
   /**
    * Stable identifier for this run's job, supplied by the Worker (the bootstrap
    * job id). The harness keys the background job on it so a re-dispatched
@@ -196,8 +252,8 @@ export interface BootstrapJob {
   /** Free-form instructions handed to Pi as the task prompt. */
   instructions: string
   model: string
-  proxyBaseUrl: string
-  sessionToken: string
+  proxyBaseUrl?: string
+  sessionToken?: string
   ghToken: string
   /** Reference architecture to clone + adapt; omitted for a from-scratch scaffold. */
   reference?: BootstrapReferenceSpec
@@ -240,8 +296,7 @@ export function parseBootstrapJob(input: unknown): BootstrapJob {
     systemPrompt: str(o.systemPrompt, 'systemPrompt'),
     instructions: str(o.instructions, 'instructions'),
     model: str(o.model, 'model'),
-    proxyBaseUrl: str(o.proxyBaseUrl, 'proxyBaseUrl'),
-    sessionToken: str(o.sessionToken, 'sessionToken'),
+    ...parseHarnessAuth(o),
     ghToken: str(o.ghToken, 'ghToken'),
     ...(reference ? { reference } : {}),
     target: {
@@ -273,7 +328,7 @@ export type BlueprintMode = 'create' | 'update'
  * force-pushes: it adds one commit to an existing branch (the repo's default
  * branch after a bootstrap, or the implementation step's PR branch in a pipeline).
  */
-export interface BlueprintJob {
+export interface BlueprintJob extends HarnessAuthFields {
   /** Stable job id (the blueprint run id); keys the background job + poll endpoint. */
   jobId: string
   /** Blueprinter role prompt; written to Pi's global AGENTS.md context. */
@@ -281,8 +336,8 @@ export interface BlueprintJob {
   /** Free-form guidance handed to Pi as the task prompt (focus areas, granularity). */
   instructions: string
   model: string
-  proxyBaseUrl: string
-  sessionToken: string
+  proxyBaseUrl?: string
+  sessionToken?: string
   ghToken: string
   repo: RepoSpec
   /** Branch to clone and commit the regenerated blueprint onto. */
@@ -314,8 +369,7 @@ export function parseBlueprintJob(input: unknown): BlueprintJob {
     systemPrompt: str(o.systemPrompt, 'systemPrompt'),
     instructions: str(o.instructions, 'instructions'),
     model: str(o.model, 'model'),
-    proxyBaseUrl: str(o.proxyBaseUrl, 'proxyBaseUrl'),
-    sessionToken: str(o.sessionToken, 'sessionToken'),
+    ...parseHarnessAuth(o),
     ghToken: str(o.ghToken, 'ghToken'),
     repo: parseRepoSpec(repo),
     branch: str(o.branch, 'branch'),
@@ -349,7 +403,7 @@ export interface RequirementsTaskContext {
  * `features/*.feature` files) and commits it onto `branch`. Like the blueprint it
  * adds one commit to a branch — it never resets history or force-pushes.
  */
-export interface RequirementsJob {
+export interface RequirementsJob extends HarnessAuthFields {
   /** Stable job id (the execution id); keys the background job + poll endpoint. */
   jobId: string
   /** Requirements-writer role prompt; written to Pi's global AGENTS.md context. */
@@ -357,8 +411,8 @@ export interface RequirementsJob {
   /** Free-form guidance handed to Pi as the task prompt. */
   instructions: string
   model: string
-  proxyBaseUrl: string
-  sessionToken: string
+  proxyBaseUrl?: string
+  sessionToken?: string
   ghToken: string
   repo: RepoSpec
   /** Branch to clone (or create from base) and commit the requirements onto. */
@@ -401,8 +455,7 @@ export function parseRequirementsJob(input: unknown): RequirementsJob {
     systemPrompt: str(o.systemPrompt, 'systemPrompt'),
     instructions: str(o.instructions, 'instructions'),
     model: str(o.model, 'model'),
-    proxyBaseUrl: str(o.proxyBaseUrl, 'proxyBaseUrl'),
-    sessionToken: str(o.sessionToken, 'sessionToken'),
+    ...parseHarnessAuth(o),
     ghToken: str(o.ghToken, 'ghToken'),
     repo: parseRepoSpec(repo),
     branch: str(o.branch, 'branch'),
@@ -422,13 +475,13 @@ export function parseRequirementsJob(input: unknown): RequirementsJob {
  * them and pushes back onto the SAME branch (no new branch, no new PR) so CI
  * re-runs. The failing-check summary is folded into `userPrompt` by the Worker.
  */
-export interface CiFixerJob {
+export interface CiFixerJob extends HarnessAuthFields {
   jobId: string
   systemPrompt: string
   userPrompt: string
   model: string
-  proxyBaseUrl: string
-  sessionToken: string
+  proxyBaseUrl?: string
+  sessionToken?: string
   ghToken: string
   repo: RepoSpec
   /** The PR head branch to clone and push fixes onto. */
@@ -460,8 +513,7 @@ export function parseCiFixerJob(input: unknown): CiFixerJob {
     systemPrompt: str(o.systemPrompt, 'systemPrompt'),
     userPrompt: str(o.userPrompt, 'userPrompt'),
     model: str(o.model, 'model'),
-    proxyBaseUrl: str(o.proxyBaseUrl, 'proxyBaseUrl'),
-    sessionToken: str(o.sessionToken, 'sessionToken'),
+    ...parseHarnessAuth(o),
     ghToken: str(o.ghToken, 'ghToken'),
     repo: parseRepoSpec(repo),
     branch: str(o.branch, 'branch'),
@@ -484,13 +536,13 @@ export function parseCiFixerJob(input: unknown): CiFixerJob {
  * onto the SAME branch (no new branch / PR) so the PR becomes mergeable and CI
  * re-runs. Like the CI-fixer it works on the existing PR branch in place.
  */
-export interface ConflictResolverJob {
+export interface ConflictResolverJob extends HarnessAuthFields {
   jobId: string
   systemPrompt: string
   userPrompt: string
   model: string
-  proxyBaseUrl: string
-  sessionToken: string
+  proxyBaseUrl?: string
+  sessionToken?: string
   ghToken: string
   repo: RepoSpec
   /** The PR head branch to clone, merge the base into, and push the resolution onto. */
@@ -518,8 +570,7 @@ export function parseConflictResolverJob(input: unknown): ConflictResolverJob {
     systemPrompt: str(o.systemPrompt, 'systemPrompt'),
     userPrompt: str(o.userPrompt, 'userPrompt'),
     model: str(o.model, 'model'),
-    proxyBaseUrl: str(o.proxyBaseUrl, 'proxyBaseUrl'),
-    sessionToken: str(o.sessionToken, 'sessionToken'),
+    ...parseHarnessAuth(o),
     ghToken: str(o.ghToken, 'ghToken'),
     repo: parseRepoSpec(repo),
     branch: str(o.branch, 'branch'),
@@ -538,13 +589,13 @@ export function parseConflictResolverJob(input: unknown): ConflictResolverJob {
  * / impact) and returns ONLY a JSON assessment — it makes NO commits (the Worker
  * performs the real merge through the GitHub API on the engine's verdict).
  */
-export interface MergerJob {
+export interface MergerJob extends HarnessAuthFields {
   jobId: string
   systemPrompt: string
   instructions: string
   model: string
-  proxyBaseUrl: string
-  sessionToken: string
+  proxyBaseUrl?: string
+  sessionToken?: string
   ghToken: string
   repo: RepoSpec
   /** The PR head branch to clone and assess against the base branch. */
@@ -574,8 +625,7 @@ export function parseMergerJob(input: unknown): MergerJob {
     systemPrompt: str(o.systemPrompt, 'systemPrompt'),
     instructions: str(o.instructions, 'instructions'),
     model: str(o.model, 'model'),
-    proxyBaseUrl: str(o.proxyBaseUrl, 'proxyBaseUrl'),
-    sessionToken: str(o.sessionToken, 'sessionToken'),
+    ...parseHarnessAuth(o),
     ghToken: str(o.ghToken, 'ghToken'),
     repo: parseRepoSpec(repo),
     branch: str(o.branch, 'branch'),
@@ -600,8 +650,7 @@ export function parseJob(input: unknown): Job {
     systemPrompt: str(o.systemPrompt, 'systemPrompt'),
     userPrompt: str(o.userPrompt, 'userPrompt'),
     model: str(o.model, 'model'),
-    proxyBaseUrl: str(o.proxyBaseUrl, 'proxyBaseUrl'),
-    sessionToken: str(o.sessionToken, 'sessionToken'),
+    ...parseHarnessAuth(o),
     ghToken: str(o.ghToken, 'ghToken'),
     repo: parseRepoSpec(repo),
     headBranch: str(o.headBranch, 'headBranch'),

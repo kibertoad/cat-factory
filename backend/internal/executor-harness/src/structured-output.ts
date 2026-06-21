@@ -53,11 +53,17 @@ export interface StructuredOutputSpec<T> {
 
 /** Runtime wiring to reach the LLM proxy for the repair call. */
 export interface ProxyAccess {
-  proxyBaseUrl: string
-  sessionToken: string
+  /** Pi-harness proxy base URL; absent for subscription harnesses (no proxy repair). */
+  proxyBaseUrl?: string
+  /** Pi-harness proxy session token; absent for subscription harnesses. */
+  sessionToken?: string
   model: string
   jobId: string
   signal?: AbortSignal
+  /** Carried for context (the subscription harnesses can't use the proxy for repair). */
+  harness?: string
+  subscriptionToken?: string
+  subscriptionBaseUrl?: string
 }
 
 /** Structured diagnostics for a resolution attempt, surfaced to logs + the failure reason. */
@@ -163,6 +169,23 @@ export async function resolveStructuredOutput<T>(
     }
   }
 
+  // A subscription harness (Claude Code / Codex) has no LLM proxy to call for a
+  // repair pass, so a malformed primary reply can't be repaired — surface it as an
+  // unrepaired failure rather than crashing.
+  if (!access.proxyBaseUrl || !access.sessionToken) {
+    return {
+      value: null,
+      diagnostics: {
+        parsedOn: 'none',
+        primaryChars,
+        looksDoubled: looksTokenDoubled(primaryText).doubled,
+        repairAttempted: false,
+        repairSucceeded: false,
+        repairError: 'structured-output repair unavailable for the subscription harness (no proxy)',
+      },
+    }
+  }
+
   // Primary failed: label the corruption (doubling is the known reasoning-model
   // streaming bug) and record the event before spending a repair call.
   const doubled = looksTokenDoubled(primaryText)
@@ -228,6 +251,10 @@ async function callRepair<T>(
   spec: StructuredOutputSpec<T>,
   access: ProxyAccess,
 ): Promise<string> {
+  // Only ever called after the caller verified the proxy is present (Pi harness).
+  if (!access.proxyBaseUrl || !access.sessionToken) {
+    throw new Error('structured-output repair requires the LLM proxy (Pi harness)')
+  }
   const url = `${access.proxyBaseUrl.replace(/\/+$/, '')}/chat/completions`
   const messages = [
     { role: 'system', content: REPAIR_SYSTEM },

@@ -92,6 +92,9 @@ export async function handleMerger(job: MergerJob, opts: RunOptions = {}): Promi
         systemPrompt: job.systemPrompt,
         userPrompt: buildUserPrompt(job),
         model: job.model,
+        harness: job.harness,
+        subscriptionToken: job.subscriptionToken,
+        subscriptionBaseUrl: job.subscriptionBaseUrl,
         proxyBaseUrl: job.proxyBaseUrl,
         sessionToken: job.sessionToken,
         // The merger only assesses (no commits/edits), so the no-edit guard must
@@ -113,6 +116,9 @@ export async function handleMerger(job: MergerJob, opts: RunOptions = {}): Promi
       },
       summary,
       {
+        harness: job.harness,
+        subscriptionToken: job.subscriptionToken,
+        subscriptionBaseUrl: job.subscriptionBaseUrl,
         proxyBaseUrl: job.proxyBaseUrl,
         sessionToken: job.sessionToken,
         model: job.model,

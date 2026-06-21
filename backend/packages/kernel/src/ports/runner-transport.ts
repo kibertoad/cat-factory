@@ -34,6 +34,14 @@ export interface RunnerJobResult {
    * `/resolve-conflicts` endpoint's product). `false` means conflicts remain.
    */
   resolved?: boolean
+  /**
+   * Token usage the harness lifted from the agent CLI's own event stream. Reported
+   * by the subscription harnesses (Claude Code / Codex), whose traffic bypasses the
+   * LLM proxy — so this is the only usage signal for them. The dispatch path folds
+   * it into the leased subscription token's rolling-window counters (usage-aware
+   * rotation) and the telemetry sink. Absent for the proxy-metered Pi harness.
+   */
+  usage?: { inputTokens: number; outputTokens: number }
 }
 
 /**

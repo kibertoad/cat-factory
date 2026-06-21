@@ -25,6 +25,7 @@ import { trackerSettingsController } from './modules/recurring/TrackerSettingsCo
 import { requirementReviewController } from './modules/requirements/RequirementReviewController.js'
 import { webSearchProxyController } from './modules/webSearch/WebSearchProxyController.js'
 import { runnerPoolController } from './modules/runners/RunnerPoolController.js'
+import { vendorCredentialController } from './modules/providers/VendorCredentialController.js'
 import { serviceMountController } from './modules/services/ServiceMountController.js'
 import { taskSourceController } from './modules/tasks/TaskSourceController.js'
 import { workspaceController } from './modules/workspaces/WorkspaceController.js'
@@ -66,6 +67,7 @@ export function registerCoreControllers<E extends AppEnv>(app: Hono<E>): void {
   app.route('/workspaces/:workspaceId', taskSourceController())
   app.route('/workspaces/:workspaceId', environmentController())
   app.route('/workspaces/:workspaceId', runnerPoolController())
+  app.route('/workspaces/:workspaceId', vendorCredentialController())
   app.route('/workspaces/:workspaceId', bootstrapController())
   app.route('/workspaces/:workspaceId', agentRunController())
   app.route('/workspaces/:workspaceId', boardScanController())

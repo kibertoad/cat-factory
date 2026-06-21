@@ -1,4 +1,5 @@
 import * as v from 'valibot'
+import { subscriptionVendorSchema } from './vendor-credentials.js'
 import {
   agentKindSchema,
   agentStateSchema,
@@ -146,11 +147,24 @@ export type PromptFragment = v.InferOutput<typeof promptFragmentSchema>
 export const promptFragmentCatalogSchema = v.array(promptFragmentSchema)
 export type PromptFragmentCatalog = v.InferOutput<typeof promptFragmentCatalogSchema>
 
+/** Informational list price for a model, surfaced in the picker. */
+export const modelCostSchema = v.object({
+  /** List price per 1M input tokens. */
+  inputPerMillion: v.number(),
+  /** List price per 1M output tokens. */
+  outputPerMillion: v.number(),
+  /** ISO 4217 currency the prices are expressed in (e.g. `EUR`). */
+  currency: v.string(),
+})
+export type ModelCost = v.InferOutput<typeof modelCostSchema>
+
 /**
  * A selectable LLM model, resolved to the flavour actually in use for this
  * deployment (`GET /models`). `flavor` is `direct` when the model's own provider
- * API key is configured, else `cloudflare`. `provider`/`model` are the effective
- * {@link ModelRef} parts the agent will run with; the picker stores only `id`.
+ * API key is configured, `cloudflare` for the Workers AI fallback, or
+ * `subscription` for a Claude Code / Codex model run via a stored subscription
+ * token. `provider`/`model` are the effective {@link ModelRef} parts the agent
+ * will run with; the picker stores only `id`.
  */
 export const modelOptionSchema = v.object({
   /** Stable id persisted on a block (`Block.modelId`). */
@@ -160,13 +174,45 @@ export const modelOptionSchema = v.object({
   /** One-line description shown in the picker. */
   description: v.string(),
   /** Which flavour is active for this deployment. */
-  flavor: v.picklist(['cloudflare', 'direct']),
+  flavor: v.picklist(['cloudflare', 'direct', 'subscription']),
   /** Short provider label for the active flavour, e.g. `Cloudflare`, `DashScope`. */
   providerLabel: v.string(),
   /** Effective provider id the agent runs with. */
   provider: v.string(),
   /** Effective model id within the provider. */
   model: v.string(),
+  /**
+   * For a `subscription` model, the vendor whose pooled token authenticates it;
+   * the frontend enables the option only when the workspace has a token for it.
+   */
+  vendor: v.optional(subscriptionVendorSchema),
+  /** Informational list price for the model, when known. */
+  cost: v.optional(modelCostSchema),
+  /** The model's context window at the effective provider, when known. */
+  contextTokens: v.optional(v.number()),
+  /**
+   * True when the effective flavour runs on a flat-rate subscription. Its `cost`
+   * is illustrative of quota burn rate only — quota-based usage does NOT draw on
+   * the monetary spend budget.
+   */
+  quotaBased: v.optional(v.boolean()),
+  /**
+   * An alternative subscription flavour for a model that ALSO has a Cloudflare /
+   * direct base (e.g. GLM-5.2, Kimi). The frontend renders ONLY this flavour when
+   * the workspace has a token for `vendor` (hiding the base), and the executor
+   * always prefers it at dispatch. Absent for subscription-only models (whose base
+   * IS the subscription) and for models with no subscription path.
+   */
+  subscription: v.optional(
+    v.object({
+      vendor: subscriptionVendorSchema,
+      providerLabel: v.string(),
+      provider: v.string(),
+      model: v.string(),
+      cost: v.optional(modelCostSchema),
+      contextTokens: v.optional(v.number()),
+    }),
+  ),
 })
 export type ModelOption = v.InferOutput<typeof modelOptionSchema>
 

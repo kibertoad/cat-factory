@@ -25,7 +25,7 @@ export interface RunOptions {
 
 /** Run one implementation job end to end: clone → Pi implements → push → PR. */
 export async function handleRun(job: Job, opts: RunOptions = {}): Promise<RunResult> {
-  const { summary, stats, stderrTail, pushed, resumed } = await runCodingAgent(
+  const { summary, stats, stderrTail, pushed, resumed, usage } = await runCodingAgent(
     {
       kind: 'impl',
       jobId: job.jobId,
@@ -38,6 +38,9 @@ export async function handleRun(job: Job, opts: RunOptions = {}): Promise<RunRes
       systemPrompt: job.systemPrompt,
       userPrompt: job.userPrompt,
       model: job.model,
+      harness: job.harness,
+      subscriptionToken: job.subscriptionToken,
+      subscriptionBaseUrl: job.subscriptionBaseUrl,
       proxyBaseUrl: job.proxyBaseUrl,
       sessionToken: job.sessionToken,
       commitMessage: job.pr.title,
@@ -75,7 +78,7 @@ export async function handleRun(job: Job, opts: RunOptions = {}): Promise<RunRes
     apiBase: job.githubApiBase,
     signal: opts.signal,
   })
-  return { prUrl, branch: job.headBranch, summary, stats }
+  return { prUrl, branch: job.headBranch, summary, stats, ...(usage ? { usage } : {}) }
 }
 
 export type JobState = 'running' | 'done' | 'failed'
