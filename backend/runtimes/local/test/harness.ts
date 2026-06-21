@@ -4,8 +4,15 @@ import {
   FakeAgentExecutor,
   type FakeAgentOptions,
   RecordingEventPublisher,
+  makeIncorporatedReview,
 } from '@cat-factory/conformance'
-import { type DrizzleDb, createApp, createDbClient, migrate } from '@cat-factory/node-server'
+import {
+  type DrizzleDb,
+  createApp,
+  createDbClient,
+  createDrizzleRepositories,
+  migrate,
+} from '@cat-factory/node-server'
 import type { ExecutionInstance, WorkspaceSnapshot } from '@cat-factory/kernel'
 import { NoopBootstrapRunner, NoopWorkRunner } from '@cat-factory/kernel'
 import type { CoreDependencies } from '@cat-factory/orchestration'
@@ -18,11 +25,15 @@ const BASE = 'https://cat-factory.test'
 // (LOCAL_HARNESS_IMAGE lets the Docker transport construct; GITHUB_PAT selects the PAT
 // token source). Neither is exercised here — the conformance suite overrides the agent
 // executor with a deterministic fake — but they prove the local composition root wires
-// the SAME Core as the Node/Worker facades.
+// the SAME Core as the Node/Worker facades. The local facade reuses the Node config
+// loader, which (like the Worker) demands an ENCRYPTION_KEY for the always-on
+// task-source integration or it throws at config load — so provide one (32 zero bytes,
+// base64), exactly as the Node harness does.
 const TEST_ENV: NodeJS.ProcessEnv = {
   ...process.env,
   AUTH_DEV_OPEN: 'true',
   ENVIRONMENT: 'test',
+  ENCRYPTION_KEY: Buffer.alloc(32).toString('base64'),
   LOCAL_HARNESS_IMAGE: 'cat-factory-executor:test',
   GITHUB_PAT: 'test-pat',
 }
@@ -97,5 +108,16 @@ export function makeConformanceApp(db: DrizzleDb, agentOptions?: FakeAgentOption
     return blockId ? recorder.emits.filter((e) => e.blockId === blockId) : recorder.emits
   }
 
-  return { call, createWorkspace, drive, executionEmits }
+  // Seed a block's incorporated requirements review directly into the (shared
+  // Postgres) store so the engine's reworked-requirements substitution can be driven
+  // without running the reviewer LLM — the same Drizzle persistence the Node harness
+  // writes through (the local facade reuses the Node repositories).
+  function seedIncorporatedReview(workspaceId: string, blockId: string, requirements: string) {
+    return createDrizzleRepositories(db).requirementReviewRepository.upsert(
+      workspaceId,
+      makeIncorporatedReview(blockId, requirements),
+    )
+  }
+
+  return { call, createWorkspace, drive, executionEmits, seedIncorporatedReview }
 }

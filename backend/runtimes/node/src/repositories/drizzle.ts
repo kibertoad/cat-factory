@@ -241,6 +241,11 @@ class DrizzlePipelineRepository implements PipelineRepository {
       .select()
       .from(pipelines)
       .where(eq(pipelines.workspace_id, workspaceId))
+      // Order by the monotonic insert `seq` so the catalog comes back in the curated
+      // `seedPipelines()` order it was inserted in (Postgres gives no row order without
+      // ORDER BY) — deterministic snapshots, a stable default `pipelines[0]`, and parity
+      // with the Cloudflare facade's `ORDER BY rowid`.
+      .orderBy(pipelines.seq)
     return rows.map(rowToPipeline)
   }
 

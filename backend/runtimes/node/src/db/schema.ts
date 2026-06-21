@@ -6,6 +6,7 @@ import {
   integer,
   pgTable,
   primaryKey,
+  serial,
   text,
   uniqueIndex,
 } from 'drizzle-orm/pg-core'
@@ -154,6 +155,11 @@ export const pipelines = pgTable(
     agent_kinds: text('agent_kinds').notNull().default('[]'),
     gates: text('gates'),
     thresholds: text('thresholds'),
+    // Monotonic insert sequence (Postgres has no SQLite rowid): a workspace's pipelines
+    // are read back in the order they were seeded — the curated `seedPipelines()` order
+    // — so the catalog order (and the UI's default `pipelines[0]`) is deterministic and
+    // matches the Cloudflare facade (which orders by `rowid`). Auto-assigned on insert.
+    seq: serial('seq').notNull(),
   },
   (t) => [primaryKey({ columns: [t.workspace_id, t.id] })],
 )
