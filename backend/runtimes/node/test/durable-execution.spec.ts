@@ -18,7 +18,13 @@ import { createApp } from '../src/server.js'
 // poll loop (sleep → pollAgentJob → repeat) is exercised durably, not just inline steps.
 
 const BASE = 'https://cat-factory.test'
-const TEST_ENV: NodeJS.ProcessEnv = { ...process.env, AUTH_DEV_OPEN: 'true', ENVIRONMENT: 'test' }
+const TEST_ENV: NodeJS.ProcessEnv = {
+  ...process.env,
+  AUTH_DEV_OPEN: 'true',
+  ENVIRONMENT: 'test',
+  // Always-on task-source integration → `loadNodeConfig` requires this key (32 zero bytes).
+  TASKS_ENCRYPTION_KEY: Buffer.alloc(32).toString('base64'),
+}
 
 const databaseUrl = process.env.DATABASE_URL
 

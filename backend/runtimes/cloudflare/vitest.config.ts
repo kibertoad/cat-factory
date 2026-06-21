@@ -52,8 +52,14 @@ export default defineConfig(async () => {
             RUNNERS_ENCRYPTION_KEY: 'cnVubmVycy10ZXN0LWtleS0wMTIzNDU2Nzg5YWJjZGU=',
             // Master key so the document-source integration's credential
             // encryption-at-rest wires up; `documentsDeps()` builds the cipher
-            // from it. Production sets this as a secret.
+            // from it. REQUIRED now the integration is always on — config load
+            // throws without it. Production sets this as a secret.
             DOCUMENTS_ENCRYPTION_KEY: 'ZG9jdW1lbnRzLXRlc3Qta2V5LTAxMjM0NTY3ODlhYmM=',
+            // Force the deterministic heading planner for the env-wired documents
+            // module (now always on): spawn specs assert exact board structure and
+            // must not reach an LLM. Specs that exercise the LLM planner inject a
+            // model provider + planner ref via overrides instead.
+            DOCUMENT_PLANNER: 'headings',
             // Master key so the task-source integration's credential
             // encryption-at-rest wires up; `tasksDeps()` builds the cipher from
             // it. Production sets this as a secret.

@@ -272,21 +272,19 @@ AUTH_ALLOWED_LOGINS = "kibertoad"
 # pinning is defense-in-depth. No trailing slash.
 CORS_ALLOWED_ORIGINS = "https://catfactory.kiberion.com"
 
-# Document-source integration. Off by default. Turn it on to let workspaces link
-# requirements/RFCs/PRDs from Confluence, Notion and the like. Per-workspace
-# credentials are entered in the app and stored ENCRYPTED in D1. The one secret
-# this feature needs is the service-level master key used to encrypt them at rest:
+# Document-source integration. ALWAYS ON — workspaces connect Confluence/Notion/… for
+# requirements/RFCs/PRDs through the app, and per-workspace credentials are stored
+# ENCRYPTED in D1. The one thing it REQUIRES is the service-level master key used to
+# encrypt them at rest; the worker fails to boot (loud config error) until it is set:
 #   openssl rand -base64 32 | wrangler secret put DOCUMENTS_ENCRYPTION_KEY
-DOCUMENTS_ENABLED = "false"
 DOCUMENT_SOURCES = "confluence,notion"
 DOCUMENT_PLANNER = "llm"
 
-# Task-source integration. Off by default. Turn it on to let workspaces link
-# individual issues from a tracker (Jira, …) to a board block as extra agent
-# context. Per-workspace credentials are entered in the app and stored ENCRYPTED
-# in D1. The one secret this feature needs:
+# Task-source integration. ALWAYS ON — workspaces connect a tracker (Jira, …) through
+# the app to link individual issues to a board block as extra agent context.
+# Per-workspace credentials are stored ENCRYPTED in D1. REQUIRES its master key (the
+# worker fails to boot until it is set):
 #   openssl rand -base64 32 | wrangler secret put TASKS_ENCRYPTION_KEY
-TASKS_ENABLED = "false"
 TASK_SOURCES = "jira"
 
 # Ephemeral environment provider integration. Off by default. Turn it on to let a

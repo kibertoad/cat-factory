@@ -246,14 +246,13 @@ export interface Env {
    */
   CORS_ALLOWED_ORIGINS?: string
 
-  // ---- Document-source integration (see config.ts; opt-in) ----------------
-  /** Enables the document-source integration ('true'). Per-workspace creds live in D1. */
-  DOCUMENTS_ENABLED?: string
+  // ---- Document-source integration (see config.ts; always on) -------------
   /**
    * Service-level master key (base64, ≥32 bytes decoded) for encrypting the
    * per-workspace source credentials (e.g. Notion/Confluence tokens) at rest.
-   * Required when the integration is enabled (secret); without it the feature
-   * fails closed rather than persisting credentials in plaintext.
+   * REQUIRED (secret): the integration is always on (tenants connect their own
+   * sources through the UI), so config load fails loudly when this is unset rather
+   * than persisting credentials in plaintext.
    */
   DOCUMENTS_ENCRYPTION_KEY?: string
   /**
@@ -267,14 +266,13 @@ export interface Env {
    */
   DOCUMENT_PLANNER?: string
 
-  // ---- Task-source integration (see config.ts; opt-in) --------------------
-  /** Enables the task-source integration ('true'). Per-workspace creds live in D1. */
-  TASKS_ENABLED?: string
+  // ---- Task-source integration (see config.ts; always on) -----------------
   /**
    * Service-level master key (base64, ≥32 bytes decoded) for encrypting the
-   * per-workspace source credentials (e.g. Jira tokens) at rest. Required when
-   * the integration is enabled (secret); without it the feature fails closed
-   * rather than persisting credentials in plaintext.
+   * per-workspace source credentials (e.g. Jira tokens) at rest. REQUIRED (secret):
+   * the integration is always on (tenants connect their own trackers through the
+   * UI), so config load fails loudly when this is unset rather than persisting
+   * credentials in plaintext.
    */
   TASKS_ENCRYPTION_KEY?: string
   /**

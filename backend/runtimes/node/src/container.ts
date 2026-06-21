@@ -291,7 +291,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     webSearch: inlineWebSearchOptionsFromEnv(env),
   })
 
-  // Task-source integration (Jira). Opt-in via TASKS_ENABLED + TASKS_ENCRYPTION_KEY;
+  // Task-source integration (Jira). Always on (config load requires TASKS_ENCRYPTION_KEY);
   // tenants connect their own Jira site through the UI and the credentials are stored
   // per-workspace, encrypted at rest. The tracker resolves each workspace's own
   // credentials from this same store (multi-tenant), mirroring the Cloudflare facade.
@@ -412,7 +412,8 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
  * `tasks` module then assembles so tenants can connect Jira through the existing
  * UI). Returns the `CoreDependencies` fragment plus the connection repository so the
  * tracker can resolve each workspace's Jira credentials from the same store.
- * Disabled → `{ deps: {} }` and both the tasks module and the Jira tracker stay off.
+ * No registered providers → `{ deps: {} }` and both the tasks module and the Jira
+ * tracker stay off (the encryption key is guaranteed present by `loadTasksConfig`).
  */
 function selectNodeTasksDeps(
   config: AppConfig,

@@ -437,7 +437,7 @@ POST   /workspaces/:ws/bootstrap/reference-architectures     CRUD reference arch
 POST   /workspaces/:ws/bootstrap/jobs                         start a bootstrap run (returns a running job)
 GET    /workspaces/:ws/bootstrap/jobs/:id                     poll a bootstrap job
 
-# Document sources (only when DOCUMENTS_ENABLED + encryption key are set)
+# Document sources (always on; requires DOCUMENTS_ENCRYPTION_KEY at boot)
 GET    /workspaces/:ws/documents/sources                     connected document sources
 POST   /workspaces/:ws/documents/sources                     connect a source (Confluence / Notion)
 POST   /workspaces/:ws/documents/import                      import a page
@@ -525,13 +525,13 @@ mistake:
   master keys. Locally these go in `.dev.vars` (gitignored; see
   `deploy/backend/.dev.vars.example`).
 
-| `[vars]` (in `wrangler.toml`)                                                                                                                                         | Secrets (`wrangler secret put …`)                                                                           |
-| --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `GITHUB_OAUTH_CLIENT_ID`, `AUTH_ALLOWED_LOGINS`/`AUTH_ALLOWED_ORGS`, `AUTH_SUCCESS_REDIRECT_URL`, `ENVIRONMENT`, `CORS_ALLOWED_ORIGINS`                               | `GITHUB_OAUTH_CLIENT_SECRET`, `AUTH_SESSION_SECRET`                                                         |
-| `WORKER_PUBLIC_URL`, `RUNNERS_ENABLED`                                                                                                                                | (container/runner path holds no key of its own — see below)                                                 |
-| `GITHUB_APP_ID`, `GITHUB_APP_SLUG`, `GITHUB_SETUP_REDIRECT_URL`, `GITHUB_PRIVILEGED_APP_ID`                                                                           | `GITHUB_APP_PRIVATE_KEY`, `GITHUB_WEBHOOK_SECRET`, `GITHUB_PRIVILEGED_APP_PRIVATE_KEY`                      |
-| `SPEND_MONTHLY_LIMIT`, `SPEND_CURRENCY`, `SPEND_MODEL_PRICES`, `AGENT_DEFAULT_*`/`AGENT_MODELS`, `DECISION_TIMEOUT`                                                   | `QWEN_API_KEY`, `DEEPSEEK_API_KEY`, `MOONSHOT_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`               |
-| `DOCUMENTS_ENABLED`/`DOCUMENT_SOURCES`/`DOCUMENT_PLANNER`, `TASKS_ENABLED`/`TASK_SOURCES`, `ENVIRONMENTS_ENABLED`, `PROMPT_LIBRARY_ENABLED`/`PROMPT_LIBRARY_SELECTOR` | `DOCUMENTS_ENCRYPTION_KEY`, `TASKS_ENCRYPTION_KEY`, `ENVIRONMENTS_ENCRYPTION_KEY`, `RUNNERS_ENCRYPTION_KEY` |
+| `[vars]` (in `wrangler.toml`)                                                                                                           | Secrets (`wrangler secret put …`)                                                                                                                                                          |
+| --------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `GITHUB_OAUTH_CLIENT_ID`, `AUTH_ALLOWED_LOGINS`/`AUTH_ALLOWED_ORGS`, `AUTH_SUCCESS_REDIRECT_URL`, `ENVIRONMENT`, `CORS_ALLOWED_ORIGINS` | `GITHUB_OAUTH_CLIENT_SECRET`, `AUTH_SESSION_SECRET`                                                                                                                                        |
+| `WORKER_PUBLIC_URL`, `RUNNERS_ENABLED`                                                                                                  | (container/runner path holds no key of its own — see below)                                                                                                                                |
+| `GITHUB_APP_ID`, `GITHUB_APP_SLUG`, `GITHUB_SETUP_REDIRECT_URL`, `GITHUB_PRIVILEGED_APP_ID`                                             | `GITHUB_APP_PRIVATE_KEY`, `GITHUB_WEBHOOK_SECRET`, `GITHUB_PRIVILEGED_APP_PRIVATE_KEY`                                                                                                     |
+| `SPEND_MONTHLY_LIMIT`, `SPEND_CURRENCY`, `SPEND_MODEL_PRICES`, `AGENT_DEFAULT_*`/`AGENT_MODELS`, `DECISION_TIMEOUT`                     | `QWEN_API_KEY`, `DEEPSEEK_API_KEY`, `MOONSHOT_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`                                                                                              |
+| `DOCUMENT_SOURCES`/`DOCUMENT_PLANNER`, `TASK_SOURCES`, `ENVIRONMENTS_ENABLED`, `PROMPT_LIBRARY_ENABLED`/`PROMPT_LIBRARY_SELECTOR`       | `DOCUMENTS_ENCRYPTION_KEY`, `TASKS_ENCRYPTION_KEY` (both **required** — always-on integrations, config fails loudly without them), `ENVIRONMENTS_ENCRYPTION_KEY`, `RUNNERS_ENCRYPTION_KEY` |
 
 > `WORKER_PUBLIC_URL` is a **`[var]`, not a secret**, despite older notes that
 > said otherwise. Set it in `[vars]`.
@@ -771,12 +771,17 @@ secret each one needs is a service-level **encryption master key** (base64, ≥3
 decoded) — there are **no provider credentials in `wrangler.toml`**. Generate with
 `openssl rand -base64 32`.
 
-| Feature                 | Enable (`[vars]`)                                                       | Master-key secret             | Docs                                                           |
-| ----------------------- | ----------------------------------------------------------------------- | ----------------------------- | -------------------------------------------------------------- |
-| Document sources        | `DOCUMENTS_ENABLED = "true"` (+ `DOCUMENT_SOURCES`, `DOCUMENT_PLANNER`) | `DOCUMENTS_ENCRYPTION_KEY`    | [document-sources](./docs/document-sources.md)                 |
-| Task sources (trackers) | `TASKS_ENABLED = "true"` (+ `TASK_SOURCES`)                             | `TASKS_ENCRYPTION_KEY`        | README → Document & task sources                               |
-| Ephemeral environments  | `ENVIRONMENTS_ENABLED = "true"`                                         | `ENVIRONMENTS_ENCRYPTION_KEY` | [environments-integration](./docs/environments-integration.md) |
-| Self-hosted runner pool | `RUNNERS_ENABLED = "true"`                                              | `RUNNERS_ENCRYPTION_KEY`      | [runner-pool-integration](./docs/runner-pool-integration.md)   |
+| Feature                 | Enable (`[vars]`)                                    | Master-key secret                         | Docs                                                           |
+| ----------------------- | ---------------------------------------------------- | ----------------------------------------- | -------------------------------------------------------------- |
+| Document sources        | always on (+ `DOCUMENT_SOURCES`, `DOCUMENT_PLANNER`) | `DOCUMENTS_ENCRYPTION_KEY` (**required**) | [document-sources](./docs/document-sources.md)                 |
+| Task sources (trackers) | always on (+ `TASK_SOURCES`)                         | `TASKS_ENCRYPTION_KEY` (**required**)     | README → Document & task sources                               |
+| Ephemeral environments  | `ENVIRONMENTS_ENABLED = "true"`                      | `ENVIRONMENTS_ENCRYPTION_KEY`             | [environments-integration](./docs/environments-integration.md) |
+| Self-hosted runner pool | `RUNNERS_ENABLED = "true"`                           | `RUNNERS_ENCRYPTION_KEY`                  | [runner-pool-integration](./docs/runner-pool-integration.md)   |
+
+> Document and task sources are **always on** (tenants connect their own
+> sources/trackers through the UI), so they have no enable flag — but the worker
+> **refuses to boot** until their master keys are set, instead of silently dropping
+> the feature from the task-creation modal.
 
 ```sh
 openssl rand -base64 32 | wrangler secret put DOCUMENTS_ENCRYPTION_KEY      # repeat per enabled feature

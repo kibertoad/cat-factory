@@ -18,16 +18,27 @@ function parseSources(raw: string | undefined): DocumentSourceKind[] {
 }
 
 export function loadDocumentsConfig(env: Env): DocumentsConfig {
-  // Opt-in, matching the GitHub-integration default-off convention. Requires the
-  // encryption key so source credentials are never stored in plaintext (mirrors
-  // the environments integration's fail-closed gate). The planner defaults to LLM
-  // mode; the worker only wires a model provider when a provider credential is
-  // present, so absent that the planner still degrades to its deterministic
-  // heading parser.
+  // The document-source integration (Notion/Confluence/GitHub docs) is always on:
+  // tenants connect their own sources interactively through the UI, so there is no
+  // service-level enable flag to forget. The one hard requirement is a master key
+  // for encrypting those per-workspace credentials at rest — without it we would be
+  // persisting tokens in plaintext, so we fail loudly at config load rather than
+  // silently disabling the feature (which is how it used to vanish from the UI).
+  // The planner defaults to LLM mode; the worker only wires a model provider when a
+  // provider credential is present, so absent that the planner still degrades to its
+  // deterministic heading parser.
+  const encryptionKey = env.DOCUMENTS_ENCRYPTION_KEY?.trim()
+  if (!encryptionKey) {
+    throw new Error(
+      'DOCUMENTS_ENCRYPTION_KEY is required: the document-source integration (Notion, ' +
+        'Confluence, …) encrypts per-workspace source credentials at rest. Set it to a ' +
+        'base64-encoded key of at least 32 bytes.',
+    )
+  }
   return {
-    enabled: env.DOCUMENTS_ENABLED === 'true' && !!env.DOCUMENTS_ENCRYPTION_KEY,
+    enabled: true,
     sources: parseSources(env.DOCUMENT_SOURCES),
     planner: env.DOCUMENT_PLANNER?.trim() === 'headings' ? 'headings' : 'llm',
-    encryptionKey: env.DOCUMENTS_ENCRYPTION_KEY,
+    encryptionKey,
   }
 }

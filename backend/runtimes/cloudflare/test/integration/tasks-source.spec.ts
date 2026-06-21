@@ -150,10 +150,17 @@ describe('task source connect + import', () => {
     expect(after.body.connections).toEqual([])
   })
 
-  it('returns 503 when the integration is not configured', async () => {
+  it('is always on: exposes the env-configured sources with no explicit overrides', async () => {
+    // No enable flag any more — the test bindings supply TASKS_ENCRYPTION_KEY, so the
+    // real Jira provider wires from env even without the `tasksDeps()` fakes, and the
+    // UI's probe sees the source instead of a 503.
     const app = makeApp(new FakeAgentExecutor())
     const { workspace } = await app.createWorkspace({ seed: false })
-    const res = await app.call('GET', `/workspaces/${workspace.id}/task-sources`)
-    expect(res.status).toBe(503)
+    const res = await app.call<{ sources: TaskSourceDescriptor[] }>(
+      'GET',
+      `/workspaces/${workspace.id}/task-sources`,
+    )
+    expect(res.status).toBe(200)
+    expect(res.body.sources.map((s) => s.source)).toContain('jira')
   })
 })

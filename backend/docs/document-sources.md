@@ -19,20 +19,22 @@ Adding a third source is just another provider: implement
 `DocumentSourceProvider` (a `kind`, a `descriptor`, `normalizeConnection`,
 `parseRef`, `fetchDocument`) and register it in `selectDocumentsDeps`.
 
-Like the GitHub integration, this is **opt-in** and assembled only when
-configured — the existing core and tests are untouched when it is off.
+This integration is **always on**: tenants connect their own sources
+interactively through the app, so there is no enable flag to forget. The one
+thing it requires is a master key to encrypt the per-workspace credentials at
+rest — and to make a misconfiguration impossible to miss, the worker **fails to
+boot** (a loud config error) when the key is unset rather than silently dropping
+the feature from the UI.
 
-## Enabling it
+## Configuring it
 
 Per-workspace credentials are entered in the app and stored (encrypted) in D1;
-there are no source secrets in `wrangler.toml`. The feature flag and a couple of
-knobs are global, plus one secret — the master key used to encrypt the
-per-workspace source credentials at rest. The integration refuses to assemble
-without the key, so credentials are never persisted in plaintext:
+there are no source secrets in `wrangler.toml`. A couple of knobs are global,
+plus the one required secret — the master key used to encrypt the per-workspace
+source credentials at rest:
 
 ```toml
 # wrangler.toml [vars]
-DOCUMENTS_ENABLED = "true"
 # Optional allow-list of sources to register (default: all known sources).
 DOCUMENT_SOURCES = "confluence,notion"
 # Doc → board planner: "llm" (default) uses the configured agent model; "headings"
@@ -41,8 +43,8 @@ DOCUMENT_PLANNER = "llm"
 ```
 
 ```sh
-# Service-level master key for credential encryption at rest (required when
-# enabled; set as a secret, never commit it):
+# Service-level master key for credential encryption at rest (REQUIRED — config
+# load throws without it; set as a secret, never commit it):
 openssl rand -base64 32 | wrangler secret put DOCUMENTS_ENCRYPTION_KEY
 ```
 
