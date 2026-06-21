@@ -1,0 +1,101 @@
+import {
+  AsyncFakeAgentExecutor,
+  type ConformanceApp,
+  FakeAgentExecutor,
+  type FakeAgentOptions,
+  RecordingEventPublisher,
+} from '@cat-factory/conformance'
+import { type DrizzleDb, createApp, createDbClient, migrate } from '@cat-factory/node-server'
+import type { ExecutionInstance, WorkspaceSnapshot } from '@cat-factory/kernel'
+import { NoopBootstrapRunner, NoopWorkRunner } from '@cat-factory/kernel'
+import type { CoreDependencies } from '@cat-factory/orchestration'
+import { buildLocalContainer } from '../src/container.js'
+
+const BASE = 'https://cat-factory.test'
+
+// Test env for the LOCAL facade. Same dev-open gate + non-production ENVIRONMENT as the
+// Node harness, plus the two local-mode prerequisites so `buildLocalContainer` composes
+// (LOCAL_HARNESS_IMAGE lets the Docker transport construct; GITHUB_PAT selects the PAT
+// token source). Neither is exercised here — the conformance suite overrides the agent
+// executor with a deterministic fake — but they prove the local composition root wires
+// the SAME Core as the Node/Worker facades.
+const TEST_ENV: NodeJS.ProcessEnv = {
+  ...process.env,
+  AUTH_DEV_OPEN: 'true',
+  ENVIRONMENT: 'test',
+  LOCAL_HARNESS_IMAGE: 'cat-factory-executor:test',
+  GITHUB_PAT: 'test-pat',
+}
+
+/** Connect to the test Postgres (`DATABASE_URL`) and ensure the schema. Idempotent. */
+export async function setupTestDb(): Promise<DrizzleDb> {
+  const url = process.env.DATABASE_URL
+  if (!url) {
+    throw new Error('DATABASE_URL is required to run the local conformance tests')
+  }
+  const { db, pool } = createDbClient(url)
+  await migrate(db, pool)
+  return db
+}
+
+/**
+ * Build one app over the shared Postgres through the LOCAL composition root, with a
+ * deterministic agent + no-op durable runner (the suite advances runs itself via
+ * `drive`). A thin adapter over the shared conformance harness, identical to the Node
+ * helper apart from `buildLocalContainer`.
+ */
+export function makeConformanceApp(db: DrizzleDb, agentOptions?: FakeAgentOptions): ConformanceApp {
+  const recorder = new RecordingEventPublisher()
+  const overrides: Partial<CoreDependencies> = {
+    agentExecutor: agentOptions?.asyncKinds?.length
+      ? new AsyncFakeAgentExecutor(agentOptions)
+      : new FakeAgentExecutor(agentOptions),
+    workRunner: new NoopWorkRunner(),
+    bootstrapRunner: new NoopBootstrapRunner(),
+    executionEventPublisher: recorder,
+  }
+  const container = buildLocalContainer({ db, env: TEST_ENV, overrides })
+  const app = createApp(container, TEST_ENV)
+
+  async function call<T>(method: string, path: string, body?: unknown) {
+    const hasBody = body !== undefined
+    const res = await app.fetch(
+      new Request(`${BASE}${path}`, {
+        method,
+        headers: hasBody ? { 'content-type': 'application/json' } : undefined,
+        body: hasBody ? JSON.stringify(body) : undefined,
+      }),
+    )
+    const text = await res.text()
+    return { status: res.status, body: (text ? JSON.parse(text) : null) as T }
+  }
+
+  async function createWorkspace(options: { name?: string; seed?: boolean } = {}) {
+    return (await call<WorkspaceSnapshot>('POST', '/workspaces', options)).body
+  }
+
+  async function drive(workspaceId: string, maxRounds = 50): Promise<ExecutionInstance[]> {
+    for (let round = 0; round < maxRounds; round++) {
+      const { executions } = await container.workspaceService.snapshot(workspaceId)
+      const active = executions.filter((e) => e.status === 'running' || e.status === 'paused')
+      if (active.length === 0) break
+      for (const e of active) {
+        const exec = container.executionService
+        let r = await exec.advanceInstance(workspaceId, e.id)
+        for (let hops = 0; hops < 500; hops++) {
+          if (r.kind === 'awaiting_job') r = await exec.pollAgentJob(workspaceId, e.id)
+          else if (r.kind === 'awaiting_ci') r = await exec.pollCi(workspaceId, e.id)
+          else if (r.kind === 'awaiting_conflicts') r = await exec.pollConflicts(workspaceId, e.id)
+          else break
+        }
+      }
+    }
+    return (await container.workspaceService.snapshot(workspaceId)).executions
+  }
+
+  function executionEmits(blockId?: string): ExecutionInstance[] {
+    return blockId ? recorder.emits.filter((e) => e.blockId === blockId) : recorder.emits
+  }
+
+  return { call, createWorkspace, drive, executionEmits }
+}

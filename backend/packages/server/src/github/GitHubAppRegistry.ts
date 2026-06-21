@@ -24,6 +24,24 @@ export interface RegisteredApp {
   auth: GitHubAppAuth
 }
 
+/**
+ * The narrow token-minting surface {@link FetchGitHubClient} needs, so the client can
+ * be driven by something OTHER than the App registry — e.g. a static-PAT source in
+ * local mode. {@link GitHubAppRegistry} satisfies it structurally; a PAT source
+ * implements `installationToken` to return the token and may throw on the app-JWT
+ * paths (which only the installation discovery/listing calls use).
+ */
+export interface AppTokenSource {
+  /** The default App id used for app-JWT calls that don't name one. */
+  readonly defaultAppId: string
+  /** Every configured App, iterated for cross-App installation discovery. */
+  apps(): readonly { appId: string }[]
+  /** The auth (app-JWT signer) for an appId. */
+  authForApp(appId: string | null | undefined): { appJwt(): Promise<string> }
+  /** An installation token (the repo-call credential). */
+  installationToken(installationId: number): Promise<string>
+}
+
 export interface GitHubAppRegistryDependencies {
   /** The default (restricted) App — always present; owns legacy installations. */
   default: RegisteredApp

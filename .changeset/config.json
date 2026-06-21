@@ -12,6 +12,7 @@
     "@cat-factory/smoketest-harness",
     "@cat-factory/deploy-backend",
     "@cat-factory/deploy-frontend",
-    "@cat-factory/deploy-node"
+    "@cat-factory/deploy-node",
+    "@cat-factory/deploy-local"
   ]
 }

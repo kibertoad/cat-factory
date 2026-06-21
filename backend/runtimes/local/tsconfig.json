@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
+    // Local runtime: Node globals + the Web Platform APIs Node provides
+    // (fetch/Response/AbortSignal/crypto), typed by @types/node.
+    "types": ["node"]
+  },
+  "include": ["src/**/*.ts"]
+}

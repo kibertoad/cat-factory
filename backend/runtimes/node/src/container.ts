@@ -8,22 +8,29 @@ import {
 } from '@cat-factory/integrations'
 import type {
   AgentExecutor,
-  BlockRepository,
   Clock,
+  GitHubClient,
   GitHubInstallationRepository,
+  RateLimitRepository,
+  RateLimitSnapshot,
   TaskConnectionRepository,
   TaskSourceProvider,
 } from '@cat-factory/kernel'
 import { type CoreDependencies, createCore } from '@cat-factory/orchestration'
 import {
   type AppConfig,
+  type ResolveRepoTarget,
   type ResolveRunnerTransport,
   type ServerContainer,
   CompositeAgentExecutor,
   ContainerAgentExecutor,
   ContainerSessionService,
+  FetchGitHubClient,
   GitHubAppAuth,
   GitHubAppRegistry,
+  GitHubCiStatusProvider,
+  GitHubMergeabilityProvider,
+  GitHubPullRequestMerger,
   WebCryptoSecretCipher,
   buildResolveRepoTarget,
   createWebSearchUpstreamFromEnv,
@@ -50,6 +57,49 @@ import { JiraProvider } from './tasks/JiraProvider.js'
 // the same master key (mirrors the Worker's `cat-factory:runners`).
 const RUNNERS_CIPHER_INFO = 'cat-factory:runners'
 
+/**
+ * Rate-limit accounting is best-effort telemetry the Worker persists to D1; the Node
+ * facade has no such table, so it drops the snapshots (exactly like the local facade).
+ */
+class NoopRateLimitRepository implements RateLimitRepository {
+  record(_snapshot: RateLimitSnapshot): Promise<void> {
+    return Promise.resolve()
+  }
+  deleteOlderThan(_epochMs: number): Promise<number> {
+    return Promise.resolve(0)
+  }
+}
+
+/**
+ * The workspace-spanning GitHub App registry, built once and shared by everything that
+ * needs an App credential: the container executor's push-token mint, the tech-debt
+ * issue filer, and the CI / merge / mergeability gate client. Returns undefined when
+ * the App isn't configured (`github.enabled` + `GITHUB_APP_PRIVATE_KEY`), so each
+ * caller degrades the way it always has.
+ */
+function buildNodeAppRegistry(
+  env: NodeJS.ProcessEnv,
+  config: AppConfig,
+  clock: Clock,
+  installationRepository: GitHubInstallationRepository,
+): GitHubAppRegistry | undefined {
+  const privateKeyPem = env.GITHUB_APP_PRIVATE_KEY?.trim()
+  if (!config.github.enabled || !privateKeyPem) return undefined
+  return new GitHubAppRegistry({
+    default: {
+      appId: config.github.appId,
+      auth: new GitHubAppAuth({
+        appId: config.github.appId,
+        privateKeyPem,
+        installationRepository,
+        clock,
+        apiBase: config.github.apiBase,
+      }),
+    },
+    installationRepository,
+  })
+}
+
 export interface NodeContainerOptions {
   /** The Drizzle/Postgres client (the single persistence layer). */
   db: DrizzleDb
@@ -70,6 +120,30 @@ export interface NodeContainerOptions {
   env?: NodeJS.ProcessEnv
   /** Override core dependencies — used by tests (e.g. a fake agent executor). */
   overrides?: Partial<CoreDependencies>
+  /**
+   * Override the runner backend the container-agent steps dispatch to. When provided
+   * (even as `null`) it REPLACES the default self-hosted-pool resolution, so a sibling
+   * facade can supply its own transport (e.g. the local-mode Docker transport) without
+   * registering a runner pool. Undefined → the default Node behaviour (resolve a
+   * workspace's self-hosted pool when runner pools are enabled).
+   */
+  resolveTransport?: ResolveRunnerTransport | null
+  /**
+   * Override how the container executor mints the push/clone token. When provided it
+   * REPLACES the GitHub-App token mint, so a sibling facade can authenticate with a
+   * static credential instead of an App installation (e.g. a PAT in local mode). The
+   * `installationId` argument is then ignored. Undefined → mint via the GitHub App
+   * (requires `GITHUB_APP_PRIVATE_KEY`).
+   */
+  mintInstallationToken?: (installationId: number) => Promise<string>
+  /**
+   * A GitHub client used to wire the CI gate + the merge / mergeability providers
+   * (so a run gates on real CI and merges for real). When provided, the
+   * `ciStatusProvider`, `mergeabilityProvider` and `pullRequestMerger` are wired from
+   * it + the resolved repo target. Undefined → those gates pass through (the existing
+   * Node behaviour). The local facade passes a PAT-backed client.
+   */
+  githubClient?: GitHubClient
 }
 
 /**
@@ -115,67 +189,49 @@ function buildNodeResolveTransport(
 /**
  * Build the container agent executor (repo-operating steps: coder, mocker,
  * playwright, blueprints, ci-fixer, conflict-resolver, merger) when its
- * prerequisites are configured: the GitHub App (id + private key) to mint the push
- * token, the public URL backing the LLM proxy, the session secret to sign proxy
- * tokens, and a runner backend. Returns null when any is missing, so the composite
- * fails those kinds loudly rather than running them as useless one-shot LLM calls.
+ * prerequisites are configured: a token source for the push/clone token, the public
+ * URL backing the LLM proxy, the session secret to sign proxy tokens, and a runner
+ * backend. Returns null when any is missing, so the composite fails those kinds
+ * loudly rather than running them as useless one-shot LLM calls.
+ *
+ * The token source is pluggable: a sibling facade may pass `mintInstallationToken`
+ * (e.g. a static PAT for local mode), otherwise it is minted via the GitHub App
+ * registry (which additionally requires the App private key + `github.enabled`).
  */
 function buildNodeContainerExecutor(
   env: NodeJS.ProcessEnv,
   config: AppConfig,
-  db: DrizzleDb,
-  clock: Clock,
-  installationRepository: GitHubInstallationRepository,
-  blockRepository: BlockRepository,
+  appRegistry: GitHubAppRegistry | undefined,
+  resolveRepoTarget: ResolveRepoTarget,
   resolveTransport: ResolveRunnerTransport | null,
   resolveWorkspaceModelDefault: (
     workspaceId: string,
     agentKind: string,
   ) => Promise<string | undefined>,
+  mintInstallationTokenOverride?: (installationId: number) => Promise<string>,
 ): AgentExecutor | null {
-  const privateKeyPem = env.GITHUB_APP_PRIVATE_KEY?.trim()
   // The harness reaches models only through this service's LLM proxy; `PUBLIC_URL`
-  // is this service's externally reachable base (the runner pool must be able to
-  // reach it). Pi posts to `${PUBLIC_URL}/v1/chat/completions`.
+  // is this service's externally reachable base (the runner pool / local container
+  // must be able to reach it). Pi posts to `${PUBLIC_URL}/v1/chat/completions`.
   const publicUrl = env.PUBLIC_URL?.trim()
   const sessionSecret = config.auth.sessionSecret
 
-  if (
-    !config.github.enabled ||
-    !privateKeyPem ||
-    !publicUrl ||
-    !sessionSecret ||
-    !resolveTransport
-  ) {
-    return null
-  }
+  if (!publicUrl || !sessionSecret || !resolveTransport) return null
 
-  const registry = new GitHubAppRegistry({
-    default: {
-      appId: config.github.appId,
-      auth: new GitHubAppAuth({
-        appId: config.github.appId,
-        privateKeyPem,
-        installationRepository,
-        clock,
-        apiBase: config.github.apiBase,
-      }),
-    },
-    installationRepository,
-  })
+  // Token source: an explicit override (e.g. a static PAT in local mode) wins; else
+  // the GitHub App registry mints a per-installation token (when the App is configured).
+  const mintInstallationToken =
+    mintInstallationTokenOverride ??
+    (appRegistry ? (id: number) => appRegistry.installationToken(id) : undefined)
+  if (!mintInstallationToken) return null
 
   return new ContainerAgentExecutor({
     resolveTransport,
     agentRouting: config.agents.routing,
     resolveBlockModel: config.agents.resolveBlockModel,
     resolveWorkspaceModelDefault,
-    resolveRepoTarget: buildResolveRepoTarget({
-      installationRepository,
-      repoProjectionRepository: new DrizzleRepoProjectionRepository(db),
-      blockRepository,
-      serviceRepository: new DrizzleServiceFrameRepository(db),
-    }),
-    mintInstallationToken: (id) => registry.installationToken(id),
+    resolveRepoTarget,
+    mintInstallationToken,
     sessionService: new ContainerSessionService({ secret: sessionSecret }),
     proxyBaseUrl: `${publicUrl.replace(/\/+$/, '')}/v1`,
     // Point container agents' web search at the backend search proxy (no provider key
@@ -203,35 +259,11 @@ type GitHubIssueFiler = (request: {
  * resolves to null (a clean pass-through, not a run failure).
  */
 function buildNodeGitHubIssueFiler(
-  env: NodeJS.ProcessEnv,
   config: AppConfig,
-  db: DrizzleDb,
-  clock: Clock,
-  installationRepository: GitHubInstallationRepository,
-  blockRepository: BlockRepository,
+  registry: GitHubAppRegistry | undefined,
+  resolveRepoTarget: ResolveRepoTarget,
 ): GitHubIssueFiler | undefined {
-  const privateKeyPem = env.GITHUB_APP_PRIVATE_KEY?.trim()
-  if (!config.github.enabled || !privateKeyPem) return undefined
-
-  const registry = new GitHubAppRegistry({
-    default: {
-      appId: config.github.appId,
-      auth: new GitHubAppAuth({
-        appId: config.github.appId,
-        privateKeyPem,
-        installationRepository,
-        clock,
-        apiBase: config.github.apiBase,
-      }),
-    },
-    installationRepository,
-  })
-  const resolveRepoTarget = buildResolveRepoTarget({
-    installationRepository,
-    repoProjectionRepository: new DrizzleRepoProjectionRepository(db),
-    blockRepository,
-    serviceRepository: new DrizzleServiceFrameRepository(db),
-  })
+  if (!registry) return undefined
 
   return async (request) => {
     let repo: Awaited<ReturnType<typeof resolveRepoTarget>>
@@ -303,21 +335,40 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   const runnerPoolConnectionRepository = new DrizzleRunnerPoolConnectionRepository(options.db)
   const githubInstallationRepository = new DrizzleGitHubInstallationRepository(options.db)
 
-  const resolveTransport = buildNodeResolveTransport(
-    config,
-    runnerPoolConnectionRepository,
-    repos.workspaceRepository,
-    clock,
-  )
+  // The GitHub App registry, built once when the App is configured and shared by the
+  // container executor's push-token mint, the tech-debt issue filer, and the CI / merge
+  // gate client below. Undefined when the App isn't configured.
+  const appRegistry = buildNodeAppRegistry(env, config, clock, githubInstallationRepository)
+
+  // The repo a running block targets (installation + owner/name), resolved from the
+  // github_repos projection. Built once and shared by the container executor, the
+  // GitHub-issue tracker filer, and the CI / merge providers.
+  const resolveRepoTarget = buildResolveRepoTarget({
+    installationRepository: githubInstallationRepository,
+    repoProjectionRepository: new DrizzleRepoProjectionRepository(options.db),
+    blockRepository: repos.blockRepository,
+    serviceRepository: new DrizzleServiceFrameRepository(options.db),
+  })
+
+  // A sibling facade (local mode) may inject its own transport — even `null` — which
+  // replaces the default self-hosted-pool resolution; undefined keeps Node's default.
+  const resolveTransport =
+    options.resolveTransport !== undefined
+      ? options.resolveTransport
+      : buildNodeResolveTransport(
+          config,
+          runnerPoolConnectionRepository,
+          repos.workspaceRepository,
+          clock,
+        )
   const container = buildNodeContainerExecutor(
     env,
     config,
-    options.db,
-    clock,
-    githubInstallationRepository,
-    repos.blockRepository,
+    appRegistry,
+    resolveRepoTarget,
     resolveTransport,
     resolveWorkspaceModelDefault,
+    options.mintInstallationToken,
   )
 
   // Always a composite: inline kinds run as one-shot LLM calls; repo-operating kinds
@@ -327,14 +378,43 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   // GitHub-issue tracker: file the tech-debt pipeline's issue through the workspace's
   // own GitHub App installation (per-tenant), resolving the service's repo from the
   // github_repos projection — the same per-tenant infra the container executor uses.
-  const fileGitHubIssue = buildNodeGitHubIssueFiler(
-    env,
-    config,
-    options.db,
-    clock,
-    githubInstallationRepository,
-    repos.blockRepository,
-  )
+  const fileGitHubIssue = buildNodeGitHubIssueFiler(config, appRegistry, resolveRepoTarget)
+
+  // The GitHub client backing the CI gate + merge / mergeability providers: an injected
+  // one wins (the local facade supplies a PAT-backed client), else — when the GitHub App
+  // is configured — one minted from the shared App registry, so a stock Node deployment
+  // with an App ALSO gates on real GitHub Actions CI and merges the PR for real (parity
+  // with the Worker). Undefined → these stay unwired and the gates pass through.
+  const githubClient: GitHubClient | undefined =
+    options.githubClient ??
+    (appRegistry
+      ? new FetchGitHubClient({
+          registry: appRegistry,
+          rateLimitRepository: new NoopRateLimitRepository(),
+          idGenerator,
+          clock,
+          apiBase: config.github.apiBase,
+        })
+      : undefined)
+  const githubGateDeps: Partial<CoreDependencies> = githubClient
+    ? {
+        ciStatusProvider: new GitHubCiStatusProvider({
+          githubClient,
+          resolveRepoTarget,
+          blockRepository: repos.blockRepository,
+        }),
+        mergeabilityProvider: new GitHubMergeabilityProvider({
+          githubClient,
+          resolveRepoTarget,
+          blockRepository: repos.blockRepository,
+        }),
+        pullRequestMerger: new GitHubPullRequestMerger({
+          githubClient,
+          resolveRepoTarget,
+          blockRepository: repos.blockRepository,
+        }),
+      }
+    : {}
 
   const dependencies: CoreDependencies = {
     workspaceRepository: repos.workspaceRepository,
@@ -408,6 +488,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     ...(options.boss
       ? { workRunner: new PgBossWorkRunner(options.boss, executionRuntime(config, env).queue) }
       : {}),
+    ...githubGateDeps,
     ...options.overrides,
   }
 
