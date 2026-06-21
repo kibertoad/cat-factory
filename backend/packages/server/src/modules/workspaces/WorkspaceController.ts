@@ -1,5 +1,19 @@
 import { createWorkspaceSchema, renameWorkspaceSchema } from '@cat-factory/contracts'
+import { configContributionCatalog } from '@cat-factory/agents'
 import { Hono } from 'hono'
+import type { WorkspaceSnapshot } from '@cat-factory/contracts'
+
+/**
+ * The agent config-contribution catalog for a snapshot: the descriptors contributed
+ * across every agent kind used by the workspace's pipelines (deduped by id). Static
+ * metadata derived from the agent registry; the board renders the subset whose
+ * owning kind appears in a task's selected pipeline.
+ */
+function snapshotAgentConfigCatalog(snapshot: WorkspaceSnapshot) {
+  const kinds = new Set<string>()
+  for (const pipeline of snapshot.pipelines) for (const kind of pipeline.agentKinds) kinds.add(kind)
+  return configContributionCatalog(kinds)
+}
 import type { Context } from 'hono'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
@@ -49,7 +63,10 @@ export function workspaceController(): Hono<AppEnv> {
 
     const snapshot = await container.workspaceService.create(body, user?.id ?? null, accountId)
     const spend = await container.spendService.status()
-    return c.json({ ...snapshot, spend }, 201)
+    return c.json(
+      { ...snapshot, spend, agentConfigCatalog: snapshotAgentConfigCatalog(snapshot) },
+      201,
+    )
   })
 
   app.get('/workspaces/:workspaceId', async (c) => {
@@ -108,6 +125,7 @@ export function workspaceController(): Hono<AppEnv> {
       ...(trackerSettings ? { trackerSettings } : {}),
       ...(mounts ? { mounts } : {}),
       ...(serviceCatalog ? { serviceCatalog } : {}),
+      agentConfigCatalog: snapshotAgentConfigCatalog(snapshot),
     })
   })
 

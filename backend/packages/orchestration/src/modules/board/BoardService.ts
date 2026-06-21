@@ -284,6 +284,11 @@ export class BoardService {
     // are treated as "not set" (workspace default preset / no pinned pipeline).
     if (input.mergePresetId) block.mergePresetId = input.mergePresetId
     if (input.pipelineId) block.pipelineId = input.pipelineId
+    // Task-level agent-contributed config values (e.g. the Tester's environment),
+    // chosen on the creation form from the selected pipeline's contributing agents.
+    if (input.agentConfig && Object.keys(input.agentConfig).length) {
+      block.agentConfig = input.agentConfig
+    }
     await this.blockRepository.insert(
       homeWorkspaceId,
       block,

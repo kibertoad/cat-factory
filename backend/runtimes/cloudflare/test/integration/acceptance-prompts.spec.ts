@@ -139,7 +139,7 @@ describe('acceptance-testing agent prompts', () => {
       expect(prompt).toContain('Scenario: Successful login')
     })
 
-    it('folds the GitHub Actions test target into the prompt', () => {
+    it('folds the CI e2e target into the prompt', () => {
       const prompt = userPromptFor(
         ctx({
           agentKind: 'playwright',
@@ -147,7 +147,7 @@ describe('acceptance-testing agent prompts', () => {
             title: 'Login',
             type: 'frontend',
             description: 'Auth',
-            testTarget: 'github_actions',
+            agentConfig: { 'playwright.e2eTarget': 'ci' },
           },
         }),
       )
@@ -155,7 +155,7 @@ describe('acceptance-testing agent prompts', () => {
       expect(prompt).toMatch(/spin the system under test up inside the same workflow run/i)
     })
 
-    it('folds the ephemeral-environment test target into the prompt', () => {
+    it('folds the ephemeral-environment e2e target into the prompt', () => {
       const prompt = userPromptFor(
         ctx({
           agentKind: 'playwright',
@@ -163,7 +163,7 @@ describe('acceptance-testing agent prompts', () => {
             title: 'Login',
             type: 'frontend',
             description: 'Auth',
-            testTarget: 'ephemeral_env',
+            agentConfig: { 'playwright.e2eTarget': 'ephemeral' },
           },
         }),
       )
@@ -179,7 +179,7 @@ describe('acceptance-testing agent prompts', () => {
             title: 'Login',
             type: 'frontend',
             description: 'Auth',
-            testTarget: 'github_actions',
+            agentConfig: { 'playwright.e2eTarget': 'ci' },
           },
         }),
       )
