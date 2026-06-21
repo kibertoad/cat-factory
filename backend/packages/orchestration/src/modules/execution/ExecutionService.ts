@@ -434,6 +434,12 @@ export class ExecutionService {
     const executor = this.agentExecutor
     if (isAsyncAgentExecutor(executor) && executor.runsAsync(context)) {
       if (!step.jobId) {
+        // The model is fixed the moment its ref resolves (block pin > workspace
+        // default > env routing) — long before the container is up — so name it on
+        // the very first "spinning up container" emit instead of waiting for the
+        // dispatch to return. startJob confirms the same value below.
+        const previewModel = await this.previewStepModel(context)
+        if (previewModel) step.model = previewModel
         // Surface an explicit "spinning up container" phase for the cold-boot
         // window: dispatch blocks until the per-run container is up and has
         // accepted the job, so emitting before it lets the board show the boot
@@ -454,8 +460,34 @@ export class ExecutionService {
       return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
     }
 
+    // Inline path: the model is resolved before the (blocking) LLM call, so surface
+    // it now — the board names the model while the step is querying instead of only
+    // once the result lands. recordStepResult re-asserts it from the result.
+    const previewModel = await this.previewStepModel(context)
+    if (previewModel && previewModel !== step.model) {
+      step.model = previewModel
+      await this.executionRepository.upsert(workspaceId, instance)
+      await this.emitInstance(workspaceId, instance)
+    }
+
     const result = await this.runAgent(context, options)
     return this.recordStepResult(workspaceId, instance, step, isFinalStep, result)
+  }
+
+  /**
+   * Preview the model a step will run (`provider:model`) ahead of the work, so the
+   * board can show it during the inline query / container cold-boot rather than only
+   * once the result or job handle lands. Best-effort: the executor may not implement
+   * a preview, and a resolution failure (e.g. an unwired container kind that fails at
+   * dispatch anyway) must never break the run — both yield undefined.
+   */
+  private async previewStepModel(context: AgentRunContext): Promise<string | undefined> {
+    if (!this.agentExecutor.resolveModel) return undefined
+    try {
+      return await this.agentExecutor.resolveModel(context)
+    } catch {
+      return undefined
+    }
   }
 
   /**

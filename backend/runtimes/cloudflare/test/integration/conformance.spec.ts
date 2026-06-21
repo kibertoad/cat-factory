@@ -2,6 +2,7 @@ import {
   AsyncFakeAgentExecutor,
   type ConformanceHarness,
   FakeAgentExecutor,
+  RecordingEventPublisher,
   defineConformanceSuite,
 } from '@cat-factory/conformance'
 import { makeApp } from '../helpers'
@@ -13,12 +14,24 @@ import { makeApp } from '../helpers'
 
 const harness: ConformanceHarness = {
   name: 'cloudflare',
-  makeApp: (agentOptions) =>
-    makeApp(
+  makeApp: (agentOptions) => {
+    // Record emitted run snapshots (shared by the start-time container and drive's
+    // own container, since it rides the core overrides) so the suite can assert
+    // intermediate transitions. Confined to the conformance adapter so the shared
+    // `makeApp`/`TestApp` other worker tests use is untouched.
+    const recorder = new RecordingEventPublisher()
+    const app = makeApp(
       agentOptions?.asyncKinds?.length
         ? new AsyncFakeAgentExecutor(agentOptions)
         : new FakeAgentExecutor(agentOptions),
-    ),
+      { executionEventPublisher: recorder },
+    )
+    return {
+      ...app,
+      executionEmits: (blockId) =>
+        blockId ? recorder.emits.filter((e) => e.blockId === blockId) : recorder.emits,
+    }
+  },
 }
 
 defineConformanceSuite(harness)

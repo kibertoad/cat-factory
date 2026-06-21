@@ -1,5 +1,30 @@
-import type { ExecutionInstance, WorkspaceSnapshot } from '@cat-factory/kernel'
+import type {
+  ExecutionEventPublisher,
+  ExecutionInstance,
+  WorkspaceSnapshot,
+} from '@cat-factory/kernel'
 import type { FakeAgentOptions } from './FakeAgentExecutor.js'
+
+/**
+ * An {@link ExecutionEventPublisher} that records every run snapshot the engine
+ * pushes, deep-cloned at emit time. The suite drives runs directly (no live
+ * WebSocket), so this is how it asserts INTERMEDIATE transitions — e.g. that a
+ * step's model is already set on the first "spinning up container" emit — which
+ * `drive`'s final-state return can't reveal. Each facade harness wires one over the
+ * `executionEventPublisher` core override and exposes it via {@link ConformanceApp.executionEmits}.
+ */
+export class RecordingEventPublisher implements ExecutionEventPublisher {
+  readonly emits: ExecutionInstance[] = []
+
+  async executionChanged(_workspaceId: string, instance: ExecutionInstance): Promise<void> {
+    // Clone so the engine's later in-place mutations don't rewrite recorded history.
+    this.emits.push(structuredClone(instance))
+  }
+
+  async boardChanged(): Promise<void> {}
+  async bootstrapChanged(): Promise<void> {}
+  async notificationChanged(): Promise<void> {}
+}
 
 // The seam the conformance suite drives. Each runtime facade implements a
 // `ConformanceHarness` over its own composition root (the Cloudflare Worker over
@@ -29,6 +54,12 @@ export interface ConformanceApp {
    * engine directly so assertions are deterministic and runtime-independent.
    */
   drive(workspaceId: string, maxRounds?: number): Promise<ExecutionInstance[]>
+  /**
+   * Every {@link ExecutionInstance} the engine emitted (via `executionChanged`), in
+   * order and deep-cloned at emit time — so the suite can assert intermediate
+   * transitions `drive`'s final state can't show. Optionally filtered to one block.
+   */
+  executionEmits(blockId?: string): ExecutionInstance[]
 }
 
 export interface ConformanceHarness {

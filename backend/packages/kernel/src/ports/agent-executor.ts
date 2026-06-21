@@ -194,6 +194,16 @@ export interface AgentRunResult {
 
 export interface AgentExecutor {
   run(context: AgentRunContext): Promise<AgentRunResult>
+  /**
+   * Resolve the concrete model this step will run (`provider:model`) WITHOUT doing
+   * the work — no LLM call, no container dispatch. The engine calls it up front so a
+   * step's model can be surfaced to the board the moment the step starts (during the
+   * inline LLM query, or the container cold-boot window) rather than only once the
+   * result/job handle lands. Must be cheap and side-effect-free (model-ref resolution
+   * only). Optional: an executor that can't cheaply preview omits it, and the engine
+   * simply records the model later. Returns undefined when no model applies.
+   */
+  resolveModel?(context: AgentRunContext): Promise<string | undefined>
 }
 
 /** A handle to an asynchronous agent job (e.g. a long-running container run). */

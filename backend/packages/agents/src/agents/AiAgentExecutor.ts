@@ -70,11 +70,13 @@ export class AiAgentExecutor implements AgentExecutor {
     this.webSearch = webSearch
   }
 
-  async run(context: AgentRunContext): Promise<AgentRunResult> {
-    const config = resolveAgentConfig(this.agentRouting, context.agentKind)
-    // The model is resolved with the shared step precedence: a block's pinned model
-    // wins, else the workspace's per-kind default, else the env routing for the kind.
-    const ref = await resolveStepModelRef(
+  /**
+   * Resolve the step's model ref with the shared step precedence: a block's pinned
+   * model wins, else the workspace's per-kind default, else the env routing for the
+   * kind. Side-effect-free, so it backs both `run` and the up-front `resolveModel`.
+   */
+  private resolveRef(context: AgentRunContext): Promise<ModelRef> {
+    return resolveStepModelRef(
       {
         agentRouting: this.agentRouting,
         resolveBlockModel: this.resolveBlockModel,
@@ -86,6 +88,17 @@ export class AiAgentExecutor implements AgentExecutor {
         workspaceId: context.workspaceId,
       },
     )
+  }
+
+  /** Preview the model this step will run, without making the LLM call. */
+  async resolveModel(context: AgentRunContext): Promise<string> {
+    const ref = await this.resolveRef(context)
+    return `${ref.provider}:${ref.model}`
+  }
+
+  async run(context: AgentRunContext): Promise<AgentRunResult> {
+    const config = resolveAgentConfig(this.agentRouting, context.agentKind)
+    const ref = await this.resolveRef(context)
     const model = this.modelProvider.resolve(ref)
 
     // Base role prompt, then fold in the best-practice fragments selected for the

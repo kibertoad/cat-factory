@@ -56,6 +56,13 @@ export interface FakeAgentOptions {
 export class FakeAgentExecutor implements AgentExecutor {
   constructor(private readonly options: FakeAgentOptions = {}) {}
 
+  // Matches the `model: 'fake'` every result carries, so the engine's up-front
+  // model preview (shown on the first "spinning up container" / querying emit)
+  // resolves to the same value the result later confirms.
+  async resolveModel(): Promise<string> {
+    return 'fake'
+  }
+
   async run(context: AgentRunContext): Promise<AgentRunResult> {
     const raisesDecision =
       this.options.decisionOnSteps?.includes(context.stepIndex) && !context.resolvedDecision

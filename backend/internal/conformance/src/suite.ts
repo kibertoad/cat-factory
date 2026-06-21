@@ -210,6 +210,15 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
           expect(s.finishedAt!).toBeGreaterThanOrEqual(s.startedAt!)
         }
 
+        // The model is surfaced up front, while the (inline) step is still querying:
+        // there is an emit where the first step is `working` with its model already
+        // set — not only the final `done` snapshot. Guards the early model preview so
+        // it can't regress to "model appears only once the result lands".
+        const querying = app
+          .executionEmits('task_login')
+          .find((e) => e.steps[0]?.state === 'working' && e.steps[0]?.model === 'fake')
+        expect(querying, 'expected an emit with the first step querying and its model set').toBeTruthy()
+
         const snap = (await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)).body
         const task = snap.blocks.find((b) => b.id === 'task_login')!
         expect(task.status).toBe('done')
@@ -305,6 +314,16 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         // The "spinning up container" phase flag is set at dispatch and must be
         // cleared once the container is up — a finished step never reads as booting.
         expect(coder.startingContainer ?? false).toBe(false)
+        // The model is known at dispatch (the moment the ref resolves, before the
+        // container is up), so it must ALREADY be present on the first "spinning up
+        // container" emit — not only once the job's result lands. Asserting it on the
+        // booting emit pins the early preview so it can't regress on either runtime.
+        const booting = app
+          .executionEmits('task_login')
+          .map((e) => e.steps.find((s) => s.agentKind === 'coder'))
+          .find((s) => s?.startingContainer === true)
+        expect(booting, 'expected a "spinning up container" emit for the coder step').toBeTruthy()
+        expect(booting!.model).toBe('fake')
 
         const task = (
           await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)

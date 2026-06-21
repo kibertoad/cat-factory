@@ -105,6 +105,17 @@ export class CompositeAgentExecutor implements AsyncAgentExecutor {
     return this.pick(context).run(context)
   }
 
+  /**
+   * Preview the model the step will run, forwarding to the executor that will
+   * handle its kind. Best-effort: returns undefined when the picked executor can't
+   * preview. `pick` throws for an unwired container kind — that real error surfaces
+   * at dispatch, so the engine treats this preview as optional and guards the call.
+   */
+  resolveModel(context: AgentRunContext): Promise<string | undefined> {
+    const executor = this.pick(context)
+    return executor.resolveModel?.(context) ?? Promise.resolve(undefined)
+  }
+
   /** Async only for container kinds whose executor actually supports polling. */
   runsAsync(context: AgentRunContext): boolean {
     const executor = this.pick(context)

@@ -3,6 +3,7 @@ import {
   type ConformanceApp,
   FakeAgentExecutor,
   type FakeAgentOptions,
+  RecordingEventPublisher,
 } from '@cat-factory/conformance'
 import type { ExecutionInstance, WorkspaceSnapshot } from '@cat-factory/kernel'
 import { NoopBootstrapRunner, NoopWorkRunner } from '@cat-factory/kernel'
@@ -45,12 +46,16 @@ export async function setupTestDb(): Promise<DrizzleDb> {
  * helper's `makeApp`, so the shared conformance harness is a thin adapter.
  */
 export function makeConformanceApp(db: DrizzleDb, agentOptions?: FakeAgentOptions): ConformanceApp {
+  // Record emitted run snapshots so the suite can assert intermediate transitions
+  // (e.g. the model present on the first "spinning up container" emit).
+  const recorder = new RecordingEventPublisher()
   const overrides: Partial<CoreDependencies> = {
     agentExecutor: agentOptions?.asyncKinds?.length
       ? new AsyncFakeAgentExecutor(agentOptions)
       : new FakeAgentExecutor(agentOptions),
     workRunner: new NoopWorkRunner(),
     bootstrapRunner: new NoopBootstrapRunner(),
+    executionEventPublisher: recorder,
   }
   const container = buildNodeContainer({ db, env: TEST_ENV, overrides })
   const app = createApp(container, TEST_ENV)
@@ -101,5 +106,9 @@ export function makeConformanceApp(db: DrizzleDb, agentOptions?: FakeAgentOption
     return (await container.workspaceService.snapshot(workspaceId)).executions
   }
 
-  return { call, createWorkspace, drive }
+  function executionEmits(blockId?: string): ExecutionInstance[] {
+    return blockId ? recorder.emits.filter((e) => e.blockId === blockId) : recorder.emits
+  }
+
+  return { call, createWorkspace, drive, executionEmits }
 }

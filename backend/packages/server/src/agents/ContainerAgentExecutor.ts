@@ -227,6 +227,36 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     }
   }
 
+  /**
+   * Resolve the step's model ref with the shared step precedence (block pin >
+   * workspace per-kind default > env routing). Side-effect-free and dispatch-free,
+   * so it backs both the up-front `resolveModel` preview and `buildJobBody`.
+   */
+  private resolveRef(context: AgentRunContext): Promise<ModelRef> {
+    return resolveStepModelRef(
+      {
+        agentRouting: this.deps.agentRouting,
+        resolveBlockModel: this.deps.resolveBlockModel,
+        resolveWorkspaceModelDefault: this.deps.resolveWorkspaceModelDefault,
+      },
+      {
+        agentKind: context.agentKind,
+        blockModelId: context.block.modelId,
+        workspaceId: context.workspaceId,
+      },
+    )
+  }
+
+  /**
+   * Preview the model this job will run, without dispatching the container. The
+   * proxyable-provider guard is deliberately left to `buildJobBody` (the dispatch
+   * path) so an unservable model still fails loudly there; this only names it.
+   */
+  async resolveModel(context: AgentRunContext): Promise<string> {
+    const ref = await this.resolveRef(context)
+    return `${ref.provider}:${ref.model}`
+  }
+
   /** Validate the ids every container job needs, narrowing them to non-empty strings. */
   private requireIds(context: AgentRunContext): {
     workspaceId: string
@@ -250,16 +280,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     // Lock the model to a provider the proxy can serve — either a direct
     // OpenAI-compatible provider or Cloudflare Workers AI (served in-Worker via
     // the AI binding) — and locking it here stops the container choosing another.
-    // The shared step precedence: a block's pinned model wins; else the workspace's
-    // per-kind default; else the env routing for the kind.
-    const ref = await resolveStepModelRef(
-      {
-        agentRouting: this.deps.agentRouting,
-        resolveBlockModel: this.deps.resolveBlockModel,
-        resolveWorkspaceModelDefault: this.deps.resolveWorkspaceModelDefault,
-      },
-      { agentKind: context.agentKind, blockModelId: context.block.modelId, workspaceId },
-    )
+    const ref = await this.resolveRef(context)
     if (!isProxyableProvider(ref.provider)) {
       throw new Error(
         `Container implementation needs a model the LLM proxy can serve ` +
