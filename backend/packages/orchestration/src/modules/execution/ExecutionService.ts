@@ -18,8 +18,10 @@ import {
   parseMergeAssessment,
   parseSpecDoc,
   parseCompanionAssessment,
+  parseTestReport,
   DEFAULT_COMPANION_MAX_ATTEMPTS,
   type CompanionAssessment,
+  type TestReport,
 } from '@cat-factory/contracts'
 import { companionFor, companionTargets, isCompanionKind } from '@cat-factory/agents'
 import { extractJson } from '../requirements/requirements.logic.js'
@@ -43,6 +45,8 @@ import {
   SPEC_WRITER_AGENT_KIND,
   TRACKER_AGENT_KIND,
   ANALYSIS_AGENT_KIND,
+  TESTER_AGENT_KIND,
+  FIXER_AGENT_KIND,
 } from './ci.logic.js'
 import type { NotificationService } from '../notifications/NotificationService.js'
 import type { LlmObservabilityService } from '../observability/LlmObservabilityService.js'
@@ -341,6 +345,25 @@ export class ExecutionService {
     return assertFound(await this.blockRepository.get(workspaceId, id), 'Block', id)
   }
 
+  /**
+   * Guard a Tester pipeline's start: local-mode testing must have its infra
+   * configured on the service frame — either a docker-compose path to stand the
+   * dependencies up, or the explicit "no infra dependencies" flag. Ephemeral-mode
+   * testing uses the provisioned environment, so it needs neither. Throws a
+   * {@link ConflictError} (surfaced as an actionable message) when neither is set.
+   */
+  private async assertTesterInfraConfigured(workspaceId: string, block: Block): Promise<void> {
+    // Default is local; only ephemeral mode skips the local-infra requirement.
+    if (block.agentConfig?.['tester.environment'] === 'ephemeral') return
+    const service = await this.resolveServiceConfig(workspaceId, block)
+    if (service?.noInfraDependencies || service?.testComposePath) return
+    throw new ConflictError(
+      "This task's pipeline runs the Tester locally, but its service has no test infra " +
+        "configured. Set the service's docker-compose path, or mark it as having no infra " +
+        'dependencies, before starting — or switch the Tester to the ephemeral environment.',
+    )
+  }
+
   /** Start a pipeline against a block, replacing any prior run on it. */
   async start(
     workspaceId: string,
@@ -348,12 +371,19 @@ export class ExecutionService {
     pipelineId: string,
   ): Promise<ExecutionInstance> {
     await this.requireWorkspace(workspaceId)
-    await this.requireBlock(workspaceId, blockId)
+    const block = await this.requireBlock(workspaceId, blockId)
     const pipeline = assertFound(
       await this.pipelineRepository.get(workspaceId, pipelineId),
       'Pipeline',
       pipelineId,
     )
+
+    // A pipeline with a Tester that runs locally needs the service's test infra
+    // configured (a docker-compose path, or an explicit "no infra dependencies"
+    // flag). Block the start with a clear, actionable error otherwise.
+    if (pipeline.agentKinds.includes(TESTER_AGENT_KIND)) {
+      await this.assertTesterInfraConfigured(workspaceId, block)
+    }
 
     await this.executionRepository.deleteByBlock(workspaceId, blockId)
 
@@ -675,6 +705,19 @@ export class ExecutionService {
       return { kind: 'awaiting_conflicts', stepIndex: instance.currentStep }
     }
 
+    // A `tester` step in its `fixing` phase has a Fixer job in flight, NOT the
+    // step's own work: when it finishes (or fails) we drop the handle, return to
+    // `testing`, and re-dispatch the Tester against the (now-fixed) branch — its
+    // fresh report then drives greenlight-or-loop again. Mirrors the CI gate.
+    if (step.agentKind === TESTER_AGENT_KIND && step.test?.phase === 'fixing') {
+      step.jobId = undefined
+      step.subtasks = undefined
+      step.test.phase = 'testing'
+      const block = await this.blockRepository.get(workspaceId, instance.blockId)
+      if (!block) return { kind: 'noop' }
+      return this.dispatchTester(workspaceId, instance, step, block)
+    }
+
     if (update.state === 'failed') {
       // A container eviction (the per-run container vanished, its in-memory job is
       // gone) is usually transient. Recover it by dropping the dead handle and
@@ -833,6 +876,15 @@ export class ExecutionService {
       await this.executionRepository.upsert(workspaceId, instance)
       await this.emitInstance(workspaceId, instance)
       return { kind: 'awaiting_decision', decisionId: step.decision.id }
+    }
+
+    // A `tester` step returned a structured report. On a withheld greenlight we do
+    // NOT finish the step: we loop the `fixer` (within the attempt budget) and
+    // re-test, mirroring the CI gate. A greenlight (or no provider) falls through to
+    // the normal finish/advance below. Records the report on the step either way.
+    if (step.agentKind === TESTER_AGENT_KIND && result.testReport !== undefined) {
+      const looped = await this.resolveTesterResult(workspaceId, instance, step, result)
+      if (looped) return looped
     }
 
     // The step completed.
@@ -1298,6 +1350,136 @@ export class ExecutionService {
       maxAttempts: step.ci?.maxAttempts ?? DEFAULT_MERGE_PRESET.ciMaxAttempts,
       headSha: step.ci?.headSha ?? null,
     }
+    await this.executionRepository.upsert(workspaceId, instance)
+    await this.emitInstance(workspaceId, instance)
+    return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
+  }
+
+  /**
+   * Apply a Tester report to its step's gate. Records the report on the step, then:
+   *  - greenlight → returns `null` so {@link recordStepResult} finishes + advances;
+   *  - withheld + budget left → dispatches the `fixer` and parks (re-tested on its
+   *    completion, see {@link pollAgentJob});
+   *  - withheld + budget spent (or unparseable) → fails the run for human attention.
+   */
+  private async resolveTesterResult(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    step: PipelineStep,
+    result: AgentRunResult,
+  ): Promise<AdvanceResult | null> {
+    const block = await this.blockRepository.get(workspaceId, instance.blockId)
+    let report: TestReport | null = null
+    try {
+      report = parseTestReport(result.testReport)
+    } catch {
+      report = null
+    }
+    if (!step.test) {
+      const maxAttempts = block
+        ? (await this.resolveMergePreset(workspaceId, block)).ciMaxAttempts
+        : DEFAULT_MERGE_PRESET.ciMaxAttempts
+      step.test = { phase: 'testing', attempts: 0, maxAttempts, lastReport: null }
+    }
+    if (report) step.test.lastReport = report
+    step.test.phase = 'testing'
+    step.subtasks = undefined
+
+    // An unparseable report can't gate a release — fail loudly rather than silently
+    // greenlighting or looping forever.
+    if (!report) {
+      step.output = result.output ?? 'Tester returned an unparseable report.'
+      this.finishStep(step)
+      await this.executionRepository.upsert(workspaceId, instance)
+      await this.emitInstance(workspaceId, instance)
+      return { kind: 'job_failed', error: 'Tester returned an unparseable test report.' }
+    }
+
+    // Greenlit: let the normal completion flow finish + advance the step.
+    if (report.greenlight) return null
+
+    // Withheld greenlight: loop the fixer if any budget remains, else give up.
+    const executor = this.agentExecutor
+    if (isAsyncAgentExecutor(executor) && block && step.test.attempts < step.test.maxAttempts) {
+      return this.dispatchFixer(workspaceId, instance, step, block, report)
+    }
+    step.output = report.summary || 'Tester withheld its greenlight.'
+    this.finishStep(step)
+    await this.executionRepository.upsert(workspaceId, instance)
+    await this.emitInstance(workspaceId, instance)
+    return {
+      kind: 'job_failed',
+      error:
+        `Tester withheld its greenlight after ${step.test.attempts} fix attempt(s). ${describeTestConcerns(report)}`.trim(),
+    }
+  }
+
+  /**
+   * Dispatch a `fixer` container job for a Tester step that withheld its greenlight:
+   * build the agent context with the kind overridden to `fixer` and the Tester's
+   * report folded in as resolved context, park on the job, and flip the gate to
+   * `fixing`. On the fixer's completion {@link pollAgentJob} re-dispatches the Tester.
+   */
+  private async dispatchFixer(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    step: PipelineStep,
+    block: Block,
+    report: TestReport,
+  ): Promise<AdvanceResult> {
+    const executor = this.agentExecutor
+    if (!isAsyncAgentExecutor(executor)) {
+      return { kind: 'job_failed', error: 'No async executor available to fix test failures.' }
+    }
+    const isFinalStep = instance.currentStep === instance.steps.length - 1
+    const base = await this.buildAgentContext(workspaceId, instance, step, isFinalStep, block)
+    const context: AgentRunContext = {
+      ...base,
+      agentKind: FIXER_AGENT_KIND,
+      // Hand the fixer the Tester's report (what failed + the concerns) as context.
+      priorOutputs: [
+        ...base.priorOutputs,
+        { agentKind: TESTER_AGENT_KIND, output: renderReportForFixer(report) },
+      ],
+    }
+    const handle = await executor.startJob(context)
+    step.jobId = handle.jobId
+    if (handle.model) step.model = handle.model
+    step.startingContainer = true
+    step.subtasks = undefined
+    step.test = {
+      phase: 'fixing',
+      attempts: (step.test?.attempts ?? 0) + 1,
+      maxAttempts: step.test?.maxAttempts ?? DEFAULT_MERGE_PRESET.ciMaxAttempts,
+      lastReport: report,
+    }
+    await this.executionRepository.upsert(workspaceId, instance)
+    await this.emitInstance(workspaceId, instance)
+    return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
+  }
+
+  /**
+   * Re-dispatch the Tester after a Fixer job finished, against the (now-fixed) PR
+   * branch. Parks on the fresh Tester job; its report then drives greenlight-or-loop.
+   */
+  private async dispatchTester(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    step: PipelineStep,
+    block: Block,
+  ): Promise<AdvanceResult> {
+    const executor = this.agentExecutor
+    if (!isAsyncAgentExecutor(executor)) {
+      return { kind: 'job_failed', error: 'No async executor available to run the tester.' }
+    }
+    const isFinalStep = instance.currentStep === instance.steps.length - 1
+    const context = await this.buildAgentContext(workspaceId, instance, step, isFinalStep, block)
+    const handle = await executor.startJob(context)
+    step.jobId = handle.jobId
+    if (handle.model) step.model = handle.model
+    step.startingContainer = true
+    step.subtasks = undefined
+    if (step.test) step.test.phase = 'testing'
     await this.executionRepository.upsert(workspaceId, instance)
     await this.emitInstance(workspaceId, instance)
     return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
@@ -2521,4 +2703,31 @@ export class ExecutionService {
       // The container may already be gone (eviction/completion) — nothing to reclaim.
     }
   }
+}
+
+/** One-line, human-readable summary of a Tester report's concerns, for failure messages. */
+function describeTestConcerns(report: TestReport): string {
+  if (!report.concerns.length) return report.summary || 'No greenlight given.'
+  const names = report.concerns
+    .map((c) => `${c.title} (${c.severity})`)
+    .slice(0, 5)
+    .join(', ')
+  return `Concerns: ${names}${report.concerns.length > 5 ? ', …' : ''}`
+}
+
+/** Render a Tester report as the resolved-context block handed to the fixer. */
+function renderReportForFixer(report: TestReport): string {
+  const lines = ['Tester report — fix the concerns below, then the tester will re-run.', '']
+  if (report.summary) lines.push(report.summary, '')
+  if (report.concerns.length) {
+    lines.push('Concerns to fix:')
+    for (const c of report.concerns) lines.push(`- [${c.severity}] ${c.title}: ${c.detail}`)
+    lines.push('')
+  }
+  const failed = report.outcomes.filter((o) => o.status === 'failed')
+  if (failed.length) {
+    lines.push('Failed checks:')
+    for (const o of failed) lines.push(`- ${o.name}${o.detail ? `: ${o.detail}` : ''}`)
+  }
+  return lines.join('\n').trim()
 }
