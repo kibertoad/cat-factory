@@ -258,8 +258,7 @@ describe('terminalRunError', () => {
   })
 
   it('reports the message from a terminal agent_end with stopReason error', () => {
-    const stdout =
-      '{"type":"agent_end","stopReason":"error","errorMessage":"boom","messages":[]}'
+    const stdout = '{"type":"agent_end","stopReason":"error","errorMessage":"boom","messages":[]}'
     expect(terminalRunError(stdout)).toBe('boom')
   })
 

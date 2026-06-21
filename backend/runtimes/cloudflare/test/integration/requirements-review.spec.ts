@@ -18,6 +18,7 @@ function seedReview(workspaceId: string, blockId: string): RequirementReview {
     status: 'ready',
     model: 'mock:mock',
     incorporatedRequirements: null,
+    companionVerdicts: [],
     createdAt: 1,
     updatedAt: 1,
     items: [

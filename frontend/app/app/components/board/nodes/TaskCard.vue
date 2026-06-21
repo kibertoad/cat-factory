@@ -110,27 +110,30 @@ const pendingApproval = computed(() =>
 /** What this blocked task actually needs from a human — drives the card's label,
  * pulse and action. Decision takes precedence over approval (a step never holds
  * both at once; this is just a stable order). Null when nothing is pending. */
-const attention = computed<{ label: string; icon: string; action: string; open: () => void } | null>(
-  () => {
-    const d = pendingDecision.value
-    if (d)
-      return {
-        label: 'Decision needed',
-        icon: 'i-lucide-circle-help',
-        action: 'Resolve',
-        open: () => ui.openDecision(d.instanceId, d.decision.id),
-      }
-    const a = pendingApproval.value
-    if (a)
-      return {
-        label: 'Approval needed',
-        icon: 'i-lucide-shield-check',
-        action: 'Approve',
-        open: () => ui.openApprovalDetail(a.instanceId, a.approval.id),
-      }
-    return null
-  },
-)
+const attention = computed<{
+  label: string
+  icon: string
+  action: string
+  open: () => void
+} | null>(() => {
+  const d = pendingDecision.value
+  if (d)
+    return {
+      label: 'Decision needed',
+      icon: 'i-lucide-circle-help',
+      action: 'Resolve',
+      open: () => ui.openDecision(d.instanceId, d.decision.id),
+    }
+  const a = pendingApproval.value
+  if (a)
+    return {
+      label: 'Approval needed',
+      icon: 'i-lucide-shield-check',
+      action: 'Approve',
+      open: () => ui.openApprovalDetail(a.instanceId, a.approval.id),
+    }
+  return null
+})
 
 /** Specific header copy: a failed run reads "Failed", a parked task reads its
  * decision/approval reason, otherwise the generic status label. */

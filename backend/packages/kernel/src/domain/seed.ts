@@ -141,27 +141,29 @@ export function seedPipelines(): Pipeline[] {
       // failure — and `merger` runs last: it scores the PR and either auto-merges
       // (within the task's thresholds) or raises a review notification.
       agentKinds: [
-        'requirements',
+        'requirements-review',
         'architect',
-        // After the requirements review + architecture are settled, the
-        // requirements-writer aggregates every task's clarified requirements into the
-        // service's unified in-repo `requirements/` document, committed to the
-        // implementation branch BEFORE the coder runs so the spec (and its Gherkin
-        // acceptance scenarios) is present while the code is written.
-        'requirements-writer',
+        // After the context requirements review + architecture are settled, the
+        // spec-writer aggregates every task's clarified requirements into the
+        // service's unified in-repo `spec/` document, committed to the implementation
+        // branch BEFORE the coder runs so the spec (and its Gherkin acceptance
+        // scenarios) is present while the code is written.
+        'spec-writer',
         'researcher',
         'coder',
         'blueprints',
         'tester',
+        // `reviewer` is the coder's companion: it rates the change and loops it back
+        // for automatic rework when quality is below threshold (see companions).
         'reviewer',
         'conflicts',
         'ci',
         'merger',
       ],
-      // Gate the requirements review and the architecture proposal. The
-      // requirements-writer, `conflicts` / `ci` / `merger` are never human-gated
-      // (they aggregate/gate/decide themselves), so their slots are false.
-      gates: [true, true, false, false, false, false, false, false, false, false, false],
+      // Gate the context requirements review, the architecture proposal and the spec
+      // (its acceptance scenarios are reviewed here). The `conflicts` / `ci` / `merger`
+      // tail is never human-gated (it gates/decides itself), so those slots are false.
+      gates: [true, true, true, false, false, false, false, false, false, false, false],
     },
     {
       // The most thorough preset: a complex, full-stack feature run that engages
@@ -170,29 +172,34 @@ export function seedPipelines(): Pipeline[] {
       // dependency mock builder, the business-logic documenter and the developer
       // documenter, in addition to the runnable end-to-end (`playwright`) tests:
       //
-      //   requirements  → analyse + clarify the collected requirements (human gate)
-      //   researcher    → investigate prior art, libraries and constraints
-      //   architect     → design the solution (human gate)
-      //   requirements-writer → aggregate the clarified spec (+ Gherkin) onto the
-      //                         implementation branch BEFORE any code is written
-      //   acceptance    → polish/extend the Gherkin acceptance SCENARIOS
+      //   requirements-review → analyse + clarify the collected context (human gate)
+      //   researcher          → investigate prior art, libraries and constraints
+      //   architect           → design the solution
+      //   architect-companion → challenge the design's quality; loop back below
+      //                         threshold, then raise the human gate on a pass
+      //   spec-writer         → aggregate the clarified spec (+ acceptance scenarios)
+      //                         onto the implementation branch BEFORE any code
+      //   spec-companion      → challenge acceptance-scenario coverage; loop back
+      //                         below threshold, then raise the human gate on a pass
       //   mocker        → stand up mocks for the external dependencies
       //   coder         → implement the feature on the implementation branch
       //   blueprints    → refresh the in-repo service map from the new code
       //   business-documenter → capture the domain rules the code now encodes
       //   tester        → define the unit / integration test strategy
-      //   playwright    → author the runnable end-to-end / acceptance TESTS
-      //   reviewer      → review the change for correctness, quality and risk
+      //   playwright    → author the runnable end-to-end / acceptance TESTS (from the
+      //                   spec's derived Gherkin)
+      //   reviewer      → coder's companion: rate the change, loop back for rework
       //   documenter    → write the developer-facing documentation
       //   conflicts → ci → merger → the same mergeability / CI / merge tail as Full build
       id: 'pl_fullstack',
       name: 'Complex fullstack feature',
       agentKinds: [
-        'requirements',
+        'requirements-review',
         'researcher',
         'architect',
-        'requirements-writer',
-        'acceptance',
+        'architect-companion',
+        'spec-writer',
+        'spec-companion',
         'mocker',
         'coder',
         'blueprints',
@@ -205,16 +212,18 @@ export function seedPipelines(): Pipeline[] {
         'ci',
         'merger',
       ],
-      // Mirror Full build: only the requirements review (index 0) and the
-      // architecture proposal (index 2) pause for human approval; every other
-      // step — including the self-gating conflicts / ci / merger tail — runs straight
-      // through.
+      // Human gates: the context requirements review (index 0), and — after each
+      // companion has cleared its quality bar — the architecture (on `architect-
+      // companion`, index 3) and the spec/acceptance scenarios (on `spec-companion`,
+      // index 5). Every other step (including the self-gating conflicts / ci / merger
+      // tail and the auto-only `reviewer` companion) runs straight through.
       gates: [
         true,
         false,
+        false,
         true,
         false,
-        false,
+        true,
         false,
         false,
         false,
@@ -266,9 +275,9 @@ export function seedPipelines(): Pipeline[] {
     // A blueprint-only pipeline, run after a bootstrap to create the initial
     // service map (and populate the board) from the freshly bootstrapped repo.
     { id: 'pl_blueprint', name: 'Map service', agentKinds: ['blueprints'] },
-    // A requirements-only pipeline, to (re)generate a service's unified in-repo
-    // requirements document (and its Gherkin acceptance scenarios) independently.
-    { id: 'pl_requirements', name: 'Write requirements', agentKinds: ['requirements-writer'] },
+    // A spec-only pipeline, to (re)generate a service's unified in-repo specification
+    // (and its Gherkin acceptance scenarios) independently.
+    { id: 'pl_spec', name: 'Write spec', agentKinds: ['spec-writer'] },
   ]
   return mergeRegisteredPipelines(builtins)
 }

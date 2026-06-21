@@ -16,7 +16,7 @@ const step = (
 
 // `pl_full`'s shape: the coder sits behind two human-gated steps.
 const fullSteps = (coderState: PipelineStep['state']): PipelineStep[] => [
-  step('requirements', 'done', {
+  step('requirements-review', 'done', {
     requiresApproval: true,
     approval: { id: 'a1', status: 'approved', proposal: 'reqs' },
     output: 'requirements output',

@@ -216,7 +216,9 @@ export class BoardService {
       for (const frame of blocks.filter((b) => b.level === 'frame')) {
         const existing = await this.serviceRepository.getByFrameBlock(frame.id)
         if (existing?.repoGithubId === repo.githubId && existing.directory === directory) {
-          throw new ValidationError(`A service for '${directory}' already exists in this repository`)
+          throw new ValidationError(
+            `A service for '${directory}' already exists in this repository`,
+          )
         }
       }
     }

@@ -327,10 +327,10 @@ export function parseBlueprintJob(input: unknown): BlueprintJob {
   return job
 }
 
-// ---- Requirements-writer job (POST /requirements) -------------------------
+// ---- Spec-writer job (POST /spec) -----------------------------------------
 
-/** One task's collected (clarified) requirements, aggregated into the service doc. */
-export interface RequirementsTaskContext {
+/** One task's collected (clarified) requirements, aggregated into the service spec. */
+export interface SpecTaskContext {
   /** Board block id of the task (provenance / traceability). */
   id: string
   title: string
@@ -338,21 +338,20 @@ export interface RequirementsTaskContext {
 }
 
 /**
- * The job the Worker's ContainerAgentExecutor POSTs to /requirements. The
- * requirements-writer agent clones `branch` (the implementation branch the coder
- * will resume — created from `repo.baseBranch` if it does not exist yet), reads any
- * existing `requirements/requirements.json`, and (re)generates the unified,
- * PRESCRIPTIVE requirements document for the service from the combined `tasks`
- * context. The harness deterministically renders that document into the in-repo
- * `requirements/` folder (the canonical `requirements.json`, the `overview.md` /
- * `rules.md` markdown, the `version.json` manifest and the Gherkin
+ * The job the Worker's ContainerAgentExecutor POSTs to /spec. The spec-writer agent
+ * clones `branch` (the implementation branch the coder will resume — created from
+ * `repo.baseBranch` if it does not exist yet), reads any existing `spec/spec.json`,
+ * and (re)generates the unified, PRESCRIPTIVE specification document for the service
+ * from the combined `tasks` context. The harness deterministically renders that
+ * document into the in-repo `spec/` folder (the canonical `spec.json`, the
+ * `overview.md` / `rules.md` markdown, the `version.json` manifest and the Gherkin
  * `features/*.feature` files) and commits it onto `branch`. Like the blueprint it
  * adds one commit to a branch — it never resets history or force-pushes.
  */
-export interface RequirementsJob {
+export interface SpecJob {
   /** Stable job id (the execution id); keys the background job + poll endpoint. */
   jobId: string
-  /** Requirements-writer role prompt; written to Pi's global AGENTS.md context. */
+  /** Spec-writer role prompt; written to Pi's global AGENTS.md context. */
   systemPrompt: string
   /** Free-form guidance handed to Pi as the task prompt. */
   instructions: string
@@ -361,24 +360,24 @@ export interface RequirementsJob {
   sessionToken: string
   ghToken: string
   repo: RepoSpec
-  /** Branch to clone (or create from base) and commit the requirements onto. */
+  /** Branch to clone (or create from base) and commit the spec onto. */
   branch: string
   /** The collected requirements of every task under the service frame (for aggregation). */
-  tasks: RequirementsTaskContext[]
+  tasks: SpecTaskContext[]
   githubApiBase?: string
 }
 
-/** The /requirements response. `requirements` (when set) is the doc to ingest. */
-export interface RequirementsResult {
-  /** The unified requirements document the agent produced (for board ingest). */
-  requirements?: unknown
+/** The /spec response. `spec` (when set) is the doc to ingest. */
+export interface SpecResult {
+  /** The unified specification document the agent produced (for board ingest). */
+  spec?: unknown
   summary?: string
   stats?: PiRunStats
   error?: string
 }
 
-/** Validate + narrow an untrusted body into a {@link RequirementsJob}, throwing on bad input. */
-export function parseRequirementsJob(input: unknown): RequirementsJob {
+/** Validate + narrow an untrusted body into a {@link SpecJob}, throwing on bad input. */
+export function parseSpecJob(input: unknown): SpecJob {
   if (typeof input !== 'object' || input === null) {
     throw new Error('Invalid job: body must be an object')
   }
@@ -386,7 +385,7 @@ export function parseRequirementsJob(input: unknown): RequirementsJob {
   const repo = (o.repo ?? {}) as Record<string, unknown>
   // `tasks` is lenient: drop anything malformed rather than reject the whole job —
   // the worst case is a thinner aggregation context, not a failed run.
-  const tasks: RequirementsTaskContext[] = Array.isArray(o.tasks)
+  const tasks: SpecTaskContext[] = Array.isArray(o.tasks)
     ? (o.tasks as unknown[])
         .filter((t): t is Record<string, unknown> => typeof t === 'object' && t !== null)
         .map((t) => ({
@@ -396,7 +395,7 @@ export function parseRequirementsJob(input: unknown): RequirementsJob {
         }))
         .filter((t) => t.title !== '' || t.description !== '')
     : []
-  const job: RequirementsJob = {
+  const job: SpecJob = {
     jobId: str(o.jobId, 'jobId'),
     systemPrompt: str(o.systemPrompt, 'systemPrompt'),
     instructions: str(o.instructions, 'instructions'),
@@ -407,6 +406,71 @@ export function parseRequirementsJob(input: unknown): RequirementsJob {
     repo: parseRepoSpec(repo),
     branch: str(o.branch, 'branch'),
     tasks,
+    ...(typeof o.githubApiBase === 'string' ? { githubApiBase: o.githubApiBase } : {}),
+  }
+  assertAllowedHost(job.repo.cloneUrl, 'repo.cloneUrl')
+  if (job.githubApiBase) assertAllowedHost(job.githubApiBase, 'githubApiBase')
+  return job
+}
+
+// ---- Read-only exploration job (POST /explore) ----------------------------
+
+/**
+ * The job the Worker's ContainerAgentExecutor POSTs to /explore for the read-only
+ * agents (architect, analysis). The agent clones `branch`, explores the checkout and
+ * returns a prose report/proposal — it makes NO edits, opens NO branch or PR, and an
+ * edit-free run is the expected outcome (NOT a failure, unlike /run). Mirrors the
+ * merger's non-pushing shape; the `summary` it returns is the deliverable.
+ */
+export interface ExploreJob {
+  jobId: string
+  /** Short label for the temp dir + logs (e.g. the agent kind). */
+  kind?: string
+  /** Composed role + best-practice fragments; written to Pi's global AGENTS.md context. */
+  systemPrompt: string
+  /** The concrete task prompt handed to Pi. */
+  userPrompt: string
+  model: string
+  proxyBaseUrl: string
+  sessionToken: string
+  ghToken: string
+  repo: RepoSpec
+  /** Branch to clone and explore read-only (no branch is created and nothing is pushed). */
+  branch: string
+  /** Per-kind web-search guidance; surfaced only when web search is configured. */
+  webToolsGuidance?: string
+  /** Enable proxy-backed web search for this run. */
+  webSearch?: boolean
+  githubApiBase?: string
+}
+
+/** The /explore response: `summary` carries the agent's prose report/proposal. */
+export interface ExploreResult {
+  summary?: string
+  stats?: PiRunStats
+  error?: string
+}
+
+/** Validate + narrow an untrusted body into an {@link ExploreJob}, throwing on bad input. */
+export function parseExploreJob(input: unknown): ExploreJob {
+  if (typeof input !== 'object' || input === null) {
+    throw new Error('Invalid job: body must be an object')
+  }
+  const o = input as Record<string, unknown>
+  const repo = (o.repo ?? {}) as Record<string, unknown>
+  const job: ExploreJob = {
+    jobId: str(o.jobId, 'jobId'),
+    systemPrompt: str(o.systemPrompt, 'systemPrompt'),
+    userPrompt: str(o.userPrompt, 'userPrompt'),
+    model: str(o.model, 'model'),
+    proxyBaseUrl: str(o.proxyBaseUrl, 'proxyBaseUrl'),
+    sessionToken: str(o.sessionToken, 'sessionToken'),
+    ghToken: str(o.ghToken, 'ghToken'),
+    repo: parseRepoSpec(repo),
+    branch: str(o.branch, 'branch'),
+    ...(typeof o.kind === 'string' && o.kind ? { kind: o.kind } : {}),
+    ...(typeof o.webToolsGuidance === 'string' ? { webToolsGuidance: o.webToolsGuidance } : {}),
+    ...(o.webSearch === true ? { webSearch: true } : {}),
     ...(typeof o.githubApiBase === 'string' ? { githubApiBase: o.githubApiBase } : {}),
   }
   assertAllowedHost(job.repo.cloneUrl, 'repo.cloneUrl')

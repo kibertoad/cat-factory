@@ -33,6 +33,11 @@ const open = computed(() => !!ctx.value && !!step.value)
 const stepNumber = computed(() => (ctx.value ? ctx.value.stepIndex + 1 : 0))
 const totalSteps = computed(() => instance.value?.steps.length ?? 0)
 
+// Companion verdicts for a companion step: the full sequence of correction cycles.
+const companionVerdicts = computed(() => step.value?.companion?.verdicts ?? [])
+const latestVerdict = computed(() => companionVerdicts.value.at(-1) ?? null)
+const pctOf = (n: number) => `${Math.round(n * 100)}%`
+
 const STATE_META: Record<AgentState, { label: string; color: string }> = {
   pending: { label: 'Pending', color: '#64748b' },
   working: { label: 'Working', color: '#6366f1' },
@@ -65,7 +70,8 @@ const durationMs = computed(() => {
   // Freeze the clock at the failure time once the run has failed (a mid-flight
   // step has no `finishedAt`, so the live tick would otherwise count up forever).
   const end =
-    s.finishedAt ?? (runFailed.value ? (instance.value?.failure?.occurredAt ?? s.startedAt) : nowTick.value)
+    s.finishedAt ??
+    (runFailed.value ? (instance.value?.failure?.occurredAt ?? s.startedAt) : nowTick.value)
   return Math.max(0, end - s.startedAt)
 })
 
@@ -602,6 +608,52 @@ watch(
                   </div>
                   <p class="mt-0.5 text-[13px] text-slate-200 capitalize">
                     {{ step.approval.status.replace('_', ' ') }}
+                  </p>
+                </div>
+
+                <!-- companion verdict + full correction sequence -->
+                <div v-if="companionVerdicts.length" class="mt-4">
+                  <div class="flex items-center justify-between">
+                    <span class="text-[11px] uppercase tracking-wide text-slate-500">
+                      Companion review
+                    </span>
+                    <UBadge
+                      :color="latestVerdict?.passed ? 'success' : 'warning'"
+                      variant="subtle"
+                      size="sm"
+                    >
+                      {{ pctOf(latestVerdict!.rating) }}
+                      {{ latestVerdict?.passed ? '≥' : '<' }} {{ pctOf(latestVerdict!.threshold) }}
+                    </UBadge>
+                  </div>
+                  <ol class="mt-2 space-y-1.5">
+                    <li
+                      v-for="(v, i) in companionVerdicts"
+                      :key="i"
+                      class="flex items-start gap-2 text-[12px]"
+                    >
+                      <span
+                        class="mt-px inline-flex h-4 shrink-0 items-center rounded px-1 font-mono text-[11px] tabular-nums"
+                        :class="
+                          v.passed
+                            ? 'bg-emerald-500/15 text-emerald-300'
+                            : 'bg-amber-500/15 text-amber-300'
+                        "
+                      >
+                        {{ i + 1 }}
+                      </span>
+                      <div class="min-w-0">
+                        <span :class="v.passed ? 'text-emerald-300' : 'text-amber-300'">
+                          {{ pctOf(v.rating) }} {{ v.passed ? '≥' : '<' }} {{ pctOf(v.threshold) }}
+                        </span>
+                        <span v-if="v.feedback" class="ml-1 text-slate-400"
+                          >— {{ v.feedback }}</span
+                        >
+                      </div>
+                    </li>
+                  </ol>
+                  <p v-if="companionVerdicts.length > 1" class="mt-1 text-[11px] text-slate-500">
+                    {{ companionVerdicts.length }} correction iteration(s).
                   </p>
                 </div>
               </section>

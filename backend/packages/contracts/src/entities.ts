@@ -186,6 +186,14 @@ export const pipelineSchema = v.object({
    * pipelines run straight through unchanged.
    */
   gates: v.optional(v.array(v.boolean())),
+  /**
+   * Per-step companion quality thresholds, parallel to {@link agentKinds}: when step
+   * `i` is a companion kind, `thresholds[i]` is the minimum rating (0..1) its review
+   * must reach for the run to proceed; below it the preceding producer is re-run, and
+   * the run fails once the rework budget is spent. `null`/absent on a companion step
+   * means "use the companion's default threshold"; ignored on non-companion steps.
+   */
+  thresholds: v.optional(v.array(v.nullable(v.pipe(v.number(), v.minValue(0), v.maxValue(1))))),
 })
 export type Pipeline = v.InferOutput<typeof pipelineSchema>
 
@@ -232,15 +240,46 @@ export type StepSubtasks = v.InferOutput<typeof stepSubtasksSchema>
  * text back to it rather than a re-rendered approximation.
  */
 export const stepReviewCommentSchema = v.object({
-  /** Verbatim raw-markdown source of the commented block. */
+  /** Verbatim raw-markdown source of the commented block (or the rendered item text). */
   quotedSource: v.string(),
-  /** 0-based source line range [start, end) of the block, for best-effort re-anchoring. */
-  srcStart: v.number(),
-  srcEnd: v.number(),
-  /** The reviewer's note on this block. */
+  /**
+   * 0-based source line range [start, end) of the commented prose block, for
+   * best-effort re-anchoring. Optional: a comment may instead anchor to a structured
+   * item via {@link anchorId} (e.g. a spec requirement/acceptance-criterion id), where
+   * there is no prose line range.
+   */
+  srcStart: v.optional(v.number()),
+  srcEnd: v.optional(v.number()),
+  /**
+   * Stable id of the structured item the comment targets (e.g. a spec
+   * requirement/criterion id), when the reviewed output is rendered as structured
+   * items rather than free prose. Absent for prose-range comments.
+   */
+  anchorId: v.optional(v.string()),
+  /** The reviewer's note on this block / item. */
   body: v.string(),
 })
 export type StepReviewComment = v.InferOutput<typeof stepReviewCommentSchema>
+
+/**
+ * The standardized, stored verdict a quality companion produced for an output it
+ * graded — shared by every companion site (the pipeline companion step and the
+ * requirements-rework gate). The raw model response is {@link companionAssessmentSchema}
+ * (rating + summary + comments); this is the persisted, self-describing record of how
+ * that assessment was applied: the `rating`, the `threshold` it was judged against,
+ * whether it `passed`, and the `feedback` surfaced to the human / fed into a rework.
+ */
+export const companionVerdictSchema = v.object({
+  /** Overall quality of the graded output (0..1, higher = better). */
+  rating: v.pipe(v.number(), v.minValue(0), v.maxValue(1)),
+  /** The quality bar the rating had to reach to pass. */
+  threshold: v.pipe(v.number(), v.minValue(0), v.maxValue(1)),
+  /** Whether the rating met the threshold. */
+  passed: v.boolean(),
+  /** The companion's challenge / justification (its assessment summary). */
+  feedback: v.string(),
+})
+export type CompanionVerdict = v.InferOutput<typeof companionVerdictSchema>
 
 /**
  * A human approval gate raised after a step whose pipeline marked it
@@ -298,6 +337,9 @@ export const agentFailureKindSchema = v.picklist([
   'job_failed',
   'decision_timeout',
   'rejected',
+  // A companion agent's quality rating stayed below the step's threshold after the
+  // automatic rework budget was exhausted, so the run was failed for human attention.
+  'companion_rejected',
   'cancelled',
   'unknown',
 ])
@@ -433,6 +475,56 @@ export const pipelineStepSchema = v.object({
    * otherwise.
    */
   approval: v.optional(v.nullable(stepApprovalSchema)),
+  /**
+   * Live state of a companion step that reviews a preceding producer step. Set when
+   * this step's `agentKind` is a companion kind. `threshold` is the quality bar the
+   * companion's latest rating (the last `verdicts` entry) must reach; `attempts`
+   * counts only the AUTOMATIC reworks performed, and the run fails once it reaches
+   * `maxAttempts`. A human "request changes" on the companion's gate also re-runs the
+   * producer but does NOT consume `attempts` (only the automatic loop is budgeted).
+   * Absent for non-companion steps.
+   */
+  companion: v.optional(
+    v.nullable(
+      v.object({
+        /** The quality bar (0..1) the latest verdict's rating must reach; seeded from the pipeline. */
+        threshold: v.number(),
+        /** The automatic rework budget: once `attempts` reaches this the run fails (`companion_rejected`). */
+        maxAttempts: v.number(),
+        /**
+         * How many AUTOMATIC reworks the companion has driven so far (the producer is
+         * looped back once per failed verdict). Human "request changes" cycles are not
+         * counted. Defaults to 0; the run fails once it reaches `maxAttempts`.
+         */
+        attempts: v.optional(v.number(), 0),
+        /**
+         * One standardized {@link companionVerdictSchema} per grading cycle, in order —
+         * the full sequence of correction iterations (the producer is re-run after each
+         * rejected verdict), including any human-driven ones. Empty before the first
+         * grade; the last entry is the latest.
+         */
+        verdicts: v.array(companionVerdictSchema),
+      }),
+    ),
+  ),
+  /**
+   * Transient rework feedback carried on a PRODUCER step while it is being re-run by
+   * a downstream companion (the analogue of an approval's `changes_requested`
+   * feedback for the automatic path). Folded into the agent's revision context on the
+   * re-run, then cleared. Absent when no companion rework is in flight.
+   */
+  rework: v.optional(
+    v.nullable(
+      v.object({
+        /** The producer's previous proposal the companion challenged. */
+        previousProposal: v.string(),
+        /** The companion's prose feedback driving the rework. */
+        feedback: v.string(),
+        /** Optional per-item / per-block challenges to address. */
+        comments: v.optional(v.array(stepReviewCommentSchema)),
+      }),
+    ),
+  ),
   /** Text the agent produced for this step (when LLM execution is enabled). */
   output: v.optional(v.string()),
   /** Identifier of the model that produced `output`, for transparency. */

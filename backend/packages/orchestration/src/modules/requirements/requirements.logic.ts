@@ -36,6 +36,12 @@ export interface RequirementsContext {
   block: Pick<Block, 'title' | 'type' | 'description'>
   docs: ReviewContextDoc[]
   tasks: ReviewContextTask[]
+  /**
+   * When a prior rework was rejected by the quality companion, its challenge — fed
+   * into the next rework so the regenerated document addresses the gaps. Absent on a
+   * first rework.
+   */
+  companionFeedback?: string
 }
 
 /**
@@ -186,10 +192,57 @@ export function buildReworkPrompt(
       '',
     )
   }
+  // When a prior rework was rejected by the quality companion, feed its challenge in
+  // so this attempt addresses the gaps rather than repeating them.
+  if (ctx.companionFeedback?.trim()) {
+    lines.push(
+      '',
+      'A quality companion REJECTED your previous reworked document for the following ' +
+        'reasons — address every one of them this time:',
+      '',
+      ctx.companionFeedback.trim(),
+      '',
+    )
+  }
   lines.push(
     'Rewrite the requirements as a single self-contained Markdown document in the standard ' +
       'structure described in your instructions, folding in every answer above. Output the ' +
       'revised requirements only.',
   )
   return lines.join('\n')
+}
+
+/**
+ * System prompt for the requirements-rework COMPANION: it challenges the just-reworked
+ * requirements document for completeness and quality and returns an overall rating
+ * (0..1) plus prose feedback, reusing the shared {@link CompanionAssessment} contract.
+ */
+export const REWORK_COMPANION_SYSTEM_PROMPT =
+  'You are a meticulous requirements quality companion. You are given a unit of ' +
+  "software work's reworked, standard-format requirements document. Challenge it hard " +
+  'for completeness and quality: missing functional or non-functional requirements, ' +
+  'weak or untestable acceptance criteria, unstated assumptions, unaddressed edge / ' +
+  'error cases, ambiguity, and anything that would block confident design or ' +
+  'implementation. Then give a SINGLE overall quality rating between 0 and 1 (1 = ' +
+  'excellent and complete, 0 = unusable). Be a fair but demanding critic — do not ' +
+  'rubber-stamp. Respond with ONLY a JSON object {"rating":0.0,"summary":"…"}: ' +
+  '`summary` is the concrete changes the document still needs. No prose outside the ' +
+  'JSON, no code fences.'
+
+/**
+ * Build the user prompt for the requirements-rework companion: the reworked document
+ * to grade, plus the context it was produced from so the companion can judge coverage.
+ */
+export function buildReworkCompanionPrompt(ctx: RequirementsContext, reworked: string): string {
+  return [
+    'Source context the requirements were produced from:',
+    '',
+    renderRequirements(ctx),
+    '',
+    'The reworked requirements document to grade:',
+    '',
+    reworked,
+    '',
+    'Challenge it and return your JSON rating + summary.',
+  ].join('\n')
 }
