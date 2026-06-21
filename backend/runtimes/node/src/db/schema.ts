@@ -97,6 +97,9 @@ export const blocks = pgTable(
     // The account-owned service this block belongs to (migration 0031); will become the
     // physical scope key once the repositories switch off workspace_id.
     service_id: text('service_id'),
+    // GitHub user id of the block's creator (migration 0038); drives "notify the task
+    // creator" routing. Nullable — legacy blocks / auth-disabled dev have no creator.
+    created_by: bigint('created_by', { mode: 'number' }),
   },
   (t) => [
     primaryKey({ columns: [t.workspace_id, t.id] }),
@@ -422,6 +425,71 @@ export const runnerPoolConnections = pgTable(
       .where(sql`deleted_at IS NULL`),
   ],
 )
+
+// Human-actionable notifications (mirror of D1 migration 0024). First-class items
+// surfaced on the board that outlive the run that raised them (merge_review /
+// pipeline_complete / ci_failed). The optional structured `payload` (assessment /
+// PR url / pipeline name) is JSON text. Closing the Node parity gap so the
+// notification subsystem — and any channel, including Slack — fires here too.
+export const notifications = pgTable(
+  'notifications',
+  {
+    workspace_id: text('workspace_id').notNull(),
+    id: text('id').notNull(),
+    type: text('type').notNull(),
+    status: text('status').notNull(),
+    block_id: text('block_id'),
+    execution_id: text('execution_id'),
+    title: text('title').notNull(),
+    body: text('body').notNull(),
+    payload: text('payload'),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+    resolved_at: bigint('resolved_at', { mode: 'number' }),
+  },
+  (t) => [
+    primaryKey({ columns: [t.workspace_id, t.id] }),
+    index('idx_notifications_open').on(t.workspace_id, t.status, t.created_at),
+    index('idx_notifications_block').on(t.workspace_id, t.block_id, t.type, t.status),
+  ],
+)
+
+// Slack integration (mirror of D1 migration 0037). An additional delivery transport
+// for the notification mechanism. Per-account connection (+ encrypted bot token,
+// `token_cipher` is a WebCryptoSecretCipher envelope, never plaintext), per-workspace
+// routing, and the per-account GitHub→Slack member map for @-mentions.
+export const slackConnections = pgTable(
+  'slack_connections',
+  {
+    account_id: text('account_id').primaryKey(),
+    team_id: text('team_id').notNull(),
+    team_name: text('team_name').notNull(),
+    team_icon_url: text('team_icon_url'),
+    bot_user_id: text('bot_user_id'),
+    scopes: text('scopes'),
+    token_cipher: text('token_cipher').notNull(),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+    deleted_at: bigint('deleted_at', { mode: 'number' }),
+  },
+  // A Slack team binds to at most one live account (mirrors the D1 partial unique).
+  (t) => [
+    uniqueIndex('idx_slack_conn_team')
+      .on(t.team_id)
+      .where(sql`deleted_at IS NULL`),
+  ],
+)
+
+export const slackSettings = pgTable('slack_settings', {
+  workspace_id: text('workspace_id').primaryKey(),
+  routes: text('routes').notNull().default('{}'),
+  mentions_enabled: integer('mentions_enabled').notNull().default(0),
+  updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
+})
+
+export const slackMemberMappings = pgTable('slack_member_mappings', {
+  account_id: text('account_id').primaryKey(),
+  entries: text('entries').notNull().default('[]'),
+  updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
+})
 
 // Provider-subscription token pool (mirror of D1 migration 0035): per-workspace,
 // per-vendor subscription credentials (Claude Pro/Max OAuth token, ChatGPT

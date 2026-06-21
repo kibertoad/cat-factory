@@ -5,7 +5,11 @@
 
 import type { MergeAssessment } from './merge'
 
-export type NotificationType = 'merge_review' | 'pipeline_complete' | 'ci_failed'
+export type NotificationType =
+  | 'merge_review'
+  | 'pipeline_complete'
+  | 'ci_failed'
+  | 'requirement_review'
 export type NotificationStatus = 'open' | 'acted' | 'dismissed'
 
 /** Optional structured detail for rendering a notification card. */
@@ -13,6 +17,7 @@ export interface NotificationPayload {
   assessment?: MergeAssessment
   prUrl?: string
   pipelineName?: string
+  findingCount?: number
 }
 
 /** A human-actionable item surfaced on the board. */

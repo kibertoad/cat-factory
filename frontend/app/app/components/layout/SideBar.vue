@@ -11,6 +11,7 @@ import UserMenu from '~/components/auth/UserMenu.vue'
 const documents = useDocumentsStore()
 const tasks = useTasksStore()
 const github = useGitHubStore()
+const slack = useSlackStore()
 const library = useFragmentLibraryStore()
 const workspace = useWorkspaceStore()
 const ui = useUiStore()
@@ -26,6 +27,7 @@ watch(
     void documents.probe()
     void tasks.probe()
     void github.probe()
+    void slack.probe()
     void library.probe()
   },
   { immediate: true },
@@ -132,6 +134,21 @@ watch(
         >
           <span class="truncate">
             {{ github.connected ? github.connection?.accountLogin : 'Connect GitHub' }}
+          </span>
+        </UButton>
+
+        <UButton
+          v-if="slack.available"
+          block
+          color="neutral"
+          variant="soft"
+          size="sm"
+          icon="i-lucide-slack"
+          class="justify-start"
+          @click="ui.openSlack()"
+        >
+          <span class="truncate">
+            {{ slack.connected ? slack.connection?.teamName : 'Connect Slack' }}
           </span>
         </UButton>
 

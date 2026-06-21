@@ -28,6 +28,10 @@ const TEST_ENV: NodeJS.ProcessEnv = {
   // ENCRYPTION_KEY (32 zero bytes, base64) or it throws at config load. Integration
   // toggles that need extra wiring (GitHub/runners) stay off — matching Node defaults.
   ENCRYPTION_KEY: Buffer.alloc(32).toString('base64'),
+  // Enable the Slack notification transport so its module + channel wire up (parity
+  // with the Worker test env); the conformance Slack CRUD asserts persistence parity,
+  // and the channel bails (best-effort) when a workspace has no Slack connection.
+  SLACK_ENABLED: 'true',
 }
 
 /**

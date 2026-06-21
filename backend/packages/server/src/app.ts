@@ -25,6 +25,7 @@ import { trackerSettingsController } from './modules/recurring/TrackerSettingsCo
 import { requirementReviewController } from './modules/requirements/RequirementReviewController.js'
 import { webSearchProxyController } from './modules/webSearch/WebSearchProxyController.js'
 import { runnerPoolController } from './modules/runners/RunnerPoolController.js'
+import { slackController, slackOAuthController } from './modules/slack/SlackController.js'
 import { vendorCredentialController } from './modules/providers/VendorCredentialController.js'
 import { serviceMountController } from './modules/services/ServiceMountController.js'
 import { taskSourceController } from './modules/tasks/TaskSourceController.js'
@@ -80,6 +81,9 @@ export function registerCoreControllers<E extends AppEnv>(app: Hono<E>): void {
   app.route('/workspaces/:workspaceId', serviceMountController())
   app.route('/workspaces/:workspaceId', fragmentLibraryController('workspace'))
   app.route('/workspaces/:workspaceId', githubController())
+  app.route('/workspaces/:workspaceId', slackController())
   // GitHub-facing (webhooks + setup callback); not workspace-scoped.
   app.route('/github', githubWebhookController())
+  // Slack-facing OAuth callback (browser redirect); not workspace-scoped.
+  app.route('/slack', slackOAuthController())
 }

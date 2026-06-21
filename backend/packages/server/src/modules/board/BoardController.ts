@@ -58,7 +58,12 @@ export function boardController(): Hono<AppEnv> {
   app.post('/blocks/:blockId/tasks', jsonBody(addTaskSchema), async (c) => {
     const block = await c
       .get('container')
-      .boardService.addTask(param(c, 'workspaceId'), param(c, 'blockId'), c.req.valid('json'))
+      .boardService.addTask(
+        param(c, 'workspaceId'),
+        param(c, 'blockId'),
+        c.req.valid('json'),
+        c.get('user')?.id ?? null,
+      )
     return c.json(block, 201)
   })
 

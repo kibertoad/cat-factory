@@ -298,6 +298,18 @@ export interface Env {
    */
   RUNNERS_ENABLED?: string
 
+  // ---- Slack notification transport (see config/slack.ts; opt-in) ---------
+  /**
+   * Enables the Slack notification transport ('true'). The per-account bot token is
+   * sealed with the shared `ENCRYPTION_KEY`. The three `SLACK_*` OAuth vars are
+   * optional: when all present they enable the "Add to Slack" flow; otherwise an
+   * org connects by pasting a bot token.
+   */
+  SLACK_ENABLED?: string
+  SLACK_CLIENT_ID?: string
+  SLACK_CLIENT_SECRET?: string
+  SLACK_REDIRECT_URL?: string
+
   // ---- Prompt-fragment library (see config.ts; opt-in; ADR 0006) ----------
   /**
    * Enables the tenant-scoped prompt-fragment library ('true'). Fragments and

@@ -93,6 +93,13 @@ export const blockSchema = v.object({
    * pipeline at run time (the board falls back to the first defined pipeline).
    */
   pipelineId: v.optional(v.string()),
+  /**
+   * GitHub user id of the person who created this block, captured from the
+   * authenticated session at creation (tasks today). Drives "notify the task
+   * creator" routing for notifications. Absent/null on blocks created before this
+   * was recorded, or with auth disabled (local/dev), where there is no user.
+   */
+  createdBy: v.optional(v.nullable(v.number())),
 })
 export type Block = v.InferOutput<typeof blockSchema>
 

@@ -52,6 +52,10 @@ export default defineConfig(async () => {
             // provider/scheduler.
             ENVIRONMENTS_ENABLED: 'true',
             RUNNERS_ENABLED: 'true',
+            // Enable the Slack notification transport so its module + channel wire up;
+            // the conformance Slack CRUD asserts persistence parity with Node, and the
+            // channel bails (best-effort) when a workspace has no Slack connection.
+            SLACK_ENABLED: 'true',
             // Force the deterministic heading planner for the env-wired documents
             // module (now always on): spawn specs assert exact board structure and
             // must not reach an LLM. Specs that exercise the LLM planner inject a

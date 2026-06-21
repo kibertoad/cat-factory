@@ -99,6 +99,7 @@ export {
   type BoardScanModule,
   type RequirementsModule,
   type NotificationsModule,
+  type SlackModule,
   type MergePresetsModule,
   type ModelDefaultsModule,
   type FragmentLibraryModule,

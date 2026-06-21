@@ -17,7 +17,8 @@ import type { AppEnv } from './env.js'
 //   /v1       — container LLM proxy; authenticated by a model-locked session token
 //               (ContainerSessionService), not the workspace session.
 //   /github   — GitHub webhooks + setup callback; verified by HMAC signature.
-const PUBLIC_PREFIXES = ['/health', '/auth', '/v1', '/github']
+//   /slack    — Slack OAuth callback; the `state` is HMAC-signed + short-lived.
+const PUBLIC_PREFIXES = ['/health', '/auth', '/v1', '/github', '/slack']
 
 /** The exact WebSocket-upgrade shape that self-authenticates via `?ticket=`. */
 const WS_EVENTS_PATH = /^\/workspaces\/[^/]+\/events$/

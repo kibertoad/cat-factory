@@ -19,6 +19,7 @@ import RecurringPipelineModal from '~/components/board/RecurringPipelineModal.vu
 import BootstrapModal from '~/components/bootstrap/BootstrapModal.vue'
 import AddServiceFromRepoModal from '~/components/github/AddServiceFromRepoModal.vue'
 import GitHubPanel from '~/components/github/GitHubPanel.vue'
+import SlackPanel from '~/components/slack/SlackPanel.vue'
 import GitHubOnboarding from '~/components/github/GitHubOnboarding.vue'
 import FragmentLibraryPanel from '~/components/fragments/FragmentLibraryPanel.vue'
 import CommandBar from '~/components/layout/CommandBar.vue'
@@ -101,6 +102,7 @@ watch(
       <BootstrapModal />
       <AddServiceFromRepoModal />
       <GitHubPanel />
+      <SlackPanel />
       <FragmentLibraryPanel />
       <CommandBar />
       <MergeThresholdsPanel />
