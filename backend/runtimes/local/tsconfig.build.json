@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "composite": true
+  },
+  "exclude": ["**/*.test.ts", "**/*.spec.ts"],
+  "references": [
+    { "path": "../../packages/kernel/tsconfig.build.json" },
+    { "path": "../../packages/agents/tsconfig.build.json" },
+    { "path": "../../packages/orchestration/tsconfig.build.json" },
+    { "path": "../../packages/server/tsconfig.build.json" },
+    { "path": "../node/tsconfig.build.json" }
+  ]
+}

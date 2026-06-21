@@ -73,7 +73,30 @@ export {
   GitHubAppRegistry,
   type GitHubAppRegistryDependencies,
   type RegisteredApp,
+  type AppTokenSource,
 } from './github/GitHubAppRegistry.js'
+// The runtime-neutral fetch-based GitHub client + the CI / merge / mergeability
+// providers (shared by every facade so a facade can gate on real CI and merge for
+// real). The client authenticates via the App registry or any AppTokenSource (e.g. a
+// static PAT in local mode).
+export {
+  FetchGitHubClient,
+  GitHubApiError,
+  type FetchGitHubClientDependencies,
+} from './github/FetchGitHubClient.js'
+export {
+  GitHubCiStatusProvider,
+  type GitHubCiStatusProviderDependencies,
+} from './github/GitHubCiStatusProvider.js'
+export {
+  GitHubMergeabilityProvider,
+  classifyMergeability,
+  type GitHubMergeabilityProviderDependencies,
+} from './github/GitHubMergeabilityProvider.js'
+export {
+  GitHubPullRequestMerger,
+  type GitHubPullRequestMergerDependencies,
+} from './github/GitHubPullRequestMerger.js'
 export {
   HmacSigner,
   TOKEN_AUDIENCE,
