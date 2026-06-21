@@ -12,6 +12,7 @@ export {
   DEFAULT_MONTHLY_LIMIT_EUR,
   DEFAULT_SPEND_PRICING,
   priceFor,
+  modelCostResolver,
   estimateCost,
   startOfMonthUtc,
 } from './pricing.js'

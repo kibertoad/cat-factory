@@ -67,6 +67,9 @@ export const useUiStore = defineStore('ui', () => {
   // default model overrides.
   const mergeThresholdsOpen = ref(false)
   const modelDefaultsOpen = ref(false)
+  // LLM-vendor subscription credentials (the token pool powering the Claude Code
+  // / Codex harnesses).
+  const vendorCredentialsOpen = ref(false)
 
   // Requirements-review panel: the block whose requirements review (questions /
   // gaps / clarifications) to show, or null when closed.
@@ -242,6 +245,12 @@ export const useUiStore = defineStore('ui', () => {
   function closeModelDefaults() {
     modelDefaultsOpen.value = false
   }
+  function openVendorCredentials() {
+    vendorCredentialsOpen.value = true
+  }
+  function closeVendorCredentials() {
+    vendorCredentialsOpen.value = false
+  }
   function openRequirementReview(blockId: string) {
     requirementReviewBlockId.value = blockId
   }
@@ -281,6 +290,7 @@ export const useUiStore = defineStore('ui', () => {
     commandBarOpen,
     mergeThresholdsOpen,
     modelDefaultsOpen,
+    vendorCredentialsOpen,
     requirementReviewBlockId,
     stepDetail,
     observabilityInstanceId,
@@ -327,6 +337,8 @@ export const useUiStore = defineStore('ui', () => {
     closeMergeThresholds,
     openModelDefaults,
     closeModelDefaults,
+    openVendorCredentials,
+    closeVendorCredentials,
     openRequirementReview,
     closeRequirementReview,
     openStepDetail,

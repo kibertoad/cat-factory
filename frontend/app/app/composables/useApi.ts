@@ -30,6 +30,8 @@ import type {
   MergePullRequestInput,
   ModelOption,
   ModelDefaults,
+  SubscriptionVendor,
+  VendorCredential,
   OpenPullRequestInput,
   Pipeline,
   PromptFragment,
@@ -189,6 +191,16 @@ export function useApi() {
 
     // ---- model picker catalog (effective per-deployment flavours) ---------
     getModels: () => http<ModelOption[]>('/models'),
+
+    // ---- LLM vendor subscription credentials (the token pool) -------------
+    listVendorCredentials: (workspaceId: string) =>
+      http<{ credentials: VendorCredential[] }>(`${ws(workspaceId)}/vendor-credentials`),
+    addVendorCredential: (
+      workspaceId: string,
+      body: { vendor: SubscriptionVendor; label: string; token: string },
+    ) => http<VendorCredential>(`${ws(workspaceId)}/vendor-credentials`, { method: 'POST', body }),
+    removeVendorCredential: (workspaceId: string, id: string) =>
+      http(`${ws(workspaceId)}/vendor-credentials/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 
     // ---- accounts (tenancy) -----------------------------------------------
     // The accounts the user can switch between (personal + orgs), org creation

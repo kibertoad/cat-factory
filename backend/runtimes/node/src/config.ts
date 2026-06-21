@@ -2,7 +2,7 @@ import type { AgentModelConfig } from '@cat-factory/agents'
 import { effectiveCatalog, resolveModelRef } from '@cat-factory/kernel'
 import type { TaskSourceKind } from '@cat-factory/kernel'
 import type { AppConfig, TasksConfig } from '@cat-factory/server'
-import { DEFAULT_SPEND_PRICING } from '@cat-factory/spend'
+import { DEFAULT_SPEND_PRICING, modelCostResolver } from '@cat-factory/spend'
 
 // Translate the Node process environment into the shared AppConfig contract. This is
 // the Node analogue of the Worker's `loadConfig(env)`: same SHAPE, different source.
@@ -126,6 +126,12 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
     )
   }
 
+  const spend = {
+    ...DEFAULT_SPEND_PRICING,
+    currency: env.SPEND_CURRENCY?.trim() || DEFAULT_SPEND_PRICING.currency,
+    monthlyLimit: num(env.SPEND_MONTHLY_LIMIT) ?? DEFAULT_SPEND_PRICING.monthlyLimit,
+  }
+
   return {
     agents: {
       routing: {
@@ -134,7 +140,8 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
       },
       resolveBlockModel: (modelId) => resolveModelRef(modelId, isDirectAvailable),
     },
-    models: effectiveCatalog(isDirectAvailable),
+    // Surface each model's informational list cost in the picker (from spend pricing).
+    models: effectiveCatalog(isDirectAvailable, modelCostResolver(spend)),
     execution: {
       decisionTimeout: env.DECISION_TIMEOUT?.trim() || '24 hours',
       jobPollInterval: env.JOB_POLL_INTERVAL?.trim() || '15 seconds',
@@ -144,11 +151,7 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
       ciMaxPolls: num(env.CI_MAX_POLLS) ?? 120,
       containerMaxAgeMs: Math.max(75, num(env.CONTAINER_MAX_AGE_MINUTES) ?? 90) * 60_000,
     },
-    spend: {
-      ...DEFAULT_SPEND_PRICING,
-      currency: env.SPEND_CURRENCY?.trim() || DEFAULT_SPEND_PRICING.currency,
-      monthlyLimit: num(env.SPEND_MONTHLY_LIMIT) ?? DEFAULT_SPEND_PRICING.monthlyLimit,
-    },
+    spend,
     github: {
       enabled: githubAppConfigured,
       appId: env.GITHUB_APP_ID?.trim() ?? '',

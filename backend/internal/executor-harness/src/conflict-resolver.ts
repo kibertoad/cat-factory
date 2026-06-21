@@ -45,16 +45,20 @@ export async function handleConflictResolver(
 
     let summary = ''
     let stats: PiRunStats = { toolCalls: 0, assistantChars: 0 }
+    let usage: { inputTokens: number; outputTokens: number } | undefined
     if (!clean) {
       // The merge left conflicts in the working tree — have the agent resolve them.
       log.info('conflict: resolving conflicts with agent', trace)
       let stderrTail: string | undefined
-      ;({ summary, stats, stderrTail } = await runAgentInWorkspace(
+      ;({ summary, stats, stderrTail, usage } = await runAgentInWorkspace(
         {
           dir,
           systemPrompt: job.systemPrompt,
           userPrompt: job.userPrompt,
           model: job.model,
+          harness: job.harness,
+          subscriptionToken: job.subscriptionToken,
+          subscriptionBaseUrl: job.subscriptionBaseUrl,
           proxyBaseUrl: job.proxyBaseUrl,
           sessionToken: job.sessionToken,
         },
@@ -74,6 +78,7 @@ export async function handleConflictResolver(
           summary,
           stats,
           error: unresolvedReason(unresolved, stats, stderrTail),
+          ...(usage ? { usage } : {}),
         }
       }
       // Complete the merge commit with the agent's resolution staged.
@@ -84,11 +89,11 @@ export async function handleConflictResolver(
     // actually advanced (an already-up-to-date branch is a no-op we leave alone).
     if ((await headCommit(dir, signal)) === prTip) {
       log.info('conflict: branch already up to date with base — nothing to push', trace)
-      return { resolved: true, summary, stats }
+      return { resolved: true, summary, stats, ...(usage ? { usage } : {}) }
     }
     log.info('conflict: pushing resolved branch', { ...trace, ...stats })
     await pushBranch(dir, job.branch, job.ghToken, signal)
-    return { resolved: true, summary, stats }
+    return { resolved: true, summary, stats, ...(usage ? { usage } : {}) }
   })
 }
 

@@ -6,11 +6,14 @@
 // (the backend replaces the whole map on each change).
 import { ref } from 'vue'
 import type { AgentKind } from '~/types/domain'
+import { contextLabel, displayFlavor, isSelectable } from '~/stores/models'
 
 const ui = useUiStore()
 const models = useModelsStore()
 const defaults = useModelDefaultsStore()
 const agents = useAgentsStore()
+const creds = useVendorCredentialsStore()
+const workspace = useWorkspaceStore()
 const toast = useToast()
 
 const open = computed({
@@ -21,7 +24,10 @@ const open = computed({
 const busy = ref<string | null>(null)
 
 watch(open, (isOpen) => {
-  if (isOpen) void models.ensureLoaded()
+  if (isOpen) {
+    void models.ensureLoaded()
+    if (workspace.workspaceId) void creds.load(workspace.workspaceId)
+  }
 })
 
 function modelLabel(id: string | undefined): string {
@@ -30,10 +36,13 @@ function modelLabel(id: string | undefined): string {
   // masquerading as "Deployment default", so the active state isn't misrepresented.
   if (!id) return 'Deployment default'
   const m = models.getModel(id)
-  return m ? `${m.label} · ${m.providerLabel}` : id
+  if (!m) return id
+  const flavor = displayFlavor(m, creds.configuredVendors)
+  return `${m.label} · ${flavor.providerLabel}`
 }
 
 function menuFor(kind: AgentKind) {
+  const configured = creds.configuredVendors
   return [
     [
       {
@@ -41,11 +50,20 @@ function menuFor(kind: AgentKind) {
         icon: 'i-lucide-rotate-ccw',
         onSelect: () => choose(kind, null),
       },
-      ...models.models.map((m) => ({
-        label: `${m.label} · ${m.providerLabel}`,
-        icon: 'i-lucide-cpu',
-        onSelect: () => choose(kind, m.id),
-      })),
+      ...models.models
+        .filter((m) => isSelectable(m, configured))
+        .map((m) => {
+          const flavor = displayFlavor(m, configured)
+          const ctx = contextLabel(flavor.contextTokens)
+          const suffix = [flavor.providerLabel, ctx, flavor.quotaBased ? 'quota' : undefined]
+            .filter(Boolean)
+            .join(' · ')
+          return {
+            label: `${m.label} · ${suffix}`,
+            icon: flavor.quotaBased ? 'i-lucide-infinity' : 'i-lucide-cpu',
+            onSelect: () => choose(kind, m.id),
+          }
+        }),
     ],
   ]
 }

@@ -48,12 +48,15 @@ export async function handleExplore(
     if (serviceDirectory) await mkdir(workDir, { recursive: true })
 
     log.info('explore: running agent', { ...trace, serviceDirectory })
-    const { summary, stats, stderrTail } = await runAgentInWorkspace(
+    const { summary, stats, stderrTail, usage } = await runAgentInWorkspace(
       {
         dir: workDir,
         systemPrompt: job.systemPrompt,
         userPrompt: job.userPrompt,
         model: job.model,
+        harness: job.harness,
+        subscriptionToken: job.subscriptionToken,
+        subscriptionBaseUrl: job.subscriptionBaseUrl,
         proxyBaseUrl: job.proxyBaseUrl,
         sessionToken: job.sessionToken,
         serviceDirectory,
@@ -69,10 +72,15 @@ export async function handleExplore(
     // The prose report IS the deliverable; an edit-free run is success. The only
     // failure is producing no text at all (the signature of never reaching the model).
     if (!summary.trim()) {
-      return { summary, stats, error: noOutputReason(stats, stderrTail) }
+      return {
+        summary,
+        stats,
+        error: noOutputReason(stats, stderrTail),
+        ...(usage ? { usage } : {}),
+      }
     }
     log.info('explore: done', { ...trace, ...stats })
-    return { summary, stats }
+    return { summary, stats, ...(usage ? { usage } : {}) }
   })
 }
 

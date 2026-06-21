@@ -120,6 +120,20 @@ export class CompositeAgentExecutor implements AsyncAgentExecutor {
     return executor.resolveModel?.(context) ?? Promise.resolve(undefined)
   }
 
+  /**
+   * Whether the step runs on a flat-rate subscription (quota) model, forwarding to
+   * the executor that handles its kind (only the container executor runs subscription
+   * harnesses). Best-effort: an inline kind, an unwired container, or an executor
+   * without the capability all report false (budget-metered, the prior behaviour).
+   */
+  isQuotaBased(context: AgentRunContext): Promise<boolean> {
+    if (!this.container) return Promise.resolve(false)
+    const needsContainer =
+      CONTAINER_KINDS.has(context.agentKind) || registeredKindRequiresContainer(context.agentKind)
+    if (!needsContainer) return Promise.resolve(false)
+    return this.container.isQuotaBased?.(context) ?? Promise.resolve(false)
+  }
+
   /** Async only for container kinds whose executor actually supports polling. */
   runsAsync(context: AgentRunContext): boolean {
     const executor = this.pick(context)

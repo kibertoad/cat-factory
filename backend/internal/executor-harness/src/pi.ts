@@ -310,6 +310,13 @@ export interface PiRunOutcome {
    * without shelling into the (ephemeral) container.
    */
   stderrTail?: string
+  /**
+   * Token usage lifted from the agent CLI's own event stream. Reported by the
+   * subscription harnesses (Claude Code / Codex), whose traffic bypasses the LLM
+   * proxy — so the backend folds it into the leased token's rolling-window counters
+   * (usage-aware rotation) and telemetry. Absent for the proxy-metered Pi harness.
+   */
+  usage?: { inputTokens: number; outputTokens: number }
 }
 
 /**

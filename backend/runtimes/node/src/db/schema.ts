@@ -488,6 +488,30 @@ export const slackMemberMappings = pgTable('slack_member_mappings', {
   updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
 })
 
+// Provider-subscription token pool (mirror of D1 migration 0035): per-workspace,
+// per-vendor subscription credentials (Claude Pro/Max OAuth token, ChatGPT
+// auth.json) authenticating the Claude Code / Codex harnesses. The credential is
+// stored as an opaque SecretCipher envelope; usage counters drive usage-aware
+// rotation. A workspace may hold many tokens per vendor (a pool).
+export const providerSubscriptionTokens = pgTable(
+  'provider_subscription_tokens',
+  {
+    id: text('id').primaryKey(),
+    workspace_id: text('workspace_id').notNull(),
+    vendor: text('vendor').notNull(),
+    label: text('label').notNull(),
+    token_cipher: text('token_cipher').notNull(),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+    last_used_at: bigint('last_used_at', { mode: 'number' }),
+    window_started_at: bigint('window_started_at', { mode: 'number' }),
+    input_tokens: bigint('input_tokens', { mode: 'number' }).notNull().default(0),
+    output_tokens: bigint('output_tokens', { mode: 'number' }).notNull().default(0),
+    request_count: integer('request_count').notNull().default(0),
+    deleted_at: bigint('deleted_at', { mode: 'number' }),
+  },
+  (t) => [index('idx_provider_subs_pool').on(t.workspace_id, t.vendor, t.deleted_at)],
+)
+
 // GitHub App installation bindings (mirror of D1 migration 0004 + the account_id /
 // app_id columns from 0017 / 0019). The container executor reads this to resolve a
 // run's installation id and mint a short-lived push token; tokens are cached

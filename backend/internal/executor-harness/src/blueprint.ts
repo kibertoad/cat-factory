@@ -367,12 +367,15 @@ export async function handleBlueprint(
     const previousVersion = await readExistingVersion(dir)
 
     log.info('blueprint: running agent', { ...trace, mode: job.mode })
-    const { summary, stats, stderrTail } = await runAgentInWorkspace(
+    const { summary, stats, stderrTail, usage } = await runAgentInWorkspace(
       {
         dir,
         systemPrompt: job.systemPrompt,
         userPrompt: buildUserPrompt(job, existing),
         model: job.model,
+        harness: job.harness,
+        subscriptionToken: job.subscriptionToken,
+        subscriptionBaseUrl: job.subscriptionBaseUrl,
         proxyBaseUrl: job.proxyBaseUrl,
         sessionToken: job.sessionToken,
         // The Blueprinter explores the repo and RETURNS the service tree as JSON —
@@ -396,6 +399,9 @@ export async function handleBlueprint(
       },
       summary,
       {
+        harness: job.harness,
+        subscriptionToken: job.subscriptionToken,
+        subscriptionBaseUrl: job.subscriptionBaseUrl,
         proxyBaseUrl: job.proxyBaseUrl,
         sessionToken: job.sessionToken,
         model: job.model,
@@ -404,7 +410,12 @@ export async function handleBlueprint(
       },
     )
     if (!service) {
-      return { summary, stats, error: noBlueprintReason(stats, summary, stderrTail, diagnostics) }
+      return {
+        summary,
+        stats,
+        error: noBlueprintReason(stats, summary, stderrTail, diagnostics),
+        ...(usage ? { usage } : {}),
+      }
     }
 
     const version = nextVersion(service, previousVersion, new Date())
@@ -425,7 +436,7 @@ export async function handleBlueprint(
       log.info('blueprint: no changes to push (blueprint unchanged)', trace)
     }
 
-    return { service, summary, stats }
+    return { service, summary, stats, ...(usage ? { usage } : {}) }
   })
 }
 

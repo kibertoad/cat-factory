@@ -41,6 +41,9 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
   // OpenAI (approximate list prices, USD→EUR ~0.92).
   'openai:gpt-4o': { inputPerMillion: 2.3, outputPerMillion: 9.2 },
   'openai:gpt-4o-mini': { inputPerMillion: 0.14, outputPerMillion: 0.55 },
+  // ChatGPT/Codex subscription models (informational list prices, USD→EUR ~0.92).
+  'openai:gpt-5.5-codex': { inputPerMillion: 4.6, outputPerMillion: 27.6 },
+  'openai:gpt-5.4-codex': { inputPerMillion: 2.3, outputPerMillion: 13.8 },
   openai: { inputPerMillion: 0.14, outputPerMillion: 0.55 },
   // Cloudflare Workers AI is billed per "neuron"; treat it as roughly free.
   'workers-ai': { inputPerMillion: 0.1, outputPerMillion: 0.1 },
@@ -76,6 +79,23 @@ export function priceFor(pricing: SpendPricing, ref: ModelRef): ModelPrice {
     pricing.prices[ref.provider] ??
     pricing.defaultPrice
   )
+}
+
+/**
+ * A {@link ModelCostResolver}-shaped closure over a {@link SpendPricing}, for the
+ * model catalog to surface each model's informational list cost in the picker.
+ */
+export function modelCostResolver(
+  pricing: SpendPricing,
+): (ref: ModelRef) => { inputPerMillion: number; outputPerMillion: number; currency: string } {
+  return (ref) => {
+    const price = priceFor(pricing, ref)
+    return {
+      inputPerMillion: price.inputPerMillion,
+      outputPerMillion: price.outputPerMillion,
+      currency: pricing.currency,
+    }
+  }
 }
 
 /** Cost of a single call's token usage, in the pricing currency. */

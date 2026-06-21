@@ -155,3 +155,15 @@ export {
   renderNotificationMessage,
   resolveRoute,
 } from './modules/slack/slack.logic.js'
+export {
+  ProviderSubscriptionService,
+  type ProviderSubscriptionServiceDependencies,
+  type VendorCredentialSummary,
+  type LeasedSubscriptionToken,
+} from './modules/providers/ProviderSubscriptionService.js'
+export * as providersLogic from './modules/providers/providers.logic.js'
+export {
+  DEFAULT_USAGE_WINDOW_MS,
+  chooseToken,
+  windowUsage,
+} from './modules/providers/providers.logic.js'

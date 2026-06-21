@@ -86,12 +86,15 @@ export async function handleMerger(job: MergerJob, opts: RunOptions = {}): Promi
     })
 
     log.info('merge: running agent', trace)
-    const { summary, stats, stderrTail } = await runAgentInWorkspace(
+    const { summary, stats, stderrTail, usage } = await runAgentInWorkspace(
       {
         dir,
         systemPrompt: job.systemPrompt,
         userPrompt: buildUserPrompt(job),
         model: job.model,
+        harness: job.harness,
+        subscriptionToken: job.subscriptionToken,
+        subscriptionBaseUrl: job.subscriptionBaseUrl,
         proxyBaseUrl: job.proxyBaseUrl,
         sessionToken: job.sessionToken,
         // The merger only assesses (no commits/edits), so the no-edit guard must
@@ -113,6 +116,9 @@ export async function handleMerger(job: MergerJob, opts: RunOptions = {}): Promi
       },
       summary,
       {
+        harness: job.harness,
+        subscriptionToken: job.subscriptionToken,
+        subscriptionBaseUrl: job.subscriptionBaseUrl,
         proxyBaseUrl: job.proxyBaseUrl,
         sessionToken: job.sessionToken,
         model: job.model,
@@ -121,10 +127,15 @@ export async function handleMerger(job: MergerJob, opts: RunOptions = {}): Promi
       },
     )
     if (!assessment) {
-      return { summary, stats, error: noAssessmentReason(stats, stderrTail, diagnostics) }
+      return {
+        summary,
+        stats,
+        error: noAssessmentReason(stats, stderrTail, diagnostics),
+        ...(usage ? { usage } : {}),
+      }
     }
     log.info('merge: assessed', { ...trace, ...assessment })
-    return { assessment, summary, stats }
+    return { assessment, summary, stats, ...(usage ? { usage } : {}) }
   })
 }
 

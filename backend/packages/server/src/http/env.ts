@@ -1,4 +1,5 @@
 import type { AgentRunRepository } from '@cat-factory/kernel'
+import type { ProviderSubscriptionService } from '@cat-factory/integrations'
 import type { Core } from '@cat-factory/orchestration'
 import type { SessionPayload } from '../auth/signing.js'
 import type { AppConfig } from '../config/types.js'
@@ -16,6 +17,11 @@ export interface ServerContainer extends Core {
   agentRunRepository: AgentRunRepository
   /** Per-facade runtime seams (real-time delivery, …) the shared controllers use. */
   gateways: RuntimeGateways
+  /**
+   * The workspace subscription-token pool (Claude Code / Codex credentials).
+   * Present only when the facade wired the provider-subscription repository.
+   */
+  subscriptions?: ProviderSubscriptionService
 }
 
 /** Hono generics shared by the cross-runtime controllers (Variables only — no Bindings). */

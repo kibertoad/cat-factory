@@ -1,4 +1,5 @@
 import { redactSecrets } from './git.js'
+import { redactAll, secretsToRedact } from './agent-runner.js'
 import { log } from './logger.js'
 
 // A reusable abstraction for the "agent returns a structured JSON document as its
@@ -53,11 +54,17 @@ export interface StructuredOutputSpec<T> {
 
 /** Runtime wiring to reach the LLM proxy for the repair call. */
 export interface ProxyAccess {
-  proxyBaseUrl: string
-  sessionToken: string
+  /** Pi-harness proxy base URL; absent for subscription harnesses (no proxy repair). */
+  proxyBaseUrl?: string
+  /** Pi-harness proxy session token; absent for subscription harnesses. */
+  sessionToken?: string
   model: string
   jobId: string
   signal?: AbortSignal
+  /** Carried for context (the subscription harnesses can't use the proxy for repair). */
+  harness?: string
+  subscriptionToken?: string
+  subscriptionBaseUrl?: string
 }
 
 /** Structured diagnostics for a resolution attempt, surfaced to logs + the failure reason. */
@@ -163,6 +170,29 @@ export async function resolveStructuredOutput<T>(
     }
   }
 
+  // Pick a repair channel. The Pi harness repairs through the LLM proxy; the
+  // claude-code subscription harness has no proxy but DOES speak a standard
+  // Anthropic Messages API (Anthropic itself, or an Anthropic-compatible endpoint
+  // for GLM/Kimi/DeepSeek), so it repairs straight against the vendor with the
+  // leased token. Codex has no simple JSON API, so it keeps the graceful no-repair
+  // path (the smaller GLM/Kimi/DeepSeek models — most prone to malformed JSON — are
+  // covered by the claude-code channel).
+  const canProxyRepair = !!access.proxyBaseUrl && !!access.sessionToken
+  const canSubscriptionRepair = access.harness === 'claude-code' && !!access.subscriptionToken
+  if (!canProxyRepair && !canSubscriptionRepair) {
+    return {
+      value: null,
+      diagnostics: {
+        parsedOn: 'none',
+        primaryChars,
+        looksDoubled: looksTokenDoubled(primaryText).doubled,
+        repairAttempted: false,
+        repairSucceeded: false,
+        repairError: `structured-output repair unavailable for the ${access.harness ?? 'pi'} harness`,
+      },
+    }
+  }
+
   // Primary failed: label the corruption (doubling is the known reasoning-model
   // streaming bug) and record the event before spending a repair call.
   const doubled = looksTokenDoubled(primaryText)
@@ -221,13 +251,21 @@ export async function resolveStructuredOutput<T>(
 /**
  * Make the structured repair call and return the model's text (the corrected JSON,
  * ideally). Throws on a transport/HTTP error so the caller records it as the repair
- * failure reason. Non-streaming + `response_format: json_object` + a focused prompt.
+ * failure reason. Routes to the LLM proxy (Pi harness) when present, else to the
+ * claude-code subscription harness's own Anthropic-compatible endpoint.
  */
 async function callRepair<T>(
   badText: string,
   spec: StructuredOutputSpec<T>,
   access: ProxyAccess,
 ): Promise<string> {
+  if ((!access.proxyBaseUrl || !access.sessionToken) && access.subscriptionToken) {
+    return callSubscriptionRepair(badText, spec, access)
+  }
+  // Only ever called after the caller verified the proxy is present (Pi harness).
+  if (!access.proxyBaseUrl || !access.sessionToken) {
+    throw new Error('structured-output repair requires the LLM proxy (Pi harness)')
+  }
   const url = `${access.proxyBaseUrl.replace(/\/+$/, '')}/chat/completions`
   const messages = [
     { role: 'system', content: REPAIR_SYSTEM },
@@ -270,6 +308,76 @@ async function callRepair<T>(
   const json = (await res.json()) as { choices?: Array<{ message?: { content?: string | null } }> }
   const content = json.choices?.[0]?.message?.content
   return typeof content === 'string' ? content : ''
+}
+
+/**
+ * Repair via the claude-code subscription harness's own vendor endpoint (no proxy):
+ * a single non-streaming Anthropic Messages call with the leased token. Anthropic
+ * itself uses the OAuth token (Bearer + the oauth beta header) against
+ * api.anthropic.com; an Anthropic-compatible vendor (GLM/Kimi/DeepSeek) uses its
+ * `subscriptionBaseUrl` with the API-token `x-api-key` header. Best-effort: any
+ * error propagates to the caller's `repairError` and degrades to the null path.
+ */
+async function callSubscriptionRepair<T>(
+  badText: string,
+  spec: StructuredOutputSpec<T>,
+  access: ProxyAccess,
+): Promise<string> {
+  if (!access.subscriptionToken) {
+    throw new Error('structured-output subscription repair requires a subscription token')
+  }
+  const base = access.subscriptionBaseUrl?.replace(/\/+$/, '') ?? 'https://api.anthropic.com'
+  const url = `${base}/v1/messages`
+  const headers: Record<string, string> = {
+    'content-type': 'application/json',
+    'anthropic-version': '2023-06-01',
+  }
+  if (access.subscriptionBaseUrl) {
+    // Anthropic-compatible vendor (GLM/Kimi/DeepSeek): API token via x-api-key.
+    headers['x-api-key'] = access.subscriptionToken
+  } else {
+    // Anthropic on a Claude subscription OAuth token.
+    headers.authorization = `Bearer ${access.subscriptionToken}`
+    headers['anthropic-beta'] = 'oauth-2025-04-20'
+  }
+  const body = {
+    model: access.model,
+    max_tokens: REPAIR_MAX_OUTPUT_TOKENS,
+    temperature: 0,
+    system: REPAIR_SYSTEM,
+    messages: [
+      {
+        role: 'user',
+        content:
+          `${spec.shapeHint}\n\n` +
+          'The text below was meant to be that JSON object but does not parse. Return ' +
+          'ONLY the corrected JSON object.\n\n' +
+          badText.slice(0, MAX_REPAIR_INPUT_CHARS),
+      },
+    ],
+  }
+  const res = await fetch(url, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body),
+    signal: access.signal,
+  })
+  if (!res.ok) {
+    // A vendor 4xx body can echo the API key/token back; `redactSecrets` only knows
+    // GitHub-shaped creds, so ALSO scrub the leased subscription credential (the raw
+    // value, and — for a JSON auth bundle — its nested token leaves) before surfacing.
+    const raw = (await res.text().catch(() => '')).slice(0, 300)
+    const detail = redactAll(redactSecrets(raw), secretsToRedact(access.subscriptionToken ?? ''))
+    throw new Error(
+      `subscription repair call failed: HTTP ${res.status}${detail ? ` — ${detail}` : ''}`,
+    )
+  }
+  const json = (await res.json()) as { content?: Array<{ type?: string; text?: string }> }
+  // Concatenate the text blocks of the Anthropic Messages response.
+  return (json.content ?? [])
+    .filter((b) => b?.type === 'text' && typeof b.text === 'string')
+    .map((b) => b.text)
+    .join('')
 }
 
 /** POST a chat-completions body to the proxy with the session bearer token. */

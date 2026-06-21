@@ -118,6 +118,63 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
       })
     })
 
+    describe('vendor credentials (subscription token pool)', () => {
+      it('adds, lists (secret-free), and removes pooled subscription tokens', async () => {
+        const { call, createWorkspace } = harness.makeApp()
+        const { workspace } = await createWorkspace()
+        const base = `/workspaces/${workspace.id}/vendor-credentials`
+
+        // A fresh workspace has an empty pool.
+        const initial = await call<{ credentials: unknown[] }>('GET', base)
+        expect(initial.status).toBe(200)
+        expect(initial.body.credentials).toEqual([])
+
+        // Add two tokens for the same vendor (a pool) — the raw token is write-only.
+        const first = await call<{ id: string; vendor: string; label: string }>('POST', base, {
+          vendor: 'claude',
+          label: 'primary',
+          token: 'sk-ant-oat01-secret-one',
+        })
+        expect(first.status).toBe(201)
+        expect(first.body.vendor).toBe('claude')
+        // The secret is never echoed back.
+        expect(JSON.stringify(first.body)).not.toContain('secret-one')
+        const second = await call<{ id: string }>('POST', base, {
+          vendor: 'codex',
+          label: 'chatgpt',
+          token: '{"auth_mode":"chatgpt","tokens":{"access_token":"secret-two"}}',
+        })
+        expect(second.status).toBe(201)
+        // A Claude-Code-flavour vendor beyond claude/codex (GLM/Kimi/DeepSeek): the
+        // unfiltered list MUST include it, not just the headline two vendors.
+        const third = await call<{ id: string; vendor: string }>('POST', base, {
+          vendor: 'glm',
+          label: 'zai',
+          token: 'glm-coding-plan-secret-three',
+        })
+        expect(third.status).toBe(201)
+        expect(third.body.vendor).toBe('glm')
+
+        // All three list back as metadata only (the unfiltered GET covers every vendor).
+        const listed = await call<{ credentials: { id: string; vendor: string }[] }>('GET', base)
+        expect(listed.body.credentials).toHaveLength(3)
+        expect(listed.body.credentials.map((c) => c.vendor).sort()).toEqual([
+          'claude',
+          'codex',
+          'glm',
+        ])
+        expect(JSON.stringify(listed.body)).not.toContain('secret-')
+
+        // Remove one; the others survive.
+        const del = await call('DELETE', `${base}/${first.body.id}`)
+        expect(del.status).toBe(204)
+        const afterDelete = await call<{ credentials: { id: string }[] }>('GET', base)
+        expect(afterDelete.body.credentials.map((c) => c.id).sort()).toEqual(
+          [second.body.id, third.body.id].sort(),
+        )
+      })
+    })
+
     describe('board', () => {
       it('adds a top-level frame', async () => {
         const app = harness.makeApp()

@@ -12,6 +12,10 @@ import {
   writeWebToolsConfig,
 } from './pi.js'
 import type { RunOptions } from './runner.js'
+import { type SubscriptionHarness, runSubscriptionHarness } from './agent-runner.js'
+
+/** Which container harness runs an agent (the default Pi, or a subscription CLI). */
+export type HarnessKind = 'pi' | SubscriptionHarness
 
 // The thin base every container agent shares: an ephemeral working directory, and
 // one Pi run inside it driven by the harness-written context. The agents differ in
@@ -47,8 +51,20 @@ export interface AgentRunSpec {
   /** The concrete task prompt handed to Pi. */
   userPrompt: string
   model: string
-  proxyBaseUrl: string
-  sessionToken: string
+  /**
+   * Which harness runs the agent. Absent ⇒ the default Pi harness (proxy +
+   * sessionToken). For `claude-code` / `codex`, `subscriptionToken` carries the
+   * leased credential and the proxy fields are unused (the CLI talks direct).
+   */
+  harness?: HarnessKind
+  /** The leased subscription credential for `claude-code` / `codex`. */
+  subscriptionToken?: string
+  /** Anthropic-compatible base URL for a non-Anthropic Claude-Code vendor (GLM/Kimi). */
+  subscriptionBaseUrl?: string
+  /** Pi proxy base URL (Pi harness only). */
+  proxyBaseUrl?: string
+  /** Pi proxy session token (Pi harness only). */
+  sessionToken?: string
   /**
    * For a monorepo service, the subdirectory (relative to the repo root) this run
    * operates within — `spec.dir` already points there. Surfaced to the agent in
@@ -88,6 +104,31 @@ export async function runAgentInWorkspace(
   spec: AgentRunSpec,
   opts: RunOptions = {},
 ): Promise<PiRunOutcome> {
+  // Subscription harnesses (Claude Code / Codex) authenticate with the leased
+  // token and talk direct to the vendor — no proxy config, no AGENTS.md. The
+  // system prompt is passed straight to the CLI; everything around this (clone,
+  // push, watchdogs) is unchanged.
+  if (spec.harness === 'claude-code' || spec.harness === 'codex') {
+    if (!spec.subscriptionToken) {
+      throw new Error(`The ${spec.harness} harness requires a subscription token`)
+    }
+    return runSubscriptionHarness(spec.harness, {
+      cwd: spec.dir,
+      model: spec.model,
+      systemPrompt: spec.systemPrompt,
+      userPrompt: spec.userPrompt,
+      subscriptionToken: spec.subscriptionToken,
+      subscriptionBaseUrl: spec.subscriptionBaseUrl,
+      signal: opts.signal,
+      onActivity: opts.onActivity,
+      onProgress: opts.onProgress,
+    })
+  }
+  if (!spec.proxyBaseUrl || !spec.sessionToken) {
+    throw new Error('The Pi harness requires proxyBaseUrl and sessionToken')
+  }
+  const proxyBaseUrl = spec.proxyBaseUrl
+  const sessionToken = spec.sessionToken
   // Opt-in web search/fetch (rpiv-web-tools). Two ways it turns on, both no-ops by
   // default:
   //  - proxy-backed (the Cloudflare/managed path): the backend set `webSearchProxy`,
@@ -98,7 +139,7 @@ export async function runAgentInWorkspace(
   // The proxy vars are handed to Pi's child via `extraEnv` (not the harness's own
   // process.env), so detection runs against the same merged view the extension sees.
   const extraEnv: Record<string, string> = spec.webSearchProxy
-    ? webSearchProxyEnv(spec.proxyBaseUrl, spec.sessionToken)
+    ? webSearchProxyEnv(proxyBaseUrl, sessionToken)
     : {}
   const webSearch = webSearchConfigFromEnv({ ...process.env, ...extraEnv })
   if (webSearch) await writeWebToolsConfig(webSearch)
@@ -107,13 +148,13 @@ export async function runAgentInWorkspace(
     guidance: spec.webToolsGuidance,
     serviceDirectory: spec.serviceDirectory,
   })
-  await writePiModelsConfig({ model: spec.model, proxyBaseUrl: spec.proxyBaseUrl })
+  await writePiModelsConfig({ model: spec.model, proxyBaseUrl })
   const { signal, onActivity, onProgress } = opts
   return runPi({
     cwd: spec.dir,
     model: spec.model,
     userPrompt: spec.userPrompt,
-    sessionToken: spec.sessionToken,
+    sessionToken,
     signal,
     onActivity,
     onProgress,
