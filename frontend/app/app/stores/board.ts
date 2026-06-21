@@ -60,7 +60,11 @@ export const useBoardStore = defineStore('board', () => {
     containerId: string,
     title: string,
     description?: string,
-    options?: { mergePresetId?: string; pipelineId?: string },
+    options?: {
+      mergePresetId?: string
+      pipelineId?: string
+      agentConfig?: Record<string, string>
+    },
   ): Promise<Block | undefined> {
     if (!getBlock(containerId)) return
     const block = await api.addTask(useWorkspaceStore().requireId(), containerId, {
@@ -68,6 +72,7 @@ export const useBoardStore = defineStore('board', () => {
       description,
       ...(options?.mergePresetId ? { mergePresetId: options.mergePresetId } : {}),
       ...(options?.pipelineId ? { pipelineId: options.pipelineId } : {}),
+      ...(options?.agentConfig ? { agentConfig: options.agentConfig } : {}),
     })
     upsert(block)
     return block

@@ -3,7 +3,8 @@ import type { Block, BlockStatus } from '~/types/domain'
 import { BLOCK_TYPE_META, STATUS_META } from '~/utils/catalog'
 import TaskContextDocs from '~/components/documents/TaskContextDocs.vue'
 import TaskContextIssues from '~/components/tasks/TaskContextIssues.vue'
-import TaskTestTarget from '~/components/panels/inspector/TaskTestTarget.vue'
+import TaskAgentConfig from '~/components/panels/inspector/TaskAgentConfig.vue'
+import ServiceTestConfig from '~/components/panels/inspector/ServiceTestConfig.vue'
 import ContainerSummary from '~/components/panels/inspector/ContainerSummary.vue'
 import TaskDependencies from '~/components/panels/inspector/TaskDependencies.vue'
 import TaskStructure from '~/components/panels/inspector/TaskStructure.vue'
@@ -356,13 +357,15 @@ const showOriginalDescription = ref(false)
 
       <!-- service / module: tasks summary -->
       <ContainerSummary v-if="isContainer" :block="block" />
+      <!-- service (frame): test infra + provisioning configuration -->
+      <ServiceTestConfig v-if="isFrame" :block="block" />
 
-      <!-- task: dependencies, structure, test target, run settings, execution -->
+      <!-- task: dependencies, structure, agent config, run settings, execution -->
       <template v-else-if="isTask">
         <RecurringScheduleSettings :block="block" />
         <TaskDependencies :block="block" />
         <TaskStructure :block="block" />
-        <TaskTestTarget :block="block" />
+        <TaskAgentConfig :block="block" />
         <TaskRunSettings :block="block" />
         <TaskExecution :block="block" />
 

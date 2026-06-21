@@ -85,14 +85,22 @@ export interface Block {
   fragmentIds?: string[]
   /** id of the model (from MODEL_CATALOG) to run this block's agents with; absent = default. */
   modelId?: string
-  /** where this block's acceptance / Playwright tests run; absent = no preference. */
-  testTarget?: TestTarget
   /** the PR the block's implementer agent opened for its work; absent = none yet. */
   pullRequest?: PullRequestRef
   /** task-only: selected merge threshold preset id; absent = workspace default. */
   mergePresetId?: string
   /** task-only: pinned default pipeline id picked at creation; absent = none. */
   pipelineId?: string
+  /** task-only: agent-contributed config values (id→value), e.g. the Tester's environment. */
+  agentConfig?: Record<string, string>
+  /** service-only (frame): docker-compose path for the Tester's local infra; absent = none. */
+  testComposePath?: string
+  /** service-only (frame): the service has no infra dependencies to stand up. */
+  noInfraDependencies?: boolean
+  /** service-only (frame): cloud provider the service's jobs run on; absent = account default. */
+  cloudProvider?: CloudProvider
+  /** service-only (frame): abstract instance size for the service's jobs; absent = default. */
+  instanceSize?: InstanceSize
 }
 
 /**
@@ -109,12 +117,55 @@ export interface PullRequestRef {
   branch?: string
 }
 
-/**
- * Where a block's acceptance / Playwright tests run:
- *  - `github_actions`  in the project's CI, against a service spun up in the run
- *  - `ephemeral_env`   against the provisioned ephemeral environment for the run
- */
-export type TestTarget = 'github_actions' | 'ephemeral_env'
+/** The cloud provider a service's container jobs run on (per service; account default otherwise). */
+export type CloudProvider = 'cloudflare' | 'aws' | 'gcp' | 'azure' | 'custom'
+
+/** Abstract, cloud-neutral instance size selectable per service. */
+export type InstanceSize = 'small' | 'medium' | 'large' | 'xlarge'
+
+/** One choice of a `select` agent-config descriptor. */
+export interface AgentConfigOption {
+  value: string
+  label: string
+}
+
+/** A task-level configuration parameter an agent kind contributes (see the snapshot catalog). */
+export interface AgentConfigDescriptor {
+  id: string
+  agentKind: string
+  label: string
+  description: string
+  type: 'select'
+  options: AgentConfigOption[]
+  default: string
+}
+
+/** Severity of a Tester-raised concern. */
+export type TestConcernSeverity = 'low' | 'medium' | 'high' | 'critical'
+
+/** A bug/risk the Tester surfaced. */
+export interface TestConcern {
+  title: string
+  detail: string
+  severity: TestConcernSeverity
+}
+
+/** A per-area Tester result. */
+export interface TestOutcome {
+  name: string
+  status: 'passed' | 'failed' | 'skipped'
+  detail?: string
+}
+
+/** A Tester's structured report (what was tested, outcomes, concerns, greenlight). */
+export interface TestReport {
+  greenlight: boolean
+  summary: string
+  tested: string[]
+  outcomes: TestOutcome[]
+  concerns: TestConcern[]
+  environment?: 'local' | 'ephemeral'
+}
 
 /** The kinds of agents available in the agent palette. */
 export type AgentKind =
@@ -229,6 +280,8 @@ export interface WorkspaceSnapshot {
   notifications?: Notification[]
   /** The workspace's merge threshold presets (the task preset picker's options). */
   mergePresets?: MergeThresholdPreset[]
+  /** Agent config-contribution descriptors (the task-level fields the board renders). */
+  agentConfigCatalog?: AgentConfigDescriptor[]
   /** Per-agent-kind default model overrides for this workspace (agentKind → model id). */
   modelDefaults?: ModelDefaults
   /** The workspace's recurring pipelines (schedules shown on the board + inspector). */
