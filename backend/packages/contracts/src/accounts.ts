@@ -1,4 +1,5 @@
 import * as v from 'valibot'
+import { cloudProviderSchema } from './provisioning.js'
 
 // ---------------------------------------------------------------------------
 // Account tenancy wire contracts. An account is the tenant that owns workspaces:
@@ -23,6 +24,12 @@ export const accountSchema = v.object({
   createdAt: v.number(),
   /** The signed-in caller's role in this account (`null` in the auth-disabled path). */
   role: v.nullable(accountRoleSchema),
+  /**
+   * The cloud provider new services in this account default to (a service may
+   * override it). Absent means the built-in {@link DEFAULT_CLOUD_PROVIDER}
+   * (`cloudflare`).
+   */
+  defaultCloudProvider: v.optional(cloudProviderSchema),
 })
 export type Account = v.InferOutput<typeof accountSchema>
 
@@ -44,6 +51,12 @@ export const createAccountSchema = v.object({
   githubAccountLogin: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(120))),
 })
 export type CreateAccountInput = v.InferOutput<typeof createAccountSchema>
+
+/** Update an account's settings (today: its default cloud provider for new services). */
+export const updateAccountSchema = v.object({
+  defaultCloudProvider: v.optional(cloudProviderSchema),
+})
+export type UpdateAccountInput = v.InferOutput<typeof updateAccountSchema>
 
 /** Add a member to an account by their GitHub numeric user id. */
 export const addMemberSchema = v.object({

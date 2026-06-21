@@ -1,7 +1,11 @@
-import type { AgentKind, BlockType, TestTarget } from '@cat-factory/kernel'
+import type { AgentKind, BlockType } from '@cat-factory/kernel'
 import type { AgentRunContext } from '@cat-factory/kernel'
 import { PLATFORM_DELIVERY_CONTRACT } from './ci-gate.js'
+import { PLAYWRIGHT_E2E_TARGET_CONFIG_ID } from './agent-configs.js'
 import { STANDARDS_FOOTER } from './prompt-shared.js'
+
+/** The acceptance/e2e execution targets the `playwright.e2eTarget` config offers. */
+type E2eTarget = 'ci' | 'ephemeral'
 
 // Built-out role prompt for the acceptance-test authoring agent. The structured
 // acceptance SCENARIOS now live in the service spec (`spec.json`, authored by the
@@ -77,14 +81,14 @@ export function acceptanceSystemPrompt(kind: AgentKind): string | undefined {
 // Where the generated tests run is a per-block choice, so it is dynamic context
 // rather than part of the static role prompt. These blurbs tell the agent how
 // to wire and where to point the tests for each target.
-const TEST_TARGET_GUIDANCE: Record<TestTarget, string> = {
-  github_actions: [
+const TEST_TARGET_GUIDANCE: Record<E2eTarget, string> = {
+  ci: [
     'Test execution target: project CI (GitHub Actions).',
     '- Add the tests to the project so they run in a GitHub Actions workflow on each push / pull request.',
     '- Spin the system under test up inside the same workflow run (e.g. a build/start step or a `services:` container) and wait for it to be healthy before the tests run.',
     '- Point Playwright at the locally started service (e.g. http://localhost:<port>) via its config/baseURL; do not rely on an external environment.',
   ].join('\n'),
-  ephemeral_env: [
+  ephemeral: [
     'Test execution target: the provisioned ephemeral environment for this run.',
     '- Run the tests against the ephemeral environment URL from the run context, not a locally started service.',
     '- Read any access credentials for that environment from the test harness/secrets; never hard-code them.',
@@ -94,12 +98,15 @@ const TEST_TARGET_GUIDANCE: Record<TestTarget, string> = {
 
 /**
  * The "where do the tests run" section for an acceptance-testing step, rendered
- * from the block's chosen test target. Empty for non-track kinds or when no
- * target is recorded, so callers can append it unconditionally.
+ * from the block's contributed `playwright.e2eTarget` config value. Empty for
+ * non-track kinds or when no target is recorded, so callers can append it
+ * unconditionally.
  */
 export function testTargetSection(context: AgentRunContext): string {
-  const target = context.block.testTarget
-  if (!isAcceptanceKind(context.agentKind) || !target) return ''
+  if (!isAcceptanceKind(context.agentKind)) return ''
+  const raw = context.block.agentConfig?.[PLAYWRIGHT_E2E_TARGET_CONFIG_ID]
+  const target: E2eTarget | undefined = raw === 'ci' || raw === 'ephemeral' ? raw : undefined
+  if (!target) return ''
   return `\n${TEST_TARGET_GUIDANCE[target]}`
 }
 

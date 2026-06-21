@@ -24,7 +24,6 @@ export type {
   StepApproval,
   StepReviewComment,
   StepSubtasks,
-  TestTarget,
   Workspace,
   WorkspaceSnapshot,
   // Prompt-fragment library shapes (ADR 0006).
@@ -151,6 +150,20 @@ export type {
   MergeThresholdPreset,
   CreateMergePresetInput,
   UpdateMergePresetInput,
+  // Agent config-contribution shapes.
+  AgentConfigOption,
+  AgentConfigDescriptor,
+  AgentConfigCatalog,
+  AgentConfigValues,
+  // Tester / Fixer structured-report shapes.
+  TestReport,
+  TestOutcome,
+  TestConcern,
+  TestConcernSeverity,
+  // Container provisioning vocabulary.
+  CloudProvider,
+  InstanceSize,
+  UpdateAccountInput,
   // Per-workspace, per-agent-kind default model selection.
   ModelDefaults,
   SetModelDefaultsInput,

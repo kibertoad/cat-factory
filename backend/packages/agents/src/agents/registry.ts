@@ -1,4 +1,4 @@
-import type { AgentKind, AgentRunContext } from '@cat-factory/kernel'
+import type { AgentConfigDescriptor, AgentKind, AgentRunContext } from '@cat-factory/kernel'
 
 // Installation-level extension point for custom agent kinds, mirroring the
 // model-provider registry seam (`registerModelRegistry` / `@cat-factory/provider-bedrock`).
@@ -41,6 +41,14 @@ export interface AgentKindDefinition {
    * Omitted ⇒ the generic "verify a fact that changes" hint. See `webResearchGuidanceFor`.
    */
   webResearchHint?: string
+  /**
+   * Task-level configuration parameters this kind contributes (see the agent-config
+   * contracts). When a pipeline that includes this kind is selected for a task, these
+   * descriptors are surfaced on task creation + the inspector, editable until the
+   * kind's step starts. Each descriptor's `agentKind` should match this `kind` so the
+   * freeze targets the right step. Omitted ⇒ the kind contributes no config.
+   */
+  configContributions?: AgentConfigDescriptor[]
 }
 
 // Process-wide registry, mirroring the Worker's model-provider registry. Registration
@@ -95,4 +103,9 @@ export function registeredUserPrompt(context: AgentRunContext): string | undefin
 /** A registered kind's web-research hint, or undefined when unregistered / not supplied. */
 export function registeredWebResearchHint(kind: AgentKind): string | undefined {
   return registry.get(kind)?.webResearchHint
+}
+
+/** A registered kind's contributed config descriptors, or an empty array when none. */
+export function registeredConfigContributions(kind: AgentKind): AgentConfigDescriptor[] {
+  return registry.get(kind)?.configContributions ?? []
 }

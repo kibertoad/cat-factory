@@ -1,4 +1,4 @@
-import type { StepSubtasks } from '../domain/types.js'
+import type { CloudProvider, StepSubtasks } from '../domain/types.js'
 
 // Port for "where a repo-operating coding job actually runs". The
 // ContainerAgentExecutor dispatches each job and polls it through this transport
@@ -34,6 +34,8 @@ export interface RunnerJobResult {
    * `/resolve-conflicts` endpoint's product). `false` means conflicts remain.
    */
   resolved?: boolean
+  /** A `tester` job's structured test report (the `/test` endpoint's product). */
+  report?: unknown
   /**
    * Token usage the harness lifted from the agent CLI's own event stream. Reported
    * by the subscription harnesses (Claude Code / Codex), whose traffic bypasses the
@@ -64,6 +66,24 @@ export type RunnerDispatchKind =
   | 'ci-fix'
   | 'resolve-conflicts'
   | 'merge'
+  // Run the project's tests (against an ephemeral env or local docker-compose infra)
+  // and return a structured report; makes no commits, like `merge`.
+  | 'test'
+  // Apply fixes from a Tester's report to the PR branch and push them back (no new
+  // PR), like `ci-fix`.
+  | 'fix-tests'
+
+/**
+ * Optional, transport-level provisioning hints resolved per-service at dispatch.
+ * Cloudflare maps `instanceTypeId` to a Container instance type; a self-hosted pool
+ * forwards it (and `provider`) so it can provision the right size on its own cloud.
+ */
+export interface RunnerDispatchOptions {
+  /** Concrete instance-type id for the target (see `resolveInstanceTypeId`). */
+  instanceTypeId?: string
+  /** The cloud provider the service selected, for a self-provisioning pool. */
+  provider?: CloudProvider
+}
 
 /** A job's current state, as the harness/pool reports it. */
 export interface RunnerJobView {
@@ -82,7 +102,12 @@ export interface RunnerTransport {
    * `blueprint` for a Blueprinter job, or `bootstrap` for a repo-bootstrap job);
    * all are polled identically via {@link poll}.
    */
-  dispatch(jobId: string, spec: Record<string, unknown>, kind?: RunnerDispatchKind): Promise<void>
+  dispatch(
+    jobId: string,
+    spec: Record<string, unknown>,
+    kind?: RunnerDispatchKind,
+    options?: RunnerDispatchOptions,
+  ): Promise<void>
   /** Poll the job's current state. */
   poll(jobId: string): Promise<RunnerJobView>
   /** Optionally release the job/runner once a terminal state is observed. */
