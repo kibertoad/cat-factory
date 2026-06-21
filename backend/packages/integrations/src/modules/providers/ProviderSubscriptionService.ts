@@ -123,6 +123,14 @@ export class ProviderSubscriptionService {
    * Lease the least-loaded live token for a vendor and return its decrypted
    * secret. Throws ConflictError when the pool is empty so the dispatch path can
    * surface a clear "connect a token" error rather than dispatching a doomed job.
+   *
+   * Rotation is best-effort, not transactional: the read → choose → markLeased
+   * sequence is not atomic, so two leases that interleave between the read and the
+   * mark can pick the same token. That window is benign (worst case one extra job on
+   * a token) and self-correcting — markLeased stamps `lastUsedAt` synchronously
+   * BEFORE this returns, so the next lease in a burst sees the just-leased token as
+   * least-recently-used and rotates to a different one even though real usage (folded
+   * in only when the job finishes, minutes later) is still zero across the pool.
    */
   async leaseToken(
     workspaceId: string,

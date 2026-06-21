@@ -332,6 +332,49 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     return `${ref.provider}:${ref.model}`
   }
 
+  /**
+   * Resolve the step's EFFECTIVE model ref plus the subscription vendor (if any) it
+   * will run on, applying the "subscriptions always win" override: a subscription-only
+   * model carries its harness already; a dual-mode model (GLM/Kimi) is switched to its
+   * subscription flavour when the workspace has a token for the vendor. Shared by
+   * {@link buildJobBody} (which dispatches the resolved ref) and {@link isQuotaBased}
+   * (which reports whether the resulting run is flat-rate quota) so the two can't drift.
+   */
+  private async resolveEffectiveRef(
+    context: AgentRunContext,
+    workspaceId: string,
+  ): Promise<{ ref: ModelRef; subscriptionVendor?: SubscriptionVendor }> {
+    let ref = await this.resolveRef(context)
+    let subscriptionVendor: SubscriptionVendor | undefined
+    const subOption = subscriptionOptionFor(await this.resolveCanonicalModelId(context))
+    if (subOption) {
+      if (ref.harness) {
+        subscriptionVendor = subOption.vendor
+      } else if (
+        this.deps.hasSubscriptionToken &&
+        (await this.deps.hasSubscriptionToken(workspaceId, subOption.vendor))
+      ) {
+        ref = subOption.ref
+        subscriptionVendor = subOption.vendor
+      }
+    }
+    return { ref, ...(subscriptionVendor ? { subscriptionVendor } : {}) }
+  }
+
+  /**
+   * Whether this step will run on a flat-rate subscription (quota) model — it
+   * resolves to a Claude Code / Codex harness (a subscription-only model, or a
+   * dual-mode model auto-routed to its subscription flavour because the workspace has
+   * a token). The engine's spend gate consults this so a quota run is not paused by
+   * an exhausted monetary budget it never contributes to. Best-effort: without a
+   * workspace id it reports false.
+   */
+  async isQuotaBased(context: AgentRunContext): Promise<boolean> {
+    if (!context.workspaceId) return false
+    const { ref } = await this.resolveEffectiveRef(context, context.workspaceId)
+    return ref.harness === 'claude-code' || ref.harness === 'codex'
+  }
+
   /** Validate the ids every container job needs, narrowing them to non-empty strings. */
   private requireIds(context: AgentRunContext): {
     workspaceId: string
@@ -355,26 +398,11 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
   }> {
     const { workspaceId, executionId, blockId } = this.requireIds(context)
 
-    let ref = await this.resolveRef(context)
-
-    // "Subscriptions always win": if the resolved canonical model has a subscription
-    // path AND the workspace has a pooled token for its vendor, override to the
-    // subscription flavour (a dual-mode GLM/Kimi step pinned to its Cloudflare base
-    // is auto-routed to Claude Code). A subscription-only model already resolved to
-    // its subscription ref (it has no base).
-    let subscriptionVendor: SubscriptionVendor | undefined
-    const subOption = subscriptionOptionFor(await this.resolveCanonicalModelId(context))
-    if (subOption) {
-      if (ref.harness) {
-        subscriptionVendor = subOption.vendor
-      } else if (
-        this.deps.hasSubscriptionToken &&
-        (await this.deps.hasSubscriptionToken(workspaceId, subOption.vendor))
-      ) {
-        ref = subOption.ref
-        subscriptionVendor = subOption.vendor
-      }
-    }
+    // "Subscriptions always win": a subscription-only model carries its harness; a
+    // dual-mode GLM/Kimi step pinned to its Cloudflare base is auto-routed to Claude
+    // Code when the workspace has a pooled token for the vendor. Shared with
+    // isQuotaBased so the dispatch and the spend gate agree on what the step runs.
+    const { ref, subscriptionVendor } = await this.resolveEffectiveRef(context, workspaceId)
     const harness: HarnessKind = ref.harness ?? 'pi'
 
     // The Pi harness reaches models through the LLM proxy, so its model must be a

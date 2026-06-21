@@ -204,6 +204,16 @@ export interface AgentExecutor {
    * simply records the model later. Returns undefined when no model applies.
    */
   resolveModel?(context: AgentRunContext): Promise<string | undefined>
+  /**
+   * Whether this step will run on a flat-rate subscription (quota) model — i.e. a
+   * Claude Code / Codex harness authenticated with a pooled subscription token. Such
+   * runs incur NO metered monetary LLM cost (their usage is folded into a quota, not
+   * the spend budget), so the engine's spend gate lets them proceed even when the
+   * monetary budget is exhausted. Must be cheap and side-effect-free (model-ref
+   * resolution only). Optional: an executor without subscription harnesses omits it
+   * and the engine treats every step as budget-metered (the prior behaviour).
+   */
+  isQuotaBased?(context: AgentRunContext): Promise<boolean>
 }
 
 /** A handle to an asynchronous agent job (e.g. a long-running container run). */

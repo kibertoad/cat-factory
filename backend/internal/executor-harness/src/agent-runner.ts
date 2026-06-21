@@ -50,10 +50,50 @@ function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
 }
 
-/** Redact the subscription secret from any text before it is logged/returned. */
-function redact(text: string, secret: string): string {
-  if (!secret) return text
-  return text.split(secret).join('***')
+/** Redact every known secret value from text before it is logged/returned. */
+export function redactAll(text: string, secrets: string[]): string {
+  let out = text
+  for (const secret of secrets) {
+    // Guard against scrubbing trivially-short values that would mangle output.
+    if (secret.length >= 6) out = out.split(secret).join('***')
+  }
+  return out
+}
+
+// Only harvest token-like JSON leaves: real OAuth access/refresh tokens and ids are
+// long, while short values (`auth_mode: "chatgpt"`, `type: "oauth"`, …) are non-secret
+// words that would over-redact legitimate error text if scrubbed. 12 chars is a safe
+// floor below which a value is not a credential.
+const MIN_HARVEST_LEN = 12
+
+/** Recursively harvest token-like string leaves from a parsed JSON value. */
+function collectStrings(value: unknown, out: Set<string>): void {
+  if (typeof value === 'string') {
+    if (value.length >= MIN_HARVEST_LEN) out.add(value)
+  } else if (Array.isArray(value)) {
+    for (const v of value) collectStrings(v, out)
+  } else if (value && typeof value === 'object') {
+    for (const v of Object.values(value)) collectStrings(v, out)
+  }
+}
+
+/**
+ * The set of secret strings to scrub from a run's stderr/output. For Claude (and the
+ * Anthropic-compatible vendors GLM/Kimi/DeepSeek) the credential IS the token string,
+ * so the whole-string entry covers it. For Codex the credential is a whole `auth.json`
+ * blob, so we ALSO scrub every string value parsed out of it (access/refresh tokens,
+ * ids): a token echoed on its OWN — not as part of the whole blob — would otherwise
+ * slip past a whole-blob-only match and leak into an error message.
+ */
+export function secretsToRedact(subscriptionToken: string): string[] {
+  const secrets = new Set<string>()
+  if (subscriptionToken) secrets.add(subscriptionToken)
+  try {
+    collectStrings(JSON.parse(subscriptionToken), secrets)
+  } catch {
+    // Not JSON (a Claude OAuth token / API key) — the whole-string entry covers it.
+  }
+  return [...secrets]
 }
 
 /**
@@ -73,6 +113,7 @@ function streamCli(
   prompt: string,
   opts: SubscriptionRunOptions,
   env: Record<string, string>,
+  secrets: string[],
   onEvent: (event: Record<string, unknown>) => void,
 ): Promise<{ stderrTail: string }> {
   return new Promise((resolve, reject) => {
@@ -148,7 +189,7 @@ function streamCli(
     child.on('close', (code) => {
       opts.signal?.removeEventListener('abort', onAbort)
       if (lineBuffer.trim()) processLine(lineBuffer.trim())
-      const stderrTail = redact(stderr, opts.subscriptionToken).slice(-700)
+      const stderrTail = redactAll(stderr, secrets).slice(-700)
       if (aborted) {
         reject(new Error('agent run aborted by watchdog'))
         return
@@ -210,6 +251,22 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
   // pushed branch. Mirrors the Codex CODEX_HOME isolation below; removed in `finally`.
   const configHome = await mkdtemp(join(tmpdir(), 'cf-claude-'))
 
+  // The config dir is brand-new every run, so Claude Code would otherwise treat this
+  // as a first launch and BLOCK on the interactive onboarding / "trust this folder" /
+  // bypass-permissions acknowledgement prompts — which never get answered headlessly,
+  // hanging the job until the watchdog kills it. Pre-seed the config that marks those
+  // as already accepted so `-p` starts straight into the run. Best-effort: written
+  // before the CLI starts; unknown keys are harmless if a CLI version ignores them.
+  await writeFile(
+    join(configHome, '.claude.json'),
+    JSON.stringify({
+      hasCompletedOnboarding: true,
+      bypassPermissionsModeAccepted: true,
+      hasTrustDialogAccepted: true,
+    }),
+    { mode: 0o600 },
+  ).catch(() => {})
+
   // Anthropic itself authenticates with the subscription OAuth token; a
   // non-Anthropic Claude-Code vendor (GLM via Z.ai, Kimi via Moonshot, DeepSeek)
   // points Claude Code at its Anthropic-compatible endpoint with an auth-token key.
@@ -245,6 +302,7 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
       opts.userPrompt,
       opts,
       env,
+      secretsToRedact(opts.subscriptionToken),
       onEvent,
     )
 
@@ -303,6 +361,16 @@ export async function runCodex(opts: SubscriptionRunOptions): Promise<PiRunOutco
   // subscription `auth.json` (access + refresh tokens) to the PR branch. An
   // isolated, per-run temp dir keeps the credential out of the working tree and is
   // removed in `finally`.
+  //
+  // KNOWN LIMITATION: Codex refreshes its OAuth access token in-place by rewriting
+  // this `auth.json` mid-run. Because the home is a per-run temp dir wiped in
+  // `finally`, that refreshed credential is discarded and never written back to the
+  // pool — there is no write-back path. The stored bundle keeps working as long as
+  // its refresh token stays valid (ChatGPT refresh tokens are long-lived and reused,
+  // not rotated per refresh today), so each run re-refreshes from the same stored
+  // copy; if OpenAI ever rotates refresh tokens on use, a pooled Codex token would
+  // eventually need to be re-connected by the user. Claude OAuth tokens (from
+  // `claude setup-token`) are long-lived and unaffected.
   const codexHome = await mkdtemp(join(tmpdir(), 'cf-codex-'))
   await writeFile(join(codexHome, 'auth.json'), opts.subscriptionToken, { mode: 0o600 })
   await writeFile(join(codexHome, 'config.toml'), 'cli_auth_credentials_store = "file"\n', 'utf8')
@@ -348,6 +416,7 @@ export async function runCodex(opts: SubscriptionRunOptions): Promise<PiRunOutco
       prompt,
       opts,
       { CODEX_HOME: codexHome },
+      secretsToRedact(opts.subscriptionToken),
       onEvent,
     )
 
