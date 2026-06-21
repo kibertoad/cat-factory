@@ -34,6 +34,10 @@ const TEST_ENV: NodeJS.ProcessEnv = {
   AUTH_DEV_OPEN: 'true',
   ENVIRONMENT: 'test',
   ENCRYPTION_KEY: Buffer.alloc(32).toString('base64'),
+  // Enable the Slack notification transport so its module + channel wire up through
+  // the local facade (parity with the Node/Worker test envs); the conformance Slack
+  // CRUD asserts persistence parity and the channel bails when no Slack is connected.
+  SLACK_ENABLED: 'true',
   LOCAL_HARNESS_IMAGE: 'cat-factory-executor:test',
   GITHUB_PAT: 'test-pat',
 }

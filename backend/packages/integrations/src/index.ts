@@ -121,6 +121,40 @@ export {
 } from './modules/runners/HttpRunnerPoolProvider.js'
 export { RunnerPoolTransport } from './modules/runners/RunnerPoolTransport.js'
 
+// Slack: an additional delivery transport for the existing notification mechanism
+// (the `SlackNotificationChannel` implements the same `NotificationChannel` port),
+// plus the per-account connection / per-workspace routing / member-mapping services.
+export {
+  SlackNotificationChannel,
+  type SlackNotificationChannelDependencies,
+} from './modules/slack/SlackNotificationChannel.js'
+export {
+  SlackConnectionService,
+  type SlackConnectionServiceDependencies,
+} from './modules/slack/SlackConnectionService.js'
+export {
+  SlackSettingsService,
+  type SlackSettingsServiceDependencies,
+} from './modules/slack/SlackSettingsService.js'
+export {
+  SlackMemberMappingService,
+  type SlackMemberMappingServiceDependencies,
+} from './modules/slack/SlackMemberMappingService.js'
+export {
+  SlackApiClient,
+  SlackApiError,
+  type SlackApiClientOptions,
+  type SlackAuthInfo,
+  type SlackOAuthResult,
+} from './modules/slack/SlackApiClient.js'
+export * as slackLogic from './modules/slack/slack.logic.js'
+export {
+  SLACK_CIPHER_INFO,
+  SLACK_ROUTABLE_TYPES,
+  defaultSlackSettings,
+  renderNotificationMessage,
+  resolveRoute,
+} from './modules/slack/slack.logic.js'
 export {
   ProviderSubscriptionService,
   type ProviderSubscriptionServiceDependencies,

@@ -45,6 +45,11 @@ import type {
   TicketTrackerProvider,
   TrackerSettingsRepository,
 } from '@cat-factory/kernel'
+import type {
+  SlackConnectionRepository,
+  SlackMemberMappingRepository,
+  SlackSettingsRepository,
+} from '@cat-factory/kernel'
 import type { SecretCipher } from '@cat-factory/kernel'
 import type { FragmentSourceRepository, PromptFragmentRepository } from '@cat-factory/kernel'
 import type { FragmentSelector } from '@cat-factory/kernel'
@@ -84,6 +89,9 @@ import {
   EnvironmentProvisioningService,
   EnvironmentTeardownService,
   RunnerPoolConnectionService,
+  SlackConnectionService,
+  SlackSettingsService,
+  SlackMemberMappingService,
 } from '@cat-factory/integrations'
 import { BootstrapService } from './modules/bootstrap/BootstrapService.js'
 import { BoardScanService } from './modules/boardScan/BoardScanService.js'
@@ -319,6 +327,19 @@ export interface CoreDependencies {
   // (CI gate passes through, `done` is a board-only flip, the built-in preset is used).
   notificationRepository?: NotificationRepository
   notificationChannel?: NotificationChannel
+
+  // ---- Slack integration (optional; an extra notification transport) ----
+  // The Slack module (per-account connect + per-workspace routing + member map)
+  // assembles when its three repositories AND a secret cipher are present (the
+  // cipher seals the bot token at rest, HKDF tag `cat-factory:slack`). The Slack
+  // *delivery* itself is wired separately as a `notificationChannel` composed into
+  // the CompositeNotificationChannel — these deps power the management API. The
+  // OAuth credentials are optional (manual-token onboarding works without them).
+  slackConnectionRepository?: SlackConnectionRepository
+  slackSettingsRepository?: SlackSettingsRepository
+  slackMemberMappingRepository?: SlackMemberMappingRepository
+  slackSecretCipher?: SecretCipher
+  slackOAuth?: { clientId: string; clientSecret: string; redirectUrl: string }
   /** Reads a block's PR CI checks so the `ci` step can gate on green CI. */
   ciStatusProvider?: CiStatusProvider
   /** Reads a block's PR mergeability so the `conflicts` step can gate on it. */
@@ -409,6 +430,13 @@ export interface NotificationsModule {
   service: NotificationService
 }
 
+/** The Slack integration's services, present only when its repositories are wired. */
+export interface SlackModule {
+  connectionService: SlackConnectionService
+  settingsService: SlackSettingsService
+  memberMappingService: SlackMemberMappingService
+}
+
 /** The merge-preset feature's service, present only when its repository is wired. */
 export interface MergePresetsModule {
   service: MergePresetService
@@ -464,6 +492,8 @@ export interface Core {
   requirements?: RequirementsModule
   /** Present only when the notifications repository is wired (see CoreDependencies). */
   notifications?: NotificationsModule
+  /** Present only when the Slack repositories + cipher are wired (see CoreDependencies). */
+  slack?: SlackModule
   /** Present only when the merge-preset repository is wired (see CoreDependencies). */
   mergePresets?: MergePresetsModule
   /** Present only when the model-defaults repository is wired (see CoreDependencies). */
@@ -789,7 +819,10 @@ function createBoardScanModule(
  * and the document/task repositories are reused, when wired, to fold linked PRDs
  * and tracker issues into the reviewed requirements.
  */
-function createRequirementsModule(deps: CoreDependencies): RequirementsModule | undefined {
+function createRequirementsModule(
+  deps: CoreDependencies,
+  notificationService?: NotificationService,
+): RequirementsModule | undefined {
   const { requirementReviewRepository } = deps
   if (!requirementReviewRepository) return undefined
 
@@ -798,6 +831,9 @@ function createRequirementsModule(deps: CoreDependencies): RequirementsModule | 
     blockRepository: deps.blockRepository,
     idGenerator: deps.idGenerator,
     clock: deps.clock,
+    // Tell product people + the task creator to react to a review's findings (when
+    // the notifications subsystem is wired). Best-effort; absent → no notification.
+    notificationService,
     modelProvider: deps.modelProvider,
     // The dedicated reviewer ref, else the document planner's (both the agents' default).
     modelRef: deps.requirementReviewModel ?? deps.documentPlannerModel,
@@ -869,6 +905,48 @@ function createNotificationsModule(deps: CoreDependencies): NotificationsModule 
     channel: deps.notificationChannel,
   })
   return { service }
+}
+
+/**
+ * Assemble the Slack integration module when its three repositories and the
+ * secret cipher are present. Powers the management API (connect/settings/member
+ * map); the actual Slack delivery is a `notificationChannel` composed in by the
+ * facade. OAuth is optional — manual-token onboarding works without it.
+ */
+function createSlackModule(deps: CoreDependencies): SlackModule | undefined {
+  const {
+    slackConnectionRepository,
+    slackSettingsRepository,
+    slackMemberMappingRepository,
+    slackSecretCipher,
+  } = deps
+  if (
+    !slackConnectionRepository ||
+    !slackSettingsRepository ||
+    !slackMemberMappingRepository ||
+    !slackSecretCipher
+  ) {
+    return undefined
+  }
+  return {
+    connectionService: new SlackConnectionService({
+      slackConnectionRepository,
+      workspaceRepository: deps.workspaceRepository,
+      secretCipher: slackSecretCipher,
+      clock: deps.clock,
+      oauth: deps.slackOAuth,
+    }),
+    settingsService: new SlackSettingsService({
+      slackSettingsRepository,
+      workspaceRepository: deps.workspaceRepository,
+      clock: deps.clock,
+    }),
+    memberMappingService: new SlackMemberMappingService({
+      slackMemberMappingRepository,
+      workspaceRepository: deps.workspaceRepository,
+      clock: deps.clock,
+    }),
+  }
 }
 
 /** Assemble the merge-preset module when its repository is present. */
@@ -967,6 +1045,7 @@ export function createCore(dependencies: CoreDependencies): Core {
   // Built before the execution engine so it can raise merge-review / CI-failed /
   // pipeline-complete notifications during a run (when the module is configured).
   const notifications = createNotificationsModule(dependencies)
+  const slack = createSlackModule(dependencies)
   const mergePresets = createMergePresetsModule(dependencies)
   const modelDefaults = createModelDefaultsModule(dependencies)
 
@@ -989,7 +1068,7 @@ export function createCore(dependencies: CoreDependencies): Core {
   const github = createGitHubModule(dependencies)
   const documents = createDocumentsModule(dependencies, boardService)
   const tasks = createTasksModule(dependencies)
-  const requirements = createRequirementsModule(dependencies)
+  const requirements = createRequirementsModule(dependencies, notifications?.service)
   const runners = createRunnersModule(dependencies)
   // After a bootstrap succeeds, map the new repo into a blueprint + the board by
   // starting the blueprint-only pipeline against the service frame.
@@ -1017,6 +1096,7 @@ export function createCore(dependencies: CoreDependencies): Core {
     ...(boardScan ? { boardScan } : {}),
     ...(requirements ? { requirements } : {}),
     ...(notifications ? { notifications } : {}),
+    ...(slack ? { slack } : {}),
     ...(mergePresets ? { mergePresets } : {}),
     ...(modelDefaults ? { modelDefaults } : {}),
     ...(fragmentLibrary ? { fragmentLibrary } : {}),

@@ -56,6 +56,7 @@ export interface BlockRow {
   pull_request: string | null
   merge_preset_id: string | null
   pipeline_id: string | null
+  created_by: number | null
 }
 
 export function rowToBlock(row: BlockRow): Block {
@@ -81,6 +82,7 @@ export function rowToBlock(row: BlockRow): Block {
   if (row.pull_request !== null) block.pullRequest = JSON.parse(row.pull_request) as PullRequestRef
   if (row.merge_preset_id !== null) block.mergePresetId = row.merge_preset_id
   if (row.pipeline_id !== null) block.pipelineId = row.pipeline_id
+  if (row.created_by !== null) block.createdBy = row.created_by
   return block
 }
 
@@ -109,6 +111,7 @@ export function blockInsertValues(block: Block): Record<string, unknown> {
     pull_request: block.pullRequest ? JSON.stringify(block.pullRequest) : null,
     merge_preset_id: block.mergePresetId ?? null,
     pipeline_id: block.pipelineId ?? null,
+    created_by: block.createdBy ?? null,
   }
 }
 

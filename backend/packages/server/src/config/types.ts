@@ -117,6 +117,22 @@ export interface RunnerPoolConfig {
   encryptionKey?: string
 }
 
+export interface SlackConfig {
+  /**
+   * Opt-in flag. Requires an encryption key (the per-account bot token is sealed
+   * at rest, no silent plaintext fallback). When false the Slack module isn't
+   * assembled and no Slack channel is composed into the notification fan-out.
+   */
+  enabled: boolean
+  /** Service-level master key (base64) backing bot-token encryption at rest. */
+  encryptionKey?: string
+  /**
+   * Slack app OAuth credentials, present only when a Slack app was registered.
+   * Absent → manual bot-token onboarding still works; OAuth routes aren't offered.
+   */
+  oauth?: { clientId: string; clientSecret: string; redirectUrl: string }
+}
+
 export interface RetentionConfig {
   tokenUsageMs: number
   rateLimitMs: number
@@ -165,6 +181,8 @@ export interface AppConfig {
   environments: EnvironmentsConfig
   /** Self-hosted runner-pool config; `enabled` is false unless opted in. */
   runners: RunnerPoolConfig
+  /** Slack notification-transport config; `enabled` is false unless opted in. */
+  slack: SlackConfig
   /** Retention windows for the unbounded ledgers/projections (epoch-ms ages). */
   retention: RetentionConfig
   /** Prompt-fragment library config; `enabled` is false unless opted in (ADR 0006). */

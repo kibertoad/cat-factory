@@ -93,6 +93,8 @@ export interface Block {
   mergePresetId?: string
   /** task-only: pinned default pipeline id picked at creation; absent = none. */
   pipelineId?: string
+  /** GitHub user id of the task's creator; drives "notify the task creator" routing. */
+  createdBy?: number | null
 }
 
 /**
@@ -286,6 +288,7 @@ export type * from './bootstrap'
 export type * from './github'
 export type * from './accounts'
 export type * from './notifications'
+export type * from './slack'
 export type * from './merge'
 export type * from './services'
 export type * from './recurring'
