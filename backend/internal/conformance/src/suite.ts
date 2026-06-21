@@ -171,6 +171,30 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
           [second.body.id, third.body.id].sort(),
         )
       })
+
+      it('refuses an individual-only (Claude) subscription for an org-owned workspace', async () => {
+        const { call, createOrgWorkspace } = harness.makeApp()
+        const { workspace } = await createOrgWorkspace()
+        const base = `/workspaces/${workspace.id}/vendor-credentials`
+
+        // Anthropic's consumer Claude subscription is licensed for individual use only,
+        // so an org-owned workspace may not connect one (409 ConflictError).
+        const claude = await call('POST', base, {
+          vendor: 'claude',
+          label: 'shared',
+          token: 'sk-ant-oat01-secret',
+        })
+        expect(claude.status).toBe(409)
+
+        // A commercial coding-plan vendor (GLM) carries no individual-only restriction.
+        const glm = await call<{ vendor: string }>('POST', base, {
+          vendor: 'glm',
+          label: 'zai',
+          token: 'glm-coding-plan-secret',
+        })
+        expect(glm.status).toBe(201)
+        expect(glm.body.vendor).toBe('glm')
+      })
     })
 
     describe('board', () => {

@@ -266,6 +266,7 @@ function buildNodeSubscriptionService(
   env: NodeJS.ProcessEnv,
   db: DrizzleDb,
   workspaceRepository: CoreDependencies['workspaceRepository'],
+  accountRepository: CoreDependencies['accountRepository'],
   idGenerator: CoreDependencies['idGenerator'],
   clock: Clock,
 ): ProviderSubscriptionService | undefined {
@@ -274,6 +275,7 @@ function buildNodeSubscriptionService(
   return new ProviderSubscriptionService({
     providerSubscriptionTokenRepository: new DrizzleProviderSubscriptionTokenRepository(db),
     workspaceRepository,
+    accountRepository,
     secretCipher: new WebCryptoSecretCipher({
       masterKeyBase64,
       info: 'cat-factory:provider-subscriptions',
@@ -409,6 +411,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     env,
     options.db,
     repos.workspaceRepository,
+    repos.accountRepository,
     idGenerator,
     clock,
   )

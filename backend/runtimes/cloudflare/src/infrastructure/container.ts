@@ -455,6 +455,7 @@ function buildSubscriptionService(
   return new ProviderSubscriptionService({
     providerSubscriptionTokenRepository: new D1ProviderSubscriptionTokenRepository({ db }),
     workspaceRepository: new D1WorkspaceRepository({ db }),
+    accountRepository: new D1AccountRepository({ db }),
     secretCipher: new WebCryptoSecretCipher({
       masterKeyBase64,
       info: 'cat-factory:provider-subscriptions',

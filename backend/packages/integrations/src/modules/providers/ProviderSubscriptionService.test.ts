@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { ConflictError } from '@cat-factory/kernel'
 import type {
+  AccountRecord,
+  AccountRepository,
   ProviderSubscriptionTokenRecord,
   ProviderSubscriptionTokenRepository,
   SecretCipher,
@@ -23,9 +25,40 @@ const fakeCipher: SecretCipher = {
   decrypt: async (envelope) => envelope.replace(/^enc\(([\s\S]*)\)$/, '$1'),
 }
 
+// By default every workspace is unscoped (no account) → individual, so the
+// individual-only vendor rule never bites. The org-rule tests below build their own
+// account-aware repositories.
 const workspaceRepository: WorkspaceRepository = {
   get: async (id) => ({ id, name: id }) as Workspace,
+  accountOf: async () => null,
 } as unknown as WorkspaceRepository
+
+const noAccountRepository: AccountRepository = {
+  get: async () => null,
+} as unknown as AccountRepository
+
+/** A repo whose single account has the given type, mapped by the workspace's accountOf. */
+function accountAwareRepos(accountType: AccountRecord['type']): {
+  workspaceRepository: WorkspaceRepository
+  accountRepository: AccountRepository
+} {
+  return {
+    workspaceRepository: {
+      get: async (id: string) => ({ id, name: id }) as Workspace,
+      accountOf: async () => 'acc_1',
+    } as unknown as WorkspaceRepository,
+    accountRepository: {
+      get: async (id: string) =>
+        ({
+          id,
+          type: accountType,
+          name: id,
+          githubAccountLogin: null,
+          createdAt: 0,
+        }) as AccountRecord,
+    } as unknown as AccountRepository,
+  }
+}
 
 /** In-memory pool repo mirroring the D1/Drizzle window-reset usage semantics. */
 class FakeRepo implements ProviderSubscriptionTokenRepository {
@@ -71,11 +104,19 @@ class FakeRepo implements ProviderSubscriptionTokenRepository {
   }
 }
 
-function makeService(repo: FakeRepo, now: () => number) {
+function makeService(
+  repo: FakeRepo,
+  now: () => number,
+  repos: { workspaceRepository: WorkspaceRepository; accountRepository: AccountRepository } = {
+    workspaceRepository,
+    accountRepository: noAccountRepository,
+  },
+) {
   let counter = 0
   return new ProviderSubscriptionService({
     providerSubscriptionTokenRepository: repo,
-    workspaceRepository,
+    workspaceRepository: repos.workspaceRepository,
+    accountRepository: repos.accountRepository,
     secretCipher: fakeCipher,
     idGenerator: { next: (p: string) => `${p}_${++counter}` },
     clock: { now },
@@ -150,5 +191,55 @@ describe('ProviderSubscriptionService', () => {
     await expect(
       svc.addToken('ws', { vendor: 'claude', label: 'ok', token: 'k' }),
     ).resolves.toBeTruthy()
+  })
+
+  // Anthropic's consumer Claude subscription is licensed for individual use only, so a
+  // workspace owned by an ORG account may neither connect nor lease a Claude token. The
+  // commercial coding-plan vendors (GLM/Kimi/DeepSeek) carry no such restriction.
+  describe('individual-only vendor rule (org workspaces)', () => {
+    it('refuses to add or lease a Claude token for an org-owned workspace', async () => {
+      const repo = new FakeRepo()
+      const svc = makeService(repo, () => 0, accountAwareRepos('org'))
+
+      await expect(
+        svc.addToken('ws', { vendor: 'claude', label: 'x', token: 'sk-ant-oat01-x' }),
+      ).rejects.toBeInstanceOf(ConflictError)
+      // Even a pre-existing token (added before the workspace became an org) is unleasable.
+      repo.rows.push({
+        id: 'pre',
+        workspaceId: 'ws',
+        vendor: 'claude',
+        label: 'pre',
+        tokenCipher: 'enc(tok)',
+        createdAt: 0,
+        lastUsedAt: null,
+        windowStartedAt: null,
+        inputTokens: 0,
+        outputTokens: 0,
+        requestCount: 0,
+        deletedAt: null,
+      })
+      await expect(svc.leaseToken('ws', 'claude')).rejects.toBeInstanceOf(ConflictError)
+      // ...and the "subscriptions always win" router must not see it as available.
+      expect(await svc.hasToken('ws', 'claude')).toBe(false)
+    })
+
+    it('still allows a commercial coding-plan vendor (GLM) for an org-owned workspace', async () => {
+      const repo = new FakeRepo()
+      const svc = makeService(repo, () => 0, accountAwareRepos('org'))
+      const added = await svc.addToken('ws', { vendor: 'glm', label: 'zai', token: 'glm-k' })
+      expect(added.vendor).toBe('glm')
+      expect(await svc.hasToken('ws', 'glm')).toBe(true)
+      await expect(svc.leaseToken('ws', 'glm')).resolves.toMatchObject({ vendor: 'glm' })
+    })
+
+    it('allows Claude for a personal-account workspace', async () => {
+      const repo = new FakeRepo()
+      const svc = makeService(repo, () => 0, accountAwareRepos('personal'))
+      await expect(
+        svc.addToken('ws', { vendor: 'claude', label: 'x', token: 'sk-ant-oat01-x' }),
+      ).resolves.toMatchObject({ vendor: 'claude' })
+      await expect(svc.leaseToken('ws', 'claude')).resolves.toMatchObject({ vendor: 'claude' })
+    })
   })
 })

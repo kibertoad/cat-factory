@@ -85,6 +85,15 @@ export function makeConformanceApp(db: DrizzleDb, agentOptions?: FakeAgentOption
     return (await call<WorkspaceSnapshot>('POST', '/workspaces', options)).body
   }
 
+  // Org-scoped workspace via the container's services (dev-open has no signed-in user,
+  // so the HTTP account flow can't create the owning org). Mirrors the Node helper.
+  async function createOrgWorkspace(options: { name?: string } = {}): Promise<WorkspaceSnapshot> {
+    const user = { id: 1, login: 'org-owner', name: 'Org Owner' }
+    const name = options.name ?? 'Org board'
+    const org = await container.accountService.createOrg(user, { name: `${name} org` })
+    return container.workspaceService.create({ name, seed: false }, user.id, org.id)
+  }
+
   async function drive(workspaceId: string, maxRounds = 50): Promise<ExecutionInstance[]> {
     for (let round = 0; round < maxRounds; round++) {
       const { executions } = await container.workspaceService.snapshot(workspaceId)
@@ -119,5 +128,12 @@ export function makeConformanceApp(db: DrizzleDb, agentOptions?: FakeAgentOption
     )
   }
 
-  return { call, createWorkspace, drive, executionEmits, seedIncorporatedReview }
+  return {
+    call,
+    createWorkspace,
+    createOrgWorkspace,
+    drive,
+    executionEmits,
+    seedIncorporatedReview,
+  }
 }

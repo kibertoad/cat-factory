@@ -1,4 +1,5 @@
 import type {
+  AccountRepository,
   Clock,
   IdGenerator,
   ProviderSubscriptionTokenRecord,
@@ -34,6 +35,12 @@ const MAX_TOKENS_PER_VENDOR = 25
 export interface ProviderSubscriptionServiceDependencies {
   providerSubscriptionTokenRepository: ProviderSubscriptionTokenRepository
   workspaceRepository: WorkspaceRepository
+  /**
+   * Resolves the account that owns a workspace so the service can enforce the
+   * individual-only vendor rule (a Claude consumer subscription may not be used by
+   * an org-owned workspace — see {@link SubscriptionVendorConfig.individualOnly}).
+   */
+  accountRepository: AccountRepository
   secretCipher: SecretCipher
   idGenerator: IdGenerator
   clock: Clock
@@ -67,12 +74,44 @@ export class ProviderSubscriptionService {
     return this.deps.usageWindowMs ?? DEFAULT_USAGE_WINDOW_MS
   }
 
+  /**
+   * Whether `vendor` is barred from this workspace because it is an individual-only
+   * subscription (e.g. Claude) and the workspace belongs to an organization account.
+   * A legacy/unscoped board (no account) is treated as individual, so the rule only
+   * bites org-owned workspaces. Other vendors are always permitted.
+   */
+  private async vendorBlockedForOrg(
+    workspaceId: string,
+    vendor: SubscriptionVendor,
+  ): Promise<boolean> {
+    if (!SUBSCRIPTION_VENDORS[vendor].individualOnly) return false
+    const accountId = await this.deps.workspaceRepository.accountOf(workspaceId)
+    if (!accountId) return false
+    const account = await this.deps.accountRepository.get(accountId)
+    return account?.type === 'org'
+  }
+
+  /** Throw a ConflictError when `vendor` may not be used by `workspaceId` (org + individual-only). */
+  private async assertVendorAllowed(
+    workspaceId: string,
+    vendor: SubscriptionVendor,
+  ): Promise<void> {
+    if (await this.vendorBlockedForOrg(workspaceId, vendor)) {
+      throw new ConflictError(
+        `The ${SUBSCRIPTION_VENDORS[vendor].label} subscription is licensed for individual ` +
+          `use only and cannot be used by workspace '${workspaceId}', which belongs to an ` +
+          `organization account. Use an API-key model or a commercial coding-plan vendor instead.`,
+      )
+    }
+  }
+
   /** Add a token to the workspace's pool for a vendor. */
   async addToken(
     workspaceId: string,
     input: { vendor: SubscriptionVendor; label: string; token: string },
   ): Promise<VendorCredentialSummary> {
     await requireWorkspace(this.deps.workspaceRepository, workspaceId)
+    await this.assertVendorAllowed(workspaceId, input.vendor)
     const existing = await this.deps.providerSubscriptionTokenRepository.listByVendor(
       workspaceId,
       input.vendor,
@@ -117,8 +156,14 @@ export class ProviderSubscriptionService {
     return out
   }
 
-  /** Whether the workspace has at least one live token for a vendor. */
+  /**
+   * Whether the workspace has at least one live token for a vendor. An individual-only
+   * vendor barred for an org-owned workspace reports false, so the executor's
+   * "subscriptions always win" routing never auto-selects a vendor that lease would
+   * then reject.
+   */
   async hasToken(workspaceId: string, vendor: SubscriptionVendor): Promise<boolean> {
+    if (await this.vendorBlockedForOrg(workspaceId, vendor)) return false
     const rows = await this.deps.providerSubscriptionTokenRepository.listByVendor(
       workspaceId,
       vendor,
@@ -152,6 +197,7 @@ export class ProviderSubscriptionService {
     workspaceId: string,
     vendor: SubscriptionVendor,
   ): Promise<LeasedSubscriptionToken> {
+    await this.assertVendorAllowed(workspaceId, vendor)
     const rows = await this.deps.providerSubscriptionTokenRepository.listByVendor(
       workspaceId,
       vendor,

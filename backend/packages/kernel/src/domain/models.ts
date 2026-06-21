@@ -14,10 +14,19 @@ export interface SubscriptionVendorConfig {
   baseUrl?: string
   /** Short label shown in the picker / credential UI. */
   label: string
+  /**
+   * The vendor's subscription is licensed for INDIVIDUAL use only, so it may not be
+   * connected to (or leased by) a workspace owned by an organization account. This
+   * is the case for Anthropic's consumer Claude subscription, whose terms permit
+   * personal use only — pooling one OAuth token across an org would breach them. The
+   * coding-plan vendors (GLM/Kimi/DeepSeek) sell commercial API keys, so they stay
+   * available to orgs; only the personal-subscription vendors carry this flag.
+   */
+  individualOnly?: boolean
 }
 
 export const SUBSCRIPTION_VENDORS: Record<SubscriptionVendor, SubscriptionVendorConfig> = {
-  claude: { harness: 'claude-code', label: 'Claude' },
+  claude: { harness: 'claude-code', label: 'Claude', individualOnly: true },
   glm: { harness: 'claude-code', baseUrl: 'https://api.z.ai/api/anthropic', label: 'GLM (Z.ai)' },
   kimi: {
     harness: 'claude-code',
