@@ -18,8 +18,9 @@ fallback):
 # wrangler.toml
 ENVIRONMENTS_ENABLED = "true"
 
-# service-level master key (≥32 bytes, base64) — required when enabled, a secret:
-openssl rand -base64 32 | wrangler secret put ENVIRONMENTS_ENCRYPTION_KEY
+# Credentials are sealed with the shared service-level master key (≥32 bytes, base64),
+# which is already required service-wide (a secret):
+openssl rand -base64 32 | wrangler secret put ENCRYPTION_KEY
 ```
 
 That master key encrypts, at rest in D1, both the per-tenant provider credentials

@@ -4,6 +4,7 @@ import {
   FakeAgentExecutor,
   type FakeAgentOptions,
   RecordingEventPublisher,
+  makeIncorporatedReview,
 } from '@cat-factory/conformance'
 import type { ExecutionInstance, WorkspaceSnapshot } from '@cat-factory/kernel'
 import { NoopBootstrapRunner, NoopWorkRunner } from '@cat-factory/kernel'
@@ -11,6 +12,7 @@ import type { CoreDependencies } from '@cat-factory/orchestration'
 import { buildNodeContainer } from '../src/container.js'
 import { type DrizzleDb, createDbClient } from '../src/db/client.js'
 import { migrate } from '../src/db/migrate.js'
+import { DrizzleRequirementReviewRepository } from '../src/repositories/drizzle.js'
 import { createApp } from '../src/server.js'
 
 const BASE = 'https://cat-factory.test'
@@ -22,6 +24,10 @@ const TEST_ENV: NodeJS.ProcessEnv = {
   ...process.env,
   AUTH_DEV_OPEN: 'true',
   ENVIRONMENT: 'test',
+  // The always-on task-source integration makes `loadNodeConfig` require the shared
+  // ENCRYPTION_KEY (32 zero bytes, base64) or it throws at config load. Integration
+  // toggles that need extra wiring (GitHub/runners) stay off — matching Node defaults.
+  ENCRYPTION_KEY: Buffer.alloc(32).toString('base64'),
 }
 
 /**
@@ -110,5 +116,12 @@ export function makeConformanceApp(db: DrizzleDb, agentOptions?: FakeAgentOption
     return blockId ? recorder.emits.filter((e) => e.blockId === blockId) : recorder.emits
   }
 
-  return { call, createWorkspace, drive, executionEmits }
+  function seedIncorporatedReview(workspaceId: string, blockId: string, requirements: string) {
+    return new DrizzleRequirementReviewRepository(db).upsert(
+      workspaceId,
+      makeIncorporatedReview(blockId, requirements),
+    )
+  }
+
+  return { call, createWorkspace, drive, executionEmits, seedIncorporatedReview }
 }

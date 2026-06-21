@@ -174,7 +174,8 @@ RUNNERS_ENABLED = "true"
 ```
 
 ```bash
-openssl rand -base64 32 | wrangler secret put RUNNERS_ENCRYPTION_KEY
+# Scheduler secrets are sealed with the shared ENCRYPTION_KEY (already required service-wide):
+openssl rand -base64 32 | wrangler secret put ENCRYPTION_KEY
 ```
 
 The coding-job path also needs what the Cloudflare container path needs: a
@@ -213,8 +214,8 @@ Containers (when enabled), so the rollout is per-workspace and reversible.
 - The runner image holds **no** long-lived secrets; models are reachable only
   through the Worker proxy, which meters token spend (so spend safeguards still
   apply to jobs that run on your pool).
-- Scheduler-API credentials are encrypted at rest (AES-256-GCM) under
-  `RUNNERS_ENCRYPTION_KEY`; the feature refuses to start without that key.
+- Scheduler-API credentials are encrypted at rest (AES-256-GCM) under the shared
+  `ENCRYPTION_KEY`; the feature refuses to start without that key.
 - Every manifest URL is SSRF-guarded before it is fetched.
 
 ---

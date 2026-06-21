@@ -195,8 +195,8 @@ export function documentsDeps(
     documentConnectionRepository: new D1DocumentConnectionRepository({
       db,
       cipher: new WebCryptoSecretCipher({
-        // Always set in the test bindings (see vitest.config.ts).
-        masterKeyBase64: env.DOCUMENTS_ENCRYPTION_KEY!,
+        // The shared master key, always set in the test bindings (see vitest.config.ts).
+        masterKeyBase64: env.ENCRYPTION_KEY!,
         info: 'cat-factory:documents',
       }),
     }),
@@ -219,8 +219,8 @@ export function tasksDeps(
     taskConnectionRepository: new D1TaskConnectionRepository({
       db,
       cipher: new WebCryptoSecretCipher({
-        // Always set in the test bindings (see vitest.config.ts).
-        masterKeyBase64: env.TASKS_ENCRYPTION_KEY!,
+        // The shared master key, always set in the test bindings (see vitest.config.ts).
+        masterKeyBase64: env.ENCRYPTION_KEY!,
         info: 'cat-factory:tasks',
       }),
     }),

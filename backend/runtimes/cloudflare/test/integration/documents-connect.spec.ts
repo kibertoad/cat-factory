@@ -113,10 +113,19 @@ describe('document source connect', () => {
     expect(res.status).toBe(422)
   })
 
-  it('returns 503 when the integration is not configured', async () => {
+  it('is always on: exposes the env-configured sources with no explicit overrides', async () => {
+    // The integration no longer hides behind an enable flag — the test bindings supply
+    // shared ENCRYPTION_KEY, so the real providers wire from env even without the
+    // `documentsDeps()` fakes, and the UI's probe sees the sources instead of a 503.
     const app = makeApp(new FakeAgentExecutor())
     const { workspace } = await app.createWorkspace({ seed: false })
-    const res = await app.call('GET', `/workspaces/${workspace.id}/document-sources`)
-    expect(res.status).toBe(503)
+    const res = await app.call<{ sources: { source: string }[] }>(
+      'GET',
+      `/workspaces/${workspace.id}/document-sources`,
+    )
+    expect(res.status).toBe(200)
+    const sources = res.body.sources.map((s) => s.source)
+    expect(sources).toContain('confluence')
+    expect(sources).toContain('notion')
   })
 })

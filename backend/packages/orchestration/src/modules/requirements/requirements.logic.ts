@@ -152,16 +152,14 @@ export function coerceReviewItems(
   return items.slice(0, 20)
 }
 
-export const INCORPORATE_SYSTEM_PROMPT =
-  'You are a requirements editor. You are given the current collected requirements for a ' +
-  'unit of software work, plus clarifying questions and the answers a human gave. Produce a ' +
-  'revised, self-contained requirements document in Markdown that folds every answer into ' +
-  'the requirements, resolves the ambiguities, and states the previously-missing details ' +
-  'explicitly. Preserve the original intent and structure; do not invent facts beyond what ' +
-  'the answers provide. Respond with ONLY the revised requirements in Markdown — no ' +
-  'preamble, no commentary, no code fences.'
-
-export function buildIncorporatePrompt(
+/**
+ * Build the user prompt for the requirements-rework step: the gathered context plus
+ * the human's answers (resolved items, folded in) and dismissals (kept out). Works
+ * with an empty item list too — the "no challenges" path simply restates the
+ * requirements in the standard structure. The {@link REWORK_SYSTEM_PROMPT} (in
+ * `@cat-factory/agents`) defines the required output structure.
+ */
+export function buildReworkPrompt(
   ctx: RequirementsContext,
   items: RequirementReviewItem[],
 ): string {
@@ -181,9 +179,17 @@ export function buildIncorporatePrompt(
     for (const i of dismissed) lines.push(`- ${i.title}`)
     lines.push('')
   }
+  if (!resolved.length && !dismissed.length) {
+    lines.push(
+      'The reviewer raised no open questions — restate the requirements cleanly in the ' +
+        'standard structure without inventing new facts.',
+      '',
+    )
+  }
   lines.push(
-    'Rewrite the requirements as a single Markdown document that incorporates every answer ' +
-      'above. Output the revised requirements only.',
+    'Rewrite the requirements as a single self-contained Markdown document in the standard ' +
+      'structure described in your instructions, folding in every answer above. Output the ' +
+      'revised requirements only.',
   )
   return lines.join('\n')
 }

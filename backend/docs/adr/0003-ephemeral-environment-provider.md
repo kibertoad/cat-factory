@@ -55,9 +55,10 @@ Per-tenant secrets do not scale in env vars, and env is for service-level secret
 So the manifest references credentials by **logical key** only; the org supplies the
 actual values at registration, and they are stored **encrypted at rest in D1**
 (AES-256-GCM via the `SecretCipher` port / `WebCryptoSecretCipher`, with a
-per-record salt and IV, an HKDF-derived key, and a versioned envelope). The single
-env secret is the service-level master key (`ENVIRONMENTS_ENCRYPTION_KEY`); the
-feature refuses to assemble without it (never a silent plaintext fallback). The
+per-record salt and IV, an HKDF-derived key, and a versioned envelope). The env
+secret is the shared service-level master key (`ENCRYPTION_KEY`, domain-separated for
+this module by its HKDF `info`); the feature refuses to assemble without it (never a
+silent plaintext fallback). The
 provisioned environment's own access credentials are likewise encrypted, and
 surfaced only via a dedicated, auth-gated access endpoint and the in-run agent
 context — never in list responses, logs, or error bodies.

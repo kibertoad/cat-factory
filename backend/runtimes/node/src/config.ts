@@ -31,21 +31,32 @@ function csv(value: string | undefined): string[] {
 const NODE_TASK_SOURCES: readonly TaskSourceKind[] = ['jira']
 
 /**
- * Task-source integration config, mirroring the Worker's `loadTasksConfig`: opt-in,
- * fail-closed on encryption (no plaintext credential fallback). Enabled when
- * `TASKS_ENABLED=true` and a `TASKS_ENCRYPTION_KEY` is present; `TASK_SOURCES`
- * narrows the registered providers (defaults to all Node-supported sources).
+ * Task-source integration config, mirroring the Worker's `loadTasksConfig`: always on
+ * (tenants connect their own trackers through the UI, so there is no enable flag), with
+ * a mandatory encryption key so credentials are never stored in plaintext. The key is
+ * missing → fail loudly at config load rather than silently disabling the feature.
+ * `TASK_SOURCES` narrows the registered providers (defaults to all Node-supported ones).
  */
 function loadTasksConfig(env: NodeJS.ProcessEnv): TasksConfig {
+  // The shared ENCRYPTION_KEY backs every integration (the cipher domain-separates per
+  // integration via its HKDF `info`, so one key safely backs them all).
+  const encryptionKey = env.ENCRYPTION_KEY?.trim()
+  if (!encryptionKey) {
+    throw new Error(
+      'ENCRYPTION_KEY is required: the task-source integration (Jira, …) encrypts ' +
+        'per-workspace source credentials at rest. Set it to a base64-encoded key of at ' +
+        'least 32 bytes.',
+    )
+  }
   const requested = csv(env.TASK_SOURCES).map((s) => s.toLowerCase())
   const sources =
     requested.length > 0
       ? NODE_TASK_SOURCES.filter((s) => requested.includes(s))
       : [...NODE_TASK_SOURCES]
   return {
-    enabled: env.TASKS_ENABLED === 'true' && !!env.TASKS_ENCRYPTION_KEY?.trim(),
+    enabled: true,
     sources: sources.length > 0 ? sources : [...NODE_TASK_SOURCES],
-    encryptionKey: env.TASKS_ENCRYPTION_KEY?.trim(),
+    encryptionKey,
   }
 }
 
@@ -77,9 +88,9 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
   const githubAppId = env.GITHUB_APP_ID?.trim() ?? ''
   const githubAppConfigured =
     githubAppId !== '' && (env.GITHUB_APP_PRIVATE_KEY?.trim() ?? '') !== ''
-  // Self-hosted runner pools encrypt their scheduler credentials at rest; opt-in
-  // strictly on the encryption key (no silent plaintext fallback), mirroring the Worker.
-  const runnersEncryptionKey = env.RUNNERS_ENCRYPTION_KEY?.trim() ?? ''
+  // Self-hosted runner pools encrypt their scheduler credentials at rest; opt-in via
+  // the enable flag, sealed with the shared ENCRYPTION_KEY (mirroring the Worker).
+  const runnersEncryptionKey = env.ENCRYPTION_KEY?.trim() ?? ''
   const clientId = env.GITHUB_OAUTH_CLIENT_ID?.trim() ?? ''
   const clientSecret = env.GITHUB_OAUTH_CLIENT_SECRET?.trim() ?? ''
   const environment = env.ENVIRONMENT?.trim().toLowerCase() ?? ''
@@ -156,6 +167,10 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
         }
       }),
     },
+    // The Node facade does not ship document-source providers yet (Notion/Confluence
+    // fetchers live only in the Worker infra), so documents stays off here — and,
+    // unlike tasks, requires no encryption key. Wiring Node document providers is the
+    // remaining symmetry follow-up; until then this facade serves task sources only.
     documents: { enabled: false, sources: [], planner: 'headings' },
     tasks: loadTasksConfig(env),
     environments: { enabled: false },
@@ -170,5 +185,8 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
       llmCallMetricsMs: (num(env.LLM_CALL_METRICS_RETENTION_DAYS) ?? 3) * 24 * 60 * 60 * 1000,
     },
     fragmentLibrary: { enabled: false, selector: 'deterministic' },
+    // Recording the complete prompts is on by default; opt out with
+    // `LLM_RECORD_PROMPTS=false` to keep the numeric telemetry but drop the prompt body.
+    observability: { recordPrompts: env.LLM_RECORD_PROMPTS?.trim() !== 'false' },
   }
 }

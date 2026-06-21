@@ -558,12 +558,12 @@ function selectGitHubDeps(
 }
 
 /**
- * Build the document-source integration's concrete ports when opted in: the
- * configured source providers (Confluence, Notion, …) plus the two D1
- * repositories. The model provider is wired only in 'llm' planner mode (it just
- * needs a provider credential); the planner degrades to its deterministic parser
- * if no model is usable. Returns `{}` when disabled, so `createCore` leaves the
- * `documents` module unassembled.
+ * Build the document-source integration's concrete ports: the configured source
+ * providers (Confluence, Notion, …) plus the two D1 repositories. The integration is
+ * always on (config load fails loudly without the encryption key), so this is wired
+ * on every deployment. The model provider is wired only in 'llm' planner mode (it
+ * just needs a provider credential); the planner degrades to its deterministic parser
+ * if no model is usable.
  */
 function selectDocumentsDeps(
   env: Env,
@@ -572,7 +572,6 @@ function selectDocumentsDeps(
   clock: Clock,
   idGenerator: IdGenerator,
 ): Partial<CoreDependencies> {
-  if (!config.documents.enabled) return {}
   const providers: DocumentSourceProvider[] = []
   if (config.documents.sources.includes('confluence')) providers.push(new ConfluenceProvider())
   if (config.documents.sources.includes('notion')) providers.push(new NotionProvider())
@@ -618,10 +617,10 @@ function selectDocumentsDeps(
 }
 
 /**
- * Build the task-source integration's concrete ports when opted in. Mirrors
- * `selectDocumentsDeps` but with no planner — issues are linked for context, not
- * expanded into board structure. Returns `{}` when disabled, so `createCore`
- * leaves the `tasks` module unassembled.
+ * Build the task-source integration's concrete ports. Mirrors `selectDocumentsDeps`
+ * but with no planner — issues are linked for context, not expanded into board
+ * structure. Always on (config load fails loudly without the encryption key), so this
+ * is wired on every deployment.
  */
 function selectTasksDeps(
   env: Env,
@@ -630,7 +629,6 @@ function selectTasksDeps(
   clock: Clock,
   idGenerator: IdGenerator,
 ): Partial<CoreDependencies> {
-  if (!config.tasks.enabled) return {}
   const providers: TaskSourceProvider[] = []
   if (config.tasks.sources.includes('jira')) providers.push(new JiraProvider())
   // GitHub issues reuse the workspace's installed GitHub App, so this provider
@@ -886,6 +884,7 @@ export function buildContainer(env: Env, overrides: Partial<CoreDependencies> = 
     workspaceMountRepository: new D1WorkspaceMountRepository({ db }),
     tokenUsageRepository: new D1TokenUsageRepository({ db }),
     llmCallMetricRepository: new D1LlmCallMetricRepository({ db }),
+    recordLlmPrompts: config.observability.recordPrompts,
     idGenerator,
     clock,
     // When a caller injects its own agentExecutor (tests pass a FakeAgentExecutor)

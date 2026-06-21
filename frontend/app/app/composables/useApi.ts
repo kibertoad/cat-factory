@@ -472,9 +472,11 @@ export function useApi() {
         { method: 'PATCH', body: { status } },
       ),
 
-    // Fold the answers back into the block's requirements (all items must be settled).
+    // Rework the requirements into one standard-format document (every finding must
+    // be settled; no findings is allowed). Returns the updated review; the block's
+    // own description is left untouched.
     incorporateRequirements: (workspaceId: string, reviewId: string) =>
-      http<{ review: RequirementReview; block: Block }>(
+      http<{ review: RequirementReview }>(
         `${ws(workspaceId)}/requirement-reviews/${encodeURIComponent(reviewId)}/incorporate`,
         { method: 'POST' },
       ),

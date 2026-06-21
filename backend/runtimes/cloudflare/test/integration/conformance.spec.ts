@@ -4,8 +4,11 @@ import {
   FakeAgentExecutor,
   RecordingEventPublisher,
   defineConformanceSuite,
+  makeIncorporatedReview,
 } from '@cat-factory/conformance'
+import { env } from 'cloudflare:test'
 import { makeApp } from '../helpers'
+import { D1RequirementReviewRepository } from '../../src/infrastructure/repositories/D1RequirementReviewRepository'
 
 // Run the shared cross-runtime conformance suite against the Cloudflare Worker
 // facade (the real Hono app over a real local D1, inside workerd). The Node
@@ -30,6 +33,11 @@ const harness: ConformanceHarness = {
       ...app,
       executionEmits: (blockId) =>
         blockId ? recorder.emits.filter((e) => e.blockId === blockId) : recorder.emits,
+      seedIncorporatedReview: (workspaceId, blockId, requirements) =>
+        new D1RequirementReviewRepository({ db: env.DB }).upsert(
+          workspaceId,
+          makeIncorporatedReview(blockId, requirements),
+        ),
     }
   },
 }

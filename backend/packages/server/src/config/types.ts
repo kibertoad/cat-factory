@@ -77,7 +77,11 @@ export interface AuthConfig {
 }
 
 export interface DocumentsConfig {
-  /** Opt-in flag. Requires an encryption key (no silent plaintext fallback). */
+  /**
+   * Always on where the runtime serves documents: there is no enable flag, and an
+   * encryption key is mandatory (config load fails loudly without it). False only on
+   * facades that do not serve documents at all (e.g. the Node MVP).
+   */
   enabled: boolean
   /** Which source providers to register (default: all). */
   sources: DocumentSourceKind[]
@@ -88,7 +92,10 @@ export interface DocumentsConfig {
 }
 
 export interface TasksConfig {
-  /** Opt-in flag. Requires an encryption key (no silent plaintext fallback). */
+  /**
+   * Always on where the runtime serves task sources: there is no enable flag, and an
+   * encryption key is mandatory (config load fails loudly without it).
+   */
   enabled: boolean
   /** Which source providers to register (default: all). */
   sources: TaskSourceKind[]
@@ -128,6 +135,17 @@ export interface FragmentLibraryConfig {
   selector: 'llm' | 'deterministic'
 }
 
+export interface ObservabilityConfig {
+  /**
+   * Whether the LLM observability sink persists the full prompt body with each
+   * metric. Default true. When false (`LLM_RECORD_PROMPTS=false`) the numeric
+   * telemetry (tokens, timing, finish reason, message/tool counts) is still recorded,
+   * but the prompt text is stored empty — for deployments that must not retain the
+   * (potentially sensitive) complete prompts sent to the model.
+   */
+  recordPrompts: boolean
+}
+
 export interface AppConfig {
   agents: AgentsConfig
   /** The effective model picker catalog (each model's active flavour). */
@@ -139,9 +157,9 @@ export interface AppConfig {
   github: GitHubConfig
   /** "Login with GitHub" config; `enabled` is false unless an OAuth app is set up. */
   auth: AuthConfig
-  /** Document-source integration config; `enabled` is false unless opted in. */
+  /** Document-source integration config; always on where the runtime serves documents. */
   documents: DocumentsConfig
-  /** Task-source integration config; `enabled` is false unless opted in. */
+  /** Task-source integration config; always on where the runtime serves task sources. */
   tasks: TasksConfig
   /** Environment provider integration config; `enabled` is false unless opted in. */
   environments: EnvironmentsConfig
@@ -151,4 +169,6 @@ export interface AppConfig {
   retention: RetentionConfig
   /** Prompt-fragment library config; `enabled` is false unless opted in (ADR 0006). */
   fragmentLibrary: FragmentLibraryConfig
+  /** LLM observability config (e.g. whether complete prompts are recorded). */
+  observability: ObservabilityConfig
 }

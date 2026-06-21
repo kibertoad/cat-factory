@@ -288,6 +288,40 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         expect(step.output).toMatch(/from [1-9]\d* task/)
       })
 
+      it("substitutes a block's reworked requirements for its description in every step", async () => {
+        // Once a task's requirements have been reworked ("incorporated"), that
+        // standard-format document — not the raw description — is what every agent step
+        // consumes. This must hold on EVERY runtime: the Cloudflare facade wires the D1
+        // review store, the Node facade the Drizzle one, and both feed the engine through
+        // the optional `requirementReviewRepository`. Asserting it here means a facade
+        // that forgets to wire that store (the old Node gap) fails a shared test instead
+        // of silently shipping divergent agent context.
+        const REWORKED = '# Login — Requirements\n\nThe system SHALL keep sessions for 24h.'
+        const app = harness.makeApp({ confidence: 1, echoDescription: true })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        await app.seedIncorporatedReview(wsId, 'task_login', REWORKED)
+
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Coder only',
+          agentKinds: ['coder'],
+        })
+        const start = await app.call<ExecutionInstance>(
+          'POST',
+          `/workspaces/${wsId}/blocks/task_login/executions`,
+          { pipelineId: pipeline.body.id },
+        )
+        expect(start.status).toBe(201)
+
+        const ticked = await app.drive(wsId)
+        const exec = ticked.find((e) => e.blockId === 'task_login')!
+        const step = exec.steps.find((s) => s.agentKind === 'coder')!
+        expect(step.state).toBe('done')
+        // The agent was handed the reworked document, not the seeded task's description.
+        expect(step.output).toContain(`[desc]${REWORKED}[/desc]`)
+      })
+
       it('drives an asynchronous (polled) agent job to completion', async () => {
         // The `coder` step runs as a polled async job (startJob → awaiting_job → pollJob),
         // so this exercises the durable driver's job-poll loop — Cloudflare Workflows and

@@ -6,13 +6,8 @@ import { describe, expect, it } from 'vitest'
 // model's JSON into review items. Exercised in the Workers pool like the other
 // prompt specs so the parsing runs in the real workerd runtime.
 
-const {
-  renderRequirements,
-  buildReviewPrompt,
-  buildIncorporatePrompt,
-  coerceReviewItems,
-  extractJson,
-} = requirementsLogic
+const { renderRequirements, buildReviewPrompt, buildReworkPrompt, coerceReviewItems, extractJson } =
+  requirementsLogic
 
 const ctx = {
   block: {
@@ -98,7 +93,7 @@ describe('requirements review logic', () => {
     expect(coerceReviewItems({ items: [] }, () => 'x', 0)).toEqual([])
   })
 
-  it('folds resolved answers into the incorporate prompt and excludes dismissed items', () => {
+  it('folds resolved answers into the rework prompt and excludes dismissed items', () => {
     const items = [
       {
         id: '1',
@@ -123,10 +118,16 @@ describe('requirements review logic', () => {
         updatedAt: 0,
       },
     ]
-    const prompt = buildIncorporatePrompt(ctx, items)
+    const prompt = buildReworkPrompt(ctx, items)
     expect(prompt).toContain('Token expiry?')
     expect(prompt).toContain('24 hours')
     expect(prompt).toContain('dismissed as out of scope')
     expect(prompt).toContain('Out of scope')
+  })
+
+  it('restates cleanly when there are no findings (no challenges path)', () => {
+    const prompt = buildReworkPrompt(ctx, [])
+    expect(prompt).toContain('no open questions')
+    expect(prompt).toContain('standard structure')
   })
 })

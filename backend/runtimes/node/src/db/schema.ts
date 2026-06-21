@@ -312,6 +312,31 @@ export const pipelineScheduleRuns = pgTable(
   ],
 )
 
+// Requirements reviews (mirror of D1 migration 0021). One row per review; the
+// reviewed `items` live as a JSON array (text). At most one live review per block —
+// the service deletes a block's prior review before inserting a fresh one, so
+// `getByBlock` returns the current one. `incorporated_requirements` holds the
+// reworked, standard-format requirements document the rework step produced.
+export const requirementReviews = pgTable(
+  'requirement_reviews',
+  {
+    workspace_id: text('workspace_id').notNull(),
+    id: text('id').notNull(),
+    block_id: text('block_id').notNull(),
+    status: text('status').notNull(),
+    items: text('items').notNull().default('[]'),
+    model: text('model'),
+    incorporated_requirements: text('incorporated_requirements'),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+    updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.workspace_id, t.id] }),
+    // getByBlock looks up a block's reviews (newest wins), mirroring D1 migration 0021.
+    index('idx_requirement_reviews_block').on(t.workspace_id, t.block_id),
+  ],
+)
+
 // A workspace's issue-tracker selection (mirror of D1 migration 0029).
 export const trackerSettings = pgTable('tracker_settings', {
   workspace_id: text('workspace_id').primaryKey(),
