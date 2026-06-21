@@ -70,6 +70,22 @@ export interface NodeContainerOptions {
   env?: NodeJS.ProcessEnv
   /** Override core dependencies — used by tests (e.g. a fake agent executor). */
   overrides?: Partial<CoreDependencies>
+  /**
+   * Override the runner backend the container-agent steps dispatch to. When provided
+   * (even as `null`) it REPLACES the default self-hosted-pool resolution, so a sibling
+   * facade can supply its own transport (e.g. the local-mode Docker transport) without
+   * registering a runner pool. Undefined → the default Node behaviour (resolve a
+   * workspace's self-hosted pool when runner pools are enabled).
+   */
+  resolveTransport?: ResolveRunnerTransport | null
+  /**
+   * Override how the container executor mints the push/clone token. When provided it
+   * REPLACES the GitHub-App token mint, so a sibling facade can authenticate with a
+   * static credential instead of an App installation (e.g. a PAT in local mode). The
+   * `installationId` argument is then ignored. Undefined → mint via the GitHub App
+   * (requires `GITHUB_APP_PRIVATE_KEY`).
+   */
+  mintInstallationToken?: (installationId: number) => Promise<string>
 }
 
 /**
@@ -115,10 +131,14 @@ function buildNodeResolveTransport(
 /**
  * Build the container agent executor (repo-operating steps: coder, mocker,
  * playwright, blueprints, ci-fixer, conflict-resolver, merger) when its
- * prerequisites are configured: the GitHub App (id + private key) to mint the push
- * token, the public URL backing the LLM proxy, the session secret to sign proxy
- * tokens, and a runner backend. Returns null when any is missing, so the composite
- * fails those kinds loudly rather than running them as useless one-shot LLM calls.
+ * prerequisites are configured: a token source for the push/clone token, the public
+ * URL backing the LLM proxy, the session secret to sign proxy tokens, and a runner
+ * backend. Returns null when any is missing, so the composite fails those kinds
+ * loudly rather than running them as useless one-shot LLM calls.
+ *
+ * The token source is pluggable: a sibling facade may pass `mintInstallationToken`
+ * (e.g. a static PAT for local mode), otherwise it is minted via the GitHub App
+ * (which additionally requires the App private key + `github.enabled`).
  */
 function buildNodeContainerExecutor(
   env: NodeJS.ProcessEnv,
@@ -132,37 +152,37 @@ function buildNodeContainerExecutor(
     workspaceId: string,
     agentKind: string,
   ) => Promise<string | undefined>,
+  mintInstallationTokenOverride?: (installationId: number) => Promise<string>,
 ): AgentExecutor | null {
-  const privateKeyPem = env.GITHUB_APP_PRIVATE_KEY?.trim()
   // The harness reaches models only through this service's LLM proxy; `PUBLIC_URL`
-  // is this service's externally reachable base (the runner pool must be able to
-  // reach it). Pi posts to `${PUBLIC_URL}/v1/chat/completions`.
+  // is this service's externally reachable base (the runner pool / local container
+  // must be able to reach it). Pi posts to `${PUBLIC_URL}/v1/chat/completions`.
   const publicUrl = env.PUBLIC_URL?.trim()
   const sessionSecret = config.auth.sessionSecret
 
-  if (
-    !config.github.enabled ||
-    !privateKeyPem ||
-    !publicUrl ||
-    !sessionSecret ||
-    !resolveTransport
-  ) {
-    return null
-  }
+  if (!publicUrl || !sessionSecret || !resolveTransport) return null
 
-  const registry = new GitHubAppRegistry({
-    default: {
-      appId: config.github.appId,
-      auth: new GitHubAppAuth({
+  // Token source: an explicit override (e.g. a static PAT in local mode) wins; else
+  // the GitHub App mints a per-installation token (requires the App private key).
+  let mintInstallationToken = mintInstallationTokenOverride
+  if (!mintInstallationToken) {
+    const privateKeyPem = env.GITHUB_APP_PRIVATE_KEY?.trim()
+    if (!config.github.enabled || !privateKeyPem) return null
+    const registry = new GitHubAppRegistry({
+      default: {
         appId: config.github.appId,
-        privateKeyPem,
-        installationRepository,
-        clock,
-        apiBase: config.github.apiBase,
-      }),
-    },
-    installationRepository,
-  })
+        auth: new GitHubAppAuth({
+          appId: config.github.appId,
+          privateKeyPem,
+          installationRepository,
+          clock,
+          apiBase: config.github.apiBase,
+        }),
+      },
+      installationRepository,
+    })
+    mintInstallationToken = (id) => registry.installationToken(id)
+  }
 
   return new ContainerAgentExecutor({
     resolveTransport,
@@ -175,7 +195,7 @@ function buildNodeContainerExecutor(
       blockRepository,
       serviceRepository: new DrizzleServiceFrameRepository(db),
     }),
-    mintInstallationToken: (id) => registry.installationToken(id),
+    mintInstallationToken,
     sessionService: new ContainerSessionService({ secret: sessionSecret }),
     proxyBaseUrl: `${publicUrl.replace(/\/+$/, '')}/v1`,
     // Point container agents' web search at the backend search proxy (no provider key
@@ -303,12 +323,17 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   const runnerPoolConnectionRepository = new DrizzleRunnerPoolConnectionRepository(options.db)
   const githubInstallationRepository = new DrizzleGitHubInstallationRepository(options.db)
 
-  const resolveTransport = buildNodeResolveTransport(
-    config,
-    runnerPoolConnectionRepository,
-    repos.workspaceRepository,
-    clock,
-  )
+  // A sibling facade (local mode) may inject its own transport — even `null` — which
+  // replaces the default self-hosted-pool resolution; undefined keeps Node's default.
+  const resolveTransport =
+    options.resolveTransport !== undefined
+      ? options.resolveTransport
+      : buildNodeResolveTransport(
+          config,
+          runnerPoolConnectionRepository,
+          repos.workspaceRepository,
+          clock,
+        )
   const container = buildNodeContainerExecutor(
     env,
     config,
@@ -318,6 +343,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     repos.blockRepository,
     resolveTransport,
     resolveWorkspaceModelDefault,
+    options.mintInstallationToken,
   )
 
   // Always a composite: inline kinds run as one-shot LLM calls; repo-operating kinds

@@ -11,6 +11,7 @@ packages:
   - 'deploy/backend'
   - 'deploy/frontend'
   - 'deploy/node'
+  - 'deploy/local'
 allowBuilds:
   '@parcel/watcher': true
   esbuild: true

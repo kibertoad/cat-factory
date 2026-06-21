@@ -104,7 +104,25 @@ facade so the runtimes can't drift (see "Cross-runtime conformance" below).
   driver), Node gateways + model provisioning (`loadNodeConfig`,
   `createNodeModelProvider` = direct vendors + Cloudflare-over-REST + opt-in Bedrock),
   and `createServer()` / `start()`. `DATABASE_URL` selects the database; `migrate()`
-  bootstraps the schema idempotently on boot.
+  bootstraps the schema idempotently on boot. Exposes two composition seams used by
+  the local facade (both default to the existing Node behaviour): `buildNodeContainer`
+  accepts an injected `resolveTransport` + `mintInstallationToken`, and `start()` an
+  injected `buildContainer`.
+- `backend/runtimes/local` — `@cat-factory/local-server`, the **local-mode facade**:
+  the Node facade with two differentiators so a developer can run the whole product on
+  their own machine. Agent jobs run as **per-job local Docker/Podman containers** (the
+  `LocalDockerRunnerTransport` — the local analogue of `CloudflareContainerTransport`
+  and `RunnerPoolTransport`, driven through the same `RunnerTransport` port: `docker run`
+  the executor-harness image per job, publish `:8080` to an ephemeral host port,
+  idempotent re-attach by `cat-factory.jobId` label, eviction-maps a vanished
+  container), and GitHub is reached via a **PAT** (`GITHUB_PAT` → `mintInstallationToken`)
+  instead of a GitHub App. `buildLocalContainer` reuses ALL of Node's persistence/
+  pg-boss/gateways and only swaps those two seams; `startLocal()` reuses Node's
+  `start()`. The harness itself opens the PR via the PAT, so pipelines produce real PRs
+  on github.com. Repo resolution is unchanged (the `github_repos`/`github_installations`
+  projection). NOTE: the auto CI-gate + auto-merge tail (a PAT-backed `CiStatusProvider`/
+  `PullRequestMerger`) is the documented follow-up — today the merge tail degrades to a
+  `pipeline_complete` notification for a human to merge the real PR.
 - `backend/internal/executor-harness` — the payload that runs **inside** each
   per-run Cloudflare Container (the Pi coding-agent harness). Private (not on npm);
   its Docker image is published to **GHCR** by `docker-publish.yml`.
@@ -124,6 +142,11 @@ facade so the runtimes can't drift (see "Cross-runtime conformance" below).
   and an `.env.example`. Env-driven (`DATABASE_URL` required); the scripts load `.env`
   via Node's native `--env-file-if-exists`, and the entry runs via Node 24/26 **type
   stripping** (no build step for this package).
+- `deploy/local` — example **local-mode** deployment: a one-line `src/main.ts` calling
+  `@cat-factory/local-server`'s `startLocal()`, a `docker-compose.yml` (local Postgres
+  only — the orchestrator runs on the host so it can drive the Docker daemon to spawn
+  agent containers), and an `.env.example` (`LOCAL_HARNESS_IMAGE`, `GITHUB_PAT`,
+  `DATABASE_URL`). Like `deploy/node`, the entry runs via Node type stripping.
 - `deploy/frontend` — example Pages deployment: a thin Nuxt app that `extends` the
   `@cat-factory/app` layer + the Pages `wrangler.toml`. `NUXT_PUBLIC_API_BASE` is
   baked in at `nuxt generate` time.
@@ -446,22 +469,31 @@ differentiators behind the shared kernel ports + the `container.gateways` seam.
   (no silent useless one-shot LLM call). NOTE: populating `github_installations` /
   `github_repos` still needs the GitHub connect/sync integration on Postgres (the
   remaining follow-up); the executor reads those rows once present.
+- **Local mode** (`runtimes/local`, `@cat-factory/local-server`): the Node facade with
+  the runner backend swapped for a **per-job local Docker container** (`LocalDockerRunnerTransport`,
+  injected via `buildNodeContainer`'s `resolveTransport` seam) and the push token swapped
+  for a **PAT** (`GITHUB_PAT`, via the `mintInstallationToken` seam). Reuses Node's
+  Postgres/pg-boss/gateways unchanged. So a developer runs the whole product locally —
+  agent containers clone/push/open real PRs on github.com via the PAT. Container kinds
+  need a target repo's `github_repos`/`github_installations` rows seeded (same as Node).
 - **Model provisioning** is composed per facade from `@cat-factory/agents`'
   `CompositeModelProvider` (+ opt-in `@cat-factory/provider-bedrock`): Worker =
   workers-ai binding + direct vendors + Cloudflare-REST + Bedrock; Node = direct
   vendors + Cloudflare-REST + Bedrock (no binding). Unconfigured providers aren't
   registered, so `resolve` throws a clear error instead of failing deep in the SDK.
 
-**Cross-runtime conformance** keeps the two facades behaviourally identical:
+**Cross-runtime conformance** keeps the facades behaviourally identical:
 `@cat-factory/conformance` exposes `defineConformanceSuite(harness)` — the key backend
 behaviour (workspaces, board, the execution engine driven via the shared
 `FakeAgentExecutor`) as runtime-neutral assertions parameterised by a
 `ConformanceHarness` (`makeApp(agentOptions) → { call, createWorkspace, drive }`). The
 Worker invokes it from `runtimes/cloudflare/test/integration/conformance.spec.ts`
 (real D1, inside workerd); the Node service from `runtimes/node/test/conformance.spec.ts`
-(real Postgres via `DATABASE_URL`). Both run the **same** assertions, so a repository
-that maps a column differently or an engine path only one facade wires fails a test
-instead of shipping. `runtimes/node/test/durable-execution.spec.ts` additionally
+and the local facade from `runtimes/local/test/conformance.spec.ts` (both real Postgres
+via `DATABASE_URL`, the latter building through `buildLocalContainer` with a fake agent
+executor so the local wiring can't drift). All run the **same** assertions, so a
+repository that maps a column differently or an engine path only one facade wires fails
+a test instead of shipping. `runtimes/node/test/durable-execution.spec.ts` additionally
 drives a run to completion through the real pg-boss runner.
 
 ## Conventions

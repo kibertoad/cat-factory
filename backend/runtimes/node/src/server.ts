@@ -73,7 +73,16 @@ export function createServer(options: CreateServerOptions): Hono<AppEnv> {
  * and listen. Registers SIGTERM/SIGINT handlers for a clean, ordered shutdown.
  */
 export async function start(
-  options: { env?: NodeJS.ProcessEnv } = {},
+  options: {
+    env?: NodeJS.ProcessEnv
+    /**
+     * The composition root to build. Defaults to {@link buildNodeContainer}; a sibling
+     * facade (local mode) passes its own builder (same signature) so it reuses this
+     * whole boot sequence — Postgres + pg-boss + sweepers — while supplying only its
+     * differentiators (e.g. the local Docker transport + PAT token source).
+     */
+    buildContainer?: (options: NodeContainerOptions) => ServerContainer
+  } = {},
 ): Promise<ReturnType<typeof serve>> {
   const env = options.env ?? process.env
   const databaseUrl = env.DATABASE_URL
@@ -90,7 +99,8 @@ export async function start(
   // retention sweeper (so the sweeper prunes the very stores the app writes to).
   const clock = new SystemClock()
   const repos = createDrizzleRepositories(db, clock)
-  const container = buildNodeContainer({ db, boss, env, repos })
+  const buildContainer = options.buildContainer ?? buildNodeContainer
+  const container = buildContainer({ db, boss, env, repos })
 
   const runtime = executionRuntime(container.config, env)
   // The decision-timeout worker creates its queue first so the advance worker's send to

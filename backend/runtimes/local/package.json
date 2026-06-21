@@ -1,0 +1,44 @@
+{
+  "name": "@cat-factory/local-server",
+  "version": "1.0.0",
+  "description": "Local-mode runtime facade for the Agent Architecture Board: the @cat-factory/node-server stack with agent jobs run as local Docker/Podman containers and GitHub accessed via a personal access token — a developer can run the whole product on their own machine.",
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -b tsconfig.build.json",
+    "build:watch": "tsc -b tsconfig.build.json --watch",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "start": "node dist/main.js",
+    "dev": "node --watch dist/main.js",
+    "link:repo": "node dist/link-repo.js",
+    "test": "vitest run",
+    "test:run": "vitest run"
+  },
+  "dependencies": {
+    "@cat-factory/agents": "workspace:*",
+    "@cat-factory/kernel": "workspace:*",
+    "@cat-factory/node-server": "workspace:*",
+    "@cat-factory/orchestration": "workspace:*",
+    "@cat-factory/server": "workspace:*"
+  },
+  "devDependencies": {
+    "@cat-factory/conformance": "workspace:*",
+    "@types/node": "^24.13.2",
+    "typescript": "7.0.1-rc",
+    "vitest": "^4.1.9"
+  }
+}

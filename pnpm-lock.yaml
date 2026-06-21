@@ -407,6 +407,37 @@ importers:
         specifier: ^4.102.0
         version: 4.102.0(@cloudflare/workers-types@4.20260619.1)
 
+  backend/runtimes/local:
+    dependencies:
+      '@cat-factory/agents':
+        specifier: workspace:*
+        version: link:../../packages/agents
+      '@cat-factory/kernel':
+        specifier: workspace:*
+        version: link:../../packages/kernel
+      '@cat-factory/node-server':
+        specifier: workspace:*
+        version: link:../node
+      '@cat-factory/orchestration':
+        specifier: workspace:*
+        version: link:../../packages/orchestration
+      '@cat-factory/server':
+        specifier: workspace:*
+        version: link:../../packages/server
+    devDependencies:
+      '@cat-factory/conformance':
+        specifier: workspace:*
+        version: link:../../internal/conformance
+      '@types/node':
+        specifier: ^24.13.2
+        version: 24.13.2
+      typescript:
+        specifier: 7.0.1-rc
+        version: 7.0.1-rc
+      vitest:
+        specifier: ^4.1.9
+        version: 4.1.9(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(happy-dom@15.11.7)(vite@7.3.5(@types/node@24.13.2)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0))
+
   backend/runtimes/node:
     dependencies:
       '@cat-factory/agents':
@@ -505,6 +536,19 @@ importers:
       wrangler:
         specifier: ^4.102.0
         version: 4.102.0(@cloudflare/workers-types@4.20260619.1)
+
+  deploy/local:
+    dependencies:
+      '@cat-factory/local-server':
+        specifier: workspace:*
+        version: link:../../backend/runtimes/local
+    devDependencies:
+      '@types/node':
+        specifier: ^24.13.2
+        version: 24.13.2
+      typescript:
+        specifier: 7.0.1-rc
+        version: 7.0.1-rc
 
   deploy/node:
     dependencies:

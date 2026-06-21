@@ -1,0 +1,23 @@
+{
+  "name": "@cat-factory/deploy-local",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Example LOCAL-MODE deployment of @cat-factory/local-server: run the whole product on your own machine — agent jobs as local Docker containers, GitHub via a PAT, a local Postgres. Carries the docker-compose for Postgres + env config + a one-line entry.",
+  "type": "module",
+  "scripts": {
+    "predev": "pnpm --filter @cat-factory/local-server run build",
+    "dev": "node --watch --env-file-if-exists=.env src/main.ts",
+    "prestart": "pnpm --filter @cat-factory/local-server run build",
+    "start": "node --env-file-if-exists=.env src/main.ts",
+    "db:up": "docker compose up -d postgres",
+    "db:down": "docker compose down",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@cat-factory/local-server": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.2",
+    "typescript": "7.0.1-rc"
+  }
+}
