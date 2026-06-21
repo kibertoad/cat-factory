@@ -32,6 +32,8 @@ const KIND_ROUTE: Record<RunnerDispatchKind, string> = {
   'ci-fix': '/ci-fix',
   'resolve-conflicts': '/resolve-conflicts',
   merge: '/merge',
+  test: '/test',
+  'fix-tests': '/fix-tests',
 }
 
 // The failed-poll error the engine classifies as a container eviction (matched by

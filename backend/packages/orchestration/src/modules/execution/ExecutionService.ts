@@ -1582,6 +1582,32 @@ export class ExecutionService {
     return current?.id ?? null
   }
 
+  /**
+   * Resolve the service-level (frame) configuration for a run's block — the
+   * Tester's local-infra docker-compose path / "no infra" flag and the provisioning
+   * provider + instance size — by walking up to the service frame. Returns undefined
+   * when no frame carries any of these settings, so callers can spread it
+   * conditionally onto the agent context.
+   */
+  private async resolveServiceConfig(
+    workspaceId: string,
+    block: Block,
+  ): Promise<AgentRunContext['service'] | undefined> {
+    const frame =
+      block.level === 'frame'
+        ? block
+        : await this.resolveServiceFrameId(workspaceId, block.id).then((id) =>
+            id ? this.blockRepository.get(workspaceId, id) : null,
+          )
+    if (!frame) return undefined
+    const service: NonNullable<AgentRunContext['service']> = {}
+    if (frame.testComposePath) service.testComposePath = frame.testComposePath
+    if (frame.noInfraDependencies) service.noInfraDependencies = frame.noInfraDependencies
+    if (frame.cloudProvider) service.cloudProvider = frame.cloudProvider
+    if (frame.instanceSize) service.instanceSize = frame.instanceSize
+    return Object.keys(service).length ? service : undefined
+  }
+
   /** Assemble the {@link AgentRunContext} for a step from the run + block state. */
   private async buildAgentContext(
     workspaceId: string,
@@ -1602,6 +1628,7 @@ export class ExecutionService {
     const contextDocs = reworked ? [] : await this.resolveContextDocs(workspaceId, block.id)
     const contextTasks = reworked ? [] : await this.resolveContextTasks(workspaceId, block.id)
     const environment = await this.resolveEnvironment(workspaceId, block.id)
+    const service = await this.resolveServiceConfig(workspaceId, block)
     const priorOutputs = instance.steps
       .slice(0, instance.currentStep)
       .filter((s) => s.output)
@@ -1631,12 +1658,13 @@ export class ExecutionService {
         fragmentIds: block.fragmentIds,
         ...(resolved ? { resolvedFragments: resolved.fragments } : {}),
         modelId: block.modelId,
-        ...(block.testTarget ? { testTarget: block.testTarget } : {}),
+        ...(block.agentConfig ? { agentConfig: block.agentConfig } : {}),
         ...(block.pullRequest ? { pullRequest: block.pullRequest } : {}),
         ...(contextDocs.length ? { contextDocs } : {}),
         ...(contextTasks.length ? { contextTasks } : {}),
       },
       ...(environment ? { environment } : {}),
+      ...(service ? { service } : {}),
       ...(serviceTasks ? { serviceTasks } : {}),
       priorOutputs,
       decisions: instance.steps

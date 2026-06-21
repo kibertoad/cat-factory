@@ -162,6 +162,7 @@ export type { RepoBlueprintRecord, RepoBlueprintRepository } from './board-scan-
 export type { RepoScanner, ScanRepoRequest, ScannedBlueprint } from './repo-scanner.js'
 export type {
   RunnerDispatchKind,
+  RunnerDispatchOptions,
   RunnerJobProgress,
   RunnerJobResult,
   RunnerJobView,

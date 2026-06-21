@@ -25,6 +25,8 @@ export {
   CONFLICT_RESOLVER_AGENT_KIND,
   ANALYSIS_AGENT_KIND,
   TRACKER_AGENT_KIND,
+  TESTER_AGENT_KIND,
+  FIXER_AGENT_KIND,
   type CiVerdict,
 } from './modules/execution/ci.logic.js'
 // A runtime facade tags an eviction it knows to be transient infra churn with this

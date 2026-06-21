@@ -1,4 +1,9 @@
-import type { RunnerDispatchKind, RunnerJobView, RunnerTransport } from '@cat-factory/kernel'
+import type {
+  RunnerDispatchKind,
+  RunnerDispatchOptions,
+  RunnerJobView,
+  RunnerTransport,
+} from '@cat-factory/kernel'
 import { TRANSIENT_EVICTION_MARKER } from '@cat-factory/orchestration'
 import type { DurableObjectNamespace } from '@cloudflare/workers-types'
 import { type ExecutionContainer, isRolloutSignal } from './ExecutionContainer'
@@ -47,11 +52,19 @@ export class CloudflareContainerTransport implements RunnerTransport {
     jobId: string,
     spec: Record<string, unknown>,
     kind: RunnerDispatchKind = 'run',
+    options?: RunnerDispatchOptions,
   ): Promise<void> {
     const stub = this.namespace.get(this.namespace.idFromName(jobId))
     const res = await stub.fetch(`http://container/${kind}`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: {
+        'content-type': 'application/json',
+        // Forward the resolved instance-type id so the Container DO can size the
+        // per-run instance when it supports per-instance sizing. (Cloudflare's
+        // instance type is otherwise the Container class's static default — see the
+        // wrangler `[[containers]] instance_type`.)
+        ...(options?.instanceTypeId ? { 'x-instance-type': options.instanceTypeId } : {}),
+      },
       body: JSON.stringify(spec),
       signal: AbortSignal.timeout(DISPATCH_TIMEOUT_MS),
     })

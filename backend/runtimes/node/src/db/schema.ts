@@ -43,6 +43,8 @@ export const accounts = pgTable(
     name: text('name').notNull(),
     github_account_login: text('github_account_login'),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
+    // The default cloud provider new services in this account inherit.
+    default_cloud_provider: text('default_cloud_provider'),
   },
   // Enforce one personal account per GitHub login (a correctness constraint, not just
   // a lookup index) — the partial unique index `findPersonalByLogin` relies on.
@@ -90,10 +92,19 @@ export const blocks = pgTable(
     module_name: text('module_name'),
     fragment_ids: text('fragment_ids'),
     model_id: text('model_id'),
+    // Legacy: superseded by agent_config; left in place to avoid a destructive drop.
     test_target: text('test_target'),
     pull_request: text('pull_request'),
     merge_preset_id: text('merge_preset_id'),
     pipeline_id: text('pipeline_id'),
+    // Task-level agent config-contribution values (JSON id->value map).
+    agent_config: text('agent_config'),
+    // Service-level (frame): Tester local-infra docker-compose path, the "no infra
+    // dependencies" flag, the cloud provider and the abstract instance size.
+    test_compose_path: text('test_compose_path'),
+    no_infra_dependencies: integer('no_infra_dependencies'),
+    cloud_provider: text('cloud_provider'),
+    instance_size: text('instance_size'),
     // The account-owned service this block belongs to (migration 0031); will become the
     // physical scope key once the repositories switch off workspace_id.
     service_id: text('service_id'),
