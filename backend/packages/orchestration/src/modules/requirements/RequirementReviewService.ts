@@ -1,5 +1,5 @@
 import { generateText } from 'ai'
-import type { Block, RequirementReview, ReviewItemStatus } from '@cat-factory/kernel'
+import type { Block, CompanionVerdict, RequirementReview, ReviewItemStatus } from '@cat-factory/kernel'
 import { assertFound, ValidationError } from '@cat-factory/kernel'
 import type { BlockRepository } from '@cat-factory/kernel'
 import type { Clock, IdGenerator } from '@cat-factory/kernel'
@@ -161,6 +161,7 @@ export class RequirementReviewService {
       items,
       model: `${ref.provider}:${ref.model}`,
       incorporatedRequirements: null,
+      companionVerdicts: [],
       createdAt: now,
       updatedAt: now,
     }
@@ -235,8 +236,9 @@ export class RequirementReviewService {
     const context = await this.gatherContext(workspaceId, block)
     // A prior rework rejected by the companion feeds its challenge into this attempt so
     // the regenerated document addresses the gaps rather than repeating them.
-    if (review.companion && !review.companion.passed) {
-      context.companionFeedback = review.companion.feedback
+    const lastVerdict = review.companionVerdicts.at(-1)
+    if (lastVerdict && !lastVerdict.passed) {
+      context.companionFeedback = lastVerdict.feedback
     }
     let revised: string
     let finishReason: string
@@ -281,15 +283,16 @@ export class RequirementReviewService {
     // NOT accepted — the review stays `ready` and the companion's challenge is surfaced
     // (and fed into the next rework). A companion failure / unparseable verdict passes
     // through (a broken critic must never wedge the human's flow).
-    const companion = await this.gradeRework(modelProvider, ref, context, revised)
+    const verdict = await this.gradeRework(modelProvider, ref, context, revised)
 
     const now = this.deps.clock.now()
-    const passed = companion.passed
+    const passed = verdict.passed
     const updated: RequirementReview = {
       ...review,
       status: passed ? 'incorporated' : 'ready',
       incorporatedRequirements: passed ? revised : null,
-      companion,
+      // Append this cycle's verdict so the whole correction sequence is preserved.
+      companionVerdicts: [...review.companionVerdicts, verdict],
       updatedAt: now,
     }
     await this.deps.requirementReviewRepository.upsert(workspaceId, updated)
@@ -307,7 +310,7 @@ export class RequirementReviewService {
     ref: ModelRef,
     context: RequirementsContext,
     reworked: string,
-  ): Promise<NonNullable<RequirementReview['companion']>> {
+  ): Promise<CompanionVerdict> {
     const threshold = DEFAULT_COMPANION_THRESHOLD
     try {
       const result = await generateText({

@@ -1320,12 +1320,13 @@ function rowToRequirementReview(row: RequirementReviewRow): RequirementReview {
   } catch {
     items = []
   }
-  let companion: RequirementReview['companion'] = null
+  let companionVerdicts: RequirementReview['companionVerdicts'] = []
   if (row.companion) {
     try {
-      companion = JSON.parse(row.companion) as RequirementReview['companion']
+      const parsed = JSON.parse(row.companion)
+      if (Array.isArray(parsed)) companionVerdicts = parsed as RequirementReview['companionVerdicts']
     } catch {
-      companion = null
+      companionVerdicts = []
     }
   }
   return {
@@ -1335,7 +1336,7 @@ function rowToRequirementReview(row: RequirementReviewRow): RequirementReview {
     items,
     model: row.model,
     incorporatedRequirements: row.incorporated_requirements,
-    companion,
+    companionVerdicts,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -1385,7 +1386,7 @@ export class DrizzleRequirementReviewRepository implements RequirementReviewRepo
       items: JSON.stringify(review.items),
       model: review.model,
       incorporated_requirements: review.incorporatedRequirements,
-      companion: review.companion ? JSON.stringify(review.companion) : null,
+      companion: review.companionVerdicts?.length ? JSON.stringify(review.companionVerdicts) : null,
       created_at: review.createdAt,
       updated_at: review.updatedAt,
     }

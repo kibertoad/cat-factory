@@ -4,6 +4,17 @@
 // ---------------------------------------------------------------------------
 
 import type { AgentKind } from './domain'
+import type { CompanionVerdict } from './requirements'
+
+/** Live companion state on a companion step: the bar, the budget, and every verdict. */
+export interface StepCompanion {
+  /** the quality bar (0..1) the rating must reach */
+  threshold: number
+  /** the rework budget: once `verdicts.length` hits this the run fails */
+  maxAttempts: number
+  /** one verdict per correction cycle, in order; the last is the latest */
+  verdicts: CompanionVerdict[]
+}
 
 /** Runtime state of a single agent within a running execution. */
 export type AgentState =
@@ -222,6 +233,12 @@ export interface PipelineStep {
   requiresApproval?: boolean
   /** the live approval gate for this step; pending => the run is blocked on a human */
   approval?: StepApproval | null
+  /**
+   * Live companion state when this step is a companion kind: its quality bar, rework
+   * budget, and the full sequence of verdicts (one per correction cycle). Absent on
+   * non-companion steps.
+   */
+  companion?: StepCompanion | null
   /** text the agent produced for this step (when LLM execution is enabled). */
   output?: string
   /** identifier of the model that produced `output`, for transparency. */

@@ -22,12 +22,13 @@ function rowToReview(row: RequirementReviewRow): RequirementReview {
   } catch {
     items = []
   }
-  let companion: RequirementReview['companion'] = null
+  let companionVerdicts: RequirementReview['companionVerdicts'] = []
   if (row.companion) {
     try {
-      companion = JSON.parse(row.companion) as RequirementReview['companion']
+      const parsed = JSON.parse(row.companion)
+      if (Array.isArray(parsed)) companionVerdicts = parsed as RequirementReview['companionVerdicts']
     } catch {
-      companion = null
+      companionVerdicts = []
     }
   }
   return {
@@ -37,7 +38,7 @@ function rowToReview(row: RequirementReviewRow): RequirementReview {
     items,
     model: row.model,
     incorporatedRequirements: row.incorporated_requirements,
-    companion,
+    companionVerdicts,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -100,7 +101,7 @@ export class D1RequirementReviewRepository implements RequirementReviewRepositor
         JSON.stringify(review.items),
         review.model,
         review.incorporatedRequirements,
-        review.companion ? JSON.stringify(review.companion) : null,
+        review.companionVerdicts?.length ? JSON.stringify(review.companionVerdicts) : null,
         review.createdAt,
         review.updatedAt,
       )

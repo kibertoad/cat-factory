@@ -390,8 +390,8 @@ export class ExecutionService {
           ? {
               companion: {
                 threshold: pipeline.thresholds?.[i] ?? companionDef.defaultThreshold,
-                attempts: 0,
                 maxAttempts: DEFAULT_COMPANION_MAX_ATTEMPTS,
+                verdicts: [],
               },
             }
           : {}),
@@ -960,8 +960,8 @@ export class ExecutionService {
 
     const companion = step.companion ?? {
       threshold: companionFor(step.agentKind)?.defaultThreshold ?? 0.8,
-      attempts: 0,
       maxAttempts: DEFAULT_COMPANION_MAX_ATTEMPTS,
+      verdicts: [],
     }
     let assessment: CompanionAssessment | undefined
     try {
@@ -973,14 +973,14 @@ export class ExecutionService {
     // rather than wedging the run: record a perfect score and advance.
     const rating = assessment && producerIndex >= 0 ? assessment.rating : 1
     const feedback = assessment?.summary ?? ''
-    companion.attempts += 1
-    // Record the standardized verdict (the same shape the requirements-rework gate stores).
-    companion.verdict = {
+    // Append this cycle's standardized verdict (the same shape the requirements-rework
+    // gate stores) so the whole correction sequence is visible, not just the latest.
+    companion.verdicts.push({
       rating,
       threshold: companion.threshold,
       passed: rating >= companion.threshold,
       feedback,
-    }
+    })
     step.companion = companion
     step.output = feedback || result.output || ''
 
@@ -1022,14 +1022,14 @@ export class ExecutionService {
     }
 
     // BELOW THRESHOLD, budget spent → fail the run for human attention.
-    if (companion.attempts >= companion.maxAttempts) {
+    if (companion.verdicts.length >= companion.maxAttempts) {
       const detail = assessment?.summary ?? 'No further detail.'
       await this.failRun(
         workspaceId,
         instance.id,
         `Companion "${step.agentKind}" rated the output ${(rating * 100).toFixed(0)}% ` +
           `(below the ${(companion.threshold * 100).toFixed(0)}% bar) after ` +
-          `${companion.attempts} attempt(s).`,
+          `${companion.verdicts.length} attempt(s).`,
         'companion_rejected',
         detail,
       )

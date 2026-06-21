@@ -488,12 +488,14 @@ export const pipelineStepSchema = v.object({
       v.object({
         /** The quality bar (0..1) this step's rating must reach; seeded from the pipeline. */
         threshold: v.number(),
-        /** How many times the companion has graded so far (the rework budget counter). */
-        attempts: v.number(),
-        /** The rework budget: once `attempts` hits this the run fails (`companion_rejected`). */
+        /** The rework budget: once `verdicts.length` hits this the run fails (`companion_rejected`). */
         maxAttempts: v.number(),
-        /** The latest standardized verdict (see {@link companionVerdictSchema}); null before the first grade. */
-        verdict: v.optional(v.nullable(companionVerdictSchema)),
+        /**
+         * One standardized {@link companionVerdictSchema} per grading cycle, in order —
+         * the full sequence of correction iterations (the producer is re-run after each
+         * rejected verdict). Empty before the first grade; the last entry is the latest.
+         */
+        verdicts: v.array(companionVerdictSchema),
       }),
     ),
   ),

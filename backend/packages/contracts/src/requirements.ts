@@ -88,8 +88,13 @@ export const requirementReviewSchema = v.object({
    * downstream agent step + the spec-writer.
    */
   incorporatedRequirements: v.nullable(v.string()),
-  /** The companion's verdict on the last rework (see schema); null before any rework. */
-  companion: v.optional(v.nullable(companionVerdictSchema)),
+  /**
+   * One standardized {@link companionVerdictSchema} per rework cycle, in order — the
+   * full sequence of correction iterations the quality companion produced (the human
+   * reworks again after each rejected verdict). Empty before any rework; the last
+   * entry is the latest (and gates whether the rework was accepted).
+   */
+  companionVerdicts: v.optional(v.array(companionVerdictSchema), []),
   createdAt: v.number(),
   updatedAt: v.number(),
 })

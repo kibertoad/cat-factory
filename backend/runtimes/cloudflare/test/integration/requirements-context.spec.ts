@@ -34,6 +34,7 @@ function incorporatedReview(blockId: string): RequirementReview {
     status: 'incorporated',
     model: 'mock:mock',
     incorporatedRequirements: REWORKED,
+    companionVerdicts: [{ rating: 1, threshold: 0.8, passed: true, feedback: '' }],
     createdAt: 1,
     updatedAt: 2,
     items: [],

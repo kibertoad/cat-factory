@@ -66,10 +66,11 @@ const settledCount = computed(() =>
 )
 const canRework = computed(() => !!review.value && requirements.canRework(review.value))
 const reworked = computed(() => review.value?.status === 'incorporated')
-// The quality companion's verdict on the last rework. When it REJECTED the document
-// (passed === false) the rework was not accepted — its challenge is surfaced for the
-// human to address before reworking again.
-const companion = computed(() => review.value?.companion ?? null)
+// The quality companion's verdicts — one per rework cycle, in order. The last is the
+// latest; when it REJECTED the document (passed === false) the rework was not accepted
+// and its challenge is surfaced for the human to address before reworking again.
+const companionVerdicts = computed(() => review.value?.companionVerdicts ?? [])
+const companion = computed(() => companionVerdicts.value.at(-1) ?? null)
 const companionRejected = computed(() => companion.value?.passed === false)
 const pctOf = (n: number) => `${Math.round(n * 100)}%`
 
@@ -385,6 +386,33 @@ async function rework() {
                   The reworked requirements cleared the quality bar and now feed every downstream
                   agent step.
                 </p>
+
+                <!-- full correction sequence: every rework cycle's verdict, in order -->
+                <div v-if="companionVerdicts.length > 1" class="mt-3 border-t border-slate-800/60 pt-2">
+                  <div class="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                    Correction history · {{ companionVerdicts.length }} iteration(s)
+                  </div>
+                  <ol class="space-y-1.5">
+                    <li
+                      v-for="(v, i) in companionVerdicts"
+                      :key="i"
+                      class="flex items-start gap-2 text-[11px]"
+                    >
+                      <span
+                        class="mt-px inline-flex h-4 shrink-0 items-center rounded px-1 font-mono tabular-nums"
+                        :class="v.passed ? 'bg-emerald-500/15 text-emerald-300' : 'bg-amber-500/15 text-amber-300'"
+                      >
+                        {{ i + 1 }}
+                      </span>
+                      <div class="min-w-0">
+                        <span :class="v.passed ? 'text-emerald-300' : 'text-amber-300'">
+                          {{ pctOf(v.rating) }} {{ v.passed ? '≥' : '<' }} {{ pctOf(v.threshold) }}
+                        </span>
+                        <span v-if="v.feedback" class="ml-1 text-slate-400">— {{ v.feedback }}</span>
+                      </div>
+                    </li>
+                  </ol>
+                </div>
               </section>
 
               <!-- reworked result: the standard-format requirements document -->

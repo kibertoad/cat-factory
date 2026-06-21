@@ -26,8 +26,11 @@ export interface RequirementReviewItem {
 
 export type RequirementReviewStatus = 'ready' | 'incorporated'
 
-/** A quality companion's verdict on the last reworked requirements document. */
-export interface RequirementReviewCompanion {
+/**
+ * A quality companion's verdict on one reworked requirements document — the shared
+ * standardized shape stored by every companion site.
+ */
+export interface CompanionVerdict {
   /** Overall quality of the reworked requirements (0..1, higher = better). */
   rating: number
   /** The quality bar the rating had to reach to pass. */
@@ -45,8 +48,8 @@ export interface RequirementReview {
   items: RequirementReviewItem[]
   model: string | null
   incorporatedRequirements: string | null
-  /** The companion's verdict on the last rework; null before any rework. */
-  companion: RequirementReviewCompanion | null
+  /** One verdict per rework cycle, in order — the full correction sequence. Last is latest. */
+  companionVerdicts: CompanionVerdict[]
   createdAt: number
   updatedAt: number
 }
