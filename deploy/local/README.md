@@ -45,9 +45,17 @@ container), addressed at `host.docker.internal` from inside Docker.
 ## How a target repo is linked
 
 Container agent steps resolve which repo to operate on from the `github_repos` /
-`github_installations` projection (the same as the cloud facades). Seed those rows for
-your target repo before running a pipeline against a board frame. See the runtime
-package README for the current linking flow.
+`github_installations` projection (the same as the cloud facades). Local mode has no
+GitHub-App connect flow, so seed those rows for your target repo with the bundled
+helper before running a pipeline against a board service frame:
+
+```sh
+# node dist/link-repo.js <workspaceId> <frameBlockId> <owner/repo>
+pnpm --filter @cat-factory/local-server link:repo ws_123 blk_frame your-org/your-repo
+```
+
+It reads `GITHUB_PAT` + `DATABASE_URL` from the environment, fetches the repo's
+metadata with the PAT, and upserts the installation + repo rows (linked to the frame).
 
 ## Networking notes
 
@@ -57,9 +65,10 @@ package README for the current linking flow.
   resolves.
 - github.com is reached directly from the job container with the PAT.
 
-## What is and isn't automated
+## Merge lifecycle
 
-The harness opens real PRs via the PAT, so a full pipeline produces a real PR. The
-automatic CI-gate + auto-merge tail (reading GitHub Actions status and merging for
-you) is a follow-up; today the pipeline raises a notification for you to review and
-merge the PR yourself.
+A full pipeline runs end to end on real GitHub: the harness opens a real PR with the
+PAT, the `ci` gate reads the PR's **real GitHub Actions** check runs (and dispatches a
+ci-fixer container on failure), and the merger step **merges the PR for real** once it
+clears the task's merge threshold — all via the PAT. A merge that needs review (or a
+pipeline with no merger) raises an in-app notification instead.

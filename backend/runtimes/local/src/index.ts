@@ -17,6 +17,8 @@ export {
 // resolve a target repo in local mode (no GitHub App connect flow). Also a CLI:
 // `node dist/link-repo.js <workspaceId> <frameBlockId> <owner/repo>`.
 export { linkRepo, type LinkRepoOptions, type LinkedRepo } from './linkRepo.js'
+// PAT-backed GitHub access for the CI gate + merge / mergeability providers.
+export { createLocalGitHubClient, StaticTokenAppRegistry } from './github.js'
 
 // Installation-level extension points, re-exported for parity with the Node facade so
 // a local deployment can register custom agent kinds / pipelines before `startLocal()`.

@@ -8,8 +8,8 @@ import {
 } from '@cat-factory/integrations'
 import type {
   AgentExecutor,
-  BlockRepository,
   Clock,
+  GitHubClient,
   GitHubInstallationRepository,
   TaskConnectionRepository,
   TaskSourceProvider,
@@ -17,6 +17,7 @@ import type {
 import { type CoreDependencies, createCore } from '@cat-factory/orchestration'
 import {
   type AppConfig,
+  type ResolveRepoTarget,
   type ResolveRunnerTransport,
   type ServerContainer,
   CompositeAgentExecutor,
@@ -24,6 +25,9 @@ import {
   ContainerSessionService,
   GitHubAppAuth,
   GitHubAppRegistry,
+  GitHubCiStatusProvider,
+  GitHubMergeabilityProvider,
+  GitHubPullRequestMerger,
   WebCryptoSecretCipher,
   buildResolveRepoTarget,
   createWebSearchUpstreamFromEnv,
@@ -86,6 +90,14 @@ export interface NodeContainerOptions {
    * (requires `GITHUB_APP_PRIVATE_KEY`).
    */
   mintInstallationToken?: (installationId: number) => Promise<string>
+  /**
+   * A GitHub client used to wire the CI gate + the merge / mergeability providers
+   * (so a run gates on real CI and merges for real). When provided, the
+   * `ciStatusProvider`, `mergeabilityProvider` and `pullRequestMerger` are wired from
+   * it + the resolved repo target. Undefined → those gates pass through (the existing
+   * Node behaviour). The local facade passes a PAT-backed client.
+   */
+  githubClient?: GitHubClient
 }
 
 /**
@@ -143,10 +155,9 @@ function buildNodeResolveTransport(
 function buildNodeContainerExecutor(
   env: NodeJS.ProcessEnv,
   config: AppConfig,
-  db: DrizzleDb,
   clock: Clock,
   installationRepository: GitHubInstallationRepository,
-  blockRepository: BlockRepository,
+  resolveRepoTarget: ResolveRepoTarget,
   resolveTransport: ResolveRunnerTransport | null,
   resolveWorkspaceModelDefault: (
     workspaceId: string,
@@ -189,12 +200,7 @@ function buildNodeContainerExecutor(
     agentRouting: config.agents.routing,
     resolveBlockModel: config.agents.resolveBlockModel,
     resolveWorkspaceModelDefault,
-    resolveRepoTarget: buildResolveRepoTarget({
-      installationRepository,
-      repoProjectionRepository: new DrizzleRepoProjectionRepository(db),
-      blockRepository,
-      serviceRepository: new DrizzleServiceFrameRepository(db),
-    }),
+    resolveRepoTarget,
     mintInstallationToken,
     sessionService: new ContainerSessionService({ secret: sessionSecret }),
     proxyBaseUrl: `${publicUrl.replace(/\/+$/, '')}/v1`,
@@ -225,10 +231,9 @@ type GitHubIssueFiler = (request: {
 function buildNodeGitHubIssueFiler(
   env: NodeJS.ProcessEnv,
   config: AppConfig,
-  db: DrizzleDb,
   clock: Clock,
   installationRepository: GitHubInstallationRepository,
-  blockRepository: BlockRepository,
+  resolveRepoTarget: ResolveRepoTarget,
 ): GitHubIssueFiler | undefined {
   const privateKeyPem = env.GITHUB_APP_PRIVATE_KEY?.trim()
   if (!config.github.enabled || !privateKeyPem) return undefined
@@ -245,12 +250,6 @@ function buildNodeGitHubIssueFiler(
       }),
     },
     installationRepository,
-  })
-  const resolveRepoTarget = buildResolveRepoTarget({
-    installationRepository,
-    repoProjectionRepository: new DrizzleRepoProjectionRepository(db),
-    blockRepository,
-    serviceRepository: new DrizzleServiceFrameRepository(db),
   })
 
   return async (request) => {
@@ -323,6 +322,16 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   const runnerPoolConnectionRepository = new DrizzleRunnerPoolConnectionRepository(options.db)
   const githubInstallationRepository = new DrizzleGitHubInstallationRepository(options.db)
 
+  // The repo a running block targets (installation + owner/name), resolved from the
+  // github_repos projection. Built once and shared by the container executor, the
+  // GitHub-issue tracker filer, and the CI / merge providers.
+  const resolveRepoTarget = buildResolveRepoTarget({
+    installationRepository: githubInstallationRepository,
+    repoProjectionRepository: new DrizzleRepoProjectionRepository(options.db),
+    blockRepository: repos.blockRepository,
+    serviceRepository: new DrizzleServiceFrameRepository(options.db),
+  })
+
   // A sibling facade (local mode) may inject its own transport — even `null` — which
   // replaces the default self-hosted-pool resolution; undefined keeps Node's default.
   const resolveTransport =
@@ -337,10 +346,9 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   const container = buildNodeContainerExecutor(
     env,
     config,
-    options.db,
     clock,
     githubInstallationRepository,
-    repos.blockRepository,
+    resolveRepoTarget,
     resolveTransport,
     resolveWorkspaceModelDefault,
     options.mintInstallationToken,
@@ -356,11 +364,34 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   const fileGitHubIssue = buildNodeGitHubIssueFiler(
     env,
     config,
-    options.db,
     clock,
     githubInstallationRepository,
-    repos.blockRepository,
+    resolveRepoTarget,
   )
+
+  // The CI gate + merge / mergeability providers, wired from an injected GitHub client
+  // (the local facade supplies a PAT-backed one) so a run gates on REAL GitHub Actions
+  // CI and merges the PR for real. Undefined client → these stay unwired and the gates
+  // pass through (the existing Node behaviour).
+  const githubGateDeps: Partial<CoreDependencies> = options.githubClient
+    ? {
+        ciStatusProvider: new GitHubCiStatusProvider({
+          githubClient: options.githubClient,
+          resolveRepoTarget,
+          blockRepository: repos.blockRepository,
+        }),
+        mergeabilityProvider: new GitHubMergeabilityProvider({
+          githubClient: options.githubClient,
+          resolveRepoTarget,
+          blockRepository: repos.blockRepository,
+        }),
+        pullRequestMerger: new GitHubPullRequestMerger({
+          githubClient: options.githubClient,
+          resolveRepoTarget,
+          blockRepository: repos.blockRepository,
+        }),
+      }
+    : {}
 
   const dependencies: CoreDependencies = {
     workspaceRepository: repos.workspaceRepository,
@@ -422,6 +453,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     ...(options.boss
       ? { workRunner: new PgBossWorkRunner(options.boss, executionRuntime(config, env).queue) }
       : {}),
+    ...githubGateDeps,
     ...options.overrides,
   }
 

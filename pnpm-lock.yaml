@@ -273,6 +273,9 @@ importers:
       '@cat-factory/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@cat-factory/integrations':
+        specifier: workspace:*
+        version: link:../integrations
       '@cat-factory/kernel':
         specifier: workspace:*
         version: link:../kernel

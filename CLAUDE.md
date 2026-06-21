@@ -117,12 +117,13 @@ facade so the runtimes can't drift (see "Cross-runtime conformance" below).
   idempotent re-attach by `cat-factory.jobId` label, eviction-maps a vanished
   container), and GitHub is reached via a **PAT** (`GITHUB_PAT` → `mintInstallationToken`)
   instead of a GitHub App. `buildLocalContainer` reuses ALL of Node's persistence/
-  pg-boss/gateways and only swaps those two seams; `startLocal()` reuses Node's
-  `start()`. The harness itself opens the PR via the PAT, so pipelines produce real PRs
-  on github.com. Repo resolution is unchanged (the `github_repos`/`github_installations`
-  projection). NOTE: the auto CI-gate + auto-merge tail (a PAT-backed `CiStatusProvider`/
-  `PullRequestMerger`) is the documented follow-up — today the merge tail degrades to a
-  `pipeline_complete` notification for a human to merge the real PR.
+  pg-boss/gateways and only swaps the runner transport + the GitHub token/client seams;
+  `startLocal()` reuses Node's `start()`. The harness itself opens the PR via the PAT,
+  and the **CI gate + merge / mergeability providers are wired from a PAT-backed
+  `FetchGitHubClient`** (`createLocalGitHubClient`), so a local pipeline gates on real
+  GitHub Actions CI and **merges the PR for real**. Repo resolution is unchanged (the
+  `github_repos`/`github_installations` projection); the `linkRepo` helper (+ CLI) seeds
+  those rows from PAT-read repo metadata since there is no GitHub-App connect flow.
 - `backend/internal/executor-harness` — the payload that runs **inside** each
   per-run Cloudflare Container (the Pi coding-agent harness). Private (not on npm);
   its Docker image is published to **GHCR** by `docker-publish.yml`.
@@ -471,11 +472,15 @@ differentiators behind the shared kernel ports + the `container.gateways` seam.
   remaining follow-up); the executor reads those rows once present.
 - **Local mode** (`runtimes/local`, `@cat-factory/local-server`): the Node facade with
   the runner backend swapped for a **per-job local Docker container** (`LocalDockerRunnerTransport`,
-  injected via `buildNodeContainer`'s `resolveTransport` seam) and the push token swapped
-  for a **PAT** (`GITHUB_PAT`, via the `mintInstallationToken` seam). Reuses Node's
-  Postgres/pg-boss/gateways unchanged. So a developer runs the whole product locally —
-  agent containers clone/push/open real PRs on github.com via the PAT. Container kinds
-  need a target repo's `github_repos`/`github_installations` rows seeded (same as Node).
+  injected via `buildNodeContainer`'s `resolveTransport` seam) and GitHub reached via a
+  **PAT** — both the push token (`mintInstallationToken` seam) and a PAT-backed
+  `FetchGitHubClient` (`githubClient` seam) that wires the CI gate + merge / mergeability
+  providers, so a local pipeline gates on real Actions CI and **merges for real**.
+  Reuses Node's Postgres/pg-boss/gateways unchanged. So a developer runs the whole
+  product locally — agent containers clone/push/open real PRs on github.com via the PAT.
+  Container kinds need a target repo's `github_repos`/`github_installations` rows seeded
+  (the `linkRepo` helper does this from PAT-read metadata, since local mode has no App
+  connect flow).
 - **Model provisioning** is composed per facade from `@cat-factory/agents`'
   `CompositeModelProvider` (+ opt-in `@cat-factory/provider-bedrock`): Worker =
   workers-ai binding + direct vendors + Cloudflare-REST + Bedrock; Node = direct

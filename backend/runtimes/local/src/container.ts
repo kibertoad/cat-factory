@@ -2,6 +2,7 @@ import { buildNodeContainer, loadNodeConfig } from '@cat-factory/node-server'
 import type { NodeContainerOptions } from '@cat-factory/node-server'
 import type { ServerContainer } from '@cat-factory/server'
 import { applyLocalDefaults } from './config.js'
+import { createLocalGitHubClient } from './github.js'
 import { createLocalDockerTransportFromEnv } from './LocalDockerRunnerTransport.js'
 
 // The local-mode composition root. It is intentionally thin: the ENTIRE Drizzle/
@@ -35,5 +36,8 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
     // falls back to the GitHub App path (and is null without it), so container kinds
     // fail loudly rather than silently mis-running.
     ...(pat ? { mintInstallationToken: async () => pat } : {}),
+    // The PAT-backed GitHub client wires the CI gate + merge / mergeability providers,
+    // so a local pipeline gates on real GitHub Actions CI and merges the PR for real.
+    ...(pat ? { githubClient: createLocalGitHubClient(env) } : {}),
   })
 }
