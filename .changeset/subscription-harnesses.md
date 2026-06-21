@@ -19,7 +19,9 @@ the Pi proxy harness.
   D1 + Postgres, encrypted at rest) with usage-aware rotation, behind a kernel
   port + `ProviderSubscriptionService`, wired into all three runtimes.
 - A guided **LLM Vendors** navbar UI to connect Claude / Codex / GLM (Z.ai) /
-  Kimi (Moonshot) subscription credentials (token pool, write-only).
+  Kimi (Moonshot) / DeepSeek subscription credentials (token pool, write-only).
+  GLM / Kimi / DeepSeek all run via Claude Code against the vendor's
+  Anthropic-compatible endpoint; the unfiltered credential list covers every vendor.
 - The executor-harness image now bundles the Claude Code and Codex CLIs; the
   harness selects `pi` / `claude-code` / `codex` per job from the model, and the
   subscription harnesses authenticate direct-to-vendor (no proxy) and report token
@@ -30,3 +32,8 @@ the Pi proxy harness.
   subscription flavour, and `ModelOption` now carries per-flavour cost, context
   window, and a `quotaBased` flag (subscription usage is flat-rate quota, never
   billed against the spend budget).
+- An inline agent step pinned (via its block) to a subscription-only model now
+  degrades gracefully to the step's env-routing default model instead of hard-failing,
+  and the claude-code subscription harness repairs malformed structured output through
+  the vendor's own Anthropic-compatible endpoint (the Pi harness still uses the proxy;
+  Codex keeps the graceful no-repair path).

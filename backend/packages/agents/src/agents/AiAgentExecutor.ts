@@ -98,17 +98,18 @@ export class AiAgentExecutor implements AgentExecutor {
 
   async run(context: AgentRunContext): Promise<AgentRunResult> {
     const config = resolveAgentConfig(this.agentRouting, context.agentKind)
-    const ref = await this.resolveRef(context)
+    let ref = await this.resolveRef(context)
     // Subscription models (Claude Code / Codex) run ONLY in the container harness
     // with a pooled token — there is no provider key for them, so resolving one
     // through the ModelProvider here would either fail deep in the SDK or, worse,
-    // call a different vendor's API with a CLI-only model id. Fail loudly instead.
+    // call a different vendor's API with a CLI-only model id. A block's model is
+    // shared by ALL its pipeline steps (container AND inline), so a task legitimately
+    // pinned to a subscription model for its coder step would otherwise hard-fail its
+    // inline steps (reviewer / requirements-rework / document-planner). Degrade
+    // gracefully instead: fall back to this kind's env-routing default model (a
+    // provider model the ModelProvider can serve) rather than failing the step.
     if (ref.harness && ref.harness !== 'pi') {
-      throw new Error(
-        `Model '${ref.provider}:${ref.model}' runs only on the ${ref.harness} subscription ` +
-          `harness (container agent steps); it can't be used for the inline '${context.agentKind}' ` +
-          `step. Pick a Cloudflare/direct model for this step.`,
-      )
+      ref = config.ref
     }
     const model = this.modelProvider.resolve(ref)
 

@@ -8,8 +8,15 @@ import type {
 } from '@cat-factory/kernel'
 import { ConflictError } from '@cat-factory/kernel'
 import { requireWorkspace } from '@cat-factory/kernel'
+import { SUBSCRIPTION_VENDORS } from '@cat-factory/kernel'
 import type { WorkspaceRepository } from '@cat-factory/kernel'
 import { DEFAULT_USAGE_WINDOW_MS, chooseToken } from './providers.logic.js'
+
+// Every vendor whose subscription harness we support — the single source of truth
+// is the SUBSCRIPTION_VENDORS map in the kernel, so adding a vendor there (e.g.
+// DeepSeek) automatically widens the unfiltered `listTokens` sweep below. A
+// hardcoded subset here silently hides newly-supported vendors' pooled tokens.
+const ALL_VENDORS = Object.keys(SUBSCRIPTION_VENDORS) as SubscriptionVendor[]
 
 // ProviderSubscriptionService: owns a workspace's pool of subscription
 // credentials per vendor. Tokens are stored *encrypted* (the raw secret is the
@@ -85,7 +92,7 @@ export class ProviderSubscriptionService {
     workspaceId: string,
     vendor?: SubscriptionVendor,
   ): Promise<VendorCredentialSummary[]> {
-    const vendors: SubscriptionVendor[] = vendor ? [vendor] : ['claude', 'codex']
+    const vendors: SubscriptionVendor[] = vendor ? [vendor] : ALL_VENDORS
     const out: VendorCredentialSummary[] = []
     for (const v of vendors) {
       const rows = await this.deps.providerSubscriptionTokenRepository.listByVendor(workspaceId, v)
@@ -131,17 +138,23 @@ export class ProviderSubscriptionService {
         `Workspace '${workspaceId}' has no ${vendor} subscription token connected`,
       )
     }
-    await this.deps.providerSubscriptionTokenRepository.markLeased(chosen.id, this.deps.clock.now())
+    await this.deps.providerSubscriptionTokenRepository.markLeased(
+      workspaceId,
+      chosen.id,
+      this.deps.clock.now(),
+    )
     const secret = await this.deps.secretCipher.decrypt(chosen.tokenCipher)
     return { tokenId: chosen.id, vendor, secret }
   }
 
   /** Fold a completed job's usage into the leased token's rolling-window counters. */
   async recordTokenUsage(
+    workspaceId: string,
     id: string,
     usage: { inputTokens: number; outputTokens: number },
   ): Promise<void> {
     await this.deps.providerSubscriptionTokenRepository.recordUsage(
+      workspaceId,
       id,
       usage,
       this.deps.clock.now(),

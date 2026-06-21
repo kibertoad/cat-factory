@@ -243,8 +243,8 @@ function buildNodeContainerExecutor(
       ? {
           leaseSubscriptionToken: (workspaceId, vendor) =>
             subscriptions.leaseToken(workspaceId, vendor),
-          recordSubscriptionUsage: (tokenId, usage) =>
-            subscriptions.recordTokenUsage(tokenId, usage),
+          recordSubscriptionUsage: (workspaceId, tokenId, usage) =>
+            subscriptions.recordTokenUsage(workspaceId, tokenId, usage),
           hasSubscriptionToken: (workspaceId, vendor) =>
             subscriptions.hasToken(workspaceId, vendor),
         }

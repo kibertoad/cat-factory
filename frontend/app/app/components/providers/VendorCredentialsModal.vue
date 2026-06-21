@@ -23,6 +23,7 @@ const VENDORS: { value: SubscriptionVendor; label: string; harness: string }[] =
   { value: 'claude', label: 'Claude (Pro/Max)', harness: 'Claude Code' },
   { value: 'glm', label: 'GLM — Z.ai coding plan', harness: 'Claude Code' },
   { value: 'kimi', label: 'Kimi — Moonshot coding plan', harness: 'Claude Code' },
+  { value: 'deepseek', label: 'DeepSeek — coding plan', harness: 'Claude Code' },
   { value: 'codex', label: 'ChatGPT (Plus/Pro)', harness: 'Codex' },
 ]
 
@@ -64,6 +65,12 @@ const steps = computed<string[]>(() => {
       return [
         'Open your Moonshot (Kimi) coding-plan console and create an API key for the Anthropic-compatible endpoint.',
         'Copy the API key. Agent steps will run via Claude Code against Moonshot’s Anthropic endpoint with full context.',
+        'Paste the key below.',
+      ]
+    case 'deepseek':
+      return [
+        'Open your DeepSeek coding-plan console and create an API key for the Anthropic-compatible endpoint.',
+        'Copy the API key. Agent steps will run via Claude Code against DeepSeek’s Anthropic endpoint with full context.',
         'Paste the key below.',
       ]
     case 'codex':

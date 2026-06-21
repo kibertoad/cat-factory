@@ -6,7 +6,7 @@
 import type { AgentKind, BlockType } from './domain'
 
 /** Subscription vendors whose pooled tokens drive the Claude Code / Codex harnesses. */
-export type SubscriptionVendor = 'claude' | 'codex' | 'glm' | 'kimi'
+export type SubscriptionVendor = 'claude' | 'codex' | 'glm' | 'kimi' | 'deepseek'
 
 /** Informational list price (per 1M tokens) for a model flavour. */
 export interface ModelCost {

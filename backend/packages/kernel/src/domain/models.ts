@@ -4,8 +4,8 @@ import type { HarnessKind, ModelRef } from '../ports/model-provider.js'
 // How each subscription vendor authenticates and which harness runs it. Claude
 // Code is an Anthropic-API client that honours ANTHROPIC_BASE_URL +
 // ANTHROPIC_AUTH_TOKEN, so it drives any vendor with an Anthropic-compatible
-// endpoint (GLM via Z.ai, Kimi via Moonshot) as well as Anthropic itself; Codex
-// runs the ChatGPT backend. The executor reads `baseUrl` here to tell the harness
+// endpoint (GLM via Z.ai, Kimi via Moonshot, DeepSeek) as well as Anthropic itself;
+// Codex runs the ChatGPT backend. The executor reads `baseUrl` here to tell the harness
 // where to point a non-Anthropic Claude-Code vendor (absent ⇒ api.anthropic.com
 // with the OAuth token).
 export interface SubscriptionVendorConfig {
@@ -23,6 +23,11 @@ export const SUBSCRIPTION_VENDORS: Record<SubscriptionVendor, SubscriptionVendor
     harness: 'claude-code',
     baseUrl: 'https://api.moonshot.ai/anthropic',
     label: 'Kimi (Moonshot)',
+  },
+  deepseek: {
+    harness: 'claude-code',
+    baseUrl: 'https://api.deepseek.com/anthropic',
+    label: 'DeepSeek',
   },
   codex: { harness: 'codex', label: 'ChatGPT (Codex)' },
 }
@@ -133,7 +138,8 @@ export const MODEL_CATALOG: SelectableModel[] = [
     id: 'deepseek',
     label: 'DeepSeek R1',
     description:
-      "DeepSeek's reasoning — cut 32K R1 distill on Cloudflare, full 64K flagship chat when direct.",
+      "DeepSeek's reasoning — cut 32K R1 distill on Cloudflare, full 64K flagship chat " +
+      'when direct or via a DeepSeek coding-plan subscription.',
     cloudflare: {
       provider: 'workers-ai',
       model: '@cf/deepseek-ai/deepseek-r1-distill-qwen-32b',
@@ -143,6 +149,17 @@ export const MODEL_CATALOG: SelectableModel[] = [
       ref: { provider: 'deepseek', model: 'deepseek-chat', contextTokens: 64_000 },
       keyEnv: 'DEEPSEEK_API_KEY',
       providerLabel: 'DeepSeek',
+    },
+    // Run via Claude Code against DeepSeek's Anthropic-compatible endpoint on a
+    // DeepSeek coding-plan subscription (full context, flat-rate quota).
+    subscription: {
+      ref: {
+        provider: 'deepseek',
+        model: 'deepseek-chat',
+        harness: 'claude-code',
+        contextTokens: 64_000,
+      },
+      vendor: 'deepseek',
     },
   },
   {
@@ -252,7 +269,16 @@ function effectiveVariant(
   if (useDirect) {
     return { ref: model.direct!.ref, flavor: 'direct', providerLabel: model.direct!.providerLabel }
   }
-  return { ref: model.cloudflare!, flavor: 'cloudflare', providerLabel: 'Cloudflare' }
+  if (!model.cloudflare) {
+    // A catalog model must have at least one resolvable flavour. The branches above
+    // cover subscription-only (no base) and direct; reaching here with no Cloudflare
+    // flavour means a malformed catalog entry — surface it clearly instead of a
+    // cryptic non-null-assertion crash deep in the caller.
+    throw new Error(
+      `Model '${model.id}' has no resolvable variant (no cloudflare/direct/subscription)`,
+    )
+  }
+  return { ref: model.cloudflare, flavor: 'cloudflare', providerLabel: 'Cloudflare' }
 }
 
 /** Project a catalog model onto its effective, display-ready option. */

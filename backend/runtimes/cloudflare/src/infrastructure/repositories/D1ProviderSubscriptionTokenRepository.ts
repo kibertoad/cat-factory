@@ -94,14 +94,17 @@ export class D1ProviderSubscriptionTokenRepository implements ProviderSubscripti
       .run()
   }
 
-  async markLeased(id: string, at: number): Promise<void> {
+  async markLeased(workspaceId: string, id: string, at: number): Promise<void> {
     await this.db
-      .prepare('UPDATE provider_subscription_tokens SET last_used_at = ? WHERE id = ?')
-      .bind(at, id)
+      .prepare(
+        'UPDATE provider_subscription_tokens SET last_used_at = ? WHERE id = ? AND workspace_id = ?',
+      )
+      .bind(at, id, workspaceId)
       .run()
   }
 
   async recordUsage(
+    workspaceId: string,
     id: string,
     usage: { inputTokens: number; outputTokens: number },
     at: number,
@@ -120,7 +123,7 @@ export class D1ProviderSubscriptionTokenRepository implements ProviderSubscripti
               input_tokens      = CASE WHEN ${active} THEN input_tokens  ELSE 0 END + ?,
               output_tokens     = CASE WHEN ${active} THEN output_tokens ELSE 0 END + ?,
               request_count     = CASE WHEN ${active} THEN request_count ELSE 0 END + 1
-          WHERE id = ?`,
+          WHERE id = ? AND workspace_id = ?`,
       )
       .bind(
         at,
@@ -135,6 +138,7 @@ export class D1ProviderSubscriptionTokenRepository implements ProviderSubscripti
         at,
         windowMs,
         id,
+        workspaceId,
       )
       .run()
   }

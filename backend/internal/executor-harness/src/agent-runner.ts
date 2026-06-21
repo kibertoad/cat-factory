@@ -203,41 +203,56 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
     }
   }
 
+  // Claude Code persists user config/credentials under its config dir; point that at
+  // an isolated, per-run temp dir OUTSIDE the cloned checkout (`opts.cwd`). Otherwise
+  // the agents that finish with `git add -A` (blueprint/requirements/bootstrap) could
+  // stage a stray `.claude/` directory — and any cached credential in it — into the
+  // pushed branch. Mirrors the Codex CODEX_HOME isolation below; removed in `finally`.
+  const configHome = await mkdtemp(join(tmpdir(), 'cf-claude-'))
+
   // Anthropic itself authenticates with the subscription OAuth token; a
-  // non-Anthropic Claude-Code vendor (GLM via Z.ai, Kimi via Moonshot) points
-  // Claude Code at its Anthropic-compatible endpoint with an auth-token key.
-  const env: Record<string, string> = opts.subscriptionBaseUrl
-    ? {
-        ANTHROPIC_BASE_URL: opts.subscriptionBaseUrl,
-        ANTHROPIC_AUTH_TOKEN: opts.subscriptionToken,
-      }
-    : { CLAUDE_CODE_OAUTH_TOKEN: opts.subscriptionToken }
+  // non-Anthropic Claude-Code vendor (GLM via Z.ai, Kimi via Moonshot, DeepSeek)
+  // points Claude Code at its Anthropic-compatible endpoint with an auth-token key.
+  const env: Record<string, string> = {
+    CLAUDE_CONFIG_DIR: configHome,
+    ...(opts.subscriptionBaseUrl
+      ? {
+          ANTHROPIC_BASE_URL: opts.subscriptionBaseUrl,
+          ANTHROPIC_AUTH_TOKEN: opts.subscriptionToken,
+        }
+      : { CLAUDE_CODE_OAUTH_TOKEN: opts.subscriptionToken }),
+  }
 
-  const { stderrTail } = await streamCli(
-    'claude',
-    [
-      '-p',
-      '--output-format',
-      'stream-json',
-      '--verbose',
-      // The per-run container IS the sandbox, and the run is fully headless (no one
-      // to approve a tool call) — so bypass permissions entirely. `acceptEdits`
-      // would auto-accept file edits but still gate Bash, which in `-p` mode is then
-      // denied, leaving the agent unable to run builds/tests/git to verify its work.
-      '--permission-mode',
-      'bypassPermissions',
-      '--model',
-      opts.model,
-      '--append-system-prompt',
-      opts.systemPrompt,
-    ],
-    opts.userPrompt,
-    opts,
-    env,
-    onEvent,
-  )
+  try {
+    const { stderrTail } = await streamCli(
+      'claude',
+      [
+        '-p',
+        '--output-format',
+        'stream-json',
+        '--verbose',
+        // The per-run container IS the sandbox, and the run is fully headless (no one
+        // to approve a tool call) — so bypass permissions entirely. `acceptEdits`
+        // would auto-accept file edits but still gate Bash, which in `-p` mode is then
+        // denied, leaving the agent unable to run builds/tests/git to verify its work.
+        '--permission-mode',
+        'bypassPermissions',
+        '--model',
+        opts.model,
+        '--append-system-prompt',
+        opts.systemPrompt,
+      ],
+      opts.userPrompt,
+      opts,
+      env,
+      onEvent,
+    )
 
-  return { summary, stats, stderrTail, ...(usage ? { usage } : {}) }
+    return { summary, stats, stderrTail, ...(usage ? { usage } : {}) }
+  } finally {
+    // Never leave the config dir (and any cached credential) on disk past the run.
+    await rm(configHome, { recursive: true, force: true }).catch(() => {})
+  }
 }
 
 /** Map Claude Code's `TodoWrite` todos array onto subtask counts. */

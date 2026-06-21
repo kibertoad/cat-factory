@@ -8,9 +8,9 @@ import * as v from 'valibot'
 // without an API key:
 //   - `claude`: a long-lived OAuth token from `claude setup-token`
 //     (injected as CLAUDE_CODE_OAUTH_TOKEN, talks to api.anthropic.com).
-//   - `glm` / `kimi`: a coding-plan API key for a vendor that exposes an
-//     Anthropic-compatible endpoint (Z.ai / Moonshot), driven by Claude Code via
-//     ANTHROPIC_BASE_URL + ANTHROPIC_AUTH_TOKEN.
+//   - `glm` / `kimi` / `deepseek`: a coding-plan API key for a vendor that exposes
+//     an Anthropic-compatible endpoint (Z.ai / Moonshot / DeepSeek), driven by
+//     Claude Code via ANTHROPIC_BASE_URL + ANTHROPIC_AUTH_TOKEN.
 //   - `codex`: the full ChatGPT `auth.json` bundle (written to $CODEX_HOME).
 //
 // Tokens form a pool, leased with usage-aware rotation. The raw secret is
@@ -19,7 +19,7 @@ import * as v from 'valibot'
 // ---------------------------------------------------------------------------
 
 /** Vendors whose subscription harnesses we support. */
-export const subscriptionVendorSchema = v.picklist(['claude', 'codex', 'glm', 'kimi'])
+export const subscriptionVendorSchema = v.picklist(['claude', 'codex', 'glm', 'kimi', 'deepseek'])
 export type SubscriptionVendor = v.InferOutput<typeof subscriptionVendorSchema>
 
 /** One pool token as exposed to clients — metadata + usage, never the secret. */

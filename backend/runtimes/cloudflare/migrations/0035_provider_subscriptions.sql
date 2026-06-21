@@ -12,7 +12,7 @@
 CREATE TABLE provider_subscription_tokens (
   id                TEXT    NOT NULL,
   workspace_id      TEXT    NOT NULL,
-  vendor            TEXT    NOT NULL,            -- 'claude' | 'glm' | 'kimi' | 'codex'
+  vendor            TEXT    NOT NULL,            -- 'claude' | 'glm' | 'kimi' | 'deepseek' | 'codex'
   label             TEXT    NOT NULL,
   token_cipher      TEXT    NOT NULL,            -- SecretCipher envelope (no plaintext)
   created_at        INTEGER NOT NULL,

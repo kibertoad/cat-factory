@@ -13,7 +13,7 @@
 // behaves identically everywhere.
 
 /** The vendors whose subscription harnesses we support. */
-export type SubscriptionVendor = 'claude' | 'codex' | 'glm' | 'kimi'
+export type SubscriptionVendor = 'claude' | 'codex' | 'glm' | 'kimi' | 'deepseek'
 
 /**
  * One subscription credential in a workspace's pool. `tokenCipher` is the
@@ -53,14 +53,15 @@ export interface ProviderSubscriptionTokenRepository {
   getById(workspaceId: string, id: string): Promise<ProviderSubscriptionTokenRecord | null>
   /** Insert a new pool token. */
   add(record: ProviderSubscriptionTokenRecord): Promise<void>
-  /** Stamp `lastUsedAt` on the leased token. */
-  markLeased(id: string, at: number): Promise<void>
+  /** Stamp `lastUsedAt` on the leased token (scoped to the workspace). */
+  markLeased(workspaceId: string, id: string, at: number): Promise<void>
   /**
-   * Fold a completed job's usage into the token's rolling-window counters. When
-   * `windowStartedAt` is null or older than `windowMs`, the window resets to
-   * `at` and the counters start from this run.
+   * Fold a completed job's usage into the token's rolling-window counters (scoped to
+   * the workspace). When `windowStartedAt` is null or older than `windowMs`, the
+   * window resets to `at` and the counters start from this run.
    */
   recordUsage(
+    workspaceId: string,
     id: string,
     usage: { inputTokens: number; outputTokens: number },
     at: number,

@@ -84,14 +84,20 @@ export class DrizzleProviderSubscriptionTokenRepository implements ProviderSubsc
     })
   }
 
-  async markLeased(id: string, at: number): Promise<void> {
+  async markLeased(workspaceId: string, id: string, at: number): Promise<void> {
     await this.db
       .update(providerSubscriptionTokens)
       .set({ last_used_at: at })
-      .where(eq(providerSubscriptionTokens.id, id))
+      .where(
+        and(
+          eq(providerSubscriptionTokens.id, id),
+          eq(providerSubscriptionTokens.workspace_id, workspaceId),
+        ),
+      )
   }
 
   async recordUsage(
+    workspaceId: string,
     id: string,
     usage: { inputTokens: number; outputTokens: number },
     at: number,
@@ -112,7 +118,7 @@ export class DrizzleProviderSubscriptionTokenRepository implements ProviderSubsc
         output_tokens: sql`CASE WHEN ${active} THEN ${cols.output_tokens} ELSE 0 END + ${usage.outputTokens}`,
         request_count: sql`CASE WHEN ${active} THEN ${cols.request_count} ELSE 0 END + 1`,
       })
-      .where(eq(cols.id, id))
+      .where(and(eq(cols.id, id), eq(cols.workspace_id, workspaceId)))
   }
 
   async softDelete(workspaceId: string, id: string, at: number): Promise<void> {

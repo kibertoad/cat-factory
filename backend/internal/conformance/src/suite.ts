@@ -143,17 +143,33 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
           token: '{"auth_mode":"chatgpt","tokens":{"access_token":"secret-two"}}',
         })
         expect(second.status).toBe(201)
+        // A Claude-Code-flavour vendor beyond claude/codex (GLM/Kimi/DeepSeek): the
+        // unfiltered list MUST include it, not just the headline two vendors.
+        const third = await call<{ id: string; vendor: string }>('POST', base, {
+          vendor: 'glm',
+          label: 'zai',
+          token: 'glm-coding-plan-secret-three',
+        })
+        expect(third.status).toBe(201)
+        expect(third.body.vendor).toBe('glm')
 
-        // Both list back as metadata only.
+        // All three list back as metadata only (the unfiltered GET covers every vendor).
         const listed = await call<{ credentials: { id: string; vendor: string }[] }>('GET', base)
-        expect(listed.body.credentials).toHaveLength(2)
+        expect(listed.body.credentials).toHaveLength(3)
+        expect(listed.body.credentials.map((c) => c.vendor).sort()).toEqual([
+          'claude',
+          'codex',
+          'glm',
+        ])
         expect(JSON.stringify(listed.body)).not.toContain('secret-')
 
-        // Remove one; the other survives.
+        // Remove one; the others survive.
         const del = await call('DELETE', `${base}/${first.body.id}`)
         expect(del.status).toBe(204)
         const afterDelete = await call<{ credentials: { id: string }[] }>('GET', base)
-        expect(afterDelete.body.credentials.map((c) => c.id)).toEqual([second.body.id])
+        expect(afterDelete.body.credentials.map((c) => c.id).sort()).toEqual(
+          [second.body.id, third.body.id].sort(),
+        )
       })
     })
 

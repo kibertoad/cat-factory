@@ -65,6 +65,7 @@ export type LeaseSubscriptionToken = (
 
 /** Fold a finished subscription job's usage into the leased token + telemetry. */
 export type RecordSubscriptionUsage = (
+  workspaceId: string,
   tokenId: string,
   usage: { inputTokens: number; outputTokens: number },
 ) => Promise<void>
@@ -239,8 +240,17 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     // Attribute a subscription harness's reported usage to its leased pool token
     // (usage-aware rotation) and the telemetry sink. Best-effort: a missing
     // usage signal or unconfigured recorder is a no-op.
-    if (handle.subscriptionTokenId && result.usage && this.deps.recordSubscriptionUsage) {
-      await this.deps.recordSubscriptionUsage(handle.subscriptionTokenId, result.usage)
+    if (
+      handle.subscriptionTokenId &&
+      handle.workspaceId &&
+      result.usage &&
+      this.deps.recordSubscriptionUsage
+    ) {
+      await this.deps.recordSubscriptionUsage(
+        handle.workspaceId,
+        handle.subscriptionTokenId,
+        result.usage,
+      )
     }
     return { state: 'done', result: toRunResult(result) }
   }
@@ -410,8 +420,16 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       }
       const leased = await this.deps.leaseSubscriptionToken(workspaceId, subscriptionVendor)
       subscriptionTokenId = leased.tokenId
-      // Non-Anthropic Claude-Code vendors (GLM/Kimi) need their Anthropic-compatible
-      // base URL; Anthropic itself uses the OAuth token against api.anthropic.com.
+      // SECURITY/TRUST: unlike the Pi harness (short-lived, model-locked proxy session
+      // token) this hands the RAW, long-lived subscription credential — a Claude OAuth
+      // token or a full ChatGPT auth.json — to the resolved runner transport. For the
+      // Cloudflare backend that is an ephemeral, managed per-run container. For a
+      // self-hosted runner pool it is the WORKSPACE'S OWN BYO infra (it connected the
+      // pool), so the credential stays within the workspace's trust domain — but a
+      // workspace should only point its subscription-harness steps at a runner pool it
+      // operates, since the credential leaves the backend to reach it.
+      // Non-Anthropic Claude-Code vendors (GLM/Kimi/DeepSeek) need their Anthropic-
+      // compatible base URL; Anthropic itself uses the OAuth token against api.anthropic.com.
       const baseUrl = SUBSCRIPTION_VENDORS[subscriptionVendor].baseUrl
       auth = {
         harness,
