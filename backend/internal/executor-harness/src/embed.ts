@@ -7,14 +7,18 @@
 
 export {
   PI_MAX_OUTPUT_TOKENS,
+  DEFAULT_PROGRESS_GUARD_LIMITS,
   writePiModelsConfig,
   writeAgentsContext,
   runPi,
   summarizePiRun,
   parsePiOutput,
   parseTodoProgress,
+  progressGuardLimitsFromEnv,
+  terminalRunError,
   type PiRunOutcome,
   type PiRunStats,
+  type ProgressGuardLimits,
   type TodoItem,
   type TodoProgress,
 } from './pi.js'
