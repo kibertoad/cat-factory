@@ -333,7 +333,14 @@ function normalizeStatus(status: unknown): 'pending' | 'in_progress' | 'complete
 
 function claudeUsage(raw: unknown): { inputTokens: number; outputTokens: number } | undefined {
   if (!isObject(raw)) return undefined
-  const input = numberOf(raw.input_tokens) + numberOf(raw.cache_read_input_tokens)
+  // Count every input bucket Anthropic bills: fresh input plus BOTH cache reads and
+  // cache writes (cache_creation_input_tokens), which are real consumed tokens — and
+  // are the dominant share on a long agent run. Omitting them under-weights a token's
+  // true load in the usage-aware rotation window.
+  const input =
+    numberOf(raw.input_tokens) +
+    numberOf(raw.cache_read_input_tokens) +
+    numberOf(raw.cache_creation_input_tokens)
   const output = numberOf(raw.output_tokens)
   if (input === 0 && output === 0) return undefined
   return { inputTokens: input, outputTokens: output }

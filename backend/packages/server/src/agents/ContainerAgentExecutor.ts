@@ -196,6 +196,18 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
   /** Shared backend-polymorphic dispatch/poll/release plumbing (see RunnerJobClient). */
   private readonly jobs: RunnerJobClient
 
+  /**
+   * Job ids whose subscription usage has already been folded into the leased token.
+   * `recordSubscriptionUsage` is additive, and the durable driver polls a finished
+   * job inside a retriable step — so a poll that records usage and then throws (or
+   * whose surrounding upsert/emit throws) would replay and double-count, unfairly
+   * penalising the token in the usage-aware rotation. Recording once per job id
+   * guards that. Best-effort + bounded: cleared wholesale past a cap, and it cannot
+   * survive a cold isolate replay — a re-record there is the documented, benign
+   * worst case (one extra job's tokens on one row), never silent over-counting.
+   */
+  private readonly recordedUsageJobs = new Set<string>()
+
   constructor(private readonly deps: ContainerAgentExecutorDependencies) {
     this.jobs = new RunnerJobClient(deps.resolveTransport)
   }
@@ -242,19 +254,26 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     const result = view.result ?? {}
     if (result.error) return { state: 'failed', error: `Implementation failed: ${result.error}` }
     // Attribute a subscription harness's reported usage to its leased pool token
-    // (usage-aware rotation) and the telemetry sink. Best-effort: a missing
-    // usage signal or unconfigured recorder is a no-op.
+    // (usage-aware rotation) and the telemetry sink. Best-effort: a missing usage
+    // signal or unconfigured recorder is a no-op; recorded at most once per job id
+    // so a retried/replayed poll can't double-count (see `recordedUsageJobs`).
     if (
       handle.subscriptionTokenId &&
       handle.workspaceId &&
       result.usage &&
-      this.deps.recordSubscriptionUsage
+      this.deps.recordSubscriptionUsage &&
+      !this.recordedUsageJobs.has(handle.jobId)
     ) {
       await this.deps.recordSubscriptionUsage(
         handle.workspaceId,
         handle.subscriptionTokenId,
         result.usage,
       )
+      // Mark only AFTER a successful write: a failed record is left to retry rather
+      // than silently dropped. Bound the set so a long-lived process can't grow it
+      // unboundedly (clearing only risks a benign re-record on a later retry).
+      if (this.recordedUsageJobs.size >= 10_000) this.recordedUsageJobs.clear()
+      this.recordedUsageJobs.add(handle.jobId)
     }
     return { state: 'done', result: toRunResult(result) }
   }
