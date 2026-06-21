@@ -266,7 +266,7 @@ function buildNodeGitHubIssueFiler(
  * Repo-operating agent steps (coder, blueprints, merger, …) run in a container
  * dispatched to a workspace's self-hosted runner pool — the shared
  * `ContainerAgentExecutor`, exactly as on the Worker. When the prerequisites (GitHub
- * App, `PUBLIC_URL`, `AUTH_SESSION_SECRET`, `RUNNERS_ENCRYPTION_KEY`) are absent the
+ * App, `PUBLIC_URL`, `AUTH_SESSION_SECRET`, `ENCRYPTION_KEY`) are absent the
  * composite still serves inline kinds but fails container kinds loudly.
  */
 export function buildNodeContainer(options: NodeContainerOptions): ServerContainer {
@@ -291,7 +291,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     webSearch: inlineWebSearchOptionsFromEnv(env),
   })
 
-  // Task-source integration (Jira). Always on (config load requires TASKS_ENCRYPTION_KEY);
+  // Task-source integration (Jira). Always on (config load requires ENCRYPTION_KEY);
   // tenants connect their own Jira site through the UI and the credentials are stored
   // per-workspace, encrypted at rest. The tracker resolves each workspace's own
   // credentials from this same store (multi-tenant), mirroring the Cloudflare facade.
@@ -427,7 +427,7 @@ function selectNodeTasksDeps(
   const taskConnectionRepository = new DrizzleTaskConnectionRepository(
     db,
     // Source credentials are encrypted at rest under a tasks-scoped HKDF info (the
-    // same domain the Cloudflare facade uses), keyed by TASKS_ENCRYPTION_KEY.
+    // same domain the Cloudflare facade uses), keyed by the shared ENCRYPTION_KEY.
     new WebCryptoSecretCipher({
       masterKeyBase64: config.tasks.encryptionKey,
       info: 'cat-factory:tasks',

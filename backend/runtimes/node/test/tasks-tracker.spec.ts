@@ -19,9 +19,9 @@ const TASKS_ENV: NodeJS.ProcessEnv = {
   ...process.env,
   AUTH_DEV_OPEN: 'true',
   ENVIRONMENT: 'test',
-  // The task-source integration is always on; the only requirement is the encryption
-  // key (32 zero bytes, base64 — a valid master key for the test cipher).
-  TASKS_ENCRYPTION_KEY: Buffer.alloc(32).toString('base64'),
+  // The task-source integration is always on; the only requirement is the shared
+  // ENCRYPTION_KEY (32 zero bytes, base64 — a valid master key for the test cipher).
+  ENCRYPTION_KEY: Buffer.alloc(32).toString('base64'),
   TASK_SOURCES: 'jira',
 }
 

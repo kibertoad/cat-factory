@@ -27,12 +27,12 @@ export function loadDocumentsConfig(env: Env): DocumentsConfig {
   // The planner defaults to LLM mode; the worker only wires a model provider when a
   // provider credential is present, so absent that the planner still degrades to its
   // deterministic heading parser.
-  const encryptionKey = env.DOCUMENTS_ENCRYPTION_KEY?.trim()
+  const encryptionKey = env.ENCRYPTION_KEY?.trim()
   if (!encryptionKey) {
     throw new Error(
-      'DOCUMENTS_ENCRYPTION_KEY is required: the document-source integration (Notion, ' +
-        'Confluence, …) encrypts per-workspace source credentials at rest. Set it to a ' +
-        'base64-encoded key of at least 32 bytes.',
+      'ENCRYPTION_KEY is required: the document-source integration (Notion, Confluence, …) ' +
+        'encrypts per-workspace source credentials at rest. Set it to a base64-encoded key of ' +
+        'at least 32 bytes.',
     )
   }
   return {

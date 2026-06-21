@@ -72,17 +72,18 @@ describe('environment credential encryption', () => {
     expect(call?.headers.authorization).toBe('Bearer rotated-token')
   })
 
-  it('refuses to assemble the module without an encryption key', async () => {
-    const withKey = buildContainer(env, { agentExecutor: new FakeAgentExecutor() })
-    expect(withKey.environments).toBeDefined()
+  it('assembles only when the integration is enabled (key comes from the shared ENCRYPTION_KEY)', async () => {
+    const enabled = buildContainer(env, { agentExecutor: new FakeAgentExecutor() })
+    expect(enabled.environments).toBeDefined()
 
-    const withoutKey = buildContainer(
+    // Opt-in flag off → module stays unassembled even though the shared key is present.
+    const disabled = buildContainer(
       {
         ...env,
-        ENVIRONMENTS_ENCRYPTION_KEY: undefined,
+        ENVIRONMENTS_ENABLED: undefined,
       } as typeof env,
       { agentExecutor: new FakeAgentExecutor() },
     )
-    expect(withoutKey.environments).toBeUndefined()
+    expect(disabled.environments).toBeUndefined()
   })
 })

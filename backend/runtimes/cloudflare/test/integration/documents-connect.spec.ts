@@ -115,7 +115,7 @@ describe('document source connect', () => {
 
   it('is always on: exposes the env-configured sources with no explicit overrides', async () => {
     // The integration no longer hides behind an enable flag — the test bindings supply
-    // DOCUMENTS_ENCRYPTION_KEY, so the real providers wire from env even without the
+    // shared ENCRYPTION_KEY, so the real providers wire from env even without the
     // `documentsDeps()` fakes, and the UI's probe sees the sources instead of a 503.
     const app = makeApp(new FakeAgentExecutor())
     const { workspace } = await app.createWorkspace({ seed: false })

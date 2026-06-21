@@ -22,8 +22,8 @@ const TEST_ENV: NodeJS.ProcessEnv = {
   ...process.env,
   AUTH_DEV_OPEN: 'true',
   ENVIRONMENT: 'test',
-  // Always-on task-source integration → `loadNodeConfig` requires this key (32 zero bytes).
-  TASKS_ENCRYPTION_KEY: Buffer.alloc(32).toString('base64'),
+  // Always-on task-source integration → `loadNodeConfig` requires ENCRYPTION_KEY (32 zero bytes).
+  ENCRYPTION_KEY: Buffer.alloc(32).toString('base64'),
 }
 
 const databaseUrl = process.env.DATABASE_URL

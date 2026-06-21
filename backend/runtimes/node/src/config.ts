@@ -38,10 +38,12 @@ const NODE_TASK_SOURCES: readonly TaskSourceKind[] = ['jira']
  * `TASK_SOURCES` narrows the registered providers (defaults to all Node-supported ones).
  */
 function loadTasksConfig(env: NodeJS.ProcessEnv): TasksConfig {
-  const encryptionKey = env.TASKS_ENCRYPTION_KEY?.trim()
+  // The shared ENCRYPTION_KEY backs every integration (the cipher domain-separates per
+  // integration via its HKDF `info`, so one key safely backs them all).
+  const encryptionKey = env.ENCRYPTION_KEY?.trim()
   if (!encryptionKey) {
     throw new Error(
-      'TASKS_ENCRYPTION_KEY is required: the task-source integration (Jira, …) encrypts ' +
+      'ENCRYPTION_KEY is required: the task-source integration (Jira, …) encrypts ' +
         'per-workspace source credentials at rest. Set it to a base64-encoded key of at ' +
         'least 32 bytes.',
     )
@@ -86,9 +88,9 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
   const githubAppId = env.GITHUB_APP_ID?.trim() ?? ''
   const githubAppConfigured =
     githubAppId !== '' && (env.GITHUB_APP_PRIVATE_KEY?.trim() ?? '') !== ''
-  // Self-hosted runner pools encrypt their scheduler credentials at rest; opt-in
-  // strictly on the encryption key (no silent plaintext fallback), mirroring the Worker.
-  const runnersEncryptionKey = env.RUNNERS_ENCRYPTION_KEY?.trim() ?? ''
+  // Self-hosted runner pools encrypt their scheduler credentials at rest; opt-in via
+  // the enable flag, sealed with the shared ENCRYPTION_KEY (mirroring the Worker).
+  const runnersEncryptionKey = env.ENCRYPTION_KEY?.trim() ?? ''
   const clientId = env.GITHUB_OAUTH_CLIENT_ID?.trim() ?? ''
   const clientSecret = env.GITHUB_OAUTH_CLIENT_SECRET?.trim() ?? ''
   const environment = env.ENVIRONMENT?.trim().toLowerCase() ?? ''

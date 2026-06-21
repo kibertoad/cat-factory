@@ -23,10 +23,10 @@ export function loadTasksConfig(env: Env): TasksConfig {
   // enable flag. It still requires a master key to encrypt those per-workspace
   // credentials at rest, so we fail loudly at config load when it is missing rather
   // than silently disabling the feature (mirrors the document-source integration).
-  const encryptionKey = env.TASKS_ENCRYPTION_KEY?.trim()
+  const encryptionKey = env.ENCRYPTION_KEY?.trim()
   if (!encryptionKey) {
     throw new Error(
-      'TASKS_ENCRYPTION_KEY is required: the task-source integration (Jira, …) encrypts ' +
+      'ENCRYPTION_KEY is required: the task-source integration (Jira, …) encrypts ' +
         'per-workspace source credentials at rest. Set it to a base64-encoded key of at ' +
         'least 32 bytes.',
     )

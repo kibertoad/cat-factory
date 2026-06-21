@@ -43,9 +43,10 @@ DOCUMENT_PLANNER = "llm"
 ```
 
 ```sh
-# Service-level master key for credential encryption at rest (REQUIRED — config
-# load throws without it; set as a secret, never commit it):
-openssl rand -base64 32 | wrangler secret put DOCUMENTS_ENCRYPTION_KEY
+# Shared master key for credential encryption at rest (REQUIRED — config load throws
+# without it; set as a secret, never commit it). One key backs every integration; the
+# cipher domain-separates per integration via its HKDF `info` tag:
+openssl rand -base64 32 | wrangler secret put ENCRYPTION_KEY
 ```
 
 In `llm` mode the planner reuses the agents' default model

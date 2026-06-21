@@ -249,9 +249,9 @@ configured).
 
 Per-tenant provider credentials are supplied at registration and stored **encrypted
 at rest** in D1 (AES-256-GCM via `SecretCipher`, per-record salt + IV, HKDF-derived
-key); the manifest references them by logical key only. The single env secret is the
-service-level master key. Configure via `ENVIRONMENTS_ENABLED=true` and the
-`ENVIRONMENTS_ENCRYPTION_KEY` secret (required when enabled). New schema is in
+key); the manifest references them by logical key only. The env secret is the
+shared `ENCRYPTION_KEY` master. Configure via `ENVIRONMENTS_ENABLED=true` (the
+`ENCRYPTION_KEY` secret is already required service-wide). New schema is in
 migration `0008_environments.sql`. See
 [`docs/environments-integration.md`](./docs/environments-integration.md) and
 [`docs/adr/0003-ephemeral-environment-provider.md`](./docs/adr/0003-ephemeral-environment-provider.md).
@@ -312,7 +312,7 @@ standard executor-harness image and put a small **pool scheduler API** in front
 of it, described to cat-factory as a declarative **manifest** (dispatch / poll /
 release templates + auth + response dot-paths). The `runners` module
 (migration `0013_runner_pools.sql`) stores the manifest plus a per-tenant secret
-bundle **encrypted at rest** (AES-256-GCM under `RUNNERS_ENCRYPTION_KEY`); the
+bundle **encrypted at rest** (AES-256-GCM under the shared `ENCRYPTION_KEY`); the
 `HttpRunnerPoolProvider` dispatches jobs there instead. Rollout is per-workspace
 and reversible — workspaces without a registered pool fall back to Cloudflare
 Containers. Opt-in via `RUNNERS_ENABLED`. Operator playbook in
@@ -437,7 +437,7 @@ POST   /workspaces/:ws/bootstrap/reference-architectures     CRUD reference arch
 POST   /workspaces/:ws/bootstrap/jobs                         start a bootstrap run (returns a running job)
 GET    /workspaces/:ws/bootstrap/jobs/:id                     poll a bootstrap job
 
-# Document sources (always on; requires DOCUMENTS_ENCRYPTION_KEY at boot)
+# Document sources (always on; requires the shared ENCRYPTION_KEY at boot)
 GET    /workspaces/:ws/documents/sources                     connected document sources
 POST   /workspaces/:ws/documents/sources                     connect a source (Confluence / Notion)
 POST   /workspaces/:ws/documents/import                      import a page
@@ -525,13 +525,13 @@ mistake:
   master keys. Locally these go in `.dev.vars` (gitignored; see
   `deploy/backend/.dev.vars.example`).
 
-| `[vars]` (in `wrangler.toml`)                                                                                                           | Secrets (`wrangler secret put …`)                                                                                                                                                          |
-| --------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `GITHUB_OAUTH_CLIENT_ID`, `AUTH_ALLOWED_LOGINS`/`AUTH_ALLOWED_ORGS`, `AUTH_SUCCESS_REDIRECT_URL`, `ENVIRONMENT`, `CORS_ALLOWED_ORIGINS` | `GITHUB_OAUTH_CLIENT_SECRET`, `AUTH_SESSION_SECRET`                                                                                                                                        |
-| `WORKER_PUBLIC_URL`, `RUNNERS_ENABLED`                                                                                                  | (container/runner path holds no key of its own — see below)                                                                                                                                |
-| `GITHUB_APP_ID`, `GITHUB_APP_SLUG`, `GITHUB_SETUP_REDIRECT_URL`, `GITHUB_PRIVILEGED_APP_ID`                                             | `GITHUB_APP_PRIVATE_KEY`, `GITHUB_WEBHOOK_SECRET`, `GITHUB_PRIVILEGED_APP_PRIVATE_KEY`                                                                                                     |
-| `SPEND_MONTHLY_LIMIT`, `SPEND_CURRENCY`, `SPEND_MODEL_PRICES`, `AGENT_DEFAULT_*`/`AGENT_MODELS`, `DECISION_TIMEOUT`                     | `QWEN_API_KEY`, `DEEPSEEK_API_KEY`, `MOONSHOT_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`                                                                                              |
-| `DOCUMENT_SOURCES`/`DOCUMENT_PLANNER`, `TASK_SOURCES`, `ENVIRONMENTS_ENABLED`, `PROMPT_LIBRARY_ENABLED`/`PROMPT_LIBRARY_SELECTOR`       | `DOCUMENTS_ENCRYPTION_KEY`, `TASKS_ENCRYPTION_KEY` (both **required** — always-on integrations, config fails loudly without them), `ENVIRONMENTS_ENCRYPTION_KEY`, `RUNNERS_ENCRYPTION_KEY` |
+| `[vars]` (in `wrangler.toml`)                                                                                                           | Secrets (`wrangler secret put …`)                                                                                                                    |
+| --------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GITHUB_OAUTH_CLIENT_ID`, `AUTH_ALLOWED_LOGINS`/`AUTH_ALLOWED_ORGS`, `AUTH_SUCCESS_REDIRECT_URL`, `ENVIRONMENT`, `CORS_ALLOWED_ORIGINS` | `GITHUB_OAUTH_CLIENT_SECRET`, `AUTH_SESSION_SECRET`                                                                                                  |
+| `WORKER_PUBLIC_URL`, `RUNNERS_ENABLED`                                                                                                  | (container/runner path holds no key of its own — see below)                                                                                          |
+| `GITHUB_APP_ID`, `GITHUB_APP_SLUG`, `GITHUB_SETUP_REDIRECT_URL`, `GITHUB_PRIVILEGED_APP_ID`                                             | `GITHUB_APP_PRIVATE_KEY`, `GITHUB_WEBHOOK_SECRET`, `GITHUB_PRIVILEGED_APP_PRIVATE_KEY`                                                               |
+| `SPEND_MONTHLY_LIMIT`, `SPEND_CURRENCY`, `SPEND_MODEL_PRICES`, `AGENT_DEFAULT_*`/`AGENT_MODELS`, `DECISION_TIMEOUT`                     | `QWEN_API_KEY`, `DEEPSEEK_API_KEY`, `MOONSHOT_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`                                                        |
+| `DOCUMENT_SOURCES`/`DOCUMENT_PLANNER`, `TASK_SOURCES`, `ENVIRONMENTS_ENABLED`, `PROMPT_LIBRARY_ENABLED`/`PROMPT_LIBRARY_SELECTOR`       | `ENCRYPTION_KEY` (shared master for every integration's credentials, **required** — the always-on document/task sources fail config load without it) |
 
 > `WORKER_PUBLIC_URL` is a **`[var]`, not a secret**, despite older notes that
 > said otherwise. Set it in `[vars]`.
@@ -761,30 +761,32 @@ GITHUB_PRIVILEGED_APP_ID = "…"
 wrangler secret put GITHUB_PRIVILEGED_APP_PRIVATE_KEY   # PKCS#8 PEM
 ```
 
-#### Opt-in integrations (encrypted-credential features)
+#### Encrypted-credential integrations
 
 The document-source, task-source, ephemeral-environment, and self-hosted runner-pool
-integrations are all **default-off** and **per-workspace**: an operator flips a single
-`[vars]` flag to enable the feature, and each workspace then enters its own provider
-credentials **in the app**, stored **encrypted at rest** in D1. So the only deployment
-secret each one needs is a service-level **encryption master key** (base64, ≥32 bytes
-decoded) — there are **no provider credentials in `wrangler.toml`**. Generate with
-`openssl rand -base64 32`.
+integrations are **per-workspace**: each workspace enters its own provider credentials
+**in the app**, stored **encrypted at rest** in D1 — there are **no provider
+credentials in `wrangler.toml`**. The only deployment secret they need is **one shared
+encryption master key** (`ENCRYPTION_KEY`, base64, ≥32 bytes decoded; generate with
+`openssl rand -base64 32`). One key backs them all — the cipher domain-separates per
+integration via its HKDF `info` tag, so document, task, environment and runner
+credentials never share a derived key. Document and task sources are **always on**;
+environments and runner pools stay behind their `*_ENABLED` flag.
 
-| Feature                 | Enable (`[vars]`)                                    | Master-key secret                         | Docs                                                           |
-| ----------------------- | ---------------------------------------------------- | ----------------------------------------- | -------------------------------------------------------------- |
-| Document sources        | always on (+ `DOCUMENT_SOURCES`, `DOCUMENT_PLANNER`) | `DOCUMENTS_ENCRYPTION_KEY` (**required**) | [document-sources](./docs/document-sources.md)                 |
-| Task sources (trackers) | always on (+ `TASK_SOURCES`)                         | `TASKS_ENCRYPTION_KEY` (**required**)     | README → Document & task sources                               |
-| Ephemeral environments  | `ENVIRONMENTS_ENABLED = "true"`                      | `ENVIRONMENTS_ENCRYPTION_KEY`             | [environments-integration](./docs/environments-integration.md) |
-| Self-hosted runner pool | `RUNNERS_ENABLED = "true"`                           | `RUNNERS_ENCRYPTION_KEY`                  | [runner-pool-integration](./docs/runner-pool-integration.md)   |
+| Feature                 | Enable (`[vars]`)                                    | Docs                                                           |
+| ----------------------- | ---------------------------------------------------- | -------------------------------------------------------------- |
+| Document sources        | always on (+ `DOCUMENT_SOURCES`, `DOCUMENT_PLANNER`) | [document-sources](./docs/document-sources.md)                 |
+| Task sources (trackers) | always on (+ `TASK_SOURCES`)                         | README → Document & task sources                               |
+| Ephemeral environments  | `ENVIRONMENTS_ENABLED = "true"`                      | [environments-integration](./docs/environments-integration.md) |
+| Self-hosted runner pool | `RUNNERS_ENABLED = "true"`                           | [runner-pool-integration](./docs/runner-pool-integration.md)   |
 
 > Document and task sources are **always on** (tenants connect their own
 > sources/trackers through the UI), so they have no enable flag — but the worker
-> **refuses to boot** until their master keys are set, instead of silently dropping
-> the feature from the task-creation modal.
+> **refuses to boot** until `ENCRYPTION_KEY` is set, instead of silently dropping the
+> feature from the task-creation modal.
 
 ```sh
-openssl rand -base64 32 | wrangler secret put DOCUMENTS_ENCRYPTION_KEY      # repeat per enabled feature
+openssl rand -base64 32 | wrangler secret put ENCRYPTION_KEY      # one key backs every integration
 ```
 
 The **runner pool** routes the repo-operating coding jobs to a workspace's own

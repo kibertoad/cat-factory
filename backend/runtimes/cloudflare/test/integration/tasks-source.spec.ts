@@ -151,7 +151,7 @@ describe('task source connect + import', () => {
   })
 
   it('is always on: exposes the env-configured sources with no explicit overrides', async () => {
-    // No enable flag any more — the test bindings supply TASKS_ENCRYPTION_KEY, so the
+    // No enable flag any more — the test bindings supply the shared ENCRYPTION_KEY, so the
     // real Jira provider wires from env even without the `tasksDeps()` fakes, and the
     // UI's probe sees the source instead of a 503.
     const app = makeApp(new FakeAgentExecutor())

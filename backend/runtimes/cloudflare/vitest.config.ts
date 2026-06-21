@@ -40,30 +40,23 @@ export default defineConfig(async () => {
             // in tests. GITHUB_APP_ID stays unset, so the integration is still
             // "disabled" by config and tests wire the module via overrides.
             GITHUB_WEBHOOK_SECRET: 'test-state-secret',
-            // Enable the environment integration with a fixed 32-byte master
-            // key so the real HttpEnvironmentProvider + WebCryptoSecretCipher
-            // wire up; env specs stub global `fetch` to act as the provider.
+            // One shared 32-byte master key backs every integration's credential
+            // cipher (documents/tasks/environments/runners) — the cipher
+            // domain-separates per integration via its HKDF `info`. REQUIRED: the
+            // always-on document/task integrations throw at config load without it,
+            // and `documentsDeps()`/`tasksDeps()` build their ciphers from it.
+            // Production sets this as a secret.
+            ENCRYPTION_KEY: 'c2hhcmVkLW1hc3Rlci1rZXktMDEyMzQ1Njc4OWFiY2RlZg==',
+            // Enable the opt-in environment + runner-pool integrations so their real
+            // services wire up; their specs stub global `fetch` to act as the
+            // provider/scheduler.
             ENVIRONMENTS_ENABLED: 'true',
-            ENVIRONMENTS_ENCRYPTION_KEY: 'MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=',
-            // Enable the self-hosted runner-pool integration with a fixed 32-byte
-            // master key so the real RunnerPoolConnectionService + cipher wire up;
-            // runner specs stub global `fetch` to act as the pool scheduler.
             RUNNERS_ENABLED: 'true',
-            RUNNERS_ENCRYPTION_KEY: 'cnVubmVycy10ZXN0LWtleS0wMTIzNDU2Nzg5YWJjZGU=',
-            // Master key so the document-source integration's credential
-            // encryption-at-rest wires up; `documentsDeps()` builds the cipher
-            // from it. REQUIRED now the integration is always on — config load
-            // throws without it. Production sets this as a secret.
-            DOCUMENTS_ENCRYPTION_KEY: 'ZG9jdW1lbnRzLXRlc3Qta2V5LTAxMjM0NTY3ODlhYmM=',
             // Force the deterministic heading planner for the env-wired documents
             // module (now always on): spawn specs assert exact board structure and
             // must not reach an LLM. Specs that exercise the LLM planner inject a
             // model provider + planner ref via overrides instead.
             DOCUMENT_PLANNER: 'headings',
-            // Master key so the task-source integration's credential
-            // encryption-at-rest wires up; `tasksDeps()` builds the cipher from
-            // it. Production sets this as a secret.
-            TASKS_ENCRYPTION_KEY: 'dGFza3MtdGVzdC1rZXktMDEyMzQ1Njc4OWFiY2RlZmc=',
           },
         },
       }),

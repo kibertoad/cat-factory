@@ -33,7 +33,7 @@ surfaced in the inspector.
   `pl_dep_update`, `pl_tech_debt`.
 - **Per-tenant tracker on the Node facade**: both trackers now work on Node, each
   resolving the **workspace's own** integration. Jira: the task-source integration is
-  wired on Node (always on; requires `TASKS_ENCRYPTION_KEY`) — a Drizzle
+  wired on Node (always on; requires the shared `ENCRYPTION_KEY`) — a Drizzle
   `task_connections`/`tasks` store + the runtime-neutral Jira provider — so each tenant
   connects its own Jira through the existing UI (credentials encrypted at rest). GitHub:
   the filer mints a short-lived token from that workspace's own GitHub App installation
