@@ -462,6 +462,31 @@ export const notifications = pgTable(
   ],
 )
 
+// Per-workspace merge threshold presets (mirror of D1 migration 0024's
+// `merge_threshold_presets`). A task selects one via `blocks.merge_preset_id`; none →
+// the workspace default (`is_default`, exactly one per workspace — the repository
+// demotes the prior default when promoting a new one). `is_default` is 0/1 to mirror
+// the D1 integer flag. Carries the auto-merge ceilings + `ci_max_attempts`.
+export const mergeThresholdPresets = pgTable(
+  'merge_threshold_presets',
+  {
+    workspace_id: text('workspace_id').notNull(),
+    id: text('id').notNull(),
+    name: text('name').notNull(),
+    max_complexity: doublePrecision('max_complexity').notNull(),
+    max_risk: doublePrecision('max_risk').notNull(),
+    max_impact: doublePrecision('max_impact').notNull(),
+    ci_max_attempts: integer('ci_max_attempts').notNull(),
+    is_default: integer('is_default').notNull().default(0),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.workspace_id, t.id] }),
+    // Fast lookup of a workspace's default preset (mirrors idx_merge_presets_default).
+    index('idx_merge_presets_default').on(t.workspace_id, t.is_default),
+  ],
+)
+
 // Slack integration (mirror of D1 migration 0037). An additional delivery transport
 // for the notification mechanism. Per-account connection (+ encrypted bot token,
 // `token_cipher` is a WebCryptoSecretCipher envelope, never plaintext), per-workspace

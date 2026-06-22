@@ -1,6 +1,7 @@
 import {
   type Block,
   type ExecutionInstance,
+  type MergeThresholdPreset,
   type ModelDefaults,
   type Pipeline,
   type PipelineSchedule,
@@ -190,6 +191,68 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         })
         expect(deepseek.status).toBe(201)
         expect(deepseek.body.vendor).toBe('deepseek')
+      })
+    })
+
+    describe('merge presets', () => {
+      it('seeds a default, enforces the single-default invariant, and guards the default', async () => {
+        const { call, createWorkspace } = harness.makeApp()
+        const { workspace } = await createWorkspace()
+        const base = `/workspaces/${workspace.id}/merge-presets`
+
+        // First list lazily seeds the built-in default (one preset, flagged default).
+        const initial = await call<MergeThresholdPreset[]>('GET', base)
+        expect(initial.status).toBe(200)
+        expect(initial.body).toHaveLength(1)
+        expect(initial.body[0]!.isDefault).toBe(true)
+        const seededDefaultId = initial.body[0]!.id
+
+        // Add a non-default preset; the seeded default stays the default.
+        const lenient = await call<MergeThresholdPreset>('POST', base, {
+          name: 'Lenient',
+          maxComplexity: 0.9,
+          maxRisk: 0.8,
+          maxImpact: 0.7,
+          ciMaxAttempts: 5,
+        })
+        expect(lenient.status).toBe(201)
+        expect(lenient.body.isDefault).toBe(false)
+
+        // Promote a brand-new preset to default; the previous default is demoted
+        // (single-default invariant enforced by the repository).
+        const strict = await call<MergeThresholdPreset>('POST', base, {
+          name: 'Strict',
+          maxComplexity: 0.3,
+          maxRisk: 0.2,
+          maxImpact: 0.2,
+          ciMaxAttempts: 10,
+          isDefault: true,
+        })
+        expect(strict.status).toBe(201)
+        expect(strict.body.isDefault).toBe(true)
+
+        const afterPromote = await call<MergeThresholdPreset[]>('GET', base)
+        expect(afterPromote.body).toHaveLength(3)
+        const defaults = afterPromote.body.filter((p) => p.isDefault)
+        expect(defaults.map((p) => p.id)).toEqual([strict.body.id])
+        expect(afterPromote.body.find((p) => p.id === seededDefaultId)!.isDefault).toBe(false)
+
+        // The default cannot be unset via PATCH, nor removed via DELETE.
+        const unset = await call('PATCH', `${base}/${strict.body.id}`, { isDefault: false })
+        expect(unset.status).toBe(409)
+        const delDefault = await call('DELETE', `${base}/${strict.body.id}`)
+        expect(delDefault.status).toBe(409)
+
+        // A non-default preset can be patched and removed.
+        const renamed = await call<MergeThresholdPreset>('PATCH', `${base}/${lenient.body.id}`, {
+          name: 'Lenient v2',
+        })
+        expect(renamed.status).toBe(200)
+        expect(renamed.body.name).toBe('Lenient v2')
+        const del = await call('DELETE', `${base}/${lenient.body.id}`)
+        expect(del.status).toBe(204)
+        const final = await call<MergeThresholdPreset[]>('GET', base)
+        expect(final.body.map((p) => p.id).sort()).toEqual([seededDefaultId, strict.body.id].sort())
       })
     })
 

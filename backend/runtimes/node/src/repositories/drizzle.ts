@@ -15,6 +15,8 @@ import type {
   ExecutionRepository,
   Membership,
   MembershipRepository,
+  MergePresetRepository,
+  MergeThresholdPreset,
   ModelDefaultsRepository,
   LlmCallMetric,
   LlmCallMetricRepository,
@@ -66,6 +68,7 @@ import {
   blocks,
   llmCallMetrics,
   memberships,
+  mergeThresholdPresets,
   pipelineScheduleRuns,
   pipelineSchedules,
   pipelines,
@@ -1435,6 +1438,121 @@ export class DrizzleRequirementReviewRepository implements RequirementReviewRepo
   }
 }
 
+type MergePresetRow = typeof mergeThresholdPresets.$inferSelect
+
+function rowToMergePreset(row: MergePresetRow): MergeThresholdPreset {
+  return {
+    id: row.id,
+    name: row.name,
+    maxComplexity: row.max_complexity,
+    maxRisk: row.max_risk,
+    maxImpact: row.max_impact,
+    ciMaxAttempts: row.ci_max_attempts,
+    isDefault: row.is_default === 1,
+    createdAt: row.created_at,
+  }
+}
+
+/**
+ * Per-workspace merge threshold presets over Postgres (the Drizzle mirror of the
+ * Worker's `D1MergePresetRepository`, migration 0024). Enforces the single-default
+ * invariant: promoting a preset to default demotes every other in the workspace
+ * before the upsert. The default preset cannot be removed (the service keeps that
+ * rule too; the DELETE also guards `is_default = 0`). Behaviourally identical to the
+ * D1 repo so the cross-runtime conformance suite asserts the same preset resolution.
+ */
+export class DrizzleMergePresetRepository implements MergePresetRepository {
+  constructor(private readonly db: DrizzleDb) {}
+
+  async get(workspaceId: string, id: string): Promise<MergeThresholdPreset | null> {
+    const rows = await this.db
+      .select()
+      .from(mergeThresholdPresets)
+      .where(
+        and(eq(mergeThresholdPresets.workspace_id, workspaceId), eq(mergeThresholdPresets.id, id)),
+      )
+      .limit(1)
+    return rows[0] ? rowToMergePreset(rows[0]) : null
+  }
+
+  async list(workspaceId: string): Promise<MergeThresholdPreset[]> {
+    const rows = await this.db
+      .select()
+      .from(mergeThresholdPresets)
+      .where(eq(mergeThresholdPresets.workspace_id, workspaceId))
+      .orderBy(mergeThresholdPresets.created_at)
+    return rows.map(rowToMergePreset)
+  }
+
+  async getDefault(workspaceId: string): Promise<MergeThresholdPreset | null> {
+    const rows = await this.db
+      .select()
+      .from(mergeThresholdPresets)
+      .where(
+        and(
+          eq(mergeThresholdPresets.workspace_id, workspaceId),
+          eq(mergeThresholdPresets.is_default, 1),
+        ),
+      )
+      .orderBy(mergeThresholdPresets.created_at)
+      .limit(1)
+    return rows[0] ? rowToMergePreset(rows[0]) : null
+  }
+
+  async upsert(workspaceId: string, preset: MergeThresholdPreset): Promise<void> {
+    // Promoting this preset to default demotes any other default first, so the
+    // single-default invariant holds.
+    if (preset.isDefault) {
+      await this.db
+        .update(mergeThresholdPresets)
+        .set({ is_default: 0 })
+        .where(
+          and(
+            eq(mergeThresholdPresets.workspace_id, workspaceId),
+            sql`${mergeThresholdPresets.id} <> ${preset.id}`,
+          ),
+        )
+    }
+    const values = {
+      workspace_id: workspaceId,
+      id: preset.id,
+      name: preset.name,
+      max_complexity: preset.maxComplexity,
+      max_risk: preset.maxRisk,
+      max_impact: preset.maxImpact,
+      ci_max_attempts: preset.ciMaxAttempts,
+      is_default: preset.isDefault ? 1 : 0,
+      created_at: preset.createdAt,
+    }
+    await this.db
+      .insert(mergeThresholdPresets)
+      .values(values)
+      .onConflictDoUpdate({
+        target: [mergeThresholdPresets.workspace_id, mergeThresholdPresets.id],
+        set: {
+          name: values.name,
+          max_complexity: values.max_complexity,
+          max_risk: values.max_risk,
+          max_impact: values.max_impact,
+          ci_max_attempts: values.ci_max_attempts,
+          is_default: values.is_default,
+        },
+      })
+  }
+
+  async remove(workspaceId: string, id: string): Promise<void> {
+    await this.db
+      .delete(mergeThresholdPresets)
+      .where(
+        and(
+          eq(mergeThresholdPresets.workspace_id, workspaceId),
+          eq(mergeThresholdPresets.id, id),
+          eq(mergeThresholdPresets.is_default, 0),
+        ),
+      )
+  }
+}
+
 export interface CoreRepositories {
   workspaceRepository: WorkspaceRepository
   accountRepository: AccountRepository
@@ -1451,6 +1569,7 @@ export interface CoreRepositories {
   serviceRepository: ServiceRepository
   workspaceMountRepository: WorkspaceMountRepository
   requirementReviewRepository: RequirementReviewRepository
+  mergePresetRepository: MergePresetRepository
 }
 
 /** Build the Drizzle/Postgres-backed core repositories. */
@@ -1471,5 +1590,6 @@ export function createDrizzleRepositories(db: DrizzleDb, clock: Clock): CoreRepo
     serviceRepository: new DrizzleServiceRepository(db),
     workspaceMountRepository: new DrizzleWorkspaceMountRepository(db),
     requirementReviewRepository: new DrizzleRequirementReviewRepository(db),
+    mergePresetRepository: new DrizzleMergePresetRepository(db),
   }
 }

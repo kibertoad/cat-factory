@@ -602,6 +602,11 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // like a pipeline step: block-pin > workspace per-kind default > routing default
     // (which falls back to Cloudflare Workers AI unless a direct key is set).
     requirementReviewRepository: repos.requirementReviewRepository,
+    // Merge threshold presets: the per-workspace auto-merge ceiling library a task's
+    // merge gate resolves (block-pinned preset > workspace default). Wired
+    // unconditionally, exactly like the Worker's `selectMergeLifecycleDeps`, so the
+    // preset CRUD API + the merger step's threshold resolution work identically.
+    mergePresetRepository: repos.mergePresetRepository,
     modelProvider: createNodeModelProvider(env),
     requirementReviewModel: config.agents.routing.default.ref,
     requirementReviewResolveModel: config.agents.resolveBlockModel,
