@@ -1,8 +1,21 @@
+CREATE TABLE "account_invitations" (
+	"id" text PRIMARY KEY,
+	"account_id" text NOT NULL,
+	"email" text NOT NULL,
+	"role" text DEFAULT 'member' NOT NULL,
+	"token_hash" text NOT NULL,
+	"invited_by" text NOT NULL,
+	"status" text DEFAULT 'pending' NOT NULL,
+	"expires_at" bigint NOT NULL,
+	"created_at" bigint NOT NULL
+);
+--> statement-breakpoint
 CREATE TABLE "accounts" (
 	"id" text PRIMARY KEY,
 	"type" text NOT NULL,
 	"name" text NOT NULL,
 	"github_account_login" text,
+	"owner_user_id" text,
 	"created_at" bigint NOT NULL,
 	"default_cloud_provider" text
 );
@@ -54,7 +67,7 @@ CREATE TABLE "blocks" (
 	"cloud_provider" text,
 	"instance_size" text,
 	"service_id" text,
-	"created_by" bigint,
+	"created_by" text,
 	CONSTRAINT "blocks_pkey" PRIMARY KEY("workspace_id","id")
 );
 --> statement-breakpoint
@@ -80,6 +93,16 @@ CREATE TABLE "documents" (
 	"synced_at" bigint NOT NULL,
 	"deleted_at" bigint,
 	CONSTRAINT "documents_pkey" PRIMARY KEY("workspace_id","source","external_id")
+);
+--> statement-breakpoint
+CREATE TABLE "email_connections" (
+	"account_id" text PRIMARY KEY,
+	"provider" text NOT NULL,
+	"from_address" text NOT NULL,
+	"api_key_cipher" text NOT NULL,
+	"created_at" bigint NOT NULL,
+	"updated_at" bigint NOT NULL,
+	"deleted_at" bigint
 );
 --> statement-breakpoint
 CREATE TABLE "environment_connections" (
@@ -262,7 +285,7 @@ CREATE TABLE "llm_call_metrics" (
 --> statement-breakpoint
 CREATE TABLE "memberships" (
 	"account_id" text,
-	"user_id" bigint,
+	"user_id" text,
 	"role" text DEFAULT 'member' NOT NULL,
 	"created_at" bigint NOT NULL,
 	CONSTRAINT "memberships_pkey" PRIMARY KEY("account_id","user_id")
@@ -298,7 +321,7 @@ CREATE TABLE "notifications" (
 --> statement-breakpoint
 CREATE TABLE "personal_subscriptions" (
 	"id" text PRIMARY KEY,
-	"user_id" bigint NOT NULL,
+	"user_id" text NOT NULL,
 	"vendor" text NOT NULL,
 	"label" text NOT NULL,
 	"token_cipher" text NOT NULL,
@@ -476,7 +499,7 @@ CREATE TABLE "slack_settings" (
 CREATE TABLE "subscription_activations" (
 	"id" text PRIMARY KEY,
 	"execution_id" text NOT NULL,
-	"user_id" bigint NOT NULL,
+	"user_id" text NOT NULL,
 	"vendor" text NOT NULL,
 	"token_cipher" text NOT NULL,
 	"created_at" bigint NOT NULL,
@@ -533,6 +556,24 @@ CREATE TABLE "tracker_settings" (
 	"updated_at" bigint NOT NULL
 );
 --> statement-breakpoint
+CREATE TABLE "user_identities" (
+	"user_id" text NOT NULL,
+	"provider" text,
+	"subject" text,
+	"secret" text,
+	"metadata" text,
+	"created_at" bigint NOT NULL,
+	CONSTRAINT "user_identities_pkey" PRIMARY KEY("provider","subject")
+);
+--> statement-breakpoint
+CREATE TABLE "users" (
+	"id" text PRIMARY KEY,
+	"name" text,
+	"email" text,
+	"avatar_url" text,
+	"created_at" bigint NOT NULL
+);
+--> statement-breakpoint
 CREATE TABLE "workspace_fragment_defaults" (
 	"workspace_id" text PRIMARY KEY,
 	"fragment_ids" text NOT NULL,
@@ -561,18 +602,22 @@ CREATE TABLE "workspace_services" (
 CREATE TABLE "workspaces" (
 	"id" text PRIMARY KEY,
 	"name" text NOT NULL,
+	"description" text,
 	"created_at" bigint NOT NULL,
 	"account_id" text,
-	"owner_user_id" bigint
+	"owner_user_id" text
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX "idx_accounts_personal" ON "accounts" ("github_account_login") WHERE type = 'personal';--> statement-breakpoint
+CREATE INDEX "idx_account_invitations_account" ON "account_invitations" ("account_id");--> statement-breakpoint
+CREATE UNIQUE INDEX "idx_account_invitations_token" ON "account_invitations" ("token_hash");--> statement-breakpoint
+CREATE UNIQUE INDEX "idx_accounts_personal" ON "accounts" ("owner_user_id") WHERE type = 'personal';--> statement-breakpoint
 CREATE INDEX "idx_agent_runs_workspace" ON "agent_runs" ("workspace_id","created_at");--> statement-breakpoint
 CREATE INDEX "idx_agent_runs_status_lease" ON "agent_runs" ("status","updated_at");--> statement-breakpoint
 CREATE INDEX "idx_agent_runs_block" ON "agent_runs" ("workspace_id","block_id");--> statement-breakpoint
 CREATE INDEX "idx_agent_runs_service" ON "agent_runs" ("service_id");--> statement-breakpoint
 CREATE INDEX "idx_blocks_parent" ON "blocks" ("workspace_id","parent_id");--> statement-breakpoint
 CREATE INDEX "idx_blocks_service" ON "blocks" ("service_id");--> statement-breakpoint
+CREATE INDEX "idx_blocks_id" ON "blocks" ("id");--> statement-breakpoint
 CREATE INDEX "idx_documents_block" ON "documents" ("workspace_id","linked_block_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "idx_environment_conn_workspace" ON "environment_connections" ("workspace_id") WHERE "deleted_at" IS NULL;--> statement-breakpoint
 CREATE INDEX "idx_environments_block" ON "environments" ("workspace_id","block_id") WHERE "deleted_at" IS NULL;--> statement-breakpoint
@@ -607,12 +652,15 @@ CREATE INDEX "idx_requirement_reviews_block" ON "requirement_reviews" ("workspac
 CREATE UNIQUE INDEX "idx_runner_pool_conn_workspace" ON "runner_pool_connections" ("workspace_id") WHERE deleted_at IS NULL;--> statement-breakpoint
 CREATE INDEX "idx_services_account" ON "services" ("account_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "idx_services_frame" ON "services" ("account_id","frame_block_id");--> statement-breakpoint
+CREATE INDEX "idx_services_frame_block" ON "services" ("frame_block_id");--> statement-breakpoint
 CREATE INDEX "idx_services_repo" ON "services" ("installation_id","repo_github_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "idx_slack_conn_team" ON "slack_connections" ("team_id") WHERE deleted_at IS NULL;--> statement-breakpoint
 CREATE UNIQUE INDEX "idx_sub_activations_run" ON "subscription_activations" ("execution_id","user_id","vendor");--> statement-breakpoint
 CREATE INDEX "idx_sub_activations_expiry" ON "subscription_activations" ("expires_at");--> statement-breakpoint
 CREATE INDEX "idx_tasks_block" ON "tasks" ("workspace_id","linked_block_id");--> statement-breakpoint
 CREATE INDEX "idx_token_usage_created" ON "token_usage" ("created_at");--> statement-breakpoint
+CREATE INDEX "idx_user_identities_user" ON "user_identities" ("user_id");--> statement-breakpoint
+CREATE UNIQUE INDEX "idx_users_email" ON "users" ("email") WHERE email IS NOT NULL;--> statement-breakpoint
 CREATE INDEX "idx_workspace_services_service" ON "workspace_services" ("service_id");--> statement-breakpoint
 CREATE INDEX "idx_workspaces_owner" ON "workspaces" ("owner_user_id");--> statement-breakpoint
 CREATE INDEX "idx_workspaces_account" ON "workspaces" ("account_id");
