@@ -48,6 +48,29 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         expect(res.body.executions).toHaveLength(0)
       })
 
+      it('persists and updates a board name + description identically on every store', async () => {
+        const { call } = harness.makeApp()
+        const created = await call<WorkspaceSnapshot>('POST', '/workspaces', {
+          name: 'Described',
+          description: 'A board with a description',
+          seed: false,
+        })
+        expect(created.body.workspace.description).toBe('A board with a description')
+
+        // Round-trips through the store on a fresh snapshot read.
+        const wsId = created.body.workspace.id
+        const reread = await call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+        expect(reread.body.workspace.description).toBe('A board with a description')
+
+        // PATCH updates the description; null clears it.
+        const updated = await call<Workspace>('PATCH', `/workspaces/${wsId}`, {
+          description: 'Updated description',
+        })
+        expect(updated.body.description).toBe('Updated description')
+        const cleared = await call<Workspace>('PATCH', `/workspaces/${wsId}`, { description: null })
+        expect(cleared.body.description).toBeNull()
+      })
+
       it('creates a board with no sample blocks when seed=false (pipelines always seeded)', async () => {
         const { call } = harness.makeApp()
         const res = await call<WorkspaceSnapshot>('POST', '/workspaces', { seed: false })
