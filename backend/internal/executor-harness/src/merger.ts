@@ -1,5 +1,5 @@
 import type { MergerJob, MergerResult } from './job.js'
-import { cloneRepo } from './git.js'
+import { cloneRepo, hasDiffAgainstBase } from './git.js'
 import { extractJsonObject } from './blueprint.js'
 import type { PiRunStats } from './pi.js'
 import {
@@ -82,8 +82,23 @@ export async function handleMerger(job: MergerJob, opts: RunOptions = {}): Promi
       repo: { ...job.repo, baseBranch: job.branch },
       ghToken: job.ghToken,
       dir,
+      // Full clone: scoring the PR means diffing it against the base, which needs the
+      // base branch's remote-tracking ref (origin/<base>) AND the merge base present. A
+      // shallow single-branch clone has neither, so `git diff origin/<base>...HEAD` fails
+      // with "branch not found" and the agent is left to GUESS scores (it tends to emit
+      // 0/0/0, which then auto-merges). The full clone gives the merger a real diff.
+      full: true,
       signal: opts.signal,
     })
+
+    // Guard the auto-merge path: confirm a real diff against the base is examinable. If
+    // it is not (missing base ref / empty diff), the agent's scores can't be trusted —
+    // we force a CONSERVATIVE assessment below so the engine routes to human review
+    // rather than auto-merging on bogus low scores.
+    const diffExaminable = await hasDiffAgainstBase(dir, job.repo.baseBranch, opts.signal)
+    if (!diffExaminable) {
+      log.warn('merge: no examinable diff against base; will assess conservatively', trace)
+    }
 
     log.info('merge: running agent', trace)
     const { summary, stats, stderrTail, usage } = await runAgentInWorkspace(
@@ -133,6 +148,23 @@ export async function handleMerger(job: MergerJob, opts: RunOptions = {}): Promi
         error: noAssessmentReason(stats, stderrTail, diagnostics),
         ...(usage ? { usage } : {}),
       }
+    }
+    // The agent could not actually examine the change: its scores are not trustworthy
+    // (a failed diff retrieval typically yields a bogus 0/0/0 that would auto-merge).
+    // Return a CONSERVATIVE assessment (max on every axis) so the engine's threshold
+    // check fails and the PR is routed to a human merge review instead.
+    if (!diffExaminable) {
+      const conservative = {
+        complexity: 1,
+        risk: 1,
+        impact: 1,
+        rationale:
+          `Could not examine a real diff of \`${job.branch}\` against \`${job.repo.baseBranch}\` ` +
+          `(the base ref was missing or the diff was empty), so this PR was NOT auto-assessed ` +
+          `and needs a human merge review.`,
+      }
+      log.info('merge: assessed conservatively (no examinable diff)', { ...trace, ...conservative })
+      return { assessment: conservative, summary, stats, ...(usage ? { usage } : {}) }
     }
     log.info('merge: assessed', { ...trace, ...assessment })
     return { assessment, summary, stats, ...(usage ? { usage } : {}) }

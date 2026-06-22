@@ -83,7 +83,12 @@ import type {
   WorkspaceRepository,
 } from '@cat-factory/kernel'
 import type { Clock, IdGenerator } from '@cat-factory/kernel'
-import type { AgentExecutor, AgentRunContext, AgentRunResult } from '@cat-factory/kernel'
+import type {
+  AgentExecutor,
+  AgentRunContext,
+  AgentRunResult,
+  AgentTokenUsage,
+} from '@cat-factory/kernel'
 import { isAsyncAgentExecutor } from '@cat-factory/kernel'
 import type { WorkRunner } from '@cat-factory/kernel'
 import type { ExecutionEventPublisher } from '@cat-factory/kernel'
@@ -175,6 +180,28 @@ function buildRevisionContext(step: PipelineStep): {
 /** Format a 0..1 score as a rounded percentage for notification copy. */
 function pct(score: number): string {
   return `${Math.round(score * 100)}%`
+}
+
+/** Parse a companion's JSON verdict from a model reply, or `undefined` if it won't parse. */
+function parseCompanionOrUndefined(output: string | undefined): CompanionAssessment | undefined {
+  try {
+    return parseCompanionAssessment(extractJson(output ?? ''))
+  } catch {
+    return undefined
+  }
+}
+
+/** Sum the token usage of two model calls (for the companion's repair retry). */
+function sumUsage(
+  a: AgentTokenUsage | undefined,
+  b: AgentTokenUsage | undefined,
+): AgentTokenUsage | undefined {
+  if (!a) return b
+  if (!b) return a
+  return {
+    inputTokens: a.inputTokens + b.inputTokens,
+    outputTokens: a.outputTokens + b.outputTokens,
+  }
 }
 
 export interface ExecutionServiceDependencies {
@@ -1264,7 +1291,14 @@ export class ExecutionService {
     const context = await this.buildAgentContext(workspaceId, instance, step, isFinalStep, block)
     const previewModel = await this.previewStepModel(context)
     if (previewModel && previewModel !== step.model) step.model = previewModel
-    const result = await this.runAgent(context, options)
+    // Run the companion, parsing its JSON verdict with ONE repair retry when the first
+    // reply doesn't parse (truncated / wrapped in prose). Only retried when there is a
+    // producer to grade. `result` carries the LAST call's output + the summed usage.
+    const { assessment, result } = await this.runCompanionWithRepair(
+      context,
+      options,
+      producerIndex >= 0,
+    )
     if (result.usage) {
       await this.spend.record({
         workspaceId,
@@ -1282,29 +1316,52 @@ export class ExecutionService {
       attempts: 0,
       verdicts: [],
     }
-    let assessment: CompanionAssessment | undefined
-    try {
-      assessment = parseCompanionAssessment(extractJson(result.output ?? ''))
-    } catch {
-      assessment = undefined
-    }
-    // A broken critic (no producer to grade, or an unparseable verdict) passes through
-    // rather than wedging the run: record a perfect score and advance.
-    const rating = assessment && producerIndex >= 0 ? assessment.rating : 1
     const feedback = assessment?.summary ?? ''
+
+    // There IS a producer to grade but the companion's own verdict never parsed (even
+    // after the repair retry): do NOT silently treat that as a perfect pass. That is the
+    // bug where a truncated reviewer reply surfaced as "100% ≥ 80%" and dropped a real
+    // review. Surface it for a human instead, recording the raw reply as the detail.
+    if (producerIndex >= 0 && !assessment) {
+      step.output = result.output || ''
+      step.companion = companion
+      await this.executionRepository.upsert(workspaceId, instance)
+      await this.failRun(
+        workspaceId,
+        instance.id,
+        `Companion "${step.agentKind}" did not return a parseable assessment (its reply ` +
+          `was truncated or malformed) after a repair retry.`,
+        'companion_rejected',
+        (result.output ?? '').slice(0, 2000) || null,
+      )
+      return { kind: 'job_failed', error: 'companion_rejected' }
+    }
+
+    // The score to judge: the parsed rating when there is a producer to grade, else a
+    // perfect score (no producer of this companion's target kind precedes it, so there
+    // is genuinely nothing to grade and the run advances).
+    const rating = assessment && producerIndex >= 0 ? assessment.rating : 1
+    // The FIRST review batch ALWAYS loops the producer back when it raised any comments,
+    // regardless of rating; the configured threshold only governs the SECOND pass onward.
+    // `attempts` counts automatic reworks, so it is 0 on the first batch. Applies to every
+    // companion (reviewer / spec-companion / architect-companion). Gated on a real producer
+    // so the loop-back below always has a step to re-run.
+    const firstBatch = companion.attempts === 0
+    const hasComments = producerIndex >= 0 && (assessment?.comments?.length ?? 0) > 0
+    const passed = firstBatch && hasComments ? false : rating >= companion.threshold
     // Append this cycle's standardized verdict (the same shape the requirements-rework
     // gate stores) so the whole correction sequence is visible, not just the latest.
     companion.verdicts.push({
       rating,
       threshold: companion.threshold,
-      passed: rating >= companion.threshold,
+      passed,
       feedback,
     })
     step.companion = companion
     step.output = feedback || result.output || ''
 
-    // PASS: the producer cleared the bar.
-    if (rating >= companion.threshold) {
+    // PASS: the producer cleared the bar (and was not force-looped on its first batch).
+    if (passed) {
       this.finishStep(step)
       step.progress = 1
       // A gated companion now raises the HUMAN approval gate on the producer's output
@@ -1357,10 +1414,11 @@ export class ExecutionService {
       return { kind: 'job_failed', error: 'companion_rejected' }
     }
 
-    // BELOW THRESHOLD, budget left → loop the producer back with the feedback folded
-    // in (the automatic analogue of a human "request changes"). `producerIndex` is
-    // guaranteed >= 0 here (rating < threshold only when a producer was found and the
-    // verdict parsed; otherwise rating defaulted to 1 and we passed above).
+    // NOT PASSED, budget left → loop the producer back with the feedback folded in (the
+    // automatic analogue of a human "request changes"). Reached either below threshold or
+    // on the forced first-batch loop. `producerIndex` is guaranteed >= 0 here: a forced
+    // loop requires comments on a real producer, and a below-threshold rating requires a
+    // parsed verdict against a producer (otherwise rating defaulted to 1 and we passed).
     companion.attempts += 1
     const producer = instance.steps[producerIndex]!
     const previousProposal = producer.output ?? ''
@@ -1374,6 +1432,34 @@ export class ExecutionService {
     await this.executionRepository.upsert(workspaceId, instance)
     await this.emitInstance(workspaceId, instance)
     return { kind: 'continue' }
+  }
+
+  /**
+   * Run a companion step and parse its JSON verdict, with ONE repair retry when the
+   * first reply doesn't parse (truncated, or wrapped in prose `extractJson` can't
+   * recover). The retry runs only when there is a producer to grade (`gradable`) — with
+   * none there is nothing to assess, so a malformed reply is irrelevant. Returns the
+   * parsed assessment (or `undefined` if even the repair failed) and the LAST call's
+   * result, with usage summed across both calls so the caller's single `spend.record`
+   * prices the whole thing. A still-unparseable verdict is handled by the caller (it
+   * surfaces to a human rather than passing), so this never wedges the run.
+   */
+  private async runCompanionWithRepair(
+    context: AgentRunContext,
+    options: AdvanceOptions,
+    gradable: boolean,
+  ): Promise<{ assessment: CompanionAssessment | undefined; result: AgentRunResult }> {
+    const first = await this.runAgent(context, options)
+    const parsed = parseCompanionOrUndefined(first.output)
+    if (parsed || !gradable) return { assessment: parsed, result: first }
+    // The first reply didn't parse. Re-run the same grading step once more; with the
+    // companion's raised output budget this almost always clears a one-off truncation.
+    const second = await this.runAgent(context, options)
+    const repaired = parseCompanionOrUndefined(second.output)
+    return {
+      assessment: repaired,
+      result: { ...second, usage: sumUsage(first.usage, second.usage) },
+    }
   }
 
   /**
@@ -1649,10 +1735,17 @@ export class ExecutionService {
       )
     }
 
-    // Greenlit: let the normal completion flow finish + advance the step. Defensive:
-    // honour a greenlight ONLY when no blocking (high/critical) concern was raised,
-    // so a harness that greenlights with open blockers can't slip a bad change through.
-    if (isGreenlit(report)) return null
+    // The FIRST testing round always loops the fixer when the report flags ANYTHING — any
+    // concern (regardless of severity) or a withheld greenlight — so the first batch of
+    // findings is always handed to the fixer. From the SECOND round onward the normal
+    // threshold applies (`isGreenlit`: a greenlight stands unless a high/critical concern
+    // is open; low/medium concerns are advisory). The defensive greenlight+no-blocker
+    // check still protects every round against a harness that greenlights with blockers.
+    const firstRound = step.test.attempts === 0
+    const accepted = firstRound
+      ? report.greenlight === true && report.concerns.length === 0
+      : isGreenlit(report)
+    if (accepted) return null
 
     // Withheld greenlight: loop the fixer if any budget remains, else give up.
     const executor = this.agentExecutor
@@ -2699,8 +2792,8 @@ export class ExecutionService {
    * Resolve a `merger` step's assessment: parse + validate it, compare each axis
    * against the task's resolved merge preset, and either merge the PR for real
    * (all within threshold) or raise a `merge_review` notification leaving the
-   * block `pr_ready`. A malformed assessment or a failed auto-merge also falls back
-   * to a review notification — never a silent merge.
+   * block `pr_ready`. A malformed/unexplained assessment or a failed auto-merge also
+   * falls back to a review notification — never a silent merge.
    */
   private async resolveMergerStep(
     workspaceId: string,
@@ -2718,8 +2811,15 @@ export class ExecutionService {
     }
 
     const preset = await this.resolveMergePreset(workspaceId, block)
+    // Auto-merge only on a CREDIBLE within-threshold assessment. A credible assessment
+    // explains itself: a merger that actually examined the diff always returns a
+    // rationale, while a merger that failed to inspect the change (the bug that
+    // auto-merged on a bogus 0/0/0) is forced upstream to a conservative, explained
+    // verdict that fails the threshold. The non-empty rationale check is the engine-side
+    // backstop so bare, unexplained scores can never silently merge.
     const within =
       assessment !== null &&
+      assessment.rationale.trim() !== '' &&
       assessment.complexity <= preset.maxComplexity &&
       assessment.risk <= preset.maxRisk &&
       assessment.impact <= preset.maxImpact

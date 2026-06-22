@@ -163,14 +163,16 @@ export function seedPipelines(): Pipeline[] {
         'architect',
         'researcher',
         'coder',
+        // `reviewer` is the coder's companion: it rates the change IMMEDIATELY after
+        // implementation and loops the coder back for automatic rework when quality is
+        // below threshold (see companions) — so review + rework happen before the
+        // map/test tail runs, on already-reviewed code.
+        'reviewer',
         'blueprints',
         // `mocker` stands up the external-dependency mocks the tester needs to run
         // the suite locally, so it always runs immediately before `tester`.
         'mocker',
         'tester',
-        // `reviewer` is the coder's companion: it rates the change and loops it back
-        // for automatic rework when quality is below threshold (see companions).
-        'reviewer',
         'conflicts',
         'ci',
         'merger',
@@ -214,12 +216,13 @@ export function seedPipelines(): Pipeline[] {
       //                         threshold, then raise the human gate on a pass
       //   mocker        → stand up mocks for the external dependencies
       //   coder         → implement the feature on the implementation branch
+      //   reviewer      → coder's companion: rate the change immediately, loop back
+      //                   for rework before the map/test tail runs
       //   blueprints    → refresh the in-repo service map from the new code
       //   business-documenter → capture the domain rules the code now encodes
       //   tester        → define the unit / integration test strategy
       //   playwright    → author the runnable end-to-end / acceptance TESTS (from the
       //                   spec's derived Gherkin)
-      //   reviewer      → coder's companion: rate the change, loop back for rework
       //   documenter    → write the developer-facing documentation
       //   conflicts → ci → merger → the same mergeability / CI / merge tail as Full build
       id: 'pl_fullstack',
@@ -233,11 +236,11 @@ export function seedPipelines(): Pipeline[] {
         'architect-companion',
         'mocker',
         'coder',
+        'reviewer',
         'blueprints',
         'business-documenter',
         'tester',
         'playwright',
-        'reviewer',
         'documenter',
         'conflicts',
         'ci',
@@ -289,10 +292,10 @@ export function seedPipelines(): Pipeline[] {
       name: 'Dependency updates',
       agentKinds: [
         'coder',
+        'reviewer',
         'blueprints',
         'mocker',
         'tester',
-        'reviewer',
         'conflicts',
         'ci',
         'merger',
@@ -305,10 +308,10 @@ export function seedPipelines(): Pipeline[] {
         'analysis',
         'tracker',
         'coder',
+        'reviewer',
         'blueprints',
         'mocker',
         'tester',
-        'reviewer',
         'conflicts',
         'ci',
         'merger',

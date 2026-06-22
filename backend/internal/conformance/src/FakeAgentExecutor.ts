@@ -65,6 +65,13 @@ export interface FakeAgentOptions {
    */
   companionRatings?: number[]
   /**
+   * When true, every companion step returns NON-JSON output, so the engine's verdict
+   * parse fails (even after its repair retry). Exercises the guard that a companion
+   * whose own reply can't be parsed surfaces for a human (run fails) rather than being
+   * silently treated as a perfect pass — the bug where a truncated reviewer showed 100%.
+   */
+  companionMalformed?: boolean
+  /**
    * The assessment the `merger` step reports. When omitted, the fake derives one
    * from `confidence` so existing tests keep their semantics: high confidence
    * (≥ 0.8) yields a within-threshold assessment (auto-merge → `done`), and low
@@ -142,6 +149,16 @@ export class FakeAgentExecutor implements AgentExecutor {
     // (default 1 = pass) as the JSON assessment the engine parses. A `companionRatings`
     // sequence walks one rating per grade (last repeats) so a test can fail then pass.
     if (isCompanionKind(context.agentKind)) {
+      // A companion whose reply can't be parsed: return prose, not JSON, so the engine's
+      // verdict parse (and its repair retry) fail and the run surfaces for a human.
+      if (this.options.companionMalformed) {
+        this.companionCalls += 1
+        return {
+          output: 'I reviewed it and it looks fine overall, but my reply got cut off mid-',
+          model: 'fake',
+          usage: this.options.usage,
+        }
+      }
       const seq = this.options.companionRatings
       const rating = seq?.length
         ? (seq[Math.min(this.companionCalls, seq.length - 1)] ?? 1)

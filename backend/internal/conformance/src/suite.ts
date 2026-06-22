@@ -955,10 +955,11 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         expect(testerStep.test?.lastReport?.greenlight).toBe(true)
       })
 
-      it('treats low/medium concerns as advisory and still greenlights', async () => {
-        // A greenlit report carrying only a LOW-severity concern must NOT loop the
-        // fixer — low/medium concerns are advisory; only high/critical blockers
-        // withhold the release. Guards against burning the whole budget on a nit.
+      it('always loops the fixer on the FIRST round, then treats low/medium concerns as advisory', async () => {
+        // The FIRST testing round hands ANY finding back to the fixer — even a single
+        // low-severity nit — so the first batch of issues is always addressed. From the
+        // SECOND round onward low/medium concerns are advisory: only a high/critical
+        // blocker withholds the greenlight, so the run isn't stuck re-fixing a nit forever.
         const greenWithNit = {
           greenlight: true,
           summary: 'all good, one minor nit',
@@ -969,7 +970,9 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         const app = harness.makeApp({
           asyncKinds: ['coder', 'tester', 'fixer'],
           asyncPolls: 1,
-          testReports: [greenWithNit],
+          // The SAME nit on both rounds: round 1 loops the fixer (first batch always
+          // does); round 2 greenlights it (now advisory).
+          testReports: [greenWithNit, greenWithNit],
           pullRequest: { url: 'https://gh/pr/1', number: 1, branch: 'cat-factory/task_login' },
         })
         const { workspace } = await app.createWorkspace()
@@ -989,8 +992,9 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         expect(exec.status).toBe('done')
         const testerStep = exec.steps.find((s) => s.agentKind === 'tester')!
         expect(testerStep.state).toBe('done')
-        // No fixer was looped for an advisory nit.
-        expect(testerStep.test?.attempts ?? 0).toBe(0)
+        // The first-round nit looped the fixer exactly once; the second-round nit was advisory.
+        expect(testerStep.test?.attempts).toBe(1)
+        expect(testerStep.test?.lastReport?.greenlight).toBe(true)
       })
 
       it('fails the run (tester step left un-done) when the greenlight is withheld terminally', async () => {
@@ -1203,6 +1207,86 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         const verdict = companionStep.companion?.verdicts.at(-1)
         expect(verdict?.rating).toBe(1)
         expect(verdict?.passed).toBe(true)
+      })
+
+      it('always loops the producer on the FIRST batch when the review raised comments, even above threshold', async () => {
+        // First review batch: ANY comments loop the producer back regardless of rating —
+        // so the first round of findings is always handed to the implementer. The
+        // threshold only governs the SECOND pass onward. A steady 0.85 (above the 0.8
+        // bar) WITH comments therefore loops once, then passes the second grade.
+        const app = harness.makeApp({ confidence: 1, companionRatings: [0.85, 0.85] })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Build + first-batch companion',
+          agentKinds: ['coder', 'reviewer'],
+        })
+        const start = await app.call<ExecutionInstance>(
+          'POST',
+          `/workspaces/${wsId}/blocks/task_login/executions`,
+          { pipelineId: pipeline.body.id },
+        )
+        expect(start.status).toBe(201)
+        const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+        expect(exec.status).toBe('done')
+        const companionStep = exec.steps.find((s) => s.agentKind === 'reviewer')!
+        // First batch failed despite clearing the threshold (forced loop), second passed.
+        expect(companionStep.companion?.verdicts.map((v) => v.passed)).toEqual([false, true])
+        expect(companionStep.companion?.verdicts.every((v) => v.rating === 0.85)).toBe(true)
+        expect(companionStep.companion?.attempts).toBe(1)
+      })
+
+      it('fails the run when a companion verdict cannot be parsed (no silent 100% pass)', async () => {
+        // The bug: a truncated/malformed reviewer reply was silently treated as a perfect
+        // pass (rating 1 ≥ threshold) and the real review was dropped. Now an unparseable
+        // verdict — even after the repair retry — fails the run for human attention.
+        const app = harness.makeApp({ confidence: 1, companionMalformed: true })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Build + unparseable companion',
+          agentKinds: ['coder', 'reviewer'],
+        })
+        const start = await app.call<ExecutionInstance>(
+          'POST',
+          `/workspaces/${wsId}/blocks/task_login/executions`,
+          { pipelineId: pipeline.body.id },
+        )
+        expect(start.status).toBe(201)
+        const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+        expect(exec.status).toBe('failed')
+        expect(exec.failure?.kind).toBe('companion_rejected')
+        // The companion step was NOT marked done / passed off as a clean review.
+        const companionStep = exec.steps.find((s) => s.agentKind === 'reviewer')!
+        expect(companionStep.state).not.toBe('done')
+      })
+
+      it('routes a merger PR to human review when the assessment is unexplained (empty rationale)', async () => {
+        // Engine guard: auto-merge only on a CREDIBLE within-threshold assessment. Scores
+        // within every ceiling but an EMPTY rationale (the shape a merger that failed to
+        // examine the diff degrades to) must NOT silently merge — it routes to merge_review
+        // and the task is left pr_ready, never `done`.
+        const app = harness.makeApp({
+          confidence: 1,
+          mergeAssessment: { complexity: 0, risk: 0, impact: 0, rationale: '' },
+        })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Build + merger',
+          agentKinds: ['coder', 'merger'],
+        })
+        const start = await app.call<ExecutionInstance>(
+          'POST',
+          `/workspaces/${wsId}/blocks/task_login/executions`,
+          { pipelineId: pipeline.body.id },
+        )
+        expect(start.status).toBe(201)
+        await app.drive(wsId)
+        const snap = (await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)).body
+        const task = snap.blocks.find((b) => b.id === 'task_login')!
+        expect(task.status).toBe('pr_ready')
+        expect(task.status).not.toBe('done')
       })
 
       it('fails the run when a companion stays below threshold past its rework budget', async () => {

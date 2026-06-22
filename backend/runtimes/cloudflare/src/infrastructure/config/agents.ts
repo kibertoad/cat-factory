@@ -81,9 +81,22 @@ export function loadAgentsConfig(env: Env, caps: ProviderCapabilities): AgentsCo
     temperature: num(env.AGENT_DEFAULT_TEMPERATURE) ?? 0.3,
     maxOutputTokens: num(env.AGENT_MAX_OUTPUT_TOKENS) ?? 5000,
   }
+  // Companions (reviewer / spec-companion / architect-companion) return their whole
+  // verdict — rating + summary + per-item comments — as ONE inline JSON reply. On a
+  // reasoning model the <think> tokens share the output budget, so the 5000 cap can
+  // truncate the JSON mid-comment, leaving it unparseable (the run then can't read the
+  // review). Give companions a larger budget so the verdict fits. Strong agentic model,
+  // like the reviewer was already on.
+  const companionDefault: AgentModelConfig = {
+    ref: { provider: 'workers-ai', model: '@cf/zai-org/glm-5.2' },
+    temperature: num(env.AGENT_DEFAULT_TEMPERATURE) ?? 0.3,
+    maxOutputTokens: num(env.AGENT_MAX_OUTPUT_TOKENS) ?? 12000,
+  }
   const byKind: Partial<Record<AgentKind, AgentModelConfig>> = {
     architect: agenticDefault,
-    reviewer: agenticDefault,
+    reviewer: companionDefault,
+    'spec-companion': companionDefault,
+    'architect-companion': companionDefault,
     coder: coderDefault,
   }
   // Env overrides win over the built-in agentic defaults.

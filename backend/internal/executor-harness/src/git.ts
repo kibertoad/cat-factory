@@ -228,6 +228,28 @@ export async function branchHasCommitsSince(
 }
 
 /**
+ * Whether the checked-out branch has a real, examinable diff against
+ * `origin/<baseBranch>` — i.e. the base branch's remote-tracking ref exists (so the
+ * merge base resolves) AND there are changes between that merge base and HEAD. The
+ * merger uses this to refuse to score a PR it could not actually inspect (a missing
+ * base ref or an empty diff) instead of emitting bogus low scores that would
+ * auto-merge. Returns false on ANY git error (e.g. an unknown ref). Requires a
+ * {@link cloneRepo} with `full: true` so `origin/<baseBranch>` and the merge base exist.
+ */
+export async function hasDiffAgainstBase(
+  dir: string,
+  baseBranch: string,
+  signal?: AbortSignal,
+): Promise<boolean> {
+  try {
+    const stat = await git(['diff', '--stat', `origin/${baseBranch}...HEAD`], { cwd: dir, signal })
+    return stat.trim() !== ''
+  } catch {
+    return false
+  }
+}
+
+/**
  * Parse the paths out of `git status --porcelain` (v1) output. Each line is
  * `XY <path>`, or `XY <old> -> <new>` for a rename/copy (we keep the new path);
  * git quotes paths with special characters, which we unquote. Blank lines are

@@ -127,6 +127,16 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
     temperature: num(env.AGENT_DEFAULT_TEMPERATURE) ?? 0.3,
     maxOutputTokens: num(env.AGENT_MAX_OUTPUT_TOKENS) ?? 5000,
   }
+  // Companions (reviewer / spec-companion / architect-companion) return their whole
+  // verdict — rating + summary + per-item comments — as ONE inline JSON reply. On a
+  // reasoning model the <think> tokens share the output budget, so the 5000 cap can
+  // truncate the JSON mid-comment, leaving it unparseable. Give companions a larger
+  // budget so the verdict fits (mirrors the Worker's routing).
+  const companionDefault: AgentModelConfig = {
+    ref: { provider: 'workers-ai', model: '@cf/zai-org/glm-5.2' },
+    temperature: num(env.AGENT_DEFAULT_TEMPERATURE) ?? 0.3,
+    maxOutputTokens: num(env.AGENT_MAX_OUTPUT_TOKENS) ?? 12000,
+  }
 
   const sessionSecret = env.AUTH_SESSION_SECRET?.trim() ?? ''
   // The GitHub App (private key + app id) backs container-agent runs: it mints the
@@ -190,7 +200,13 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
     agents: {
       routing: {
         default: defaultConfig,
-        byKind: { architect: agenticDefault, coder: agenticDefault, reviewer: agenticDefault },
+        byKind: {
+          architect: agenticDefault,
+          coder: agenticDefault,
+          reviewer: companionDefault,
+          'spec-companion': companionDefault,
+          'architect-companion': companionDefault,
+        },
       },
       resolveBlockModel: (modelId) => resolveModelRef(modelId, caps),
     },
