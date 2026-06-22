@@ -703,9 +703,10 @@ function buildContainerExecutor(
     resolveWorkspaceModelDefault: buildResolveWorkspaceModelDefault(db),
     resolveRepoTarget,
     mintInstallationToken: (id) => registry.installationToken(id),
-    // Create the shared per-task work branch up front so every agent (including the
-    // read-only architect) operates on the same branch — idempotent, best-effort.
-    ensureWorkBranch: async (repo, branch) =>
+    // Ensure the shared per-task work branch up front so every agent (including the
+    // read-only architect) operates on the same branch — idempotent, best-effort. Writers
+    // create it from base; read-only agents only probe (`options.create`).
+    ensureWorkBranch: async (repo, branch, options) =>
       ensureWorkBranchViaRest({
         ...(config.github.apiBase ? { apiBase: config.github.apiBase } : {}),
         token: await registry.installationToken(repo.installationId),
@@ -713,6 +714,7 @@ function buildContainerExecutor(
         name: repo.name,
         baseBranch: repo.baseBranch,
         branch,
+        create: options.create,
       }),
     sessionService: new ContainerSessionService({ secret: env.AUTH_SESSION_SECRET }),
     // The subscription harnesses (Claude Code / Codex) lease a pooled token and
