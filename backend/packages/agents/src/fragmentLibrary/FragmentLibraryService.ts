@@ -36,11 +36,12 @@ export interface FragmentLibraryServiceDependencies {
 }
 
 /**
- * The fragment library's management + resolution service (ADR 0006). It owns the
- * per-tier CRUD (account / workspace), resolves the merged catalog a workspace
- * sees (built-in ∪ account ∪ workspace, override-by-id, tombstone-suppressed),
- * and implements {@link FragmentResolver} so the execution engine can fold the
- * relevant fragments into any agent's system prompt — not the reviewer alone.
+ * The fragment library's management service (ADR 0006). It owns the per-tier CRUD
+ * (account / workspace) and resolves the merged catalog a workspace sees (built-in ∪
+ * account ∪ workspace, override-by-id, tombstone-suppressed). It still implements
+ * {@link FragmentResolver} (`resolveForRun`), but the execution engine NO LONGER
+ * consumes it: fragment delivery is now the service-scoped `serviceFragmentIds` folded
+ * into `code-aware` agents, so this is a management surface only.
  */
 export class FragmentLibraryService implements FragmentResolver {
   private readonly repo: PromptFragmentRepository

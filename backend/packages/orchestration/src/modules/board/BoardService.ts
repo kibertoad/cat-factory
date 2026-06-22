@@ -386,8 +386,16 @@ export class BoardService {
 
   async updateBlock(workspaceId: string, id: string, patch: UpdateBlockInput): Promise<Block> {
     await this.requireWorkspace(workspaceId)
-    const { homeWorkspaceId } = await this.resolveBlock(workspaceId, id)
-    await this.blockRepository.update(homeWorkspaceId, id, patch)
+    const { homeWorkspaceId, block } = await this.resolveBlock(workspaceId, id)
+    // `serviceFragmentIds` is a service-level (frame) setting the engine only reads off
+    // the owning service frame; ignore it on non-frame blocks so it never persists as
+    // dead data (the inspector only exposes the picker on frames anyway).
+    let effective = patch
+    if (patch.serviceFragmentIds !== undefined && block.level !== 'frame') {
+      const { serviceFragmentIds: _ignored, ...rest } = patch
+      effective = rest
+    }
+    await this.blockRepository.update(homeWorkspaceId, id, effective)
     return assertFound(await this.blockRepository.get(homeWorkspaceId, id), 'Block', id)
   }
 

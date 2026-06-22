@@ -47,3 +47,10 @@ asserting the workspace-default round-trip, new-service inheritance, and the
 code-aware-only folding on both facades. The UI adds a per-service "Service best
 practices" picker in the inspector and a "Default service best practices" workspace
 settings panel.
+
+BREAKING (Node facade dev/test only): the Drizzle migration lineage under
+`runtimes/node/drizzle/` was squashed into a single fresh baseline migration — the prior
+incremental migrations had a forked, non-commutative history (left by merging two
+branches) that broke `drizzle-kit generate`/`check`. There are no production Postgres
+deployments, so existing dev/test databases should be dropped and re-created from the
+new baseline rather than migrated. CI now runs `db:check` to keep the lineage honest.

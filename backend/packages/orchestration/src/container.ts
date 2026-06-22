@@ -480,7 +480,11 @@ export interface TrackerModule {
 
 /** The prompt-fragment library's services, present only when configured (ADR 0006). */
 export interface FragmentLibraryModule {
-  /** Per-tier CRUD + the merged-catalog resolver (also the run-path FragmentResolver). */
+  /**
+   * Per-tier CRUD + the merged-catalog resolver. A management surface only: the run
+   * path no longer consumes it (service-scoped `serviceFragmentIds` folded into
+   * `code-aware` agents replaced the automatic per-run relevance selector).
+   */
   libraryService: FragmentLibraryService
   /** Repo-sourced fragments; present only when the GitHub client + source repo are wired. */
   sourceService?: FragmentSourceService

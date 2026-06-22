@@ -2133,14 +2133,19 @@ export class ExecutionService {
     }
   }
 
-  /** The selected best-practice fragment ids of the block's owning service frame. */
+  /**
+   * The selected best-practice fragment ids of the block's owning service frame. Walks
+   * up from the block we already hold (bounded: frame → module → task, cycle-guarded),
+   * reading the frame's `serviceFragmentIds` — without re-fetching the block in hand or
+   * fetching the frame twice.
+   */
   private async resolveServiceFragmentIds(workspaceId: string, block: Block): Promise<string[]> {
-    if (block.level === 'frame') return block.serviceFragmentIds ?? []
-    const frameId = await this.resolveServiceFrameId(workspaceId, block.id)
-    if (!frameId) return []
-    if (frameId === block.id) return block.serviceFragmentIds ?? []
-    const frame = await this.blockRepository.get(workspaceId, frameId)
-    return frame?.serviceFragmentIds ?? []
+    let current: Block | null = block
+    for (let i = 0; current && i < 8; i++) {
+      if (current.level === 'frame' || !current.parentId) return current.serviceFragmentIds ?? []
+      current = await this.blockRepository.get(workspaceId, current.parentId)
+    }
+    return []
   }
 
   /**
