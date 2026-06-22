@@ -36,6 +36,7 @@ import { type CoreDependencies, createCore } from '@cat-factory/orchestration'
 import { createLangfuseSink } from '@cat-factory/observability-langfuse'
 import {
   buildResolveRepoTarget as buildSharedResolveRepoTarget,
+  ensureWorkBranchViaRest,
   FanOutEventPublisher,
   WebCryptoPasswordHasher,
   WebCryptoPersonalSecretCipher,
@@ -738,6 +739,19 @@ function buildContainerExecutor(
     // Resolve the workspace's owning account so the proxy can lease account-scoped keys.
     resolveAccountId: (workspaceId) => new D1WorkspaceRepository({ db }).accountOf(workspaceId),
     mintInstallationToken: (id) => registry.installationToken(id),
+    // Ensure the shared per-task work branch up front so every agent (including the
+    // read-only architect) operates on the same branch — idempotent, best-effort. Writers
+    // create it from base; read-only agents only probe (`options.create`).
+    ensureWorkBranch: async (repo, branch, options) =>
+      ensureWorkBranchViaRest({
+        ...(config.github.apiBase ? { apiBase: config.github.apiBase } : {}),
+        token: await registry.installationToken(repo.installationId),
+        owner: repo.owner,
+        name: repo.name,
+        baseBranch: repo.baseBranch,
+        branch,
+        create: options.create,
+      }),
     sessionService: new ContainerSessionService({ secret: env.AUTH_SESSION_SECRET }),
     // The subscription harnesses (Claude Code / Codex) lease a pooled token and
     // attribute usage back for usage-aware rotation; absent ⇒ those harnesses are

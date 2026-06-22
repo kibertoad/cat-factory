@@ -3,9 +3,9 @@ import type { PipelineStep } from '@cat-factory/kernel'
 /**
  * Plan how a failed run resumes on retry: keep the steps that already completed
  * and re-run from the one that actually failed, rather than restarting the whole
- * pipeline from step 0. For `pl_full` (`requirements → architect → researcher →
- * coder → …`) a coder failure otherwise re-runs the two human-gated steps before
- * it; resuming skips straight back to `coder`.
+ * pipeline from step 0. For `pl_full` (`requirements → spec-writer → architect →
+ * researcher → coder → …`) a coder failure otherwise re-runs the human-gated steps
+ * before it; resuming skips straight back to `coder`.
  *
  * Pure + deterministic so it can be unit-tested without the service's ports. The
  * caller mints the new instance id and re-drives the durable runner.

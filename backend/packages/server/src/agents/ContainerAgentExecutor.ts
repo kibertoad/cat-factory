@@ -62,6 +62,20 @@ export type ResolveRepoTarget = (workspaceId: string, blockId: string) => Promis
 
 export type MintInstallationToken = (installationId: number) => Promise<string>
 
+/**
+ * Ensure the per-task work branch exists on the remote, so every agent in the pipeline
+ * operates on the SAME branch. Returns whether the branch is present afterwards; a
+ * `false`/absent result makes read-only agents fall back to the base branch (writers
+ * create-or-resume the branch in their harness regardless). `options.create` is `true`
+ * for writers (create from base when absent) and `false` for read-only agents (probe
+ * only — never create, since a missing branch means there is nothing yet to read).
+ */
+export type EnsureWorkBranch = (
+  repo: RepoTarget,
+  branch: string,
+  options: { create: boolean },
+) => Promise<boolean>
+
 /** A subscription token leased from the workspace's pool for a vendor. */
 export interface LeasedSubscriptionToken {
   tokenId: string
@@ -135,6 +149,12 @@ export interface ContainerAgentExecutorDependencies {
   resolveAccountId?: (workspaceId: string) => Promise<string | null | undefined>
   /** Mint a short-lived GitHub installation token for cloning + opening the PR. */
   mintInstallationToken: MintInstallationToken
+  /**
+   * Create the shared per-task work branch up front so every agent — including the
+   * read-only design agents — operates on the same branch. Optional: absent (tests, no
+   * GitHub) ⇒ read-only agents clone the base branch, the prior behaviour.
+   */
+  ensureWorkBranch?: EnsureWorkBranch
   /** Mints the signed LLM-proxy session token the container uses (Pi harness). */
   sessionService: ContainerSessionService
   /**
@@ -553,6 +573,25 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
 
     const ghToken = await this.deps.mintInstallationToken(repo.installationId)
 
+    // The shared per-task work branch every agent in this pipeline operates on. Its name
+    // is deterministic from the block id (so a retry/replay/sweeper re-drive always targets
+    // the SAME branch with no extra persistence), and once a PR is open it IS this branch.
+    // Ensure it up front (mechanical, idempotent) so even the read-only design agents clone
+    // the branch the earlier writers committed to — e.g. the spec-writer's in-repo `spec/`.
+    // Writers create it from base when absent; read-only agents only probe (a missing
+    // branch ⇒ nothing to read yet ⇒ fall back to base), so a code-less pipeline never
+    // orphans an empty ref. Once this block already has a PR, the branch IS that PR's
+    // branch, so we skip the round-trip entirely.
+    const workBranch = `cat-factory/${blockId}`
+    const workBranchReady =
+      context.block.pullRequest?.branch === workBranch
+        ? true
+        : this.deps.ensureWorkBranch
+          ? await this.deps.ensureWorkBranch(repo, workBranch, {
+              create: !isReadOnlyAgentKind(context.agentKind),
+            })
+          : false
+
     // Resolve the per-job auth the harness carries: the proxy session token for Pi,
     // or a leased subscription token for Claude Code / Codex. `auth` is spread into
     // every job body so the per-kind bodies can't drift on which auth they forward.
@@ -669,7 +708,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     // them) so the doc is an aggregate, not per-task. Targets the harness `/spec`
     // endpoint.
     if (context.agentKind === SPEC_WRITER_AGENT_KIND) {
-      const branch = context.block.pullRequest?.branch ?? `cat-factory/${blockId}`
+      const branch = workBranch
       const body = {
         jobId: executionId,
         systemPrompt: SPEC_WRITER_SYSTEM_PROMPT,
@@ -841,10 +880,14 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     // it: they clone a branch, produce a prose report/proposal and return it as
     // `output`. They target the harness `/explore` endpoint — which opens no branch,
     // makes no commit, opens no PR, and (unlike `/run`) does NOT treat an edit-free
-    // run as a failure. One shared body for every read-only kind. The branch explored
-    // is the implementation PR branch when one already exists (a re-run), else base.
+    // run as a failure. One shared body for every read-only kind. They explore the
+    // shared work branch when it exists (so e.g. the architect reads the spec-writer's
+    // committed `spec/` and any in-progress implementation), falling back to base when
+    // it could not be ensured (no GitHub wired) and no PR branch exists yet.
     if (isReadOnlyAgentKind(context.agentKind)) {
-      const branch = context.block.pullRequest?.branch ?? repo.baseBranch
+      const branch = workBranchReady
+        ? workBranch
+        : (context.block.pullRequest?.branch ?? repo.baseBranch)
       const body = {
         jobId: executionId,
         kind: context.agentKind,
@@ -874,7 +917,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     // already exists, so an evicted/failed run's work survives and a retry continues
     // on top of it rather than starting over. (The branch is thus "preserved on the
     // task" by construction, with no extra persistence to fall out of sync.)
-    const headBranch = `cat-factory/${blockId}`
+    const headBranch = workBranch
 
     // The harness keys the background job (and the poll endpoint) on `jobId`; the
     // execution id gives an idempotent re-attach across durable-driver replays.

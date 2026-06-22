@@ -53,7 +53,9 @@ export {
   type RepoTarget,
   type ResolveRepoTarget,
   type MintInstallationToken,
+  type EnsureWorkBranch,
 } from './agents/ContainerAgentExecutor.js'
+export { ensureWorkBranchViaRest, type EnsureWorkBranchInput } from './github/ensureWorkBranch.js'
 export { RunnerJobClient, type ResolveRunnerTransport } from './agents/RunnerJobClient.js'
 export {
   createScopedModelProviderResolver,
