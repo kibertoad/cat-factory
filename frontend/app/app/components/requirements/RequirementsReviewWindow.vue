@@ -550,7 +550,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                   :loading="busy"
                   @click="reReview"
                 >
-                  Looks good — re-review
+                  {{ busy ? 'Re-reviewing…' : 'Looks good — re-review' }}
                 </UButton>
                 <UButton
                   color="neutral"
