@@ -9,11 +9,13 @@
 // `ui` dispatch.
 import { computed, type Component } from 'vue'
 import RequirementsReviewWindow from '~/components/requirements/RequirementsReviewWindow.vue'
+import TestReportWindow from '~/components/testing/TestReportWindow.vue'
 
 const ui = useUiStore()
 
 const STEP_RESULT_VIEWS: Record<string, Component> = {
   'requirements-review': RequirementsReviewWindow,
+  tester: TestReportWindow,
 }
 
 const active = computed<Component | null>(() => {

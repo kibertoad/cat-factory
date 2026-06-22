@@ -1,7 +1,12 @@
 <script setup lang="ts">
 import type { AgentState, ExecutionInstance } from '~/types/domain'
 import { agentKindMeta } from '~/utils/catalog'
-import { subtaskIconClass } from '~/utils/pipelineRender'
+import {
+  subtaskIconClass,
+  gateCompanionFor,
+  COMPANION_STATE_META,
+  isCompanionKind,
+} from '~/utils/pipelineRender'
 import StepMetricsBar from '~/components/observability/StepMetricsBar.vue'
 
 const props = defineProps<{ instance: ExecutionInstance }>()
@@ -38,6 +43,11 @@ const STATUS_META: Record<ExecutionInstance['status'], { label: string; chip: st
 
 const steps = computed(() => props.instance.steps)
 const total = computed(() => steps.value.length)
+
+// The conditionally-run companion (e.g. the Tester's `fixer`) each step drives, with
+// its possible/running/completed/skipped state — rendered as a distinct sub-node so a
+// human can see at a glance whether the fixer ran or was skipped.
+const companionByStep = computed(() => steps.value.map((s) => gateCompanionFor(s)))
 
 // A failed run is no longer executing: a step left mid-flight (state still
 // `working`, `startingContainer` still set) must stop looking live — no spinner,
@@ -176,8 +186,17 @@ const ITEM_ICON: Record<string, string> = {
               />
             </div>
             <div class="min-w-0">
-              <div class="truncate text-sm font-semibold text-white">
-                {{ agentKindMeta(s.agentKind).label }}
+              <div class="flex items-center gap-1.5">
+                <span class="truncate text-sm font-semibold text-white">
+                  {{ agentKindMeta(s.agentKind).label }}
+                </span>
+                <span
+                  v-if="isCompanionKind(s.agentKind)"
+                  class="shrink-0 rounded bg-slate-700/60 px-1 text-[9px] font-medium uppercase tracking-wide text-slate-300"
+                  title="Companion of a producer step"
+                >
+                  Companion
+                </span>
               </div>
               <div class="text-[10px] uppercase tracking-wide text-slate-500">
                 Step {{ i + 1 }} of {{ total }}
@@ -281,6 +300,37 @@ const ITEM_ICON: Record<string, string> = {
             <UIcon name="i-lucide-book-open-text" class="h-3 w-3 shrink-0" />
             Click to read this agent’s output
           </p>
+
+          <!-- Conditionally-run companion (today the Tester's fixer): a distinct
+               sub-node marked possible / running / completed / skipped. -->
+          <div
+            v-if="companionByStep[i]"
+            class="mt-3 flex items-center gap-2 rounded-lg border border-dashed border-slate-700/70 bg-slate-900/40 px-2.5 py-1.5"
+          >
+            <span
+              class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border"
+              :class="COMPANION_STATE_META[companionByStep[i]!.state].dot"
+            >
+              <UIcon
+                :name="agentKindMeta(companionByStep[i]!.kind).icon"
+                class="h-3 w-3"
+                :class="[
+                  COMPANION_STATE_META[companionByStep[i]!.state].text,
+                  companionByStep[i]!.state === 'running' && !runFailed ? 'animate-spin' : '',
+                ]"
+              />
+            </span>
+            <span class="min-w-0 flex-1 truncate text-[12px] text-slate-300">
+              {{ agentKindMeta(companionByStep[i]!.kind).label }}
+              <span class="text-slate-500">(companion)</span>
+            </span>
+            <span
+              class="shrink-0 text-[11px] font-medium"
+              :class="COMPANION_STATE_META[companionByStep[i]!.state].text"
+            >
+              {{ COMPANION_STATE_META[companionByStep[i]!.state].label }}
+            </span>
+          </div>
 
           <!-- approval gate: review (and edit) the proposal before continuing -->
           <div v-if="s.approval && s.approval.status === 'pending'" class="mt-3">

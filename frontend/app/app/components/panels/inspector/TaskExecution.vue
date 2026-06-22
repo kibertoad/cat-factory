@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { Block } from '~/types/domain'
 import { agentKindMeta } from '~/utils/catalog'
+import { gateCompanionFor, COMPANION_STATE_META, isCompanionKind } from '~/utils/pipelineRender'
 import AgentFailureCard from '~/components/board/AgentFailureCard.vue'
 
 const props = defineProps<{ block: Block }>()
@@ -107,6 +108,13 @@ function openStep(i: number) {
               <span class="truncate text-xs text-slate-200">
                 {{ agentKindMeta(s.agentKind).label }}
               </span>
+              <span
+                v-if="isCompanionKind(s.agentKind)"
+                class="shrink-0 rounded bg-slate-700/60 px-1 text-[9px] font-medium uppercase tracking-wide text-slate-300"
+                title="Companion of a producer step"
+              >
+                Companion
+              </span>
               <UIcon
                 :name="s.output ? 'i-lucide-book-open-text' : 'i-lucide-info'"
                 class="h-3.5 w-3.5 shrink-0 text-slate-500"
@@ -176,6 +184,24 @@ function openStep(i: number) {
           >
             <UIcon name="i-lucide-book-marked" class="h-3 w-3 shrink-0" />
             <span>{{ s.selectedFragmentIds.length }} standard(s) applied</span>
+          </div>
+          <!-- Conditionally-run companion (the Tester's fixer): possible/running/
+               completed/skipped, so it's clear whether a fix pass ran. -->
+          <div v-if="gateCompanionFor(s)" class="mt-0.5 flex items-center gap-1.5 pl-6 text-[10px]">
+            <UIcon
+              :name="agentKindMeta(gateCompanionFor(s)!.kind).icon"
+              class="h-3 w-3 shrink-0"
+              :class="[
+                COMPANION_STATE_META[gateCompanionFor(s)!.state].text,
+                gateCompanionFor(s)!.state === 'running' && !runFailed ? 'animate-spin' : '',
+              ]"
+            />
+            <span class="text-slate-400">
+              {{ agentKindMeta(gateCompanionFor(s)!.kind).label }} (companion)
+            </span>
+            <span class="ml-auto" :class="COMPANION_STATE_META[gateCompanionFor(s)!.state].text">
+              {{ COMPANION_STATE_META[gateCompanionFor(s)!.state].label }}
+            </span>
           </div>
         </li>
       </ul>

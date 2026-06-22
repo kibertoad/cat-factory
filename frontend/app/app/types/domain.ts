@@ -212,6 +212,9 @@ export type AgentKind =
   | 'conflict-resolver'
   | 'ci'
   | 'ci-fixer'
+  // The Tester's companion: dispatched within the tester gate to fix the bugs the
+  // Tester found, then the Tester re-runs (skipped when the tests pass).
+  | 'fixer'
   | 'merger'
   // Recurring tech-debt pipeline: read-only code `analysis`, then a special
   // non-LLM `tracker` step that files a GitHub issue / Jira ticket.
