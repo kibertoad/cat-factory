@@ -28,6 +28,9 @@ const review = computed<RequirementReview | null>(() =>
   blockId.value ? requirements.reviewFor(blockId.value) : null,
 )
 const busy = computed(() => (blockId.value ? requirements.isReviewing(blockId.value) : false))
+// True while the initial fetch of an existing review is in flight (opening the window),
+// before the cache is populated — so we show a spinner instead of the empty state.
+const loading = computed(() => (blockId.value ? requirements.isLoading(blockId.value) : false))
 const reworking = computed(() =>
   review.value ? requirements.isIncorporating(review.value.id) : false,
 )
@@ -242,7 +245,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
               Iteration {{ iteration }} / {{ maxIterations }}
             </UBadge>
             <UButton
-              v-if="!review"
+              v-if="!review && !loading"
               color="primary"
               variant="soft"
               size="sm"
@@ -269,19 +272,19 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
 
             <!-- empty / first-run state -->
             <div
-              v-if="!review && !busy"
+              v-if="!review && !busy && !loading"
               class="rounded-lg border border-dashed border-slate-700 p-8 text-center text-sm text-slate-500"
             >
               No review yet. Run the reviewer to surface findings about the requirements.
             </div>
 
-            <!-- working state -->
+            <!-- working state (initial fetch on open, or a reviewer pass running) -->
             <div
-              v-else-if="busy && !review"
+              v-else-if="(busy || loading) && !review"
               class="flex items-center justify-center gap-2 p-8 text-sm text-slate-400"
             >
               <UIcon name="i-lucide-loader-circle" class="h-4 w-4 animate-spin" />
-              Reviewing the requirements…
+              {{ loading && !busy ? 'Loading the review…' : 'Reviewing the requirements…' }}
             </div>
 
             <template v-else-if="review">

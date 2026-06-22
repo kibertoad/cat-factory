@@ -28,12 +28,17 @@ export const useRequirementsStore = defineStore('requirements', () => {
   const reviewing = ref<Set<string>>(new Set())
   /** Review ids currently incorporating their answers. */
   const incorporating = ref<Set<string>>(new Set())
+  /** Block ids whose current review is being fetched (the initial `load`). */
+  const loadingByBlock = ref<Set<string>>(new Set())
 
   function reviewFor(blockId: string): RequirementReview | null {
     return reviews.value[blockId] ?? null
   }
   function isReviewing(blockId: string): boolean {
     return reviewing.value.has(blockId)
+  }
+  function isLoading(blockId: string): boolean {
+    return loadingByBlock.value.has(blockId)
   }
   function isIncorporating(reviewId: string): boolean {
     return incorporating.value.has(reviewId)
@@ -74,6 +79,7 @@ export const useRequirementsStore = defineStore('requirements', () => {
   /** Fetch the current review for a block (probing the feature's availability). */
   async function load(blockId: string) {
     if (!workspace.workspaceId) return
+    withFlag(loadingByBlock, blockId, true)
     try {
       const review = await api.getRequirementReview(workspace.requireId(), blockId)
       available.value = true
@@ -81,6 +87,8 @@ export const useRequirementsStore = defineStore('requirements', () => {
     } catch {
       // 503 (feature off) or any error → hide the UI entry points.
       available.value = false
+    } finally {
+      withFlag(loadingByBlock, blockId, false)
     }
   }
 
@@ -165,6 +173,7 @@ export const useRequirementsStore = defineStore('requirements', () => {
     reviews,
     reviewFor,
     isReviewing,
+    isLoading,
     isIncorporating,
     openCount,
     answeredCount,
