@@ -13,7 +13,7 @@
 import { computed, ref, watch } from 'vue'
 import { onKeyStroke } from '@vueuse/core'
 import type { AgentKind } from '~/types/domain'
-import { contextLabel, displayFlavor, isSelectable } from '~/stores/models'
+import { contextLabel, costLabel, displayFlavor, isSelectable } from '~/stores/models'
 
 const ui = useUiStore()
 const models = useModelsStore()
@@ -67,9 +67,12 @@ function menuFor(kind: AgentKind) {
         .map((m) => {
           const flavor = displayFlavor(m, configured)
           const ctx = contextLabel(flavor.contextTokens)
-          const suffix = [flavor.providerLabel, ctx, flavor.quotaBased ? 'quota' : undefined]
-            .filter(Boolean)
-            .join(' · ')
+          // Show the model's list price too (already resolved from spend pricing on
+          // the catalog). `costLabel` folds the quota indicator into the cost string
+          // for quota-based models; fall back to a bare "quota" tag when a quota model
+          // carries no price.
+          const price = costLabel(flavor) ?? (flavor.quotaBased ? 'quota' : undefined)
+          const suffix = [flavor.providerLabel, ctx, price].filter(Boolean).join(' · ')
           return {
             label: `${m.label} · ${suffix}`,
             icon: flavor.quotaBased ? 'i-lucide-infinity' : 'i-lucide-cpu',
