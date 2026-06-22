@@ -1,4 +1,5 @@
 import type { AgentConfigDescriptor, AgentKind, AgentRunContext } from '@cat-factory/kernel'
+import type { AgentTrait } from './traits.js'
 
 // Installation-level extension point for custom agent kinds, mirroring the
 // model-provider registry seam (`registerModelRegistry` / `@cat-factory/provider-bedrock`).
@@ -49,6 +50,13 @@ export interface AgentKindDefinition {
    * freeze targets the right step. Omitted ⇒ the kind contributes no config.
    */
   configContributions?: AgentConfigDescriptor[]
+  /**
+   * Capability traits this kind carries (see ./traits). `code-aware` makes the engine
+   * fold the running service's selected best-practice fragments into the agent's prompt;
+   * `spec-aware` appends the in-repo-spec reading guidance. Deployments can also assign
+   * their own traits registered via `registerAgentTrait`. Omitted ⇒ no traits.
+   */
+  traits?: AgentTrait[]
 }
 
 // Process-wide registry, mirroring the Worker's model-provider registry. Registration

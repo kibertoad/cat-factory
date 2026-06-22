@@ -84,6 +84,9 @@ export const updateBlockSchema = v.partial(
     size: sizeSchema,
     moduleName: v.pipe(v.string(), v.trim(), v.maxLength(120)),
     fragmentIds: v.array(v.pipe(v.string(), v.maxLength(120))),
+    // Service-level (frame): the service's selected best-practice fragment ids (folded
+    // into code-aware agents on its tasks); an empty array clears the selection.
+    serviceFragmentIds: v.array(v.pipe(v.string(), v.maxLength(120))),
     // The selected model's catalog id; an empty string resets to the default.
     modelId: v.pipe(v.string(), v.maxLength(120)),
     // The merge threshold preset id; an empty string resets to the workspace default.

@@ -19,7 +19,8 @@
   },
   "dependencies": {
     "@cat-factory/agents": "workspace:*",
-    "@cat-factory/kernel": "workspace:*"
+    "@cat-factory/kernel": "workspace:*",
+    "@cat-factory/prompt-fragments": "workspace:*"
   },
   "devDependencies": {
     "typescript": "7.0.1-rc",

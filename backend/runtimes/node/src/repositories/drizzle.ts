@@ -16,6 +16,7 @@ import type {
   Membership,
   MembershipRepository,
   ModelDefaultsRepository,
+  ServiceFragmentDefaultsRepository,
   LlmCallMetric,
   LlmCallMetricRepository,
   LlmCallMetricSummary,
@@ -73,6 +74,7 @@ import {
   services,
   tokenUsage,
   trackerSettings,
+  workspaceFragmentDefaults,
   workspaceModelDefaults,
   workspaceServices,
   workspaces,
@@ -825,6 +827,37 @@ class DrizzleModelDefaultsRepository implements ModelDefaultsRepository {
   }
 }
 
+/**
+ * A workspace's default service-fragment selection — one row per workspace in
+ * `workspace_fragment_defaults`, the fragment ids stored as a JSON array (mirror of the
+ * D1 `D1ServiceFragmentDefaultsRepository`). `set` upserts the whole list.
+ */
+class DrizzleServiceFragmentDefaultsRepository implements ServiceFragmentDefaultsRepository {
+  constructor(private readonly db: DrizzleDb) {}
+
+  async get(workspaceId: string): Promise<string[]> {
+    const [row] = await this.db
+      .select({ fragmentIds: workspaceFragmentDefaults.fragment_ids })
+      .from(workspaceFragmentDefaults)
+      .where(eq(workspaceFragmentDefaults.workspace_id, workspaceId))
+    return row ? (JSON.parse(row.fragmentIds) as string[]) : []
+  }
+
+  async set(workspaceId: string, fragmentIds: string[]): Promise<void> {
+    await this.db
+      .insert(workspaceFragmentDefaults)
+      .values({
+        workspace_id: workspaceId,
+        fragment_ids: JSON.stringify(fragmentIds),
+        updated_at: Date.now(),
+      })
+      .onConflictDoUpdate({
+        target: workspaceFragmentDefaults.workspace_id,
+        set: { fragment_ids: JSON.stringify(fragmentIds), updated_at: Date.now() },
+      })
+  }
+}
+
 type ScheduleRow = typeof pipelineSchedules.$inferSelect
 type RunRow = typeof pipelineScheduleRuns.$inferSelect
 
@@ -1446,6 +1479,7 @@ export interface CoreRepositories {
   llmCallMetricRepository: LlmCallMetricRepository
   agentRunRepository: AgentRunRepository
   modelDefaultsRepository: ModelDefaultsRepository
+  serviceFragmentDefaultsRepository: ServiceFragmentDefaultsRepository
   pipelineScheduleRepository: PipelineScheduleRepository
   trackerSettingsRepository: TrackerSettingsRepository
   serviceRepository: ServiceRepository
@@ -1466,6 +1500,7 @@ export function createDrizzleRepositories(db: DrizzleDb, clock: Clock): CoreRepo
     llmCallMetricRepository: new DrizzleLlmCallMetricRepository(db),
     agentRunRepository: new DrizzleAgentRunRepository(db),
     modelDefaultsRepository: new DrizzleModelDefaultsRepository(db),
+    serviceFragmentDefaultsRepository: new DrizzleServiceFragmentDefaultsRepository(db),
     pipelineScheduleRepository: new DrizzlePipelineScheduleRepository(db),
     trackerSettingsRepository: new DrizzleTrackerSettingsRepository(db),
     serviceRepository: new DrizzleServiceRepository(db),

@@ -30,6 +30,23 @@ export {
   registeredConfigContributions,
   clearRegisteredAgentKinds,
 } from './agents/registry.js'
+// Agent capability traits (standard + custom). `code-aware` gates the engine's folding
+// of the service's best-practice fragments; `spec-aware` appends the in-repo-spec guidance.
+export {
+  type AgentTrait,
+  type AgentTraitDefinition,
+  CODE_AWARE_TRAIT,
+  SPEC_AWARE_TRAIT,
+  SPEC_AWARE_GUIDANCE,
+  STANDARD_AGENT_TRAITS,
+  registerAgentTrait,
+  registerAgentTraits,
+  registeredAgentTrait,
+  clearRegisteredAgentTraits,
+  traitsFor,
+  hasTrait,
+  traitGuidanceFor,
+} from './agents/traits.js'
 // Agent configuration-contribution catalog (the descriptors surfaced on task
 // creation / inspector, frozen once the contributing step runs).
 export {

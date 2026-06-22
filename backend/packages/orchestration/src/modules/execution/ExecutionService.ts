@@ -25,7 +25,14 @@ import {
   type CompanionAssessment,
   type TestReport,
 } from '@cat-factory/contracts'
-import { companionFor, companionTargets, isCompanionKind } from '@cat-factory/agents'
+import {
+  CODE_AWARE_TRAIT,
+  companionFor,
+  companionTargets,
+  hasTrait,
+  isCompanionKind,
+} from '@cat-factory/agents'
+import { getFragment } from '@cat-factory/prompt-fragments'
 import { extractJson } from '../requirements/requirements.logic.js'
 import {
   assertFound,
@@ -69,7 +76,6 @@ import type { ExecutionEventPublisher } from '@cat-factory/kernel'
 import type { DocumentRepository } from '@cat-factory/kernel'
 import type { TaskRepository } from '@cat-factory/kernel'
 import type { RequirementReviewRepository } from '@cat-factory/kernel'
-import type { FragmentResolver } from '@cat-factory/kernel'
 import type { EnvironmentProvisioningService } from '@cat-factory/integrations'
 import { isDeployStep } from '@cat-factory/integrations'
 import { descendantIds, serviceOf } from '../board/board.logic.js'
@@ -213,13 +219,6 @@ export interface ExecutionServiceDependencies {
    */
   environmentProvisioning?: EnvironmentProvisioningService
   /**
-   * Optional: when the prompt-fragment library is configured, this resolves the
-   * relevant best-practice fragments to fold into each agent's system prompt —
-   * the merged tenant catalog selected per run (ADR 0006). Applies to every agent
-   * kind. Absent → the engine uses the block's manual `fragmentIds` unchanged.
-   */
-  fragmentResolver?: FragmentResolver
-  /**
    * Optional: when the board-scan module is configured, a `blueprints` step's
    * decomposition tree is reconciled onto the board through this (BoardScanService).
    * Absent → a blueprint step still runs and commits its in-repo files, but the
@@ -305,7 +304,6 @@ export class ExecutionService {
   private readonly tasks?: TaskRepository
   private readonly requirementReviews?: RequirementReviewRepository
   private readonly environmentProvisioning?: EnvironmentProvisioningService
-  private readonly fragmentResolver?: FragmentResolver
   private readonly blueprintReconciler?: BlueprintReconciler
   private readonly notificationService?: NotificationService
   private readonly llmObservability?: LlmObservabilityService
@@ -337,7 +335,6 @@ export class ExecutionService {
     taskRepository,
     requirementReviewRepository,
     environmentProvisioning,
-    fragmentResolver,
     blueprintReconciler,
     notificationService,
     llmObservability,
@@ -365,7 +362,6 @@ export class ExecutionService {
     this.tasks = taskRepository
     this.requirementReviews = requirementReviewRepository
     this.environmentProvisioning = environmentProvisioning
-    this.fragmentResolver = fragmentResolver
     this.blueprintReconciler = blueprintReconciler
     this.notificationService = notificationService
     this.llmObservability = llmObservability
@@ -2043,10 +2039,10 @@ export class ExecutionService {
       .slice(0, instance.currentStep)
       .filter((s) => s.output)
       .map((s) => ({ agentKind: s.agentKind, output: s.output! }))
-    // Resolve the best-practice fragments to inject for this step from the tenant
-    // library (when configured): the merged catalog selected for this block/agent,
-    // unioned with the block's manual pins. Recorded on the step for observability.
-    const resolved = await this.resolveFragments(workspaceId, step, block, priorOutputs)
+    // Resolve the best-practice fragments to inject for this step. `code-aware` kinds
+    // get the running service's selected fragments unioned with the block's own pins;
+    // other kinds keep only their block pins. Recorded on the step for observability.
+    const resolved = await this.resolveFragments(workspaceId, step, block)
     // The spec-writer aggregates the collected requirements of EVERY task under the
     // service frame; gather them only for that kind (a no-op otherwise).
     const serviceTasks =
@@ -2097,37 +2093,54 @@ export class ExecutionService {
   }
 
   /**
-   * Resolve the prompt-fragment library selection for a step. A no-op (returns
-   * null) unless the library module is wired, so the engine — and every executor
-   * — falls back to the block's manual `fragmentIds` when it is off. Records the
-   * selected ids on the step for observability; never throws (a selector failure
-   * degrades to the manual pins inside the resolver).
+   * Resolve the best-practice fragments to fold into a step's system prompt. Service
+   * fragments reach an agent ONLY when its kind carries the `code-aware` trait: those
+   * kinds get the running SERVICE's selected fragments (the frame's
+   * `serviceFragmentIds`, seeded from the workspace default and editable per service)
+   * unioned with the block's own manual pins, resolved against the universal pool. A
+   * non-code-aware kind returns null so `composeBlockSystemPrompt` falls back to the
+   * block's own `fragmentIds` unchanged. Records the selected ids on the step for
+   * observability; never throws (a lookup failure degrades to the block pins).
    */
   private async resolveFragments(
     workspaceId: string,
     step: PipelineStep,
     block: Block,
-    priorOutputs: { agentKind: string; output: string }[],
   ): Promise<{ fragments: { id: string; body: string }[] } | null> {
-    if (!this.fragmentResolver) return null
+    if (!hasTrait(step.agentKind, CODE_AWARE_TRAIT)) return null
     try {
-      const selection = await this.fragmentResolver.resolveForRun({
-        workspaceId,
-        agentKind: step.agentKind,
-        blockType: block.type,
-        blockTitle: block.title,
-        blockDescription: block.description,
-        manualIds: block.fragmentIds ?? [],
-        // The prior step's output (e.g. a coder's summary) is the cheapest signal
-        // available without fetching a diff; the selector reasons over it.
-        signals: priorOutputs.map((p) => p.output).slice(-2),
-      })
-      step.selectedFragmentIds = selection.selectedIds
-      return { fragments: selection.fragments }
+      const serviceIds = await this.resolveServiceFragmentIds(workspaceId, block)
+      // Service standards first, then the block's own pins; deduped, stable order.
+      const ids: string[] = []
+      const seen = new Set<string>()
+      for (const id of [...serviceIds, ...(block.fragmentIds ?? [])]) {
+        if (seen.has(id)) continue
+        seen.add(id)
+        ids.push(id)
+      }
+      const fragments = ids
+        .map((id) => {
+          const fragment = getFragment(id)
+          return fragment ? { id, body: fragment.body } : null
+        })
+        .filter((f): f is { id: string; body: string } => f !== null)
+      if (fragments.length === 0) return null
+      step.selectedFragmentIds = fragments.map((f) => f.id)
+      return { fragments }
     } catch {
-      // Resolution must never wedge a run; fall back to manual id resolution.
+      // Resolution must never wedge a run; fall back to the block's own pins.
       return null
     }
+  }
+
+  /** The selected best-practice fragment ids of the block's owning service frame. */
+  private async resolveServiceFragmentIds(workspaceId: string, block: Block): Promise<string[]> {
+    if (block.level === 'frame') return block.serviceFragmentIds ?? []
+    const frameId = await this.resolveServiceFrameId(workspaceId, block.id)
+    if (!frameId) return []
+    if (frameId === block.id) return block.serviceFragmentIds ?? []
+    const frame = await this.blockRepository.get(workspaceId, frameId)
+    return frame?.serviceFragmentIds ?? []
   }
 
   /**

@@ -78,6 +78,9 @@ importers:
       '@cat-factory/kernel':
         specifier: workspace:*
         version: link:../../packages/kernel
+      '@cat-factory/prompt-fragments':
+        specifier: workspace:*
+        version: link:../../packages/prompt-fragments
     devDependencies:
       typescript:
         specifier: 7.0.1-rc
@@ -222,6 +225,9 @@ importers:
       '@cat-factory/kernel':
         specifier: workspace:*
         version: link:../kernel
+      '@cat-factory/prompt-fragments':
+        specifier: workspace:*
+        version: link:../prompt-fragments
       '@cat-factory/spend':
         specifier: workspace:*
         version: link:../spend

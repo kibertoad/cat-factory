@@ -53,6 +53,8 @@ export interface BlockRow {
   confidence: number | null
   module_name: string | null
   fragment_ids: string | null
+  /** Service-level: the service's selected best-practice fragment ids, JSON array. */
+  service_fragment_ids: string | null
   model_id: string | null
   pull_request: string | null
   merge_preset_id: string | null
@@ -88,6 +90,8 @@ export function rowToBlock(row: BlockRow): Block {
   if (row.confidence !== null) block.confidence = row.confidence
   if (row.module_name !== null) block.moduleName = row.module_name
   if (row.fragment_ids !== null) block.fragmentIds = JSON.parse(row.fragment_ids) as string[]
+  if (row.service_fragment_ids !== null)
+    block.serviceFragmentIds = JSON.parse(row.service_fragment_ids) as string[]
   if (row.model_id !== null) block.modelId = row.model_id
   if (row.pull_request !== null) block.pullRequest = JSON.parse(row.pull_request) as PullRequestRef
   if (row.merge_preset_id !== null) block.mergePresetId = row.merge_preset_id
@@ -123,6 +127,9 @@ export function blockInsertValues(block: Block): Record<string, unknown> {
     confidence: block.confidence ?? null,
     module_name: block.moduleName ?? null,
     fragment_ids: block.fragmentIds ? JSON.stringify(block.fragmentIds) : null,
+    service_fragment_ids: block.serviceFragmentIds
+      ? JSON.stringify(block.serviceFragmentIds)
+      : null,
     model_id: block.modelId ?? null,
     pull_request: block.pullRequest ? JSON.stringify(block.pullRequest) : null,
     merge_preset_id: block.mergePresetId ?? null,
@@ -163,6 +170,13 @@ export function blockPatchToColumns(patch: BlockPatch): Record<string, unknown> 
   if (patch.moduleName !== undefined) set.module_name = patch.moduleName
   if (patch.fragmentIds !== undefined) {
     set.fragment_ids = patch.fragmentIds ? JSON.stringify(patch.fragmentIds) : null
+  }
+  // Service-level selection (frame blocks). An empty array clears it.
+  if (patch.serviceFragmentIds !== undefined) {
+    set.service_fragment_ids =
+      patch.serviceFragmentIds && patch.serviceFragmentIds.length
+        ? JSON.stringify(patch.serviceFragmentIds)
+        : null
   }
   // An empty string clears the selection (back to the routing default).
   if (patch.modelId !== undefined) set.model_id = patch.modelId ? patch.modelId : null
