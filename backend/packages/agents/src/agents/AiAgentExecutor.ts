@@ -1,6 +1,6 @@
 import { generateText } from 'ai'
 import type { AgentExecutor, AgentRunContext, AgentRunResult } from '@cat-factory/kernel'
-import type { ModelProvider, ModelRef } from '@cat-factory/kernel'
+import type { ModelProvider, ModelProviderResolver, ModelRef } from '@cat-factory/kernel'
 import { systemPromptFor, userPromptFor } from './agent-catalog.js'
 import { catFactoryObservability } from '../providers/instrumented.js'
 import { type AgentRouting, resolveAgentConfig, resolveInlineModelRef } from './agent-routing.js'
@@ -12,7 +12,18 @@ import {
 } from './web-search.js'
 
 export interface AiAgentExecutorDependencies {
-  modelProvider: ModelProvider
+  /**
+   * Resolve a {@link ModelProvider} for a run's credential scope (workspace + owning
+   * account + initiator), leasing the DB-backed API keys for that scope. Preferred over
+   * the static `modelProvider`; the facades supply it so inline calls use the same
+   * per-scope pool the container proxy does.
+   */
+  modelProviderResolver?: ModelProviderResolver
+  /**
+   * A static {@link ModelProvider} (e.g. a fake in tests). Used only when no
+   * `modelProviderResolver` is supplied. One of the two MUST be present.
+   */
+  modelProvider?: ModelProvider
   agentRouting: AgentRouting
   /**
    * Resolve a block's selected model id to a concrete ref. Deployment-aware (it
@@ -48,7 +59,8 @@ export interface AiAgentExecutorDependencies {
  * a provider SDK or an API key directly.
  */
 export class AiAgentExecutor implements AgentExecutor {
-  private readonly modelProvider: ModelProvider
+  private readonly modelProviderResolver?: ModelProviderResolver
+  private readonly modelProvider?: ModelProvider
   private readonly agentRouting: AgentRouting
   private readonly resolveBlockModel: (modelId: string | undefined) => ModelRef | undefined
   private readonly resolveWorkspaceModelDefault?: (
@@ -58,17 +70,39 @@ export class AiAgentExecutor implements AgentExecutor {
   private readonly webSearch?: InlineWebSearchOptions
 
   constructor({
+    modelProviderResolver,
     modelProvider,
     agentRouting,
     resolveBlockModel,
     resolveWorkspaceModelDefault,
     webSearch,
   }: AiAgentExecutorDependencies) {
+    if (!modelProviderResolver && !modelProvider) {
+      throw new Error('AiAgentExecutor requires a modelProviderResolver or a modelProvider')
+    }
+    this.modelProviderResolver = modelProviderResolver
     this.modelProvider = modelProvider
     this.agentRouting = agentRouting
     this.resolveBlockModel = resolveBlockModel ?? (() => undefined)
     this.resolveWorkspaceModelDefault = resolveWorkspaceModelDefault
     this.webSearch = webSearch
+  }
+
+  /** Resolve the model provider for a run's scope (per-scope DB pool, else the static one). */
+  private async providerFor(context: AgentRunContext): Promise<ModelProvider> {
+    if (this.modelProviderResolver && context.workspaceId) {
+      return this.modelProviderResolver.forScope({
+        workspaceId: context.workspaceId,
+        userId: context.initiatedByUserId,
+      })
+    }
+    if (this.modelProvider) return this.modelProvider
+    if (this.modelProviderResolver) {
+      // No workspace scope (rare): lease from no scope — only the opt-in registries
+      // (Cloudflare/Bedrock) can resolve.
+      return this.modelProviderResolver.forScope({ workspaceId: context.workspaceId ?? '' })
+    }
+    throw new Error('AiAgentExecutor: no model provider available')
   }
 
   /**
@@ -107,7 +141,8 @@ export class AiAgentExecutor implements AgentExecutor {
     // which run only in the container harness and have no provider key here) to this
     // kind's env-routing default, so the ModelProvider always gets a servable ref.
     const ref = await this.resolveRef(context)
-    const model = this.modelProvider.resolve(ref)
+    const provider = await this.providerFor(context)
+    const model = provider.resolve(ref)
 
     // Base role prompt, then fold in the best-practice fragments selected for the
     // block — the engine-resolved tenant catalog when present, else the manual ids.

@@ -28,7 +28,7 @@ import type {
   FragmentOwnerKind,
   GitHubClient,
   GitHubInstallationRepository,
-  ModelProvider,
+  ModelProviderResolver,
   RateLimitRepository,
   RateLimitSnapshot,
   TaskConnectionRepository,
@@ -67,7 +67,7 @@ import { executionRuntime } from './execution/config.js'
 import { PgBossBootstrapRunner } from './execution/bootstrapRunner.js'
 import { PgBossWorkRunner } from './execution/pgBossRunner.js'
 import { createNodeGateways } from './gateways.js'
-import { createNodeModelProvider } from './modelProvider.js'
+import { createNodeModelProviderResolver } from './modelProvider.js'
 import {
   DrizzleGitHubInstallationRepository,
   DrizzleRunnerPoolConnectionRepository,
@@ -122,16 +122,24 @@ const RUNNERS_CIPHER_INFO = 'cat-factory:runners'
 // Langfuse sink) across the agent executor, requirements reviewer, doc planner and
 // fragment selector, and ONE core trace sink — instead of each call constructing its
 // own. Mirrors the Worker's `buildModelProvider` memoisation.
-const modelProviderCache = new WeakMap<NodeJS.ProcessEnv, ModelProvider>()
 const langfuseSinkCache = new WeakMap<AppConfig, CoreDependencies['llmTraceSink']>()
 
-/** The Node model provider (instrumented when Langfuse is on), shared per `env`. */
-function buildModelProvider(env: NodeJS.ProcessEnv): ModelProvider {
-  const cached = modelProviderCache.get(env)
+/**
+ * The Node model-provider RESOLVER (instrumented when Langfuse is on), shared per
+ * `(env, db)`. Builds a per-scope provider from the DB-backed API-key pool plus opt-in
+ * Cloudflare-REST / Bedrock registries. Mirrors the Worker's buildModelProviderResolver.
+ */
+const modelResolverCache = new WeakMap<DrizzleDb, ModelProviderResolver>()
+function buildModelProviderResolver(
+  env: NodeJS.ProcessEnv,
+  db: DrizzleDb,
+  apiKeys: ApiKeyService | undefined,
+): ModelProviderResolver {
+  const cached = modelResolverCache.get(db)
   if (cached) return cached
-  const provider = createNodeModelProvider(env)
-  modelProviderCache.set(env, provider)
-  return provider
+  const resolver = createNodeModelProviderResolver(env, apiKeys)
+  modelResolverCache.set(db, resolver)
+  return resolver
 }
 
 /**
@@ -637,8 +645,22 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   const resolveWorkspaceModelDefault = (workspaceId: string, agentKind: string) =>
     repos.modelDefaultsRepository.getForKind(workspaceId, agentKind).then((v) => v ?? undefined)
 
+  // The direct-provider API-key pool + the per-scope model-provider resolver, shared by
+  // the inline executor, the inline modules (planner/reviewer/fragment selector), the
+  // API-key controller, and the LLM proxy key lease.
+  const apiKeys = buildNodeApiKeyService(
+    env,
+    options.db,
+    repos.workspaceRepository,
+    idGenerator,
+    clock,
+  )
+  const modelProviderResolver = buildModelProviderResolver(env, options.db, apiKeys)
+  // Cloudflare Workers AI is opt-in on Node: enabled when the REST creds are present.
+  const cloudflareModelsEnabled = !!(env.CLOUDFLARE_ACCOUNT_ID && env.CLOUDFLARE_API_TOKEN)
+
   const inline = new AiAgentExecutor({
-    modelProvider: buildModelProvider(env),
+    modelProviderResolver,
     agentRouting: config.agents.routing,
     resolveBlockModel: config.agents.resolveBlockModel,
     resolveWorkspaceModelDefault,
@@ -705,18 +727,6 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     idGenerator,
     clock,
   )
-  // The direct-provider API-key pool (account/workspace/user), shared by the
-  // API-key controller, the model-provider resolver, and the LLM proxy key lease.
-  const apiKeys = buildNodeApiKeyService(
-    env,
-    options.db,
-    repos.workspaceRepository,
-    idGenerator,
-    clock,
-  )
-  // Cloudflare Workers AI is opt-in on Node: enabled when the REST creds are present.
-  const cloudflareModelsEnabled = !!(env.CLOUDFLARE_ACCOUNT_ID && env.CLOUDFLARE_API_TOKEN)
-
   const container = buildNodeContainerExecutor(
     env,
     config,
@@ -878,7 +888,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // scan endpoint returns its graceful 503 (the blueprint decomposition itself runs as
     // a normal `blueprints` pipeline step through the runner transport, like the Worker).
     repoBlueprintRepository: repos.repoBlueprintRepository,
-    modelProvider: buildModelProvider(env),
+    modelProviderResolver,
     requirementReviewModel: config.agents.routing.default.ref,
     requirementReviewResolveModel: config.agents.resolveBlockModel,
     // Notifications subsystem (parity with the Worker, which wires it unconditionally):
@@ -963,6 +973,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
       options.db,
       githubClient,
       githubInstallationRepository,
+      modelProviderResolver,
     ),
     // Slack: an extra notification transport (the channel) + its management module.
     // Default-off; when enabled it composes the Slack channel onto the notification
@@ -1108,6 +1119,7 @@ function selectNodeFragmentLibraryDeps(
   db: DrizzleDb,
   githubClient: GitHubClient | undefined,
   installations: GitHubInstallationRepository,
+  modelProviderResolver: ModelProviderResolver,
 ): Partial<CoreDependencies> {
   if (!config.fragmentLibrary.enabled) return {}
   const resolveFragmentInstallationId = async (
@@ -1130,7 +1142,7 @@ function selectNodeFragmentLibraryDeps(
     ...(config.fragmentLibrary.selector === 'llm'
       ? {
           fragmentSelector: new LlmFragmentSelector({
-            modelProvider: buildModelProvider(env),
+            modelProviderResolver,
             modelRef: config.agents.routing.default.ref,
           }),
         }

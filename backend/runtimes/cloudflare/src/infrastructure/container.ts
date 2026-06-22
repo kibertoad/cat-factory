@@ -6,7 +6,7 @@ import {
   type ExecutionEventPublisher,
   type FragmentOwnerKind,
   type IdGenerator,
-  type ModelProvider,
+  type ModelProviderResolver,
   type NotificationChannel,
   NoopWorkRunner,
   type TaskSourceProvider,
@@ -14,10 +14,10 @@ import {
 } from '@cat-factory/kernel'
 import {
   AiAgentExecutor,
-  InstrumentedModelProvider,
   inlineWebSearchOptionsFromEnv,
   resolveAgentConfig,
 } from '@cat-factory/agents'
+import { cloudflareBindingRegistry } from '@cat-factory/provider-cloudflare'
 import {
   ConfluenceProvider,
   GitHubDocsProvider,
@@ -41,6 +41,7 @@ import {
   WebCryptoPersonalSecretCipher,
   createWebSearchUpstreamFromEnv,
   logger,
+  createScopedModelProviderResolver,
   resolveWorkspaceCapabilities,
   type ServerContainer,
 } from '@cat-factory/server'
@@ -48,7 +49,7 @@ import { type AppConfig, loadConfig } from './config'
 import { loadLangfuseConfig } from './config/langfuse'
 import { loadObservabilityConfig } from './config/observability'
 import type { Env } from './env'
-import { CloudflareModelProvider } from './ai/CloudflareModelProvider'
+import { baseUrlFor } from './ai/providerEndpoints'
 import { resolveExtraRegistries } from './ai/registries'
 import { DoRealtimeGateway } from './gateways/DoRealtimeGateway'
 import { CfGitHubWebhookIngest, WorkflowsBackfillScheduler } from './gateways/GitHubGateways'
@@ -156,34 +157,43 @@ export type Container = ServerContainer
  * configured the provider is wrapped so those INLINE (non-proxied) calls surface on
  * the same trace sink the LLM proxy fans container calls out to.
  */
-// Memoised per `Env`: every consumer (agent executor, requirements reviewer, doc
-// planner, fragment selector) shares ONE provider — and so ONE Langfuse sink — for a
-// container build, instead of each constructing its own. The `Env` object is stable
-// across a build, so a WeakMap keyed on it both dedupes and lets it be GC'd with the env.
-const modelProviderCache = new WeakMap<Env, ModelProvider>()
+// Memoised per `(Env, db)`: every inline consumer (agent executor, requirements
+// reviewer, doc planner, fragment selector) shares ONE resolver — and so ONE Langfuse
+// sink — for a container build. The resolver builds a per-scope provider from the
+// DB-backed API-key pool plus the opt-in Cloudflare binding + Bedrock registries.
+const modelResolverCache = new WeakMap<Env, ModelProviderResolver>()
 
-function buildModelProvider(env: Env): ModelProvider {
-  const cached = modelProviderCache.get(env)
+function buildModelProviderResolver(env: Env, db: D1Database): ModelProviderResolver {
+  const cached = modelResolverCache.get(env)
   if (cached) return cached
-  const provider = createModelProvider(env)
-  modelProviderCache.set(env, provider)
-  return provider
-}
-
-function createModelProvider(env: Env): ModelProvider {
-  const base = new CloudflareModelProvider({ env, extraRegistries: resolveExtraRegistries(env) })
+  // Opt-in provider registries that need no per-scope DB key: the Cloudflare Workers
+  // AI binding (when bound) and any extra registries (e.g. Bedrock). NOT assumed —
+  // `workers-ai` resolves only when the `AI` binding is present.
+  const extraRegistries = [
+    ...(env.AI ? [cloudflareBindingRegistry({ binding: env.AI })] : []),
+    ...resolveExtraRegistries(env),
+  ]
   const langfuse = loadLangfuseConfig(env)
-  if (!langfuse.enabled || !langfuse.publicKey || !langfuse.secretKey) return base
-  return new InstrumentedModelProvider({
-    inner: base,
-    traceSink: createLangfuseSink({
-      publicKey: langfuse.publicKey,
-      secretKey: langfuse.secretKey,
-      baseUrl: langfuse.baseUrl,
-      logger,
-    }),
-    recordPrompts: loadObservabilityConfig(env).recordPrompts,
+  const instrument =
+    langfuse.enabled && langfuse.publicKey && langfuse.secretKey
+      ? {
+          traceSink: createLangfuseSink({
+            publicKey: langfuse.publicKey,
+            secretKey: langfuse.secretKey,
+            baseUrl: langfuse.baseUrl,
+            logger,
+          }),
+          recordPrompts: loadObservabilityConfig(env).recordPrompts,
+        }
+      : undefined
+  const resolver = createScopedModelProviderResolver({
+    apiKeys: buildApiKeyService(env, db, { now: () => Date.now() }),
+    baseUrlFor: (provider) => baseUrlFor(provider, env) ?? undefined,
+    extraRegistries,
+    instrument,
   })
+  modelResolverCache.set(env, resolver)
+  return resolver
 }
 
 /**
@@ -223,7 +233,7 @@ function selectAgentExecutor(
   personalSubscriptions?: PersonalSubscriptionService,
 ): AgentExecutor {
   const inline = new AiAgentExecutor({
-    modelProvider: buildModelProvider(env),
+    modelProviderResolver: buildModelProviderResolver(env, db),
     agentRouting: config.agents.routing,
     resolveBlockModel: config.agents.resolveBlockModel,
     // Inline (non-sandbox) kinds honour the workspace's per-kind defaults too, so
@@ -897,7 +907,7 @@ function selectDocumentsDeps(
     documentRepository: new D1DocumentRepository({ db }),
     ...(config.documents.planner === 'llm'
       ? {
-          modelProvider: buildModelProvider(env),
+          modelProviderResolver: buildModelProviderResolver(env, db),
           documentPlannerModel: config.agents.routing.default.ref,
         }
       : {}),
@@ -968,7 +978,7 @@ function selectRequirementsDeps(
 ): Partial<CoreDependencies> {
   return {
     requirementReviewRepository: new D1RequirementReviewRepository({ db }),
-    modelProvider: buildModelProvider(env),
+    modelProviderResolver: buildModelProviderResolver(env, db),
     // The routing default already resolves to Cloudflare Workers AI unless a
     // direct provider key is set, so the reviewer runs on Cloudflare by default.
     requirementReviewModel: config.agents.routing.default.ref,
@@ -1141,7 +1151,7 @@ function selectFragmentLibraryDeps(
     ...(config.fragmentLibrary.selector === 'llm'
       ? {
           fragmentSelector: new LlmFragmentSelector({
-            modelProvider: buildModelProvider(env),
+            modelProviderResolver: buildModelProviderResolver(env, db),
             modelRef: config.agents.routing.default.ref,
           }),
         }

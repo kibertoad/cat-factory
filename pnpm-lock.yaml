@@ -407,6 +407,9 @@ importers:
       '@cat-factory/prompt-fragments':
         specifier: workspace:*
         version: link:../../packages/prompt-fragments
+      '@cat-factory/provider-cloudflare':
+        specifier: workspace:*
+        version: link:../../packages/provider-cloudflare
       '@cat-factory/server':
         specifier: workspace:*
         version: link:../../packages/server
@@ -517,6 +520,9 @@ importers:
       '@cat-factory/provider-bedrock':
         specifier: workspace:*
         version: link:../../packages/provider-bedrock
+      '@cat-factory/provider-cloudflare':
+        specifier: workspace:*
+        version: link:../../packages/provider-cloudflare
       '@cat-factory/server':
         specifier: workspace:*
         version: link:../../packages/server

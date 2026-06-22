@@ -27,8 +27,12 @@ import type {
 // so they are passed through unchanged on every scope.
 
 export interface ScopedModelProviderOptions {
-  /** The direct-provider API-key pool (account/workspace/user scoped). */
-  apiKeys: ApiKeyService
+  /**
+   * The direct-provider API-key pool (account/workspace/user scoped). Absent (no
+   * ENCRYPTION_KEY) → no direct providers are configured; only the opt-in registries
+   * (Cloudflare/Bedrock) can resolve, and a direct-provider ref fails clearly.
+   */
+  apiKeys?: ApiKeyService
   /** Base URL for a direct provider's API (the OpenAI-compatible vendors need one). */
   baseUrlFor: (provider: string) => string | undefined
   /** Opt-in registries that need no DB key — the Cloudflare lib + Bedrock. */
@@ -43,11 +47,13 @@ export function createScopedModelProviderResolver(
   return {
     async forScope(scope: ModelScope): Promise<ModelProvider> {
       const poolOpts = { accountId: scope.accountId, userId: scope.userId }
-      const providers = await opts.apiKeys.configuredProviders(scope.workspaceId, poolOpts)
       const registry: ProviderRegistry = {}
-      for (const provider of providers) {
-        const leased = await opts.apiKeys.lease(scope.workspaceId, provider, poolOpts)
-        registry[provider] = buildDirectResolver(provider, leased.secret, opts.baseUrlFor(provider))
+      if (opts.apiKeys) {
+        const providers = await opts.apiKeys.configuredProviders(scope.workspaceId, poolOpts)
+        for (const provider of providers) {
+          const leased = await opts.apiKeys.lease(scope.workspaceId, provider, poolOpts)
+          registry[provider] = buildDirectResolver(provider, leased.secret, opts.baseUrlFor(provider))
+        }
       }
       const composite = new CompositeModelProvider(registry, ...(opts.extraRegistries ?? []))
       if (opts.instrument) {

@@ -7,7 +7,7 @@ export { createApp, createServer, start, type CreateServerOptions } from './serv
 export { buildNodeContainer, type NodeContainerOptions } from './container.js'
 export { loadNodeConfig } from './config.js'
 export { createNodeGateways } from './gateways.js'
-export { createNodeModelProvider } from './modelProvider.js'
+export { createNodeModelProviderResolver } from './modelProvider.js'
 
 // Installation-level extension points (mirroring the Worker facade): a deployment —
 // typically a proprietary org package — registers custom agent kinds and predefined

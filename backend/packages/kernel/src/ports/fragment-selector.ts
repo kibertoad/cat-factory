@@ -26,6 +26,8 @@ export interface SelectableFragment {
 
 /** What the selector knows about the run it is choosing fragments for. */
 export interface FragmentSelectionContext {
+  /** The workspace the run belongs to, for resolving the scoped model provider. */
+  workspaceId: string
   agentKind: AgentKind
   blockType: BlockType
   blockTitle: string
