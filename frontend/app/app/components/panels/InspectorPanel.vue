@@ -175,6 +175,11 @@ const reqReworkedText = computed(() => reqReview.value?.incorporatedRequirements
 // every agent step consumes — so the raw description is frozen (read-only) and hidden
 // behind an expander, with the reworked requirements taking focus instead.
 const frozenByRework = computed(() => isTask.value && reqReworked.value)
+// After a "stop & reset" the task is editable again (phase zero) but the LAST incorporated
+// requirements survive on the review as a base to rework from — surfaced read-only here.
+const reqHasPriorDoc = computed(
+  () => isTask.value && !reqReworked.value && !!reqReworkedText.value,
+)
 const showOriginalDescription = ref(false)
 </script>
 
@@ -295,6 +300,25 @@ const showOriginalDescription = ref(false)
             <UIcon name="i-lucide-lock" class="h-3 w-3" />
             This task has started — its details are locked.
           </p>
+
+          <!-- prior incorporated requirements kept as a base after a review-driven reset -->
+          <div
+            v-if="reqHasPriorDoc"
+            class="rounded-lg border border-slate-700 bg-slate-800/40 p-3"
+          >
+            <div
+              class="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400"
+            >
+              <UIcon name="i-lucide-history" class="h-3.5 w-3.5" />
+              Last incorporated requirements
+            </div>
+            <p class="line-clamp-5 whitespace-pre-line text-[13px] leading-relaxed text-slate-300">
+              {{ reqReworkedText }}
+            </p>
+            <p class="mt-2 text-[11px] text-slate-500">
+              From the previous review. Use it as a base — edit the description above and resubmit.
+            </p>
+          </div>
         </template>
       </div>
 

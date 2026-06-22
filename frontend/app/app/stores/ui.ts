@@ -3,6 +3,7 @@ import { ref, computed } from 'vue'
 import type { DocumentSourceKind, TaskSourceKind, LodLevel } from '~/types/domain'
 import { zoomToLod, lodAtLeast } from '~/composables/useSemanticZoom'
 import { useExecutionStore } from '~/stores/execution'
+import { agentKindMeta } from '~/utils/catalog'
 
 /** Transient UI state: selection, panels, zoom level. */
 export const useUiStore = defineStore('ui', () => {
@@ -73,9 +74,21 @@ export const useUiStore = defineStore('ui', () => {
   // / Codex harnesses).
   const vendorCredentialsOpen = ref(false)
 
-  // Requirements-review panel: the block whose requirements review (questions /
-  // gaps / clarifications) to show, or null when closed.
-  const requirementReviewBlockId = ref<string | null>(null)
+  // Dedicated result-view overlay: a step whose agent kind declares a bespoke
+  // visualization (via the archetype's `resultView`) opens here instead of the generic
+  // prose step-detail panel. `view` is the registry id (e.g. 'requirements-review');
+  // `blockId` is always set; `instanceId`/`stepIndex` are present on the pipeline path and
+  // null for an off-path open (e.g. the inspector's pre-start requirements review).
+  const resultView = ref<{
+    view: string
+    blockId: string
+    instanceId: string | null
+    stepIndex: number | null
+  } | null>(null)
+  // Back-compat alias for surfaces that only care about the requirements window.
+  const requirementReviewBlockId = computed(() =>
+    resultView.value?.view === 'requirements-review' ? resultView.value.blockId : null,
+  )
 
   // Agent step-detail overlay: which pipeline step (a run instance + step index)
   // a human is inspecting, or null when closed. The overlay resolves the step
@@ -144,7 +157,26 @@ export const useUiStore = defineStore('ui', () => {
     const execution = useExecutionStore()
     const instance = execution.getInstance(instanceId)
     const idx = instance?.steps.findIndex((s) => s.approval?.id === approvalId) ?? -1
-    if (idx >= 0) stepDetail.value = { instanceId, stepIndex: idx }
+    if (idx >= 0) dispatchStepView(instanceId, idx)
+  }
+
+  /**
+   * Open a pipeline step: route it to its agent kind's DEDICATED result window when the
+   * archetype declares one (the universal `resultView` seam), else the generic prose
+   * step-detail panel. This is the single dispatch every board/inspector entry point uses,
+   * so adding a bespoke window for a new agent is just declaring `resultView` + registering
+   * a component — no caller changes.
+   */
+  function dispatchStepView(instanceId: string, stepIndex: number) {
+    const execution = useExecutionStore()
+    const instance = execution.getInstance(instanceId)
+    const step = instance?.steps[stepIndex]
+    const view = step ? agentKindMeta(step.agentKind).resultView : undefined
+    if (view && instance) {
+      resultView.value = { view, blockId: instance.blockId, instanceId, stepIndex }
+      return
+    }
+    stepDetail.value = { instanceId, stepIndex }
   }
 
   function openDocumentConnect(source: DocumentSourceKind) {
@@ -260,13 +292,15 @@ export const useUiStore = defineStore('ui', () => {
     vendorCredentialsOpen.value = false
   }
   function openRequirementReview(blockId: string) {
-    requirementReviewBlockId.value = blockId
+    resultView.value = { view: 'requirements-review', blockId, instanceId: null, stepIndex: null }
   }
-  function closeRequirementReview() {
-    requirementReviewBlockId.value = null
+  function closeResultView() {
+    resultView.value = null
   }
+  // Kept name for the requirements window's close handler.
+  const closeRequirementReview = closeResultView
   function openStepDetail(instanceId: string, stepIndex: number) {
-    stepDetail.value = { instanceId, stepIndex }
+    dispatchStepView(instanceId, stepIndex)
   }
   function closeStepDetail() {
     stepDetail.value = null
@@ -300,6 +334,8 @@ export const useUiStore = defineStore('ui', () => {
     modelDefaultsOpen,
     serviceFragmentDefaultsOpen,
     vendorCredentialsOpen,
+    resultView,
+    closeResultView,
     requirementReviewBlockId,
     stepDetail,
     observabilityInstanceId,

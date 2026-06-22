@@ -18,6 +18,7 @@ export {
   BLOCK_TYPE_LABEL,
   DEFAULT_MERGE_PRESET,
   DEFAULT_CI_MAX_ATTEMPTS,
+  DEFAULT_MAX_REQUIREMENT_ITERATIONS,
 } from './domain/catalog.js'
 export {
   type SelectableModel,

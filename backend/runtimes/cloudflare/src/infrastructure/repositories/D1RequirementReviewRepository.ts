@@ -9,7 +9,8 @@ interface RequirementReviewRow {
   items: string
   model: string | null
   incorporated_requirements: string | null
-  companion: string | null
+  iteration: number
+  max_iterations: number
   created_at: number
   updated_at: number
 }
@@ -22,16 +23,6 @@ function rowToReview(row: RequirementReviewRow): RequirementReview {
   } catch {
     items = []
   }
-  let companionVerdicts: RequirementReview['companionVerdicts'] = []
-  if (row.companion) {
-    try {
-      const parsed = JSON.parse(row.companion)
-      if (Array.isArray(parsed))
-        companionVerdicts = parsed as RequirementReview['companionVerdicts']
-    } catch {
-      companionVerdicts = []
-    }
-  }
   return {
     id: row.id,
     blockId: row.block_id,
@@ -39,7 +30,8 @@ function rowToReview(row: RequirementReviewRow): RequirementReview {
     items,
     model: row.model,
     incorporatedRequirements: row.incorporated_requirements,
-    companionVerdicts,
+    iteration: row.iteration,
+    maxIterations: row.max_iterations,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -83,15 +75,16 @@ export class D1RequirementReviewRepository implements RequirementReviewRepositor
       .prepare(
         `INSERT INTO requirement_reviews
            (workspace_id, id, block_id, status, items, model, incorporated_requirements,
-            companion, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            iteration, max_iterations, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (workspace_id, id) DO UPDATE SET
            block_id = excluded.block_id,
            status = excluded.status,
            items = excluded.items,
            model = excluded.model,
            incorporated_requirements = excluded.incorporated_requirements,
-           companion = excluded.companion,
+           iteration = excluded.iteration,
+           max_iterations = excluded.max_iterations,
            updated_at = excluded.updated_at`,
       )
       .bind(
@@ -102,7 +95,8 @@ export class D1RequirementReviewRepository implements RequirementReviewRepositor
         JSON.stringify(review.items),
         review.model,
         review.incorporatedRequirements,
-        review.companionVerdicts?.length ? JSON.stringify(review.companionVerdicts) : null,
+        review.iteration ?? 1,
+        review.maxIterations ?? 1,
         review.createdAt,
         review.updatedAt,
       )

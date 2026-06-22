@@ -59,6 +59,8 @@ export class MergePresetService {
       maxRisk: input.maxRisk,
       maxImpact: input.maxImpact,
       ciMaxAttempts: input.ciMaxAttempts,
+      maxRequirementIterations: input.maxRequirementIterations,
+      maxRequirementConcernAllowed: input.maxRequirementConcernAllowed,
       // The very first preset must be the default; otherwise honour the request.
       isDefault: existing.length === 0 ? true : input.isDefault,
       createdAt: this.clock.now(),
@@ -85,6 +87,12 @@ export class MergePresetService {
       ...(patch.maxRisk !== undefined ? { maxRisk: patch.maxRisk } : {}),
       ...(patch.maxImpact !== undefined ? { maxImpact: patch.maxImpact } : {}),
       ...(patch.ciMaxAttempts !== undefined ? { ciMaxAttempts: patch.ciMaxAttempts } : {}),
+      ...(patch.maxRequirementIterations !== undefined
+        ? { maxRequirementIterations: patch.maxRequirementIterations }
+        : {}),
+      ...(patch.maxRequirementConcernAllowed !== undefined
+        ? { maxRequirementConcernAllowed: patch.maxRequirementConcernAllowed }
+        : {}),
       ...(patch.isDefault !== undefined ? { isDefault: patch.isDefault } : {}),
     }
     await this.presets.upsert(workspaceId, updated)
@@ -112,6 +120,8 @@ export class MergePresetService {
       maxRisk: DEFAULT_MERGE_PRESET.maxRisk,
       maxImpact: DEFAULT_MERGE_PRESET.maxImpact,
       ciMaxAttempts: DEFAULT_MERGE_PRESET.ciMaxAttempts,
+      maxRequirementIterations: DEFAULT_MERGE_PRESET.maxRequirementIterations,
+      maxRequirementConcernAllowed: DEFAULT_MERGE_PRESET.maxRequirementConcernAllowed,
       isDefault: true,
       createdAt: this.clock.now(),
     })

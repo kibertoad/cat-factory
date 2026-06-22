@@ -5,7 +5,15 @@
 // task inspector's "Merge policy" dropdown selects from. Exactly one preset is the
 // default; it cannot be deleted or un-defaulted (the backend enforces this too).
 import { reactive, ref, watch } from 'vue'
-import type { MergeThresholdPreset } from '~/types/merge'
+import type { MergeThresholdPreset, RequirementConcernLevel } from '~/types/merge'
+
+// Concern-level options for the requirements auto-pass threshold (none < low < medium < high).
+const CONCERN_LEVELS: { value: RequirementConcernLevel; label: string }[] = [
+  { value: 'none', label: 'None (always stop)' },
+  { value: 'low', label: 'Low' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'high', label: 'High (never stop)' },
+]
 
 const ui = useUiStore()
 const store = useMergePresetsStore()
@@ -24,6 +32,8 @@ interface Draft {
   maxRisk: number
   maxImpact: number
   ciMaxAttempts: number
+  maxRequirementIterations: number
+  maxRequirementConcernAllowed: RequirementConcernLevel
 }
 const drafts = reactive<Record<string, Draft>>({})
 
@@ -34,6 +44,8 @@ function toDraft(p: MergeThresholdPreset): Draft {
     maxRisk: Math.round(p.maxRisk * 100),
     maxImpact: Math.round(p.maxImpact * 100),
     ciMaxAttempts: p.ciMaxAttempts,
+    maxRequirementIterations: p.maxRequirementIterations,
+    maxRequirementConcernAllowed: p.maxRequirementConcernAllowed,
   }
 }
 
@@ -68,6 +80,8 @@ async function save(p: MergeThresholdPreset) {
       maxRisk: d.maxRisk / 100,
       maxImpact: d.maxImpact / 100,
       ciMaxAttempts: d.ciMaxAttempts,
+      maxRequirementIterations: d.maxRequirementIterations,
+      maxRequirementConcernAllowed: d.maxRequirementConcernAllowed,
     })
     toast.add({ title: 'Preset saved', icon: 'i-lucide-check', color: 'success' })
   } catch (e) {
@@ -107,6 +121,8 @@ const draft = reactive<Draft>({
   maxRisk: 40,
   maxImpact: 50,
   ciMaxAttempts: 10,
+  maxRequirementIterations: 3,
+  maxRequirementConcernAllowed: 'none',
 })
 
 async function create() {
@@ -119,6 +135,8 @@ async function create() {
       maxRisk: draft.maxRisk / 100,
       maxImpact: draft.maxImpact / 100,
       ciMaxAttempts: draft.ciMaxAttempts,
+      maxRequirementIterations: draft.maxRequirementIterations,
+      maxRequirementConcernAllowed: draft.maxRequirementConcernAllowed,
     })
     draft.name = ''
     toast.add({ title: 'Preset created', icon: 'i-lucide-check', color: 'success' })
@@ -226,6 +244,29 @@ async function create() {
                 size="sm"
               />
             </label>
+            <label class="block">
+              <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
+                Requirement iterations
+              </span>
+              <UInput
+                v-model.number="drafts[p.id]!.maxRequirementIterations"
+                type="number"
+                :min="1"
+                :max="20"
+                size="sm"
+              />
+            </label>
+            <label class="block">
+              <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
+                Auto-pass concerns ≤
+              </span>
+              <USelect
+                v-model="drafts[p.id]!.maxRequirementConcernAllowed"
+                :items="CONCERN_LEVELS"
+                value-key="value"
+                size="sm"
+              />
+            </label>
           </div>
 
           <div class="mt-3 flex justify-end">
@@ -293,6 +334,29 @@ async function create() {
                 type="number"
                 :min="0"
                 :max="50"
+                size="sm"
+              />
+            </label>
+            <label class="block w-20">
+              <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500"
+                >Req iter</span
+              >
+              <UInput
+                v-model.number="draft.maxRequirementIterations"
+                type="number"
+                :min="1"
+                :max="20"
+                size="sm"
+              />
+            </label>
+            <label class="block w-32">
+              <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500"
+                >Auto-pass ≤</span
+              >
+              <USelect
+                v-model="draft.maxRequirementConcernAllowed"
+                :items="CONCERN_LEVELS"
+                value-key="value"
                 size="sm"
               />
             </label>

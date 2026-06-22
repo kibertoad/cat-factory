@@ -141,10 +141,14 @@ function openStep(i: number) {
               color="warning"
               variant="soft"
               size="xs"
-              icon="i-lucide-shield-check"
+              :icon="
+                agentKindMeta(s.agentKind).resultView
+                  ? 'i-lucide-clipboard-check'
+                  : 'i-lucide-shield-check'
+              "
               @click="openApprovalFor(s.approval.id)"
             >
-              Approve
+              {{ agentKindMeta(s.agentKind).resultView ? 'Review' : 'Approve' }}
             </UButton>
           </div>
           <div

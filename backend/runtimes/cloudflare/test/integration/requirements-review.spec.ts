@@ -18,7 +18,8 @@ function seedReview(workspaceId: string, blockId: string): RequirementReview {
     status: 'ready',
     model: 'mock:mock',
     incorporatedRequirements: null,
-    companionVerdicts: [],
+    iteration: 1,
+    maxIterations: 3,
     createdAt: 1,
     updatedAt: 1,
     items: [
@@ -106,7 +107,7 @@ describe('requirements review HTTP surface', () => {
       `/workspaces/${ws}/requirement-reviews/rrv_test/incorporate`,
     )
     expect(blocked.status).toBe(422)
-    expect(JSON.stringify(blocked.body)).toContain('Resolve or dismiss')
+    expect(JSON.stringify(blocked.body)).toContain('Answer or dismiss')
   })
 
   it('reports a missing item as a validation error', async () => {

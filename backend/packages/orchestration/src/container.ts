@@ -1183,6 +1183,9 @@ export function createCore(dependencies: CoreDependencies): Core {
   const mergePresets = createMergePresetsModule(dependencies)
   const modelDefaults = createModelDefaultsModule(dependencies)
   const serviceFragmentDefaults = createServiceFragmentDefaultsModule(dependencies)
+  // Built before the execution engine so the special `requirements-review` gate step can
+  // drive the inline reviewer + the iterative answer → incorporate → re-review loop.
+  const requirements = createRequirementsModule(dependencies, notifications?.service)
 
   const executionService = new ExecutionService({
     ...dependencies,
@@ -1190,6 +1193,7 @@ export function createCore(dependencies: CoreDependencies): Core {
     executionEventPublisher,
     boardService,
     spendService,
+    requirementReviewService: requirements?.service,
     environmentProvisioning: environments?.provisioningService,
     blueprintReconciler: boardScan?.service,
     notificationService: notifications?.service,
@@ -1209,7 +1213,6 @@ export function createCore(dependencies: CoreDependencies): Core {
   const github = createGitHubModule(dependencies)
   const documents = createDocumentsModule(dependencies, boardService)
   const tasks = createTasksModule(dependencies)
-  const requirements = createRequirementsModule(dependencies, notifications?.service)
   const runners = createRunnersModule(dependencies)
   // After a bootstrap succeeds, map the new repo into a blueprint + the board by
   // starting the blueprint-only pipeline against the service frame.

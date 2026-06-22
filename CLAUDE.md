@@ -332,36 +332,54 @@ derived from the blueprint (there is no longer a "feature" granularity level).
   source of truth and the board is the projection); the manual board-scan `scan`
   command still populates that table.
 
-## Requirements review flow (stateless, synchronous reviewer agent)
+## Requirements review flow (iterative gate step + dedicated window)
 
-A **reviewer** agent inspects a block's "collected requirements" — its
-description plus any linked PRD/RFC docs and tracker issues — and raises a list of
-review items (gaps / clarifications / assumptions / risks / questions). A human
-**reacts** to each finding (answers the relevant ones, dismisses the irrelevant);
-once every finding is settled a **requirements-rework** agent folds the answers
-into ONE standard-format requirements document. That reworked document is stored on
-the review (NOT written back over the block description) and **replaces** the
-original description + linked docs/tasks as the context every subsequent agent step
-(and the requirements-writer) consumes. Unlike `execution` / `bootstrap` this flow
-is **stateless and synchronous**: no container, no durable driver, no real-time
-events — every call runs an LLM inline (via the `ModelProvider` port, like the
-document planner) and returns the updated entity, which the SPA patches directly.
+`requirements-review` is the FIRST step of the default pipelines — a special engine
+gate (handled in `ExecutionService.evaluateRequirementsReview`, like `ci`/`conflicts`,
+NOT a container/prose agent). The reviewer inspects a block's "collected requirements"
+(description + linked PRD/RFC docs + tracker issues) and raises items, each with a
+**severity**. The run **parks** on a durable decision-wait and the dedicated structured
+window drives an iterative loop until the reviewer converges; only then does the run
+advance to the architect. Every reviewer/incorporation call runs an LLM inline (via the
+`ModelProvider` port) and returns the updated review, which the SPA patches directly.
+
+The loop (one reviewer pass = one **iteration**; the initial review is iteration 1):
+
+1. Reviewer raises findings → human **answers** the relevant, **dismisses** the irrelevant.
+2. An **incorporation companion** folds the answers into ONE standard-format document
+   (`incorporate`, status `merged`). The human inspects it and either re-reviews or
+   **redoes** the merge with a freeform "do it differently" comment.
+3. **Re-review** runs the reviewer against that document (`iteration++`). It converges
+   (`incorporated` → the run advances), continues (`ready` → answer the new findings) or
+   hits the cap (`exceeded`).
+4. At the cap the human picks: **extra-round** (one more pass), **proceed** (advance with
+   the last incorporated doc) or **stop-reset** (`cancel()` → block `planned`/editable;
+   the last incorporated doc survives on the inspector as a base to rework from).
+5. **Auto-pass**: if every outstanding finding is at or below the task's tolerated
+   severity (`maxRequirementConcernAllowed`), the findings are recorded but the run
+   advances with no human gate and no incorporation. All findings dismissed → **proceed**.
+
+The cap + tolerated severity are per-task on the **merge preset** (`maxRequirementIterations`
+default 3, `maxRequirementConcernAllowed` default `none`). There is NO quality-companion
+grade gate any more — convergence is reviewer-driven.
 
 - Wire contracts: `contracts/src/requirements.ts` (`RequirementReview` +
-  `RequirementReviewItem`, item `category`/`severity`/`status`, request bodies).
-  One **live review per block** (a new run replaces the prior one). The reworked
-  text lives on `review.incorporatedRequirements`; `status` flips to `incorporated`.
-- Core: `RequirementReviewService` (`modules/requirements/`) — `review()` gathers
-  context + LLM-generates items, `replyToItem()`/`setItemStatus()` mutate items,
-  `incorporate()` requires every finding settled (an EMPTY findings list passes, so
-  a clean standardized doc is still produced) then runs the rework LLM call and
-  stores the result on the review — **without** touching the block description.
-  `REWORK_SYSTEM_PROMPT` (`@cat-factory/agents`, versioned `requirement-rework`)
-  enforces the standard structure (SHALL statements + MoSCoW + Given/When/Then
-  acceptance + domain rules) so the requirements-writer can aggregate it directly.
-  Pure prompt/parse logic (`buildReviewPrompt`/`buildReworkPrompt`/…) is in
-  `requirements.logic.ts`. Assembled by `createRequirementsModule` whenever
-  `requirementReviewRepository` is wired.
+  `RequirementReviewItem`; review `status` ∈ `ready`/`merged`/`exceeded`/`incorporated`,
+  plus `iteration`/`maxIterations`; `incorporateRequirementsSchema` carries the redo
+  `feedback`; `resolveRequirementsExceededSchema` carries the choice). One **live review
+  per block**. The document lives on `review.incorporatedRequirements`.
+- Core: `RequirementReviewService` (`modules/requirements/`) — `review()`/`reReview()`
+  generate items (reReview reviews the incorporated doc), `replyToItem()`/`setItemStatus()`
+  mutate items, `incorporate()` requires no `open` items then runs the rework LLM (folding
+  in the redo `feedback` + prior doc), `markIncorporated()`/`grantExtraRound()` settle the
+  loop. `ExecutionService.{reReviewRequirements,proceedRequirements,resolveRequirementsExceeded}`
+  call the service then drive the parked run (`resumeRequirementsRun` advances + signals;
+  stop-reset cancels). The pure `disposeReview(items, {iteration,maxIterations,
+  concernThreshold})` (`requirements.logic.ts`) decides auto-pass / awaiting / exceeded.
+  `REWORK_SYSTEM_PROMPT` (`@cat-factory/agents`) enforces the standard doc structure.
+  Pass-through when the reviewer model isn't wired (tests/conformance) so pipelines run
+  unchanged. Assembled by `createRequirementsModule` whenever `requirementReviewRepository`
+  is wired (and passed into `ExecutionService` as `requirementReviewService`).
 - Downstream consumption: `ExecutionService.resolveReworkedRequirements` reads the
   block's incorporated review (optional `requirementReviewRepository` dep). When
   present, `buildAgentContext` uses it as the block description (only for `task`-level
@@ -371,35 +389,29 @@ document planner) and returns the updated entity, which the SPA patches directly
   behavior. The rework LLM call rejects a length-truncated document (it would become a
   silently-incomplete spec for every downstream agent) rather than persisting it.
 - Persistence: `requirement_reviews`, mirrored on **both** runtimes (parity is
-  mandatory, see "Keep the runtimes symmetric"): the Cloudflare D1 table (migration
-  `0021`, `D1RequirementReviewRepository`) and the Node Postgres table (Drizzle
-  `requirementReviews` in `db/schema.ts` + `DrizzleRequirementReviewRepository`, its
-  generated migration under `runtimes/node/drizzle/`). Items as a JSON column, keyed
-  by review id, `getByBlock` returns the current one. Both facades wire the repo +
-  model provider into the core, so the review/rework API AND the agent-context
-  substitution work identically; the cross-runtime conformance suite asserts the
+  mandatory): the Cloudflare D1 table (`D1RequirementReviewRepository`) and the Node
+  Postgres table (Drizzle `requirementReviews` in `db/schema.ts` +
+  `DrizzleRequirementReviewRepository`, generated migration under `runtimes/node/drizzle/`).
+  Items as a JSON column; `iteration`/`max_iterations` columns track the loop; the old
+  `companion` column is gone. `getByBlock` returns the current one. Both facades wire the
+  repo + model provider; the cross-runtime conformance suite asserts the agent-context
   substitution against both stores.
-- Controller (shared `@cat-factory/server`): `RequirementReviewController`
-  (`modules/requirements/`) mounts `GET|POST /blocks/:blockId/requirement-review`,
-  `POST /requirement-reviews/:id/items/:itemId/reply`,
-  `PATCH …/items/:itemId`, `POST …/:id/incorporate` (returns `{ review }`).
-  Each facade supplies the requirements deps: Cloudflare's `selectRequirementsDeps`
-  and the Node container both wire the review repo + a model provider + the agents'
-  routing default ref + `resolveBlockModel`, so the reviewer resolves its model
-  exactly like an agent step: a block's pinned model wins, else the default — which
-  falls back to **Cloudflare Workers AI** unless a direct provider key is set.
-- Frontend: `stores/requirements.ts` (load/review/reply/setItemStatus/incorporate;
-  `incorporate` does NOT patch the board — the description is preserved),
-  `components/requirements/RequirementsReviewWindow.vue` — a full-screen review
-  window modelled on the prose review window (`AgentStepDetail.vue`): react to the
-  findings, then "Rework requirements" (enabled once every finding is settled, and
-  immediately for a zero-findings review); the reworked document renders as
-  collapsible markdown. Triggered from `InspectorPanel.vue`'s "Review requirements"
-  button (open-finding count badge); `ui.requirementReviewBlockId` drives it. Once a
-  task is reworked the inspector **freezes** its raw description: the standardized
-  requirements take focus and the original is read-only behind an "Original
-  description (frozen)" expander (it is no longer what agents consume). No stream
-  event — the responses carry the updated review.
+- Controller (shared `@cat-factory/server`): `RequirementReviewController` mounts
+  `GET|POST /blocks/:blockId/requirement-review`, `POST /requirement-reviews/:id/items/:itemId/reply`,
+  `PATCH …/items/:itemId`, `POST /requirement-reviews/:id/incorporate` (reviewId-scoped,
+  no run drive), and the run-driving `POST /blocks/:blockId/requirement-review/{re-review,
+  proceed,resolve-exceeded}` (via `container.executionService`). Each facade wires the
+  review repo + a model provider + the routing default ref + `resolveBlockModel`, so the
+  reviewer resolves its model like an agent step (block pin > workspace default >
+  Cloudflare Workers AI).
+- Frontend: `stores/requirements.ts` (load/review/reply/setItemStatus/incorporate/
+  reReview/proceed/resolveExceeded) +
+  `components/requirements/RequirementsReviewWindow.vue` — the loop UI (answer/dismiss →
+  incorporate → inspect doc → re-review or redo-with-comment → proceed; the 3-choice
+  prompt on `exceeded`; "Iteration N / M"). It opens via the **universal result-view
+  seam** (see "Conventions"), not a hardcoded mount. `InspectorPanel.vue` freezes a
+  task's raw description once `incorporated` (the standardized doc takes focus), and after
+  a stop-reset surfaces the last incorporated doc read-only as a base.
 
 ## Merge lifecycle flow (CI gate → CI-fixer → merger → notifications)
 
@@ -440,7 +452,9 @@ still open). Two new container agent kinds plus a special gate step implement it
   `D1MergePresetRepository`; `GET|POST|PATCH|DELETE /workspaces/:ws/merge-presets`).
   A task selects one via `Block.mergePresetId` (the inspector dropdown in
   `TaskModelSettings.vue`); none → the workspace default (lazily seeded from
-  `DEFAULT_MERGE_PRESET` in kernel). Carries the auto-merge ceilings + `ciMaxAttempts`.
+  `DEFAULT_MERGE_PRESET` in kernel). Carries the auto-merge ceilings + `ciMaxAttempts`
+  + the requirements-review knobs `maxRequirementIterations` (default 3) and
+  `maxRequirementConcernAllowed` (default `none`); see "Requirements review flow".
 - **Notifications** — a first-class, human-actionable surface (NOT a mid-pipeline
   gate). `notifications` table (migration 0024) + `NotificationService`
   (orchestration) behind a `NotificationChannel` port: the canonical row is persisted
@@ -593,6 +607,13 @@ drives a run to completion through the real pg-boss runner.
   facade and implement the ports + the `gateways` seam, wired in that facade's
   `container.ts` via constructor injection of a single `dependencies` object. Opt-in
   integrations (GitHub / environments / board-scan / bootstrap) wire only when configured.
+- **Dedicated result-view seam (frontend):** an agent step opens the generic prose panel
+  (`AgentStepDetail.vue`) UNLESS its archetype declares a `resultView` id (`app/utils/catalog.ts`).
+  The `ui` store's step dispatch (`dispatchStepView`, used by both `openStepDetail` and
+  `openApprovalDetail`) routes such a step to `ui.resultView`; `StepResultViewHost.vue`
+  renders the component registered for that id (`STEP_RESULT_VIEWS`). Give a new agent a
+  bespoke window by declaring `resultView` + registering a component — no caller changes.
+  `requirements-review` is the first consumer (the review window).
 - The Worker's integration tests use the real `workerd` + real local D1
   (`@cloudflare/vitest-pool-workers`); the Node tests use real Postgres
   (`DATABASE_URL`, a Postgres 18 service in CI); only the LLM is faked in both. Run

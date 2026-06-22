@@ -1632,16 +1632,6 @@ function rowToRequirementReview(row: RequirementReviewRow): RequirementReview {
   } catch {
     items = []
   }
-  let companionVerdicts: RequirementReview['companionVerdicts'] = []
-  if (row.companion) {
-    try {
-      const parsed = JSON.parse(row.companion)
-      if (Array.isArray(parsed))
-        companionVerdicts = parsed as RequirementReview['companionVerdicts']
-    } catch {
-      companionVerdicts = []
-    }
-  }
   return {
     id: row.id,
     blockId: row.block_id,
@@ -1649,7 +1639,8 @@ function rowToRequirementReview(row: RequirementReviewRow): RequirementReview {
     items,
     model: row.model,
     incorporatedRequirements: row.incorporated_requirements,
-    companionVerdicts,
+    iteration: row.iteration,
+    maxIterations: row.max_iterations,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -1699,7 +1690,8 @@ export class DrizzleRequirementReviewRepository implements RequirementReviewRepo
       items: JSON.stringify(review.items),
       model: review.model,
       incorporated_requirements: review.incorporatedRequirements,
-      companion: review.companionVerdicts?.length ? JSON.stringify(review.companionVerdicts) : null,
+      iteration: review.iteration ?? 1,
+      max_iterations: review.maxIterations ?? 1,
       created_at: review.createdAt,
       updated_at: review.updatedAt,
     }
@@ -1714,7 +1706,8 @@ export class DrizzleRequirementReviewRepository implements RequirementReviewRepo
           items: values.items,
           model: values.model,
           incorporated_requirements: values.incorporated_requirements,
-          companion: values.companion,
+          iteration: values.iteration,
+          max_iterations: values.max_iterations,
           updated_at: values.updated_at,
         },
       })
@@ -1742,6 +1735,9 @@ function rowToMergePreset(row: MergePresetRow): MergeThresholdPreset {
     maxRisk: row.max_risk,
     maxImpact: row.max_impact,
     ciMaxAttempts: row.ci_max_attempts,
+    maxRequirementIterations: row.max_requirement_iterations,
+    maxRequirementConcernAllowed:
+      row.max_requirement_concern_allowed as MergeThresholdPreset['maxRequirementConcernAllowed'],
     isDefault: row.is_default === 1,
     createdAt: row.created_at,
   }
@@ -1802,6 +1798,8 @@ export class DrizzleMergePresetRepository implements MergePresetRepository {
       max_risk: preset.maxRisk,
       max_impact: preset.maxImpact,
       ci_max_attempts: preset.ciMaxAttempts,
+      max_requirement_iterations: preset.maxRequirementIterations,
+      max_requirement_concern_allowed: preset.maxRequirementConcernAllowed,
       is_default: preset.isDefault ? 1 : 0,
       created_at: preset.createdAt,
     }
@@ -1831,6 +1829,8 @@ export class DrizzleMergePresetRepository implements MergePresetRepository {
             max_risk: values.max_risk,
             max_impact: values.max_impact,
             ci_max_attempts: values.ci_max_attempts,
+            max_requirement_iterations: values.max_requirement_iterations,
+            max_requirement_concern_allowed: values.max_requirement_concern_allowed,
             is_default: values.is_default,
           },
         })
