@@ -1,6 +1,7 @@
 ---
 '@cat-factory/contracts': minor
 '@cat-factory/integrations': minor
+'@cat-factory/kernel': patch
 ---
 
 Self-hosted runner pools: serve every harness kind and forward structured results.
@@ -17,8 +18,9 @@ and Node facades for a workspace's self-hosted pool):
   `assessment` / `defaultBranch` / `pushed` / `resolved` / `usage` (type-guarded, with
   the structured products passed through for the engine to validate). The individual
   scalar paths still apply and override.
-- **Serve every harness route.** `RunnerPoolTransport` no longer rejects
-  `blueprint` / `spec` / `explore` / `ci-fix` / `resolve-conflicts` / `merge` — a pool
-  runs the same executor-harness image as the Cloudflare backend, so it serves all of
-  them (none need a Cloudflare-specific primitive). The kind guard is kept (defensive
-  against a hypothetical future Cloudflare-only kind) but now lists the full set.
+- **Serve every harness route, with no allow-list.** A pool runs the same
+  executor-harness image as the Cloudflare backend, and runtime parity is the default
+  (the "keep the runtimes symmetric" guideline), so `RunnerPoolTransport` dispatches
+  every kind with no opt-in `POOL_SUPPORTED_KINDS` guard to gate them. A new harness kind
+  reaches a pool automatically, exactly as it does a Cloudflare container, instead of
+  silently diverging until it is added to a list.

@@ -33,7 +33,7 @@ export class RunnerPoolTransport implements RunnerTransport {
     // serves every harness route. Runtime parity is the default and assumed (the "keep
     // the runtimes symmetric" guideline): there is no opt-in allow-list to gate kinds,
     // so a new harness kind dispatches to a pool automatically, exactly as it does to a
-    // Cloudflare container — never silently diverging.
+    // Cloudflare container, never silently diverging.
     //
     // Forward the harness route kind and the resolved provisioning hints (the
     // instance-type id + the cloud provider) in the dispatch spec so a pool that

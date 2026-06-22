@@ -117,8 +117,11 @@ facade so the runtimes can't drift (see "Cross-runtime conformance" below).
   gateway impls (`src/infrastructure/gateways/*` — `DoRealtimeGateway`, the GitHub
   gateways, `WorkersAiLlmUpstream`). `createApp`/`buildContainer` are thin wrappers
   over `@cat-factory/server`. Exposes the default fetch/scheduled/queue handler + the
-  DO/Workflow classes. Ships its D1 `migrations/`. Carries **no** production config;
-  its own `wrangler.toml` is a stripped test/dev config (the vitest workers pool reads it).
+  DO/Workflow classes. Ships its D1 `migrations/` — pre-1.0 history (0001–0041) is
+  squashed into a single `0001_init.sql`, and new tables get a fresh numbered migration
+  on top (so the old per-table migration numbers no longer exist). Carries **no**
+  production config; its own `wrangler.toml` is a stripped test/dev config (the vitest
+  workers pool reads it).
 - `backend/runtimes/node` — `@cat-factory/node-server`, the **Node.js service facade**:
   serves the same `@cat-factory/server` Hono app via `@hono/node-server`, with
   **Drizzle/Postgres** repositories (`src/db/*`, `src/repositories/drizzle.ts` — the
@@ -448,7 +451,7 @@ still open). Two new container agent kinds plus a special gate step implement it
   **no** merger raises a `pipeline_complete` notification (confirm + merge) instead of
   auto-`done`.
 - **Merge threshold presets** — a per-workspace library
-  (`merge_threshold_presets`, migration 0024; `MergePresetService` +
+  (`merge_threshold_presets`; `MergePresetService` +
   `D1MergePresetRepository`; `GET|POST|PATCH|DELETE /workspaces/:ws/merge-presets`).
   A task selects one via `Block.mergePresetId` (the inspector dropdown in
   `TaskModelSettings.vue`); none → the workspace default (lazily seeded from
@@ -456,7 +459,7 @@ still open). Two new container agent kinds plus a special gate step implement it
   - the requirements-review knobs `maxRequirementIterations` (default 3) and
     `maxRequirementConcernAllowed` (default `none`); see "Requirements review flow".
 - **Notifications** — a first-class, human-actionable surface (NOT a mid-pipeline
-  gate). `notifications` table (migration 0024) + `NotificationService`
+  gate). `notifications` table + `NotificationService`
   (orchestration) behind a `NotificationChannel` port: the canonical row is persisted
   - the in-app `notification` `WorkspaceEvent` is pushed (worker
     `InAppNotificationChannel` over `DurableObjectEventPublisher.notificationChanged`),
@@ -494,8 +497,8 @@ AgentRunController.ts`) resolves the kind via `getRef`, then calls
   `app/types/domain.ts`, `backend/packages/contracts/src/entities.ts`,
   migration `0001_init.sql`.
 - **A Block carries no repo fields.** Repo↔block linkage lives in the
-  `github_repos` projection table via its `block_id` column (migration
-  `0004_github_projections.sql`; `D1RepoProjectionRepository.linkBlock()`).
+  `github_repos` projection table via its `block_id` column
+  (`D1RepoProjectionRepository.linkBlock()`).
 - **Execution resolves the repo at runtime** via `resolveRepoTarget(workspaceId,
 blockId)` (worker `infrastructure/container.ts`): find the `github_repos` row
   whose `block_id === blockId`, else fall back to `repos[0]`. So to make a
@@ -503,21 +506,24 @@ blockId)` (worker `infrastructure/container.ts`): find the `github_repos` row
   projection row must be linked to the new frame's block id.
 - A workspace has exactly **one** GitHub installation but may have **many** repos.
 - `BoardScanService.spawnBlueprint()` (orchestration `src/modules/boardScan/BoardScanService.ts`)
-  materialises a scanned repo as frame→modules→tasks but does **not** link the
-  repo to the frame today.
+  materialises a scanned repo as frame→modules→tasks and links the repo to the new
+  frame (`linkRepoToFrame` → `repoProjectionRepository.linkBlock`) when the repo
+  projection is wired and a matching row exists.
 - Drag-drop: `useBlockDrag.ts` (`reparentAt()`) → `POST /blocks/:id/reparent` →
   `BoardService.reparent()`. Tasks can move into frames or modules; modules into
   frames; frames cannot nest (`canReparent` in `board.logic.ts`).
 
-## Individual-usage subscriptions (Claude) — per-user, not pooled
+## Individual-usage subscriptions (per-user, not pooled)
 
-Vendors flagged `individualOnly` in `SUBSCRIPTION_VENDORS` (today only `claude`,
-Anthropic's consumer subscription) are licensed for individual use, so they are NEVER in
-the per-workspace pool — `ProviderSubscriptionService` refuses them (409). They live in a
-separate per-USER store with a distinct restricted mode. Full model + safeguards:
+Vendors flagged `individualOnly` in `SUBSCRIPTION_VENDORS` (today `claude`, `codex`, and
+`glm`) are licensed for individual use, so they are NEVER in the per-workspace pool:
+`ProviderSubscriptionService` refuses them (409). They live in a separate per-USER store
+with a distinct restricted mode. (At run time `claude`/`codex` always lease a personal
+credential, while `glm` is dual-mode: it leases one only when the user has their own GLM
+subscription, else it runs on the poolable Cloudflare base.) Full model + safeguards:
 [`backend/docs/individual-subscription-usage.md`](./backend/docs/individual-subscription-usage.md).
 
-- **Double-encrypted at rest** (`personal_subscriptions`, migration 0039 ⇄ Drizzle):
+- **Double-encrypted at rest** (`personal_subscriptions` ⇄ Drizzle):
   `system.encrypt(personal.seal(token, password))`. The inner layer
   (`WebCryptoPersonalSecretCipher`, PBKDF2→AES-GCM) is keyed by the user's personal
   **password**, which is never stored — so the token needs BOTH the system key AND the
@@ -555,7 +561,7 @@ differentiators behind the shared kernel ports + the `container.gateways` seam.
   run). `start()` connects to `DATABASE_URL`, runs `migrate()`, boots pg-boss + the
   execution worker, and serves over `@hono/node-server`. Real-time + async GitHub
   ingest fall back to the inline/not-enabled paths for now.
-  **Container agent steps** (coder/mocker/playwright/blueprints/ci-fixer/
+  **Container agent steps** (coder/mocker/tester/playwright/blueprints/ci-fixer/
   conflict-resolver/merger) run via the **same** shared `CompositeAgentExecutor` +
   `ContainerAgentExecutor` the Worker uses (now in `@cat-factory/server`),
   dispatching to a workspace's **self-hosted runner pool** — the Node facade has no
