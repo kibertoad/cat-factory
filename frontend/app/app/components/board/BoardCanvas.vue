@@ -13,6 +13,7 @@ const board = useBoardStore()
 const pipelines = usePipelinesStore()
 const execution = useExecutionStore()
 const ui = useUiStore()
+const github = useGitHubStore()
 const toast = useToast()
 
 const { onNodeDragStop, onViewportChange, screenToFlowCoordinate } = useVueFlow(BOARD_FLOW_ID)
@@ -139,6 +140,41 @@ async function onDrop(event: DragEvent) {
         <BlockNode :id="props.id" />
       </template>
     </VueFlow>
+
+    <!-- An empty board reads as broken; invite the user to add a service. The
+         overlay lets pointer events through (so the pane still pans) except on
+         the buttons themselves. -->
+    <div
+      v-if="board.frames.length === 0"
+      class="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-4 text-center"
+    >
+      <UIcon name="i-lucide-layout-dashboard" class="h-10 w-10 text-slate-600" />
+      <div>
+        <h2 class="text-base font-semibold text-slate-300">Your board is empty</h2>
+        <p class="mt-1 max-w-sm text-sm text-slate-500">
+          Add a service to get started: bootstrap a fresh repo or pull in one you already
+          have.
+        </p>
+      </div>
+      <div class="pointer-events-auto flex flex-wrap items-center justify-center gap-2">
+        <UButton
+          color="primary"
+          icon="i-lucide-git-branch-plus"
+          @click="ui.openBootstrap()"
+        >
+          Bootstrap repo
+        </UButton>
+        <UButton
+          v-if="github.available"
+          color="primary"
+          variant="soft"
+          icon="i-lucide-folder-git-2"
+          @click="ui.openAddService()"
+        >
+          Add from existing repo
+        </UButton>
+      </div>
+    </div>
 
     <!-- task dependency arrows, overlaid in screen space -->
     <TaskDependencyEdges />
