@@ -257,6 +257,15 @@ export interface AgentJobHandle {
   /** Opaque identifier the executor uses to address the running job when polled. */
   jobId: string
   /**
+   * The run (execution) the job belongs to. A run executes a sequence of jobs (one
+   * per pipeline step) that share one per-run container, so the poll/stop site needs
+   * the run id — alongside the per-step {@link jobId} — to address that container
+   * (and to reclaim it). Set by the executor at dispatch and re-supplied by the
+   * engine at the poll/stop site (it always has the execution id in scope). Absent ⇒
+   * the job IS its own run (a single-job flow), so callers fall back to {@link jobId}.
+   */
+  runId?: string
+  /**
    * The model the job runs (`provider:model`), known at dispatch. Recorded on the
    * step immediately so the board shows it even though the poll site — which maps
    * the eventual result — has no access to the resolved model ref.

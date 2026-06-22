@@ -124,6 +124,59 @@ describe('ContainerAgentExecutor', () => {
     expect(session).toMatchObject({ provider: 'qwen', model: 'qwen3-max', executionId: 'ex-1' })
   })
 
+  it('keys each step by a per-step job id while sharing the one per-run container', async () => {
+    // Two steps of the SAME run (executionId 'ex-1') but different kinds must dispatch
+    // with DISTINCT harness job ids — otherwise the harness reads one step's finished
+    // result back for the other (the bug where `architect` returned the `spec-writer`'s
+    // doc). The per-RUN container (idFromName argument) is the SAME for both, and the
+    // poll reads each step's job by its own id.
+    const idArgs: string[] = []
+    const dispatchedJobIds: unknown[] = []
+    const polledPaths: string[] = []
+    const ns = {
+      idFromName: (name: string) => {
+        idArgs.push(name)
+        return { name }
+      },
+      get: () => ({
+        fetch: (url: string, init?: { method?: string; body?: string }) => {
+          if (init?.method === 'GET' || url.includes('/jobs/')) {
+            polledPaths.push(new URL(url).pathname)
+            return Promise.resolve(
+              new Response(JSON.stringify({ state: 'done', result: { summary: 'ok' } })),
+            )
+          }
+          dispatchedJobIds.push((JSON.parse(init!.body!) as { jobId: unknown }).jobId)
+          return Promise.resolve(
+            new Response(JSON.stringify({ state: 'running' }), { status: 202 }),
+          )
+        },
+      }),
+    } as unknown as DurableObjectNamespace<ExecutionContainer>
+
+    const executor = new ContainerAgentExecutor({
+      resolveTransport: resolveTo(ns),
+      agentRouting: routing('qwen', 'qwen3-max'),
+      resolveBlockModel: () => undefined,
+      resolveRepoTarget: () => Promise.resolve(repo),
+      mintInstallationToken: () => Promise.resolve('gh-token'),
+      sessionService: new ContainerSessionService({ secret: 'secret' }),
+      proxyBaseUrl: 'https://worker.example/v1',
+    })
+
+    const base = context()
+    await executor.run({ ...base, agentKind: 'spec-writer' })
+    await executor.run({ ...base, agentKind: 'architect' })
+
+    // Distinct harness job ids per step…
+    expect(dispatchedJobIds).toEqual(['ex-1-spec-writer', 'ex-1-architect'])
+    // …polled by their own id…
+    expect(polledPaths).toContain('/jobs/ex-1-architect')
+    expect(polledPaths).toContain('/jobs/ex-1-spec-writer')
+    // …but addressed to the one per-run container (the execution id).
+    expect(new Set(idArgs)).toEqual(new Set(['ex-1']))
+  })
+
   it('forwards live subtask progress from a still-running job poll', async () => {
     // A container whose GET /jobs/{id} reports the job still running, with the
     // latest todo counts attached — exactly the harness's running JobView.

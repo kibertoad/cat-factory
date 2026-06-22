@@ -9,6 +9,7 @@ import {
   type ModelRef,
   type RunnerDispatchKind,
   type RunnerDispatchOptions,
+  type RunnerJobRef,
   type RunnerJobResult,
   type SubscriptionVendor,
 } from '@cat-factory/kernel'
@@ -114,6 +115,27 @@ export type RecordSubscriptionUsage = (
  * here once so the (six) agent-kind job bodies can't drift on which repo fields they
  * forward.
  */
+/**
+ * The harness job id for one pipeline step: the run (execution) id plus the agent
+ * kind. A run executes a sequence of steps that all share the one per-run container,
+ * so each needs an id that is UNIQUE WITHIN THE RUN — the harness keys its per-kind
+ * job registries by it, and two steps sharing an id alias there (the bug where an
+ * `architect` /explore poll read back the `spec-writer`'s /spec result). The run is
+ * addressed separately by the execution id (the {@link RunnerJobRef.runId}).
+ */
+function stepJobId(executionId: string, agentKind: string): string {
+  return `${executionId}-${agentKind}`
+}
+
+/**
+ * The {@link RunnerJobRef} a job handle addresses: the run (for the per-run container)
+ * plus the per-step job id. Falls back to the job id as the run id for a handle minted
+ * before run ids were carried (or a single-job flow where the two coincide).
+ */
+function refForHandle(handle: AgentJobHandle): RunnerJobRef {
+  return { runId: handle.runId ?? handle.jobId, jobId: handle.jobId }
+}
+
 function buildRepoSpec(repo: RepoTarget) {
   return {
     owner: repo.owner,
@@ -297,13 +319,19 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
   async startJob(context: AgentRunContext): Promise<AgentJobHandle> {
     const { workspaceId, executionId } = this.requireIds(context)
     const { body, model, kind, subscriptionTokenId } = await this.buildJobBody(context)
-    await this.jobs.dispatch(workspaceId, executionId, body, kind, this.dispatchOptions(context))
-    // Carry the workspace on the handle so the poll site can resolve the same
-    // backend (Cloudflare container vs. self-hosted pool) given only the job id;
-    // carry the leased subscription token id so a finished subscription job can
-    // attribute its usage back to the right pool row.
+    // The job's id is per-STEP (run id + agent kind), so sibling steps that share this
+    // run's container never collide in the harness's per-kind job registries; the run
+    // itself is addressed by the execution id, so its container is reclaimed as a unit.
+    const jobId = body.jobId as string
+    const ref: RunnerJobRef = { runId: executionId, jobId }
+    await this.jobs.dispatch(workspaceId, ref, body, kind, this.dispatchOptions(context))
+    // Carry the run id + workspace on the handle so the poll/stop site can re-address
+    // the same per-run container (Cloudflare vs. self-hosted pool) given only the
+    // handle; carry the leased subscription token id so a finished subscription job
+    // can attribute its usage back to the right pool row.
     return {
-      jobId: executionId,
+      jobId,
+      runId: executionId,
       model,
       workspaceId,
       agentKind: context.agentKind,
@@ -313,16 +341,17 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
 
   /** Poll a dispatched job for its state, mapping the runner view into an update. */
   async pollJob(handle: AgentJobHandle): Promise<AgentJobUpdate> {
-    const view = await this.jobs.poll(handle.workspaceId, handle.jobId)
+    const view = await this.jobs.poll(handle.workspaceId, refForHandle(handle))
     // Forward any tool spans the harness drained on this poll to the trace sink, as
-    // child spans under the run's trace (jobId === executionId, the same trace id the
-    // LLM proxy's generations use). Isolated + best-effort: never affects the lifecycle.
+    // child spans under the RUN's trace (the run id is the trace id the LLM proxy's
+    // generations also use, so per-step jobs share one trace). Isolated + best-effort:
+    // never affects the lifecycle.
     if (this.deps.llmTraceSink?.recordToolSpans && view.spans && view.spans.length > 0) {
       try {
         await this.deps.llmTraceSink.recordToolSpans(
           {
             workspaceId: handle.workspaceId ?? null,
-            executionId: handle.jobId,
+            executionId: handle.runId ?? handle.jobId,
             agentKind: handle.agentKind ?? 'agent',
           },
           view.spans,
@@ -375,7 +404,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
    * is a no-op.
    */
   async stopJob(handle: AgentJobHandle): Promise<void> {
-    await this.jobs.release(handle.workspaceId, handle.jobId)
+    await this.jobs.release(handle.workspaceId, refForHandle(handle))
   }
 
   /**
@@ -545,6 +574,9 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     subscriptionTokenId?: string
   }> {
     const { workspaceId, executionId, blockId } = this.requireIds(context)
+    // Per-STEP harness job id: unique within the run so this step's job never aliases
+    // a sibling step's in the (shared) per-run container's job registries.
+    const jobId = stepJobId(executionId, context.agentKind)
 
     // "Subscriptions always win": a subscription-only model carries its harness; a
     // dual-mode GLM/Kimi step pinned to its Cloudflare base is auto-routed to Claude
@@ -682,7 +714,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     if (context.agentKind === 'blueprints') {
       const branch = context.block.pullRequest?.branch ?? repo.baseBranch
       const body = {
-        jobId: executionId,
+        jobId,
         systemPrompt: BLUEPRINT_SYSTEM_PROMPT,
         instructions:
           'Map (or update) this repository into the canonical service → modules ' +
@@ -710,7 +742,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     if (context.agentKind === SPEC_WRITER_AGENT_KIND) {
       const branch = workBranch
       const body = {
-        jobId: executionId,
+        jobId,
         systemPrompt: SPEC_WRITER_SYSTEM_PROMPT,
         instructions:
           'Produce (or update) the unified, prescriptive specification for this ' +
@@ -744,7 +776,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
         throw new Error('CI-fixer needs the implementation PR branch to push fixes to')
       }
       const body = {
-        jobId: executionId,
+        jobId,
         systemPrompt: composeBlockSystemPrompt(systemPromptFor(context.agentKind), context.block),
         userPrompt: userPromptFor(context),
         model: ref.model,
@@ -770,7 +802,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
         )
       }
       const body = {
-        jobId: executionId,
+        jobId,
         systemPrompt: composeBlockSystemPrompt(systemPromptFor(context.agentKind), context.block),
         userPrompt: userPromptFor(context),
         model: ref.model,
@@ -794,7 +826,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     if (context.agentKind === MERGER_AGENT_KIND) {
       const branch = context.block.pullRequest?.branch ?? repo.baseBranch
       const body = {
-        jobId: executionId,
+        jobId,
         systemPrompt: MERGER_SYSTEM_PROMPT,
         instructions:
           'Assess the pull request on the head branch against the base branch and ' +
@@ -823,7 +855,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
         context.block.agentConfig?.['tester.environment'] === 'local' ? 'local' : 'ephemeral'
       const service = context.service
       const body = {
-        jobId: executionId,
+        jobId,
         systemPrompt: composeBlockSystemPrompt(systemPromptFor(context.agentKind), context.block),
         userPrompt: userPromptFor(context),
         model: ref.model,
@@ -861,7 +893,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
         throw new Error('Fixer needs the implementation PR branch to push fixes to')
       }
       const body = {
-        jobId: executionId,
+        jobId,
         systemPrompt: composeBlockSystemPrompt(systemPromptFor(context.agentKind), context.block),
         userPrompt: userPromptFor(context),
         model: ref.model,
@@ -889,7 +921,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
         ? workBranch
         : (context.block.pullRequest?.branch ?? repo.baseBranch)
       const body = {
-        jobId: executionId,
+        jobId,
         kind: context.agentKind,
         systemPrompt: composeBlockSystemPrompt(systemPromptFor(context.agentKind), context.block),
         userPrompt: userPromptFor(context),
@@ -920,9 +952,10 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     const headBranch = workBranch
 
     // The harness keys the background job (and the poll endpoint) on `jobId`; the
-    // execution id gives an idempotent re-attach across durable-driver replays.
+    // per-step id gives an idempotent re-attach across durable-driver replays while
+    // staying distinct from this run's sibling steps in the shared container.
     const body = {
-      jobId: executionId,
+      jobId,
       systemPrompt,
       userPrompt,
       model: ref.model,

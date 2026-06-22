@@ -1,6 +1,7 @@
 import type {
   RunnerDispatchKind,
   RunnerDispatchOptions,
+  RunnerJobRef,
   RunnerJobView,
   RunnerPoolManifest,
   RunnerPoolProvider,
@@ -9,9 +10,15 @@ import type {
 } from '@cat-factory/kernel'
 
 // Adapts the stateless, manifest-interpreting HttpRunnerPoolProvider to the
-// per-job RunnerTransport the container executor drives, binding one workspace's
-// resolved manifest + secret resolver. One instance per (workspace) dispatch/poll
-// resolution; the underlying provider (and its OAuth cache) is shared.
+// RunnerTransport the container executor drives, binding one workspace's resolved
+// manifest + secret resolver. One instance per (workspace) dispatch/poll resolution;
+// the underlying provider (and its OAuth cache) is shared.
+//
+// A pool is a PER-JOB backend — it has no per-run container to share across steps —
+// so it keys on the per-step `ref.jobId`; each step is an independent pool job, which
+// is exactly what keeps sibling steps from colliding here too. `ref.runId` is unused
+// (there is no run-scoped resource to address), and `release` cancels the run's
+// in-flight job by its id.
 //
 // Runtime-neutral: both the Cloudflare Worker and the Node service resolve this
 // transport for a workspace whose self-hosted runner pool is registered.
@@ -24,11 +31,12 @@ export class RunnerPoolTransport implements RunnerTransport {
   ) {}
 
   dispatch(
-    jobId: string,
+    ref: RunnerJobRef,
     spec: Record<string, unknown>,
     kind: RunnerDispatchKind = 'run',
     options?: RunnerDispatchOptions,
   ): Promise<void> {
+    const jobId = ref.jobId
     // A pool runs the SAME executor-harness image as the Cloudflare backend, so it
     // serves every harness route. Runtime parity is the default and assumed (the "keep
     // the runtimes symmetric" guideline): there is no opt-in allow-list to gate kinds,
@@ -51,14 +59,18 @@ export class RunnerPoolTransport implements RunnerTransport {
     })
   }
 
-  poll(jobId: string): Promise<RunnerJobView> {
-    return this.provider.poll({ manifest: this.manifest, jobId, resolveSecret: this.resolveSecret })
+  poll(ref: RunnerJobRef): Promise<RunnerJobView> {
+    return this.provider.poll({
+      manifest: this.manifest,
+      jobId: ref.jobId,
+      resolveSecret: this.resolveSecret,
+    })
   }
 
-  release(jobId: string): Promise<void> {
+  release(ref: RunnerJobRef): Promise<void> {
     return this.provider.release({
       manifest: this.manifest,
-      jobId,
+      jobId: ref.jobId,
       resolveSecret: this.resolveSecret,
     })
   }
