@@ -33,13 +33,16 @@ export const TOKEN_AUDIENCE = {
 
 export type TokenAudience = (typeof TOKEN_AUDIENCE)[keyof typeof TOKEN_AUDIENCE]
 
-/** Identity we trust from GitHub and surface to the client. */
+/** Identity we surface to the client. */
 export interface SessionUser {
-  /** GitHub user id (stable across renames). */
-  id: number
+  /** Internal user id (`usr_*`) — stable across login providers. */
+  id: string
+  /** Display handle (GitHub login for GitHub users, else email/local-part). */
   login: string
   name: string | null
   avatarUrl: string | null
+  /** Primary email, when known. */
+  email?: string | null
 }
 
 /** A signed session: the user plus an absolute expiry (epoch ms). */

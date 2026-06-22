@@ -28,9 +28,9 @@ export class SlackMemberMappingService {
     entries: SlackMemberMappingEntry[],
   ): Promise<SlackMemberMappingEntry[]> {
     const accountKey = await this.resolveAccountKey(workspaceId)
-    // De-duplicate by githubUserId (a stable, deterministic map).
-    const byUser = new Map<number, SlackMemberMappingEntry>()
-    for (const entry of entries) byUser.set(entry.githubUserId, entry)
+    // De-duplicate by userId (a stable, deterministic map).
+    const byUser = new Map<string, SlackMemberMappingEntry>()
+    for (const entry of entries) byUser.set(entry.userId, entry)
     const deduped = [...byUser.values()]
     await this.deps.slackMemberMappingRepository.upsert(accountKey, deduped, this.deps.clock.now())
     return deduped

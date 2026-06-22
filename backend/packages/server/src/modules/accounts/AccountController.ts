@@ -1,4 +1,9 @@
-import { addMemberSchema, createAccountSchema, updateAccountSchema } from '@cat-factory/contracts'
+import {
+  addMemberSchema,
+  createAccountSchema,
+  createInvitationSchema,
+  updateAccountSchema,
+} from '@cat-factory/contracts'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
 import type { AppEnv } from '../../http/env.js'
@@ -62,6 +67,50 @@ export function accountController(): Hono<AppEnv> {
       .get('container')
       .accountService.addMember(param(c, 'accountId'), user.id, body.userId, body.role)
     return c.json(member, 201)
+  })
+
+  // ---- Invitations (email-based org onboarding) ---------------------------
+  // Available only when the invitation repository is wired (opt-in feature).
+
+  app.get('/accounts/:accountId/invitations', async (c) => {
+    const user = accountUser(c)
+    if (!user) return signInRequired(c)
+    const container = c.get('container')
+    if (!container.invitations) return c.json([])
+    // Membership is required to view the account's pending invitations.
+    await container.accountService.requireMember(param(c, 'accountId'), user.id)
+    return c.json(await container.invitations.list(param(c, 'accountId')))
+  })
+
+  app.post('/accounts/:accountId/invitations', jsonBody(createInvitationSchema), async (c) => {
+    const user = accountUser(c)
+    if (!user) return signInRequired(c)
+    const container = c.get('container')
+    if (!container.invitations) {
+      return c.json(
+        { error: { code: 'unavailable', message: 'Invitations are not configured' } },
+        503,
+      )
+    }
+    const body = c.req.valid('json')
+    const created = await container.invitations.invite(
+      param(c, 'accountId'),
+      user.id,
+      body.email,
+      body.role,
+    )
+    // The raw accept link is returned so an operator can share it manually when no
+    // email transport is configured; never re-derivable afterwards.
+    return c.json({ invitation: created.invitation, acceptUrl: created.acceptUrl }, 201)
+  })
+
+  app.delete('/accounts/:accountId/invitations/:invitationId', async (c) => {
+    const user = accountUser(c)
+    if (!user) return signInRequired(c)
+    const container = c.get('container')
+    if (!container.invitations) return c.body(null, 204)
+    await container.invitations.revoke(param(c, 'accountId'), user.id, param(c, 'invitationId'))
+    return c.body(null, 204)
   })
 
   return app

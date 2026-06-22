@@ -24,7 +24,9 @@ export {
   DEFAULT_WEB_SEARCH_COUNT,
 } from './modules/webSearch/upstreams.js'
 export { StateSigner, type InstallState } from './github/state.js'
-export { GitHubOAuth, type GitHubOAuthDependencies } from './auth/GitHubOAuth.js'
+export { GitHubOAuth, type GitHubOAuthDependencies, type GitHubIdentity } from './auth/GitHubOAuth.js'
+export { GoogleOAuth, type GoogleOAuthDependencies, type GoogleIdentity } from './auth/GoogleOAuth.js'
+export { WebCryptoPasswordHasher } from './crypto/WebCryptoPasswordHasher.js'
 export { authController, pickPostLoginRedirect } from './modules/auth/AuthController.js'
 export { llmProxyController } from './modules/llmProxy/LlmProxyController.js'
 export {

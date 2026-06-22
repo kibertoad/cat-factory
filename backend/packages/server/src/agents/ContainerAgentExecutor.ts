@@ -82,7 +82,7 @@ export type LeaseSubscriptionToken = (
  */
 export type LeasePersonalSubscriptionToken = (
   executionId: string,
-  userId: number,
+  userId: string,
   vendor: SubscriptionVendor,
 ) => Promise<{ secret: string }>
 

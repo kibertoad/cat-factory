@@ -118,15 +118,15 @@ export class SlackNotificationChannel implements NotificationChannel {
   ): Promise<string[]> {
     const mapping = await this.deps.slackMemberMappingRepository.getByAccount(accountKey)
     if (mapping.length === 0) return []
-    const creatorGithubId = await this.resolveCreator(workspaceId, notification.blockId)
-    return resolveMentionTargets(notification.type, mapping, creatorGithubId)
+    const creatorUserId = await this.resolveCreator(workspaceId, notification.blockId)
+    return resolveMentionTargets(notification.type, mapping, creatorUserId)
   }
 
-  /** The GitHub user id of the block's creator, or null when unknown. */
+  /** The internal user id of the block's creator, or null when unknown. */
   private async resolveCreator(
     workspaceId: string,
     blockId: string | null,
-  ): Promise<number | null> {
+  ): Promise<string | null> {
     if (!blockId) return null
     const block = await this.deps.blockRepository.get(workspaceId, blockId)
     return block?.createdBy ?? null

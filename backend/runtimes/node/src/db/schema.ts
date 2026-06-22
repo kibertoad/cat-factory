@@ -24,14 +24,45 @@ export const workspaces = pgTable(
   {
     id: text('id').primaryKey(),
     name: text('name').notNull(),
+    description: text('description'),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
     account_id: text('account_id'),
-    owner_user_id: bigint('owner_user_id', { mode: 'number' }),
+    owner_user_id: text('owner_user_id'),
   },
   // listVisible filters by owner_user_id (legacy) and account_id (membership scope).
   (t) => [
     index('idx_workspaces_owner').on(t.owner_user_id),
     index('idx_workspaces_account').on(t.account_id),
+  ],
+)
+
+// Canonical user identity (decoupled from GitHub). Everything else keys off users.id.
+export const users = pgTable(
+  'users',
+  {
+    id: text('id').primaryKey(),
+    name: text('name'),
+    email: text('email'),
+    avatar_url: text('avatar_url'),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+  },
+  (t) => [uniqueIndex('idx_users_email').on(t.email).where(sql`email IS NOT NULL`)],
+)
+
+// A linked login identity for a user. (provider, subject) is unique.
+export const userIdentities = pgTable(
+  'user_identities',
+  {
+    user_id: text('user_id').notNull(),
+    provider: text('provider').notNull(),
+    subject: text('subject').notNull(),
+    secret: text('secret'),
+    metadata: text('metadata'),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.provider, t.subject] }),
+    index('idx_user_identities_user').on(t.user_id),
   ],
 )
 
@@ -42,15 +73,17 @@ export const accounts = pgTable(
     type: text('type').notNull(),
     name: text('name').notNull(),
     github_account_login: text('github_account_login'),
+    // The user who owns a personal account (its account-of-one). Null for orgs.
+    owner_user_id: text('owner_user_id'),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
     // The default cloud provider new services in this account inherit.
     default_cloud_provider: text('default_cloud_provider'),
   },
-  // Enforce one personal account per GitHub login (a correctness constraint, not just
-  // a lookup index) — the partial unique index `findPersonalByLogin` relies on.
+  // Enforce one personal account per user (a correctness constraint, not just a
+  // lookup index) — the partial unique index `findPersonalByUser` relies on.
   (t) => [
     uniqueIndex('idx_accounts_personal')
-      .on(t.github_account_login)
+      .on(t.owner_user_id)
       .where(sql`type = 'personal'`),
   ],
 )
@@ -59,13 +92,33 @@ export const memberships = pgTable(
   'memberships',
   {
     account_id: text('account_id').notNull(),
-    user_id: bigint('user_id', { mode: 'number' }).notNull(),
+    user_id: text('user_id').notNull(),
     role: text('role').notNull().default('member'),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
   },
   (t) => [
     primaryKey({ columns: [t.account_id, t.user_id] }),
     index('idx_memberships_user').on(t.user_id),
+  ],
+)
+
+// Email invitations into an org account. Only the token's hash is stored.
+export const accountInvitations = pgTable(
+  'account_invitations',
+  {
+    id: text('id').primaryKey(),
+    account_id: text('account_id').notNull(),
+    email: text('email').notNull(),
+    role: text('role').notNull().default('member'),
+    token_hash: text('token_hash').notNull(),
+    invited_by: text('invited_by').notNull(),
+    status: text('status').notNull().default('pending'),
+    expires_at: bigint('expires_at', { mode: 'number' }).notNull(),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+  },
+  (t) => [
+    index('idx_account_invitations_account').on(t.account_id),
+    uniqueIndex('idx_account_invitations_token').on(t.token_hash),
   ],
 )
 
@@ -110,7 +163,7 @@ export const blocks = pgTable(
     service_id: text('service_id'),
     // GitHub user id of the block's creator (migration 0038); drives "notify the task
     // creator" routing. Nullable — legacy blocks / auth-disabled dev have no creator.
-    created_by: bigint('created_by', { mode: 'number' }),
+    created_by: text('created_by'),
   },
   (t) => [
     primaryKey({ columns: [t.workspace_id, t.id] }),
@@ -778,7 +831,7 @@ export const personalSubscriptions = pgTable(
   'personal_subscriptions',
   {
     id: text('id').primaryKey(),
-    user_id: bigint('user_id', { mode: 'number' }).notNull(),
+    user_id: text('user_id').notNull(),
     vendor: text('vendor').notNull(),
     label: text('label').notNull(),
     token_cipher: text('token_cipher').notNull(),
@@ -805,7 +858,7 @@ export const subscriptionActivations = pgTable(
   {
     id: text('id').primaryKey(),
     execution_id: text('execution_id').notNull(),
-    user_id: bigint('user_id', { mode: 'number' }).notNull(),
+    user_id: text('user_id').notNull(),
     vendor: text('vendor').notNull(),
     token_cipher: text('token_cipher').notNull(),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),

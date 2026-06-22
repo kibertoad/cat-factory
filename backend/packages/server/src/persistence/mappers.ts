@@ -22,6 +22,7 @@ import type {
 export interface WorkspaceRow {
   id: string
   name: string
+  description?: string | null
   created_at: number
   account_id: string | null
 }
@@ -30,6 +31,7 @@ export function rowToWorkspace(row: WorkspaceRow): Workspace {
   return {
     id: row.id,
     name: row.name,
+    description: row.description ?? null,
     createdAt: row.created_at,
     accountId: row.account_id ?? null,
   }
@@ -69,7 +71,7 @@ export interface BlockRow {
   cloud_provider: string | null
   /** Service-level: abstract instance size for the service's jobs. */
   instance_size: string | null
-  created_by: number | null
+  created_by: string | null
 }
 
 export function rowToBlock(row: BlockRow): Block {
@@ -255,8 +257,8 @@ interface ExecutionDetail {
   pipelineName: string
   steps: PipelineStep[]
   currentStep: number
-  /** GitHub user id of the run's initiator (individual-usage credential ownership). */
-  initiatedBy: number | null
+  /** Internal user id of the run's initiator (individual-usage credential ownership). */
+  initiatedBy: string | null
 }
 
 /** Parse the JSON-encoded structured failure column, tolerating null/garbage. */

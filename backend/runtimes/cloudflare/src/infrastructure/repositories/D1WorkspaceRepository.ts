@@ -42,11 +42,11 @@ export class D1WorkspaceRepository implements WorkspaceRepository {
     return row ? rowToWorkspace(row) : null
   }
 
-  async ownerOf(id: string): Promise<number | null | undefined> {
+  async ownerOf(id: string): Promise<string | null | undefined> {
     const row = await this.db
       .prepare('SELECT owner_user_id FROM workspaces WHERE id = ?')
       .bind(id)
-      .first<{ owner_user_id: number | null }>()
+      .first<{ owner_user_id: string | null }>()
     // Row absent → undefined (missing); present → the (possibly null) owner id.
     return row ? row.owner_user_id : undefined
   }
@@ -62,19 +62,33 @@ export class D1WorkspaceRepository implements WorkspaceRepository {
 
   async create(
     workspace: Workspace,
-    ownerUserId: number | null,
+    ownerUserId: string | null,
     accountId: string | null,
   ): Promise<void> {
     await this.db
       .prepare(
-        'INSERT INTO workspaces (id, name, created_at, owner_user_id, account_id) VALUES (?, ?, ?, ?, ?)',
+        'INSERT INTO workspaces (id, name, description, created_at, owner_user_id, account_id) VALUES (?, ?, ?, ?, ?, ?)',
       )
-      .bind(workspace.id, workspace.name, workspace.createdAt, ownerUserId, accountId)
+      .bind(
+        workspace.id,
+        workspace.name,
+        workspace.description ?? null,
+        workspace.createdAt,
+        ownerUserId,
+        accountId,
+      )
       .run()
   }
 
   async rename(id: string, name: string): Promise<void> {
     await this.db.prepare('UPDATE workspaces SET name = ? WHERE id = ?').bind(name, id).run()
+  }
+
+  async setDescription(id: string, description: string | null): Promise<void> {
+    await this.db
+      .prepare('UPDATE workspaces SET description = ? WHERE id = ?')
+      .bind(description, id)
+      .run()
   }
 
   async delete(id: string): Promise<void> {

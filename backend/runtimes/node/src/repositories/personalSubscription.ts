@@ -34,7 +34,7 @@ export class DrizzlePersonalSubscriptionRepository implements PersonalSubscripti
   constructor(private readonly db: DrizzleDb) {}
 
   async getByUserVendor(
-    userId: number,
+    userId: string,
     vendor: SubscriptionVendor,
   ): Promise<PersonalSubscriptionRecord | null> {
     const rows = await this.db
@@ -51,7 +51,7 @@ export class DrizzlePersonalSubscriptionRepository implements PersonalSubscripti
     return rows[0] ? toRecord(rows[0]) : null
   }
 
-  async listByUser(userId: number): Promise<PersonalSubscriptionRecord[]> {
+  async listByUser(userId: string): Promise<PersonalSubscriptionRecord[]> {
     const rows = await this.db
       .select()
       .from(personalSubscriptions)
@@ -101,7 +101,7 @@ export class DrizzlePersonalSubscriptionRepository implements PersonalSubscripti
       })
   }
 
-  async markUsed(userId: number, vendor: SubscriptionVendor, at: number): Promise<void> {
+  async markUsed(userId: string, vendor: SubscriptionVendor, at: number): Promise<void> {
     await this.db
       .update(personalSubscriptions)
       .set({ last_used_at: at })
@@ -114,7 +114,7 @@ export class DrizzlePersonalSubscriptionRepository implements PersonalSubscripti
       )
   }
 
-  async softDelete(userId: number, vendor: SubscriptionVendor, at: number): Promise<void> {
+  async softDelete(userId: string, vendor: SubscriptionVendor, at: number): Promise<void> {
     await this.db
       .update(personalSubscriptions)
       .set({ deleted_at: at })
@@ -162,7 +162,7 @@ export class DrizzleSubscriptionActivationRepository implements SubscriptionActi
 
   async get(
     executionId: string,
-    userId: number,
+    userId: string,
     vendor: SubscriptionVendor,
     now: number,
   ): Promise<SubscriptionActivationRecord | null> {
@@ -210,7 +210,7 @@ export class DrizzleSubscriptionActivationRepository implements SubscriptionActi
 
   async refresh(
     executionId: string,
-    userId: number,
+    userId: string,
     vendor: SubscriptionVendor,
     expiresAt: number,
   ): Promise<void> {

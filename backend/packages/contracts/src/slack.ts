@@ -71,16 +71,16 @@ export type SlackNotificationSettings = v.InferOutput<typeof slackNotificationSe
 export const slackMemberRoleSchema = v.picklist(['product', 'engineering'])
 export type SlackMemberRole = v.InferOutput<typeof slackMemberRoleSchema>
 
-/** One GitHub user id → Slack member id mapping entry, with the member's role. */
+/** One internal user id → Slack member id mapping entry, with the member's role. */
 export const slackMemberMappingEntrySchema = v.object({
-  githubUserId: v.number(),
+  userId: v.pipe(v.string(), v.minLength(1)),
   slackUserId: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(64)),
   /** Notification role (default `engineering` when absent). */
   role: v.optional(slackMemberRoleSchema),
 })
 export type SlackMemberMappingEntry = v.InferOutput<typeof slackMemberMappingEntrySchema>
 
-/** An account's GitHub→Slack member map (opt-in; backs @-mentions). */
+/** An account's user→Slack member map (opt-in; backs @-mentions). */
 export const slackMemberMappingSchema = v.object({
   entries: v.array(slackMemberMappingEntrySchema),
 })

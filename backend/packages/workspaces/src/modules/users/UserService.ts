@@ -39,6 +39,11 @@ export class UserService {
     return this.deps.userRepository.get(id)
   }
 
+  /** The user behind an external identity, or null (no side effects). */
+  findByIdentity(provider: IdentityProvider, subject: string): Promise<UserRecord | null> {
+    return this.deps.userRepository.findByIdentity(provider, subject)
+  }
+
   /**
    * Resolve the user behind an external identity, creating the user + linking the
    * identity on first sight. Idempotent on `(provider, subject)`: repeated logins
