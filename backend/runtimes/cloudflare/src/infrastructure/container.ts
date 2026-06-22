@@ -17,6 +17,10 @@ import {
   resolveAgentConfig,
 } from '@cat-factory/agents'
 import {
+  ConfluenceProvider,
+  GitHubDocsProvider,
+  HttpEnvironmentProvider,
+  NotionProvider,
   PersonalSubscriptionService,
   ProviderSubscriptionService,
   RunnerPoolConnectionService,
@@ -105,16 +109,12 @@ import { InAppNotificationChannel } from './events/InAppNotificationChannel'
 import { GitHubCiStatusProvider } from './github/GitHubCiStatusProvider'
 import { GitHubMergeabilityProvider } from './github/GitHubMergeabilityProvider'
 import { GitHubPullRequestMerger } from './github/GitHubPullRequestMerger'
-import { HttpEnvironmentProvider } from './environments/HttpEnvironmentProvider'
 import { WebCryptoSecretCipher } from './environments/WebCryptoSecretCipher'
 import { GitHubAppAuth } from './github/GitHubAppAuth'
 import { GitHubAppRegistry } from './github/GitHubAppRegistry'
 import { FetchGitHubClient } from './github/FetchGitHubClient'
 import { FetchGitHubProvisioningClient } from './github/FetchGitHubProvisioningClient'
 import { WebCryptoWebhookVerifier } from './github/WebCryptoWebhookVerifier'
-import { ConfluenceProvider } from './documents/ConfluenceProvider'
-import { NotionProvider } from './documents/NotionProvider'
-import { GitHubDocsProvider } from './documents/GitHubDocsProvider'
 import { JiraProvider } from './tasks/JiraProvider'
 import { GitHubIssuesProvider } from './tasks/GitHubIssuesProvider'
 import { D1TaskConnectionRepository } from './repositories/D1TaskConnectionRepository'

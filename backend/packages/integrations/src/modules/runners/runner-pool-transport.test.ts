@@ -71,7 +71,16 @@ describe('RunnerPoolTransport', () => {
     expect(calls.release).toHaveLength(1)
   })
 
-  it('rejects non-run kinds (self-hosted pools serve coding runs only)', () => {
+  it('serves repo bootstrap (the harness /bootstrap route needs no Cloudflare primitive)', async () => {
+    const { provider, calls } = fakeProvider()
+    const transport = new RunnerPoolTransport(provider, manifest, () => 't')
+    await transport.dispatch('job-1', { repoName: 'svc' }, 'bootstrap')
+    expect(calls.dispatch).toHaveLength(1)
+    const req = calls.dispatch[0] as { spec: Record<string, unknown> }
+    expect(req.spec.kind).toBe('bootstrap')
+  })
+
+  it('rejects the Cloudflare-only kinds (self-hosted pools serve run/test/fix/bootstrap only)', () => {
     const { provider } = fakeProvider()
     const transport = new RunnerPoolTransport(provider, manifest, () => 't')
     expect(() => transport.dispatch('job-1', {}, 'blueprint')).toThrow(/do not support 'blueprint'/)

@@ -1,8 +1,6 @@
 import type {
   GitHubInstallation,
   GitHubInstallationRepository,
-  GitHubRepo,
-  RepoProjectionRepository,
   RunnerPoolConnectionRecord,
   RunnerPoolConnectionRepository,
   Service,
@@ -10,13 +8,7 @@ import type {
 } from '@cat-factory/kernel'
 import { and, eq, isNull } from 'drizzle-orm'
 import type { DrizzleDb } from '../db/client.js'
-import {
-  githubInstallations,
-  githubRepos,
-  runnerPoolConnections,
-  services,
-  workspaces,
-} from '../db/schema.js'
+import { githubInstallations, runnerPoolConnections, services, workspaces } from '../db/schema.js'
 
 // Drizzle/Postgres adapters for the persistence the container-agent execution path
 // needs on the Node facade: a workspace's self-hosted runner-pool binding, its
@@ -209,38 +201,6 @@ export class DrizzleGitHubInstallationRepository implements GitHubInstallationRe
       .update(githubInstallations)
       .set({ deleted_at: at })
       .where(eq(githubInstallations.installation_id, installationId))
-  }
-}
-
-function rowToRepo(row: typeof githubRepos.$inferSelect): GitHubRepo {
-  return {
-    githubId: row.github_id,
-    installationId: row.installation_id,
-    owner: row.owner,
-    name: row.name,
-    defaultBranch: row.default_branch,
-    private: row.private !== 0,
-    blockId: row.block_id,
-    isMonorepo: row.is_monorepo !== 0,
-    syncedAt: row.synced_at,
-  }
-}
-
-/**
- * Postgres-backed read of a workspace's projected GitHub repos (mirror of D1 migration
- * 0004). The Node facade has no GitHub sync writer yet, so only the `list` the shared
- * `buildResolveRepoTarget` needs is implemented (the rest of `RepoProjectionRepository`
- * has no caller here).
- */
-export class DrizzleRepoProjectionRepository implements Pick<RepoProjectionRepository, 'list'> {
-  constructor(private readonly db: DrizzleDb) {}
-
-  async list(workspaceId: string): Promise<GitHubRepo[]> {
-    const rows = await this.db
-      .select()
-      .from(githubRepos)
-      .where(and(eq(githubRepos.workspace_id, workspaceId), isNull(githubRepos.deleted_at)))
-    return rows.map(rowToRepo)
   }
 }
 

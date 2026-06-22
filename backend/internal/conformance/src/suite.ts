@@ -1,9 +1,11 @@
 import {
   type Block,
   type ExecutionInstance,
+  type MergeThresholdPreset,
   type ModelDefaults,
   type Pipeline,
   type PipelineSchedule,
+  type RepoBlueprintRecord,
   type ScheduleRun,
   seedPipelines,
   type SlackMemberMappingEntry,
@@ -206,6 +208,50 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
       })
     })
 
+    describe('prompt-fragment library (managed catalog)', () => {
+      it('lists (200 not 503), creates, edits and removes a tier-owned fragment', async () => {
+        const { call, createWorkspace } = harness.makeApp()
+        const { workspace } = await createWorkspace()
+        const base = `/workspaces/${workspace.id}/prompt-fragments`
+
+        // The library module is wired on every facade (the test env opts in): a fresh
+        // workspace lists no tier-owned fragments (a 200), not the 503 an unconfigured
+        // library returns.
+        const initial = await call<{ id: string }[]>('GET', base)
+        expect(initial.status).toBe(200)
+        expect(initial.body).toEqual([])
+
+        // Create a hand-authored fragment at the workspace tier.
+        const created = await call<{ id: string; title: string }>('POST', base, {
+          id: 'perf',
+          title: 'Performance',
+          summary: 'Keep the hot path allocation-free.',
+          body: 'Avoid allocations in the request hot path; prefer streaming.',
+          tags: ['backend'],
+        })
+        expect(created.status).toBe(201)
+        expect(created.body.id).toBe('perf')
+        expect(created.body.title).toBe('Performance')
+
+        // It lists back at this tier (the merged/built-in catalog is a separate read).
+        const listed = await call<{ id: string }[]>('GET', base)
+        expect(listed.body.map((f) => f.id)).toEqual(['perf'])
+
+        // Edit its summary.
+        const patched = await call<{ summary: string }>('PATCH', `${base}/perf`, {
+          summary: 'Keep the hot path allocation-free and streamed.',
+        })
+        expect(patched.status).toBe(200)
+        expect(patched.body.summary).toBe('Keep the hot path allocation-free and streamed.')
+
+        // Remove it; the tier list goes empty again.
+        const del = await call('DELETE', `${base}/perf`)
+        expect(del.status).toBe(204)
+        const afterDelete = await call<{ id: string }[]>('GET', base)
+        expect(afterDelete.body).toEqual([])
+      })
+    })
+
     describe('vendor credentials (subscription token pool)', () => {
       it('adds, lists (secret-free), and removes pooled subscription tokens', async () => {
         const { call, createWorkspace } = harness.makeApp()
@@ -278,6 +324,290 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         })
         expect(deepseek.status).toBe(201)
         expect(deepseek.body.vendor).toBe('deepseek')
+      })
+    })
+
+    describe('merge presets', () => {
+      it('seeds a default, enforces the single-default invariant, and guards the default', async () => {
+        const { call, createWorkspace } = harness.makeApp()
+        const { workspace } = await createWorkspace()
+        const base = `/workspaces/${workspace.id}/merge-presets`
+
+        // First list lazily seeds the built-in default (one preset, flagged default).
+        const initial = await call<MergeThresholdPreset[]>('GET', base)
+        expect(initial.status).toBe(200)
+        expect(initial.body).toHaveLength(1)
+        expect(initial.body[0]!.isDefault).toBe(true)
+        const seededDefaultId = initial.body[0]!.id
+
+        // Add a non-default preset; the seeded default stays the default.
+        const lenient = await call<MergeThresholdPreset>('POST', base, {
+          name: 'Lenient',
+          maxComplexity: 0.9,
+          maxRisk: 0.8,
+          maxImpact: 0.7,
+          ciMaxAttempts: 5,
+        })
+        expect(lenient.status).toBe(201)
+        expect(lenient.body.isDefault).toBe(false)
+
+        // Promote a brand-new preset to default; the previous default is demoted
+        // (single-default invariant enforced by the repository).
+        const strict = await call<MergeThresholdPreset>('POST', base, {
+          name: 'Strict',
+          maxComplexity: 0.3,
+          maxRisk: 0.2,
+          maxImpact: 0.2,
+          ciMaxAttempts: 10,
+          isDefault: true,
+        })
+        expect(strict.status).toBe(201)
+        expect(strict.body.isDefault).toBe(true)
+
+        const afterPromote = await call<MergeThresholdPreset[]>('GET', base)
+        expect(afterPromote.body).toHaveLength(3)
+        const defaults = afterPromote.body.filter((p) => p.isDefault)
+        expect(defaults.map((p) => p.id)).toEqual([strict.body.id])
+        expect(afterPromote.body.find((p) => p.id === seededDefaultId)!.isDefault).toBe(false)
+
+        // The default cannot be unset via PATCH, nor removed via DELETE.
+        const unset = await call('PATCH', `${base}/${strict.body.id}`, { isDefault: false })
+        expect(unset.status).toBe(409)
+        const delDefault = await call('DELETE', `${base}/${strict.body.id}`)
+        expect(delDefault.status).toBe(409)
+
+        // A non-default preset can be patched and removed.
+        const renamed = await call<MergeThresholdPreset>('PATCH', `${base}/${lenient.body.id}`, {
+          name: 'Lenient v2',
+        })
+        expect(renamed.status).toBe(200)
+        expect(renamed.body.name).toBe('Lenient v2')
+        const del = await call('DELETE', `${base}/${lenient.body.id}`)
+        expect(del.status).toBe(204)
+        const final = await call<MergeThresholdPreset[]>('GET', base)
+        expect(final.body.map((p) => p.id).sort()).toEqual([seededDefaultId, strict.body.id].sort())
+      })
+    })
+
+    describe('repo bootstrap', () => {
+      it('round-trips reference architectures', async () => {
+        const { call, createWorkspace } = harness.makeApp()
+        const { workspace } = await createWorkspace()
+        const base = `/workspaces/${workspace.id}/bootstrap/reference-architectures`
+
+        const empty = await call<unknown[]>('GET', base)
+        expect(empty.status).toBe(200)
+        expect(empty.body).toEqual([])
+
+        const created = await call<{ id: string; name: string }>('POST', base, {
+          name: 'Node service',
+          repoOwner: 'acme',
+          repoName: 'reference-node',
+          defaultInstructions: 'Adapt the reference service.',
+        })
+        expect(created.status).toBe(201)
+        expect(created.body.name).toBe('Node service')
+
+        const renamed = await call<{ name: string }>('PATCH', `${base}/${created.body.id}`, {
+          name: 'Node service v2',
+        })
+        expect(renamed.status).toBe(200)
+        expect(renamed.body.name).toBe('Node service v2')
+
+        const listed = await call<{ id: string }[]>('GET', base)
+        expect(listed.body.map((r) => r.id)).toEqual([created.body.id])
+
+        const del = await call('DELETE', `${base}/${created.body.id}`)
+        expect(del.status).toBe(204)
+        expect((await call<unknown[]>('GET', base)).body).toEqual([])
+      })
+
+      it('drives a bootstrap run to success and materialises its service frame', async () => {
+        const app = harness.makeApp()
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        // Kick off a from-scratch bootstrap (the FakeRepoBootstrapper reports connected,
+        // so the pre-flight passes). The call returns immediately with a running job that
+        // already carries its provisional service frame.
+        const started = await app.call<{ id: string; status: string; blockId: string | null }>(
+          'POST',
+          `/workspaces/${wsId}/bootstrap/jobs`,
+          { repoName: 'new-service', instructions: 'Scaffold a small HTTP service.' },
+        )
+        expect(started.status).toBe(201)
+        expect(started.body.status).toBe('running')
+        expect(started.body.blockId).toBeTruthy()
+        const jobId = started.body.id
+        const frameId = started.body.blockId!
+
+        // Drive the durable poll loop (production: pg-boss / a BootstrapWorkflow). The
+        // default fake reports `done` on the first poll.
+        const polls = await app.driveBootstrap(wsId, jobId)
+        expect(polls).toBeGreaterThanOrEqual(1)
+
+        // The job is now succeeded and its service frame is materialised on the board
+        // (a real frame, not blocked — the success path flips it ready, after which the
+        // best-effort initial blueprint run may move it to in_progress; both are success
+        // states and identical across facades, so we assert it isn't the failure state).
+        const job = await app.call<{ status: string; blockId: string | null }>(
+          'GET',
+          `/workspaces/${wsId}/bootstrap/jobs/${jobId}`,
+        )
+        expect(job.body.status).toBe('succeeded')
+
+        const snap = await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+        const frame = snap.body.blocks.find((b) => b.id === frameId)
+        expect(frame?.level).toBe('frame')
+        expect(frame?.status).not.toBe('blocked')
+      })
+    })
+
+    describe('board scan blueprints', () => {
+      it('exposes the module and round-trips persisted repository blueprints', async () => {
+        const app = harness.makeApp()
+        const { workspace } = await app.createWorkspace()
+        const base = `/workspaces/${workspace.id}/board-scan/blueprints`
+
+        // The module is wired on every facade: a fresh workspace lists an empty array
+        // (a 200), not the 503 a missing board-scan module would return.
+        const empty = await app.call<RepoBlueprintRecord[]>('GET', base)
+        expect(empty.status).toBe(200)
+        expect(empty.body).toEqual([])
+
+        // Seed a blueprint straight into the store (what the manual scan + the blueprint
+        // pipeline step persist) and assert the read endpoints return it.
+        const record: RepoBlueprintRecord = {
+          id: 'bp_conformance',
+          workspaceId: workspace.id,
+          repoOwner: 'octo',
+          repoName: 'demo',
+          source: 'llm',
+          service: {
+            type: 'service',
+            name: 'Demo',
+            summary: 'A demo service',
+            references: ['package.json'],
+            modules: [{ name: 'Auth', summary: 'Login', references: ['src/auth'] }],
+          },
+          createdAt: 1,
+          updatedAt: 2,
+        }
+        await app.seedBlueprint(record)
+
+        const listed = await app.call<RepoBlueprintRecord[]>('GET', base)
+        expect(listed.status).toBe(200)
+        expect(listed.body).toHaveLength(1)
+        expect(listed.body[0]!.repoName).toBe('demo')
+        expect(listed.body[0]!.service.modules?.[0]?.name).toBe('Auth')
+
+        const got = await app.call<RepoBlueprintRecord>('GET', `${base}/${record.id}`)
+        expect(got.status).toBe(200)
+        expect(got.body.repoOwner).toBe('octo')
+
+        const del = await app.call('DELETE', `${base}/${record.id}`)
+        expect(del.status).toBe(204)
+        const afterDelete = await app.call<RepoBlueprintRecord[]>('GET', base)
+        expect(afterDelete.body).toEqual([])
+      })
+    })
+
+    describe('document sources', () => {
+      it('connects, lists (secret-free), and disconnects a document source', async () => {
+        const { call, createWorkspace } = harness.makeApp()
+        const { workspace } = await createWorkspace()
+        const base = `/workspaces/${workspace.id}/document-sources`
+
+        // The module is wired on every facade: a fresh workspace lists no connections
+        // (a 200), not the 503 a missing documents module would return.
+        const initial = await call<{ connections: { source: string }[] }>(
+          'GET',
+          `${base}/connections`,
+        )
+        expect(initial.status).toBe(200)
+        expect(initial.body.connections).toEqual([])
+
+        // Connect Notion (a single internal-integration token; normalizeConnection is
+        // pure, so no network). The credential is encrypted at rest and never echoed.
+        const connected = await call<{ source: string; label: string }>(
+          'POST',
+          `${base}/notion/connect`,
+          { credentials: { apiToken: 'secret-notion-token-xyz' } },
+        )
+        expect(connected.status).toBe(201)
+        expect(connected.body.source).toBe('notion')
+        expect(JSON.stringify(connected.body)).not.toContain('secret-notion-token')
+
+        // It lists back as metadata only — the token is never on the wire.
+        const listed = await call<{ connections: { source: string }[] }>(
+          'GET',
+          `${base}/connections`,
+        )
+        expect(listed.body.connections.map((c) => c.source)).toEqual(['notion'])
+        expect(JSON.stringify(listed.body)).not.toContain('secret-notion-token')
+
+        // Disconnect tombstones it; the list goes empty again.
+        const del = await call('DELETE', `${base}/notion/connection`)
+        expect(del.status).toBe(204)
+        const afterDelete = await call<{ connections: unknown[] }>('GET', `${base}/connections`)
+        expect(afterDelete.body.connections).toEqual([])
+      })
+    })
+
+    describe('ephemeral environments', () => {
+      it('registers, reads (secret-free), and unregisters an environment provider', async () => {
+        const { call, createWorkspace } = harness.makeApp()
+        const { workspace } = await createWorkspace()
+        const base = `/workspaces/${workspace.id}/environments`
+
+        // The module is wired on every facade (the test env opts in): a fresh
+        // workspace has no provider connection — a 200, not the 503 a missing module
+        // would return.
+        const initial = await call<{ connection: unknown }>('GET', `${base}/connection`)
+        expect(initial.status).toBe(200)
+        expect(initial.body.connection).toBeNull()
+
+        // Register a provider (a declarative manifest + its secret bundle). register is
+        // pure — it validates the manifest (SSRF + secret completeness) and encrypts the
+        // bundle at rest; no network. The token is never echoed.
+        const manifest = {
+          providerId: 'acme-envs',
+          label: 'Acme Ephemeral Envs',
+          baseUrl: 'https://envs.test/api',
+          auth: { type: 'bearer', secretRef: { key: 'API_TOKEN' } },
+          provision: {
+            method: 'POST',
+            pathTemplate: '/environments',
+            bodyTemplate: '{"ref":"{{input.blockId}}"}',
+          },
+          status: { method: 'GET', pathTemplate: '/environments/{{provision.externalId}}' },
+          teardown: { method: 'DELETE', pathTemplate: '/environments/{{provision.externalId}}' },
+          response: { urlPath: 'url', statusPath: 'state', externalIdPath: 'id' },
+        }
+        const registered = await call<{ providerId: string; secretKeys: string[] }>(
+          'POST',
+          `${base}/connection`,
+          { manifest, secrets: { API_TOKEN: 'super-secret-env-token' } },
+        )
+        expect(registered.status).toBe(201)
+        expect(registered.body.providerId).toBe('acme-envs')
+        expect(registered.body.secretKeys).toEqual(['API_TOKEN'])
+        expect(JSON.stringify(registered.body)).not.toContain('super-secret-env-token')
+
+        // It reads back as metadata only — the secret bundle is never on the wire.
+        const got = await call<{ connection: { providerId: string; secretKeys: string[] } | null }>(
+          'GET',
+          `${base}/connection`,
+        )
+        expect(got.body.connection?.providerId).toBe('acme-envs')
+        expect(got.body.connection?.secretKeys).toEqual(['API_TOKEN'])
+        expect(JSON.stringify(got.body)).not.toContain('super-secret-env-token')
+
+        // Unregister tombstones it; the connection goes null again.
+        const del = await call('DELETE', `${base}/connection`)
+        expect(del.status).toBe(204)
+        const afterDelete = await call<{ connection: unknown }>('GET', `${base}/connection`)
+        expect(afterDelete.body.connection).toBeNull()
       })
     })
 

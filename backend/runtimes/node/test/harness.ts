@@ -3,16 +3,20 @@ import {
   type ConformanceApp,
   FakeAgentExecutor,
   type FakeAgentOptions,
+  FakeRepoBootstrapper,
   RecordingEventPublisher,
   makeIncorporatedReview,
 } from '@cat-factory/conformance'
-import type { ExecutionInstance, WorkspaceSnapshot } from '@cat-factory/kernel'
+import type { ExecutionInstance, RepoBlueprintRecord, WorkspaceSnapshot } from '@cat-factory/kernel'
 import { NoopBootstrapRunner, NoopWorkRunner } from '@cat-factory/kernel'
 import type { CoreDependencies } from '@cat-factory/orchestration'
 import { buildNodeContainer } from '../src/container.js'
 import { type DrizzleDb, createDbClient } from '../src/db/client.js'
 import { migrate } from '../src/db/migrate.js'
-import { DrizzleRequirementReviewRepository } from '../src/repositories/drizzle.js'
+import {
+  DrizzleRepoBlueprintRepository,
+  DrizzleRequirementReviewRepository,
+} from '../src/repositories/drizzle.js'
 import { createApp } from '../src/server.js'
 
 const BASE = 'https://cat-factory.test'
@@ -32,6 +36,12 @@ const TEST_ENV: NodeJS.ProcessEnv = {
   // with the Worker test env); the conformance Slack CRUD asserts persistence parity,
   // and the channel bails (best-effort) when a workspace has no Slack connection.
   SLACK_ENABLED: 'true',
+  // Opt into the ephemeral-environment integration so its module wires up (parity with
+  // the Worker test env); the conformance env CRUD asserts persistence parity.
+  ENVIRONMENTS_ENABLED: 'true',
+  // Opt into the prompt-fragment library (ADR 0006) so its module wires up; the
+  // conformance library CRUD asserts persistence parity across stores.
+  PROMPT_LIBRARY_ENABLED: 'true',
 }
 
 /**
@@ -65,6 +75,9 @@ export function makeConformanceApp(db: DrizzleDb, agentOptions?: FakeAgentOption
       : new FakeAgentExecutor(agentOptions),
     workRunner: new NoopWorkRunner(),
     bootstrapRunner: new NoopBootstrapRunner(),
+    // A deterministic bootstrapper so the suite can drive the dispatch→poll→finalise
+    // lifecycle without GitHub or a container (the suite drives it via driveBootstrap).
+    repoBootstrapper: new FakeRepoBootstrapper(),
     executionEventPublisher: recorder,
   }
   const container = buildNodeContainer({ db, env: TEST_ENV, overrides })
@@ -129,6 +142,20 @@ export function makeConformanceApp(db: DrizzleDb, agentOptions?: FakeAgentOption
     return blockId ? recorder.emits.filter((e) => e.blockId === blockId) : recorder.emits
   }
 
+  // Poll a bootstrap run to terminal directly (production drives this via pg-boss).
+  async function driveBootstrap(
+    workspaceId: string,
+    jobId: string,
+    maxPolls = 50,
+  ): Promise<number> {
+    if (!container.bootstrap) throw new Error('bootstrap module is not configured in this app')
+    for (let p = 0; p < maxPolls; p++) {
+      const result = await container.bootstrap.service.pollBootstrapJob(workspaceId, jobId)
+      if (result.state !== 'running') return p + 1
+    }
+    return maxPolls
+  }
+
   function seedIncorporatedReview(workspaceId: string, blockId: string, requirements: string) {
     return new DrizzleRequirementReviewRepository(db).upsert(
       workspaceId,
@@ -136,12 +163,18 @@ export function makeConformanceApp(db: DrizzleDb, agentOptions?: FakeAgentOption
     )
   }
 
+  function seedBlueprint(record: RepoBlueprintRecord) {
+    return new DrizzleRepoBlueprintRepository(db).upsert(record)
+  }
+
   return {
     call,
     createWorkspace,
     createOrgWorkspace,
     drive,
+    driveBootstrap,
     executionEmits,
     seedIncorporatedReview,
+    seedBlueprint,
   }
 }

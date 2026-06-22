@@ -1,6 +1,7 @@
 import type {
   ExecutionEventPublisher,
   ExecutionInstance,
+  RepoBlueprintRecord,
   WorkspaceSnapshot,
 } from '@cat-factory/kernel'
 import type { FakeAgentOptions } from './FakeAgentExecutor.js'
@@ -62,6 +63,12 @@ export interface ConformanceApp {
    */
   drive(workspaceId: string, maxRounds?: number): Promise<ExecutionInstance[]>
   /**
+   * Poll a bootstrap run to a terminal state (the Node/CF facades durably drive this via
+   * pg-boss / a BootstrapWorkflow; the suite drives it directly against a deterministic
+   * {@link FakeRepoBootstrapper}). Returns the number of polls taken.
+   */
+  driveBootstrap(workspaceId: string, jobId: string, maxPolls?: number): Promise<number>
+  /**
    * Every {@link ExecutionInstance} the engine emitted (via `executionChanged`), in
    * order and deep-cloned at emit time — so the suite can assert intermediate
    * transitions `drive`'s final state can't show. Optionally filtered to one block.
@@ -75,6 +82,13 @@ export interface ConformanceApp {
    * real LLM, so the suite seeds the persisted outcome rather than driving them.)
    */
   seedIncorporatedReview(workspaceId: string, blockId: string, requirements: string): Promise<void>
+  /**
+   * Seed a persisted repository blueprint straight into the facade's real board-scan
+   * store, so the suite can assert the blueprint read endpoints (which the manual scan
+   * + the blueprint pipeline step write) return it identically on every runtime —
+   * without running a real container scan.
+   */
+  seedBlueprint(record: RepoBlueprintRecord): Promise<void>
 }
 
 export interface ConformanceHarness {

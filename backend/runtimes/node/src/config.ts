@@ -1,7 +1,7 @@
 import type { AgentModelConfig } from '@cat-factory/agents'
 import { effectiveCatalog, resolveModelRef } from '@cat-factory/kernel'
-import type { TaskSourceKind } from '@cat-factory/kernel'
-import type { AppConfig, TasksConfig } from '@cat-factory/server'
+import type { DocumentSourceKind, TaskSourceKind } from '@cat-factory/kernel'
+import type { AppConfig, DocumentsConfig, TasksConfig } from '@cat-factory/server'
 import { DEFAULT_SPEND_PRICING, modelCostResolver } from '@cat-factory/spend'
 
 // Translate the Node process environment into the shared AppConfig contract. This is
@@ -29,6 +29,40 @@ function csv(value: string | undefined): string[] {
 // Node only ships the runtime-neutral Jira provider today; GitHub Issues need the
 // per-tenant GitHub App installation infra, wired separately.
 const NODE_TASK_SOURCES: readonly TaskSourceKind[] = ['jira']
+
+const ALL_DOCUMENT_SOURCES: readonly DocumentSourceKind[] = ['confluence', 'notion', 'github']
+
+/** Parse the comma-separated `DOCUMENT_SOURCES` allow-list, defaulting to all. */
+function parseDocumentSources(raw: string | undefined): DocumentSourceKind[] {
+  const requested = csv(raw).map((s) => s.toLowerCase())
+  if (requested.length === 0) return [...ALL_DOCUMENT_SOURCES]
+  const selected = ALL_DOCUMENT_SOURCES.filter((s) => requested.includes(s))
+  return selected.length > 0 ? selected : [...ALL_DOCUMENT_SOURCES]
+}
+
+/**
+ * Document-source integration config, mirroring the Worker's `loadDocumentsConfig`:
+ * always on (tenants connect Notion/Confluence/GitHub-docs through the UI), with the
+ * shared ENCRYPTION_KEY backing per-workspace credential encryption at rest. The
+ * planner defaults to LLM mode; the container only wires a model provider when one is
+ * configured, so absent that the planner degrades to its deterministic heading parser.
+ */
+function loadDocumentsConfig(env: NodeJS.ProcessEnv): DocumentsConfig {
+  const encryptionKey = env.ENCRYPTION_KEY?.trim()
+  if (!encryptionKey) {
+    throw new Error(
+      'ENCRYPTION_KEY is required: the document-source integration (Notion, Confluence, …) ' +
+        'encrypts per-workspace source credentials at rest. Set it to a base64-encoded key of ' +
+        'at least 32 bytes.',
+    )
+  }
+  return {
+    enabled: true,
+    sources: parseDocumentSources(env.DOCUMENT_SOURCES),
+    planner: env.DOCUMENT_PLANNER?.trim() === 'headings' ? 'headings' : 'llm',
+    encryptionKey,
+  }
+}
 
 /**
  * Task-source integration config, mirroring the Worker's `loadTasksConfig`: always on
@@ -182,13 +216,19 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
         }
       }),
     },
-    // The Node facade does not ship document-source providers yet (Notion/Confluence
-    // fetchers live only in the Worker infra), so documents stays off here — and,
-    // unlike tasks, requires no encryption key. Wiring Node document providers is the
-    // remaining symmetry follow-up; until then this facade serves task sources only.
-    documents: { enabled: false, sources: [], planner: 'headings' },
+    // Document-source integration: the providers (Confluence/Notion/GitHub-docs) are
+    // the shared `@cat-factory/integrations` fetch shells, wired in the container
+    // exactly like the Worker's `selectDocumentsDeps`. Always on (the shared
+    // ENCRYPTION_KEY backs credential encryption at rest).
+    documents: loadDocumentsConfig(env),
     tasks: loadTasksConfig(env),
-    environments: { enabled: false },
+    // Ephemeral-environment provider integration: opt-in (a tenant rolls its own
+    // environment-management API), gated on ENVIRONMENTS_ENABLED + the shared
+    // ENCRYPTION_KEY (credentials are encrypted at rest), mirroring the Worker.
+    environments:
+      env.ENVIRONMENTS_ENABLED === 'true' && env.ENCRYPTION_KEY?.trim()
+        ? { enabled: true, encryptionKey: env.ENCRYPTION_KEY.trim() }
+        : { enabled: false },
     runners: runnersEncryptionKey
       ? { enabled: true, encryptionKey: runnersEncryptionKey }
       : { enabled: false },
@@ -207,7 +247,14 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
       // Heavy full per-call prompt/response; pruned aggressively (default 3 days).
       llmCallMetricsMs: (num(env.LLM_CALL_METRICS_RETENTION_DAYS) ?? 3) * 24 * 60 * 60 * 1000,
     },
-    fragmentLibrary: { enabled: false, selector: 'deterministic' },
+    // Prompt-fragment library (ADR 0006): opt-in (`PROMPT_LIBRARY_ENABLED=true`),
+    // needs no encryption key (fragments are not secrets). Mirrors the Worker's
+    // mapping; `PROMPT_LIBRARY_SELECTOR=llm` ranks per run, else the deterministic
+    // tag matcher (which also backs the `llm` selector's graceful fallback).
+    fragmentLibrary: {
+      enabled: env.PROMPT_LIBRARY_ENABLED?.trim() === 'true',
+      selector: env.PROMPT_LIBRARY_SELECTOR?.trim() === 'llm' ? 'llm' : 'deterministic',
+    },
     // Recording the complete prompts is on by default; opt out with
     // `LLM_RECORD_PROMPTS=false` to keep the numeric telemetry but drop the prompt body.
     observability: { recordPrompts: env.LLM_RECORD_PROMPTS?.trim() !== 'false' },

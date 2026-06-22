@@ -58,6 +58,107 @@ CREATE TABLE "blocks" (
 	CONSTRAINT "blocks_pkey" PRIMARY KEY("workspace_id","id")
 );
 --> statement-breakpoint
+CREATE TABLE "document_connections" (
+	"workspace_id" text,
+	"source" text,
+	"credentials" text NOT NULL,
+	"label" text DEFAULT '' NOT NULL,
+	"created_at" bigint NOT NULL,
+	"deleted_at" bigint,
+	CONSTRAINT "document_connections_pkey" PRIMARY KEY("workspace_id","source")
+);
+--> statement-breakpoint
+CREATE TABLE "documents" (
+	"workspace_id" text,
+	"source" text,
+	"external_id" text,
+	"title" text NOT NULL,
+	"url" text NOT NULL,
+	"excerpt" text DEFAULT '' NOT NULL,
+	"body" text DEFAULT '' NOT NULL,
+	"linked_block_id" text,
+	"synced_at" bigint NOT NULL,
+	"deleted_at" bigint,
+	CONSTRAINT "documents_pkey" PRIMARY KEY("workspace_id","source","external_id")
+);
+--> statement-breakpoint
+CREATE TABLE "environment_connections" (
+	"workspace_id" text,
+	"provider_id" text,
+	"label" text NOT NULL,
+	"base_url" text NOT NULL,
+	"manifest_json" text NOT NULL,
+	"secrets_cipher" text NOT NULL,
+	"created_at" bigint NOT NULL,
+	"deleted_at" bigint,
+	CONSTRAINT "environment_connections_pkey" PRIMARY KEY("workspace_id","provider_id")
+);
+--> statement-breakpoint
+CREATE TABLE "environments" (
+	"id" text PRIMARY KEY,
+	"workspace_id" text NOT NULL,
+	"block_id" text,
+	"execution_id" text,
+	"provider_id" text NOT NULL,
+	"external_id" text,
+	"url" text,
+	"status" text NOT NULL,
+	"access_cipher" text,
+	"provision_fields_cipher" text,
+	"created_at" bigint NOT NULL,
+	"expires_at" bigint,
+	"last_error" text,
+	"deleted_at" bigint
+);
+--> statement-breakpoint
+CREATE TABLE "fragment_sources" (
+	"id" text PRIMARY KEY,
+	"owner_kind" text NOT NULL,
+	"owner_id" text NOT NULL,
+	"repo_owner" text NOT NULL,
+	"repo_name" text NOT NULL,
+	"git_ref" text DEFAULT 'HEAD' NOT NULL,
+	"dir_path" text DEFAULT '' NOT NULL,
+	"last_synced_sha" text,
+	"last_synced_at" bigint,
+	"created_at" bigint NOT NULL,
+	"deleted_at" bigint
+);
+--> statement-breakpoint
+CREATE TABLE "github_branches" (
+	"workspace_id" text,
+	"repo_github_id" bigint,
+	"name" text,
+	"head_sha" text NOT NULL,
+	"protected" integer DEFAULT 0 NOT NULL,
+	"synced_at" bigint NOT NULL,
+	"deleted_at" bigint,
+	CONSTRAINT "github_branches_pkey" PRIMARY KEY("workspace_id","repo_github_id","name")
+);
+--> statement-breakpoint
+CREATE TABLE "github_check_runs" (
+	"workspace_id" text,
+	"repo_github_id" bigint,
+	"github_id" bigint,
+	"head_sha" text NOT NULL,
+	"name" text NOT NULL,
+	"status" text NOT NULL,
+	"conclusion" text,
+	"synced_at" bigint NOT NULL,
+	CONSTRAINT "github_check_runs_pkey" PRIMARY KEY("workspace_id","repo_github_id","github_id")
+);
+--> statement-breakpoint
+CREATE TABLE "github_commits" (
+	"workspace_id" text,
+	"repo_github_id" bigint,
+	"sha" text,
+	"message" text NOT NULL,
+	"author" text,
+	"authored_at" bigint,
+	"synced_at" bigint NOT NULL,
+	CONSTRAINT "github_commits_pkey" PRIMARY KEY("workspace_id","repo_github_id","sha")
+);
+--> statement-breakpoint
 CREATE TABLE "github_installations" (
 	"installation_id" bigint PRIMARY KEY,
 	"workspace_id" text NOT NULL,
@@ -69,6 +170,39 @@ CREATE TABLE "github_installations" (
 	"token_expires_at" bigint,
 	"created_at" bigint NOT NULL,
 	"deleted_at" bigint
+);
+--> statement-breakpoint
+CREATE TABLE "github_issues" (
+	"workspace_id" text,
+	"repo_github_id" bigint,
+	"number" integer,
+	"github_id" bigint NOT NULL,
+	"title" text NOT NULL,
+	"state" text NOT NULL,
+	"author" text,
+	"labels" text DEFAULT '[]' NOT NULL,
+	"gh_updated_at" bigint,
+	"synced_at" bigint NOT NULL,
+	"deleted_at" bigint,
+	CONSTRAINT "github_issues_pkey" PRIMARY KEY("workspace_id","repo_github_id","number")
+);
+--> statement-breakpoint
+CREATE TABLE "github_pull_requests" (
+	"workspace_id" text,
+	"repo_github_id" bigint,
+	"number" integer,
+	"github_id" bigint NOT NULL,
+	"title" text NOT NULL,
+	"state" text NOT NULL,
+	"head_ref" text,
+	"base_ref" text,
+	"head_sha" text,
+	"merged" integer DEFAULT 0 NOT NULL,
+	"author" text,
+	"gh_updated_at" bigint,
+	"synced_at" bigint NOT NULL,
+	"deleted_at" bigint,
+	CONSTRAINT "github_pull_requests_pkey" PRIMARY KEY("workspace_id","repo_github_id","number")
 );
 --> statement-breakpoint
 CREATE TABLE "github_repos" (
@@ -85,6 +219,16 @@ CREATE TABLE "github_repos" (
 	"synced_at" bigint NOT NULL,
 	"deleted_at" bigint,
 	CONSTRAINT "github_repos_pkey" PRIMARY KEY("workspace_id","github_id")
+);
+--> statement-breakpoint
+CREATE TABLE "github_sync_cursors" (
+	"installation_id" bigint,
+	"repo_github_id" bigint,
+	"kind" text,
+	"etag" text,
+	"last_synced_at" bigint,
+	"since_iso" text,
+	CONSTRAINT "github_sync_cursors_pkey" PRIMARY KEY("installation_id","repo_github_id","kind")
 );
 --> statement-breakpoint
 CREATE TABLE "llm_call_metrics" (
@@ -122,6 +266,19 @@ CREATE TABLE "memberships" (
 	"role" text DEFAULT 'member' NOT NULL,
 	"created_at" bigint NOT NULL,
 	CONSTRAINT "memberships_pkey" PRIMARY KEY("account_id","user_id")
+);
+--> statement-breakpoint
+CREATE TABLE "merge_threshold_presets" (
+	"workspace_id" text,
+	"id" text,
+	"name" text NOT NULL,
+	"max_complexity" double precision NOT NULL,
+	"max_risk" double precision NOT NULL,
+	"max_impact" double precision NOT NULL,
+	"ci_max_attempts" integer NOT NULL,
+	"is_default" integer DEFAULT 0 NOT NULL,
+	"created_at" bigint NOT NULL,
+	CONSTRAINT "merge_threshold_presets_pkey" PRIMARY KEY("workspace_id","id")
 );
 --> statement-breakpoint
 CREATE TABLE "notifications" (
@@ -196,6 +353,26 @@ CREATE TABLE "pipelines" (
 	CONSTRAINT "pipelines_pkey" PRIMARY KEY("workspace_id","id")
 );
 --> statement-breakpoint
+CREATE TABLE "prompt_fragments" (
+	"fragment_id" text,
+	"owner_kind" text,
+	"owner_id" text,
+	"version" text NOT NULL,
+	"title" text NOT NULL,
+	"category" text,
+	"summary" text NOT NULL,
+	"body" text NOT NULL,
+	"applies_to" text,
+	"tags" text,
+	"source_id" text,
+	"source_path" text,
+	"source_sha" text,
+	"created_at" bigint NOT NULL,
+	"updated_at" bigint NOT NULL,
+	"deleted_at" bigint,
+	CONSTRAINT "prompt_fragments_pkey" PRIMARY KEY("owner_kind","owner_id","fragment_id")
+);
+--> statement-breakpoint
 CREATE TABLE "provider_subscription_tokens" (
 	"id" text PRIMARY KEY,
 	"workspace_id" text NOT NULL,
@@ -209,6 +386,30 @@ CREATE TABLE "provider_subscription_tokens" (
 	"output_tokens" bigint DEFAULT 0 NOT NULL,
 	"request_count" integer DEFAULT 0 NOT NULL,
 	"deleted_at" bigint
+);
+--> statement-breakpoint
+CREATE TABLE "reference_architectures" (
+	"id" text PRIMARY KEY,
+	"workspace_id" text NOT NULL,
+	"name" text NOT NULL,
+	"description" text DEFAULT '' NOT NULL,
+	"repo_owner" text NOT NULL,
+	"repo_name" text NOT NULL,
+	"default_instructions" text DEFAULT '' NOT NULL,
+	"created_at" bigint NOT NULL,
+	"updated_at" bigint NOT NULL,
+	"deleted_at" bigint
+);
+--> statement-breakpoint
+CREATE TABLE "repo_blueprints" (
+	"id" text PRIMARY KEY,
+	"workspace_id" text NOT NULL,
+	"repo_owner" text NOT NULL,
+	"repo_name" text NOT NULL,
+	"source" text NOT NULL,
+	"service_json" text NOT NULL,
+	"created_at" bigint NOT NULL,
+	"updated_at" bigint NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "requirement_reviews" (
@@ -372,12 +573,21 @@ CREATE INDEX "idx_agent_runs_block" ON "agent_runs" ("workspace_id","block_id");
 CREATE INDEX "idx_agent_runs_service" ON "agent_runs" ("service_id");--> statement-breakpoint
 CREATE INDEX "idx_blocks_parent" ON "blocks" ("workspace_id","parent_id");--> statement-breakpoint
 CREATE INDEX "idx_blocks_service" ON "blocks" ("service_id");--> statement-breakpoint
+CREATE INDEX "idx_documents_block" ON "documents" ("workspace_id","linked_block_id");--> statement-breakpoint
+CREATE UNIQUE INDEX "idx_environment_conn_workspace" ON "environment_connections" ("workspace_id") WHERE "deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX "idx_environments_block" ON "environments" ("workspace_id","block_id") WHERE "deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX "idx_environments_expiry" ON "environments" ("expires_at") WHERE "deleted_at" IS NULL AND "expires_at" IS NOT NULL;--> statement-breakpoint
+CREATE UNIQUE INDEX "idx_fragment_sources_unique" ON "fragment_sources" ("owner_kind","owner_id","repo_owner","repo_name","git_ref","dir_path");--> statement-breakpoint
+CREATE INDEX "idx_fragment_sources_owner" ON "fragment_sources" ("owner_kind","owner_id") WHERE "deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX "idx_gh_checks_sha" ON "github_check_runs" ("workspace_id","repo_github_id","head_sha");--> statement-breakpoint
 CREATE UNIQUE INDEX "idx_gh_install_workspace" ON "github_installations" ("workspace_id") WHERE deleted_at IS NULL;--> statement-breakpoint
 CREATE INDEX "idx_gh_install_account" ON "github_installations" ("account_id") WHERE deleted_at IS NULL;--> statement-breakpoint
+CREATE INDEX "idx_gh_pr_state" ON "github_pull_requests" ("workspace_id","state");--> statement-breakpoint
 CREATE INDEX "idx_gh_repos_install" ON "github_repos" ("installation_id");--> statement-breakpoint
 CREATE INDEX "idx_llm_call_metrics_execution" ON "llm_call_metrics" ("workspace_id","execution_id","created_at");--> statement-breakpoint
 CREATE INDEX "idx_llm_call_metrics_created" ON "llm_call_metrics" ("created_at");--> statement-breakpoint
 CREATE INDEX "idx_memberships_user" ON "memberships" ("user_id");--> statement-breakpoint
+CREATE INDEX "idx_merge_presets_default" ON "merge_threshold_presets" ("workspace_id","is_default");--> statement-breakpoint
 CREATE INDEX "idx_notifications_open" ON "notifications" ("workspace_id","status","created_at");--> statement-breakpoint
 CREATE INDEX "idx_notifications_block" ON "notifications" ("workspace_id","block_id","type","status");--> statement-breakpoint
 CREATE UNIQUE INDEX "idx_personal_subs_user_vendor" ON "personal_subscriptions" ("user_id","vendor") WHERE "deleted_at" IS NULL;--> statement-breakpoint
@@ -387,7 +597,12 @@ CREATE INDEX "idx_schedule_runs_started" ON "pipeline_schedule_runs" ("started_a
 CREATE INDEX "idx_pipeline_schedules_due" ON "pipeline_schedules" ("enabled","next_run_at");--> statement-breakpoint
 CREATE INDEX "idx_pipeline_schedules_block" ON "pipeline_schedules" ("workspace_id","block_id");--> statement-breakpoint
 CREATE INDEX "idx_pipeline_schedules_service" ON "pipeline_schedules" ("service_id");--> statement-breakpoint
+CREATE INDEX "idx_prompt_fragments_owner" ON "prompt_fragments" ("owner_kind","owner_id") WHERE "deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX "idx_prompt_fragments_source" ON "prompt_fragments" ("source_id") WHERE "deleted_at" IS NULL;--> statement-breakpoint
 CREATE INDEX "idx_provider_subs_pool" ON "provider_subscription_tokens" ("workspace_id","vendor","deleted_at");--> statement-breakpoint
+CREATE INDEX "idx_reference_architectures_workspace" ON "reference_architectures" ("workspace_id") WHERE "deleted_at" IS NULL;--> statement-breakpoint
+CREATE UNIQUE INDEX "idx_repo_blueprints_repo" ON "repo_blueprints" ("workspace_id","repo_owner","repo_name");--> statement-breakpoint
+CREATE INDEX "idx_repo_blueprints_workspace" ON "repo_blueprints" ("workspace_id","updated_at");--> statement-breakpoint
 CREATE INDEX "idx_requirement_reviews_block" ON "requirement_reviews" ("workspace_id","block_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "idx_runner_pool_conn_workspace" ON "runner_pool_connections" ("workspace_id") WHERE deleted_at IS NULL;--> statement-breakpoint
 CREATE INDEX "idx_services_account" ON "services" ("account_id");--> statement-breakpoint

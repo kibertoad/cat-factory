@@ -15,6 +15,8 @@ import type {
   ExecutionRepository,
   Membership,
   MembershipRepository,
+  MergePresetRepository,
+  MergeThresholdPreset,
   ModelDefaultsRepository,
   ServiceFragmentDefaultsRepository,
   LlmCallMetric,
@@ -27,6 +29,9 @@ import type {
   PipelineScheduleRepository,
   DueSchedule,
   Recurrence,
+  RepoBlueprintRecord,
+  RepoBlueprintRepository,
+  BlueprintService,
   RequirementReview,
   RequirementReviewItem,
   RequirementReviewRepository,
@@ -67,6 +72,8 @@ import {
   blocks,
   llmCallMetrics,
   memberships,
+  mergeThresholdPresets,
+  repoBlueprints,
   pipelineScheduleRuns,
   pipelineSchedules,
   pipelines,
@@ -1468,6 +1475,217 @@ export class DrizzleRequirementReviewRepository implements RequirementReviewRepo
   }
 }
 
+type MergePresetRow = typeof mergeThresholdPresets.$inferSelect
+
+function rowToMergePreset(row: MergePresetRow): MergeThresholdPreset {
+  return {
+    id: row.id,
+    name: row.name,
+    maxComplexity: row.max_complexity,
+    maxRisk: row.max_risk,
+    maxImpact: row.max_impact,
+    ciMaxAttempts: row.ci_max_attempts,
+    isDefault: row.is_default === 1,
+    createdAt: row.created_at,
+  }
+}
+
+/**
+ * Per-workspace merge threshold presets over Postgres (the Drizzle mirror of the
+ * Worker's `D1MergePresetRepository`, migration 0024). Enforces the single-default
+ * invariant: promoting a preset to default demotes every other in the workspace
+ * before the upsert. The default preset cannot be removed (the service keeps that
+ * rule too; the DELETE also guards `is_default = 0`). Behaviourally identical to the
+ * D1 repo so the cross-runtime conformance suite asserts the same preset resolution.
+ */
+export class DrizzleMergePresetRepository implements MergePresetRepository {
+  constructor(private readonly db: DrizzleDb) {}
+
+  async get(workspaceId: string, id: string): Promise<MergeThresholdPreset | null> {
+    const rows = await this.db
+      .select()
+      .from(mergeThresholdPresets)
+      .where(
+        and(eq(mergeThresholdPresets.workspace_id, workspaceId), eq(mergeThresholdPresets.id, id)),
+      )
+      .limit(1)
+    return rows[0] ? rowToMergePreset(rows[0]) : null
+  }
+
+  async list(workspaceId: string): Promise<MergeThresholdPreset[]> {
+    const rows = await this.db
+      .select()
+      .from(mergeThresholdPresets)
+      .where(eq(mergeThresholdPresets.workspace_id, workspaceId))
+      .orderBy(mergeThresholdPresets.created_at)
+    return rows.map(rowToMergePreset)
+  }
+
+  async getDefault(workspaceId: string): Promise<MergeThresholdPreset | null> {
+    const rows = await this.db
+      .select()
+      .from(mergeThresholdPresets)
+      .where(
+        and(
+          eq(mergeThresholdPresets.workspace_id, workspaceId),
+          eq(mergeThresholdPresets.is_default, 1),
+        ),
+      )
+      .orderBy(mergeThresholdPresets.created_at)
+      .limit(1)
+    return rows[0] ? rowToMergePreset(rows[0]) : null
+  }
+
+  async upsert(workspaceId: string, preset: MergeThresholdPreset): Promise<void> {
+    const values = {
+      workspace_id: workspaceId,
+      id: preset.id,
+      name: preset.name,
+      max_complexity: preset.maxComplexity,
+      max_risk: preset.maxRisk,
+      max_impact: preset.maxImpact,
+      ci_max_attempts: preset.ciMaxAttempts,
+      is_default: preset.isDefault ? 1 : 0,
+      created_at: preset.createdAt,
+    }
+    // Demote + upsert run in one transaction so the single-default invariant can never
+    // be observed broken (zero or two defaults) by a concurrent reader or a partial failure.
+    await this.db.transaction(async (tx) => {
+      // Promoting this preset to default demotes any other default first.
+      if (preset.isDefault) {
+        await tx
+          .update(mergeThresholdPresets)
+          .set({ is_default: 0 })
+          .where(
+            and(
+              eq(mergeThresholdPresets.workspace_id, workspaceId),
+              sql`${mergeThresholdPresets.id} <> ${preset.id}`,
+            ),
+          )
+      }
+      await tx
+        .insert(mergeThresholdPresets)
+        .values(values)
+        .onConflictDoUpdate({
+          target: [mergeThresholdPresets.workspace_id, mergeThresholdPresets.id],
+          set: {
+            name: values.name,
+            max_complexity: values.max_complexity,
+            max_risk: values.max_risk,
+            max_impact: values.max_impact,
+            ci_max_attempts: values.ci_max_attempts,
+            is_default: values.is_default,
+          },
+        })
+    })
+  }
+
+  async remove(workspaceId: string, id: string): Promise<void> {
+    await this.db
+      .delete(mergeThresholdPresets)
+      .where(
+        and(
+          eq(mergeThresholdPresets.workspace_id, workspaceId),
+          eq(mergeThresholdPresets.id, id),
+          eq(mergeThresholdPresets.is_default, 0),
+        ),
+      )
+  }
+}
+
+type RepoBlueprintRow = typeof repoBlueprints.$inferSelect
+
+function rowToBlueprintRecord(row: RepoBlueprintRow): RepoBlueprintRecord {
+  return {
+    id: row.id,
+    workspaceId: row.workspace_id,
+    repoOwner: row.repo_owner,
+    repoName: row.repo_name,
+    source: row.source as RepoBlueprintRecord['source'],
+    service: JSON.parse(row.service_json) as BlueprintService,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }
+}
+
+/**
+ * Repository blueprints over Postgres (the Drizzle mirror of the Worker's
+ * `D1RepoBlueprintRepository`, migration 0011). One row per (workspace, repo):
+ * `upsert` replaces the existing blueprint in place, keyed by the unique
+ * `(workspace_id, repo_owner, repo_name)` index, so the row is always the single
+ * current decomposition. The service → modules tree is persisted whole as JSON.
+ */
+export class DrizzleRepoBlueprintRepository implements RepoBlueprintRepository {
+  constructor(private readonly db: DrizzleDb) {}
+
+  async upsert(record: RepoBlueprintRecord): Promise<void> {
+    const values = {
+      id: record.id,
+      workspace_id: record.workspaceId,
+      repo_owner: record.repoOwner,
+      repo_name: record.repoName,
+      source: record.source,
+      service_json: JSON.stringify(record.service),
+      created_at: record.createdAt,
+      updated_at: record.updatedAt,
+    }
+    await this.db
+      .insert(repoBlueprints)
+      .values(values)
+      .onConflictDoUpdate({
+        target: [repoBlueprints.workspace_id, repoBlueprints.repo_owner, repoBlueprints.repo_name],
+        set: {
+          source: values.source,
+          service_json: values.service_json,
+          updated_at: values.updated_at,
+        },
+      })
+  }
+
+  async get(workspaceId: string, id: string): Promise<RepoBlueprintRecord | null> {
+    const rows = await this.db
+      .select()
+      .from(repoBlueprints)
+      .where(and(eq(repoBlueprints.workspace_id, workspaceId), eq(repoBlueprints.id, id)))
+      .limit(1)
+    return rows[0] ? rowToBlueprintRecord(rows[0]) : null
+  }
+
+  async getByRepo(
+    workspaceId: string,
+    repoOwner: string,
+    repoName: string,
+  ): Promise<RepoBlueprintRecord | null> {
+    const rows = await this.db
+      .select()
+      .from(repoBlueprints)
+      .where(
+        and(
+          eq(repoBlueprints.workspace_id, workspaceId),
+          eq(repoBlueprints.repo_owner, repoOwner),
+          eq(repoBlueprints.repo_name, repoName),
+        ),
+      )
+      .limit(1)
+    return rows[0] ? rowToBlueprintRecord(rows[0]) : null
+  }
+
+  async listByWorkspace(workspaceId: string): Promise<RepoBlueprintRecord[]> {
+    const rows = await this.db
+      .select()
+      .from(repoBlueprints)
+      .where(eq(repoBlueprints.workspace_id, workspaceId))
+      .orderBy(desc(repoBlueprints.updated_at))
+    return rows.map(rowToBlueprintRecord)
+  }
+
+  async delete(workspaceId: string, id: string): Promise<void> {
+    await this.db
+      .delete(repoBlueprints)
+      .where(and(eq(repoBlueprints.workspace_id, workspaceId), eq(repoBlueprints.id, id)))
+  }
+}
+
 export interface CoreRepositories {
   workspaceRepository: WorkspaceRepository
   accountRepository: AccountRepository
@@ -1485,6 +1703,8 @@ export interface CoreRepositories {
   serviceRepository: ServiceRepository
   workspaceMountRepository: WorkspaceMountRepository
   requirementReviewRepository: RequirementReviewRepository
+  mergePresetRepository: MergePresetRepository
+  repoBlueprintRepository: RepoBlueprintRepository
 }
 
 /** Build the Drizzle/Postgres-backed core repositories. */
@@ -1506,5 +1726,7 @@ export function createDrizzleRepositories(db: DrizzleDb, clock: Clock): CoreRepo
     serviceRepository: new DrizzleServiceRepository(db),
     workspaceMountRepository: new DrizzleWorkspaceMountRepository(db),
     requirementReviewRepository: new DrizzleRequirementReviewRepository(db),
+    mergePresetRepository: new DrizzleMergePresetRepository(db),
+    repoBlueprintRepository: new DrizzleRepoBlueprintRepository(db),
   }
 }

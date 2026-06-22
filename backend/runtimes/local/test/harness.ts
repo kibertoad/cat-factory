@@ -3,6 +3,7 @@ import {
   type ConformanceApp,
   FakeAgentExecutor,
   type FakeAgentOptions,
+  FakeRepoBootstrapper,
   RecordingEventPublisher,
   makeIncorporatedReview,
 } from '@cat-factory/conformance'
@@ -13,12 +14,22 @@ import {
   createDrizzleRepositories,
   migrate,
 } from '@cat-factory/node-server'
-import type { ExecutionInstance, WorkspaceSnapshot } from '@cat-factory/kernel'
+import type {
+  Clock,
+  ExecutionInstance,
+  RepoBlueprintRecord,
+  WorkspaceSnapshot,
+} from '@cat-factory/kernel'
 import { NoopBootstrapRunner, NoopWorkRunner } from '@cat-factory/kernel'
 import type { CoreDependencies } from '@cat-factory/orchestration'
 import { buildLocalContainer } from '../src/container.js'
 
 const BASE = 'https://cat-factory.test'
+
+// The seed helpers only persist fixtures (no timestamping path is exercised), but
+// `createDrizzleRepositories` requires a clock — pass a real one rather than building
+// the whole repo set with an undefined clock.
+const SEED_CLOCK: Clock = { now: () => Date.now() }
 
 // Test env for the LOCAL facade. Same dev-open gate + non-production ENVIRONMENT as the
 // Node harness, plus the two local-mode prerequisites so `buildLocalContainer` composes
@@ -38,6 +49,12 @@ const TEST_ENV: NodeJS.ProcessEnv = {
   // the local facade (parity with the Node/Worker test envs); the conformance Slack
   // CRUD asserts persistence parity and the channel bails when no Slack is connected.
   SLACK_ENABLED: 'true',
+  // Opt into the ephemeral-environment integration (parity with the Node/Worker test
+  // envs) so the conformance env CRUD asserts persistence parity here too.
+  ENVIRONMENTS_ENABLED: 'true',
+  // Opt into the prompt-fragment library (ADR 0006) so its module wires up (parity
+  // with the Node/Worker test envs); the conformance library CRUD asserts parity.
+  PROMPT_LIBRARY_ENABLED: 'true',
   LOCAL_HARNESS_IMAGE: 'cat-factory-executor:test',
   GITHUB_PAT: 'test-pat',
 }
@@ -67,6 +84,9 @@ export function makeConformanceApp(db: DrizzleDb, agentOptions?: FakeAgentOption
       : new FakeAgentExecutor(agentOptions),
     workRunner: new NoopWorkRunner(),
     bootstrapRunner: new NoopBootstrapRunner(),
+    // Deterministic bootstrapper so the suite drives the bootstrap lifecycle through the
+    // local composition root without GitHub/Docker (driven via driveBootstrap).
+    repoBootstrapper: new FakeRepoBootstrapper(),
     executionEventPublisher: recorder,
   }
   const container = buildLocalContainer({ db, env: TEST_ENV, overrides })
@@ -121,15 +141,34 @@ export function makeConformanceApp(db: DrizzleDb, agentOptions?: FakeAgentOption
     return blockId ? recorder.emits.filter((e) => e.blockId === blockId) : recorder.emits
   }
 
+  async function driveBootstrap(
+    workspaceId: string,
+    jobId: string,
+    maxPolls = 50,
+  ): Promise<number> {
+    if (!container.bootstrap) throw new Error('bootstrap module is not configured in this app')
+    for (let p = 0; p < maxPolls; p++) {
+      const result = await container.bootstrap.service.pollBootstrapJob(workspaceId, jobId)
+      if (result.state !== 'running') return p + 1
+    }
+    return maxPolls
+  }
+
   // Seed a block's incorporated requirements review directly into the (shared
   // Postgres) store so the engine's reworked-requirements substitution can be driven
   // without running the reviewer LLM — the same Drizzle persistence the Node harness
   // writes through (the local facade reuses the Node repositories).
   function seedIncorporatedReview(workspaceId: string, blockId: string, requirements: string) {
-    return createDrizzleRepositories(db).requirementReviewRepository.upsert(
+    return createDrizzleRepositories(db, SEED_CLOCK).requirementReviewRepository.upsert(
       workspaceId,
       makeIncorporatedReview(blockId, requirements),
     )
+  }
+
+  // Reuses Node's Drizzle board-scan repo (the local facade shares all of Node's
+  // persistence), so the blueprint read endpoints assert identically here.
+  function seedBlueprint(record: RepoBlueprintRecord) {
+    return createDrizzleRepositories(db, SEED_CLOCK).repoBlueprintRepository.upsert(record)
   }
 
   return {
@@ -137,7 +176,9 @@ export function makeConformanceApp(db: DrizzleDb, agentOptions?: FakeAgentOption
     createWorkspace,
     createOrgWorkspace,
     drive,
+    driveBootstrap,
     executionEmits,
     seedIncorporatedReview,
+    seedBlueprint,
   }
 }

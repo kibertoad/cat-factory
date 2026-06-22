@@ -6,7 +6,7 @@ import type {
   WorkspaceSnapshot,
 } from '@cat-factory/contracts'
 import { makeApp } from '../helpers'
-import { FakeRepoBootstrapper } from '../fakes/FakeRepoBootstrapper'
+import { FakeRepoBootstrapper } from '@cat-factory/conformance'
 
 // The repo-bootstrap feature: reference-architecture CRUD always works (its
 // repositories are wired unconditionally), while the "bootstrap repo" run path is

@@ -45,6 +45,11 @@ export * as githubDocsLogic from './modules/documents/github-docs.logic.js'
 export { CONFLUENCE_DESCRIPTOR } from './modules/documents/confluence.logic.js'
 export { NOTION_DESCRIPTOR } from './modules/documents/notion.logic.js'
 export { GITHUB_DOCS_DESCRIPTOR } from './modules/documents/github-docs.logic.js'
+// Document-source provider classes (thin `fetch` shells around the logic above).
+// Promoted from the Worker infra so every facade composes the same providers.
+export { ConfluenceProvider, ConfluenceApiError } from './modules/documents/ConfluenceProvider.js'
+export { NotionProvider, NotionApiError } from './modules/documents/NotionProvider.js'
+export { GitHubDocsProvider } from './modules/documents/GitHubDocsProvider.js'
 
 export {
   TaskConnectionService,
@@ -99,6 +104,12 @@ export {
   type EnvironmentTeardownServiceDependencies,
 } from './modules/environments/EnvironmentTeardownService.js'
 export * as environmentsLogic from './modules/environments/environments.logic.js'
+// The HTTP environment provider (a `fetch` shell around the manifest logic above),
+// promoted from the Worker infra so every facade composes the same provider.
+export {
+  HttpEnvironmentProvider,
+  EnvironmentApiError,
+} from './modules/environments/HttpEnvironmentProvider.js'
 export {
   isDeployStep,
   DEPLOYER_AGENT_KIND,

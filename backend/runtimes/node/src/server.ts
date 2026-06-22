@@ -20,6 +20,8 @@ import {
   startExecutionWorker,
   startStaleRunSweeper,
 } from './execution/pgBossRunner.js'
+import { startBootstrapWorker } from './execution/bootstrapRunner.js'
+import { startEnvironmentSweeper } from './environments.js'
 import { startScheduleSweeper } from './recurring.js'
 import { createDrizzleRepositories } from './repositories/drizzle.js'
 import { DrizzleSubscriptionActivationRepository } from './repositories/personalSubscription.js'
@@ -119,6 +121,11 @@ export async function start(
     concurrency: runtime.concurrency,
     decisionTimeoutSeconds: runtime.decisionTimeoutSeconds,
   })
+  // Durably drive bootstrap runs too (the Worker uses a per-run BootstrapWorkflow);
+  // a no-op queue when the bootstrap module isn't wired.
+  await startBootstrapWorker(boss, container, runtime.drive, logger, {
+    concurrency: runtime.concurrency,
+  })
   const stopSweeper = startStaleRunSweeper(boss, container, runtime.sweeper, runtime.queue, logger)
   // Bound the unbounded tables (`token_usage`, the heavy `llm_call_metrics`): the Worker
   // prunes these from cron, Node has none, so a timer mirrors it. Without this the
@@ -136,6 +143,9 @@ export async function start(
   )
   // Fire due recurring pipelines on a one-minute timer (the Worker uses cron).
   const stopScheduleSweeper = startScheduleSweeper(container, clock, logger)
+  // Tear down expired ephemeral environments (the Worker uses cron); no-op unless the
+  // environments integration is wired.
+  const stopEnvironmentSweeper = startEnvironmentSweeper(container, clock, logger)
 
   const app = createApp(container, env)
   const port = Number(env.PORT ?? 8787)
@@ -154,6 +164,7 @@ export async function start(
     stopSweeper()
     stopRetention()
     stopScheduleSweeper()
+    stopEnvironmentSweeper()
     await new Promise<void>((resolve) => server.close(() => resolve()))
     try {
       await boss.stop()

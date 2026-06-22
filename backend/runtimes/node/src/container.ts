@@ -1,6 +1,15 @@
-import { AiAgentExecutor, inlineWebSearchOptionsFromEnv } from '@cat-factory/agents'
 import {
+  AiAgentExecutor,
+  LlmFragmentSelector,
+  inlineWebSearchOptionsFromEnv,
+  resolveAgentConfig,
+} from '@cat-factory/agents'
+import {
+  ConfluenceProvider,
+  GitHubDocsProvider,
+  HttpEnvironmentProvider,
   HttpRunnerPoolProvider,
+  NotionProvider,
   PersonalSubscriptionService,
   ProviderSubscriptionService,
   RunnerPoolConnectionService,
@@ -13,6 +22,8 @@ import {
 import type {
   AgentExecutor,
   Clock,
+  DocumentSourceProvider,
+  FragmentOwnerKind,
   GitHubClient,
   GitHubInstallationRepository,
   RateLimitRepository,
@@ -28,6 +39,7 @@ import {
   type ServerContainer,
   CompositeAgentExecutor,
   ContainerAgentExecutor,
+  ContainerRepoBootstrapper,
   ContainerSessionService,
   FetchGitHubClient,
   GitHubAppAuth,
@@ -37,6 +49,7 @@ import {
   GitHubPullRequestMerger,
   WebCryptoPersonalSecretCipher,
   WebCryptoSecretCipher,
+  WebCryptoWebhookVerifier,
   buildResolveRepoTarget,
   createWebSearchUpstreamFromEnv,
   logger,
@@ -45,21 +58,45 @@ import type { PgBoss } from 'pg-boss'
 import { loadNodeConfig } from './config.js'
 import type { DrizzleDb } from './db/client.js'
 import { executionRuntime } from './execution/config.js'
+import { PgBossBootstrapRunner } from './execution/bootstrapRunner.js'
 import { PgBossWorkRunner } from './execution/pgBossRunner.js'
 import { createNodeGateways } from './gateways.js'
 import { createNodeModelProvider } from './modelProvider.js'
 import {
   DrizzleGitHubInstallationRepository,
-  DrizzleRepoProjectionRepository,
   DrizzleRunnerPoolConnectionRepository,
   DrizzleServiceFrameRepository,
 } from './repositories/containerExecution.js'
+import {
+  DrizzleBranchProjectionRepository,
+  DrizzleCheckRunProjectionRepository,
+  DrizzleCommitProjectionRepository,
+  DrizzleIssueProjectionRepository,
+  DrizzlePullRequestProjectionRepository,
+  DrizzleRepoProjectionRepository,
+} from './repositories/github.js'
 import { DrizzleProviderSubscriptionTokenRepository } from './repositories/providerSubscription.js'
 import {
   DrizzlePersonalSubscriptionRepository,
   DrizzleSubscriptionActivationRepository,
 } from './repositories/personalSubscription.js'
 import { createDrizzleRepositories } from './repositories/drizzle.js'
+import {
+  DrizzleBootstrapJobRepository,
+  DrizzleReferenceArchitectureRepository,
+} from './repositories/bootstrap.js'
+import {
+  DrizzleDocumentConnectionRepository,
+  DrizzleDocumentRepository,
+} from './repositories/documents.js'
+import {
+  DrizzleEnvironmentConnectionRepository,
+  DrizzleEnvironmentRegistryRepository,
+} from './repositories/environments.js'
+import {
+  DrizzleFragmentSourceRepository,
+  DrizzlePromptFragmentRepository,
+} from './repositories/fragments.js'
 import { DrizzleNotificationRepository } from './repositories/notifications.js'
 import {
   DrizzleSlackConnectionRepository,
@@ -327,6 +364,54 @@ function buildNodeContainerExecutor(
 }
 
 /**
+ * Build the repo bootstrapper (the "bootstrap repo" container dispatch) when its
+ * prerequisites are configured — mirroring the Worker's `selectRepoBootstrapper` and
+ * the container-executor prerequisites: a resolvable runner transport, the public URL
+ * + session secret backing the LLM proxy, a token source, and a GitHub client.
+ * Returns undefined otherwise (the bootstrap module then has no runner and the service
+ * reports a clean dispatch failure). Bootstrap is an `architect`-kind run, so it
+ * follows that kind's routing. The promoted `ContainerRepoBootstrapper` dispatches
+ * through the same shared runner seam the container executor uses, so on Node it runs
+ * against the self-hosted pool and on local against the per-job Docker container.
+ */
+function selectNodeRepoBootstrapper(deps: {
+  env: NodeJS.ProcessEnv
+  config: AppConfig
+  resolveTransport: ResolveRunnerTransport | null
+  installationRepository: GitHubInstallationRepository
+  bootstrapJobRepository: ConstructorParameters<
+    typeof ContainerRepoBootstrapper
+  >[0]['bootstrapJobRepository']
+  repoRepository: ConstructorParameters<typeof ContainerRepoBootstrapper>[0]['repoRepository']
+  githubClient: GitHubClient | undefined
+  mintInstallationToken: ((installationId: number) => Promise<string>) | undefined
+}): ContainerRepoBootstrapper | undefined {
+  const publicUrl = deps.env.PUBLIC_URL?.trim()
+  const sessionSecret = deps.config.auth.sessionSecret
+  if (
+    !deps.resolveTransport ||
+    !publicUrl ||
+    !sessionSecret ||
+    !deps.githubClient ||
+    !deps.mintInstallationToken
+  ) {
+    return undefined
+  }
+  return new ContainerRepoBootstrapper({
+    resolveTransport: deps.resolveTransport,
+    installationRepository: deps.installationRepository,
+    bootstrapJobRepository: deps.bootstrapJobRepository,
+    repoRepository: deps.repoRepository,
+    githubClient: deps.githubClient,
+    mintInstallationToken: deps.mintInstallationToken,
+    sessionService: new ContainerSessionService({ secret: sessionSecret }),
+    model: resolveAgentConfig(deps.config.agents.routing, 'architect').ref,
+    proxyBaseUrl: `${publicUrl.replace(/\/+$/, '')}/v1`,
+    githubApiBase: deps.config.github.apiBase,
+  })
+}
+
+/**
  * Build the workspace subscription-token pool service for the Node/local facade
  * (Postgres-backed), or undefined when the shared ENCRYPTION_KEY is absent. Tokens
  * are sealed under a subscriptions-scoped HKDF info of the shared master key.
@@ -472,6 +557,9 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   // via the API; the installation repo backs both token minting and repo resolution.
   const runnerPoolConnectionRepository = new DrizzleRunnerPoolConnectionRepository(options.db)
   const githubInstallationRepository = new DrizzleGitHubInstallationRepository(options.db)
+  // The repositories projection (+ sync cursors), shared by `buildResolveRepoTarget`
+  // (block→repo resolution) and the GitHub sync/webhook module below.
+  const repoProjectionRepository = new DrizzleRepoProjectionRepository(options.db)
 
   // The GitHub App registry, built once when the App is configured and shared by the
   // container executor's push-token mint, the tech-debt issue filer, and the CI / merge
@@ -483,7 +571,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   // GitHub-issue tracker filer, and the CI / merge providers.
   const resolveRepoTarget = buildResolveRepoTarget({
     installationRepository: githubInstallationRepository,
-    repoProjectionRepository: new DrizzleRepoProjectionRepository(options.db),
+    repoProjectionRepository,
     blockRepository: repos.blockRepository,
     serviceRepository: new DrizzleServiceFrameRepository(options.db),
   })
@@ -574,6 +662,61 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
       }
     : {}
 
+  // GitHub installation + projections + sync/webhook module: wired when the App is
+  // configured (a real githubClient), mirroring the Worker's selectGitHubDeps. This
+  // turns the GitHub read endpoints + the inline webhook/backfill sync on for Node —
+  // the sync engine (GitHubSyncService) is runtime-neutral, so populating the
+  // projection repos here makes the inline ingest actually persist (parity with the
+  // Worker, which fans the same sync through a queue/Workflow). `canCreateRepos` /
+  // `workflowsGranted` come from the App registry when present (advisory).
+  const githubModuleDeps: Partial<CoreDependencies> =
+    config.github.enabled && githubClient
+      ? {
+          githubClient,
+          githubInstallationRepository,
+          repoProjectionRepository,
+          branchProjectionRepository: new DrizzleBranchProjectionRepository(options.db),
+          pullRequestProjectionRepository: new DrizzlePullRequestProjectionRepository(options.db),
+          issueProjectionRepository: new DrizzleIssueProjectionRepository(options.db),
+          commitProjectionRepository: new DrizzleCommitProjectionRepository(options.db),
+          checkRunProjectionRepository: new DrizzleCheckRunProjectionRepository(options.db),
+          webhookVerifier: new WebCryptoWebhookVerifier(config.github.webhookSecret),
+          // Bound the initial backfill to the commit retention horizon (0 = full).
+          commitBackfillHorizonMs: config.retention.commitMs || undefined,
+          ...(appRegistry
+            ? {
+                canCreateRepos: (installation) => appRegistry.canCreateRepos(installation),
+                workflowsGranted: async (installation) => {
+                  const perms = await appRegistry.installationPermissions(
+                    installation.installationId,
+                  )
+                  return perms.workflows === 'write'
+                },
+              }
+            : {}),
+        }
+      : {}
+
+  // Repo-bootstrap: the reference-architecture library + the bootstrap runs (stored as
+  // kind='bootstrap' rows of agent_runs). The repos are wired unconditionally (the
+  // module + ref-arch CRUD then work like the Worker); the container-dispatching
+  // `repoBootstrapper` wires only when its prerequisites are met (transport + proxy +
+  // token + GitHub client) — the same token source the container executor uses.
+  const bootstrapJobRepository = new DrizzleBootstrapJobRepository(options.db)
+  const bootstrapMintInstallationToken =
+    options.mintInstallationToken ??
+    (appRegistry ? (id: number) => appRegistry.installationToken(id) : undefined)
+  const repoBootstrapper = selectNodeRepoBootstrapper({
+    env,
+    config,
+    resolveTransport,
+    installationRepository: githubInstallationRepository,
+    bootstrapJobRepository,
+    repoRepository: repoProjectionRepository,
+    githubClient,
+    mintInstallationToken: bootstrapMintInstallationToken,
+  })
+
   const dependencies: CoreDependencies = {
     workspaceRepository: repos.workspaceRepository,
     accountRepository: repos.accountRepository,
@@ -603,6 +746,20 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // like a pipeline step: block-pin > workspace per-kind default > routing default
     // (which falls back to Cloudflare Workers AI unless a direct key is set).
     requirementReviewRepository: repos.requirementReviewRepository,
+    // Merge threshold presets: the per-workspace auto-merge ceiling library a task's
+    // merge gate resolves (block-pinned preset > workspace default). Wired
+    // unconditionally, exactly like the Worker's `selectMergeLifecycleDeps`, so the
+    // preset CRUD API + the merger step's threshold resolution work identically.
+    mergePresetRepository: repos.mergePresetRepository,
+    // Board-scan: the persisted repository blueprints (the service → modules map the
+    // blueprint pipeline step reconciles, and the manual scan command writes). Wiring
+    // the repo makes the board-scan module + blueprint read endpoints available, like
+    // the Worker (which wires it unconditionally). Actually *running* a scan also needs
+    // a `repoScanner` — a per-run container that clones + decomposes the repo. The Node
+    // facade has no such synchronous scanner, so `service.canScan` stays false and the
+    // scan endpoint returns its graceful 503 (the blueprint decomposition itself runs as
+    // a normal `blueprints` pipeline step through the runner transport, like the Worker).
+    repoBlueprintRepository: repos.repoBlueprintRepository,
     modelProvider: createNodeModelProvider(env),
     requirementReviewModel: config.agents.routing.default.ref,
     requirementReviewResolveModel: config.agents.resolveBlockModel,
@@ -651,9 +808,44 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
         }
       : {}),
     ...(options.boss
-      ? { workRunner: new PgBossWorkRunner(options.boss, executionRuntime(config, env).queue) }
+      ? {
+          workRunner: new PgBossWorkRunner(options.boss, executionRuntime(config, env).queue),
+          // The durable bootstrap driver (analogue of the Worker's BootstrapWorkflow):
+          // BootstrapService.startRun enqueues a drive job that polls the run to terminal.
+          bootstrapRunner: new PgBossBootstrapRunner(
+            options.boss,
+            executionRuntime(config, env).queue,
+          ),
+        }
       : {}),
     ...githubGateDeps,
+    // GitHub installation + repo/branch/PR/issue/commit/check-run projections + the
+    // sync/webhook module (inline ingest persists to these repos on Node).
+    ...githubModuleDeps,
+    // Repo-bootstrap: the reference-architecture library + bootstrap-run store make the
+    // module + API available; `repoBootstrapper` (when wired) dispatches the bootstrap
+    // container through the shared runner seam, and `bootstrapRunner` (pg-boss, below)
+    // durably drives its poll loop — parity with the Worker's BootstrapWorkflow.
+    referenceArchitectureRepository: new DrizzleReferenceArchitectureRepository(options.db),
+    bootstrapJobRepository,
+    ...(repoBootstrapper ? { repoBootstrapper } : {}),
+    // Document sources (Confluence / Notion / GitHub docs): wired from the shared
+    // integration providers exactly like the Worker, so a workspace can connect a
+    // source and import requirement/PRD/RFC pages as agent context.
+    ...selectNodeDocumentsDeps(config, options.db, githubClient, githubInstallationRepository),
+    // Ephemeral environments (opt-in): a workspace registers its own environment
+    // management API; the tester provisions/destroys per-run environments from it.
+    ...selectNodeEnvironmentsDeps(config, options.db),
+    // Prompt-fragment library (ADR 0006; opt-in): the managed tenant-scoped catalog
+    // of best-practice fragments feeding every agent run, wired exactly like the
+    // Worker's selectFragmentLibraryDeps (repos + installation resolver + selector).
+    ...selectNodeFragmentLibraryDeps(
+      config,
+      env,
+      options.db,
+      githubClient,
+      githubInstallationRepository,
+    ),
     // Slack: an extra notification transport (the channel) + its management module.
     // Default-off; when enabled it composes the Slack channel onto the notification
     // mechanism, identically to the Worker.
@@ -708,5 +900,108 @@ function selectNodeTasksDeps(
       taskRepository: new DrizzleTaskRepository(db),
     },
     taskConnectionRepository,
+  }
+}
+
+/**
+ * Wire the document-source integration for the Node facade, mirroring the Worker's
+ * `selectDocumentsDeps`: the shared `@cat-factory/integrations` provider shells
+ * (Confluence/Notion always; GitHub-docs only when a GitHub client is available, since
+ * it reuses the workspace's App installation), the Drizzle connection/document repos,
+ * and — in `llm` planner mode — the default model ref the doc→board planner runs with
+ * (the container's `modelProvider` is shared). Source credentials are encrypted at rest
+ * under a documents-scoped HKDF info, keyed by the shared ENCRYPTION_KEY.
+ */
+function selectNodeDocumentsDeps(
+  config: AppConfig,
+  db: DrizzleDb,
+  githubClient: GitHubClient | undefined,
+  installations: GitHubInstallationRepository,
+): Partial<CoreDependencies> {
+  if (!config.documents.enabled || !config.documents.encryptionKey) return {}
+  const providers: DocumentSourceProvider[] = []
+  if (config.documents.sources.includes('confluence')) providers.push(new ConfluenceProvider())
+  if (config.documents.sources.includes('notion')) providers.push(new NotionProvider())
+  if (config.documents.sources.includes('github') && githubClient) {
+    providers.push(new GitHubDocsProvider({ githubClient, installations }))
+  }
+  if (providers.length === 0) return {}
+  return {
+    documentSourceProviders: providers,
+    documentConnectionRepository: new DrizzleDocumentConnectionRepository(
+      db,
+      new WebCryptoSecretCipher({
+        masterKeyBase64: config.documents.encryptionKey,
+        info: 'cat-factory:documents',
+      }),
+    ),
+    documentRepository: new DrizzleDocumentRepository(db),
+    ...(config.documents.planner === 'llm'
+      ? { documentPlannerModel: config.agents.routing.default.ref }
+      : {}),
+  }
+}
+
+/**
+ * Wire the ephemeral-environment integration for the Node facade when enabled,
+ * mirroring the Worker's `selectEnvironmentsDeps`: the shared `HttpEnvironmentProvider`
+ * (a manifest-driven `fetch` shell), the Drizzle connection + registry repos, and the
+ * environment-scoped `SecretCipher`. Per-tenant management-API secrets are encrypted at
+ * rest with the shared ENCRYPTION_KEY. Disabled → `{}` and the module stays off.
+ */
+function selectNodeEnvironmentsDeps(config: AppConfig, db: DrizzleDb): Partial<CoreDependencies> {
+  if (!config.environments.enabled || !config.environments.encryptionKey) return {}
+  return {
+    environmentProvider: new HttpEnvironmentProvider(),
+    environmentConnectionRepository: new DrizzleEnvironmentConnectionRepository(db),
+    environmentRegistryRepository: new DrizzleEnvironmentRegistryRepository(db),
+    secretCipher: new WebCryptoSecretCipher({
+      masterKeyBase64: config.environments.encryptionKey,
+    }),
+  }
+}
+
+/**
+ * Wire the prompt-fragment library (ADR 0006) for the Node facade when opted in,
+ * mirroring the Worker's `selectFragmentLibraryDeps`: the two Drizzle repositories,
+ * the installation resolver repo-source sync uses to read guideline repos through the
+ * tier's GitHub installation, and — in `llm` selector mode — the shared
+ * `LlmFragmentSelector` over the Node model provider (else the core deterministic
+ * matcher, via `fragmentSelector: undefined`). Disabled → `{}` and the module stays
+ * unassembled (the engine falls back to the static built-in catalog).
+ */
+function selectNodeFragmentLibraryDeps(
+  config: AppConfig,
+  env: NodeJS.ProcessEnv,
+  db: DrizzleDb,
+  githubClient: GitHubClient | undefined,
+  installations: GitHubInstallationRepository,
+): Partial<CoreDependencies> {
+  if (!config.fragmentLibrary.enabled) return {}
+  const resolveFragmentInstallationId = async (
+    ownerKind: FragmentOwnerKind,
+    ownerId: string,
+  ): Promise<number | null> => {
+    if (ownerKind === 'workspace') {
+      return (await installations.getByWorkspace(ownerId))?.installationId ?? null
+    }
+    const active = await installations.listActive()
+    return active.find((i) => i.accountId === ownerId)?.installationId ?? null
+  }
+  return {
+    promptFragmentRepository: new DrizzlePromptFragmentRepository(db),
+    fragmentSourceRepository: new DrizzleFragmentSourceRepository(db),
+    // Repo-sourced fragments read guideline files through the workspace's App
+    // installation; only wired when a real GitHub client is available (parity with
+    // the Worker — hand-authored fragments work without it).
+    ...(githubClient ? { githubClient, resolveFragmentInstallationId } : {}),
+    ...(config.fragmentLibrary.selector === 'llm'
+      ? {
+          fragmentSelector: new LlmFragmentSelector({
+            modelProvider: createNodeModelProvider(env),
+            modelRef: config.agents.routing.default.ref,
+          }),
+        }
+      : {}),
   }
 }

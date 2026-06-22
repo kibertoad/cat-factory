@@ -246,6 +246,75 @@ export const workspaceFragmentDefaults = pgTable('workspace_fragment_defaults', 
   updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
 })
 
+// Prompt-fragment library (ADR 0006; mirror of D1 migration 0020). The managed,
+// tenant-scoped catalog of best-practice fragments, scoped by an (owner_kind,
+// owner_id) pair so one table backs both the account and workspace tiers. JSON-shaped
+// columns (`applies_to`, `tags`) are `text`; a tombstone (`deleted_at`) suppresses an
+// inherited or removed-upstream fragment.
+export const promptFragments = pgTable(
+  'prompt_fragments',
+  {
+    fragment_id: text('fragment_id').notNull(),
+    owner_kind: text('owner_kind').notNull(),
+    owner_id: text('owner_id').notNull(),
+    version: text('version').notNull(),
+    title: text('title').notNull(),
+    category: text('category'),
+    summary: text('summary').notNull(),
+    body: text('body').notNull(),
+    applies_to: text('applies_to'),
+    tags: text('tags'),
+    source_id: text('source_id'),
+    source_path: text('source_path'),
+    source_sha: text('source_sha'),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+    updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
+    deleted_at: bigint('deleted_at', { mode: 'number' }),
+  },
+  (t) => [
+    primaryKey({ columns: [t.owner_kind, t.owner_id, t.fragment_id] }),
+    index('idx_prompt_fragments_owner')
+      .on(t.owner_kind, t.owner_id)
+      .where(sql`${t.deleted_at} IS NULL`),
+    index('idx_prompt_fragments_source')
+      .on(t.source_id)
+      .where(sql`${t.deleted_at} IS NULL`),
+  ],
+)
+
+// A repo directory linked as a source of Markdown guideline files (ADR 0006 §3;
+// mirror of D1 migration 0020). At most one live source per (owner, repo, ref, dir) —
+// the unique index is the upsert key; a partial owner index powers the list.
+export const fragmentSources = pgTable(
+  'fragment_sources',
+  {
+    id: text('id').primaryKey(),
+    owner_kind: text('owner_kind').notNull(),
+    owner_id: text('owner_id').notNull(),
+    repo_owner: text('repo_owner').notNull(),
+    repo_name: text('repo_name').notNull(),
+    git_ref: text('git_ref').notNull().default('HEAD'),
+    dir_path: text('dir_path').notNull().default(''),
+    last_synced_sha: text('last_synced_sha'),
+    last_synced_at: bigint('last_synced_at', { mode: 'number' }),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+    deleted_at: bigint('deleted_at', { mode: 'number' }),
+  },
+  (t) => [
+    uniqueIndex('idx_fragment_sources_unique').on(
+      t.owner_kind,
+      t.owner_id,
+      t.repo_owner,
+      t.repo_name,
+      t.git_ref,
+      t.dir_path,
+    ),
+    index('idx_fragment_sources_owner')
+      .on(t.owner_kind, t.owner_id)
+      .where(sql`${t.deleted_at} IS NULL`),
+  ],
+)
+
 // LLM observability sink (mirror of D1 migration 0026). One row per proxied
 // container-agent model call: full prompt/response, output-limit headroom and the
 // transport-vs-execution latency split. Pruned aggressively by retention (the full
@@ -472,6 +541,174 @@ export const notifications = pgTable(
   ],
 )
 
+// Per-workspace merge threshold presets (mirror of D1 migration 0024's
+// `merge_threshold_presets`). A task selects one via `blocks.merge_preset_id`; none →
+// the workspace default (`is_default`, exactly one per workspace — the repository
+// demotes the prior default when promoting a new one). `is_default` is 0/1 to mirror
+// the D1 integer flag. Carries the auto-merge ceilings + `ci_max_attempts`.
+export const mergeThresholdPresets = pgTable(
+  'merge_threshold_presets',
+  {
+    workspace_id: text('workspace_id').notNull(),
+    id: text('id').notNull(),
+    name: text('name').notNull(),
+    max_complexity: doublePrecision('max_complexity').notNull(),
+    max_risk: doublePrecision('max_risk').notNull(),
+    max_impact: doublePrecision('max_impact').notNull(),
+    ci_max_attempts: integer('ci_max_attempts').notNull(),
+    is_default: integer('is_default').notNull().default(0),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.workspace_id, t.id] }),
+    // Fast lookup of a workspace's default preset (mirrors idx_merge_presets_default).
+    index('idx_merge_presets_default').on(t.workspace_id, t.is_default),
+  ],
+)
+
+// Board-scan feature: the persisted "repository blueprint" — a repo decomposed into
+// the canonical service → modules tree (mirror of D1 migration 0011). Exactly one
+// blueprint per (workspace, repo): a re-scan replaces it in place (the unique index
+// is the upsert key). The tree is stored whole as JSON in `service_json`.
+export const repoBlueprints = pgTable(
+  'repo_blueprints',
+  {
+    id: text('id').primaryKey(),
+    workspace_id: text('workspace_id').notNull(),
+    repo_owner: text('repo_owner').notNull(),
+    repo_name: text('repo_name').notNull(),
+    source: text('source').notNull(),
+    service_json: text('service_json').notNull(),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+    updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
+  },
+  (t) => [
+    uniqueIndex('idx_repo_blueprints_repo').on(t.workspace_id, t.repo_owner, t.repo_name),
+    index('idx_repo_blueprints_workspace').on(t.workspace_id, t.updated_at),
+  ],
+)
+
+// Document-source integration (mirror of D1 migration 0012). A `source`
+// discriminator tags every row so one pair of tables serves every provider. The
+// credential bag is encrypted at rest (a WebCryptoSecretCipher envelope), never sent
+// on the wire; at most one live connection per (workspace, source) — reconnecting
+// replaces the row.
+export const documentConnections = pgTable(
+  'document_connections',
+  {
+    workspace_id: text('workspace_id').notNull(),
+    source: text('source').notNull(),
+    credentials: text('credentials').notNull(),
+    label: text('label').notNull().default(''),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+    deleted_at: bigint('deleted_at', { mode: 'number' }),
+  },
+  (t) => [primaryKey({ columns: [t.workspace_id, t.source] })],
+)
+
+// One row per imported page: `body` holds the normalized Markdown the planner +
+// agent-context injection consume, `linked_block_id` attaches it to a board block.
+export const documents = pgTable(
+  'documents',
+  {
+    workspace_id: text('workspace_id').notNull(),
+    source: text('source').notNull(),
+    external_id: text('external_id').notNull(),
+    title: text('title').notNull(),
+    url: text('url').notNull(),
+    excerpt: text('excerpt').notNull().default(''),
+    body: text('body').notNull().default(''),
+    linked_block_id: text('linked_block_id'),
+    synced_at: bigint('synced_at', { mode: 'number' }).notNull(),
+    deleted_at: bigint('deleted_at', { mode: 'number' }),
+  },
+  (t) => [
+    primaryKey({ columns: [t.workspace_id, t.source, t.external_id] }),
+    index('idx_documents_block').on(t.workspace_id, t.linked_block_id),
+  ],
+)
+
+// Ephemeral-environment integration (mirror of D1 migration 0008). A workspace's
+// binding to its own environment-management API (a declarative manifest) and the
+// registry of environments provisioned from it. Credentials are opaque ciphertext
+// (SecretCipher envelopes), never plaintext. At most one live provider per workspace
+// (the partial unique index lets a tombstoned binding be replaced).
+export const environmentConnections = pgTable(
+  'environment_connections',
+  {
+    workspace_id: text('workspace_id').notNull(),
+    provider_id: text('provider_id').notNull(),
+    label: text('label').notNull(),
+    base_url: text('base_url').notNull(),
+    manifest_json: text('manifest_json').notNull(),
+    secrets_cipher: text('secrets_cipher').notNull(),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+    deleted_at: bigint('deleted_at', { mode: 'number' }),
+  },
+  (t) => [
+    primaryKey({ columns: [t.workspace_id, t.provider_id] }),
+    uniqueIndex('idx_environment_conn_workspace')
+      .on(t.workspace_id)
+      .where(sql`${t.deleted_at} IS NULL`),
+  ],
+)
+
+// One row per provisioned environment. `access_cipher` holds the env's own access
+// creds (what the tester uses); `provision_fields_cipher` holds the fields captured at
+// provision time that status/teardown calls interpolate.
+export const environments = pgTable(
+  'environments',
+  {
+    id: text('id').primaryKey(),
+    workspace_id: text('workspace_id').notNull(),
+    block_id: text('block_id'),
+    execution_id: text('execution_id'),
+    provider_id: text('provider_id').notNull(),
+    external_id: text('external_id'),
+    url: text('url'),
+    status: text('status').notNull(),
+    access_cipher: text('access_cipher'),
+    provision_fields_cipher: text('provision_fields_cipher'),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+    expires_at: bigint('expires_at', { mode: 'number' }),
+    last_error: text('last_error'),
+    deleted_at: bigint('deleted_at', { mode: 'number' }),
+  },
+  (t) => [
+    index('idx_environments_block')
+      .on(t.workspace_id, t.block_id)
+      .where(sql`${t.deleted_at} IS NULL`),
+    index('idx_environments_expiry')
+      .on(t.expires_at)
+      .where(sql`${t.deleted_at} IS NULL AND ${t.expires_at} IS NOT NULL`),
+  ],
+)
+
+// Repo-bootstrap feature: managed reference architectures a new repo is bootstrapped
+// from (mirror of D1 migration 0010). The bootstrap *runs* themselves are stored as
+// kind='bootstrap' rows of the unified agent_runs table (no separate table), exactly
+// like the Worker.
+export const referenceArchitectures = pgTable(
+  'reference_architectures',
+  {
+    id: text('id').primaryKey(),
+    workspace_id: text('workspace_id').notNull(),
+    name: text('name').notNull(),
+    description: text('description').notNull().default(''),
+    repo_owner: text('repo_owner').notNull(),
+    repo_name: text('repo_name').notNull(),
+    default_instructions: text('default_instructions').notNull().default(''),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+    updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
+    deleted_at: bigint('deleted_at', { mode: 'number' }),
+  },
+  (t) => [
+    index('idx_reference_architectures_workspace')
+      .on(t.workspace_id)
+      .where(sql`${t.deleted_at} IS NULL`),
+  ],
+)
+
 // Slack integration (mirror of D1 migration 0037). An additional delivery transport
 // for the notification mechanism. Per-account connection (+ encrypted bot token,
 // `token_cipher` is a WebCryptoSecretCipher envelope, never plaintext), per-workspace
@@ -634,4 +871,111 @@ export const githubRepos = pgTable(
     primaryKey({ columns: [t.workspace_id, t.github_id] }),
     index('idx_gh_repos_install').on(t.installation_id),
   ],
+)
+
+// GitHub projection tables (mirror of D1 migration 0004; sync cursors re-keyed by
+// migration 0032). Local read models of a workspace's repos' branches / PRs / issues /
+// commits / check runs, populated by the inline GitHub sync. `protected`/`merged` are
+// 0/1 to mirror the D1 integer flags; soft-delete tombstones where the D1 tables have one.
+export const githubBranches = pgTable(
+  'github_branches',
+  {
+    workspace_id: text('workspace_id').notNull(),
+    repo_github_id: bigint('repo_github_id', { mode: 'number' }).notNull(),
+    name: text('name').notNull(),
+    head_sha: text('head_sha').notNull(),
+    protected: integer('protected').notNull().default(0),
+    synced_at: bigint('synced_at', { mode: 'number' }).notNull(),
+    deleted_at: bigint('deleted_at', { mode: 'number' }),
+  },
+  (t) => [primaryKey({ columns: [t.workspace_id, t.repo_github_id, t.name] })],
+)
+
+export const githubPullRequests = pgTable(
+  'github_pull_requests',
+  {
+    workspace_id: text('workspace_id').notNull(),
+    repo_github_id: bigint('repo_github_id', { mode: 'number' }).notNull(),
+    number: integer('number').notNull(),
+    github_id: bigint('github_id', { mode: 'number' }).notNull(),
+    title: text('title').notNull(),
+    state: text('state').notNull(),
+    head_ref: text('head_ref'),
+    base_ref: text('base_ref'),
+    head_sha: text('head_sha'),
+    merged: integer('merged').notNull().default(0),
+    author: text('author'),
+    gh_updated_at: bigint('gh_updated_at', { mode: 'number' }),
+    synced_at: bigint('synced_at', { mode: 'number' }).notNull(),
+    deleted_at: bigint('deleted_at', { mode: 'number' }),
+  },
+  (t) => [
+    primaryKey({ columns: [t.workspace_id, t.repo_github_id, t.number] }),
+    index('idx_gh_pr_state').on(t.workspace_id, t.state),
+  ],
+)
+
+export const githubIssues = pgTable(
+  'github_issues',
+  {
+    workspace_id: text('workspace_id').notNull(),
+    repo_github_id: bigint('repo_github_id', { mode: 'number' }).notNull(),
+    number: integer('number').notNull(),
+    github_id: bigint('github_id', { mode: 'number' }).notNull(),
+    title: text('title').notNull(),
+    state: text('state').notNull(),
+    author: text('author'),
+    labels: text('labels').notNull().default('[]'),
+    gh_updated_at: bigint('gh_updated_at', { mode: 'number' }),
+    synced_at: bigint('synced_at', { mode: 'number' }).notNull(),
+    deleted_at: bigint('deleted_at', { mode: 'number' }),
+  },
+  (t) => [primaryKey({ columns: [t.workspace_id, t.repo_github_id, t.number] })],
+)
+
+export const githubCommits = pgTable(
+  'github_commits',
+  {
+    workspace_id: text('workspace_id').notNull(),
+    repo_github_id: bigint('repo_github_id', { mode: 'number' }).notNull(),
+    sha: text('sha').notNull(),
+    message: text('message').notNull(),
+    author: text('author'),
+    authored_at: bigint('authored_at', { mode: 'number' }),
+    synced_at: bigint('synced_at', { mode: 'number' }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.workspace_id, t.repo_github_id, t.sha] })],
+)
+
+export const githubCheckRuns = pgTable(
+  'github_check_runs',
+  {
+    workspace_id: text('workspace_id').notNull(),
+    repo_github_id: bigint('repo_github_id', { mode: 'number' }).notNull(),
+    github_id: bigint('github_id', { mode: 'number' }).notNull(),
+    head_sha: text('head_sha').notNull(),
+    name: text('name').notNull(),
+    status: text('status').notNull(),
+    conclusion: text('conclusion'),
+    synced_at: bigint('synced_at', { mode: 'number' }).notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.workspace_id, t.repo_github_id, t.github_id] }),
+    index('idx_gh_checks_sha').on(t.workspace_id, t.repo_github_id, t.head_sha),
+  ],
+)
+
+// Incremental-sync bookkeeping, keyed by (installation, repo, kind) so a repo is
+// fetched once per org and fanned out (mirror of D1 migration 0032).
+export const githubSyncCursors = pgTable(
+  'github_sync_cursors',
+  {
+    installation_id: bigint('installation_id', { mode: 'number' }).notNull(),
+    repo_github_id: bigint('repo_github_id', { mode: 'number' }).notNull(),
+    kind: text('kind').notNull(),
+    etag: text('etag'),
+    last_synced_at: bigint('last_synced_at', { mode: 'number' }),
+    since_iso: text('since_iso'),
+  },
+  (t) => [primaryKey({ columns: [t.installation_id, t.repo_github_id, t.kind] })],
 )

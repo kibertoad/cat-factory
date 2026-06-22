@@ -150,6 +150,10 @@ export {
 } from './fragmentLibrary/FragmentSourceService.js'
 export { DeterministicFragmentSelector } from './fragmentLibrary/DeterministicFragmentSelector.js'
 export {
+  LlmFragmentSelector,
+  type LlmFragmentSelectorDependencies,
+} from './fragmentLibrary/LlmFragmentSelector.js'
+export {
   type ResolvedCatalogEntry,
   mergeCatalog,
   toSelectable,

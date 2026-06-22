@@ -30,7 +30,7 @@ to custom kinds via `AgentKindDefinition.traits`. Two standard traits ship:
   selected fragments are folded into the agent's system prompt, unioned with the block's
   own manual pins. Other kinds keep only their block pins.
 - **`spec-aware`** (every code-touching kind): the agent's system prompt gains guidance to
-  read the in-repo `spec/` artifact (overview.md → rules.md → features/*.feature →
+  read the in-repo `spec/` artifact (overview.md → rules.md → features/\*.feature →
   spec.json) and treat it as the source of truth for required behaviour.
 
 This **replaces the automatic per-run relevance selector**: fragment delivery is now

@@ -5,9 +5,9 @@ import type { DrizzleDb } from '../src/db/client.js'
 import { blocks, githubRepos } from '../src/db/schema.js'
 import {
   DrizzleGitHubInstallationRepository,
-  DrizzleRepoProjectionRepository,
   DrizzleRunnerPoolConnectionRepository,
 } from '../src/repositories/containerExecution.js'
+import { DrizzleRepoProjectionRepository } from '../src/repositories/github.js'
 import { createDrizzleRepositories } from '../src/repositories/drizzle.js'
 import { SystemClock } from '../src/runtime.js'
 import { setupTestDb } from './harness.js'
