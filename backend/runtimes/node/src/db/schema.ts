@@ -102,6 +102,18 @@ export const memberships = pgTable(
   ],
 )
 
+// Per-account transactional-email sender (UI-onboarded). The provider API key is
+// sealed at rest (SecretCipher), never plaintext.
+export const emailConnections = pgTable('email_connections', {
+  account_id: text('account_id').primaryKey(),
+  provider: text('provider').notNull(),
+  from_address: text('from_address').notNull(),
+  api_key_cipher: text('api_key_cipher').notNull(),
+  created_at: bigint('created_at', { mode: 'number' }).notNull(),
+  updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
+  deleted_at: bigint('deleted_at', { mode: 'number' }),
+})
+
 // Email invitations into an org account. Only the token's hash is stored.
 export const accountInvitations = pgTable(
   'account_invitations',

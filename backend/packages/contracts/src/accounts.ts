@@ -93,3 +93,30 @@ export const createInvitationSchema = v.object({
   role: v.optional(accountRoleSchema),
 })
 export type CreateInvitationInput = v.InferOutput<typeof createInvitationSchema>
+
+// ---- Email sender connection (per-account, UI-onboarded) ------------------
+
+export const emailProviderKindSchema = v.picklist(['sendgrid', 'resend'])
+export type EmailProviderKind = v.InferOutput<typeof emailProviderKindSchema>
+
+/** Safe email-connection metadata exposed to clients (never the API key). */
+export const emailConnectionSchema = v.object({
+  provider: emailProviderKindSchema,
+  fromAddress: v.string(),
+  connectedAt: v.number(),
+})
+export type EmailConnection = v.InferOutput<typeof emailConnectionSchema>
+
+/** Connect (or replace) an account's email sender. */
+export const connectEmailSchema = v.object({
+  provider: emailProviderKindSchema,
+  apiKey: v.pipe(v.string(), v.minLength(1), v.maxLength(500)),
+  fromAddress: v.pipe(v.string(), v.trim(), v.email(), v.maxLength(320)),
+})
+export type ConnectEmailInput = v.InferOutput<typeof connectEmailSchema>
+
+/** Send a test email through a connected account sender. */
+export const testEmailSchema = v.object({
+  to: v.pipe(v.string(), v.trim(), v.email(), v.maxLength(320)),
+})
+export type TestEmailInput = v.InferOutput<typeof testEmailSchema>

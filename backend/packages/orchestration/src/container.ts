@@ -7,7 +7,7 @@ import type {
 import type { AccountRepository, MembershipRepository } from '@cat-factory/kernel'
 import type {
   AccountInvitationRepository,
-  EmailSender,
+  EmailConnectionRepository,
   PasswordHasher,
   UserRepository,
 } from '@cat-factory/kernel'
@@ -78,6 +78,7 @@ import { WorkspaceService } from '@cat-factory/workspaces'
 import { AccountService } from '@cat-factory/workspaces'
 import { UserService } from '@cat-factory/workspaces'
 import { InvitationService } from '@cat-factory/workspaces'
+import { EmailConnectionService } from '@cat-factory/integrations'
 import { SpendService, DEFAULT_SPEND_PRICING, type SpendPricing } from '@cat-factory/spend'
 import { LlmObservabilityService } from './modules/observability/LlmObservabilityService.js'
 import {
@@ -136,12 +137,12 @@ export interface CoreDependencies {
   passwordHasher: PasswordHasher
   /** Account invitations (email-based org onboarding). Optional: opt-in feature. */
   invitationRepository?: AccountInvitationRepository
-  /** Transactional email transport (invitations). Optional: returns links when absent. */
-  emailSender?: EmailSender
+  /** Per-account email-sender connections (UI-onboarded, DB-stored). Optional. */
+  emailConnectionRepository?: EmailConnectionRepository
+  /** Master-key cipher sealing the per-account email API key at rest. */
+  emailSecretCipher?: SecretCipher
   /** Base URL the invite-accept link points at (SPA origin). */
   appBaseUrl?: string
-  /** From address for transactional email. */
-  emailFrom?: string
   blockRepository: BlockRepository
   pipelineRepository: PipelineRepository
   executionRepository: ExecutionRepository
@@ -516,6 +517,8 @@ export interface Core {
   userService: UserService
   /** Present only when the invitation repository is wired (see CoreDependencies). */
   invitations?: InvitationService
+  /** Present only when the email-connection repository + cipher are wired. */
+  email?: EmailConnectionService
   boardService: BoardService
   pipelineService: PipelineService
   executionService: ExecutionService
@@ -1092,6 +1095,14 @@ export function createCore(dependencies: CoreDependencies): Core {
     idGenerator: dependencies.idGenerator,
     clock: dependencies.clock,
   })
+  const email =
+    dependencies.emailConnectionRepository && dependencies.emailSecretCipher
+      ? new EmailConnectionService({
+          emailConnectionRepository: dependencies.emailConnectionRepository,
+          secretCipher: dependencies.emailSecretCipher,
+          clock: dependencies.clock,
+        })
+      : undefined
   const invitations = dependencies.invitationRepository
     ? new InvitationService({
         invitationRepository: dependencies.invitationRepository,
@@ -1099,9 +1110,9 @@ export function createCore(dependencies: CoreDependencies): Core {
         membershipRepository: dependencies.membershipRepository,
         idGenerator: dependencies.idGenerator,
         clock: dependencies.clock,
-        emailSender: dependencies.emailSender,
+        // Resolve the inviting account's own (DB-stored) email sender at send time.
+        resolveEmailSender: email ? (accountId) => email.resolveSender(accountId) : undefined,
         appBaseUrl: dependencies.appBaseUrl,
-        emailFrom: dependencies.emailFrom,
       })
     : undefined
   const pipelineService = new PipelineService(dependencies)
@@ -1174,6 +1185,7 @@ export function createCore(dependencies: CoreDependencies): Core {
     accountService,
     userService,
     ...(invitations ? { invitations } : {}),
+    ...(email ? { email } : {}),
     boardService,
     pipelineService,
     executionService,

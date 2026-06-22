@@ -21,7 +21,13 @@ export type {
   UserRepository,
 } from './user-repositories.js'
 export type { PasswordHasher } from './password-hasher.js'
-export type { EmailMessage, EmailSender } from './email-sender.js'
+export type {
+  EmailMessage,
+  EmailSender,
+  EmailProviderKind,
+  EmailConnectionRecord,
+  EmailConnectionRepository,
+} from './email-sender.js'
 export type {
   AccountInvitationRecord,
   AccountInvitationRepository,

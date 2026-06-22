@@ -5,6 +5,9 @@ import type {
   AccountRepository,
   AccountSettingsPatch,
   AgentFailure,
+  EmailConnectionRecord,
+  EmailConnectionRepository,
+  EmailProviderKind,
   AgentRunKind,
   CloudProvider,
   AgentRunRef,
@@ -77,6 +80,7 @@ import {
   accounts,
   agentRuns,
   blocks,
+  emailConnections,
   llmCallMetrics,
   memberships,
   mergeThresholdPresets,
@@ -731,6 +735,61 @@ class DrizzleAccountInvitationRepository implements AccountInvitationRepository 
 
   async setStatus(id: string, status: AccountInvitationRecord['status']): Promise<void> {
     await this.db.update(accountInvitations).set({ status }).where(eq(accountInvitations.id, id))
+  }
+}
+
+function rowToEmailConnection(row: typeof emailConnections.$inferSelect): EmailConnectionRecord {
+  return {
+    accountId: row.account_id,
+    provider: row.provider as EmailProviderKind,
+    fromAddress: row.from_address,
+    apiKeyCipher: row.api_key_cipher,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    deletedAt: row.deleted_at,
+  }
+}
+
+class DrizzleEmailConnectionRepository implements EmailConnectionRepository {
+  constructor(private readonly db: DrizzleDb) {}
+
+  async getByAccount(accountId: string): Promise<EmailConnectionRecord | null> {
+    const [row] = await this.db
+      .select()
+      .from(emailConnections)
+      .where(eq(emailConnections.account_id, accountId))
+    return row ? rowToEmailConnection(row) : null
+  }
+
+  async upsert(record: EmailConnectionRecord): Promise<void> {
+    await this.db
+      .insert(emailConnections)
+      .values({
+        account_id: record.accountId,
+        provider: record.provider,
+        from_address: record.fromAddress,
+        api_key_cipher: record.apiKeyCipher,
+        created_at: record.createdAt,
+        updated_at: record.updatedAt,
+        deleted_at: record.deletedAt,
+      })
+      .onConflictDoUpdate({
+        target: emailConnections.account_id,
+        set: {
+          provider: record.provider,
+          from_address: record.fromAddress,
+          api_key_cipher: record.apiKeyCipher,
+          updated_at: record.updatedAt,
+          deleted_at: record.deletedAt,
+        },
+      })
+  }
+
+  async softDelete(accountId: string, at: number): Promise<void> {
+    await this.db
+      .update(emailConnections)
+      .set({ deleted_at: at, updated_at: at })
+      .where(eq(emailConnections.account_id, accountId))
   }
 }
 
@@ -1866,6 +1925,7 @@ export interface CoreRepositories {
   membershipRepository: MembershipRepository
   userRepository: UserRepository
   invitationRepository: AccountInvitationRepository
+  emailConnectionRepository: EmailConnectionRepository
   blockRepository: BlockRepository
   pipelineRepository: PipelineRepository
   executionRepository: ExecutionRepository
@@ -1891,6 +1951,7 @@ export function createDrizzleRepositories(db: DrizzleDb, clock: Clock): CoreRepo
     membershipRepository: new DrizzleMembershipRepository(db),
     userRepository: new DrizzleUserRepository(db),
     invitationRepository: new DrizzleAccountInvitationRepository(db),
+    emailConnectionRepository: new DrizzleEmailConnectionRepository(db),
     blockRepository: new DrizzleBlockRepository(db),
     pipelineRepository: new DrizzlePipelineRepository(db),
     executionRepository: new DrizzleExecutionRepository(db, clock),

@@ -1,9 +1,12 @@
 import {
   addMemberSchema,
+  connectEmailSchema,
   createAccountSchema,
   createInvitationSchema,
+  testEmailSchema,
   updateAccountSchema,
 } from '@cat-factory/contracts'
+import { ConflictError } from '@cat-factory/kernel'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
 import type { AppEnv } from '../../http/env.js'
@@ -113,5 +116,60 @@ export function accountController(): Hono<AppEnv> {
     return c.body(null, 204)
   })
 
+  // ---- Email sender connection (per-account, UI-onboarded) ----------------
+  // Owner-only mutations; available only when the email module is wired.
+
+  app.get('/accounts/:accountId/email-connection', async (c) => {
+    const user = accountUser(c)
+    if (!user) return signInRequired(c)
+    const container = c.get('container')
+    if (!container.email) return c.json({ connection: null, configured: false })
+    await container.accountService.requireMember(param(c, 'accountId'), user.id)
+    const connection = await container.email.getConnection(param(c, 'accountId'))
+    return c.json({ connection, configured: true })
+  })
+
+  app.post('/accounts/:accountId/email-connection', jsonBody(connectEmailSchema), async (c) => {
+    const user = accountUser(c)
+    if (!user) return signInRequired(c)
+    const container = c.get('container')
+    if (!container.email) {
+      return c.json({ error: { code: 'unavailable', message: 'Email is not configured' } }, 503)
+    }
+    await requireOwner(c, param(c, 'accountId'), user.id)
+    const connection = await container.email.connect(param(c, 'accountId'), c.req.valid('json'))
+    return c.json(connection, 201)
+  })
+
+  app.delete('/accounts/:accountId/email-connection', async (c) => {
+    const user = accountUser(c)
+    if (!user) return signInRequired(c)
+    const container = c.get('container')
+    if (!container.email) return c.body(null, 204)
+    await requireOwner(c, param(c, 'accountId'), user.id)
+    await container.email.disconnect(param(c, 'accountId'))
+    return c.body(null, 204)
+  })
+
+  app.post('/accounts/:accountId/email-connection/test', jsonBody(testEmailSchema), async (c) => {
+    const user = accountUser(c)
+    if (!user) return signInRequired(c)
+    const container = c.get('container')
+    if (!container.email) {
+      return c.json({ error: { code: 'unavailable', message: 'Email is not configured' } }, 503)
+    }
+    await requireOwner(c, param(c, 'accountId'), user.id)
+    await container.email.sendTest(param(c, 'accountId'), c.req.valid('json').to)
+    return c.json({ ok: true })
+  })
+
   return app
+}
+
+/** Throw 404/409 unless the user is an owner of the account. */
+async function requireOwner(c: Context<AppEnv>, accountId: string, userId: string): Promise<void> {
+  const membership = await c.get('container').accountService.requireMember(accountId, userId)
+  if (membership.role !== 'owner') {
+    throw new ConflictError('Only an account owner can manage this setting')
+  }
 }

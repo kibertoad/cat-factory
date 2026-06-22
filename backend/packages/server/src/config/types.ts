@@ -101,16 +101,18 @@ export interface AuthConfig {
 }
 
 export interface EmailConfig {
-  /** Opt-in flag; false unless a provider API key is configured. */
+  /**
+   * Opt-in flag. Requires an encryption key (the per-account provider API key is
+   * sealed at rest, no plaintext fallback). When false the email module isn't
+   * assembled and invitations return a shareable link instead of sending mail.
+   * The provider + API key + From address are onboarded per-account in the UI and
+   * stored in the DB — NOT read from env — so each org brings its own sender.
+   */
   enabled: boolean
-  /** Which provider to send through ('sendgrid' | 'resend'). */
-  provider: 'sendgrid' | 'resend' | null
-  /** The From address for transactional email (invitations). */
-  from: string
+  /** Service-level master key (base64) backing provider-API-key encryption at rest. */
+  encryptionKey?: string
   /** Public base URL the invite-accept link points at (the SPA origin). */
   appBaseUrl: string
-  sendgrid?: { apiKey: string }
-  resend?: { apiKey: string }
 }
 
 export interface DocumentsConfig {

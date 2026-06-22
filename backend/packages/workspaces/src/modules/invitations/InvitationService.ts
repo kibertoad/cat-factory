@@ -36,12 +36,14 @@ export interface InvitationServiceDependencies {
   membershipRepository: MembershipRepository
   idGenerator: IdGenerator
   clock: Clock
-  /** Optional: deliver the invite email. Absent ⇒ the link is returned for manual sharing. */
-  emailSender?: EmailSender
+  /**
+   * Optional: resolve the account's configured (DB-stored, per-account) email sender
+   * at send time. Absent or returning null ⇒ the accept link is returned for manual
+   * sharing instead of being emailed.
+   */
+  resolveEmailSender?: (accountId: string) => Promise<EmailSender | null>
   /** Base URL the accept link points at (the SPA origin). */
   appBaseUrl?: string
-  /** From address for the invite email. */
-  emailFrom?: string
 }
 
 /** SHA-256 hex digest — Web Crypto, runs on both runtimes. */
@@ -68,6 +70,8 @@ export interface CreatedInvitation {
   /** The raw accept token + link (only available at creation; never re-derivable). */
   token: string
   acceptUrl: string | null
+  /** Whether the invite email was actually sent (vs. needing manual link sharing). */
+  emailed: boolean
 }
 
 export class InvitationService {
@@ -112,15 +116,20 @@ export class InvitationService {
     const acceptUrl = this.deps.appBaseUrl
       ? `${this.deps.appBaseUrl.replace(/\/$/, '')}/invite?token=${token}`
       : null
-    if (this.deps.emailSender && acceptUrl) {
-      await this.deps.emailSender.send({
+    const sender = this.deps.resolveEmailSender
+      ? await this.deps.resolveEmailSender(accountId)
+      : null
+    let emailed = false
+    if (sender && acceptUrl) {
+      await sender.send({
         to: normalizedEmail,
         subject: `You've been invited to ${account.name} on Cat Factory`,
         text: `You've been invited to join ${account.name}. Accept: ${acceptUrl}`,
         html: invitationEmailHtml(account.name, acceptUrl),
       })
+      emailed = true
     }
-    return { invitation: toWire(record), token, acceptUrl }
+    return { invitation: toWire(record), token, acceptUrl, emailed }
   }
 
   list(accountId: string): Promise<AccountInvitation[]> {

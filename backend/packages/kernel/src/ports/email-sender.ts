@@ -17,3 +17,32 @@ export interface EmailSender {
   /** Send one transactional email. Throws on a provider/transport failure. */
   send(message: EmailMessage): Promise<void>
 }
+
+/** Supported transactional-email providers (UI-onboarded per account). */
+export type EmailProviderKind = 'sendgrid' | 'resend'
+
+/**
+ * An account's email-sender connection: which provider, the From address, and the
+ * encrypted provider API key. Keyed per-account and stored in the DB (onboarded in
+ * the UI, never via env). The key is decrypted only in-memory at send time.
+ */
+export interface EmailConnectionRecord {
+  accountId: string
+  provider: EmailProviderKind
+  fromAddress: string
+  /** Ciphertext of the provider API key (SecretCipher envelope); never plaintext. */
+  apiKeyCipher: string
+  createdAt: number
+  updatedAt: number
+  /** Set when the account disconnects email (tombstone). */
+  deletedAt: number | null
+}
+
+export interface EmailConnectionRepository {
+  /** The account's live connection, or null if not connected. */
+  getByAccount(accountId: string): Promise<EmailConnectionRecord | null>
+  /** Create or replace the live connection for an account. */
+  upsert(record: EmailConnectionRecord): Promise<void>
+  /** Tombstone the account's connection. */
+  softDelete(accountId: string, at: number): Promise<void>
+}
