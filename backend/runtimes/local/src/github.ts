@@ -17,6 +17,25 @@ import { type AppTokenSource, FetchGitHubClient } from '@cat-factory/server'
 // mode — those are the GitHub-App connect flow, which local mode replaces with the
 // linkRepo helper — so they throw rather than pretend to work.
 
+// The scopes a local-mode PAT needs. Agent containers clone/push branches and open PRs
+// (`repo`, which also covers reading the PR head's Actions check runs for the CI gate and
+// merging the PR), and the coder/ci-fixer may touch `.github/workflows/*` files (`workflow`).
+const LOCAL_PAT_SCOPES = ['repo', 'workflow'] as const
+
+/**
+ * A GitHub "new personal access token (classic)" URL with the scopes local mode needs
+ * pre-selected, so a developer without a PAT can click straight through to create one.
+ * Classic tokens are used (not fine-grained) because only the classic form accepts the
+ * `scopes` query param for pre-selection.
+ */
+export function githubPatCreationUrl(): string {
+  const params = new URLSearchParams({
+    description: 'cat-factory local mode',
+    scopes: LOCAL_PAT_SCOPES.join(','),
+  })
+  return `https://github.com/settings/tokens/new?${params.toString()}`
+}
+
 /** An {@link AppTokenSource} that returns a fixed PAT for every installation call. */
 export class StaticTokenAppRegistry implements AppTokenSource {
   readonly defaultAppId = ''
