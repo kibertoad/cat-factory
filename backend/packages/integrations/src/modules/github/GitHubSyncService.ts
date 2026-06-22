@@ -74,18 +74,21 @@ export class GitHubSyncService {
   }
 
   /**
-   * Mark (or unmark) a tracked repo as a monorepo (hosting several services, each
-   * pinned to a subdirectory). The flag is board-owned state on the projection;
-   * returns the updated repo, or throws if the repo isn't tracked by the workspace.
+   * Mark (or unmark) a repo as a monorepo (hosting several services, each pinned
+   * to a subdirectory). The flag is board-owned state on the projection. Lazily
+   * links the repo first if the workspace doesn't track it yet — the "add an
+   * existing repo as a service" flow flips this toggle before the repo is added,
+   * so it may not be linked. Throws only if the repo isn't accessible to the
+   * installation (the App hasn't been granted it).
    */
   async setRepoMonorepo(
     workspaceId: string,
     repoGithubId: number,
     isMonorepo: boolean,
   ): Promise<GitHubRepo> {
-    const existing = await this.deps.repoProjectionRepository.get(workspaceId, repoGithubId)
+    const existing = await this.linkRepo(workspaceId, repoGithubId)
     if (!existing) {
-      throw new Error(`Repo ${repoGithubId} is not linked to workspace '${workspaceId}'`)
+      throw new Error(`Repo ${repoGithubId} is not accessible to workspace '${workspaceId}'`)
     }
     await this.deps.repoProjectionRepository.setMonorepo(workspaceId, repoGithubId, isMonorepo)
     return { ...existing, isMonorepo }
@@ -104,9 +107,11 @@ export class GitHubSyncService {
   ): Promise<RepoTreeEntry[]> {
     const installation = await this.deps.githubInstallationRepository.getByWorkspace(workspaceId)
     if (!installation || installation.deletedAt) return []
-    const repo = await this.deps.repoProjectionRepository.get(workspaceId, repoGithubId)
+    // Lazily link the repo if the workspace doesn't track it yet (the add-service
+    // flow browses the tree before the repo is added), same as setRepoMonorepo.
+    const repo = await this.linkRepo(workspaceId, repoGithubId)
     if (!repo) {
-      throw new Error(`Repo ${repoGithubId} is not linked to workspace '${workspaceId}'`)
+      throw new Error(`Repo ${repoGithubId} is not accessible to workspace '${workspaceId}'`)
     }
     const entries = await this.deps.githubClient.listDirectory(
       installation.installationId,
