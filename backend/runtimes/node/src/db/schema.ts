@@ -509,6 +509,46 @@ export const repoBlueprints = pgTable(
   ],
 )
 
+// Document-source integration (mirror of D1 migration 0012). A `source`
+// discriminator tags every row so one pair of tables serves every provider. The
+// credential bag is encrypted at rest (a WebCryptoSecretCipher envelope), never sent
+// on the wire; at most one live connection per (workspace, source) — reconnecting
+// replaces the row.
+export const documentConnections = pgTable(
+  'document_connections',
+  {
+    workspace_id: text('workspace_id').notNull(),
+    source: text('source').notNull(),
+    credentials: text('credentials').notNull(),
+    label: text('label').notNull().default(''),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+    deleted_at: bigint('deleted_at', { mode: 'number' }),
+  },
+  (t) => [primaryKey({ columns: [t.workspace_id, t.source] })],
+)
+
+// One row per imported page: `body` holds the normalized Markdown the planner +
+// agent-context injection consume, `linked_block_id` attaches it to a board block.
+export const documents = pgTable(
+  'documents',
+  {
+    workspace_id: text('workspace_id').notNull(),
+    source: text('source').notNull(),
+    external_id: text('external_id').notNull(),
+    title: text('title').notNull(),
+    url: text('url').notNull(),
+    excerpt: text('excerpt').notNull().default(''),
+    body: text('body').notNull().default(''),
+    linked_block_id: text('linked_block_id'),
+    synced_at: bigint('synced_at', { mode: 'number' }).notNull(),
+    deleted_at: bigint('deleted_at', { mode: 'number' }),
+  },
+  (t) => [
+    primaryKey({ columns: [t.workspace_id, t.source, t.external_id] }),
+    index('idx_documents_block').on(t.workspace_id, t.linked_block_id),
+  ],
+)
+
 // Slack integration (mirror of D1 migration 0037). An additional delivery transport
 // for the notification mechanism. Per-account connection (+ encrypted bot token,
 // `token_cipher` is a WebCryptoSecretCipher envelope, never plaintext), per-workspace

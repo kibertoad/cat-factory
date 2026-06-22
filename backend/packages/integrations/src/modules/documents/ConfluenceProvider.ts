@@ -6,7 +6,8 @@ import {
   type DocumentSourceProvider,
   type NormalizedConnection,
 } from '@cat-factory/kernel'
-import { CONFLUENCE_DESCRIPTOR, confluenceLogic } from '@cat-factory/integrations'
+import { CONFLUENCE_DESCRIPTOR } from './confluence.logic.js'
+import * as confluenceLogic from './confluence.logic.js'
 
 // ConfluenceProvider: the document-source provider for Confluence Cloud. It
 // authenticates with HTTP Basic (account email + API token), fetches a page in

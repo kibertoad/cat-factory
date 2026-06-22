@@ -306,6 +306,42 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
       })
     })
 
+    describe('document sources', () => {
+      it('connects, lists (secret-free), and disconnects a document source', async () => {
+        const { call, createWorkspace } = harness.makeApp()
+        const { workspace } = await createWorkspace()
+        const base = `/workspaces/${workspace.id}/document-sources`
+
+        // The module is wired on every facade: a fresh workspace lists no connections
+        // (a 200), not the 503 a missing documents module would return.
+        const initial = await call<{ connections: { source: string }[] }>('GET', `${base}/connections`)
+        expect(initial.status).toBe(200)
+        expect(initial.body.connections).toEqual([])
+
+        // Connect Notion (a single internal-integration token; normalizeConnection is
+        // pure, so no network). The credential is encrypted at rest and never echoed.
+        const connected = await call<{ source: string; label: string }>(
+          'POST',
+          `${base}/notion/connect`,
+          { credentials: { apiToken: 'secret-notion-token-xyz' } },
+        )
+        expect(connected.status).toBe(201)
+        expect(connected.body.source).toBe('notion')
+        expect(JSON.stringify(connected.body)).not.toContain('secret-notion-token')
+
+        // It lists back as metadata only — the token is never on the wire.
+        const listed = await call<{ connections: { source: string }[] }>('GET', `${base}/connections`)
+        expect(listed.body.connections.map((c) => c.source)).toEqual(['notion'])
+        expect(JSON.stringify(listed.body)).not.toContain('secret-notion-token')
+
+        // Disconnect tombstones it; the list goes empty again.
+        const del = await call('DELETE', `${base}/notion/connection`)
+        expect(del.status).toBe(204)
+        const afterDelete = await call<{ connections: unknown[] }>('GET', `${base}/connections`)
+        expect(afterDelete.body.connections).toEqual([])
+      })
+    })
+
     describe('board', () => {
       it('adds a top-level frame', async () => {
         const app = harness.makeApp()

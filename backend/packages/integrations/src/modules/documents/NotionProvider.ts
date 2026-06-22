@@ -6,7 +6,8 @@ import {
   type DocumentSourceProvider,
   type NormalizedConnection,
 } from '@cat-factory/kernel'
-import { NOTION_DESCRIPTOR, notionLogic } from '@cat-factory/integrations'
+import { NOTION_DESCRIPTOR } from './notion.logic.js'
+import * as notionLogic from './notion.logic.js'
 
 // NotionProvider: the document-source provider for Notion. It authenticates with
 // a single internal-integration token (Bearer), fetches a page for its title and

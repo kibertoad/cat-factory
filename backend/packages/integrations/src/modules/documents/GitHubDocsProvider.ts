@@ -9,7 +9,8 @@ import {
   type GitHubInstallationRepository,
   type NormalizedConnection,
 } from '@cat-factory/kernel'
-import { GITHUB_DOCS_DESCRIPTOR, githubDocsLogic } from '@cat-factory/integrations'
+import { GITHUB_DOCS_DESCRIPTOR } from './github-docs.logic.js'
+import * as githubDocsLogic from './github-docs.logic.js'
 
 // GitHubDocsProvider: the document-source provider for files living in a GitHub
 // repository (READMEs, RFCs, architecture notes under `docs/`). Like the

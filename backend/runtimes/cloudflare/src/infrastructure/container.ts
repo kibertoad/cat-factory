@@ -17,6 +17,9 @@ import {
   resolveAgentConfig,
 } from '@cat-factory/agents'
 import {
+  ConfluenceProvider,
+  GitHubDocsProvider,
+  NotionProvider,
   PersonalSubscriptionService,
   ProviderSubscriptionService,
   RunnerPoolConnectionService,
@@ -111,9 +114,6 @@ import { GitHubAppRegistry } from './github/GitHubAppRegistry'
 import { FetchGitHubClient } from './github/FetchGitHubClient'
 import { FetchGitHubProvisioningClient } from './github/FetchGitHubProvisioningClient'
 import { WebCryptoWebhookVerifier } from './github/WebCryptoWebhookVerifier'
-import { ConfluenceProvider } from './documents/ConfluenceProvider'
-import { NotionProvider } from './documents/NotionProvider'
-import { GitHubDocsProvider } from './documents/GitHubDocsProvider'
 import { JiraProvider } from './tasks/JiraProvider'
 import { GitHubIssuesProvider } from './tasks/GitHubIssuesProvider'
 import { D1TaskConnectionRepository } from './repositories/D1TaskConnectionRepository'

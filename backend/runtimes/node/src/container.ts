@@ -1,6 +1,9 @@
 import { AiAgentExecutor, inlineWebSearchOptionsFromEnv } from '@cat-factory/agents'
 import {
+  ConfluenceProvider,
+  GitHubDocsProvider,
   HttpRunnerPoolProvider,
+  NotionProvider,
   PersonalSubscriptionService,
   ProviderSubscriptionService,
   RunnerPoolConnectionService,
@@ -13,6 +16,7 @@ import {
 import type {
   AgentExecutor,
   Clock,
+  DocumentSourceProvider,
   GitHubClient,
   GitHubInstallationRepository,
   RateLimitRepository,
@@ -60,6 +64,10 @@ import {
   DrizzleSubscriptionActivationRepository,
 } from './repositories/personalSubscription.js'
 import { createDrizzleRepositories } from './repositories/drizzle.js'
+import {
+  DrizzleDocumentConnectionRepository,
+  DrizzleDocumentRepository,
+} from './repositories/documents.js'
 import { DrizzleNotificationRepository } from './repositories/notifications.js'
 import {
   DrizzleSlackConnectionRepository,
@@ -667,6 +675,10 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
       ? { workRunner: new PgBossWorkRunner(options.boss, executionRuntime(config, env).queue) }
       : {}),
     ...githubGateDeps,
+    // Document sources (Confluence / Notion / GitHub docs): wired from the shared
+    // integration providers exactly like the Worker, so a workspace can connect a
+    // source and import requirement/PRD/RFC pages as agent context.
+    ...selectNodeDocumentsDeps(config, options.db, githubClient, githubInstallationRepository),
     // Slack: an extra notification transport (the channel) + its management module.
     // Default-off; when enabled it composes the Slack channel onto the notification
     // mechanism, identically to the Worker.
@@ -721,5 +733,44 @@ function selectNodeTasksDeps(
       taskRepository: new DrizzleTaskRepository(db),
     },
     taskConnectionRepository,
+  }
+}
+
+/**
+ * Wire the document-source integration for the Node facade, mirroring the Worker's
+ * `selectDocumentsDeps`: the shared `@cat-factory/integrations` provider shells
+ * (Confluence/Notion always; GitHub-docs only when a GitHub client is available, since
+ * it reuses the workspace's App installation), the Drizzle connection/document repos,
+ * and — in `llm` planner mode — the default model ref the doc→board planner runs with
+ * (the container's `modelProvider` is shared). Source credentials are encrypted at rest
+ * under a documents-scoped HKDF info, keyed by the shared ENCRYPTION_KEY.
+ */
+function selectNodeDocumentsDeps(
+  config: AppConfig,
+  db: DrizzleDb,
+  githubClient: GitHubClient | undefined,
+  installations: GitHubInstallationRepository,
+): Partial<CoreDependencies> {
+  if (!config.documents.enabled || !config.documents.encryptionKey) return {}
+  const providers: DocumentSourceProvider[] = []
+  if (config.documents.sources.includes('confluence')) providers.push(new ConfluenceProvider())
+  if (config.documents.sources.includes('notion')) providers.push(new NotionProvider())
+  if (config.documents.sources.includes('github') && githubClient) {
+    providers.push(new GitHubDocsProvider({ githubClient, installations }))
+  }
+  if (providers.length === 0) return {}
+  return {
+    documentSourceProviders: providers,
+    documentConnectionRepository: new DrizzleDocumentConnectionRepository(
+      db,
+      new WebCryptoSecretCipher({
+        masterKeyBase64: config.documents.encryptionKey,
+        info: 'cat-factory:documents',
+      }),
+    ),
+    documentRepository: new DrizzleDocumentRepository(db),
+    ...(config.documents.planner === 'llm'
+      ? { documentPlannerModel: config.agents.routing.default.ref }
+      : {}),
   }
 }
