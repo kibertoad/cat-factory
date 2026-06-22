@@ -15,6 +15,11 @@ import { mergeAssessmentSchema } from './merge.js'
 //   - `test_failed`      — the `fixer` agent exhausted its attempt budget (or there
 //                          was no PR branch to fix) and the `tester` still withholds
 //                          its greenlight; a human takes over.
+//   - `requirement_review`— a requirements-review agent raised findings on a task
+//                          (gaps / clarifications / risks); product people + the
+//                          task's creator are told to go react to them. Purely
+//                          informational (no typed side-effect — `act` just marks
+//                          it read), unlike the engineering notifications above.
 //
 // In-app delivery is the only channel today, but the core models delivery behind
 // a `NotificationChannel` port so email / Slack channels can be added later
@@ -31,6 +36,7 @@ export const notificationTypeSchema = v.picklist([
   'pipeline_complete',
   'ci_failed',
   'test_failed',
+  'requirement_review',
 ])
 export type NotificationType = v.InferOutput<typeof notificationTypeSchema>
 
@@ -55,6 +61,8 @@ export const notificationPayloadSchema = v.object({
   prUrl: v.optional(v.string()),
   /** The pipeline run that raised it, for display ("from the Full build run"). */
   pipelineName: v.optional(v.string()),
+  /** Number of open findings, on a `requirement_review`. */
+  findingCount: v.optional(v.number()),
 })
 export type NotificationPayload = v.InferOutput<typeof notificationPayloadSchema>
 

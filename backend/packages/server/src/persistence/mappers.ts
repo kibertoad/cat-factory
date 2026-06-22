@@ -67,6 +67,7 @@ export interface BlockRow {
   cloud_provider: string | null
   /** Service-level: abstract instance size for the service's jobs. */
   instance_size: string | null
+  created_by: number | null
 }
 
 export function rowToBlock(row: BlockRow): Block {
@@ -98,6 +99,7 @@ export function rowToBlock(row: BlockRow): Block {
     block.noInfraDependencies = row.no_infra_dependencies === 1
   if (row.cloud_provider !== null) block.cloudProvider = row.cloud_provider as CloudProvider
   if (row.instance_size !== null) block.instanceSize = row.instance_size as InstanceSize
+  if (row.created_by !== null) block.createdBy = row.created_by
   return block
 }
 
@@ -133,6 +135,7 @@ export function blockInsertValues(block: Block): Record<string, unknown> {
     no_infra_dependencies: block.noInfraDependencies ? 1 : null,
     cloud_provider: block.cloudProvider ?? null,
     instance_size: block.instanceSize ?? null,
+    created_by: block.createdBy ?? null,
   }
 }
 

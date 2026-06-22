@@ -173,6 +173,17 @@ export type {
   NotificationStatus,
   NotificationPayload,
   ResolveNotificationAction,
+  // Slack integration shapes (Slack as an extra notification transport).
+  SlackConnection,
+  SlackRoute,
+  SlackNotificationSettings,
+  SlackMemberMappingEntry,
+  SlackMemberRole,
+  SlackMemberMapping,
+  SlackChannel,
+  ConnectSlackByTokenInput,
+  UpdateSlackSettingsInput,
+  UpdateSlackMemberMappingInput,
   // Recurring-pipeline (scheduled run) shapes.
   ScheduleTemplate,
   Recurrence,

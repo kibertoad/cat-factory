@@ -101,6 +101,8 @@ export interface Block {
   cloudProvider?: CloudProvider
   /** service-only (frame): abstract instance size for the service's jobs; absent = default. */
   instanceSize?: InstanceSize
+  /** GitHub user id of the task's creator; drives "notify the task creator" routing. */
+  createdBy?: number | null
 }
 
 /**
@@ -339,6 +341,7 @@ export type * from './bootstrap'
 export type * from './github'
 export type * from './accounts'
 export type * from './notifications'
+export type * from './slack'
 export type * from './merge'
 export type * from './services'
 export type * from './recurring'

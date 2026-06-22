@@ -12,6 +12,7 @@ import type { ModelProvider, ModelRef } from '@cat-factory/kernel'
 import type { DocumentRepository } from '@cat-factory/kernel'
 import type { TaskRepository } from '@cat-factory/kernel'
 import type { RequirementReviewRepository } from '@cat-factory/kernel'
+import type { NotificationService } from '../notifications/NotificationService.js'
 import { REVIEW_SYSTEM_PROMPT, REWORK_SYSTEM_PROMPT } from '@cat-factory/agents'
 import { DEFAULT_COMPANION_THRESHOLD, safeParseCompanionAssessment } from '@cat-factory/contracts'
 import {
@@ -57,6 +58,12 @@ export interface RequirementReviewServiceDependencies {
   documentRepository?: DocumentRepository
   /** Linked tracker issues (optional; only when the task-source integration is on). */
   taskRepository?: TaskRepository
+  /**
+   * Raises a `requirement_review` notification when a review yields findings, so
+   * product people (and the task's creator) are told to react to them. Optional —
+   * absent → no notification (the review is still persisted + returned as before).
+   */
+  notificationService?: NotificationService
 }
 
 /** Settled items no longer need a human; both gate-pass the incorporate step. */
@@ -182,7 +189,35 @@ export class RequirementReviewService {
 
     await this.deps.requirementReviewRepository.deleteByBlock(workspaceId, blockId)
     await this.deps.requirementReviewRepository.upsert(workspaceId, review)
+    await this.notifyFindings(workspaceId, block, items.length)
     return review
+  }
+
+  /**
+   * Tell product people (and the task's creator) to react to a review's findings.
+   * Best-effort and only when there ARE findings — a clean review pings no one. Never
+   * lets a notification failure break the review the caller is awaiting.
+   */
+  private async notifyFindings(
+    workspaceId: string,
+    block: Block,
+    findingCount: number,
+  ): Promise<void> {
+    if (findingCount <= 0 || !this.deps.notificationService) return
+    try {
+      await this.deps.notificationService.raise(workspaceId, {
+        type: 'requirement_review',
+        blockId: block.id,
+        executionId: null,
+        title: `Requirements review: ${block.title}`,
+        body: `The reviewer raised ${findingCount} finding${
+          findingCount === 1 ? '' : 's'
+        } to react to.`,
+        payload: { findingCount },
+      })
+    } catch {
+      // Best-effort: the review is already persisted and returned to the caller.
+    }
   }
 
   /** Record a human's answer to one item (and flip it to `answered`). */

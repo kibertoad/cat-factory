@@ -117,6 +117,7 @@ export type {
   PrivilegedAppConfig,
   RetentionConfig,
   RunnerPoolConfig,
+  SlackConfig,
   TasksConfig,
 } from './config/types.js'
 

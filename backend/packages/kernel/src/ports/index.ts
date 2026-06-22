@@ -192,6 +192,13 @@ export type {
   PullRequestMergeabilityProvider,
 } from './pr-mergeability.js'
 export type { NotificationRepository } from './notification-repositories.js'
+export type {
+  SlackConnectionRecord,
+  SlackConnectionRepository,
+  SlackSettingsRecord,
+  SlackSettingsRepository,
+  SlackMemberMappingRepository,
+} from './slack-repositories.js'
 export type { MergePresetRepository } from './merge-preset-repositories.js'
 export type { ModelDefaultsRepository } from './model-default-repositories.js'
 export type { DueSchedule, PipelineScheduleRepository } from './recurring-repositories.js'
