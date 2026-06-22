@@ -25,7 +25,7 @@ const busy = ref<string | null>(null)
 
 watch(open, (isOpen) => {
   if (isOpen) {
-    void models.ensureLoaded()
+    void models.ensureLoaded(workspace.workspaceId ?? undefined)
     if (workspace.workspaceId) void creds.load(workspace.workspaceId)
   }
 })

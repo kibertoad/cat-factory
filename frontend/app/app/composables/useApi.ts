@@ -32,6 +32,8 @@ import type {
   GitHubRepo,
   MergePullRequestInput,
   ModelOption,
+  ApiKey,
+  AddApiKeyInput,
   ModelDefaults,
   ServiceFragmentDefaults,
   PersonalSubscriptionStatus,
@@ -223,6 +225,25 @@ export function useApi() {
 
     // ---- model picker catalog (effective per-deployment flavours) ---------
     getModels: () => http<ModelOption[]>('/models'),
+    // Per-workspace catalog: selectability reflects the workspace's (+ account's +
+    // caller's) configured API keys and subscription tokens (`available` flag).
+    getWorkspaceModels: (workspaceId: string) =>
+      http<ModelOption[]>(`${ws(workspaceId)}/models`),
+
+    // ---- direct-provider API keys (the DB-backed pool) --------------------
+    // Onboarded via UI, stored encrypted, pooled + rotated. Scoped to a workspace,
+    // its owning account, or the signed-in user. Keys are write-only (never returned).
+    listWorkspaceApiKeys: (workspaceId: string) =>
+      http<{ keys: ApiKey[] }>(`${ws(workspaceId)}/api-keys`),
+    addWorkspaceApiKey: (workspaceId: string, body: AddApiKeyInput) =>
+      http<ApiKey>(`${ws(workspaceId)}/api-keys`, { method: 'POST', body }),
+    removeWorkspaceApiKey: (workspaceId: string, id: string) =>
+      http(`${ws(workspaceId)}/api-keys/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+    listMyApiKeys: () => http<{ keys: ApiKey[] }>('/me/api-keys'),
+    addMyApiKey: (body: AddApiKeyInput) =>
+      http<ApiKey>('/me/api-keys', { method: 'POST', body }),
+    removeMyApiKey: (id: string) =>
+      http(`/me/api-keys/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 
     // ---- LLM vendor subscription credentials (the token pool) -------------
     listVendorCredentials: (workspaceId: string) =>

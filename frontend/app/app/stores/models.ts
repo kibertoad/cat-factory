@@ -43,8 +43,14 @@ export function displayFlavor(m: ModelOption, configured: Set<SubscriptionVendor
   }
 }
 
-/** A model is selectable unless it's subscription-only with no connected vendor token. */
+/**
+ * Whether a model is selectable. On the per-workspace catalog the backend already
+ * computes `available` from the configured API keys / subscriptions / Cloudflare opt-in,
+ * so honour it directly. On the deployment catalog (`available` absent) fall back to the
+ * subscription-token heuristic so the picker still gates subscription-only models.
+ */
 export function isSelectable(m: ModelOption, configured: Set<SubscriptionVendor>): boolean {
+  if (m.available !== undefined) return m.available
   if (m.flavor === 'subscription' && m.vendor) return configured.has(m.vendor)
   return true
 }
@@ -73,11 +79,30 @@ export const useModelsStore = defineStore('models', () => {
   const api = useApi()
   const models = ref<ModelOption[]>([])
   const loaded = ref(false)
+  const loadedWorkspaceId = ref<string | null>(null)
 
-  /** Fetch the catalog once; subsequent calls are no-ops. */
-  async function ensureLoaded() {
+  /**
+   * Fetch the catalog. Pass a `workspaceId` for the per-workspace catalog (selectability
+   * reflects that workspace's configured keys/subscriptions); re-fetches when the
+   * workspace changes. Without one, the deployment-level catalog is loaded once.
+   */
+  async function ensureLoaded(workspaceId?: string) {
+    if (workspaceId) {
+      if (loaded.value && loadedWorkspaceId.value === workspaceId) return
+      models.value = await api.getWorkspaceModels(workspaceId)
+      loadedWorkspaceId.value = workspaceId
+      loaded.value = true
+      return
+    }
     if (loaded.value) return
     models.value = await api.getModels()
+    loaded.value = true
+  }
+
+  /** Force a re-fetch of the per-workspace catalog (e.g. after adding an API key). */
+  async function refresh(workspaceId: string) {
+    models.value = await api.getWorkspaceModels(workspaceId)
+    loadedWorkspaceId.value = workspaceId
     loaded.value = true
   }
 
@@ -105,5 +130,5 @@ export const useModelsStore = defineStore('models', () => {
     return hit ? `${hit.label} · ${hit.providerLabel}` : model || ref
   }
 
-  return { models, loaded, ensureLoaded, byId, getModel, labelForRef }
+  return { models, loaded, ensureLoaded, refresh, byId, getModel, labelForRef }
 })

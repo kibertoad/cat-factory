@@ -182,6 +182,11 @@ function vendorLabel(v: SubscriptionVendor): string {
           </div>
         </div>
 
+        <!-- direct provider API keys (OpenAI/Anthropic/Qwen/DeepSeek/Moonshot), pooled -->
+        <div class="border-t border-slate-800 pt-5">
+          <ProvidersApiKeysSection />
+        </div>
+
         <!-- personal (individual-usage) subscriptions: Claude / GLM / Codex, per-user -->
         <div class="border-t border-slate-800 pt-5">
           <ProvidersPersonalSubscriptionSection />

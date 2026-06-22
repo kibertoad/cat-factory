@@ -28,6 +28,12 @@ export interface ModelOption {
   label: string
   description: string
   flavor: 'cloudflare' | 'direct' | 'subscription'
+  /**
+   * Whether this model is actually selectable for the workspace: a direct API key for
+   * its provider, a connected subscription vendor, or Cloudflare AI enabled. Absent on
+   * the deployment-level catalog; present on the per-workspace `/workspaces/:id/models`.
+   */
+  available?: boolean
   providerLabel: string
   provider: string
   model: string
@@ -76,6 +82,33 @@ export interface StorePersonalSubscriptionInput {
   password: string
   /** Epoch ms the subscription expires (for renewal warnings); optional. */
   expiresAt?: number | null
+}
+
+/** The scope a stored direct-provider API key belongs to. */
+export type ApiKeyScope = 'account' | 'workspace' | 'user'
+
+/** The direct providers that own a poolable API key. */
+export type ApiKeyProvider = 'openai' | 'anthropic' | 'qwen' | 'deepseek' | 'moonshot'
+
+/** A connected direct-provider API key (metadata + usage), never the secret. */
+export interface ApiKey {
+  id: string
+  scope: ApiKeyScope
+  scopeId: string
+  provider: ApiKeyProvider
+  label: string
+  createdAt: number
+  lastUsedAt: number | null
+  inputTokens: number
+  outputTokens: number
+  requestCount: number
+}
+
+/** Add a direct-provider API key to a pool. `key` is write-only (the raw secret). */
+export interface AddApiKeyInput {
+  provider: ApiKeyProvider
+  label: string
+  key: string
 }
 
 /** A connected subscription credential (metadata + usage), never the secret. */
