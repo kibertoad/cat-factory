@@ -379,6 +379,7 @@ function buildNodeContainerExecutor(
   mintInstallationTokenOverride?: (installationId: number) => Promise<string>,
   subscriptions?: ProviderSubscriptionService,
   personalSubscriptions?: PersonalSubscriptionService,
+  resolveAccountId?: (workspaceId: string) => Promise<string | null | undefined>,
 ): AgentExecutor | null {
   // The harness reaches models only through this service's LLM proxy; `PUBLIC_URL`
   // is this service's externally reachable base (the runner pool / local container
@@ -401,6 +402,7 @@ function buildNodeContainerExecutor(
     resolveBlockModel: config.agents.resolveBlockModel,
     resolveWorkspaceModelDefault,
     resolveRepoTarget,
+    ...(resolveAccountId ? { resolveAccountId } : {}),
     mintInstallationToken,
     sessionService: new ContainerSessionService({ secret: sessionSecret }),
     // The subscription harnesses (Claude Code / Codex) lease a pooled token and
@@ -725,6 +727,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     options.mintInstallationToken,
     subscriptions,
     personalSubscriptions,
+    (workspaceId) => repos.workspaceRepository.accountOf(workspaceId),
   )
 
   // Always a composite: inline kinds run as one-shot LLM calls; repo-operating kinds

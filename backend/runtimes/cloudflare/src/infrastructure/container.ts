@@ -725,6 +725,8 @@ function buildContainerExecutor(
     // (block-pinned > workspace per-kind default > env routing > env default).
     resolveWorkspaceModelDefault: buildResolveWorkspaceModelDefault(db),
     resolveRepoTarget,
+    // Resolve the workspace's owning account so the proxy can lease account-scoped keys.
+    resolveAccountId: (workspaceId) => new D1WorkspaceRepository({ db }).accountOf(workspaceId),
     mintInstallationToken: (id) => registry.installationToken(id),
     sessionService: new ContainerSessionService({ secret: env.AUTH_SESSION_SECRET }),
     // The subscription harnesses (Claude Code / Codex) lease a pooled token and

@@ -69,10 +69,13 @@ export interface ProxyCallObservation {
   upstreamMs: number
 }
 
-/** A resolved OpenAI-compatible upstream: where to forward, and the key to use. */
+/**
+ * A resolved OpenAI-compatible upstream: where to forward. The API key is NOT here —
+ * it is leased per call from the DB-backed API-key pool by the proxy, so credentials
+ * are no longer env-baked into the gateway.
+ */
 export interface LlmUpstreamEndpoint {
   baseURL: string
-  apiKey: string
 }
 
 /** What the LLM proxy needs to run a model in-process (e.g. a Workers AI binding). */
@@ -105,7 +108,10 @@ export interface LlmInProcessRequest {
  * on Node, which forwards over HTTP instead).
  */
 export interface LlmUpstream {
-  /** Resolve an OpenAI-compatible upstream for `provider`, or null when unavailable. */
+  /**
+   * Resolve the OpenAI-compatible base URL for `provider`, or null when unavailable.
+   * Key-free: the proxy leases the API key from the DB pool and injects it.
+   */
   resolveOpenAiCompatible(provider: string): LlmUpstreamEndpoint | null
   /**
    * Serve a completion in-process (no external HTTP), returning an OpenAI-shaped

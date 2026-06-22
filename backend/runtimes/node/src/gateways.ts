@@ -47,26 +47,19 @@ class InlineGitHubWebhookIngest implements GitHubWebhookIngest {
   }
 }
 
-const OPENAI_COMPATIBLE: Record<string, { baseUrl: string; keyEnv: string; baseUrlEnv: string }> = {
-  qwen: { baseUrl: QWEN_BASE_URL, keyEnv: 'QWEN_API_KEY', baseUrlEnv: 'QWEN_BASE_URL' },
-  deepseek: {
-    baseUrl: DEEPSEEK_BASE_URL,
-    keyEnv: 'DEEPSEEK_API_KEY',
-    baseUrlEnv: 'DEEPSEEK_BASE_URL',
-  },
-  moonshot: {
-    baseUrl: MOONSHOT_BASE_URL,
-    keyEnv: 'MOONSHOT_API_KEY',
-    baseUrlEnv: 'MOONSHOT_BASE_URL',
-  },
-  openai: { baseUrl: OPENAI_BASE_URL, keyEnv: 'OPENAI_API_KEY', baseUrlEnv: 'OPENAI_BASE_URL' },
+const OPENAI_COMPATIBLE: Record<string, { baseUrl: string; baseUrlEnv: string }> = {
+  qwen: { baseUrl: QWEN_BASE_URL, baseUrlEnv: 'QWEN_BASE_URL' },
+  deepseek: { baseUrl: DEEPSEEK_BASE_URL, baseUrlEnv: 'DEEPSEEK_BASE_URL' },
+  moonshot: { baseUrl: MOONSHOT_BASE_URL, baseUrlEnv: 'MOONSHOT_BASE_URL' },
+  openai: { baseUrl: OPENAI_BASE_URL, baseUrlEnv: 'OPENAI_BASE_URL' },
 }
 
 /**
- * Forwards the container LLM proxy to OpenAI-compatible providers over HTTP, keyed
- * from process env. There is no in-process path on Node, so `runInProcess` returns
- * null (a `workers-ai`-pinned model is unavailable here; use a direct provider or the
- * Cloudflare REST flavour instead).
+ * Forwards the container LLM proxy to OpenAI-compatible providers over HTTP. Only the
+ * base URL is resolved here (overridable per provider via env); the API key is leased
+ * per call from the DB-backed pool by the proxy. There is no in-process path on Node,
+ * so `runInProcess` returns null (a `workers-ai`-pinned model is unavailable here; use
+ * a direct provider, or enable the Cloudflare REST flavour).
  */
 class HttpLlmUpstream implements LlmUpstream {
   constructor(private readonly env: NodeJS.ProcessEnv) {}
@@ -74,11 +67,9 @@ class HttpLlmUpstream implements LlmUpstream {
   resolveOpenAiCompatible(provider: string): LlmUpstreamEndpoint | null {
     const entry = OPENAI_COMPATIBLE[provider]
     if (!entry) return null
-    const apiKey = this.env[entry.keyEnv]
-    if (!apiKey) return null
     // `||` not `??`: a set-but-blank base-URL env must fall back to the default, not
     // collapse to an empty URL the SDK then chokes on.
-    return { baseURL: this.env[entry.baseUrlEnv] || entry.baseUrl, apiKey }
+    return { baseURL: this.env[entry.baseUrlEnv] || entry.baseUrl }
   }
 
   runInProcess(): Promise<Response> | null {
