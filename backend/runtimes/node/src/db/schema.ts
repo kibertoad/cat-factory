@@ -97,8 +97,6 @@ export const memberships = pgTable(
   {
     account_id: text('account_id').notNull(),
     user_id: text('user_id').notNull(),
-    // Orphaned single-role column (pre-roles); kept only so the migration is a pure add.
-    role: text('role').notNull().default('member'),
     // Combinable roles (admin / developer / product) as a CSV; defaults to developer.
     roles: text('roles').notNull().default('developer'),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
@@ -128,8 +126,6 @@ export const accountInvitations = pgTable(
     id: text('id').primaryKey(),
     account_id: text('account_id').notNull(),
     email: text('email').notNull(),
-    // Orphaned single-role column (pre-roles); kept only so the migration is a pure add.
-    role: text('role').notNull().default('member'),
     roles: text('roles').notNull().default('developer'),
     token_hash: text('token_hash').notNull(),
     invited_by: text('invited_by').notNull(),

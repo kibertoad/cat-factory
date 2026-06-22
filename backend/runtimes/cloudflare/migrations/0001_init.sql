@@ -24,6 +24,9 @@ CREATE TABLE blocks (
   confidence           REAL,
   module_name          TEXT,
   fragment_ids TEXT, model_id TEXT, pull_request TEXT, merge_preset_id TEXT, pipeline_id TEXT, width REAL, height REAL, service_id TEXT, created_by INTEGER, agent_config TEXT, test_compose_path TEXT, no_infra_dependencies INTEGER, cloud_provider TEXT, instance_size TEXT, service_fragment_ids TEXT,
+  -- The account member (a product role-holder) responsible for a task; notified when
+  -- requirement review flags findings. Null when unassigned.
+  responsible_product_user_id TEXT,
   PRIMARY KEY (workspace_id, id)
 );
 CREATE TABLE pipelines (
@@ -69,7 +72,10 @@ CREATE TABLE github_repos (
   name             TEXT    NOT NULL,
   default_branch   TEXT,
   private          INTEGER NOT NULL DEFAULT 0,
-  block_id         TEXT,                       
+  block_id         TEXT,
+  -- A monorepo-flagged repo can back more than one board service, each pinned to its
+  -- own subdirectory (see services.directory).
+  is_monorepo      INTEGER NOT NULL DEFAULT 0,
   etag             TEXT,
   synced_at        INTEGER NOT NULL,
   deleted_at       INTEGER,
@@ -265,8 +271,9 @@ CREATE TABLE accounts (
 , default_cloud_provider TEXT, owner_user_id TEXT);
 CREATE TABLE memberships (
   account_id TEXT    NOT NULL,
-  user_id    INTEGER NOT NULL,                       
-  role       TEXT    NOT NULL DEFAULT 'member',      
+  user_id    INTEGER NOT NULL,
+  -- Combinable role set (admin / developer / product), CSV.
+  roles      TEXT    NOT NULL DEFAULT 'developer',
   created_at INTEGER NOT NULL,
   PRIMARY KEY (account_id, user_id)
 );
@@ -327,7 +334,10 @@ CREATE TABLE requirement_reviews (
   model                     TEXT,                          
   incorporated_requirements TEXT,                          
   created_at                INTEGER NOT NULL,
-  updated_at                INTEGER NOT NULL, companion TEXT,
+  updated_at                INTEGER NOT NULL,
+  -- Reviewer-pass counter + its budget (the iterative requirements-review loop).
+  iteration                 INTEGER NOT NULL DEFAULT 1,
+  max_iterations            INTEGER NOT NULL DEFAULT 1,
   PRIMARY KEY (workspace_id, id)
 );
 CREATE TABLE live_containers (
@@ -344,7 +354,11 @@ CREATE TABLE merge_threshold_presets (
   max_risk        REAL    NOT NULL,
   max_impact      REAL    NOT NULL,
   ci_max_attempts INTEGER NOT NULL,
-  is_default      INTEGER NOT NULL DEFAULT 0,   
+  is_default      INTEGER NOT NULL DEFAULT 0,
+  -- Per-task requirements-review loop knobs: reviewer passes before asking the human,
+  -- and the finding severity tolerated without stopping.
+  max_requirement_iterations      INTEGER NOT NULL DEFAULT 3,
+  max_requirement_concern_allowed TEXT    NOT NULL DEFAULT 'none',
   created_at      INTEGER NOT NULL,
   PRIMARY KEY (workspace_id, id)
 );
@@ -554,12 +568,32 @@ CREATE TABLE account_invitations (
   id TEXT PRIMARY KEY,
   account_id TEXT NOT NULL,
   email TEXT NOT NULL,
-  role TEXT NOT NULL DEFAULT 'member',
   token_hash TEXT NOT NULL,
   invited_by TEXT NOT NULL,
   status TEXT NOT NULL DEFAULT 'pending',
   expires_at INTEGER NOT NULL,
-  created_at INTEGER NOT NULL
+  created_at INTEGER NOT NULL,
+  -- Combinable role set (admin / developer / product), CSV.
+  roles TEXT NOT NULL DEFAULT 'developer'
+);
+-- Direct-provider API-key pool (account/workspace/user scope), leased with usage-aware
+-- rotation by the LLM proxy + inline calls. Stored as an opaque SecretCipher envelope
+-- (AES-256-GCM) — never plaintext.
+CREATE TABLE provider_api_keys (
+  id                TEXT    NOT NULL,
+  scope             TEXT    NOT NULL,            -- 'account' | 'workspace' | 'user'
+  scope_id          TEXT    NOT NULL,            -- account id | workspace id | usr_* id
+  provider          TEXT    NOT NULL,            -- 'openai' | 'anthropic' | 'qwen' | 'deepseek' | 'moonshot'
+  label             TEXT    NOT NULL,
+  key_cipher        TEXT    NOT NULL,            -- SecretCipher envelope (no plaintext)
+  created_at        INTEGER NOT NULL,
+  last_used_at      INTEGER,                     -- null = never leased
+  window_started_at INTEGER,                     -- start of the current usage window
+  input_tokens      INTEGER NOT NULL DEFAULT 0,  -- tokens consumed this window
+  output_tokens     INTEGER NOT NULL DEFAULT 0,
+  request_count     INTEGER NOT NULL DEFAULT 0,
+  deleted_at        INTEGER,                     -- tombstone
+  PRIMARY KEY (id)
 );
 CREATE INDEX idx_blocks_parent ON blocks (workspace_id, parent_id);
 CREATE INDEX idx_token_usage_created ON token_usage (created_at);
@@ -567,6 +601,8 @@ CREATE UNIQUE INDEX idx_gh_install_workspace
   ON github_installations (workspace_id)
   WHERE deleted_at IS NULL;
 CREATE INDEX idx_gh_repos_install ON github_repos (installation_id);
+CREATE INDEX idx_provider_api_keys_pool
+  ON provider_api_keys (scope, scope_id, provider, deleted_at);
 CREATE INDEX idx_gh_pr_state ON github_pull_requests (workspace_id, state);
 CREATE INDEX idx_gh_checks_sha ON github_check_runs (workspace_id, repo_github_id, head_sha);
 CREATE INDEX idx_gh_ratelimit_observed ON github_rate_limits (observed_at);
