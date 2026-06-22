@@ -932,10 +932,7 @@ function selectNodeDocumentsDeps(
  * environment-scoped `SecretCipher`. Per-tenant management-API secrets are encrypted at
  * rest with the shared ENCRYPTION_KEY. Disabled → `{}` and the module stays off.
  */
-function selectNodeEnvironmentsDeps(
-  config: AppConfig,
-  db: DrizzleDb,
-): Partial<CoreDependencies> {
+function selectNodeEnvironmentsDeps(config: AppConfig, db: DrizzleDb): Partial<CoreDependencies> {
   if (!config.environments.enabled || !config.environments.encryptionKey) return {}
   return {
     environmentProvider: new HttpEnvironmentProvider(),

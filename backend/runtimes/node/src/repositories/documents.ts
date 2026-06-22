@@ -94,25 +94,28 @@ export class DrizzleDocumentConnectionRepository implements DocumentConnectionRe
   }
 
   async upsert(record: DocumentConnectionRecord): Promise<void> {
+    const credentials = await this.cipher.encrypt(JSON.stringify(record.credentials))
     // A workspace has a single live connection per source: clear any prior binding
     // (live or tombstoned) before inserting, so reconnecting can't collide on the
-    // (workspace_id, source) primary key.
-    await this.db
-      .delete(documentConnections)
-      .where(
-        and(
-          eq(documentConnections.workspace_id, record.workspaceId),
-          eq(documentConnections.source, record.source),
-        ),
-      )
-    const credentials = await this.cipher.encrypt(JSON.stringify(record.credentials))
-    await this.db.insert(documentConnections).values({
-      workspace_id: record.workspaceId,
-      source: record.source,
-      credentials,
-      label: record.label,
-      created_at: record.createdAt,
-      deleted_at: null,
+    // (workspace_id, source) primary key. Delete + insert run in one transaction so a
+    // concurrent reader never sees the connection transiently absent.
+    await this.db.transaction(async (tx) => {
+      await tx
+        .delete(documentConnections)
+        .where(
+          and(
+            eq(documentConnections.workspace_id, record.workspaceId),
+            eq(documentConnections.source, record.source),
+          ),
+        )
+      await tx.insert(documentConnections).values({
+        workspace_id: record.workspaceId,
+        source: record.source,
+        credentials,
+        label: record.label,
+        created_at: record.createdAt,
+        deleted_at: null,
+      })
     })
   }
 

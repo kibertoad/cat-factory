@@ -57,7 +57,10 @@ export async function driveBootstrap(
     if (result.state === 'done' || result.state === 'failed') return
     await sleep(cfg.jobPollIntervalMs)
   }
-  log.warn({ workspaceId, jobId }, 'bootstrap drive exhausted its poll budget; sweeper will re-drive')
+  log.warn(
+    { workspaceId, jobId },
+    'bootstrap drive exhausted its poll budget; sweeper will re-drive',
+  )
 }
 
 export class PgBossBootstrapRunner implements BootstrapRunner {
@@ -86,20 +89,24 @@ export async function startBootstrapWorker(
 ): Promise<void> {
   const concurrency = Math.max(1, options.concurrency ?? 10)
   await boss.createQueue(QUEUE, { policy: QUEUE_POLICY })
-  await boss.work<BootstrapJob>(QUEUE, { localConcurrency: concurrency }, async (jobs: Job<BootstrapJob>[]) => {
-    for (const job of jobs) {
-      const { workspaceId, jobId } = job.data
-      try {
-        await driveBootstrap(container, workspaceId, jobId, cfg, log)
-      } catch (error) {
-        log.error(
-          { workspaceId, jobId, err: error instanceof Error ? error.message : String(error) },
-          'bootstrap drive failed',
-        )
-        throw error // let pg-boss retry/backoff (the durable backstop)
+  await boss.work<BootstrapJob>(
+    QUEUE,
+    { localConcurrency: concurrency },
+    async (jobs: Job<BootstrapJob>[]) => {
+      for (const job of jobs) {
+        const { workspaceId, jobId } = job.data
+        try {
+          await driveBootstrap(container, workspaceId, jobId, cfg, log)
+        } catch (error) {
+          log.error(
+            { workspaceId, jobId, err: error instanceof Error ? error.message : String(error) },
+            'bootstrap drive failed',
+          )
+          throw error // let pg-boss retry/backoff (the durable backstop)
+        }
       }
-    }
-  })
+    },
+  )
 }
 
 /** Re-enqueue a stale bootstrap run (used by the stale-run sweeper). */

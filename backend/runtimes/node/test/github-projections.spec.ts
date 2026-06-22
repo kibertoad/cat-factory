@@ -139,7 +139,10 @@ describe('GitHub projections (Postgres)', () => {
     ])
 
     // The module is wired (a 200, not a 503), and reads serve from the projections.
-    const repos = await call<{ githubId: number; name: string }[]>('GET', `/workspaces/${ws}/github/repos`)
+    const repos = await call<{ githubId: number; name: string }[]>(
+      'GET',
+      `/workspaces/${ws}/github/repos`,
+    )
     expect(repos.status).toBe(200)
     expect(repos.body.map((r) => r.githubId)).toEqual([repoGithubId])
 
@@ -188,7 +191,11 @@ describe('GitHub projections (Postgres)', () => {
 
     // Sync cursors are keyed by (installation, repo, kind) — upsert replaces in place.
     const repoRepo = new DrizzleRepoProjectionRepository(db)
-    const cursor: SyncCursor = { etag: 'W/"v1"', lastSyncedAt: 1000, sinceIso: '2026-01-01T00:00:00Z' }
+    const cursor: SyncCursor = {
+      etag: 'W/"v1"',
+      lastSyncedAt: 1000,
+      sinceIso: '2026-01-01T00:00:00Z',
+    }
     await repoRepo.setCursor(9, repoGithubId, 'pulls', cursor)
     expect(await repoRepo.getCursor(9, repoGithubId, 'pulls')).toEqual(cursor)
     await repoRepo.setCursor(9, repoGithubId, 'pulls', { ...cursor, etag: 'W/"v2"' })

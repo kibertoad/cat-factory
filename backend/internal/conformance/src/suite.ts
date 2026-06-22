@@ -388,7 +388,10 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
 
         // The module is wired on every facade: a fresh workspace lists no connections
         // (a 200), not the 503 a missing documents module would return.
-        const initial = await call<{ connections: { source: string }[] }>('GET', `${base}/connections`)
+        const initial = await call<{ connections: { source: string }[] }>(
+          'GET',
+          `${base}/connections`,
+        )
         expect(initial.status).toBe(200)
         expect(initial.body.connections).toEqual([])
 
@@ -404,7 +407,10 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         expect(JSON.stringify(connected.body)).not.toContain('secret-notion-token')
 
         // It lists back as metadata only — the token is never on the wire.
-        const listed = await call<{ connections: { source: string }[] }>('GET', `${base}/connections`)
+        const listed = await call<{ connections: { source: string }[] }>(
+          'GET',
+          `${base}/connections`,
+        )
         expect(listed.body.connections.map((c) => c.source)).toEqual(['notion'])
         expect(JSON.stringify(listed.body)).not.toContain('secret-notion-token')
 

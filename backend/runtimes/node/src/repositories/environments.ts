@@ -50,19 +50,22 @@ export class DrizzleEnvironmentConnectionRepository implements EnvironmentConnec
   async upsert(record: EnvironmentConnectionRecord): Promise<void> {
     // A workspace has a single live provider: clear any prior binding (live or
     // tombstoned) before inserting, so re-registering a different provider can't
-    // collide on the (workspace_id, provider_id) primary key.
-    await this.db
-      .delete(environmentConnections)
-      .where(eq(environmentConnections.workspace_id, record.workspaceId))
-    await this.db.insert(environmentConnections).values({
-      workspace_id: record.workspaceId,
-      provider_id: record.providerId,
-      label: record.label,
-      base_url: record.baseUrl,
-      manifest_json: record.manifestJson,
-      secrets_cipher: record.secretsCipher,
-      created_at: record.createdAt,
-      deleted_at: null,
+    // collide on the (workspace_id, provider_id) primary key. Delete + insert run in
+    // one transaction so a concurrent reader never sees the binding transiently absent.
+    await this.db.transaction(async (tx) => {
+      await tx
+        .delete(environmentConnections)
+        .where(eq(environmentConnections.workspace_id, record.workspaceId))
+      await tx.insert(environmentConnections).values({
+        workspace_id: record.workspaceId,
+        provider_id: record.providerId,
+        label: record.label,
+        base_url: record.baseUrl,
+        manifest_json: record.manifestJson,
+        secrets_cipher: record.secretsCipher,
+        created_at: record.createdAt,
+        deleted_at: null,
+      })
     })
   }
 

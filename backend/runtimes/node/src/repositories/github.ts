@@ -116,10 +116,7 @@ export class DrizzleRepoProjectionRepository implements RepoProjectionRepository
     return rows[0] ? rowToRepo(rows[0]) : null
   }
 
-  async linkedWorkspaces(
-    repoGithubId: number,
-    candidateWorkspaceIds: string[],
-  ): Promise<string[]> {
+  async linkedWorkspaces(repoGithubId: number, candidateWorkspaceIds: string[]): Promise<string[]> {
     if (candidateWorkspaceIds.length === 0) return []
     const rows = await this.db
       .selectDistinct({ workspace_id: githubRepos.workspace_id })
@@ -270,7 +267,12 @@ export class DrizzleBranchProjectionRepository implements BranchProjectionReposi
         })
         .onConflictDoUpdate({
           target: [githubBranches.workspace_id, githubBranches.repo_github_id, githubBranches.name],
-          set: { head_sha: b.headSha, protected: intBool(b.protected), synced_at: b.syncedAt, deleted_at: null },
+          set: {
+            head_sha: b.headSha,
+            protected: intBool(b.protected),
+            synced_at: b.syncedAt,
+            deleted_at: null,
+          },
         })
     }
   }
@@ -377,9 +379,7 @@ export class DrizzlePullRequestProjectionRepository implements PullRequestProjec
           isNull(githubPullRequests.deleted_at),
         ),
       )
-    return rows
-      .map((r) => this.rowToPr(r))
-      .sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0))
+    return rows.map((r) => this.rowToPr(r)).sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0))
   }
 }
 
@@ -402,7 +402,12 @@ export class DrizzleIssueProjectionRepository implements IssueProjectionReposito
       }
       await this.db
         .insert(githubIssues)
-        .values({ workspace_id: workspaceId, repo_github_id: i.repoGithubId, number: i.number, ...set })
+        .values({
+          workspace_id: workspaceId,
+          repo_github_id: i.repoGithubId,
+          number: i.number,
+          ...set,
+        })
         .onConflictDoUpdate({
           target: [githubIssues.workspace_id, githubIssues.repo_github_id, githubIssues.number],
           set,
@@ -525,7 +530,12 @@ export class DrizzleCheckRunProjectionRepository implements CheckRunProjectionRe
       }
       await this.db
         .insert(githubCheckRuns)
-        .values({ workspace_id: workspaceId, repo_github_id: c.repoGithubId, github_id: c.githubId, ...set })
+        .values({
+          workspace_id: workspaceId,
+          repo_github_id: c.repoGithubId,
+          github_id: c.githubId,
+          ...set,
+        })
         .onConflictDoUpdate({
           target: [
             githubCheckRuns.workspace_id,

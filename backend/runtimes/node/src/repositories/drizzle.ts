@@ -1504,19 +1504,6 @@ export class DrizzleMergePresetRepository implements MergePresetRepository {
   }
 
   async upsert(workspaceId: string, preset: MergeThresholdPreset): Promise<void> {
-    // Promoting this preset to default demotes any other default first, so the
-    // single-default invariant holds.
-    if (preset.isDefault) {
-      await this.db
-        .update(mergeThresholdPresets)
-        .set({ is_default: 0 })
-        .where(
-          and(
-            eq(mergeThresholdPresets.workspace_id, workspaceId),
-            sql`${mergeThresholdPresets.id} <> ${preset.id}`,
-          ),
-        )
-    }
     const values = {
       workspace_id: workspaceId,
       id: preset.id,
@@ -1528,20 +1515,36 @@ export class DrizzleMergePresetRepository implements MergePresetRepository {
       is_default: preset.isDefault ? 1 : 0,
       created_at: preset.createdAt,
     }
-    await this.db
-      .insert(mergeThresholdPresets)
-      .values(values)
-      .onConflictDoUpdate({
-        target: [mergeThresholdPresets.workspace_id, mergeThresholdPresets.id],
-        set: {
-          name: values.name,
-          max_complexity: values.max_complexity,
-          max_risk: values.max_risk,
-          max_impact: values.max_impact,
-          ci_max_attempts: values.ci_max_attempts,
-          is_default: values.is_default,
-        },
-      })
+    // Demote + upsert run in one transaction so the single-default invariant can never
+    // be observed broken (zero or two defaults) by a concurrent reader or a partial failure.
+    await this.db.transaction(async (tx) => {
+      // Promoting this preset to default demotes any other default first.
+      if (preset.isDefault) {
+        await tx
+          .update(mergeThresholdPresets)
+          .set({ is_default: 0 })
+          .where(
+            and(
+              eq(mergeThresholdPresets.workspace_id, workspaceId),
+              sql`${mergeThresholdPresets.id} <> ${preset.id}`,
+            ),
+          )
+      }
+      await tx
+        .insert(mergeThresholdPresets)
+        .values(values)
+        .onConflictDoUpdate({
+          target: [mergeThresholdPresets.workspace_id, mergeThresholdPresets.id],
+          set: {
+            name: values.name,
+            max_complexity: values.max_complexity,
+            max_risk: values.max_risk,
+            max_impact: values.max_impact,
+            ci_max_attempts: values.ci_max_attempts,
+            is_default: values.is_default,
+          },
+        })
+    })
   }
 
   async remove(workspaceId: string, id: string): Promise<void> {

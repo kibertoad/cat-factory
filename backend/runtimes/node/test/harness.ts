@@ -7,11 +7,7 @@ import {
   RecordingEventPublisher,
   makeIncorporatedReview,
 } from '@cat-factory/conformance'
-import type {
-  ExecutionInstance,
-  RepoBlueprintRecord,
-  WorkspaceSnapshot,
-} from '@cat-factory/kernel'
+import type { ExecutionInstance, RepoBlueprintRecord, WorkspaceSnapshot } from '@cat-factory/kernel'
 import { NoopBootstrapRunner, NoopWorkRunner } from '@cat-factory/kernel'
 import type { CoreDependencies } from '@cat-factory/orchestration'
 import { buildNodeContainer } from '../src/container.js'
@@ -144,7 +140,11 @@ export function makeConformanceApp(db: DrizzleDb, agentOptions?: FakeAgentOption
   }
 
   // Poll a bootstrap run to terminal directly (production drives this via pg-boss).
-  async function driveBootstrap(workspaceId: string, jobId: string, maxPolls = 50): Promise<number> {
+  async function driveBootstrap(
+    workspaceId: string,
+    jobId: string,
+    maxPolls = 50,
+  ): Promise<number> {
     if (!container.bootstrap) throw new Error('bootstrap module is not configured in this app')
     for (let p = 0; p < maxPolls; p++) {
       const result = await container.bootstrap.service.pollBootstrapJob(workspaceId, jobId)

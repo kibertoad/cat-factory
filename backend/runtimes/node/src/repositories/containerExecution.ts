@@ -8,12 +8,7 @@ import type {
 } from '@cat-factory/kernel'
 import { and, eq, isNull } from 'drizzle-orm'
 import type { DrizzleDb } from '../db/client.js'
-import {
-  githubInstallations,
-  runnerPoolConnections,
-  services,
-  workspaces,
-} from '../db/schema.js'
+import { githubInstallations, runnerPoolConnections, services, workspaces } from '../db/schema.js'
 
 // Drizzle/Postgres adapters for the persistence the container-agent execution path
 // needs on the Node facade: a workspace's self-hosted runner-pool binding, its

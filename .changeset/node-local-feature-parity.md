@@ -30,7 +30,11 @@ a cross-runtime conformance assertion.
   `kind='bootstrap'` rows of `agent_runs`; `ContainerRepoBootstrapper` promoted into
   `@cat-factory/server`; a **pg-boss durable bootstrap driver** (the analogue of the
   Worker's `BootstrapWorkflow`) replaces the previous "bootstrap isn't durable on Node
-  yet" gap, and the stale-run sweeper now re-drives orphaned bootstrap runs too.
+  yet" gap, and the stale-run sweeper now re-drives orphaned bootstrap runs too. The
+  self-hosted runner pool (`RunnerPoolTransport`) now accepts the `bootstrap` dispatch
+  kind — the harness `/bootstrap` route needs no Cloudflare primitive, so a pool runner
+  serves it just like the local Docker transport — so a real bootstrap run dispatches +
+  pushes for real on Node, not just on local.
 
 The Worker keeps the same behaviour (it gains the new conformance assertions and the
 shared promoted classes). **Breaking on Node/local:** these features now require their
