@@ -9,11 +9,19 @@ import type {
   SubscriptionActivationRepository,
   SubscriptionVendor,
 } from '@cat-factory/kernel'
-import { CredentialRequiredError, getErrorMessage, isIndividualVendor } from '@cat-factory/kernel'
-import type { PersonalSubscriptionStatus, StorePersonalSubscriptionInput } from '@cat-factory/contracts'
+import {
+  CredentialRequiredError,
+  getErrorMessage,
+  INDIVIDUAL_VENDORS,
+  isIndividualVendor,
+} from '@cat-factory/kernel'
+import type {
+  PersonalSubscriptionStatus,
+  StorePersonalSubscriptionInput,
+} from '@cat-factory/contracts'
 
 // PersonalSubscriptionService: owns each USER's individual-usage subscription
-// credentials (currently Claude) — the per-user analogue of the per-workspace
+// credentials (Claude / GLM / Codex) — the per-user analogue of the per-workspace
 // ProviderSubscriptionService pool. The credential is stored DOUBLE-encrypted
 // (`secretCipher.encrypt(personalCipher.seal(token, password))`), so it cannot be
 // recovered without BOTH the system key AND the user's personal password. To let
@@ -68,7 +76,10 @@ export class PersonalSubscriptionService {
   }
 
   /** Store (or replace) the user's personal credential for an individual-usage vendor. */
-  async store(userId: number, input: StorePersonalSubscriptionInput): Promise<PersonalSubscriptionStatus> {
+  async store(
+    userId: number,
+    input: StorePersonalSubscriptionInput,
+  ): Promise<PersonalSubscriptionStatus> {
     this.assertIndividual(input.vendor)
     const sealed = await this.deps.personalCipher.seal(input.token, input.password)
     const tokenCipher = await this.deps.secretCipher.encrypt(sealed)
@@ -236,9 +247,15 @@ export class PersonalSubscriptionService {
   ): Promise<SubscriptionVendor[]> {
     const out: SubscriptionVendor[] = []
     // Only individual-usage vendors are ever activated; refresh those that are present
-    // and at least half through their TTL.
-    for (const vendor of ['claude'] as SubscriptionVendor[]) {
-      const a = await this.deps.subscriptionActivationRepository.get(executionId, userId, vendor, now)
+    // and at least half through their TTL. Driven off INDIVIDUAL_VENDORS (the kernel's
+    // single source of truth) so a newly individual-only vendor is covered automatically.
+    for (const vendor of INDIVIDUAL_VENDORS) {
+      const a = await this.deps.subscriptionActivationRepository.get(
+        executionId,
+        userId,
+        vendor,
+        now,
+      )
       if (a && a.expiresAt - now <= this.activationTtlMs / 2) out.push(vendor)
     }
     return out
@@ -262,7 +279,9 @@ export class PersonalSubscriptionService {
 
   private toStatus(record: PersonalSubscriptionRecord, now: number): PersonalSubscriptionStatus {
     const expiresInDays =
-      record.expiresAt === null ? null : Math.floor((record.expiresAt - now) / (24 * 60 * 60 * 1000))
+      record.expiresAt === null
+        ? null
+        : Math.floor((record.expiresAt - now) / (24 * 60 * 60 * 1000))
     return {
       vendor: record.vendor,
       label: record.label,

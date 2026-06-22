@@ -37,13 +37,14 @@ export function executionController(): Hono<AppEnv> {
     const workspaceId = param(c, 'workspaceId')
     const blockId = param(c, 'blockId')
     const { pipelineId, password } = c.req.valid('json')
-    // Individual-usage models (Claude) require the initiator's personal subscription:
-    // resolve the initiator + an activation closure (throws 428 when a password is
-    // needed). A non-individual run gets a no-op gate.
+    // Individual-usage models (Claude/GLM/Codex) require the initiator's personal
+    // subscription: resolve the initiator + an activation closure (throws 428 when a
+    // password is needed). A run touching no individual-usage vendor gets a no-op gate.
     const { initiatedBy, activate } = await personalGateForBlock(
       container,
       workspaceId,
       blockId,
+      pipelineId,
       c.get('user'),
       password,
     )

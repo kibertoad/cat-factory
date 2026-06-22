@@ -1070,6 +1070,15 @@ export function createCore(dependencies: CoreDependencies): Core {
     notificationService: notifications?.service,
     llmObservability,
     ticketTrackerProvider: dependencies.ticketTrackerProvider,
+    // Let the personal-credential gate resolve the workspace per-kind default model the
+    // same way dispatch does, so a run whose block has no pin but an individual-usage
+    // workspace default is still gated up-front. Reuses the model-defaults repository.
+    resolveWorkspaceModelDefault: dependencies.modelDefaultsRepository
+      ? (workspaceId, agentKind) =>
+          dependencies
+            .modelDefaultsRepository!.getForKind(workspaceId, agentKind)
+            .then((v) => v ?? undefined)
+      : undefined,
   })
 
   const github = createGitHubModule(dependencies)

@@ -1,9 +1,10 @@
 <script setup lang="ts">
-// LLM Vendors: connect subscription credentials (a token pool) so agent steps can
-// run on the Claude Code / Codex harnesses instead of an API key. Guided,
-// vendor-specific instructions (OS-specific for Codex); tokens are write-only and
-// pooled, leased with usage-aware rotation. Connecting a vendor makes its models
-// win in the picker and at dispatch ("subscriptions always win").
+// LLM Vendors: connect commercial coding-plan subscription credentials (a token pool) so
+// agent steps can run on the Claude Code harness instead of an API key. Tokens are
+// write-only and pooled, leased with usage-aware rotation. Connecting a vendor makes its
+// models win in the picker and at dispatch ("subscriptions always win"). Only genuinely
+// poolable (team/organization-licensed) vendors live here; individual-use subscriptions
+// (Claude, GLM, ChatGPT/Codex) are connected per-user in the Personal subscriptions section.
 import { computed, ref, watch } from 'vue'
 import type { SubscriptionVendor } from '~/types/domain'
 
@@ -17,22 +18,17 @@ const open = computed({
   set: (v: boolean) => (v ? ui.openVendorCredentials() : ui.closeVendorCredentials()),
 })
 
-type Os = 'mac' | 'linux' | 'windows'
-
-// Anthropic's consumer Claude subscription is licensed for INDIVIDUAL use only, so it is
-// never pooled here — it is connected per-user in the "Personal subscription" section
-// below (PersonalSubscriptionSection). Only commercial coding-plan vendors are poolable.
+// Only commercial coding-plan vendors that permit team/organization use are poolable here.
+// Claude, GLM and ChatGPT/Codex are licensed for individual use only, so they are connected
+// per-user in the "Personal subscriptions" section below (PersonalSubscriptionSection).
 const VENDORS: { value: SubscriptionVendor; label: string; harness: string }[] = [
-  { value: 'glm', label: 'GLM — Z.ai coding plan', harness: 'Claude Code' },
   { value: 'kimi', label: 'Kimi — Moonshot coding plan', harness: 'Claude Code' },
   { value: 'deepseek', label: 'DeepSeek — coding plan', harness: 'Claude Code' },
-  { value: 'codex', label: 'ChatGPT (Plus/Pro)', harness: 'Codex' },
 ]
 
 const visibleVendors = computed(() => VENDORS)
 
-const vendor = ref<SubscriptionVendor>('codex')
-const os = ref<Os>('mac')
+const vendor = ref<SubscriptionVendor>('kimi')
 const label = ref('')
 const token = ref('')
 const busy = ref(false)
@@ -41,24 +37,9 @@ watch(open, (isOpen) => {
   if (isOpen && workspace.workspaceId) void creds.load(workspace.workspaceId)
 })
 
-const codexPath = computed(
-  () =>
-    ({
-      mac: '~/.codex/auth.json',
-      linux: '~/.codex/auth.json',
-      windows: '%USERPROFILE%\\.codex\\auth.json',
-    })[os.value],
-)
-
-/** Step-by-step instructions for the selected vendor (+ OS for Codex). */
+/** Step-by-step instructions for the selected vendor. */
 const steps = computed<string[]>(() => {
   switch (vendor.value) {
-    case 'glm':
-      return [
-        'Open your Z.ai coding-plan dashboard and create an API key for the Anthropic-compatible endpoint.',
-        'Copy the API key. Agent steps will run via Claude Code against Z.ai’s Anthropic endpoint with full context.',
-        'Paste the key below.',
-      ]
     case 'kimi':
       return [
         'Open your Moonshot (Kimi) coding-plan console and create an API key for the Anthropic-compatible endpoint.',
@@ -71,23 +52,12 @@ const steps = computed<string[]>(() => {
         'Copy the API key. Agent steps will run via Claude Code against DeepSeek’s Anthropic endpoint with full context.',
         'Paste the key below.',
       ]
-    case 'codex':
-      return [
-        'Install the Codex CLI and sign in with your ChatGPT account: run `codex login` and complete the browser flow.',
-        `Open the credentials file Codex wrote at ${codexPath.value} (set \`cli_auth_credentials_store = "file"\` in ~/.codex/config.toml first if it used the OS keychain).`,
-        'Copy the entire contents of auth.json and paste it below.',
-      ]
     default:
-      // Claude is individual-usage only (the personal section); not poolable here.
       return []
   }
 })
 
-const tokenPlaceholder = computed(() =>
-  vendor.value === 'codex'
-    ? '{ "auth_mode": "chatgpt", "tokens": { … } }'
-    : 'your coding-plan API key',
-)
+const tokenPlaceholder = computed(() => 'your coding-plan API key')
 
 async function add() {
   if (!token.value.trim()) return
@@ -134,33 +104,25 @@ function vendorLabel(v: SubscriptionVendor): string {
     <template #body>
       <div class="space-y-5">
         <p class="text-sm text-slate-400">
-          Connect a commercial coding-plan subscription to run agent steps on the Claude Code /
-          Codex harnesses instead of an API key. Tokens are stored encrypted, pooled, and rotated by
-          usage. Subscription models are flat-rate quota — they don’t draw on your spend budget.
+          Connect a <strong>commercial</strong> coding-plan subscription (Kimi, DeepSeek) that
+          permits team/organization use to run agent steps on the Claude Code harness instead of an
+          API key. Tokens are stored encrypted, pooled, and rotated by usage. Subscription models
+          are flat-rate quota — they don’t draw on your spend budget. Individual-use subscriptions
+          (Claude, GLM, ChatGPT/Codex) are connected per-user in the Personal subscriptions section
+          below.
         </p>
 
         <h4 class="text-xs font-semibold uppercase tracking-wide text-slate-500">
           Workspace pool (commercial coding plans)
         </h4>
 
-        <!-- vendor + (codex) OS pickers -->
+        <!-- vendor picker -->
         <div class="flex flex-wrap items-end gap-3">
           <UFormField label="Vendor">
             <USelect
               v-model="vendor"
               :items="visibleVendors.map((v) => ({ label: v.label, value: v.value }))"
               class="w-64"
-            />
-          </UFormField>
-          <UFormField v-if="vendor === 'codex'" label="Your OS">
-            <USelect
-              v-model="os"
-              :items="[
-                { label: 'macOS', value: 'mac' },
-                { label: 'Linux', value: 'linux' },
-                { label: 'Windows', value: 'windows' },
-              ]"
-              class="w-40"
             />
           </UFormField>
         </div>
@@ -220,7 +182,7 @@ function vendorLabel(v: SubscriptionVendor): string {
           </div>
         </div>
 
-        <!-- personal (individual-usage) subscription: Claude, per-user -->
+        <!-- personal (individual-usage) subscriptions: Claude / GLM / Codex, per-user -->
         <div class="border-t border-slate-800 pt-5">
           <ProvidersPersonalSubscriptionSection />
         </div>

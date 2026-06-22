@@ -157,9 +157,7 @@ function toActivation(row: ActRow): SubscriptionActivationRecord {
   }
 }
 
-export class DrizzleSubscriptionActivationRepository
-  implements SubscriptionActivationRepository
-{
+export class DrizzleSubscriptionActivationRepository implements SubscriptionActivationRepository {
   constructor(private readonly db: DrizzleDb) {}
 
   async get(

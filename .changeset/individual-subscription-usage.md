@@ -11,9 +11,9 @@
 ---
 
 Add an **individual-usage restricted mode** for subscriptions licensed for personal
-use only (Anthropic's consumer Claude subscription). Such vendors are no longer
-poolable on a workspace; instead each user stores their OWN credential and only that
-user's runs may use it.
+use only (`claude`, `glm` and `codex` — see their terms of service). Such vendors are no
+longer poolable on a workspace; instead each user stores their OWN credential and only
+that user's runs may use it.
 
 - **Per-user, double-encrypted storage.** A personal subscription's token is sealed
   under a key derived from the user's personal **password** (PBKDF2 → AES-GCM, never
@@ -29,9 +29,12 @@ user's runs may use it.
   and swept on TTL expiry.
 - **No recurring runs.** A recurring schedule whose block uses an individual-usage
   model is refused at fire time (it can't be unlocked unattended).
-- **Gating.** Starting/retrying a run on a Claude-pinned block requires a signed-in
-  user with a stored subscription; a missing password returns `428 credential_required`
-  so the client prompts. The container executor leases the initiator's activation and
+- **Gating.** Starting/retrying a run that resolves to individual-usage model(s)
+  requires a signed-in user with the stored subscription(s); a missing password returns
+  `428 credential_required` so the client prompts. The gate mirrors dispatch's model
+  precedence (block pin → workspace per-kind default) across the pipeline's steps, so a
+  block with no pin but an individual-usage workspace default is gated up-front instead
+  of failing at dispatch. The container executor leases the initiator's activation and
   fails clearly (retryable) if it has lapsed. Expiry/renewal is surfaced in advance.
 
 See `backend/docs/individual-subscription-usage.md` for the full model + safeguards.

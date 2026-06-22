@@ -189,7 +189,10 @@ export default {
               logger.info({ cron: 'activation-sweeper', reclaimed }, 'reclaimed activations')
           })
           .catch((error) =>
-            logger.error({ cron: 'activation-sweeper', err: errInfo(error) }, 'activation sweep failed'),
+            logger.error(
+              { cron: 'activation-sweeper', err: errInfo(error) },
+              'activation sweep failed',
+            ),
           ),
       )
     }

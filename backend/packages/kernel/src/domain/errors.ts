@@ -63,10 +63,7 @@ export type CredentialRequiredReason =
  * Used by the individual-usage restricted mode (e.g. Claude personal subscriptions).
  */
 export class CredentialRequiredError extends DomainError {
-  constructor(
-    message: string,
-    details: { vendor: string; reason: CredentialRequiredReason },
-  ) {
+  constructor(message: string, details: { vendor: string; reason: CredentialRequiredReason }) {
     super('credential_required', message, details)
   }
 }

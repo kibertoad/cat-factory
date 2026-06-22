@@ -184,6 +184,18 @@ export interface ExecutionServiceDependencies {
    */
   subscriptionActivationRepository?: SubscriptionActivationRepository
   /**
+   * Optional: resolve a workspace's per-agent-kind default model id (the same resolver
+   * the container executor uses for dispatch). The personal-credential gate consults it
+   * so a run whose block has NO pinned model but whose workspace default resolves to an
+   * individual-usage vendor is still gated up-front — matching what dispatch will resolve,
+   * instead of starting and then failing on a missing activation. Absent → the gate sees
+   * only the block's pinned model (env-routing defaults are operator-level and not gated).
+   */
+  resolveWorkspaceModelDefault?: (
+    workspaceId: string,
+    agentKind: string,
+  ) => Promise<string | undefined>
+  /**
    * Optional: when the environment integration is configured, a `deployer` step
    * provisions an ephemeral environment deterministically through this service
    * (no LLM), and downstream steps discover the resulting env via it.
@@ -291,6 +303,10 @@ export class ExecutionService {
   private readonly mergePresetRepository?: MergePresetRepository
   private readonly ticketTrackerProvider?: TicketTrackerProvider
   private readonly subscriptionActivations?: SubscriptionActivationRepository
+  private readonly resolveWorkspaceModelDefault?: (
+    workspaceId: string,
+    agentKind: string,
+  ) => Promise<string | undefined>
 
   constructor({
     workspaceRepository,
@@ -318,6 +334,7 @@ export class ExecutionService {
     mergePresetRepository,
     ticketTrackerProvider,
     subscriptionActivationRepository,
+    resolveWorkspaceModelDefault,
   }: ExecutionServiceDependencies) {
     this.workspaceRepository = workspaceRepository
     this.blockRepository = blockRepository
@@ -344,6 +361,7 @@ export class ExecutionService {
     this.mergePresetRepository = mergePresetRepository
     this.ticketTrackerProvider = ticketTrackerProvider
     this.subscriptionActivations = subscriptionActivationRepository
+    this.resolveWorkspaceModelDefault = resolveWorkspaceModelDefault
   }
 
   private requireWorkspace(workspaceId: string) {
@@ -354,32 +372,64 @@ export class ExecutionService {
     return assertFound(await this.blockRepository.get(workspaceId, id), 'Block', id)
   }
 
-  /** Start a pipeline against a block, replacing any prior run on it. */
   /**
-   * The individual-usage subscription vendor (Claude) a block's pinned model runs on,
-   * or null. The controller uses it to gate a run on the initiator's personal
-   * subscription (require + activate their password) before starting. Pure: derived
-   * from the block's `modelId` via the catalog, so no token/workspace state is touched.
+   * The individual-usage subscription vendors (Claude/GLM/Codex) a run STARTED against
+   * `blockId` with `pipelineId` will use — so the controller can gate the run on the
+   * initiator's personal subscription(s) up-front. Mirrors the dispatch-time model
+   * precedence (block pin → workspace per-kind default) across every step in the
+   * pipeline, so a block with NO pin but an individual-usage workspace default is gated
+   * too, instead of starting and then failing at dispatch on a missing activation.
    */
-  async individualVendorForBlock(
+  async individualVendorsForBlock(
     workspaceId: string,
     blockId: string,
-  ): Promise<SubscriptionVendor | null> {
+    pipelineId: string,
+  ): Promise<SubscriptionVendor[]> {
     const block = await this.requireBlock(workspaceId, blockId)
-    return individualVendorForModelId(block.modelId)
+    const pipeline = await this.pipelineRepository.get(workspaceId, pipelineId)
+    return this.resolveIndividualVendors(workspaceId, block.modelId, pipeline?.agentKinds ?? [])
   }
 
-  /** The individual-usage vendor a failed run's block uses (for the retry gate), or null. */
-  async individualVendorForRun(
+  /** The individual-usage vendors a failed run's resumed steps use (for the retry gate). */
+  async individualVendorsForRun(
     workspaceId: string,
     executionId: string,
-  ): Promise<SubscriptionVendor | null> {
+  ): Promise<SubscriptionVendor[]> {
     const run = await this.executionRepository.get(workspaceId, executionId)
-    if (!run) return null
+    if (!run) return []
     const block = await this.blockRepository.get(workspaceId, run.blockId)
-    return block ? individualVendorForModelId(block.modelId) : null
+    if (!block) return []
+    return this.resolveIndividualVendors(
+      workspaceId,
+      block.modelId,
+      run.steps.map((s) => s.agentKind),
+    )
   }
 
+  /**
+   * The set of individual-usage vendors the given steps resolve to. A block-level pin
+   * applies to every step (so it short-circuits); otherwise each kind falls to the
+   * workspace per-kind default — exactly the precedence `resolveStepModelRef` uses at
+   * dispatch. Env-routing defaults (the last fallback) are operator-level and not gated.
+   */
+  private async resolveIndividualVendors(
+    workspaceId: string,
+    blockModelId: string | undefined,
+    agentKinds: string[],
+  ): Promise<SubscriptionVendor[]> {
+    const pinned = individualVendorForModelId(blockModelId)
+    if (pinned) return [pinned]
+    if (!this.resolveWorkspaceModelDefault || agentKinds.length === 0) return []
+    const vendors = new Set<SubscriptionVendor>()
+    for (const kind of agentKinds) {
+      const defaultId = await this.resolveWorkspaceModelDefault(workspaceId, kind)
+      const vendor = individualVendorForModelId(defaultId)
+      if (vendor) vendors.add(vendor)
+    }
+    return [...vendors]
+  }
+
+  /** Start a pipeline against a block, replacing any prior run on it. */
   async start(
     workspaceId: string,
     blockId: string,
@@ -411,6 +461,17 @@ export class ExecutionService {
     // tearing down the block's prior run or creating a new one.
     const executionId = this.idGenerator.next('exec')
     await activate?.(executionId)
+
+    // Replacing the block's prior run: clear its per-run activation now (it never reaches
+    // the terminal cleanup in emitInstance when it's still running), so a replaced run's
+    // system-encrypted token copy doesn't linger to its TTL. Keyed by the OLD run id, so
+    // the activation just minted for the new run is untouched.
+    if (this.subscriptionActivations) {
+      const prior = await this.executionRepository.getByBlock(workspaceId, blockId)
+      if (prior && prior.id !== executionId) {
+        await this.subscriptionActivations.deleteByExecution(prior.id)
+      }
+    }
 
     await this.executionRepository.deleteByBlock(workspaceId, blockId)
 

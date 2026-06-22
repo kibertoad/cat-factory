@@ -9,7 +9,10 @@ import type {
   SubscriptionActivationRepository,
   SubscriptionVendor,
 } from '@cat-factory/kernel'
-import { DEFAULT_ACTIVATION_TTL_MS, PersonalSubscriptionService } from './PersonalSubscriptionService.js'
+import {
+  DEFAULT_ACTIVATION_TTL_MS,
+  PersonalSubscriptionService,
+} from './PersonalSubscriptionService.js'
 
 // Service behaviour over in-memory repos + reversible ciphers: double-encryption at
 // rest, password-gated unlock, per-run activation lifecycle, expiry/renewal status, and
@@ -90,7 +93,12 @@ class FakeActs implements SubscriptionActivationRepository {
     if (i >= 0) this.rows[i] = { ...record }
     else this.rows.push({ ...record })
   }
-  async refresh(executionId: string, userId: number, vendor: SubscriptionVendor, expiresAt: number) {
+  async refresh(
+    executionId: string,
+    userId: number,
+    vendor: SubscriptionVendor,
+    expiresAt: number,
+  ) {
     const r = this.rows.find(
       (x) => x.executionId === executionId && x.userId === userId && x.vendor === vendor,
     )
@@ -137,10 +145,10 @@ describe('PersonalSubscriptionService', () => {
     expect(subs.rows[0]!.tokenCipher).toBe('enc(seal[hunter2hunter2](sk-ant-oat01-raw))')
   })
 
-  it('rejects a non-individual vendor', async () => {
+  it('rejects a non-individual (poolable) vendor', async () => {
     const { svc } = makeService()
     await expect(
-      svc.store(7, { vendor: 'glm', label: 'x', token: 't', password: 'longpassword' }),
+      svc.store(7, { vendor: 'kimi', label: 'x', token: 't', password: 'longpassword' }),
     ).rejects.toBeInstanceOf(CredentialRequiredError)
   })
 
@@ -161,9 +169,9 @@ describe('PersonalSubscriptionService', () => {
   it('rejects a wrong password on activation', async () => {
     const { svc } = makeService()
     await svc.store(7, { vendor: 'claude', label: 'm', token: 'T', password: 'rightpassword' })
-    await expect(svc.activateForRun('exec_1', 7, 'claude', 'wrongpassword!!')).rejects.toMatchObject(
-      { details: { reason: 'wrong_password' } },
-    )
+    await expect(
+      svc.activateForRun('exec_1', 7, 'claude', 'wrongpassword!!'),
+    ).rejects.toMatchObject({ details: { reason: 'wrong_password' } })
   })
 
   it('blocks a lapsed subscription from unlocking', async () => {

@@ -33,6 +33,7 @@ export {
   resolveModelRef,
   subscriptionOptionFor,
   isIndividualVendor,
+  INDIVIDUAL_VENDORS,
   individualVendorForModelId,
 } from './domain/models.js'
 export {
