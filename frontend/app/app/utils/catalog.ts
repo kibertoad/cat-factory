@@ -192,6 +192,22 @@ export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
   },
 }
 
+/**
+ * Engine-driven kinds that still run an LLM, so their model is worth pinning per
+ * workspace even though they aren't user-addable palette archetypes. Surfaced in the
+ * Default Models settings alongside {@link AGENT_ARCHETYPES} (but NOT in the pipeline
+ * palette). The pure gates (`ci`, `conflicts`) are excluded — they run no model, so a
+ * default model would do nothing for them.
+ */
+export const MODEL_CONFIGURABLE_SYSTEM_KINDS: AgentArchetype[] = [
+  'spec-writer',
+  'blueprints',
+  'conflict-resolver',
+  'ci-fixer',
+  'fixer',
+  'merger',
+].map((kind) => SYSTEM_AGENT_META[kind]!)
+
 /** Fallback metadata for any kind with no archetype or system entry (unknown/custom). */
 const FALLBACK_AGENT_META: Omit<AgentArchetype, 'kind'> = {
   label: 'Agent',

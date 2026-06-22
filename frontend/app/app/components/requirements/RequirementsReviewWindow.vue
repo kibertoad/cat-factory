@@ -148,15 +148,20 @@ async function setStatus(item: RequirementReviewItem, itemStatus: ReviewItemStat
 }
 
 async function incorporate(feedback?: string) {
-  if (!review.value) return
+  if (!review.value || !blockId.value) return
   try {
     await requirements.incorporate(review.value, feedback)
     redoComment.value = ''
     showRedo.value = false
-    toast.add({ title: 'Answers incorporated', icon: 'i-lucide-check-check' })
   } catch (e) {
     notifyError('Could not incorporate the answers', e)
+    return
   }
+  // Auto re-review: fold the answers, then immediately run the reviewer against the new
+  // document so the loop advances in one action (no separate "re-review" click). If the
+  // re-review itself fails the review stays `merged`, where the manual re-review / redo
+  // buttons are the recovery surface. `reReview` owns its own outcome toast + errors.
+  await reReview()
 }
 
 async function reReview() {
@@ -528,7 +533,8 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                     Every finding is dismissed — proceed to the next phase without reworking.
                   </template>
                   <template v-else-if="canIncorporate">
-                    Folds your answers into one standard-format document, then you re-review it.
+                    Folds your answers into one standard-format document, then re-reviews it
+                    automatically.
                   </template>
                   <template v-else> Answer or dismiss every finding to continue. </template>
                 </p>

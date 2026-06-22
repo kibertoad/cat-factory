@@ -98,8 +98,14 @@ const isOpen = (i: RequirementReviewItem): boolean => i.status === 'open'
  */
 const REWORK_MAX_OUTPUT_TOKENS = 16_000
 
-/** The agent kind the reviewer runs as — keys its per-workspace default model. */
-const REQUIREMENTS_AGENT_KIND = 'requirements'
+/**
+ * The agent kind the reviewer runs as — keys its per-workspace default model. Must match
+ * the catalog archetype kind the Default Models UI saves under (`requirements-review`),
+ * the seeded pipelines' step kind, and the observability tag; otherwise a workspace
+ * default set in the UI is written under one key and read under another (so the reviewer
+ * silently falls back to the routing default).
+ */
+const REQUIREMENTS_AGENT_KIND = 'requirements-review'
 
 /**
  * The requirements-review agent. Stateless and synchronous (no container, no

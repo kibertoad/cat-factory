@@ -13,6 +13,7 @@
 import { computed, ref, watch } from 'vue'
 import { onKeyStroke } from '@vueuse/core'
 import type { AgentKind } from '~/types/domain'
+import { MODEL_CONFIGURABLE_SYSTEM_KINDS } from '~/utils/catalog'
 import { contextLabel, costLabel, displayFlavor, isSelectable } from '~/stores/models'
 
 const ui = useUiStore()
@@ -32,10 +33,15 @@ const busy = ref<string | null>(null)
 // Narrows the agent-kind rows below, for finding a kind fast in a long catalog.
 const filter = ref('')
 
+// The palette archetypes PLUS the engine-driven kinds that still run an LLM
+// (spec-writer, merger, the fixers/resolver) — those aren't user-addable steps but their
+// model is still worth pinning per workspace. The pure gates run no model, so they stay out.
+const configurableKinds = computed(() => [...agents.archetypes, ...MODEL_CONFIGURABLE_SYSTEM_KINDS])
+
 const filteredArchetypes = computed(() => {
   const q = filter.value.trim().toLowerCase()
-  if (!q) return agents.archetypes
-  return agents.archetypes.filter(
+  if (!q) return configurableKinds.value
+  return configurableKinds.value.filter(
     (a) => a.label.toLowerCase().includes(q) || String(a.kind).toLowerCase().includes(q),
   )
 })
