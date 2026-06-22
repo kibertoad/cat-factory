@@ -671,6 +671,17 @@ export const pipelineStepSchema = v.object({
       }),
     ),
   ),
+  /**
+   * Transient incorporation intent carried on a parked `requirements-review` gate step.
+   * Set when the human answers the findings and asks to incorporate: the run is signalled
+   * to wake and the durable driver, on re-entering the gate, folds the answers into a
+   * document and re-reviews it (the LLM work that used to block the HTTP request). Cleared
+   * once that async cycle completes. `feedback` is the human's optional "do it differently"
+   * direction (a redo). Absent when no incorporation is pending.
+   */
+  pendingIncorporation: v.optional(
+    v.nullable(v.object({ feedback: v.optional(v.string()) })),
+  ),
   /** Text the agent produced for this step (when LLM execution is enabled). */
   output: v.optional(v.string()),
   /** Identifier of the model that produced `output`, for transparency. */

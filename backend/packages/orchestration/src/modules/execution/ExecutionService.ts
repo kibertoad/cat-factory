@@ -746,14 +746,24 @@ export class ExecutionService {
     if (instance.status === 'paused') instance.status = 'running'
 
     if (step.state === 'waiting_decision') {
-      // Parked on either an agent-raised decision or a human approval gate; both
-      // are addressed by the same durable event id.
-      const pendingId = step.decision?.id ?? step.approval?.id
-      if (pendingId) {
-        instance.status = 'blocked'
-        await this.executionRepository.upsert(workspaceId, instance)
-        await this.emitInstance(workspaceId, instance)
-        return { kind: 'awaiting_decision', decisionId: pendingId }
+      // The requirements gate is re-entrant: when the human answers the findings and asks
+      // to incorporate, a `pendingIncorporation` marker is set on the parked step and the
+      // run is signalled to wake. Fall through so the gate re-evaluates — folding the
+      // answers and re-reviewing in the durable driver (the LLM work that used to block the
+      // HTTP request) — instead of immediately re-parking. Every other parked step (and a
+      // requirements gate with nothing pending) re-parks on its durable decision id.
+      const reentrantRequirements =
+        step.agentKind === REQUIREMENTS_REVIEW_AGENT_KIND && !!step.pendingIncorporation
+      if (!reentrantRequirements) {
+        // Parked on either an agent-raised decision or a human approval gate; both
+        // are addressed by the same durable event id.
+        const pendingId = step.decision?.id ?? step.approval?.id
+        if (pendingId) {
+          instance.status = 'blocked'
+          await this.executionRepository.upsert(workspaceId, instance)
+          await this.emitInstance(workspaceId, instance)
+          return { kind: 'awaiting_decision', decisionId: pendingId }
+        }
       }
     }
     this.startStep(step)
@@ -2184,14 +2194,71 @@ export class ExecutionService {
     if (!this.requirementReviewService?.enabled) {
       return this.completeRequirementsStep(workspaceId, instance, step, isFinalStep)
     }
-    // Runs the reviewer with the task's preset knobs (shared with the off-path surface).
+
+    // Re-entry: the human answered the findings and asked to incorporate. Do the (slow)
+    // LLM work here in the durable driver — fold the answers into a document, then
+    // re-review it — instead of in the HTTP request that the user is no longer waiting on.
+    // `reReview` raises the re-summon notification itself when it finds findings.
+    const pending = step.pendingIncorporation
+    if (pending) {
+      step.pendingIncorporation = null
+      const review = await this.runIncorporationCycle(workspaceId, block.id, pending.feedback)
+      if (review.status === 'incorporated') {
+        return this.completeRequirementsStep(workspaceId, instance, step, isFinalStep)
+      }
+      // `ready`/`exceeded`: re-park (a fresh decision id) and wait for the human again.
+      return this.parkRequirementsStep(workspaceId, instance, step)
+    }
+
+    // Fresh entry: run the initial reviewer pass with the task's preset knobs (shared with
+    // the off-path inspector surface). Auto-pass (status `incorporated`) → advance; the
+    // findings stay recorded on the review for transparency. `ready`/`exceeded` → park for
+    // the dedicated window.
     const review = await this.reviewRequirements(workspaceId, block.id)
-    // Auto-pass (status `incorporated`) → advance; the findings stay recorded on the
-    // review for transparency. `ready`/`exceeded` → park for the dedicated window.
     if (review.status === 'incorporated') {
       return this.completeRequirementsStep(workspaceId, instance, step, isFinalStep)
     }
     return this.parkRequirementsStep(workspaceId, instance, step)
+  }
+
+  /**
+   * Fold the human's settled answers into a standardized requirements document and
+   * re-review it (one iteration of the loop), emitting the live review-changed event after
+   * each phase so an open window/inspector tracks progress. Runs inside the durable driver
+   * (see {@link evaluateRequirementsReview} re-entry); shared by the no-run inline fallback
+   * in {@link incorporateRequirements}. Returns the re-reviewed review.
+   */
+  private async runIncorporationCycle(
+    workspaceId: string,
+    blockId: string,
+    feedback?: string,
+  ): Promise<RequirementReview> {
+    const review = await this.currentReview(workspaceId, blockId)
+    const block = assertFound(
+      await this.blockRepository.get(workspaceId, blockId),
+      'Block',
+      blockId,
+    )
+    const preset = await this.resolveMergePreset(workspaceId, block)
+    const { review: merged } = await this.requireReviewService().incorporate(
+      workspaceId,
+      review.id,
+      { feedback },
+    )
+    await this.emitRequirementReview(workspaceId, merged)
+    const reviewed = await this.requireReviewService().reReview(workspaceId, review.id, {
+      concernThreshold: preset.maxRequirementConcernAllowed,
+    })
+    await this.emitRequirementReview(workspaceId, reviewed)
+    return reviewed
+  }
+
+  /** Push a live `requirements` event so an open window/inspector reflects the new status. */
+  private async emitRequirementReview(
+    workspaceId: string,
+    review: RequirementReview,
+  ): Promise<void> {
+    await this.events.requirementReviewChanged?.(workspaceId, review)
   }
 
   /** Finish the requirements gate step and advance to the next step (or finish the run). */
@@ -2290,6 +2357,72 @@ export class ExecutionService {
       maxIterations: preset.maxRequirementIterations,
       concernThreshold: preset.maxRequirementConcernAllowed,
     })
+  }
+
+  /**
+   * Incorporate the human's settled answers ASYNCHRONOUSLY. Validates that every finding is
+   * answered/dismissed (so the user gets immediate feedback if not), flags the review
+   * `incorporating`, records the intent on the parked gate step, and signals the durable
+   * driver to wake — which folds the answers and re-reviews in the background (see
+   * {@link evaluateRequirementsReview} re-entry). Returns at once with the `incorporating`
+   * review so the SPA can return the user to the board; they are summoned again only if the
+   * re-review yields findings (`ready`) or hits the cap (`exceeded`).
+   *
+   * No parked run (an off-path inspector review with no active pipeline) → there is no
+   * driver to offload to, so the fold + re-review run inline here. That path never had the
+   * pipeline-gate freeze this method exists to remove.
+   */
+  async incorporateRequirements(
+    workspaceId: string,
+    blockId: string,
+    feedback?: string,
+  ): Promise<RequirementReview> {
+    const review = await this.currentReview(workspaceId, blockId)
+    const open = review.items.filter((i) => i.status === 'open')
+    if (open.length > 0) {
+      throw new ValidationError(
+        `Answer or dismiss all ${open.length} remaining item(s) before incorporating`,
+      )
+    }
+
+    const parked = await this.findParkedRequirementsStep(workspaceId, blockId)
+    if (!parked) {
+      // Off-path: no pipeline parked on this review. Do the work inline (it cannot be
+      // offloaded to a driver that isn't running) and return the re-reviewed result.
+      return this.runIncorporationCycle(workspaceId, blockId, feedback)
+    }
+
+    const { instance, step } = parked
+    step.pendingIncorporation = { ...(feedback ? { feedback } : {}) }
+    const updated = await this.requireReviewService().markIncorporating(workspaceId, review.id)
+    await this.executionRepository.upsert(workspaceId, instance)
+    await this.emitInstance(workspaceId, instance)
+    await this.emitRequirementReview(workspaceId, updated)
+    await this.workRunner.signalDecision(
+      workspaceId,
+      instance.id,
+      step.approval!.id,
+      'incorporate',
+    )
+    return updated
+  }
+
+  /** Locate the run + gate step a block's requirements review is parked on (or null). */
+  private async findParkedRequirementsStep(
+    workspaceId: string,
+    blockId: string,
+  ): Promise<{ instance: ExecutionInstance; step: PipelineStep } | null> {
+    const block = await this.blockRepository.get(workspaceId, blockId)
+    if (!block?.executionId) return null
+    const instance = await this.executionRepository.get(workspaceId, block.executionId)
+    if (!instance) return null
+    const step = instance.steps.find(
+      (s) =>
+        s.agentKind === REQUIREMENTS_REVIEW_AGENT_KIND &&
+        s.state === 'waiting_decision' &&
+        s.approval?.status === 'pending',
+    )
+    return step ? { instance, step } : null
   }
 
   /**

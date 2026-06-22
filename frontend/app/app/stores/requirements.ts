@@ -9,12 +9,13 @@ import { useWorkspaceStore } from '~/stores/workspace'
 
 /**
  * Requirements-review state. On the pipeline path the reviewer runs as the first gate
- * step: the run parks while the human drives an iterative loop — answer/dismiss findings →
- * incorporate (companion) → re-review — until the reviewer converges or the task's
- * iteration cap is hit (then the human picks: extra round / proceed / reset). Every call
- * runs an LLM inline server-side and returns the updated review, so there is no real-time
- * stream; we patch the local cache from each response. `available` mirrors the backend's
- * opt-in gate (a 503 hides the UI). Per-workspace; nothing is persisted client-side.
+ * step: the run parks while the human answers/dismisses findings, then asks to incorporate.
+ * Incorporation + the re-review run ASYNCHRONOUSLY in the durable driver — the call returns
+ * at once (status `incorporating`) and the user goes back to the board; they are summoned
+ * again (a notification) only if the re-review yields findings or hits the cap. The store is
+ * patched both from call responses and from live `requirements` stream events (see
+ * `upsert`). `available` mirrors the backend's opt-in gate (a 503 hides the UI).
+ * Per-workspace; nothing is persisted client-side.
  */
 export const useRequirementsStore = defineStore('requirements', () => {
   const api = useApi()
@@ -135,16 +136,17 @@ export const useRequirementsStore = defineStore('requirements', () => {
   }
 
   /**
-   * Incorporate the answers into one standard-format document (the companion). Optional
-   * `feedback` is the "do it differently" direction when redoing a merge. The run stays
-   * parked; the review moves to `merged` for the human to re-review or redo.
+   * Ask the driver to incorporate the answers ASYNCHRONOUSLY. Optional `feedback` is the "do
+   * it differently" direction when redoing a merge. Returns at once with the `incorporating`
+   * review (the fold + re-review run in the background); the caller returns the user to the
+   * board. A live `requirements` event / a notification reflects the outcome later.
    */
   async function incorporate(review: RequirementReview, feedback?: string) {
     withFlag(incorporating, review.id, true)
     try {
-      const { review: updated } = await api.incorporateRequirements(
+      const updated = await api.incorporateRequirements(
         workspace.requireId(),
-        review.id,
+        review.blockId,
         feedback,
       )
       store(updated)
@@ -203,5 +205,7 @@ export const useRequirementsStore = defineStore('requirements', () => {
     reReview,
     proceed,
     resolveExceeded,
+    // Patch the cache from a live `requirements` stream event.
+    upsert: store,
   }
 })

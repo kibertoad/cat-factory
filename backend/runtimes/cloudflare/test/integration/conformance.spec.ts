@@ -7,6 +7,7 @@ import {
   defineConformanceSuite,
   makeIncorporatedReview,
   makeOnboardingProbe,
+  makeReadyReviewWithOpenItem,
 } from '@cat-factory/conformance'
 import { env } from 'cloudflare:test'
 import { makeApp, fragmentLibraryDeps } from '../helpers'
@@ -52,6 +53,11 @@ const harness: ConformanceHarness = {
         new D1RequirementReviewRepository({ db: env.DB }).upsert(
           workspaceId,
           makeIncorporatedReview(blockId, requirements),
+        ),
+      seedReadyReview: (workspaceId, blockId) =>
+        new D1RequirementReviewRepository({ db: env.DB }).upsert(
+          workspaceId,
+          makeReadyReviewWithOpenItem(blockId),
         ),
       seedBlueprint: (record) => new D1RepoBlueprintRepository({ db: env.DB }).upsert(record),
       // The identity/onboarding services over the same local D1 (invitations are always

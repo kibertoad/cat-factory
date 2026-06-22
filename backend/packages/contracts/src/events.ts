@@ -2,6 +2,7 @@ import type { Block, ExecutionInstance } from './entities.js'
 import type { BootstrapJob } from './bootstrap.js'
 import type { Notification } from './notifications.js'
 import type { LlmCallActivity } from './observability.js'
+import type { RequirementReview } from './requirements.js'
 
 // Real-time events pushed from the per-workspace events hub to subscribed
 // browsers over WebSocket, replacing the old `tick` polling. The shape is shared
@@ -42,3 +43,12 @@ export type WorkspaceEvent =
    * the full bodies for an expanded row from the persisted metrics endpoint.
    */
   | { type: 'llmCall'; call: LlmCallActivity; at: number }
+  /**
+   * A block's requirements review changed status (the async incorporate +
+   * re-review cycle started, produced new findings, converged, or hit its cap).
+   * Carries the updated review so an open review window / inspector reflects the
+   * transition live without a refetch. The user is summoned back only via a
+   * `notification` event when input is needed; this event is for live state, not
+   * a summons.
+   */
+  | { type: 'requirements'; review: RequirementReview; at: number }

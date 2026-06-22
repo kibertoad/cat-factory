@@ -1,12 +1,12 @@
 <script setup lang="ts">
 // Requirements review window — the dedicated surface for the `requirements-review` gate
 // step (opened via the universal result-view host). The human reacts to the reviewer's
-// structured findings (answer the relevant, dismiss the irrelevant), then an incorporation
-// companion folds the answers into ONE standard-format document, and the reviewer
-// re-reviews that document. The cycle repeats until the reviewer converges (or every
-// remaining finding is dismissed); when the task's iteration cap is hit, the human picks
-// how to proceed. The incorporated document — not the original description + linked
-// docs/tasks — is what every downstream agent step and the spec-writer consume.
+// structured findings (answer the relevant, dismiss the irrelevant), then asks to
+// incorporate. Incorporation + the re-review run ASYNCHRONOUSLY in the durable driver: the
+// window closes and the user returns to the board, and is summoned back (a notification)
+// only if the re-review raises new findings or hits the iteration cap. The incorporated
+// document — not the original description + linked docs/tasks — is what every downstream
+// agent step and the spec-writer consume.
 import { parseOutputOutline } from '~/utils/agentOutput'
 import type {
   RequirementReview,
@@ -66,6 +66,11 @@ const status = computed(() => review.value?.status ?? null)
 const merged = computed(() => status.value === 'merged')
 const exceeded = computed(() => status.value === 'exceeded')
 const incorporated = computed(() => status.value === 'incorporated')
+// The async fold + re-review is running in the driver. The window normally closes the
+// moment it's requested; this state only shows if the window is later re-opened mid-cycle.
+const incorporating = computed(() => status.value === 'incorporating')
+// No edits while the requirements are settled or a cycle is running in the background.
+const frozen = computed(() => incorporated.value || incorporating.value)
 const canIncorporate = computed(() => !!review.value && requirements.canIncorporate(review.value))
 const canProceed = computed(() => !!review.value && requirements.canProceed(review.value))
 const iteration = computed(() => review.value?.iteration ?? 1)
@@ -151,17 +156,20 @@ async function incorporate(feedback?: string) {
   if (!review.value || !blockId.value) return
   try {
     await requirements.incorporate(review.value, feedback)
-    redoComment.value = ''
-    showRedo.value = false
   } catch (e) {
     notifyError('Could not incorporate the answers', e)
     return
   }
-  // Auto re-review: fold the answers, then immediately run the reviewer against the new
-  // document so the loop advances in one action (no separate "re-review" click). If the
-  // re-review itself fails the review stays `merged`, where the manual re-review / redo
-  // buttons are the recovery surface. `reReview` owns its own outcome toast + errors.
-  await reReview()
+  redoComment.value = ''
+  showRedo.value = false
+  // The fold + re-review now run in the durable driver. Hand the user back to the board;
+  // a notification calls them back only if the re-review needs more input.
+  toast.add({
+    title: 'Incorporating your answers in the background',
+    description: "You're back on the board — we'll notify you only if more input is needed.",
+    icon: 'i-lucide-wand-sparkles',
+  })
+  close()
 }
 
 async function reReview() {
@@ -343,6 +351,16 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                 </div>
               </div>
 
+              <!-- incorporating: the async fold + re-review is running in the driver -->
+              <div
+                v-else-if="incorporating"
+                class="mb-4 flex items-center gap-2 rounded-lg border border-indigo-900/60 bg-indigo-950/30 p-4 text-sm text-indigo-200"
+              >
+                <UIcon name="i-lucide-loader-circle" class="h-5 w-5 shrink-0 animate-spin" />
+                Incorporating your answers and re-reviewing in the background. You can close this —
+                we’ll notify you only if more input is needed.
+              </div>
+
               <!-- findings to react to -->
               <div v-if="review.items.length" class="flex flex-col gap-3">
                 <div
@@ -399,7 +417,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                           size="sm"
                           class="mt-2 w-full"
                           :placeholder="item.reply ? 'Refine your answer…' : 'Answer this finding…'"
-                          :disabled="incorporated"
+                          :disabled="frozen"
                         />
                         <div class="mt-2 flex flex-wrap items-center gap-2">
                           <UButton
@@ -407,7 +425,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                             variant="soft"
                             size="xs"
                             icon="i-lucide-corner-down-left"
-                            :disabled="!(drafts[item.id] ?? '').trim() || incorporated"
+                            :disabled="!(drafts[item.id] ?? '').trim() || frozen"
                             @click="submitReply(item)"
                           >
                             Save answer
@@ -417,7 +435,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                             variant="ghost"
                             size="xs"
                             icon="i-lucide-x"
-                            :disabled="incorporated"
+                            :disabled="frozen"
                             @click="setStatus(item, 'dismissed')"
                           >
                             Dismiss as irrelevant
@@ -432,7 +450,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                           variant="ghost"
                           size="xs"
                           icon="i-lucide-rotate-ccw"
-                          :disabled="incorporated"
+                          :disabled="frozen"
                           @click="setStatus(item, 'open')"
                         >
                           Reopen

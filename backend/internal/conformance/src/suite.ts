@@ -1183,6 +1183,29 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         expect(res.status).toBe(409)
       })
 
+      it('wires the async-incorporate endpoint and refuses it while a finding is open', async () => {
+        // Incorporation is asynchronous: the route records the human's intent on the parked
+        // run and signals the durable driver to fold + re-review in the background. Its
+        // pre-LLM guard — every finding must be answered or dismissed first — must hold on
+        // EVERY facade and fires BEFORE any model call or run signal, so this is
+        // deterministic (no live reviewer) yet proves the route is mounted identically and
+        // the guard rejects an out-of-order incorporate. A `ready` review with one still-open
+        // finding is seeded straight into each facade's real review store.
+        const app = harness.makeApp()
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+        await app.seedReadyReview(wsId, 'task_login')
+
+        const res = await app.call(
+          'POST',
+          `/workspaces/${wsId}/blocks/task_login/requirement-review/incorporate`,
+          {},
+        )
+        // The unanswered finding fails the guard (a `validation` domain error → 422) before
+        // any model call or run signal — identically on both facades.
+        expect(res.status).toBe(422)
+      })
+
       it('passes a companion gate when the rating clears the threshold', async () => {
         // A companion step grades the prior producer; at/above its threshold the run
         // proceeds. `reviewer` is the coder's companion, so ['coder','reviewer'] runs the

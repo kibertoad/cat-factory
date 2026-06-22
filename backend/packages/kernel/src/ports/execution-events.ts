@@ -4,6 +4,7 @@ import type {
   ExecutionInstance,
   LlmCallActivity,
   Notification,
+  RequirementReview,
 } from '../domain/types.js'
 
 // Port for pushing state changes to connected clients in real time, instead of
@@ -54,6 +55,14 @@ export interface ExecutionEventPublisher {
    * a runtime with no real-time transport (Node today) leaves it a no-op.
    */
   llmCallObserved?(workspaceId: string, activity: LlmCallActivity): Promise<void>
+  /**
+   * A block's requirements review changed status (the async incorporate + re-review cycle
+   * started, produced new findings, converged, or hit its cap): push the updated review so
+   * an open review window / inspector reflects the transition live. This is live state, not
+   * a summons — the user is called back via a `notificationChanged` event when input is
+   * needed. Optional; a runtime with no real-time transport (Node today) leaves it a no-op.
+   */
+  requirementReviewChanged?(workspaceId: string, review: RequirementReview): Promise<void>
 }
 
 /**
@@ -67,4 +76,5 @@ export class NoopEventPublisher implements ExecutionEventPublisher {
   async bootstrapChanged(): Promise<void> {}
   async notificationChanged(): Promise<void> {}
   async llmCallObserved(): Promise<void> {}
+  async requirementReviewChanged(): Promise<void> {}
 }

@@ -5,6 +5,7 @@ import type {
   ExecutionInstance,
   LlmCallActivity,
   Notification,
+  RequirementReview,
   WorkspaceMountRepository,
 } from '@cat-factory/kernel'
 
@@ -84,5 +85,11 @@ export class FanOutEventPublisher implements ExecutionEventPublisher {
     // mounted service surfacing solely on its origin board is an acceptable edge; the
     // persisted metrics (and the panel's lazy load) remain the cross-workspace source.
     await this.inner.llmCallObserved?.(workspaceId, activity)
+  }
+
+  async requirementReviewChanged(workspaceId: string, review: RequirementReview): Promise<void> {
+    for (const ws of await this.targets(workspaceId, review.blockId)) {
+      await this.inner.requirementReviewChanged?.(ws, review)
+    }
   }
 }

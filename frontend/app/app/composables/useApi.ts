@@ -661,12 +661,13 @@ export function useApi() {
         { method: 'PATCH', body: { status } },
       ),
 
-    // Incorporate the answers into one standard-format document (every finding must be
-    // answered or dismissed). Optional `feedback` is the "do it differently" lever when
-    // redoing a merge. Returns `{ review }`; the run stays parked.
-    incorporateRequirements: (workspaceId: string, reviewId: string, feedback?: string) =>
-      http<{ review: RequirementReview }>(
-        `${ws(workspaceId)}/requirement-reviews/${encodeURIComponent(reviewId)}/incorporate`,
+    // Incorporate the answers ASYNCHRONOUSLY (every finding must be answered or dismissed).
+    // The durable driver folds them and re-reviews in the background. Optional `feedback` is
+    // the "do it differently" lever when redoing a merge. Returns the `incorporating` review
+    // at once; a notification calls the user back only if the re-review needs input.
+    incorporateRequirements: (workspaceId: string, blockId: string, feedback?: string) =>
+      http<RequirementReview>(
+        `${ws(workspaceId)}/blocks/${encodeURIComponent(blockId)}/requirement-review/incorporate`,
         { method: 'POST', body: feedback ? { feedback } : {} },
       ),
 

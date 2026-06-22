@@ -90,6 +90,13 @@ export interface ConformanceApp {
    */
   seedIncorporatedReview(workspaceId: string, blockId: string, requirements: string): Promise<void>
   /**
+   * Seed a `ready` review with one still-open finding straight into the facade's real
+   * review store, so the suite can assert the async-incorporate route's pre-LLM guard
+   * (incorporation refused while a finding is unanswered) on every runtime without a live
+   * reviewer model.
+   */
+  seedReadyReview(workspaceId: string, blockId: string): Promise<void>
+  /**
    * Seed a persisted repository blueprint straight into the facade's real board-scan
    * store, so the suite can assert the blueprint read endpoints (which the manual scan
    * + the blueprint pipeline step write) return it identically on every runtime —

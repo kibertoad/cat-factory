@@ -19,7 +19,7 @@ const META: Record<Notification['type'], { icon: string; color: Accent; action: 
   pipeline_complete: { icon: 'i-lucide-circle-check', color: 'primary', action: 'Confirm & merge' },
   ci_failed: { icon: 'i-lucide-triangle-alert', color: 'error', action: 'Retry run' },
   test_failed: { icon: 'i-lucide-flask-conical', color: 'error', action: 'Retry run' },
-  // Informational: clicking the title reveals the task to review; "act" just marks
+  // Clicking the title opens the review window for the task (see `reveal`); "act" just marks
   // it read (the server performs no side-effect for this type).
   requirement_review: { icon: 'i-lucide-clipboard-list', color: 'primary', action: 'Mark read' },
 }
@@ -42,9 +42,16 @@ async function dismiss(n: Notification) {
   }
 }
 
-/** Focus the related block on the board when a notification is clicked. */
+/**
+ * Clicking a notification's title takes the user where they can act on it. A
+ * `requirement_review` summons them straight back into the review window (the async
+ * incorporate/re-review raised new findings or hit the cap); every other type just focuses
+ * the related block on the board.
+ */
 function reveal(n: Notification) {
-  if (n.blockId) ui.select(n.blockId)
+  if (!n.blockId) return
+  if (n.type === 'requirement_review') ui.openRequirementReview(n.blockId)
+  else ui.select(n.blockId)
 }
 </script>
 

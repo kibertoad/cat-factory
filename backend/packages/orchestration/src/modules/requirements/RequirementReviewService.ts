@@ -480,6 +480,20 @@ export class RequirementReviewService {
     }))
   }
 
+  /**
+   * Flag a review as `incorporating`: the human answered the findings and asked to
+   * incorporate, and the durable driver is about to fold the answers and re-review in the
+   * background. Transient — the driver overwrites it with the re-review's disposition. Lets
+   * the board/inspector show "working" instead of a stale "awaiting you" the moment the
+   * request is accepted, before the (slow) LLM work begins.
+   */
+  async markIncorporating(workspaceId: string, reviewId: string): Promise<RequirementReview> {
+    return this.patchReview(workspaceId, reviewId, (review) => ({
+      ...review,
+      status: 'incorporating',
+    }))
+  }
+
   private async patchReview(
     workspaceId: string,
     reviewId: string,

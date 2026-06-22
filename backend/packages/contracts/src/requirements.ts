@@ -60,8 +60,13 @@ export type RequirementReviewItem = v.InferOutput<typeof requirementReviewItemSc
 /**
  * Lifecycle of the review as a whole:
  * - `ready`: the reviewer raised findings that are awaiting human answers/dismissals.
- * - `merged`: the companion produced an incorporated document the human is inspecting
- *   (they can re-review it, or redo the merge with a comment).
+ * - `incorporating`: transient. The human answered the findings and asked to incorporate;
+ *   the durable driver is folding the answers into a document and re-reviewing it in the
+ *   background. No human action is needed — the user is back on the board and will be
+ *   summoned again only if the re-review yields `ready`/`exceeded`.
+ * - `merged`: the companion produced an incorporated document (an internal transient on the
+ *   async path — the driver re-reviews it immediately; only the off-path inline incorporate
+ *   leaves a review here momentarily).
  * - `exceeded`: the iteration cap was reached with findings still open — awaiting the
  *   human's choice (one more round / proceed anyway / reset the task).
  * - `incorporated`: terminal. The requirements phase is settled; downstream agents
@@ -69,6 +74,7 @@ export type RequirementReviewItem = v.InferOutput<typeof requirementReviewItemSc
  */
 export const requirementReviewStatusSchema = v.picklist([
   'ready',
+  'incorporating',
   'merged',
   'exceeded',
   'incorporated',

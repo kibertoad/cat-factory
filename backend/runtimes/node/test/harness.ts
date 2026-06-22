@@ -7,6 +7,7 @@ import {
   RecordingEventPublisher,
   makeIncorporatedReview,
   makeOnboardingProbe,
+  makeReadyReviewWithOpenItem,
 } from '@cat-factory/conformance'
 import type { ExecutionInstance, RepoBlueprintRecord, WorkspaceSnapshot } from '@cat-factory/kernel'
 import { NoopBootstrapRunner, NoopWorkRunner } from '@cat-factory/kernel'
@@ -173,6 +174,13 @@ export function makeConformanceApp(
     )
   }
 
+  function seedReadyReview(workspaceId: string, blockId: string) {
+    return new DrizzleRequirementReviewRepository(db).upsert(
+      workspaceId,
+      makeReadyReviewWithOpenItem(blockId),
+    )
+  }
+
   function seedBlueprint(record: RepoBlueprintRecord) {
     return new DrizzleRepoBlueprintRepository(db).upsert(record)
   }
@@ -185,6 +193,7 @@ export function makeConformanceApp(
     driveBootstrap,
     executionEmits,
     seedIncorporatedReview,
+    seedReadyReview,
     seedBlueprint,
     onboarding: () => makeOnboardingProbe(container),
   }

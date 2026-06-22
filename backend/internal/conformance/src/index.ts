@@ -18,6 +18,6 @@ export {
   type OnboardingProbe,
   type OnboardingUsersProbe,
 } from './onboarding.js'
-export { makeIncorporatedReview } from './requirements-fixtures.js'
+export { makeIncorporatedReview, makeReadyReviewWithOpenItem } from './requirements-fixtures.js'
 export { defineConformanceSuite } from './suite.js'
 export { defineLlmMetricsSuite } from './llm-metrics-suite.js'

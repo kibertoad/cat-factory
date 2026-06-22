@@ -20,6 +20,7 @@ export function useWorkspaceStream() {
   const agentRuns = useAgentRunsStore()
   const notifications = useNotificationsStore()
   const observability = useObservabilityStore()
+  const requirements = useRequirementsStore()
   const api = useApi()
   const apiBase = useRuntimeConfig().public.apiBase
 
@@ -69,6 +70,11 @@ export function useWorkspaceStream() {
       // updating even when the durable driver is evicted: the proxy emits these
       // independently of the run's poll loop).
       observability.appendCall(event.call)
+    } else if (event.type === 'requirements') {
+      // The async incorporate + re-review cycle changed a review's status — patch the cache
+      // so an open review window / inspector reflects it live ("incorporating…" → the next
+      // cycle / converged). The summons back, when needed, arrives as a `notification`.
+      requirements.upsert(event.review)
     }
   }
 

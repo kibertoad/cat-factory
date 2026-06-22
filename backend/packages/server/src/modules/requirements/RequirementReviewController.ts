@@ -20,11 +20,12 @@ const unavailable = (c: Context<AppEnv>) =>
   c.json({ error: { code: 'unavailable', message: 'Requirements review is not configured' } }, 503)
 
 /**
- * Workspace-scoped requirements-review endpoints. The reviewer is stateless and
- * synchronous (no container, no durable driver): generating a review and
- * incorporating answers both run an LLM inline and return the updated entity, so
- * the SPA patches its store from the response without a real-time event. Mounted
- * under `/workspaces/:workspaceId`.
+ * Workspace-scoped requirements-review endpoints. The initial review runs an LLM inline and
+ * returns the entity. Incorporation, by contrast, is ASYNCHRONOUS: it records the human's
+ * intent on the parked run, signals the durable driver to fold + re-review in the
+ * background, and returns at once with the `incorporating` review so the SPA can return the
+ * user to the board — they are summoned again (a notification) only if input is needed.
+ * Mounted under `/workspaces/:workspaceId`.
  */
 export function requirementReviewController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
@@ -86,21 +87,26 @@ export function requirementReviewController(): Hono<AppEnv> {
     },
   )
 
-  // Incorporate the answers into one standard-format document (the companion). Optional
-  // `feedback` is the "do it differently" lever when redoing a merge. Does not touch the
-  // run — it stays parked so the human can re-review or redo. Returns `{ review }`.
+  // Incorporate the answers ASYNCHRONOUSLY: the durable driver folds them into one
+  // standard-format document and re-reviews it in the background. Optional `feedback` is the
+  // "do it differently" lever when redoing a merge. Returns the `incorporating` review at
+  // once (no LLM in the request) so the SPA returns the user to the board; a notification
+  // calls them back only if the re-review needs input. Blocks scoped (the review is resolved
+  // from the block) to match the other run-driving endpoints.
   app.post(
-    '/requirement-reviews/:reviewId/incorporate',
+    '/blocks/:blockId/requirement-review/incorporate',
     jsonBody(incorporateRequirementsSchema),
     async (c) => {
       const requirements = requireRequirements(c)
       if (!requirements) return unavailable(c)
-      const result = await requirements.service.incorporate(
-        param(c, 'workspaceId'),
-        param(c, 'reviewId'),
-        { feedback: c.req.valid('json').feedback },
-      )
-      return c.json(result)
+      const review = await c
+        .get('container')
+        .executionService.incorporateRequirements(
+          param(c, 'workspaceId'),
+          param(c, 'blockId'),
+          c.req.valid('json').feedback,
+        )
+      return c.json(review)
     },
   )
 

@@ -7,6 +7,7 @@ import {
   RecordingEventPublisher,
   makeIncorporatedReview,
   makeOnboardingProbe,
+  makeReadyReviewWithOpenItem,
 } from '@cat-factory/conformance'
 import {
   type DrizzleDb,
@@ -175,6 +176,13 @@ export function makeConformanceApp(
     )
   }
 
+  function seedReadyReview(workspaceId: string, blockId: string) {
+    return createDrizzleRepositories(db, SEED_CLOCK).requirementReviewRepository.upsert(
+      workspaceId,
+      makeReadyReviewWithOpenItem(blockId),
+    )
+  }
+
   // Reuses Node's Drizzle board-scan repo (the local facade shares all of Node's
   // persistence), so the blueprint read endpoints assert identically here.
   function seedBlueprint(record: RepoBlueprintRecord) {
@@ -189,6 +197,7 @@ export function makeConformanceApp(
     driveBootstrap,
     executionEmits,
     seedIncorporatedReview,
+    seedReadyReview,
     seedBlueprint,
     onboarding: () => makeOnboardingProbe(container),
   }

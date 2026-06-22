@@ -4,6 +4,7 @@ import type {
   ExecutionInstance,
   LlmCallActivity,
   Notification,
+  RequirementReview,
   WorkspaceEvent,
 } from '@cat-factory/contracts'
 import type { ExecutionEventPublisher } from '@cat-factory/kernel'
@@ -58,6 +59,10 @@ export class DurableObjectEventPublisher implements ExecutionEventPublisher {
 
   async llmCallObserved(workspaceId: string, activity: LlmCallActivity): Promise<void> {
     await this.publish(workspaceId, { type: 'llmCall', call: activity, at: Date.now() })
+  }
+
+  async requirementReviewChanged(workspaceId: string, review: RequirementReview): Promise<void> {
+    await this.publish(workspaceId, { type: 'requirements', review, at: Date.now() })
   }
 
   private async publish(workspaceId: string, event: WorkspaceEvent): Promise<void> {
