@@ -13,7 +13,7 @@
 Monorepo support: select a subset of a repo's services and pin each to a subdirectory.
 
 A linked GitHub repository can now be flagged a **monorepo** (`github_repos.is_monorepo`,
-D1 migration `0034` ⇄ Drizzle), which lets it back **more than one** board service —
+D1 migration `0044` ⇄ Drizzle), which lets it back **more than one** board service —
 each pinned to its own subdirectory (`services.directory`). The "Add service from repo"
 modal gains a monorepo toggle and a **directory browser** (`GET
 /workspaces/:ws/github/repos/:id/tree`, served from GitHub's contents API via
