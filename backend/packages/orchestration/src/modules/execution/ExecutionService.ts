@@ -139,7 +139,7 @@ function buildRevisionContext(step: PipelineStep): {
   revision?: {
     previousProposal: string
     feedback: string
-    comments?: { quotedSource: string; body: string }[]
+    comments?: { quotedSource?: string; body: string }[]
   }
 } {
   const source = step.rework
@@ -161,7 +161,12 @@ function buildRevisionContext(step: PipelineStep): {
       previousProposal: source.previousProposal,
       feedback: source.feedback,
       ...(source.comments?.length
-        ? { comments: source.comments.map((c) => ({ quotedSource: c.quotedSource, body: c.body })) }
+        ? {
+            comments: source.comments.map((c) => ({
+              ...(c.quotedSource ? { quotedSource: c.quotedSource } : {}),
+              body: c.body,
+            })),
+          }
         : {}),
     },
   }

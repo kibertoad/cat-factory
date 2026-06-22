@@ -1226,6 +1226,14 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         const exec = ticked.find((e) => e.blockId === 'task_login')!
         expect(exec.status).toBe('failed')
         expect(exec.failure?.kind).toBe('companion_rejected')
+        // The recorded verdicts must carry the critic's REAL low rating, not the
+        // pass-through `1` the engine falls back to when an assessment is unparseable.
+        // The fake critic returns anchor-based comments (no `quotedSource`) alongside
+        // its rating, so this also guards that `stepReviewCommentSchema` accepts the
+        // shape the real Spec Reviewer emits.
+        const companionStep = exec.steps.find((s) => s.agentKind === 'reviewer')!
+        expect(companionStep.companion?.verdicts.every((v) => v.rating === 0.4)).toBe(true)
+        expect(companionStep.companion?.verdicts.at(-1)?.passed).toBe(false)
       })
 
       it('reworks an earlier producer through an intermediate step, then recovers', async () => {
