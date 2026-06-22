@@ -2,6 +2,7 @@ import type {
   Account,
   AccountInvitation,
   AccountMember,
+  AccountRole,
   AddMemberInput,
   EmailConnection,
   UpdateAccountInput,
@@ -287,11 +288,17 @@ export function useApi() {
         body,
       }),
 
+    setMemberRoles: (accountId: string, userId: string, roles: AccountRole[]) =>
+      http<AccountMember>(
+        `/accounts/${encodeURIComponent(accountId)}/members/${encodeURIComponent(userId)}/roles`,
+        { method: 'PATCH', body: { roles } },
+      ),
+
     // Invitations: invite teammates by email into an org account.
     listInvitations: (accountId: string) =>
       http<AccountInvitation[]>(`/accounts/${encodeURIComponent(accountId)}/invitations`),
 
-    createInvitation: (accountId: string, body: { email: string; role?: 'owner' | 'member' }) =>
+    createInvitation: (accountId: string, body: { email: string; roles?: AccountRole[] }) =>
       http<{ invitation: AccountInvitation; acceptUrl: string | null }>(
         `/accounts/${encodeURIComponent(accountId)}/invitations`,
         { method: 'POST', body },

@@ -1,6 +1,7 @@
 import type {
   AccountInvitationRecord,
   AccountInvitationRepository,
+  AccountRole,
   InvitationStatus,
 } from '@cat-factory/kernel'
 import type { D1Database } from '@cloudflare/workers-types'
@@ -9,7 +10,7 @@ interface InvitationRow {
   id: string
   account_id: string
   email: string
-  role: string
+  roles: string | null
   token_hash: string
   invited_by: string
   status: string
@@ -17,12 +18,20 @@ interface InvitationRow {
   created_at: number
 }
 
+function parseRoles(csv: string | null): AccountRole[] {
+  const roles = (csv ?? '')
+    .split(',')
+    .map((r) => r.trim())
+    .filter((r): r is AccountRole => r === 'admin' || r === 'developer' || r === 'product')
+  return roles.length > 0 ? [...new Set(roles)] : ['developer']
+}
+
 function rowToInvitation(row: InvitationRow): AccountInvitationRecord {
   return {
     id: row.id,
     accountId: row.account_id,
     email: row.email,
-    role: row.role === 'owner' ? 'owner' : 'member',
+    roles: parseRoles(row.roles),
     tokenHash: row.token_hash,
     invitedBy: row.invited_by,
     status: row.status as InvitationStatus,
@@ -43,14 +52,14 @@ export class D1AccountInvitationRepository implements AccountInvitationRepositor
     await this.db
       .prepare(
         `INSERT INTO account_invitations
-           (id, account_id, email, role, token_hash, invited_by, status, expires_at, created_at)
+           (id, account_id, email, roles, token_hash, invited_by, status, expires_at, created_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .bind(
         record.id,
         record.accountId,
         record.email,
-        record.role,
+        record.roles.join(','),
         record.tokenHash,
         record.invitedBy,
         record.status,

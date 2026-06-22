@@ -97,7 +97,10 @@ export const memberships = pgTable(
   {
     account_id: text('account_id').notNull(),
     user_id: text('user_id').notNull(),
+    // Orphaned single-role column (pre-roles); kept only so the migration is a pure add.
     role: text('role').notNull().default('member'),
+    // Combinable roles (admin / developer / product) as a CSV; defaults to developer.
+    roles: text('roles').notNull().default('developer'),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
   },
   (t) => [
@@ -125,7 +128,9 @@ export const accountInvitations = pgTable(
     id: text('id').primaryKey(),
     account_id: text('account_id').notNull(),
     email: text('email').notNull(),
+    // Orphaned single-role column (pre-roles); kept only so the migration is a pure add.
     role: text('role').notNull().default('member'),
+    roles: text('roles').notNull().default('developer'),
     token_hash: text('token_hash').notNull(),
     invited_by: text('invited_by').notNull(),
     status: text('status').notNull().default('pending'),
@@ -180,6 +185,8 @@ export const blocks = pgTable(
     // GitHub user id of the block's creator (migration 0038); drives "notify the task
     // creator" routing. Nullable — legacy blocks / auth-disabled dev have no creator.
     created_by: text('created_by'),
+    // The responsible product person (usr_*): notified when requirement review flags it.
+    responsible_product_user_id: text('responsible_product_user_id'),
   },
   (t) => [
     primaryKey({ columns: [t.workspace_id, t.id] }),

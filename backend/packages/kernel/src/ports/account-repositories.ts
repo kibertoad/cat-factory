@@ -33,7 +33,8 @@ export interface AccountSettingsPatch {
 export interface Membership {
   accountId: string
   userId: string
-  role: AccountRole
+  /** The member's combinable roles (admin / developer / product); at least one. */
+  roles: AccountRole[]
   createdAt: number
 }
 

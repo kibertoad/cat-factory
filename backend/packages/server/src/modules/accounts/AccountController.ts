@@ -3,10 +3,10 @@ import {
   connectEmailSchema,
   createAccountSchema,
   createInvitationSchema,
+  setMemberRolesSchema,
   testEmailSchema,
   updateAccountSchema,
 } from '@cat-factory/contracts'
-import { ConflictError } from '@cat-factory/kernel'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
 import type { AppEnv } from '../../http/env.js'
@@ -68,9 +68,28 @@ export function accountController(): Hono<AppEnv> {
     const body = c.req.valid('json')
     const member = await c
       .get('container')
-      .accountService.addMember(param(c, 'accountId'), user.id, body.userId, body.role)
+      .accountService.addMember(param(c, 'accountId'), user.id, body.userId, body.roles)
     return c.json(member, 201)
   })
+
+  // Set a member's role set (admin-only). The acting admin can't drop their own admin.
+  app.patch(
+    '/accounts/:accountId/members/:userId/roles',
+    jsonBody(setMemberRolesSchema),
+    async (c) => {
+      const user = accountUser(c)
+      if (!user) return signInRequired(c)
+      const member = await c
+        .get('container')
+        .accountService.setMemberRoles(
+          param(c, 'accountId'),
+          user.id,
+          param(c, 'userId'),
+          c.req.valid('json').roles,
+        )
+      return c.json(member)
+    },
+  )
 
   // ---- Invitations (email-based org onboarding) ---------------------------
   // Available only when the invitation repository is wired (opt-in feature).
@@ -100,7 +119,7 @@ export function accountController(): Hono<AppEnv> {
       param(c, 'accountId'),
       user.id,
       body.email,
-      body.role,
+      body.roles,
     )
     // The raw accept link is returned so an operator can share it manually when no
     // email transport is configured; never re-derivable afterwards.
@@ -136,7 +155,7 @@ export function accountController(): Hono<AppEnv> {
     if (!container.email) {
       return c.json({ error: { code: 'unavailable', message: 'Email is not configured' } }, 503)
     }
-    await requireOwner(c, param(c, 'accountId'), user.id)
+    await c.get('container').accountService.requireAdmin(param(c, 'accountId'), user.id)
     const connection = await container.email.connect(param(c, 'accountId'), c.req.valid('json'))
     return c.json(connection, 201)
   })
@@ -146,7 +165,7 @@ export function accountController(): Hono<AppEnv> {
     if (!user) return signInRequired(c)
     const container = c.get('container')
     if (!container.email) return c.body(null, 204)
-    await requireOwner(c, param(c, 'accountId'), user.id)
+    await c.get('container').accountService.requireAdmin(param(c, 'accountId'), user.id)
     await container.email.disconnect(param(c, 'accountId'))
     return c.body(null, 204)
   })
@@ -158,18 +177,10 @@ export function accountController(): Hono<AppEnv> {
     if (!container.email) {
       return c.json({ error: { code: 'unavailable', message: 'Email is not configured' } }, 503)
     }
-    await requireOwner(c, param(c, 'accountId'), user.id)
+    await c.get('container').accountService.requireAdmin(param(c, 'accountId'), user.id)
     await container.email.sendTest(param(c, 'accountId'), c.req.valid('json').to)
     return c.json({ ok: true })
   })
 
   return app
-}
-
-/** Throw 404/409 unless the user is an owner of the account. */
-async function requireOwner(c: Context<AppEnv>, accountId: string, userId: string): Promise<void> {
-  const membership = await c.get('container').accountService.requireMember(accountId, userId)
-  if (membership.role !== 'owner') {
-    throw new ConflictError('Only an account owner can manage this setting')
-  }
 }

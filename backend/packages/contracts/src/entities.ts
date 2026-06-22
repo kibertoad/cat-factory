@@ -137,6 +137,12 @@ export const blockSchema = v.object({
    * was recorded, or with auth disabled (local/dev), where there is no user.
    */
   createdBy: v.optional(v.nullable(v.string())),
+  /**
+   * Internal user id (`usr_*`) of the account member (a `product` role-holder) made
+   * responsible for this task. They are notified when requirement review flags findings.
+   * Absent/null when no responsible product person is assigned.
+   */
+  responsibleProductUserId: v.optional(v.nullable(v.string())),
 })
 export type Block = v.InferOutput<typeof blockSchema>
 

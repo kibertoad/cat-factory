@@ -234,7 +234,14 @@ export class RequirementReviewService {
         body: `The reviewer raised ${findingCount} finding${
           findingCount === 1 ? '' : 's'
         } to react to.`,
-        payload: { findingCount },
+        // Direct it at the task's responsible product person when one is assigned, so
+        // the inbox can highlight it for them (it stays visible to the whole workspace).
+        payload: {
+          findingCount,
+          ...(block.responsibleProductUserId
+            ? { targetUserId: block.responsibleProductUserId }
+            : {}),
+        },
       })
     } catch {
       // Best-effort: the review is already persisted and returned to the caller.

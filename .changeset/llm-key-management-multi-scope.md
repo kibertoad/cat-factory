@@ -4,6 +4,8 @@
 '@cat-factory/integrations': minor
 '@cat-factory/server': minor
 '@cat-factory/orchestration': minor
+'@cat-factory/workspaces': minor
+'@cat-factory/provider-cloudflare': minor
 '@cat-factory/worker': minor
 '@cat-factory/node-server': minor
 '@cat-factory/local-server': minor

@@ -56,8 +56,8 @@ const accountItems = computed<DropdownMenuItem[][]>(() => [
     ...(accounts.activeAccount?.type === 'org'
       ? [{ label: 'Manage team…', icon: 'i-lucide-users', onSelect: () => openSettings() }]
       : []),
-    // Owners can set the account-wide default provider new services inherit.
-    ...(accounts.activeAccount?.role === 'owner'
+    // Admins can set the account-wide default provider new services inherit.
+    ...(accounts.activeAccount?.roles?.includes('admin')
       ? [
           {
             label: 'Default cloud provider',

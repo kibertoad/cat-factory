@@ -1,6 +1,7 @@
 import type {
   Account,
   AccountMember,
+  AccountRole,
   CreateAccountInput,
   UpdateAccountInput,
 } from '@cat-factory/kernel'
@@ -40,20 +41,20 @@ export interface AccountUser {
   name: string | null
 }
 
-function toWire(account: AccountRecord, role: Account['role']): Account {
+function toWire(account: AccountRecord, roles: Account['roles']): Account {
   return {
     id: account.id,
     type: account.type,
     name: account.name,
     githubAccountLogin: account.githubAccountLogin,
     createdAt: account.createdAt,
-    role,
+    roles,
     ...(account.defaultCloudProvider ? { defaultCloudProvider: account.defaultCloudProvider } : {}),
   }
 }
 
 function toMember(m: Membership): AccountMember {
-  return { accountId: m.accountId, userId: m.userId, role: m.role, createdAt: m.createdAt }
+  return { accountId: m.accountId, userId: m.userId, roles: m.roles, createdAt: m.createdAt }
 }
 
 export class AccountService {
@@ -67,8 +68,8 @@ export class AccountService {
   async ensurePersonalAccount(user: AccountUser): Promise<AccountRecord> {
     const existing = await this.deps.accountRepository.findPersonalByUser(user.id)
     if (existing) {
-      // Self-heal a missing owner membership (e.g. partially-applied prior run).
-      await this.ensureMembership(existing.id, user.id, 'owner')
+      // Self-heal a missing admin membership (e.g. partially-applied prior run).
+      await this.ensureMembership(existing.id, user.id, ['admin'])
       return existing
     }
     const account: AccountRecord = {
@@ -80,7 +81,7 @@ export class AccountService {
       createdAt: this.deps.clock.now(),
     }
     await this.deps.accountRepository.create(account)
-    await this.ensureMembership(account.id, user.id, 'owner')
+    await this.ensureMembership(account.id, user.id, ['admin'])
     return account
   }
 
@@ -95,8 +96,8 @@ export class AccountService {
       createdAt: this.deps.clock.now(),
     }
     await this.deps.accountRepository.create(account)
-    await this.ensureMembership(account.id, user.id, 'owner')
-    return toWire(account, 'owner')
+    await this.ensureMembership(account.id, user.id, ['admin'])
+    return toWire(account, ['admin'])
   }
 
   /**
@@ -109,7 +110,7 @@ export class AccountService {
     const accounts: Account[] = []
     for (const m of memberships) {
       const account = await this.deps.accountRepository.get(m.accountId)
-      if (account) accounts.push(toWire(account, m.role))
+      if (account) accounts.push(toWire(account, m.roles))
     }
     // Personal accounts first, then orgs, each alphabetical — a stable switcher order.
     return accounts.sort(
@@ -133,6 +134,30 @@ export class AccountService {
   async requireMember(accountId: string, userId: string): Promise<Membership> {
     const membership = await this.deps.membershipRepository.get(accountId, userId)
     if (!membership) throw new NotFoundError('Account', accountId)
+    return membership
+  }
+
+  /** A user's roles in an account (empty when not a member). */
+  async rolesFor(accountId: string, userId: string): Promise<AccountRole[]> {
+    const membership = await this.deps.membershipRepository.get(accountId, userId)
+    return membership?.roles ?? []
+  }
+
+  /** Whether a user holds a role in an account. */
+  async hasRole(accountId: string, userId: string, role: AccountRole): Promise<boolean> {
+    return (await this.rolesFor(accountId, userId)).includes(role)
+  }
+
+  /**
+   * Resolve the membership and require the `admin` role — the guard every
+   * org-account-modifying route uses (settings, members, invitations, account-scoped
+   * credentials). Throws 404 for a non-member, 409 for a member without `admin`.
+   */
+  async requireAdmin(accountId: string, userId: string): Promise<Membership> {
+    const membership = await this.requireMember(accountId, userId)
+    if (!membership.roles.includes('admin')) {
+      throw new ConflictError('Only an account admin can modify the organization account')
+    }
     return membership
   }
 
@@ -169,10 +194,7 @@ export class AccountService {
     actingUserId: string,
     input: UpdateAccountInput,
   ): Promise<Account> {
-    const acting = await this.requireMember(accountId, actingUserId)
-    if (acting.role !== 'owner') {
-      throw new ConflictError('Only an account owner can change account settings')
-    }
+    const acting = await this.requireAdmin(accountId, actingUserId)
     // An explicit key (even `undefined`) means "clear"; an absent key leaves it.
     if ('defaultCloudProvider' in input) {
       await this.deps.accountRepository.updateSettings(accountId, {
@@ -184,18 +206,18 @@ export class AccountService {
       'Account',
       accountId,
     )
-    return toWire(account, acting.role)
+    return toWire(account, acting.roles)
   }
 
   /**
-   * Add a member to an account. Only an existing owner may invite, and only into
-   * an `org` account (a personal account stays an account-of-one).
+   * Add a member to an account. Only an admin may add, and only into an `org` account
+   * (a personal account stays an account-of-one). Defaults to the `developer` role.
    */
   async addMember(
     accountId: string,
     actingUserId: string,
     userId: string,
-    role: Membership['role'] = 'member',
+    roles: AccountRole[] = ['developer'],
   ): Promise<AccountMember> {
     const account = assertFound(
       await this.deps.accountRepository.get(accountId),
@@ -205,16 +227,31 @@ export class AccountService {
     if (account.type === 'personal') {
       throw new ValidationError('Cannot add members to a personal account')
     }
-    const acting = await this.requireMember(accountId, actingUserId)
-    if (acting.role !== 'owner') {
-      throw new ConflictError('Only an account owner can add members')
-    }
+    await this.requireAdmin(accountId, actingUserId)
     const membership: Membership = {
       accountId,
       userId,
-      role,
+      roles: normalizeRoles(roles),
       createdAt: this.deps.clock.now(),
     }
+    await this.deps.membershipRepository.upsert(membership)
+    return toMember(membership)
+  }
+
+  /** Set a member's role set (admin-only). The acting admin cannot drop their OWN admin. */
+  async setMemberRoles(
+    accountId: string,
+    actingUserId: string,
+    targetUserId: string,
+    roles: AccountRole[],
+  ): Promise<AccountMember> {
+    await this.requireAdmin(accountId, actingUserId)
+    const target = await this.requireMember(accountId, targetUserId)
+    const next = normalizeRoles(roles)
+    if (actingUserId === targetUserId && !next.includes('admin')) {
+      throw new ConflictError('You cannot remove your own admin role')
+    }
+    const membership: Membership = { ...target, roles: next }
     await this.deps.membershipRepository.upsert(membership)
     return toMember(membership)
   }
@@ -222,14 +259,21 @@ export class AccountService {
   private async ensureMembership(
     accountId: string,
     userId: string,
-    role: Membership['role'],
+    roles: AccountRole[],
   ): Promise<void> {
     if (await this.deps.membershipRepository.get(accountId, userId)) return
     await this.deps.membershipRepository.upsert({
       accountId,
       userId,
-      role,
+      roles: normalizeRoles(roles),
       createdAt: this.deps.clock.now(),
     })
   }
+}
+
+/** De-duplicate a role set, preserving order, defaulting to `developer` when empty. */
+function normalizeRoles(roles: AccountRole[]): AccountRole[] {
+  const seen = new Set<AccountRole>()
+  for (const r of roles) seen.add(r)
+  return seen.size > 0 ? [...seen] : ['developer']
 }

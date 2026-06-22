@@ -109,6 +109,11 @@ export interface Block {
   instanceSize?: InstanceSize
   /** GitHub user id of the task's creator; drives "notify the task creator" routing. */
   createdBy?: number | null
+  /**
+   * Internal user id (`usr_*`) of the responsible product person — an account member
+   * with the `product` role, notified when requirement review flags this task.
+   */
+  responsibleProductUserId?: string | null
 }
 
 /**
