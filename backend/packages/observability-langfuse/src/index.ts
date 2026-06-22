@@ -23,6 +23,25 @@ import type {
 // outlive its request), so a per-call POST is the only shape that stays identical across
 // the Worker and Node facades. Tool spans, which the backend already accumulates per
 // poll, ARE sent as one batch. Langfuse's ingestion API is built for this volume.
+//
+// IMPACT ANALYSIS — why per-call POST is safe for the execution hot path:
+//   - NOT on the hot path. The proxied feeder runs under `executionCtx.waitUntil`
+//     (`LlmProxyController`), scheduled AFTER the container's chat-completion response
+//     is returned (on Node `waitUntil` is a plain fire-and-forget); the inline feeder
+//     (`InstrumentedModelProvider`) dispatches AFTER `generateText` resolves. Inside
+//     `LlmObservabilityService.record` the POST is then dispatched detached (not
+//     awaited), so even the `waitUntil` window never blocks on the Langfuse round trip.
+//     The only synchronous cost added to any path is one object build + `JSON.stringify`
+//     — microseconds, never the network call.
+//   - NOT a source of execution brittleness. Every error is swallowed + logged, the
+//     fetch is bounded by SEND_TIMEOUT_MS, and nothing in the run lifecycle reads the
+//     sink's result — a Langfuse outage / slowness / 4xx drops a batch and nothing else.
+//   - The costs that DO exist are telemetry-side, not run-side: +1 detached subrequest
+//     per proxy invocation (~2 of the Worker's 1000-subrequest budget), negligible
+//     `waitUntil` CPU (I/O-bound, timeout-capped), and N calls ⇒ N POSTs — a very chatty
+//     run could brush Langfuse ingestion rate limits and drop some batches, degrading
+//     telemetry COMPLETENESS only, never the run. (Tool spans are batched per poll, so
+//     they don't multiply.)
 
 const DEFAULT_BASE_URL = 'https://cloud.langfuse.com'
 
