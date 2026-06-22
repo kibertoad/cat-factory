@@ -1,7 +1,7 @@
 import { anthropic } from '@ai-sdk/anthropic'
 import { openai } from '@ai-sdk/openai'
 import type { ToolSet } from 'ai'
-import { registeredWebResearchHint } from './registry.js'
+import { registeredWebResearchHint } from '../kinds/registry.js'
 
 // Provider-hosted web search for the INLINE agents (architect / researcher), which
 // run a single `generateText` call via the AI SDK rather than going through the Pi

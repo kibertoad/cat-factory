@@ -1,6 +1,6 @@
 import type { AgentKind, AgentRunContext } from '@cat-factory/kernel'
-import { STANDARDS_FOOTER } from './prompt-shared.js'
-import { TESTER_ENVIRONMENT_CONFIG_ID } from './agent-configs.js'
+import { STANDARDS_FOOTER } from './shared.js'
+import { TESTER_ENVIRONMENT_CONFIG_ID } from '../kinds/configs.js'
 
 // Built-out role prompts for the Tester → Fixer loop. The `tester` clones the PR
 // branch, brings its dependencies up (locally via docker-compose, or against the

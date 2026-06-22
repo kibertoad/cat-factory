@@ -1,10 +1,10 @@
 import { generateText } from 'ai'
 import type { AgentExecutor, AgentRunContext, AgentRunResult } from '@cat-factory/kernel'
 import type { ModelProvider, ModelProviderResolver, ModelRef } from '@cat-factory/kernel'
-import { systemPromptFor, userPromptFor } from './agent-catalog.js'
-import { catFactoryObservability } from '../providers/instrumented.js'
-import { type AgentRouting, resolveAgentConfig, resolveInlineModelRef } from './agent-routing.js'
-import { composeBlockSystemPrompt } from './prompt-fragments.js'
+import { systemPromptFor, userPromptFor } from '../catalog.js'
+import { catFactoryObservability } from '../../providers/instrumented.js'
+import { type AgentRouting, resolveAgentConfig, resolveInlineModelRef } from './routing.js'
+import { composeBlockSystemPrompt } from './fragments.js'
 import {
   type InlineWebSearchOptions,
   providerWebSearchTools,

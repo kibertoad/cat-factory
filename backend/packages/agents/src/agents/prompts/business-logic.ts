@@ -1,6 +1,6 @@
 import type { AgentKind } from '@cat-factory/kernel'
-import { PLATFORM_DELIVERY_CONTRACT } from './ci-gate.js'
-import { STANDARDS_FOOTER } from './prompt-shared.js'
+import { PLATFORM_DELIVERY_CONTRACT } from './delivery-contract.js'
+import { STANDARDS_FOOTER } from './shared.js'
 
 // Built-out role prompts for the business-logic / domain-rules track. Two kinds
 // keep a service's encoded business rules honest and documented:

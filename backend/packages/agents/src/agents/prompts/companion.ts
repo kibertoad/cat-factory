@@ -1,5 +1,5 @@
 import type { AgentKind } from '@cat-factory/kernel'
-import { companionFor } from './companions.js'
+import { companionFor } from '../kinds/companions.js'
 
 // System prompt for a companion agent, parameterised by the producer kind it
 // reviews. The companion returns a single overall quality rating (0..1) plus prose

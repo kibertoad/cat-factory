@@ -1,8 +1,8 @@
 import type { AgentKind, BlockType } from '@cat-factory/kernel'
 import type { AgentRunContext } from '@cat-factory/kernel'
-import { PLATFORM_DELIVERY_CONTRACT } from './ci-gate.js'
-import { PLAYWRIGHT_E2E_TARGET_CONFIG_ID } from './agent-configs.js'
-import { STANDARDS_FOOTER } from './prompt-shared.js'
+import { PLATFORM_DELIVERY_CONTRACT } from './delivery-contract.js'
+import { PLAYWRIGHT_E2E_TARGET_CONFIG_ID } from '../kinds/configs.js'
+import { STANDARDS_FOOTER } from './shared.js'
 
 /** The acceptance/e2e execution targets the `playwright.e2eTarget` config offers. */
 type E2eTarget = 'ci' | 'ephemeral'

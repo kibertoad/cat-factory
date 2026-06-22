@@ -6,9 +6,9 @@ import HandlebarsRuntime from 'handlebars/runtime.js'
 import type { AgentKind } from '@cat-factory/kernel'
 import type { AgentRunContext } from '@cat-factory/kernel'
 import { renderTaskContext } from '@cat-factory/kernel'
-import { PLATFORM_DELIVERY_CONTRACT } from './ci-gate.js'
-import { STANDARDS_FOOTER } from './prompt-shared.js'
-import * as templateSpecs from './standard-prompt-templates.generated.js'
+import { PLATFORM_DELIVERY_CONTRACT } from './delivery-contract.js'
+import { STANDARDS_FOOTER } from './shared.js'
+import * as templateSpecs from './standard-templates.generated.js'
 
 const Handlebars = HandlebarsRuntime as unknown as typeof import('handlebars')
 
@@ -133,7 +133,7 @@ export function standardSystemPrompt(phase: StandardPhase): string {
 // prompt is rendered from a Handlebars template. Cloudflare Workers forbid
 // runtime code generation, so we cannot compile templates from source there;
 // instead the templates are *precompiled* (see scripts/precompile-prompts.mjs)
-// into ./standard-prompt-templates.generated and executed by the codegen-free
+// into ./standard-templates.generated and executed by the codegen-free
 // Handlebars runtime. We use an isolated environment so the registered helper
 // and partial never touch global state.
 
