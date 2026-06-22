@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { env } from 'cloudflare:test'
+import { RecordingEventPublisher } from '@cat-factory/conformance'
 import { createApp } from '../../src/app'
 import { ContainerSessionService } from '../../src/infrastructure/containers/ContainerSessionService'
 import { FakeAgentExecutor } from '../fakes/FakeAgentExecutor'
@@ -107,6 +108,54 @@ describe('llm proxy /v1/chat/completions', () => {
       input_tokens: 10,
       output_tokens: 5,
     })
+  })
+
+  it('pushes a compact llmCall activity event per proxied call (no prompt/response bodies)', async () => {
+    const workspaceId = `ws-${crypto.randomUUID()}`
+    const executionId = `ex-${crypto.randomUUID()}`
+    const token = await mint({ workspaceId, executionId })
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              choices: [{ message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' }],
+              usage: { prompt_tokens: 10, completion_tokens: 5 },
+            }),
+            { headers: { 'content-type': 'application/json' } },
+          ),
+      ),
+    )
+
+    // Inject a recording publisher in place of the DO-backed one so we can observe the
+    // emit directly (the real one fans out to the WorkspaceEventsHub).
+    const recorder = new RecordingEventPublisher()
+    const app = createApp({
+      overrides: { agentExecutor: new FakeAgentExecutor(), executionEventPublisher: recorder },
+    })
+    const res = await app.fetch(chatRequest(token, 'cheap-model'), testEnv())
+    expect(res.status).toBe(200)
+
+    // The proxy pushed exactly one activity event, sourced at the proxy (not the driver).
+    expect(recorder.llmCalls).toHaveLength(1)
+    const activity = recorder.llmCalls[0]!
+    expect(activity.workspaceId).toBe(workspaceId)
+    expect(activity.executionId).toBe(executionId)
+    expect(activity.agentKind).toBe('coder')
+    expect(activity.provider).toBe('qwen')
+    expect(activity.model).toBe('qwen3-max')
+    expect(activity.ok).toBe(true)
+    expect(activity.httpStatus).toBe(200)
+    expect(activity.promptTokens).toBe(10)
+    expect(activity.completionTokens).toBe(5)
+    expect(activity.totalTokens).toBe(15)
+    expect(activity.finishReason).toBe('stop')
+    expect(typeof activity.id).toBe('string')
+    // Compact wire shape: the heavy bodies are never pushed over the stream.
+    expect(activity).not.toHaveProperty('promptText')
+    expect(activity).not.toHaveProperty('responseText')
   })
 
   it('returns 502 when the locked provider has no configured key', async () => {

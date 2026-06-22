@@ -2,6 +2,7 @@ import type {
   Block,
   BootstrapJob,
   ExecutionInstance,
+  LlmCallActivity,
   Notification,
   WorkspaceEvent,
 } from '@cat-factory/contracts'
@@ -53,6 +54,10 @@ export class DurableObjectEventPublisher implements ExecutionEventPublisher {
 
   async notificationChanged(workspaceId: string, notification: Notification): Promise<void> {
     await this.publish(workspaceId, { type: 'notification', notification, at: Date.now() })
+  }
+
+  async llmCallObserved(workspaceId: string, activity: LlmCallActivity): Promise<void> {
+    await this.publish(workspaceId, { type: 'llmCall', call: activity, at: Date.now() })
   }
 
   private async publish(workspaceId: string, event: WorkspaceEvent): Promise<void> {

@@ -198,4 +198,6 @@ export type {
   TrackerKind,
   TrackerSettings,
   PutTrackerSettingsInput,
+  // LLM observability: the compact per-call summary pushed over the event stream.
+  LlmCallActivity,
 } from '@cat-factory/contracts'

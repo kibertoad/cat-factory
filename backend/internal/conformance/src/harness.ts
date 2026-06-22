@@ -1,6 +1,7 @@
 import type {
   ExecutionEventPublisher,
   ExecutionInstance,
+  LlmCallActivity,
   RepoBlueprintRecord,
   WorkspaceSnapshot,
 } from '@cat-factory/kernel'
@@ -16,6 +17,8 @@ import type { FakeAgentOptions } from './FakeAgentExecutor.js'
  */
 export class RecordingEventPublisher implements ExecutionEventPublisher {
   readonly emits: ExecutionInstance[] = []
+  /** Every compact `llmCall` activity the proxy pushed, in order (see {@link ConformanceApp.llmCallEmits}). */
+  readonly llmCalls: LlmCallActivity[] = []
 
   async executionChanged(_workspaceId: string, instance: ExecutionInstance): Promise<void> {
     // Clone so the engine's later in-place mutations don't rewrite recorded history.
@@ -25,6 +28,9 @@ export class RecordingEventPublisher implements ExecutionEventPublisher {
   async boardChanged(): Promise<void> {}
   async bootstrapChanged(): Promise<void> {}
   async notificationChanged(): Promise<void> {}
+  async llmCallObserved(_workspaceId: string, activity: LlmCallActivity): Promise<void> {
+    this.llmCalls.push(structuredClone(activity))
+  }
 }
 
 // The seam the conformance suite drives. Each runtime facade implements a

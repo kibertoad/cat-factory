@@ -183,6 +183,19 @@ export interface LlmCallMetric {
   responseText: string
 }
 
+/**
+ * The compact per-call summary pushed live over the workspace stream (the `llmCall`
+ * event). It is {@link LlmCallMetric} WITHOUT the heavy text bodies and delta
+ * bookkeeping, so an open "Model activity" panel updates in real time without
+ * shipping prompt bytes. The panel lazy-loads the full bodies for an expanded row
+ * from the persisted metrics endpoint, keyed by the shared `id`. Mirrors
+ * `LlmCallActivity` in `@cat-factory/contracts`.
+ */
+export type LlmCallActivity = Omit<
+  LlmCallMetric,
+  'promptText' | 'responseText' | 'promptPrefixCount' | 'promptHash'
+>
+
 /** One per-agent-kind insight in the LLM-friendly export (rollup + derived ratios). */
 export interface LlmExportInsight extends StepMetrics {
   agentKind: string

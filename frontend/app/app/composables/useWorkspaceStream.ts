@@ -19,6 +19,7 @@ export function useWorkspaceStream() {
   const board = useBoardStore()
   const agentRuns = useAgentRunsStore()
   const notifications = useNotificationsStore()
+  const observability = useObservabilityStore()
   const api = useApi()
   const apiBase = useRuntimeConfig().public.apiBase
 
@@ -62,6 +63,12 @@ export function useWorkspaceStream() {
       // A PR needs a merge decision, a pipeline finished, or CI gave up — patch the
       // inbox + per-block badge in place (resolved ones drop out of the inbox).
       notifications.upsert(event.notification)
+    } else if (event.type === 'llmCall') {
+      // A container agent just made a model call — fold the compact summary into the
+      // observability store so an open "Model activity" panel updates live (and keeps
+      // updating even when the durable driver is evicted: the proxy emits these
+      // independently of the run's poll loop).
+      observability.appendCall(event.call)
     }
   }
 

@@ -14,7 +14,7 @@
 //   - document sources  → ./documents
 // ---------------------------------------------------------------------------
 
-import type { ExecutionInstance } from './execution'
+import type { ExecutionInstance, LlmCallActivity } from './execution'
 import type { BootstrapJob } from './bootstrap'
 import type { Notification } from './notifications'
 import type { MergeThresholdPreset } from './merge'
@@ -330,6 +330,7 @@ export type WorkspaceEvent =
   | { type: 'board'; reason: string; at: number }
   | { type: 'bootstrap'; job: BootstrapJob; block: Block | null; at: number }
   | { type: 'notification'; notification: Notification; at: number }
+  | { type: 'llmCall'; call: LlmCallActivity; at: number }
 
 /** Level-of-detail buckets driven by the canvas zoom level. Shallow → deep:
  * `far`/`mid`/`close` govern a service frame (chip → card → opened with tasks);

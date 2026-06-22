@@ -64,8 +64,14 @@ function isWarning(finishReason: string | null): boolean {
 }
 
 const expanded = reactive<Record<string, boolean>>({})
-function toggle(id: string) {
-  expanded[id] = !expanded[id]
+function toggle(c: LlmCallMetric) {
+  expanded[c.id] = !expanded[c.id]
+  // A live-streamed row arrives without its prompt/response bodies (the event stays
+  // small). On first expand, backfill them from the persisted metrics endpoint —
+  // `load` replaces the list with the full rows (same ids), so the open row fills in.
+  if (expanded[c.id] && !c.promptText && !c.responseText && executionId.value && !loading.value) {
+    void observability.load(executionId.value)
+  }
 }
 
 function agentMeta(kind: string) {
@@ -194,7 +200,7 @@ function exportJson() {
 
             <!-- states -->
             <p
-              v-if="loading"
+              v-if="loading && !calls.length"
               class="flex items-center gap-2 py-8 text-center text-sm text-slate-500 justify-center"
             >
               <UIcon name="i-lucide-loader-circle" class="h-4 w-4 animate-spin" /> Loading model
@@ -223,7 +229,7 @@ function exportJson() {
               >
                 <button
                   class="flex w-full items-center gap-3 px-4 py-2.5 text-left transition hover:bg-slate-900/70"
-                  @click="toggle(c.id)"
+                  @click="toggle(c)"
                 >
                   <UIcon
                     name="i-lucide-chevron-right"

@@ -1,4 +1,9 @@
-import type { ExecutionEventPublisher, ExecutionInstance, Notification } from '@cat-factory/kernel'
+import type {
+  ExecutionEventPublisher,
+  ExecutionInstance,
+  LlmCallActivity,
+  Notification,
+} from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import { FanOutEventPublisher } from '../src/events/FanOutEventPublisher.js'
 
@@ -41,6 +46,10 @@ class RecordingPublisher implements ExecutionEventPublisher {
   }
   async notificationChanged(ws: string): Promise<void> {
     this.notifications.push(ws)
+  }
+  llmCalls: string[] = []
+  async llmCallObserved(ws: string): Promise<void> {
+    this.llmCalls.push(ws)
   }
 }
 
@@ -104,6 +113,18 @@ describe('FanOutEventPublisher', () => {
     })
     await fanOut.executionChanged('wsA', execInstance('task1'))
     expect(inner.executions.sort()).toEqual(['wsA'])
+  })
+
+  it('delivers an llmCall activity to the origin only (no block context to fan out)', async () => {
+    const inner = new RecordingPublisher()
+    const fanOut = new FanOutEventPublisher(inner, {
+      // The activity carries no block id, so the mount join must never be consulted.
+      workspaceMountRepository: mountRepo(['wsA', 'wsB'], () => {
+        throw new Error('should not be queried for an llmCall')
+      }),
+    })
+    await fanOut.llmCallObserved('wsA', { executionId: 'ex1' } as LlmCallActivity)
+    expect(inner.llmCalls).toEqual(['wsA'])
   })
 
   it('resolves targets with a single mount-repo query per event', async () => {
