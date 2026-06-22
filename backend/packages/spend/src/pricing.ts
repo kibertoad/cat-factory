@@ -51,6 +51,15 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
   // rates (served via Fireworks), not the near-free neuron rate above, so it needs
   // its own entry. Approximate (USD→EUR ~0.92); tune via SPEND_MODEL_PRICES.
   'workers-ai:deepseek/deepseek-v4-pro': { inputPerMillion: 0.5, outputPerMillion: 2 },
+  // Kimi K2.6 / K2.7 likewise run on Workers AI as partner models billed at Workers
+  // AI's published per-token rate, NOT the near-free `workers-ai` neuron rate — without
+  // these explicit entries a Cloudflare-Kimi run (the default coder) would fall back to
+  // 0.1/0.1 and meter as ~0.00. Cloudflare lists both at $0.95 in / $4.00 out per 1M
+  // (USD→EUR ~0.92); this is Cloudflare's marked-up rate, well above Moonshot's direct
+  // list (`moonshot:kimi-k2.6`). The spend table has no cached-input tier, so we use the
+  // standard cache-miss input rate. See workers-ai/platform/pricing. Tune via SPEND_MODEL_PRICES.
+  'workers-ai:@cf/moonshotai/kimi-k2.6': { inputPerMillion: 0.87, outputPerMillion: 3.68 },
+  'workers-ai:@cf/moonshotai/kimi-k2.7-code': { inputPerMillion: 0.87, outputPerMillion: 3.68 },
   // DeepSeek API (approximate list prices for deepseek-chat, USD→EUR ~0.92).
   'deepseek:deepseek-chat': { inputPerMillion: 0.26, outputPerMillion: 1.01 },
   deepseek: { inputPerMillion: 0.26, outputPerMillion: 1.01 },
