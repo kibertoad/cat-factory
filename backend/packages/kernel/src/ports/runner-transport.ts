@@ -1,4 +1,5 @@
 import type { CloudProvider, InstanceSize, StepSubtasks } from '../domain/types.js'
+import type { LlmToolSpan } from './llm-trace-sink.js'
 
 // Port for "where a repo-operating coding job actually runs". The
 // ContainerAgentExecutor dispatches each job and polls it through this transport
@@ -101,6 +102,12 @@ export interface RunnerJobView {
   progress?: RunnerJobProgress
   result?: RunnerJobResult
   error?: string
+  /**
+   * Tool spans the harness buffered SINCE THE LAST POLL (drain-on-read): the executor
+   * forwards them to the optional trace sink as child spans under the run trace. Empty/
+   * absent on most polls. Best-effort observability — never affects the job lifecycle.
+   */
+  spans?: LlmToolSpan[]
 }
 
 export interface RunnerTransport {

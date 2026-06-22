@@ -6,6 +6,7 @@ import {
   type ExecutionEventPublisher,
   type FragmentOwnerKind,
   type IdGenerator,
+  type ModelProvider,
   type NotificationChannel,
   NoopWorkRunner,
   type TaskSourceProvider,
@@ -13,6 +14,7 @@ import {
 } from '@cat-factory/kernel'
 import {
   AiAgentExecutor,
+  InstrumentedModelProvider,
   inlineWebSearchOptionsFromEnv,
   resolveAgentConfig,
 } from '@cat-factory/agents'
@@ -29,6 +31,7 @@ import {
   TicketTrackerService,
 } from '@cat-factory/integrations'
 import { type CoreDependencies, createCore } from '@cat-factory/orchestration'
+import { createLangfuseSink } from '@cat-factory/observability-langfuse'
 import {
   buildResolveRepoTarget as buildSharedResolveRepoTarget,
   FanOutEventPublisher,
@@ -38,6 +41,8 @@ import {
   type ServerContainer,
 } from '@cat-factory/server'
 import { type AppConfig, loadConfig } from './config'
+import { loadLangfuseConfig } from './config/langfuse'
+import { loadObservabilityConfig } from './config/observability'
 import type { Env } from './env'
 import { CloudflareModelProvider } from './ai/CloudflareModelProvider'
 import { resolveExtraRegistries } from './ai/registries'
@@ -139,10 +144,38 @@ export type Container = ServerContainer
  * The Worker's {@link ModelProvider}: the base registry plus any extra provider
  * registries an installation registered (see ./ai/registries). Used everywhere a
  * model provider is needed so every path — agent executor, requirements reviewer,
- * doc planner, fragment selector — sees the same provider set.
+ * doc planner, fragment selector — sees the same provider set. When Langfuse is
+ * configured the provider is wrapped so those INLINE (non-proxied) calls surface on
+ * the same trace sink the LLM proxy fans container calls out to.
  */
-function buildModelProvider(env: Env): CloudflareModelProvider {
-  return new CloudflareModelProvider({ env, extraRegistries: resolveExtraRegistries(env) })
+// Memoised per `Env`: every consumer (agent executor, requirements reviewer, doc
+// planner, fragment selector) shares ONE provider — and so ONE Langfuse sink — for a
+// container build, instead of each constructing its own. The `Env` object is stable
+// across a build, so a WeakMap keyed on it both dedupes and lets it be GC'd with the env.
+const modelProviderCache = new WeakMap<Env, ModelProvider>()
+
+function buildModelProvider(env: Env): ModelProvider {
+  const cached = modelProviderCache.get(env)
+  if (cached) return cached
+  const provider = createModelProvider(env)
+  modelProviderCache.set(env, provider)
+  return provider
+}
+
+function createModelProvider(env: Env): ModelProvider {
+  const base = new CloudflareModelProvider({ env, extraRegistries: resolveExtraRegistries(env) })
+  const langfuse = loadLangfuseConfig(env)
+  if (!langfuse.enabled || !langfuse.publicKey || !langfuse.secretKey) return base
+  return new InstrumentedModelProvider({
+    inner: base,
+    traceSink: createLangfuseSink({
+      publicKey: langfuse.publicKey,
+      secretKey: langfuse.secretKey,
+      baseUrl: langfuse.baseUrl,
+      logger,
+    }),
+    recordPrompts: loadObservabilityConfig(env).recordPrompts,
+  })
 }
 
 /**
@@ -471,6 +504,28 @@ function selectSlackDeps(config: AppConfig, db: D1Database): Partial<CoreDepende
 }
 
 /**
+ * Wire the opt-in Langfuse trace sink. Built only when `LANGFUSE_ENABLED=true` and both
+ * keys are set; the observability service then fans every recorded LLM call out to it.
+ * A fetch-based sink, so it runs unchanged on the Worker runtime.
+ */
+function buildLangfuseSink(config: AppConfig): CoreDependencies['llmTraceSink'] {
+  if (!config.langfuse.enabled || !config.langfuse.publicKey || !config.langfuse.secretKey) {
+    return undefined
+  }
+  return createLangfuseSink({
+    publicKey: config.langfuse.publicKey,
+    secretKey: config.langfuse.secretKey,
+    baseUrl: config.langfuse.baseUrl,
+    logger,
+  })
+}
+
+function selectLangfuseSink(config: AppConfig): Partial<CoreDependencies> {
+  const sink = buildLangfuseSink(config)
+  return sink ? { llmTraceSink: sink } : {}
+}
+
+/**
  * Wire the recurring-pipeline + issue-tracker ports. The schedule + tracker-setting
  * repositories are always available (the feature is workspace-scoped CRUD); the
  * `ticketTrackerProvider` files the tech-debt pipeline's issue and degrades
@@ -648,6 +703,9 @@ function buildContainerExecutor(
     // in the sandbox) whenever an upstream is configured for this deployment.
     webSearchProxyEnabled: Boolean(createWebSearchUpstreamFromEnv(env)),
     githubApiBase: config.github.apiBase,
+    // Forward container tool spans to Langfuse (when configured) as child spans under
+    // the run trace — the same sink the LLM proxy fans generations out to.
+    llmTraceSink: buildLangfuseSink(config),
   })
 }
 
@@ -1111,6 +1169,7 @@ export function buildContainer(env: Env, overrides: Partial<CoreDependencies> = 
     ...selectGitHubDeps(env, config, db, clock, idGenerator),
     ...selectMergeLifecycleDeps(env, config, db, clock, idGenerator),
     ...selectSlackDeps(config, db),
+    ...selectLangfuseSink(config),
     ...selectRecurringDeps(env, config, db, clock, idGenerator),
     ...selectDocumentsDeps(env, config, db, clock, idGenerator),
     ...selectTasksDeps(env, config, db, clock, idGenerator),

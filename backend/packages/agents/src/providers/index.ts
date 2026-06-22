@@ -1,5 +1,10 @@
 export { CompositeModelProvider, type ModelResolver, type ProviderRegistry } from './registry.js'
 export {
+  InstrumentedModelProvider,
+  catFactoryObservability,
+  type InlineObservabilityContext,
+} from './instrumented.js'
+export {
   anthropicResolver,
   baseProviderRegistry,
   cloudflareRestResolver,

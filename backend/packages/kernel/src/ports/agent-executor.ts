@@ -273,6 +273,12 @@ export interface AgentJobHandle {
    * (usage-aware rotation). Absent for proxy-metered Pi jobs.
    */
   subscriptionTokenId?: string
+  /**
+   * The agent kind the job runs as (`coder`, `merger`, …). Carried so the poll site
+   * can label the job's tool spans when forwarding them to the observability trace
+   * sink. Optional — absent ⇒ spans are still grouped under the run, just unlabelled.
+   */
+  agentKind?: string
 }
 
 /** The outcome of polling an {@link AgentJobHandle}. */

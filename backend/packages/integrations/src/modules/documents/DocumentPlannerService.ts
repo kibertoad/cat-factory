@@ -2,6 +2,7 @@ import { generateText } from 'ai'
 import type { ModelProvider, ModelRef } from '@cat-factory/kernel'
 import type { DocumentRecord } from '@cat-factory/kernel'
 import type { DocumentBoardPlan } from '@cat-factory/kernel'
+import { catFactoryObservability } from '@cat-factory/kernel'
 import { coercePlan, markdownToText, planFromHeadings } from './documents.logic.js'
 
 // DocumentPlannerService: turns an imported document into a proposed board
@@ -87,6 +88,12 @@ export class DocumentPlannerService {
         // Headroom for a reasoning model's `<think>` before the JSON plan — a
         // tight cap truncates the plan mid-output (finish_reason: length).
         maxOutputTokens: 5000,
+        // Label the call for the trace sink (a no-op when no instrumented provider
+        // is wired). Not run-scoped, so it surfaces as its own standalone trace.
+        providerOptions: catFactoryObservability({
+          agentKind: 'document-planner',
+          workspaceId: record.workspaceId,
+        }),
       })
       const plan = coercePlan(record.source, record.externalId, extractJson(text))
       return plan ?? fallback()

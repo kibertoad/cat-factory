@@ -58,6 +58,34 @@ describe('JobRegistry', () => {
     expect(view?.progress).toEqual({ completed: 2, inProgress: 0, total: 3 })
   })
 
+  it('buffers tool spans and drains them on each poll (drain-on-read)', async () => {
+    const registry = new JobRegistry(limits, async (_job, opts: RunOptions) => {
+      opts.onSpan?.({ tool: 'read', startedAt: 1, endedAt: 2, ok: true })
+      opts.onSpan?.({ tool: 'edit_file', startedAt: 2, endedAt: 5, ok: true })
+      await tick(50)
+      opts.onSpan?.({ tool: 'run_command', startedAt: 6, endedAt: 9, ok: false })
+      await tick(50)
+      return { summary: 's' }
+    })
+    registry.start('exec-1', job())
+    await tick()
+
+    // First poll drains the two spans emitted so far...
+    const first = registry.get('exec-1')
+    expect(first?.spans).toEqual([
+      { tool: 'read', startedAt: 1, endedAt: 2, ok: true },
+      { tool: 'edit_file', startedAt: 2, endedAt: 5, ok: true },
+    ])
+    // ...and clears the buffer, so an immediate re-poll carries none.
+    expect(registry.get('exec-1')?.spans).toBeUndefined()
+
+    // A later span shows up on the next poll only.
+    await tick(60)
+    expect(registry.get('exec-1')?.spans).toEqual([
+      { tool: 'run_command', startedAt: 6, endedAt: 9, ok: false },
+    ])
+  })
+
   it('records a thrown fault as failed', async () => {
     const registry = new JobRegistry(limits, async () => {
       throw new Error('boom')

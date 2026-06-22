@@ -5,7 +5,9 @@ import type {
   LlmCallMetric,
   LlmCallMetricRepository,
   LlmCallMetricSummary,
+  LlmGenerationEvent,
   LlmPromptChainTip,
+  LlmTraceSink,
 } from '@cat-factory/kernel'
 import {
   LlmObservabilityService,
@@ -221,6 +223,87 @@ describe('LlmObservabilityService.record', () => {
     // Streaming flush timing can momentarily make upstream exceed the proxy total.
     await service.record(input({ totalMs: 100, upstreamMs: 140 }))
     expect(repo.recorded[0]!.overheadMs).toBe(0)
+  })
+})
+
+/** Captures generation events fanned out to the external trace sink. */
+class CaptureSink implements LlmTraceSink {
+  events: LlmGenerationEvent[] = []
+  recordGeneration(event: LlmGenerationEvent): void {
+    this.events.push(event)
+  }
+}
+
+describe('LlmObservabilityService trace-sink fan-out', () => {
+  it('emits one generation per recorded call with the FULL prompt and the timing split', async () => {
+    const repo = new MemoryRepo()
+    const sink = new CaptureSink()
+    const service = new LlmObservabilityService({
+      llmCallMetricRepository: repo,
+      idGenerator,
+      clock,
+      traceSink: sink,
+    })
+
+    await service.record(
+      input({
+        promptText: '[{"role":"user"}]',
+        responseText: 'done',
+        totalMs: 250,
+        upstreamMs: 200,
+      }),
+    )
+
+    expect(sink.events).toHaveLength(1)
+    const e = sink.events[0]!
+    expect(e.executionId).toBe('exec')
+    expect(e.agentKind).toBe('coder')
+    expect(e.provider).toBe('workers-ai')
+    // The sink gets the FULL prompt, not the stored delta.
+    expect(e.input).toBe('[{"role":"user"}]')
+    expect(e.output).toBe('done')
+    // startedAt is endedAt minus the upstream slice (createdAt=1700, upstreamMs=200).
+    expect(e.endedAt).toBe(1700)
+    expect(e.startedAt).toBe(1500)
+    expect(e.totalTokens).toBe(150)
+  })
+
+  it('omits prompt/response bodies when recordPrompts is false', async () => {
+    const repo = new MemoryRepo()
+    const sink = new CaptureSink()
+    const service = new LlmObservabilityService({
+      llmCallMetricRepository: repo,
+      idGenerator,
+      clock,
+      recordPrompts: false,
+      traceSink: sink,
+    })
+
+    await service.record(input({ promptText: '[{"role":"user"}]', responseText: 'secret' }))
+
+    const e = sink.events[0]!
+    expect(e.input).toBe('')
+    expect(e.output).toBe('')
+    // Numeric telemetry still flows.
+    expect(e.promptTokens).toBe(100)
+    expect(e.completionTokens).toBe(50)
+  })
+
+  it('still records locally when the sink throws (observability never breaks the proxy)', async () => {
+    const repo = new MemoryRepo()
+    const service = new LlmObservabilityService({
+      llmCallMetricRepository: repo,
+      idGenerator,
+      clock,
+      traceSink: {
+        recordGeneration() {
+          throw new Error('sink down')
+        },
+      },
+    })
+
+    await expect(service.record(input())).resolves.toBeUndefined()
+    expect(repo.recorded).toHaveLength(1)
   })
 })
 

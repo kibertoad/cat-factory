@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
+    // `fetch`, `crypto` (randomUUID) and `btoa` are runtime globals on BOTH the Worker
+    // (workerd) and Node — pull in their type declarations (DOM lib is type-only here).
+    "lib": ["ES2022", "DOM"]
+  },
+  "include": ["src/**/*.ts"]
+}

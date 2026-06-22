@@ -149,7 +149,7 @@ export async function runAgentInWorkspace(
     serviceDirectory: spec.serviceDirectory,
   })
   await writePiModelsConfig({ model: spec.model, proxyBaseUrl })
-  const { signal, onActivity, onProgress } = opts
+  const { signal, onActivity, onProgress, onSpan } = opts
   return runPi({
     cwd: spec.dir,
     model: spec.model,
@@ -158,6 +158,7 @@ export async function runAgentInWorkspace(
     signal,
     onActivity,
     onProgress,
+    onSpan,
     expectsEdits: spec.expectsEdits ?? true,
     extraEnv,
   })
