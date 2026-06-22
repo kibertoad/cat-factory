@@ -147,10 +147,19 @@ export interface ContainerAgentExecutorDependencies {
   recordSubscriptionUsage?: RecordSubscriptionUsage
   /**
    * Whether the workspace has a pooled token for a vendor. Drives "subscriptions
-   * always win": a step pinned to a dual-mode model (GLM/Kimi with a Cloudflare
-   * base) is auto-routed to its subscription flavour when this returns true.
+   * always win" for POOLABLE vendors: a step pinned to a dual-mode model (Kimi/DeepSeek
+   * with a Cloudflare base) is auto-routed to its subscription flavour when this returns
+   * true.
    */
   hasSubscriptionToken?: (workspaceId: string, vendor: SubscriptionVendor) => Promise<boolean>
+  /**
+   * Whether the run-initiator has their OWN personal subscription for an INDIVIDUAL-usage
+   * vendor. Individual vendors (e.g. GLM) are never pooled, so a dual-mode individual
+   * model is auto-routed to the user's personal subscription when this returns true, and
+   * otherwise stays on its Cloudflare base — so a subscriber runs GLM on their plan while
+   * a non-subscriber on the same workspace falls back to Cloudflare GLM.
+   */
+  hasPersonalSubscription?: (userId: string, vendor: SubscriptionVendor) => Promise<boolean>
   /**
    * Public base URL of the facade's OpenAI-compatible LLM proxy, including the
    * `/v1` suffix — Pi posts to `${proxyBaseUrl}/chat/completions`.
@@ -411,11 +420,16 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
 
   /**
    * Resolve the step's EFFECTIVE model ref plus the subscription vendor (if any) it
-   * will run on, applying the "subscriptions always win" override: a subscription-only
-   * model carries its harness already; a dual-mode model (GLM/Kimi) is switched to its
-   * subscription flavour when the workspace has a token for the vendor. Shared by
-   * {@link buildJobBody} (which dispatches the resolved ref) and {@link isQuotaBased}
-   * (which reports whether the resulting run is flat-rate quota) so the two can't drift.
+   * will run on, applying the "subscriptions always win" override:
+   *  - a subscription-only model carries its harness already (always its subscription);
+   *  - a dual-mode POOLABLE model (Kimi/DeepSeek) switches to its subscription flavour
+   *    when the WORKSPACE has a pooled token for the vendor;
+   *  - a dual-mode INDIVIDUAL model (GLM — never pooled) switches to the RUN-INITIATOR's
+   *    own personal subscription when they have one, and otherwise stays on its Cloudflare
+   *    base. So a subscriber runs GLM on their plan while a non-subscriber on the same
+   *    workspace falls back to Cloudflare GLM.
+   * Shared by {@link buildJobBody} (which dispatches the resolved ref) and
+   * {@link isQuotaBased} (whether the run is flat-rate quota) so the two can't drift.
    */
   private async resolveEffectiveRef(
     context: AgentRunContext,
@@ -427,6 +441,17 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     if (subOption) {
       if (ref.harness) {
         subscriptionVendor = subOption.vendor
+      } else if (isIndividualVendor(subOption.vendor)) {
+        // Dual-mode individual vendor (GLM): use the initiator's OWN personal subscription
+        // when they have one; else leave `ref` on the Cloudflare base (ungated fallback).
+        if (
+          context.initiatedByUserId &&
+          this.deps.hasPersonalSubscription &&
+          (await this.deps.hasPersonalSubscription(context.initiatedByUserId, subOption.vendor))
+        ) {
+          ref = subOption.ref
+          subscriptionVendor = subOption.vendor
+        }
       } else if (
         this.deps.hasSubscriptionToken &&
         (await this.deps.hasSubscriptionToken(workspaceId, subOption.vendor))

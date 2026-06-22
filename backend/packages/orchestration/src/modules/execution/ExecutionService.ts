@@ -34,7 +34,10 @@ import {
 } from '@cat-factory/agents'
 import { getFragment } from '@cat-factory/prompt-fragments'
 import { extractJson } from '../requirements/requirements.logic.js'
-import { resolveIndividualVendors } from './individualVendors.logic.js'
+import {
+  resolveIndividualVendors,
+  type HasPersonalSubscription,
+} from './individualVendors.logic.js'
 import {
   assertFound,
   ConflictError,
@@ -383,27 +386,36 @@ export class ExecutionService {
   }
 
   /**
-   * The individual-usage subscription vendors (Claude/GLM/Codex) a run STARTED against
-   * `blockId` with `pipelineId` will use — so the controller can gate the run on the
-   * initiator's personal subscription(s) up-front. Mirrors the dispatch-time model
-   * precedence (block pin → workspace per-kind default) across every step in the
-   * pipeline, so a block with NO pin but an individual-usage workspace default is gated
-   * too, instead of starting and then failing at dispatch on a missing activation.
+   * The individual-usage subscription vendors a run STARTED against `blockId` with
+   * `pipelineId` will lease a personal credential for — so the controller can gate the
+   * run on the initiator's personal subscription(s) up-front. Mirrors the dispatch-time
+   * model precedence (block pin → workspace per-kind default) across every step, AND the
+   * per-user dispatch decision: `hasPersonalSubscription(vendor)` reports whether the
+   * initiator has their own subscription for a vendor, so a dual-mode model (GLM) only
+   * gates a subscriber (a non-subscriber runs it on the Cloudflare base, ungated).
+   * Defaults to "no personal subscription" for system/unauthenticated callers.
    */
   async individualVendorsForBlock(
     workspaceId: string,
     blockId: string,
     pipelineId: string,
+    hasPersonalSubscription: HasPersonalSubscription = () => false,
   ): Promise<SubscriptionVendor[]> {
     const block = await this.requireBlock(workspaceId, blockId)
     const pipeline = await this.pipelineRepository.get(workspaceId, pipelineId)
-    return this.resolveIndividualVendors(workspaceId, block.modelId, pipeline?.agentKinds ?? [])
+    return this.resolveIndividualVendors(
+      workspaceId,
+      block.modelId,
+      pipeline?.agentKinds ?? [],
+      hasPersonalSubscription,
+    )
   }
 
   /** The individual-usage vendors a failed run's resumed steps use (for the retry gate). */
   async individualVendorsForRun(
     workspaceId: string,
     executionId: string,
+    hasPersonalSubscription: HasPersonalSubscription = () => false,
   ): Promise<SubscriptionVendor[]> {
     const run = await this.executionRepository.get(workspaceId, executionId)
     if (!run) return []
@@ -413,6 +425,7 @@ export class ExecutionService {
       workspaceId,
       block.modelId,
       run.steps.map((s) => s.agentKind),
+      hasPersonalSubscription,
     )
   }
 
@@ -427,12 +440,14 @@ export class ExecutionService {
     workspaceId: string,
     blockModelId: string | undefined,
     agentKinds: string[],
+    hasPersonalSubscription: HasPersonalSubscription,
   ): Promise<SubscriptionVendor[]> {
     const resolveDefault = this.resolveWorkspaceModelDefault
     return resolveIndividualVendors(
       blockModelId,
       agentKinds,
       resolveDefault ? (kind) => resolveDefault(workspaceId, kind) : undefined,
+      hasPersonalSubscription,
     )
   }
 

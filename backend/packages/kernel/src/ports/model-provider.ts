@@ -21,9 +21,16 @@ export interface ModelRef {
    */
   harness?: HarnessKind
   /**
-   * The model's context window at this provider, for the picker. Cloudflare-hosted
-   * variants typically run a cut context vs the vendor-direct/subscription full
-   * window; surfacing it lets the picker differentiate them. Absent ⇒ unknown.
+   * The total context window for THIS flavour, in tokens, as published by the provider
+   * that actually serves it — the combined input + output the model can process in one
+   * request, NOT a max-output limit. It is per-flavour because the SAME catalog model
+   * can be served with a different window depending on where it runs, in EITHER
+   * direction: Cloudflare may cap below the vendor's full window (e.g. GLM-5.2 is 256K
+   * on Cloudflare vs 1M on a Z.ai subscription), match it (Kimi K2.6 is 256K both on
+   * Cloudflare and direct), or even exceed a direct sibling (the Cloudflare R1 distill
+   * serves 80K while the direct flagship chat model is 64K). Set it from the serving
+   * provider's own model docs, not a general spec sheet. Surfaced in the picker so a
+   * user sees the window the selected flavour will really give them. Absent ⇒ unknown.
    */
   contextTokens?: number
 }

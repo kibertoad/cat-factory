@@ -106,10 +106,12 @@ export const useExecutionStore = defineStore('execution', () => {
    * password — supplied transparently from the local cache, and prompted via the
    * credential modal (then retried) when the server replies 428.
    */
-  async function start(blockId: string, pipeline: Pipeline) {
+  async function start(blockId: string, pipeline: Pipeline): Promise<boolean> {
     const ws = useWorkspaceStore()
     const personal = usePersonalSubscriptionsStore()
-    await personal.withCredential(async (password) => {
+    // Returns false when the user cancels the personal-password prompt (the run never
+    // started), so an optimistic caller can revert its "Starting…" state.
+    return personal.withCredential(async (password) => {
       await api.startExecution(ws.requireId(), blockId, { pipelineId: pipeline.id }, password)
       await ws.refresh()
     })

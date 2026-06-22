@@ -73,7 +73,10 @@ async function run() {
   }
   starting.value = true
   try {
-    await execution.start(props.taskId, pipeline)
+    // false ⇒ the user cancelled the personal-password prompt; revert quietly (the run
+    // never started). On success the button unmounts once the stream pushes in_progress.
+    const started = await execution.start(props.taskId, pipeline)
+    if (!started) starting.value = false
   } catch (e) {
     // Real confirmation came back as a failure — revert the optimistic state.
     starting.value = false

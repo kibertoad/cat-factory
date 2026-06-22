@@ -37,6 +37,8 @@ export interface PendingCredential {
   reason: 'no_subscription' | 'password_required' | 'wrong_password' | 'subscription_expired'
   /** Re-run the gated action with the supplied password (start/retry). */
   retry: (password: string) => Promise<void>
+  /** Abandon the prompt (Cancel / connect-instead): the gated action does NOT run. */
+  cancel: () => void
 }
 
 /** Pull `{ vendor, reason }` out of a 428 credential_required error, else null. */
@@ -133,34 +135,68 @@ export const usePersonalSubscriptionsStore = defineStore('personalSubscriptions'
   }
 
   /**
-   * Run a gated action (start/retry) that may require a personal credential. Supplies
-   * the cached password on the first attempt; if the server replies 428, opens the
-   * credential modal so the user can connect/enter, then transparently retries via the
-   * `pending.retry` closure. The caller's `action(password?)` performs the API call.
+   * Run a gated action (start/retry) that may require a personal credential. Supplies the
+   * cached password on the first attempt; if the server replies 428, opens the credential
+   * modal and AWAITS the user satisfying or cancelling it (transparently retrying via the
+   * `pending.retry` closure). The caller's `action(password?)` performs the API call.
+   *
+   * Resolves `true` once the action actually ran (first try, or a successful retry), and
+   * `false` when the user cancels the prompt — so a caller showing an optimistic spinner
+   * can revert it instead of spinning forever. Still rejects for non-credential errors.
    */
-  async function withCredential(action: (password?: string) => Promise<void>): Promise<void> {
+  async function withCredential(action: (password?: string) => Promise<void>): Promise<boolean> {
     // First attempt may carry no password (non-individual runs) or the single cached one;
     // the server only consults it when the block needs it.
     try {
       await action(getCachedPassword())
+      return true
     } catch (error) {
       const credential = parseCredentialError(error)
       if (!credential) throw error
       // A stale/wrong cached password — drop it so the modal is the source of truth.
       if (credential.reason === 'wrong_password') clearCachedPassword()
-      pending.value = {
-        ...credential,
-        retry: async (password: string) => {
-          await action(password)
-          setCachedPassword(password)
-          pending.value = null
-        },
-      }
+      return await new Promise<boolean>((resolve) => {
+        const arm = (c: { vendor: SubscriptionVendor; reason: PendingCredential['reason'] }) => {
+          pending.value = {
+            ...c,
+            retry: async (password: string) => {
+              try {
+                await action(password)
+                setCachedPassword(password)
+                pending.value = null
+                resolve(true)
+              } catch (retryError) {
+                const again = parseCredentialError(retryError)
+                if (again) {
+                  // Still needs a credential (e.g. still-wrong password): keep the modal
+                  // open with the fresh reason and let it surface its own toast.
+                  if (again.reason === 'wrong_password') clearCachedPassword()
+                  arm(again)
+                  throw retryError
+                }
+                // A non-credential failure ends the flow: close the modal, revert the
+                // caller's optimistic state, and surface the error to the modal's toast.
+                pending.value = null
+                resolve(false)
+                throw retryError
+              }
+            },
+            cancel: () => {
+              pending.value = null
+              resolve(false)
+            },
+          }
+        }
+        arm(credential)
+      })
     }
   }
 
   function dismissPending() {
+    // Settle the awaiting `withCredential` (the gated action never ran) before clearing.
+    const current = pending.value
     pending.value = null
+    current?.cancel()
   }
 
   return {
