@@ -41,7 +41,11 @@ async function sendInvite() {
   if (!inviteEmail.value.trim()) return
   busy.value = true
   try {
-    const acceptUrl = await accounts.invite(props.accountId, inviteEmail.value.trim(), inviteRole.value)
+    const acceptUrl = await accounts.invite(
+      props.accountId,
+      inviteEmail.value.trim(),
+      inviteRole.value,
+    )
     inviteEmail.value = ''
     toast.add({
       title: 'Invitation created',
@@ -164,8 +168,8 @@ async function disconnectEmail() {
     <section>
       <h3 class="mb-2 font-semibold text-white">Email sender</h3>
       <p v-if="!accounts.emailConfigured" class="text-slate-500">
-        Email delivery is not enabled on this deployment. Invitations still produce a
-        shareable accept link.
+        Email delivery is not enabled on this deployment. Invitations still produce a shareable
+        accept link.
       </p>
       <template v-else>
         <div
@@ -190,7 +194,12 @@ async function disconnectEmail() {
             class="w-full"
           />
           <UInput v-model="emailFrom" type="email" placeholder="From address" class="w-full" />
-          <UInput v-model="emailApiKey" type="password" placeholder="Provider API key" class="w-full" />
+          <UInput
+            v-model="emailApiKey"
+            type="password"
+            placeholder="Provider API key"
+            class="w-full"
+          />
           <UButton type="submit" color="primary" :loading="busy">Connect email sender</UButton>
         </form>
       </template>

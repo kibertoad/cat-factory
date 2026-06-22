@@ -315,10 +315,8 @@ export function useApi() {
 
     getWorkspace: (workspaceId: string) => http<WorkspaceSnapshot>(ws(workspaceId)),
 
-    updateWorkspace: (
-      workspaceId: string,
-      body: { name?: string; description?: string | null },
-    ) => http<Workspace>(ws(workspaceId), { method: 'PATCH', body }),
+    updateWorkspace: (workspaceId: string, body: { name?: string; description?: string | null }) =>
+      http<Workspace>(ws(workspaceId), { method: 'PATCH', body }),
 
     renameWorkspace: (workspaceId: string, name: string) =>
       http<Workspace>(ws(workspaceId), { method: 'PATCH', body: { name } }),

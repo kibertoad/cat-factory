@@ -155,8 +155,7 @@ const promptHasDescription = computed(() => prompt.value === 'board' || prompt.v
 function openPrompt(kind: PromptKind) {
   prompt.value = kind
   promptValue.value = kind === 'rename' ? (workspace.activeWorkspace?.name ?? '') : ''
-  promptDescription.value =
-    kind === 'rename' ? (workspace.activeWorkspace?.description ?? '') : ''
+  promptDescription.value = kind === 'rename' ? (workspace.activeWorkspace?.description ?? '') : ''
 }
 
 async function submitPrompt() {
@@ -271,7 +270,10 @@ function openSettings() {
     <!-- account team settings: members, invitations, email sender -->
     <UModal v-model:open="settingsOpen" title="Team settings">
       <template #body>
-        <AccountTeamSettings v-if="accounts.activeAccountId" :account-id="accounts.activeAccountId" />
+        <AccountTeamSettings
+          v-if="accounts.activeAccountId"
+          :account-id="accounts.activeAccountId"
+        />
       </template>
     </UModal>
   </div>

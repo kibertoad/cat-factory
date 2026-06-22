@@ -46,7 +46,10 @@ export interface UserIdentityRecord {
 export interface UserRepository {
   get(id: string): Promise<UserRecord | null>
   create(user: UserRecord): Promise<void>
-  update(id: string, patch: Partial<Pick<UserRecord, 'name' | 'email' | 'avatarUrl'>>): Promise<void>
+  update(
+    id: string,
+    patch: Partial<Pick<UserRecord, 'name' | 'email' | 'avatarUrl'>>,
+  ): Promise<void>
   /** The user behind a linked identity, or null. */
   findByIdentity(provider: IdentityProvider, subject: string): Promise<UserRecord | null>
   /** The raw identity row (carries the password `secret`), or null. */

@@ -2,9 +2,7 @@
   "version": "8",
   "dialect": "postgres",
   "id": "43c053a1-b680-4fc9-b025-d193de0636ae",
-  "prevIds": [
-    "1107b6a4-278b-4359-abc7-e94e3452dca1"
-  ],
+  "prevIds": ["1107b6a4-278b-4359-abc7-e94e3452dca1"],
   "ddl": [
     {
       "isRlsEnabled": false,
@@ -7462,10 +7460,7 @@
       "table": "workspaces"
     },
     {
-      "columns": [
-        "workspace_id",
-        "id"
-      ],
+      "columns": ["workspace_id", "id"],
       "nameExplicit": false,
       "name": "agent_runs_pkey",
       "entityType": "pks",
@@ -7473,10 +7468,7 @@
       "table": "agent_runs"
     },
     {
-      "columns": [
-        "workspace_id",
-        "id"
-      ],
+      "columns": ["workspace_id", "id"],
       "nameExplicit": false,
       "name": "blocks_pkey",
       "entityType": "pks",
@@ -7484,10 +7476,7 @@
       "table": "blocks"
     },
     {
-      "columns": [
-        "workspace_id",
-        "source"
-      ],
+      "columns": ["workspace_id", "source"],
       "nameExplicit": false,
       "name": "document_connections_pkey",
       "entityType": "pks",
@@ -7495,11 +7484,7 @@
       "table": "document_connections"
     },
     {
-      "columns": [
-        "workspace_id",
-        "source",
-        "external_id"
-      ],
+      "columns": ["workspace_id", "source", "external_id"],
       "nameExplicit": false,
       "name": "documents_pkey",
       "entityType": "pks",
@@ -7507,10 +7492,7 @@
       "table": "documents"
     },
     {
-      "columns": [
-        "workspace_id",
-        "provider_id"
-      ],
+      "columns": ["workspace_id", "provider_id"],
       "nameExplicit": false,
       "name": "environment_connections_pkey",
       "entityType": "pks",
@@ -7518,11 +7500,7 @@
       "table": "environment_connections"
     },
     {
-      "columns": [
-        "workspace_id",
-        "repo_github_id",
-        "name"
-      ],
+      "columns": ["workspace_id", "repo_github_id", "name"],
       "nameExplicit": false,
       "name": "github_branches_pkey",
       "entityType": "pks",
@@ -7530,11 +7508,7 @@
       "table": "github_branches"
     },
     {
-      "columns": [
-        "workspace_id",
-        "repo_github_id",
-        "github_id"
-      ],
+      "columns": ["workspace_id", "repo_github_id", "github_id"],
       "nameExplicit": false,
       "name": "github_check_runs_pkey",
       "entityType": "pks",
@@ -7542,11 +7516,7 @@
       "table": "github_check_runs"
     },
     {
-      "columns": [
-        "workspace_id",
-        "repo_github_id",
-        "sha"
-      ],
+      "columns": ["workspace_id", "repo_github_id", "sha"],
       "nameExplicit": false,
       "name": "github_commits_pkey",
       "entityType": "pks",
@@ -7554,11 +7524,7 @@
       "table": "github_commits"
     },
     {
-      "columns": [
-        "workspace_id",
-        "repo_github_id",
-        "number"
-      ],
+      "columns": ["workspace_id", "repo_github_id", "number"],
       "nameExplicit": false,
       "name": "github_issues_pkey",
       "entityType": "pks",
@@ -7566,11 +7532,7 @@
       "table": "github_issues"
     },
     {
-      "columns": [
-        "workspace_id",
-        "repo_github_id",
-        "number"
-      ],
+      "columns": ["workspace_id", "repo_github_id", "number"],
       "nameExplicit": false,
       "name": "github_pull_requests_pkey",
       "entityType": "pks",
@@ -7578,10 +7540,7 @@
       "table": "github_pull_requests"
     },
     {
-      "columns": [
-        "workspace_id",
-        "github_id"
-      ],
+      "columns": ["workspace_id", "github_id"],
       "nameExplicit": false,
       "name": "github_repos_pkey",
       "entityType": "pks",
@@ -7589,11 +7548,7 @@
       "table": "github_repos"
     },
     {
-      "columns": [
-        "installation_id",
-        "repo_github_id",
-        "kind"
-      ],
+      "columns": ["installation_id", "repo_github_id", "kind"],
       "nameExplicit": false,
       "name": "github_sync_cursors_pkey",
       "entityType": "pks",
@@ -7601,10 +7556,7 @@
       "table": "github_sync_cursors"
     },
     {
-      "columns": [
-        "account_id",
-        "user_id"
-      ],
+      "columns": ["account_id", "user_id"],
       "nameExplicit": false,
       "name": "memberships_pkey",
       "entityType": "pks",
@@ -7612,10 +7564,7 @@
       "table": "memberships"
     },
     {
-      "columns": [
-        "workspace_id",
-        "id"
-      ],
+      "columns": ["workspace_id", "id"],
       "nameExplicit": false,
       "name": "merge_threshold_presets_pkey",
       "entityType": "pks",
@@ -7623,10 +7572,7 @@
       "table": "merge_threshold_presets"
     },
     {
-      "columns": [
-        "workspace_id",
-        "id"
-      ],
+      "columns": ["workspace_id", "id"],
       "nameExplicit": false,
       "name": "notifications_pkey",
       "entityType": "pks",
@@ -7634,10 +7580,7 @@
       "table": "notifications"
     },
     {
-      "columns": [
-        "workspace_id",
-        "id"
-      ],
+      "columns": ["workspace_id", "id"],
       "nameExplicit": false,
       "name": "pipeline_schedule_runs_pkey",
       "entityType": "pks",
@@ -7645,10 +7588,7 @@
       "table": "pipeline_schedule_runs"
     },
     {
-      "columns": [
-        "workspace_id",
-        "id"
-      ],
+      "columns": ["workspace_id", "id"],
       "nameExplicit": false,
       "name": "pipeline_schedules_pkey",
       "entityType": "pks",
@@ -7656,10 +7596,7 @@
       "table": "pipeline_schedules"
     },
     {
-      "columns": [
-        "workspace_id",
-        "id"
-      ],
+      "columns": ["workspace_id", "id"],
       "nameExplicit": false,
       "name": "pipelines_pkey",
       "entityType": "pks",
@@ -7667,11 +7604,7 @@
       "table": "pipelines"
     },
     {
-      "columns": [
-        "owner_kind",
-        "owner_id",
-        "fragment_id"
-      ],
+      "columns": ["owner_kind", "owner_id", "fragment_id"],
       "nameExplicit": false,
       "name": "prompt_fragments_pkey",
       "entityType": "pks",
@@ -7679,10 +7612,7 @@
       "table": "prompt_fragments"
     },
     {
-      "columns": [
-        "workspace_id",
-        "id"
-      ],
+      "columns": ["workspace_id", "id"],
       "nameExplicit": false,
       "name": "requirement_reviews_pkey",
       "entityType": "pks",
@@ -7690,10 +7620,7 @@
       "table": "requirement_reviews"
     },
     {
-      "columns": [
-        "workspace_id",
-        "provider_id"
-      ],
+      "columns": ["workspace_id", "provider_id"],
       "nameExplicit": false,
       "name": "runner_pool_connections_pkey",
       "entityType": "pks",
@@ -7701,10 +7628,7 @@
       "table": "runner_pool_connections"
     },
     {
-      "columns": [
-        "workspace_id",
-        "source"
-      ],
+      "columns": ["workspace_id", "source"],
       "nameExplicit": false,
       "name": "task_connections_pkey",
       "entityType": "pks",
@@ -7712,11 +7636,7 @@
       "table": "task_connections"
     },
     {
-      "columns": [
-        "workspace_id",
-        "source",
-        "external_id"
-      ],
+      "columns": ["workspace_id", "source", "external_id"],
       "nameExplicit": false,
       "name": "tasks_pkey",
       "entityType": "pks",
@@ -7724,10 +7644,7 @@
       "table": "tasks"
     },
     {
-      "columns": [
-        "provider",
-        "subject"
-      ],
+      "columns": ["provider", "subject"],
       "nameExplicit": false,
       "name": "user_identities_pkey",
       "entityType": "pks",
@@ -7735,10 +7652,7 @@
       "table": "user_identities"
     },
     {
-      "columns": [
-        "workspace_id",
-        "agent_kind"
-      ],
+      "columns": ["workspace_id", "agent_kind"],
       "nameExplicit": false,
       "name": "workspace_model_defaults_pkey",
       "entityType": "pks",
@@ -7746,10 +7660,7 @@
       "table": "workspace_model_defaults"
     },
     {
-      "columns": [
-        "workspace_id",
-        "service_id"
-      ],
+      "columns": ["workspace_id", "service_id"],
       "nameExplicit": false,
       "name": "workspace_services_pkey",
       "entityType": "pks",
@@ -7757,9 +7668,7 @@
       "table": "workspace_services"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "account_invitations_pkey",
       "schema": "public",
@@ -7767,9 +7676,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "accounts_pkey",
       "schema": "public",
@@ -7777,9 +7684,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "account_id"
-      ],
+      "columns": ["account_id"],
       "nameExplicit": false,
       "name": "email_connections_pkey",
       "schema": "public",
@@ -7787,9 +7692,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "environments_pkey",
       "schema": "public",
@@ -7797,9 +7700,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "fragment_sources_pkey",
       "schema": "public",
@@ -7807,9 +7708,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "installation_id"
-      ],
+      "columns": ["installation_id"],
       "nameExplicit": false,
       "name": "github_installations_pkey",
       "schema": "public",
@@ -7817,9 +7716,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "llm_call_metrics_pkey",
       "schema": "public",
@@ -7827,9 +7724,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "personal_subscriptions_pkey",
       "schema": "public",
@@ -7837,9 +7732,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "provider_subscription_tokens_pkey",
       "schema": "public",
@@ -7847,9 +7740,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "reference_architectures_pkey",
       "schema": "public",
@@ -7857,9 +7748,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "repo_blueprints_pkey",
       "schema": "public",
@@ -7867,9 +7756,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "services_pkey",
       "schema": "public",
@@ -7877,9 +7764,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "account_id"
-      ],
+      "columns": ["account_id"],
       "nameExplicit": false,
       "name": "slack_connections_pkey",
       "schema": "public",
@@ -7887,9 +7772,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "account_id"
-      ],
+      "columns": ["account_id"],
       "nameExplicit": false,
       "name": "slack_member_mappings_pkey",
       "schema": "public",
@@ -7897,9 +7780,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "workspace_id"
-      ],
+      "columns": ["workspace_id"],
       "nameExplicit": false,
       "name": "slack_settings_pkey",
       "schema": "public",
@@ -7907,9 +7788,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "subscription_activations_pkey",
       "schema": "public",
@@ -7917,9 +7796,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "token_usage_pkey",
       "schema": "public",
@@ -7927,9 +7804,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "workspace_id"
-      ],
+      "columns": ["workspace_id"],
       "nameExplicit": false,
       "name": "tracker_settings_pkey",
       "schema": "public",
@@ -7937,9 +7812,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "users_pkey",
       "schema": "public",
@@ -7947,9 +7820,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "workspace_id"
-      ],
+      "columns": ["workspace_id"],
       "nameExplicit": false,
       "name": "workspace_fragment_defaults_pkey",
       "schema": "public",
@@ -7957,9 +7828,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "workspaces_pkey",
       "schema": "public",

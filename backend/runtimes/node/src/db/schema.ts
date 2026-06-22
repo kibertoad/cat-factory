@@ -46,7 +46,11 @@ export const users = pgTable(
     avatar_url: text('avatar_url'),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
   },
-  (t) => [uniqueIndex('idx_users_email').on(t.email).where(sql`email IS NOT NULL`)],
+  (t) => [
+    uniqueIndex('idx_users_email')
+      .on(t.email)
+      .where(sql`email IS NOT NULL`),
+  ],
 )
 
 // A linked login identity for a user. (provider, subject) is unique.

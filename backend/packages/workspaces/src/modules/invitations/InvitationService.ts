@@ -1,13 +1,5 @@
-import {
-  ConflictError,
-  NotFoundError,
-  ValidationError,
-  assertFound,
-} from '@cat-factory/kernel'
-import type {
-  AccountInvitation,
-  AccountRole,
-} from '@cat-factory/contracts'
+import { ConflictError, NotFoundError, ValidationError, assertFound } from '@cat-factory/kernel'
+import type { AccountInvitation, AccountRole } from '@cat-factory/contracts'
 import type {
   AccountInvitationRecord,
   AccountInvitationRepository,
@@ -133,9 +125,7 @@ export class InvitationService {
   }
 
   list(accountId: string): Promise<AccountInvitation[]> {
-    return this.deps.invitationRepository
-      .listByAccount(accountId)
-      .then((rows) => rows.map(toWire))
+    return this.deps.invitationRepository.listByAccount(accountId).then((rows) => rows.map(toWire))
   }
 
   /** Revoke a pending invitation (owner-only). */
@@ -198,7 +188,8 @@ function invitationEmailHtml(accountName: string, acceptUrl: string): string {
 }
 
 function escapeHtml(s: string): string {
-  return s.replace(/[&<>"']/g, (c) =>
-    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!,
+  return s.replace(
+    /[&<>"']/g,
+    (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!,
   )
 }

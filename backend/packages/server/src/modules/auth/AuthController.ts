@@ -5,7 +5,12 @@ import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
 import { GitHubOAuth } from '../../auth/GitHubOAuth.js'
 import { GoogleOAuth } from '../../auth/GoogleOAuth.js'
 import { verifySession } from '../../auth/middleware.js'
-import { HmacSigner, type SessionPayload, type SessionUser, TOKEN_AUDIENCE } from '../../auth/signing.js'
+import {
+  HmacSigner,
+  type SessionPayload,
+  type SessionUser,
+  TOKEN_AUDIENCE,
+} from '../../auth/signing.js'
 import type { AuthConfig } from '../../config/types.js'
 import type { AppEnv } from '../../http/env.js'
 import { jsonBody } from '../../http/validation.js'
@@ -259,7 +264,9 @@ export function authController(): Hono<AppEnv> {
       path: '/auth',
       maxAge: OAUTH_STATE_TTL_MS / 1000,
     })
-    return c.redirect(google.authorizeUrl({ redirectUri: googleCallbackUrl(c, cfg), state: signedState }))
+    return c.redirect(
+      google.authorizeUrl({ redirectUri: googleCallbackUrl(c, cfg), state: signedState }),
+    )
   })
 
   app.get('/google/callback', async (c) => {
@@ -279,7 +286,8 @@ export function authController(): Hono<AppEnv> {
     // Gate NEW-user creation: an invite OR an allowlisted email domain is required.
     const invited = state.invite ? await peekInvite(c, state.invite) : null
     if (!existing) {
-      const allowed = !!invited || (identity.email ? emailDomainAllowed(identity.email, cfg) : false)
+      const allowed =
+        !!invited || (identity.email ? emailDomainAllowed(identity.email, cfg) : false)
       if (!allowed) {
         return c.json(
           { error: { code: 'forbidden', message: 'Sign-up requires an invitation' } },

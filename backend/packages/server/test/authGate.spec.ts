@@ -92,7 +92,9 @@ describe('mountAuthGate — per-workspace authz', () => {
 
   it('lets the handler 404 a missing board (accountOf undefined)', async () => {
     const call = makeApp({ accountOf: async () => undefined })
-    expect((await call('GET', '/workspaces/ws_x/blocks', await sessionToken('usr_1'))).status).toBe(200)
+    expect((await call('GET', '/workspaces/ws_x/blocks', await sessionToken('usr_1'))).status).toBe(
+      200,
+    )
   })
 
   it('legacy board: only the owner may access it (else 404)', async () => {
@@ -108,6 +110,8 @@ describe('mountAuthGate — per-workspace authz', () => {
     const member = makeApp({ accountOf: async () => 'acc_1', isMember: async () => true })
     expect((await member('GET', '/workspaces/ws_x', await sessionToken('usr_1'))).status).toBe(200)
     const outsider = makeApp({ accountOf: async () => 'acc_1', isMember: async () => false })
-    expect((await outsider('GET', '/workspaces/ws_x', await sessionToken('usr_1'))).status).toBe(404)
+    expect((await outsider('GET', '/workspaces/ws_x', await sessionToken('usr_1'))).status).toBe(
+      404,
+    )
   })
 })
