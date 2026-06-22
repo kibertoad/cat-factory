@@ -598,6 +598,22 @@ wrangler secret put ANTHROPIC_API_KEY
 The effective catalog (which flavour is active) is served read-only at `GET /models`; it exposes
 only labels and provider/model ids, never the keys.
 
+A third flavour, **subscription**, runs a model in the Claude Code / Codex harness on a vendor
+token. The **poolable, organization-permitted** coding plans (Kimi, DeepSeek) are connected per
+workspace under the **LLM Vendors** UI (`/workspaces/:ws/vendor-credentials`, encrypted at rest —
+needs `ENCRYPTION_KEY`). The overall flavour precedence is **subscription > direct > cloudflare**
+("subscriptions always win"): connecting a dual-mode vendor token upgrades that model for the
+workspace, and subscription-only models (Opus/Sonnet, GPT-5.x) run _only_ this way. Subscription
+runs are flat-rate **quota** and are exempt from the monetary spend gate. One nuance: the
+**individual-use-only** subscriptions — Claude (Pro/Max), GLM (Z.ai Coding Plan) and ChatGPT/Codex
+— are **never pooled on a workspace**; each user connects their own under **Personal
+subscriptions** and only that user's runs use it (organizations use a direct provider API key
+instead). See [`docs/individual-subscription-usage.md`](./docs/individual-subscription-usage.md).
+
+> Full details — the resolution precedence, the Pi/Claude Code/Codex harnesses and the inline
+> degradation seam, dual-mode context windows, Bedrock, and the per-runtime provisioning/env
+> reference — are in [`docs/model-support.md`](./docs/model-support.md).
+
 #### Container implementation (running agents on a real checkout)
 
 The phases that must operate on the repository — `coder` (implementation), `mocker` (WireMock

@@ -14,11 +14,38 @@ export interface SubscriptionVendorConfig {
   baseUrl?: string
   /** Short label shown in the picker / credential UI. */
   label: string
+  /**
+   * The vendor's subscription credential is licensed for INDIVIDUAL use only, so it may
+   * NOT be pooled on a workspace (any member's runs leasing it) — it is stored per-user
+   * and only its owner's runs may use it. Set from each vendor's own terms of service:
+   *
+   *  - `claude`  — Anthropic consumer Claude (Pro/Max) is individual-use only.
+   *  - `codex`   — a ChatGPT `auth.json` is a per-seat credential; OpenAI prohibits
+   *                credential sharing at EVERY tier (Plus/Pro and Team/Business/
+   *                Enterprise alike — Team/Enterprise just grant more individual seats).
+   *  - `glm`     — Z.ai's GLM Coding Plan is "licensed only to the individual natural
+   *                person" and forbids any organization using its quota.
+   *
+   * This is the right axis even across tiers: the pool models SHARING a subscription
+   * credential, which no consumer tier permits. Genuine org-wide / programmatic access
+   * goes through the DIRECT-PROVIDER API-KEY path (OpenAI/Anthropic keys), which is
+   * unaffected by this flag — so flagging a vendor here routes orgs to API keys, it does
+   * not lock them out. The commercial coding-plan vendors that DO permit org use stay
+   * poolable: `kimi` (Moonshot explicitly permits authorized enterprise use) and
+   * `deepseek` (a commercial API platform serving internal/external end users). See
+   * backend/docs/individual-subscription-usage.md §1 for the per-vendor ToS citations.
+   */
+  individualOnly?: boolean
 }
 
 export const SUBSCRIPTION_VENDORS: Record<SubscriptionVendor, SubscriptionVendorConfig> = {
-  claude: { harness: 'claude-code', label: 'Claude' },
-  glm: { harness: 'claude-code', baseUrl: 'https://api.z.ai/api/anthropic', label: 'GLM (Z.ai)' },
+  claude: { harness: 'claude-code', label: 'Claude', individualOnly: true },
+  glm: {
+    harness: 'claude-code',
+    baseUrl: 'https://api.z.ai/api/anthropic',
+    label: 'GLM (Z.ai)',
+    individualOnly: true,
+  },
   kimi: {
     harness: 'claude-code',
     baseUrl: 'https://api.moonshot.ai/anthropic',
@@ -29,7 +56,7 @@ export const SUBSCRIPTION_VENDORS: Record<SubscriptionVendor, SubscriptionVendor
     baseUrl: 'https://api.deepseek.com/anthropic',
     label: 'DeepSeek',
   },
-  codex: { harness: 'codex', label: 'ChatGPT (Codex)' },
+  codex: { harness: 'codex', label: 'ChatGPT (Codex)', individualOnly: true },
 }
 
 // The curated catalog of LLM models a user can pick for a single block. Selection
@@ -332,6 +359,31 @@ export function subscriptionOptionFor(
   const model = getSelectableModel(id)
   if (!model?.subscription) return undefined
   return { vendor: model.subscription.vendor, ref: model.subscription.ref }
+}
+
+/** Whether a vendor's subscription is licensed for individual use only (e.g. `claude`). */
+export function isIndividualVendor(vendor: SubscriptionVendor): boolean {
+  return SUBSCRIPTION_VENDORS[vendor].individualOnly === true
+}
+
+/** Every vendor flagged individual-usage only — the single source of truth for the
+ *  per-user personal-subscription flow (e.g. activation refresh) so it never drifts
+ *  from {@link SUBSCRIPTION_VENDORS}. */
+export const INDIVIDUAL_VENDORS: SubscriptionVendor[] = (
+  Object.keys(SUBSCRIPTION_VENDORS) as SubscriptionVendor[]
+).filter(isIndividualVendor)
+
+/**
+ * The individual-usage vendor a catalog model id runs on, or null. A model triggers
+ * the individual-usage restricted mode (per-user credential, no recurring, etc.) only
+ * when it has a subscription flavour AND that vendor is `individualOnly`. Used by the
+ * engine/controllers to gate a run on the initiator's personal subscription.
+ */
+export function individualVendorForModelId(
+  id: string | undefined | null,
+): SubscriptionVendor | null {
+  const sub = subscriptionOptionFor(id)
+  return sub && isIndividualVendor(sub.vendor) ? sub.vendor : null
 }
 
 /**

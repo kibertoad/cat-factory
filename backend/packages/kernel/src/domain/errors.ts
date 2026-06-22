@@ -2,12 +2,19 @@
 // them to HTTP status codes. Keeping them framework-agnostic means the same core
 // can be wrapped by a different transport (queue consumer, RPC, CLI) unchanged.
 
-export type DomainErrorCode = 'not_found' | 'validation' | 'conflict'
+export type DomainErrorCode = 'not_found' | 'validation' | 'conflict' | 'credential_required'
 
 export class DomainError extends Error {
   constructor(
     readonly code: DomainErrorCode,
     message: string,
+    /**
+     * Optional machine-readable detail the facade surfaces alongside the error
+     * (e.g. which vendor + why a personal credential is required), so a client can
+     * react precisely — prompt for a password vs offer to connect a subscription —
+     * without string-matching the message.
+     */
+    readonly details?: Record<string, unknown>,
   ) {
     super(message)
     this.name = new.target.name
@@ -32,6 +39,32 @@ export class ValidationError extends DomainError {
 export class ConflictError extends DomainError {
   constructor(message: string) {
     super('conflict', message)
+  }
+}
+
+/**
+ * Why a personal (individual-usage) subscription credential can't be used right now.
+ *  - `no_subscription`     — the user has no stored credential for the vendor.
+ *  - `password_required`   — a credential exists but the request carried no password
+ *                            (or none is cached) to unlock it.
+ *  - `wrong_password`      — the supplied password did not decrypt the credential.
+ *  - `subscription_expired`— the stored subscription's own expiry has passed; renew it.
+ */
+export type CredentialRequiredReason =
+  | 'no_subscription'
+  | 'password_required'
+  | 'wrong_password'
+  | 'subscription_expired'
+
+/**
+ * A user-scoped personal credential is needed before this action can proceed (→ 428
+ * Precondition Required). Carries the vendor + reason so the client prompts for a
+ * password or offers to connect/renew the subscription, rather than failing opaquely.
+ * Used by the individual-usage restricted mode (e.g. Claude personal subscriptions).
+ */
+export class CredentialRequiredError extends DomainError {
+  constructor(message: string, details: { vendor: string; reason: CredentialRequiredReason }) {
+    super('credential_required', message, details)
   }
 }
 

@@ -7,9 +7,11 @@ export {
   NotFoundError,
   ValidationError,
   ConflictError,
+  CredentialRequiredError,
   assertFound,
   getErrorMessage,
   type DomainErrorCode,
+  type CredentialRequiredReason,
 } from './domain/errors.js'
 export { sameSubtasks, sameSubtaskItems } from './domain/subtasks.logic.js'
 export {
@@ -30,6 +32,9 @@ export {
   effectiveCatalog,
   resolveModelRef,
   subscriptionOptionFor,
+  isIndividualVendor,
+  INDIVIDUAL_VENDORS,
+  individualVendorForModelId,
 } from './domain/models.js'
 export {
   seedBlocks,

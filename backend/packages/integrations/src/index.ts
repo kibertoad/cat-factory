@@ -161,6 +161,13 @@ export {
   type VendorCredentialSummary,
   type LeasedSubscriptionToken,
 } from './modules/providers/ProviderSubscriptionService.js'
+export {
+  PersonalSubscriptionService,
+  type PersonalSubscriptionServiceDependencies,
+  type LeasedPersonalToken,
+  DEFAULT_ACTIVATION_TTL_MS,
+  DEFAULT_RENEW_WARNING_MS,
+} from './modules/providers/PersonalSubscriptionService.js'
 export * as providersLogic from './modules/providers/providers.logic.js'
 export {
   DEFAULT_USAGE_WINDOW_MS,

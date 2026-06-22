@@ -9,6 +9,11 @@ import { Hono } from 'hono'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
 import { jsonBody } from '../../http/validation.js'
+import {
+  personalGateForBlock,
+  readPersonalPassword,
+  remintActivations,
+} from '../providers/personalCredentialGate.js'
 
 /**
  * The execution engine endpoints — starting/cancelling runs, resolving decisions
@@ -20,13 +25,29 @@ export function executionController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
 
   app.post('/blocks/:blockId/executions', jsonBody(startExecutionSchema), async (c) => {
-    const instance = await c
-      .get('container')
-      .executionService.start(
-        param(c, 'workspaceId'),
-        param(c, 'blockId'),
-        c.req.valid('json').pipelineId,
-      )
+    const container = c.get('container')
+    const workspaceId = param(c, 'workspaceId')
+    const blockId = param(c, 'blockId')
+    const { pipelineId } = c.req.valid('json')
+    // Individual-usage models (Claude/GLM/Codex) require the initiator's personal
+    // subscription: resolve the initiator + an activation closure (throws 428 when a
+    // password is needed). The password rides on the X-Personal-Password header. A run
+    // touching no individual-usage vendor gets a no-op gate.
+    const { initiatedBy, activate } = await personalGateForBlock(
+      container,
+      workspaceId,
+      blockId,
+      pipelineId,
+      c.get('user'),
+      readPersonalPassword(c),
+    )
+    const instance = await container.executionService.start(
+      workspaceId,
+      blockId,
+      pipelineId,
+      initiatedBy,
+      activate,
+    )
     return c.json(instance, 201)
   })
 
@@ -104,6 +125,8 @@ export function executionController(): Hono<AppEnv> {
     '/executions/:executionId/decisions/:decisionId',
     jsonBody(resolveDecisionSchema),
     async (c) => {
+      // Re-mint the run's activation BEFORE the engine advances + dispatches the next step.
+      await remintActivations(c, param(c, 'workspaceId'), param(c, 'executionId'))
       const instance = await c
         .get('container')
         .executionService.resolveDecision(
@@ -122,6 +145,8 @@ export function executionController(): Hono<AppEnv> {
     '/executions/:executionId/steps/:approvalId/approve',
     jsonBody(approveStepSchema),
     async (c) => {
+      // Re-mint the run's activation BEFORE the engine advances + dispatches the next step.
+      await remintActivations(c, param(c, 'workspaceId'), param(c, 'executionId'))
       const instance = await c
         .get('container')
         .executionService.approveStep(
@@ -141,6 +166,8 @@ export function executionController(): Hono<AppEnv> {
     jsonBody(requestStepChangesSchema),
     async (c) => {
       const { feedback, comments } = c.req.valid('json')
+      // The step re-runs (dispatches) — re-mint the run's activation first.
+      await remintActivations(c, param(c, 'workspaceId'), param(c, 'executionId'))
       const instance = await c
         .get('container')
         .executionService.requestStepChanges(

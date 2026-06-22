@@ -692,6 +692,14 @@ export const executionInstanceSchema = v.object({
    * failed bootstrap (shared {@link agentFailureSchema}).
    */
   failure: v.optional(v.nullable(agentFailureSchema)),
+  /**
+   * GitHub user id of whoever started this run (or retried it). Recorded so the
+   * individual-usage restricted mode can use the initiator's OWN personal
+   * subscription (e.g. Claude) for the run's steps — a personal credential is never
+   * shared, so only its owner's runs may use it. Absent for runs started without a
+   * signed-in user (auth-disabled/local dev) and for legacy runs.
+   */
+  initiatedBy: v.optional(v.nullable(v.number())),
 })
 export type ExecutionInstance = v.InferOutput<typeof executionInstanceSchema>
 

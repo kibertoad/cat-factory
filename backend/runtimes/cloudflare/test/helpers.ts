@@ -43,6 +43,8 @@ export interface TestResponse<T = unknown> {
 export interface TestApp {
   call<T = unknown>(method: string, path: string, body?: unknown): Promise<TestResponse<T>>
   createWorkspace(options?: { name?: string; seed?: boolean }): Promise<WorkspaceSnapshot>
+  /** Create an unseeded workspace owned by a fresh ORG account (via the real services). */
+  createOrgWorkspace(options?: { name?: string }): Promise<WorkspaceSnapshot>
   /**
    * Drive every active run in a workspace to a standstill (done, or parked on a
    * decision / the spend gate), then return the latest executions. Reproduces the
@@ -101,6 +103,17 @@ export function makeApp(
     return res.body
   }
 
+  // Create an org account + owner and a workspace owned by it directly through the
+  // container's services — dev-open has no signed-in user, so the HTTP account flow
+  // (which requires one) can't be used to set up an org-scoped workspace.
+  async function createOrgWorkspace(options: { name?: string } = {}): Promise<WorkspaceSnapshot> {
+    const c = buildContainer(env, coreOverrides)
+    const user = { id: 1, login: 'org-owner', name: 'Org Owner' }
+    const name = options.name ?? 'Org board'
+    const org = await c.accountService.createOrg(user, { name: `${name} org` })
+    return c.workspaceService.create({ name, seed: false }, user.id, org.id)
+  }
+
   async function drive(workspaceId: string, maxRounds = 50): Promise<ExecutionInstance[]> {
     const c = buildContainer(env, coreOverrides)
     for (let round = 0; round < maxRounds; round++) {
@@ -142,7 +155,7 @@ export function makeApp(
     return maxPolls
   }
 
-  return { call, createWorkspace, drive, driveBootstrap }
+  return { call, createWorkspace, createOrgWorkspace, drive, driveBootstrap }
 }
 
 /**

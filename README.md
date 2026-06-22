@@ -157,6 +157,10 @@ Each capability has a deeper write-up; start here and follow the link.
 - **Execution & real-time events** — the durable run engine, decision prompts,
   failure/retry surface, and the push-not-poll event hub.
   [Backend → Execution & real-time events](./backend/README.md).
+- **Model support** — per-block model selection, the Cloudflare → direct →
+  subscription fallback ladder ("subscriptions always win"), the Pi / Claude Code /
+  Codex harnesses, flat-rate quota vs the spend budget, and the individual-only
+  (Claude-on-org) rule. [`docs/model-support.md`](./backend/docs/model-support.md).
 - **Requirements review** — the stateless, synchronous reviewer agent.
   [`CLAUDE.md` → Requirements review flow](./CLAUDE.md).
 - **Service blueprints** — the in-repo `blueprints/` map and board reconciliation.
@@ -200,6 +204,7 @@ Each capability has a deeper write-up; start here and follow the link.
 
 **Integrations & features**
 
+- [Model support — selection, fallbacks, harnesses & provisioning](./backend/docs/model-support.md)
 - [Authentication](./backend/docs/auth.md)
 - [GitHub integration — design](./backend/docs/github-integration.md) ·
   [operations runbook](./backend/docs/github-operations.md) ·

@@ -12,6 +12,7 @@ import type {
   PullRequestMerger,
   PullRequestMergeabilityProvider,
   StepReviewComment,
+  SubscriptionActivationRepository,
   TicketTrackerProvider,
 } from '@cat-factory/kernel'
 import {
@@ -30,8 +31,10 @@ import {
   assertFound,
   ConflictError,
   getErrorMessage,
+  individualVendorForModelId,
   NotFoundError,
   sameSubtasks,
+  type SubscriptionVendor,
 } from '@cat-factory/kernel'
 import { DEFAULT_MERGE_PRESET } from '@cat-factory/kernel'
 import {
@@ -185,6 +188,25 @@ export interface ExecutionServiceDependencies {
    */
   requirementReviewRepository?: RequirementReviewRepository
   /**
+   * Optional: when the individual-usage subscription store is configured, a finished
+   * run's per-run credential activation is deleted here the moment it reaches a terminal
+   * state, bounding standing exposure to the run's own lifetime (the TTL sweep is the
+   * backstop). Absent → activations are reclaimed by the TTL sweep alone.
+   */
+  subscriptionActivationRepository?: SubscriptionActivationRepository
+  /**
+   * Optional: resolve a workspace's per-agent-kind default model id (the same resolver
+   * the container executor uses for dispatch). The personal-credential gate consults it
+   * so a run whose block has NO pinned model but whose workspace default resolves to an
+   * individual-usage vendor is still gated up-front — matching what dispatch will resolve,
+   * instead of starting and then failing on a missing activation. Absent → the gate sees
+   * only the block's pinned model (env-routing defaults are operator-level and not gated).
+   */
+  resolveWorkspaceModelDefault?: (
+    workspaceId: string,
+    agentKind: string,
+  ) => Promise<string | undefined>
+  /**
    * Optional: when the environment integration is configured, a `deployer` step
    * provisions an ephemeral environment deterministically through this service
    * (no LLM), and downstream steps discover the resulting env via it.
@@ -292,6 +314,11 @@ export class ExecutionService {
   private readonly prMerger?: PullRequestMerger
   private readonly mergePresetRepository?: MergePresetRepository
   private readonly ticketTrackerProvider?: TicketTrackerProvider
+  private readonly subscriptionActivations?: SubscriptionActivationRepository
+  private readonly resolveWorkspaceModelDefault?: (
+    workspaceId: string,
+    agentKind: string,
+  ) => Promise<string | undefined>
 
   constructor({
     workspaceRepository,
@@ -319,6 +346,8 @@ export class ExecutionService {
     pullRequestMerger,
     mergePresetRepository,
     ticketTrackerProvider,
+    subscriptionActivationRepository,
+    resolveWorkspaceModelDefault,
   }: ExecutionServiceDependencies) {
     this.workspaceRepository = workspaceRepository
     this.blockRepository = blockRepository
@@ -345,6 +374,8 @@ export class ExecutionService {
     this.prMerger = pullRequestMerger
     this.mergePresetRepository = mergePresetRepository
     this.ticketTrackerProvider = ticketTrackerProvider
+    this.subscriptionActivations = subscriptionActivationRepository
+    this.resolveWorkspaceModelDefault = resolveWorkspaceModelDefault
   }
 
   private requireWorkspace(workspaceId: string) {
@@ -353,6 +384,63 @@ export class ExecutionService {
 
   private async requireBlock(workspaceId: string, id: string): Promise<Block> {
     return assertFound(await this.blockRepository.get(workspaceId, id), 'Block', id)
+  }
+
+  /**
+   * The individual-usage subscription vendors (Claude/GLM/Codex) a run STARTED against
+   * `blockId` with `pipelineId` will use — so the controller can gate the run on the
+   * initiator's personal subscription(s) up-front. Mirrors the dispatch-time model
+   * precedence (block pin → workspace per-kind default) across every step in the
+   * pipeline, so a block with NO pin but an individual-usage workspace default is gated
+   * too, instead of starting and then failing at dispatch on a missing activation.
+   */
+  async individualVendorsForBlock(
+    workspaceId: string,
+    blockId: string,
+    pipelineId: string,
+  ): Promise<SubscriptionVendor[]> {
+    const block = await this.requireBlock(workspaceId, blockId)
+    const pipeline = await this.pipelineRepository.get(workspaceId, pipelineId)
+    return this.resolveIndividualVendors(workspaceId, block.modelId, pipeline?.agentKinds ?? [])
+  }
+
+  /** The individual-usage vendors a failed run's resumed steps use (for the retry gate). */
+  async individualVendorsForRun(
+    workspaceId: string,
+    executionId: string,
+  ): Promise<SubscriptionVendor[]> {
+    const run = await this.executionRepository.get(workspaceId, executionId)
+    if (!run) return []
+    const block = await this.blockRepository.get(workspaceId, run.blockId)
+    if (!block) return []
+    return this.resolveIndividualVendors(
+      workspaceId,
+      block.modelId,
+      run.steps.map((s) => s.agentKind),
+    )
+  }
+
+  /**
+   * The set of individual-usage vendors the given steps resolve to. A block-level pin
+   * applies to every step (so it short-circuits); otherwise each kind falls to the
+   * workspace per-kind default — exactly the precedence `resolveStepModelRef` uses at
+   * dispatch. Env-routing defaults (the last fallback) are operator-level and not gated.
+   */
+  private async resolveIndividualVendors(
+    workspaceId: string,
+    blockModelId: string | undefined,
+    agentKinds: string[],
+  ): Promise<SubscriptionVendor[]> {
+    const pinned = individualVendorForModelId(blockModelId)
+    if (pinned) return [pinned]
+    if (!this.resolveWorkspaceModelDefault || agentKinds.length === 0) return []
+    const vendors = new Set<SubscriptionVendor>()
+    for (const kind of agentKinds) {
+      const defaultId = await this.resolveWorkspaceModelDefault(workspaceId, kind)
+      const vendor = individualVendorForModelId(defaultId)
+      if (vendor) vendors.add(vendor)
+    }
+    return [...vendors]
   }
 
   /**
@@ -380,6 +468,20 @@ export class ExecutionService {
     workspaceId: string,
     blockId: string,
     pipelineId: string,
+    /**
+     * GitHub user id of the initiator. Recorded on the run so an individual-usage
+     * model (Claude) uses this user's OWN personal subscription. Absent for
+     * system-initiated runs (recurring schedules) and auth-disabled dev.
+     */
+    initiatedBy?: number | null,
+    /**
+     * Mint the per-run personal-credential activation for an individual-usage model.
+     * Invoked with the new run's id BEFORE it is persisted/dispatched, so the async
+     * steps can lease it; a throw (wrong/missing password) aborts the start cleanly
+     * with nothing persisted. The server layer supplies this (the personal store lives
+     * outside the domain Core); absent for non-individual runs.
+     */
+    activate?: (executionId: string) => Promise<void>,
   ): Promise<ExecutionInstance> {
     await this.requireWorkspace(workspaceId)
     const block = await this.requireBlock(workspaceId, blockId)
@@ -391,9 +493,26 @@ export class ExecutionService {
 
     // A pipeline with a Tester that runs locally needs the service's test infra
     // configured (a docker-compose path, or an explicit "no infra dependencies"
-    // flag). Block the start with a clear, actionable error otherwise.
+    // flag). Block the start with a clear, actionable error otherwise — before any
+    // side effects (activation mint / prior-run teardown).
     if (pipeline.agentKinds.includes(TESTER_AGENT_KIND)) {
       await this.assertTesterInfraConfigured(workspaceId, block)
+    }
+
+    // Mint the activation next: if the credential can't be unlocked, fail before
+    // tearing down the block's prior run or creating a new one.
+    const executionId = this.idGenerator.next('exec')
+    await activate?.(executionId)
+
+    // Replacing the block's prior run: clear its per-run activation now (it never reaches
+    // the terminal cleanup in emitInstance when it's still running), so a replaced run's
+    // system-encrypted token copy doesn't linger to its TTL. Keyed by the OLD run id, so
+    // the activation just minted for the new run is untouched.
+    if (this.subscriptionActivations) {
+      const prior = await this.executionRepository.getByBlock(workspaceId, blockId)
+      if (prior && prior.id !== executionId) {
+        await this.subscriptionActivations.deleteByExecution(prior.id)
+      }
     }
 
     await this.executionRepository.deleteByBlock(workspaceId, blockId)
@@ -424,13 +543,14 @@ export class ExecutionService {
       }
     })
     const instance: ExecutionInstance = {
-      id: this.idGenerator.next('exec'),
+      id: executionId,
       blockId,
       pipelineId: pipeline.id,
       pipelineName: pipeline.name,
       steps,
       currentStep: 0,
       status: 'running',
+      initiatedBy: initiatedBy ?? null,
     }
     await this.executionRepository.upsert(workspaceId, instance)
     await this.blockRepository.update(workspaceId, blockId, {
@@ -1938,6 +2058,9 @@ export class ExecutionService {
       pipelineName: instance.pipelineName,
       workspaceId,
       executionId: instance.id,
+      // Carry the run initiator so the container executor can lease their OWN personal
+      // (individual-usage) subscription for the step. Null on system/dev runs.
+      ...(instance.initiatedBy != null ? { initiatedByUserId: instance.initiatedBy } : {}),
       stepIndex: instance.currentStep,
       isFinalStep,
       block: {
@@ -2069,6 +2192,24 @@ export class ExecutionService {
       this.blockRepository.get(workspaceId, instance.blockId),
     ])
     await this.events.executionChanged(workspaceId, instance, block)
+    // When a run reaches a terminal state, delete its per-run personal-credential
+    // activation immediately (individual-usage subscriptions) so the system-encrypted
+    // token copy doesn't linger to its TTL. Best-effort + idempotent — a missing repo or
+    // a re-emit of an already-cleared run is a no-op, and a failure here must never
+    // derail the emit.
+    if (
+      this.subscriptionActivations &&
+      (instance.status === 'done' || instance.status === 'failed')
+    ) {
+      try {
+        await this.subscriptionActivations.deleteByExecution(instance.id)
+      } catch {
+        // Swallow — a failure here must never derail the emit. This is not a silent
+        // data-loss path: the TTL sweep reclaims the row as a backstop, and the sweep
+        // (Worker cron / Node retention timer) logs its own errors, so a *systemic*
+        // cleanup failure surfaces there rather than being lost here.
+      }
+    }
   }
 
   /**
@@ -2665,7 +2806,15 @@ export class ExecutionService {
    * work. Mirrors {@link BootstrapService.retry}; both are reached via the unified
    * `POST /agent-runs/:id/retry` endpoint.
    */
-  async retry(workspaceId: string, executionId: string): Promise<ExecutionInstance> {
+  async retry(
+    workspaceId: string,
+    executionId: string,
+    /** The retrying user (their personal subscription is used for individual-usage
+     *  models). Falls back to the original initiator when omitted. */
+    initiatedBy?: number | null,
+    /** Mint the per-run personal-credential activation (see {@link start}). */
+    activate?: (executionId: string) => Promise<void>,
+  ): Promise<ExecutionInstance> {
     await this.requireWorkspace(workspaceId)
     const previous = assertFound(
       await this.executionRepository.get(workspaceId, executionId),
@@ -2678,17 +2827,22 @@ export class ExecutionService {
     await this.requireBlock(workspaceId, previous.blockId)
 
     const { steps, currentStep } = planResumedSteps(previous)
+    // Mint the activation before replacing the failed run, so a bad password aborts
+    // the retry without losing the retryable terminal run.
+    const newId = this.idGenerator.next('exec')
+    await activate?.(newId)
     // Replace the terminal failed run for this block with the resumed one (single
     // run per block, matching the board's by-block projection).
     await this.executionRepository.deleteByBlock(workspaceId, previous.blockId)
     const instance: ExecutionInstance = {
-      id: this.idGenerator.next('exec'),
+      id: newId,
       blockId: previous.blockId,
       pipelineId: previous.pipelineId,
       pipelineName: previous.pipelineName,
       steps,
       currentStep,
       status: 'running',
+      initiatedBy: initiatedBy ?? previous.initiatedBy ?? null,
     }
     await this.executionRepository.upsert(workspaceId, instance)
     const done = steps.filter((s) => s.state === 'done').length

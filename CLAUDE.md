@@ -5,6 +5,18 @@ Orientation for working in this repo. High-level product docs live in
 `backend/docs/`. This file captures the **runtime flows** that are spread across
 many files and are otherwise slow to re-derive.
 
+## Backwards compatibility is NOT a goal
+
+This project is pre-1.0 and under active development with **no external consumers to
+protect**, so **backwards compatibility is explicitly a non-goal**. Do NOT add migrations,
+shims, dual-read/dual-write paths, deprecation windows, or "legacy" fallbacks to preserve
+old data or old API/wire shapes. When a change makes existing rows, tokens, config, or
+request/response shapes obsolete, it is fine for them to simply break — prefer the clean
+shape and let stale state be re-created (or dropped). Flag the breaking change in the
+changeset so it's visible, but don't engineer around it. (This is why, e.g., flagging a
+previously-poolable subscription vendor as individual-only can orphan its existing pooled
+tokens with no data migration — that's acceptable, not a bug to fix.)
+
 ## Known environment quirks
 
 - **Do not validate Cloudflare auth before deployments.** Skip `wrangler whoami`
@@ -482,6 +494,34 @@ blockId)` (worker `infrastructure/container.ts`): find the `github_repos` row
 - Drag-drop: `useBlockDrag.ts` (`reparentAt()`) → `POST /blocks/:id/reparent` →
   `BoardService.reparent()`. Tasks can move into frames or modules; modules into
   frames; frames cannot nest (`canReparent` in `board.logic.ts`).
+
+## Individual-usage subscriptions (Claude) — per-user, not pooled
+
+Vendors flagged `individualOnly` in `SUBSCRIPTION_VENDORS` (today only `claude`,
+Anthropic's consumer subscription) are licensed for individual use, so they are NEVER in
+the per-workspace pool — `ProviderSubscriptionService` refuses them (409). They live in a
+separate per-USER store with a distinct restricted mode. Full model + safeguards:
+[`backend/docs/individual-subscription-usage.md`](./backend/docs/individual-subscription-usage.md).
+
+- **Double-encrypted at rest** (`personal_subscriptions`, migration 0039 ⇄ Drizzle):
+  `system.encrypt(personal.seal(token, password))`. The inner layer
+  (`WebCryptoPersonalSecretCipher`, PBKDF2→AES-GCM) is keyed by the user's personal
+  **password**, which is never stored — so the token needs BOTH the system key AND the
+  password to recover. `PersonalSubscriptionService` (integrations) owns it;
+  `GET|POST|DELETE /personal-subscriptions` (user-scoped) is the API.
+- **Per-run activation** (`subscription_activations`): at start/retry the user supplies
+  their password (cached client-side with a TTL) → `activateForRun` re-encrypts the raw
+  token with the SYSTEM key only, scoped to the run, so the async container steps lease it
+  without the user present. Cleared when the run reaches terminal (`emitInstance` →
+  `deleteByExecution`) and swept on TTL (Worker cron ⇄ Node retention timer).
+- **Gating**: `personalGateForBlock`/`personalGateForRun` (server) resolve the block's
+  individual vendor via `individualVendorForModelId`; a missing user/credential/password
+  → `428 credential_required {vendor,reason}`, which the SPA's
+  `personalSubscriptions` store turns into a password modal (then retries). The run
+  records `initiatedBy`; `ContainerAgentExecutor` leases the initiator's activation
+  (`leasePersonalSubscriptionToken`) for an individual vendor instead of the pool.
+- **No recurring**: `RecurringPipelineService.fire` refuses a block on an individual-usage
+  model (can't unlock unattended).
 
 ## Multi-runtime facades & cross-runtime conformance
 

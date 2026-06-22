@@ -1,6 +1,7 @@
 import { AiAgentExecutor, inlineWebSearchOptionsFromEnv } from '@cat-factory/agents'
 import {
   HttpRunnerPoolProvider,
+  PersonalSubscriptionService,
   ProviderSubscriptionService,
   RunnerPoolConnectionService,
   RunnerPoolTransport,
@@ -34,6 +35,7 @@ import {
   GitHubCiStatusProvider,
   GitHubMergeabilityProvider,
   GitHubPullRequestMerger,
+  WebCryptoPersonalSecretCipher,
   WebCryptoSecretCipher,
   buildResolveRepoTarget,
   createWebSearchUpstreamFromEnv,
@@ -53,6 +55,10 @@ import {
   DrizzleServiceFrameRepository,
 } from './repositories/containerExecution.js'
 import { DrizzleProviderSubscriptionTokenRepository } from './repositories/providerSubscription.js'
+import {
+  DrizzlePersonalSubscriptionRepository,
+  DrizzleSubscriptionActivationRepository,
+} from './repositories/personalSubscription.js'
 import { createDrizzleRepositories } from './repositories/drizzle.js'
 import { DrizzleNotificationRepository } from './repositories/notifications.js'
 import {
@@ -266,6 +272,7 @@ function buildNodeContainerExecutor(
   ) => Promise<string | undefined>,
   mintInstallationTokenOverride?: (installationId: number) => Promise<string>,
   subscriptions?: ProviderSubscriptionService,
+  personalSubscriptions?: PersonalSubscriptionService,
 ): AgentExecutor | null {
   // The harness reaches models only through this service's LLM proxy; `PUBLIC_URL`
   // is this service's externally reachable base (the runner pool / local container
@@ -303,6 +310,14 @@ function buildNodeContainerExecutor(
             subscriptions.hasToken(workspaceId, vendor),
         }
       : {}),
+    // Individual-usage harnesses (Claude) lease the run-initiator's OWN activated
+    // personal credential; absent ⇒ such models fail loudly at dispatch.
+    ...(personalSubscriptions
+      ? {
+          leasePersonalSubscriptionToken: (executionId, userId, vendor) =>
+            personalSubscriptions.leaseForRun(executionId, userId, vendor),
+        }
+      : {}),
     proxyBaseUrl: `${publicUrl.replace(/\/+$/, '')}/v1`,
     // Point container agents' web search at the backend search proxy (no provider key
     // in the sandbox) whenever an upstream is configured for this deployment.
@@ -332,6 +347,33 @@ function buildNodeSubscriptionService(
       masterKeyBase64,
       info: 'cat-factory:provider-subscriptions',
     }),
+    idGenerator,
+    clock,
+  })
+}
+
+/**
+ * Build the per-USER individual-usage subscription service (Claude) for the Node/local
+ * facade (Postgres-backed), or undefined when the shared ENCRYPTION_KEY is absent.
+ * Double-encrypts the credential (password layer inside the system layer). Mirrors the
+ * Worker's buildPersonalSubscriptionService.
+ */
+function buildNodePersonalSubscriptionService(
+  env: NodeJS.ProcessEnv,
+  db: DrizzleDb,
+  idGenerator: CoreDependencies['idGenerator'],
+  clock: Clock,
+): PersonalSubscriptionService | undefined {
+  const masterKeyBase64 = env.ENCRYPTION_KEY?.trim()
+  if (!masterKeyBase64) return undefined
+  return new PersonalSubscriptionService({
+    personalSubscriptionRepository: new DrizzlePersonalSubscriptionRepository(db),
+    subscriptionActivationRepository: new DrizzleSubscriptionActivationRepository(db),
+    secretCipher: new WebCryptoSecretCipher({
+      masterKeyBase64,
+      info: 'cat-factory:personal-subscriptions',
+    }),
+    personalCipher: new WebCryptoPersonalSecretCipher(),
     idGenerator,
     clock,
   })
@@ -466,6 +508,14 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     idGenerator,
     clock,
   )
+  // The per-user individual-usage subscription store (Claude), shared by the
+  // container executor's personal lease and the personal-subscription controller.
+  const personalSubscriptions = buildNodePersonalSubscriptionService(
+    env,
+    options.db,
+    idGenerator,
+    clock,
+  )
 
   const container = buildNodeContainerExecutor(
     env,
@@ -476,6 +526,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     resolveWorkspaceModelDefault,
     options.mintInstallationToken,
     subscriptions,
+    personalSubscriptions,
   )
 
   // Always a composite: inline kinds run as one-shot LLM calls; repo-operating kinds
@@ -530,6 +581,8 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     blockRepository: repos.blockRepository,
     pipelineRepository: repos.pipelineRepository,
     executionRepository: repos.executionRepository,
+    // Clear a finished run's personal-credential activation promptly (TTL sweep is the backstop).
+    subscriptionActivationRepository: new DrizzleSubscriptionActivationRepository(options.db),
     // In-org shared services. NOTE: the Node facade has no real-time transport yet (runs fall
     // back to the engine's NoopEventPublisher), so it does NOT wrap a FanOutEventPublisher the
     // way the Cloudflare facade does. When real-time lands here, decorate the publisher with
@@ -615,6 +668,9 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // The vendor-credential (subscription token pool) service the shared controller
     // reads; present when the shared ENCRYPTION_KEY is configured.
     subscriptions,
+    // The per-user individual-usage subscription store (Claude); present when the
+    // shared ENCRYPTION_KEY is configured.
+    personalSubscriptions,
   }
 }
 

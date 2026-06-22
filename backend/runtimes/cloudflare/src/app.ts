@@ -35,7 +35,9 @@ export function createApp(options: CreateAppOptions = {}): Hono<AppEnv> {
     '*',
     cors({
       origin: (origin, c) => resolveCorsOrigin(origin, c.env.CORS_ALLOWED_ORIGINS),
-      allowHeaders: ['Content-Type', 'Authorization'],
+      // X-Personal-Password carries the ambient personal-subscription unlock password
+      // (individual-usage vendors); it must be allow-listed or the browser drops it.
+      allowHeaders: ['Content-Type', 'Authorization', 'X-Personal-Password'],
     }),
   )
   app.use('*', async (c, next) => {

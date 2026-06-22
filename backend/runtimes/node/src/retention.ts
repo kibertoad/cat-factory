@@ -2,6 +2,7 @@ import type {
   Clock,
   LlmCallMetricRepository,
   PipelineScheduleRepository,
+  SubscriptionActivationRepository,
   TokenUsageRepository,
 } from '@cat-factory/kernel'
 import type { Logger, RetentionConfig } from '@cat-factory/server'
@@ -22,6 +23,9 @@ export interface RetentionRepos {
   tokenUsageRepository: Pick<TokenUsageRepository, 'deleteOlderThan'>
   llmCallMetricRepository: Pick<LlmCallMetricRepository, 'deleteOlderThan'>
   pipelineScheduleRepository: Pick<PipelineScheduleRepository, 'pruneRunsBefore'>
+  // Personal-credential per-run activations whose TTL has passed (individual-usage
+  // subscriptions). Mirrors the Worker's activation-sweeper cron.
+  subscriptionActivationRepository: Pick<SubscriptionActivationRepository, 'deleteExpired'>
 }
 
 /** Rows reclaimed from each table, for logging. */
@@ -29,6 +33,7 @@ export interface RetentionResult {
   tokenUsage: number
   llmCallMetrics: number
   scheduleRuns: number
+  activations: number
 }
 
 /**
@@ -69,6 +74,8 @@ export async function sweepRetention(
     scheduleRuns: await prune(SCHEDULE_RUN_RETENTION_MS, now, (c) =>
       repos.pipelineScheduleRepository.pruneRunsBefore(c),
     ),
+    // Delete activations whose own TTL (expires_at) has passed — `now`, not a window.
+    activations: await repos.subscriptionActivationRepository.deleteExpired(now),
   }
 }
 
@@ -86,13 +93,16 @@ export function startRetentionSweeper(
 ): () => void {
   const tick = async () => {
     try {
-      const { tokenUsage, llmCallMetrics, scheduleRuns } = await sweepRetention(
+      const { tokenUsage, llmCallMetrics, scheduleRuns, activations } = await sweepRetention(
         repos,
         retention,
         clock.now(),
       )
-      if (tokenUsage > 0 || llmCallMetrics > 0 || scheduleRuns > 0) {
-        log.info({ tokenUsage, llmCallMetrics, scheduleRuns }, 'retention sweep reclaimed rows')
+      if (tokenUsage > 0 || llmCallMetrics > 0 || scheduleRuns > 0 || activations > 0) {
+        log.info(
+          { tokenUsage, llmCallMetrics, scheduleRuns, activations },
+          'retention sweep reclaimed rows',
+        )
       }
     } catch (error) {
       log.error(

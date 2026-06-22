@@ -1,5 +1,8 @@
 import type { AgentRunRepository } from '@cat-factory/kernel'
-import type { ProviderSubscriptionService } from '@cat-factory/integrations'
+import type {
+  PersonalSubscriptionService,
+  ProviderSubscriptionService,
+} from '@cat-factory/integrations'
 import type { Core } from '@cat-factory/orchestration'
 import type { SessionPayload } from '../auth/signing.js'
 import type { AppConfig } from '../config/types.js'
@@ -22,6 +25,12 @@ export interface ServerContainer extends Core {
    * Present only when the facade wired the provider-subscription repository.
    */
   subscriptions?: ProviderSubscriptionService
+  /**
+   * The per-user individual-usage subscription store (Claude). Present only when the
+   * facade wired the personal-subscription repositories (needs ENCRYPTION_KEY). Drives
+   * the personal-credential controller + the run activation the executor leases.
+   */
+  personalSubscriptions?: PersonalSubscriptionService
 }
 
 /** Hono generics shared by the cross-runtime controllers (Variables only — no Bindings). */

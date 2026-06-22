@@ -27,6 +27,7 @@ import { webSearchProxyController } from './modules/webSearch/WebSearchProxyCont
 import { runnerPoolController } from './modules/runners/RunnerPoolController.js'
 import { slackController, slackOAuthController } from './modules/slack/SlackController.js'
 import { vendorCredentialController } from './modules/providers/VendorCredentialController.js'
+import { personalSubscriptionController } from './modules/providers/PersonalSubscriptionController.js'
 import { serviceMountController } from './modules/services/ServiceMountController.js'
 import { taskSourceController } from './modules/tasks/TaskSourceController.js'
 import { workspaceController } from './modules/workspaces/WorkspaceController.js'
@@ -54,6 +55,7 @@ export function registerCoreControllers<E extends AppEnv>(app: Hono<E>): void {
   app.route('/', promptFragmentController())
   app.route('/', modelController())
   app.route('/', accountController())
+  app.route('/', personalSubscriptionController())
   app.route('/accounts/:accountId', fragmentLibraryController('account'))
   app.route('/', workspaceController())
   // Real-time WebSocket event stream (self-authenticates via ?ticket=; the facade's

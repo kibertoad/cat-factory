@@ -8,15 +8,18 @@ import type {
 } from '@cat-factory/kernel'
 import { ConflictError } from '@cat-factory/kernel'
 import { requireWorkspace } from '@cat-factory/kernel'
-import { SUBSCRIPTION_VENDORS } from '@cat-factory/kernel'
+import { SUBSCRIPTION_VENDORS, isIndividualVendor } from '@cat-factory/kernel'
 import type { WorkspaceRepository } from '@cat-factory/kernel'
 import { DEFAULT_USAGE_WINDOW_MS, chooseToken } from './providers.logic.js'
 
-// Every vendor whose subscription harness we support — the single source of truth
-// is the SUBSCRIPTION_VENDORS map in the kernel, so adding a vendor there (e.g.
-// DeepSeek) automatically widens the unfiltered `listTokens` sweep below. A
-// hardcoded subset here silently hides newly-supported vendors' pooled tokens.
-const ALL_VENDORS = Object.keys(SUBSCRIPTION_VENDORS) as SubscriptionVendor[]
+// Every vendor whose subscription harness we support that is ALSO poolable — i.e.
+// excluding the individual-usage vendors (Claude), which are stored per-user by the
+// PersonalSubscriptionService and never shared in a workspace pool. The single source
+// of truth is the SUBSCRIPTION_VENDORS map in the kernel, so adding a poolable vendor
+// there automatically widens the unfiltered `listTokens` sweep below.
+const ALL_VENDORS = (Object.keys(SUBSCRIPTION_VENDORS) as SubscriptionVendor[]).filter(
+  (v) => !isIndividualVendor(v),
+)
 
 // Upper bound on live tokens per workspace+vendor. The rotation pool is meant to hold
 // a handful of subscriptions for quota headroom; a generous ceiling keeps the feature
@@ -67,12 +70,27 @@ export class ProviderSubscriptionService {
     return this.deps.usageWindowMs ?? DEFAULT_USAGE_WINDOW_MS
   }
 
+  /**
+   * Reject an individual-usage vendor (Claude) from the shared workspace pool: such a
+   * subscription is licensed for individual use only, so it is stored per-user by the
+   * PersonalSubscriptionService and never pooled/rotated/shared across a workspace.
+   */
+  private assertPoolable(vendor: SubscriptionVendor): void {
+    if (isIndividualVendor(vendor)) {
+      throw new ConflictError(
+        `The ${SUBSCRIPTION_VENDORS[vendor].label} subscription is licensed for individual use ` +
+          `only and cannot be pooled on a workspace. Connect it as a personal subscription instead.`,
+      )
+    }
+  }
+
   /** Add a token to the workspace's pool for a vendor. */
   async addToken(
     workspaceId: string,
     input: { vendor: SubscriptionVendor; label: string; token: string },
   ): Promise<VendorCredentialSummary> {
     await requireWorkspace(this.deps.workspaceRepository, workspaceId)
+    this.assertPoolable(input.vendor)
     const existing = await this.deps.providerSubscriptionTokenRepository.listByVendor(
       workspaceId,
       input.vendor,
@@ -117,8 +135,13 @@ export class ProviderSubscriptionService {
     return out
   }
 
-  /** Whether the workspace has at least one live token for a vendor. */
+  /**
+   * Whether the workspace has at least one live token for a vendor. Individual-usage
+   * vendors are never pooled, so this is always false for them — the executor routes
+   * those through the per-user PersonalSubscriptionService instead.
+   */
   async hasToken(workspaceId: string, vendor: SubscriptionVendor): Promise<boolean> {
+    if (isIndividualVendor(vendor)) return false
     const rows = await this.deps.providerSubscriptionTokenRepository.listByVendor(
       workspaceId,
       vendor,
@@ -152,6 +175,7 @@ export class ProviderSubscriptionService {
     workspaceId: string,
     vendor: SubscriptionVendor,
   ): Promise<LeasedSubscriptionToken> {
+    this.assertPoolable(vendor)
     const rows = await this.deps.providerSubscriptionTokenRepository.listByVendor(
       workspaceId,
       vendor,

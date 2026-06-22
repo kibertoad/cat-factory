@@ -31,6 +31,13 @@ export interface AgentRunContext {
    */
   workspaceId?: string
   executionId?: string
+  /**
+   * GitHub user id of whoever started/retried this run. Set by the engine from the
+   * run's `initiatedBy`. The container executor uses it to lease the initiator's OWN
+   * personal (individual-usage) subscription — e.g. Claude — for the step, since such
+   * a credential is never shared. Absent for runs started without a signed-in user.
+   */
+  initiatedByUserId?: number
   /** Index of this step within the pipeline. */
   stepIndex: number
   /** Whether this is the pipeline's last step (drives task finalisation). */

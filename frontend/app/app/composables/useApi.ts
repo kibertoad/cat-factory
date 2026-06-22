@@ -31,6 +31,8 @@ import type {
   MergePullRequestInput,
   ModelOption,
   ModelDefaults,
+  PersonalSubscriptionStatus,
+  StorePersonalSubscriptionInput,
   SubscriptionVendor,
   VendorCredential,
   OpenPullRequestInput,
@@ -110,6 +112,12 @@ export function useApi() {
       if (response?.status === 401) useAuthStore().handleUnauthorized()
     },
   })
+
+  // The personal-subscription unlock password (individual-usage vendors) rides as an
+  // ambient request header — like the bearer token — so it never lands in a request
+  // body/wire-contract payload. Mirrors PERSONAL_PASSWORD_HEADER in @cat-factory/contracts.
+  const pwHeaders = (password?: string): Record<string, string> | undefined =>
+    password ? { 'X-Personal-Password': password } : undefined
 
   const ws = (workspaceId: string) => `/workspaces/${encodeURIComponent(workspaceId)}`
   // Prompt-fragment library routes exist at both tiers; resolve the prefix from
@@ -203,6 +211,18 @@ export function useApi() {
     removeVendorCredential: (workspaceId: string, id: string) =>
       http(`${ws(workspaceId)}/vendor-credentials/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 
+    // ---- personal (individual-usage) subscriptions (per-user, e.g. Claude) ----
+    // Stored per signed-in user, double-encrypted under their personal password.
+    // Metadata only is returned (never the token). User-scoped (no workspace).
+    listPersonalSubscriptions: () =>
+      http<{ subscriptions: PersonalSubscriptionStatus[] }>('/personal-subscriptions'),
+
+    storePersonalSubscription: (body: StorePersonalSubscriptionInput) =>
+      http<PersonalSubscriptionStatus>('/personal-subscriptions', { method: 'POST', body }),
+
+    removePersonalSubscription: (vendor: SubscriptionVendor) =>
+      http(`/personal-subscriptions/${encodeURIComponent(vendor)}`, { method: 'DELETE' }),
+
     // ---- accounts (tenancy) -----------------------------------------------
     // The accounts the user can switch between (personal + orgs), org creation
     // and membership management. Empty when auth is disabled (dev).
@@ -294,10 +314,16 @@ export function useApi() {
       http(`${ws(workspaceId)}/pipelines/${pipelineId}`, { method: 'DELETE' }),
 
     // ---- executions -------------------------------------------------------
-    startExecution: (workspaceId: string, blockId: string, body: { pipelineId: string }) =>
+    startExecution: (
+      workspaceId: string,
+      blockId: string,
+      body: { pipelineId: string },
+      password?: string,
+    ) =>
       http<ExecutionInstance>(`${ws(workspaceId)}/blocks/${blockId}/executions`, {
         method: 'POST',
         body,
+        headers: pwHeaders(password),
       }),
 
     cancelExecution: (workspaceId: string, blockId: string) =>
@@ -311,10 +337,11 @@ export function useApi() {
       executionId: string,
       decisionId: string,
       body: { choice: string },
+      password?: string,
     ) =>
       http<ExecutionInstance>(
         `${ws(workspaceId)}/executions/${executionId}/decisions/${decisionId}`,
-        { method: 'POST', body },
+        { method: 'POST', body, headers: pwHeaders(password) },
       ),
 
     approveStep: (
@@ -322,10 +349,11 @@ export function useApi() {
       executionId: string,
       approvalId: string,
       body: { proposal?: string },
+      password?: string,
     ) =>
       http<ExecutionInstance>(
         `${ws(workspaceId)}/executions/${executionId}/steps/${approvalId}/approve`,
-        { method: 'POST', body },
+        { method: 'POST', body, headers: pwHeaders(password) },
       ),
 
     requestStepChanges: (
@@ -333,10 +361,11 @@ export function useApi() {
       executionId: string,
       approvalId: string,
       body: { feedback?: string; comments?: ReviewComment[] },
+      password?: string,
     ) =>
       http<ExecutionInstance>(
         `${ws(workspaceId)}/executions/${executionId}/steps/${approvalId}/request-changes`,
-        { method: 'POST', body },
+        { method: 'POST', body, headers: pwHeaders(password) },
       ),
 
     rejectStep: (
@@ -801,10 +830,10 @@ export function useApi() {
     // ---- agent runs (unified failure + retry) -----------------------------
     // Retry any failed run (bootstrap or execution); the backend resolves the
     // kind from the unified `agent_runs` table and re-drives the right flow.
-    retryAgentRun: (workspaceId: string, runId: string) =>
+    retryAgentRun: (workspaceId: string, runId: string, password?: string) =>
       http<{ kind: AgentRunKind; run: ExecutionInstance | BootstrapJob }>(
         `${ws(workspaceId)}/agent-runs/${encodeURIComponent(runId)}/retry`,
-        { method: 'POST' },
+        { method: 'POST', headers: pwHeaders(password) },
       ),
 
     // Explicitly stop a running run (bootstrap or execution): the backend kills the

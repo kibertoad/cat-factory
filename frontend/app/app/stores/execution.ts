@@ -100,23 +100,49 @@ export const useExecutionStore = defineStore('execution', () => {
     return out
   })
 
-  /** Start `pipeline` against a block; the server marks the block in-progress. */
+  /**
+   * Start `pipeline` against a block; the server marks the block in-progress. A block
+   * pinned to an individual-usage model (Claude) needs the initiator's personal
+   * password — supplied transparently from the local cache, and prompted via the
+   * credential modal (then retried) when the server replies 428.
+   */
   async function start(blockId: string, pipeline: Pipeline) {
     const ws = useWorkspaceStore()
-    await api.startExecution(ws.requireId(), blockId, { pipelineId: pipeline.id })
-    await ws.refresh()
+    const personal = usePersonalSubscriptionsStore()
+    await personal.withCredential(async (password) => {
+      await api.startExecution(ws.requireId(), blockId, { pipelineId: pipeline.id }, password)
+      await ws.refresh()
+    })
   }
 
+  // Interacting with a running individual-usage run (resolve/approve/request-changes) rides
+  // the CACHED personal password along transparently so the server can re-mint the run's
+  // short-TTL activation before advancing — no prompt here (the user is only re-prompted on
+  // start/retry, once the cache lapses). For a non-individual run the server ignores it.
   async function resolveDecision(instanceId: string, decisionId: string, choice: string) {
     const ws = useWorkspaceStore()
-    await api.resolveDecision(ws.requireId(), instanceId, decisionId, { choice })
+    const personal = usePersonalSubscriptionsStore()
+    await api.resolveDecision(
+      ws.requireId(),
+      instanceId,
+      decisionId,
+      { choice },
+      personal.getCachedPassword(),
+    )
     await ws.refresh()
   }
 
   /** Approve a step's gated proposal (optionally edited); the run advances. */
   async function approveStep(instanceId: string, approvalId: string, proposal?: string) {
     const ws = useWorkspaceStore()
-    await api.approveStep(ws.requireId(), instanceId, approvalId, { proposal })
+    const personal = usePersonalSubscriptionsStore()
+    await api.approveStep(
+      ws.requireId(),
+      instanceId,
+      approvalId,
+      { proposal },
+      personal.getCachedPassword(),
+    )
     await ws.refresh()
   }
 
@@ -127,7 +153,14 @@ export const useExecutionStore = defineStore('execution', () => {
     review: { feedback?: string; comments?: ReviewComment[] },
   ) {
     const ws = useWorkspaceStore()
-    await api.requestStepChanges(ws.requireId(), instanceId, approvalId, review)
+    const personal = usePersonalSubscriptionsStore()
+    await api.requestStepChanges(
+      ws.requireId(),
+      instanceId,
+      approvalId,
+      review,
+      personal.getCachedPassword(),
+    )
     await ws.refresh()
   }
 

@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import type { Context } from 'hono'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
+import { personalGateForRun, readPersonalPassword } from '../providers/personalCredentialGate.js'
 
 const unavailable = (c: Context<AppEnv>, message: string) =>
   c.json({ error: { code: 'unavailable', message } }, 503)
@@ -40,7 +41,18 @@ export function agentRunController(): Hono<AppEnv> {
       return c.json({ kind: ref.kind, run }, 201)
     }
 
-    const run = await container.executionService.retry(workspaceId, id)
+    // Individual-usage models (Claude) require the retrying user's personal
+    // subscription: resolve the initiator + activation closure (throws 428 when a
+    // password is needed). The password rides on the X-Personal-Password header. A
+    // non-individual run gets a no-op gate.
+    const { initiatedBy, activate } = await personalGateForRun(
+      container,
+      workspaceId,
+      id,
+      c.get('user'),
+      readPersonalPassword(c),
+    )
+    const run = await container.executionService.retry(workspaceId, id, initiatedBy, activate)
     return c.json({ kind: ref.kind, run }, 201)
   })
 

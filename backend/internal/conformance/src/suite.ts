@@ -129,49 +129,67 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         expect(initial.status).toBe(200)
         expect(initial.body.credentials).toEqual([])
 
-        // Add two tokens for the same vendor (a pool) — the raw token is write-only.
+        // Add two tokens (a pool) for the poolable, organization-permitted coding-plan
+        // vendors — the raw token is write-only. (Claude/GLM/ChatGPT-Codex are individual-
+        // usage only and are NOT poolable; that is asserted separately below.)
         const first = await call<{ id: string; vendor: string; label: string }>('POST', base, {
-          vendor: 'claude',
-          label: 'primary',
-          token: 'sk-ant-oat01-secret-one',
+          vendor: 'kimi',
+          label: 'moonshot',
+          token: 'kimi-coding-plan-secret-one',
         })
         expect(first.status).toBe(201)
-        expect(first.body.vendor).toBe('claude')
+        expect(first.body.vendor).toBe('kimi')
         // The secret is never echoed back.
         expect(JSON.stringify(first.body)).not.toContain('secret-one')
-        const second = await call<{ id: string }>('POST', base, {
-          vendor: 'codex',
-          label: 'chatgpt',
-          token: '{"auth_mode":"chatgpt","tokens":{"access_token":"secret-two"}}',
+        const second = await call<{ id: string; vendor: string }>('POST', base, {
+          vendor: 'deepseek',
+          label: 'deepseek',
+          token: 'deepseek-coding-plan-secret-two',
         })
         expect(second.status).toBe(201)
-        // A Claude-Code-flavour vendor beyond claude/codex (GLM/Kimi/DeepSeek): the
-        // unfiltered list MUST include it, not just the headline two vendors.
-        const third = await call<{ id: string; vendor: string }>('POST', base, {
-          vendor: 'glm',
-          label: 'zai',
-          token: 'glm-coding-plan-secret-three',
-        })
-        expect(third.status).toBe(201)
-        expect(third.body.vendor).toBe('glm')
+        expect(second.body.vendor).toBe('deepseek')
 
-        // All three list back as metadata only (the unfiltered GET covers every vendor).
+        // Both list back as metadata only (the unfiltered GET covers every poolable vendor).
         const listed = await call<{ credentials: { id: string; vendor: string }[] }>('GET', base)
-        expect(listed.body.credentials).toHaveLength(3)
-        expect(listed.body.credentials.map((c) => c.vendor).sort()).toEqual([
-          'claude',
-          'codex',
-          'glm',
-        ])
+        expect(listed.body.credentials).toHaveLength(2)
+        expect(listed.body.credentials.map((c) => c.vendor).sort()).toEqual(['deepseek', 'kimi'])
         expect(JSON.stringify(listed.body)).not.toContain('secret-')
 
-        // Remove one; the others survive.
+        // Remove one; the other survives.
         const del = await call('DELETE', `${base}/${first.body.id}`)
         expect(del.status).toBe(204)
         const afterDelete = await call<{ credentials: { id: string }[] }>('GET', base)
-        expect(afterDelete.body.credentials.map((c) => c.id).sort()).toEqual(
-          [second.body.id, third.body.id].sort(),
-        )
+        expect(afterDelete.body.credentials.map((c) => c.id).sort()).toEqual([second.body.id])
+      })
+
+      it('refuses to pool any individual-usage subscription (Claude / GLM / Codex)', async () => {
+        const { call, createOrgWorkspace } = harness.makeApp()
+        // An organization-owned workspace is the case the rule most matters for (pooling an
+        // individual-use credential across an org breaches the vendor's terms), but the rule
+        // is account-agnostic — these vendors are never poolable on ANY workspace.
+        const { workspace } = await createOrgWorkspace()
+        const base = `/workspaces/${workspace.id}/vendor-credentials`
+
+        // Every vendor whose own terms license it for individual use only is never poolable
+        // on a workspace (409 ConflictError) — they are stored per-user via the
+        // personal-subscription endpoints instead.
+        for (const [vendor, token] of [
+          ['claude', 'sk-ant-oat01-secret'],
+          ['glm', 'glm-coding-plan-individual-secret'],
+          ['codex', '{"auth_mode":"chatgpt","tokens":{"access_token":"secret"}}'],
+        ] as const) {
+          const res = await call('POST', base, { vendor, label: 'shared', token })
+          expect(res.status).toBe(409)
+        }
+
+        // An organization-permitted coding-plan vendor (DeepSeek) carries no restriction.
+        const deepseek = await call<{ vendor: string }>('POST', base, {
+          vendor: 'deepseek',
+          label: 'deepseek',
+          token: 'deepseek-coding-plan-secret',
+        })
+        expect(deepseek.status).toBe(201)
+        expect(deepseek.body.vendor).toBe('deepseek')
       })
     })
 

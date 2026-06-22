@@ -265,6 +265,44 @@ export class RecurringPipelineService {
     opts: { now?: number; force?: boolean } = {},
   ): Promise<boolean> {
     const now = opts.now ?? this.clock.now()
+
+    // Individual-usage subscriptions (Claude) require their owner to be present to unlock
+    // them per run, so they can never run on an unattended schedule. Refuse to fire and
+    // record a clear failure (the user must switch the block to an API-key or pooled
+    // coding-plan model) rather than starting a run that would fault at dispatch. Resolve
+    // the vendor set with the SAME precedence dispatch uses (block pin → workspace per-kind
+    // default), via the engine, so a block with no pin but an individual-usage workspace
+    // default is caught here too — not just an explicitly pinned one.
+    const scheduledBlock = await this.blockRepository.get(workspaceId, schedule.blockId)
+    const individualVendor = scheduledBlock
+      ? ((
+          await this.executionService.individualVendorsForBlock(
+            workspaceId,
+            schedule.blockId,
+            schedule.pipelineId,
+          )
+        )[0] ?? null)
+      : null
+    if (individualVendor) {
+      if (opts.force) {
+        throw new ConflictError(
+          `This recurring pipeline targets an individual-usage ${individualVendor} model, which ` +
+            `cannot run on a schedule. Pick an API-key or coding-plan model.`,
+        )
+      }
+      await this.schedules.insertRun(workspaceId, {
+        id: this.idGenerator.next('schr'),
+        scheduleId: schedule.id,
+        executionId: null,
+        status: 'failed',
+        startedAt: now,
+        finishedAt: now,
+        outcome: `Individual-usage ${individualVendor} models cannot run on a recurring schedule.`,
+      })
+      await this.advanceCadence(workspaceId, schedule, now)
+      return false
+    }
+
     const prior = await this.executionRepository.getByBlock(workspaceId, schedule.blockId)
     if (prior && (prior.status === 'running' || prior.status === 'paused')) {
       if (opts.force) {

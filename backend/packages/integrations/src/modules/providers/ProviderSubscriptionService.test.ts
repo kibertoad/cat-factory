@@ -12,7 +12,8 @@ import { ProviderSubscriptionService } from './ProviderSubscriptionService.js'
 
 // Service-level behaviour over an in-memory repository: encryption-at-rest (the raw
 // secret never lands in the row), usage-aware leasing + the window-reset usage
-// round-trip, and the per-vendor pool cap. The pure rotation choice is covered in
+// round-trip, the per-vendor pool cap, and the rule that an individual-usage vendor
+// (Claude / GLM / ChatGPT-Codex) is never poolable. The pure rotation choice is covered in
 // providers.logic.test; this exercises the service wiring those pieces together.
 
 const WINDOW = 5 * 60 * 60 * 1000
@@ -88,43 +89,43 @@ describe('ProviderSubscriptionService', () => {
     const repo = new FakeRepo()
     const svc = makeService(repo, () => 1000)
     const summary = await svc.addToken('ws', {
-      vendor: 'claude',
+      vendor: 'kimi',
       label: 'primary',
-      token: 'sk-ant-oat01-raw-secret',
+      token: 'kimi-coding-plan-raw-secret',
     })
     // The summary carries metadata only.
     expect(JSON.stringify(summary)).not.toContain('raw-secret')
     // The persisted row holds ciphertext, not the plaintext.
-    expect(repo.rows[0]!.tokenCipher).toBe('enc(sk-ant-oat01-raw-secret)')
+    expect(repo.rows[0]!.tokenCipher).toContain('enc(')
   })
 
   it('leases the least-loaded token and decrypts it', async () => {
     const repo = new FakeRepo()
     const svc = makeService(repo, () => 2000)
-    const busy = await svc.addToken('ws', { vendor: 'claude', label: 'busy', token: 'tok-busy' })
-    const idle = await svc.addToken('ws', { vendor: 'claude', label: 'idle', token: 'tok-idle' })
+    const busy = await svc.addToken('ws', { vendor: 'kimi', label: 'busy', token: 'tok-busy' })
+    const idle = await svc.addToken('ws', { vendor: 'kimi', label: 'idle', token: 'tok-idle' })
     await svc.recordTokenUsage('ws', busy.id, { inputTokens: 900, outputTokens: 100 })
 
-    const leased = await svc.leaseToken('ws', 'claude')
+    const leased = await svc.leaseToken('ws', 'kimi')
     expect(leased.tokenId).toBe(idle.id)
     expect(leased.secret).toBe('tok-idle') // decrypted on lease
   })
 
   it('throws a ConflictError when the pool is empty', async () => {
     const svc = makeService(new FakeRepo(), () => 0)
-    await expect(svc.leaseToken('ws', 'codex')).rejects.toBeInstanceOf(ConflictError)
+    await expect(svc.leaseToken('ws', 'kimi')).rejects.toBeInstanceOf(ConflictError)
   })
 
   it('accumulates usage within a window and resets once it ages out', async () => {
     const repo = new FakeRepo()
     let t = 1000
     const svc = makeService(repo, () => t)
-    const { id } = await svc.addToken('ws', { vendor: 'glm', label: 'a', token: 'k' })
+    const { id } = await svc.addToken('ws', { vendor: 'kimi', label: 'a', token: 'k' })
 
     await svc.recordTokenUsage('ws', id, { inputTokens: 10, outputTokens: 5 })
     t = 2000
     await svc.recordTokenUsage('ws', id, { inputTokens: 20, outputTokens: 5 })
-    let listed = (await svc.listTokens('ws', 'glm'))[0]!
+    let listed = (await svc.listTokens('ws', 'kimi'))[0]!
     expect(listed.inputTokens).toBe(30)
     expect(listed.outputTokens).toBe(10)
     expect(listed.requestCount).toBe(2)
@@ -132,7 +133,7 @@ describe('ProviderSubscriptionService', () => {
     // Past the window: the next record resets the counters to this run only.
     t = 1000 + WINDOW + 1
     await svc.recordTokenUsage('ws', id, { inputTokens: 7, outputTokens: 3 })
-    listed = (await svc.listTokens('ws', 'glm'))[0]!
+    listed = (await svc.listTokens('ws', 'kimi'))[0]!
     expect(listed.inputTokens).toBe(7)
     expect(listed.requestCount).toBe(1)
   })
@@ -148,7 +149,36 @@ describe('ProviderSubscriptionService', () => {
     ).rejects.toBeInstanceOf(ConflictError)
     // A different vendor is unaffected by another vendor's full pool.
     await expect(
-      svc.addToken('ws', { vendor: 'claude', label: 'ok', token: 'k' }),
+      svc.addToken('ws', { vendor: 'deepseek', label: 'ok', token: 'k' }),
     ).resolves.toBeTruthy()
+  })
+
+  // Claude, GLM (Z.ai Coding Plan) and ChatGPT/Codex are each licensed for individual use
+  // only by their own terms, so they are NEVER poolable on a workspace — they are stored
+  // per-user by PersonalSubscriptionService instead.
+  describe('individual-usage vendors are not poolable', () => {
+    it.each(['claude', 'glm', 'codex'] as const)(
+      'refuses to add, lease, or report a %s token in the workspace pool',
+      async (vendor) => {
+        const repo = new FakeRepo()
+        const svc = makeService(repo, () => 0)
+        await expect(
+          svc.addToken('ws', { vendor, label: 'x', token: 'individual-secret' }),
+        ).rejects.toBeInstanceOf(ConflictError)
+        await expect(svc.leaseToken('ws', vendor)).rejects.toBeInstanceOf(ConflictError)
+        expect(await svc.hasToken('ws', vendor)).toBe(false)
+      },
+    )
+
+    it('omits individual-usage vendors from the unfiltered pool listing', async () => {
+      const repo = new FakeRepo()
+      const svc = makeService(repo, () => 0)
+      await svc.addToken('ws', { vendor: 'kimi', label: 'moonshot', token: 'k' })
+      const listed = await svc.listTokens('ws')
+      expect(listed.map((c) => c.vendor)).not.toContain('claude')
+      expect(listed.map((c) => c.vendor)).not.toContain('glm')
+      expect(listed.map((c) => c.vendor)).not.toContain('codex')
+      expect(listed.map((c) => c.vendor)).toContain('kimi')
+    })
   })
 })
