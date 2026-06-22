@@ -137,7 +137,10 @@ export function llmProxyController(): Hono<AppEnv> {
       // must not break metering.
       waitUntil(
         Promise.resolve(
-          executionEventPublisher.llmCallObserved?.(session.workspaceId, {
+          // `?.` on the publisher itself, not just the method: a minimal container
+          // (e.g. the harness's real-proxy acceptance test) may omit it, and the live
+          // emit is best-effort — a missing publisher must never break metering.
+          executionEventPublisher?.llmCallObserved?.(session.workspaceId, {
             id: callId,
             workspaceId: session.workspaceId,
             executionId: session.executionId,
