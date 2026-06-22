@@ -27,7 +27,7 @@ that user's runs may use it.
   HTTP-header-safe.
 - **Per-run activation, short TTL, transparently extended.** At task start/retry the user
   supplies their password — carried on the ambient `X-Personal-Password` header (never a
-  body field), cached client-side (~8h) so it usually rides along transparently — to mint a
+  body field), cached client-side (~40h) so it usually rides along transparently — to mint a
   short-lived (~12h), system-encrypted, per-run activation (`subscription_activations`
   table) that the asynchronous container steps lease, so the whole step chain authenticates
   without the user present. The activation is **re-minted from the cached password on each

@@ -27,8 +27,8 @@ import type {
 // only ever helps on the very device the user is already signed in on. (See
 // backend/docs/individual-subscription-usage.md §3.)
 
-/** How long a typed password stays cached before the user is re-prompted (8h). */
-const PASSWORD_TTL_MS = 8 * 60 * 60 * 1000
+/** How long a typed password stays cached before the user is re-prompted (40h). */
+const PASSWORD_TTL_MS = 40 * 60 * 60 * 1000
 const CACHE_KEY = 'cf.personal-pw'
 
 /** A credential prompt the UI must satisfy (set when the server replies 428). */
