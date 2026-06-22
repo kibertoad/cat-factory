@@ -1,9 +1,9 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "f6091d23-2649-4e9d-a9d0-f83cdb80a6ac",
+  "id": "26e9f25d-c903-40ec-a457-350689a8d4ba",
   "prevIds": [
-    "41435699-61b9-4975-9ddf-065b1a36b094"
+    "5a1a9638-536e-453e-b228-bfb998b6549b"
   ],
   "ddl": [
     {
@@ -3289,6 +3289,32 @@
       "typeSchema": null,
       "notNull": true,
       "dimensions": 0,
+      "default": "3",
+      "generated": null,
+      "identity": null,
+      "name": "max_requirement_iterations",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "merge_threshold_presets"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'none'",
+      "generated": null,
+      "identity": null,
+      "name": "max_requirement_concern_allowed",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "merge_threshold_presets"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
       "default": "0",
       "generated": null,
       "identity": null,
@@ -4884,14 +4910,27 @@
       "table": "requirement_reviews"
     },
     {
-      "type": "text",
+      "type": "integer",
       "typeSchema": null,
-      "notNull": false,
+      "notNull": true,
       "dimensions": 0,
-      "default": null,
+      "default": "1",
       "generated": null,
       "identity": null,
-      "name": "companion",
+      "name": "iteration",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "requirement_reviews"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "1",
+      "generated": null,
+      "identity": null,
+      "name": "max_iterations",
       "entityType": "columns",
       "schema": "public",
       "table": "requirement_reviews"

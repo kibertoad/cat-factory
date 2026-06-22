@@ -182,9 +182,7 @@ function assertValidCompanionPlacement(agentKinds: string[], enabled?: boolean[]
     if (kind === undefined || !isCompanionKind(kind)) continue
     if (!isEnabled(i)) continue
     const targets = companionTargets(kind)
-    const hasProducer = agentKinds
-      .slice(0, i)
-      .some((k, j) => targets.includes(k) && isEnabled(j))
+    const hasProducer = agentKinds.slice(0, i).some((k, j) => targets.includes(k) && isEnabled(j))
     if (!hasProducer) {
       throw new ValidationError(
         `Companion '${kind}' must run after an enabled step it can review (${targets.join(', ')}).`,

@@ -177,9 +177,7 @@ const reqReworkedText = computed(() => reqReview.value?.incorporatedRequirements
 const frozenByRework = computed(() => isTask.value && reqReworked.value)
 // After a "stop & reset" the task is editable again (phase zero) but the LAST incorporated
 // requirements survive on the review as a base to rework from — surfaced read-only here.
-const reqHasPriorDoc = computed(
-  () => isTask.value && !reqReworked.value && !!reqReworkedText.value,
-)
+const reqHasPriorDoc = computed(() => isTask.value && !reqReworked.value && !!reqReworkedText.value)
 const showOriginalDescription = ref(false)
 </script>
 
@@ -302,10 +300,7 @@ const showOriginalDescription = ref(false)
           </p>
 
           <!-- prior incorporated requirements kept as a base after a review-driven reset -->
-          <div
-            v-if="reqHasPriorDoc"
-            class="rounded-lg border border-slate-700 bg-slate-800/40 p-3"
-          >
+          <div v-if="reqHasPriorDoc" class="rounded-lg border border-slate-700 bg-slate-800/40 p-3">
             <div
               class="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400"
             >

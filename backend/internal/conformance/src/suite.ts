@@ -1172,7 +1172,10 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         const wsId = workspace.id
         await app.seedIncorporatedReview(wsId, 'task_login', '# Login — Requirements')
 
-        const res = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/requirement-review/re-review`)
+        const res = await app.call(
+          'POST',
+          `/workspaces/${wsId}/blocks/task_login/requirement-review/re-review`,
+        )
         expect(res.status).toBe(409)
       })
 

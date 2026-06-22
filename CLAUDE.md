@@ -375,7 +375,7 @@ grade gate any more — convergence is reviewer-driven.
   loop. `ExecutionService.{reReviewRequirements,proceedRequirements,resolveRequirementsExceeded}`
   call the service then drive the parked run (`resumeRequirementsRun` advances + signals;
   stop-reset cancels). The pure `disposeReview(items, {iteration,maxIterations,
-  concernThreshold})` (`requirements.logic.ts`) decides auto-pass / awaiting / exceeded.
+concernThreshold})` (`requirements.logic.ts`) decides auto-pass / awaiting / exceeded.
   `REWORK_SYSTEM_PROMPT` (`@cat-factory/agents`) enforces the standard doc structure.
   Pass-through when the reviewer model isn't wired (tests/conformance) so pipelines run
   unchanged. Assembled by `createRequirementsModule` whenever `requirementReviewRepository`
@@ -400,7 +400,7 @@ grade gate any more — convergence is reviewer-driven.
   `GET|POST /blocks/:blockId/requirement-review`, `POST /requirement-reviews/:id/items/:itemId/reply`,
   `PATCH …/items/:itemId`, `POST /requirement-reviews/:id/incorporate` (reviewId-scoped,
   no run drive), and the run-driving `POST /blocks/:blockId/requirement-review/{re-review,
-  proceed,resolve-exceeded}` (via `container.executionService`). Each facade wires the
+proceed,resolve-exceeded}` (via `container.executionService`). Each facade wires the
   review repo + a model provider + the routing default ref + `resolveBlockModel`, so the
   reviewer resolves its model like an agent step (block pin > workspace default >
   Cloudflare Workers AI).
@@ -453,8 +453,8 @@ still open). Two new container agent kinds plus a special gate step implement it
   A task selects one via `Block.mergePresetId` (the inspector dropdown in
   `TaskModelSettings.vue`); none → the workspace default (lazily seeded from
   `DEFAULT_MERGE_PRESET` in kernel). Carries the auto-merge ceilings + `ciMaxAttempts`
-  + the requirements-review knobs `maxRequirementIterations` (default 3) and
-  `maxRequirementConcernAllowed` (default `none`); see "Requirements review flow".
+  - the requirements-review knobs `maxRequirementIterations` (default 3) and
+    `maxRequirementConcernAllowed` (default `none`); see "Requirements review flow".
 - **Notifications** — a first-class, human-actionable surface (NOT a mid-pipeline
   gate). `notifications` table (migration 0024) + `NotificationService`
   (orchestration) behind a `NotificationChannel` port: the canonical row is persisted

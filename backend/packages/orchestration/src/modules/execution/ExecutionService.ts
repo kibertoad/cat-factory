@@ -2180,7 +2180,11 @@ export class ExecutionService {
    * inspector "Run review" surface, so both honour the task's preset identically.
    */
   async reviewRequirements(workspaceId: string, blockId: string): Promise<RequirementReview> {
-    const block = assertFound(await this.blockRepository.get(workspaceId, blockId), 'Block', blockId)
+    const block = assertFound(
+      await this.blockRepository.get(workspaceId, blockId),
+      'Block',
+      blockId,
+    )
     const preset = await this.resolveMergePreset(workspaceId, block)
     return this.requireReviewService().review(workspaceId, blockId, {
       maxIterations: preset.maxRequirementIterations,
@@ -2199,7 +2203,11 @@ export class ExecutionService {
     if (review.status !== 'merged') {
       throw new ConflictError('Incorporate the answers before re-reviewing')
     }
-    const block = assertFound(await this.blockRepository.get(workspaceId, blockId), 'Block', blockId)
+    const block = assertFound(
+      await this.blockRepository.get(workspaceId, blockId),
+      'Block',
+      blockId,
+    )
     const preset = await this.resolveMergePreset(workspaceId, block)
     const updated = await this.requireReviewService().reReview(workspaceId, review.id, {
       concernThreshold: preset.maxRequirementConcernAllowed,

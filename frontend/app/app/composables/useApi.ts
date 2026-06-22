@@ -665,7 +665,7 @@ export function useApi() {
     incorporateRequirements: (workspaceId: string, reviewId: string, feedback?: string) =>
       http<{ review: RequirementReview }>(
         `${ws(workspaceId)}/requirement-reviews/${encodeURIComponent(reviewId)}/incorporate`,
-        { method: 'POST', body: { ...(feedback ? { feedback } : {}) } },
+        { method: 'POST', body: feedback ? { feedback } : {} },
       ),
 
     // Re-review the incorporated document (one more reviewer pass). On convergence the
