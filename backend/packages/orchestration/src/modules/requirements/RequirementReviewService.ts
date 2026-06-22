@@ -344,7 +344,7 @@ export class RequirementReviewService {
     // NOT accepted — the review stays `ready` and the companion's challenge is surfaced
     // (and fed into the next rework). A companion failure / unparseable verdict passes
     // through (a broken critic must never wedge the human's flow).
-    const verdict = await this.gradeRework(modelProvider, ref, context, revised)
+    const verdict = await this.gradeRework(workspaceId, modelProvider, ref, context, revised)
 
     const now = this.deps.clock.now()
     const passed = verdict.passed
@@ -367,6 +367,7 @@ export class RequirementReviewService {
    * human — the truncation + empty-doc guards already caught the dangerous cases.
    */
   private async gradeRework(
+    workspaceId: string,
     modelProvider: ModelProvider,
     ref: ModelRef,
     context: RequirementsContext,
@@ -380,6 +381,10 @@ export class RequirementReviewService {
         prompt: buildReworkCompanionPrompt(context, reworked),
         temperature: 0.1,
         maxOutputTokens: 2_000,
+        providerOptions: catFactoryObservability({
+          agentKind: 'requirements-rework-companion',
+          workspaceId,
+        }),
       })
       const assessment = safeParseCompanionAssessment(extractJson(result.text))
       if (!assessment) return { rating: 1, threshold, passed: true, feedback: '' }

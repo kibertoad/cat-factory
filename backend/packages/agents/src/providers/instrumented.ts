@@ -1,6 +1,19 @@
 import { wrapLanguageModel, type LanguageModelMiddleware } from 'ai'
 import type { LanguageModel } from 'ai'
-import type { LlmGenerationEvent, LlmTraceSink, ModelProvider, ModelRef } from '@cat-factory/kernel'
+import type {
+  InlineObservabilityContext,
+  LlmGenerationEvent,
+  LlmTraceSink,
+  ModelProvider,
+  ModelRef,
+} from '@cat-factory/kernel'
+import { catFactoryObservability, readInlineObservabilityContext } from '@cat-factory/kernel'
+
+// Re-exported so existing `@cat-factory/agents` consumers keep importing the inline
+// observability tag from here; the canonical, dependency-free definition lives in the
+// kernel so any caller layer can build the tag without depending on this package.
+export { catFactoryObservability }
+export type { InlineObservabilityContext }
 
 // Instruments the INLINE (non-proxied) LLM calls so they reach the SAME trace sink as
 // the container-agent calls. Container calls go through the LLM proxy, which the
@@ -13,44 +26,10 @@ import type { LlmGenerationEvent, LlmTraceSink, ModelProvider, ModelRef } from '
 //
 // The middleware is transparent: callers keep calling `generateText({ model })`
 // unchanged. To group a call under its run's trace and label it, a caller passes
-// `providerOptions: catFactoryObservability({ agentKind, workspaceId, executionId })`;
-// absent ⇒ the call still emits, as its own standalone trace named `inline`. The
-// instrumentation never changes the model's behaviour and never throws into the call.
-
-/** Namespace used to smuggle observability context through the AI SDK's providerOptions. */
-const OBSERVABILITY_NS = 'catFactoryObservability'
-
-export interface InlineObservabilityContext {
-  agentKind: string
-  workspaceId?: string
-  executionId?: string
-}
-
-/**
- * Build the `providerOptions` fragment a caller spreads into `generateText` to tag an
- * inline call with its run context. Providers ignore unknown provider-option
- * namespaces, so this is invisible to the model — only the instrumentation reads it.
- */
-export function catFactoryObservability(
-  context: InlineObservabilityContext,
-): Record<string, Record<string, string>> {
-  return {
-    [OBSERVABILITY_NS]: {
-      agentKind: context.agentKind,
-      ...(context.workspaceId ? { workspaceId: context.workspaceId } : {}),
-      ...(context.executionId ? { executionId: context.executionId } : {}),
-    },
-  }
-}
-
-function readContext(params: unknown): InlineObservabilityContext {
-  const providerOptions = (params as { providerOptions?: Record<string, unknown> })?.providerOptions
-  const raw = providerOptions?.[OBSERVABILITY_NS] as Record<string, unknown> | undefined
-  const agentKind = typeof raw?.agentKind === 'string' ? raw.agentKind : 'inline'
-  const workspaceId = typeof raw?.workspaceId === 'string' ? raw.workspaceId : null
-  const executionId = typeof raw?.executionId === 'string' ? raw.executionId : null
-  return { agentKind, workspaceId: workspaceId ?? undefined, executionId: executionId ?? undefined }
-}
+// `providerOptions: catFactoryObservability({ agentKind, workspaceId, executionId })`
+// (the kernel helper); absent ⇒ the call still emits, as its own standalone trace
+// named `inline`. The instrumentation never changes the model's behaviour and never
+// throws into the call.
 
 /** Read token counts defensively across the AI SDK's flat (v2) and nested (v3) usage shapes. */
 function readUsage(usage: unknown): { prompt: number; completion: number; total: number } {
@@ -154,7 +133,7 @@ export class InstrumentedModelProvider implements ModelProvider {
     errMessage: string | null,
   ): void {
     const endedAt = this.now()
-    const context = readContext(params)
+    const context = readInlineObservabilityContext(params)
     const usage = readUsage((result as { usage?: unknown })?.usage)
     const event: LlmGenerationEvent = {
       workspaceId: context.workspaceId ?? null,

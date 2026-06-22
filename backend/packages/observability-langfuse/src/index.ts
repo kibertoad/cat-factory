@@ -16,8 +16,23 @@ import type {
 // Observability must never break the product, so every method swallows its own errors
 // (logging at most a warning) and the caller additionally schedules the call off the
 // response path. A failed flush drops that batch; it never propagates.
+//
+// Each `recordGeneration` posts its own small ingestion batch rather than buffering
+// across calls. This is deliberate: the Worker runtime is stateless per request (there
+// is no durable cross-request buffer to flush, and a `waitUntil`-scheduled POST can't
+// outlive its request), so a per-call POST is the only shape that stays identical across
+// the Worker and Node facades. Tool spans, which the backend already accumulates per
+// poll, ARE sent as one batch. Langfuse's ingestion API is built for this volume.
 
 const DEFAULT_BASE_URL = 'https://cloud.langfuse.com'
+
+/**
+ * Hard ceiling on a single ingestion POST. Observability must never tie up the LLM
+ * path: the proxied feeder records under the platform's `waitUntil` budget and the
+ * inline feeder dispatches without awaiting, so a hung Langfuse endpoint must abort
+ * rather than dangle. A dropped batch is the documented best-effort worst case.
+ */
+const SEND_TIMEOUT_MS = 10_000
 
 /** Minimal structured logger (pino-compatible); optional. */
 export interface LangfuseLogger {
@@ -105,8 +120,10 @@ export class LangfuseTraceSink implements LlmTraceSink {
         timestamp: iso(event.endedAt),
         body: {
           id: traceId,
+          // A run trace is upserted by every call it groups, so keep the trace body
+          // stable across them: the per-call agent kind lives on each generation
+          // (its `name` + metadata), NOT as a trace tag that the next call would clobber.
           name: event.executionId ? `run ${event.executionId}` : event.agentKind,
-          tags: [event.agentKind],
           metadata: { workspaceId: event.workspaceId },
         },
       },
@@ -149,6 +166,9 @@ export class LangfuseTraceSink implements LlmTraceSink {
           authorization: this.authorization,
         },
         body: JSON.stringify({ batch }),
+        // Bound the request so a hung endpoint can't tie up the caller's waitUntil
+        // budget; an abort lands in the catch below and drops the batch (best-effort).
+        signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
       })
       // 207 = partial success (per-event errors in the body); anything else non-2xx is
       // a hard failure. Either way we only log — observability never breaks the caller.

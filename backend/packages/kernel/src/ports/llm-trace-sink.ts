@@ -86,3 +86,53 @@ export interface LlmTraceSink {
    */
   recordToolSpans?(context: LlmToolSpanContext, spans: LlmToolSpan[]): Promise<void> | void
 }
+
+// ----------------------------------------------------------------------------
+// Inline-call observability context
+//
+// The inline (non-proxied) LLM callers — the requirements reviewer/rework, the
+// document planner, the fragment selector, the inline agent — tag each
+// `generateText` with their run context so the `InstrumentedModelProvider`
+// middleware (in `@cat-factory/agents`) can group the call under its run's trace
+// and label it. The tag rides on the AI SDK's `providerOptions` under a private
+// namespace, which every model provider ignores — so it's invisible to the model
+// and only the instrumentation reads it. Lives in the kernel (dependency-free) so
+// any caller layer (orchestration, integrations, agents) can build the tag without
+// depending on `@cat-factory/agents`.
+
+/** Namespace used to smuggle observability context through the AI SDK's providerOptions. */
+export const INLINE_OBSERVABILITY_NS = 'catFactoryObservability'
+
+/** The run context an inline LLM call carries for the trace sink. */
+export interface InlineObservabilityContext {
+  agentKind: string
+  workspaceId?: string
+  executionId?: string
+}
+
+/**
+ * Build the `providerOptions` fragment a caller spreads into `generateText` to tag an
+ * inline call with its run context. Providers ignore unknown provider-option
+ * namespaces, so this is invisible to the model — only the instrumentation reads it.
+ */
+export function catFactoryObservability(
+  context: InlineObservabilityContext,
+): Record<string, Record<string, string>> {
+  return {
+    [INLINE_OBSERVABILITY_NS]: {
+      agentKind: context.agentKind,
+      ...(context.workspaceId ? { workspaceId: context.workspaceId } : {}),
+      ...(context.executionId ? { executionId: context.executionId } : {}),
+    },
+  }
+}
+
+/** Read the {@link InlineObservabilityContext} back off a model call's params. */
+export function readInlineObservabilityContext(params: unknown): InlineObservabilityContext {
+  const providerOptions = (params as { providerOptions?: Record<string, unknown> })?.providerOptions
+  const raw = providerOptions?.[INLINE_OBSERVABILITY_NS] as Record<string, unknown> | undefined
+  const agentKind = typeof raw?.agentKind === 'string' ? raw.agentKind : 'inline'
+  const workspaceId = typeof raw?.workspaceId === 'string' ? raw.workspaceId : undefined
+  const executionId = typeof raw?.executionId === 'string' ? raw.executionId : undefined
+  return { agentKind, workspaceId, executionId }
+}

@@ -148,7 +148,21 @@ export type Container = ServerContainer
  * configured the provider is wrapped so those INLINE (non-proxied) calls surface on
  * the same trace sink the LLM proxy fans container calls out to.
  */
+// Memoised per `Env`: every consumer (agent executor, requirements reviewer, doc
+// planner, fragment selector) shares ONE provider — and so ONE Langfuse sink — for a
+// container build, instead of each constructing its own. The `Env` object is stable
+// across a build, so a WeakMap keyed on it both dedupes and lets it be GC'd with the env.
+const modelProviderCache = new WeakMap<Env, ModelProvider>()
+
 function buildModelProvider(env: Env): ModelProvider {
+  const cached = modelProviderCache.get(env)
+  if (cached) return cached
+  const provider = createModelProvider(env)
+  modelProviderCache.set(env, provider)
+  return provider
+}
+
+function createModelProvider(env: Env): ModelProvider {
   const base = new CloudflareModelProvider({ env, extraRegistries: resolveExtraRegistries(env) })
   const langfuse = loadLangfuseConfig(env)
   if (!langfuse.enabled || !langfuse.publicKey || !langfuse.secretKey) return base

@@ -143,28 +143,32 @@ export class LlmObservabilityService {
     await this.repository.record(metric)
     // Fan out to the external trace sink (Langfuse), if wired. We send the FULL prompt
     // (not the stored delta) so the trace is self-contained, honouring the same
-    // `recordPrompts` privacy switch as the local store. Best-effort: a sink failure
-    // must never break local recording, so it is isolated here.
+    // `recordPrompts` privacy switch as the local store. Best-effort and NON-blocking:
+    // dispatched without awaiting (like the inline feeder) so the sink's network round
+    // trip never extends the metering path, and isolated so a sink failure can't break
+    // local recording. The sink itself swallows + logs and bounds its own request.
     if (this.traceSink) {
       const endedAt = metric.createdAt
       try {
-        await this.traceSink.recordGeneration({
-          workspaceId: input.workspaceId,
-          executionId: input.executionId,
-          agentKind: input.agentKind,
-          provider: input.provider,
-          model: input.model,
-          startedAt: Math.max(0, endedAt - input.upstreamMs),
-          endedAt,
-          promptTokens: input.promptTokens,
-          completionTokens: input.completionTokens,
-          totalTokens: input.totalTokens,
-          finishReason: input.finishReason,
-          ok: input.ok,
-          errorMessage: input.errorMessage,
-          input: this.recordPrompts ? input.promptText : '',
-          output: this.recordPrompts ? input.responseText : '',
-        })
+        void Promise.resolve(
+          this.traceSink.recordGeneration({
+            workspaceId: input.workspaceId,
+            executionId: input.executionId,
+            agentKind: input.agentKind,
+            provider: input.provider,
+            model: input.model,
+            startedAt: Math.max(0, endedAt - input.upstreamMs),
+            endedAt,
+            promptTokens: input.promptTokens,
+            completionTokens: input.completionTokens,
+            totalTokens: input.totalTokens,
+            finishReason: input.finishReason,
+            ok: input.ok,
+            errorMessage: input.errorMessage,
+            input: this.recordPrompts ? input.promptText : '',
+            output: this.recordPrompts ? input.responseText : '',
+          }),
+        ).catch(() => {})
       } catch {
         // Swallowed: the sink itself logs; observability never breaks the proxy.
       }
