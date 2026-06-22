@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { env } from 'cloudflare:test'
 import { RecordingEventPublisher } from '@cat-factory/conformance'
 import { createApp } from '../../src/app'
+import { buildContainer } from '../../src/infrastructure/container'
 import { ContainerSessionService } from '../../src/infrastructure/containers/ContainerSessionService'
 import { FakeAgentExecutor } from '../fakes/FakeAgentExecutor'
 
@@ -45,6 +46,18 @@ async function mint(overrides: Partial<Parameters<ContainerSessionService['mint'
   })
 }
 
+/**
+ * Seed a workspace-scoped qwen key into the DB pool. Provider keys are DB-backed now
+ * (no longer env), so the proxy leases this for the upstream call. Shares `env.DB` +
+ * `ENCRYPTION_KEY` with the app the test drives, so the cipher round-trips.
+ */
+async function seedQwenKey(workspaceId: string, key = 'sk-upstream') {
+  // A fake executor so buildContainer doesn't require the container-runner prerequisites
+  // (we only need the apiKeys service, which builds from ENCRYPTION_KEY + the shared DB).
+  const c = buildContainer(env, { agentExecutor: new FakeAgentExecutor() })
+  await c.apiKeys!.addKey('workspace', workspaceId, { provider: 'qwen', label: 'upstream', key })
+}
+
 describe('llm proxy /v1/chat/completions', () => {
   afterEach(() => vi.restoreAllMocks())
 
@@ -65,6 +78,7 @@ describe('llm proxy /v1/chat/completions', () => {
     const workspaceId = `ws-${crypto.randomUUID()}`
     const executionId = `ex-${crypto.randomUUID()}`
     const token = await mint({ workspaceId, executionId })
+    await seedQwenKey(workspaceId)
 
     let upstreamUrl = ''
     let upstreamAuth = ''
@@ -114,6 +128,7 @@ describe('llm proxy /v1/chat/completions', () => {
     const workspaceId = `ws-${crypto.randomUUID()}`
     const executionId = `ex-${crypto.randomUUID()}`
     const token = await mint({ workspaceId, executionId })
+    await seedQwenKey(workspaceId)
 
     vi.stubGlobal(
       'fetch',

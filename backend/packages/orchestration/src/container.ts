@@ -23,7 +23,12 @@ import { type ExecutionEventPublisher, NoopEventPublisher } from '@cat-factory/k
 import type { GitHubClient } from '@cat-factory/kernel'
 import type { GitHubProvisioningClient } from '@cat-factory/kernel'
 import type { WebhookVerifier } from '@cat-factory/kernel'
-import type { ModelProvider, ModelRef } from '@cat-factory/kernel'
+import type {
+  ModelProvider,
+  ModelProviderResolver,
+  ModelRef,
+  ProviderCapabilities,
+} from '@cat-factory/kernel'
 import type { DocumentSourceProvider } from '@cat-factory/kernel'
 import type { DocumentConnectionRepository, DocumentRepository } from '@cat-factory/kernel'
 import type { TaskSourceProvider } from '@cat-factory/kernel'
@@ -252,6 +257,13 @@ export interface CoreDependencies {
   // additionally consumed by the execution engine to feed linked docs to agents
   // as context.
   modelProvider?: ModelProvider
+  /**
+   * Resolve a {@link ModelProvider} for a run's credential scope (the DB-backed API-key
+   * pool, account/workspace/user). Preferred over the static `modelProvider` by the
+   * inline consumers (document planner, requirements reviewer); the facade supplies it
+   * so inline calls use the same per-scope pool the container LLM proxy does.
+   */
+  modelProviderResolver?: ModelProviderResolver
   /** Model the document planner uses (the agents' default model ref). */
   documentPlannerModel?: ModelRef
   documentSourceProviders?: DocumentSourceProvider[]
@@ -392,6 +404,17 @@ export interface CoreDependencies {
    * routing is used everywhere.
    */
   modelDefaultsRepository?: ModelDefaultsRepository
+  /**
+   * Resolve the provider capabilities (configured direct API keys + subscription
+   * vendors + whether Cloudflare AI is enabled) for a workspace and the run initiator.
+   * The pipeline-start guard uses it to block a run whose steps' canonical models have
+   * no usable provider. Wired by each facade from its API-key + subscription services;
+   * absent → the guard is skipped.
+   */
+  resolveProviderCapabilities?: (
+    workspaceId: string,
+    initiatedBy?: string | null,
+  ) => Promise<ProviderCapabilities>
   /**
    * Stores a workspace's default service-fragment selection (the best-practice
    * fragment ids new services inherit). Optional and default-off: absent → the
@@ -709,6 +732,7 @@ function createDocumentsModule(
     clock: deps.clock,
   })
   const plannerService = new DocumentPlannerService({
+    modelProviderResolver: deps.modelProviderResolver,
     modelProvider: deps.modelProvider,
     modelRef: deps.documentPlannerModel,
   })
@@ -902,6 +926,7 @@ function createRequirementsModule(
     // Tell product people + the task creator to react to a review's findings (when
     // the notifications subsystem is wired). Best-effort; absent → no notification.
     notificationService,
+    modelProviderResolver: deps.modelProviderResolver,
     modelProvider: deps.modelProvider,
     // The dedicated reviewer ref, else the document planner's (both the agents' default).
     modelRef: deps.requirementReviewModel ?? deps.documentPlannerModel,

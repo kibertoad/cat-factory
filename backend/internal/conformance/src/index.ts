@@ -5,6 +5,7 @@ export {
 } from './FakeAgentExecutor.js'
 export {
   type ConformanceApp,
+  type ConformanceAppOptions,
   type ConformanceHarness,
   RecordingEventPublisher,
   type TestResponse,

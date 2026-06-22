@@ -19,16 +19,19 @@ removing them.
   (`PipelineService.update`, new `PipelineRepository.update` on both stores). The
   builder loads a custom pipeline into the draft and saves changes back to the same id
   (preserving its catalog position). Built-in catalog pipelines are **read-only** —
-  the API rejects editing them (422) and the UI offers Clone instead; pipelines now
-  carry a `builtin` flag (true for the `seedPipelines()` catalog) to drive this.
+  the API rejects both editing and deleting them (422) and the UI offers Clone
+  instead (no edit/delete affordance on a built-in); pipelines now carry a `builtin`
+  flag (true for the `seedPipelines()` catalog) to drive this.
 - **Disable a step without removing it**: a new per-step `enabled[]` array (parallel
   to `agentKinds`, like `gates`/`thresholds`). A step flagged `enabled[i] === false`
   is kept in the saved pipeline (and can be toggled back on) but skipped at run start —
   `ExecutionService` builds the run only from the enabled steps, reading gates/
   thresholds by each kind's original index so they stay aligned. A pipeline must keep
-  at least one step enabled. The builder adds an enable/disable toggle and dims
-  disabled steps.
+  at least one step enabled, and an enabled companion must still have an enabled
+  producer to grade (disabling a producer while leaving its companion on is rejected).
+  The builder adds an enable/disable toggle and dims disabled steps.
 
 Persistence: new `enabled` + `builtin` columns on the `pipelines` table, mirrored on
-both runtimes (D1 migration `0002` ⇄ Drizzle schema + generated migration). Cross-
-runtime conformance asserts a disabled step is skipped at run on every facade.
+both runtimes — folded into the squashed baselines (D1 `0001_init.sql` ⇄ the Drizzle
+schema + a regenerated migration) rather than a standalone migration. Cross-runtime
+conformance asserts a disabled step is skipped at run on every facade.

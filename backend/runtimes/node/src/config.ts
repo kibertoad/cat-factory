@@ -1,5 +1,10 @@
 import type { AgentModelConfig } from '@cat-factory/agents'
-import { effectiveCatalog, resolveModelRef } from '@cat-factory/kernel'
+import {
+  ALL_SUBSCRIPTION_VENDORS,
+  type ProviderCapabilities,
+  effectiveCatalog,
+  resolveModelRef,
+} from '@cat-factory/kernel'
 import type { DocumentSourceKind, TaskSourceKind } from '@cat-factory/kernel'
 import type { AppConfig, DocumentsConfig, TasksConfig } from '@cat-factory/server'
 import { DEFAULT_SPEND_PRICING, modelCostResolver } from '@cat-factory/spend'
@@ -95,11 +100,20 @@ function loadTasksConfig(env: NodeJS.ProcessEnv): TasksConfig {
 }
 
 export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
-  const isDirectAvailable = (keyEnv: string): boolean => !!env[keyEnv]
+  // Deployment-level capabilities: direct keys are per-workspace (resolved at run time
+  // from the DB pool), so none are known here; Cloudflare Workers AI is opt-in over
+  // REST (account id + API token). The per-workspace `/models` endpoint recomputes
+  // selectability against each workspace's configured keys + subscriptions.
+  const caps: ProviderCapabilities = {
+    directProviders: new Set(),
+    subscriptionVendors: new Set(ALL_SUBSCRIPTION_VENDORS),
+    cloudflareEnabled: !!(env.CLOUDFLARE_ACCOUNT_ID && env.CLOUDFLARE_API_TOKEN),
+  }
 
-  // Default unpinned agents to Qwen (direct DashScope when keyed, else its Cloudflare
-  // flavour); the agentic kinds default to GLM-5.2 — mirroring the Worker's routing.
-  const qwenDefault = resolveModelRef('qwen', isDirectAvailable)
+  // Default unpinned agents to Qwen (the Cloudflare flavour when enabled, upgraded to
+  // direct DashScope per-workspace by the executor when a Qwen key is configured); the
+  // agentic kinds default to GLM-5.2 — mirroring the Worker's routing.
+  const qwenDefault = resolveModelRef('qwen', caps)
   const defaultConfig: AgentModelConfig = {
     ref: {
       provider: env.AGENT_DEFAULT_PROVIDER ?? qwenDefault?.provider ?? 'workers-ai',
@@ -178,10 +192,10 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
         default: defaultConfig,
         byKind: { architect: agenticDefault, coder: agenticDefault, reviewer: agenticDefault },
       },
-      resolveBlockModel: (modelId) => resolveModelRef(modelId, isDirectAvailable),
+      resolveBlockModel: (modelId) => resolveModelRef(modelId, caps),
     },
     // Surface each model's informational list cost in the picker (from spend pricing).
-    models: effectiveCatalog(isDirectAvailable, modelCostResolver(spend)),
+    models: effectiveCatalog(caps, modelCostResolver(spend)),
     execution: {
       decisionTimeout: env.DECISION_TIMEOUT?.trim() || '24 hours',
       jobPollInterval: env.JOB_POLL_INTERVAL?.trim() || '15 seconds',

@@ -1,5 +1,5 @@
 import { generateText } from 'ai'
-import type { ModelProvider, ModelRef } from '@cat-factory/kernel'
+import type { ModelProvider, ModelProviderResolver, ModelRef } from '@cat-factory/kernel'
 import type { DocumentRecord } from '@cat-factory/kernel'
 import type { DocumentBoardPlan } from '@cat-factory/kernel'
 import { catFactoryObservability } from '@cat-factory/kernel'
@@ -16,7 +16,12 @@ import { coercePlan, markdownToText, planFromHeadings } from './documents.logic.
 const MAX_BODY_CHARS = 6000
 
 export interface DocumentPlannerServiceDependencies {
-  /** Resolves the planner model; absent when no provider is configured. */
+  /**
+   * Resolve a {@link ModelProvider} for a workspace's credential scope (DB-backed key
+   * pool). Preferred over the static `modelProvider`; the facade supplies it.
+   */
+  modelProviderResolver?: ModelProviderResolver
+  /** Static planner model provider (e.g. a fake in tests). Used when no resolver is set. */
   modelProvider?: ModelProvider
   /** Which model to use for planning (the agents' default model ref). */
   modelRef?: ModelRef
@@ -67,19 +72,24 @@ function extractJson(text: string): unknown {
 export class DocumentPlannerService {
   constructor(private readonly deps: DocumentPlannerServiceDependencies) {}
 
-  /** Whether LLM planning is available (a model provider + ref are configured). */
+  /** Whether LLM planning is available (a model provider/resolver + ref are configured). */
   get llmEnabled(): boolean {
-    return !!this.deps.modelProvider && !!this.deps.modelRef
+    return (!!this.deps.modelProviderResolver || !!this.deps.modelProvider) && !!this.deps.modelRef
   }
 
   /** Propose a board structure for an imported document. */
   async plan(record: DocumentRecord): Promise<DocumentBoardPlan> {
     const fallback = () =>
       planFromHeadings(record.source, record.externalId, record.title, record.body)
-    if (!this.deps.modelProvider || !this.deps.modelRef) return fallback()
+    if (!this.deps.modelRef || (!this.deps.modelProviderResolver && !this.deps.modelProvider)) {
+      return fallback()
+    }
 
     try {
-      const model = this.deps.modelProvider.resolve(this.deps.modelRef)
+      const provider = this.deps.modelProviderResolver
+        ? await this.deps.modelProviderResolver.forScope({ workspaceId: record.workspaceId })
+        : this.deps.modelProvider!
+      const model = provider.resolve(this.deps.modelRef)
       const { text } = await generateText({
         model,
         system: SYSTEM_PROMPT,

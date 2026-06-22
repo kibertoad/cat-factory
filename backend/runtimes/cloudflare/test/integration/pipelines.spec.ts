@@ -55,14 +55,6 @@ describe('pipelines', () => {
     expect(res.status).toBe(400)
   })
 
-  it('deletes a pipeline', async () => {
-    const del = await app.call('DELETE', `/workspaces/${wsId}/pipelines/pl_quick`)
-    expect(del.status).toBe(204)
-
-    const list = await app.call<Pipeline[]>('GET', `/workspaces/${wsId}/pipelines`)
-    expect(list.body.map((p) => p.id)).not.toContain('pl_quick')
-  })
-
   it('returns 404 when deleting an unknown pipeline', async () => {
     const res = await app.call('DELETE', `/workspaces/${wsId}/pipelines/missing`)
     expect(res.status).toBe(404)
@@ -142,6 +134,37 @@ describe('pipelines', () => {
     )
     const res = await app.call('PATCH', `/workspaces/${wsId}/pipelines/${clone.body.id}`, {
       enabled: clone.body.agentKinds.map(() => false),
+    })
+    expect(res.status).toBe(422)
+  })
+
+  it('refuses to delete a built-in pipeline (must clone first)', async () => {
+    const res = await app.call('DELETE', `/workspaces/${wsId}/pipelines/pl_quick`)
+    expect(res.status).toBe(422)
+    // The built-in is still in the catalog.
+    const list = await app.call<Pipeline[]>('GET', `/workspaces/${wsId}/pipelines`)
+    expect(list.body.map((p) => p.id)).toContain('pl_quick')
+  })
+
+  it('deletes a cloned (custom) pipeline', async () => {
+    const clone = await app.call<Pipeline>(
+      'POST',
+      `/workspaces/${wsId}/pipelines/pl_quick/clone`,
+      {},
+    )
+    const res = await app.call('DELETE', `/workspaces/${wsId}/pipelines/${clone.body.id}`)
+    expect(res.status).toBe(204)
+    const list = await app.call<Pipeline[]>('GET', `/workspaces/${wsId}/pipelines`)
+    expect(list.body.map((p) => p.id)).not.toContain(clone.body.id)
+  })
+
+  it('rejects a pipeline whose enabled companion has no enabled producer', async () => {
+    // `reviewer` reviews `coder`; disabling the `coder` it grades while leaving the
+    // `reviewer` enabled would orphan the companion at run start, so it is rejected.
+    const res = await app.call('POST', `/workspaces/${wsId}/pipelines`, {
+      name: 'Orphaned reviewer',
+      agentKinds: ['coder', 'reviewer'],
+      enabled: [false, true],
     })
     expect(res.status).toBe(422)
   })

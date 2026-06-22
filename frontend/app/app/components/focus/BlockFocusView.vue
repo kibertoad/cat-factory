@@ -9,8 +9,9 @@ const pipelines = usePipelinesStore()
 const execution = useExecutionStore()
 const ui = useUiStore()
 const models = useModelsStore()
+const workspace = useWorkspaceStore()
 
-onMounted(() => models.ensureLoaded())
+onMounted(() => models.ensureLoaded(workspace.workspaceId ?? undefined))
 
 const block = computed<Block | undefined>(() =>
   ui.focusBlockId ? board.getBlock(ui.focusBlockId) : undefined,

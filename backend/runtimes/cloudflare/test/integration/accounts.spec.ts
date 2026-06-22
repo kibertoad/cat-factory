@@ -82,7 +82,7 @@ describe('accounts', () => {
     expect(res.status).toBe(200)
     expect(res.body).toHaveLength(1)
     expect(res.body[0]!.type).toBe('personal')
-    expect(res.body[0]!.role).toBe('owner')
+    expect(res.body[0]!.roles).toEqual(['admin'])
     expect(res.body[0]!.githubAccountLogin).toBe('alice')
   })
 

@@ -66,7 +66,11 @@ export async function setupTestDb(): Promise<DrizzleDb> {
  * runner (the suite advances runs itself via `drive`). Mirrors the Worker test
  * helper's `makeApp`, so the shared conformance harness is a thin adapter.
  */
-export function makeConformanceApp(db: DrizzleDb, agentOptions?: FakeAgentOptions): ConformanceApp {
+export function makeConformanceApp(
+  db: DrizzleDb,
+  agentOptions?: FakeAgentOptions,
+  opts?: { cloudflareModelsEnabled?: boolean },
+): ConformanceApp {
   // Record emitted run snapshots so the suite can assert intermediate transitions
   // (e.g. the model present on the first "spinning up container" emit).
   const recorder = new RecordingEventPublisher()
@@ -81,7 +85,12 @@ export function makeConformanceApp(db: DrizzleDb, agentOptions?: FakeAgentOption
     repoBootstrapper: new FakeRepoBootstrapper(),
     executionEventPublisher: recorder,
   }
-  const container = buildNodeContainer({ db, env: TEST_ENV, overrides })
+  const container = buildNodeContainer({
+    db,
+    env: TEST_ENV,
+    overrides,
+    cloudflareModelsEnabled: opts?.cloudflareModelsEnabled,
+  })
   const app = createApp(container, TEST_ENV)
 
   async function call<T>(method: string, path: string, body?: unknown) {

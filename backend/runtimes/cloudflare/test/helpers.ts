@@ -68,6 +68,7 @@ export interface TestApp {
 export function makeApp(
   agentExecutor: AgentExecutor = new FakeAgentExecutor(),
   overrides: Partial<CoreDependencies> = {},
+  appOptions: { cloudflareModelsEnabled?: boolean } = {},
 ): TestApp {
   // Default to a no-op work runner so starting a run doesn't spawn a real
   // Cloudflare Workflows instance in the test pool (the wrangler.toml binding is
@@ -82,7 +83,7 @@ export function makeApp(
     bootstrapRunner: new NoopBootstrapRunner(),
     ...overrides,
   }
-  const app = createApp({ overrides: coreOverrides })
+  const app = createApp({ overrides: coreOverrides, ...appOptions })
 
   async function call<T>(method: string, path: string, body?: unknown): Promise<TestResponse<T>> {
     const hasBody = body !== undefined

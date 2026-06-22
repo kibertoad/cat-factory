@@ -29,6 +29,10 @@ import { runnerPoolController } from './modules/runners/RunnerPoolController.js'
 import { slackController, slackOAuthController } from './modules/slack/SlackController.js'
 import { vendorCredentialController } from './modules/providers/VendorCredentialController.js'
 import { personalSubscriptionController } from './modules/providers/PersonalSubscriptionController.js'
+import {
+  userApiKeyController,
+  workspaceApiKeyController,
+} from './modules/providers/ApiKeyController.js'
 import { serviceMountController } from './modules/services/ServiceMountController.js'
 import { taskSourceController } from './modules/tasks/TaskSourceController.js'
 import { workspaceController } from './modules/workspaces/WorkspaceController.js'
@@ -57,6 +61,7 @@ export function registerCoreControllers<E extends AppEnv>(app: Hono<E>): void {
   app.route('/', modelController())
   app.route('/', accountController())
   app.route('/', personalSubscriptionController())
+  app.route('/', userApiKeyController())
   app.route('/accounts/:accountId', fragmentLibraryController('account'))
   app.route('/', workspaceController())
   // Real-time WebSocket event stream (self-authenticates via ?ticket=; the facade's
@@ -72,6 +77,7 @@ export function registerCoreControllers<E extends AppEnv>(app: Hono<E>): void {
   app.route('/workspaces/:workspaceId', environmentController())
   app.route('/workspaces/:workspaceId', runnerPoolController())
   app.route('/workspaces/:workspaceId', vendorCredentialController())
+  app.route('/workspaces/:workspaceId', workspaceApiKeyController())
   app.route('/workspaces/:workspaceId', bootstrapController())
   app.route('/workspaces/:workspaceId', agentRunController())
   app.route('/workspaces/:workspaceId', boardScanController())

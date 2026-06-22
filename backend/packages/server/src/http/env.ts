@@ -1,5 +1,6 @@
 import type { AgentRunRepository } from '@cat-factory/kernel'
 import type {
+  ApiKeyService,
   PersonalSubscriptionService,
   ProviderSubscriptionService,
 } from '@cat-factory/integrations'
@@ -31,6 +32,20 @@ export interface ServerContainer extends Core {
    * the personal-credential controller + the run activation the executor leases.
    */
   personalSubscriptions?: PersonalSubscriptionService
+  /**
+   * The direct-provider API-key pool (OpenAI/Anthropic/Qwen/DeepSeek/Moonshot),
+   * scoped account/workspace/user. Present only when the facade wired the
+   * provider-api-key repository (needs ENCRYPTION_KEY). Drives the API-key
+   * controller, the per-scope model-provider resolver, and the LLM proxy's key lease.
+   */
+  apiKeys?: ApiKeyService
+  /**
+   * Whether the opt-in Cloudflare Workers AI provider lib is registered for this
+   * deployment (binding on the Worker, REST account/token on Node). When false, the
+   * `workers-ai` provider is unavailable and `cloudflare`-flavour catalog models are
+   * not selectable.
+   */
+  cloudflareModelsEnabled?: boolean
 }
 
 /** Hono generics shared by the cross-runtime controllers (Variables only — no Bindings). */

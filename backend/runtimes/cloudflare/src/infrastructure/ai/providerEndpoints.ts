@@ -31,17 +31,16 @@ export function baseUrlFor(provider: string, env: Env): string | null {
   }
 }
 
-/** A resolved OpenAI-compatible upstream: where to send the request and the key. */
+/** A resolved OpenAI-compatible upstream: where to send the request (key-free). */
 export interface UpstreamEndpoint {
   baseURL: string
-  apiKey: string
 }
 
 /**
- * Resolve a provider id to its OpenAI-compatible upstream (base URL + key from
- * `env`). Returns null for providers that are not OpenAI-compatible (e.g.
- * `workers-ai`, `anthropic`) or whose key is not configured — the proxy then
- * rejects the request rather than forwarding it without credentials.
+ * Resolve a provider id to its OpenAI-compatible upstream base URL. Returns null for
+ * providers that are not OpenAI-compatible (e.g. `workers-ai`, `anthropic`). The API
+ * key is leased per call from the DB-backed pool by the proxy — it is no longer read
+ * from env here.
  */
 export function resolveOpenAiCompatibleUpstream(
   provider: string,
@@ -49,15 +48,5 @@ export function resolveOpenAiCompatibleUpstream(
 ): UpstreamEndpoint | null {
   const baseURL = baseUrlFor(provider, env)
   if (!baseURL) return null
-  const apiKey =
-    provider === 'qwen'
-      ? env.QWEN_API_KEY
-      : provider === 'deepseek'
-        ? env.DEEPSEEK_API_KEY
-        : provider === 'moonshot'
-          ? env.MOONSHOT_API_KEY
-          : provider === 'openai'
-            ? env.OPENAI_API_KEY
-            : undefined
-  return apiKey ? { baseURL, apiKey } : null
+  return { baseURL }
 }

@@ -78,6 +78,13 @@ if (databaseUrl) {
         env: TEST_ENV,
         overrides: { executionEventPublisher: recorder },
       })
+      // Provider keys are DB-backed now (no longer env): seed the workspace-scoped qwen
+      // key the proxy leases for the upstream call.
+      await container.apiKeys!.addKey('workspace', workspaceId, {
+        provider: 'qwen',
+        label: 'upstream',
+        key: 'sk-upstream',
+      })
       const app = createApp(container, TEST_ENV)
 
       const res = await app.fetch(chatRequest(token))

@@ -72,6 +72,7 @@ export interface BlockRow {
   /** Service-level: abstract instance size for the service's jobs. */
   instance_size: string | null
   created_by: string | null
+  responsible_product_user_id: string | null
 }
 
 export function rowToBlock(row: BlockRow): Block {
@@ -106,6 +107,8 @@ export function rowToBlock(row: BlockRow): Block {
   if (row.cloud_provider !== null) block.cloudProvider = row.cloud_provider as CloudProvider
   if (row.instance_size !== null) block.instanceSize = row.instance_size as InstanceSize
   if (row.created_by !== null) block.createdBy = row.created_by
+  if (row.responsible_product_user_id !== null)
+    block.responsibleProductUserId = row.responsible_product_user_id
   return block
 }
 
@@ -145,6 +148,7 @@ export function blockInsertValues(block: Block): Record<string, unknown> {
     cloud_provider: block.cloudProvider ?? null,
     instance_size: block.instanceSize ?? null,
     created_by: block.createdBy ?? null,
+    responsible_product_user_id: block.responsibleProductUserId ?? null,
   }
 }
 
@@ -182,6 +186,12 @@ export function blockPatchToColumns(patch: BlockPatch): Record<string, unknown> 
   }
   // An empty string clears the selection (back to the routing default).
   if (patch.modelId !== undefined) set.model_id = patch.modelId ? patch.modelId : null
+  // The responsible product person; an empty string clears the assignment.
+  if (patch.responsibleProductUserId !== undefined) {
+    set.responsible_product_user_id = patch.responsibleProductUserId
+      ? patch.responsibleProductUserId
+      : null
+  }
   if (patch.pullRequest !== undefined) {
     set.pull_request = patch.pullRequest ? JSON.stringify(patch.pullRequest) : null
   }

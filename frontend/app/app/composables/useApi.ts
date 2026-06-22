@@ -2,6 +2,7 @@ import type {
   Account,
   AccountInvitation,
   AccountMember,
+  AccountRole,
   AddMemberInput,
   EmailConnection,
   UpdateAccountInput,
@@ -32,6 +33,8 @@ import type {
   GitHubRepo,
   MergePullRequestInput,
   ModelOption,
+  ApiKey,
+  AddApiKeyInput,
   ModelDefaults,
   ServiceFragmentDefaults,
   PersonalSubscriptionStatus,
@@ -223,6 +226,32 @@ export function useApi() {
 
     // ---- model picker catalog (effective per-deployment flavours) ---------
     getModels: () => http<ModelOption[]>('/models'),
+    // Per-workspace catalog: selectability reflects the workspace's (+ account's +
+    // caller's) configured API keys and subscription tokens (`available` flag).
+    getWorkspaceModels: (workspaceId: string) => http<ModelOption[]>(`${ws(workspaceId)}/models`),
+
+    // ---- direct-provider API keys (the DB-backed pool) --------------------
+    // Onboarded via UI, stored encrypted, pooled + rotated. Scoped to a workspace,
+    // its owning account, or the signed-in user. Keys are write-only (never returned).
+    listWorkspaceApiKeys: (workspaceId: string) =>
+      http<{ keys: ApiKey[] }>(`${ws(workspaceId)}/api-keys`),
+    addWorkspaceApiKey: (workspaceId: string, body: AddApiKeyInput) =>
+      http<ApiKey>(`${ws(workspaceId)}/api-keys`, { method: 'POST', body }),
+    removeWorkspaceApiKey: (workspaceId: string, id: string) =>
+      http(`${ws(workspaceId)}/api-keys/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+    listMyApiKeys: () => http<{ keys: ApiKey[] }>('/me/api-keys'),
+    addMyApiKey: (body: AddApiKeyInput) => http<ApiKey>('/me/api-keys', { method: 'POST', body }),
+    removeMyApiKey: (id: string) =>
+      http(`/me/api-keys/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+    // Account-scoped keys (shared by every workspace in the account); admin-only.
+    listAccountApiKeys: (accountId: string) =>
+      http<{ keys: ApiKey[] }>(`/accounts/${encodeURIComponent(accountId)}/api-keys`),
+    addAccountApiKey: (accountId: string, body: AddApiKeyInput) =>
+      http<ApiKey>(`/accounts/${encodeURIComponent(accountId)}/api-keys`, { method: 'POST', body }),
+    removeAccountApiKey: (accountId: string, id: string) =>
+      http(`/accounts/${encodeURIComponent(accountId)}/api-keys/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+      }),
 
     // ---- LLM vendor subscription credentials (the token pool) -------------
     listVendorCredentials: (workspaceId: string) =>
@@ -266,11 +295,17 @@ export function useApi() {
         body,
       }),
 
+    setMemberRoles: (accountId: string, userId: string, roles: AccountRole[]) =>
+      http<AccountMember>(
+        `/accounts/${encodeURIComponent(accountId)}/members/${encodeURIComponent(userId)}/roles`,
+        { method: 'PATCH', body: { roles } },
+      ),
+
     // Invitations: invite teammates by email into an org account.
     listInvitations: (accountId: string) =>
       http<AccountInvitation[]>(`/accounts/${encodeURIComponent(accountId)}/invitations`),
 
-    createInvitation: (accountId: string, body: { email: string; role?: 'owner' | 'member' }) =>
+    createInvitation: (accountId: string, body: { email: string; roles?: AccountRole[] }) =>
       http<{ invitation: AccountInvitation; acceptUrl: string | null }>(
         `/accounts/${encodeURIComponent(accountId)}/invitations`,
         { method: 'POST', body },

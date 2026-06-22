@@ -215,7 +215,10 @@ export class UserService {
     if (!identity?.secret) {
       // Equalise timing with the hit path so the response time can't reveal whether the
       // email is registered (PBKDF2 against a dummy hash that can never match).
-      await this.deps.passwordHasher.verify(input.password, await dummyPasswordHash(this.deps.passwordHasher))
+      await this.deps.passwordHasher.verify(
+        input.password,
+        await dummyPasswordHash(this.deps.passwordHasher),
+      )
       return null
     }
     if (!(await this.deps.passwordHasher.verify(input.password, identity.secret))) return null

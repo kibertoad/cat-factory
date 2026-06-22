@@ -287,6 +287,25 @@ importers:
         specifier: 7.0.1-rc
         version: 7.0.1-rc
 
+  backend/packages/provider-cloudflare:
+    dependencies:
+      '@cat-factory/agents':
+        specifier: workspace:*
+        version: link:../agents
+      '@cat-factory/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+      ai:
+        specifier: ^6.0.208
+        version: 6.0.208(zod@3.25.76)
+      workers-ai-provider:
+        specifier: ^3.2.0
+        version: 3.2.0(@ai-sdk/anthropic@3.0.85(zod@3.25.76))(@ai-sdk/openai@3.0.73(zod@3.25.76))(@ai-sdk/provider@3.0.10)(ai@6.0.208(zod@3.25.76))
+    devDependencies:
+      typescript:
+        specifier: 7.0.1-rc
+        version: 7.0.1-rc
+
   backend/packages/server:
     dependencies:
       '@cat-factory/agents':
@@ -388,6 +407,9 @@ importers:
       '@cat-factory/prompt-fragments':
         specifier: workspace:*
         version: link:../../packages/prompt-fragments
+      '@cat-factory/provider-cloudflare':
+        specifier: workspace:*
+        version: link:../../packages/provider-cloudflare
       '@cat-factory/server':
         specifier: workspace:*
         version: link:../../packages/server
@@ -498,6 +520,9 @@ importers:
       '@cat-factory/provider-bedrock':
         specifier: workspace:*
         version: link:../../packages/provider-bedrock
+      '@cat-factory/provider-cloudflare':
+        specifier: workspace:*
+        version: link:../../packages/provider-cloudflare
       '@cat-factory/server':
         specifier: workspace:*
         version: link:../../packages/server

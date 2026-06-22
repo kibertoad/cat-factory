@@ -2,6 +2,7 @@ import {
   type FragmentSelectionContext,
   type FragmentSelector,
   type ModelProvider,
+  type ModelProviderResolver,
   type ModelRef,
   type SelectableFragment,
 } from '@cat-factory/kernel'
@@ -13,7 +14,10 @@ import { selectDeterministic } from './fragment-catalog.js'
 // Worker infra into @cat-factory/agents so every facade composes the same selector.
 
 export interface LlmFragmentSelectorDependencies {
-  modelProvider: ModelProvider
+  /** Resolve a {@link ModelProvider} for the run's workspace scope (DB key pool). */
+  modelProviderResolver?: ModelProviderResolver
+  /** Static provider (e.g. a fake in tests); used when no resolver is set. */
+  modelProvider?: ModelProvider
   modelRef: ModelRef
 }
 
@@ -76,7 +80,11 @@ export class LlmFragmentSelector implements FragmentSelector {
     if (candidates.length === 0) return []
     const fallback = () => selectDeterministic(candidates, context)
     try {
-      const model = this.deps.modelProvider.resolve(this.deps.modelRef)
+      const provider = this.deps.modelProviderResolver
+        ? await this.deps.modelProviderResolver.forScope({ workspaceId: context.workspaceId })
+        : this.deps.modelProvider
+      if (!provider) return fallback()
+      const model = provider.resolve(this.deps.modelRef)
       const { text } = await generateText({
         model,
         system: SYSTEM_PROMPT,

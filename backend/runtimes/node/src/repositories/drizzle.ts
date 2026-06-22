@@ -3,6 +3,7 @@ import type {
   AccountInvitationRepository,
   AccountRecord,
   AccountRepository,
+  AccountRole,
   AccountSettingsPatch,
   AgentFailure,
   EmailConnectionRecord,
@@ -537,11 +538,20 @@ class DrizzleAccountRepository implements AccountRepository {
   }
 }
 
+/** Parse the CSV `roles` column into a non-empty role set (defaults to developer). */
+function parseRoles(csv: string | null): AccountRole[] {
+  const roles = (csv ?? '')
+    .split(',')
+    .map((r) => r.trim())
+    .filter((r): r is AccountRole => r === 'admin' || r === 'developer' || r === 'product')
+  return roles.length > 0 ? [...new Set(roles)] : ['developer']
+}
+
 function rowToMembership(row: typeof memberships.$inferSelect): Membership {
   return {
     accountId: row.account_id,
     userId: row.user_id,
-    role: row.role === 'owner' ? 'owner' : 'member',
+    roles: parseRoles(row.roles),
     createdAt: row.created_at,
   }
 }
@@ -581,12 +591,12 @@ class DrizzleMembershipRepository implements MembershipRepository {
       .values({
         account_id: membership.accountId,
         user_id: membership.userId,
-        role: membership.role,
+        roles: membership.roles.join(','),
         created_at: membership.createdAt,
       })
       .onConflictDoUpdate({
         target: [memberships.account_id, memberships.user_id],
-        set: { role: membership.role },
+        set: { roles: membership.roles.join(',') },
       })
   }
 
@@ -713,7 +723,7 @@ function rowToInvitation(row: typeof accountInvitations.$inferSelect): AccountIn
     id: row.id,
     accountId: row.account_id,
     email: row.email,
-    role: row.role === 'owner' ? 'owner' : 'member',
+    roles: parseRoles(row.roles),
     tokenHash: row.token_hash,
     invitedBy: row.invited_by,
     status: row.status as AccountInvitationRecord['status'],
@@ -730,7 +740,7 @@ class DrizzleAccountInvitationRepository implements AccountInvitationRepository 
       id: record.id,
       account_id: record.accountId,
       email: record.email,
-      role: record.role,
+      roles: record.roles.join(','),
       token_hash: record.tokenHash,
       invited_by: record.invitedBy,
       status: record.status,

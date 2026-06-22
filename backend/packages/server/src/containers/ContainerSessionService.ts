@@ -13,6 +13,16 @@ export interface ContainerSession {
   aud: typeof TOKEN_AUDIENCE.container
   /** Workspace the run belongs to (spend is metered against it). */
   workspaceId: string
+  /**
+   * The workspace's owning account id, so the proxy can lease an account-scoped API
+   * key from the merged pool. Absent for a legacy/unscoped workspace.
+   */
+  accountId?: string
+  /**
+   * The run initiator's `usr_*` id, so the proxy can also lease the initiator's own
+   * user-scoped API keys. Absent for system-initiated runs.
+   */
+  userId?: string
   /** Execution instance id (links proxied usage to the run). */
   executionId: string
   /** Agent kind performing the work, for the spend ledger. */
@@ -30,6 +40,8 @@ export const DEFAULT_SESSION_TTL_MS = 30 * 60 * 1000
 
 export interface MintInput {
   workspaceId: string
+  accountId?: string | null
+  userId?: string | null
   executionId: string
   agentKind: string
   provider: string
@@ -52,6 +64,8 @@ export class ContainerSessionService {
     const session: ContainerSession = {
       aud: TOKEN_AUDIENCE.container,
       workspaceId: input.workspaceId,
+      ...(input.accountId ? { accountId: input.accountId } : {}),
+      ...(input.userId ? { userId: input.userId } : {}),
       executionId: input.executionId,
       agentKind: input.agentKind,
       provider: input.provider,

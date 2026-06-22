@@ -274,13 +274,25 @@ export function getSelectableModel(id: string | undefined | null): SelectableMod
   return id ? BY_ID.get(id) : undefined
 }
 
-/** Predicate: is the API key for a model's direct variant configured? */
-export type DirectKeyAvailable = (keyEnv: string) => boolean
+/**
+ * What a deployment + workspace actually has configured, used to resolve a catalog
+ * model to its usable flavour. Replaces the old env-only `keyEnv` predicate: direct
+ * keys now live in the DB API-key pool (account/workspace/user scoped), subscription
+ * vendors in the token pools, and Cloudflare Workers AI is an opt-in provider lib.
+ */
+export interface ProviderCapabilities {
+  /** Direct providers (e.g. `qwen`, `openai`) with ≥1 key in the merged scope pool. */
+  directProviders: Set<string>
+  /** Subscription vendors with a usable token (pool or personal). */
+  subscriptionVendors: Set<SubscriptionVendor>
+  /** Whether the opt-in Cloudflare Workers AI lib is registered for this deployment. */
+  cloudflareEnabled: boolean
+}
 
 /** Resolve the informational list cost for a model ref (e.g. from spend pricing). */
 export type ModelCostResolver = (ref: ModelRef) => ModelCost | undefined
 
-/** The effective variant a catalog model resolves to for this deployment. */
+/** The effective variant a catalog model resolves to for a given capability set. */
 interface EffectiveVariant {
   ref: ModelRef
   flavor: 'cloudflare' | 'direct' | 'subscription'
@@ -288,53 +300,81 @@ interface EffectiveVariant {
   vendor?: SubscriptionVendor
 }
 
-// The BASE effective variant: the always-available flavour the global catalog
-// resolves a model to (direct when its key is set, else Cloudflare). A
-// subscription-ONLY model has no base, so its base IS the subscription. A
-// dual-mode model (GLM/Kimi) keeps its Cloudflare/direct base here; its
-// subscription flavour is preferred per-workspace by the executor + frontend.
-function effectiveVariant(
-  model: SelectableModel,
-  isAvailable: DirectKeyAvailable,
-): EffectiveVariant {
-  const hasBase = !!model.cloudflare || !!model.direct
-  if (!hasBase && model.subscription) {
-    return {
-      ref: model.subscription.ref,
-      flavor: 'subscription',
-      providerLabel: SUBSCRIPTION_VENDORS[model.subscription.vendor].label,
-      vendor: model.subscription.vendor,
-    }
-  }
-  const useDirect = !!model.direct && isAvailable(model.direct.keyEnv)
-  if (useDirect) {
-    return { ref: model.direct!.ref, flavor: 'direct', providerLabel: model.direct!.providerLabel }
-  }
-  if (!model.cloudflare) {
-    // A catalog model must have at least one resolvable flavour. The branches above
-    // cover subscription-only (no base) and direct; reaching here with no Cloudflare
-    // flavour means a malformed catalog entry — surface it clearly instead of a
-    // cryptic non-null-assertion crash deep in the caller.
-    throw new Error(
-      `Model '${model.id}' has no resolvable variant (no cloudflare/direct/subscription)`,
-    )
-  }
-  return { ref: model.cloudflare, flavor: 'cloudflare', providerLabel: 'Cloudflare' }
+/** Whether a flavour of the model is usable given the capabilities. */
+function directUsable(model: SelectableModel, caps: ProviderCapabilities): boolean {
+  return !!model.direct && caps.directProviders.has(model.direct.ref.provider)
+}
+function cloudflareUsable(model: SelectableModel, caps: ProviderCapabilities): boolean {
+  return !!model.cloudflare && caps.cloudflareEnabled
+}
+function subscriptionUsable(model: SelectableModel, caps: ProviderCapabilities): boolean {
+  return !!model.subscription && caps.subscriptionVendors.has(model.subscription.vendor)
+}
+
+/**
+ * Whether a catalog model is selectable for the given capabilities — it has at least
+ * one usable flavour (a configured direct key, an enabled Cloudflare lib, or a
+ * connected subscription vendor). Unknown ids are not usable.
+ */
+export function isModelUsable(id: string | undefined | null, caps: ProviderCapabilities): boolean {
+  const model = getSelectableModel(id)
+  if (!model) return false
+  return (
+    directUsable(model, caps) || cloudflareUsable(model, caps) || subscriptionUsable(model, caps)
+  )
+}
+
+// The effective variant a model resolves to for a capability set: prefer a usable
+// direct key, else the Cloudflare lib, else a connected subscription. When NOTHING is
+// usable it still returns a best-effort ref (direct → cloudflare → subscription) so
+// callers always get a ref; selectability is reported separately by `isModelUsable`.
+// A dual-mode model's subscription flavour ("subscriptions win") is preferred
+// per-workspace by the executor + frontend, not here.
+function effectiveVariant(model: SelectableModel, caps: ProviderCapabilities): EffectiveVariant {
+  const direct = (): EffectiveVariant => ({
+    ref: model.direct!.ref,
+    flavor: 'direct',
+    providerLabel: model.direct!.providerLabel,
+  })
+  const cloudflare = (): EffectiveVariant => ({
+    ref: model.cloudflare!,
+    flavor: 'cloudflare',
+    providerLabel: 'Cloudflare',
+  })
+  const subscription = (): EffectiveVariant => ({
+    ref: model.subscription!.ref,
+    flavor: 'subscription',
+    providerLabel: SUBSCRIPTION_VENDORS[model.subscription!.vendor].label,
+    vendor: model.subscription!.vendor,
+  })
+  // Prefer a usable flavour.
+  if (directUsable(model, caps)) return direct()
+  if (cloudflareUsable(model, caps)) return cloudflare()
+  if (subscriptionUsable(model, caps)) return subscription()
+  // Nothing usable: a best-effort ref so the caller still has something to show/run
+  // (the guard / `available` flag gate actual use).
+  if (model.direct) return direct()
+  if (model.cloudflare) return cloudflare()
+  if (model.subscription) return subscription()
+  throw new Error(
+    `Model '${model.id}' has no resolvable variant (no cloudflare/direct/subscription)`,
+  )
 }
 
 /** Project a catalog model onto its effective, display-ready option. */
 function toOption(
   model: SelectableModel,
-  isAvailable: DirectKeyAvailable,
+  caps: ProviderCapabilities,
   costFor?: ModelCostResolver,
 ): ModelOption {
-  const variant = effectiveVariant(model, isAvailable)
+  const variant = effectiveVariant(model, caps)
   const cost = costFor?.(variant.ref)
   const option: ModelOption = {
     id: model.id,
     label: model.label,
     description: model.description,
     flavor: variant.flavor,
+    available: isModelUsable(model.id, caps),
     providerLabel: variant.providerLabel,
     provider: variant.ref.provider,
     model: variant.ref.model,
@@ -439,10 +479,10 @@ export function personalCredentialVendorForModelId(
  * whether the workspace has a token for the vendor.
  */
 export function effectiveCatalog(
-  isAvailable: DirectKeyAvailable,
+  caps: ProviderCapabilities,
   costFor?: ModelCostResolver,
 ): ModelOption[] {
-  return MODEL_CATALOG.map((model) => toOption(model, isAvailable, costFor))
+  return MODEL_CATALOG.map((model) => toOption(model, caps, costFor))
 }
 
 /**
@@ -453,9 +493,14 @@ export function effectiveCatalog(
  */
 export function resolveModelRef(
   id: string | undefined | null,
-  isAvailable: DirectKeyAvailable,
+  caps: ProviderCapabilities,
 ): ModelRef | undefined {
   const model = getSelectableModel(id)
   if (!model) return undefined
-  return effectiveVariant(model, isAvailable).ref
+  return effectiveVariant(model, caps).ref
 }
+
+/** Every subscription vendor (the full set), for building a permissive capability set. */
+export const ALL_SUBSCRIPTION_VENDORS: SubscriptionVendor[] = Object.keys(
+  SUBSCRIPTION_VENDORS,
+) as SubscriptionVendor[]

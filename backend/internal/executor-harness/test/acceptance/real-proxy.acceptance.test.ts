@@ -68,6 +68,13 @@ async function startRealProxy() {
     config: { auth: { sessionSecret: SECRET } },
     spendService,
     gateways: { llmUpstream: stubLlmUpstream(`http://127.0.0.1:${upstreamPort}/v1`) },
+    // Provider keys are DB-backed now: the proxy leases the real upstream key from the
+    // pool (not the env/gateway). Stub the pool to lease it so the injected-key + usage
+    // assertions hold, mirroring a configured workspace.
+    apiKeys: {
+      lease: async () => ({ keyId: 'apikey-real', provider: 'qwen', secret: 'real-upstream-key' }),
+      recordUsage: async () => {},
+    },
   }
 
   const app = new Hono()

@@ -12,7 +12,8 @@ export interface AccountInvitationRecord {
   accountId: string
   /** Lowercased invitee email. */
   email: string
-  role: AccountRole
+  /** The roles the invitee gains on acceptance (at least one). */
+  roles: AccountRole[]
   /** SHA-256 hash (hex/base64url) of the opaque token; the raw token is never stored. */
   tokenHash: string
   /** User id of the inviter. */

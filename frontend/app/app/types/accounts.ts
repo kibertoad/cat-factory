@@ -8,17 +8,18 @@
 import type { CloudProvider } from './domain'
 
 export type AccountType = 'personal' | 'org'
-export type AccountRole = 'owner' | 'member'
+/** Combinable account roles: admin controls the org account, product owns tasks. */
+export type AccountRole = 'admin' | 'developer' | 'product'
 
-/** An account, annotated with the signed-in caller's role in it. */
+/** An account, annotated with the signed-in caller's roles in it. */
 export interface Account {
   id: string
   type: AccountType
   name: string
   githubAccountLogin: string | null
   createdAt: number
-  /** The caller's role in this account (`null` in the auth-disabled path). */
-  role: AccountRole | null
+  /** The caller's roles in this account (`null` in the auth-disabled path). */
+  roles: AccountRole[] | null
   /** The cloud provider new services in this account default to; absent = built-in default. */
   defaultCloudProvider?: CloudProvider
 }
@@ -27,7 +28,7 @@ export interface Account {
 export interface AccountMember {
   accountId: string
   userId: string
-  role: AccountRole
+  roles: AccountRole[]
   createdAt: number
   name?: string | null
   email?: string | null
@@ -46,7 +47,12 @@ export interface UpdateAccountInput {
 
 export interface AddMemberInput {
   userId: string
-  role?: AccountRole
+  roles?: AccountRole[]
+}
+
+/** Set a member's role set (admin-only). */
+export interface SetMemberRolesInput {
+  roles: AccountRole[]
 }
 
 /** An email invitation into an org account (never carries the raw token). */
@@ -54,7 +60,7 @@ export interface AccountInvitation {
   id: string
   accountId: string
   email: string
-  role: AccountRole
+  roles: AccountRole[]
   status: 'pending' | 'accepted' | 'revoked'
   invitedBy: string
   expiresAt: number

@@ -278,7 +278,10 @@ async function clone(p: Pipeline) {
                       title="Edit this pipeline"
                       @click="edit(p)"
                     />
+                    <!-- Built-in templates are read-only — they can be cloned but not
+                         deleted (the backend rejects it too); only custom ones delete. -->
                     <UButton
+                      v-if="!p.builtin"
                       icon="i-lucide-trash-2"
                       color="neutral"
                       variant="ghost"

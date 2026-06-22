@@ -1,64 +1,60 @@
-import {
-  CompositeModelProvider,
-  InstrumentedModelProvider,
-  type ProviderRegistry,
-  baseProviderRegistry,
-} from '@cat-factory/agents'
-import type { ModelProvider } from '@cat-factory/kernel'
-import { bedrockRegistry } from '@cat-factory/provider-bedrock'
-import { createLangfuseSink } from '@cat-factory/observability-langfuse'
+import { type ProviderRegistry } from '@cat-factory/agents'
 import {
   DEEPSEEK_BASE_URL,
   MOONSHOT_BASE_URL,
   OPENAI_BASE_URL,
   QWEN_BASE_URL,
 } from '@cat-factory/agents'
+import type { ApiKeyService } from '@cat-factory/integrations'
+import type { ModelProviderResolver } from '@cat-factory/kernel'
+import { bedrockRegistry } from '@cat-factory/provider-bedrock'
+import { cloudflareRestRegistry } from '@cat-factory/provider-cloudflare'
+import { createLangfuseSink } from '@cat-factory/observability-langfuse'
+import { createScopedModelProviderResolver } from '@cat-factory/server'
 
-// The Node deployment's ModelProvider: the shared base registry (direct vendors +
-// Cloudflare-over-REST) plus opt-in AWS Bedrock when AWS credentials/region are set.
-// There is no Workers AI binding on Node, so `workers-ai` is served via the
-// Cloudflare REST resolver when CLOUDFLARE_ACCOUNT_ID + CLOUDFLARE_API_TOKEN are set.
+// The Node deployment's ModelProvider RESOLVER: builds a per-scope provider from the
+// DB-backed API-key pool (account/workspace/user), plus opt-in registries that need no
+// per-scope key — AWS Bedrock (when AWS creds/region are set) and Cloudflare Workers AI
+// over REST (when CLOUDFLARE_ACCOUNT_ID + CLOUDFLARE_API_TOKEN are set). There is no
+// Workers AI binding on Node, so `workers-ai` is served via the Cloudflare REST flavour.
+// Inline calls are wrapped for Langfuse exactly like the proxied path when configured.
 
-export function createNodeModelProvider(env: NodeJS.ProcessEnv): ModelProvider {
-  // `||` not `??` on the base URLs: a set-but-blank env var must fall back to the
-  // vendor default rather than collapse to an empty URL.
-  const registry: ProviderRegistry = baseProviderRegistry({
-    openaiApiKey: env.OPENAI_API_KEY,
-    openaiBaseURL: env.OPENAI_BASE_URL || OPENAI_BASE_URL,
-    anthropicApiKey: env.ANTHROPIC_API_KEY,
-    openAiCompatible: {
-      qwen: env.QWEN_API_KEY
-        ? { apiKey: env.QWEN_API_KEY, baseURL: env.QWEN_BASE_URL || QWEN_BASE_URL }
-        : undefined,
-      deepseek: env.DEEPSEEK_API_KEY
-        ? { apiKey: env.DEEPSEEK_API_KEY, baseURL: env.DEEPSEEK_BASE_URL || DEEPSEEK_BASE_URL }
-        : undefined,
-      moonshot: env.MOONSHOT_API_KEY
-        ? { apiKey: env.MOONSHOT_API_KEY, baseURL: env.MOONSHOT_BASE_URL || MOONSHOT_BASE_URL }
-        : undefined,
-    },
-    cloudflareRest:
-      env.CLOUDFLARE_ACCOUNT_ID && env.CLOUDFLARE_API_TOKEN
-        ? {
-            accountId: env.CLOUDFLARE_ACCOUNT_ID,
-            apiToken: env.CLOUDFLARE_API_TOKEN,
-            gateway: env.CLOUDFLARE_AI_GATEWAY,
-          }
-        : undefined,
-  })
+const NODE_BASE_URLS: Record<string, string> = {
+  openai: OPENAI_BASE_URL,
+  qwen: QWEN_BASE_URL,
+  deepseek: DEEPSEEK_BASE_URL,
+  moonshot: MOONSHOT_BASE_URL,
+}
 
-  const provider = new CompositeModelProvider(registry)
+/** The base URL for a direct provider: env override (e.g. QWEN_BASE_URL), else default. */
+function baseUrlForNode(provider: string, env: NodeJS.ProcessEnv): string | undefined {
+  // `||` not `??`: a set-but-blank override must fall back to the default.
+  return env[`${provider.toUpperCase()}_BASE_URL`] || NODE_BASE_URLS[provider]
+}
 
-  // Opt-in Bedrock: registered only when a region is configured, so an unconfigured
-  // deployment doesn't surface a half-wired provider.
+export function createNodeModelProviderResolver(
+  env: NodeJS.ProcessEnv,
+  apiKeys: ApiKeyService | undefined,
+): ModelProviderResolver {
+  const extraRegistries: ProviderRegistry[] = []
+
+  // Opt-in Cloudflare Workers AI over REST.
+  if (env.CLOUDFLARE_ACCOUNT_ID && env.CLOUDFLARE_API_TOKEN) {
+    extraRegistries.push(
+      cloudflareRestRegistry({
+        accountId: env.CLOUDFLARE_ACCOUNT_ID,
+        apiToken: env.CLOUDFLARE_API_TOKEN,
+        gateway: env.CLOUDFLARE_AI_GATEWAY,
+      }),
+    )
+  }
+
+  // Opt-in Bedrock: registered only when a region is configured.
   if (env.BEDROCK_REGION) {
-    // An empty/blank list collapses to `undefined` (allow all) rather than `[]` — a
-    // set-but-blank BEDROCK_MODELS must not silently reject every model (an empty
-    // allow-list would). Only a non-empty list narrows the allow-list.
     const supportedModels = env.BEDROCK_MODELS?.split(',')
       .map((m) => m.trim())
       .filter(Boolean)
-    provider.register(
+    extraRegistries.push(
       bedrockRegistry({
         region: env.BEDROCK_REGION,
         accessKeyId: env.AWS_ACCESS_KEY_ID,
@@ -69,25 +65,24 @@ export function createNodeModelProvider(env: NodeJS.ProcessEnv): ModelProvider {
     )
   }
 
-  // Opt-in Langfuse: wrap the provider so INLINE (non-proxied) calls — requirements
-  // review/rework, the document planner, the fragment selector, the inline agent —
-  // surface on the same trace sink the LLM proxy fans container calls out to. Off
-  // unless `LANGFUSE_ENABLED=true` and both keys are set.
-  if (
+  const instrument =
     env.LANGFUSE_ENABLED?.trim() === 'true' &&
     env.LANGFUSE_PUBLIC_KEY?.trim() &&
     env.LANGFUSE_SECRET_KEY?.trim()
-  ) {
-    return new InstrumentedModelProvider({
-      inner: provider,
-      traceSink: createLangfuseSink({
-        publicKey: env.LANGFUSE_PUBLIC_KEY.trim(),
-        secretKey: env.LANGFUSE_SECRET_KEY.trim(),
-        baseUrl: env.LANGFUSE_BASE_URL?.trim() || undefined,
-      }),
-      recordPrompts: env.LLM_RECORD_PROMPTS?.trim() !== 'false',
-    })
-  }
+      ? {
+          traceSink: createLangfuseSink({
+            publicKey: env.LANGFUSE_PUBLIC_KEY.trim(),
+            secretKey: env.LANGFUSE_SECRET_KEY.trim(),
+            baseUrl: env.LANGFUSE_BASE_URL?.trim() || undefined,
+          }),
+          recordPrompts: env.LLM_RECORD_PROMPTS?.trim() !== 'false',
+        }
+      : undefined
 
-  return provider
+  return createScopedModelProviderResolver({
+    apiKeys,
+    baseUrlFor: (provider) => baseUrlForNode(provider, env),
+    extraRegistries,
+    instrument,
+  })
 }
