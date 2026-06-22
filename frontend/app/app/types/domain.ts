@@ -267,6 +267,8 @@ export interface SpendStatus {
 export interface Workspace {
   id: string
   name: string
+  /** Optional free-text description (null when unset). */
+  description: string | null
   createdAt: number
   /** The account this board belongs to, or null for a legacy/unscoped board. */
   accountId: string | null

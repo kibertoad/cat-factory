@@ -23,12 +23,15 @@ export interface Account {
   defaultCloudProvider?: CloudProvider
 }
 
-/** A member of an account. */
+/** A member of an account, with display details when resolvable. */
 export interface AccountMember {
   accountId: string
-  userId: number
+  userId: string
   role: AccountRole
   createdAt: number
+  name?: string | null
+  email?: string | null
+  avatarUrl?: string | null
 }
 
 export interface CreateAccountInput {
@@ -42,6 +45,27 @@ export interface UpdateAccountInput {
 }
 
 export interface AddMemberInput {
-  userId: number
+  userId: string
   role?: AccountRole
+}
+
+/** An email invitation into an org account (never carries the raw token). */
+export interface AccountInvitation {
+  id: string
+  accountId: string
+  email: string
+  role: AccountRole
+  status: 'pending' | 'accepted' | 'revoked'
+  invitedBy: string
+  expiresAt: number
+  createdAt: number
+}
+
+export type EmailProviderKind = 'sendgrid' | 'resend'
+
+/** A per-account email-sender connection (safe metadata; never the API key). */
+export interface EmailConnection {
+  provider: EmailProviderKind
+  fromAddress: string
+  connectedAt: number
 }

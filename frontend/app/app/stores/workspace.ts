@@ -135,23 +135,29 @@ export const useWorkspaceStore = defineStore(
     }
 
     /** Create a new board in the active account and open it. */
-    async function create(name?: string) {
+    async function create(name?: string, description?: string) {
       const accounts = useAccountsStore()
       const snapshot = await api.createWorkspace({
         seed: false,
         name,
+        description,
         accountId: accounts.activeAccountId ?? undefined,
       })
       hydrate(snapshot)
       return snapshot.workspace
     }
 
-    /** Rename a board. */
-    async function rename(id: string, name: string) {
-      const updated = await api.renameWorkspace(id, name)
+    /** Rename a board and/or update its description. */
+    async function update(id: string, patch: { name?: string; description?: string | null }) {
+      const updated = await api.updateWorkspace(id, patch)
       const i = workspaces.value.findIndex((w) => w.id === id)
       if (i >= 0) workspaces.value[i] = updated
       return updated
+    }
+
+    /** Rename a board (kept for the existing rename callers). */
+    async function rename(id: string, name: string) {
+      return update(id, { name })
     }
 
     /** Delete a board; if it was active, fall back to another in the account. */
@@ -194,6 +200,7 @@ export const useWorkspaceStore = defineStore(
       switchTo,
       selectAccount,
       create,
+      update,
       rename,
       remove,
       refresh,
