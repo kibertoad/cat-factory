@@ -70,7 +70,7 @@ watch(
         </UButton>
         <UButton
           block
-          color="neutral"
+          color="primary"
           variant="soft"
           size="sm"
           icon="i-lucide-plus"
@@ -92,7 +92,7 @@ watch(
         <UButton
           v-if="github.available"
           block
-          color="neutral"
+          color="primary"
           variant="soft"
           size="sm"
           icon="i-lucide-folder-git-2"
@@ -103,7 +103,7 @@ watch(
         </UButton>
         <UButton
           block
-          color="neutral"
+          color="primary"
           variant="soft"
           size="sm"
           icon="i-lucide-git-branch-plus"
@@ -125,7 +125,7 @@ watch(
         <UButton
           v-if="github.available"
           block
-          color="neutral"
+          color="primary"
           variant="soft"
           size="sm"
           icon="i-lucide-github"
@@ -140,7 +140,7 @@ watch(
         <UButton
           v-if="slack.available"
           block
-          color="neutral"
+          color="primary"
           variant="soft"
           size="sm"
           icon="i-lucide-slack"
@@ -222,7 +222,7 @@ watch(
         </h2>
         <UButton
           block
-          color="neutral"
+          color="primary"
           variant="soft"
           size="sm"
           icon="i-lucide-book-marked"
@@ -242,7 +242,7 @@ watch(
       <div class="space-y-1.5">
         <UButton
           block
-          color="neutral"
+          color="primary"
           variant="soft"
           size="sm"
           icon="i-lucide-git-merge"
@@ -253,7 +253,7 @@ watch(
         </UButton>
         <UButton
           block
-          color="neutral"
+          color="primary"
           variant="soft"
           size="sm"
           icon="i-lucide-cpu"
@@ -264,7 +264,7 @@ watch(
         </UButton>
         <UButton
           block
-          color="neutral"
+          color="primary"
           variant="soft"
           size="sm"
           icon="i-lucide-book-open-check"

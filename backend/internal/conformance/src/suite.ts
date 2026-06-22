@@ -144,6 +144,12 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         // And it rides along on the workspace snapshot.
         const snapshot = await call<WorkspaceSnapshot>('GET', `/workspaces/${workspace.id}`)
         expect(snapshot.body.modelDefaults?.defaults.architect).toBe('strong-model')
+
+        // The snapshot also names the deployment's env-routing defaults (so the
+        // settings panel can label the model behind "Deployment default"); both
+        // facades derive it from the shared agents config.
+        expect(typeof snapshot.body.deploymentModelDefaults?.default).toBe('string')
+        expect(snapshot.body.deploymentModelDefaults?.default.length).toBeGreaterThan(0)
       })
     })
 

@@ -114,13 +114,21 @@ export const MODEL_CATALOG: SelectableModel[] = [
     id: 'cloudflare-llama',
     label: 'Llama 3.1',
     description: "Meta's fast 8B instruct model — Cloudflare Workers AI's default.",
-    cloudflare: { provider: 'workers-ai', model: '@cf/meta/llama-3.1-8b-instruct' },
+    cloudflare: {
+      provider: 'workers-ai',
+      model: '@cf/meta/llama-3.1-8b-instruct',
+      contextTokens: 7_968,
+    },
   },
   {
     id: 'qwen',
     label: 'Qwen3',
     description: "Alibaba's Qwen3 — Qwen3-30B on Cloudflare, flagship Qwen3-Max when direct.",
-    cloudflare: { provider: 'workers-ai', model: '@cf/qwen/qwen3-30b-a3b-fp8' },
+    cloudflare: {
+      provider: 'workers-ai',
+      model: '@cf/qwen/qwen3-30b-a3b-fp8',
+      contextTokens: 32_768,
+    },
     direct: {
       ref: { provider: 'qwen', model: 'qwen3-max' },
       keyEnv: 'QWEN_API_KEY',
@@ -130,33 +138,38 @@ export const MODEL_CATALOG: SelectableModel[] = [
   {
     id: 'kimi-k2.7',
     label: 'Kimi K2.7',
-    description: "Moonshot AI's latest 1T-param agentic-coding model (structured outputs).",
-    cloudflare: { provider: 'workers-ai', model: '@cf/moonshotai/kimi-k2.7-code' },
+    description:
+      "Moonshot AI's latest 1T-param agentic-coding model (structured outputs), 256K context.",
+    cloudflare: {
+      provider: 'workers-ai',
+      model: '@cf/moonshotai/kimi-k2.7-code',
+      contextTokens: 262_144,
+    },
   },
   {
     id: 'kimi',
     label: 'Kimi K2.6',
     description:
-      "Moonshot AI's frontier-scale agentic model — cut 32K context on Cloudflare, " +
-      'full 256K via a Kimi (Moonshot) subscription.',
+      "Moonshot AI's frontier-scale agentic model with a 256K context, on Cloudflare or " +
+      'direct via a Moonshot key / Kimi (Moonshot) subscription.',
     cloudflare: {
       provider: 'workers-ai',
       model: '@cf/moonshotai/kimi-k2.6',
-      contextTokens: 32_000,
+      contextTokens: 262_144,
     },
     direct: {
-      ref: { provider: 'moonshot', model: 'kimi-k2.6', contextTokens: 256_000 },
+      ref: { provider: 'moonshot', model: 'kimi-k2.6', contextTokens: 262_144 },
       keyEnv: 'MOONSHOT_API_KEY',
       providerLabel: 'Moonshot',
     },
     // Run via Claude Code against Moonshot's Anthropic-compatible endpoint on a
-    // Kimi coding-plan subscription (full context, flat-rate quota).
+    // Kimi coding-plan subscription (same 256K window, flat-rate quota).
     subscription: {
       ref: {
         provider: 'moonshot',
         model: 'kimi-k2.6',
         harness: 'claude-code',
-        contextTokens: 256_000,
+        contextTokens: 262_144,
       },
       vendor: 'kimi',
     },
@@ -165,12 +178,12 @@ export const MODEL_CATALOG: SelectableModel[] = [
     id: 'deepseek',
     label: 'DeepSeek R1',
     description:
-      "DeepSeek's reasoning — cut 32K R1 distill on Cloudflare, full 64K flagship chat " +
-      'when direct or via a DeepSeek coding-plan subscription.',
+      "DeepSeek's reasoning: the 80K R1 Qwen-32B distill on Cloudflare, or the flagship " +
+      'chat model (64K) when direct or via a DeepSeek coding-plan subscription.',
     cloudflare: {
       provider: 'workers-ai',
       model: '@cf/deepseek-ai/deepseek-r1-distill-qwen-32b',
-      contextTokens: 32_000,
+      contextTokens: 80_000,
     },
     direct: {
       ref: { provider: 'deepseek', model: 'deepseek-chat', contextTokens: 64_000 },
@@ -197,19 +210,20 @@ export const MODEL_CATALOG: SelectableModel[] = [
     cloudflare: {
       provider: 'workers-ai',
       model: 'deepseek/deepseek-v4-pro',
-      contextTokens: 131_000,
+      contextTokens: 131_072,
     },
   },
   {
     id: 'glm',
     label: 'GLM-5.2',
     description:
-      "Z.ai's agentic-coding model — cut 24K context on Cloudflare, full 200K via a GLM (Z.ai) subscription.",
-    cloudflare: { provider: 'workers-ai', model: '@cf/zai-org/glm-5.2', contextTokens: 24_000 },
+      "Z.ai's agentic-coding model: 256K context on Cloudflare, or the full 1M-token " +
+      'window via a GLM (Z.ai) subscription.',
+    cloudflare: { provider: 'workers-ai', model: '@cf/zai-org/glm-5.2', contextTokens: 262_144 },
     // Run via Claude Code against Z.ai's Anthropic-compatible endpoint on a GLM
-    // coding-plan subscription (full context, flat-rate quota).
+    // coding-plan subscription (full 1M context, flat-rate quota).
     subscription: {
-      ref: { provider: 'zai', model: 'glm-5.2', harness: 'claude-code', contextTokens: 200_000 },
+      ref: { provider: 'zai', model: 'glm-5.2', harness: 'claude-code', contextTokens: 1_000_000 },
       vendor: 'glm',
     },
   },
@@ -425,6 +439,36 @@ export function individualVendorForModelId(
 ): SubscriptionVendor | null {
   const sub = subscriptionOptionFor(id)
   return sub && isIndividualVendor(sub.vendor) ? sub.vendor : null
+}
+
+/**
+ * The individual-usage vendor whose PERSONAL credential a run on this catalog model id
+ * will ACTUALLY lease, given whether the run's user already has a personal subscription
+ * for the candidate vendor (`hasPersonalSubscription`). Returns null when no personal
+ * credential is needed. This is the gating-accurate refinement of
+ * {@link individualVendorForModelId}, and mirrors
+ * `ContainerAgentExecutor.resolveEffectiveRef`, so the credential gate prompts for a
+ * password exactly when dispatch will use one:
+ *
+ *  - SUBSCRIPTION-ONLY individual model (Claude / Codex — no Cloudflare/direct base):
+ *    there is no fallback, so the personal credential is always required.
+ *  - DUAL-MODE individual model (e.g. GLM, which also has a Cloudflare base): per-user.
+ *    A user WITH their own personal subscription for the vendor runs on it (gated on
+ *    their password); a user WITHOUT one falls back to the Cloudflare base and is not
+ *    gated. (Individual vendors are never pooled, so there is no shared fallback — only
+ *    the user's own subscription or the base.)
+ *  - Poolable / non-subscription models: never need a personal credential.
+ */
+export function personalCredentialVendorForModelId(
+  id: string | undefined | null,
+  hasPersonalSubscription: (vendor: SubscriptionVendor) => boolean,
+): SubscriptionVendor | null {
+  const model = getSelectableModel(id)
+  const sub = model?.subscription
+  if (!sub || !isIndividualVendor(sub.vendor)) return null
+  const hasBase = !!model.cloudflare || !!model.direct
+  if (!hasBase) return sub.vendor
+  return hasPersonalSubscription(sub.vendor) ? sub.vendor : null
 }
 
 /**

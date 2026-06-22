@@ -14,6 +14,23 @@ export function readPersonalPassword(c: Context<AppEnv>): string | undefined {
 }
 
 /**
+ * A predicate over the vendors the run's user has their OWN personal subscription for.
+ * Passed into the engine's vendor resolution so a DUAL-MODE individual model (GLM) gates
+ * only a subscriber (a non-subscriber runs it on the Cloudflare base). Empty for an
+ * unauthenticated/unconfigured caller — then only subscription-ONLY individual models
+ * (Claude / Codex) gate.
+ */
+async function resolvePersonalVendorPredicate(
+  container: ServerContainer,
+  user: SessionPayload | undefined,
+): Promise<(vendor: SubscriptionVendor) => boolean> {
+  const personal = container.personalSubscriptions
+  if (!personal || !user) return () => false
+  const owned = new Set((await personal.list(user.id)).map((s) => s.vendor))
+  return (vendor) => owned.has(vendor)
+}
+
+/**
  * Best-effort, transparent re-mint of a run's individual-usage activation(s) when a user
  * interacts with it (resolve decision / approve / request changes). Runs BEFORE the engine
  * advances and dispatches the next step, so a freshly-minted activation is in place even if
@@ -35,6 +52,7 @@ export async function remintActivations(
     const vendors = await container.executionService.individualVendorsForRun(
       workspaceId,
       executionId,
+      await resolvePersonalVendorPredicate(container, user),
     )
     if (vendors.length === 0) return
     const password = readPersonalPassword(c)
@@ -130,6 +148,7 @@ export async function personalGateForBlock(
     workspaceId,
     blockId,
     pipelineId,
+    await resolvePersonalVendorPredicate(container, user),
   )
   return gate(container, vendors, user, password)
 }
@@ -142,6 +161,10 @@ export async function personalGateForRun(
   user: SessionPayload | undefined,
   password: string | undefined,
 ): Promise<PersonalCredentialGate> {
-  const vendors = await container.executionService.individualVendorsForRun(workspaceId, executionId)
+  const vendors = await container.executionService.individualVendorsForRun(
+    workspaceId,
+    executionId,
+    await resolvePersonalVendorPredicate(container, user),
+  )
   return gate(container, vendors, user, password)
 }

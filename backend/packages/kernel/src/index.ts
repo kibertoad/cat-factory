@@ -37,6 +37,7 @@ export {
   isIndividualVendor,
   INDIVIDUAL_VENDORS,
   individualVendorForModelId,
+  personalCredentialVendorForModelId,
 } from './domain/models.js'
 export {
   seedBlocks,

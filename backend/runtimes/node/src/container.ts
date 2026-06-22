@@ -437,6 +437,9 @@ function buildNodeContainerExecutor(
       ? {
           leasePersonalSubscriptionToken: (executionId, userId, vendor) =>
             personalSubscriptions.leaseForRun(executionId, userId, vendor),
+          // Route a dual-mode individual model (GLM) to the initiator's own subscription
+          // when they have one; otherwise dispatch keeps it on the Cloudflare base.
+          hasPersonalSubscription: (userId, vendor) => personalSubscriptions.has(userId, vendor),
         }
       : {}),
     proxyBaseUrl: `${publicUrl.replace(/\/+$/, '')}/v1`,

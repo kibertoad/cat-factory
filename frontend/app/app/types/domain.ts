@@ -299,6 +299,13 @@ export interface WorkspaceSnapshot {
   agentConfigCatalog?: AgentConfigDescriptor[]
   /** Per-agent-kind default model overrides for this workspace (agentKind → model id). */
   modelDefaults?: ModelDefaults
+  /**
+   * The deployment's env-routing defaults as `provider:model` refs: the model a
+   * kind runs on when neither the task nor the workspace pins one. `default` is the
+   * global fallback; `byKind` carries kinds the operator routed specifically. Used
+   * to name the model behind "Deployment default" in the settings panel.
+   */
+  deploymentModelDefaults?: { default: string; byKind: Record<string, string> }
   /** The workspace's default service-fragment selection (ids new services inherit). */
   serviceFragmentDefaults?: ServiceFragmentDefaults
   /** The workspace's recurring pipelines (schedules shown on the board + inspector). */
