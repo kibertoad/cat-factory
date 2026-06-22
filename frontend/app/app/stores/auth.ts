@@ -62,7 +62,26 @@ export const useAuthStore = defineStore(
         }
         if (!user.value) token.value = null
       }
+      // An already-signed-in user who followed an invite link redeems it here (a
+      // brand-new user redeems it server-side during signup/OAuth instead).
+      if (user.value) await maybeAcceptInvite()
       ready.value = true
+    }
+
+    /** Redeem an `?invite=` token in the URL for the signed-in user, then clean the URL. */
+    async function maybeAcceptInvite() {
+      if (typeof window === 'undefined') return
+      const params = new URLSearchParams(window.location.search)
+      const inviteToken = params.get('invite')
+      if (!inviteToken) return
+      try {
+        await api.acceptInvite(inviteToken)
+      } catch {
+        // Stale/already-accepted invite — ignore and let the app load normally.
+      }
+      params.delete('invite')
+      const qs = params.toString()
+      history.replaceState(null, '', window.location.pathname + (qs ? `?${qs}` : ''))
     }
 
     /** Build a post-login redirect back to the current page, with an optional invite. */
