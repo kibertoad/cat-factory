@@ -8,13 +8,26 @@ import type {
   SecretResolver,
 } from '@cat-factory/kernel'
 
-// Dispatch kinds a self-hosted pool's harness can serve. The pool runs the same
-// executor-harness image as the Cloudflare backend, so it serves the coding run, the
-// Tester/Fixer loop, and repo bootstrap (the harness `/bootstrap` route clones/scaffolds
-// and force-pushes the new repo — no Cloudflare-specific primitive, so a pool runner
-// serves it exactly like the local Docker transport does). The remaining kinds
-// (blueprint/spec/merge/…) stay on the Cloudflare backend until a pool opts into them.
-const POOL_SUPPORTED_KINDS = new Set<RunnerDispatchKind>(['run', 'test', 'fix-tests', 'bootstrap'])
+// Dispatch kinds a self-hosted pool's harness can serve. The pool runs the SAME
+// executor-harness image as the Cloudflare backend, so it serves EVERY harness route —
+// the coding run, read-only exploration, the Tester/Fixer loop, repo bootstrap, the
+// blueprint mapper, the spec writer, the merge assessor and the CI / conflict fixers.
+// None of these need a Cloudflare-specific primitive (they are all plain harness HTTP
+// routes), so the pool serves them exactly like the local Docker transport does. The
+// guard is kept (rather than removed) so a future genuinely Cloudflare-only kind is
+// rejected by default until it is explicitly added here.
+const POOL_SUPPORTED_KINDS = new Set<RunnerDispatchKind>([
+  'run',
+  'blueprint',
+  'spec',
+  'explore',
+  'bootstrap',
+  'ci-fix',
+  'resolve-conflicts',
+  'merge',
+  'test',
+  'fix-tests',
+])
 
 // Adapts the stateless, manifest-interpreting HttpRunnerPoolProvider to the
 // per-job RunnerTransport the container executor drives, binding one workspace's
@@ -37,8 +50,8 @@ export class RunnerPoolTransport implements RunnerTransport {
     kind: RunnerDispatchKind = 'run',
     options?: RunnerDispatchOptions,
   ): Promise<void> {
-    // A pool serves the coding run, the Tester/Fixer loop, and repo bootstrap; the
-    // remaining kinds run exclusively on the Cloudflare container backend for now.
+    // A pool runs the full executor-harness image, so it serves every harness route;
+    // the guard only trips on a (hypothetical) future Cloudflare-only kind.
     if (!POOL_SUPPORTED_KINDS.has(kind)) {
       throw new Error(`Self-hosted runner pools do not support '${kind}' jobs`)
     }
