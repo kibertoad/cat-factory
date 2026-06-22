@@ -66,7 +66,7 @@ CREATE TABLE github_repos (
   block_id         TEXT,                       
   etag             TEXT,
   synced_at        INTEGER NOT NULL,
-  deleted_at       INTEGER, is_monorepo INTEGER NOT NULL DEFAULT 0,
+  deleted_at       INTEGER,
   PRIMARY KEY (workspace_id, github_id)
 );
 CREATE TABLE github_branches (

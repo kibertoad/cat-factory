@@ -103,6 +103,31 @@ describe('add service from existing repo', () => {
     expect(again.body.id).not.toBe(first.body.id)
   })
 
+  it('flags a linked repo as a monorepo via PATCH', async () => {
+    const installationId = uniqueInstallationId()
+    const app = makeApp(
+      new FakeAgentExecutor(),
+      githubDeps({ client: clientWithRepo(installationId) }),
+    )
+    const { workspace } = await app.createWorkspace()
+    const ws = workspace.id
+    await app.call('POST', `/workspaces/${ws}/github/connect`, { installationId })
+    await app.call('POST', `/workspaces/${ws}/blocks/from-repo`, { repoGithubId: 101 })
+
+    // Toggle the monorepo flag — this PATCH writes `github_repos.is_monorepo`, so it
+    // exercises the column added by migration 0044 (a missing column 500s the update).
+    const patched = await app.call<GitHubRepo>(
+      'PATCH',
+      `/workspaces/${ws}/github/repos/101`,
+      { isMonorepo: true },
+    )
+    expect(patched.status).toBe(200)
+    expect(patched.body.isMonorepo).toBe(true)
+
+    const repos = await app.call<GitHubRepo[]>('GET', `/workspaces/${ws}/github/repos`)
+    expect(repos.body.find((r) => r.githubId === 101)?.isMonorepo).toBe(true)
+  })
+
   it('409s when the App cannot access the requested repo', async () => {
     const installationId = uniqueInstallationId()
     const app = makeApp(
