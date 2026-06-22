@@ -30,6 +30,13 @@ export const useRequirementsStore = defineStore('requirements', () => {
   const incorporating = ref<Set<string>>(new Set())
   /** Block ids whose current review is being fetched (the initial `load`). */
   const loadingByBlock = ref<Set<string>>(new Set())
+  /**
+   * In-flight `load()` promises keyed by block id, so concurrent callers for the same
+   * block (the inspector's badge watch + the review window opening together) share ONE
+   * request instead of each firing its own. Plain Map — internal bookkeeping, not
+   * reactive. Cleared once the request settles.
+   */
+  const inFlight = new Map<string, Promise<void>>()
 
   function reviewFor(blockId: string): RequirementReview | null {
     return reviews.value[blockId] ?? null
@@ -79,17 +86,25 @@ export const useRequirementsStore = defineStore('requirements', () => {
   /** Fetch the current review for a block (probing the feature's availability). */
   async function load(blockId: string) {
     if (!workspace.workspaceId) return
-    withFlag(loadingByBlock, blockId, true)
-    try {
-      const review = await api.getRequirementReview(workspace.requireId(), blockId)
-      available.value = true
-      reviews.value = { ...reviews.value, [blockId]: review }
-    } catch {
-      // 503 (feature off) or any error → hide the UI entry points.
-      available.value = false
-    } finally {
-      withFlag(loadingByBlock, blockId, false)
-    }
+    // Coalesce overlapping loads of the same block onto a single request.
+    const pending = inFlight.get(blockId)
+    if (pending) return pending
+    const promise = (async () => {
+      withFlag(loadingByBlock, blockId, true)
+      try {
+        const review = await api.getRequirementReview(workspace.requireId(), blockId)
+        available.value = true
+        reviews.value = { ...reviews.value, [blockId]: review }
+      } catch {
+        // 503 (feature off) or any error → hide the UI entry points.
+        available.value = false
+      } finally {
+        withFlag(loadingByBlock, blockId, false)
+        inFlight.delete(blockId)
+      }
+    })()
+    inFlight.set(blockId, promise)
+    return promise
   }
 
   /** Run a fresh review of a block's collected requirements (off-path / inspector). */

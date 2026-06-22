@@ -6,7 +6,10 @@
 //   1. declare `resultView: '<id>'` on its archetype, and
 //   2. register `'<id>': <Component>` below.
 // No caller changes — every board/inspector entry point already routes through
-// `ui` dispatch.
+// `ui` dispatch. Each registered window builds on `useResultView(viewId, { onOpen })`,
+// which owns the seam contract (open/blockId/close + Escape + load-on-open) so a new
+// window can't reintroduce the route-dependent empty-state bug by forgetting to fetch
+// on mount — declare an `onOpen` loader and it fires on every open.
 import { computed, type Component } from 'vue'
 import RequirementsReviewWindow from '~/components/requirements/RequirementsReviewWindow.vue'
 import TestReportWindow from '~/components/testing/TestReportWindow.vue'

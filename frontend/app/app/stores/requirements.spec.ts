@@ -61,4 +61,34 @@ describe('requirements store load() loading flag', () => {
     expect(store.available).toBe(false)
     expect(store.reviewFor('b1')).toBeNull()
   })
+
+  it('coalesces concurrent load() calls for the same block into one request', async () => {
+    // Two callers open at once (the inspector badge watch + the review window). They must
+    // share a single in-flight request, not each fetch their own.
+    let calls = 0
+    let resolveFetch!: (r: RequirementReview) => void
+    const pending = new Promise<RequirementReview>((res) => {
+      resolveFetch = res
+    })
+    vi.stubGlobal('useApi', () => ({
+      getRequirementReview: () => {
+        calls++
+        return pending
+      },
+    }))
+
+    const store = useRequirementsStore()
+    const first = store.load('b1')
+    const second = store.load('b1')
+    expect(calls).toBe(1)
+
+    resolveFetch(review())
+    await Promise.all([first, second])
+    expect(calls).toBe(1)
+    expect(store.reviewFor('b1')?.id).toBe('rr1')
+
+    // Once the in-flight request settles, a later load fetches fresh.
+    void store.load('b1')
+    expect(calls).toBe(2)
+  })
 })

@@ -85,10 +85,6 @@ export const useUiStore = defineStore('ui', () => {
     instanceId: string | null
     stepIndex: number | null
   } | null>(null)
-  // Back-compat alias for surfaces that only care about the requirements window.
-  const requirementReviewBlockId = computed(() =>
-    resultView.value?.view === 'requirements-review' ? resultView.value.blockId : null,
-  )
 
   // Agent step-detail overlay: which pipeline step (a run instance + step index)
   // a human is inspecting, or null when closed. The overlay resolves the step
@@ -336,7 +332,6 @@ export const useUiStore = defineStore('ui', () => {
     vendorCredentialsOpen,
     resultView,
     closeResultView,
-    requirementReviewBlockId,
     stepDetail,
     observabilityInstanceId,
     zoom,

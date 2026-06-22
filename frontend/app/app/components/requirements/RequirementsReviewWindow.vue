@@ -16,13 +16,29 @@ import type {
   ReviewItemStatus,
 } from '~/types/requirements'
 
-const ui = useUiStore()
 const board = useBoardStore()
 const requirements = useRequirementsStore()
 const toast = useToast()
 
-const open = computed(() => ui.requirementReviewBlockId !== null)
-const blockId = computed(() => ui.requirementReviewBlockId)
+// Draft replies, keyed by item id, so editing one item doesn't disturb others.
+const drafts = ref<Record<string, string>>({})
+// Freeform "do it differently" comment when redoing a merge the human was unhappy with.
+const redoComment = ref('')
+const showRedo = ref(false)
+
+// The seam contract (open/blockId/close + Escape handling + load-on-open) lives in
+// `useResultView`, so this window can't drift from the others. Declaring `onOpen` makes the
+// review load on EVERY open regardless of navigation route: the host mounts this window
+// fresh each open, so a non-immediate per-window watch used to leave it empty for whichever
+// route (a pipeline step / "Review & approve") didn't warm the cache by selecting the block.
+const { open, blockId, close } = useResultView('requirements-review', {
+  onOpen: (id) => {
+    drafts.value = {}
+    redoComment.value = ''
+    showRedo.value = false
+    void requirements.load(id)
+  },
+})
 const block = computed(() => (blockId.value ? board.getBlock(blockId.value) : undefined))
 const review = computed<RequirementReview | null>(() =>
   blockId.value ? requirements.reviewFor(blockId.value) : null,
@@ -35,29 +51,6 @@ const reworking = computed(() =>
   review.value ? requirements.isIncorporating(review.value.id) : false,
 )
 const acting = ref(false)
-
-// Draft replies, keyed by item id, so editing one item doesn't disturb others.
-const drafts = ref<Record<string, string>>({})
-// Freeform "do it differently" comment when redoing a merge the human was unhappy with.
-const redoComment = ref('')
-const showRedo = ref(false)
-
-watch(blockId, (id) => {
-  drafts.value = {}
-  redoComment.value = ''
-  showRedo.value = false
-  if (id) void requirements.load(id)
-})
-
-function onKey(e: KeyboardEvent) {
-  if (e.key === 'Escape' && open.value) close()
-}
-onMounted(() => window.addEventListener('keydown', onKey))
-onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
-
-function close() {
-  ui.closeResultView()
-}
 
 const SEVERITY_RANK: Record<ReviewItemSeverity, number> = { high: 0, medium: 1, low: 2 }
 const sortedItems = computed<RequirementReviewItem[]>(() => {

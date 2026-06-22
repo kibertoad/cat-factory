@@ -12,30 +12,20 @@
 // `spec/features/*.feature` files would need a spec endpoint (a future enhancement).
 import type { TestConcern, TestOutcome, TestReport } from '~/types/domain'
 
-const ui = useUiStore()
 const board = useBoardStore()
 const execution = useExecutionStore()
 
-const open = computed(() => ui.resultView?.view === 'tester')
-const blockId = computed(() => ui.resultView?.blockId ?? null)
+// Shared seam contract (open/blockId/close + Escape). No `onOpen` loader: this window reads
+// its report straight off the execution step, so there's nothing to fetch on open.
+const { open, blockId, instanceId, stepIndex, close } = useResultView('tester')
 const block = computed(() => (blockId.value ? board.getBlock(blockId.value) : undefined))
 
 const step = computed(() => {
-  const rv = ui.resultView
-  if (!rv || rv.view !== 'tester' || rv.instanceId === null || rv.stepIndex === null) return null
-  return execution.getInstance(rv.instanceId)?.steps[rv.stepIndex] ?? null
+  if (instanceId.value === null || stepIndex.value === null) return null
+  return execution.getInstance(instanceId.value)?.steps[stepIndex.value] ?? null
 })
 const report = computed<TestReport | null>(() => step.value?.test?.lastReport ?? null)
 const testState = computed(() => step.value?.test ?? null)
-
-function close() {
-  ui.closeResultView()
-}
-function onKey(e: KeyboardEvent) {
-  if (e.key === 'Escape' && open.value) close()
-}
-onMounted(() => window.addEventListener('keydown', onKey))
-onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
 
 const STATUS_META: Record<TestOutcome['status'], { icon: string; text: string; label: string }> = {
   passed: { icon: 'i-lucide-circle-check', text: 'text-emerald-400', label: 'Passed' },

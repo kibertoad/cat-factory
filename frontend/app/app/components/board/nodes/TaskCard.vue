@@ -144,9 +144,13 @@ const statusText = computed(() =>
   runFailed.value ? 'Failed' : (attention.value?.label ?? statusMeta.value?.label ?? ''),
 )
 
+// Clicking the card body only selects the task (opening the inspector so the human can
+// interact with it). Whatever the task is parked on — a decision, an approval, or the
+// requirements review — is opened explicitly via the action button below, never by a
+// click anywhere on the card. (A card-body click used to pop the review window open,
+// which got in the way of just inspecting/editing the task.)
 function selectTask() {
   ui.select(props.taskId)
-  attention.value?.open()
 }
 </script>
 
