@@ -56,6 +56,7 @@ import {
   WebCryptoWebhookVerifier,
   buildResolveRepoTarget,
   createWebSearchUpstreamFromEnv,
+  ensureWorkBranchViaRest,
   logger,
 } from '@cat-factory/server'
 import type { PgBoss } from 'pg-boss'
@@ -399,6 +400,17 @@ function buildNodeContainerExecutor(
     resolveWorkspaceModelDefault,
     resolveRepoTarget,
     mintInstallationToken,
+    // Create the shared per-task work branch up front so every agent (including the
+    // read-only architect) operates on the same branch — idempotent, best-effort.
+    ensureWorkBranch: async (repo, branch) =>
+      ensureWorkBranchViaRest({
+        ...(config.github.apiBase ? { apiBase: config.github.apiBase } : {}),
+        token: await mintInstallationToken(repo.installationId),
+        owner: repo.owner,
+        name: repo.name,
+        baseBranch: repo.baseBranch,
+        branch,
+      }),
     sessionService: new ContainerSessionService({ secret: sessionSecret }),
     // The subscription harnesses (Claude Code / Codex) lease a pooled token and
     // attribute usage back for usage-aware rotation; absent ⇒ those harnesses are
