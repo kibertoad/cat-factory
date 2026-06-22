@@ -35,5 +35,7 @@ is already recorded:
   endpoint when a row is expanded.
 
 Both runtimes' real Hono apps are covered by a proxy-emit integration test asserting
-the identical compact activity event (Cloudflare over the DO publisher path, Node over
-its app), so the live stream can't silently work on one runtime and not the other.
+the identical compact activity event (each over its own app), so the shared controller's
+emit can't silently work on one runtime and not the other. The Cloudflare-specific
+publish leg — `DurableObjectEventPublisher.llmCallObserved` fanning the event to a live
+socket as an `llmCall` `WorkspaceEvent` — has its own dedicated hub spec.

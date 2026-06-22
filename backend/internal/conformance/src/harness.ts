@@ -17,7 +17,7 @@ import type { FakeAgentOptions } from './FakeAgentExecutor.js'
  */
 export class RecordingEventPublisher implements ExecutionEventPublisher {
   readonly emits: ExecutionInstance[] = []
-  /** Every compact `llmCall` activity the proxy pushed, in order (see {@link ConformanceApp.llmCallEmits}). */
+  /** Every compact `llmCall` activity the proxy pushed (via `llmCallObserved`), in order. */
   readonly llmCalls: LlmCallActivity[] = []
 
   async executionChanged(_workspaceId: string, instance: ExecutionInstance): Promise<void> {

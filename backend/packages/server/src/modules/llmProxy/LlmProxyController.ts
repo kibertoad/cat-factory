@@ -133,7 +133,10 @@ export function llmProxyController(): Hono<AppEnv> {
 
       // Live activity event — emitted regardless of whether the persistence sink is
       // wired, so the live view works even on a deployment that does not retain
-      // metrics. Best-effort: a publish failure (no subscribers, transient hub error)
+      // metrics. This fires on EVERY observed outcome, including refusals/errors (spend
+      // exhausted, unavailable provider, upstream non-2xx) where no model work ran:
+      // surfacing those live (with `ok:false`) is intentional and matches what the sink
+      // persists. Best-effort: a publish failure (no subscribers, transient hub error)
       // must not break metering.
       waitUntil(
         Promise.resolve(

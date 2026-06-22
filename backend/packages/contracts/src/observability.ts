@@ -80,7 +80,10 @@ export const llmCallActivitySchema = v.object({
   toolCount: v.number(),
   requestMaxTokens: v.nullable(v.number()),
   promptTokens: v.number(),
-  cachedPromptTokens: v.optional(v.number(), 0),
+  // Always supplied by the proxy emit (unlike the persisted metric, which defaults it
+  // for rows that predate delta storage), so it is required here — matching the SPA's
+  // `LlmCallActivity` type, which derives it as a required field from `LlmCallMetric`.
+  cachedPromptTokens: v.number(),
   completionTokens: v.number(),
   totalTokens: v.number(),
   finishReason: v.nullable(v.string()),
