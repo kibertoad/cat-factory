@@ -2,15 +2,24 @@
 // Direct-provider API keys: connect a vendor API key (OpenAI/Anthropic/Qwen/DeepSeek/
 // Moonshot) so agent steps and inline calls run on that provider. Keys are stored
 // encrypted in the DB, pooled and rotated by usage — replacing deployment env vars.
-// A key can be scoped to this WORKSPACE (shared by the team) or to YOU (your own pool,
-// usable in any workspace). Account-wide keys are managed in account/team settings.
+//
+// Two modes:
+//  - Default (no `accountId`): manage WORKSPACE keys (shared by the team) and YOUR own
+//    keys (your personal pool, usable in any workspace), toggled by the Scope select.
+//  - With `accountId`: manage ACCOUNT-wide keys (shared by every workspace in the
+//    account); admin-only, enforced server-side. Surfaced from account/team settings.
 import { computed, ref, watch } from 'vue'
 import type { ApiKey, ApiKeyProvider } from '~/types/domain'
+
+const props = defineProps<{ accountId?: string }>()
 
 const workspace = useWorkspaceStore()
 const keys = useApiKeysStore()
 const models = useModelsStore()
 const toast = useToast()
+
+/** Account-wide mode (single account scope) vs the default workspace/user toggle. */
+const isAccount = computed(() => !!props.accountId)
 
 /** Where to obtain each provider's API key + a short note. */
 const PROVIDERS: {
@@ -73,16 +82,28 @@ const key = ref('')
 const busy = ref(false)
 
 watch(
+  () => props.accountId,
+  (acc) => {
+    if (acc) void keys.loadAccountKeys(acc)
+  },
+  { immediate: true },
+)
+
+watch(
   () => workspace.workspaceId,
   (ws) => {
-    if (ws) void keys.load(ws)
+    if (!isAccount.value && ws) void keys.load(ws)
   },
   { immediate: true },
 )
 
 const selected = computed(() => PROVIDERS.find((p) => p.value === provider.value)!)
 const connected = computed<ApiKey[]>(() =>
-  scope.value === 'workspace' ? keys.workspaceKeys : keys.userKeys,
+  isAccount.value
+    ? keys.accountKeys
+    : scope.value === 'workspace'
+      ? keys.workspaceKeys
+      : keys.userKeys,
 )
 
 function providerLabel(p: ApiKeyProvider): string {
@@ -98,7 +119,8 @@ async function add() {
       label: label.value.trim() || `${provider.value} key`,
       key: key.value.trim(),
     }
-    if (scope.value === 'workspace') await keys.addWorkspaceKey(input)
+    if (isAccount.value) await keys.addAccountKey(input)
+    else if (scope.value === 'workspace') await keys.addWorkspaceKey(input)
     else await keys.addUserKey(input)
     key.value = ''
     label.value = ''
@@ -118,7 +140,8 @@ async function add() {
 
 async function remove(k: ApiKey) {
   try {
-    if (k.scope === 'workspace') await keys.removeWorkspaceKey(k.id)
+    if (k.scope === 'account') await keys.removeAccountKey(k.id)
+    else if (k.scope === 'workspace') await keys.removeWorkspaceKey(k.id)
     else await keys.removeUserKey(k.id)
     if (workspace.workspaceId) await models.refresh(workspace.workspaceId)
   } catch (e) {
@@ -137,7 +160,11 @@ async function remove(k: ApiKey) {
       <h4 class="text-xs font-semibold uppercase tracking-wide text-slate-500">
         Direct provider API keys
       </h4>
-      <p class="mt-1 text-sm text-slate-400">
+      <p v-if="isAccount" class="mt-1 text-sm text-slate-400">
+        Connect a vendor API key shared by <strong>every workspace</strong> in this account.
+        Keys are stored encrypted, pooled, and rotated by usage. Account keys are admin-managed.
+      </p>
+      <p v-else class="mt-1 text-sm text-slate-400">
         Connect a vendor API key so models run directly on that provider. Keys are stored
         encrypted, pooled, and rotated by usage. Scope a key to this <strong>workspace</strong>
         (shared with the team) or to <strong>you</strong> (your own pool, usable anywhere).
@@ -146,7 +173,7 @@ async function remove(k: ApiKey) {
 
     <!-- scope + provider -->
     <div class="flex flex-wrap items-end gap-3">
-      <UFormField label="Scope">
+      <UFormField v-if="!isAccount" label="Scope">
         <USelect
           v-model="scope"
           :items="[

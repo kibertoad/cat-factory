@@ -117,13 +117,8 @@ export class ApiKeyService {
     scopeId: string,
     provider?: ApiKeyProvider,
   ): Promise<ApiKeySummary[]> {
-    const providers: ApiKeyProvider[] = provider ? [provider] : ALL_PROVIDERS
-    const out: ApiKeySummary[] = []
-    for (const p of providers) {
-      const rows = await this.deps.providerApiKeyRepository.listByScope(scope, scopeId, p)
-      for (const row of rows) out.push(toSummary(row))
-    }
-    return out
+    const rows = await this.deps.providerApiKeyRepository.listByScope(scope, scopeId, provider)
+    return rows.map(toSummary)
   }
 
   /** Remove a key from its scope's pool. */
@@ -200,9 +195,6 @@ export class ApiKeyService {
     )
   }
 }
-
-/** Every direct provider that owns a poolable API key. */
-const ALL_PROVIDERS: ApiKeyProvider[] = ['openai', 'anthropic', 'qwen', 'deepseek', 'moonshot']
 
 function toSummary(record: ProviderApiKeyRecord): ApiKeySummary {
   return {

@@ -1,4 +1,5 @@
 import {
+  addApiKeySchema,
   addMemberSchema,
   connectEmailSchema,
   createAccountSchema,
@@ -12,6 +13,7 @@ import type { Context } from 'hono'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
 import { jsonBody } from '../../http/validation.js'
+import { apiKeyToWire } from '../providers/ApiKeyController.js'
 
 /** The signed-in user, narrowed to what the tenancy layer needs. */
 function accountUser(c: Context<AppEnv>) {
@@ -132,6 +134,48 @@ export function accountController(): Hono<AppEnv> {
     const container = c.get('container')
     if (!container.invitations) return c.body(null, 204)
     await container.invitations.revoke(param(c, 'accountId'), user.id, param(c, 'invitationId'))
+    return c.body(null, 204)
+  })
+
+  // ---- Account-scoped provider API keys (admin-onboarded, shared org pool) ----
+  // Direct-provider keys (OpenAI/Anthropic/Qwen/DeepSeek/Moonshot) shared by every
+  // workspace in the account. Admin-gated like the other account-scoped credentials;
+  // the raw key is write-only — only secret-free metadata is ever returned. Available
+  // only when the API-key store is wired (ENCRYPTION_KEY).
+
+  const apiKeysUnavailable = (c: Context<AppEnv>) =>
+    c.json(
+      { error: { code: 'unavailable', message: 'API key storage is not configured' } },
+      503,
+    )
+
+  app.get('/accounts/:accountId/api-keys', async (c) => {
+    const user = accountUser(c)
+    if (!user) return signInRequired(c)
+    const container = c.get('container')
+    if (!container.apiKeys) return apiKeysUnavailable(c)
+    await container.accountService.requireAdmin(param(c, 'accountId'), user.id)
+    const keys = await container.apiKeys.listKeys('account', param(c, 'accountId'))
+    return c.json({ keys: keys.map(apiKeyToWire) })
+  })
+
+  app.post('/accounts/:accountId/api-keys', jsonBody(addApiKeySchema), async (c) => {
+    const user = accountUser(c)
+    if (!user) return signInRequired(c)
+    const container = c.get('container')
+    if (!container.apiKeys) return apiKeysUnavailable(c)
+    await container.accountService.requireAdmin(param(c, 'accountId'), user.id)
+    const summary = await container.apiKeys.addKey('account', param(c, 'accountId'), c.req.valid('json'))
+    return c.json(apiKeyToWire(summary), 201)
+  })
+
+  app.delete('/accounts/:accountId/api-keys/:id', async (c) => {
+    const user = accountUser(c)
+    if (!user) return signInRequired(c)
+    const container = c.get('container')
+    if (!container.apiKeys) return apiKeysUnavailable(c)
+    await container.accountService.requireAdmin(param(c, 'accountId'), user.id)
+    await container.apiKeys.removeKey('account', param(c, 'accountId'), param(c, 'id'))
     return c.body(null, 204)
   })
 

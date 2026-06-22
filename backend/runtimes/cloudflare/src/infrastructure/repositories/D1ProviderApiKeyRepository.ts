@@ -52,15 +52,17 @@ export class D1ProviderApiKeyRepository implements ProviderApiKeyRepository {
   async listByScope(
     scope: ApiKeyScope,
     scopeId: string,
-    provider: ApiKeyProvider,
+    provider?: ApiKeyProvider,
   ): Promise<ProviderApiKeyRecord[]> {
+    const providerFilter = provider ? ' AND provider = ?' : ''
+    const binds = provider ? [scope, scopeId, provider] : [scope, scopeId]
     const { results } = await this.db
       .prepare(
         `SELECT * FROM provider_api_keys
-          WHERE scope = ? AND scope_id = ? AND provider = ? AND deleted_at IS NULL
+          WHERE scope = ? AND scope_id = ?${providerFilter} AND deleted_at IS NULL
           ORDER BY created_at ASC`,
       )
-      .bind(scope, scopeId, provider)
+      .bind(...binds)
       .all<ProviderApiKeyRow>()
     return (results ?? []).map(rowToRecord)
   }

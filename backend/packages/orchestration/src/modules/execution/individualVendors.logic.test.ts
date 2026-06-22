@@ -37,7 +37,9 @@ describe('resolveIndividualVendors', () => {
   })
 
   it('falls through a stale/unknown pin to the workspace defaults', async () => {
-    const vendors = await resolveIndividualVendors('gone-stale', ['coder'], async () => 'glm')
+    // glm is dual-mode, so the gate fires only when the user has their own glm
+    // subscription — stub `hasPersonalSubscription` true so it resolves to the vendor.
+    const vendors = await resolveIndividualVendors('gone-stale', ['coder'], async () => 'glm', () => true)
     expect(vendors).toEqual(['glm'])
   })
 

@@ -219,6 +219,9 @@ export class AccountService {
     userId: string,
     roles: AccountRole[] = ['developer'],
   ): Promise<AccountMember> {
+    // Authorize first so a non-admin/non-member can't probe an account's existence or
+    // type (404 before any ValidationError leak).
+    await this.requireAdmin(accountId, actingUserId)
     const account = assertFound(
       await this.deps.accountRepository.get(accountId),
       'Account',
@@ -227,7 +230,6 @@ export class AccountService {
     if (account.type === 'personal') {
       throw new ValidationError('Cannot add members to a personal account')
     }
-    await this.requireAdmin(accountId, actingUserId)
     const membership: Membership = {
       accountId,
       userId,

@@ -47,7 +47,7 @@ export class DrizzleProviderApiKeyRepository implements ProviderApiKeyRepository
   async listByScope(
     scope: ApiKeyScope,
     scopeId: string,
-    provider: ApiKeyProvider,
+    provider?: ApiKeyProvider,
   ): Promise<ProviderApiKeyRecord[]> {
     const rows = await this.db
       .select()
@@ -56,7 +56,7 @@ export class DrizzleProviderApiKeyRepository implements ProviderApiKeyRepository
         and(
           eq(providerApiKeys.scope, scope),
           eq(providerApiKeys.scope_id, scopeId),
-          eq(providerApiKeys.provider, provider),
+          provider ? eq(providerApiKeys.provider, provider) : undefined,
           isNull(providerApiKeys.deleted_at),
         ),
       )

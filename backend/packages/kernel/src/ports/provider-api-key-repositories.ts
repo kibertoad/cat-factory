@@ -52,11 +52,14 @@ export interface ProviderApiKeyRecord {
 }
 
 export interface ProviderApiKeyRepository {
-  /** All live keys for one (scope, scopeId, provider), oldest first. */
+  /**
+   * All live keys for one (scope, scopeId), oldest first. Filtered to a single
+   * `provider` when given, else every provider in the scope (one query, not N).
+   */
   listByScope(
     scope: ApiKeyScope,
     scopeId: string,
-    provider: ApiKeyProvider,
+    provider?: ApiKeyProvider,
   ): Promise<ProviderApiKeyRecord[]>
   /**
    * All live keys for one provider across MANY scope segments — the merged-pool

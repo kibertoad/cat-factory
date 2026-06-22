@@ -227,5 +227,11 @@ async function disconnectEmail() {
         </form>
       </template>
     </section>
+
+    <!-- account-wide provider API keys (admin-only) -->
+    <section v-if="isAdmin">
+      <h3 class="mb-2 font-semibold text-white">Account API keys</h3>
+      <ProvidersApiKeysSection :account-id="accountId" />
+    </section>
   </div>
 </template>

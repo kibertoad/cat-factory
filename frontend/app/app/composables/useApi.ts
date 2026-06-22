@@ -245,6 +245,15 @@ export function useApi() {
       http<ApiKey>('/me/api-keys', { method: 'POST', body }),
     removeMyApiKey: (id: string) =>
       http(`/me/api-keys/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+    // Account-scoped keys (shared by every workspace in the account); admin-only.
+    listAccountApiKeys: (accountId: string) =>
+      http<{ keys: ApiKey[] }>(`/accounts/${encodeURIComponent(accountId)}/api-keys`),
+    addAccountApiKey: (accountId: string, body: AddApiKeyInput) =>
+      http<ApiKey>(`/accounts/${encodeURIComponent(accountId)}/api-keys`, { method: 'POST', body }),
+    removeAccountApiKey: (accountId: string, id: string) =>
+      http(`/accounts/${encodeURIComponent(accountId)}/api-keys/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+      }),
 
     // ---- LLM vendor subscription credentials (the token pool) -------------
     listVendorCredentials: (workspaceId: string) =>

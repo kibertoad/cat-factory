@@ -42,13 +42,13 @@ class FakeRepo implements ProviderApiKeyRepository {
   private matches(r: ProviderApiKeyRecord, scopes: ApiKeyScopeRef[]): boolean {
     return scopes.some((s) => s.scope === r.scope && s.scopeId === r.scopeId)
   }
-  async listByScope(scope: ApiKeyScope, scopeId: string, provider: ApiKeyProvider) {
+  async listByScope(scope: ApiKeyScope, scopeId: string, provider?: ApiKeyProvider) {
     return this.rows
       .filter(
         (r) =>
           r.scope === scope &&
           r.scopeId === scopeId &&
-          r.provider === provider &&
+          (provider === undefined || r.provider === provider) &&
           r.deletedAt === null,
       )
       .sort((a, b) => a.createdAt - b.createdAt)
@@ -130,6 +130,16 @@ describe('ApiKeyService', () => {
     expect(repo.rows[0]!.keyCipher).toBe('enc(sk-secret)')
     const listed = await service.listKeys('workspace', WS)
     expect(listed.map((k) => k.label)).toEqual(['team'])
+  })
+
+  it('lists every provider in a scope (no provider filter) in one read', async () => {
+    const { service } = build()
+    await service.addKey('account', ACC, { provider: 'openai', label: 'a', key: '1' })
+    await service.addKey('account', ACC, { provider: 'qwen', label: 'b', key: '2' })
+    const listed = await service.listKeys('account', ACC)
+    expect(new Set(listed.map((k) => k.provider))).toEqual(new Set(['openai', 'qwen']))
+    // Filtering by provider still narrows to one.
+    expect((await service.listKeys('account', ACC, 'qwen')).map((k) => k.label)).toEqual(['b'])
   })
 
   it('merges workspace + owning-account + user scopes into the candidate pool', async () => {
