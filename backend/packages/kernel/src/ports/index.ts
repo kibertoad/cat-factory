@@ -216,6 +216,13 @@ export type {
   ProviderSubscriptionTokenRepository,
 } from './provider-subscription-repositories.js'
 export type {
+  ApiKeyScope,
+  ApiKeyProvider,
+  ApiKeyScopeRef,
+  ProviderApiKeyRecord,
+  ProviderApiKeyRepository,
+} from './provider-api-key-repositories.js'
+export type {
   PersonalSubscriptionRecord,
   PersonalSubscriptionRepository,
   SubscriptionActivationRecord,

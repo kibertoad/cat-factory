@@ -10,6 +10,7 @@ import {
   HttpEnvironmentProvider,
   HttpRunnerPoolProvider,
   NotionProvider,
+  ApiKeyService,
   PersonalSubscriptionService,
   ProviderSubscriptionService,
   RunnerPoolConnectionService,
@@ -80,6 +81,7 @@ import {
   DrizzleRepoProjectionRepository,
 } from './repositories/github.js'
 import { DrizzleProviderSubscriptionTokenRepository } from './repositories/providerSubscription.js'
+import { DrizzleProviderApiKeyRepository } from './repositories/providerApiKey.js'
 import {
   DrizzlePersonalSubscriptionRepository,
   DrizzleSubscriptionActivationRepository,
@@ -507,6 +509,33 @@ function buildNodeSubscriptionService(
 }
 
 /**
+ * Build the direct-provider API-key pool (account/workspace/user) for the Node/local
+ * facade (Postgres-backed), or undefined when the shared ENCRYPTION_KEY is absent.
+ * Keys are sealed under an api-keys-scoped HKDF info of the shared master key. Mirrors
+ * the Worker's buildApiKeyService.
+ */
+function buildNodeApiKeyService(
+  env: NodeJS.ProcessEnv,
+  db: DrizzleDb,
+  workspaceRepository: CoreDependencies['workspaceRepository'],
+  idGenerator: CoreDependencies['idGenerator'],
+  clock: Clock,
+): ApiKeyService | undefined {
+  const masterKeyBase64 = env.ENCRYPTION_KEY?.trim()
+  if (!masterKeyBase64) return undefined
+  return new ApiKeyService({
+    providerApiKeyRepository: new DrizzleProviderApiKeyRepository(db),
+    workspaceRepository,
+    secretCipher: new WebCryptoSecretCipher({
+      masterKeyBase64,
+      info: 'cat-factory:provider-api-keys',
+    }),
+    idGenerator,
+    clock,
+  })
+}
+
+/**
  * Build the per-USER individual-usage subscription service (Claude) for the Node/local
  * facade (Postgres-backed), or undefined when the shared ENCRYPTION_KEY is absent.
  * Double-encrypts the credential (password layer inside the system layer). Mirrors the
@@ -670,6 +699,15 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   const personalSubscriptions = buildNodePersonalSubscriptionService(
     env,
     options.db,
+    idGenerator,
+    clock,
+  )
+  // The direct-provider API-key pool (account/workspace/user), shared by the
+  // API-key controller, the model-provider resolver, and the LLM proxy key lease.
+  const apiKeys = buildNodeApiKeyService(
+    env,
+    options.db,
+    repos.workspaceRepository,
     idGenerator,
     clock,
   )
@@ -940,6 +978,9 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // The per-user individual-usage subscription store (Claude); present when the
     // shared ENCRYPTION_KEY is configured.
     personalSubscriptions,
+    // The direct-provider API-key pool (account/workspace/user); present when the
+    // shared ENCRYPTION_KEY is configured.
+    apiKeys,
   }
 }
 

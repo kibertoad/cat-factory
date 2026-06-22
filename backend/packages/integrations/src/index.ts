@@ -173,6 +173,13 @@ export {
   type LeasedSubscriptionToken,
 } from './modules/providers/ProviderSubscriptionService.js'
 export {
+  ApiKeyService,
+  type ApiKeyServiceDependencies,
+  type ApiKeySummary,
+  type LeasedApiKey,
+  type PoolScopeOpts,
+} from './modules/providers/ApiKeyService.js'
+export {
   PersonalSubscriptionService,
   type PersonalSubscriptionServiceDependencies,
   type LeasedPersonalToken,
@@ -184,6 +191,7 @@ export {
   DEFAULT_USAGE_WINDOW_MS,
   chooseToken,
   windowUsage,
+  type PoolRotationRecord,
 } from './modules/providers/providers.logic.js'
 
 export {

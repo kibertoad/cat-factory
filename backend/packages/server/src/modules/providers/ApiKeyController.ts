@@ -1,0 +1,110 @@
+import { addApiKeySchema, apiKeyProviderSchema, type ApiKey } from '@cat-factory/contracts'
+import type { ApiKeySummary } from '@cat-factory/integrations'
+import * as v from 'valibot'
+import { Hono } from 'hono'
+import type { Context } from 'hono'
+import type { AppEnv } from '../../http/env.js'
+import { param } from '../../http/params.js'
+import { jsonBody } from '../../http/validation.js'
+
+// Direct-provider API-key endpoints. Keys (OpenAI/Anthropic/Qwen/DeepSeek/Moonshot)
+// are onboarded here and stored encrypted, replacing deployment-env onboarding. The
+// raw key is write-only — only metadata + rolling-window usage is ever returned.
+//
+// This controller mounts the WORKSPACE-scoped routes (under `/workspaces/:workspaceId`)
+// and the USER-scoped routes (`/me/api-keys`, the caller's own pool). ACCOUNT-scoped
+// keys are managed by the AccountController, which admin-gates them.
+
+const unavailable = (c: Context<AppEnv>) =>
+  c.json(
+    { error: { code: 'unavailable', message: 'API key storage is not configured' } },
+    503,
+  )
+
+const signInRequired = (c: Context<AppEnv>) =>
+  c.json({ error: { code: 'unauthorized', message: 'Sign in to manage your API keys' } }, 401)
+
+/** Project the service summary onto the wire type (already secret-free). */
+export function apiKeyToWire(summary: ApiKeySummary): ApiKey {
+  return {
+    id: summary.id,
+    scope: summary.scope,
+    scopeId: summary.scopeId,
+    provider: summary.provider,
+    label: summary.label,
+    createdAt: summary.createdAt,
+    lastUsedAt: summary.lastUsedAt,
+    inputTokens: summary.inputTokens,
+    outputTokens: summary.outputTokens,
+    requestCount: summary.requestCount,
+  }
+}
+
+/** Workspace-scoped API-key routes, mounted under `/workspaces/:workspaceId`. */
+export function workspaceApiKeyController(): Hono<AppEnv> {
+  const app = new Hono<AppEnv>()
+
+  app.get('/api-keys', async (c) => {
+    const apiKeys = c.get('container').apiKeys
+    if (!apiKeys) return unavailable(c)
+    const keys = await apiKeys.listKeys('workspace', param(c, 'workspaceId'))
+    return c.json({ keys: keys.map(apiKeyToWire) })
+  })
+
+  app.post('/api-keys', jsonBody(addApiKeySchema), async (c) => {
+    const apiKeys = c.get('container').apiKeys
+    if (!apiKeys) return unavailable(c)
+    const summary = await apiKeys.addKey('workspace', param(c, 'workspaceId'), c.req.valid('json'))
+    return c.json(apiKeyToWire(summary), 201)
+  })
+
+  app.delete('/api-keys/:id', async (c) => {
+    const apiKeys = c.get('container').apiKeys
+    if (!apiKeys) return unavailable(c)
+    await apiKeys.removeKey('workspace', param(c, 'workspaceId'), param(c, 'id'))
+    return c.body(null, 204)
+  })
+
+  return app
+}
+
+/** User-scoped API-key routes (the caller's own pool), mounted at the root. */
+export function userApiKeyController(): Hono<AppEnv> {
+  const app = new Hono<AppEnv>()
+
+  app.get('/me/api-keys', async (c) => {
+    const apiKeys = c.get('container').apiKeys
+    if (!apiKeys) return unavailable(c)
+    const user = c.get('user')
+    if (!user) return signInRequired(c)
+    const keys = await apiKeys.listKeys('user', user.id)
+    return c.json({ keys: keys.map(apiKeyToWire) })
+  })
+
+  app.post('/me/api-keys', jsonBody(addApiKeySchema), async (c) => {
+    const apiKeys = c.get('container').apiKeys
+    if (!apiKeys) return unavailable(c)
+    const user = c.get('user')
+    if (!user) return signInRequired(c)
+    const summary = await apiKeys.addKey('user', user.id, c.req.valid('json'))
+    return c.json(apiKeyToWire(summary), 201)
+  })
+
+  app.delete('/me/api-keys/:id', async (c) => {
+    const apiKeys = c.get('container').apiKeys
+    if (!apiKeys) return unavailable(c)
+    const user = c.get('user')
+    if (!user) return signInRequired(c)
+    await apiKeys.removeKey('user', user.id, param(c, 'id'))
+    return c.body(null, 204)
+  })
+
+  return app
+}
+
+/** Parse a provider id from a query/path value, or undefined when absent/invalid. */
+export function parseApiKeyProvider(value: string | undefined) {
+  if (!value) return undefined
+  const parsed = v.safeParse(apiKeyProviderSchema, value)
+  return parsed.success ? parsed.output : undefined
+}

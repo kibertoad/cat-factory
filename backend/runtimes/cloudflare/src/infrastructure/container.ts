@@ -24,6 +24,7 @@ import {
   HttpEnvironmentProvider,
   NotionProvider,
   EMAIL_CIPHER_INFO,
+  ApiKeyService,
   PersonalSubscriptionService,
   ProviderSubscriptionService,
   RunnerPoolConnectionService,
@@ -63,6 +64,7 @@ import { HttpRunnerPoolProvider } from './runners/HttpRunnerPoolProvider'
 import { RunnerPoolTransport } from './runners/RunnerPoolTransport'
 import { D1RunnerPoolConnectionRepository } from './repositories/D1RunnerPoolConnectionRepository'
 import { D1ProviderSubscriptionTokenRepository } from './repositories/D1ProviderSubscriptionTokenRepository'
+import { D1ProviderApiKeyRepository } from './repositories/D1ProviderApiKeyRepository'
 import {
   D1PersonalSubscriptionRepository,
   D1SubscriptionActivationRepository,
@@ -644,6 +646,27 @@ function buildSubscriptionService(
 }
 
 /**
+ * Build the direct-provider API-key pool service (account/workspace/user-scoped),
+ * or undefined when no ENCRYPTION_KEY is configured. Keys are sealed under an
+ * api-keys-scoped HKDF info of the shared master key. Shared by the API-key
+ * controller, the model-provider resolver, and the LLM proxy's key lease.
+ */
+function buildApiKeyService(env: Env, db: D1Database, clock: Clock): ApiKeyService | undefined {
+  const masterKeyBase64 = env.ENCRYPTION_KEY?.trim()
+  if (!masterKeyBase64) return undefined
+  return new ApiKeyService({
+    providerApiKeyRepository: new D1ProviderApiKeyRepository({ db }),
+    workspaceRepository: new D1WorkspaceRepository({ db }),
+    secretCipher: new WebCryptoSecretCipher({
+      masterKeyBase64,
+      info: 'cat-factory:provider-api-keys',
+    }),
+    idGenerator: new CryptoIdGenerator(),
+    clock,
+  })
+}
+
+/**
  * Build the per-USER individual-usage subscription service (Claude), or undefined when
  * no ENCRYPTION_KEY is configured. Uses the system SecretCipher (master key, scoped
  * info) for the outer layer and the password-derived PersonalSecretCipher for the inner
@@ -1144,6 +1167,10 @@ export function buildContainer(env: Env, overrides: Partial<CoreDependencies> = 
   // personal-subscription controller and the container executor's personal lease.
   const personalSubscriptions = buildPersonalSubscriptionService(env, db, clock)
 
+  // The direct-provider API-key pool (account/workspace/user) — shared by the
+  // API-key controller, the model-provider resolver, and the LLM proxy key lease.
+  const apiKeys = buildApiKeyService(env, db, clock)
+
   const dependencies: CoreDependencies = {
     workspaceRepository: new D1WorkspaceRepository({ db }),
     accountRepository: new D1AccountRepository({ db }),
@@ -1219,6 +1246,9 @@ export function buildContainer(env: Env, overrides: Partial<CoreDependencies> = 
     // The per-user individual-usage subscription store (Claude); present when the
     // shared ENCRYPTION_KEY is configured.
     personalSubscriptions,
+    // The direct-provider API-key pool (account/workspace/user); present when the
+    // shared ENCRYPTION_KEY is configured.
+    apiKeys,
     gateways: {
       // Real-time event delivery via the per-workspace WorkspaceEventsHub DO (when
       // the WORKSPACE_EVENTS namespace is bound; absent → the events route 501s).
