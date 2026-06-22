@@ -27,7 +27,9 @@ function deploymentModelDefaults(routing: AgentRouting) {
   return {
     default: ref(routing.default.ref),
     byKind: Object.fromEntries(
-      Object.entries(routing.byKind).map(([kind, cfg]) => [kind, ref(cfg.ref)]),
+      Object.entries(routing.byKind)
+        .filter((entry): entry is [string, NonNullable<(typeof entry)[1]>] => entry[1] != null)
+        .map(([kind, cfg]) => [kind, ref(cfg.ref)]),
     ),
   }
 }

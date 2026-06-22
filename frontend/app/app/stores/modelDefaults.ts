@@ -33,10 +33,12 @@ export const useModelDefaultsStore = defineStore('modelDefaults', () => {
   function hydrateDeployment(
     next: { default: string; byKind: Record<string, string> } | undefined,
   ) {
-    deployment.value = next ? { default: next.default, byKind: { ...next.byKind } } : {
-      default: '',
-      byKind: {},
-    }
+    deployment.value = next
+      ? { default: next.default, byKind: { ...next.byKind } }
+      : {
+          default: '',
+          byKind: {},
+        }
   }
 
   /** The model id chosen for a kind, or undefined when it falls back to routing. */

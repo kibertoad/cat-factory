@@ -96,9 +96,7 @@ async function save() {
         <!-- draft chain -->
         <div class="flex flex-col">
           <div class="mb-2 flex items-center justify-between gap-2">
-            <h3 class="text-xs font-semibold uppercase tracking-wide text-slate-400">
-              Pipeline
-            </h3>
+            <h3 class="text-xs font-semibold uppercase tracking-wide text-slate-400">Pipeline</h3>
             <UButton
               color="neutral"
               variant="soft"
@@ -222,11 +220,7 @@ async function save() {
                   v-if="expandedSaved.has(p.id)"
                   class="space-y-1 border-t border-slate-800 px-2 py-2 pl-7"
                 >
-                  <li
-                    v-for="(k, i) in p.agentKinds"
-                    :key="i"
-                    class="flex items-center gap-2"
-                  >
+                  <li v-for="(k, i) in p.agentKinds" :key="i" class="flex items-center gap-2">
                     <span class="w-4 shrink-0 text-center text-[10px] text-slate-500">{{
                       i + 1
                     }}</span>
