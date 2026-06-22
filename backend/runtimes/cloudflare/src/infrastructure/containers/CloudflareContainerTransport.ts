@@ -1,4 +1,9 @@
-import type { RunnerDispatchKind, RunnerJobView, RunnerTransport } from '@cat-factory/kernel'
+import type {
+  RunnerDispatchKind,
+  RunnerJobRef,
+  RunnerJobView,
+  RunnerTransport,
+} from '@cat-factory/kernel'
 import { TRANSIENT_EVICTION_MARKER } from '@cat-factory/orchestration'
 import type { DurableObjectNamespace } from '@cloudflare/workers-types'
 import { type ExecutionContainer, isRolloutSignal } from './ExecutionContainer'
@@ -14,15 +19,15 @@ import type { ContainerInstanceRegistry } from './ContainerInstanceRegistry'
 const EVICTION_ERROR = 'Job not found (container evicted or crashed)'
 const ROLLOUT_EVICTION_ERROR = `${EVICTION_ERROR} (${TRANSIENT_EVICTION_MARKER})`
 
-// The default runner transport: a per-run Cloudflare Container. Each job is one
-// Durable Object instance keyed by the job id (the execution/bootstrap job id); the
-// base Container.fetch proxies to the Pi harness inside it. This is the behaviour
-// the ContainerAgentExecutor had inline before the transport seam was introduced —
-// preserved here, including the idempotent re-attach (a replayed dispatch for the
-// same id re-attaches to the running job) and the eviction→failed mapping on a 404
-// poll. Every dispatch kind (`run` | `blueprint` | `bootstrap`) hits the matching
-// harness endpoint identically; the bootstrapper rides this transport rather than
-// hand-rolling its own EXEC_CONTAINER plumbing.
+// The default runner transport: a per-RUN Cloudflare Container. One Durable Object
+// instance per run id (`ref.runId`) hosts that run's whole sequence of step jobs; the
+// base Container.fetch proxies to the Pi harness inside it, which keys each job by the
+// per-step `ref.jobId`. This is the behaviour the ContainerAgentExecutor had inline
+// before the transport seam was introduced — preserved here, including the idempotent
+// re-attach (a replayed dispatch for the same ref re-attaches to the running job) and
+// the eviction→failed mapping on a 404 poll. Every dispatch kind (`run` | `blueprint`
+// | `bootstrap` | …) hits the matching harness endpoint identically; the bootstrapper
+// rides this transport rather than hand-rolling its own EXEC_CONTAINER plumbing.
 //
 // It also folds in instance-level reaping: when a ContainerInstanceRegistry is
 // wired, dispatch records the container in the live inventory and release clears it
@@ -50,11 +55,14 @@ export class CloudflareContainerTransport implements RunnerTransport {
   // this backend. Per-service sizing applies only to the backends that can honour it
   // (the self-hosted pool and the local Docker transport).
   async dispatch(
-    jobId: string,
+    ref: RunnerJobRef,
     spec: Record<string, unknown>,
     kind: RunnerDispatchKind = 'run',
   ): Promise<void> {
-    const stub = this.namespace.get(this.namespace.idFromName(jobId))
+    // The container is per-RUN (one Durable Object per run id), so every step of a run
+    // dispatches to the same instance; the harness keys the job by `ref.jobId` (in the
+    // spec body), unique per step, so siblings never collide in its registries.
+    const stub = this.namespace.get(this.namespace.idFromName(ref.runId))
     const res = await stub.fetch(`http://container/${kind}`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -64,16 +72,18 @@ export class CloudflareContainerTransport implements RunnerTransport {
     if (!res.ok) {
       throw new Error(`Container dispatch failed (HTTP ${res.status}): ${await safeText(res)}`)
     }
-    // Record the now-live container so the reaper can find it if its run record
-    // ever diverges from reality. Best-effort — the registry swallows store errors.
-    await this.registry?.register(jobId, kind)
+    // Record the now-live container (keyed by the run id, the idFromName argument) so
+    // the reaper can find it if its run record ever diverges from reality. Idempotent
+    // across a run's steps — the store preserves the earliest startedAt for a key.
+    // Best-effort — the registry swallows store errors.
+    await this.registry?.register(ref.runId, kind)
   }
 
-  async poll(jobId: string): Promise<RunnerJobView> {
-    const stub = this.namespace.get(this.namespace.idFromName(jobId))
+  async poll(ref: RunnerJobRef): Promise<RunnerJobView> {
+    const stub = this.namespace.get(this.namespace.idFromName(ref.runId))
     let res: Response
     try {
-      res = await stub.fetch(`http://container/jobs/${encodeURIComponent(jobId)}`, {
+      res = await stub.fetch(`http://container/jobs/${encodeURIComponent(ref.jobId)}`, {
         method: 'GET',
         signal: AbortSignal.timeout(POLL_TIMEOUT_MS),
       })
@@ -107,13 +117,15 @@ export class CloudflareContainerTransport implements RunnerTransport {
    * when a run is stopped/cancelled, succeeds/fails, or its block is deleted.
    * Best-effort and idempotent: shutting down an already-gone container is a no-op.
    */
-  async release(jobId: string): Promise<void> {
+  async release(ref: RunnerJobRef): Promise<void> {
+    // Reclaim the per-RUN container (the shutdown is run-scoped — `ref.jobId` is a
+    // single step within it, so the whole run's container goes regardless).
     if (this.registry) {
       // The registry owns the single kill path (shutdown + inventory removal).
-      await this.registry.release(jobId)
+      await this.registry.release(ref.runId)
       return
     }
-    const stub = this.namespace.get(this.namespace.idFromName(jobId))
+    const stub = this.namespace.get(this.namespace.idFromName(ref.runId))
     await stub.shutdown()
   }
 }

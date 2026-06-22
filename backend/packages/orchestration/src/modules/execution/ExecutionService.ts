@@ -896,7 +896,9 @@ export class ExecutionService {
     const executor = this.agentExecutor
     if (!isAsyncAgentExecutor(executor)) return { kind: 'noop' }
 
-    const update = await executor.pollJob({ jobId: step.jobId, workspaceId })
+    // Re-supply the run id alongside the per-step job id so the executor can address
+    // the same per-run container at the poll site (it only stored the per-step jobId).
+    const update = await executor.pollJob({ jobId: step.jobId, runId: executionId, workspaceId })
     if (update.state === 'running') {
       // A successful poll proves the container is up, so the cold-boot phase is
       // over (defensive: a replay may have left the flag set). Surface live subtask
@@ -962,7 +964,7 @@ export class ExecutionService {
       // Reclaim the finished Fixer container before re-dispatching the Tester so it
       // boots fresh against the just-pushed fixes (rather than re-attaching to the
       // completed job by run id).
-      await this.stopRunContainer(workspaceId, instance.id)
+      await this.stopRunContainer(workspaceId, instance)
       return this.dispatchTester(workspaceId, instance, step, block)
     }
 
@@ -1215,7 +1217,7 @@ export class ExecutionService {
       // idle out its sleepAfter window (~10 min of billed-but-useless compute). All
       // pipeline steps share the one container keyed by the execution id, so this is
       // only safe on the FINAL step — never between steps. Best-effort/idempotent.
-      await this.stopRunContainer(workspaceId, instance.id)
+      await this.stopRunContainer(workspaceId, instance)
       return { kind: 'done' }
     }
     instance.currentStep += 1
@@ -1326,7 +1328,7 @@ export class ExecutionService {
         await this.finalizeBlock(workspaceId, instance, undefined)
         await this.executionRepository.upsert(workspaceId, instance)
         await this.emitInstance(workspaceId, instance)
-        await this.stopRunContainer(workspaceId, instance.id)
+        await this.stopRunContainer(workspaceId, instance)
         return { kind: 'done' }
       }
       instance.currentStep += 1
@@ -1658,7 +1660,7 @@ export class ExecutionService {
       // Reclaim the finished Tester container before dispatching the Fixer so the
       // next job boots fresh — the per-run container would otherwise re-attach to the
       // completed Tester job (idempotent dispatch by run id), replaying its result.
-      await this.stopRunContainer(workspaceId, instance.id)
+      await this.stopRunContainer(workspaceId, instance)
       return this.dispatchFixer(workspaceId, instance, step, block, report)
     }
     // Budget spent (or no async executor to fix with): give up for human attention.
@@ -2115,7 +2117,7 @@ export class ExecutionService {
       await this.finalizeBlock(workspaceId, instance, undefined)
       await this.executionRepository.upsert(workspaceId, instance)
       await this.emitInstance(workspaceId, instance)
-      await this.stopRunContainer(workspaceId, instance.id)
+      await this.stopRunContainer(workspaceId, instance)
       return { kind: 'done' }
     }
     instance.currentStep += 1
@@ -2280,7 +2282,7 @@ export class ExecutionService {
     if (isFinalStep) {
       instance.status = 'done'
       await this.finalizeBlock(workspaceId, instance, undefined)
-      await this.stopRunContainer(workspaceId, instance.id)
+      await this.stopRunContainer(workspaceId, instance)
     } else {
       instance.currentStep = idx + 1
       const next = instance.steps[instance.currentStep]
@@ -2940,7 +2942,7 @@ export class ExecutionService {
       // A gate is never raised on the final step, but stay defensive: just finish.
       instance.status = 'done'
       await this.finalizeBlock(workspaceId, instance, undefined)
-      await this.stopRunContainer(workspaceId, instance.id)
+      await this.stopRunContainer(workspaceId, instance)
     } else {
       instance.currentStep = stepIndex + 1
       const next = instance.steps[instance.currentStep]
@@ -3133,7 +3135,7 @@ export class ExecutionService {
     // leaves its container to idle out sleepAfter. This is the single funnel for
     // every failure kind (job_failed from the driver, the spend/decision timeouts,
     // and the user-facing stopRun, which already reclaimed — the call is idempotent).
-    await this.stopRunContainer(workspaceId, executionId)
+    await this.stopRunContainer(workspaceId, instance)
     const failure: AgentFailure = {
       kind,
       message,
@@ -3245,7 +3247,7 @@ export class ExecutionService {
     // the record, so a cancel never leaves a container running until its watchdog.
     const existing = await this.executionRepository.getByBlock(workspaceId, blockId)
     if (existing) {
-      await this.stopRunContainer(workspaceId, existing.id)
+      await this.stopRunContainer(workspaceId, existing)
       await this.workRunner.cancelRun(workspaceId, existing.id)
     }
     await this.executionRepository.deleteByBlock(workspaceId, blockId)
@@ -3281,7 +3283,7 @@ export class ExecutionService {
       executionId,
     )
     if (instance.status === 'failed' || instance.status === 'done') return instance
-    await this.stopRunContainer(workspaceId, executionId)
+    await this.stopRunContainer(workspaceId, instance)
     await this.workRunner.cancelRun(workspaceId, executionId)
     await this.failRun(
       workspaceId,
@@ -3307,23 +3309,29 @@ export class ExecutionService {
     for (const blockId of descendantIds(blocks, rootId)) {
       const run = await this.executionRepository.getByBlock(workspaceId, blockId)
       if (!run) continue
-      await this.stopRunContainer(workspaceId, run.id)
+      await this.stopRunContainer(workspaceId, run)
       await this.workRunner.cancelRun(workspaceId, run.id)
       await this.executionRepository.deleteByBlock(workspaceId, blockId)
     }
   }
 
   /**
-   * Best-effort: kill the per-run container backing an execution. The container is
-   * keyed by the execution id (see ContainerAgentExecutor), so the handle needs no
-   * step lookup. A no-op for inline executors (no `stopJob`) and for an already-gone
-   * container; never throws, so it can't derail the teardown that calls it.
+   * Best-effort: reclaim the per-run container backing an execution. The container is
+   * addressed by the run (execution) id, so a backend that shares one across the run
+   * (Cloudflare, local Docker) tears the whole thing down. A per-job backend (a
+   * self-hosted pool) has no run container, so it cancels the run's IN-FLIGHT step job
+   * instead — hence we pass the current step's job id alongside the run id. A no-op for
+   * inline executors (no `stopJob`) and for an already-gone container/job; never
+   * throws, so it can't derail the teardown that calls it.
    */
-  private async stopRunContainer(workspaceId: string, executionId: string): Promise<void> {
+  private async stopRunContainer(workspaceId: string, instance: ExecutionInstance): Promise<void> {
     const executor = this.agentExecutor
     if (!isAsyncAgentExecutor(executor) || !executor.stopJob) return
+    // The in-flight step's job id (when a job is parked), so a per-job backend can
+    // cancel exactly it; the run-container backends ignore it and use the run id.
+    const jobId = instance.steps[instance.currentStep]?.jobId ?? instance.id
     try {
-      await executor.stopJob({ jobId: executionId, workspaceId })
+      await executor.stopJob({ jobId, runId: instance.id, workspaceId })
     } catch {
       // The container may already be gone (eviction/completion) — nothing to reclaim.
     }

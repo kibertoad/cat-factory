@@ -51,11 +51,11 @@ describe('LocalDockerRunnerTransport', () => {
       fetchImpl: fetchImpl as unknown as typeof fetch,
     })
 
-    await transport.dispatch('job-1', { hello: 'world' }, 'run')
+    await transport.dispatch({ runId: 'job-1', jobId: 'job-1' }, { hello: 'world' }, 'run')
 
     const runCall = calls.find((c) => c[0] === 'run')!
     expect(runCall).toContain('--label')
-    expect(runCall).toContain('cat-factory.jobId=job-1')
+    expect(runCall).toContain('cat-factory.runId=job-1')
     expect(runCall.join(' ')).toContain('-p 127.0.0.1:0:8080')
     expect(runCall.join(' ')).toContain('HARNESS_SHARED_SECRET=sek')
     expect(runCall).toContain('harness:test')
@@ -81,12 +81,44 @@ describe('LocalDockerRunnerTransport', () => {
       fetchImpl: fetchImpl as unknown as typeof fetch,
     })
 
-    await transport.dispatch('job-1', {}, 'merge')
-    await transport.dispatch('job-1', {}, 'merge')
+    await transport.dispatch({ runId: 'job-1', jobId: 'job-1' }, {}, 'merge')
+    await transport.dispatch({ runId: 'job-1', jobId: 'job-1' }, {}, 'merge')
 
     expect(calls.filter((c) => c[0] === 'run')).toHaveLength(1)
     // The merge kind maps to the /merge route.
     expect(fetchImpl.mock.calls.filter(([u]) => String(u).endsWith('/merge'))).toHaveLength(2)
+  })
+
+  it('shares one per-run container across steps, keyed by run id and polled by job id', async () => {
+    // Two steps of ONE run: same run id (so they share a single container — only one
+    // `docker run`), but distinct per-step job ids so the harness never aliases one
+    // step's result for another. The poll addresses the run's container yet reads the
+    // per-step job by its own id.
+    const { exec, calls } = fakeDocker()
+    const jobPaths: string[] = []
+    const fetchImpl = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input)
+      if (url.endsWith('/health')) return new Response('ok', { status: 200 })
+      if (url.includes('/jobs/')) {
+        jobPaths.push(new URL(url).pathname)
+        return jsonResponse({ state: 'running' }, 200)
+      }
+      return jsonResponse({ state: 'running' }, 202)
+    })
+    const transport = new LocalDockerRunnerTransport({
+      image: 'harness:test',
+      exec,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    })
+
+    await transport.dispatch({ runId: 'run-1', jobId: 'run-1-spec' }, {}, 'spec')
+    await transport.dispatch({ runId: 'run-1', jobId: 'run-1-architect' }, {}, 'explore')
+    // The second step re-attaches to the run's container — only one `docker run`.
+    expect(calls.filter((c) => c[0] === 'run')).toHaveLength(1)
+    expect(calls.find((c) => c[0] === 'run')!).toContain('cat-factory.runId=run-1')
+
+    await transport.poll({ runId: 'run-1', jobId: 'run-1-architect' })
+    expect(jobPaths).toContain('/jobs/run-1-architect')
   })
 
   it('maps each dispatch kind to its harness route', async () => {
@@ -103,9 +135,9 @@ describe('LocalDockerRunnerTransport', () => {
       exec,
       fetchImpl: fetchImpl as unknown as typeof fetch,
     })
-    await transport.dispatch('a', {}, 'blueprint')
-    await transport.dispatch('b', {}, 'ci-fix')
-    await transport.dispatch('c', {}, 'resolve-conflicts')
+    await transport.dispatch({ runId: 'a', jobId: 'a' }, {}, 'blueprint')
+    await transport.dispatch({ runId: 'b', jobId: 'b' }, {}, 'ci-fix')
+    await transport.dispatch({ runId: 'c', jobId: 'c' }, {}, 'resolve-conflicts')
     expect(routes).toEqual(['/blueprint', '/ci-fix', '/resolve-conflicts'])
   })
 
@@ -120,10 +152,10 @@ describe('LocalDockerRunnerTransport', () => {
       exec,
       fetchImpl: fetchImpl as unknown as typeof fetch,
     })
-    await transport.dispatch('t', {}, 'test')
-    await transport.dispatch('r', {}, 'run')
-    const testRun = calls.find((c) => c[0] === 'run' && c.includes('cat-factory.jobId=t'))!
-    const codeRun = calls.find((c) => c[0] === 'run' && c.includes('cat-factory.jobId=r'))!
+    await transport.dispatch({ runId: 't', jobId: 't' }, {}, 'test')
+    await transport.dispatch({ runId: 'r', jobId: 'r' }, {}, 'run')
+    const testRun = calls.find((c) => c[0] === 'run' && c.includes('cat-factory.runId=t'))!
+    const codeRun = calls.find((c) => c[0] === 'run' && c.includes('cat-factory.runId=r'))!
     expect(testRun).toContain('--privileged')
     expect(codeRun).not.toContain('--privileged')
   })
@@ -140,7 +172,7 @@ describe('LocalDockerRunnerTransport', () => {
       exec,
       fetchImpl: fetchImpl as unknown as typeof fetch,
     })
-    await transport.dispatch('t', {}, 'test')
+    await transport.dispatch({ runId: 't', jobId: 't' }, {}, 'test')
     expect(calls.find((c) => c[0] === 'run')!).not.toContain('--privileged')
   })
 
@@ -155,7 +187,7 @@ describe('LocalDockerRunnerTransport', () => {
       exec,
       fetchImpl: fetchImpl as unknown as typeof fetch,
     })
-    await transport.dispatch('big', {}, 'run', { instanceSize: 'large' })
+    await transport.dispatch({ runId: 'big', jobId: 'big' }, {}, 'run', { instanceSize: 'large' })
     const run = calls.find((c) => c[0] === 'run')!
     expect(run.join(' ')).toContain('--memory 4g')
     expect(run.join(' ')).toContain('--cpus 4')
@@ -176,8 +208,8 @@ describe('LocalDockerRunnerTransport', () => {
       exec,
       fetchImpl: fetchImpl as unknown as typeof fetch,
     })
-    await transport.dispatch('job-9', {}, 'run')
-    const view = await transport.poll('job-9')
+    await transport.dispatch({ runId: 'job-9', jobId: 'job-9' }, {}, 'run')
+    const view = await transport.poll({ runId: 'job-9', jobId: 'job-9' })
     expect(view.state).toBe('done')
     expect(view.result?.prUrl).toBe('https://x/pr/1')
   })
@@ -192,7 +224,7 @@ describe('LocalDockerRunnerTransport', () => {
         throw new Error('should not fetch')
       }) as unknown as typeof fetch,
     })
-    const view = await transport.poll('ghost')
+    const view = await transport.poll({ runId: 'ghost', jobId: 'ghost' })
     expect(view.state).toBe('failed')
     expect(view.error).toMatch(/container evicted or crashed/)
   })
@@ -210,8 +242,8 @@ describe('LocalDockerRunnerTransport', () => {
       exec,
       fetchImpl: fetchImpl as unknown as typeof fetch,
     })
-    await transport.dispatch('job-x', {}, 'run')
-    const view = await transport.poll('job-x')
+    await transport.dispatch({ runId: 'job-x', jobId: 'job-x' }, {}, 'run')
+    const view = await transport.poll({ runId: 'job-x', jobId: 'job-x' })
     expect(view.state).toBe('failed')
     expect(view.error).toMatch(/container evicted or crashed/)
   })
@@ -227,14 +259,14 @@ describe('LocalDockerRunnerTransport', () => {
       exec,
       fetchImpl: fetchImpl as unknown as typeof fetch,
     })
-    await transport.dispatch('job-r', {}, 'run')
-    await transport.release('job-r')
+    await transport.dispatch({ runId: 'job-r', jobId: 'job-r' }, {}, 'run')
+    await transport.release({ runId: 'job-r', jobId: 'job-r' })
     expect(calls.some((c) => c[0] === 'rm' && c.includes('container-abc'))).toBe(true)
 
     // A second release (now uncached, ps empty) does not throw.
     const empty = fakeDocker({ ps: '' })
     const t2 = new LocalDockerRunnerTransport({ image: 'i', exec: empty.exec })
-    await expect(t2.release('missing')).resolves.toBeUndefined()
+    await expect(t2.release({ runId: 'missing', jobId: 'missing' })).resolves.toBeUndefined()
   })
 
   it('maps a 404 job view (container up, job unknown/reaped) to an eviction', async () => {
@@ -250,8 +282,8 @@ describe('LocalDockerRunnerTransport', () => {
       exec,
       fetchImpl: fetchImpl as unknown as typeof fetch,
     })
-    await transport.dispatch('job-404', {}, 'run')
-    const view = await transport.poll('job-404')
+    await transport.dispatch({ runId: 'job-404', jobId: 'job-404' }, {}, 'run')
+    const view = await transport.poll({ runId: 'job-404', jobId: 'job-404' })
     expect(view.state).toBe('failed')
     expect(view.error).toMatch(/container evicted or crashed/)
   })
@@ -268,7 +300,9 @@ describe('LocalDockerRunnerTransport', () => {
       exec,
       fetchImpl: fetchImpl as unknown as typeof fetch,
     })
-    await expect(transport.dispatch('job-500', {}, 'run')).rejects.toThrow(/HTTP 500/)
+    await expect(
+      transport.dispatch({ runId: 'job-500', jobId: 'job-500' }, {}, 'run'),
+    ).rejects.toThrow(/HTTP 500/)
   })
 
   it('removes a lingering container for the same job id before starting a fresh one', async () => {
@@ -301,7 +335,7 @@ describe('LocalDockerRunnerTransport', () => {
       exec,
       fetchImpl: fetchImpl as unknown as typeof fetch,
     })
-    await transport.dispatch('job-stale', {}, 'run')
+    await transport.dispatch({ runId: 'job-stale', jobId: 'job-stale' }, {}, 'run')
     // The stale container was force-removed, then a fresh one was started.
     expect(calls.some((c) => c[0] === 'rm' && c.includes('stale-container'))).toBe(true)
     expect(calls.some((c) => c[0] === 'run')).toBe(true)

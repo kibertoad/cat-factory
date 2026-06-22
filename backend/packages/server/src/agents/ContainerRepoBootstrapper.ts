@@ -211,14 +211,24 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
       { reference: reference ? `${reference.owner}/${reference.name}` : null },
       'bootstrap: dispatching container',
     )
-    await this.jobs.dispatch(request.workspaceId, request.jobId, body, 'bootstrap')
+    // A bootstrap is a single-job flow: its run IS its one job, so the run id and job
+    // id coincide (no per-step fan-out into a shared container).
+    await this.jobs.dispatch(
+      request.workspaceId,
+      { runId: request.jobId, jobId: request.jobId },
+      body,
+      'bootstrap',
+    )
     log.info('bootstrap: container accepted job')
     return { workspaceId: request.workspaceId, jobId: request.jobId }
   }
 
   /** Poll a dispatched bootstrap job, mapping the runner job view into an update. */
   async pollBootstrap(handle: BootstrapJobHandle): Promise<BootstrapJobUpdate> {
-    const view = await this.jobs.poll(handle.workspaceId, handle.jobId)
+    const view = await this.jobs.poll(handle.workspaceId, {
+      runId: handle.jobId,
+      jobId: handle.jobId,
+    })
 
     if (view.state === 'running') {
       return view.progress ? { state: 'running', subtasks: view.progress } : { state: 'running' }
@@ -257,7 +267,7 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
    * a no-op, and any error is swallowed by the caller.
    */
   async stopBootstrap(handle: BootstrapJobHandle): Promise<void> {
-    await this.jobs.release(handle.workspaceId, handle.jobId)
+    await this.jobs.release(handle.workspaceId, { runId: handle.jobId, jobId: handle.jobId })
     logger
       .child({ jobId: handle.jobId, workspaceId: handle.workspaceId })
       .info('bootstrap: stopped container')

@@ -6,10 +6,23 @@ import type { LlmToolSpan } from './llm-trace-sink.js'
 // rather than talking to a concrete backend, so the same executor drives either:
 //   - CloudflareContainerTransport — a per-run Cloudflare Container (the default)
 //   - RunnerPoolTransport          — an org's self-hosted runner pool (BYO infra)
-// The transport is addressed purely by the cat-factory job id (the execution id),
-// which both backends key on: the Cloudflare container is one Durable Object per
-// id, and a self-hosted pool is required to route by the same id (so a replayed
-// dispatch re-attaches, and poll/release need no extra handle).
+//
+// A job is addressed by a {@link RunnerJobRef} that names TWO distinct things:
+//   - `runId`  — the run (execution) the job belongs to. On backends that share one
+//                container across a run (Cloudflare, local Docker) this addresses
+//                that per-run container, and `release(runId)` reclaims it.
+//   - `jobId`  — the job itself, UNIQUE WITHIN THE RUN. A run executes a SEQUENCE of
+//                jobs (one per pipeline step: spec-writer, architect, coder, …), all
+//                in the one per-run container, so each needs its own id — the harness
+//                keys its per-kind job registries by it. Conflating the two (keying a
+//                job by the bare run id) makes sibling steps collide: a poll for one
+//                step reads back another step's finished result (the bug where an
+//                `architect` /explore poll returned the `spec-writer`'s /spec doc,
+//                since both were keyed by the execution id).
+//
+// Splitting them keeps the run-scoped container reclaim intact while giving every
+// step its own job identity. A single-job flow (a repo bootstrap, a repo scan) simply
+// uses the same value for both — its run IS its one job.
 
 /** Live subtask counts a running job reports (from the coding tool's todo list). */
 export type RunnerJobProgress = StepSubtasks
@@ -112,22 +125,39 @@ export interface RunnerJobView {
   spans?: LlmToolSpan[]
 }
 
+/**
+ * Addresses one runner job: the run (execution) it belongs to plus the job's own id.
+ * See the file header for why the two are distinct — `runId` scopes the per-run
+ * container, `jobId` identifies the step's job uniquely within that run.
+ */
+export interface RunnerJobRef {
+  /** The run (execution) the job belongs to; addresses the per-run container. */
+  runId: string
+  /** The job's own id, unique within the run (one per pipeline step). */
+  jobId: string
+}
+
 export interface RunnerTransport {
   /**
-   * Start the job `jobId` with the harness job `spec`, or re-attach to one already
-   * running for it. Must be idempotent per job id so a replayed dispatch never
-   * starts a duplicate. `kind` selects the harness endpoint (`run` by default,
-   * `blueprint` for a Blueprinter job, or `bootstrap` for a repo-bootstrap job);
-   * all are polled identically via {@link poll}.
+   * Start the job `ref.jobId` (in run `ref.runId`) with the harness job `spec`, or
+   * re-attach to one already running for that ref. Must be idempotent per ref so a
+   * replayed dispatch never starts a duplicate. `kind` selects the harness endpoint
+   * (`run` by default, `blueprint` for a Blueprinter job, `bootstrap` for a
+   * repo-bootstrap job, …); all are polled identically via {@link poll}.
    */
   dispatch(
-    jobId: string,
+    ref: RunnerJobRef,
     spec: Record<string, unknown>,
     kind?: RunnerDispatchKind,
     options?: RunnerDispatchOptions,
   ): Promise<void>
   /** Poll the job's current state. */
-  poll(jobId: string): Promise<RunnerJobView>
-  /** Optionally release the job/runner once a terminal state is observed. */
-  release?(jobId: string): Promise<void>
+  poll(ref: RunnerJobRef): Promise<RunnerJobView>
+  /**
+   * Optionally reclaim a run's runner resources: the per-run container on backends
+   * that share one across the run (Cloudflare, local Docker), and any of the run's
+   * still-running jobs on a per-job backend (a self-hosted pool cancels `ref.jobId`).
+   * Best-effort and idempotent — releasing an already-gone run/job is a no-op.
+   */
+  release?(ref: RunnerJobRef): Promise<void>
 }

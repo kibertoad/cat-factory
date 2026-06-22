@@ -140,11 +140,12 @@ facade so the runtimes can't drift (see "Cross-runtime conformance" below).
   CI and merges for real, exactly like the Worker (previously only local mode did).
 - `backend/runtimes/local` — `@cat-factory/local-server`, the **local-mode facade**:
   the Node facade with two differentiators so a developer can run the whole product on
-  their own machine. Agent jobs run as **per-job local Docker/Podman containers** (the
+  their own machine. Agent jobs run as **per-run local Docker/Podman containers** (the
   `LocalDockerRunnerTransport` — the local analogue of `CloudflareContainerTransport`
   and `RunnerPoolTransport`, driven through the same `RunnerTransport` port: `docker run`
-  the executor-harness image per job, publish `:8080` to an ephemeral host port,
-  idempotent re-attach by `cat-factory.jobId` label, eviction-maps a vanished
+  the executor-harness image per run, publish `:8080` to an ephemeral host port,
+  re-attach the run's later steps by `cat-factory.runId` label (each step's harness job
+  is keyed by the per-step `RunnerJobRef.jobId`), eviction-maps a vanished
   container), and GitHub is reached via a **PAT** (`GITHUB_PAT` → `mintInstallationToken`)
   instead of a GitHub App. `buildLocalContainer` reuses ALL of Node's persistence/
   pg-boss/gateways and only swaps the runner transport + the GitHub token/client seams;

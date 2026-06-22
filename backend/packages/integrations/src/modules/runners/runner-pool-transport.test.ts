@@ -63,18 +63,23 @@ describe('RunnerPoolTransport', () => {
     const transport = new RunnerPoolTransport(provider, manifest, (k) =>
       k === 'API_TOKEN' ? 't' : undefined,
     )
-    await transport.dispatch('job-1', { hello: 'world' }, 'run')
-    await transport.poll('job-1')
-    await transport.release('job-1')
+    await transport.dispatch({ runId: 'run-1', jobId: 'run-1-coder' }, { hello: 'world' }, 'run')
+    await transport.poll({ runId: 'run-1', jobId: 'run-1-coder' })
+    await transport.release({ runId: 'run-1', jobId: 'run-1-coder' })
     expect(calls.dispatch).toHaveLength(1)
     expect(calls.poll).toHaveLength(1)
     expect(calls.release).toHaveLength(1)
+    // A pool is per-job (no shared per-run container), so it keys on the per-step job
+    // id — `runId` is irrelevant to it. This is what keeps sibling steps distinct here.
+    expect((calls.dispatch[0] as { jobId: string }).jobId).toBe('run-1-coder')
+    expect((calls.poll[0] as { jobId: string }).jobId).toBe('run-1-coder')
+    expect((calls.release[0] as { jobId: string }).jobId).toBe('run-1-coder')
   })
 
   it('serves repo bootstrap (the harness /bootstrap route needs no Cloudflare primitive)', async () => {
     const { provider, calls } = fakeProvider()
     const transport = new RunnerPoolTransport(provider, manifest, () => 't')
-    await transport.dispatch('job-1', { repoName: 'svc' }, 'bootstrap')
+    await transport.dispatch({ runId: 'job-1', jobId: 'job-1' }, { repoName: 'svc' }, 'bootstrap')
     expect(calls.dispatch).toHaveLength(1)
     const req = calls.dispatch[0] as { spec: Record<string, unknown> }
     expect(req.spec.kind).toBe('bootstrap')
@@ -95,7 +100,7 @@ describe('RunnerPoolTransport', () => {
       'test',
       'fix-tests',
     ] as const) {
-      await transport.dispatch('job-1', {}, kind)
+      await transport.dispatch({ runId: 'job-1', jobId: 'job-1' }, {}, kind)
     }
     expect(calls.dispatch).toHaveLength(8)
     expect((calls.dispatch.at(-1) as { spec: Record<string, unknown> }).spec.kind).toBe('fix-tests')

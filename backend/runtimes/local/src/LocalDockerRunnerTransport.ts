@@ -4,6 +4,7 @@ import { promisify } from 'node:util'
 import type {
   RunnerDispatchKind,
   RunnerDispatchOptions,
+  RunnerJobRef,
   RunnerJobView,
   RunnerTransport,
 } from '@cat-factory/kernel'
@@ -11,18 +12,18 @@ import { resolveDockerResources } from '@cat-factory/contracts'
 
 const execFileAsync = promisify(execFile)
 
-// The local-mode runner backend: each repo-operating agent job runs as its OWN
-// local Docker/Podman container — the SAME executor-harness image the Cloudflare
-// Worker runs per-run Containers from. It is the local analogue of
-// `CloudflareContainerTransport` (a per-run Cloudflare Container) and of
-// `RunnerPoolTransport` (an org's self-hosted pool): the ContainerAgentExecutor
-// drives all three identically through the `RunnerTransport` port, addressed purely
-// by the cat-factory job id.
+// The local-mode runner backend: each RUN gets its OWN local Docker/Podman container
+// — the SAME executor-harness image the Cloudflare Worker runs per-run Containers
+// from — which hosts that run's whole sequence of step jobs. It is the local analogue
+// of `CloudflareContainerTransport` (a per-run Cloudflare Container) and of
+// `RunnerPoolTransport` (an org's self-hosted pool): the ContainerAgentExecutor drives
+// all three identically through the `RunnerTransport` port, addressed by a
+// {@link RunnerJobRef} — the run id (which container) plus the per-step job id.
 //
-// A container is started per job (`docker run -d`, harness `:8080` published to an
-// ephemeral host port), labelled with the job id so a replayed dispatch re-attaches
-// instead of starting a duplicate (the harness's own job registry is likewise
-// idempotent per id). The harness reaches this service's LLM proxy at
+// A container is started per RUN (`docker run -d`, harness `:8080` published to an
+// ephemeral host port), labelled with the run id so the run's later steps re-attach to
+// it instead of starting a duplicate, and the harness keys each step's job by the
+// per-step job id (so siblings never collide). The harness reaches this service's LLM proxy at
 // `host.docker.internal` — published via `--add-host` on Linux — and clones/pushes
 // to github.com directly with the per-job token in the request body. Nothing
 // long-lived is mounted: the per-job GitHub + proxy tokens travel in the POST body
@@ -48,7 +49,9 @@ const KIND_ROUTE: Record<RunnerDispatchKind, string> = {
 // sweeper can re-drive it — mirroring the Worker transport's 404 mapping.
 const EVICTION_ERROR = 'Job not found (container evicted or crashed)'
 
-const LABEL_JOB = 'cat-factory.jobId'
+// Labels the per-RUN container by its run id (the container key). A run's steps share
+// one container, so this is the run id, not a per-step job id.
+const LABEL_RUN = 'cat-factory.runId'
 const LABEL_MANAGED = 'cat-factory.managed=local-docker'
 /** The port the harness listens on inside the container. */
 const HARNESS_PORT = 8080
@@ -114,7 +117,7 @@ export class LocalDockerRunnerTransport implements RunnerTransport {
   private readonly requestTimeoutMs: number
   private readonly privilegedTestJobs: boolean
 
-  /** jobId → resolved container handle, to spare a `docker` lookup on the hot poll path. */
+  /** runId → resolved container handle, to spare a `docker` lookup on the hot poll path. */
   private readonly cache = new Map<string, { containerId: string; port: number }>()
 
   constructor(options: LocalDockerRunnerTransportOptions) {
@@ -133,23 +136,27 @@ export class LocalDockerRunnerTransport implements RunnerTransport {
   }
 
   async dispatch(
-    jobId: string,
+    ref: RunnerJobRef,
     spec: Record<string, unknown>,
     kind: RunnerDispatchKind = 'run',
     options?: RunnerDispatchOptions,
   ): Promise<void> {
-    let resolved = await this.resolve(jobId)
+    // The container is per-RUN: a run's first step starts it, later steps re-attach to
+    // it (resolved by the run-id label), and the harness keys each step's job by the
+    // per-step `ref.jobId` carried in the spec body.
+    const runId = ref.runId
+    let resolved = await this.resolve(runId)
     if (!resolved) {
-      // A prior attempt may have left an exited/dead container under this job label
+      // A prior attempt may have left an exited/dead container under this run label
       // (resolve() returns undefined for one whose port is no longer published). Remove
       // any such container first so it can't shadow the fresh one in later label lookups
       // (findContainer returns the first match).
-      await this.removeContainersForJob(jobId)
+      await this.removeContainersForRun(runId)
       const args = [
         'run',
         '-d',
         '--label',
-        `${LABEL_JOB}=${jobId}`,
+        `${LABEL_RUN}=${runId}`,
         '--label',
         LABEL_MANAGED,
         '-p',
@@ -179,7 +186,7 @@ export class LocalDockerRunnerTransport implements RunnerTransport {
       if (!containerId) throw new Error('docker run returned no container id')
       const port = await this.waitForPort(containerId)
       resolved = { containerId, port }
-      this.cache.set(jobId, resolved)
+      this.cache.set(runId, resolved)
       await this.waitForHealth(resolved.port)
     }
 
@@ -198,24 +205,28 @@ export class LocalDockerRunnerTransport implements RunnerTransport {
     }
   }
 
-  async poll(jobId: string): Promise<RunnerJobView> {
-    const resolved = await this.resolve(jobId)
-    // No container for this id at all → it was evicted/reaped (or never started).
+  async poll(ref: RunnerJobRef): Promise<RunnerJobView> {
+    const resolved = await this.resolve(ref.runId)
+    // No container for this run at all → it was evicted/reaped (or never started).
     if (!resolved) return { state: 'failed', error: EVICTION_ERROR }
 
     let res: Response
     try {
-      res = await this.fetchImpl(this.url(resolved.port, `/jobs/${encodeURIComponent(jobId)}`), {
-        method: 'GET',
-        headers: { [SECRET_HEADER]: this.sharedSecret },
-        signal: AbortSignal.timeout(this.requestTimeoutMs),
-      })
+      // Address the per-RUN container, but read the per-step job by its own id.
+      res = await this.fetchImpl(
+        this.url(resolved.port, `/jobs/${encodeURIComponent(ref.jobId)}`),
+        {
+          method: 'GET',
+          headers: { [SECRET_HEADER]: this.sharedSecret },
+          signal: AbortSignal.timeout(this.requestTimeoutMs),
+        },
+      )
     } catch (err) {
       // Connection refused / DNS gone: the container most likely exited. Confirm via
       // the daemon — if it is no longer running, report an eviction so the run stops;
       // otherwise surface the transient error so the caller can retry.
       if (!(await this.isRunning(resolved.containerId))) {
-        this.cache.delete(jobId)
+        this.cache.delete(ref.runId)
         return { state: 'failed', error: EVICTION_ERROR }
       }
       throw err
@@ -232,12 +243,14 @@ export class LocalDockerRunnerTransport implements RunnerTransport {
   }
 
   /**
-   * Reclaim the per-job container now (`docker rm -f`) rather than leaving it idle.
-   * Best-effort and idempotent: removing an already-gone container is a no-op.
+   * Reclaim the per-RUN container now (`docker rm -f`) rather than leaving it idle —
+   * this tears down the whole run's container (and with it any step still running in
+   * it). Best-effort and idempotent: removing an already-gone container is a no-op.
    */
-  async release(jobId: string): Promise<void> {
-    const containerId = this.cache.get(jobId)?.containerId ?? (await this.findContainer(jobId))
-    this.cache.delete(jobId)
+  async release(ref: RunnerJobRef): Promise<void> {
+    const containerId =
+      this.cache.get(ref.runId)?.containerId ?? (await this.findContainer(ref.runId))
+    this.cache.delete(ref.runId)
     if (!containerId) return
     await this.exec(['rm', '-f', containerId]).catch(() => undefined)
   }
@@ -267,13 +280,13 @@ export class LocalDockerRunnerTransport implements RunnerTransport {
 
   // --- internals ----------------------------------------------------------
 
-  /** Force-remove every (running or exited) container labelled with this job id. */
-  private async removeContainersForJob(jobId: string): Promise<void> {
+  /** Force-remove every (running or exited) container labelled with this run id. */
+  private async removeContainersForRun(runId: string): Promise<void> {
     const { stdout } = await this.exec([
       'ps',
       '-aq',
       '--filter',
-      `label=${LABEL_JOB}=${jobId}`,
+      `label=${LABEL_RUN}=${runId}`,
       '--filter',
       `label=${LABEL_MANAGED}`,
     ])
@@ -289,26 +302,26 @@ export class LocalDockerRunnerTransport implements RunnerTransport {
     return `http://127.0.0.1:${port}${path}`
   }
 
-  /** The container handle for a job from the cache, else rediscovered by label. */
-  private async resolve(jobId: string): Promise<{ containerId: string; port: number } | undefined> {
-    const cached = this.cache.get(jobId)
+  /** The container handle for a run from the cache, else rediscovered by label. */
+  private async resolve(runId: string): Promise<{ containerId: string; port: number } | undefined> {
+    const cached = this.cache.get(runId)
     if (cached) return cached
-    const containerId = await this.findContainer(jobId)
+    const containerId = await this.findContainer(runId)
     if (!containerId) return undefined
     const port = await this.hostPort(containerId)
     if (port === undefined) return undefined
     const resolved = { containerId, port }
-    this.cache.set(jobId, resolved)
+    this.cache.set(runId, resolved)
     return resolved
   }
 
-  /** The (running-or-exited) container id labelled with this job id, if any. */
-  private async findContainer(jobId: string): Promise<string | undefined> {
+  /** The (running-or-exited) container id labelled with this run id, if any. */
+  private async findContainer(runId: string): Promise<string | undefined> {
     const { stdout } = await this.exec([
       'ps',
       '-aq',
       '--filter',
-      `label=${LABEL_JOB}=${jobId}`,
+      `label=${LABEL_RUN}=${runId}`,
       '--filter',
       `label=${LABEL_MANAGED}`,
     ])

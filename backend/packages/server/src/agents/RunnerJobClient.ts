@@ -1,6 +1,7 @@
 import type {
   RunnerDispatchKind,
   RunnerDispatchOptions,
+  RunnerJobRef,
   RunnerJobView,
   RunnerTransport,
 } from '@cat-factory/kernel'
@@ -30,35 +31,35 @@ export class RunnerJobClient {
   constructor(private readonly resolveTransport: ResolveRunnerTransport) {}
 
   /**
-   * Start (or idempotently re-attach to) job `jobId` for `workspaceId`. `kind`
+   * Start (or idempotently re-attach to) job `ref` for `workspaceId`. `kind`
    * selects the harness endpoint; the Cloudflare backend serves every kind, a
    * self-hosted pool only `run` (and throws a clear "unsupported" for the rest).
    */
   async dispatch(
     workspaceId: string | undefined,
-    jobId: string,
+    ref: RunnerJobRef,
     spec: Record<string, unknown>,
     kind: RunnerDispatchKind,
     options?: RunnerDispatchOptions,
   ): Promise<void> {
     const transport = await this.resolveTransport(workspaceId)
-    await transport.dispatch(jobId, spec, kind, options)
+    await transport.dispatch(ref, spec, kind, options)
   }
 
   /** Poll the job's current state from the same backend it dispatched to. */
-  async poll(workspaceId: string | undefined, jobId: string): Promise<RunnerJobView> {
+  async poll(workspaceId: string | undefined, ref: RunnerJobRef): Promise<RunnerJobView> {
     const transport = await this.resolveTransport(workspaceId)
-    return transport.poll(jobId)
+    return transport.poll(ref)
   }
 
   /**
-   * Reclaim the job's backing runner (for the Cloudflare backend, SIGKILL the
-   * per-run container instead of letting it idle out its sleep timer). Best-effort
-   * and idempotent: a transport without `release`, or an already-gone job, is a
-   * no-op.
+   * Reclaim a run's backing runner (for the Cloudflare backend, SIGKILL the per-run
+   * container instead of letting it idle out its sleep timer; for a pool, cancel the
+   * run's in-flight job `ref.jobId`). Best-effort and idempotent: a transport without
+   * `release`, or an already-gone run/job, is a no-op.
    */
-  async release(workspaceId: string | undefined, jobId: string): Promise<void> {
+  async release(workspaceId: string | undefined, ref: RunnerJobRef): Promise<void> {
     const transport = await this.resolveTransport(workspaceId)
-    await transport.release?.(jobId)
+    await transport.release?.(ref)
   }
 }
