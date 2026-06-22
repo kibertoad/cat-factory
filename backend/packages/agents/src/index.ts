@@ -1,4 +1,4 @@
-export { AiAgentExecutor, type AiAgentExecutorDependencies } from './agents/AiAgentExecutor.js'
+export { AiAgentExecutor, type AiAgentExecutorDependencies } from './agents/runtime/executor.js'
 export {
   type InlineWebSearchOptions,
   DEFAULT_INLINE_WEB_SEARCH_KINDS,
@@ -6,7 +6,7 @@ export {
   webResearchGuidanceFor,
   inlineWebSearchOptionsFromEnv,
   providerWebSearchTools,
-} from './agents/web-search.js'
+} from './agents/runtime/web-search.js'
 export {
   type AgentModelConfig,
   type AgentRouting,
@@ -15,8 +15,8 @@ export {
   resolveAgentConfig,
   resolveStepModelRef,
   resolveInlineModelRef,
-} from './agents/agent-routing.js'
-export { systemPromptFor, userPromptFor } from './agents/agent-catalog.js'
+} from './agents/runtime/routing.js'
+export { systemPromptFor, userPromptFor } from './agents/catalog.js'
 // Installation-level extension point for custom agent kinds (mirrors the model-provider
 // registry seam): a deployment registers extra kinds at startup and the prompt catalog +
 // the Worker's executor routing pick them up.
@@ -29,7 +29,7 @@ export {
   registeredKindRequiresContainer,
   registeredConfigContributions,
   clearRegisteredAgentKinds,
-} from './agents/registry.js'
+} from './agents/kinds/registry.js'
 // Agent capability traits (standard + custom). `code-aware` gates the engine's folding
 // of the service's best-practice fragments; `spec-aware` appends the in-repo-spec guidance.
 export {
@@ -46,7 +46,7 @@ export {
   traitsFor,
   hasTrait,
   traitGuidanceFor,
-} from './agents/traits.js'
+} from './agents/kinds/traits.js'
 // Agent configuration-contribution catalog (the descriptors surfaced on task
 // creation / inspector, frozen once the contributing step runs).
 export {
@@ -54,27 +54,27 @@ export {
   PLAYWRIGHT_E2E_TARGET_CONFIG_ID,
   configContributionsFor,
   configContributionCatalog,
-} from './agents/agent-configs.js'
+} from './agents/kinds/configs.js'
 // Tester / Fixer track prompts + helpers.
 export {
   isTestingKind,
   testingSystemPrompt,
   testerEnvironmentSection,
-} from './agents/test-prompts.js'
+} from './agents/prompts/testing.js'
+// Requirements-review prompt text + its versioned-prompt registry.
+export { REVIEW_SYSTEM_PROMPT, REWORK_SYSTEM_PROMPT } from './agents/prompts/requirements.js'
 export {
   type VersionedPrompt,
   type PromptId,
   PROMPT_VERSIONS,
-  REVIEW_SYSTEM_PROMPT,
-  REWORK_SYSTEM_PROMPT,
   promptVersion,
   promptVersionLabel,
-} from './agents/prompt-versions.js'
+} from './agents/kinds/versions.js'
 export {
   composeSystemPrompt,
   composeBlockSystemPrompt,
   type ComposableBlock,
-} from './agents/prompt-fragments.js'
+} from './agents/runtime/fragments.js'
 export {
   type StandardPhase,
   STANDARD_PHASES,
@@ -82,28 +82,28 @@ export {
   phaseForKind,
   standardSystemPrompt,
   renderStandardUserPrompt,
-} from './agents/standard-prompts.js'
+} from './agents/prompts/standard.js'
 export {
   type AcceptanceAgentKind,
   ACCEPTANCE_AGENT_KINDS,
   acceptanceSystemPrompt,
   isAcceptanceKind,
   testApproachSection,
-} from './agents/acceptance-prompts.js'
+} from './agents/prompts/acceptance.js'
 export {
   type CompanionDefinition,
   COMPANIONS,
   isCompanionKind,
   companionFor,
   companionTargets,
-} from './agents/companions.js'
-export { companionSystemPrompt } from './agents/companion-prompts.js'
+} from './agents/kinds/companions.js'
+export { companionSystemPrompt } from './agents/prompts/companion.js'
 export {
   READ_ONLY_AGENT_KINDS,
   READ_ONLY_GUARDRAIL,
   isReadOnlyAgentKind,
-} from './agents/read-only.js'
-export { MOCK_AGENT_KIND, isMockKind, mockSystemPrompt } from './agents/mock-prompts.js'
+} from './agents/kinds/read-only.js'
+export { MOCK_AGENT_KIND, isMockKind, mockSystemPrompt } from './agents/prompts/mock.js'
 export {
   type BusinessLogicAgentKind,
   BUSINESS_LOGIC_AGENT_KINDS,
@@ -112,8 +112,8 @@ export {
   BUSINESS_LOGIC_DOCS_DIR,
   isBusinessLogicKind,
   businessLogicSystemPrompt,
-} from './agents/business-logic-prompts.js'
-export { PLATFORM_DELIVERY_CONTRACT } from './agents/ci-gate.js'
+} from './agents/prompts/business-logic.js'
+export { PLATFORM_DELIVERY_CONTRACT } from './agents/prompts/delivery-contract.js'
 
 // The generic AI provisioning facade: a mixable provider registry + the base,
 // runtime-neutral resolvers. Optional/heavier backends ship as their own packages

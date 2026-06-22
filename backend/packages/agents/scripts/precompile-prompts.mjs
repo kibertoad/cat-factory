@@ -72,7 +72,8 @@ const outPath = join(
   '..',
   'src',
   'agents',
-  'standard-prompt-templates.generated.ts',
+  'prompts',
+  'standard-templates.generated.ts',
 )
 
 writeFileSync(outPath, `${header}${specs}\n`)
