@@ -203,6 +203,7 @@ export type {
   RunnerDispatchKind,
   RunnerDispatchOptions,
   RunnerJobProgress,
+  RunnerJobRef,
   RunnerJobResult,
   RunnerJobView,
   RunnerTransport,
