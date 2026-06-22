@@ -1,15 +1,33 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
+import type { AccountRole } from '~/types/domain'
 
-// Team settings for an org account: the member roster, pending email invitations,
-// and the per-account transactional-email sender (UI-onboarded, stored sealed in the
-// DB). Owner-only mutations are enforced by the backend; this surface degrades to a
-// read-only view when the caller isn't an owner (the actions just 4xx).
+// Team settings for an org account: the member roster (with combinable admin /
+// developer / product roles), pending email invitations, and the per-account
+// transactional-email sender. Admin-only mutations are enforced by the backend; this
+// surface degrades to a read-only view when the caller isn't an admin (actions 4xx).
 const props = defineProps<{ accountId: string }>()
 
 const accounts = useAccountsStore()
 const toast = useToast()
 const busy = ref(false)
+
+const ROLE_ITEMS: { label: string; value: AccountRole }[] = [
+  { label: 'Admin', value: 'admin' },
+  { label: 'Developer', value: 'developer' },
+  { label: 'Product', value: 'product' },
+]
+
+/** Whether the signed-in caller is an admin of this account (drives edit affordances). */
+const isAdmin = computed(() => accounts.activeAccount?.roles?.includes('admin') ?? false)
+
+async function updateMemberRoles(userId: string, roles: AccountRole[]) {
+  try {
+    await accounts.setMemberRoles(props.accountId, userId, roles.length ? roles : ['developer'])
+  } catch (e) {
+    notifyError('Could not update roles', e)
+  }
+}
 
 function notifyError(title: string, e: unknown) {
   toast.add({
@@ -35,7 +53,7 @@ onMounted(async () => {
 
 // ---- invitations ----------------------------------------------------------
 const inviteEmail = ref('')
-const inviteRole = ref<'member' | 'owner'>('member')
+const inviteRoles = ref<AccountRole[]>(['developer'])
 
 async function sendInvite() {
   if (!inviteEmail.value.trim()) return
@@ -44,7 +62,7 @@ async function sendInvite() {
     const acceptUrl = await accounts.invite(
       props.accountId,
       inviteEmail.value.trim(),
-      inviteRole.value,
+      inviteRoles.value.length ? inviteRoles.value : ['developer'],
     )
     inviteEmail.value = ''
     toast.add({
@@ -116,7 +134,18 @@ async function disconnectEmail() {
           class="flex items-center justify-between rounded-md bg-slate-800/40 px-2 py-1"
         >
           <span class="truncate">{{ m.name || m.email || m.userId }}</span>
-          <span class="text-xs uppercase tracking-wide text-slate-400">{{ m.role }}</span>
+          <USelect
+            v-if="isAdmin"
+            :model-value="m.roles"
+            multiple
+            :items="ROLE_ITEMS"
+            size="xs"
+            class="w-44"
+            @update:model-value="(r: AccountRole[]) => updateMemberRoles(m.userId, r)"
+          />
+          <span v-else class="text-xs uppercase tracking-wide text-slate-400">
+            {{ m.roles.join(', ') }}
+          </span>
         </li>
         <li v-if="accounts.members.length === 0" class="text-slate-500">No members yet.</li>
       </ul>
@@ -132,13 +161,7 @@ async function disconnectEmail() {
           placeholder="teammate@example.com"
           class="flex-1"
         />
-        <USelect
-          v-model="inviteRole"
-          :items="[
-            { label: 'Member', value: 'member' },
-            { label: 'Owner', value: 'owner' },
-          ]"
-        />
+        <USelect v-model="inviteRoles" multiple :items="ROLE_ITEMS" class="w-44" />
         <UButton type="submit" color="primary" :loading="busy" icon="i-lucide-send">Invite</UButton>
       </form>
 
@@ -203,6 +226,12 @@ async function disconnectEmail() {
           <UButton type="submit" color="primary" :loading="busy">Connect email sender</UButton>
         </form>
       </template>
+    </section>
+
+    <!-- account-wide provider API keys (admin-only) -->
+    <section v-if="isAdmin">
+      <h3 class="mb-2 font-semibold text-white">Account API keys</h3>
+      <ProvidersApiKeysSection :account-id="accountId" />
     </section>
   </div>
 </template>

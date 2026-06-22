@@ -1,6 +1,7 @@
 import type { Context } from 'hono'
 import { Hono } from 'hono'
 import { cachedTokensFromUsage, promptCacheParams } from '@cat-factory/agents'
+import type { ApiKeyProvider } from '@cat-factory/kernel'
 import { ContainerSessionService } from '../../containers/ContainerSessionService.js'
 import type { AppEnv } from '../../http/env.js'
 import { logger } from '../../observability/logger.js'
@@ -56,7 +57,7 @@ export function llmProxyController(): Hono<AppEnv> {
     // response) is transport overhead; the slice spent waiting on the model is the
     // actual execution. The two are split in the observability sink.
     const t0 = Date.now()
-    const { config, spendService, gateways, llmObservability, executionEventPublisher } =
+    const { config, spendService, gateways, llmObservability, executionEventPublisher, apiKeys } =
       c.get('container')
     const secret = config.auth.sessionSecret
     if (!secret) {
@@ -237,17 +238,24 @@ export function llmProxyController(): Hono<AppEnv> {
       requestMaxTokens = floored
     }
 
+    // The pooled API key leased for this call (non-binding providers), so usage can be
+    // folded back into its rolling-window rotation counters when the call completes.
+    let leasedApiKeyId: string | null = null
+
     const record = (usage: LlmTokenUsage | null): Promise<number> => {
       if (!usage) return Promise.resolve(0)
+      const inputTokens = usage.prompt_tokens ?? 0
+      const outputTokens = usage.completion_tokens ?? 0
+      // Fold usage into the leased key's rotation counters (best-effort, off the meter).
+      if (leasedApiKeyId && apiKeys) {
+        void apiKeys.recordUsage(leasedApiKeyId, { inputTokens, outputTokens }).catch(() => {})
+      }
       return spendService.record({
         workspaceId: session.workspaceId,
         executionId: session.executionId,
         agentKind: session.agentKind,
         model: `${session.provider}:${session.model}`,
-        usage: {
-          inputTokens: usage.prompt_tokens ?? 0,
-          outputTokens: usage.completion_tokens ?? 0,
-        },
+        usage: { inputTokens, outputTokens },
       })
     }
 
@@ -306,9 +314,7 @@ export function llmProxyController(): Hono<AppEnv> {
 
     const upstream = gateways.llmUpstream.resolveOpenAiCompatible(session.provider)
     if (!upstream) {
-      log.error(
-        'llm proxy: provider is not available (no upstream resolved — its API key is likely unset)',
-      )
+      log.error('llm proxy: provider is not available (no base URL resolved)')
       observe({
         usage: null,
         finishReason: null,
@@ -320,6 +326,47 @@ export function llmProxyController(): Hono<AppEnv> {
       })
       return c.json({ error: { message: `Provider '${session.provider}' is not available` } }, 502)
     }
+    // Lease the API key for this provider from the DB-backed pool (workspace + owning
+    // account + the run initiator), scoped from the signed session claims. Keys are no
+    // longer env-baked: an empty pool means the provider is not configured.
+    if (!apiKeys) {
+      log.error('llm proxy: API-key store is not configured')
+      observe({
+        usage: null,
+        finishReason: null,
+        responseText: '',
+        ok: false,
+        httpStatus: 502,
+        errorMessage: 'API-key store is not configured',
+        upstreamMs: 0,
+      })
+      return c.json({ error: { message: 'API-key store is not configured' } }, 502)
+    }
+    let apiKey: string
+    try {
+      const leased = await apiKeys.lease(session.workspaceId, session.provider as ApiKeyProvider, {
+        accountId: session.accountId,
+        userId: session.userId,
+      })
+      leasedApiKeyId = leased.keyId
+      apiKey = leased.secret
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      log.error({ err: message }, 'llm proxy: no API key configured for provider')
+      observe({
+        usage: null,
+        finishReason: null,
+        responseText: '',
+        ok: false,
+        httpStatus: 502,
+        errorMessage: message,
+        upstreamMs: 0,
+      })
+      return c.json(
+        { error: { message: `No API key configured for provider '${session.provider}'` } },
+        502,
+      )
+    }
     if (streaming) {
       payload.stream_options = { include_usage: true }
     }
@@ -330,7 +377,7 @@ export function llmProxyController(): Hono<AppEnv> {
     const upstreamRes = await fetch(`${upstream.baseURL}/chat/completions`, {
       method: 'POST',
       headers: {
-        authorization: `Bearer ${upstream.apiKey}`,
+        authorization: `Bearer ${apiKey}`,
         'content-type': 'application/json',
       },
       body: JSON.stringify(payload),

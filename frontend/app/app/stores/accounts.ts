@@ -4,6 +4,7 @@ import type {
   Account,
   AccountInvitation,
   AccountMember,
+  AccountRole,
   CloudProvider,
   EmailConnection,
 } from '~/types/domain'
@@ -82,8 +83,8 @@ export const useAccountsStore = defineStore(
     }
 
     /** Invite a teammate by email; returns the accept link (for manual sharing). */
-    async function invite(accountId: string, email: string, role: 'owner' | 'member' = 'member') {
-      const { invitation, acceptUrl } = await api.createInvitation(accountId, { email, role })
+    async function invite(accountId: string, email: string, roles: AccountRole[] = ['developer']) {
+      const { invitation, acceptUrl } = await api.createInvitation(accountId, { email, roles })
       invitations.value = [invitation, ...invitations.value]
       return acceptUrl
     }
@@ -91,6 +92,14 @@ export const useAccountsStore = defineStore(
     async function revokeInvite(accountId: string, invitationId: string) {
       await api.revokeInvitation(accountId, invitationId)
       invitations.value = invitations.value.filter((i) => i.id !== invitationId)
+    }
+
+    /** Set a member's role set (admin-only); patches the loaded roster in place. */
+    async function setMemberRoles(accountId: string, userId: string, roles: AccountRole[]) {
+      const updated = await api.setMemberRoles(accountId, userId, roles)
+      const i = members.value.findIndex((m) => m.userId === userId)
+      if (i >= 0) members.value[i] = updated
+      return updated
     }
 
     // ---- email sender connection -----------------------------------------
@@ -133,6 +142,7 @@ export const useAccountsStore = defineStore(
       loadRoster,
       invite,
       revokeInvite,
+      setMemberRoles,
       loadEmailConnection,
       connectEmail,
       disconnectEmail,

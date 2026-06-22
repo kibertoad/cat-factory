@@ -127,6 +127,12 @@ export interface ContainerAgentExecutorDependencies {
   ) => Promise<string | undefined>
   /** Resolve which repo (and installation) a run targets. */
   resolveRepoTarget: ResolveRepoTarget
+  /**
+   * Resolve a workspace's owning account id, signed into the proxy session token so the
+   * proxy can lease an account-scoped API key from the merged pool. Optional; absent ⇒
+   * only the workspace + initiator scopes are leased.
+   */
+  resolveAccountId?: (workspaceId: string) => Promise<string | null | undefined>
   /** Mint a short-lived GitHub installation token for cloning + opening the PR. */
   mintInstallationToken: MintInstallationToken
   /** Mints the signed LLM-proxy session token the container uses (Pi harness). */
@@ -553,8 +559,13 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     let auth: Record<string, unknown>
     let subscriptionTokenId: string | undefined
     if (harness === 'pi') {
+      const accountId = this.deps.resolveAccountId
+        ? await this.deps.resolveAccountId(workspaceId)
+        : undefined
       const sessionToken = await this.deps.sessionService.mint({
         workspaceId,
+        accountId: accountId ?? undefined,
+        userId: context.initiatedByUserId,
         executionId,
         agentKind: context.agentKind,
         provider: ref.provider,

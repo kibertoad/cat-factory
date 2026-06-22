@@ -43,7 +43,7 @@ const filteredArchetypes = computed(() => {
 watch(open, (isOpen) => {
   if (isOpen) {
     filter.value = ''
-    void models.ensureLoaded()
+    void models.ensureLoaded(workspace.workspaceId ?? undefined)
     if (workspace.workspaceId) void creds.load(workspace.workspaceId)
   }
 })

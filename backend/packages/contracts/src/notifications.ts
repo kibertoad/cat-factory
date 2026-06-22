@@ -63,6 +63,12 @@ export const notificationPayloadSchema = v.object({
   pipelineName: v.optional(v.string()),
   /** Number of open findings, on a `requirement_review`. */
   findingCount: v.optional(v.number()),
+  /**
+   * Internal user id (`usr_*`) of the member this notification is directed at — the
+   * task's responsible product person on a `requirement_review`. The inbox highlights
+   * it as "for you"; the notification stays workspace-visible to everyone.
+   */
+  targetUserId: v.optional(v.nullable(v.string())),
 })
 export type NotificationPayload = v.InferOutput<typeof notificationPayloadSchema>
 

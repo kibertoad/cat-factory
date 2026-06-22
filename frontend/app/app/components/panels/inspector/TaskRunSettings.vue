@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed, onMounted } from 'vue'
 import type { Block } from '~/types/domain'
 
 const props = defineProps<{ block: Block }>()
@@ -6,6 +7,37 @@ const props = defineProps<{ block: Block }>()
 const board = useBoardStore()
 const mergePresets = useMergePresetsStore()
 const pipelines = usePipelinesStore()
+const accounts = useAccountsStore()
+
+// ---- responsible product person --------------------------------------------
+// The account member (a `product` role-holder) accountable for this task; they are
+// notified when requirement review flags findings. Picks from the account roster.
+onMounted(() => {
+  const id = accounts.activeAccountId
+  if (id && accounts.members.length === 0) void accounts.loadRoster(id).catch(() => {})
+})
+const productMembers = computed(() => accounts.members.filter((m) => m.roles.includes('product')))
+const responsible = computed(() =>
+  accounts.members.find((m) => m.userId === props.block.responsibleProductUserId),
+)
+const responsibleLabel = computed(() => {
+  const m = responsible.value
+  if (!m) return undefined
+  return m.name || m.email || m.userId
+})
+const responsibleMenu = computed(() => [
+  [
+    { label: 'Unassigned', icon: 'i-lucide-user-x', onSelect: () => setResponsible('') },
+    ...productMembers.value.map((m) => ({
+      label: m.name || m.email || m.userId,
+      icon: 'i-lucide-user',
+      onSelect: () => setResponsible(m.userId),
+    })),
+  ],
+])
+function setResponsible(userId: string) {
+  board.updateBlock(props.block.id, { responsibleProductUserId: userId })
+}
 
 // ---- merge policy preset ---------------------------------------------------
 // Which merge threshold preset governs this task's auto-merge decision + CI-fixer
@@ -117,6 +149,38 @@ function setPipeline(id: string) {
       </div>
       <div v-else class="text-[11px] text-slate-500">
         No preset configured — the merger raises a review notification for every PR.
+      </div>
+    </div>
+
+    <!-- responsible product person -->
+    <div>
+      <div class="mb-1 flex items-center justify-between">
+        <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+          Responsible product
+        </span>
+        <UDropdownMenu :items="responsibleMenu">
+          <UButton
+            size="xs"
+            variant="ghost"
+            color="neutral"
+            icon="i-lucide-user"
+            trailing-icon="i-lucide-chevron-down"
+          />
+        </UDropdownMenu>
+      </div>
+      <div v-if="responsibleLabel" class="flex items-center gap-1">
+        <UBadge
+          color="primary"
+          variant="subtle"
+          size="sm"
+          class="cursor-pointer"
+          @click="setResponsible('')"
+        >
+          {{ responsibleLabel }}<UIcon name="i-lucide-x" class="ml-0.5 h-3 w-3" />
+        </UBadge>
+      </div>
+      <div v-else class="text-[11px] text-slate-500">
+        Unassigned — set a product owner to notify them when requirement review flags this task.
       </div>
     </div>
   </div>

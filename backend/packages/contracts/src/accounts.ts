@@ -11,8 +11,17 @@ import { cloudProviderSchema } from './provisioning.js'
 export const accountTypeSchema = v.picklist(['personal', 'org'])
 export type AccountType = v.InferOutput<typeof accountTypeSchema>
 
-export const accountRoleSchema = v.picklist(['owner', 'member'])
+// Combinable account roles. `admin` may modify anything about the org account
+// (settings, members, invitations, account-scoped credentials); `developer` is the
+// default and grants no special powers; `product` people can be set as a task's
+// responsible person and are notified when requirement review flags findings. A member
+// holds a SET of these (e.g. an admin who is also a product owner).
+export const accountRoleSchema = v.picklist(['admin', 'developer', 'product'])
 export type AccountRole = v.InferOutput<typeof accountRoleSchema>
+
+/** A member's combinable role set (at least one role). */
+export const accountRolesSchema = v.pipe(v.array(accountRoleSchema), v.minLength(1))
+export type AccountRoles = v.InferOutput<typeof accountRolesSchema>
 
 /** An account as exposed to clients, annotated with the caller's role in it. */
 export const accountSchema = v.object({
@@ -22,8 +31,8 @@ export const accountSchema = v.object({
   /** The GitHub org/user login this account maps to, when known. */
   githubAccountLogin: v.nullable(v.string()),
   createdAt: v.number(),
-  /** The signed-in caller's role in this account (`null` in the auth-disabled path). */
-  role: v.nullable(accountRoleSchema),
+  /** The signed-in caller's roles in this account (`null` in the auth-disabled path). */
+  roles: v.nullable(accountRolesSchema),
   /**
    * The cloud provider new services in this account default to (a service may
    * override it). Absent means the built-in {@link DEFAULT_CLOUD_PROVIDER}
@@ -37,7 +46,7 @@ export type Account = v.InferOutput<typeof accountSchema>
 export const accountMemberSchema = v.object({
   accountId: v.string(),
   userId: v.string(),
-  role: accountRoleSchema,
+  roles: accountRolesSchema,
   createdAt: v.number(),
   /** Display details of the member (resolved from the users table), when available. */
   name: v.optional(v.nullable(v.string())),
@@ -65,9 +74,15 @@ export type UpdateAccountInput = v.InferOutput<typeof updateAccountSchema>
 /** Add a member to an account by their internal user id. */
 export const addMemberSchema = v.object({
   userId: v.pipe(v.string(), v.minLength(1)),
-  role: v.optional(accountRoleSchema),
+  roles: v.optional(accountRolesSchema),
 })
 export type AddMemberInput = v.InferOutput<typeof addMemberSchema>
+
+/** Set a member's role set (admin-only). */
+export const setMemberRolesSchema = v.object({
+  roles: accountRolesSchema,
+})
+export type SetMemberRolesInput = v.InferOutput<typeof setMemberRolesSchema>
 
 // ---- Invitations ----------------------------------------------------------
 
@@ -79,7 +94,7 @@ export const accountInvitationSchema = v.object({
   id: v.string(),
   accountId: v.string(),
   email: v.string(),
-  role: accountRoleSchema,
+  roles: accountRolesSchema,
   status: invitationStatusSchema,
   invitedBy: v.string(),
   expiresAt: v.number(),
@@ -90,7 +105,7 @@ export type AccountInvitation = v.InferOutput<typeof accountInvitationSchema>
 /** Invite a teammate by email into an org account. */
 export const createInvitationSchema = v.object({
   email: v.pipe(v.string(), v.trim(), v.email(), v.maxLength(320)),
-  role: v.optional(accountRoleSchema),
+  roles: v.optional(accountRolesSchema),
 })
 export type CreateInvitationInput = v.InferOutput<typeof createInvitationSchema>
 

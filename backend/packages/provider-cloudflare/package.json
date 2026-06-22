@@ -1,0 +1,34 @@
+{
+  "name": "@cat-factory/provider-cloudflare",
+  "version": "1.0.0",
+  "description": "Opt-in Cloudflare Workers AI model registry for the Agent Architecture Board's AI provisioning facade. Mix into a CompositeModelProvider to add the `workers-ai` provider (in-process binding on the Worker, OpenAI-compatible REST elsewhere).",
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -b tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@cat-factory/agents": "workspace:*",
+    "@cat-factory/kernel": "workspace:*",
+    "ai": "^6.0.208",
+    "workers-ai-provider": "^3.2.0"
+  },
+  "devDependencies": {
+    "typescript": "7.0.1-rc"
+  }
+}

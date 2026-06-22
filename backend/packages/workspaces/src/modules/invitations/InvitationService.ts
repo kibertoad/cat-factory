@@ -49,7 +49,7 @@ function toWire(record: AccountInvitationRecord): AccountInvitation {
     id: record.id,
     accountId: record.accountId,
     email: record.email,
-    role: record.role,
+    roles: record.roles,
     status: record.status,
     invitedBy: record.invitedBy,
     expiresAt: record.expiresAt,
@@ -69,12 +69,12 @@ export interface CreatedInvitation {
 export class InvitationService {
   constructor(private readonly deps: InvitationServiceDependencies) {}
 
-  /** Invite a teammate by email. Owner-only, org accounts only. */
+  /** Invite a teammate by email. Admin-only, org accounts only. */
   async invite(
     accountId: string,
     actingUserId: string,
     email: string,
-    role: AccountRole = 'member',
+    roles: AccountRole[] = ['developer'],
   ): Promise<CreatedInvitation> {
     const account = assertFound(
       await this.deps.accountRepository.get(accountId),
@@ -86,8 +86,8 @@ export class InvitationService {
     }
     const acting = await this.deps.membershipRepository.get(accountId, actingUserId)
     if (!acting) throw new NotFoundError('Account', accountId)
-    if (acting.role !== 'owner') {
-      throw new ConflictError('Only an account owner can invite members')
+    if (!acting.roles.includes('admin')) {
+      throw new ConflictError('Only an account admin can invite members')
     }
 
     const normalizedEmail = email.toLowerCase().trim()
@@ -104,7 +104,7 @@ export class InvitationService {
       id: this.deps.idGenerator.next('inv'),
       accountId,
       email: normalizedEmail,
-      role,
+      roles: roles.length > 0 ? roles : ['developer'],
       tokenHash: await sha256Hex(token),
       invitedBy: actingUserId,
       status: 'pending',
@@ -136,11 +136,11 @@ export class InvitationService {
     return this.deps.invitationRepository.listByAccount(accountId).then((rows) => rows.map(toWire))
   }
 
-  /** Revoke a pending invitation (owner-only). */
+  /** Revoke a pending invitation (admin-only). */
   async revoke(accountId: string, actingUserId: string, invitationId: string): Promise<void> {
     const acting = await this.deps.membershipRepository.get(accountId, actingUserId)
-    if (acting?.role !== 'owner') {
-      throw new ConflictError('Only an account owner can revoke invitations')
+    if (!acting?.roles.includes('admin')) {
+      throw new ConflictError('Only an account admin can revoke invitations')
     }
     const invitation = assertFound(
       await this.deps.invitationRepository.get(invitationId),
@@ -186,7 +186,7 @@ export class InvitationService {
     const membership: Membership = {
       accountId: record.accountId,
       userId,
-      role: record.role,
+      roles: record.roles,
       createdAt: this.deps.clock.now(),
     }
     await this.deps.membershipRepository.upsert(membership)

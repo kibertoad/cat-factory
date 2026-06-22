@@ -18,8 +18,9 @@ const ui = useUiStore()
 const execution = useExecutionStore()
 const board = useBoardStore()
 const models = useModelsStore()
+const workspace = useWorkspaceStore()
 
-onMounted(() => models.ensureLoaded())
+onMounted(() => models.ensureLoaded(workspace.workspaceId ?? undefined))
 
 const ctx = computed(() => ui.stepDetail)
 const instance = computed(() => execution.getInstance(ctx.value?.instanceId))

@@ -10,6 +10,8 @@ import type { AppEnv } from './infrastructure/http/types'
 export interface CreateAppOptions {
   /** Override core dependencies — used by tests (e.g. a fake agent executor). */
   overrides?: Partial<CoreDependencies>
+  /** Force the Cloudflare-AI-enabled flag (conformance forces it off for parity). */
+  cloudflareModelsEnabled?: boolean
 }
 
 /**
@@ -41,7 +43,12 @@ export function createApp(options: CreateAppOptions = {}): Hono<AppEnv> {
     }),
   )
   app.use('*', async (c, next) => {
-    c.set('container', buildContainer(c.env, options.overrides))
+    c.set(
+      'container',
+      buildContainer(c.env, options.overrides, {
+        cloudflareModelsEnabled: options.cloudflareModelsEnabled,
+      }),
+    )
     await next()
   })
 

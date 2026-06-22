@@ -97,7 +97,10 @@ export const memberships = pgTable(
   {
     account_id: text('account_id').notNull(),
     user_id: text('user_id').notNull(),
+    // Orphaned single-role column (pre-roles); kept only so the migration is a pure add.
     role: text('role').notNull().default('member'),
+    // Combinable roles (admin / developer / product) as a CSV; defaults to developer.
+    roles: text('roles').notNull().default('developer'),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
   },
   (t) => [
@@ -125,7 +128,9 @@ export const accountInvitations = pgTable(
     id: text('id').primaryKey(),
     account_id: text('account_id').notNull(),
     email: text('email').notNull(),
+    // Orphaned single-role column (pre-roles); kept only so the migration is a pure add.
     role: text('role').notNull().default('member'),
+    roles: text('roles').notNull().default('developer'),
     token_hash: text('token_hash').notNull(),
     invited_by: text('invited_by').notNull(),
     status: text('status').notNull().default('pending'),
@@ -180,6 +185,8 @@ export const blocks = pgTable(
     // GitHub user id of the block's creator (migration 0038); drives "notify the task
     // creator" routing. Nullable — legacy blocks / auth-disabled dev have no creator.
     created_by: text('created_by'),
+    // The responsible product person (usr_*): notified when requirement review flags it.
+    responsible_product_user_id: text('responsible_product_user_id'),
   },
   (t) => [
     primaryKey({ columns: [t.workspace_id, t.id] }),
@@ -846,6 +853,29 @@ export const providerSubscriptionTokens = pgTable(
     deleted_at: bigint('deleted_at', { mode: 'number' }),
   },
   (t) => [index('idx_provider_subs_pool').on(t.workspace_id, t.vendor, t.deleted_at)],
+)
+
+// Direct-provider API-key pool: UI-onboarded vendor API keys scoped to an
+// account, workspace, or user (mirror of D1 migration 0042). The key is stored as
+// an opaque SecretCipher envelope — never plaintext.
+export const providerApiKeys = pgTable(
+  'provider_api_keys',
+  {
+    id: text('id').primaryKey(),
+    scope: text('scope').notNull(),
+    scope_id: text('scope_id').notNull(),
+    provider: text('provider').notNull(),
+    label: text('label').notNull(),
+    key_cipher: text('key_cipher').notNull(),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+    last_used_at: bigint('last_used_at', { mode: 'number' }),
+    window_started_at: bigint('window_started_at', { mode: 'number' }),
+    input_tokens: bigint('input_tokens', { mode: 'number' }).notNull().default(0),
+    output_tokens: bigint('output_tokens', { mode: 'number' }).notNull().default(0),
+    request_count: integer('request_count').notNull().default(0),
+    deleted_at: bigint('deleted_at', { mode: 'number' }),
+  },
+  (t) => [index('idx_provider_api_keys_pool').on(t.scope, t.scope_id, t.provider, t.deleted_at)],
 )
 
 // Individual-usage subscriptions (Claude): per-USER, never pooled (mirror of D1

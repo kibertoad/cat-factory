@@ -201,6 +201,7 @@ export class FragmentLibraryService implements FragmentResolver {
     let picked: string[] = []
     try {
       picked = await this.selector.select(catalog.map(toSelectable), {
+        workspaceId: input.workspaceId,
         agentKind: input.agentKind,
         blockType: input.blockType,
         blockTitle: input.blockTitle,

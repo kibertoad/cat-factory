@@ -8,7 +8,7 @@ import type {
 import { assertFound, inlineModelRef, ValidationError } from '@cat-factory/kernel'
 import type { BlockRepository } from '@cat-factory/kernel'
 import type { Clock, IdGenerator } from '@cat-factory/kernel'
-import type { ModelProvider, ModelRef } from '@cat-factory/kernel'
+import type { ModelProvider, ModelProviderResolver, ModelRef } from '@cat-factory/kernel'
 import type { DocumentRepository } from '@cat-factory/kernel'
 import type { TaskRepository } from '@cat-factory/kernel'
 import type { RequirementReviewRepository } from '@cat-factory/kernel'
@@ -34,7 +34,12 @@ export interface RequirementReviewServiceDependencies {
   blockRepository: BlockRepository
   idGenerator: IdGenerator
   clock: Clock
-  /** Resolves the reviewer model; absent when no provider is configured. */
+  /**
+   * Resolve a {@link ModelProvider} for a workspace's credential scope (DB-backed key
+   * pool). Preferred over the static `modelProvider`; the facade supplies it.
+   */
+  modelProviderResolver?: ModelProviderResolver
+  /** Static reviewer model provider (e.g. a fake in tests). Used when no resolver is set. */
   modelProvider?: ModelProvider
   /**
    * Default model ref when the block pins none — the agents' routing default,
@@ -103,7 +108,15 @@ export class RequirementReviewService {
 
   /** Whether the LLM-backed review path is available. */
   get enabled(): boolean {
-    return !!this.deps.modelProvider && !!this.deps.modelRef
+    return (!!this.deps.modelProviderResolver || !!this.deps.modelProvider) && !!this.deps.modelRef
+  }
+
+  /** The model provider for a workspace's scope (per-scope DB pool, else the static one). */
+  private async providerFor(workspaceId: string): Promise<ModelProvider | undefined> {
+    if (this.deps.modelProviderResolver) {
+      return this.deps.modelProviderResolver.forScope({ workspaceId })
+    }
+    return this.deps.modelProvider
   }
 
   /**
@@ -149,7 +162,7 @@ export class RequirementReviewService {
       'Block',
       blockId,
     )
-    const { modelProvider } = this.deps
+    const modelProvider = await this.providerFor(workspaceId)
     const ref = await this.modelFor(workspaceId, block)
     if (!modelProvider || !ref) {
       throw new ValidationError('No model is configured for the requirements reviewer')
@@ -221,7 +234,14 @@ export class RequirementReviewService {
         body: `The reviewer raised ${findingCount} finding${
           findingCount === 1 ? '' : 's'
         } to react to.`,
-        payload: { findingCount },
+        // Direct it at the task's responsible product person when one is assigned, so
+        // the inbox can highlight it for them (it stays visible to the whole workspace).
+        payload: {
+          findingCount,
+          ...(block.responsibleProductUserId
+            ? { targetUserId: block.responsibleProductUserId }
+            : {}),
+        },
       })
     } catch {
       // Best-effort: the review is already persisted and returned to the caller.
@@ -284,7 +304,7 @@ export class RequirementReviewService {
         `Resolve or dismiss all ${unsettled.length} remaining item(s) before reworking`,
       )
     }
-    const { modelProvider } = this.deps
+    const modelProvider = await this.providerFor(workspaceId)
     const ref = await this.modelFor(workspaceId, block)
     if (!modelProvider || !ref) {
       throw new ValidationError('No model is configured for the requirements reviewer')

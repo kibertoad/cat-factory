@@ -6,7 +6,7 @@ import {
   type ExecutionEventPublisher,
   type FragmentOwnerKind,
   type IdGenerator,
-  type ModelProvider,
+  type ModelProviderResolver,
   type NotificationChannel,
   NoopWorkRunner,
   type TaskSourceProvider,
@@ -14,16 +14,17 @@ import {
 } from '@cat-factory/kernel'
 import {
   AiAgentExecutor,
-  InstrumentedModelProvider,
   inlineWebSearchOptionsFromEnv,
   resolveAgentConfig,
 } from '@cat-factory/agents'
+import { cloudflareBindingRegistry } from '@cat-factory/provider-cloudflare'
 import {
   ConfluenceProvider,
   GitHubDocsProvider,
   HttpEnvironmentProvider,
   NotionProvider,
   EMAIL_CIPHER_INFO,
+  ApiKeyService,
   PersonalSubscriptionService,
   ProviderSubscriptionService,
   RunnerPoolConnectionService,
@@ -40,13 +41,15 @@ import {
   WebCryptoPersonalSecretCipher,
   createWebSearchUpstreamFromEnv,
   logger,
+  createScopedModelProviderResolver,
+  resolveWorkspaceCapabilities,
   type ServerContainer,
 } from '@cat-factory/server'
 import { type AppConfig, loadConfig } from './config'
 import { loadLangfuseConfig } from './config/langfuse'
 import { loadObservabilityConfig } from './config/observability'
 import type { Env } from './env'
-import { CloudflareModelProvider } from './ai/CloudflareModelProvider'
+import { baseUrlFor } from './ai/providerEndpoints'
 import { resolveExtraRegistries } from './ai/registries'
 import { DoRealtimeGateway } from './gateways/DoRealtimeGateway'
 import { CfGitHubWebhookIngest, WorkflowsBackfillScheduler } from './gateways/GitHubGateways'
@@ -63,6 +66,7 @@ import { HttpRunnerPoolProvider } from './runners/HttpRunnerPoolProvider'
 import { RunnerPoolTransport } from './runners/RunnerPoolTransport'
 import { D1RunnerPoolConnectionRepository } from './repositories/D1RunnerPoolConnectionRepository'
 import { D1ProviderSubscriptionTokenRepository } from './repositories/D1ProviderSubscriptionTokenRepository'
+import { D1ProviderApiKeyRepository } from './repositories/D1ProviderApiKeyRepository'
 import {
   D1PersonalSubscriptionRepository,
   D1SubscriptionActivationRepository,
@@ -153,34 +157,43 @@ export type Container = ServerContainer
  * configured the provider is wrapped so those INLINE (non-proxied) calls surface on
  * the same trace sink the LLM proxy fans container calls out to.
  */
-// Memoised per `Env`: every consumer (agent executor, requirements reviewer, doc
-// planner, fragment selector) shares ONE provider — and so ONE Langfuse sink — for a
-// container build, instead of each constructing its own. The `Env` object is stable
-// across a build, so a WeakMap keyed on it both dedupes and lets it be GC'd with the env.
-const modelProviderCache = new WeakMap<Env, ModelProvider>()
+// Memoised per `(Env, db)`: every inline consumer (agent executor, requirements
+// reviewer, doc planner, fragment selector) shares ONE resolver — and so ONE Langfuse
+// sink — for a container build. The resolver builds a per-scope provider from the
+// DB-backed API-key pool plus the opt-in Cloudflare binding + Bedrock registries.
+const modelResolverCache = new WeakMap<Env, ModelProviderResolver>()
 
-function buildModelProvider(env: Env): ModelProvider {
-  const cached = modelProviderCache.get(env)
+function buildModelProviderResolver(env: Env, db: D1Database): ModelProviderResolver {
+  const cached = modelResolverCache.get(env)
   if (cached) return cached
-  const provider = createModelProvider(env)
-  modelProviderCache.set(env, provider)
-  return provider
-}
-
-function createModelProvider(env: Env): ModelProvider {
-  const base = new CloudflareModelProvider({ env, extraRegistries: resolveExtraRegistries(env) })
+  // Opt-in provider registries that need no per-scope DB key: the Cloudflare Workers
+  // AI binding (when bound) and any extra registries (e.g. Bedrock). NOT assumed —
+  // `workers-ai` resolves only when the `AI` binding is present.
+  const extraRegistries = [
+    ...(env.AI ? [cloudflareBindingRegistry({ binding: env.AI })] : []),
+    ...resolveExtraRegistries(env),
+  ]
   const langfuse = loadLangfuseConfig(env)
-  if (!langfuse.enabled || !langfuse.publicKey || !langfuse.secretKey) return base
-  return new InstrumentedModelProvider({
-    inner: base,
-    traceSink: createLangfuseSink({
-      publicKey: langfuse.publicKey,
-      secretKey: langfuse.secretKey,
-      baseUrl: langfuse.baseUrl,
-      logger,
-    }),
-    recordPrompts: loadObservabilityConfig(env).recordPrompts,
+  const instrument =
+    langfuse.enabled && langfuse.publicKey && langfuse.secretKey
+      ? {
+          traceSink: createLangfuseSink({
+            publicKey: langfuse.publicKey,
+            secretKey: langfuse.secretKey,
+            baseUrl: langfuse.baseUrl,
+            logger,
+          }),
+          recordPrompts: loadObservabilityConfig(env).recordPrompts,
+        }
+      : undefined
+  const resolver = createScopedModelProviderResolver({
+    apiKeys: buildApiKeyService(env, db, { now: () => Date.now() }),
+    baseUrlFor: (provider) => baseUrlFor(provider, env) ?? undefined,
+    extraRegistries,
+    instrument,
   })
+  modelResolverCache.set(env, resolver)
+  return resolver
 }
 
 /**
@@ -220,7 +233,7 @@ function selectAgentExecutor(
   personalSubscriptions?: PersonalSubscriptionService,
 ): AgentExecutor {
   const inline = new AiAgentExecutor({
-    modelProvider: buildModelProvider(env),
+    modelProviderResolver: buildModelProviderResolver(env, db),
     agentRouting: config.agents.routing,
     resolveBlockModel: config.agents.resolveBlockModel,
     // Inline (non-sandbox) kinds honour the workspace's per-kind defaults too, so
@@ -644,6 +657,27 @@ function buildSubscriptionService(
 }
 
 /**
+ * Build the direct-provider API-key pool service (account/workspace/user-scoped),
+ * or undefined when no ENCRYPTION_KEY is configured. Keys are sealed under an
+ * api-keys-scoped HKDF info of the shared master key. Shared by the API-key
+ * controller, the model-provider resolver, and the LLM proxy's key lease.
+ */
+function buildApiKeyService(env: Env, db: D1Database, clock: Clock): ApiKeyService | undefined {
+  const masterKeyBase64 = env.ENCRYPTION_KEY?.trim()
+  if (!masterKeyBase64) return undefined
+  return new ApiKeyService({
+    providerApiKeyRepository: new D1ProviderApiKeyRepository({ db }),
+    workspaceRepository: new D1WorkspaceRepository({ db }),
+    secretCipher: new WebCryptoSecretCipher({
+      masterKeyBase64,
+      info: 'cat-factory:provider-api-keys',
+    }),
+    idGenerator: new CryptoIdGenerator(),
+    clock,
+  })
+}
+
+/**
  * Build the per-USER individual-usage subscription service (Claude), or undefined when
  * no ENCRYPTION_KEY is configured. Uses the system SecretCipher (master key, scoped
  * info) for the outer layer and the password-derived PersonalSecretCipher for the inner
@@ -701,6 +735,8 @@ function buildContainerExecutor(
     // (block-pinned > workspace per-kind default > env routing > env default).
     resolveWorkspaceModelDefault: buildResolveWorkspaceModelDefault(db),
     resolveRepoTarget,
+    // Resolve the workspace's owning account so the proxy can lease account-scoped keys.
+    resolveAccountId: (workspaceId) => new D1WorkspaceRepository({ db }).accountOf(workspaceId),
     mintInstallationToken: (id) => registry.installationToken(id),
     sessionService: new ContainerSessionService({ secret: env.AUTH_SESSION_SECRET }),
     // The subscription harnesses (Claude Code / Codex) lease a pooled token and
@@ -874,7 +910,7 @@ function selectDocumentsDeps(
     documentRepository: new D1DocumentRepository({ db }),
     ...(config.documents.planner === 'llm'
       ? {
-          modelProvider: buildModelProvider(env),
+          modelProviderResolver: buildModelProviderResolver(env, db),
           documentPlannerModel: config.agents.routing.default.ref,
         }
       : {}),
@@ -945,7 +981,7 @@ function selectRequirementsDeps(
 ): Partial<CoreDependencies> {
   return {
     requirementReviewRepository: new D1RequirementReviewRepository({ db }),
-    modelProvider: buildModelProvider(env),
+    modelProviderResolver: buildModelProviderResolver(env, db),
     // The routing default already resolves to Cloudflare Workers AI unless a
     // direct provider key is set, so the reviewer runs on Cloudflare by default.
     requirementReviewModel: config.agents.routing.default.ref,
@@ -1118,7 +1154,7 @@ function selectFragmentLibraryDeps(
     ...(config.fragmentLibrary.selector === 'llm'
       ? {
           fragmentSelector: new LlmFragmentSelector({
-            modelProvider: buildModelProvider(env),
+            modelProviderResolver: buildModelProviderResolver(env, db),
             modelRef: config.agents.routing.default.ref,
           }),
         }
@@ -1126,7 +1162,11 @@ function selectFragmentLibraryDeps(
   }
 }
 
-export function buildContainer(env: Env, overrides: Partial<CoreDependencies> = {}): Container {
+export function buildContainer(
+  env: Env,
+  overrides: Partial<CoreDependencies> = {},
+  opts: { cloudflareModelsEnabled?: boolean } = {},
+): Container {
   const config = loadConfig(env)
   const db = env.DB
   const clock = new SystemClock()
@@ -1146,6 +1186,15 @@ export function buildContainer(env: Env, overrides: Partial<CoreDependencies> = 
   // The per-user individual-usage subscription store (Claude) — shared by the
   // personal-subscription controller and the container executor's personal lease.
   const personalSubscriptions = buildPersonalSubscriptionService(env, db, clock)
+
+  // The direct-provider API-key pool (account/workspace/user) — shared by the
+  // API-key controller, the model-provider resolver, and the LLM proxy key lease.
+  const apiKeys = buildApiKeyService(env, db, clock)
+
+  // Cloudflare Workers AI is opt-in: enabled when the `AI` binding is present. A caller
+  // (the cross-runtime conformance suite) may force it off to assert key-driven
+  // selectability + the provider guard uniformly across runtimes.
+  const cloudflareModelsEnabled = opts.cloudflareModelsEnabled ?? !!env.AI
 
   const dependencies: CoreDependencies = {
     workspaceRepository: new D1WorkspaceRepository({ db }),
@@ -1209,6 +1258,13 @@ export function buildContainer(env: Env, overrides: Partial<CoreDependencies> = 
     ...selectEnvironmentsDeps(env, config, db),
     ...selectRunnersDeps(env, config, db),
     ...selectFragmentLibraryDeps(env, config, db),
+    // The pipeline-start guard resolves what's configured for a workspace + initiator.
+    resolveProviderCapabilities: (workspaceId, initiatedBy) =>
+      resolveWorkspaceCapabilities(
+        { apiKeys, subscriptions, personalSubscriptions, cloudflareModelsEnabled },
+        workspaceId,
+        initiatedBy,
+      ),
     ...overrides,
   }
 
@@ -1222,6 +1278,11 @@ export function buildContainer(env: Env, overrides: Partial<CoreDependencies> = 
     // The per-user individual-usage subscription store (Claude); present when the
     // shared ENCRYPTION_KEY is configured.
     personalSubscriptions,
+    // The direct-provider API-key pool (account/workspace/user); present when the
+    // shared ENCRYPTION_KEY is configured.
+    apiKeys,
+    // Whether the opt-in Cloudflare Workers AI lib is enabled (the `AI` binding).
+    cloudflareModelsEnabled,
     gateways: {
       // Real-time event delivery via the per-workspace WorkspaceEventsHub DO (when
       // the WORKSPACE_EVENTS namespace is bound; absent → the events route 501s).

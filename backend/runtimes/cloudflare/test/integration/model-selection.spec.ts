@@ -1,14 +1,35 @@
-import type { AgentExecutor, AgentRunContext, AgentRunResult, Block } from '@cat-factory/kernel'
-import { effectiveCatalog, MODEL_CATALOG, resolveModelRef } from '@cat-factory/kernel'
+import type {
+  AgentExecutor,
+  AgentRunContext,
+  AgentRunResult,
+  Block,
+  ProviderCapabilities,
+} from '@cat-factory/kernel'
+import {
+  ALL_SUBSCRIPTION_VENDORS,
+  effectiveCatalog,
+  MODEL_CATALOG,
+  resolveModelRef,
+} from '@cat-factory/kernel'
 import type { ModelOption } from '@cat-factory/contracts'
 import { modelCatalogSchema } from '@cat-factory/contracts'
 import * as v from 'valibot'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { makeApp, type TestApp } from '../helpers'
 
-// Direct-flavour key availability fakes for the resolver.
-const noKeys = () => false
-const allKeys = () => true
+// Capability fakes for the resolver. Cloudflare is enabled and every subscription
+// vendor connected throughout (the deployment-level baseline); only the set of
+// configured DIRECT provider keys varies, which is what drives the direct switch.
+const caps = (over: Partial<ProviderCapabilities> = {}): ProviderCapabilities => ({
+  directProviders: new Set<string>(),
+  subscriptionVendors: new Set(ALL_SUBSCRIPTION_VENDORS),
+  cloudflareEnabled: true,
+  ...over,
+})
+const noKeys = caps()
+const allKeys = caps({
+  directProviders: new Set(MODEL_CATALOG.flatMap((m) => (m.direct ? [m.direct.ref.provider] : []))),
+})
 
 // Derive expectations from the catalog itself rather than hardcoding its members, so
 // these stay green as models are added/removed/renamed — they assert the resolution
@@ -52,11 +73,13 @@ describe('per-block model selection', () => {
       // model — including other direct-capable ones — stays on Cloudflare.
       const target = directModels[0]
       expect(target).toBeDefined()
-      const onlyTarget = (keyEnv: string) => keyEnv === target!.direct!.keyEnv
+      const onlyTarget = caps({ directProviders: new Set([target!.direct!.ref.provider]) })
 
       expect(resolveModelRef(target!.id, onlyTarget)).toEqual(target!.direct!.ref)
 
-      const otherDirect = directModels.find((m) => m.direct!.keyEnv !== target!.direct!.keyEnv)
+      const otherDirect = directModels.find(
+        (m) => m.direct!.ref.provider !== target!.direct!.ref.provider,
+      )
       if (otherDirect) {
         expect(resolveModelRef(otherDirect.id, onlyTarget)?.provider).toBe('workers-ai')
       }

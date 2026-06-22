@@ -1,5 +1,5 @@
 import type { AgentKind } from '@cat-factory/contracts'
-import { resolveModelRef } from '@cat-factory/kernel'
+import { type ProviderCapabilities, resolveModelRef } from '@cat-factory/kernel'
 import type { AgentModelConfig } from '@cat-factory/agents'
 import type { AgentsConfig } from '@cat-factory/server'
 import type { Env } from '../env'
@@ -39,14 +39,12 @@ function parseModelOverrides(
   return out
 }
 
-export function loadAgentsConfig(
-  env: Env,
-  isDirectAvailable: (keyEnv: string) => boolean,
-): AgentsConfig {
-  // Default unpinned agents/blocks to the Qwen model (its active flavour: direct
-  // DashScope when QWEN_API_KEY is set, else the Cloudflare Workers AI variant).
+export function loadAgentsConfig(env: Env, caps: ProviderCapabilities): AgentsConfig {
+  // Default unpinned agents/blocks to the Qwen model (its active flavour: the
+  // Cloudflare Workers AI variant when the Cloudflare lib is enabled, upgraded to
+  // direct DashScope per-workspace by the executor when a Qwen key is configured).
   // An operator can still pin a specific provider/model via the env vars.
-  const qwenDefault = resolveModelRef('qwen', isDirectAvailable)
+  const qwenDefault = resolveModelRef('qwen', caps)
   const defaultConfig: AgentModelConfig = {
     ref: {
       provider: env.AGENT_DEFAULT_PROVIDER ?? qwenDefault?.provider ?? 'workers-ai',
@@ -96,6 +94,6 @@ export function loadAgentsConfig(
       default: defaultConfig,
       byKind,
     },
-    resolveBlockModel: (modelId) => resolveModelRef(modelId, isDirectAvailable),
+    resolveBlockModel: (modelId) => resolveModelRef(modelId, caps),
   }
 }
