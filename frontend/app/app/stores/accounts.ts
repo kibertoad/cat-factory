@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
-import type { Account } from '~/types/domain'
+import type { Account, CloudProvider } from '~/types/domain'
 
 /**
  * Account tenancy on the client: the accounts the signed-in user can switch
@@ -49,6 +49,17 @@ export const useAccountsStore = defineStore(
       activeAccountId.value = id
     }
 
+    /**
+     * Set an account's default cloud provider (the provider new services inherit).
+     * Owner-only on the backend; patches the loaded account in place on success.
+     */
+    async function setDefaultCloudProvider(id: string, provider: CloudProvider) {
+      const updated = await api.updateAccount(id, { defaultCloudProvider: provider })
+      const i = accounts.value.findIndex((a) => a.id === id)
+      if (i >= 0) accounts.value[i] = updated
+      return updated
+    }
+
     return {
       accounts,
       activeAccountId,
@@ -58,6 +69,7 @@ export const useAccountsStore = defineStore(
       load,
       createOrg,
       switchTo,
+      setDefaultCloudProvider,
     }
   },
   { persist: { pick: ['activeAccountId'] } },

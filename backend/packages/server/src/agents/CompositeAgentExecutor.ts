@@ -71,6 +71,15 @@ const CONTAINER_KINDS = new Set([
   // It is read-only (makes no edits) so the coding-agent harness produces no commit
   // and opens no PR — but it still needs a real checkout, so it runs in a container.
   'analysis',
+  // The tester clones the PR branch, stands up infra (local docker-compose or an
+  // ephemeral env), runs the suite and returns a structured report — a real-checkout
+  // operation. (The `tester` step is also a special engine gate that loops a `fixer`
+  // on a withheld greenlight, mirroring `ci`/`ci-fixer`; the engine dispatches both
+  // jobs, which reach this executor.)
+  'tester',
+  // The fixer clones the PR head branch, applies fixes from the Tester's report and
+  // pushes back to the same branch — a real-checkout operation, like `ci-fixer`.
+  'fixer',
 ])
 
 export class CompositeAgentExecutor implements AsyncAgentExecutor {

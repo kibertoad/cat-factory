@@ -47,6 +47,7 @@ const MENTION_AUDIENCE: Record<NotificationType, MentionAudience> = {
   merge_review: { roles: [], includeCreator: true },
   pipeline_complete: { roles: [], includeCreator: true },
   ci_failed: { roles: [], includeCreator: true },
+  test_failed: { roles: [], includeCreator: true },
   requirement_review: { roles: ['product'], includeCreator: true },
 }
 
@@ -123,6 +124,7 @@ const TYPE_LABEL: Record<NotificationType, string> = {
   merge_review: ':eyes: Merge review',
   pipeline_complete: ':white_check_mark: Pipeline complete',
   ci_failed: ':rotating_light: CI failed',
+  test_failed: ':rotating_light: Tests failed',
   requirement_review: ':memo: Requirement review',
 }
 

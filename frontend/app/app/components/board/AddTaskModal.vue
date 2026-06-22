@@ -17,6 +17,7 @@ const documents = useDocumentsStore()
 const tasks = useTasksStore()
 const mergePresets = useMergePresetsStore()
 const pipelines = usePipelinesStore()
+const agentConfig = useAgentConfigStore()
 const toast = useToast()
 
 const { linkPending } = useContextLinking()
@@ -84,6 +85,18 @@ const selectedPipelineLabel = computed(
   () => pipelines.getPipeline(pipelineId.value)?.name ?? 'Choose at run time',
 )
 
+// Task-level agent config contributed by the selected pipeline's agents (e.g. the
+// Tester's environment). Editable up front; persisted on the task and frozen once
+// the contributing agent runs. Defaults to each descriptor's default until changed.
+const agentConfigValues = ref<Record<string, string>>({})
+const configDescriptors = computed(() => agentConfig.forPipeline(pipelineId.value))
+function configValue(id: string, fallback: string): string {
+  return agentConfigValues.value[id] ?? fallback
+}
+function setConfig(id: string, value: string) {
+  agentConfigValues.value = { ...agentConfigValues.value, [id]: value }
+}
+
 // Context the user chose to attach to the new task (search hits, pasted URLs,
 // already-imported items), collected by <ContextPicker> and committed on add.
 const pendingContext = ref<PendingContext[]>([])
@@ -101,6 +114,7 @@ watch(open, (isOpen) => {
   saving.value = false
   mergePresetId.value = ''
   pipelineId.value = ''
+  agentConfigValues.value = {}
   pendingContext.value = []
   documents.loadDocuments().catch(() => {})
   tasks.loadTasks().catch(() => {})
@@ -120,6 +134,9 @@ async function add() {
       {
         ...(mergePresetId.value ? { mergePresetId: mergePresetId.value } : {}),
         ...(pipelineId.value ? { pipelineId: pipelineId.value } : {}),
+        ...(Object.keys(agentConfigValues.value).length
+          ? { agentConfig: agentConfigValues.value }
+          : {}),
       },
     )
     if (block) {
@@ -204,6 +221,28 @@ async function add() {
               </UButton>
             </UDropdownMenu>
           </UFormField>
+        </div>
+
+        <div v-if="configDescriptors.length" class="space-y-3">
+          <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+            Agent configuration
+          </span>
+          <div v-for="d in configDescriptors" :key="d.id" class="space-y-1">
+            <div class="text-[11px] text-slate-400">{{ d.label }}</div>
+            <div class="flex flex-wrap gap-1">
+              <UButton
+                v-for="opt in d.options"
+                :key="opt.value"
+                :color="configValue(d.id, d.default) === opt.value ? 'primary' : 'neutral'"
+                :variant="configValue(d.id, d.default) === opt.value ? 'soft' : 'ghost'"
+                size="xs"
+                @click="setConfig(d.id, opt.value)"
+              >
+                {{ opt.label }}
+              </UButton>
+            </div>
+            <p class="text-[11px] leading-snug text-slate-500">{{ d.description }}</p>
+          </div>
         </div>
 
         <div v-if="showContext" class="space-y-2">

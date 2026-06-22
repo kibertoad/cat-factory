@@ -1,4 +1,9 @@
-import type { Account, AccountMember, CreateAccountInput } from '@cat-factory/kernel'
+import type {
+  Account,
+  AccountMember,
+  CreateAccountInput,
+  UpdateAccountInput,
+} from '@cat-factory/kernel'
 import type {
   AccountRecord,
   AccountRepository,
@@ -38,6 +43,7 @@ function toWire(account: AccountRecord, role: Account['role']): Account {
     githubAccountLogin: account.githubAccountLogin,
     createdAt: account.createdAt,
     role,
+    ...(account.defaultCloudProvider ? { defaultCloudProvider: account.defaultCloudProvider } : {}),
   }
 }
 
@@ -130,6 +136,34 @@ export class AccountService {
   async members(accountId: string): Promise<AccountMember[]> {
     const list = await this.deps.membershipRepository.listByAccount(accountId)
     return list.map(toMember)
+  }
+
+  /**
+   * Update an account's settings (today: the default cloud provider new services
+   * inherit). Owner-only. Returns the updated wire account so the caller can patch
+   * its switcher in place.
+   */
+  async updateSettings(
+    accountId: string,
+    actingUserId: number,
+    input: UpdateAccountInput,
+  ): Promise<Account> {
+    const acting = await this.requireMember(accountId, actingUserId)
+    if (acting.role !== 'owner') {
+      throw new ConflictError('Only an account owner can change account settings')
+    }
+    // An explicit key (even `undefined`) means "clear"; an absent key leaves it.
+    if ('defaultCloudProvider' in input) {
+      await this.deps.accountRepository.updateSettings(accountId, {
+        defaultCloudProvider: input.defaultCloudProvider ?? null,
+      })
+    }
+    const account = assertFound(
+      await this.deps.accountRepository.get(accountId),
+      'Account',
+      accountId,
+    )
+    return toWire(account, acting.role)
   }
 
   /**

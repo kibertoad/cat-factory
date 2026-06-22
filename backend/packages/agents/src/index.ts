@@ -27,8 +27,23 @@ export {
   registeredAgentKind,
   registeredAgentKinds,
   registeredKindRequiresContainer,
+  registeredConfigContributions,
   clearRegisteredAgentKinds,
 } from './agents/registry.js'
+// Agent configuration-contribution catalog (the descriptors surfaced on task
+// creation / inspector, frozen once the contributing step runs).
+export {
+  TESTER_ENVIRONMENT_CONFIG_ID,
+  PLAYWRIGHT_E2E_TARGET_CONFIG_ID,
+  configContributionsFor,
+  configContributionCatalog,
+} from './agents/agent-configs.js'
+// Tester / Fixer track prompts + helpers.
+export {
+  isTestingKind,
+  testingSystemPrompt,
+  testerEnvironmentSection,
+} from './agents/test-prompts.js'
 export {
   type VersionedPrompt,
   type PromptId,

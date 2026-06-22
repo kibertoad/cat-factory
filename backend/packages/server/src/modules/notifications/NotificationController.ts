@@ -16,7 +16,8 @@ const unavailable = (c: Context<AppEnv>) =>
 /**
  * Human-actionable notifications. `act` performs the notification's typed
  * side-effect (merge the PR for a `merge_review` / `pipeline_complete`, retry the
- * run for a `ci_failed`) and then resolves it; `dismiss` just resolves it. The
+ * run for a `ci_failed` / `test_failed`) and then resolves it; `dismiss` just
+ * resolves it. The
  * board patches its store from the `notification` WorkspaceEvent the service emits
  * on resolve, but the responses also carry the updated notification.
  * Mounted under `/workspaces/:workspaceId`.
@@ -51,7 +52,8 @@ export function notificationController(): Hono<AppEnv> {
         }
         break
       case 'ci_failed':
-        // Re-run the failed pipeline once CI is presumably fixed.
+      case 'test_failed':
+        // Re-run the failed pipeline once CI / the tests are presumably fixed.
         if (notification.executionId) {
           await container.executionService.retry(workspaceId, notification.executionId)
         }

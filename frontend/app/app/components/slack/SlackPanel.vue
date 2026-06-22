@@ -21,6 +21,7 @@ const ROUTABLE: { type: NotificationType; label: string }[] = [
   { type: 'merge_review', label: 'Merge review' },
   { type: 'pipeline_complete', label: 'Pipeline complete' },
   { type: 'ci_failed', label: 'CI failed' },
+  { type: 'test_failed', label: 'Tests failed' },
   { type: 'requirement_review', label: 'Requirement review' },
 ]
 
@@ -32,6 +33,7 @@ const routes = reactive<Record<NotificationType, SlackRoute>>({
   merge_review: { enabled: false, channel: '' },
   pipeline_complete: { enabled: false, channel: '' },
   ci_failed: { enabled: false, channel: '' },
+  test_failed: { enabled: false, channel: '' },
   requirement_review: { enabled: false, channel: '' },
 })
 const mentionsEnabled = ref(false)

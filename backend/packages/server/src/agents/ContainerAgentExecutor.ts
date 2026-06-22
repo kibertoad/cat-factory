@@ -7,10 +7,12 @@ import {
   type HarnessKind,
   type ModelRef,
   type RunnerDispatchKind,
+  type RunnerDispatchOptions,
   type RunnerJobResult,
   type SubscriptionVendor,
 } from '@cat-factory/kernel'
 import { SUBSCRIPTION_VENDORS, subscriptionOptionFor } from '@cat-factory/kernel'
+import { resolveInstanceTypeId } from '@cat-factory/contracts'
 import {
   type AgentRouting,
   composeBlockSystemPrompt,
@@ -23,8 +25,10 @@ import {
 import {
   CI_FIXER_AGENT_KIND,
   CONFLICT_RESOLVER_AGENT_KIND,
+  FIXER_AGENT_KIND,
   MERGER_AGENT_KIND,
   SPEC_WRITER_AGENT_KIND,
+  TESTER_AGENT_KIND,
 } from '@cat-factory/orchestration'
 import type { ContainerSessionService } from '../containers/ContainerSessionService.js'
 import { RunnerJobClient, type ResolveRunnerTransport } from './RunnerJobClient.js'
@@ -226,7 +230,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
   async startJob(context: AgentRunContext): Promise<AgentJobHandle> {
     const { workspaceId, executionId } = this.requireIds(context)
     const { body, model, kind, subscriptionTokenId } = await this.buildJobBody(context)
-    await this.jobs.dispatch(workspaceId, executionId, body, kind)
+    await this.jobs.dispatch(workspaceId, executionId, body, kind, this.dispatchOptions(context))
     // Carry the workspace on the handle so the poll site can resolve the same
     // backend (Cloudflare container vs. self-hosted pool) given only the job id;
     // carry the leased subscription token id so a finished subscription job can
@@ -396,6 +400,26 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     if (!context.workspaceId) return false
     const { ref } = await this.resolveEffectiveRef(context, context.workspaceId)
     return ref.harness === 'claude-code' || ref.harness === 'codex'
+  }
+
+  /**
+   * Per-service provisioning hints for the dispatch: the cloud provider the service
+   * runs on and the abstract instance size resolved to the target's concrete
+   * instance-type id. Cloudflare maps the id to a Container instance type; a
+   * self-hosted pool forwards it (with the provider) and provisions itself. Undefined
+   * when the service pins no provider/size (the transport keeps its default).
+   */
+  private dispatchOptions(context: AgentRunContext): RunnerDispatchOptions | undefined {
+    const provider = context.service?.cloudProvider
+    const size = context.service?.instanceSize
+    if (!provider && !size) return undefined
+    return {
+      instanceTypeId: resolveInstanceTypeId(provider, size),
+      ...(provider ? { provider } : {}),
+      // Forward the abstract size too, so the local Docker/Podman backend can size
+      // the per-job container (`--memory`/`--cpus`) without decoding the cloud id.
+      ...(size ? { instanceSize: size } : {}),
+    }
   }
 
   /** Validate the ids every container job needs, narrowing them to non-empty strings. */
@@ -626,6 +650,70 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       return { subscriptionTokenId, body, model: `${ref.provider}:${ref.model}`, kind: 'merge' }
     }
 
+    // The tester clones the PR head branch, stands up its dependencies (locally via
+    // the service's docker-compose, or against the provisioned ephemeral env — the
+    // task's `tester.environment` config picks which), runs the suite and returns a
+    // structured report. It makes NO commits (the engine loops the `fixer` on a
+    // withheld greenlight). Targets the harness `/test` endpoint; mapped to `testReport`.
+    if (context.agentKind === TESTER_AGENT_KIND) {
+      const branch = context.block.pullRequest?.branch ?? repo.baseBranch
+      const env =
+        context.block.agentConfig?.['tester.environment'] === 'local' ? 'local' : 'ephemeral'
+      const service = context.service
+      const body = {
+        jobId: executionId,
+        systemPrompt: composeBlockSystemPrompt(systemPromptFor(context.agentKind), context.block),
+        userPrompt: userPromptFor(context),
+        model: ref.model,
+        ...auth,
+        ghToken,
+        repo: buildRepoSpec(repo),
+        branch,
+        // How the Tester stands up its dependencies for this run.
+        test: {
+          environment: env,
+          ...(env === 'local'
+            ? {
+                noInfraDependencies: service?.noInfraDependencies === true,
+                ...(service?.testComposePath ? { composePath: service.testComposePath } : {}),
+              }
+            : {}),
+          ...(env === 'ephemeral' && context.environment?.url
+            ? { environmentUrl: context.environment.url }
+            : {}),
+        },
+        webToolsGuidance: webResearchGuidanceFor(context.agentKind, { fetch: true }),
+        ...(this.deps.webSearchProxyEnabled ? { webSearch: true } : {}),
+        ...(this.deps.githubApiBase ? { githubApiBase: this.deps.githubApiBase } : {}),
+      }
+      return { subscriptionTokenId, body, model: `${ref.provider}:${ref.model}`, kind: 'test' }
+    }
+
+    // The fixer clones the PR head branch, applies fixes for the concerns in the
+    // Tester's report (folded into the user prompt via the prior `tester` output) and
+    // pushes back to the SAME branch (no new branch / PR) so the Tester can re-run.
+    // Mirrors the CI-fixer's body; targets the harness `/fix-tests` endpoint.
+    if (context.agentKind === FIXER_AGENT_KIND) {
+      const branch = context.block.pullRequest?.branch
+      if (!branch) {
+        throw new Error('Fixer needs the implementation PR branch to push fixes to')
+      }
+      const body = {
+        jobId: executionId,
+        systemPrompt: composeBlockSystemPrompt(systemPromptFor(context.agentKind), context.block),
+        userPrompt: userPromptFor(context),
+        model: ref.model,
+        ...auth,
+        ghToken,
+        repo: buildRepoSpec(repo),
+        branch,
+        webToolsGuidance: webResearchGuidanceFor(context.agentKind, { fetch: true }),
+        ...(this.deps.webSearchProxyEnabled ? { webSearch: true } : {}),
+        ...(this.deps.githubApiBase ? { githubApiBase: this.deps.githubApiBase } : {}),
+      }
+      return { subscriptionTokenId, body, model: `${ref.provider}:${ref.model}`, kind: 'fix-tests' }
+    }
+
     // Read-only agents (architect, analysis) explore a real checkout but never edit
     // it: they clone a branch, produce a prose report/proposal and return it as
     // `output`. They target the harness `/explore` endpoint — which opens no branch,
@@ -718,6 +806,14 @@ function toRunResult(result: RunnerJobResult): AgentRunResult {
     return {
       output: result.summary?.trim() || 'Pull request assessed.',
       mergeAssessment: result.assessment,
+    }
+  }
+  // A `tester` job carries a structured test report instead of a PR; surface it so
+  // the engine can greenlight-or-loop the fixer.
+  if (result.report !== undefined) {
+    return {
+      output: result.summary?.trim() || 'Testing complete.',
+      testReport: result.report,
     }
   }
   // A `ci-fixer` job reports whether it pushed a fix. The engine's CI gate ignores

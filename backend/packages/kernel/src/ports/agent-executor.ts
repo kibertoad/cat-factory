@@ -1,11 +1,13 @@
 import type {
+  AgentConfigValues,
   AgentKind,
   BlockType,
+  CloudProvider,
   EnvironmentAccessHandle,
   EnvironmentStatus,
+  InstanceSize,
   PullRequestRef,
   StepSubtasks,
-  TestTarget,
 } from '../domain/types.js'
 
 // Port for "an agent doing its work". The execution engine calls this to perform
@@ -75,11 +77,13 @@ export interface AgentRunContext {
       comments: { author: string; createdAt: string; body: string }[]
     }[]
     /**
-     * Where this block's acceptance / Playwright tests should run. Folded into
-     * the acceptance-testing agents' prompt so generated tests target the right
-     * harness. Absent when no preference is recorded.
+     * Task-level configuration values contributed by the agents in this task's
+     * pipeline (a sparse id→value map; see the agent-config contracts). Folded
+     * into the relevant agents' prompts and job bodies — e.g. the Tester reads
+     * `tester.environment` (local vs ephemeral) and the Playwright agent reads
+     * `playwright.e2eTarget` (ci vs ephemeral). Absent when nothing is set.
      */
-    testTarget?: TestTarget
+    agentConfig?: AgentConfigValues
     /**
      * A pull request already opened for this block (e.g. by an earlier `coder`
      * step in the same run). The Blueprinter step reads its `branch` so it commits
@@ -113,6 +117,20 @@ export interface AgentRunContext {
     status: EnvironmentStatus
     access: EnvironmentAccessHandle | null
     expiresAt: number | null
+  }
+  /**
+   * Service-level (frame) configuration resolved by the engine from this run's
+   * service frame. Carries what the Tester's local-infra path and the
+   * provisioning layer need: the docker-compose path to stand up dependencies (or
+   * the explicit "no infra" flag), and the cloud provider + abstract instance size
+   * the dispatch resolves to a concrete instance-type id. Absent when no service
+   * frame applies.
+   */
+  service?: {
+    testComposePath?: string
+    noInfraDependencies?: boolean
+    cloudProvider?: CloudProvider
+    instanceSize?: InstanceSize
   }
   /**
    * If this step previously raised a decision that a human has now resolved,
@@ -184,6 +202,15 @@ export interface AgentRunResult {
    * the contracts schema; the engine parses it before use.
    */
   mergeAssessment?: unknown
+  /**
+   * A `tester` step's structured test report (what was exercised, the per-area
+   * outcomes, any concerns/bugs, and the greenlight verdict). The engine validates
+   * it and, when the Tester withholds its greenlight, dispatches the `fixer` agent
+   * and re-tests — looping until greenlight or the attempt budget is spent. Carried
+   * as `unknown` so the port stays free of the contracts schema; the engine parses
+   * it before use.
+   */
+  testReport?: unknown
   /**
    * Tokens the model consumed for this call. Reported by inline LLM executors so
    * the spend safeguard can meter usage; absent for the container executor (whose

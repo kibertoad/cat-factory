@@ -9,6 +9,7 @@ import {
 import { bootstrapJobSchema } from './bootstrap.js'
 import { notificationSchema } from './notifications.js'
 import { mergeThresholdPresetSchema } from './merge.js'
+import { agentConfigCatalogSchema } from './agent-config.js'
 import { modelDefaultsSchema } from './model-defaults.js'
 import { pipelineScheduleSchema } from './recurring.js'
 import { serviceSchema, workspaceMountSchema } from './services.js'
@@ -48,6 +49,14 @@ export const workspaceSnapshotSchema = v.object({
    * auto-merge policy from). Attached by the worker, so optional on the wire.
    */
   mergePresets: v.optional(v.array(mergeThresholdPresetSchema)),
+  /**
+   * The catalog of agent config-contribution descriptors (the task-level parameters
+   * the registered agent kinds surface, e.g. the Tester's environment). The board
+   * renders the subset whose owning kind appears in a task's selected pipeline.
+   * Static metadata derived from the agent registry; attached by the facade, so
+   * optional on the wire.
+   */
+  agentConfigCatalog: v.optional(agentConfigCatalogSchema),
   /**
    * The workspace's per-agent-kind default models (the model each agent kind
    * defaults to, overriding the env routing for this workspace). Attached by the

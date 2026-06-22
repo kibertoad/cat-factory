@@ -61,7 +61,9 @@ describe('CompositeAgentExecutor', () => {
 
   it('routes repo-operating kinds to the container executor', async () => {
     // `architect` runs in a container too (read-only repo exploration before proposing).
-    for (const kind of ['coder', 'mocker', 'playwright', 'architect']) {
+    // `tester`/`fixer` clone the PR branch (run the suite / push fixes), so both are
+    // container kinds — the Tester→Fixer loop dispatches both through this executor.
+    for (const kind of ['coder', 'mocker', 'playwright', 'architect', 'tester', 'fixer']) {
       expect((await composite.run(ctx(kind))).output).toBe('container')
     }
   })
@@ -69,7 +71,6 @@ describe('CompositeAgentExecutor', () => {
   it('routes other kinds to the inline executor', async () => {
     for (const kind of [
       'reviewer',
-      'tester',
       'architect-companion',
       'spec-companion',
       'documenter',
@@ -88,6 +89,8 @@ describe('CompositeAgentExecutor', () => {
       'blueprints',
       'business-documenter',
       'architect',
+      'tester',
+      'fixer',
     ]) {
       // pick() throws synchronously, so run()/runsAsync()/startJob() all throw.
       expect(() => noSandbox.run(ctx(kind))).toThrow(/needs a real checkout/)
@@ -95,7 +98,7 @@ describe('CompositeAgentExecutor', () => {
       expect(() => noSandbox.startJob(ctx(kind))).toThrow(/needs a real checkout/)
     }
     // Non-sandbox kinds still run inline even with no container.
-    expect((await noSandbox.run(ctx('tester'))).output).toBe('inline')
+    expect((await noSandbox.run(ctx('documenter'))).output).toBe('inline')
   })
 
   it('routes a registered container kind to the container executor', async () => {

@@ -50,6 +50,11 @@ ENV NODE_ENV=production
 # `pi install` could not write (EACCES).
 RUN groupadd --system harness \
     && useradd --system --gid harness --create-home --home-dir /home/harness harness
+# Map a subuid/subgid range for the harness user so rootless Docker can run (the
+# Tester's local-mode infra stand-up runs `docker compose up` for the service's
+# dependencies). Required before the rootless daemon can create user namespaces.
+RUN echo 'harness:100000:65536' > /etc/subuid \
+    && echo 'harness:100000:65536' > /etc/subgid
 # Root-only setup in one layer: git for clone/commit/push, the Pi coding-agent
 # CLI (bring-your-own key at runtime — none is installed here; --ignore-scripts
 # avoids running untrusted install hooks), and git's dubious-ownership guard
@@ -77,17 +82,37 @@ ARG PI_VERSION=0.79.8
 ARG CLAUDE_CODE_VERSION=2.0.30
 ARG CODEX_VERSION=0.47.0
 RUN --mount=type=secret,id=extra_ca,target=/tmp/extra_ca.crt \
-    sh -eu -c 'apt-get update && apt-get install -y --no-install-recommends git ca-certificates && rm -rf /var/lib/apt/lists/*; \
+    sh -eu -c 'apt-get update && apt-get install -y --no-install-recommends git ca-certificates curl && rm -rf /var/lib/apt/lists/*; \
     if [ -s /tmp/extra_ca.crt ]; then export NODE_EXTRA_CA_CERTS=/tmp/extra_ca.crt; fi; \
     npm install -g --ignore-scripts "@earendil-works/pi-coding-agent@${PI_VERSION}"; \
     npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}" "@openai/codex@${CODEX_VERSION}"; \
     claude --version; codex --version; \
     git config --system --add safe.directory "*"'
 
+# Rootless Docker + the compose plugin, for the Tester's local-mode infra stand-up.
+# Cloudflare Containers (and most managed runners) run unprivileged, so we install
+# the rootless extras and run the daemon as the `harness` user at runtime (see
+# entrypoint.sh) — no privileged mode, no host docker socket. uidmap provides the
+# newuidmap/newgidmap helpers user namespaces need; fuse-overlayfs is the rootless
+# storage driver. Best-effort at runtime: if the sandbox forbids user namespaces the
+# daemon simply won't start and the Tester degrades to no-infra (it never blocks the
+# container from booting). Installed from Docker's official apt repo, pinned to the
+# Debian release the base image uses (trixie).
+RUN --mount=type=secret,id=extra_ca,target=/tmp/extra_ca.crt \
+    sh -eu -c 'if [ -s /tmp/extra_ca.crt ]; then export NODE_EXTRA_CA_CERTS=/tmp/extra_ca.crt; export CURL_CA_BUNDLE=/tmp/extra_ca.crt; fi; \
+    install -m 0755 -d /etc/apt/keyrings; \
+    curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc; \
+    chmod a+r /etc/apt/keyrings/docker.asc; \
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian trixie stable" > /etc/apt/sources.list.d/docker.list; \
+    apt-get update && apt-get install -y --no-install-recommends docker-ce-cli docker-compose-plugin docker-ce-rootless-extras uidmap fuse-overlayfs && rm -rf /var/lib/apt/lists/*'
+
 WORKDIR /app
 # Copy the compiled wrapper owned by the unprivileged user (no recursive chown
 # layer). Done before USER so the build artifact lands owned correctly.
 COPY --chown=harness:harness --from=build /app/dist ./dist
+# The entrypoint that starts rootless dockerd (best-effort) then the server.
+COPY --chown=harness:harness entrypoint.sh ./entrypoint.sh
+RUN chmod +x ./entrypoint.sh
 # Drop privileges before the Pi extension installs so they write to this user's
 # HOME already owned by it — no post-install chown of the extension tree needed.
 # HOME is set here (not before the root steps) so the as-harness npm cache is clean.
@@ -111,5 +136,8 @@ RUN --mount=type=secret,id=extra_ca,target=/tmp/extra_ca.crt \
     pi install "npm:@juicesharp/rpiv-todo@${PI_TODO_EXTENSION_VERSION}"; \
     pi install "npm:@juicesharp/rpiv-web-tools@${PI_WEB_TOOLS_EXTENSION_VERSION}"'
 
+# Rootless Docker runtime config for the harness user (consumed by entrypoint.sh).
+ENV XDG_RUNTIME_DIR=/home/harness/.docker/run \
+    DOCKER_HOST=
 EXPOSE 8080
-ENTRYPOINT ["node", "dist/server.js"]
+ENTRYPOINT ["./entrypoint.sh"]

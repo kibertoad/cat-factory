@@ -743,3 +743,148 @@ export function parseJob(input: unknown): Job {
   if (job.githubApiBase) assertAllowedHost(job.githubApiBase, 'githubApiBase')
   return job
 }
+
+// ---- Tester job (POST /test) ----------------------------------------------
+
+/** How the Tester stands up its dependencies for a run. */
+export interface TesterTestSpec {
+  /** `local` stands infra up via docker-compose; `ephemeral` tests a deployed env. */
+  environment: 'local' | 'ephemeral'
+  /** Local mode: the service declared no infra dependencies (spin nothing up). */
+  noInfraDependencies?: boolean
+  /** Local mode: repo-relative docker-compose path to stand the dependencies up. */
+  composePath?: string
+  /** Ephemeral mode: the provisioned environment URL to test against. */
+  environmentUrl?: string
+}
+
+/**
+ * The job the backend's ContainerAgentExecutor POSTs to /test. The tester clones the
+ * PR head `branch`, brings its dependencies up per `test` (local docker-compose infra
+ * or an ephemeral env), runs the suite and returns ONLY a structured JSON report — it
+ * makes NO commits (the engine loops the `fixer` on a withheld greenlight).
+ */
+export interface TesterJob extends HarnessAuthFields {
+  jobId: string
+  systemPrompt: string
+  userPrompt: string
+  model: string
+  proxyBaseUrl?: string
+  sessionToken?: string
+  ghToken: string
+  repo: RepoSpec
+  /** The PR head branch to clone and test. */
+  branch: string
+  /** How to stand the dependencies up for this run. */
+  test: TesterTestSpec
+  githubApiBase?: string
+  webToolsGuidance?: string
+  webSearch?: boolean
+}
+
+/** The /test response. `report` (when set) is the structured test report to ingest. */
+export interface TesterResult {
+  report?: unknown
+  summary?: string
+  stats?: PiRunStats
+  error?: string
+  usage?: { inputTokens: number; outputTokens: number }
+}
+
+/** Parse the Tester's dependency-stand-up spec, defaulting to local mode. */
+function parseTesterTestSpec(value: unknown): TesterTestSpec {
+  const o = (typeof value === 'object' && value !== null ? value : {}) as Record<string, unknown>
+  const environment = o.environment === 'ephemeral' ? 'ephemeral' : 'local'
+  return {
+    environment,
+    ...(o.noInfraDependencies === true ? { noInfraDependencies: true } : {}),
+    ...(typeof o.composePath === 'string' && o.composePath ? { composePath: o.composePath } : {}),
+    ...(typeof o.environmentUrl === 'string' && o.environmentUrl
+      ? { environmentUrl: o.environmentUrl }
+      : {}),
+  }
+}
+
+/** Validate + narrow an untrusted body into a {@link TesterJob}, throwing on bad input. */
+export function parseTesterJob(input: unknown): TesterJob {
+  if (typeof input !== 'object' || input === null) {
+    throw new Error('Invalid job: body must be an object')
+  }
+  const o = input as Record<string, unknown>
+  const repo = (o.repo ?? {}) as Record<string, unknown>
+  const job: TesterJob = {
+    jobId: str(o.jobId, 'jobId'),
+    systemPrompt: str(o.systemPrompt, 'systemPrompt'),
+    userPrompt: str(o.userPrompt, 'userPrompt'),
+    model: str(o.model, 'model'),
+    ...parseHarnessAuth(o),
+    ghToken: str(o.ghToken, 'ghToken'),
+    repo: parseRepoSpec(repo),
+    branch: str(o.branch, 'branch'),
+    test: parseTesterTestSpec(o.test),
+    ...(typeof o.githubApiBase === 'string' ? { githubApiBase: o.githubApiBase } : {}),
+    ...(typeof o.webToolsGuidance === 'string' ? { webToolsGuidance: o.webToolsGuidance } : {}),
+    ...(o.webSearch === true ? { webSearch: true } : {}),
+  }
+  assertAllowedHost(job.repo.cloneUrl, 'repo.cloneUrl')
+  if (job.githubApiBase) assertAllowedHost(job.githubApiBase, 'githubApiBase')
+  return job
+}
+
+// ---- Fixer job (POST /fix-tests) ------------------------------------------
+
+/**
+ * The job the backend's ContainerAgentExecutor POSTs to /fix-tests when a Tester
+ * withholds its greenlight. The fixer clones the PR head `branch`, applies fixes for
+ * the concerns (folded into `userPrompt` by the backend) and pushes back onto the
+ * SAME branch (no new branch / PR) so the Tester can re-run. Mirrors the CI-fixer.
+ */
+export interface FixerJob extends HarnessAuthFields {
+  jobId: string
+  systemPrompt: string
+  userPrompt: string
+  model: string
+  proxyBaseUrl?: string
+  sessionToken?: string
+  ghToken: string
+  repo: RepoSpec
+  /** The PR head branch to clone and push fixes onto. */
+  branch: string
+  githubApiBase?: string
+  webToolsGuidance?: string
+  webSearch?: boolean
+}
+
+/** The /fix-tests response. `pushed` says whether a fix commit was pushed. */
+export interface FixerResult {
+  pushed?: boolean
+  summary?: string
+  stats?: PiRunStats
+  error?: string
+  usage?: { inputTokens: number; outputTokens: number }
+}
+
+/** Validate + narrow an untrusted body into a {@link FixerJob}, throwing on bad input. */
+export function parseFixerJob(input: unknown): FixerJob {
+  if (typeof input !== 'object' || input === null) {
+    throw new Error('Invalid job: body must be an object')
+  }
+  const o = input as Record<string, unknown>
+  const repo = (o.repo ?? {}) as Record<string, unknown>
+  const job: FixerJob = {
+    jobId: str(o.jobId, 'jobId'),
+    systemPrompt: str(o.systemPrompt, 'systemPrompt'),
+    userPrompt: str(o.userPrompt, 'userPrompt'),
+    model: str(o.model, 'model'),
+    ...parseHarnessAuth(o),
+    ghToken: str(o.ghToken, 'ghToken'),
+    repo: parseRepoSpec(repo),
+    branch: str(o.branch, 'branch'),
+    ...(typeof o.githubApiBase === 'string' ? { githubApiBase: o.githubApiBase } : {}),
+    ...(typeof o.webToolsGuidance === 'string' ? { webToolsGuidance: o.webToolsGuidance } : {}),
+    ...(o.webSearch === true ? { webSearch: true } : {}),
+  }
+  assertAllowedHost(job.repo.cloneUrl, 'repo.cloneUrl')
+  if (job.githubApiBase) assertAllowedHost(job.githubApiBase, 'githubApiBase')
+  return job
+}
