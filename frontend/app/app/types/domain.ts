@@ -83,6 +83,12 @@ export interface Block {
   moduleName?: string
   /** ids of best-practice prompt fragments folded into this block's agent prompts. */
   fragmentIds?: string[]
+  /**
+   * frame-only: the service's selected best-practice fragment ids. Folded into the
+   * prompt of every `code-aware` agent on tasks under this service. Seeded from the
+   * workspace default on new services; absent = none.
+   */
+  serviceFragmentIds?: string[]
   /** id of the model (from MODEL_CATALOG) to run this block's agents with; absent = default. */
   modelId?: string
   /** the PR the block's implementer agent opened for its work; absent = none yet. */
@@ -286,6 +292,8 @@ export interface WorkspaceSnapshot {
   agentConfigCatalog?: AgentConfigDescriptor[]
   /** Per-agent-kind default model overrides for this workspace (agentKind → model id). */
   modelDefaults?: ModelDefaults
+  /** The workspace's default service-fragment selection (ids new services inherit). */
+  serviceFragmentDefaults?: ServiceFragmentDefaults
   /** The workspace's recurring pipelines (schedules shown on the board + inspector). */
   recurringPipelines?: PipelineSchedule[]
   /** The workspace's issue-tracker selection (where the tech-debt pipeline files tickets). */
@@ -303,6 +311,14 @@ export interface WorkspaceSnapshot {
  */
 export interface ModelDefaults {
   defaults: Record<string, string>
+}
+
+/**
+ * A workspace's default service-fragment selection: the best-practice fragment ids
+ * new services inherit onto their `serviceFragmentIds`. Mirrors `@cat-factory/contracts`.
+ */
+export interface ServiceFragmentDefaults {
+  fragmentIds: string[]
 }
 
 /**

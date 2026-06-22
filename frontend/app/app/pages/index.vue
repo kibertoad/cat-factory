@@ -25,6 +25,7 @@ import FragmentLibraryPanel from '~/components/fragments/FragmentLibraryPanel.vu
 import CommandBar from '~/components/layout/CommandBar.vue'
 import MergeThresholdsPanel from '~/components/settings/MergeThresholdsPanel.vue'
 import ModelDefaultsPanel from '~/components/settings/ModelDefaultsPanel.vue'
+import ServiceFragmentDefaultsPanel from '~/components/settings/ServiceFragmentDefaultsPanel.vue'
 
 const workspace = useWorkspaceStore()
 const github = useGitHubStore()
@@ -107,6 +108,7 @@ watch(
       <CommandBar />
       <MergeThresholdsPanel />
       <ModelDefaultsPanel />
+      <ServiceFragmentDefaultsPanel />
     </template>
 
     <!-- Backend unreachable / bootstrap failed -->

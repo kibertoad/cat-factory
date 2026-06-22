@@ -43,7 +43,9 @@ describe('acceptance-testing agent prompts', () => {
 
   describe('system prompts', () => {
     it('serves the built-out role prompt for the track kind', () => {
-      expect(systemPromptFor('playwright')).toBe(acceptanceSystemPrompt('playwright'))
+      // `playwright` is spec-aware, so the spec-aware guidance is appended after the
+      // built-out acceptance role prompt (its foundation).
+      expect(systemPromptFor('playwright')).toContain(acceptanceSystemPrompt('playwright')!)
       expect(systemPromptFor('playwright')).toContain('Playwright')
     })
 

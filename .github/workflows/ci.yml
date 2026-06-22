@@ -150,6 +150,13 @@ jobs:
       - name: Typecheck frontend layer
         run: pnpm --filter @cat-factory/app run typecheck
 
+      # Verify the Node facade's Drizzle migration lineage stays consistent with
+      # `schema.ts`: no forked/non-commutative history and no un-generated drift
+      # (an edited schema without its `pnpm db:generate` migration). Offline — a
+      # pure snapshot diff, no database needed.
+      - name: Check Drizzle migrations
+        run: pnpm --filter @cat-factory/node-server run db:check
+
   # The Cloudflare worker suite (58 files) is the dominant test cost, and its
   # per-file overhead is intrinsic pool-workers isolate setup — embarrassingly
   # parallel across jobs but not within one. Split it into 2 shards via vitest

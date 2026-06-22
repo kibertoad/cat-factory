@@ -93,6 +93,11 @@ export function workspaceController(): Hono<AppEnv> {
     const modelDefaults = container.modelDefaults
       ? await container.modelDefaults.service.get(workspaceId)
       : undefined
+    // The workspace's default service-fragment selection, so the board renders the
+    // defaults settings on load. No-op when the module isn't configured.
+    const serviceFragmentDefaults = container.serviceFragmentDefaults
+      ? await container.serviceFragmentDefaults.service.get(workspaceId)
+      : undefined
     // The workspace's recurring pipelines + issue-tracker selection, so the board
     // renders the recurring-task badges and the tracker config on load. No-ops when
     // the modules aren't configured. Run history is fetched lazily, not here.
@@ -121,6 +126,7 @@ export function workspaceController(): Hono<AppEnv> {
       ...(notifications ? { notifications } : {}),
       ...(mergePresets ? { mergePresets } : {}),
       ...(modelDefaults ? { modelDefaults } : {}),
+      ...(serviceFragmentDefaults ? { serviceFragmentDefaults } : {}),
       ...(recurringPipelines ? { recurringPipelines } : {}),
       ...(trackerSettings ? { trackerSettings } : {}),
       ...(mounts ? { mounts } : {}),

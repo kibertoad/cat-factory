@@ -12,6 +12,7 @@ import { businessLogicSystemPrompt } from './business-logic-prompts.js'
 import { mockSystemPrompt } from './mock-prompts.js'
 import { testingSystemPrompt, testerEnvironmentSection } from './test-prompts.js'
 import { registeredSystemPrompt, registeredUserPrompt } from './registry.js'
+import { traitGuidanceFor } from './traits.js'
 import {
   environmentSection,
   linkedContextSection,
@@ -71,7 +72,12 @@ export function systemPromptFor(kind: AgentKind): string {
   const base = baseSystemPromptFor(kind)
   // Read-only kinds (architect, analysis) explore a real checkout but must never edit
   // it; append the shared guardrail so the harness `/explore` run stays edit-free.
-  return isReadOnlyAgentKind(kind) ? `${base}\n\n${READ_ONLY_GUARDRAIL}` : base
+  const withGuardrail = isReadOnlyAgentKind(kind) ? `${base}\n\n${READ_ONLY_GUARDRAIL}` : base
+  // Fold in any guidance contributed by the kind's traits (e.g. the spec-aware kinds get
+  // the in-repo-spec reading guidance). Marker traits like `code-aware` add nothing here —
+  // their effect (folding the service's fragments) is applied by the execution engine.
+  const guidance = traitGuidanceFor(kind)
+  return guidance.length ? `${withGuardrail}\n\n${guidance.join('\n\n')}` : withGuardrail
 }
 
 function baseSystemPromptFor(kind: AgentKind): string {

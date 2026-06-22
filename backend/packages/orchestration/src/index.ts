@@ -56,6 +56,10 @@ export {
   ModelDefaultsService,
   type ModelDefaultsServiceDependencies,
 } from './modules/modelDefaults/ModelDefaultsService.js'
+export {
+  ServiceFragmentDefaultsService,
+  type ServiceFragmentDefaultsServiceDependencies,
+} from './modules/serviceFragmentDefaults/ServiceFragmentDefaultsService.js'
 
 export {
   LlmObservabilityService,
@@ -104,6 +108,7 @@ export {
   type SlackModule,
   type MergePresetsModule,
   type ModelDefaultsModule,
+  type ServiceFragmentDefaultsModule,
   type FragmentLibraryModule,
   type RecurringModule,
   type TrackerModule,

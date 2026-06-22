@@ -4,10 +4,12 @@ import { getFragment } from '@cat-factory/prompt-fragments'
 // system prompt. There are two sources of fragment bodies, in priority order:
 //
 //  1. `resolvedFragments` — already-resolved `{ id, body }` entries the execution
-//     engine attaches when the tenant fragment-library module is configured (the
-//     merged catalog + relevance selection; ADR 0006). Used as-is.
-//  2. `fragmentIds` — the legacy/manual selection, resolved against the
-//     build-static registry in @cat-factory/prompt-fragments.
+//     engine attaches for a `code-aware` step: the running service's selected
+//     fragments (the frame's `serviceFragmentIds`) unioned with the block's own
+//     pins, resolved against the universal pool. Used as-is.
+//  2. `fragmentIds` — the block's own manual selection, resolved against the
+//     universal fragment pool in @cat-factory/prompt-fragments. This is the path
+//     for non-code-aware kinds (the engine attaches no `resolvedFragments` for them).
 //
 // Unknown ids (e.g. a fragment removed from the catalog after selection) are
 // skipped so a stale selection never breaks a run.

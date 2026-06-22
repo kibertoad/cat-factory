@@ -55,11 +55,13 @@ describe('business-logic agent prompts', () => {
 
   describe('system prompts', () => {
     it('serves the built-out role prompt for each kind', () => {
-      expect(systemPromptFor('business-documenter')).toBe(
-        businessLogicSystemPrompt('business-documenter'),
+      // Both kinds are spec-aware, so their system prompts carry the spec-aware guidance
+      // appended after the built-out role prompt (their foundation).
+      expect(systemPromptFor('business-documenter')).toContain(
+        businessLogicSystemPrompt('business-documenter')!,
       )
-      expect(systemPromptFor('business-reviewer')).toBe(
-        businessLogicSystemPrompt('business-reviewer'),
+      expect(systemPromptFor('business-reviewer')).toContain(
+        businessLogicSystemPrompt('business-reviewer')!,
       )
     })
 

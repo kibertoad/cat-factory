@@ -31,6 +31,7 @@ import type {
   MergePullRequestInput,
   ModelOption,
   ModelDefaults,
+  ServiceFragmentDefaults,
   PersonalSubscriptionStatus,
   StorePersonalSubscriptionInput,
   SubscriptionVendor,
@@ -583,6 +584,17 @@ export function useApi() {
       http<ModelDefaults>(`${ws(workspaceId)}/model-defaults`, {
         method: 'PUT',
         body: { defaults },
+      }),
+
+    // The workspace's default service-fragment selection (the fragment ids new
+    // services inherit). `setServiceFragmentDefaults` replaces the whole list.
+    getServiceFragmentDefaults: (workspaceId: string) =>
+      http<ServiceFragmentDefaults>(`${ws(workspaceId)}/service-fragment-defaults`),
+
+    setServiceFragmentDefaults: (workspaceId: string, fragmentIds: string[]) =>
+      http<ServiceFragmentDefaults>(`${ws(workspaceId)}/service-fragment-defaults`, {
+        method: 'PUT',
+        body: { fragmentIds },
       }),
 
     // ---- recurring pipelines (scheduled runs against a service) -----------

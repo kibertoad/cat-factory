@@ -48,7 +48,10 @@ describe('standard solution-phase prompts', () => {
 
   describe('system prompts', () => {
     it('routes the standard kinds through the built-out phase prompts', () => {
-      expect(systemPromptFor('coder')).toBe(standardSystemPrompt('build'))
+      // `coder` carries the `code-aware` + `spec-aware` traits, so its system prompt is
+      // the build phase prompt with the spec-aware guidance appended (like the read-only
+      // guardrail on the architect). The phase prompt is still its foundation.
+      expect(systemPromptFor('coder')).toContain(standardSystemPrompt('build'))
       // `tester` no longer routes through the generic `test` phase — it has its own
       // built-out Tester prompt (run the suite, return a structured report).
       expect(systemPromptFor('tester')).not.toBe(standardSystemPrompt('test'))

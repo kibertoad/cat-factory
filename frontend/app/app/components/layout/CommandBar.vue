@@ -183,6 +183,14 @@ const commands = computed<Command[]>(() => {
     keywords: 'model llm routing agent kind default',
     run: () => ui.openModelDefaults(),
   })
+  list.push({
+    id: 'service-fragment-defaults',
+    label: 'Default service best practices',
+    group: 'Workspace',
+    icon: 'i-lucide-book-open-check',
+    keywords: 'fragment best practice guideline service default code-aware',
+    run: () => ui.openServiceFragmentDefaults(),
+  })
 
   return list
 })
