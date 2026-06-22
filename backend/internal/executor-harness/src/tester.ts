@@ -74,9 +74,13 @@ function coerceReport(
             : 'medium') as TestReportShape['concerns'][number]['severity'],
         }))
     : []
-  // A greenlight is only honoured when no concerns were raised — never auto-pass a
-  // run that listed problems, even if the model set greenlight:true by mistake.
-  const greenlight = o.greenlight === true && concerns.length === 0
+  // A greenlight is only honoured when no BLOCKING (high/critical) concern was
+  // raised — never auto-pass a run with an open blocker, even if the model set
+  // greenlight:true by mistake. Low/medium concerns are advisory: they're reported
+  // but don't, on their own, withhold the greenlight (which would otherwise burn the
+  // whole fixer budget looping on a trivial nit). The engine re-applies this rule.
+  const blocking = concerns.some((c) => c.severity === 'high' || c.severity === 'critical')
+  const greenlight = o.greenlight === true && !blocking
   return {
     greenlight,
     summary: typeof o.summary === 'string' && o.summary ? o.summary : summary.slice(0, 2000),

@@ -8,10 +8,17 @@ import * as v from 'valibot'
 //   - a `CloudProvider` selecting which target a service's jobs run on, and
 //   - an abstract t-shirt `InstanceSize` per service.
 // At dispatch we resolve `(provider, size)` to the concrete instance-type id the
-// target understands (a Cloudflare instance type, or the id string a custom pool
-// expects) and hand that id to the transport — Cloudflare maps it to a Container
-// instance type; a custom pool provisions itself from the id. The provider is
-// chosen per service and defaults to the owning account's `defaultCloudProvider`.
+// target understands (the id string a custom pool expects) and hand it to the
+// transport: a custom pool provisions itself from the id, and the local Docker
+// backend maps the abstract size to `--memory`/`--cpus` limits. The provider is
+// chosen per service and, when unset, falls back to the owning account's
+// `defaultCloudProvider` (the engine resolves this at dispatch).
+//
+// Per-service sizing applies only to the backends that can honour it (the
+// self-hosted pool and local Docker). The Cloudflare Container backend has a FIXED
+// instance type per container class — set by `[[containers]] instance_type` in
+// `wrangler.toml`, applying to every run — with no per-dispatch override, so it
+// ignores these hints. Pick `cloudflare` when you don't need per-service sizing.
 // ---------------------------------------------------------------------------
 
 /**

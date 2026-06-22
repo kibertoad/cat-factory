@@ -102,7 +102,7 @@ const TEST_TARGET_GUIDANCE: Record<E2eTarget, string> = {
  * non-track kinds or when no target is recorded, so callers can append it
  * unconditionally.
  */
-export function testTargetSection(context: AgentRunContext): string {
+export function e2eTargetSection(context: AgentRunContext): string {
   if (!isAcceptanceKind(context.agentKind)) return ''
   const raw = context.block.agentConfig?.[PLAYWRIGHT_E2E_TARGET_CONFIG_ID]
   const target: E2eTarget | undefined = raw === 'ci' || raw === 'ephemeral' ? raw : undefined

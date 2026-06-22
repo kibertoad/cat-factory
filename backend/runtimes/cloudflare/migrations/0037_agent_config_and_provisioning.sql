@@ -1,7 +1,6 @@
 -- Task-level agent-contributed config values + service-level infra/provisioning
--- settings, plus an account-level default cloud provider. The old `test_target`
--- column is intentionally left in place (no longer read/written) to avoid a
--- destructive migration; the contributed-config system replaces it.
+-- settings, plus an account-level default cloud provider. The contributed-config
+-- system replaces the old `test_target` column, which is dropped below.
 
 -- Task-level: agent config-contribution values (JSON id->value map).
 ALTER TABLE blocks ADD COLUMN agent_config TEXT;
@@ -15,3 +14,7 @@ ALTER TABLE blocks ADD COLUMN instance_size TEXT;
 
 -- Account-level: the default cloud provider new services in the account inherit.
 ALTER TABLE accounts ADD COLUMN default_cloud_provider TEXT;
+
+-- Drop the legacy acceptance-test target column: it is fully superseded by the
+-- contributed-config map (`agent_config['playwright.e2eTarget']`) and no longer read.
+ALTER TABLE blocks DROP COLUMN test_target;

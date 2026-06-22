@@ -5,7 +5,7 @@
 
 import type { MergeAssessment } from './merge'
 
-export type NotificationType = 'merge_review' | 'pipeline_complete' | 'ci_failed'
+export type NotificationType = 'merge_review' | 'pipeline_complete' | 'ci_failed' | 'test_failed'
 export type NotificationStatus = 'open' | 'acted' | 'dismissed'
 
 /** Optional structured detail for rendering a notification card. */

@@ -92,8 +92,6 @@ export const blocks = pgTable(
     module_name: text('module_name'),
     fragment_ids: text('fragment_ids'),
     model_id: text('model_id'),
-    // Legacy: superseded by agent_config; left in place to avoid a destructive drop.
-    test_target: text('test_target'),
     pull_request: text('pull_request'),
     merge_preset_id: text('merge_preset_id'),
     pipeline_id: text('pipeline_id'),

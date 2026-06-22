@@ -63,7 +63,15 @@ export type AgentConfigCatalog = v.InferOutput<typeof agentConfigCatalogSchema>
  * the chosen value. Sparse — only ids the user has explicitly set are present;
  * everything else resolves to the descriptor's `default` at read time.
  */
-export const agentConfigValuesSchema = v.record(v.string(), v.string())
+// Keys are descriptor ids (e.g. `tester.environment`) and values are short option
+// values; both are length-capped so a stray client can't persist an unbounded map.
+// Values are NOT validated against the descriptor catalog here (the contracts layer
+// can't see the runtime-registered descriptors) — `resolveAgentConfigValue` falls
+// back to the descriptor default for any unknown/invalid value at read time.
+export const agentConfigValuesSchema = v.record(
+  v.pipe(v.string(), v.minLength(1), v.maxLength(120)),
+  v.pipe(v.string(), v.maxLength(400)),
+)
 export type AgentConfigValues = v.InferOutput<typeof agentConfigValuesSchema>
 
 /** Parse-or-throw a block's stored agent-config values. */

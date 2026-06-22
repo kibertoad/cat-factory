@@ -56,7 +56,11 @@ export const testReportSchema = v.object({
   tested: v.array(v.string()),
   /** Per-area results. */
   outcomes: v.array(testOutcomeSchema),
-  /** Bugs/risks uncovered; non-empty implies `greenlight` should be false. */
+  /**
+   * Bugs/risks uncovered. A `high`/`critical` (blocking) concern implies
+   * `greenlight` must be false; `low`/`medium` concerns are advisory and do not, on
+   * their own, withhold the greenlight. The engine re-applies this rule defensively.
+   */
   concerns: v.array(testConcernSchema),
   /** Which environment the suite ran in, echoed back for the UI. */
   environment: v.optional(v.picklist(['local', 'ephemeral'])),

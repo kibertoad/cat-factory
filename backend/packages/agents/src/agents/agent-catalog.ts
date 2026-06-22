@@ -3,7 +3,7 @@ import type { AgentRunContext } from '@cat-factory/kernel'
 import {
   acceptanceSystemPrompt,
   testApproachSection,
-  testTargetSection,
+  e2eTargetSection,
 } from './acceptance-prompts.js'
 import { companionSystemPrompt } from './companion-prompts.js'
 import { companionTargets, isCompanionKind } from './companions.js'
@@ -170,7 +170,7 @@ function buildBaseUserPrompt(context: AgentRunContext): string {
   if (envSection) lines.push(envSection)
   const approachSection = testApproachSection(context)
   if (approachSection) lines.push(approachSection)
-  const targetSection = testTargetSection(context)
+  const targetSection = e2eTargetSection(context)
   if (targetSection) lines.push(targetSection)
   const testerEnv = testerEnvironmentSection(context)
   if (testerEnv) lines.push(testerEnv)

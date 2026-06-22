@@ -4,6 +4,7 @@ import type {
   Block,
   BlueprintService,
   CiStatusProvider,
+  CloudProvider,
   ExecutionInstance,
   MergeAssessment,
   MergePresetRepository,
@@ -51,6 +52,7 @@ import {
 import type { NotificationService } from '../notifications/NotificationService.js'
 import type { LlmObservabilityService } from '../observability/LlmObservabilityService.js'
 import type {
+  AccountRepository,
   BlockRepository,
   ExecutionRepository,
   PipelineRepository,
@@ -152,6 +154,11 @@ export interface ExecutionServiceDependencies {
   blockRepository: BlockRepository
   pipelineRepository: PipelineRepository
   executionRepository: ExecutionRepository
+  /**
+   * Resolves the owning account of a workspace so a service that pins no cloud
+   * provider falls back to the account's `defaultCloudProvider` at dispatch.
+   */
+  accountRepository: AccountRepository
   idGenerator: IdGenerator
   clock: Clock
   agentExecutor: AgentExecutor
@@ -264,6 +271,7 @@ export class ExecutionService {
   private readonly blockRepository: BlockRepository
   private readonly pipelineRepository: PipelineRepository
   private readonly executionRepository: ExecutionRepository
+  private readonly accountRepository: AccountRepository
   private readonly idGenerator: IdGenerator
   private readonly clock: Clock
   private readonly agentExecutor: AgentExecutor
@@ -290,6 +298,7 @@ export class ExecutionService {
     blockRepository,
     pipelineRepository,
     executionRepository,
+    accountRepository,
     idGenerator,
     clock,
     agentExecutor,
@@ -315,6 +324,7 @@ export class ExecutionService {
     this.blockRepository = blockRepository
     this.pipelineRepository = pipelineRepository
     this.executionRepository = executionRepository
+    this.accountRepository = accountRepository
     this.idGenerator = idGenerator
     this.clock = clock
     this.agentExecutor = agentExecutor
@@ -1393,15 +1403,21 @@ export class ExecutionService {
     // An unparseable report can't gate a release — fail loudly rather than silently
     // greenlighting or looping forever.
     if (!report) {
-      step.output = result.output ?? 'Tester returned an unparseable report.'
-      this.finishStep(step)
-      await this.executionRepository.upsert(workspaceId, instance)
-      await this.emitInstance(workspaceId, instance)
-      return { kind: 'job_failed', error: 'Tester returned an unparseable test report.' }
+      return this.failTester(
+        workspaceId,
+        instance,
+        step,
+        block,
+        result.output ?? 'Tester returned an unparseable report.',
+        'Tester returned an unparseable test report.',
+        step.test.attempts,
+      )
     }
 
-    // Greenlit: let the normal completion flow finish + advance the step.
-    if (report.greenlight) return null
+    // Greenlit: let the normal completion flow finish + advance the step. Defensive:
+    // honour a greenlight ONLY when no blocking (high/critical) concern was raised,
+    // so a harness that greenlights with open blockers can't slip a bad change through.
+    if (isGreenlit(report)) return null
 
     // Withheld greenlight: loop the fixer if any budget remains, else give up.
     const executor = this.agentExecutor
@@ -1412,15 +1428,62 @@ export class ExecutionService {
       await this.stopRunContainer(workspaceId, instance.id)
       return this.dispatchFixer(workspaceId, instance, step, block, report)
     }
-    step.output = report.summary || 'Tester withheld its greenlight.'
-    this.finishStep(step)
+    // Budget spent (or no async executor to fix with): give up for human attention.
+    return this.failTester(
+      workspaceId,
+      instance,
+      step,
+      block,
+      report.summary || 'Tester withheld its greenlight.',
+      `Tester withheld its greenlight after ${step.test.attempts} fix attempt(s). ${describeTestConcerns(report)}`.trim(),
+      step.test.attempts,
+    )
+  }
+
+  /**
+   * Give up on a Tester gate that can't be greenlit. Persists the step (left
+   * un-`done`, like the CI gate — never falsely completed), raises a human-actionable
+   * `test_failed` notification, and fails the run for human attention. Returns the
+   * `job_failed` result the driver propagates.
+   */
+  private async failTester(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    step: PipelineStep,
+    block: Block | null,
+    output: string,
+    error: string,
+    attempts: number,
+  ): Promise<AdvanceResult> {
+    step.output = output
     await this.executionRepository.upsert(workspaceId, instance)
-    await this.emitInstance(workspaceId, instance)
-    return {
-      kind: 'job_failed',
-      error:
-        `Tester withheld its greenlight after ${step.test.attempts} fix attempt(s). ${describeTestConcerns(report)}`.trim(),
-    }
+    await this.raiseTestFailed(workspaceId, instance, block, error, attempts)
+    await this.failRun(workspaceId, instance.id, error, 'agent')
+    return { kind: 'job_failed', error }
+  }
+
+  /** Raise a `test_failed` notification when the Tester gate gives up. */
+  private async raiseTestFailed(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    block: Block | null,
+    summary: string,
+    attempts: number,
+  ): Promise<void> {
+    if (!this.notificationService || !block) return
+    await this.notificationService.raise(workspaceId, {
+      type: 'test_failed',
+      blockId: block.id,
+      executionId: instance.id,
+      title: `Tests are still failing for "${block.title}"`,
+      body:
+        `The Fixer agent tried ${attempts} time(s) but the Tester still won't greenlight. ${summary} ` +
+        `Take a look and retry the run once fixed.`,
+      payload: {
+        ...(block.pullRequest?.url ? { prUrl: block.pullRequest.url } : {}),
+        pipelineName: instance.pipelineName,
+      },
+    })
   }
 
   /**
@@ -1445,15 +1508,15 @@ export class ExecutionService {
     // earlier step never produced a PR) can't be auto-fixed — fail cleanly with the
     // report instead of letting the job-body builder throw out of the advance.
     if (!block.pullRequest?.branch) {
-      step.output = report.summary || 'Tester withheld its greenlight.'
-      this.finishStep(step)
-      await this.executionRepository.upsert(workspaceId, instance)
-      await this.emitInstance(workspaceId, instance)
-      return {
-        kind: 'job_failed',
-        error:
-          `Tester withheld its greenlight and there is no PR branch for the fixer to push to. ${describeTestConcerns(report)}`.trim(),
-      }
+      return this.failTester(
+        workspaceId,
+        instance,
+        step,
+        block,
+        report.summary || 'Tester withheld its greenlight.',
+        `Tester withheld its greenlight and there is no PR branch for the fixer to push to. ${describeTestConcerns(report)}`.trim(),
+        step.test?.attempts ?? 0,
+      )
     }
     const isFinalStep = instance.currentStep === instance.steps.length - 1
     const base = await this.buildAgentContext(workspaceId, instance, step, isFinalStep, block)
@@ -1791,9 +1854,11 @@ export class ExecutionService {
   /**
    * Resolve the service-level (frame) configuration for a run's block — the
    * Tester's local-infra docker-compose path / "no infra" flag and the provisioning
-   * provider + instance size — by walking up to the service frame. Returns undefined
-   * when no frame carries any of these settings, so callers can spread it
-   * conditionally onto the agent context.
+   * provider + instance size — by walking up to the service frame. When the frame
+   * pins no cloud provider it inherits the owning account's `defaultCloudProvider`
+   * (so the account-level default actually reaches dispatch, not just the UI).
+   * Returns undefined when no frame carries any of these settings, so callers can
+   * spread it conditionally onto the agent context.
    */
   private async resolveServiceConfig(
     workspaceId: string,
@@ -1810,8 +1875,27 @@ export class ExecutionService {
     if (frame.testComposePath) service.testComposePath = frame.testComposePath
     if (frame.noInfraDependencies) service.noInfraDependencies = frame.noInfraDependencies
     if (frame.cloudProvider) service.cloudProvider = frame.cloudProvider
+    else {
+      // No per-service override: fall back to the owning account's default provider
+      // so a pool/local deployment honours the account-level choice at dispatch.
+      const accountDefault = await this.resolveAccountDefaultProvider(workspaceId)
+      if (accountDefault) service.cloudProvider = accountDefault
+    }
     if (frame.instanceSize) service.instanceSize = frame.instanceSize
     return Object.keys(service).length ? service : undefined
+  }
+
+  /**
+   * The owning account's `defaultCloudProvider`, or undefined when the workspace
+   * has no account or the account pins no default (so the transport keeps its own).
+   */
+  private async resolveAccountDefaultProvider(
+    workspaceId: string,
+  ): Promise<CloudProvider | undefined> {
+    const workspace = await this.workspaceRepository.get(workspaceId)
+    if (!workspace?.accountId) return undefined
+    const account = await this.accountRepository.get(workspace.accountId)
+    return account?.defaultCloudProvider
   }
 
   /** Assemble the {@link AgentRunContext} for a step from the run + block state. */
@@ -2727,6 +2811,21 @@ export class ExecutionService {
       // The container may already be gone (eviction/completion) — nothing to reclaim.
     }
   }
+}
+
+/** Whether a Tester report raised any concern serious enough to block a release. */
+function hasBlockingConcerns(report: TestReport): boolean {
+  return report.concerns.some((c) => c.severity === 'high' || c.severity === 'critical')
+}
+
+/**
+ * The engine's release verdict for a Tester report: greenlit only when the Tester
+ * said so AND it raised no blocking (high/critical) concern. Defensive against a
+ * harness that greenlights with open blockers — low/medium concerns are advisory
+ * and do not, on their own, withhold the greenlight or loop the fixer.
+ */
+function isGreenlit(report: TestReport): boolean {
+  return report.greenlight === true && !hasBlockingConcerns(report)
 }
 
 /** One-line, human-readable summary of a Tester report's concerns, for failure messages. */

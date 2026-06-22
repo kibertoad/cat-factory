@@ -75,8 +75,10 @@ export type RunnerDispatchKind =
 
 /**
  * Optional, transport-level provisioning hints resolved per-service at dispatch.
- * Cloudflare maps `instanceTypeId` to a Container instance type; a self-hosted pool
- * forwards it (and `provider`) so it can provision the right size on its own cloud.
+ * A self-hosted pool forwards `instanceTypeId` (and `provider`) so it can provision
+ * the right size on its own cloud; the local Docker backend maps `instanceSize` to
+ * container resource limits. The Cloudflare backend ignores these — its Container
+ * instance type is fixed per class by `wrangler.toml` (no per-dispatch sizing).
  */
 export interface RunnerDispatchOptions {
   /** Concrete instance-type id for the target (see `resolveInstanceTypeId`). */

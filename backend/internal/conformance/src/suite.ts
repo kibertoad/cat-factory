@@ -399,6 +399,82 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         expect(testerStep.test?.lastReport?.greenlight).toBe(true)
       })
 
+      it('treats low/medium concerns as advisory and still greenlights', async () => {
+        // A greenlit report carrying only a LOW-severity concern must NOT loop the
+        // fixer — low/medium concerns are advisory; only high/critical blockers
+        // withhold the release. Guards against burning the whole budget on a nit.
+        const greenWithNit = {
+          greenlight: true,
+          summary: 'all good, one minor nit',
+          tested: ['login'],
+          outcomes: [{ name: 'login', status: 'passed' as const }],
+          concerns: [{ title: 'naming', detail: 'rename a var', severity: 'low' as const }],
+        }
+        const app = harness.makeApp({
+          asyncKinds: ['coder', 'tester', 'fixer'],
+          asyncPolls: 1,
+          testReports: [greenWithNit],
+          pullRequest: { url: 'https://gh/pr/1', number: 1, branch: 'cat-factory/task_login' },
+        })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Code + test nit',
+          agentKinds: ['coder', 'tester'],
+        })
+        await app.call('PATCH', `/workspaces/${wsId}/blocks/task_login`, {
+          agentConfig: { 'tester.environment': 'ephemeral' },
+        })
+        const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+          pipelineId: pipeline.body.id,
+        })
+        expect(start.status).toBe(201)
+        const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+        expect(exec.status).toBe('done')
+        const testerStep = exec.steps.find((s) => s.agentKind === 'tester')!
+        expect(testerStep.state).toBe('done')
+        // No fixer was looped for an advisory nit.
+        expect(testerStep.test?.attempts ?? 0).toBe(0)
+      })
+
+      it('fails the run (tester step left un-done) when the greenlight is withheld terminally', async () => {
+        // A report with a blocking (critical) concern and NO PR branch for a fixer to
+        // push to is terminal: the run FAILS and the tester step is left un-`done` (it
+        // is never falsely marked complete on a failure). Also exercises the engine's
+        // defensive override — a `greenlight:true` carrying a critical concern is still
+        // withheld, so a buggy/over-eager report can't slip a blocker through.
+        const bogusGreen = {
+          greenlight: true,
+          summary: 'shipped with a known crash',
+          tested: ['login'],
+          outcomes: [{ name: 'login', status: 'failed' as const, detail: 'crash' }],
+          concerns: [{ title: 'NPE', detail: 'crashes on null', severity: 'critical' as const }],
+        }
+        const app = harness.makeApp({
+          asyncKinds: ['tester', 'fixer'],
+          asyncPolls: 1,
+          testReports: [bogusGreen],
+          // No pullRequest → no branch for the fixer to push to → terminal failure.
+        })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Test only',
+          agentKinds: ['tester'],
+        })
+        await app.call('PATCH', `/workspaces/${wsId}/blocks/task_login`, {
+          agentConfig: { 'tester.environment': 'ephemeral' },
+        })
+        const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+          pipelineId: pipeline.body.id,
+        })
+        expect(start.status).toBe(201)
+        const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+        expect(exec.status).toBe('failed')
+        const testerStep = exec.steps.find((s) => s.agentKind === 'tester')!
+        expect(testerStep.state).not.toBe('done')
+      })
+
       it('aggregates all tasks and ingests the spec-writer document', async () => {
         // The spec-writer step runs on the implementation branch BEFORE the
         // coder, aggregating EVERY task under the service frame into the service's

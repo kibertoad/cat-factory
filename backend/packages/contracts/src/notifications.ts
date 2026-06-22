@@ -12,6 +12,9 @@ import { mergeAssessmentSchema } from './merge.js'
 //                          confirms the work as complete (and merges the PR).
 //   - `ci_failed`        — the `ci-fixer` agent exhausted its attempt budget and
 //                          CI is still red; a human takes over.
+//   - `test_failed`      — the `fixer` agent exhausted its attempt budget (or there
+//                          was no PR branch to fix) and the `tester` still withholds
+//                          its greenlight; a human takes over.
 //
 // In-app delivery is the only channel today, but the core models delivery behind
 // a `NotificationChannel` port so email / Slack channels can be added later
@@ -23,7 +26,12 @@ import { mergeAssessmentSchema } from './merge.js'
  * the frontend can switch on it to render the right action; extending it is a
  * one-line change here plus a handler in the worker's `act` route.
  */
-export const notificationTypeSchema = v.picklist(['merge_review', 'pipeline_complete', 'ci_failed'])
+export const notificationTypeSchema = v.picklist([
+  'merge_review',
+  'pipeline_complete',
+  'ci_failed',
+  'test_failed',
+])
 export type NotificationType = v.InferOutput<typeof notificationTypeSchema>
 
 /**
