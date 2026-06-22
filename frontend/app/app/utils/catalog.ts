@@ -44,7 +44,10 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
     label: 'Tester',
     icon: 'i-lucide-flask-conical',
     color: '#fbbf24',
-    description: 'Writes and runs tests, reports failures.',
+    description: 'Exercises the change against the mocks + spec scenarios and reports outcomes.',
+    // Opens the dedicated structured test-report window (scenarios → outcomes →
+    // concerns tree) instead of the generic prose step-detail panel.
+    resultView: 'tester',
   },
   {
     kind: 'reviewer',
@@ -171,6 +174,14 @@ export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
     icon: 'i-lucide-wrench',
     color: '#38bdf8',
     description: 'Fixes failing CI and pushes back to the PR branch.',
+  },
+  fixer: {
+    kind: 'fixer',
+    label: 'Fixer',
+    icon: 'i-lucide-wrench',
+    color: '#fbbf24',
+    description:
+      "Tester's companion: fixes the bugs the tester found and pushes back, then the tester re-runs.",
   },
   merger: {
     kind: 'merger',

@@ -1,5 +1,6 @@
 import type {
   RunnerDispatchRequest,
+  RunnerJobResult,
   RunnerJobView,
   RunnerPollRequest,
   RunnerPoolAuthScheme,
@@ -264,10 +265,22 @@ export class HttpRunnerPoolProvider implements RunnerPoolProvider {
     }
 
     if (state === 'done') {
+      const result: NonNullable<RunnerJobView['result']> = {}
+      // The WHOLE structured work product when the scheduler exposes the harness
+      // `result` envelope: forwards EVERY product (blueprint tree, spec, merge
+      // assessment, test report, bootstrap branch, …), not just the PR scalars — so a
+      // pool-backed tester/merger/blueprinter reaches the engine intact.
+      if (r.resultPath) {
+        Object.assign(
+          result,
+          coerceRunnerResult(environmentsLogic.extractByPath(json, r.resultPath)),
+        )
+      }
+      // Individual scalar paths still apply (and override) for schedulers that surface
+      // the PR url / branch / summary outside any result envelope.
       const prUrl = environmentsLogic.extractString(json, r.prUrlPath)
       const branch = environmentsLogic.extractString(json, r.branchPath)
       const summary = environmentsLogic.extractString(json, r.summaryPath)
-      const result: NonNullable<RunnerJobView['result']> = {}
       if (prUrl) result.prUrl = prUrl
       if (branch) result.branch = branch
       if (summary) result.summary = summary
@@ -296,4 +309,40 @@ export class HttpRunnerPoolProvider implements RunnerPoolProvider {
     if (completed === undefined && inProgress === undefined && total === undefined) return undefined
     return { completed: completed ?? 0, inProgress: inProgress ?? 0, total: total ?? 0 }
   }
+}
+
+/**
+ * Coerce a scheduler's `result` envelope into the canonical {@link RunnerJobResult},
+ * picking only the known fields by type. The structured products (`service` /
+ * `spec` / `assessment` / `report`) are passed through verbatim for the engine to
+ * strictly validate; the scalars/booleans are type-guarded. Anything unexpected is
+ * dropped, so a malformed envelope can never inject junk into the run result.
+ */
+function coerceRunnerResult(raw: unknown): Partial<RunnerJobResult> {
+  if (typeof raw !== 'object' || raw === null) return {}
+  const o = raw as Record<string, unknown>
+  const out: Partial<RunnerJobResult> = {}
+  const STRINGS = ['prUrl', 'branch', 'summary', 'error', 'defaultBranch'] as const
+  for (const k of STRINGS) {
+    if (typeof o[k] === 'string') out[k] = o[k] as string
+  }
+  if (typeof o.pushed === 'boolean') out.pushed = o.pushed
+  if (typeof o.resolved === 'boolean') out.resolved = o.resolved
+  // Structured work products (carried as `unknown` on the port — the engine validates).
+  for (const k of ['service', 'spec', 'assessment', 'report'] as const) {
+    if (o[k] !== undefined) out[k] = o[k]
+  }
+  const usage = o.usage
+  if (
+    typeof usage === 'object' &&
+    usage !== null &&
+    typeof (usage as Record<string, unknown>).inputTokens === 'number' &&
+    typeof (usage as Record<string, unknown>).outputTokens === 'number'
+  ) {
+    out.usage = {
+      inputTokens: (usage as { inputTokens: number }).inputTokens,
+      outputTokens: (usage as { outputTokens: number }).outputTokens,
+    }
+  }
+  return out
 }

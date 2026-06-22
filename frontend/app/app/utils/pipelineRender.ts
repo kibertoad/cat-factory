@@ -2,6 +2,90 @@
 // TaskPipelineMini, AgentStepDetail), so the "is this step still live?" logic stays
 // in one place rather than being re-derived as inline ternaries per component.
 
+import type { PipelineStep } from '~/types/execution'
+
+/**
+ * Visual state of a conditionally-run companion attached to a gate step (today the
+ * Tester's `fixer`): it MIGHT run (`possible`), is running now (`running`), ran at
+ * least once (`completed`), or the gate passed without ever needing it (`skipped`).
+ */
+export type CompanionState = 'possible' | 'running' | 'completed' | 'skipped'
+
+/** Descriptor for the companion node a gate step renders beneath itself. */
+export interface GateCompanion {
+  /** Agent kind of the companion (resolved through `agentKindMeta` for icon/label). */
+  kind: string
+  state: CompanionState
+}
+
+/** Display metadata per companion state (badge label + Tailwind colour classes). */
+export const COMPANION_STATE_META: Record<
+  CompanionState,
+  { label: string; dot: string; text: string; icon: string }
+> = {
+  possible: {
+    label: 'May run',
+    dot: 'border-slate-600 bg-slate-800/40',
+    text: 'text-slate-400',
+    icon: 'i-lucide-circle-dashed',
+  },
+  running: {
+    label: 'Running',
+    dot: 'border-amber-400 bg-amber-500/20',
+    text: 'text-amber-300',
+    icon: 'i-lucide-loader',
+  },
+  completed: {
+    label: 'Ran',
+    dot: 'border-emerald-500 bg-emerald-500/20',
+    text: 'text-emerald-300',
+    icon: 'i-lucide-circle-check',
+  },
+  skipped: {
+    label: 'Skipped',
+    dot: 'border-slate-700 bg-slate-800/40',
+    text: 'text-slate-500',
+    icon: 'i-lucide-circle-slash',
+  },
+}
+
+/**
+ * The conditionally-run companion (if any) a gate step drives, with its current
+ * state — so the pipeline views can render it as a distinct sub-node marked
+ * possible / running / completed / skipped. Today only the Tester's `fixer` loop is
+ * modelled on the SPA (via `step.test`); the CI gate's `ci-fixer` and the conflicts
+ * gate's `conflict-resolver` follow the same shape once their gate state is wired
+ * onto the client step.
+ */
+export function gateCompanionFor(step: PipelineStep): GateCompanion | null {
+  if (step.agentKind === 'tester') {
+    const attempts = step.test?.attempts ?? 0
+    if (step.state === 'done') {
+      // The gate finished: it ran the fixer iff it ever dispatched one.
+      return { kind: 'fixer', state: attempts > 0 ? 'completed' : 'skipped' }
+    }
+    if (step.test?.phase === 'fixing') return { kind: 'fixer', state: 'running' }
+    if (attempts > 0) return { kind: 'fixer', state: 'completed' }
+    // Pending, or testing with no attempt yet — the fixer might still be needed.
+    return { kind: 'fixer', state: 'possible' }
+  }
+  return null
+}
+
+/**
+ * Whether an agent kind is a companion of a producer step (the quality companions
+ * that grade-and-loop, plus the Tester's `fixer`). Used to give companion steps a
+ * visually distinct treatment in the pipeline.
+ */
+export function isCompanionKind(kind: string): boolean {
+  return (
+    kind === 'reviewer' ||
+    kind === 'architect-companion' ||
+    kind === 'spec-companion' ||
+    kind === 'fixer'
+  )
+}
+
 /**
  * Tailwind classes for a subtask-item status icon. An in-progress item spins only
  * while the run is live: once the run has failed, a step left mid-flight (its item

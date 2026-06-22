@@ -80,11 +80,21 @@ describe('RunnerPoolTransport', () => {
     expect(req.spec.kind).toBe('bootstrap')
   })
 
-  it('rejects the Cloudflare-only kinds (self-hosted pools serve run/test/fix/bootstrap only)', () => {
-    const { provider } = fakeProvider()
+  it('serves every harness route (blueprint/spec/merge/… run on the same image)', async () => {
+    const { provider, calls } = fakeProvider()
     const transport = new RunnerPoolTransport(provider, manifest, () => 't')
-    expect(() => transport.dispatch('job-1', {}, 'blueprint')).toThrow(/do not support 'blueprint'/)
-    expect(() => transport.dispatch('job-1', {}, 'merge')).toThrow(/do not support 'merge'/)
+    for (const kind of [
+      'blueprint',
+      'spec',
+      'explore',
+      'ci-fix',
+      'resolve-conflicts',
+      'merge',
+    ] as const) {
+      await transport.dispatch('job-1', {}, kind)
+    }
+    expect(calls.dispatch).toHaveLength(6)
+    expect((calls.dispatch.at(-1) as { spec: Record<string, unknown> }).spec.kind).toBe('merge')
   })
 })
 
@@ -130,5 +140,41 @@ describe('HttpRunnerPoolProvider', () => {
     expect(view.state).toBe('done')
     expect(view.progress).toEqual({ completed: 3, inProgress: 0, total: 5 })
     expect(view.result?.prUrl).toBe('https://github.com/o/r/pull/9')
+  })
+
+  it('forwards the whole structured result envelope via resultPath (test report, etc.)', async () => {
+    const report = {
+      greenlight: false,
+      summary: 'two checks failed',
+      tested: ['login'],
+      outcomes: [{ name: 'login', status: 'failed' }],
+      concerns: [{ title: 'bug', detail: 'x', severity: 'high' }],
+    }
+    vi.stubGlobal('fetch', () =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({
+            state: 'succeeded',
+            result: { report, summary: 'tested', usage: { inputTokens: 10, outputTokens: 5 } },
+          }),
+          { status: 200 },
+        ),
+      ),
+    )
+    const provider = new HttpRunnerPoolProvider()
+    const withResult: RunnerPoolManifest = {
+      ...manifest,
+      response: { ...manifest.response, resultPath: 'result' },
+    }
+    const view = await provider.poll({
+      manifest: withResult,
+      jobId: 'job-7',
+      resolveSecret: () => 't',
+    })
+    expect(view.state).toBe('done')
+    // The structured test report reaches the engine intact (previously dropped).
+    expect(view.result?.report).toEqual(report)
+    expect(view.result?.usage).toEqual({ inputTokens: 10, outputTokens: 5 })
+    expect(view.result?.summary).toBe('tested')
   })
 })

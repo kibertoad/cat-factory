@@ -75,6 +75,17 @@ export const runnerPoolResponseMappingSchema = v.object({
   prUrlPath: v.optional(v.string()),
   branchPath: v.optional(v.string()),
   summaryPath: v.optional(v.string()),
+  /**
+   * Dot-path to the WHOLE structured result object the harness records (the
+   * harness `result`: `{ prUrl, branch, summary, service, spec, assessment, report,
+   * defaultBranch, pushed, resolved, usage }`). A pool that proxies the cat-factory
+   * executor-harness verbatim should set this so EVERY structured product — the
+   * blueprint tree, the spec doc, the merge assessment, the test report, the bootstrap
+   * default branch — is forwarded, not just the PR url/branch/summary scalars. Known
+   * fields are coerced by type; unknown ones are ignored. The individual scalar paths
+   * above still apply (and override) for schedulers that surface them out-of-envelope.
+   */
+  resultPath: v.optional(v.string()),
   /** Dot-path to a job-level error message (a failed job, or a structured error). */
   errorPath: v.optional(v.string()),
 })
