@@ -219,6 +219,12 @@ export const modelOptionSchema = v.object({
   description: v.string(),
   /** Which flavour is active for this deployment. */
   flavor: v.picklist(['cloudflare', 'direct', 'subscription']),
+  /**
+   * Whether this model is actually selectable given what the workspace has
+   * configured: a direct key for its provider, a subscription token for its vendor,
+   * or the opt-in Cloudflare lib enabled. The picker disables an unavailable model.
+   */
+  available: v.optional(v.boolean()),
   /** Short provider label for the active flavour, e.g. `Cloudflare`, `DashScope`. */
   providerLabel: v.string(),
   /** Effective provider id the agent runs with. */

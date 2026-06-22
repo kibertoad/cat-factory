@@ -1,8 +1,7 @@
 import type { AppConfig } from '@cat-factory/server'
-import { effectiveCatalog } from '@cat-factory/kernel'
+import { ALL_SUBSCRIPTION_VENDORS, type ProviderCapabilities, effectiveCatalog } from '@cat-factory/kernel'
 import { modelCostResolver } from '@cat-factory/spend'
 import type { Env } from '../env'
-import { directKeyAvailable } from './utils'
 import { type AgentsConfig, loadAgentsConfig } from './agents'
 import { type ExecutionConfig, loadExecutionConfig } from './execution'
 import { loadSpendPricing } from './spending'
@@ -46,12 +45,20 @@ export type {
 }
 
 export function loadConfig(env: Env): AppConfig {
-  const isDirectAvailable = directKeyAvailable(env)
+  // Deployment-level capabilities: direct keys are now per-workspace (resolved at run
+  // time from the DB pool), so none are known here; Cloudflare Workers AI is opt-in
+  // (the `AI` binding). The per-workspace `/models` endpoint recomputes selectability
+  // against each workspace's configured keys + subscriptions.
+  const caps: ProviderCapabilities = {
+    directProviders: new Set(),
+    subscriptionVendors: new Set(ALL_SUBSCRIPTION_VENDORS),
+    cloudflareEnabled: !!env.AI,
+  }
   const spend = loadSpendPricing(env)
   return {
-    agents: loadAgentsConfig(env, isDirectAvailable),
+    agents: loadAgentsConfig(env, caps),
     // Surface each model's informational list cost in the picker (from spend pricing).
-    models: effectiveCatalog(isDirectAvailable, modelCostResolver(spend)),
+    models: effectiveCatalog(caps, modelCostResolver(spend)),
     execution: loadExecutionConfig(env),
     spend,
     github: loadGitHubConfig(env),
