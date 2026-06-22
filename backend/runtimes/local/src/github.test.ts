@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createLocalGitHubClient, StaticTokenAppRegistry } from './github.js'
+import {
+  createLocalGitHubClient,
+  githubPatCreationUrl,
+  StaticTokenAppRegistry,
+} from './github.js'
 
 describe('StaticTokenAppRegistry', () => {
   it('returns the PAT for installation tokens and rejects app-JWT use', async () => {
@@ -8,6 +12,15 @@ describe('StaticTokenAppRegistry', () => {
     expect(reg.apps()).toEqual([{ appId: '' }])
     await expect(reg.installationToken()).resolves.toBe('pat_abc')
     await expect(reg.authForApp().appJwt()).rejects.toThrow(/not available in local/)
+  })
+})
+
+describe('githubPatCreationUrl', () => {
+  it('points at the classic-token form with the local-mode scopes pre-selected', () => {
+    const url = new URL(githubPatCreationUrl())
+    expect(url.origin + url.pathname).toBe('https://github.com/settings/tokens/new')
+    expect(url.searchParams.get('scopes')).toBe('repo,workflow')
+    expect(url.searchParams.get('description')).toBe('cat-factory local mode')
   })
 })
 
