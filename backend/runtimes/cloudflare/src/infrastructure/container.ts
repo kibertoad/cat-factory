@@ -104,6 +104,7 @@ import { D1MergePresetRepository } from './repositories/D1MergePresetRepository'
 import { D1PipelineScheduleRepository } from './repositories/D1PipelineScheduleRepository'
 import { D1TrackerSettingsRepository } from './repositories/D1TrackerSettingsRepository'
 import { D1ModelDefaultsRepository } from './repositories/D1ModelDefaultsRepository'
+import { D1ServiceFragmentDefaultsRepository } from './repositories/D1ServiceFragmentDefaultsRepository'
 import { InAppNotificationChannel } from './events/InAppNotificationChannel'
 import { GitHubCiStatusProvider } from './github/GitHubCiStatusProvider'
 import { GitHubMergeabilityProvider } from './github/GitHubMergeabilityProvider'
@@ -363,6 +364,7 @@ function selectMergeLifecycleDeps(
     notificationRepository: new D1NotificationRepository({ db }),
     mergePresetRepository: new D1MergePresetRepository({ db }),
     modelDefaultsRepository: new D1ModelDefaultsRepository({ db }),
+    serviceFragmentDefaultsRepository: new D1ServiceFragmentDefaultsRepository({ db }),
   }
   // Compose the delivery channels: in-app push (when the events binding is present)
   // and Slack (when the integration is enabled) implement the same NotificationChannel

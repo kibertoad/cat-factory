@@ -14,6 +14,7 @@ import type {
   Clock,
   ExecutionRepository,
   RepoProjectionRepository,
+  ServiceFragmentDefaultsRepository,
   ServiceRepository,
   WorkspaceMountRepository,
   WorkspaceRepository,
@@ -42,6 +43,13 @@ export interface BoardServiceDependencies {
    */
   serviceRepository?: ServiceRepository
   workspaceMountRepository?: WorkspaceMountRepository
+  /**
+   * The workspace's default service-fragment selection. When wired, a new service
+   * frame inherits the workspace default onto its `serviceFragmentIds` at creation, so
+   * `code-aware` agents on its tasks pick up the org's standards out of the box. Absent
+   * → new frames start with no service-level fragments.
+   */
+  serviceFragmentDefaultsRepository?: ServiceFragmentDefaultsRepository
 }
 
 /**
@@ -59,6 +67,7 @@ export class BoardService {
   private readonly repoProjectionRepository?: RepoProjectionRepository
   private readonly serviceRepository?: ServiceRepository
   private readonly workspaceMountRepository?: WorkspaceMountRepository
+  private readonly serviceFragmentDefaultsRepository?: ServiceFragmentDefaultsRepository
 
   constructor({
     workspaceRepository,
@@ -69,6 +78,7 @@ export class BoardService {
     repoProjectionRepository,
     serviceRepository,
     workspaceMountRepository,
+    serviceFragmentDefaultsRepository,
   }: BoardServiceDependencies) {
     this.workspaceRepository = workspaceRepository
     this.blockRepository = blockRepository
@@ -78,6 +88,21 @@ export class BoardService {
     this.repoProjectionRepository = repoProjectionRepository
     this.serviceRepository = serviceRepository
     this.workspaceMountRepository = workspaceMountRepository
+    this.serviceFragmentDefaultsRepository = serviceFragmentDefaultsRepository
+  }
+
+  /**
+   * The workspace's default service-fragment selection that a NEW service frame
+   * inherits. Empty when the defaults repo isn't wired or none is set; never throws so
+   * frame creation isn't blocked by a defaults read.
+   */
+  private async defaultServiceFragmentIds(workspaceId: string): Promise<string[]> {
+    if (!this.serviceFragmentDefaultsRepository) return []
+    try {
+      return await this.serviceFragmentDefaultsRepository.get(workspaceId)
+    } catch {
+      return []
+    }
   }
 
   /**
@@ -159,6 +184,7 @@ export class BoardService {
     const blocks = await this.blockRepository.listByWorkspace(workspaceId)
     const type = input.type as BlockType
     const count = blocks.filter((b) => b.type === type).length + 1
+    const serviceFragmentIds = await this.defaultServiceFragmentIds(workspaceId)
     const block: Block = {
       id: this.idGenerator.next('blk'),
       title: `${BLOCK_TYPE_LABEL[type]} ${count}`,
@@ -171,6 +197,7 @@ export class BoardService {
       executionId: null,
       level: 'frame',
       parentId: null,
+      ...(serviceFragmentIds.length ? { serviceFragmentIds } : {}),
     }
     const serviceId = await this.registerService(workspaceId, block)
     await this.blockRepository.insert(workspaceId, block, serviceId)
@@ -224,6 +251,7 @@ export class BoardService {
     }
     const frames = blocks.filter((b) => b.level === 'frame').length
     const title = directory ? (directory.split('/').pop() ?? repo.name) : repo.name
+    const serviceFragmentIds = await this.defaultServiceFragmentIds(workspaceId)
     const block: Block = {
       id: this.idGenerator.next('blk'),
       title,
@@ -238,6 +266,7 @@ export class BoardService {
       executionId: null,
       level: 'frame',
       parentId: null,
+      ...(serviceFragmentIds.length ? { serviceFragmentIds } : {}),
     }
     const serviceId = await this.registerService(workspaceId, block, {
       installationId: repo.installationId,
@@ -357,8 +386,16 @@ export class BoardService {
 
   async updateBlock(workspaceId: string, id: string, patch: UpdateBlockInput): Promise<Block> {
     await this.requireWorkspace(workspaceId)
-    const { homeWorkspaceId } = await this.resolveBlock(workspaceId, id)
-    await this.blockRepository.update(homeWorkspaceId, id, patch)
+    const { homeWorkspaceId, block } = await this.resolveBlock(workspaceId, id)
+    // `serviceFragmentIds` is a service-level (frame) setting the engine only reads off
+    // the owning service frame; ignore it on non-frame blocks so it never persists as
+    // dead data (the inspector only exposes the picker on frames anyway).
+    let effective = patch
+    if (patch.serviceFragmentIds !== undefined && block.level !== 'frame') {
+      const { serviceFragmentIds: _ignored, ...rest } = patch
+      effective = rest
+    }
+    await this.blockRepository.update(homeWorkspaceId, id, effective)
     return assertFound(await this.blockRepository.get(homeWorkspaceId, id), 'Block', id)
   }
 

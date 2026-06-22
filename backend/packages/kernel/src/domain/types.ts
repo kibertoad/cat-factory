@@ -167,6 +167,9 @@ export type {
   // Per-workspace, per-agent-kind default model selection.
   ModelDefaults,
   SetModelDefaultsInput,
+  // Per-workspace default service-fragment selection (new services inherit it).
+  ServiceFragmentDefaults,
+  SetServiceFragmentDefaultsInput,
   // Notification shapes.
   Notification,
   NotificationType,

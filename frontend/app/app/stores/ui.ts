@@ -67,6 +67,8 @@ export const useUiStore = defineStore('ui', () => {
   // default model overrides.
   const mergeThresholdsOpen = ref(false)
   const modelDefaultsOpen = ref(false)
+  // Workspace-settings panel: the default service-fragment selection new services inherit.
+  const serviceFragmentDefaultsOpen = ref(false)
   // LLM-vendor subscription credentials (the token pool powering the Claude Code
   // / Codex harnesses).
   const vendorCredentialsOpen = ref(false)
@@ -245,6 +247,12 @@ export const useUiStore = defineStore('ui', () => {
   function closeModelDefaults() {
     modelDefaultsOpen.value = false
   }
+  function openServiceFragmentDefaults() {
+    serviceFragmentDefaultsOpen.value = true
+  }
+  function closeServiceFragmentDefaults() {
+    serviceFragmentDefaultsOpen.value = false
+  }
   function openVendorCredentials() {
     vendorCredentialsOpen.value = true
   }
@@ -290,6 +298,7 @@ export const useUiStore = defineStore('ui', () => {
     commandBarOpen,
     mergeThresholdsOpen,
     modelDefaultsOpen,
+    serviceFragmentDefaultsOpen,
     vendorCredentialsOpen,
     requirementReviewBlockId,
     stepDetail,
@@ -337,6 +346,8 @@ export const useUiStore = defineStore('ui', () => {
     closeMergeThresholds,
     openModelDefaults,
     closeModelDefaults,
+    openServiceFragmentDefaults,
+    closeServiceFragmentDefaults,
     openVendorCredentials,
     closeVendorCredentials,
     openRequirementReview,

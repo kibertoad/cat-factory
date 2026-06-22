@@ -11,6 +11,7 @@ import { notificationSchema } from './notifications.js'
 import { mergeThresholdPresetSchema } from './merge.js'
 import { agentConfigCatalogSchema } from './agent-config.js'
 import { modelDefaultsSchema } from './model-defaults.js'
+import { serviceFragmentDefaultsSchema } from './service-fragment-defaults.js'
 import { pipelineScheduleSchema } from './recurring.js'
 import { serviceSchema, workspaceMountSchema } from './services.js'
 import { trackerSettingsSchema } from './tracker.js'
@@ -63,6 +64,11 @@ export const workspaceSnapshotSchema = v.object({
    * worker, so optional on the wire.
    */
   modelDefaults: v.optional(modelDefaultsSchema),
+  /**
+   * The workspace's default service-fragment selection (the best-practice fragment ids
+   * new services inherit). Attached by the facade, so optional on the wire.
+   */
+  serviceFragmentDefaults: v.optional(serviceFragmentDefaultsSchema),
   /**
    * The workspace's recurring pipelines (schedules that re-run a pipeline against
    * a service on a cadence). Carried in the snapshot so the board renders the

@@ -14,6 +14,10 @@ import {
   type Workspace,
   type WorkspaceSnapshot,
 } from '@cat-factory/kernel'
+import {
+  clearRegisteredPromptFragments,
+  registerPromptFragment,
+} from '@cat-factory/prompt-fragments'
 import { describe, expect, it } from 'vitest'
 import type { ConformanceHarness } from './harness.js'
 
@@ -117,6 +121,90 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         // And it rides along on the workspace snapshot.
         const snapshot = await call<WorkspaceSnapshot>('GET', `/workspaces/${workspace.id}`)
         expect(snapshot.body.modelDefaults?.defaults.architect).toBe('strong-model')
+      })
+    })
+
+    describe('service-scoped fragments + agent traits', () => {
+      it('reads, replaces and surfaces the workspace default service-fragment set', async () => {
+        const { call, createWorkspace } = harness.makeApp()
+        const { workspace } = await createWorkspace()
+
+        // A fresh workspace has no default service fragments.
+        const initial = await call<{ fragmentIds: string[] }>(
+          'GET',
+          `/workspaces/${workspace.id}/service-fragment-defaults`,
+        )
+        expect(initial.status).toBe(200)
+        expect(initial.body.fragmentIds).toEqual([])
+
+        // Replace the whole list (ids aren't validated against the catalog here).
+        const put = await call<{ fragmentIds: string[] }>(
+          'PUT',
+          `/workspaces/${workspace.id}/service-fragment-defaults`,
+          { fragmentIds: ['node.best-practices', 'node.performance'] },
+        )
+        expect(put.status).toBe(200)
+        expect(put.body.fragmentIds).toEqual(['node.best-practices', 'node.performance'])
+
+        // It persisted and rides along on the snapshot.
+        const snapshot = await call<WorkspaceSnapshot>('GET', `/workspaces/${workspace.id}`)
+        expect(snapshot.body.serviceFragmentDefaults?.fragmentIds).toEqual([
+          'node.best-practices',
+          'node.performance',
+        ])
+
+        // A new service inherits the default onto its serviceFragmentIds.
+        const frame = await call<Block>('POST', `/workspaces/${workspace.id}/blocks`, {
+          type: 'service',
+          position: { x: 5, y: 5 },
+        })
+        expect(frame.body.serviceFragmentIds).toEqual(['node.best-practices', 'node.performance'])
+      })
+
+      it('folds the service fragments into code-aware agents only', async () => {
+        // Register a deployment-style custom fragment into the universal pool, select it
+        // as a service's standards, and assert the engine folds it into a `code-aware`
+        // step's prompt (coder) but not a non-code-aware one (documenter).
+        registerPromptFragment({
+          id: 'test.svc-standard',
+          version: '1.0.0',
+          title: 'Service standard',
+          category: 'Test',
+          summary: 'A registered service standard.',
+          body: 'SERVICE-STANDARD-BODY',
+        })
+        try {
+          const app = harness.makeApp({ echoFragments: true })
+          const { workspace } = await app.createWorkspace()
+          const wsId = workspace.id
+
+          // Set the service-level selection on the seeded auth frame (task_login's owner).
+          await app.call('PATCH', `/workspaces/${wsId}/blocks/blk_auth`, {
+            serviceFragmentIds: ['test.svc-standard'],
+          })
+
+          const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+            name: 'Code + document',
+            agentKinds: ['coder', 'documenter'],
+          })
+          const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+            pipelineId: pipeline.body.id,
+          })
+          expect(start.status).toBe(201)
+          const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+
+          // The coder is `code-aware`: it receives the service's fragment.
+          const coder = exec.steps.find((s) => s.agentKind === 'coder')!
+          expect(coder.output).toContain('[frags]test.svc-standard[/frags]')
+          expect(coder.selectedFragmentIds).toEqual(['test.svc-standard'])
+
+          // The documenter is neither code-aware nor spec-aware: no service fragments.
+          const documenter = exec.steps.find((s) => s.agentKind === 'documenter')!
+          expect(documenter.output).toContain('[frags][/frags]')
+          expect(documenter.selectedFragmentIds ?? []).toEqual([])
+        } finally {
+          clearRegisteredPromptFragments()
+        }
       })
     })
 

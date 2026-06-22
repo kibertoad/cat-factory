@@ -38,6 +38,7 @@ import type {
   CiStatusProvider,
   MergePresetRepository,
   ModelDefaultsRepository,
+  ServiceFragmentDefaultsRepository,
   NotificationChannel,
   NotificationRepository,
   PipelineScheduleRepository,
@@ -100,6 +101,7 @@ import { RequirementReviewService } from './modules/requirements/RequirementRevi
 import { NotificationService } from './modules/notifications/NotificationService.js'
 import { MergePresetService } from './modules/merge/MergePresetService.js'
 import { ModelDefaultsService } from './modules/modelDefaults/ModelDefaultsService.js'
+import { ServiceFragmentDefaultsService } from './modules/serviceFragmentDefaults/ServiceFragmentDefaultsService.js'
 import { RecurringPipelineService } from './modules/recurring/RecurringPipelineService.js'
 import { TrackerSettingsService } from './modules/recurring/TrackerSettingsService.js'
 import { BLUEPRINT_PIPELINE_ID } from '@cat-factory/kernel'
@@ -362,6 +364,13 @@ export interface CoreDependencies {
    * routing is used everywhere.
    */
   modelDefaultsRepository?: ModelDefaultsRepository
+  /**
+   * Stores a workspace's default service-fragment selection (the best-practice
+   * fragment ids new services inherit). Optional and default-off: absent → the
+   * `serviceFragmentDefaults` module isn't assembled, new services start with no
+   * service-level fragments, and `code-aware` agents only see the block's own pins.
+   */
+  serviceFragmentDefaultsRepository?: ServiceFragmentDefaultsRepository
 
   // ---- Recurring pipelines + issue tracker (optional; wired when configured) -
   // The recurring-pipeline feature (scheduled runs of a pipeline against a
@@ -454,6 +463,11 @@ export interface ModelDefaultsModule {
   service: ModelDefaultsService
 }
 
+/** The default service-fragment feature's service, present only when its repository is wired. */
+export interface ServiceFragmentDefaultsModule {
+  service: ServiceFragmentDefaultsService
+}
+
 /** The recurring-pipeline feature's service, present only when its repository is wired. */
 export interface RecurringModule {
   service: RecurringPipelineService
@@ -466,7 +480,11 @@ export interface TrackerModule {
 
 /** The prompt-fragment library's services, present only when configured (ADR 0006). */
 export interface FragmentLibraryModule {
-  /** Per-tier CRUD + the merged-catalog resolver (also the run-path FragmentResolver). */
+  /**
+   * Per-tier CRUD + the merged-catalog resolver. A management surface only: the run
+   * path no longer consumes it (service-scoped `serviceFragmentIds` folded into
+   * `code-aware` agents replaced the automatic per-run relevance selector).
+   */
   libraryService: FragmentLibraryService
   /** Repo-sourced fragments; present only when the GitHub client + source repo are wired. */
   sourceService?: FragmentSourceService
@@ -505,6 +523,8 @@ export interface Core {
   mergePresets?: MergePresetsModule
   /** Present only when the model-defaults repository is wired (see CoreDependencies). */
   modelDefaults?: ModelDefaultsModule
+  /** Present only when the service-fragment-defaults repository is wired (see CoreDependencies). */
+  serviceFragmentDefaults?: ServiceFragmentDefaultsModule
   /** Present only when the prompt-fragment library is configured (see CoreDependencies). */
   fragmentLibrary?: FragmentLibraryModule
   /** Present only when the recurring-pipeline repository is wired (see CoreDependencies). */
@@ -783,6 +803,7 @@ function createBootstrapModule(
     blockRepository: deps.blockRepository,
     serviceRepository: deps.serviceRepository,
     workspaceMountRepository: deps.workspaceMountRepository,
+    serviceFragmentDefaultsRepository: deps.serviceFragmentDefaultsRepository,
     idGenerator: deps.idGenerator,
     clock: deps.clock,
     repoBootstrapper: deps.repoBootstrapper,
@@ -980,6 +1001,19 @@ function createModelDefaultsModule(deps: CoreDependencies): ModelDefaultsModule 
   return { service }
 }
 
+/** Assemble the service-fragment-defaults module when its repository is present. */
+function createServiceFragmentDefaultsModule(
+  deps: CoreDependencies,
+): ServiceFragmentDefaultsModule | undefined {
+  const { serviceFragmentDefaultsRepository } = deps
+  if (!serviceFragmentDefaultsRepository) return undefined
+  const service = new ServiceFragmentDefaultsService({
+    serviceFragmentDefaultsRepository,
+    workspaceRepository: deps.workspaceRepository,
+  })
+  return { service }
+}
+
 /** Assemble the tracker-settings module when its repository is present. */
 function createTrackerModule(deps: CoreDependencies): TrackerModule | undefined {
   const { trackerSettingsRepository } = deps
@@ -1055,6 +1089,7 @@ export function createCore(dependencies: CoreDependencies): Core {
   const slack = createSlackModule(dependencies)
   const mergePresets = createMergePresetsModule(dependencies)
   const modelDefaults = createModelDefaultsModule(dependencies)
+  const serviceFragmentDefaults = createServiceFragmentDefaultsModule(dependencies)
 
   const executionService = new ExecutionService({
     ...dependencies,
@@ -1063,9 +1098,6 @@ export function createCore(dependencies: CoreDependencies): Core {
     boardService,
     spendService,
     environmentProvisioning: environments?.provisioningService,
-    // The library service is itself the run-path FragmentResolver (it merges the
-    // tenant catalog + runs selection); injected so every agent kind benefits.
-    fragmentResolver: fragmentLibrary?.libraryService,
     blueprintReconciler: boardScan?.service,
     notificationService: notifications?.service,
     llmObservability,
@@ -1115,6 +1147,7 @@ export function createCore(dependencies: CoreDependencies): Core {
     ...(slack ? { slack } : {}),
     ...(mergePresets ? { mergePresets } : {}),
     ...(modelDefaults ? { modelDefaults } : {}),
+    ...(serviceFragmentDefaults ? { serviceFragmentDefaults } : {}),
     ...(fragmentLibrary ? { fragmentLibrary } : {}),
     ...(recurring ? { recurring } : {}),
     ...(tracker ? { tracker } : {}),

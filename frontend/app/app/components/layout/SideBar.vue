@@ -262,6 +262,17 @@ watch(
         >
           Default models
         </UButton>
+        <UButton
+          block
+          color="neutral"
+          variant="soft"
+          size="sm"
+          icon="i-lucide-book-open-check"
+          class="justify-start"
+          @click="ui.openServiceFragmentDefaults()"
+        >
+          Default service best practices
+        </UButton>
       </div>
     </section>
 

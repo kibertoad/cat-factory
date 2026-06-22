@@ -10,6 +10,7 @@ import { useNotificationsStore } from '~/stores/notifications'
 import { useMergePresetsStore } from '~/stores/mergePresets'
 import { useAgentConfigStore } from '~/stores/agentConfig'
 import { useModelDefaultsStore } from '~/stores/modelDefaults'
+import { useServiceFragmentDefaultsStore } from '~/stores/serviceFragmentDefaults'
 import { useRecurringPipelinesStore } from '~/stores/recurringPipelines'
 import { useServicesStore } from '~/stores/services'
 import { useTrackerStore } from '~/stores/tracker'
@@ -69,6 +70,7 @@ export const useWorkspaceStore = defineStore(
       useMergePresetsStore().hydrate(snapshot.mergePresets ?? [])
       useAgentConfigStore().hydrate(snapshot.agentConfigCatalog ?? [])
       useModelDefaultsStore().hydrate(snapshot.modelDefaults?.defaults)
+      useServiceFragmentDefaultsStore().hydrate(snapshot.serviceFragmentDefaults?.fragmentIds)
       useRecurringPipelinesStore().hydrate(snapshot.recurringPipelines ?? [])
       useTrackerStore().hydrate(snapshot.trackerSettings)
       useServicesStore().hydrate(snapshot.mounts ?? [], snapshot.serviceCatalog ?? [])

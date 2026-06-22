@@ -65,6 +65,15 @@ export const blockSchema = v.object({
    */
   fragmentIds: v.optional(v.array(v.string())),
   /**
+   * Service-level (frame-only): ids of the best-practice / guideline prompt fragments
+   * selected as this service's programming standards (drawn from the universal pool in
+   * @cat-factory/prompt-fragments). At run time the execution engine folds their bodies
+   * into the system prompt of every agent under this service that carries the
+   * `code-aware` trait. Seeded from the workspace default on new services; absent ⇒ no
+   * service-level fragments (only the block's own `fragmentIds` apply).
+   */
+  serviceFragmentIds: v.optional(v.array(v.string())),
+  /**
    * Id of the LLM model selected for this block from the shared model catalog
    * (see MODEL_CATALOG in @cat-factory/kernel). When set it overrides the agent
    * routing's default model at run time; absent means "use the routing default".

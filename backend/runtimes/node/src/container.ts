@@ -731,6 +731,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     llmCallMetricRepository: repos.llmCallMetricRepository,
     recordLlmPrompts: config.observability.recordPrompts,
     modelDefaultsRepository: repos.modelDefaultsRepository,
+    serviceFragmentDefaultsRepository: repos.serviceFragmentDefaultsRepository,
     // Requirements-review feature (stateless reviewer + the requirements-rework
     // step). Wired identically to the Cloudflare facade's `selectRequirementsDeps`
     // so both runtimes serve the review/rework API AND substitute a block's reworked

@@ -91,6 +91,8 @@ export const blocks = pgTable(
     confidence: doublePrecision('confidence'),
     module_name: text('module_name'),
     fragment_ids: text('fragment_ids'),
+    // Service-level (frame): the service's selected best-practice fragment ids (JSON array).
+    service_fragment_ids: text('service_fragment_ids'),
     model_id: text('model_id'),
     pull_request: text('pull_request'),
     merge_preset_id: text('merge_preset_id'),
@@ -235,6 +237,14 @@ export const workspaceModelDefaults = pgTable(
   },
   (t) => [primaryKey({ columns: [t.workspace_id, t.agent_kind] })],
 )
+
+// Per-workspace default service-fragment selection (mirror of D1 migration 0040). One
+// row per workspace; the best-practice fragment ids new services inherit, JSON array.
+export const workspaceFragmentDefaults = pgTable('workspace_fragment_defaults', {
+  workspace_id: text('workspace_id').primaryKey(),
+  fragment_ids: text('fragment_ids').notNull(),
+  updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
+})
 
 // LLM observability sink (mirror of D1 migration 0026). One row per proxied
 // container-agent model call: full prompt/response, output-limit headroom and the

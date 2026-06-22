@@ -13,6 +13,7 @@ import type {
 import type { Clock, IdGenerator } from '@cat-factory/kernel'
 import type {
   BlockRepository,
+  ServiceFragmentDefaultsRepository,
   ServiceRepository,
   WorkspaceMountRepository,
   WorkspaceRepository,
@@ -57,6 +58,12 @@ export interface BootstrapServiceDependencies {
    */
   serviceRepository?: ServiceRepository
   workspaceMountRepository?: WorkspaceMountRepository
+  /**
+   * The workspace's default service-fragment selection. When wired, the provisional
+   * service frame inherits the workspace default onto its `serviceFragmentIds`, so a
+   * bootstrapped service starts with the org's standards like any other new service.
+   */
+  serviceFragmentDefaultsRepository?: ServiceFragmentDefaultsRepository
   idGenerator: IdGenerator
   clock: Clock
   /** Performs the side-effecting pre-flight + container bootstrap; optional. */
@@ -608,11 +615,22 @@ export class BootstrapService {
 
   // ---- helpers ------------------------------------------------------------
 
+  /** The workspace default fragment ids a new service inherits; empty / never throws. */
+  private async defaultServiceFragmentIds(workspaceId: string): Promise<string[]> {
+    if (!this.deps.serviceFragmentDefaultsRepository) return []
+    try {
+      return await this.deps.serviceFragmentDefaultsRepository.get(workspaceId)
+    } catch {
+      return []
+    }
+  }
+
   /** Create the provisional, in-progress service frame a bootstrap run materialises. */
   private async createServiceFrame(workspaceId: string, repoName: string): Promise<Block> {
     const blocks = await this.deps.blockRepository.listByWorkspace(workspaceId)
     const frames = blocks.filter((b) => b.level === 'frame').length
     const type: BlockType = 'service'
+    const serviceFragmentIds = await this.defaultServiceFragmentIds(workspaceId)
     const block: Block = {
       id: this.deps.idGenerator.next('blk'),
       title: repoName,
@@ -627,6 +645,7 @@ export class BootstrapService {
       executionId: null,
       level: 'frame',
       parentId: null,
+      ...(serviceFragmentIds.length ? { serviceFragmentIds } : {}),
     }
     // Register the bootstrapped frame as an account-owned service + mount (no-op when sharing
     // isn't wired), so a bootstrapped service is shareable and its run is service-discoverable.

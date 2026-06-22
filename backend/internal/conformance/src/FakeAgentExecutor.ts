@@ -32,6 +32,13 @@ export interface FakeAgentOptions {
    * fed it — e.g. that a block's reworked requirements replaced its raw description.
    */
   echoDescription?: boolean
+  /**
+   * When set, the (generic-kind) agent echoes the ids of the resolved best-practice
+   * fragments it was handed as `[frags]id,id[/frags]`, so a test can assert WHICH
+   * fragments the engine folded in — e.g. that only `code-aware` kinds receive the
+   * running service's `serviceFragmentIds`.
+   */
+  echoFragments?: boolean
   /** A PR the (container-flavoured) agent reports opening, so persistence can be exercised. */
   pullRequest?: PullRequestRef
   /**
@@ -202,8 +209,11 @@ export class FakeAgentExecutor implements AgentExecutor {
     const descSuffix = this.options.echoDescription
       ? ` [desc]${context.block.description}[/desc]`
       : ''
+    const fragSuffix = this.options.echoFragments
+      ? ` [frags]${(context.block.resolvedFragments ?? []).map((f) => f.id).join(',')}[/frags]`
+      : ''
     return {
-      output: `[${context.agentKind}] processed "${context.block.title}"${revisionSuffix}${descSuffix}`,
+      output: `[${context.agentKind}] processed "${context.block.title}"${revisionSuffix}${descSuffix}${fragSuffix}`,
       model: 'fake',
       confidence: context.isFinalStep ? confidence : undefined,
       usage: this.options.usage,

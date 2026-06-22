@@ -1,8 +1,4 @@
 import type {
-  AgentExecutor,
-  AgentRunContext,
-  AgentRunResult,
-  ExecutionInstance,
   FragmentSource,
   FragmentSourceStatus,
   FragmentSyncResult,
@@ -183,50 +179,9 @@ describe('prompt-fragment library (ADR 0006)', () => {
     })
   })
 
-  describe('per-run relevance selection (every agent kind)', () => {
-    let app: TestApp
-    let wsId: string
-
-    beforeEach(async () => {
-      app = makeApp(undefined, fragmentLibraryDeps())
-      const { workspace } = await app.createWorkspace()
-      wsId = workspace.id
-    })
-
-    it('folds the resolved catalog into the agent context and records the selection', async () => {
-      await app.call('POST', `/workspaces/${wsId}/prompt-fragments`, {
-        id: 'team.review-bar',
-        title: 'Team review bar',
-        summary: 'What we always check in review.',
-        body: 'Always check error handling and tests before approving.',
-      })
-
-      const seen: AgentRunContext[] = []
-      const capturing: AgentExecutor = {
-        async run(context: AgentRunContext): Promise<AgentRunResult> {
-          seen.push(context)
-          return { output: 'ok', model: 'fake', confidence: 1 }
-        },
-      }
-      const runApp = makeApp(capturing, fragmentLibraryDeps())
-
-      await runApp.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
-        pipelineId: 'pl_quick',
-      })
-      await runApp.drive(wsId)
-
-      // The resolver runs for every step (coder + tester here), not just review.
-      expect(seen.length).toBeGreaterThanOrEqual(2)
-      const resolvedIds = seen[0]!.block.resolvedFragments?.map((f) => f.id) ?? []
-      expect(resolvedIds).toContain('team.review-bar')
-
-      // The selection is recorded on the execution step for observability.
-      const snap = await runApp.call<{ executions: ExecutionInstance[] }>(
-        'GET',
-        `/workspaces/${wsId}`,
-      )
-      const exec = snap.body.executions.find((e) => e.blockId === 'task_login')!
-      expect(exec.steps[0]!.selectedFragmentIds).toContain('team.review-bar')
-    })
-  })
+  // NOTE: the tenant library no longer feeds the run path. The automatic per-run
+  // relevance selector was retired in favour of an explicit, service-scoped selection
+  // (a frame's `serviceFragmentIds`) folded only into `code-aware` agents — see the
+  // cross-runtime conformance suite's "service-scoped fragments + agent traits" tests.
+  // This file now covers the library's management surface (tier CRUD + repo sources) only.
 })

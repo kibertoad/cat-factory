@@ -45,7 +45,9 @@ describe('mock-builder agent prompt', () => {
 
   describe('system prompt', () => {
     it('serves the built-out role prompt for the mock kind', () => {
-      expect(systemPromptFor('mocker')).toBe(mockSystemPrompt('mocker'))
+      // `mocker` is spec-aware, so its system prompt is the mock role prompt with the
+      // spec-aware guidance appended; the role prompt is still its foundation.
+      expect(systemPromptFor('mocker')).toContain(mockSystemPrompt('mocker')!)
     })
 
     it('returns undefined for other kinds so callers fall through', () => {
