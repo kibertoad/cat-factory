@@ -16,12 +16,7 @@ import type {
   WorkspaceRepository,
 } from '@cat-factory/kernel'
 import type { BlockRepository } from '@cat-factory/kernel'
-import {
-  assertFound,
-  ConflictError,
-  individualVendorForModelId,
-  requireWorkspace,
-} from '@cat-factory/kernel'
+import { assertFound, ConflictError, requireWorkspace } from '@cat-factory/kernel'
 import type { ExecutionService } from '../execution/ExecutionService.js'
 import { computeNextRun } from './schedule.logic.js'
 
@@ -274,9 +269,20 @@ export class RecurringPipelineService {
     // Individual-usage subscriptions (Claude) require their owner to be present to unlock
     // them per run, so they can never run on an unattended schedule. Refuse to fire and
     // record a clear failure (the user must switch the block to an API-key or pooled
-    // coding-plan model) rather than starting a run that would fault at dispatch.
+    // coding-plan model) rather than starting a run that would fault at dispatch. Resolve
+    // the vendor set with the SAME precedence dispatch uses (block pin → workspace per-kind
+    // default), via the engine, so a block with no pin but an individual-usage workspace
+    // default is caught here too — not just an explicitly pinned one.
     const scheduledBlock = await this.blockRepository.get(workspaceId, schedule.blockId)
-    const individualVendor = individualVendorForModelId(scheduledBlock?.modelId)
+    const individualVendor = scheduledBlock
+      ? ((
+          await this.executionService.individualVendorsForBlock(
+            workspaceId,
+            schedule.blockId,
+            schedule.pipelineId,
+          )
+        )[0] ?? null)
+      : null
     if (individualVendor) {
       if (opts.force) {
         throw new ConflictError(

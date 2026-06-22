@@ -1,6 +1,56 @@
 import { CredentialRequiredError, type SubscriptionVendor } from '@cat-factory/kernel'
+import { PERSONAL_PASSWORD_HEADER } from '@cat-factory/contracts'
+import type { Context } from 'hono'
+import type { AppEnv, ServerContainer } from '../../http/env.js'
 import type { SessionPayload } from '../../auth/signing.js'
-import type { ServerContainer } from '../../http/env.js'
+
+/**
+ * Read the ambient personal password from the request header (see
+ * `PERSONAL_PASSWORD_HEADER`). The client attaches it on the gated run calls the way it
+ * attaches the bearer token, so it never lives in a request body. Absent ⇒ undefined.
+ */
+export function readPersonalPassword(c: Context<AppEnv>): string | undefined {
+  return c.req.header(PERSONAL_PASSWORD_HEADER) || undefined
+}
+
+/**
+ * Best-effort, transparent re-mint of a run's individual-usage activation(s) when a user
+ * interacts with it (resolve decision / approve / request changes). Runs BEFORE the engine
+ * advances and dispatches the next step, so a freshly-minted activation is in place even if
+ * the previous one lapsed under its short TTL — keeping an actively-tended run alive without
+ * re-prompting. Driven off the cached password on the header; a wrong/absent one is ignored
+ * (the next dispatch then 428s and the client re-prompts on retry). Never throws, and skips
+ * entirely for non-individual runs (no password work on the common path).
+ */
+export async function remintActivations(
+  c: Context<AppEnv>,
+  workspaceId: string,
+  executionId: string,
+): Promise<void> {
+  const container = c.get('container')
+  const personal = container.personalSubscriptions
+  const user = c.get('user')
+  if (!personal || !user) return
+  try {
+    const vendors = await container.executionService.individualVendorsForRun(
+      workspaceId,
+      executionId,
+    )
+    if (vendors.length === 0) return
+    const password = readPersonalPassword(c)
+    if (password) {
+      // Re-mint from the password — robust even when the prior activation already expired.
+      for (const vendor of vendors) {
+        await personal.activateForRun(executionId, user.id, vendor, password)
+      }
+    } else {
+      // No password on hand — just extend any still-live activation (no-op if expired).
+      await personal.refreshActivations(executionId, user.id)
+    }
+  } catch {
+    // Best-effort: a lapsed run surfaces 428 at the next dispatch, which the client retries.
+  }
+}
 
 // Shared gate for the individual-usage restricted mode (Claude / GLM / ChatGPT-Codex).
 // When a run resolves to one or more such models, only the signed-in initiator may run

@@ -112,6 +112,12 @@ export function useApi() {
     },
   })
 
+  // The personal-subscription unlock password (individual-usage vendors) rides as an
+  // ambient request header — like the bearer token — so it never lands in a request
+  // body/wire-contract payload. Mirrors PERSONAL_PASSWORD_HEADER in @cat-factory/contracts.
+  const pwHeaders = (password?: string): Record<string, string> | undefined =>
+    password ? { 'X-Personal-Password': password } : undefined
+
   const ws = (workspaceId: string) => `/workspaces/${encodeURIComponent(workspaceId)}`
   // Prompt-fragment library routes exist at both tiers; resolve the prefix from
   // the owner scope (ADR 0006 §8).
@@ -301,11 +307,13 @@ export function useApi() {
     startExecution: (
       workspaceId: string,
       blockId: string,
-      body: { pipelineId: string; password?: string },
+      body: { pipelineId: string },
+      password?: string,
     ) =>
       http<ExecutionInstance>(`${ws(workspaceId)}/blocks/${blockId}/executions`, {
         method: 'POST',
         body,
+        headers: pwHeaders(password),
       }),
 
     cancelExecution: (workspaceId: string, blockId: string) =>
@@ -319,10 +327,11 @@ export function useApi() {
       executionId: string,
       decisionId: string,
       body: { choice: string },
+      password?: string,
     ) =>
       http<ExecutionInstance>(
         `${ws(workspaceId)}/executions/${executionId}/decisions/${decisionId}`,
-        { method: 'POST', body },
+        { method: 'POST', body, headers: pwHeaders(password) },
       ),
 
     approveStep: (
@@ -330,10 +339,11 @@ export function useApi() {
       executionId: string,
       approvalId: string,
       body: { proposal?: string },
+      password?: string,
     ) =>
       http<ExecutionInstance>(
         `${ws(workspaceId)}/executions/${executionId}/steps/${approvalId}/approve`,
-        { method: 'POST', body },
+        { method: 'POST', body, headers: pwHeaders(password) },
       ),
 
     requestStepChanges: (
@@ -341,10 +351,11 @@ export function useApi() {
       executionId: string,
       approvalId: string,
       body: { feedback?: string; comments?: ReviewComment[] },
+      password?: string,
     ) =>
       http<ExecutionInstance>(
         `${ws(workspaceId)}/executions/${executionId}/steps/${approvalId}/request-changes`,
-        { method: 'POST', body },
+        { method: 'POST', body, headers: pwHeaders(password) },
       ),
 
     rejectStep: (
@@ -812,7 +823,7 @@ export function useApi() {
     retryAgentRun: (workspaceId: string, runId: string, password?: string) =>
       http<{ kind: AgentRunKind; run: ExecutionInstance | BootstrapJob }>(
         `${ws(workspaceId)}/agent-runs/${encodeURIComponent(runId)}/retry`,
-        { method: 'POST', body: password ? { password } : undefined },
+        { method: 'POST', headers: pwHeaders(password) },
       ),
 
     // Explicitly stop a running run (bootstrap or execution): the backend kills the

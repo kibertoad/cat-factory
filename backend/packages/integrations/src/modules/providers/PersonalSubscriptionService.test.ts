@@ -222,7 +222,33 @@ describe('PersonalSubscriptionService', () => {
     expect(expiring.map((r) => r.userId)).toEqual([7])
   })
 
-  it('uses a ~1 week activation TTL by default', () => {
-    expect(DEFAULT_ACTIVATION_TTL_MS).toBe(7 * 24 * 60 * 60 * 1000)
+  it('uses a short (12h) activation TTL by default', () => {
+    expect(DEFAULT_ACTIVATION_TTL_MS).toBe(12 * 60 * 60 * 1000)
+  })
+
+  it('enforces one personal password across a user’s individual-usage subscriptions', async () => {
+    const { svc } = makeService()
+    await svc.store(7, { vendor: 'claude', label: 'c', token: 'T1', password: 'rightpassword' })
+    // A second vendor sealed under a DIFFERENT password is rejected up-front (validation),
+    // since one run unlocks every vendor it touches with a single password.
+    await expect(
+      svc.store(7, { vendor: 'glm', label: 'g', token: 'T2', password: 'otherpassword' }),
+    ).rejects.toMatchObject({ code: 'validation' })
+    // The SAME password is accepted.
+    const ok = await svc.store(7, {
+      vendor: 'glm',
+      label: 'g',
+      token: 'T2',
+      password: 'rightpassword',
+    })
+    expect(ok.vendor).toBe('glm')
+    // A different USER is unaffected by user 7's password.
+    const other = await svc.store(9, {
+      vendor: 'glm',
+      label: 'g',
+      token: 'T3',
+      password: 'separatepassword',
+    })
+    expect(other.vendor).toBe('glm')
   })
 })

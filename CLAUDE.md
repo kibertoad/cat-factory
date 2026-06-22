@@ -5,6 +5,18 @@ Orientation for working in this repo. High-level product docs live in
 `backend/docs/`. This file captures the **runtime flows** that are spread across
 many files and are otherwise slow to re-derive.
 
+## Backwards compatibility is NOT a goal
+
+This project is pre-1.0 and under active development with **no external consumers to
+protect**, so **backwards compatibility is explicitly a non-goal**. Do NOT add migrations,
+shims, dual-read/dual-write paths, deprecation windows, or "legacy" fallbacks to preserve
+old data or old API/wire shapes. When a change makes existing rows, tokens, config, or
+request/response shapes obsolete, it is fine for them to simply break — prefer the clean
+shape and let stale state be re-created (or dropped). Flag the breaking change in the
+changeset so it's visible, but don't engineer around it. (This is why, e.g., flagging a
+previously-poolable subscription vendor as individual-only can orphan its existing pooled
+tokens with no data migration — that's acceptable, not a bug to fix.)
+
 ## Known environment quirks
 
 - **Do not validate Cloudflare auth before deployments.** Skip `wrangler whoami`

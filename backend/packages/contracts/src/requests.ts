@@ -1,5 +1,4 @@
 import * as v from 'valibot'
-import { personalPasswordFieldSchema } from './personal-subscriptions.js'
 import {
   agentKindSchema,
   blockTypeSchema,
@@ -132,21 +131,15 @@ export type CreatePipelineInput = v.InferOutput<typeof createPipelineSchema>
 
 export const startExecutionSchema = v.object({
   pipelineId: v.pipe(v.string(), v.minLength(1)),
-  /**
-   * Personal password to unlock the initiator's individual-usage subscription (Claude)
-   * when the block's pipeline uses such a model. Optional — only consulted in that case,
-   * and the client typically supplies it from its local TTL cache. Absent + required ⇒
-   * `428 credential_required`.
-   */
-  password: personalPasswordFieldSchema,
 })
 export type StartExecutionInput = v.InferOutput<typeof startExecutionSchema>
 
-/** Retry a failed run; carries the personal password when the run uses Claude. */
-export const retryAgentRunSchema = v.object({
-  password: personalPasswordFieldSchema,
-})
-export type RetryAgentRunInput = v.InferOutput<typeof retryAgentRunSchema>
+// NOTE: the personal password that unlocks a run's individual-usage credential
+// (Claude / GLM / Codex) is NOT a body field on any of the run endpoints below
+// (start / retry / resolve-decision / approve / request-changes). It is an ambient
+// credential carried on the `X-Personal-Password` header (see
+// `PERSONAL_PASSWORD_HEADER` in personal-subscriptions.ts), so it stays out of the
+// wire-contract payloads and the client can attach it uniformly on the gated calls.
 
 export const resolveDecisionSchema = v.object({
   choice: v.pipe(v.string(), v.minLength(1)),

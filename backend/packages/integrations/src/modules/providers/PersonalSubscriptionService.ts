@@ -14,6 +14,7 @@ import {
   getErrorMessage,
   INDIVIDUAL_VENDORS,
   isIndividualVendor,
+  ValidationError,
 } from '@cat-factory/kernel'
 import type {
   PersonalSubscriptionStatus,
@@ -31,9 +32,18 @@ import type {
 //
 // See docs/individual-subscription-usage.md for the full model + safeguards.
 
-/** Default per-run activation lifetime (~1 week): far longer than a run needs, so a
- *  user who starts a task isn't re-prompted mid-run; deleted when the run finishes. */
-export const DEFAULT_ACTIVATION_TTL_MS = 7 * 24 * 60 * 60 * 1000
+/**
+ * Default per-run activation lifetime (~12h). This bounds the window in which the
+ * raw token is recoverable with the SYSTEM key alone (the activation has no password
+ * layer), so it is kept deliberately short. It does NOT need to cover a long run: a
+ * healthy run deletes its activation the moment it finishes, and any run a user keeps
+ * tending transparently RE-MINTS the activation on each interaction (resolve/approve/
+ * retry) from the password cached client-side — so the user is only re-prompted once
+ * that cache lapses, never because the activation TTL did. 12h is simply long enough to
+ * cover a fully-autonomous run (no human touch-points to re-mint at) while keeping the
+ * stuck/abandoned-run exposure window an order of magnitude tighter than a week.
+ */
+export const DEFAULT_ACTIVATION_TTL_MS = 12 * 60 * 60 * 1000
 /** Surface "renew your subscription" once it expires within this horizon (~7 days). */
 export const DEFAULT_RENEW_WARNING_MS = 7 * 24 * 60 * 60 * 1000
 
@@ -81,6 +91,7 @@ export class PersonalSubscriptionService {
     input: StorePersonalSubscriptionInput,
   ): Promise<PersonalSubscriptionStatus> {
     this.assertIndividual(input.vendor)
+    await this.assertSamePasswordAsOthers(userId, input.vendor, input.password)
     const sealed = await this.deps.personalCipher.seal(input.token, input.password)
     const tokenCipher = await this.deps.secretCipher.encrypt(sealed)
     const now = this.deps.clock.now()
@@ -102,6 +113,37 @@ export class PersonalSubscriptionService {
     }
     await this.deps.personalSubscriptionRepository.upsert(record)
     return this.toStatus(record, now)
+  }
+
+  /**
+   * Enforce ONE personal password across all of a user's individual-usage subscriptions.
+   * The run gate unlocks every vendor a single run touches with the SAME password (and the
+   * client caches just one), so a second credential sealed under a different password would
+   * be silently un-unlockable in any run that uses both. Rather than let that latent
+   * dead-end ship, we verify the new password decrypts an existing (non-expired) credential
+   * and reject up-front otherwise. No-op for the user's first credential. The check unlocks
+   * an arbitrary existing credential purely to compare the password — nothing is persisted.
+   */
+  private async assertSamePasswordAsOthers(
+    userId: number,
+    vendor: SubscriptionVendor,
+    password: string,
+  ): Promise<void> {
+    const now = this.deps.clock.now()
+    const other = (await this.deps.personalSubscriptionRepository.listByUser(userId)).find(
+      (r) => r.vendor !== vendor && (r.expiresAt === null || r.expiresAt > now),
+    )
+    if (!other) return
+    const sealed = await this.deps.secretCipher.decrypt(other.tokenCipher)
+    try {
+      await this.deps.personalCipher.open(sealed, password)
+    } catch {
+      throw new ValidationError(
+        `This personal password doesn't match your other connected subscription(s). Use the ` +
+          `same personal password for all of them — one run unlocks every individual-usage ` +
+          `vendor it touches with a single password — or remove the others first.`,
+      )
+    }
   }
 
   /** Every personal subscription the user has, metadata only (never the secret). */

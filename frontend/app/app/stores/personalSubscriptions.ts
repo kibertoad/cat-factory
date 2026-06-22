@@ -14,10 +14,18 @@ import type {
 // To keep the password mostly transparent, it is cached CLIENT-SIDE in localStorage under a
 // SINGLE key with a TTL: the backend gate applies one password to ALL of a run's
 // individual-usage vendors, so there's no point keying the cache per vendor. A task
-// start/retry rides along with the cached password, and the user is only re-prompted once it
-// expires (or is wrong). Caching the password on this device does NOT weaken at-rest
-// protection — the server never stores it, so the cache only helps on the very device the
-// user is already signed in on; an external attacker would still need the system key.
+// start/retry (and each interaction with a live run) rides along with the cached password —
+// sent as the `X-Personal-Password` header — and the user is only re-prompted once it
+// expires (or is wrong).
+//
+// Caching here is a DELIBERATE convenience choice, not a security weakness. The password
+// layer exists to prevent ACCIDENTAL misuse (a credential can't be silently pooled); the
+// real at-rest protection is the server's system encryption, which the cache doesn't touch.
+// Re-prompting an engineer on every run would buy nobody anything (it wouldn't change the
+// threat model), so we don't. The server never stores the password, the raw token is never
+// returned to the client, and an external attacker still needs the system key — so the cache
+// only ever helps on the very device the user is already signed in on. (See
+// backend/docs/individual-subscription-usage.md §3.)
 
 /** How long a typed password stays cached before the user is re-prompted (8h). */
 const PASSWORD_TTL_MS = 8 * 60 * 60 * 1000

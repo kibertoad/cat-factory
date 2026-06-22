@@ -11,12 +11,39 @@ import { subscriptionVendorSchema } from './vendor-credentials.js'
 // against an operator with the database + system key, the credential is
 // **double-encrypted**: the raw token is sealed under a key derived from the
 // user's PERSONAL PASSWORD (never stored), then encrypted again with the system
-// key. The password is supplied at task start/retry (cached client-side with a
-// TTL to stay low-friction) to mint a short-lived, per-run activation the async
-// container steps use.
+// key. The password is supplied at task start/retry — carried on the ambient
+// `X-Personal-Password` header (not a body field) and cached client-side with a TTL to
+// stay low-friction — to mint a short-lived, per-run activation the async container steps
+// use (re-minted transparently while the run is tended; see the docs).
 //
-// See docs/individual-subscription-usage.md for the full model + safeguards.
+// The password layer's purpose is preventing ACCIDENTAL misuse (a credential can't be
+// silently pooled), not defending against a system-key holder — the system encryption is
+// the primary at-rest protection. See docs/individual-subscription-usage.md §3 for the
+// honest threat model + the full safeguards.
 // ---------------------------------------------------------------------------
+
+/**
+ * The personal password that gates the second encryption layer (8–256 chars). Restricted
+ * to printable ASCII so the same value can ride **raw** in the `X-Personal-Password`
+ * request header (see below) when unlocking a run — HTTP header values must be Latin-1, so
+ * a non-ASCII password could not be sent without encoding. Never stored server-side.
+ */
+export const personalPasswordSchema = v.pipe(
+  v.string(),
+  v.minLength(8),
+  v.maxLength(256),
+  v.regex(/^[\x20-\x7e]+$/, 'Password must use printable ASCII characters (no tabs/newlines).'),
+)
+
+/**
+ * HTTP header carrying the personal password to unlock a run's individual-usage
+ * credential(s). It is an AMBIENT credential — like the bearer token, the client attaches
+ * it on the gated calls (start / retry / resolve / approve / request-changes) rather than
+ * baking it into each request body — so it never appears in a wire-contract payload. The
+ * server reads it, unlocks, and mints/re-mints the per-run activation; absent + required ⇒
+ * `428 credential_required`.
+ */
+export const PERSONAL_PASSWORD_HEADER = 'X-Personal-Password'
 
 /** Store (or replace) the signed-in user's personal subscription for a vendor. */
 export const storePersonalSubscriptionSchema = v.object({
@@ -25,7 +52,7 @@ export const storePersonalSubscriptionSchema = v.object({
   /** The raw secret (write-only): the `claude setup-token` OAuth token for `claude`. */
   token: v.pipe(v.string(), v.trim(), v.minLength(1)),
   /** Personal password that gates the second encryption layer. Never stored. */
-  password: v.pipe(v.string(), v.minLength(8), v.maxLength(256)),
+  password: personalPasswordSchema,
   /**
    * Epoch ms the subscription itself expires (so we can warn well in advance and
    * block runs once lapsed). Optional — omit if the plan has no fixed end date.
@@ -54,14 +81,3 @@ export type PersonalSubscriptionStatus = v.InferOutput<typeof personalSubscripti
 
 export const personalSubscriptionListSchema = v.array(personalSubscriptionStatusSchema)
 export type PersonalSubscriptionList = v.InferOutput<typeof personalSubscriptionListSchema>
-
-/**
- * An optional personal password carried by a task-start / retry request. When the
- * task's pipeline resolves to an individual-usage model, the server uses it to
- * unlock the user's stored credential and mint the run activation. The frontend
- * caches it locally (TTL) so it usually rides along transparently; when absent and
- * required, the server replies `428 credential_required`.
- */
-export const personalPasswordFieldSchema = v.optional(
-  v.pipe(v.string(), v.minLength(8), v.maxLength(256)),
-)

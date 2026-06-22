@@ -97,39 +97,58 @@ leases activations keyed by `(executionId, userId, vendor)`. A workspace peer wh
 a run becomes a _new_ run under _their_ id, so they are prompted for _their own_ password
 and can never accidentally ride yours. There is no API that pools or shares these tokens.
 
-**The client-side password cache.** To stay low-friction the typed password is cached in
-the browser (`localStorage`, single key, ~8h TTL) so a start/retry usually rides along
-transparently. This does **not** weaken at-rest protection: the server never stores the
-password, and the cache is useless to an external attacker without the system key. It is a
-convenience on the device the user is already signed in on. (An XSS attacker on the origin
-who could read the cache could already act as the signed-in user — but still cannot recover
-the raw token, which is never returned to the client.)
+**The client-side password cache (intent: convenience, not a security boundary).** To stay
+low-friction the typed password is cached in the browser (`localStorage`, single key, ~8h
+TTL) so a start/retry rides along transparently. This is a deliberate, eyes-open choice: the
+whole password layer exists to prevent _accidental_ misuse (see "What the password layer
+actually buys" above), and the at-rest security is carried by the **system encryption**, not
+by how long the password lives on the user's own device. Re-prompting an engineer on every
+run would buy nobody anything — it wouldn't change the threat model — so we cache it. It does
+**not** weaken at-rest protection: the server never stores the password, and the cache is
+useless to an external attacker without the system key. (An XSS attacker on the origin who
+could read the cache could already act as the signed-in user — but still cannot recover the
+raw token, which is never returned to the client.) The password rides to the server as an
+ambient request header (`X-Personal-Password`), like the bearer token — never in a request
+body — so it stays out of wire-contract payloads. It is restricted to printable ASCII purely
+so it is header-safe (HTTP header values are Latin-1).
 
-**The per-run activation TTL.** A password unlock mints a per-run activation: the raw token
-re-encrypted with the **system key only** (no password layer), scoped to one run, so the
-asynchronous container steps can authenticate without the user online. During that window
-the token is recoverable with the system key alone — but that only matters to a system-key
-holder, the actor we've descoped, and on a system-key compromise every _other_
-system-encrypted secret (the whole pooled-subscription pool, GitHub/Slack tokens, …) is
-exposed too, so a personal token in an active run is marginal incremental exposure. The TTL
-(~1 week) is deliberately longer than a run needs so an actively-tended long run isn't
-re-prompted; activations are **deleted the moment the run finishes** (so the common case is
-much shorter than the TTL), refreshed on user interaction, and swept on expiry as a
-backstop. Given the threat model, this is a fine trade-off — not a standing risk to anyone
-we're trying to protect against.
+**The per-run activation TTL (kept short, transparently extended).** A password unlock mints
+a per-run activation: the raw token re-encrypted with the **system key only** (no password
+layer), scoped to one run, so the asynchronous container steps can authenticate without the
+user online. During that window the token is recoverable with the system key alone — the one
+spot the password layer is bypassed — so we keep the window tight: the default TTL is **~12h**
+(not a week), and a healthy run **deletes its activation the moment it finishes**, so in the
+common case the window is far shorter still. We can keep it short without ever re-prompting a
+working user because an actively-tended run **transparently re-mints** the activation on each
+interaction (resolve a decision / approve a step / retry) from the cached password — so the
+TTL only ever bounds a _stuck/abandoned_ run, never a live one, and the user is re-prompted
+only once the **8h password cache** lapses, not because the activation did. The TTL must also
+simply outlast a fully-autonomous run (which has no human touch-points to re-mint at), which
+12h comfortably does; the expiry sweep reclaims any straggler as a backstop. Even at its
+widest the exposure only matters to a system-key holder — the actor we've descoped — and on a
+system-key compromise every _other_ system-encrypted secret (the whole pooled-subscription
+pool, GitHub/Slack tokens, …) is exposed too, so a personal token in an active run is marginal
+incremental exposure. Given the threat model, this is a fine trade-off — not a standing risk
+to anyone we're trying to protect against.
 
 ## 4. Safeguards (summary)
 
 1. **Per-user ownership.** Keyed by GitHub **user id**; a run records its **initiator** and
    the executor leases _that user's_ credential, never another user's or a pooled one.
 2. **Double encryption at rest** (§3): `system.encrypt( personal.seal(token, password) )`,
-   the password (PBKDF2 → AES-256-GCM, 210k iterations) never stored.
-3. **Password supplied per session, not stored server-side** — cached client-side with a
-   TTL for low friction (§3).
-4. **Short-lived, per-run activations** — system-key-only, scoped to the run, deleted on
-   completion (or when the block's run is replaced), TTL-swept as a backstop (§3).
+   the password (PBKDF2 → AES-256-GCM, 210k iterations) never stored. One personal password
+   per user across all their individual-usage vendors (enforced at store time), since a run
+   unlocks every vendor it touches with a single password.
+3. **Password supplied per session, not stored server-side** — cached client-side with an
+   ~8h TTL for low friction (§3) and carried as the `X-Personal-Password` header, never a
+   body field. Restricted to printable ASCII so it is header-safe.
+4. **Short, transparently-extended per-run activations** — system-key-only, scoped to the
+   run, ~12h TTL, deleted on completion (or when the block's run is replaced), re-minted from
+   the cached password on each user interaction so a live run never lapses, TTL-swept as a
+   backstop (§3).
 5. **No unattended use.** A recurring schedule whose block resolves to an individual-usage
-   model is refused at fire time (no one is present to unlock it).
+   model — by pin _or_ workspace default — is refused at fire time (no one is present to
+   unlock it).
 6. **Loud, recoverable failures.** A missing/needed credential returns
    `428 credential_required` (with `{ vendor, reason }`); a lapsed activation fails the step
    clearly and a retry (with the cached/entered password) re-activates it.
@@ -144,20 +163,26 @@ Connect (once, per individual-usage vendor):
     → personal.seal(token, password) → system.encrypt(...) → personal_subscriptions row
 
 Start / retry a task whose run uses individual-usage model(s):
-  POST /workspaces/:ws/blocks/:id/executions { pipelineId, password? }
+  POST /workspaces/:ws/blocks/:id/executions { pipelineId }
+       Header: X-Personal-Password: <cached or just-typed password>
     │  individualVendorsForBlock(ws, block, pipeline)  ── resolves the SET of
     │  individual-usage vendors the run will use, mirroring dispatch precedence
     │  (block pin → workspace per-kind default) across every pipeline step
     │    ├─ empty set → no personal credential needed (normal run)
-    │    ├─ no signed-in user / no stored subscription / no password
+    │    ├─ no signed-in user / no stored subscription / no password header
     │    │     → 428 credential_required { vendor, reason } → client prompts
     │    └─ password ok → for each vendor: activateForRun(execId, user, vendor, password)
-    │            → system.encrypt(rawToken) → subscription_activations row (TTL ~1wk)
+    │            → system.encrypt(rawToken) → subscription_activations row (TTL ~12h)
     └─ run starts, recording initiatedBy = user
 
 Each async container step:
   ContainerAgentExecutor → leasePersonalSubscriptionToken(execId, user, vendor)
     → system.decrypt(activation) → raw token handed to the runner transport
+
+Interact with a live run (resolve decision / approve / request changes):
+  POST … (same X-Personal-Password header, ridden from the cache, no prompt)
+    → remintActivations: re-mint the run's activation(s) BEFORE advancing, so the
+      short TTL never lapses a run the user is actively tending
 
 Run finishes (done/failed) — or is replaced by a new run on the block:
   ExecutionService deletes the run's subscription_activations immediately
@@ -193,9 +218,10 @@ is identical on Cloudflare D1 and Node/local Postgres.
 
 - Connect **only your own** subscription, and only where its terms permit individual use.
   For organization-wide use, use a **direct provider API key** instead (§1).
-- Use a **strong personal password** — it is the second factor that protects your token at
-  rest, and it is never recoverable from the server if you forget it (re-connect instead).
-  If you connect more than one individual-usage subscription, use the **same** personal
-  password (one run uses one password to unlock every individual-usage vendor it touches).
+- Use a **strong, printable-ASCII personal password** — it is the second factor that protects
+  your token at rest, and it is never recoverable from the server if you forget it (re-connect
+  instead). All your individual-usage subscriptions must share **one** personal password (a
+  run unlocks every vendor it touches with a single password); connecting a second vendor under
+  a different password is rejected up-front.
 - Don't pin individual-usage models on tasks meant to run **unattended** (recurring
   schedules reject them by design).

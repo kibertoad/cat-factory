@@ -1885,7 +1885,10 @@ export class ExecutionService {
       try {
         await this.subscriptionActivations.deleteByExecution(instance.id)
       } catch {
-        // swallow — the TTL sweep will reclaim it
+        // Swallow — a failure here must never derail the emit. This is not a silent
+        // data-loss path: the TTL sweep reclaims the row as a backstop, and the sweep
+        // (Worker cron / Node retention timer) logs its own errors, so a *systemic*
+        // cleanup failure surfaces there rather than being lost here.
       }
     }
   }
