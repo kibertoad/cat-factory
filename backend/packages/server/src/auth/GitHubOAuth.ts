@@ -1,5 +1,3 @@
-import type { SessionUser } from './signing.js'
-
 // Minimal GitHub OAuth web-flow client (the user-to-server login flow). Works
 // with either a GitHub App's OAuth credentials or a classic OAuth App — both
 // expose the same `/login/oauth/*` endpoints on github.com and `/user` on the
@@ -28,6 +26,17 @@ interface GitHubUserResponse {
   login: string
   name: string | null
   avatar_url: string | null
+  email?: string | null
+}
+
+/** The GitHub identity behind an access token (the OAuth provider's subject). */
+export interface GitHubIdentity {
+  /** GitHub numeric user id (stable across renames) — the identity subject. */
+  id: number
+  login: string
+  name: string | null
+  avatarUrl: string | null
+  email: string | null
 }
 
 interface GitHubOrgResponse {
@@ -75,7 +84,7 @@ export class GitHubOAuth {
   }
 
   /** Resolve the authenticated GitHub user behind an access token. */
-  async fetchUser(accessToken: string): Promise<SessionUser> {
+  async fetchUser(accessToken: string): Promise<GitHubIdentity> {
     const res = await fetch(new URL('/user', this.deps.apiBase), {
       headers: {
         accept: 'application/vnd.github+json',
@@ -86,7 +95,13 @@ export class GitHubOAuth {
     })
     if (!res.ok) throw new Error(`GitHub user fetch failed (HTTP ${res.status})`)
     const user = (await res.json()) as GitHubUserResponse
-    return { id: user.id, login: user.login, name: user.name, avatarUrl: user.avatar_url }
+    return {
+      id: user.id,
+      login: user.login,
+      name: user.name,
+      avatarUrl: user.avatar_url,
+      email: user.email ?? null,
+    }
   }
 
   /**

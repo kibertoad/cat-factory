@@ -1,4 +1,12 @@
-import { addMemberSchema, createAccountSchema, updateAccountSchema } from '@cat-factory/contracts'
+import {
+  addMemberSchema,
+  connectEmailSchema,
+  createAccountSchema,
+  createInvitationSchema,
+  testEmailSchema,
+  updateAccountSchema,
+} from '@cat-factory/contracts'
+import { ConflictError } from '@cat-factory/kernel'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
 import type { AppEnv } from '../../http/env.js'
@@ -64,5 +72,104 @@ export function accountController(): Hono<AppEnv> {
     return c.json(member, 201)
   })
 
+  // ---- Invitations (email-based org onboarding) ---------------------------
+  // Available only when the invitation repository is wired (opt-in feature).
+
+  app.get('/accounts/:accountId/invitations', async (c) => {
+    const user = accountUser(c)
+    if (!user) return signInRequired(c)
+    const container = c.get('container')
+    if (!container.invitations) return c.json([])
+    // Membership is required to view the account's pending invitations.
+    await container.accountService.requireMember(param(c, 'accountId'), user.id)
+    return c.json(await container.invitations.list(param(c, 'accountId')))
+  })
+
+  app.post('/accounts/:accountId/invitations', jsonBody(createInvitationSchema), async (c) => {
+    const user = accountUser(c)
+    if (!user) return signInRequired(c)
+    const container = c.get('container')
+    if (!container.invitations) {
+      return c.json(
+        { error: { code: 'unavailable', message: 'Invitations are not configured' } },
+        503,
+      )
+    }
+    const body = c.req.valid('json')
+    const created = await container.invitations.invite(
+      param(c, 'accountId'),
+      user.id,
+      body.email,
+      body.role,
+    )
+    // The raw accept link is returned so an operator can share it manually when no
+    // email transport is configured; never re-derivable afterwards.
+    return c.json({ invitation: created.invitation, acceptUrl: created.acceptUrl }, 201)
+  })
+
+  app.delete('/accounts/:accountId/invitations/:invitationId', async (c) => {
+    const user = accountUser(c)
+    if (!user) return signInRequired(c)
+    const container = c.get('container')
+    if (!container.invitations) return c.body(null, 204)
+    await container.invitations.revoke(param(c, 'accountId'), user.id, param(c, 'invitationId'))
+    return c.body(null, 204)
+  })
+
+  // ---- Email sender connection (per-account, UI-onboarded) ----------------
+  // Owner-only mutations; available only when the email module is wired.
+
+  app.get('/accounts/:accountId/email-connection', async (c) => {
+    const user = accountUser(c)
+    if (!user) return signInRequired(c)
+    const container = c.get('container')
+    if (!container.email) return c.json({ connection: null, configured: false })
+    await container.accountService.requireMember(param(c, 'accountId'), user.id)
+    const connection = await container.email.getConnection(param(c, 'accountId'))
+    return c.json({ connection, configured: true })
+  })
+
+  app.post('/accounts/:accountId/email-connection', jsonBody(connectEmailSchema), async (c) => {
+    const user = accountUser(c)
+    if (!user) return signInRequired(c)
+    const container = c.get('container')
+    if (!container.email) {
+      return c.json({ error: { code: 'unavailable', message: 'Email is not configured' } }, 503)
+    }
+    await requireOwner(c, param(c, 'accountId'), user.id)
+    const connection = await container.email.connect(param(c, 'accountId'), c.req.valid('json'))
+    return c.json(connection, 201)
+  })
+
+  app.delete('/accounts/:accountId/email-connection', async (c) => {
+    const user = accountUser(c)
+    if (!user) return signInRequired(c)
+    const container = c.get('container')
+    if (!container.email) return c.body(null, 204)
+    await requireOwner(c, param(c, 'accountId'), user.id)
+    await container.email.disconnect(param(c, 'accountId'))
+    return c.body(null, 204)
+  })
+
+  app.post('/accounts/:accountId/email-connection/test', jsonBody(testEmailSchema), async (c) => {
+    const user = accountUser(c)
+    if (!user) return signInRequired(c)
+    const container = c.get('container')
+    if (!container.email) {
+      return c.json({ error: { code: 'unavailable', message: 'Email is not configured' } }, 503)
+    }
+    await requireOwner(c, param(c, 'accountId'), user.id)
+    await container.email.sendTest(param(c, 'accountId'), c.req.valid('json').to)
+    return c.json({ ok: true })
+  })
+
   return app
+}
+
+/** Throw 404/409 unless the user is an owner of the account. */
+async function requireOwner(c: Context<AppEnv>, accountId: string, userId: string): Promise<void> {
+  const membership = await c.get('container').accountService.requireMember(accountId, userId)
+  if (membership.role !== 'owner') {
+    throw new ConflictError('Only an account owner can manage this setting')
+  }
 }

@@ -229,6 +229,20 @@ export interface Env {
    * so an unconfigured deployment fails closed instead of serving data openly.
    */
   AUTH_DEV_OPEN?: string
+  /** Set 'true' to offer email/password signup + login (needs a strong session secret). */
+  AUTH_PASSWORD_ENABLED?: string
+  /** Comma-separated email domains allowed to self-signup without an invite. */
+  AUTH_ALLOWED_EMAIL_DOMAINS?: string
+  /** Google OAuth credentials (login-with-Google); both required to enable it. */
+  GOOGLE_OAUTH_CLIENT_ID?: string
+  GOOGLE_OAUTH_CLIENT_SECRET?: string
+  /** Explicit Google redirect_uri; derived from the request origin when unset. */
+  GOOGLE_OAUTH_REDIRECT_URL?: string
+  /** Transactional email (invitations): opt-in flag + master key for the per-account API key. */
+  EMAIL_ENABLED?: string
+  EMAIL_ENCRYPTION_KEY?: string
+  /** Public SPA base URL the invite-accept link points at. */
+  APP_BASE_URL?: string
   /**
    * Deployment environment marker (e.g. `production`, `staging`, `development`).
    * When set to a production-like value, the AUTH_DEV_OPEN escape hatch is

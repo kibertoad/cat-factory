@@ -185,3 +185,18 @@ export {
   chooseToken,
   windowUsage,
 } from './modules/providers/providers.logic.js'
+
+export {
+  SendGridEmailSender,
+  ResendEmailSender,
+  createEmailSender,
+  EMAIL_CIPHER_INFO,
+  type EmailProviderConfig,
+  type SendGridConfig,
+  type ResendConfig,
+} from './modules/email/adapters.js'
+export {
+  EmailConnectionService,
+  type EmailConnectionServiceDependencies,
+  type EmailConnection,
+} from './modules/email/EmailConnectionService.js'

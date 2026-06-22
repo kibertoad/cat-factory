@@ -465,11 +465,11 @@ export class ExecutionService {
     blockId: string,
     pipelineId: string,
     /**
-     * GitHub user id of the initiator. Recorded on the run so an individual-usage
+     * Internal user id of the initiator. Recorded on the run so an individual-usage
      * model (Claude) uses this user's OWN personal subscription. Absent for
      * system-initiated runs (recurring schedules) and auth-disabled dev.
      */
-    initiatedBy?: number | null,
+    initiatedBy?: string | null,
     /**
      * Mint the per-run personal-credential activation for an individual-usage model.
      * Invoked with the new run's id BEFORE it is persisted/dispatched, so the async
@@ -2829,7 +2829,7 @@ export class ExecutionService {
     executionId: string,
     /** The retrying user (their personal subscription is used for individual-usage
      *  models). Falls back to the original initiator when omitted. */
-    initiatedBy?: number | null,
+    initiatedBy?: string | null,
     /** Mint the per-run personal-credential activation (see {@link start}). */
     activate?: (executionId: string) => Promise<void>,
   ): Promise<ExecutionInstance> {

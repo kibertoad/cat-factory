@@ -14,6 +14,8 @@ export interface AccountRecord {
   type: AccountType
   name: string
   githubAccountLogin: string | null
+  /** The user who owns a `personal` account (its account-of-one). Null for orgs. */
+  ownerUserId: string | null
   createdAt: number
   /**
    * The cloud provider new services in this account default to (a service may
@@ -30,7 +32,7 @@ export interface AccountSettingsPatch {
 
 export interface Membership {
   accountId: string
-  userId: number
+  userId: string
   role: AccountRole
   createdAt: number
 }
@@ -41,16 +43,16 @@ export interface AccountRepository {
   rename(id: string, name: string): Promise<void>
   /** Apply a settings patch (today: the default cloud provider). A no-op for an empty patch. */
   updateSettings(id: string, patch: AccountSettingsPatch): Promise<void>
-  /** The existing personal account for a GitHub login, if one was already created. */
-  findPersonalByLogin(login: string): Promise<AccountRecord | null>
+  /** The existing personal account owned by a user, if one was already created. */
+  findPersonalByUser(userId: string): Promise<AccountRecord | null>
 }
 
 export interface MembershipRepository {
   /** Every membership for a user — the accounts they can see and switch between. */
-  listByUser(userId: number): Promise<Membership[]>
+  listByUser(userId: string): Promise<Membership[]>
   /** Every membership in an account — its member roster. */
   listByAccount(accountId: string): Promise<Membership[]>
-  get(accountId: string, userId: number): Promise<Membership | null>
+  get(accountId: string, userId: string): Promise<Membership | null>
   upsert(membership: Membership): Promise<void>
-  remove(accountId: string, userId: number): Promise<void>
+  remove(accountId: string, userId: string): Promise<void>
 }

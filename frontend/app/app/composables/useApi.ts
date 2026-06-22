@@ -1,7 +1,9 @@
 import type {
   Account,
+  AccountInvitation,
   AccountMember,
   AddMemberInput,
+  EmailConnection,
   UpdateAccountInput,
   AgentRunKind,
   AuthUser,
@@ -130,9 +132,29 @@ export function useApi() {
 
   return {
     // ---- auth -------------------------------------------------------------
-    getAuthConfig: () => http<{ enabled: boolean }>('/auth/config'),
+    getAuthConfig: () =>
+      http<{
+        enabled: boolean
+        providers?: { github: boolean; password: boolean; google: boolean }
+      }>('/auth/config'),
 
     getMe: () => http<{ user: AuthUser | null; enabled: boolean }>('/auth/me'),
+
+    signup: (body: { email: string; password: string; name?: string; invite?: string }) =>
+      http<{ token: string; user: AuthUser }>('/auth/signup', { method: 'POST', body }),
+
+    passwordLogin: (body: { email: string; password: string }) =>
+      http<{ token: string; user: AuthUser }>('/auth/password-login', { method: 'POST', body }),
+
+    peekInvite: (token: string) =>
+      http<{ valid: boolean; email?: string; accountName?: string | null }>(
+        `/auth/invitations/${encodeURIComponent(token)}`,
+      ),
+
+    acceptInvite: (token: string) =>
+      http<{ accountId: string }>(`/auth/invitations/${encodeURIComponent(token)}/accept`, {
+        method: 'POST',
+      }),
 
     logout: () => http('/auth/logout', { method: 'POST' }),
 
@@ -244,13 +266,57 @@ export function useApi() {
         body,
       }),
 
+    // Invitations: invite teammates by email into an org account.
+    listInvitations: (accountId: string) =>
+      http<AccountInvitation[]>(`/accounts/${encodeURIComponent(accountId)}/invitations`),
+
+    createInvitation: (accountId: string, body: { email: string; role?: 'owner' | 'member' }) =>
+      http<{ invitation: AccountInvitation; acceptUrl: string | null }>(
+        `/accounts/${encodeURIComponent(accountId)}/invitations`,
+        { method: 'POST', body },
+      ),
+
+    revokeInvitation: (accountId: string, invitationId: string) =>
+      http(
+        `/accounts/${encodeURIComponent(accountId)}/invitations/${encodeURIComponent(invitationId)}`,
+        { method: 'DELETE' },
+      ),
+
+    // Per-account email sender (UI-onboarded): connect/inspect/disconnect/test.
+    getEmailConnection: (accountId: string) =>
+      http<{ connection: EmailConnection | null; configured: boolean }>(
+        `/accounts/${encodeURIComponent(accountId)}/email-connection`,
+      ),
+
+    connectEmail: (
+      accountId: string,
+      body: { provider: 'sendgrid' | 'resend'; apiKey: string; fromAddress: string },
+    ) =>
+      http<EmailConnection>(`/accounts/${encodeURIComponent(accountId)}/email-connection`, {
+        method: 'POST',
+        body,
+      }),
+
+    disconnectEmail: (accountId: string) =>
+      http(`/accounts/${encodeURIComponent(accountId)}/email-connection`, { method: 'DELETE' }),
+
+    testEmail: (accountId: string, to: string) =>
+      http<{ ok: boolean }>(`/accounts/${encodeURIComponent(accountId)}/email-connection/test`, {
+        method: 'POST',
+        body: { to },
+      }),
+
     // ---- workspaces -------------------------------------------------------
     listWorkspaces: () => http<Workspace[]>('/workspaces'),
 
-    createWorkspace: (body: { name?: string; seed?: boolean; accountId?: string } = {}) =>
-      http<WorkspaceSnapshot>('/workspaces', { method: 'POST', body }),
+    createWorkspace: (
+      body: { name?: string; description?: string; seed?: boolean; accountId?: string } = {},
+    ) => http<WorkspaceSnapshot>('/workspaces', { method: 'POST', body }),
 
     getWorkspace: (workspaceId: string) => http<WorkspaceSnapshot>(ws(workspaceId)),
+
+    updateWorkspace: (workspaceId: string, body: { name?: string; description?: string | null }) =>
+      http<Workspace>(ws(workspaceId), { method: 'PATCH', body }),
 
     renameWorkspace: (workspaceId: string, name: string) =>
       http<Workspace>(ws(workspaceId), { method: 'PATCH', body: { name } }),

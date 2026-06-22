@@ -80,8 +80,8 @@ export class WorkspaceService {
     return this.workspaceRepository.listVisible(scope)
   }
 
-  /** Owning user id for a board (number/owned, null/none, undefined/missing). */
-  ownerOf(id: string): Promise<number | null | undefined> {
+  /** Owning user id for a board (string/owned, null/none, undefined/missing). */
+  ownerOf(id: string): Promise<string | null | undefined> {
     return this.workspaceRepository.ownerOf(id)
   }
 
@@ -92,12 +92,13 @@ export class WorkspaceService {
 
   async create(
     input: CreateWorkspaceInput,
-    ownerUserId: number | null,
+    ownerUserId: string | null,
     accountId: string | null,
   ): Promise<WorkspaceSnapshot> {
     const workspace: Workspace = {
       id: this.idGenerator.next('ws'),
       name: input.name?.trim() || 'Untitled board',
+      description: input.description?.trim() || null,
       createdAt: this.clock.now(),
       accountId,
     }
@@ -157,10 +158,17 @@ export class WorkspaceService {
     }
   }
 
-  /** Rename a board. */
-  async rename(id: string, name: string): Promise<Workspace> {
+  /** Rename a board and/or update its description. */
+  async update(
+    id: string,
+    patch: { name?: string; description?: string | null },
+  ): Promise<Workspace> {
     await this.require(id)
-    await this.workspaceRepository.rename(id, name.trim())
+    if (patch.name !== undefined) await this.workspaceRepository.rename(id, patch.name.trim())
+    if ('description' in patch) {
+      const desc = patch.description == null ? null : patch.description.trim() || null
+      await this.workspaceRepository.setDescription(id, desc)
+    }
     return this.require(id)
   }
 

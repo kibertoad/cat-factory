@@ -61,7 +61,7 @@ export async function remintActivations(
 
 export interface PersonalCredentialGate {
   /** Recorded on the run (individual-usage credential ownership). */
-  initiatedBy: number | null
+  initiatedBy: string | null
   /**
    * Mints the per-run activation(s); passed to `executionService.start`/`retry` so it
    * runs with the new run id before dispatch. Undefined when the run needs no personal

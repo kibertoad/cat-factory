@@ -9,7 +9,7 @@ import type { D1Database } from '@cloudflare/workers-types'
 
 interface PersonalSubscriptionRow {
   id: string
-  user_id: number
+  user_id: string
   vendor: string
   label: string
   token_cipher: string
@@ -43,7 +43,7 @@ export class D1PersonalSubscriptionRepository implements PersonalSubscriptionRep
   }
 
   async getByUserVendor(
-    userId: number,
+    userId: string,
     vendor: SubscriptionVendor,
   ): Promise<PersonalSubscriptionRecord | null> {
     const row = await this.db
@@ -56,7 +56,7 @@ export class D1PersonalSubscriptionRepository implements PersonalSubscriptionRep
     return row ? toRecord(row) : null
   }
 
-  async listByUser(userId: number): Promise<PersonalSubscriptionRecord[]> {
+  async listByUser(userId: string): Promise<PersonalSubscriptionRecord[]> {
     const { results } = await this.db
       .prepare(
         `SELECT * FROM personal_subscriptions
@@ -104,7 +104,7 @@ export class D1PersonalSubscriptionRepository implements PersonalSubscriptionRep
       .run()
   }
 
-  async markUsed(userId: number, vendor: SubscriptionVendor, at: number): Promise<void> {
+  async markUsed(userId: string, vendor: SubscriptionVendor, at: number): Promise<void> {
     await this.db
       .prepare(
         `UPDATE personal_subscriptions SET last_used_at = ?
@@ -114,7 +114,7 @@ export class D1PersonalSubscriptionRepository implements PersonalSubscriptionRep
       .run()
   }
 
-  async softDelete(userId: number, vendor: SubscriptionVendor, at: number): Promise<void> {
+  async softDelete(userId: string, vendor: SubscriptionVendor, at: number): Promise<void> {
     await this.db
       .prepare(
         `UPDATE personal_subscriptions SET deleted_at = ?
@@ -141,7 +141,7 @@ export class D1PersonalSubscriptionRepository implements PersonalSubscriptionRep
 interface SubscriptionActivationRow {
   id: string
   execution_id: string
-  user_id: number
+  user_id: string
   vendor: string
   token_cipher: string
   created_at: number
@@ -169,7 +169,7 @@ export class D1SubscriptionActivationRepository implements SubscriptionActivatio
 
   async get(
     executionId: string,
-    userId: number,
+    userId: string,
     vendor: SubscriptionVendor,
     now: number,
   ): Promise<SubscriptionActivationRecord | null> {
@@ -208,7 +208,7 @@ export class D1SubscriptionActivationRepository implements SubscriptionActivatio
 
   async refresh(
     executionId: string,
-    userId: number,
+    userId: string,
     vendor: SubscriptionVendor,
     expiresAt: number,
   ): Promise<void> {

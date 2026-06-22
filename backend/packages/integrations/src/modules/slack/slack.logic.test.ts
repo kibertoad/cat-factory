@@ -78,7 +78,7 @@ describe('renderNotificationMessage', () => {
     const msg = renderNotificationMessage(
       notification({
         payload: {
-          assessment: { complexity: 0.4, risk: 0.2, impact: 0.9 },
+          assessment: { complexity: 0.4, risk: 0.2, impact: 0.9, rationale: 'looks good' },
           prUrl: 'https://github.com/a/b/pull/3',
           pipelineName: 'Full build',
         },
@@ -104,28 +104,28 @@ describe('renderNotificationMessage', () => {
 
 describe('resolveMentionTargets', () => {
   const map: SlackMemberMappingEntry[] = [
-    { githubUserId: 7, slackUserId: 'U7', role: 'engineering' },
-    { githubUserId: 9, slackUserId: 'U9', role: 'product' },
-    { githubUserId: 10, slackUserId: 'U10', role: 'product' },
-    { githubUserId: 11, slackUserId: 'U11' }, // no role → engineering
+    { userId: 'usr_7', slackUserId: 'U7', role: 'engineering' },
+    { userId: 'usr_9', slackUserId: 'U9', role: 'product' },
+    { userId: 'usr_10', slackUserId: 'U10', role: 'product' },
+    { userId: 'usr_11', slackUserId: 'U11' }, // no role → engineering
   ]
 
   it('engineering notifications mention only the task creator', () => {
-    expect(resolveMentionTargets('merge_review', map, 7)).toEqual(['U7'])
-    expect(resolveMentionTargets('ci_failed', map, 11)).toEqual(['U11'])
+    expect(resolveMentionTargets('merge_review', map, 'usr_7')).toEqual(['U7'])
+    expect(resolveMentionTargets('ci_failed', map, 'usr_11')).toEqual(['U11'])
     // No creator (or an unmapped creator) → no one.
     expect(resolveMentionTargets('pipeline_complete', map, null)).toEqual([])
-    expect(resolveMentionTargets('merge_review', map, 999)).toEqual([])
+    expect(resolveMentionTargets('merge_review', map, 'usr_999')).toEqual([])
   })
 
   it('requirement reviews mention product people plus the creator, de-duped', () => {
     // Creator 7 is engineering-role but still pinged (roles first, then creator).
-    expect(resolveMentionTargets('requirement_review', map, 7)).toEqual(['U9', 'U10', 'U7'])
+    expect(resolveMentionTargets('requirement_review', map, 'usr_7')).toEqual(['U9', 'U10', 'U7'])
     // Creator who is themselves product is not duplicated.
-    expect(resolveMentionTargets('requirement_review', map, 9)).toEqual(['U9', 'U10'])
+    expect(resolveMentionTargets('requirement_review', map, 'usr_9')).toEqual(['U9', 'U10'])
   })
 
   it('returns nothing when the map is empty', () => {
-    expect(resolveMentionTargets('requirement_review', [], 7)).toEqual([])
+    expect(resolveMentionTargets('requirement_review', [], 'usr_7')).toEqual([])
   })
 })

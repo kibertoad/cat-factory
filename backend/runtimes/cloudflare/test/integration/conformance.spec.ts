@@ -6,9 +6,11 @@ import {
   RecordingEventPublisher,
   defineConformanceSuite,
   makeIncorporatedReview,
+  makeOnboardingProbe,
 } from '@cat-factory/conformance'
 import { env } from 'cloudflare:test'
 import { makeApp, fragmentLibraryDeps } from '../helpers'
+import { buildContainer } from '../../src/infrastructure/container'
 import { D1RequirementReviewRepository } from '../../src/infrastructure/repositories/D1RequirementReviewRepository'
 import { D1RepoBlueprintRepository } from '../../src/infrastructure/repositories/D1RepoBlueprintRepository'
 
@@ -49,6 +51,12 @@ const harness: ConformanceHarness = {
           makeIncorporatedReview(blockId, requirements),
         ),
       seedBlueprint: (record) => new D1RepoBlueprintRepository({ db: env.DB }).upsert(record),
+      // The identity/onboarding services over the same local D1 (invitations are always
+      // wired in the worker; email senders stay opt-in and out of the probe). A fake
+      // executor override skips the strict container-executor selection (the identity
+      // layer never touches the agent runner).
+      onboarding: () =>
+        makeOnboardingProbe(buildContainer(env, { agentExecutor: new FakeAgentExecutor() })),
     }
   },
 }

@@ -12,8 +12,8 @@ import { base64url, base64urlToBytes, timingSafeEqual } from '../crypto/encoding
 /** Claims carried through the install round-trip. */
 export interface InstallState {
   workspaceId: string
-  /** GitHub user id that initiated the install (null when auth is disabled). */
-  userId: number | null
+  /** Internal user id that initiated the install (null when auth is disabled). */
+  userId: string | null
   /** Absolute expiry, epoch ms. */
   exp: number
 }

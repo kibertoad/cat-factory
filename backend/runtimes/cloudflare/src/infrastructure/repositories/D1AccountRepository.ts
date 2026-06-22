@@ -11,6 +11,7 @@ interface AccountRow {
   type: string
   name: string
   github_account_login: string | null
+  owner_user_id: string | null
   created_at: number
   default_cloud_provider: string | null
 }
@@ -21,6 +22,7 @@ function rowToAccount(row: AccountRow): AccountRecord {
     type: row.type === 'org' ? 'org' : 'personal',
     name: row.name,
     githubAccountLogin: row.github_account_login,
+    ownerUserId: row.owner_user_id,
     createdAt: row.created_at,
     ...(row.default_cloud_provider
       ? { defaultCloudProvider: row.default_cloud_provider as CloudProvider }
@@ -47,13 +49,14 @@ export class D1AccountRepository implements AccountRepository {
   async create(account: AccountRecord): Promise<void> {
     await this.db
       .prepare(
-        'INSERT INTO accounts (id, type, name, github_account_login, created_at, default_cloud_provider) VALUES (?, ?, ?, ?, ?, ?)',
+        'INSERT INTO accounts (id, type, name, github_account_login, owner_user_id, created_at, default_cloud_provider) VALUES (?, ?, ?, ?, ?, ?, ?)',
       )
       .bind(
         account.id,
         account.type,
         account.name,
         account.githubAccountLogin,
+        account.ownerUserId,
         account.createdAt,
         account.defaultCloudProvider ?? null,
       )
@@ -72,10 +75,10 @@ export class D1AccountRepository implements AccountRepository {
       .run()
   }
 
-  async findPersonalByLogin(login: string): Promise<AccountRecord | null> {
+  async findPersonalByUser(userId: string): Promise<AccountRecord | null> {
     const row = await this.db
-      .prepare("SELECT * FROM accounts WHERE type = 'personal' AND github_account_login = ?")
-      .bind(login)
+      .prepare("SELECT * FROM accounts WHERE type = 'personal' AND owner_user_id = ?")
+      .bind(userId)
       .first<AccountRow>()
     return row ? rowToAccount(row) : null
   }

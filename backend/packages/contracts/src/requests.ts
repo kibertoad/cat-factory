@@ -9,6 +9,8 @@ import { agentKindSchema, blockTypeSchema, positionSchema, sizeSchema } from './
 
 export const createWorkspaceSchema = v.object({
   name: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(120))),
+  /** Optional free-text description shown on the board switcher / onboarding list. */
+  description: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(500))),
   /**
    * Seed the board with the sample architecture *blocks* (default true; the SPA
    * passes false so real boards start empty). The pipeline catalog is always
@@ -24,9 +26,11 @@ export const createWorkspaceSchema = v.object({
 })
 export type CreateWorkspaceInput = v.InferOutput<typeof createWorkspaceSchema>
 
-/** Rename a board. */
+/** Rename a board and/or update its description. */
 export const renameWorkspaceSchema = v.object({
-  name: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(120)),
+  name: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(120))),
+  /** `null` clears the description; an absent key leaves it unchanged. */
+  description: v.optional(v.nullable(v.pipe(v.string(), v.trim(), v.maxLength(500)))),
 })
 export type RenameWorkspaceInput = v.InferOutput<typeof renameWorkspaceSchema>
 

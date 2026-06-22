@@ -111,7 +111,7 @@ async function saveRouting() {
 }
 
 function addMapping() {
-  mapping.value.push({ githubUserId: 0, slackUserId: '', role: 'engineering' })
+  mapping.value.push({ userId: '', slackUserId: '', role: 'engineering' })
 }
 function removeMapping(index: number) {
   mapping.value.splice(index, 1)
@@ -119,7 +119,7 @@ function removeMapping(index: number) {
 async function saveMapping() {
   busy.value = true
   try {
-    const entries = mapping.value.filter((e) => e.githubUserId > 0 && e.slackUserId.trim())
+    const entries = mapping.value.filter((e) => e.userId.trim() && e.slackUserId.trim())
     await slack.updateMemberMapping(entries)
     mapping.value = slack.memberMapping.map((e) => ({ ...e }))
     toast.add({ title: 'Member map saved', icon: 'i-lucide-check', color: 'success' })
@@ -241,7 +241,7 @@ async function saveMapping() {
           <!-- member mapping -->
           <div v-if="mentionsEnabled" class="space-y-2">
             <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-              Member map (GitHub user id → Slack member id)
+              Member map (user id → Slack member id)
             </p>
             <p class="text-[11px] leading-snug text-slate-500">
               <span class="font-medium text-slate-400">Product</span> people are mentioned on
@@ -249,11 +249,10 @@ async function saveMapping() {
             </p>
             <div v-for="(entry, i) in mapping" :key="i" class="flex items-center gap-2">
               <UInput
-                v-model.number="entry.githubUserId"
-                type="number"
+                v-model="entry.userId"
                 size="sm"
-                class="w-32"
-                placeholder="GitHub user id"
+                class="w-40"
+                placeholder="User id (usr_…)"
               />
               <UInput
                 v-model="entry.slackUserId"

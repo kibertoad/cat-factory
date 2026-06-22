@@ -44,7 +44,7 @@ function fetchWith(
 function session(overrides: Partial<SessionPayload> = {}): Promise<string> {
   const payload: SessionPayload = {
     aud: TOKEN_AUDIENCE.session,
-    id: 42,
+    id: 'usr_42',
     login: 'octocat',
     name: 'The Octocat',
     avatarUrl: 'https://example.com/a.png',
@@ -59,12 +59,18 @@ describe('auth', () => {
     it('reports disabled when no OAuth app is configured', async () => {
       const res = await fetchWith(env, { path: '/auth/config' })
       expect(res.status).toBe(200)
-      expect(await res.json()).toEqual({ enabled: false })
+      expect(await res.json()).toEqual({
+        enabled: false,
+        providers: { github: false, password: false, google: false },
+      })
     })
 
     it('reports enabled once configured', async () => {
       const res = await fetchWith(authEnv, { path: '/auth/config' })
-      expect(await res.json()).toEqual({ enabled: true })
+      expect(await res.json()).toEqual({
+        enabled: true,
+        providers: { github: true, password: false, google: false },
+      })
     })
 
     it('leaves the API open when auth is unconfigured but AUTH_DEV_OPEN is set', async () => {
@@ -141,10 +147,11 @@ describe('auth', () => {
       expect(res.status).toBe(200)
       expect(await res.json()).toEqual({
         user: {
-          id: 42,
+          id: 'usr_42',
           login: 'octocat',
           name: 'The Octocat',
           avatarUrl: 'https://example.com/a.png',
+          email: null,
         },
         enabled: true,
       })

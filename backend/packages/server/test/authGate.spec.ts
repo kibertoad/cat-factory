@@ -15,8 +15,8 @@ interface FakeOpts {
   enabled?: boolean
   devOpen?: boolean
   accountOf?: (id: string) => Promise<string | null | undefined>
-  ownerOf?: (id: string) => Promise<number | null | undefined>
-  isMember?: (accountId: string, userId: number) => Promise<boolean>
+  ownerOf?: (id: string) => Promise<string | null | undefined>
+  isMember?: (accountId: string, userId: string) => Promise<boolean>
 }
 
 function makeApp(opts: FakeOpts = {}) {
@@ -52,7 +52,7 @@ function makeApp(opts: FakeOpts = {}) {
     )
 }
 
-async function sessionToken(id: number): Promise<string> {
+async function sessionToken(id: string): Promise<string> {
   const payload: SessionPayload = {
     id,
     login: 'octocat',
@@ -87,27 +87,31 @@ describe('mountAuthGate — default-deny', () => {
 describe('mountAuthGate — per-workspace authz', () => {
   it('skips the unscoped /workspaces collection', async () => {
     const call = makeApp()
-    expect((await call('GET', '/workspaces', await sessionToken(1))).status).toBe(200)
+    expect((await call('GET', '/workspaces', await sessionToken('usr_1'))).status).toBe(200)
   })
 
   it('lets the handler 404 a missing board (accountOf undefined)', async () => {
     const call = makeApp({ accountOf: async () => undefined })
-    expect((await call('GET', '/workspaces/ws_x/blocks', await sessionToken(1))).status).toBe(200)
+    expect((await call('GET', '/workspaces/ws_x/blocks', await sessionToken('usr_1'))).status).toBe(
+      200,
+    )
   })
 
   it('legacy board: only the owner may access it (else 404)', async () => {
-    const owned = makeApp({ accountOf: async () => null, ownerOf: async () => 1 })
-    expect((await owned('GET', '/workspaces/ws_x', await sessionToken(1))).status).toBe(200)
-    const foreign = makeApp({ accountOf: async () => null, ownerOf: async () => 2 })
-    const res = await foreign('GET', '/workspaces/ws_x', await sessionToken(1))
+    const owned = makeApp({ accountOf: async () => null, ownerOf: async () => 'usr_1' })
+    expect((await owned('GET', '/workspaces/ws_x', await sessionToken('usr_1'))).status).toBe(200)
+    const foreign = makeApp({ accountOf: async () => null, ownerOf: async () => 'usr_2' })
+    const res = await foreign('GET', '/workspaces/ws_x', await sessionToken('usr_1'))
     expect(res.status).toBe(404)
     expect(((await res.json()) as { error: { code: string } }).error.code).toBe('not_found')
   })
 
   it('account board: members pass, non-members get 404 (existence not leaked)', async () => {
     const member = makeApp({ accountOf: async () => 'acc_1', isMember: async () => true })
-    expect((await member('GET', '/workspaces/ws_x', await sessionToken(1))).status).toBe(200)
+    expect((await member('GET', '/workspaces/ws_x', await sessionToken('usr_1'))).status).toBe(200)
     const outsider = makeApp({ accountOf: async () => 'acc_1', isMember: async () => false })
-    expect((await outsider('GET', '/workspaces/ws_x', await sessionToken(1))).status).toBe(404)
+    expect((await outsider('GET', '/workspaces/ws_x', await sessionToken('usr_1'))).status).toBe(
+      404,
+    )
   })
 })

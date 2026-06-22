@@ -15,6 +15,25 @@ export type {
   MembershipRepository,
 } from './account-repositories.js'
 export type {
+  IdentityProvider,
+  UserRecord,
+  UserIdentityRecord,
+  UserRepository,
+} from './user-repositories.js'
+export type { PasswordHasher } from './password-hasher.js'
+export type {
+  EmailMessage,
+  EmailSender,
+  EmailProviderKind,
+  EmailConnectionRecord,
+  EmailConnectionRepository,
+} from './email-sender.js'
+export type {
+  AccountInvitationRecord,
+  AccountInvitationRepository,
+  InvitationStatus,
+} from './invitation-repositories.js'
+export type {
   ServicePatch,
   ServiceRepository,
   WorkspaceMountPatch,

@@ -108,7 +108,7 @@ export function makeApp(
   // (which requires one) can't be used to set up an org-scoped workspace.
   async function createOrgWorkspace(options: { name?: string } = {}): Promise<WorkspaceSnapshot> {
     const c = buildContainer(env, coreOverrides)
-    const user = { id: 1, login: 'org-owner', name: 'Org Owner' }
+    const user = { id: 'usr_org-owner', login: 'org-owner', name: 'Org Owner' }
     const name = options.name ?? 'Org board'
     const org = await c.accountService.createOrg(user, { name: `${name} org` })
     return c.workspaceService.create({ name, seed: false }, user.id, org.id)

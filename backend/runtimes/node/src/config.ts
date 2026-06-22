@@ -139,8 +139,14 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
       : undefined
   const clientId = env.GITHUB_OAUTH_CLIENT_ID?.trim() ?? ''
   const clientSecret = env.GITHUB_OAUTH_CLIENT_SECRET?.trim() ?? ''
+  const googleClientId = env.GOOGLE_OAUTH_CLIENT_ID?.trim() ?? ''
+  const googleClientSecret = env.GOOGLE_OAUTH_CLIENT_SECRET?.trim() ?? ''
   const environment = env.ENVIRONMENT?.trim().toLowerCase() ?? ''
   const ttlHours = num(env.AUTH_SESSION_TTL_HOURS)
+  const strongSecret = sessionSecret.length >= MIN_SESSION_SECRET_LENGTH
+  const githubEnabled = clientId !== '' && clientSecret !== '' && strongSecret
+  const googleEnabled = googleClientId !== '' && googleClientSecret !== '' && strongSecret
+  const passwordEnabled = env.AUTH_PASSWORD_ENABLED?.trim() === 'true' && strongSecret
 
   const devOpen = env.AUTH_DEV_OPEN?.trim() === 'true' && !PRODUCTION_ENVIRONMENTS.has(environment)
 
@@ -195,9 +201,9 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
       webhookSecret: env.GITHUB_WEBHOOK_SECRET ?? '',
     },
     auth: {
-      enabled:
-        clientId !== '' && clientSecret !== '' && sessionSecret.length >= MIN_SESSION_SECRET_LENGTH,
+      enabled: githubEnabled || googleEnabled || passwordEnabled,
       devOpen,
+      githubEnabled,
       clientId,
       clientSecret,
       sessionSecret,
@@ -206,6 +212,17 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
       sessionTtlMs: (ttlHours !== undefined && ttlHours > 0 ? ttlHours : 168) * 60 * 60 * 1000,
       successRedirectUrl: env.AUTH_SUCCESS_REDIRECT_URL?.trim() || '',
       callbackUrl: env.AUTH_CALLBACK_URL?.trim() || '',
+      passwordEnabled,
+      ...(googleEnabled
+        ? {
+            google: {
+              clientId: googleClientId,
+              clientSecret: googleClientSecret,
+              redirectUrl: env.GOOGLE_OAUTH_REDIRECT_URL?.trim() || '',
+            },
+          }
+        : {}),
+      allowedEmailDomains: csv(env.AUTH_ALLOWED_EMAIL_DOMAINS).map((d) => d.toLowerCase()),
       allowedLogins: csv(env.AUTH_ALLOWED_LOGINS).map((l) => l.toLowerCase()),
       allowedOrgs: csv(env.AUTH_ALLOWED_ORGS).map((o) => o.toLowerCase()),
       allowedRedirectOrigins: csv(env.AUTH_ALLOWED_REDIRECT_ORIGINS).map((o) => {
@@ -216,6 +233,17 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
         }
       }),
     },
+    email:
+      env.EMAIL_ENABLED?.trim() === 'true' && env.ENCRYPTION_KEY?.trim()
+        ? {
+            enabled: true,
+            encryptionKey: env.ENCRYPTION_KEY.trim(),
+            appBaseUrl: env.APP_BASE_URL?.trim() || env.AUTH_SUCCESS_REDIRECT_URL?.trim() || '',
+          }
+        : {
+            enabled: false,
+            appBaseUrl: env.APP_BASE_URL?.trim() || env.AUTH_SUCCESS_REDIRECT_URL?.trim() || '',
+          },
     // Document-source integration: the providers (Confluence/Notion/GitHub-docs) are
     // the shared `@cat-factory/integrations` fetch shells, wired in the container
     // exactly like the Worker's `selectDocumentsDeps`. Always on (the shared

@@ -22,6 +22,8 @@ export const useAuthStore = defineStore(
     const user = ref<AuthUser | null>(null)
     /** Whether the backend requires authentication. */
     const required = ref(false)
+    /** Which login providers the backend offers (drives the login UI). */
+    const providers = ref({ github: false, password: false, google: false })
     /** True once the initial auth handshake has settled. */
     const ready = ref(false)
 
@@ -42,7 +44,9 @@ export const useAuthStore = defineStore(
     async function bootstrap() {
       consumeRedirectToken()
       try {
-        required.value = (await api.getAuthConfig()).enabled
+        const config = await api.getAuthConfig()
+        required.value = config.enabled
+        if (config.providers) providers.value = config.providers
       } catch {
         // Backend unreachable — let the board's own error UI handle it.
         required.value = false
@@ -58,14 +62,67 @@ export const useAuthStore = defineStore(
         }
         if (!user.value) token.value = null
       }
+      // An already-signed-in user who followed an invite link redeems it here (a
+      // brand-new user redeems it server-side during signup/OAuth instead).
+      if (user.value) await maybeAcceptInvite()
       ready.value = true
     }
 
-    /** Send the browser to the backend's GitHub login, returning here after. */
-    function login() {
+    /** Redeem an `?invite=` token in the URL for the signed-in user, then clean the URL. */
+    async function maybeAcceptInvite() {
       if (typeof window === 'undefined') return
+      const params = new URLSearchParams(window.location.search)
+      const inviteToken = params.get('invite')
+      if (!inviteToken) return
+      try {
+        await api.acceptInvite(inviteToken)
+      } catch {
+        // Stale/already-accepted invite — ignore and let the app load normally.
+      }
+      params.delete('invite')
+      const qs = params.toString()
+      history.replaceState(null, '', window.location.pathname + (qs ? `?${qs}` : ''))
+    }
+
+    /** Build a post-login redirect back to the current page, with an optional invite. */
+    function redirectTarget(invite?: string): string {
       const here = window.location.origin + window.location.pathname
-      window.location.href = `${apiBase}/auth/login?redirect=${encodeURIComponent(here)}`
+      const params = new URLSearchParams({ redirect: here })
+      if (invite) params.set('invite', invite)
+      return params.toString()
+    }
+
+    /** Send the browser to the backend's GitHub login, returning here after. */
+    function login(invite?: string) {
+      if (typeof window === 'undefined') return
+      window.location.href = `${apiBase}/auth/login?${redirectTarget(invite)}`
+    }
+
+    /** Send the browser to the backend's Google login, returning here after. */
+    function loginWithGoogle(invite?: string) {
+      if (typeof window === 'undefined') return
+      window.location.href = `${apiBase}/auth/google/login?${redirectTarget(invite)}`
+    }
+
+    /** Apply a freshly-minted token + user (from password signup/login). */
+    function applySession(result: { token: string; user: AuthUser }) {
+      token.value = result.token
+      user.value = result.user
+    }
+
+    /** Register a new email/password user (optionally redeeming an invite). */
+    async function signup(body: {
+      email: string
+      password: string
+      name?: string
+      invite?: string
+    }) {
+      applySession(await api.signup(body))
+    }
+
+    /** Sign in with email/password. */
+    async function passwordLogin(body: { email: string; password: string }) {
+      applySession(await api.passwordLogin(body))
     }
 
     /** Drop the local session (sessions are stateless server-side). */
@@ -85,10 +142,14 @@ export const useAuthStore = defineStore(
       token,
       user,
       required,
+      providers,
       ready,
       isAuthenticated,
       bootstrap,
       login,
+      loginWithGoogle,
+      signup,
+      passwordLogin,
       logout,
       handleUnauthorized,
     }

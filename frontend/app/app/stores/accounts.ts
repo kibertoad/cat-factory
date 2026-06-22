@@ -1,6 +1,12 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
-import type { Account, CloudProvider } from '~/types/domain'
+import type {
+  Account,
+  AccountInvitation,
+  AccountMember,
+  CloudProvider,
+  EmailConnection,
+} from '~/types/domain'
 
 /**
  * Account tenancy on the client: the accounts the signed-in user can switch
@@ -60,16 +66,76 @@ export const useAccountsStore = defineStore(
       return updated
     }
 
+    // ---- members + invitations -------------------------------------------
+
+    const members = ref<AccountMember[]>([])
+    const invitations = ref<AccountInvitation[]>([])
+
+    /** Load the active account's member roster + pending invitations. */
+    async function loadRoster(accountId: string) {
+      const [m, inv] = await Promise.all([
+        api.listAccountMembers(accountId),
+        api.listInvitations(accountId),
+      ])
+      members.value = m
+      invitations.value = inv
+    }
+
+    /** Invite a teammate by email; returns the accept link (for manual sharing). */
+    async function invite(accountId: string, email: string, role: 'owner' | 'member' = 'member') {
+      const { invitation, acceptUrl } = await api.createInvitation(accountId, { email, role })
+      invitations.value = [invitation, ...invitations.value]
+      return acceptUrl
+    }
+
+    async function revokeInvite(accountId: string, invitationId: string) {
+      await api.revokeInvitation(accountId, invitationId)
+      invitations.value = invitations.value.filter((i) => i.id !== invitationId)
+    }
+
+    // ---- email sender connection -----------------------------------------
+
+    const emailConnection = ref<EmailConnection | null>(null)
+    const emailConfigured = ref(false)
+
+    async function loadEmailConnection(accountId: string) {
+      const res = await api.getEmailConnection(accountId)
+      emailConnection.value = res.connection
+      emailConfigured.value = res.configured
+    }
+
+    async function connectEmail(
+      accountId: string,
+      body: { provider: 'sendgrid' | 'resend'; apiKey: string; fromAddress: string },
+    ) {
+      emailConnection.value = await api.connectEmail(accountId, body)
+    }
+
+    async function disconnectEmail(accountId: string) {
+      await api.disconnectEmail(accountId)
+      emailConnection.value = null
+    }
+
     return {
       accounts,
       activeAccountId,
       activeAccount,
       enabled,
       ready,
+      members,
+      invitations,
+      emailConnection,
+      emailConfigured,
       load,
       createOrg,
       switchTo,
       setDefaultCloudProvider,
+      loadRoster,
+      invite,
+      revokeInvite,
+      loadEmailConnection,
+      connectEmail,
+      disconnectEmail,
     }
   },
   { persist: { pick: ['activeAccountId'] } },

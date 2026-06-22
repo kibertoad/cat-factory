@@ -172,6 +172,7 @@ describe('rowToWorkspace / rowToPipeline', () => {
     expect(rowToWorkspace({ id: 'ws_1', name: 'W', created_at: 5, account_id: null })).toEqual({
       id: 'ws_1',
       name: 'W',
+      description: null,
       createdAt: 5,
       accountId: null,
     })

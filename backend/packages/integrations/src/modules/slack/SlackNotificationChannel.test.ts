@@ -44,7 +44,7 @@ function mappingRepo(entries: SlackMemberMappingEntry[]): SlackMemberMappingRepo
 }
 
 /** A BlockRepository whose `get` returns a task block with the given creator. */
-function blockRepo(createdBy: number | null): BlockRepository {
+function blockRepo(createdBy: string | null): BlockRepository {
   const block = { id: 'blk_1', createdBy } as unknown as Block
   return { get: async () => block } as unknown as BlockRepository
 }
@@ -153,7 +153,7 @@ describe('SlackNotificationChannel', () => {
       slackConnectionRepository: connectionRepo(null),
       slackSettingsRepository: settingsRepo(enabledRoute('#releases')),
       slackMemberMappingRepository: mappingRepo([]),
-      blockRepository: blockRepo(7),
+      blockRepository: blockRepo('usr_7'),
       secretCipher: reversingCipher,
       slackClient: client,
     })
@@ -169,10 +169,10 @@ describe('SlackNotificationChannel', () => {
       slackConnectionRepository: connectionRepo(connection),
       slackSettingsRepository: settingsRepo(enabledRoute('#releases')),
       slackMemberMappingRepository: mappingRepo([
-        { githubUserId: 7, slackUserId: 'U7', role: 'engineering' },
-        { githubUserId: 9, slackUserId: 'U9', role: 'product' },
+        { userId: 'usr_7', slackUserId: 'U7', role: 'engineering' },
+        { userId: 'usr_9', slackUserId: 'U9', role: 'product' },
       ]),
-      blockRepository: blockRepo(7), // task created by github user 7
+      blockRepository: blockRepo('usr_7'), // task created by github user 7
       secretCipher: reversingCipher,
       slackClient: client,
     })
@@ -191,11 +191,11 @@ describe('SlackNotificationChannel', () => {
       slackConnectionRepository: connectionRepo(connection),
       slackSettingsRepository: settingsRepo(enabledRoute('#product')),
       slackMemberMappingRepository: mappingRepo([
-        { githubUserId: 7, slackUserId: 'U7', role: 'engineering' }, // the creator
-        { githubUserId: 9, slackUserId: 'U9', role: 'product' },
-        { githubUserId: 10, slackUserId: 'U10', role: 'product' },
+        { userId: 'usr_7', slackUserId: 'U7', role: 'engineering' }, // the creator
+        { userId: 'usr_9', slackUserId: 'U9', role: 'product' },
+        { userId: 'usr_10', slackUserId: 'U10', role: 'product' },
       ]),
-      blockRepository: blockRepo(7),
+      blockRepository: blockRepo('usr_7'),
       secretCipher: reversingCipher,
       slackClient: client,
     })

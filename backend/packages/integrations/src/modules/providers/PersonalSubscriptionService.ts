@@ -87,7 +87,7 @@ export class PersonalSubscriptionService {
 
   /** Store (or replace) the user's personal credential for an individual-usage vendor. */
   async store(
-    userId: number,
+    userId: string,
     input: StorePersonalSubscriptionInput,
   ): Promise<PersonalSubscriptionStatus> {
     this.assertIndividual(input.vendor)
@@ -125,7 +125,7 @@ export class PersonalSubscriptionService {
    * an arbitrary existing credential purely to compare the password — nothing is persisted.
    */
   private async assertSamePasswordAsOthers(
-    userId: number,
+    userId: string,
     vendor: SubscriptionVendor,
     password: string,
   ): Promise<void> {
@@ -147,19 +147,19 @@ export class PersonalSubscriptionService {
   }
 
   /** Every personal subscription the user has, metadata only (never the secret). */
-  async list(userId: number): Promise<PersonalSubscriptionStatus[]> {
+  async list(userId: string): Promise<PersonalSubscriptionStatus[]> {
     const now = this.deps.clock.now()
     const rows = await this.deps.personalSubscriptionRepository.listByUser(userId)
     return rows.map((r) => this.toStatus(r, now))
   }
 
   /** Whether the user has a live personal credential for the vendor. */
-  async has(userId: number, vendor: SubscriptionVendor): Promise<boolean> {
+  async has(userId: string, vendor: SubscriptionVendor): Promise<boolean> {
     return (await this.deps.personalSubscriptionRepository.getByUserVendor(userId, vendor)) !== null
   }
 
   /** Remove the user's personal credential for a vendor. */
-  async remove(userId: number, vendor: SubscriptionVendor): Promise<void> {
+  async remove(userId: string, vendor: SubscriptionVendor): Promise<void> {
     await this.deps.personalSubscriptionRepository.softDelete(userId, vendor, this.deps.clock.now())
   }
 
@@ -168,7 +168,7 @@ export class PersonalSubscriptionService {
    * Throws a {@link CredentialRequiredError} when there's no credential, the
    * subscription has lapsed, or the password is wrong. Does NOT persist anything.
    */
-  async unlock(userId: number, vendor: SubscriptionVendor, password: string): Promise<string> {
+  async unlock(userId: string, vendor: SubscriptionVendor, password: string): Promise<string> {
     const record = await this.deps.personalSubscriptionRepository.getByUserVendor(userId, vendor)
     if (!record) {
       throw new CredentialRequiredError(
@@ -202,7 +202,7 @@ export class PersonalSubscriptionService {
    */
   async activateForRun(
     executionId: string,
-    userId: number,
+    userId: string,
     vendor: SubscriptionVendor,
     password: string,
   ): Promise<void> {
@@ -229,7 +229,7 @@ export class PersonalSubscriptionService {
    */
   async leaseForRun(
     executionId: string,
-    userId: number,
+    userId: string,
     vendor: SubscriptionVendor,
   ): Promise<LeasedPersonalToken> {
     const now = this.deps.clock.now()
@@ -252,7 +252,7 @@ export class PersonalSubscriptionService {
   /** Whether the run currently has a live activation for the user+vendor. */
   async hasActivation(
     executionId: string,
-    userId: number,
+    userId: string,
     vendor: SubscriptionVendor,
   ): Promise<boolean> {
     return (
@@ -270,7 +270,7 @@ export class PersonalSubscriptionService {
    * it is at least half spent, so an actively-tended long run doesn't lapse. No-op when
    * the run has no activation.
    */
-  async refreshActivations(executionId: string, userId: number): Promise<void> {
+  async refreshActivations(executionId: string, userId: string): Promise<void> {
     const now = this.deps.clock.now()
     for (const vendor of await this.activatedVendors(executionId, userId, now)) {
       await this.deps.subscriptionActivationRepository.refresh(
@@ -284,7 +284,7 @@ export class PersonalSubscriptionService {
 
   private async activatedVendors(
     executionId: string,
-    userId: number,
+    userId: string,
     now: number,
   ): Promise<SubscriptionVendor[]> {
     const out: SubscriptionVendor[] = []

@@ -25,8 +25,8 @@ import type { SubscriptionVendor } from './provider-subscription-repositories.js
  */
 export interface PersonalSubscriptionRecord {
   id: string
-  /** GitHub user id of the owner. */
-  userId: number
+  /** Internal user id (`usr_*`) of the owner. */
+  userId: string
   vendor: SubscriptionVendor
   label: string
   /** Double-encrypted credential (password layer inside the system layer). */
@@ -44,17 +44,17 @@ export interface PersonalSubscriptionRecord {
 export interface PersonalSubscriptionRepository {
   /** The user's live credential for a vendor, or null. */
   getByUserVendor(
-    userId: number,
+    userId: string,
     vendor: SubscriptionVendor,
   ): Promise<PersonalSubscriptionRecord | null>
   /** Every live credential the user owns (metadata for the status surface). */
-  listByUser(userId: number): Promise<PersonalSubscriptionRecord[]>
+  listByUser(userId: string): Promise<PersonalSubscriptionRecord[]>
   /** Insert or replace the user's credential for a vendor (one per user+vendor). */
   upsert(record: PersonalSubscriptionRecord): Promise<void>
   /** Stamp `lastUsedAt` when a run activates the credential. */
-  markUsed(userId: number, vendor: SubscriptionVendor, at: number): Promise<void>
+  markUsed(userId: string, vendor: SubscriptionVendor, at: number): Promise<void>
   /** Tombstone the user's credential for a vendor. */
-  softDelete(userId: number, vendor: SubscriptionVendor, at: number): Promise<void>
+  softDelete(userId: string, vendor: SubscriptionVendor, at: number): Promise<void>
   /**
    * Live credentials whose subscription `expiresAt` is at/after `now` but at/before
    * `before` (the advance-warning horizon) — the renewal-nudge sweep reads these.
@@ -73,7 +73,7 @@ export interface PersonalSubscriptionRepository {
 export interface SubscriptionActivationRecord {
   id: string
   executionId: string
-  userId: number
+  userId: string
   vendor: SubscriptionVendor
   /** System-key-only ciphertext of the raw token. */
   tokenCipher: string
@@ -85,7 +85,7 @@ export interface SubscriptionActivationRepository {
   /** The live (unexpired) activation for a run+user+vendor, or null. */
   get(
     executionId: string,
-    userId: number,
+    userId: string,
     vendor: SubscriptionVendor,
     now: number,
   ): Promise<SubscriptionActivationRecord | null>
@@ -94,7 +94,7 @@ export interface SubscriptionActivationRepository {
   /** Extend an existing activation's TTL (refresh on interaction). No-op if absent. */
   refresh(
     executionId: string,
-    userId: number,
+    userId: string,
     vendor: SubscriptionVendor,
     expiresAt: number,
   ): Promise<void>

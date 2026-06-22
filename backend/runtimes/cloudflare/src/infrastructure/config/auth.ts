@@ -28,10 +28,18 @@ export function loadAuthConfig(env: Env): AuthConfig {
   // longer silently re-open the API. Operators should set ENVIRONMENT=production.
   const environment = env.ENVIRONMENT?.trim().toLowerCase() ?? ''
   const devOpen = env.AUTH_DEV_OPEN?.trim() === 'true' && !PRODUCTION_ENVIRONMENTS.has(environment)
+  const strongSecret = sessionSecret.length >= MIN_SESSION_SECRET_LENGTH
+  const githubEnabled = clientId !== '' && clientSecret !== '' && strongSecret
+  // Google OAuth is offered only when its client id/secret are both present.
+  const googleClientId = env.GOOGLE_OAUTH_CLIENT_ID?.trim() ?? ''
+  const googleClientSecret = env.GOOGLE_OAUTH_CLIENT_SECRET?.trim() ?? ''
+  const googleEnabled = googleClientId !== '' && googleClientSecret !== '' && strongSecret
+  const passwordEnabled = env.AUTH_PASSWORD_ENABLED?.trim() === 'true' && strongSecret
   return {
-    enabled:
-      clientId !== '' && clientSecret !== '' && sessionSecret.length >= MIN_SESSION_SECRET_LENGTH,
+    // Enabled when ANY provider is configured (with a strong session secret).
+    enabled: githubEnabled || googleEnabled || passwordEnabled,
     devOpen,
+    githubEnabled,
     clientId,
     clientSecret,
     sessionSecret,
@@ -40,6 +48,20 @@ export function loadAuthConfig(env: Env): AuthConfig {
     sessionTtlMs: (ttlHours !== undefined && ttlHours > 0 ? ttlHours : 168) * 60 * 60 * 1000,
     successRedirectUrl: env.AUTH_SUCCESS_REDIRECT_URL?.trim() || '',
     callbackUrl: env.AUTH_CALLBACK_URL?.trim() || '',
+    passwordEnabled,
+    ...(googleEnabled
+      ? {
+          google: {
+            clientId: googleClientId,
+            clientSecret: googleClientSecret,
+            redirectUrl: env.GOOGLE_OAUTH_REDIRECT_URL?.trim() || '',
+          },
+        }
+      : {}),
+    allowedEmailDomains: (env.AUTH_ALLOWED_EMAIL_DOMAINS ?? '')
+      .split(',')
+      .map((d) => d.trim().toLowerCase())
+      .filter(Boolean),
     allowedLogins: (env.AUTH_ALLOWED_LOGINS ?? '')
       .split(',')
       .map((login) => login.trim().toLowerCase())

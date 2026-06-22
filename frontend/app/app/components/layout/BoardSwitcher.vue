@@ -52,6 +52,10 @@ const accountItems = computed<DropdownMenuItem[][]>(() => [
   })),
   [
     { label: 'New organization…', icon: 'i-lucide-plus', onSelect: () => openPrompt('account') },
+    // Team management (members + invitations + email sender) for org accounts.
+    ...(accounts.activeAccount?.type === 'org'
+      ? [{ label: 'Manage team…', icon: 'i-lucide-users', onSelect: () => openSettings() }]
+      : []),
     // Owners can set the account-wide default provider new services inherit.
     ...(accounts.activeAccount?.role === 'owner'
       ? [
@@ -132,6 +136,8 @@ async function removeBoard() {
 type PromptKind = 'account' | 'board' | 'rename'
 const prompt = ref<PromptKind | null>(null)
 const promptValue = ref('')
+// Board create/rename also carries an optional description (Part C of onboarding).
+const promptDescription = ref('')
 const promptOpen = computed({
   get: () => prompt.value !== null,
   set: (v: boolean) => {
@@ -141,17 +147,21 @@ const promptOpen = computed({
 const promptMeta: Record<PromptKind, { title: string; placeholder: string; cta: string }> = {
   account: { title: 'New organization', placeholder: 'Acme Inc.', cta: 'Create' },
   board: { title: 'New board', placeholder: 'Untitled board', cta: 'Create' },
-  rename: { title: 'Rename board', placeholder: 'Board name', cta: 'Save' },
+  rename: { title: 'Board settings', placeholder: 'Board name', cta: 'Save' },
 }
+/** Whether the current prompt edits a board (so it shows the description field). */
+const promptHasDescription = computed(() => prompt.value === 'board' || prompt.value === 'rename')
 
 function openPrompt(kind: PromptKind) {
   prompt.value = kind
   promptValue.value = kind === 'rename' ? (workspace.activeWorkspace?.name ?? '') : ''
+  promptDescription.value = kind === 'rename' ? (workspace.activeWorkspace?.description ?? '') : ''
 }
 
 async function submitPrompt() {
   const kind = prompt.value
   const name = promptValue.value.trim()
+  const description = promptDescription.value.trim()
   if (!kind || (!name && kind !== 'board')) return
   busy.value = true
   try {
@@ -160,9 +170,12 @@ async function submitPrompt() {
       // The new org starts empty — open (create) its first board.
       await workspace.selectAccount(accounts.activeAccountId!)
     } else if (kind === 'board') {
-      await workspace.create(name || undefined)
+      await workspace.create(name || undefined, description || undefined)
     } else if (workspace.workspaceId) {
-      await workspace.rename(workspace.workspaceId, name)
+      await workspace.update(workspace.workspaceId, {
+        name,
+        description: description || null,
+      })
     }
     prompt.value = null
   } catch (e) {
@@ -170,6 +183,12 @@ async function submitPrompt() {
   } finally {
     busy.value = false
   }
+}
+
+// ---- account settings modal (members / invitations / email) ----------------
+const settingsOpen = ref(false)
+function openSettings() {
+  settingsOpen.value = true
 }
 </script>
 
@@ -228,6 +247,14 @@ async function submitPrompt() {
               class="w-full"
             />
           </UFormField>
+          <UFormField v-if="promptHasDescription" label="Description" hint="Optional">
+            <UTextarea
+              v-model="promptDescription"
+              :rows="3"
+              placeholder="What is this board for?"
+              class="w-full"
+            />
+          </UFormField>
           <div class="flex justify-end gap-2">
             <UButton color="neutral" variant="ghost" :disabled="busy" @click="prompt = null">
               Cancel
@@ -237,6 +264,16 @@ async function submitPrompt() {
             </UButton>
           </div>
         </form>
+      </template>
+    </UModal>
+
+    <!-- account team settings: members, invitations, email sender -->
+    <UModal v-model:open="settingsOpen" title="Team settings">
+      <template #body>
+        <AccountTeamSettings
+          v-if="accounts.activeAccountId"
+          :account-id="accounts.activeAccountId"
+        />
       </template>
     </UModal>
   </div>

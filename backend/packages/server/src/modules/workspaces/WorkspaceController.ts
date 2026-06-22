@@ -136,9 +136,11 @@ export function workspaceController(): Hono<AppEnv> {
   })
 
   app.patch('/workspaces/:workspaceId', jsonBody(renameWorkspaceSchema), async (c) => {
-    const workspace = await c
-      .get('container')
-      .workspaceService.rename(param(c, 'workspaceId'), c.req.valid('json').name)
+    const body = c.req.valid('json')
+    const workspace = await c.get('container').workspaceService.update(param(c, 'workspaceId'), {
+      ...(body.name !== undefined ? { name: body.name } : {}),
+      ...('description' in body ? { description: body.description } : {}),
+    })
     return c.json(workspace)
   })
 

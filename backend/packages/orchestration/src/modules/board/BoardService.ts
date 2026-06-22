@@ -288,7 +288,7 @@ export class BoardService {
     workspaceId: string,
     containerId: string,
     input: AddTaskInput,
-    createdBy?: number | null,
+    createdBy?: string | null,
   ): Promise<Block> {
     await this.requireWorkspace(workspaceId)
     // The container may be a frame/module of a service mounted from another workspace; create

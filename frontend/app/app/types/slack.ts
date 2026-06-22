@@ -34,11 +34,12 @@ export interface SlackNotificationSettings {
   updatedAt: number
 }
 
-/** One GitHub user id → Slack member id mapping entry. */
+/** One internal user id → Slack member id mapping entry. */
 export type SlackMemberRole = 'product' | 'engineering'
 
 export interface SlackMemberMappingEntry {
-  githubUserId: number
+  /** Internal user id (`usr_*`) — the same id the member roster shows. */
+  userId: string
   slackUserId: string
   /**
    * Notification role: `product` people are @-mentioned on requirement-review

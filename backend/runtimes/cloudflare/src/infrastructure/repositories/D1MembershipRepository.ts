@@ -3,7 +3,7 @@ import type { D1Database } from '@cloudflare/workers-types'
 
 interface MembershipRow {
   account_id: string
-  user_id: number
+  user_id: string
   role: string
   created_at: number
 }
@@ -25,7 +25,7 @@ export class D1MembershipRepository implements MembershipRepository {
     this.db = db
   }
 
-  async listByUser(userId: number): Promise<Membership[]> {
+  async listByUser(userId: string): Promise<Membership[]> {
     const { results } = await this.db
       .prepare('SELECT * FROM memberships WHERE user_id = ? ORDER BY created_at ASC')
       .bind(userId)
@@ -41,7 +41,7 @@ export class D1MembershipRepository implements MembershipRepository {
     return results.map(rowToMembership)
   }
 
-  async get(accountId: string, userId: number): Promise<Membership | null> {
+  async get(accountId: string, userId: string): Promise<Membership | null> {
     const row = await this.db
       .prepare('SELECT * FROM memberships WHERE account_id = ? AND user_id = ?')
       .bind(accountId, userId)
@@ -59,7 +59,7 @@ export class D1MembershipRepository implements MembershipRepository {
       .run()
   }
 
-  async remove(accountId: string, userId: number): Promise<void> {
+  async remove(accountId: string, userId: string): Promise<void> {
     await this.db
       .prepare('DELETE FROM memberships WHERE account_id = ? AND user_id = ?')
       .bind(accountId, userId)

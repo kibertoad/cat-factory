@@ -65,7 +65,7 @@ export function mentionAudience(type: NotificationType): MentionAudience {
 export function resolveMentionTargets(
   type: NotificationType,
   mapping: SlackMemberMappingEntry[],
-  creatorGithubId: number | null | undefined,
+  creatorUserId: string | null | undefined,
 ): string[] {
   const audience = mentionAudience(type)
   const ids: string[] = []
@@ -81,8 +81,8 @@ export function resolveMentionTargets(
       if (audience.roles.includes(resolveMemberRole(entry))) add(entry.slackUserId)
     }
   }
-  if (audience.includeCreator && creatorGithubId != null) {
-    const creator = mapping.find((e) => e.githubUserId === creatorGithubId)
+  if (audience.includeCreator && creatorUserId != null) {
+    const creator = mapping.find((e) => e.userId === creatorUserId)
     if (creator) add(creator.slackUserId)
   }
   return ids
