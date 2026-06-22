@@ -238,6 +238,16 @@ SPEND_CURRENCY = "EUR"
 # reason, counts — is still recorded) for deployments that must not retain prompt text.
 # LLM_RECORD_PROMPTS = "false"
 
+# Langfuse trace sink (opt-in). Streams every LLM call — container-agent calls (via the
+# proxy) AND inline calls (requirements review, doc planner, fragment selector) — to
+# Langfuse as a generation grouped under its run's trace, via Langfuse's fetch-based
+# ingestion API (so it runs on the Worker). Off unless LANGFUSE_ENABLED = "true" and
+# both keys are set; honours LLM_RECORD_PROMPTS. Set the secret key as a Worker secret:
+#   wrangler secret put LANGFUSE_SECRET_KEY
+# LANGFUSE_ENABLED = "true"
+# LANGFUSE_PUBLIC_KEY = "pk-lf-..."
+# LANGFUSE_BASE_URL = "https://cloud.langfuse.com"
+
 # GitHub App integration. Off until an App is configured: set the App id/slug here
 # and the private key (PKCS#8 PEM) + webhook secret as secrets:
 #   wrangler secret put GITHUB_APP_PRIVATE_KEY

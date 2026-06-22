@@ -6,6 +6,7 @@ import {
   type SelectableFragment,
 } from '@cat-factory/kernel'
 import { generateText } from 'ai'
+import { catFactoryObservability } from '../providers/instrumented.js'
 import { selectDeterministic } from './fragment-catalog.js'
 
 // Runtime-neutral LLM-backed fragment selector (ADR 0006 §5). Promoted from the
@@ -84,6 +85,7 @@ export class LlmFragmentSelector implements FragmentSelector {
         // Headroom for a reasoning model's `<think>` before the (small) id list —
         // a tight cap truncates the output before any ids are emitted.
         maxOutputTokens: 5000,
+        providerOptions: catFactoryObservability({ agentKind: 'fragment-selector' }),
       })
       const ids = extractIds(text, new Set(candidates.map((c) => c.id)))
       return ids ?? fallback()

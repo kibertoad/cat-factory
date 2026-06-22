@@ -119,6 +119,7 @@ export type {
   ExecutionConfig,
   FragmentLibraryConfig,
   GitHubConfig,
+  LangfuseConfig,
   ObservabilityConfig,
   PrivilegedAppConfig,
   RetentionConfig,

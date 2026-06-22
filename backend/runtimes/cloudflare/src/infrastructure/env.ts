@@ -332,6 +332,20 @@ export interface Env {
    */
   LLM_RECORD_PROMPTS?: string
 
+  // ---- Langfuse trace sink (opt-in LLM observability) -----------------------
+  /**
+   * Opt-in flag for streaming LLM generations (and container tool spans) to Langfuse.
+   * Enabled only when 'true' AND both keys below are set. The sink uses Langfuse's
+   * fetch-based ingestion API, so it runs unchanged on the Worker runtime.
+   */
+  LANGFUSE_ENABLED?: string
+  /** Langfuse public key (`pk-lf-…`). */
+  LANGFUSE_PUBLIC_KEY?: string
+  /** Langfuse secret key (`sk-lf-…`); a Worker secret. */
+  LANGFUSE_SECRET_KEY?: string
+  /** Langfuse host; defaults to Langfuse Cloud when unset. */
+  LANGFUSE_BASE_URL?: string
+
   // ---- Storage retention (see config.ts and docs/storage-and-retention.md) -
   /**
    * Days of `token_usage` ledger history to keep. The spend budget only reads the

@@ -3,6 +3,7 @@ import type {
   LlmCallMetric,
   LlmCallMetricRepository,
   LlmCallMetricSummary,
+  LlmTraceSink,
 } from '@cat-factory/kernel'
 import type { LlmMetricsExport } from '@cat-factory/contracts'
 import type { StoredPrompt } from './observability.logic.js'
@@ -19,6 +20,13 @@ export interface LlmObservabilityServiceDependencies {
    * retain the complete prompts sent to the model. Governed by `LLM_RECORD_PROMPTS`.
    */
   recordPrompts?: boolean
+  /**
+   * Optional external trace sink (e.g. Langfuse). When wired, every recorded call is
+   * ALSO emitted here as a generation — the same code path the inline executor's
+   * instrumented model provider feeds, so proxied and inline calls land in one place.
+   * Fan-out is best-effort and never blocks or breaks the local recording.
+   */
+  traceSink?: LlmTraceSink
 }
 
 /**
@@ -88,17 +96,20 @@ export class LlmObservabilityService {
   private readonly idGenerator: IdGenerator
   private readonly clock: Clock
   private readonly recordPrompts: boolean
+  private readonly traceSink?: LlmTraceSink
 
   constructor({
     llmCallMetricRepository,
     idGenerator,
     clock,
     recordPrompts = true,
+    traceSink,
   }: LlmObservabilityServiceDependencies) {
     this.repository = llmCallMetricRepository
     this.idGenerator = idGenerator
     this.clock = clock
     this.recordPrompts = recordPrompts
+    this.traceSink = traceSink
   }
 
   /**
@@ -130,6 +141,34 @@ export class LlmObservabilityService {
       responseText: clampBody(input.responseText),
     }
     await this.repository.record(metric)
+    // Fan out to the external trace sink (Langfuse), if wired. We send the FULL prompt
+    // (not the stored delta) so the trace is self-contained, honouring the same
+    // `recordPrompts` privacy switch as the local store. Best-effort: a sink failure
+    // must never break local recording, so it is isolated here.
+    if (this.traceSink) {
+      const endedAt = metric.createdAt
+      try {
+        await this.traceSink.recordGeneration({
+          workspaceId: input.workspaceId,
+          executionId: input.executionId,
+          agentKind: input.agentKind,
+          provider: input.provider,
+          model: input.model,
+          startedAt: Math.max(0, endedAt - input.upstreamMs),
+          endedAt,
+          promptTokens: input.promptTokens,
+          completionTokens: input.completionTokens,
+          totalTokens: input.totalTokens,
+          finishReason: input.finishReason,
+          ok: input.ok,
+          errorMessage: input.errorMessage,
+          input: this.recordPrompts ? input.promptText : '',
+          output: this.recordPrompts ? input.responseText : '',
+        })
+      } catch {
+        // Swallowed: the sink itself logs; observability never breaks the proxy.
+      }
+    }
   }
 
   /**

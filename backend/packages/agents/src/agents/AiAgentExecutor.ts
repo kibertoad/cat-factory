@@ -2,6 +2,7 @@ import { generateText } from 'ai'
 import type { AgentExecutor, AgentRunContext, AgentRunResult } from '@cat-factory/kernel'
 import type { ModelProvider, ModelRef } from '@cat-factory/kernel'
 import { systemPromptFor, userPromptFor } from './agent-catalog.js'
+import { catFactoryObservability } from '../providers/instrumented.js'
 import { type AgentRouting, resolveAgentConfig, resolveInlineModelRef } from './agent-routing.js'
 import { composeBlockSystemPrompt } from './prompt-fragments.js'
 import {
@@ -134,6 +135,13 @@ export class AiAgentExecutor implements AgentExecutor {
       temperature: config.temperature,
       maxOutputTokens: config.maxOutputTokens,
       ...(tools ? { tools } : {}),
+      // Tag the call so an instrumented provider can group it under its run's trace
+      // (a no-op when no trace sink is wired; ignored by every model provider).
+      providerOptions: catFactoryObservability({
+        agentKind: context.agentKind,
+        workspaceId: context.workspaceId,
+        executionId: context.executionId,
+      }),
     })
 
     return {

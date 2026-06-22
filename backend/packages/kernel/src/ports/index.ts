@@ -34,6 +34,12 @@ export type {
 } from './llm-metrics.js'
 export { LLM_WARNING_FINISH_REASONS } from './llm-metrics.js'
 export type {
+  LlmGenerationEvent,
+  LlmToolSpan,
+  LlmToolSpanContext,
+  LlmTraceSink,
+} from './llm-trace-sink.js'
+export type {
   AgentDecisionRequest,
   AgentExecutor,
   AgentJobHandle,

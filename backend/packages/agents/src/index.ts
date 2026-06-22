@@ -120,6 +120,9 @@ export { PLATFORM_DELIVERY_CONTRACT } from './agents/ci-gate.js'
 // (e.g. @cat-factory/provider-bedrock) and are mixed into a CompositeModelProvider.
 export {
   CompositeModelProvider,
+  InstrumentedModelProvider,
+  catFactoryObservability,
+  type InlineObservabilityContext,
   type ModelResolver,
   type ProviderRegistry,
   anthropicResolver,

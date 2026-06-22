@@ -13,7 +13,11 @@ import type { DocumentRepository } from '@cat-factory/kernel'
 import type { TaskRepository } from '@cat-factory/kernel'
 import type { RequirementReviewRepository } from '@cat-factory/kernel'
 import type { NotificationService } from '../notifications/NotificationService.js'
-import { REVIEW_SYSTEM_PROMPT, REWORK_SYSTEM_PROMPT } from '@cat-factory/agents'
+import {
+  REVIEW_SYSTEM_PROMPT,
+  REWORK_SYSTEM_PROMPT,
+  catFactoryObservability,
+} from '@cat-factory/agents'
 import { DEFAULT_COMPANION_THRESHOLD, safeParseCompanionAssessment } from '@cat-factory/contracts'
 import {
   type RequirementsContext,
@@ -161,6 +165,10 @@ export class RequirementReviewService {
         prompt: buildReviewPrompt(context),
         temperature: 0.2,
         maxOutputTokens: 5000,
+        providerOptions: catFactoryObservability({
+          agentKind: 'requirements-review',
+          workspaceId,
+        }),
       })
       text = result.text
     } catch (e) {
@@ -304,6 +312,10 @@ export class RequirementReviewService {
         // every downstream agent step (the description + linked docs are then dropped).
         // A generous budget keeps a real spec from being cut off mid-document.
         maxOutputTokens: REWORK_MAX_OUTPUT_TOKENS,
+        providerOptions: catFactoryObservability({
+          agentKind: 'requirements-rework',
+          workspaceId,
+        }),
       })
       revised = result.text.trim()
       finishReason = result.finishReason

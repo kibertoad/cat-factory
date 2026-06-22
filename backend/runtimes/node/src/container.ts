@@ -32,6 +32,7 @@ import type {
   TaskSourceProvider,
 } from '@cat-factory/kernel'
 import { type CoreDependencies, createCore } from '@cat-factory/orchestration'
+import { createLangfuseSink } from '@cat-factory/observability-langfuse'
 import {
   type AppConfig,
   type ResolveRepoTarget,
@@ -110,6 +111,23 @@ import { JiraProvider } from './tasks/JiraProvider.js'
 // HKDF domain tag separating runner-pool scheduler secrets from any other use of
 // the same master key (mirrors the Worker's `cat-factory:runners`).
 const RUNNERS_CIPHER_INFO = 'cat-factory:runners'
+
+/**
+ * Build the opt-in Langfuse trace sink (fetch-based, so identical to the Worker's
+ * `selectLangfuseSink`). Returns undefined unless `LANGFUSE_ENABLED=true` and both keys
+ * are set; the observability service then fans every recorded LLM call out to it.
+ */
+function buildLangfuseSink(config: AppConfig): CoreDependencies['llmTraceSink'] {
+  if (!config.langfuse.enabled || !config.langfuse.publicKey || !config.langfuse.secretKey) {
+    return undefined
+  }
+  return createLangfuseSink({
+    publicKey: config.langfuse.publicKey,
+    secretKey: config.langfuse.secretKey,
+    baseUrl: config.langfuse.baseUrl,
+    logger,
+  })
+}
 
 /**
  * Wire the Slack integration when enabled: the notification *channel* (an extra
@@ -736,6 +754,9 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     tokenUsageRepository: repos.tokenUsageRepository,
     llmCallMetricRepository: repos.llmCallMetricRepository,
     recordLlmPrompts: config.observability.recordPrompts,
+    // Opt-in Langfuse trace sink (fans every recorded LLM call out as a generation).
+    // Built only when configured; otherwise undefined and there is no external emission.
+    llmTraceSink: buildLangfuseSink(config),
     modelDefaultsRepository: repos.modelDefaultsRepository,
     serviceFragmentDefaultsRepository: repos.serviceFragmentDefaultsRepository,
     // Requirements-review feature (stateless reviewer + the requirements-rework
