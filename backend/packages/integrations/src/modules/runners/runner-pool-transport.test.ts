@@ -80,6 +80,8 @@ describe('RunnerPoolTransport', () => {
     expect(req.spec.kind).toBe('bootstrap')
   })
 
+  // Runtime parity is the default: a pool runs the same harness image, so it serves
+  // every kind with no opt-in allow-list — none are gated or rejected.
   it('serves every harness route (blueprint/spec/merge/… run on the same image)', async () => {
     const { provider, calls } = fakeProvider()
     const transport = new RunnerPoolTransport(provider, manifest, () => 't')
@@ -90,11 +92,13 @@ describe('RunnerPoolTransport', () => {
       'ci-fix',
       'resolve-conflicts',
       'merge',
+      'test',
+      'fix-tests',
     ] as const) {
       await transport.dispatch('job-1', {}, kind)
     }
-    expect(calls.dispatch).toHaveLength(6)
-    expect((calls.dispatch.at(-1) as { spec: Record<string, unknown> }).spec.kind).toBe('merge')
+    expect(calls.dispatch).toHaveLength(8)
+    expect((calls.dispatch.at(-1) as { spec: Record<string, unknown> }).spec.kind).toBe('fix-tests')
   })
 })
 

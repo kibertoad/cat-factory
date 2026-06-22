@@ -52,9 +52,11 @@ export interface RunnerJobResult {
  * read-only repo exploration, a repo-bootstrap run, a CI fix, a merge-conflict
  * resolution, or a merge assessment). All are dispatched + polled identically
  * through this transport; `kind` only selects the harness endpoint (e.g. `/run` |
- * `/blueprint` | `/explore` | `/resolve-conflicts`). The Cloudflare backend serves
- * all of them; a self-hosted pool serves only `run` and rejects the rest until it
- * implements them.
+ * `/blueprint` | `/explore` | `/resolve-conflicts`). The Cloudflare backend serves all
+ * of them, and so does a self-hosted pool: it runs the same executor-harness image, and
+ * runtime parity is the default (the "keep the runtimes symmetric" guideline), so a pool
+ * serves every kind with no opt-in allow-list — a new harness kind reaches it
+ * automatically, never silently diverging from Cloudflare.
  */
 export type RunnerDispatchKind =
   | 'run'

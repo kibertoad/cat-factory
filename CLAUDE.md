@@ -561,7 +561,11 @@ differentiators behind the shared kernel ports + the `container.gateways` seam.
   dispatching to a workspace's **self-hosted runner pool** — the Node facade has no
   built-in per-run container runtime, so it resolves the manifest-driven
   `RunnerPoolTransport` (in `@cat-factory/integrations`) instead of a Cloudflare
-  Container. Wired in `runtimes/node/src/container.ts` when the prerequisites are set
+  Container. A pool runs the same executor-harness image, so it serves **every** dispatch
+  kind: runtime parity is the default (see "Keep the runtimes symmetric"), so there is no
+  opt-in allow-list — a new harness kind reaches the pool automatically, exactly as it
+  does a Cloudflare container.
+  Wired in `runtimes/node/src/container.ts` when the prerequisites are set
   (`GITHUB_APP_ID`/`GITHUB_APP_PRIVATE_KEY`, `PUBLIC_URL`, `AUTH_SESSION_SECRET`,
   `ENCRYPTION_KEY`); persistence (`runner_pool_connections`,
   `github_installations`, `github_repos`) mirrors the D1 tables in `db/schema.ts`. When
