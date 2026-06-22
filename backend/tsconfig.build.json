@@ -14,6 +14,7 @@
     { "path": "packages/workspaces/tsconfig.build.json" },
     { "path": "packages/agents/tsconfig.build.json" },
     { "path": "packages/provider-bedrock/tsconfig.build.json" },
+    { "path": "packages/provider-cloudflare/tsconfig.build.json" },
     { "path": "packages/observability-langfuse/tsconfig.build.json" },
     { "path": "packages/orchestration/tsconfig.build.json" },
     { "path": "packages/server/tsconfig.build.json" },
