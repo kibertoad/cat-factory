@@ -1118,6 +1118,67 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         expect(companionStep.companion?.attempts).toBe(1)
       })
 
+      it('reviews the spec-writer with its companion and reworks it without a human gate', async () => {
+        // The Spec Writer is no longer human-gated by default: its `spec-companion`
+        // (Spec Reviewer) rates the spec, and below threshold loops the spec-writer
+        // back for automatic rework — NO human decision is raised. A first failing
+        // grade then a passing re-grade drives the loop to completion, pinning that
+        // the spec quality gate is automatic on both runtimes.
+        const spec = {
+          service: 'Auth',
+          summary: 'Authentication service',
+          groups: [
+            {
+              name: 'Login',
+              requirements: [
+                {
+                  id: 'req-login',
+                  title: 'Login',
+                  statement: 'The system SHALL let a user log in.',
+                  kind: 'functional',
+                  priority: 'must',
+                  acceptance: [
+                    {
+                      id: 'ac-1',
+                      given: 'a registered user',
+                      when: 'they sign in',
+                      outcome: 'a session starts',
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+          rules: [],
+        }
+        const app = harness.makeApp({ spec, companionRatings: [0.4, 1] })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Spec + reviewer',
+          agentKinds: ['spec-writer', 'spec-companion'],
+        })
+        expect(pipeline.status).toBe(201)
+        const start = await app.call<ExecutionInstance>(
+          'POST',
+          `/workspaces/${wsId}/blocks/task_login/executions`,
+          { pipelineId: pipeline.body.id },
+        )
+        expect(start.status).toBe(201)
+        const ticked = await app.drive(wsId)
+        const exec = ticked.find((e) => e.blockId === 'task_login')!
+        // Completed straight through — the spec never paused for a human decision.
+        expect(exec.status).toBe('done')
+        expect(exec.steps.some((s) => s.state === 'waiting_decision')).toBe(false)
+        // The spec-writer re-ran after the failing grade and finished.
+        expect(exec.steps.find((s) => s.agentKind === 'spec-writer')!.state).toBe('done')
+        // The companion recorded both cycles (rejected then passed), consuming exactly
+        // one automatic rework from the budget.
+        const companionStep = exec.steps.find((s) => s.agentKind === 'spec-companion')!
+        expect(companionStep.companion?.verdicts.map((v) => v.passed)).toEqual([false, true])
+        expect(companionStep.companion?.attempts).toBe(1)
+      })
+
       it('drives an asynchronous (polled) agent job to completion', async () => {
         // The `coder` step runs as a polled async job (startJob → awaiting_job → pollJob),
         // so this exercises the durable driver's job-poll loop — Cloudflare Workflows and

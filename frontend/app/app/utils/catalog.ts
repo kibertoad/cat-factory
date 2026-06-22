@@ -75,11 +75,11 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
   },
   {
     kind: 'spec-companion',
-    label: 'Spec Companion',
+    label: 'Spec Reviewer',
     icon: 'i-lucide-list-checks',
     color: '#2dd4bf',
     description:
-      'Challenges the spec — especially acceptance-scenario coverage — looping it back for rework below the threshold before a human reviews it.',
+      'Reviews the spec — especially acceptance-scenario coverage — rating it and looping the Spec Writer back for automatic rework below the threshold, instead of requiring a human review.',
   },
   {
     kind: 'playwright',
