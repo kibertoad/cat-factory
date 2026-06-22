@@ -57,6 +57,45 @@ export const llmCallMetricSchema = v.object({
 })
 export type LlmCallMetric = v.InferOutput<typeof llmCallMetricSchema>
 
+/**
+ * The compact per-call summary pushed live over the workspace event stream (the
+ * `llmCall` {@link WorkspaceEvent}). It is {@link llmCallMetricSchema} WITHOUT the
+ * heavy text bodies (`promptText`/`responseText`) and the delta bookkeeping
+ * (`promptPrefixCount`/`promptHash`), so a stalled-driver "is the agent still
+ * calling the model?" view updates in real time without shipping prompt bytes over
+ * the socket. The drill-down panel lazy-loads the full bodies for an expanded row
+ * from `GET /executions/:id/llm-metrics` (the persisted store), keyed by the shared
+ * call `id`.
+ */
+export const llmCallActivitySchema = v.object({
+  id: v.string(),
+  workspaceId: v.string(),
+  executionId: v.nullable(v.string()),
+  agentKind: v.string(),
+  provider: v.string(),
+  model: v.string(),
+  createdAt: v.number(),
+  streaming: v.boolean(),
+  messageCount: v.number(),
+  toolCount: v.number(),
+  requestMaxTokens: v.nullable(v.number()),
+  promptTokens: v.number(),
+  // Always supplied by the proxy emit (unlike the persisted metric, which defaults it
+  // for rows that predate delta storage), so it is required here — matching the SPA's
+  // `LlmCallActivity` type, which derives it as a required field from `LlmCallMetric`.
+  cachedPromptTokens: v.number(),
+  completionTokens: v.number(),
+  totalTokens: v.number(),
+  finishReason: v.nullable(v.string()),
+  upstreamMs: v.number(),
+  overheadMs: v.number(),
+  totalMs: v.number(),
+  ok: v.boolean(),
+  httpStatus: v.nullable(v.number()),
+  errorMessage: v.nullable(v.string()),
+})
+export type LlmCallActivity = v.InferOutput<typeof llmCallActivitySchema>
+
 /** Response of `GET /workspaces/:ws/executions/:id/llm-metrics` (drill-down panel). */
 export const llmMetricsResponseSchema = v.object({
   executionId: v.string(),

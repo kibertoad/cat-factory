@@ -1,4 +1,10 @@
-import type { Block, BootstrapJob, ExecutionInstance, Notification } from '../domain/types.js'
+import type {
+  Block,
+  BootstrapJob,
+  ExecutionInstance,
+  LlmCallActivity,
+  Notification,
+} from '../domain/types.js'
 
 // Port for pushing state changes to connected clients in real time, instead of
 // the browser polling for them. The execution engine calls this whenever it
@@ -40,6 +46,14 @@ export interface ExecutionEventPublisher {
    * that predate notifications need no change.
    */
   notificationChanged?(workspaceId: string, notification: Notification): Promise<void>
+  /**
+   * One container-agent LLM call completed at the proxy: push its compact summary
+   * (no prompt/response bodies) so an open "Model activity" view updates live,
+   * independent of the durable driver (the proxy records calls even while the run's
+   * poll loop is frozen). Optional so publishers/tests that predate it need no change;
+   * a runtime with no real-time transport (Node today) leaves it a no-op.
+   */
+  llmCallObserved?(workspaceId: string, activity: LlmCallActivity): Promise<void>
 }
 
 /**
@@ -52,4 +66,5 @@ export class NoopEventPublisher implements ExecutionEventPublisher {
   async boardChanged(): Promise<void> {}
   async bootstrapChanged(): Promise<void> {}
   async notificationChanged(): Promise<void> {}
+  async llmCallObserved(): Promise<void> {}
 }

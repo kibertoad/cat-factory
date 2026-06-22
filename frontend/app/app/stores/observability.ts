@@ -1,14 +1,17 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import type { LlmCallMetric } from '~/types/execution'
+import type { LlmCallActivity, LlmCallMetric } from '~/types/execution'
 import { useWorkspaceStore } from '~/stores/workspace'
 
 /**
  * LLM observability state: the full per-call model activity for a run (prompts,
  * responses, token usage, output-limit headroom, the transport-vs-execution
- * latency split). Fetched on demand when the drill-down panel opens — the board's
- * inline step rollups already arrive on the execution stream, so this store backs
- * only the deep dive + the LLM-friendly export. Per-workspace; nothing persisted.
+ * latency split). Loaded on demand when the drill-down panel opens, then kept live:
+ * the proxy pushes a compact `llmCall` event per model call over the workspace
+ * stream, which `appendCall` folds in so an open panel updates in real time even
+ * while the durable driver is evicted. Live-appended rows carry no prompt/response
+ * bodies (the event stays small); the panel lazy-loads those for an expanded row
+ * from the persisted metrics endpoint. Per-workspace; nothing persisted.
  */
 export const useObservabilityStore = defineStore('observability', () => {
   const api = useApi()
@@ -45,9 +48,27 @@ export const useObservabilityStore = defineStore('observability', () => {
     if (!workspace.workspaceId) return
     withFlag(loading, executionId, true)
     errors.value = { ...errors.value, [executionId]: null }
+    // Seed the key up front so this run counts as "opened": `appendCall` only folds
+    // live events into already-opened runs, so seeding here both captures calls that
+    // arrive DURING the fetch and lets the merge below preserve them.
+    if (!callsByExecution.value[executionId]) {
+      callsByExecution.value = { ...callsByExecution.value, [executionId]: [] }
+    }
     try {
       const { calls } = await api.getLlmMetrics(workspace.requireId(), executionId)
-      callsByExecution.value = { ...callsByExecution.value, [executionId]: calls }
+      // Preserve live-streamed rows the persisted store hasn't caught up with yet: the
+      // proxy emits the live `llmCall` event and writes the metric on INDEPENDENT paths,
+      // so a just-observed call can reach the panel before its row is queryable here.
+      // Server rows win (they carry the full bodies); the body-less live-only rows stay
+      // newest-first ahead of them so a wholesale replace can't drop them mid-run.
+      const fetchedIds = new Set(calls.map((c) => c.id))
+      const liveOnly = (callsByExecution.value[executionId] ?? []).filter(
+        (c) => !fetchedIds.has(c.id),
+      )
+      callsByExecution.value = {
+        ...callsByExecution.value,
+        [executionId]: [...liveOnly, ...calls],
+      }
     } catch (err) {
       errors.value = {
         ...errors.value,
@@ -56,6 +77,35 @@ export const useObservabilityStore = defineStore('observability', () => {
     } finally {
       withFlag(loading, executionId, false)
     }
+  }
+
+  /**
+   * Fold a live `llmCall` activity event into the cached call list for its run, so an
+   * open panel updates in real time. The compact event carries no prompt/response
+   * bodies, so we materialise a {@link LlmCallMetric} with empty bodies + zeroed delta
+   * fields; the panel lazy-loads the real bodies (by id) when the row is expanded.
+   * Prepended (newest-first, matching `load`'s order) and deduped by id so a later
+   * `load` that already includes the call, or a duplicate event, can't double it up.
+   *
+   * Gated to runs whose panel has been opened (`load` seeds the key): otherwise EVERY
+   * model call in the workspace would accumulate here for runs the user never opens,
+   * growing this store unbounded for the session's lifetime. An open panel still gets
+   * its live updates because it loaded on open.
+   */
+  function appendCall(activity: LlmCallActivity) {
+    const executionId = activity.executionId
+    if (!executionId) return
+    const existing = callsByExecution.value[executionId]
+    if (!existing) return
+    if (existing.some((c) => c.id === activity.id)) return
+    const row: LlmCallMetric = {
+      ...activity,
+      promptText: '',
+      promptPrefixCount: 0,
+      promptHash: '',
+      responseText: '',
+    }
+    callsByExecution.value = { ...callsByExecution.value, [executionId]: [row, ...existing] }
   }
 
   /**
@@ -87,6 +137,7 @@ export const useObservabilityStore = defineStore('observability', () => {
     isExporting,
     errors,
     load,
+    appendCall,
     downloadExport,
   }
 })

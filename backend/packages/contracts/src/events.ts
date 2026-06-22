@@ -1,6 +1,7 @@
 import type { Block, ExecutionInstance } from './entities.js'
 import type { BootstrapJob } from './bootstrap.js'
 import type { Notification } from './notifications.js'
+import type { LlmCallActivity } from './observability.js'
 
 // Real-time events pushed from the per-workspace events hub to subscribed
 // browsers over WebSocket, replacing the old `tick` polling. The shape is shared
@@ -32,3 +33,12 @@ export type WorkspaceEvent =
    * upserts it into its notifications store and surfaces/clears the board badge.
    */
   | { type: 'notification'; notification: Notification; at: number }
+  /**
+   * One container-agent LLM call completed at the proxy. Carries a COMPACT per-call
+   * summary (no prompt/response bodies) so an open "Model activity" panel updates
+   * live and an evicted-but-alive durable driver is visibly distinct from a wedged
+   * agent — the proxy records calls independently of the execution driver, so these
+   * keep arriving even while the run's poll loop is frozen. The drill-down lazy-loads
+   * the full bodies for an expanded row from the persisted metrics endpoint.
+   */
+  | { type: 'llmCall'; call: LlmCallActivity; at: number }

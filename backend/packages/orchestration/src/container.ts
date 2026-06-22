@@ -504,6 +504,13 @@ export interface Core {
   pipelineService: PipelineService
   executionService: ExecutionService
   spendService: SpendService
+  /**
+   * The real-time event publisher the engine pushes transitions through. Exposed so
+   * the runtime-neutral LLM proxy can push a compact `llmCall` activity event per
+   * model call (live "Model activity", independent of the durable driver). Defaults
+   * to {@link NoopEventPublisher}; a facade with a real-time transport injects its own.
+   */
+  executionEventPublisher: ExecutionEventPublisher
   /** Present only when the LLM-metric repository is wired (see CoreDependencies). */
   llmObservability?: LlmObservabilityService
   /** Present only when the GitHub integration is configured (see CoreDependencies). */
@@ -1142,6 +1149,7 @@ export function createCore(dependencies: CoreDependencies): Core {
     pipelineService,
     executionService,
     spendService,
+    executionEventPublisher,
     ...(llmObservability ? { llmObservability } : {}),
     ...(github ? { github } : {}),
     ...(documents ? { documents } : {}),

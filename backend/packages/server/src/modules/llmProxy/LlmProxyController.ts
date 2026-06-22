@@ -56,7 +56,8 @@ export function llmProxyController(): Hono<AppEnv> {
     // response) is transport overhead; the slice spent waiting on the model is the
     // actual execution. The two are split in the observability sink.
     const t0 = Date.now()
-    const { config, spendService, gateways, llmObservability } = c.get('container')
+    const { config, spendService, gateways, llmObservability, executionEventPublisher } =
+      c.get('container')
     const secret = config.auth.sessionSecret
     if (!secret) {
       logger.error({ scope: 'llmProxy' }, 'llm proxy: session secret not configured')
@@ -111,18 +112,69 @@ export function llmProxyController(): Hono<AppEnv> {
 
     const waitUntil = makeWaitUntil(c)
 
-    // Observability sink: record one metric per call (full prompt/response, the
-    // output-limit headroom and the transport-vs-execution latency split), off the
-    // response path. A no-op when the sink is not wired. `upstreamMs` is supplied by
-    // whichever path made the call; `totalMs` is the proxy's end-to-end time.
+    // One id per proxied call, minted here so the SAME id rides both the live
+    // `llmCall` activity event and the persisted metric row — the drill-down panel
+    // keys its lazy body-load by it, and a live-appended summary row reconciles with
+    // the stored row on reload instead of duplicating.
+    const callId = `llm_${crypto.randomUUID()}`
+
+    // Per-call observation handling, off the response path: (1) push a COMPACT live
+    // activity event (no prompt/response bodies) so an open "Model activity" panel
+    // updates in real time, independent of the durable driver — the proxy records
+    // calls even while the run's poll loop is evicted; (2) persist the full metric to
+    // the observability sink when it is wired. `upstreamMs` is supplied by whichever
+    // path made the call; `totalMs` is the proxy's end-to-end time. Both are
+    // best-effort and must never break the proxy.
     const observe = (obs: ProxyCallObservation): void => {
-      if (!llmObservability) return
       const promptTokens = obs.usage?.prompt_tokens ?? 0
       const completionTokens = obs.usage?.completion_tokens ?? 0
       const cachedPromptTokens = obs.cachedPromptTokens ?? cachedTokensFromUsage(obs.usage)
+      const totalMs = Date.now() - t0
+
+      // Live activity event — emitted regardless of whether the persistence sink is
+      // wired, so the live view works even on a deployment that does not retain
+      // metrics. This fires on EVERY observed outcome, including refusals/errors (spend
+      // exhausted, unavailable provider, upstream non-2xx) where no model work ran:
+      // surfacing those live (with `ok:false`) is intentional and matches what the sink
+      // persists. Best-effort: a publish failure (no subscribers, transient hub error)
+      // must not break metering.
+      waitUntil(
+        Promise.resolve(
+          // `?.` on the publisher itself, not just the method: a minimal container
+          // (e.g. the harness's real-proxy acceptance test) may omit it, and the live
+          // emit is best-effort — a missing publisher must never break metering.
+          executionEventPublisher?.llmCallObserved?.(session.workspaceId, {
+            id: callId,
+            workspaceId: session.workspaceId,
+            executionId: session.executionId,
+            agentKind: session.agentKind,
+            provider: session.provider,
+            model: session.model,
+            createdAt: Date.now(),
+            streaming,
+            messageCount,
+            toolCount,
+            requestMaxTokens,
+            promptTokens,
+            cachedPromptTokens,
+            completionTokens,
+            totalTokens: promptTokens + completionTokens,
+            finishReason: obs.finishReason,
+            upstreamMs: obs.upstreamMs,
+            overheadMs: Math.max(0, totalMs - obs.upstreamMs),
+            totalMs,
+            ok: obs.ok,
+            httpStatus: obs.httpStatus,
+            errorMessage: obs.errorMessage,
+          }),
+        ).catch(() => {}),
+      )
+
+      if (!llmObservability) return
       waitUntil(
         llmObservability
           .record({
+            id: callId,
             workspaceId: session.workspaceId,
             executionId: session.executionId,
             agentKind: session.agentKind,
@@ -137,7 +189,7 @@ export function llmProxyController(): Hono<AppEnv> {
             completionTokens,
             totalTokens: promptTokens + completionTokens,
             finishReason: obs.finishReason,
-            totalMs: Date.now() - t0,
+            totalMs,
             upstreamMs: obs.upstreamMs,
             ok: obs.ok,
             httpStatus: obs.httpStatus,

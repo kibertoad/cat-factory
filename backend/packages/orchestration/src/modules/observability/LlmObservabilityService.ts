@@ -57,6 +57,12 @@ const EMPTY_STORED_PROMPT: StoredPrompt = { promptText: '', promptPrefixCount: 0
  * transport/proxy overhead, derived here so the two can never disagree.
  */
 export interface RecordLlmCallInput {
+  /**
+   * The call's id. The proxy mints it so the same id is carried on the live `llmCall`
+   * activity event AND this persisted row — the drill-down panel keys its lazy body
+   * load by it. Optional: when omitted the service mints one (existing callers).
+   */
+  id?: string
   workspaceId: string
   executionId: string | null
   agentKind: string
@@ -130,10 +136,12 @@ export class LlmObservabilityService {
       ? await this.computeStoredPromptForChain(input)
       : EMPTY_STORED_PROMPT
     const metric: LlmCallMetric = {
-      id: this.idGenerator.next('llm'),
       createdAt: this.clock.now(),
       ...input,
       // Derived/bounded fields last, so they win over any same-named input field.
+      // `id` here (not above `...input`) so an absent `input.id` falls back to a mint
+      // rather than being spread in as `undefined`.
+      id: input.id ?? this.idGenerator.next('llm'),
       overheadMs,
       promptText: clampBody(stored.promptText),
       promptPrefixCount: stored.promptPrefixCount,

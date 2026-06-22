@@ -3,6 +3,7 @@ import type {
   BootstrapJob,
   ExecutionEventPublisher,
   ExecutionInstance,
+  LlmCallActivity,
   Notification,
   WorkspaceMountRepository,
 } from '@cat-factory/kernel'
@@ -75,5 +76,13 @@ export class FanOutEventPublisher implements ExecutionEventPublisher {
     for (const ws of await this.targets(workspaceId, notification.blockId)) {
       await this.inner.notificationChanged?.(ws, notification)
     }
+  }
+
+  async llmCallObserved(workspaceId: string, activity: LlmCallActivity): Promise<void> {
+    // The compact activity carries no block id, so there is nothing to resolve a shared
+    // service from — deliver to the originating workspace only. Model activity for a
+    // mounted service surfacing solely on its origin board is an acceptable edge; the
+    // persisted metrics (and the panel's lazy load) remain the cross-workspace source.
+    await this.inner.llmCallObserved?.(workspaceId, activity)
   }
 }
