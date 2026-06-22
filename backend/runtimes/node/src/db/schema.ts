@@ -116,6 +116,10 @@ export const blocks = pgTable(
     primaryKey({ columns: [t.workspace_id, t.id] }),
     index('idx_blocks_parent').on(t.workspace_id, t.parent_id),
     index('idx_blocks_service').on(t.service_id),
+    // findById looks a block up by id alone (no workspace_id), so it can't use the
+    // (workspace_id, id) PK — index id directly to avoid scanning the largest table.
+    // Block ids are only unique within a workspace, so this is a plain lookup index.
+    index('idx_blocks_id').on(t.id),
   ],
 )
 
@@ -139,6 +143,10 @@ export const services = pgTable(
     // reused/seeded frame id recurs across workspaces; NULL account ids are SQL-distinct, so
     // the auth-disabled/local path stays unconstrained while real accounts stay 1:1.
     uniqueIndex('idx_services_frame').on(t.account_id, t.frame_block_id),
+    // getByFrameBlock resolves a service by frame_block_id alone (no account_id), so it
+    // can't use the composite idx_services_frame above. This lookup runs in a loop walking
+    // a block's ancestry on every agent run's repo resolution + on board reads — index it.
+    index('idx_services_frame_block').on(t.frame_block_id),
     index('idx_services_repo').on(t.installation_id, t.repo_github_id),
   ],
 )
