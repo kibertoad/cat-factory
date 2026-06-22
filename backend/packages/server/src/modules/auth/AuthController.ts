@@ -203,9 +203,11 @@ const tooManyAttempts = (c: Context<AppEnv>) =>
 export function authController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
 
-  // Lets the SPA decide which login controls to show.
+  // Lets the SPA decide which login controls to show, and (local mode only) surface a
+  // setup banner when the GitHub PAT is missing.
   app.get('/config', (c) => {
     const cfg = authConfig(c)
+    const { localMode } = c.get('container').config
     return c.json({
       enabled: cfg.enabled,
       providers: {
@@ -213,6 +215,7 @@ export function authController(): Hono<AppEnv> {
         password: cfg.passwordEnabled,
         google: !!cfg.google,
       },
+      ...(localMode ? { localMode } : {}),
     })
   })
 

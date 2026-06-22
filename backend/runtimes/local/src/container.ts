@@ -1,8 +1,8 @@
 import { buildNodeContainer, loadNodeConfig } from '@cat-factory/node-server'
 import type { NodeContainerOptions } from '@cat-factory/node-server'
-import type { ResolveRunnerTransport, ServerContainer } from '@cat-factory/server'
+import type { AppConfig, ResolveRunnerTransport, ServerContainer } from '@cat-factory/server'
 import { applyLocalDefaults } from './config.js'
-import { createLocalGitHubClient } from './github.js'
+import { createLocalGitHubClient, githubPatCreationUrl } from './github.js'
 import {
   type LocalDockerRunnerTransport,
   createLocalDockerTransportFromEnv,
@@ -24,8 +24,17 @@ import {
 
 export function buildLocalContainer(options: NodeContainerOptions): ServerContainer {
   const env = applyLocalDefaults(options.env ?? process.env)
-  const config = options.config ?? loadNodeConfig(env)
   const pat = env.GITHUB_PAT?.trim()
+  // Tag the config as local mode and, when no PAT is set, carry the (scopes-preselected)
+  // creation URL so the SPA can surface it as a dismissible banner — the server-side warn
+  // log alone is easy to miss in a dev terminal.
+  const config: AppConfig = {
+    ...(options.config ?? loadNodeConfig(env)),
+    localMode: {
+      enabled: true,
+      ...(pat ? {} : { githubPatSetupUrl: githubPatCreationUrl() }),
+    },
+  }
 
   // The Docker transport is constructed LAZILY on first container-job dispatch, so the
   // service still boots to serve the board (and inline kinds) when LOCAL_HARNESS_IMAGE

@@ -3,6 +3,7 @@ import BoardCanvas from '~/components/board/BoardCanvas.vue'
 import SideBar from '~/components/layout/SideBar.vue'
 import BoardToolbar from '~/components/layout/BoardToolbar.vue'
 import SpendWarningBanner from '~/components/layout/SpendWarningBanner.vue'
+import GitHubPatBanner from '~/components/layout/GitHubPatBanner.vue'
 import PipelineBuilder from '~/components/pipeline/PipelineBuilder.vue'
 import InspectorPanel from '~/components/panels/InspectorPanel.vue'
 import DecisionModal from '~/components/panels/DecisionModal.vue'
@@ -66,6 +67,9 @@ watch(
 
 <template>
   <div class="flex h-screen w-screen overflow-hidden bg-slate-950 text-slate-100">
+    <!-- Local-mode setup prompt (missing GitHub PAT); floats over whatever is shown below. -->
+    <GitHubPatBanner />
+
     <!-- Resolving whether the GitHub App is installed, before we decide what to show. -->
     <div
       v-if="workspace.ready && githubProbePending"
