@@ -768,3 +768,110 @@ export const githubRepos = pgTable(
     index('idx_gh_repos_install').on(t.installation_id),
   ],
 )
+
+// GitHub projection tables (mirror of D1 migration 0004; sync cursors re-keyed by
+// migration 0032). Local read models of a workspace's repos' branches / PRs / issues /
+// commits / check runs, populated by the inline GitHub sync. `protected`/`merged` are
+// 0/1 to mirror the D1 integer flags; soft-delete tombstones where the D1 tables have one.
+export const githubBranches = pgTable(
+  'github_branches',
+  {
+    workspace_id: text('workspace_id').notNull(),
+    repo_github_id: bigint('repo_github_id', { mode: 'number' }).notNull(),
+    name: text('name').notNull(),
+    head_sha: text('head_sha').notNull(),
+    protected: integer('protected').notNull().default(0),
+    synced_at: bigint('synced_at', { mode: 'number' }).notNull(),
+    deleted_at: bigint('deleted_at', { mode: 'number' }),
+  },
+  (t) => [primaryKey({ columns: [t.workspace_id, t.repo_github_id, t.name] })],
+)
+
+export const githubPullRequests = pgTable(
+  'github_pull_requests',
+  {
+    workspace_id: text('workspace_id').notNull(),
+    repo_github_id: bigint('repo_github_id', { mode: 'number' }).notNull(),
+    number: integer('number').notNull(),
+    github_id: bigint('github_id', { mode: 'number' }).notNull(),
+    title: text('title').notNull(),
+    state: text('state').notNull(),
+    head_ref: text('head_ref'),
+    base_ref: text('base_ref'),
+    head_sha: text('head_sha'),
+    merged: integer('merged').notNull().default(0),
+    author: text('author'),
+    gh_updated_at: bigint('gh_updated_at', { mode: 'number' }),
+    synced_at: bigint('synced_at', { mode: 'number' }).notNull(),
+    deleted_at: bigint('deleted_at', { mode: 'number' }),
+  },
+  (t) => [
+    primaryKey({ columns: [t.workspace_id, t.repo_github_id, t.number] }),
+    index('idx_gh_pr_state').on(t.workspace_id, t.state),
+  ],
+)
+
+export const githubIssues = pgTable(
+  'github_issues',
+  {
+    workspace_id: text('workspace_id').notNull(),
+    repo_github_id: bigint('repo_github_id', { mode: 'number' }).notNull(),
+    number: integer('number').notNull(),
+    github_id: bigint('github_id', { mode: 'number' }).notNull(),
+    title: text('title').notNull(),
+    state: text('state').notNull(),
+    author: text('author'),
+    labels: text('labels').notNull().default('[]'),
+    gh_updated_at: bigint('gh_updated_at', { mode: 'number' }),
+    synced_at: bigint('synced_at', { mode: 'number' }).notNull(),
+    deleted_at: bigint('deleted_at', { mode: 'number' }),
+  },
+  (t) => [primaryKey({ columns: [t.workspace_id, t.repo_github_id, t.number] })],
+)
+
+export const githubCommits = pgTable(
+  'github_commits',
+  {
+    workspace_id: text('workspace_id').notNull(),
+    repo_github_id: bigint('repo_github_id', { mode: 'number' }).notNull(),
+    sha: text('sha').notNull(),
+    message: text('message').notNull(),
+    author: text('author'),
+    authored_at: bigint('authored_at', { mode: 'number' }),
+    synced_at: bigint('synced_at', { mode: 'number' }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.workspace_id, t.repo_github_id, t.sha] })],
+)
+
+export const githubCheckRuns = pgTable(
+  'github_check_runs',
+  {
+    workspace_id: text('workspace_id').notNull(),
+    repo_github_id: bigint('repo_github_id', { mode: 'number' }).notNull(),
+    github_id: bigint('github_id', { mode: 'number' }).notNull(),
+    head_sha: text('head_sha').notNull(),
+    name: text('name').notNull(),
+    status: text('status').notNull(),
+    conclusion: text('conclusion'),
+    synced_at: bigint('synced_at', { mode: 'number' }).notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.workspace_id, t.repo_github_id, t.github_id] }),
+    index('idx_gh_checks_sha').on(t.workspace_id, t.repo_github_id, t.head_sha),
+  ],
+)
+
+// Incremental-sync bookkeeping, keyed by (installation, repo, kind) so a repo is
+// fetched once per org and fanned out (mirror of D1 migration 0032).
+export const githubSyncCursors = pgTable(
+  'github_sync_cursors',
+  {
+    installation_id: bigint('installation_id', { mode: 'number' }).notNull(),
+    repo_github_id: bigint('repo_github_id', { mode: 'number' }).notNull(),
+    kind: text('kind').notNull(),
+    etag: text('etag'),
+    last_synced_at: bigint('last_synced_at', { mode: 'number' }),
+    since_iso: text('since_iso'),
+  },
+  (t) => [primaryKey({ columns: [t.installation_id, t.repo_github_id, t.kind] })],
+)

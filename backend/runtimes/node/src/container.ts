@@ -42,6 +42,7 @@ import {
   GitHubPullRequestMerger,
   WebCryptoPersonalSecretCipher,
   WebCryptoSecretCipher,
+  WebCryptoWebhookVerifier,
   buildResolveRepoTarget,
   createWebSearchUpstreamFromEnv,
   logger,
@@ -55,10 +56,17 @@ import { createNodeGateways } from './gateways.js'
 import { createNodeModelProvider } from './modelProvider.js'
 import {
   DrizzleGitHubInstallationRepository,
-  DrizzleRepoProjectionRepository,
   DrizzleRunnerPoolConnectionRepository,
   DrizzleServiceFrameRepository,
 } from './repositories/containerExecution.js'
+import {
+  DrizzleBranchProjectionRepository,
+  DrizzleCheckRunProjectionRepository,
+  DrizzleCommitProjectionRepository,
+  DrizzleIssueProjectionRepository,
+  DrizzlePullRequestProjectionRepository,
+  DrizzleRepoProjectionRepository,
+} from './repositories/github.js'
 import { DrizzleProviderSubscriptionTokenRepository } from './repositories/providerSubscription.js'
 import {
   DrizzlePersonalSubscriptionRepository,
@@ -485,6 +493,9 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   // via the API; the installation repo backs both token minting and repo resolution.
   const runnerPoolConnectionRepository = new DrizzleRunnerPoolConnectionRepository(options.db)
   const githubInstallationRepository = new DrizzleGitHubInstallationRepository(options.db)
+  // The repositories projection (+ sync cursors), shared by `buildResolveRepoTarget`
+  // (block→repo resolution) and the GitHub sync/webhook module below.
+  const repoProjectionRepository = new DrizzleRepoProjectionRepository(options.db)
 
   // The GitHub App registry, built once when the App is configured and shared by the
   // container executor's push-token mint, the tech-debt issue filer, and the CI / merge
@@ -496,7 +507,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   // GitHub-issue tracker filer, and the CI / merge providers.
   const resolveRepoTarget = buildResolveRepoTarget({
     installationRepository: githubInstallationRepository,
-    repoProjectionRepository: new DrizzleRepoProjectionRepository(options.db),
+    repoProjectionRepository,
     blockRepository: repos.blockRepository,
     serviceRepository: new DrizzleServiceFrameRepository(options.db),
   })
@@ -586,6 +597,41 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
         }),
       }
     : {}
+
+  // GitHub installation + projections + sync/webhook module: wired when the App is
+  // configured (a real githubClient), mirroring the Worker's selectGitHubDeps. This
+  // turns the GitHub read endpoints + the inline webhook/backfill sync on for Node —
+  // the sync engine (GitHubSyncService) is runtime-neutral, so populating the
+  // projection repos here makes the inline ingest actually persist (parity with the
+  // Worker, which fans the same sync through a queue/Workflow). `canCreateRepos` /
+  // `workflowsGranted` come from the App registry when present (advisory).
+  const githubModuleDeps: Partial<CoreDependencies> =
+    config.github.enabled && githubClient
+      ? {
+          githubClient,
+          githubInstallationRepository,
+          repoProjectionRepository,
+          branchProjectionRepository: new DrizzleBranchProjectionRepository(options.db),
+          pullRequestProjectionRepository: new DrizzlePullRequestProjectionRepository(options.db),
+          issueProjectionRepository: new DrizzleIssueProjectionRepository(options.db),
+          commitProjectionRepository: new DrizzleCommitProjectionRepository(options.db),
+          checkRunProjectionRepository: new DrizzleCheckRunProjectionRepository(options.db),
+          webhookVerifier: new WebCryptoWebhookVerifier(config.github.webhookSecret),
+          // Bound the initial backfill to the commit retention horizon (0 = full).
+          commitBackfillHorizonMs: config.retention.commitMs || undefined,
+          ...(appRegistry
+            ? {
+                canCreateRepos: (installation) => appRegistry.canCreateRepos(installation),
+                workflowsGranted: async (installation) => {
+                  const perms = await appRegistry.installationPermissions(
+                    installation.installationId,
+                  )
+                  return perms.workflows === 'write'
+                },
+              }
+            : {}),
+        }
+      : {}
 
   const dependencies: CoreDependencies = {
     workspaceRepository: repos.workspaceRepository,
@@ -680,6 +726,9 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
       ? { workRunner: new PgBossWorkRunner(options.boss, executionRuntime(config, env).queue) }
       : {}),
     ...githubGateDeps,
+    // GitHub installation + repo/branch/PR/issue/commit/check-run projections + the
+    // sync/webhook module (inline ingest persists to these repos on Node).
+    ...githubModuleDeps,
     // Document sources (Confluence / Notion / GitHub docs): wired from the shared
     // integration providers exactly like the Worker, so a workspace can connect a
     // source and import requirement/PRD/RFC pages as agent context.

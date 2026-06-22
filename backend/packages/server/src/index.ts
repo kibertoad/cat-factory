@@ -85,6 +85,7 @@ export {
   GitHubApiError,
   type FetchGitHubClientDependencies,
 } from './github/FetchGitHubClient.js'
+export { WebCryptoWebhookVerifier } from './github/WebCryptoWebhookVerifier.js'
 export {
   GitHubCiStatusProvider,
   type GitHubCiStatusProviderDependencies,
