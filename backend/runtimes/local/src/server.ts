@@ -2,6 +2,7 @@ import { start } from '@cat-factory/node-server'
 import { logger } from '@cat-factory/server'
 import { applyLocalDefaults } from './config.js'
 import { buildLocalContainer } from './container.js'
+import { githubPatCreationUrl } from './github.js'
 import { createLocalDockerTransportFromEnv } from './LocalDockerRunnerTransport.js'
 
 // Boot the local-mode service. It reuses the Node facade's `start()` — Postgres +
@@ -36,6 +37,19 @@ export async function startLocal(
   // surface it so it is a choice, not a surprise. Lock it down with AUTH_DEV_OPEN=false,
   // or HOST=127.0.0.1 on Docker Desktop (where host.docker.internal still resolves).
   const localized = applyLocalDefaults(env)
+
+  // GitHub is reached via a PAT in local mode (there is no GitHub-App connect flow). Without
+  // one the board still serves, but every repo-operating agent step — clone, push, open PR,
+  // the CI gate, the real merge — fails. Surface it at boot with a click-through URL that
+  // pre-selects the scopes, so it is a one-step fix rather than a runtime surprise.
+  if (!localized.GITHUB_PAT?.trim()) {
+    logger.warn(
+      `local mode: GITHUB_PAT is not set — agent steps that clone, push, open PRs, gate on ` +
+        `CI or merge will fail. Create a token (scopes pre-selected) at ${githubPatCreationUrl()} ` +
+        `then set GITHUB_PAT and restart.`,
+    )
+  }
+
   if (localized.AUTH_DEV_OPEN !== 'false' && !env.HOST?.trim()) {
     logger.warn(
       'local mode: the auth gate is OPEN and the server binds to all interfaces — anyone ' +

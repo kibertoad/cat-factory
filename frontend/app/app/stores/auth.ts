@@ -24,6 +24,12 @@ export const useAuthStore = defineStore(
     const required = ref(false)
     /** Which login providers the backend offers (drives the login UI). */
     const providers = ref({ github: false, password: false, google: false })
+    /**
+     * Local-mode signals from the backend. Present only when running the local facade;
+     * `githubPatSetupUrl` is set when local mode has no GitHub PAT configured (drives the
+     * setup banner). Null on every other facade.
+     */
+    const localMode = ref<{ enabled: boolean; githubPatSetupUrl?: string } | null>(null)
     /** True once the initial auth handshake has settled. */
     const ready = ref(false)
 
@@ -47,6 +53,7 @@ export const useAuthStore = defineStore(
         const config = await api.getAuthConfig()
         required.value = config.enabled
         if (config.providers) providers.value = config.providers
+        localMode.value = config.localMode ?? null
       } catch {
         // Backend unreachable — let the board's own error UI handle it.
         required.value = false
@@ -143,6 +150,7 @@ export const useAuthStore = defineStore(
       user,
       required,
       providers,
+      localMode,
       ready,
       isAuthenticated,
       bootstrap,

@@ -216,6 +216,21 @@ export interface LangfuseConfig {
   baseUrl?: string
 }
 
+export interface LocalModeConfig {
+  /**
+   * True on the local-mode facade (a single developer running the whole product on
+   * their own machine). Absent/false on the Worker and stock Node facades.
+   */
+  enabled: boolean
+  /**
+   * When local mode is running WITHOUT a GitHub PAT, a github.com URL with the scopes
+   * local mode needs pre-selected, so the developer can create one in a single click.
+   * Absent once a PAT is configured. The SPA surfaces this as a dismissible banner so
+   * the warning isn't lost in the server console.
+   */
+  githubPatSetupUrl?: string
+}
+
 export interface AppConfig {
   agents: AgentsConfig
   /** The effective model picker catalog (each model's active flavour). */
@@ -247,4 +262,9 @@ export interface AppConfig {
   observability: ObservabilityConfig
   /** Optional Langfuse trace-sink config; `enabled` is false unless opted in. */
   langfuse: LangfuseConfig
+  /**
+   * Local-mode facade signals surfaced to the SPA; present only on the local facade
+   * (the Worker/Node facades leave it undefined). Carries the missing-PAT setup prompt.
+   */
+  localMode?: LocalModeConfig
 }

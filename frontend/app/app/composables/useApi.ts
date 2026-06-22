@@ -143,6 +143,8 @@ export function useApi() {
       http<{
         enabled: boolean
         providers?: { github: boolean; password: boolean; google: boolean }
+        /** Local-mode signals; present only when the backend is the local facade. */
+        localMode?: { enabled: boolean; githubPatSetupUrl?: string }
       }>('/auth/config'),
 
     getMe: () => http<{ user: AuthUser | null; enabled: boolean }>('/auth/me'),
