@@ -56,6 +56,10 @@ export {
 } from './agents/ContainerAgentExecutor.js'
 export { RunnerJobClient, type ResolveRunnerTransport } from './agents/RunnerJobClient.js'
 export {
+  createScopedModelProviderResolver,
+  type ScopedModelProviderOptions,
+} from './agents/modelProviderResolver.js'
+export {
   ContainerRepoBootstrapper,
   type ContainerRepoBootstrapperDependencies,
 } from './agents/ContainerRepoBootstrapper.js'

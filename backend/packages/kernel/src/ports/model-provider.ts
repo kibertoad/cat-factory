@@ -48,3 +48,27 @@ export interface ModelProvider {
   /** Resolve a model handle the AI SDK can call, or throw if unconfigured. */
   resolve(ref: ModelRef): LanguageModel
 }
+
+/**
+ * The credential scope a run draws model-provider keys from: the workspace, its
+ * owning account, and the run initiator's own user keys are merged into one pool.
+ */
+export interface ModelScope {
+  workspaceId: string
+  /** The workspace's owning account id (resolved automatically when omitted). */
+  accountId?: string | null
+  /** The run initiator's `usr_*` id, to also draw from their personal keys. */
+  userId?: string | null
+}
+
+/**
+ * Resolves a {@link ModelProvider} bound to a run's credential scope. Direct-provider
+ * API keys live in the DB (account/workspace/user scoped), so the provider can no
+ * longer be a single process-wide instance built from env: each inline LLM call asks
+ * for the provider for its scope, which leases the configured keys for that
+ * workspace+account+user. `resolve` itself stays synchronous (keys are leased up
+ * front when the scoped provider is built).
+ */
+export interface ModelProviderResolver {
+  forScope(scope: ModelScope): Promise<ModelProvider>
+}
