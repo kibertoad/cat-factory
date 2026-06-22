@@ -494,18 +494,21 @@ function selectSlackDeps(config: AppConfig, db: D1Database): Partial<CoreDepende
  * keys are set; the observability service then fans every recorded LLM call out to it.
  * A fetch-based sink, so it runs unchanged on the Worker runtime.
  */
-function selectLangfuseSink(config: AppConfig): Partial<CoreDependencies> {
+function buildLangfuseSink(config: AppConfig): CoreDependencies['llmTraceSink'] {
   if (!config.langfuse.enabled || !config.langfuse.publicKey || !config.langfuse.secretKey) {
-    return {}
+    return undefined
   }
-  return {
-    llmTraceSink: createLangfuseSink({
-      publicKey: config.langfuse.publicKey,
-      secretKey: config.langfuse.secretKey,
-      baseUrl: config.langfuse.baseUrl,
-      logger,
-    }),
-  }
+  return createLangfuseSink({
+    publicKey: config.langfuse.publicKey,
+    secretKey: config.langfuse.secretKey,
+    baseUrl: config.langfuse.baseUrl,
+    logger,
+  })
+}
+
+function selectLangfuseSink(config: AppConfig): Partial<CoreDependencies> {
+  const sink = buildLangfuseSink(config)
+  return sink ? { llmTraceSink: sink } : {}
 }
 
 /**
@@ -686,6 +689,9 @@ function buildContainerExecutor(
     // in the sandbox) whenever an upstream is configured for this deployment.
     webSearchProxyEnabled: Boolean(createWebSearchUpstreamFromEnv(env)),
     githubApiBase: config.github.apiBase,
+    // Forward container tool spans to Langfuse (when configured) as child spans under
+    // the run trace — the same sink the LLM proxy fans generations out to.
+    llmTraceSink: buildLangfuseSink(config),
   })
 }
 

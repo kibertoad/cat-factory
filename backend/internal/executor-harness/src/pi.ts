@@ -281,6 +281,21 @@ export interface TodoProgress {
   items?: TodoItem[]
 }
 
+/**
+ * One tool invocation in Pi's loop, captured for the run's observability trace.
+ * Metadata only (name + timing + ok) — never the tool's args or result — so the
+ * harness buffer stays tiny. The backend drains these on its existing job poll and
+ * emits them as child spans under the run trace.
+ */
+export interface ToolSpan {
+  tool: string
+  /** Epoch ms the tool call started (approximated as the previous tool's end). */
+  startedAt: number
+  /** Epoch ms the tool call ended (when its `tool_execution_end` event arrived). */
+  endedAt: number
+  ok: boolean
+}
+
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
 }
@@ -643,6 +658,12 @@ export function runPi(opts: {
   /** Called with the latest subtask counts each time Pi updates its todo list. */
   onProgress?: (progress: TodoProgress) => void
   /**
+   * Called once per completed tool call with a compact {@link ToolSpan}. Feeds the
+   * run's observability trace (drained by the backend on its job poll); a no-op when
+   * the container payload doesn't pass it, so production behaviour is unchanged.
+   */
+  onSpan?: (span: ToolSpan) => void
+  /**
    * Called with every parsed Pi `--mode json` event, in stream order — the raw
    * observability seam over the run. Used by offline tooling (the smoketest
    * harness) to capture the full prompt/response/tool-call transcript for
@@ -696,6 +717,10 @@ export function runPi(opts: {
       opts.guardLimits ?? progressGuardLimitsFromEnv(),
       opts.expectsEdits ?? true,
     )
+    // Start boundary for the next tool span: each tool's slice runs from the previous
+    // tool's end (or the run start) to its own `tool_execution_end`. Approximate but
+    // contiguous — enough for the trace tree, and metadata-only.
+    let toolBoundary = Date.now()
 
     // SIGTERM first, then SIGKILL if Pi ignores it. Shared by the watchdog abort
     // and the no-progress guard; the `close` handler turns it into a rejection.
@@ -727,6 +752,23 @@ export function runPi(opts: {
       if (opts.onProgress) {
         const progress = parseTodoProgress(event)
         if (progress) opts.onProgress(progress)
+      }
+      if (opts.onSpan) {
+        const signal = toolCallSignal(event)
+        if (signal && signal.name) {
+          const endedAt = Date.now()
+          try {
+            opts.onSpan({
+              tool: signal.name,
+              startedAt: toolBoundary,
+              endedAt,
+              ok: !signal.isError,
+            })
+          } catch {
+            // A faulty observer must never break the run.
+          }
+          toolBoundary = endedAt
+        }
       }
       if (!guardReason && !aborted) {
         const reason = guard.observe(event)

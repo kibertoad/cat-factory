@@ -5,6 +5,7 @@ import {
   type AgentRunResult,
   type AsyncAgentExecutor,
   type HarnessKind,
+  type LlmTraceSink,
   type ModelRef,
   type RunnerDispatchKind,
   type RunnerDispatchOptions,
@@ -164,6 +165,13 @@ export interface ContainerAgentExecutorDependencies {
    * reaches the sandbox. Off ⇒ container web search stays disabled.
    */
   webSearchProxyEnabled?: boolean
+  /**
+   * Optional observability trace sink (e.g. Langfuse). When wired, each poll forwards
+   * the container's drained tool spans as child spans under the run's trace — the same
+   * sink the LLM proxy fans generations out to, so the trace tree is complete.
+   * Best-effort and isolated: a sink failure never affects the job lifecycle.
+   */
+  llmTraceSink?: LlmTraceSink
 }
 
 /** Poll cadence for the non-durable `run()` fallback (the durable driver sleeps between polls itself). */
@@ -263,6 +271,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       jobId: executionId,
       model,
       workspaceId,
+      agentKind: context.agentKind,
       ...(subscriptionTokenId ? { subscriptionTokenId } : {}),
     }
   }
@@ -270,6 +279,23 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
   /** Poll a dispatched job for its state, mapping the runner view into an update. */
   async pollJob(handle: AgentJobHandle): Promise<AgentJobUpdate> {
     const view = await this.jobs.poll(handle.workspaceId, handle.jobId)
+    // Forward any tool spans the harness drained on this poll to the trace sink, as
+    // child spans under the run's trace (jobId === executionId, the same trace id the
+    // LLM proxy's generations use). Isolated + best-effort: never affects the lifecycle.
+    if (this.deps.llmTraceSink?.recordToolSpans && view.spans && view.spans.length > 0) {
+      try {
+        await this.deps.llmTraceSink.recordToolSpans(
+          {
+            workspaceId: handle.workspaceId ?? null,
+            executionId: handle.jobId,
+            agentKind: handle.agentKind ?? 'agent',
+          },
+          view.spans,
+        )
+      } catch {
+        // Swallowed: the sink logs its own errors; observability never breaks a run.
+      }
+    }
     if (view.state === 'running') {
       // Forward the latest subtask counts (if any) so the engine can surface
       // live "N/M done" progress on the step; the shapes match field-for-field.

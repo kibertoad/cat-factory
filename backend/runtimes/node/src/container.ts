@@ -378,6 +378,9 @@ function buildNodeContainerExecutor(
     // in the sandbox) whenever an upstream is configured for this deployment.
     webSearchProxyEnabled: Boolean(createWebSearchUpstreamFromEnv(env)),
     githubApiBase: config.github.apiBase,
+    // Forward container tool spans to Langfuse (when configured) as child spans under
+    // the run trace — the same sink the LLM proxy fans generations out to.
+    llmTraceSink: buildLangfuseSink(config),
   })
 }
 
