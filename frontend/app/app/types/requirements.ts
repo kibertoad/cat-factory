@@ -26,11 +26,18 @@ export interface RequirementReviewItem {
 
 /**
  * - `ready`: the reviewer raised findings awaiting human answers/dismissals.
- * - `merged`: the companion produced a document the human is inspecting (re-review or redo).
+ * - `incorporating`: transient; the driver is folding the answers + re-reviewing in the
+ *   background (the user is back on the board, summoned again only if input is needed).
+ * - `merged`: the companion produced a document (an internal transient on the async path).
  * - `exceeded`: the iteration cap was hit with findings open — awaiting the human's choice.
  * - `incorporated`: terminal; the requirements phase is settled.
  */
-export type RequirementReviewStatus = 'ready' | 'merged' | 'exceeded' | 'incorporated'
+export type RequirementReviewStatus =
+  | 'ready'
+  | 'incorporating'
+  | 'merged'
+  | 'exceeded'
+  | 'incorporated'
 
 /** How a human resolves a review that hit its iteration cap. */
 export type ResolveRequirementsExceededChoice = 'extra-round' | 'proceed' | 'stop-reset'

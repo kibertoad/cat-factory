@@ -15,7 +15,7 @@ export const DEFAULT_MERGE_PRESET = {
   maxRisk: 0.4,
   maxImpact: 0.5,
   ciMaxAttempts: 10,
-  maxRequirementIterations: 3,
+  maxRequirementIterations: 6,
   // Tolerate nothing by default: any reviewer finding pauses the run for a human.
   maxRequirementConcernAllowed: 'none',
 } as const

@@ -679,9 +679,7 @@ export const pipelineStepSchema = v.object({
    * once that async cycle completes. `feedback` is the human's optional "do it differently"
    * direction (a redo). Absent when no incorporation is pending.
    */
-  pendingIncorporation: v.optional(
-    v.nullable(v.object({ feedback: v.optional(v.string()) })),
-  ),
+  pendingIncorporation: v.optional(v.nullable(v.object({ feedback: v.optional(v.string()) }))),
   /** Text the agent produced for this step (when LLM execution is enabled). */
   output: v.optional(v.string()),
   /** Identifier of the model that produced `output`, for transparency. */

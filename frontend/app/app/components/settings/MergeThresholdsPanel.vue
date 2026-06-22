@@ -121,7 +121,7 @@ const draft = reactive<Draft>({
   maxRisk: 40,
   maxImpact: 50,
   ciMaxAttempts: 10,
-  maxRequirementIterations: 3,
+  maxRequirementIterations: 6,
   maxRequirementConcernAllowed: 'none',
 })
 

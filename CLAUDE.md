@@ -364,7 +364,7 @@ The loop (one reviewer pass = one **iteration**; the initial review is iteration
    advances with no human gate and no incorporation. All findings dismissed → **proceed**.
 
 The cap + tolerated severity are per-task on the **merge preset** (`maxRequirementIterations`
-default 3, `maxRequirementConcernAllowed` default `none`). There is NO quality-companion
+default 6, `maxRequirementConcernAllowed` default `none`). There is NO quality-companion
 grade gate any more — convergence is reviewer-driven.
 
 - Wire contracts: `contracts/src/requirements.ts` (`RequirementReview` +
@@ -457,7 +457,7 @@ still open). Two new container agent kinds plus a special gate step implement it
   A task selects one via `Block.mergePresetId` (the inspector dropdown in
   `TaskModelSettings.vue`); none → the workspace default (lazily seeded from
   `DEFAULT_MERGE_PRESET` in kernel). Carries the auto-merge ceilings + `ciMaxAttempts`
-  - the requirements-review knobs `maxRequirementIterations` (default 3) and
+  - the requirements-review knobs `maxRequirementIterations` (default 6) and
     `maxRequirementConcernAllowed` (default `none`); see "Requirements review flow".
 - **Notifications** — a first-class, human-actionable surface (NOT a mid-pipeline
   gate). `notifications` table + `NotificationService`

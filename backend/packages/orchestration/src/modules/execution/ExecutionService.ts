@@ -2393,17 +2393,12 @@ export class ExecutionService {
     }
 
     const { instance, step } = parked
-    step.pendingIncorporation = { ...(feedback ? { feedback } : {}) }
+    step.pendingIncorporation = feedback ? { feedback } : {}
     const updated = await this.requireReviewService().markIncorporating(workspaceId, review.id)
     await this.executionRepository.upsert(workspaceId, instance)
     await this.emitInstance(workspaceId, instance)
     await this.emitRequirementReview(workspaceId, updated)
-    await this.workRunner.signalDecision(
-      workspaceId,
-      instance.id,
-      step.approval!.id,
-      'incorporate',
-    )
+    await this.workRunner.signalDecision(workspaceId, instance.id, step.approval!.id, 'incorporate')
     return updated
   }
 
