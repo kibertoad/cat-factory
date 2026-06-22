@@ -17,8 +17,8 @@ import { ConflictError, NotFoundError, ValidationError, assertFound } from '@cat
 // ---------------------------------------------------------------------------
 // AccountService: the tenancy layer. An account is the owner of workspaces —
 // either a single user's `personal` account or an `org` shared by many engineers.
-// Memberships map GitHub users to accounts with a role, so visibility (which
-// boards you can switch between) is "the accounts you belong to". A GitHub App
+// Memberships map internal users (`usr_*`) to accounts with a role, so visibility
+// (which boards you can switch between) is "the accounts you belong to". A GitHub App
 // installation is bound to an account, so every workspace in it shares the repos.
 // ---------------------------------------------------------------------------
 
@@ -62,7 +62,7 @@ export class AccountService {
   /**
    * Ensure a user has a personal account (account-of-one) with an owner
    * membership, creating it on first sign-in. Idempotent: keyed by the user's
-   * GitHub login, so repeated calls return the same account.
+   * internal id, so repeated calls return the same account.
    */
   async ensurePersonalAccount(user: AccountUser): Promise<AccountRecord> {
     const existing = await this.deps.accountRepository.findPersonalByUser(user.id)

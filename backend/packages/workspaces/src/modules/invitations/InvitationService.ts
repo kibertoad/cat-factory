@@ -91,6 +91,14 @@ export class InvitationService {
     }
 
     const normalizedEmail = email.toLowerCase().trim()
+    // Supersede any still-pending invite to the same address in this account, so only
+    // the freshly-minted token stays live (no pile-up of redeemable links per email).
+    const pending = await this.deps.invitationRepository.listByAccount(accountId)
+    for (const prior of pending) {
+      if (prior.status === 'pending' && prior.email === normalizedEmail) {
+        await this.deps.invitationRepository.setStatus(prior.id, 'revoked')
+      }
+    }
     const token = `${crypto.randomUUID()}${crypto.randomUUID()}`.replace(/-/g, '')
     const record: AccountInvitationRecord = {
       id: this.deps.idGenerator.next('inv'),

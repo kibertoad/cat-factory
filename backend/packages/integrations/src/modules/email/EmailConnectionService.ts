@@ -47,6 +47,8 @@ export class EmailConnectionService {
   ): Promise<EmailConnection> {
     if (!input.apiKey.trim()) throw new ValidationError('API key is required')
     if (!input.fromAddress.trim()) throw new ValidationError('From address is required')
+    // getByAccount already filters tombstones, so a present record is a live one whose
+    // original createdAt we preserve; a reconnect after disconnect starts a fresh one.
     const existing = await this.deps.emailConnectionRepository.getByAccount(accountId)
     const apiKeyCipher = await this.deps.secretCipher.encrypt(input.apiKey.trim())
     const now = this.deps.clock.now()
@@ -55,7 +57,7 @@ export class EmailConnectionService {
       provider: input.provider,
       fromAddress: input.fromAddress.trim(),
       apiKeyCipher,
-      createdAt: existing && !existing.deletedAt ? existing.createdAt : now,
+      createdAt: existing ? existing.createdAt : now,
       updatedAt: now,
       deletedAt: null,
     }

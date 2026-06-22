@@ -39,12 +39,17 @@ export interface IdentityProfile {
   metadata?: Record<string, unknown>
 }
 
-// A fixed, well-formed PHC string the password verify path runs against when no
-// password identity exists, so a miss costs the same PBKDF2 work as a hit and the
-// response time can't be used to enumerate which emails are registered. It is NOT a
-// hash of any real password (the random salt + zero-filled digest never matches).
-const DUMMY_PASSWORD_HASH =
-  'pbkdf2-sha256$i=210000$AAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+// A dummy PHC hash the password verify path runs against when no password identity
+// exists, so a miss costs the same PBKDF2 work as a hit and response time can't be used
+// to enumerate which emails are registered. It is computed once per process from the
+// REAL hasher (over a random, unguessable input) so its cost always tracks the hasher's
+// current iteration count — a hardcoded string would silently drift if the default cost
+// were raised, reopening the timing oracle. Cached process-wide (not per instance) so
+// every miss pays exactly one PBKDF2, matching the single derivation a hit performs.
+let dummyHashPromise: Promise<string> | undefined
+function dummyPasswordHash(hasher: PasswordHasher): Promise<string> {
+  return (dummyHashPromise ??= hasher.hash(crypto.randomUUID()))
+}
 
 export class UserService {
   constructor(private readonly deps: UserServiceDependencies) {}
@@ -80,10 +85,11 @@ export class UserService {
     // Is this email already owned by another user? (Unique-index-safe handling below.)
     const emailOwner = email ? await this.deps.userRepository.findByEmail(email) : null
     if (emailOwner) {
-      if (profile.emailVerified) {
+      if (profile.emailVerified && (await this.emailIsProviderVerified(emailOwner.id))) {
         // A second login provider for the same person — attach this identity to the
         // existing same-email user instead of creating a duplicate (which would collide
-        // on the unique email index and 500).
+        // on the unique email index and 500). Only safe when the existing owner's email
+        // was itself proven by an OAuth provider, never by a self-asserted signup.
         await this.deps.userRepository.linkIdentity({
           userId: emailOwner.id,
           provider,
@@ -94,10 +100,20 @@ export class UserService {
         })
         return emailOwner
       }
-      // Unverified and the email belongs to someone else: never trusted to claim or
-      // merge it, and storing it would collide on the unique index. Create a distinct
-      // user with no email rather than failing the login.
-      email = null
+      if (profile.emailVerified) {
+        // The email is owned only via an UNVERIFIED password signup (the owner has no
+        // OAuth identity). Password signup never proves email ownership, so that claim
+        // can't block the genuinely-verified party from this provider. Release the email
+        // from the squatting account and let the verified login take it on a fresh user.
+        // (The squatter keeps its now-emailless, password-only account; acceptable per
+        // the pre-1.0 policy — and it stops a pre-registration account-hijack.)
+        await this.deps.userRepository.update(emailOwner.id, { email: null })
+      } else {
+        // Unverified and the email belongs to someone else: never trusted to claim or
+        // merge it, and storing it would collide on the unique index. Create a distinct
+        // user with no email rather than failing the login.
+        email = null
+      }
     }
 
     const user: UserRecord = {
@@ -117,6 +133,19 @@ export class UserService {
       createdAt: this.deps.clock.now(),
     })
     return user
+  }
+
+  /**
+   * Whether a user's primary email was proven by an OAuth provider rather than a
+   * self-asserted password signup. `users.email` is only ever written by (a) a
+   * verified OAuth create/link or (b) a `password` signup; password is the sole
+   * unverified writer. So "owns an email AND has a non-password identity" is a sound
+   * proxy for "email is provider-verified" — used to refuse merging a verified login
+   * onto a squatted, password-only account.
+   */
+  private async emailIsProviderVerified(userId: string): Promise<boolean> {
+    const identities = await this.deps.userRepository.listIdentities(userId)
+    return identities.some((i) => i.provider !== 'password')
   }
 
   /** Link an additional identity to an existing user (onboarding follow-up). */
@@ -186,7 +215,7 @@ export class UserService {
     if (!identity?.secret) {
       // Equalise timing with the hit path so the response time can't reveal whether the
       // email is registered (PBKDF2 against a dummy hash that can never match).
-      await this.deps.passwordHasher.verify(input.password, DUMMY_PASSWORD_HASH)
+      await this.deps.passwordHasher.verify(input.password, await dummyPasswordHash(this.deps.passwordHasher))
       return null
     }
     if (!(await this.deps.passwordHasher.verify(input.password, identity.secret))) return null

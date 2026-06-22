@@ -159,6 +159,47 @@ async function isGitHubSignInAllowed(
   return orgs.some((org) => cfg.allowedOrgs.includes(org))
 }
 
+// Best-effort in-process throttle for the password endpoints. It bounds naive online
+// brute-force / credential-stuffing bursts without any new infrastructure, but is
+// deliberately modest: the window is per-isolate (each Workers isolate / Node process
+// keeps its own), so it is a speed bump, not an authoritative limiter — a durable,
+// cross-runtime limiter (D1/Postgres-backed, exercised by the conformance suite) is the
+// proper follow-up. Keyed by client IP + email so one attacker can't lock out an
+// unrelated victim, and PBKDF2's per-attempt cost remains the primary defence.
+const ATTEMPT_WINDOW_MS = 15 * 60 * 1000
+const MAX_ATTEMPTS = 10
+const attempts = new Map<string, number[]>()
+
+function clientIp(c: Context<AppEnv>): string {
+  return (
+    c.req.header('cf-connecting-ip') ||
+    c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ||
+    'unknown'
+  )
+}
+
+/** Record a password attempt for `c`+`email`; true once it is over the burst limit. */
+function passwordAttemptLimited(c: Context<AppEnv>, email: string): boolean {
+  const now = Date.now()
+  const key = `${clientIp(c)}:${email.toLowerCase().trim()}`
+  const recent = (attempts.get(key) ?? []).filter((t) => now - t < ATTEMPT_WINDOW_MS)
+  recent.push(now)
+  attempts.set(key, recent)
+  // Opportunistically evict fully-stale keys so the map can't grow unbounded.
+  if (attempts.size > 10_000) {
+    for (const [k, ts] of attempts) {
+      if (ts.every((t) => now - t >= ATTEMPT_WINDOW_MS)) attempts.delete(k)
+    }
+  }
+  return recent.length > MAX_ATTEMPTS
+}
+
+const tooManyAttempts = (c: Context<AppEnv>) =>
+  c.json(
+    { error: { code: 'rate_limited', message: 'Too many attempts. Please try again later.' } },
+    429,
+  )
+
 export function authController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
 
@@ -326,6 +367,7 @@ export function authController(): Hono<AppEnv> {
     const cfg = authConfig(c)
     if (!cfg.passwordEnabled) return unavailable(c)
     const body = c.req.valid('json')
+    if (passwordAttemptLimited(c, body.email)) return tooManyAttempts(c)
     const container = c.get('container')
 
     // New-user creation is gated: an invite addressed to this email OR an allowlisted
@@ -367,6 +409,7 @@ export function authController(): Hono<AppEnv> {
     const cfg = authConfig(c)
     if (!cfg.passwordEnabled) return unavailable(c)
     const body = c.req.valid('json')
+    if (passwordAttemptLimited(c, body.email)) return tooManyAttempts(c)
     const user = await c.get('container').userService.verifyPassword(body)
     if (!user) {
       return c.json({ error: { code: 'unauthorized', message: 'Invalid email or password' } }, 401)

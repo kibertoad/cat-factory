@@ -1573,6 +1573,23 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         expect(unverified.email).toBeNull()
       })
 
+      it('does NOT merge a verified login onto a password-squatted email (pre-hijack guard)', async () => {
+        const ob = harness.makeApp().onboarding()
+        const email = uniqueEmail('squat')
+        // A password signup self-asserts the email without proving ownership.
+        const squatter = await ob.users.signupWithPassword({ email, password: 'squatter pass' })
+        // A genuinely-verified OAuth login for the same address must NOT land on the
+        // squatter's account — it takes the email onto a fresh, distinct user.
+        const victim = await ob.users.findOrCreateByIdentity('google', uniqueEmail('victim'), {
+          email,
+          emailVerified: true,
+        })
+        expect(victim.id).not.toBe(squatter.id)
+        expect(victim.email).toBe(email.toLowerCase())
+        // The email is released from the squatting, password-only account.
+        expect((await ob.users.get(squatter.id))?.email).toBeNull()
+      })
+
       it('signs up + verifies a password user, and rejects duplicate email / bad password', async () => {
         const ob = harness.makeApp().onboarding()
         const email = uniqueEmail('pw')
