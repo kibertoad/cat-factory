@@ -18,6 +18,20 @@ export const CI_FIXER_AGENT_KIND = 'ci-fixer'
 export const MERGER_AGENT_KIND = 'merger'
 
 /**
+ * The agent kind of the special `tester` gate step: a container agent that runs the
+ * project's tests (local docker-compose infra or an ephemeral env) and returns a
+ * structured report. On a withheld greenlight the engine loops the `fixer` agent
+ * with the report and re-tests — mirroring the CI gate / ci-fixer loop.
+ */
+export const TESTER_AGENT_KIND = 'tester'
+
+/**
+ * The agent kind of the container agent that applies fixes from a Tester's report to
+ * the PR head branch and pushes them back (no new PR), looping with the Tester.
+ */
+export const FIXER_AGENT_KIND = 'fixer'
+
+/**
  * The agent kind of the special pre-merge gate step: it checks whether the PR can
  * be merged and, on a conflict, loops the conflict-resolver — mirroring the CI gate.
  */

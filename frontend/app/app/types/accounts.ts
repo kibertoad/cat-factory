@@ -5,6 +5,8 @@
 // so responses drop straight into the Pinia store.
 // ---------------------------------------------------------------------------
 
+import type { CloudProvider } from './domain'
+
 export type AccountType = 'personal' | 'org'
 export type AccountRole = 'owner' | 'member'
 
@@ -17,6 +19,8 @@ export interface Account {
   createdAt: number
   /** The caller's role in this account (`null` in the auth-disabled path). */
   role: AccountRole | null
+  /** The cloud provider new services in this account default to; absent = built-in default. */
+  defaultCloudProvider?: CloudProvider
 }
 
 /** A member of an account. */
@@ -30,6 +34,11 @@ export interface AccountMember {
 export interface CreateAccountInput {
   name: string
   githubAccountLogin?: string
+}
+
+/** Update an account's settings (today: its default cloud provider for new services). */
+export interface UpdateAccountInput {
+  defaultCloudProvider?: CloudProvider
 }
 
 export interface AddMemberInput {

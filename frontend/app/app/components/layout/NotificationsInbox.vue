@@ -18,6 +18,7 @@ const META: Record<Notification['type'], { icon: string; color: Accent; action: 
   merge_review: { icon: 'i-lucide-git-pull-request-arrow', color: 'warning', action: 'Merge' },
   pipeline_complete: { icon: 'i-lucide-circle-check', color: 'primary', action: 'Confirm & merge' },
   ci_failed: { icon: 'i-lucide-triangle-alert', color: 'error', action: 'Retry run' },
+  test_failed: { icon: 'i-lucide-flask-conical', color: 'error', action: 'Retry run' },
   // Informational: clicking the title reveals the task to review; "act" just marks
   // it read (the server performs no side-effect for this type).
   requirement_review: { icon: 'i-lucide-clipboard-list', color: 'primary', action: 'Mark read' },

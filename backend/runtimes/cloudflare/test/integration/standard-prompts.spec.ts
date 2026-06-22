@@ -31,14 +31,17 @@ function ctx(overrides: Partial<AgentRunContext> = {}): AgentRunContext {
 }
 
 describe('standard solution-phase prompts', () => {
-  it('maps the four standard agent kinds to phases', () => {
+  it('maps the standard agent kinds to phases', () => {
     expect(STANDARD_PHASE_BY_KIND).toMatchObject({
       architect: 'design',
       coder: 'build',
       reviewer: 'review',
-      tester: 'test',
     })
     expect(phaseForKind('architect')).toBe('design')
+    // `tester` is no longer a one-shot phase: it routes through its own Tester/Fixer
+    // prompt (it runs the tests and returns a structured report), so it maps to no
+    // standard phase.
+    expect(phaseForKind('tester')).toBeUndefined()
     expect(phaseForKind('documenter')).toBeUndefined()
     expect(phaseForKind('my-custom-agent')).toBeUndefined()
   })
@@ -46,7 +49,10 @@ describe('standard solution-phase prompts', () => {
   describe('system prompts', () => {
     it('routes the standard kinds through the built-out phase prompts', () => {
       expect(systemPromptFor('coder')).toBe(standardSystemPrompt('build'))
-      expect(systemPromptFor('tester')).toBe(standardSystemPrompt('test'))
+      // `tester` no longer routes through the generic `test` phase — it has its own
+      // built-out Tester prompt (run the suite, return a structured report).
+      expect(systemPromptFor('tester')).not.toBe(standardSystemPrompt('test'))
+      expect(systemPromptFor('tester')).toContain('test engineer')
     })
 
     it('builds the architect on the design phase prompt plus the read-only guardrail', () => {
@@ -122,7 +128,6 @@ describe('standard solution-phase prompts', () => {
     it('uses a phase-specific task line per kind', () => {
       expect(userPromptFor(ctx({ agentKind: 'coder' }))).toContain('implementation for this block')
       expect(userPromptFor(ctx({ agentKind: 'reviewer' }))).toContain('Review the work above')
-      expect(userPromptFor(ctx({ agentKind: 'tester' }))).toContain('test plan')
     })
 
     it('falls back to (none provided) for an empty description', () => {

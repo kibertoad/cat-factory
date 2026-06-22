@@ -1,11 +1,7 @@
 import * as v from 'valibot'
-import {
-  agentKindSchema,
-  blockTypeSchema,
-  positionSchema,
-  sizeSchema,
-  testTargetSchema,
-} from './primitives.js'
+import { agentConfigValuesSchema } from './agent-config.js'
+import { cloudProviderSchema, instanceSizeSchema } from './provisioning.js'
+import { agentKindSchema, blockTypeSchema, positionSchema, sizeSchema } from './primitives.js'
 
 // Request body schemas. The Hono facade validates inbound JSON against these via
 // @hono/valibot-validator; the frontend API client can import the inferred input
@@ -68,6 +64,8 @@ export const addTaskSchema = v.object({
   mergePresetId: v.optional(v.pipe(v.string(), v.maxLength(120))),
   // The pipeline the task's Run controls default to; omitted/empty → none recorded.
   pipelineId: v.optional(v.pipe(v.string(), v.maxLength(120))),
+  // Task-level agent-contributed config values (e.g. the Tester's environment).
+  agentConfig: v.optional(agentConfigValuesSchema),
 })
 export type AddTaskInput = v.InferOutput<typeof addTaskSchema>
 
@@ -88,12 +86,21 @@ export const updateBlockSchema = v.partial(
     fragmentIds: v.array(v.pipe(v.string(), v.maxLength(120))),
     // The selected model's catalog id; an empty string resets to the default.
     modelId: v.pipe(v.string(), v.maxLength(120)),
-    // Where this block's acceptance / Playwright tests run.
-    testTarget: testTargetSchema,
     // The merge threshold preset id; an empty string resets to the workspace default.
     mergePresetId: v.pipe(v.string(), v.maxLength(120)),
     // The task's default pipeline id; an empty string clears the selection.
     pipelineId: v.pipe(v.string(), v.maxLength(120)),
+    // Task-level agent-contributed config values (id→value map; replaces the map).
+    agentConfig: agentConfigValuesSchema,
+    // Service-level (frame): docker-compose path for the Tester's local infra; an
+    // empty string clears it.
+    testComposePath: v.pipe(v.string(), v.maxLength(400)),
+    // Service-level (frame): the service has no infra dependencies to stand up.
+    noInfraDependencies: v.boolean(),
+    // Service-level (frame): the cloud provider this service's jobs run on.
+    cloudProvider: cloudProviderSchema,
+    // Service-level (frame): the abstract instance size for this service's jobs.
+    instanceSize: instanceSizeSchema,
   }),
 )
 export type UpdateBlockInput = v.InferOutput<typeof updateBlockSchema>

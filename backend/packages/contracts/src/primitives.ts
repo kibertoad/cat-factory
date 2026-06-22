@@ -36,15 +36,6 @@ export type AgentState = v.InferOutput<typeof agentStateSchema>
 export const agentKindSchema = v.pipe(v.string(), v.minLength(1))
 export type AgentKind = v.InferOutput<typeof agentKindSchema>
 
-/**
- * Where a block's acceptance / Playwright tests run:
- *  - `github_actions`  in the project's CI, against a service spun up in the
- *                      same workflow run (e.g. via `services:` / a build step)
- *  - `ephemeral_env`   against the provisioned ephemeral environment for the run
- */
-export const testTargetSchema = v.picklist(['github_actions', 'ephemeral_env'])
-export type TestTarget = v.InferOutput<typeof testTargetSchema>
-
 export const positionSchema = v.object({
   x: v.number(),
   y: v.number(),

@@ -3,7 +3,7 @@
 // Mirrors the `@cat-factory/contracts` execution schemas.
 // ---------------------------------------------------------------------------
 
-import type { AgentKind } from './domain'
+import type { AgentKind, TestReport } from './domain'
 import type { CompanionVerdict } from './requirements'
 
 /** Live companion state on a companion step: the bar, the budget, and every verdict. */
@@ -251,6 +251,23 @@ export interface PipelineStep {
   startedAt?: number | null
   /** epoch ms the step finished (transitioned to `done`); with `startedAt` gives duration. */
   finishedAt?: number | null
+  /**
+   * Live Tester→Fixer loop state when this step is a `tester` kind: which phase is in
+   * flight (testing vs fixing the issues it found), the fixer attempt budget, and the
+   * latest structured test report. Absent on non-tester steps.
+   */
+  test?: TesterStepState | null
+}
+
+/** Live state of a `tester` step's Tester→Fixer loop (mirrors `testerStepStateSchema`). */
+export interface TesterStepState {
+  phase: 'testing' | 'fixing'
+  /** how many fixer attempts have been dispatched so far */
+  attempts: number
+  /** ceiling on fixer attempts (from the task's merge preset) */
+  maxAttempts: number
+  /** the most recent Tester report (what was tested, outcomes, concerns, greenlight) */
+  lastReport?: TestReport | null
 }
 
 /** A pipeline instance running against one block. */

@@ -15,6 +15,10 @@ import {
   type SpecResult,
   type ExploreJob,
   type ExploreResult,
+  type TesterJob,
+  type TesterResult,
+  type FixerJob,
+  type FixerResult,
   parseBlueprintJob,
   parseBootstrapJob,
   parseCiFixerJob,
@@ -22,6 +26,8 @@ import {
   parseMergerJob,
   parseSpecJob,
   parseExploreJob,
+  parseTesterJob,
+  parseFixerJob,
   parseJob,
   type RunResult,
 } from './job.js'
@@ -32,6 +38,8 @@ import { handleExplore } from './explore.js'
 import { handleCiFixer } from './ci-fixer.js'
 import { handleConflictResolver } from './conflict-resolver.js'
 import { handleMerger } from './merger.js'
+import { handleTester } from './tester.js'
+import { handleFixer } from './fixer.js'
 import { redactSecrets } from './git.js'
 import { JobRegistry, loadRunnerLimits } from './runner.js'
 import { handleRun } from './runner.js'
@@ -85,6 +93,8 @@ const conflictResolverJobs = new JobRegistry<ConflictResolverJob, ConflictResolv
   handleConflictResolver,
 )
 const mergerJobs = new JobRegistry<MergerJob, MergerResult>(limits, handleMerger)
+const testerJobs = new JobRegistry<TesterJob, TesterResult>(limits, handleTester)
+const fixerJobs = new JobRegistry<FixerJob, FixerResult>(limits, handleFixer)
 
 // Re-exported so the acceptance suite (and any direct caller) can run a job
 // synchronously without going through the async job API.
@@ -208,9 +218,35 @@ const server = createServer((req, res) => {
         return send(res, 400, { error: message } satisfies MergerResult)
       }
     }
+    // Start (or re-attach to) a tester job: POST /test. Clones the PR branch, stands
+    // up infra, runs the suite and returns a JSON report (no commits).
+    if (req.method === 'POST' && req.url === '/test') {
+      try {
+        const job = parseTesterJob(JSON.parse(await readBody(req)))
+        const view = testerJobs.start(job.jobId, job)
+        return send(res, 202, { jobId: view.id, state: view.state })
+      } catch (error) {
+        const message = redactSecrets(error instanceof Error ? error.message : String(error))
+        log.error('failed to start test', { error: message })
+        return send(res, 400, { error: message } satisfies TesterResult)
+      }
+    }
+    // Start (or re-attach to) a fixer job: POST /fix-tests. Clones the PR branch,
+    // applies fixes from the tester's report and pushes back onto the same branch.
+    if (req.method === 'POST' && req.url === '/fix-tests') {
+      try {
+        const job = parseFixerJob(JSON.parse(await readBody(req)))
+        const view = fixerJobs.start(job.jobId, job)
+        return send(res, 202, { jobId: view.id, state: view.state })
+      } catch (error) {
+        const message = redactSecrets(error instanceof Error ? error.message : String(error))
+        log.error('failed to start fix-tests', { error: message })
+        return send(res, 400, { error: message } satisfies FixerResult)
+      }
+    }
     // Poll a running/finished job: GET /jobs/{id}. Job ids are unique per kind, so
     // check each registry in turn (implementation, bootstrap, blueprint, ci-fix,
-    // resolve-conflicts, merge).
+    // resolve-conflicts, merge, test, fix-tests).
     if (req.method === 'GET' && req.url?.startsWith('/jobs/')) {
       const id = decodeURIComponent(req.url.slice('/jobs/'.length))
       const view =
@@ -221,7 +257,9 @@ const server = createServer((req, res) => {
         exploreJobs.get(id) ??
         ciFixerJobs.get(id) ??
         conflictResolverJobs.get(id) ??
-        mergerJobs.get(id)
+        mergerJobs.get(id) ??
+        testerJobs.get(id) ??
+        fixerJobs.get(id)
       if (!view) return send(res, 404, { error: 'job not found' })
       return send(res, 200, view)
     }

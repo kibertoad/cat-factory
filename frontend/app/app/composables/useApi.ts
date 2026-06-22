@@ -2,6 +2,7 @@ import type {
   Account,
   AccountMember,
   AddMemberInput,
+  UpdateAccountInput,
   AgentRunKind,
   AuthUser,
   Block,
@@ -230,6 +231,9 @@ export function useApi() {
     createAccount: (body: { name: string; githubAccountLogin?: string }) =>
       http<Account>('/accounts', { method: 'POST', body }),
 
+    updateAccount: (accountId: string, body: UpdateAccountInput) =>
+      http<Account>(`/accounts/${encodeURIComponent(accountId)}`, { method: 'PATCH', body }),
+
     listAccountMembers: (accountId: string) =>
       http<AccountMember[]>(`/accounts/${encodeURIComponent(accountId)}/members`),
 
@@ -265,7 +269,13 @@ export function useApi() {
     addTask: (
       workspaceId: string,
       blockId: string,
-      body: { title: string; description?: string; mergePresetId?: string; pipelineId?: string },
+      body: {
+        title: string
+        description?: string
+        mergePresetId?: string
+        pipelineId?: string
+        agentConfig?: Record<string, string>
+      },
     ) => http<Block>(`${ws(workspaceId)}/blocks/${blockId}/tasks`, { method: 'POST', body }),
 
     addModule: (

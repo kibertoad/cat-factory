@@ -9,6 +9,7 @@ export type NotificationType =
   | 'merge_review'
   | 'pipeline_complete'
   | 'ci_failed'
+  | 'test_failed'
   | 'requirement_review'
 export type NotificationStatus = 'open' | 'acted' | 'dismissed'
 

@@ -3,13 +3,14 @@ import type { AgentRunContext } from '@cat-factory/kernel'
 import {
   acceptanceSystemPrompt,
   testApproachSection,
-  testTargetSection,
+  e2eTargetSection,
 } from './acceptance-prompts.js'
 import { companionSystemPrompt } from './companion-prompts.js'
 import { companionTargets, isCompanionKind } from './companions.js'
 import { READ_ONLY_GUARDRAIL, isReadOnlyAgentKind } from './read-only.js'
 import { businessLogicSystemPrompt } from './business-logic-prompts.js'
 import { mockSystemPrompt } from './mock-prompts.js'
+import { testingSystemPrompt, testerEnvironmentSection } from './test-prompts.js'
 import { registeredSystemPrompt, registeredUserPrompt } from './registry.js'
 import {
   environmentSection,
@@ -80,6 +81,10 @@ function baseSystemPromptFor(kind: AgentKind): string {
   if (companion) return companion
   const phase = phaseForKind(kind)
   if (phase) return standardSystemPrompt(phase)
+  // The Tester/Fixer track runs in a container and returns a structured report /
+  // pushes fixes; it owns its own prompts rather than the generic `test` phase.
+  const testing = testingSystemPrompt(kind)
+  if (testing) return testing
   const acceptance = acceptanceSystemPrompt(kind)
   if (acceptance) return acceptance
   const mock = mockSystemPrompt(kind)
@@ -165,8 +170,10 @@ function buildBaseUserPrompt(context: AgentRunContext): string {
   if (envSection) lines.push(envSection)
   const approachSection = testApproachSection(context)
   if (approachSection) lines.push(approachSection)
-  const targetSection = testTargetSection(context)
+  const targetSection = e2eTargetSection(context)
   if (targetSection) lines.push(targetSection)
+  const testerEnv = testerEnvironmentSection(context)
+  if (testerEnv) lines.push(testerEnv)
   const allDecisions = resolvedDecision ? [...decisions, resolvedDecision] : decisions
   if (allDecisions.length) {
     lines.push('', 'Resolved decisions:')

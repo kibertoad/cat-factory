@@ -7,9 +7,9 @@ developer's laptop. The reusable logic lives in
 Drizzle/Postgres + pg-boss) with two local differentiators:
 
 - **Agent jobs run as local Docker/Podman containers.** Each repo-operating step
-  (coder, mocker, playwright, blueprints, ci-fixer, conflict-resolver, merger) is
-  launched as its own `docker run` of the executor-harness image — the same image the
-  Cloudflare Worker runs per-run Containers from — via the
+  (coder, mocker, playwright, blueprints, tester, fixer, ci-fixer, conflict-resolver,
+  merger) is launched as its own `docker run` of the executor-harness image — the same
+  image the Cloudflare Worker runs per-run Containers from — via the
   `LocalDockerRunnerTransport`. No Cloudflare and no self-hosted runner pool required.
 - **GitHub is reached via a personal access token** (`GITHUB_PAT`) instead of a GitHub
   App. The agent containers clone, push branches and **open real PRs on github.com**
@@ -72,3 +72,44 @@ PAT, the `ci` gate reads the PR's **real GitHub Actions** check runs (and dispat
 ci-fixer container on failure), and the merger step **merges the PR for real** once it
 clears the task's merge threshold — all via the PAT. A merge that needs review (or a
 pipeline with no merger) raises an in-app notification instead.
+
+## Running the Tester locally (Docker-in-Docker)
+
+The `tester` step runs the project's suite and returns a structured greenlight/loop
+report; a withheld greenlight loops a `fixer` (up to the task's merge-preset attempt
+budget) and re-tests. It can stand the service's dependencies up two ways, chosen by
+the task's **Test environment** config (inspector → Agent configuration, or on the
+task-creation form):
+
+- **Ephemeral** (default) — test against a provisioned environment URL; nothing is
+  stood up locally. Zero extra setup.
+- **Local** — the Tester runs `docker compose up` for the service's dependencies
+  **inside its own job container** (Docker-in-Docker), so they sit on that container's
+  `localhost`. To use it you must, on the **service frame** (inspector → Test
+  infrastructure), either set the **docker-compose path** or tick **No infra
+  dependencies** — a local-mode Tester pipeline refuses to start until one is set.
+
+Because the job runs Docker inside Docker, in local mode the Tester's container is
+launched **`--privileged`** so its in-container daemon can start. This is the only kind
+that gets elevated; every other agent job runs unprivileged. If your runtime can run
+nested containers without it (e.g. rootless Podman), set
+`LOCAL_DOCKER_PRIVILEGED_TEST_JOBS=false`. Standing the infra up is best-effort: if the
+in-container daemon can't start, the Tester is told and runs what it can rather than
+failing the job.
+
+## Container sizing & the `docker` provider
+
+Local mode never touches a cloud. A service's **cloud provider** should be set to
+**`docker`** (inspector → Test infrastructure), and its **instance size** maps straight
+to the per-job container's resource limits on your host daemon:
+
+| size   | `--memory` | `--cpus` |
+| ------ | ---------- | -------- |
+| small  | 1g         | 1        |
+| medium | 2g         | 2        |
+| large  | 4g         | 4        |
+| xlarge | 8g         | 8        |
+
+New services inherit the active account's **default cloud provider** (set it once from
+the account menu — e.g. to `docker` for a local install); a service can still override
+it per-frame.

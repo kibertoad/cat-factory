@@ -39,7 +39,10 @@ export const STANDARD_PHASE_BY_KIND: Readonly<Record<string, StandardPhase>> = {
   architect: 'design',
   coder: 'build',
   reviewer: 'review',
-  tester: 'test',
+  // `tester` is no longer a one-shot strategy phase: it is a container agent that
+  // actually runs the tests and returns a structured report (see ./test-prompts),
+  // looped with the `fixer` by the engine. It therefore routes through its own
+  // prompt, not the generic `test` phase.
 }
 
 /** The standard phase an agent kind performs, or `undefined` if it isn't one. */

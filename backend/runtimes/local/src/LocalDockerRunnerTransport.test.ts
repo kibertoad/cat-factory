@@ -109,6 +109,58 @@ describe('LocalDockerRunnerTransport', () => {
     expect(routes).toEqual(['/blueprint', '/ci-fix', '/resolve-conflicts'])
   })
 
+  it('runs the tester job privileged (Docker-in-Docker) but no other kind', async () => {
+    const { exec, calls } = fakeDocker()
+    const fetchImpl = vi.fn(async (input: string | URL | Request) => {
+      if (String(input).endsWith('/health')) return new Response('ok', { status: 200 })
+      return jsonResponse({ state: 'running' }, 202)
+    })
+    const transport = new LocalDockerRunnerTransport({
+      image: 'harness:test',
+      exec,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    })
+    await transport.dispatch('t', {}, 'test')
+    await transport.dispatch('r', {}, 'run')
+    const testRun = calls.find((c) => c[0] === 'run' && c.includes('cat-factory.jobId=t'))!
+    const codeRun = calls.find((c) => c[0] === 'run' && c.includes('cat-factory.jobId=r'))!
+    expect(testRun).toContain('--privileged')
+    expect(codeRun).not.toContain('--privileged')
+  })
+
+  it('omits --privileged for the tester when privilegedTestJobs is disabled', async () => {
+    const { exec, calls } = fakeDocker()
+    const fetchImpl = vi.fn(async (input: string | URL | Request) => {
+      if (String(input).endsWith('/health')) return new Response('ok', { status: 200 })
+      return jsonResponse({ state: 'running' }, 202)
+    })
+    const transport = new LocalDockerRunnerTransport({
+      image: 'harness:test',
+      privilegedTestJobs: false,
+      exec,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    })
+    await transport.dispatch('t', {}, 'test')
+    expect(calls.find((c) => c[0] === 'run')!).not.toContain('--privileged')
+  })
+
+  it('sizes the job container from the dispatch instanceSize', async () => {
+    const { exec, calls } = fakeDocker()
+    const fetchImpl = vi.fn(async (input: string | URL | Request) => {
+      if (String(input).endsWith('/health')) return new Response('ok', { status: 200 })
+      return jsonResponse({ state: 'running' }, 202)
+    })
+    const transport = new LocalDockerRunnerTransport({
+      image: 'harness:test',
+      exec,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    })
+    await transport.dispatch('big', {}, 'run', { instanceSize: 'large' })
+    const run = calls.find((c) => c[0] === 'run')!
+    expect(run.join(' ')).toContain('--memory 4g')
+    expect(run.join(' ')).toContain('--cpus 4')
+  })
+
   it('polls the job view through the mapped port', async () => {
     const { exec } = fakeDocker()
     const fetchImpl = vi.fn(async (input: string | URL | Request) => {

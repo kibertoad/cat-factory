@@ -12,6 +12,9 @@ import { mergeAssessmentSchema } from './merge.js'
 //                          confirms the work as complete (and merges the PR).
 //   - `ci_failed`        — the `ci-fixer` agent exhausted its attempt budget and
 //                          CI is still red; a human takes over.
+//   - `test_failed`      — the `fixer` agent exhausted its attempt budget (or there
+//                          was no PR branch to fix) and the `tester` still withholds
+//                          its greenlight; a human takes over.
 //   - `requirement_review`— a requirements-review agent raised findings on a task
 //                          (gaps / clarifications / risks); product people + the
 //                          task's creator are told to go react to them. Purely
@@ -32,6 +35,7 @@ export const notificationTypeSchema = v.picklist([
   'merge_review',
   'pipeline_complete',
   'ci_failed',
+  'test_failed',
   'requirement_review',
 ])
 export type NotificationType = v.InferOutput<typeof notificationTypeSchema>

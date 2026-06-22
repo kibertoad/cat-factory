@@ -1,4 +1,9 @@
-import type { RunnerDispatchKind, RunnerJobView, RunnerTransport } from '@cat-factory/kernel'
+import type {
+  RunnerDispatchKind,
+  RunnerDispatchOptions,
+  RunnerJobView,
+  RunnerTransport,
+} from '@cat-factory/kernel'
 
 /**
  * Resolve the runner backend a workspace's container jobs run on. Picks a
@@ -34,9 +39,10 @@ export class RunnerJobClient {
     jobId: string,
     spec: Record<string, unknown>,
     kind: RunnerDispatchKind,
+    options?: RunnerDispatchOptions,
   ): Promise<void> {
     const transport = await this.resolveTransport(workspaceId)
-    await transport.dispatch(jobId, spec, kind)
+    await transport.dispatch(jobId, spec, kind, options)
   }
 
   /** Poll the job's current state from the same backend it dispatched to. */

@@ -43,6 +43,12 @@ export class CloudflareContainerTransport implements RunnerTransport {
     private readonly registry?: ContainerInstanceRegistry,
   ) {}
 
+  // NB: the `RunnerDispatchOptions` (provisioning hints) the port allows are
+  // intentionally ignored here. A Cloudflare Container's instance type is fixed per
+  // container class by the wrangler `[[containers]] instance_type` — there is no
+  // per-DO/per-request sizing API — so a resolved instance-type id is meaningless on
+  // this backend. Per-service sizing applies only to the backends that can honour it
+  // (the self-hosted pool and the local Docker transport).
   async dispatch(
     jobId: string,
     spec: Record<string, unknown>,

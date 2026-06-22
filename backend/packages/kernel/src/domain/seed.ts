@@ -152,6 +152,9 @@ export function seedPipelines(): Pipeline[] {
         'researcher',
         'coder',
         'blueprints',
+        // `mocker` stands up the external-dependency mocks the tester needs to run
+        // the suite locally, so it always runs immediately before `tester`.
+        'mocker',
         'tester',
         // `reviewer` is the coder's companion: it rates the change and loops it back
         // for automatic rework when quality is below threshold (see companions).
@@ -161,9 +164,10 @@ export function seedPipelines(): Pipeline[] {
         'merger',
       ],
       // Gate the context requirements review, the architecture proposal and the spec
-      // (its acceptance scenarios are reviewed here). The `conflicts` / `ci` / `merger`
-      // tail is never human-gated (it gates/decides itself), so those slots are false.
-      gates: [true, true, true, false, false, false, false, false, false, false, false],
+      // (its acceptance scenarios are reviewed here). The `mocker` / `tester` /
+      // `conflicts` / `ci` / `merger` tail is never human-gated (it gates/decides
+      // itself), so those slots are false.
+      gates: [true, true, true, false, false, false, false, false, false, false, false, false],
     },
     {
       // The most thorough preset: a complex, full-stack feature run that engages
@@ -240,12 +244,12 @@ export function seedPipelines(): Pipeline[] {
     {
       id: 'pl_quick',
       name: 'Quick implement',
-      agentKinds: ['coder', 'blueprints', 'tester', 'conflicts', 'ci', 'merger'],
+      agentKinds: ['coder', 'blueprints', 'mocker', 'tester', 'conflicts', 'ci', 'merger'],
     },
     {
       id: 'pl_integrate',
       name: 'Integrate & ship',
-      agentKinds: ['integrator', 'tester', 'documenter'],
+      agentKinds: ['integrator', 'mocker', 'tester', 'documenter'],
     },
     // Recurring-pipeline presets. "Dependency updates" is a plain implement →
     // review → merge run; "Tech debt" first runs a read-only `analysis` agent and
@@ -255,7 +259,16 @@ export function seedPipelines(): Pipeline[] {
     {
       id: 'pl_dep_update',
       name: 'Dependency updates',
-      agentKinds: ['coder', 'blueprints', 'tester', 'reviewer', 'conflicts', 'ci', 'merger'],
+      agentKinds: [
+        'coder',
+        'blueprints',
+        'mocker',
+        'tester',
+        'reviewer',
+        'conflicts',
+        'ci',
+        'merger',
+      ],
     },
     {
       id: 'pl_tech_debt',
@@ -265,6 +278,7 @@ export function seedPipelines(): Pipeline[] {
         'tracker',
         'coder',
         'blueprints',
+        'mocker',
         'tester',
         'reviewer',
         'conflicts',

@@ -1,5 +1,8 @@
 import * as v from 'valibot'
 import { subscriptionVendorSchema } from './vendor-credentials.js'
+import { agentConfigValuesSchema } from './agent-config.js'
+import { testReportSchema } from './testing.js'
+import { cloudProviderSchema, instanceSizeSchema } from './provisioning.js'
 import {
   agentKindSchema,
   agentStateSchema,
@@ -8,7 +11,6 @@ import {
   blockTypeSchema,
   positionSchema,
   sizeSchema,
-  testTargetSchema,
 } from './primitives.js'
 
 // ---------------------------------------------------------------------------
@@ -69,11 +71,37 @@ export const blockSchema = v.object({
    */
   modelId: v.optional(v.string()),
   /**
-   * Where this block's acceptance / Playwright tests run — in project CI via
-   * GitHub Actions, or against the provisioned ephemeral environment. Drives the
-   * acceptance-testing agents' prompt. Absent means no preference recorded.
+   * Task-level configuration values contributed by the agents in the task's
+   * pipeline (see {@link agentConfigValuesSchema}) — a sparse id→value map. Each
+   * value is editable until its contributing agent's step starts, then freezes.
+   * Used e.g. for the Tester's `tester.environment` (local vs ephemeral) choice.
+   * Only meaningful on `task`-level blocks.
    */
-  testTarget: v.optional(testTargetSchema),
+  agentConfig: v.optional(agentConfigValuesSchema),
+  /**
+   * Service-level (frame-only): path to the service's docker-compose file used to
+   * stand up the Tester's local infra dependencies, relative to the repo root
+   * (e.g. `docker-compose.yml`). Autodiscovered when the service is added but may
+   * be set later. Mutually exclusive with {@link noInfraDependencies}; a Tester
+   * pipeline cannot start until one of the two is set.
+   */
+  testComposePath: v.optional(v.string()),
+  /**
+   * Service-level (frame-only): the service has no infra dependencies to stand up,
+   * so the Tester spins nothing up. When true {@link testComposePath} is ignored.
+   */
+  noInfraDependencies: v.optional(v.boolean()),
+  /**
+   * Service-level (frame-only): the cloud provider this service's container jobs
+   * run on. Absent means the owning account's `defaultCloudProvider`.
+   */
+  cloudProvider: v.optional(cloudProviderSchema),
+  /**
+   * Service-level (frame-only): the abstract instance size for this service's
+   * container jobs, resolved to a provider-specific id at dispatch. Absent means
+   * the built-in default size.
+   */
+  instanceSize: v.optional(instanceSizeSchema),
   /**
    * The pull request the block's implementation ("implementer") agent opened for
    * its work. Set on a task once its container agent pushes a branch and opens a
@@ -462,6 +490,25 @@ export const conflictsStepStateSchema = v.object({
 export type ConflictsStepState = v.InferOutput<typeof conflictsStepStateSchema>
 
 /**
+ * State a `tester` step carries while it runs the Tester → Fixer loop. Unlike `ci`,
+ * the gate's own work IS a container job (the Tester); on a withheld greenlight the
+ * engine loops a `fixer` container agent and re-tests.
+ *   - `phase: 'testing'` — a Tester job is in flight (tracked via the step's `jobId`).
+ *   - `phase: 'fixing'`  — a Fixer job is in flight; on completion the step returns to
+ *                          `testing` and a fresh Tester job is dispatched.
+ */
+export const testerStepStateSchema = v.object({
+  phase: v.picklist(['testing', 'fixing']),
+  /** How many `fixer` attempts have been dispatched so far. */
+  attempts: v.number(),
+  /** Ceiling on fixer attempts, resolved from the task's merge preset at step start. */
+  maxAttempts: v.number(),
+  /** The most recent Tester report (what was tested, outcomes, concerns, greenlight). */
+  lastReport: v.optional(v.nullable(testReportSchema)),
+})
+export type TesterStepState = v.InferOutput<typeof testerStepStateSchema>
+
+/**
  * Per-step LLM observability rollup: a compact aggregate over every model call the
  * step's container made, recorded by the LLM proxy and summed by the engine for the
  * board. It surfaces, at a glance, token usage, how close the step ran to its
@@ -504,6 +551,8 @@ export const pipelineStepSchema = v.object({
   ci: v.optional(v.nullable(ciStepStateSchema)),
   /** Live conflict-gate state while a `conflicts` step checks/resolves mergeability. */
   conflicts: v.optional(v.nullable(conflictsStepStateSchema)),
+  /** Live Tester→Fixer loop state while a `tester` step runs/fixes; see {@link testerStepStateSchema}. */
+  test: v.optional(v.nullable(testerStepStateSchema)),
   /** Live subtask counts while an async (container) step runs; see {@link stepSubtasksSchema}. */
   subtasks: v.optional(stepSubtasksSchema),
   /**

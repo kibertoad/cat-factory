@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { DropdownMenuItem } from '@nuxt/ui'
+import type { CloudProvider } from '~/types/domain'
 
 // Account + board switching. Picks the active account (personal / org) and the
 // active board within it, and manages boards (new / rename / delete). The account
@@ -20,6 +21,27 @@ function notifyError(title: string, e: unknown) {
   })
 }
 
+// The cloud provider new services in the active account default to (a service may
+// override it per-frame). `docker` is the local Docker/Podman backend.
+const PROVIDERS: { value: CloudProvider; label: string }[] = [
+  { value: 'cloudflare', label: 'Cloudflare' },
+  { value: 'docker', label: 'Docker (local)' },
+  { value: 'aws', label: 'AWS' },
+  { value: 'gcp', label: 'GCP' },
+  { value: 'azure', label: 'Azure' },
+  { value: 'custom', label: 'Custom' },
+]
+
+async function setDefaultProvider(provider: CloudProvider) {
+  const id = accounts.activeAccountId
+  if (!id) return
+  try {
+    await accounts.setDefaultCloudProvider(id, provider)
+  } catch (e) {
+    notifyError('Could not update default provider', e)
+  }
+}
+
 // ---- account + board menus -------------------------------------------------
 const accountItems = computed<DropdownMenuItem[][]>(() => [
   accounts.accounts.map((a) => ({
@@ -28,7 +50,26 @@ const accountItems = computed<DropdownMenuItem[][]>(() => [
     trailingIcon: a.id === accounts.activeAccountId ? 'i-lucide-check' : undefined,
     onSelect: () => void selectAccount(a.id),
   })),
-  [{ label: 'New organization…', icon: 'i-lucide-plus', onSelect: () => openPrompt('account') }],
+  [
+    { label: 'New organization…', icon: 'i-lucide-plus', onSelect: () => openPrompt('account') },
+    // Owners can set the account-wide default provider new services inherit.
+    ...(accounts.activeAccount?.role === 'owner'
+      ? [
+          {
+            label: 'Default cloud provider',
+            icon: 'i-lucide-cloud',
+            children: PROVIDERS.map((p) => ({
+              label: p.label,
+              trailingIcon:
+                (accounts.activeAccount?.defaultCloudProvider ?? 'cloudflare') === p.value
+                  ? 'i-lucide-check'
+                  : undefined,
+              onSelect: () => void setDefaultProvider(p.value),
+            })),
+          },
+        ]
+      : []),
+  ],
 ])
 
 const boardItems = computed<DropdownMenuItem[][]>(() => [
