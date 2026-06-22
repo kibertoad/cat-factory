@@ -1092,6 +1092,40 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         expect(step.output).toMatch(/from [1-9]\d* task/)
       })
 
+      it('skips a disabled step at run start but keeps it in the saved pipeline', async () => {
+        // A step the pipeline marks `enabled[i] === false` is kept in the saved
+        // pipeline (so it can be toggled back on) but skipped when the run is built —
+        // the execution instance contains only the enabled steps. Disabling the FIRST
+        // step also exercises "the first SURVIVING step starts working". Driven on both
+        // runtimes so the skip can't drift between the facades.
+        const app = harness.makeApp({ confidence: 1 })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Docs (researcher disabled)',
+          agentKinds: ['researcher', 'documenter', 'integrator'],
+          enabled: [false, true, true],
+        })
+        expect(pipeline.status).toBe(201)
+        const start = await app.call<ExecutionInstance>(
+          'POST',
+          `/workspaces/${wsId}/blocks/task_login/executions`,
+          { pipelineId: pipeline.body.id },
+        )
+        expect(start.status).toBe(201)
+        const ticked = await app.drive(wsId)
+        const exec = ticked.find((e) => e.blockId === 'task_login')!
+        expect(exec.status).toBe('done')
+        // The disabled researcher never ran — the run is built only from the enabled
+        // steps — while the saved pipeline still carries all three.
+        expect(exec.steps.map((s) => s.agentKind)).toEqual(['documenter', 'integrator'])
+        const saved = (
+          await app.call<Pipeline[]>('GET', `/workspaces/${wsId}/pipelines`)
+        ).body.find((p) => p.id === pipeline.body.id)!
+        expect(saved.agentKinds).toEqual(['researcher', 'documenter', 'integrator'])
+        expect(saved.enabled).toEqual([false, true, true])
+      })
+
       it("substitutes a block's reworked requirements for its description in every step", async () => {
         // Once a task's requirements have been reworked ("incorporated"), that
         // standard-format document — not the raw description — is what every agent step
@@ -1138,7 +1172,10 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         const wsId = workspace.id
         await app.seedIncorporatedReview(wsId, 'task_login', '# Login — Requirements')
 
-        const res = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/requirement-review/re-review`)
+        const res = await app.call(
+          'POST',
+          `/workspaces/${wsId}/blocks/task_login/requirement-review/re-review`,
+        )
         expect(res.status).toBe(409)
       })
 
@@ -1220,6 +1257,67 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         const companionStep = exec.steps.find((s) => s.agentKind === 'reviewer')!
         expect(companionStep.companion?.verdicts.map((v) => v.passed)).toEqual([false, true])
         // Exactly one automatic rework was consumed from the budget.
+        expect(companionStep.companion?.attempts).toBe(1)
+      })
+
+      it('reviews the spec-writer with its companion and reworks it without a human gate', async () => {
+        // The Spec Writer is no longer human-gated by default: its `spec-companion`
+        // (Spec Reviewer) rates the spec, and below threshold loops the spec-writer
+        // back for automatic rework — NO human decision is raised. A first failing
+        // grade then a passing re-grade drives the loop to completion, pinning that
+        // the spec quality gate is automatic on both runtimes.
+        const spec = {
+          service: 'Auth',
+          summary: 'Authentication service',
+          groups: [
+            {
+              name: 'Login',
+              requirements: [
+                {
+                  id: 'req-login',
+                  title: 'Login',
+                  statement: 'The system SHALL let a user log in.',
+                  kind: 'functional',
+                  priority: 'must',
+                  acceptance: [
+                    {
+                      id: 'ac-1',
+                      given: 'a registered user',
+                      when: 'they sign in',
+                      outcome: 'a session starts',
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+          rules: [],
+        }
+        const app = harness.makeApp({ spec, companionRatings: [0.4, 1] })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Spec + reviewer',
+          agentKinds: ['spec-writer', 'spec-companion'],
+        })
+        expect(pipeline.status).toBe(201)
+        const start = await app.call<ExecutionInstance>(
+          'POST',
+          `/workspaces/${wsId}/blocks/task_login/executions`,
+          { pipelineId: pipeline.body.id },
+        )
+        expect(start.status).toBe(201)
+        const ticked = await app.drive(wsId)
+        const exec = ticked.find((e) => e.blockId === 'task_login')!
+        // Completed straight through — the spec never paused for a human decision.
+        expect(exec.status).toBe('done')
+        expect(exec.steps.some((s) => s.state === 'waiting_decision')).toBe(false)
+        // The spec-writer re-ran after the failing grade and finished.
+        expect(exec.steps.find((s) => s.agentKind === 'spec-writer')!.state).toBe('done')
+        // The companion recorded both cycles (rejected then passed), consuming exactly
+        // one automatic rework from the budget.
+        const companionStep = exec.steps.find((s) => s.agentKind === 'spec-companion')!
+        expect(companionStep.companion?.verdicts.map((v) => v.passed)).toEqual([false, true])
         expect(companionStep.companion?.attempts).toBe(1)
       })
 

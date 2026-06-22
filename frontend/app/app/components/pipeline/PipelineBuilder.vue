@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import type { AgentKind } from '~/types/domain'
+import type { AgentKind, Pipeline } from '~/types/domain'
 import AgentPalette from '~/components/palettes/AgentPalette.vue'
 import AgentKindIcon from '~/components/pipeline/AgentKindIcon.vue'
 import { agentKindMeta } from '~/utils/catalog'
@@ -56,16 +56,40 @@ function placeholder(what: string) {
 }
 
 async function save() {
+  const wasEditing = pipelines.editingId !== null
   try {
     const saved = await pipelines.saveDraft()
     if (saved) {
-      toast.add({ title: `Saved “${saved.name}”`, color: 'success', icon: 'i-lucide-check' })
+      toast.add({
+        title: wasEditing ? `Updated “${saved.name}”` : `Saved “${saved.name}”`,
+        color: 'success',
+        icon: 'i-lucide-check',
+      })
       ui.builderOpen = false
     } else {
       toast.add({ title: 'Add at least one agent first', color: 'warning' })
     }
   } catch {
     toast.add({ title: 'Could not save pipeline', color: 'error' })
+  }
+}
+
+/** Load a custom pipeline into the draft for in-place editing. */
+function edit(p: Pipeline) {
+  pipelines.loadForEdit(p)
+}
+
+/** Clone any pipeline (incl. a read-only built-in) into an editable copy, then edit it. */
+async function clone(p: Pipeline) {
+  try {
+    const copy = await pipelines.clonePipeline(p.id)
+    toast.add({
+      title: `Cloned “${p.name}” — now editing “${copy.name}”`,
+      color: 'success',
+      icon: 'i-lucide-copy',
+    })
+  } catch {
+    toast.add({ title: 'Could not clone pipeline', color: 'error' })
   }
 }
 </script>
@@ -127,13 +151,30 @@ async function save() {
               v-for="(kind, i) in pipelines.draft"
               :key="i"
               class="flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/60 p-2"
+              :class="{ 'opacity-50': pipelines.draftEnabled[i] === false }"
             >
               <span class="w-4 shrink-0 text-center text-[10px] text-slate-500">{{ i + 1 }}</span>
               <AgentKindIcon :kind="kind" icon-class="h-4 w-4" />
-              <span class="min-w-0 flex-1 truncate text-xs text-slate-100">
+              <span
+                class="min-w-0 flex-1 truncate text-xs text-slate-100"
+                :class="{ 'line-through': pipelines.draftEnabled[i] === false }"
+              >
                 {{ agentKindMeta(kind).label }}
               </span>
               <div class="flex shrink-0 items-center">
+                <!-- Enable/disable: keep the step in the pipeline but skip it at run. -->
+                <UButton
+                  :icon="pipelines.draftEnabled[i] === false ? 'i-lucide-eye-off' : 'i-lucide-eye'"
+                  :color="pipelines.draftEnabled[i] === false ? 'neutral' : 'primary'"
+                  variant="ghost"
+                  size="xs"
+                  :title="
+                    pipelines.draftEnabled[i] === false
+                      ? 'Step disabled (skipped at run) — click to enable'
+                      : 'Disable this step (kept in the pipeline but skipped at run)'
+                  "
+                  @click="pipelines.toggleDraftEnabled(i)"
+                />
                 <!-- Approval gate: pause after this step so a human reviews (and
                      can edit) its proposal before the next step runs. -->
                 <UButton
@@ -201,18 +242,53 @@ async function save() {
                       class="h-3.5 w-3.5 shrink-0 text-slate-500"
                     />
                     <span class="min-w-0 flex-1 truncate text-xs text-slate-200">{{ p.name }}</span>
+                    <UBadge
+                      v-if="p.builtin"
+                      color="neutral"
+                      variant="soft"
+                      size="xs"
+                      class="shrink-0"
+                    >
+                      default
+                    </UBadge>
                     <span class="shrink-0 text-[10px] text-slate-500">
                       {{ p.agentKinds.length }} {{ p.agentKinds.length === 1 ? 'step' : 'steps' }}
                     </span>
                   </button>
-                  <UButton
-                    icon="i-lucide-trash-2"
-                    color="neutral"
-                    variant="ghost"
-                    size="xs"
-                    class="opacity-0 transition group-hover:opacity-100"
-                    @click="pipelines.removePipeline(p.id)"
-                  />
+                  <div
+                    class="flex shrink-0 items-center opacity-0 transition group-hover:opacity-100"
+                  >
+                    <!-- Clone is available on every pipeline — it's how a read-only
+                         built-in template becomes an editable copy. -->
+                    <UButton
+                      icon="i-lucide-copy"
+                      color="neutral"
+                      variant="ghost"
+                      size="xs"
+                      :title="p.builtin ? 'Clone this default into an editable copy' : 'Clone'"
+                      @click="clone(p)"
+                    />
+                    <!-- Built-in templates are read-only; only custom pipelines edit in place. -->
+                    <UButton
+                      v-if="!p.builtin"
+                      icon="i-lucide-pencil"
+                      color="neutral"
+                      variant="ghost"
+                      size="xs"
+                      title="Edit this pipeline"
+                      @click="edit(p)"
+                    />
+                    <!-- Built-in templates are read-only — they can be cloned but not
+                         deleted (the backend rejects it too); only custom ones delete. -->
+                    <UButton
+                      v-if="!p.builtin"
+                      icon="i-lucide-trash-2"
+                      color="neutral"
+                      variant="ghost"
+                      size="xs"
+                      @click="pipelines.removePipeline(p.id)"
+                    />
+                  </div>
                 </div>
 
                 <!-- Full ordered step list, revealed on click. -->
@@ -220,7 +296,13 @@ async function save() {
                   v-if="expandedSaved.has(p.id)"
                   class="space-y-1 border-t border-slate-800 px-2 py-2 pl-7"
                 >
-                  <li v-for="(k, i) in p.agentKinds" :key="i" class="flex items-center gap-2">
+                  <li
+                    v-for="(k, i) in p.agentKinds"
+                    :key="i"
+                    class="flex items-center gap-2"
+                    :class="{ 'opacity-50 line-through': p.enabled?.[i] === false }"
+                    :title="p.enabled?.[i] === false ? 'Disabled — skipped at run' : undefined"
+                  >
                     <span class="w-4 shrink-0 text-center text-[10px] text-slate-500">{{
                       i + 1
                     }}</span>
@@ -237,7 +319,7 @@ async function save() {
     <template #footer>
       <div class="flex w-full items-center justify-between">
         <UButton color="neutral" variant="ghost" size="sm" @click="pipelines.clearDraft()">
-          Clear
+          {{ pipelines.editingId ? 'Cancel edit' : 'Clear' }}
         </UButton>
         <UButton
           color="primary"
@@ -246,7 +328,7 @@ async function save() {
           :disabled="pipelines.draft.length === 0"
           @click="save"
         >
-          Save pipeline
+          {{ pipelines.editingId ? 'Update pipeline' : 'Save pipeline' }}
         </UButton>
       </div>
     </template>

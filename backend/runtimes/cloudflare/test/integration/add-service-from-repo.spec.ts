@@ -116,11 +116,9 @@ describe('add service from existing repo', () => {
 
     // Toggle the monorepo flag — this PATCH writes `github_repos.is_monorepo`, so it
     // exercises the column added by migration 0044 (a missing column 500s the update).
-    const patched = await app.call<GitHubRepo>(
-      'PATCH',
-      `/workspaces/${ws}/github/repos/101`,
-      { isMonorepo: true },
-    )
+    const patched = await app.call<GitHubRepo>('PATCH', `/workspaces/${ws}/github/repos/101`, {
+      isMonorepo: true,
+    })
     expect(patched.status).toBe(200)
     expect(patched.body.isMonorepo).toBe(true)
 

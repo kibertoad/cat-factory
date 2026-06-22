@@ -24,8 +24,7 @@ function rowToPreset(row: MergePresetRow): MergeThresholdPreset {
     maxImpact: row.max_impact,
     ciMaxAttempts: row.ci_max_attempts,
     maxRequirementIterations: row.max_requirement_iterations,
-    maxRequirementConcernAllowed:
-      row.max_requirement_concern_allowed as RequirementConcernLevel,
+    maxRequirementConcernAllowed: row.max_requirement_concern_allowed as RequirementConcernLevel,
     isDefault: row.is_default === 1,
     createdAt: row.created_at,
   }

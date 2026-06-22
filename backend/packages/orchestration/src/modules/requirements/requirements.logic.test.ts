@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import type { RequirementReviewItem, ReviewItemSeverity, ReviewItemStatus } from '@cat-factory/kernel'
+import type {
+  RequirementReviewItem,
+  ReviewItemSeverity,
+  ReviewItemStatus,
+} from '@cat-factory/kernel'
 import { buildReviewPrompt, disposeReview } from './requirements.logic.js'
 
 function item(
@@ -32,9 +36,9 @@ describe('disposeReview', () => {
   })
 
   it('auto-passes when every finding is at or below the tolerated severity', () => {
-    expect(disposeReview([item('low'), item('medium')], { ...budget, concernThreshold: 'medium' })).toBe(
-      'auto-pass',
-    )
+    expect(
+      disposeReview([item('low'), item('medium')], { ...budget, concernThreshold: 'medium' }),
+    ).toBe('auto-pass')
     // A single high finding above the medium bar still stops.
     expect(
       disposeReview([item('low'), item('high')], { ...budget, concernThreshold: 'medium' }),

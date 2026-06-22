@@ -100,6 +100,8 @@ export interface PipelineRepository {
   listByWorkspace(workspaceId: string): Promise<Pipeline[]>
   get(workspaceId: string, id: string): Promise<Pipeline | null>
   insert(workspaceId: string, pipeline: Pipeline): Promise<void>
+  /** Overwrite an existing pipeline in place (preserving its catalog order). */
+  update(workspaceId: string, pipeline: Pipeline): Promise<void>
   delete(workspaceId: string, id: string): Promise<void>
 }
 

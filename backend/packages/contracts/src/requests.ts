@@ -140,8 +140,34 @@ export const createPipelineSchema = v.object({
    * default threshold". Optional.
    */
   thresholds: v.optional(v.array(v.nullable(v.pipe(v.number(), v.minValue(0), v.maxValue(1))))),
+  /**
+   * Per-step enable flags, parallel to {@link agentKinds}. `false` keeps the step in
+   * the pipeline but skips it at run start. Optional; omitted means every step runs.
+   */
+  enabled: v.optional(v.array(v.boolean())),
 })
 export type CreatePipelineInput = v.InferOutput<typeof createPipelineSchema>
+
+/**
+ * Edit an existing (non-built-in) pipeline. Every field is optional — only the
+ * supplied fields change; `agentKinds` (when present) replaces the whole chain and
+ * re-aligns the parallel arrays. Built-in pipelines reject this (clone them first).
+ */
+export const updatePipelineSchema = v.object({
+  name: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(120))),
+  agentKinds: v.optional(v.pipe(v.array(agentKindSchema), v.minLength(1))),
+  gates: v.optional(v.array(v.boolean())),
+  thresholds: v.optional(v.array(v.nullable(v.pipe(v.number(), v.minValue(0), v.maxValue(1))))),
+  enabled: v.optional(v.array(v.boolean())),
+})
+export type UpdatePipelineInput = v.InferOutput<typeof updatePipelineSchema>
+
+/** Clone any pipeline (built-in or custom) into a new, editable copy. */
+export const clonePipelineSchema = v.object({
+  /** Name for the copy. Optional; defaults to "<source name> (copy)". */
+  name: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(120))),
+})
+export type ClonePipelineInput = v.InferOutput<typeof clonePipelineSchema>
 
 export const startExecutionSchema = v.object({
   pipelineId: v.pipe(v.string(), v.minLength(1)),

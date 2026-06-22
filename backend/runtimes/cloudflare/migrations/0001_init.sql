@@ -31,6 +31,12 @@ CREATE TABLE pipelines (
   id           TEXT NOT NULL,
   name         TEXT NOT NULL,
   agent_kinds  TEXT NOT NULL DEFAULT '[]', gates TEXT, thresholds TEXT,
+  -- enabled: nullable JSON array of per-step enable flags, parallel to agent_kinds; a
+  --          step whose flag is false is kept in the pipeline but skipped at run start.
+  -- builtin: 1 for the curated seedPipelines() catalog templates (read-only — clone to
+  --          edit), NULL for user-created and cloned pipelines.
+  enabled      TEXT,
+  builtin      INTEGER,
   PRIMARY KEY (workspace_id, id)
 );
 CREATE TABLE token_usage (

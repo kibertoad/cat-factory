@@ -1,4 +1,8 @@
-import { createPipelineSchema } from '@cat-factory/contracts'
+import {
+  clonePipelineSchema,
+  createPipelineSchema,
+  updatePipelineSchema,
+} from '@cat-factory/contracts'
 import { Hono } from 'hono'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
@@ -17,6 +21,22 @@ export function pipelineController(): Hono<AppEnv> {
       .get('container')
       .pipelineService.create(param(c, 'workspaceId'), c.req.valid('json'))
     return c.json(pipeline, 201)
+  })
+
+  // Clone any pipeline (built-in or custom) into a new, editable copy.
+  app.post('/pipelines/:pipelineId/clone', jsonBody(clonePipelineSchema), async (c) => {
+    const pipeline = await c
+      .get('container')
+      .pipelineService.clone(param(c, 'workspaceId'), param(c, 'pipelineId'), c.req.valid('json'))
+    return c.json(pipeline, 201)
+  })
+
+  // Edit a custom pipeline in place. Built-in pipelines reject this (clone first).
+  app.patch('/pipelines/:pipelineId', jsonBody(updatePipelineSchema), async (c) => {
+    const pipeline = await c
+      .get('container')
+      .pipelineService.update(param(c, 'workspaceId'), param(c, 'pipelineId'), c.req.valid('json'))
+    return c.json(pipeline)
   })
 
   app.delete('/pipelines/:pipelineId', async (c) => {

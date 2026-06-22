@@ -65,9 +65,7 @@ const sortedItems = computed<RequirementReviewItem[]>(() => {
 })
 
 const openCount = computed(() => (review.value ? requirements.openCount(review.value) : 0))
-const answeredCount = computed(() =>
-  review.value ? requirements.answeredCount(review.value) : 0,
-)
+const answeredCount = computed(() => (review.value ? requirements.answeredCount(review.value) : 0))
 const status = computed(() => review.value?.status ?? null)
 const merged = computed(() => status.value === 'merged')
 const exceeded = computed(() => status.value === 'exceeded')
@@ -361,11 +359,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                     <div class="min-w-0 flex-1">
                       <div class="flex flex-wrap items-center gap-1.5">
                         <span class="text-sm font-medium text-white">{{ item.title }}</span>
-                        <UBadge
-                          size="xs"
-                          variant="subtle"
-                          :color="SEVERITY_COLOR[item.severity]"
-                        >
+                        <UBadge size="xs" variant="subtle" :color="SEVERITY_COLOR[item.severity]">
                           {{ item.severity }}
                         </UBadge>
                         <UBadge size="xs" variant="outline" color="neutral">

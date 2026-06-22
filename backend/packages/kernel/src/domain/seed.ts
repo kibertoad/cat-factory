@@ -133,8 +133,10 @@ export function seedPipelines(): Pipeline[] {
       // `requirements` runs first and reviews the collected requirements; the
       // spec-writer then folds them into the in-repo spec, and only THEN does the
       // architect design the solution — against that written spec (the architect is
-      // spec-aware, so it reads `spec/` from its checkout). All three pause for human
-      // approval (their proposals are reviewed/edited before the next step), while
+      // spec-aware, so it reads `spec/` from its checkout). The requirements review and
+      // the architecture pause for human approval (their proposals are reviewed/edited
+      // before the next step); the spec is NOT human-gated — its `spec-companion`
+      // (Spec Reviewer) rates it and loops the spec-writer back automatically instead.
       // `blueprints` runs right after implementation so the service map (and the board)
       // is refreshed from the just-written code, on the same PR branch. `conflicts`
       // then ensures the PR is mergeable with its base — looping a `conflict-resolver`
@@ -149,8 +151,15 @@ export function seedPipelines(): Pipeline[] {
         // branch BEFORE the architect and coder run — so the spec (and its Gherkin
         // acceptance scenarios) is the source of truth the architect designs against
         // and the code is written to satisfy. Every task's work branch is created up
-        // front, so the read-only architect reads what the spec-writer committed.
+        // front, so the read-only architect reads what the spec-writer committed. It
+        // is NOT human-gated: the `spec-companion` (Spec Reviewer) below rates the
+        // spec and loops the spec-writer back for automatic rework below threshold.
         'spec-writer',
+        // `spec-companion` is the spec-writer's optional reviewer: it grades the
+        // spec (especially acceptance-scenario coverage), and below its threshold
+        // loops the spec-writer back with the feedback folded in — replacing the
+        // human review the spec used to require.
+        'spec-companion',
         'architect',
         'researcher',
         'coder',
@@ -166,11 +175,26 @@ export function seedPipelines(): Pipeline[] {
         'ci',
         'merger',
       ],
-      // Gate the context requirements review, the spec (its acceptance scenarios are
-      // reviewed here) and the architecture proposal. The `mocker` / `tester` /
-      // `conflicts` / `ci` / `merger` tail is never human-gated (it gates/decides
-      // itself), so those slots are false.
-      gates: [true, true, true, false, false, false, false, false, false, false, false, false],
+      // Gate only the context requirements review (index 0) and the architecture
+      // proposal (`architect`, index 3). The spec is NO LONGER human-gated — its
+      // `spec-companion` (index 2) is the quality gate (rate + automatic rework). The
+      // `mocker` / `tester` / `conflicts` / `ci` / `merger` tail is never human-gated
+      // (it gates/decides itself), so those slots are false too.
+      gates: [
+        true,
+        false,
+        false,
+        true,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+      ],
     },
     {
       // The most thorough preset: a complex, full-stack feature run that engages
@@ -183,8 +207,8 @@ export function seedPipelines(): Pipeline[] {
       //   researcher          → investigate prior art, libraries and constraints
       //   spec-writer         → aggregate the clarified spec (+ acceptance scenarios)
       //                         onto the shared work branch BEFORE the design/code
-      //   spec-companion      → challenge acceptance-scenario coverage; loop back
-      //                         below threshold, then raise the human gate on a pass
+      //   spec-companion      → challenge acceptance-scenario coverage; loop the
+      //                         spec-writer back below threshold (no human gate)
       //   architect           → design the solution against the written spec
       //   architect-companion → challenge the design's quality; loop back below
       //                         threshold, then raise the human gate on a pass
@@ -219,16 +243,17 @@ export function seedPipelines(): Pipeline[] {
         'ci',
         'merger',
       ],
-      // Human gates: the context requirements review (index 0), and — after each
-      // companion has cleared its quality bar — the spec/acceptance scenarios (on
-      // `spec-companion`, index 3) and the architecture (on `architect-companion`,
-      // index 5). Every other step (including the self-gating conflicts / ci / merger
-      // tail and the auto-only `reviewer` companion) runs straight through.
+      // Human gates: the context requirements review (index 0) and — after its
+      // companion has cleared the quality bar — the architecture (on `architect-
+      // companion`, index 5). The spec is NOT human-gated: its `spec-companion`
+      // (index 3) rates it and loops the spec-writer back automatically. Every other
+      // step (including the self-gating conflicts / ci / merger tail and the auto-only
+      // `reviewer` companion) runs straight through.
       gates: [
         true,
         false,
         false,
-        true,
+        false,
         false,
         true,
         false,
@@ -296,7 +321,9 @@ export function seedPipelines(): Pipeline[] {
     // (and its Gherkin acceptance scenarios) independently.
     { id: 'pl_spec', name: 'Write spec', agentKinds: ['spec-writer'] },
   ]
-  return mergeRegisteredPipelines(builtins)
+  // Every curated catalog pipeline is a read-only template: it can be cloned into an
+  // editable copy but not edited in place (see PipelineService.update / clone).
+  return mergeRegisteredPipelines(builtins.map((p) => ({ ...p, builtin: true })))
 }
 
 /** Pipeline id of the blueprint-only run kicked off after a successful bootstrap. */

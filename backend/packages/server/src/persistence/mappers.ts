@@ -230,6 +230,10 @@ export interface PipelineRow {
   gates: string | null
   /** Nullable JSON array of per-step companion quality thresholds (migration 0035). */
   thresholds?: string | null
+  /** Nullable JSON array of per-step enable flags (migration 0002). */
+  enabled?: string | null
+  /** Truthy (1) for the curated built-in catalog templates (migration 0002). */
+  builtin?: number | boolean | null
 }
 
 export function rowToPipeline(row: PipelineRow): Pipeline {
@@ -239,6 +243,8 @@ export function rowToPipeline(row: PipelineRow): Pipeline {
     agentKinds: JSON.parse(row.agent_kinds) as Pipeline['agentKinds'],
     ...(row.gates ? { gates: JSON.parse(row.gates) as boolean[] } : {}),
     ...(row.thresholds ? { thresholds: JSON.parse(row.thresholds) as Pipeline['thresholds'] } : {}),
+    ...(row.enabled ? { enabled: JSON.parse(row.enabled) as boolean[] } : {}),
+    ...(row.builtin ? { builtin: true } : {}),
   }
 }
 

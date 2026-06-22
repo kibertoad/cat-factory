@@ -413,8 +413,32 @@ export function useApi() {
 
     createPipeline: (
       workspaceId: string,
-      body: { name: string; agentKinds: string[]; gates?: boolean[] },
+      body: {
+        name: string
+        agentKinds: string[]
+        gates?: boolean[]
+        thresholds?: (number | null)[]
+        enabled?: boolean[]
+      },
     ) => http<Pipeline>(`${ws(workspaceId)}/pipelines`, { method: 'POST', body }),
+
+    updatePipeline: (
+      workspaceId: string,
+      pipelineId: string,
+      body: {
+        name?: string
+        agentKinds?: string[]
+        gates?: boolean[]
+        thresholds?: (number | null)[]
+        enabled?: boolean[]
+      },
+    ) => http<Pipeline>(`${ws(workspaceId)}/pipelines/${pipelineId}`, { method: 'PATCH', body }),
+
+    clonePipeline: (workspaceId: string, pipelineId: string, body: { name?: string } = {}) =>
+      http<Pipeline>(`${ws(workspaceId)}/pipelines/${pipelineId}/clone`, {
+        method: 'POST',
+        body,
+      }),
 
     removePipeline: (workspaceId: string, pipelineId: string) =>
       http(`${ws(workspaceId)}/pipelines/${pipelineId}`, { method: 'DELETE' }),
@@ -641,7 +665,7 @@ export function useApi() {
     incorporateRequirements: (workspaceId: string, reviewId: string, feedback?: string) =>
       http<{ review: RequirementReview }>(
         `${ws(workspaceId)}/requirement-reviews/${encodeURIComponent(reviewId)}/incorporate`,
-        { method: 'POST', body: { ...(feedback ? { feedback } : {}) } },
+        { method: 'POST', body: feedback ? { feedback } : {} },
       ),
 
     // Re-review the incorporated document (one more reviewer pass). On convergence the
