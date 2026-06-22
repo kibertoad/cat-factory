@@ -41,4 +41,13 @@ describe('WebCryptoPasswordHasher', () => {
     expect(await hasher.verify('pw', 'pbkdf2-sha256$i=x$salt$hash')).toBe(false)
     expect(await hasher.verify('pw', '')).toBe(false)
   })
+
+  it('flags a weaker-cost or malformed hash for rehash, not a current-cost one', async () => {
+    const current = new WebCryptoPasswordHasher(2000)
+    expect(current.needsRehash(await current.hash('pw'))).toBe(false)
+    // A hash produced with fewer iterations should be upgraded on next login.
+    expect(current.needsRehash(await new WebCryptoPasswordHasher(1000).hash('pw'))).toBe(true)
+    // Anything unparseable is upgraded too (fail closed).
+    expect(current.needsRehash('garbage')).toBe(true)
+  })
 })

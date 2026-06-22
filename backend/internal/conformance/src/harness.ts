@@ -5,6 +5,7 @@ import type {
   WorkspaceSnapshot,
 } from '@cat-factory/kernel'
 import type { FakeAgentOptions } from './FakeAgentExecutor.js'
+import type { OnboardingProbe } from './onboarding.js'
 
 /**
  * An {@link ExecutionEventPublisher} that records every run snapshot the engine
@@ -89,6 +90,12 @@ export interface ConformanceApp {
    * without running a real container scan.
    */
   seedBlueprint(record: RepoBlueprintRecord): Promise<void>
+  /**
+   * The facade's user-identity + onboarding services over its real store, so the suite
+   * can assert identity/invitation behaviour parity (the unauthenticated HTTP `call`
+   * path can't reach the authenticated identity layer).
+   */
+  onboarding(): OnboardingProbe
 }
 
 export interface ConformanceHarness {

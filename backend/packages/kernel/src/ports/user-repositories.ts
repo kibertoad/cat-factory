@@ -52,6 +52,14 @@ export interface UserRepository {
   ): Promise<void>
   /** The user behind a linked identity, or null. */
   findByIdentity(provider: IdentityProvider, subject: string): Promise<UserRecord | null>
+  /**
+   * The user owning a primary email (case-insensitive), or null. Lets a verified
+   * second login provider (or password signup) attach to / be rejected against the
+   * existing person instead of colliding on the unique email index.
+   */
+  findByEmail(email: string): Promise<UserRecord | null>
+  /** Bulk-load users by id (the member-roster enrichment; order not guaranteed). */
+  listByIds(ids: string[]): Promise<UserRecord[]>
   /** The raw identity row (carries the password `secret`), or null. */
   getIdentity(provider: IdentityProvider, subject: string): Promise<UserIdentityRecord | null>
   /** Link an external identity to a user (idempotent on `(provider, subject)`). */

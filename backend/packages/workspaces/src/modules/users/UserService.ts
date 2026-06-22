@@ -4,6 +4,7 @@ import type {
   IdGenerator,
   IdentityProvider,
   PasswordHasher,
+  UserIdentityRecord,
   UserRecord,
   UserRepository,
 } from '@cat-factory/kernel'
@@ -28,9 +29,22 @@ export interface IdentityProfile {
   name?: string | null
   email?: string | null
   avatarUrl?: string | null
+  /**
+   * Whether the provider has verified the user owns `email`. Only a verified email is
+   * trusted to link this identity onto an existing same-email user (else two people
+   * who happen to share an email could merge into one account).
+   */
+  emailVerified?: boolean
   /** Provider-specific extras to persist as identity metadata (e.g. github login). */
   metadata?: Record<string, unknown>
 }
+
+// A fixed, well-formed PHC string the password verify path runs against when no
+// password identity exists, so a miss costs the same PBKDF2 work as a hit and the
+// response time can't be used to enumerate which emails are registered. It is NOT a
+// hash of any real password (the random salt + zero-filled digest never matches).
+const DUMMY_PASSWORD_HASH =
+  'pbkdf2-sha256$i=210000$AAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
 
 export class UserService {
   constructor(private readonly deps: UserServiceDependencies) {}
@@ -42,6 +56,11 @@ export class UserService {
   /** The user behind an external identity, or null (no side effects). */
   findByIdentity(provider: IdentityProvider, subject: string): Promise<UserRecord | null> {
     return this.deps.userRepository.findByIdentity(provider, subject)
+  }
+
+  /** Every linked login identity for a user (the account-settings "connected logins"). */
+  listIdentities(userId: string): Promise<UserIdentityRecord[]> {
+    return this.deps.userRepository.listIdentities(userId)
   }
 
   /**
@@ -56,10 +75,35 @@ export class UserService {
   ): Promise<UserRecord> {
     const existing = await this.deps.userRepository.findByIdentity(provider, subject)
     if (existing) return existing
+
+    let email = profile.email?.toLowerCase().trim() || null
+    // Is this email already owned by another user? (Unique-index-safe handling below.)
+    const emailOwner = email ? await this.deps.userRepository.findByEmail(email) : null
+    if (emailOwner) {
+      if (profile.emailVerified) {
+        // A second login provider for the same person — attach this identity to the
+        // existing same-email user instead of creating a duplicate (which would collide
+        // on the unique email index and 500).
+        await this.deps.userRepository.linkIdentity({
+          userId: emailOwner.id,
+          provider,
+          subject,
+          secret: null,
+          metadata: profile.metadata ? JSON.stringify(profile.metadata) : null,
+          createdAt: this.deps.clock.now(),
+        })
+        return emailOwner
+      }
+      // Unverified and the email belongs to someone else: never trusted to claim or
+      // merge it, and storing it would collide on the unique index. Create a distinct
+      // user with no email rather than failing the login.
+      email = null
+    }
+
     const user: UserRecord = {
       id: this.deps.idGenerator.next('usr'),
       name: profile.name?.trim() || null,
-      email: profile.email?.toLowerCase().trim() || null,
+      email,
       avatarUrl: profile.avatarUrl || null,
       createdAt: this.deps.clock.now(),
     }
@@ -106,7 +150,11 @@ export class UserService {
     if (input.password.length < 8) {
       throw new ValidationError('Password must be at least 8 characters')
     }
-    if (await this.deps.userRepository.getIdentity('password', email)) {
+    // Reject if ANY user already owns this email (not just a prior password identity):
+    // attaching a password to an existing OAuth-only account via an unauthenticated
+    // signup would be account takeover, and a duplicate would collide on the unique
+    // email index. The owner can add a password later from an authenticated session.
+    if (await this.deps.userRepository.findByEmail(email)) {
       throw new ConflictError('An account with that email already exists')
     }
     const user: UserRecord = {
@@ -135,8 +183,20 @@ export class UserService {
   async verifyPassword(input: { email: string; password: string }): Promise<UserRecord | null> {
     const email = input.email.toLowerCase().trim()
     const identity = await this.deps.userRepository.getIdentity('password', email)
-    if (!identity?.secret) return null
+    if (!identity?.secret) {
+      // Equalise timing with the hit path so the response time can't reveal whether the
+      // email is registered (PBKDF2 against a dummy hash that can never match).
+      await this.deps.passwordHasher.verify(input.password, DUMMY_PASSWORD_HASH)
+      return null
+    }
     if (!(await this.deps.passwordHasher.verify(input.password, identity.secret))) return null
+    // Transparently upgrade a weaker-cost hash now that we hold the plaintext.
+    if (this.deps.passwordHasher.needsRehash(identity.secret)) {
+      await this.deps.userRepository.linkIdentity({
+        ...identity,
+        secret: await this.deps.passwordHasher.hash(input.password),
+      })
+    }
     return this.deps.userRepository.get(identity.userId)
   }
 }

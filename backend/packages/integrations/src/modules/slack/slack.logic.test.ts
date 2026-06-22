@@ -78,7 +78,7 @@ describe('renderNotificationMessage', () => {
     const msg = renderNotificationMessage(
       notification({
         payload: {
-          assessment: { complexity: 0.4, risk: 0.2, impact: 0.9 },
+          assessment: { complexity: 0.4, risk: 0.2, impact: 0.9, rationale: 'looks good' },
           prUrl: 'https://github.com/a/b/pull/3',
           pipelineName: 'Full build',
         },

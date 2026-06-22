@@ -1509,5 +1509,122 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         expect(after.body.entries.find((e) => e.userId === 'usr_2')?.role).toBe('product')
       })
     })
+
+    // The user-identity + onboarding layer (users / user_identities / invitations).
+    // Driven through the facade's real services + store so a repository that maps a
+    // column differently, or a facade that forgot to wire the identity layer, fails the
+    // same assertion on every runtime. A unique email suffix keeps the persisted store
+    // (shared across a file's tests) collision-free.
+    describe('identity & onboarding', () => {
+      const uniqueEmail = (local: string) => `${local}-${crypto.randomUUID()}@conformance.test`
+
+      it('creates a user on first identity sight and is idempotent on (provider, subject)', async () => {
+        const ob = harness.makeApp().onboarding()
+        const email = uniqueEmail('gh')
+        const subject = uniqueEmail('sub-gh')
+        const first = await ob.users.findOrCreateByIdentity('github', subject, {
+          name: 'Octo Cat',
+          email,
+          emailVerified: true,
+        })
+        expect(first.id).toMatch(/^usr_/)
+        expect(first.email).toBe(email.toLowerCase())
+
+        // A repeat login for the same (provider, subject) returns the SAME user.
+        const again = await ob.users.findOrCreateByIdentity('github', subject, { email })
+        expect(again.id).toBe(first.id)
+        expect((await ob.users.findByIdentity('github', subject))?.id).toBe(first.id)
+        expect((await ob.users.get(first.id))?.id).toBe(first.id)
+        const identities = await ob.users.listIdentities(first.id)
+        expect(identities.some((i) => i.provider === 'github')).toBe(true)
+      })
+
+      it('links a second VERIFIED-email provider onto the same user (no email collision)', async () => {
+        const ob = harness.makeApp().onboarding()
+        const email = uniqueEmail('shared')
+        const viaGithub = await ob.users.findOrCreateByIdentity('github', uniqueEmail('s-gh'), {
+          email,
+          emailVerified: true,
+        })
+        const viaGoogle = await ob.users.findOrCreateByIdentity('google', uniqueEmail('s-goog'), {
+          email,
+          emailVerified: true,
+        })
+        // Same person, two logins — NOT a duplicate user / unique-index collision.
+        expect(viaGoogle.id).toBe(viaGithub.id)
+        const identities = await ob.users.listIdentities(viaGithub.id)
+        expect(identities.map((i) => i.provider).sort()).toEqual(['github', 'google'])
+      })
+
+      it('does NOT merge accounts on an UNVERIFIED same-email login', async () => {
+        const ob = harness.makeApp().onboarding()
+        const email = uniqueEmail('unver')
+        const verified = await ob.users.findOrCreateByIdentity('github', uniqueEmail('u-gh'), {
+          email,
+          emailVerified: true,
+        })
+        const unverified = await ob.users.findOrCreateByIdentity('google', uniqueEmail('u-goog'), {
+          email,
+          emailVerified: false,
+        })
+        // An unverified email is never trusted to claim the existing user — the second
+        // identity creates a distinct user (its own email stays null to avoid the index).
+        expect(unverified.id).not.toBe(verified.id)
+        expect(unverified.email).toBeNull()
+      })
+
+      it('signs up + verifies a password user, and rejects duplicate email / bad password', async () => {
+        const ob = harness.makeApp().onboarding()
+        const email = uniqueEmail('pw')
+        const user = await ob.users.signupWithPassword({
+          email,
+          password: 'correct horse battery',
+          name: 'PW User',
+        })
+        expect(user.id).toMatch(/^usr_/)
+
+        // Right password verifies to the same user; wrong password + unknown email → null.
+        const ok = await ob.users.verifyPassword({ email, password: 'correct horse battery' })
+        expect(ok?.id).toBe(user.id)
+        expect(await ob.users.verifyPassword({ email, password: 'wrong' })).toBeNull()
+        expect(
+          await ob.users.verifyPassword({ email: uniqueEmail('nope'), password: 'whatever' }),
+        ).toBeNull()
+
+        // A second signup for the same email is refused (no duplicate / takeover).
+        await expect(
+          ob.users.signupWithPassword({ email, password: 'another password' }),
+        ).rejects.toMatchObject({ name: 'ConflictError' })
+      })
+
+      it('invites + redeems org membership bound to the invited email', async () => {
+        const app = harness.makeApp()
+        const ob = app.onboarding()
+        if (!ob.invitations) return // facade without the invitation repository wired
+        const invitations = ob.invitations
+        const org = await ob.makeOrgOwner('Conformance Org')
+
+        const inviteeEmail = uniqueEmail('invitee')
+        const invitee = await ob.users.findOrCreateByIdentity('google', uniqueEmail('inv-goog'), {
+          email: inviteeEmail,
+          emailVerified: true,
+        })
+        const created = await invitations.invite(org.accountId, org.ownerUserId, inviteeEmail)
+        const peeked = await invitations.peek(created.token)
+        expect(peeked?.accountId).toBe(org.accountId)
+        expect(peeked?.email).toBe(inviteeEmail.toLowerCase())
+
+        // A mismatched email cannot redeem the invite (leaked-link / allowlist-bypass guard).
+        await expect(
+          invitations.accept(created.token, invitee.id, 'someone-else@conformance.test'),
+        ).rejects.toMatchObject({ name: 'ConflictError' })
+
+        // The intended invitee redeems and gains membership.
+        const accountId = await invitations.accept(created.token, invitee.id, inviteeEmail)
+        expect(accountId).toBe(org.accountId)
+        const members = await ob.members(org.accountId)
+        expect(members.some((m) => m.userId === invitee.id)).toBe(true)
+      })
+    })
   })
 }

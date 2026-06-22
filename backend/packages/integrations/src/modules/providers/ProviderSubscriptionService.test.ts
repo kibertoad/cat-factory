@@ -25,7 +25,7 @@ const fakeCipher: SecretCipher = {
 }
 
 const workspaceRepository: WorkspaceRepository = {
-  get: async (id) => ({ id, name: id }) as Workspace,
+  get: async (id: string) => ({ id, name: id }) as Workspace,
 } as unknown as WorkspaceRepository
 
 /** In-memory pool repo mirroring the D1/Drizzle window-reset usage semantics. */

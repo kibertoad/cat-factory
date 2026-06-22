@@ -15,7 +15,7 @@ import type { AuthConfig } from '../../config/types.js'
 import type { AppEnv } from '../../http/env.js'
 import { jsonBody } from '../../http/validation.js'
 import type { UserRecord } from '@cat-factory/kernel'
-import { ConflictError, ValidationError } from '@cat-factory/kernel'
+import { ConflictError, NotFoundError, ValidationError } from '@cat-factory/kernel'
 
 // Authentication endpoints. The SPA is handed a signed session token (via the URL
 // fragment for OAuth redirects, or the JSON body for password login) which it carries
@@ -217,10 +217,12 @@ export function authController(): Hono<AppEnv> {
     const identity = await oauth.fetchUser(accessToken)
 
     const container = c.get('container')
-    // An invite OR the allowlist admits the user. A signed invite token short-circuits
-    // the org allowlist (the inviter already vouched for them).
+    // An invite (matching this user's email) OR the allowlist admits the user. The
+    // invite short-circuits the org allowlist, so it is bound to the invited email —
+    // a leaked link can't admit an arbitrary GitHub account onto a private deployment.
     const invited = state.invite ? await peekInvite(c, state.invite) : null
-    if (!invited && !(await isGitHubSignInAllowed(oauth, accessToken, identity, cfg))) {
+    const inviteAdmits = invited != null && emailMatchesInvite(identity.email, invited.email)
+    if (!inviteAdmits && !(await isGitHubSignInAllowed(oauth, accessToken, identity, cfg))) {
       return c.json(
         { error: { code: 'forbidden', message: `@${identity.login} is not allowed to sign in` } },
         403,
@@ -229,6 +231,9 @@ export function authController(): Hono<AppEnv> {
     const user = await container.userService.findOrCreateByIdentity('github', String(identity.id), {
       name: identity.name,
       email: identity.email,
+      // GitHub only exposes an email it has verified for the account, so it is trusted
+      // to link this login onto an existing same-email user.
+      emailVerified: !!identity.email,
       avatarUrl: identity.avatarUrl,
       metadata: { login: identity.login },
     })
@@ -237,7 +242,7 @@ export function authController(): Hono<AppEnv> {
       login: identity.login,
       name: user.name,
     })
-    if (state.invite) await acceptInvite(c, state.invite, user.id)
+    if (state.invite) await acceptInvite(c, state.invite, user.id, user.email)
     const token = await mintSession(cfg, sessionUser(user, identity.login))
     return c.redirect(withToken(state.redirect, token))
   })
@@ -283,11 +288,14 @@ export function authController(): Hono<AppEnv> {
     const container = c.get('container')
 
     const existing = await container.userService.findByIdentity('google', identity.subject)
-    // Gate NEW-user creation: an invite OR an allowlisted email domain is required.
+    // Gate NEW-user creation: an invite (matching the verified email) OR an allowlisted
+    // VERIFIED email domain. An unverified Google email is never trusted to self-signup.
     const invited = state.invite ? await peekInvite(c, state.invite) : null
+    const verifiedEmail = identity.emailVerified ? identity.email : null
+    const inviteAdmits = invited != null && emailMatchesInvite(verifiedEmail, invited.email)
     if (!existing) {
       const allowed =
-        !!invited || (identity.email ? emailDomainAllowed(identity.email, cfg) : false)
+        inviteAdmits || (verifiedEmail ? emailDomainAllowed(verifiedEmail, cfg) : false)
       if (!allowed) {
         return c.json(
           { error: { code: 'forbidden', message: 'Sign-up requires an invitation' } },
@@ -298,6 +306,7 @@ export function authController(): Hono<AppEnv> {
     const user = await container.userService.findOrCreateByIdentity('google', identity.subject, {
       name: identity.name,
       email: identity.email,
+      emailVerified: identity.emailVerified,
       avatarUrl: identity.avatarUrl,
       metadata: { email: identity.email },
     })
@@ -306,7 +315,7 @@ export function authController(): Hono<AppEnv> {
       login: identity.email || user.id,
       name: user.name,
     })
-    if (state.invite) await acceptInvite(c, state.invite, user.id)
+    if (state.invite) await acceptInvite(c, state.invite, user.id, user.email)
     const token = await mintSession(cfg, sessionUser(user, identity.email || user.id))
     return c.redirect(withToken(state.redirect, token))
   })
@@ -319,9 +328,13 @@ export function authController(): Hono<AppEnv> {
     const body = c.req.valid('json')
     const container = c.get('container')
 
-    // New-user creation is gated: a valid invite OR an allowlisted email domain.
+    // New-user creation is gated: an invite addressed to this email OR an allowlisted
+    // email domain. The invite is bound to its email so a leaked link can't be used to
+    // self-register an arbitrary address on a private deployment.
     const invited = body.invite ? await peekInvite(c, body.invite) : null
-    const allowed = !!invited || emailDomainAllowed(body.email, cfg)
+    const allowed =
+      (invited != null && emailMatchesInvite(body.email, invited.email)) ||
+      emailDomainAllowed(body.email, cfg)
     if (!allowed) {
       return c.json(
         { error: { code: 'forbidden', message: 'Sign-up requires an invitation' } },
@@ -339,7 +352,7 @@ export function authController(): Hono<AppEnv> {
         login: user.email || user.id,
         name: user.name,
       })
-      if (body.invite) await acceptInvite(c, body.invite, user.id)
+      if (body.invite) await acceptInvite(c, body.invite, user.id, user.email)
       const token = await mintSession(cfg, sessionUser(user, user.email || user.id))
       return c.json({ token, user: sessionUser(user, user.email || user.id) }, 201)
     } catch (err) {
@@ -384,8 +397,22 @@ export function authController(): Hono<AppEnv> {
     if (!container.invitations) {
       return c.json({ error: { code: 'unavailable', message: 'Invitations not configured' } }, 503)
     }
-    const accountId = await container.invitations.accept(c.req.param('token'), user.id)
-    return c.json({ accountId })
+    try {
+      const accountId = await container.invitations.accept(
+        c.req.param('token'),
+        user.id,
+        user.email ?? null,
+      )
+      return c.json({ accountId })
+    } catch (err) {
+      if (err instanceof ConflictError) {
+        return c.json({ error: { code: 'conflict', message: err.message } }, 409)
+      }
+      if (err instanceof NotFoundError) {
+        return c.json({ error: { code: 'not_found', message: 'Invitation not found' } }, 404)
+      }
+      throw err
+    }
   })
 
   // Who am I? Used by the SPA to validate a stored token on boot.
@@ -429,12 +456,25 @@ async function peekInvite(c: Context<AppEnv>, token: string) {
   return inv ? inv.peek(token) : null
 }
 
-async function acceptInvite(c: Context<AppEnv>, token: string, userId: string): Promise<void> {
+/** Whether a sign-in email matches the address an invitation was sent to. */
+function emailMatchesInvite(signInEmail: string | null | undefined, inviteEmail: string): boolean {
+  return !!signInEmail && signInEmail.toLowerCase().trim() === inviteEmail
+}
+
+async function acceptInvite(
+  c: Context<AppEnv>,
+  token: string,
+  userId: string,
+  userEmail: string | null,
+): Promise<void> {
   const inv = c.get('container').invitations
   if (!inv) return
   try {
-    await inv.accept(token, userId)
-  } catch {
-    // A stale/expired invite must not block an otherwise-valid login.
+    await inv.accept(token, userId, userEmail)
+  } catch (err) {
+    // Expected invite states (expired / already-used / wrong email) must not block an
+    // otherwise-valid login; an unexpected infra error should still surface.
+    if (err instanceof ConflictError || err instanceof NotFoundError) return
+    throw err
   }
 }

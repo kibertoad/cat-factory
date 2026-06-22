@@ -157,14 +157,23 @@ export class InvitationService {
   /**
    * Redeem an invitation: grant the user membership in the org and mark it accepted.
    * Returns the account id joined.
+   *
+   * The redemption is bound to the invited email: the accepting user's verified email
+   * must match the address the invite was sent to. This stops a leaked accept link from
+   * admitting an arbitrary account (the invite token also short-circuits the sign-in
+   * allowlist, so without this binding any leaked link would be a private-deployment
+   * bypass). A user with no known email cannot redeem (fail closed).
    */
-  async accept(token: string, userId: string): Promise<string> {
+  async accept(token: string, userId: string, userEmail: string | null): Promise<string> {
     const record = await this.deps.invitationRepository.findByTokenHash(await sha256Hex(token))
     if (!record || record.status !== 'pending') {
       throw new NotFoundError('Invitation', 'token')
     }
     if (record.expiresAt < this.deps.clock.now()) {
       throw new ConflictError('This invitation has expired')
+    }
+    if (!userEmail || userEmail.toLowerCase().trim() !== record.email) {
+      throw new ConflictError('This invitation was sent to a different email address')
     }
     const membership: Membership = {
       accountId: record.accountId,

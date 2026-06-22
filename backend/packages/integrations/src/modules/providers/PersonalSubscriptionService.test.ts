@@ -40,10 +40,10 @@ class FakeSubs implements PersonalSubscriptionRepository {
   private live() {
     return this.rows.filter((r) => r.deletedAt === null)
   }
-  async getByUserVendor(userId: number, vendor: SubscriptionVendor) {
+  async getByUserVendor(userId: string, vendor: SubscriptionVendor) {
     return this.live().find((r) => r.userId === userId && r.vendor === vendor) ?? null
   }
-  async listByUser(userId: number) {
+  async listByUser(userId: string) {
     return this.live().filter((r) => r.userId === userId)
   }
   async upsert(record: PersonalSubscriptionRecord) {
@@ -55,11 +55,11 @@ class FakeSubs implements PersonalSubscriptionRepository {
     if (i >= 0) this.rows[i] = { ...record }
     else this.rows.push({ ...record })
   }
-  async markUsed(userId: number, vendor: SubscriptionVendor, at: number) {
+  async markUsed(userId: string, vendor: SubscriptionVendor, at: number) {
     const r = await this.getByUserVendor(userId, vendor)
     if (r) r.lastUsedAt = at
   }
-  async softDelete(userId: number, vendor: SubscriptionVendor, at: number) {
+  async softDelete(userId: string, vendor: SubscriptionVendor, at: number) {
     const r = await this.getByUserVendor(userId, vendor)
     if (r) r.deletedAt = at
   }
@@ -72,7 +72,7 @@ class FakeSubs implements PersonalSubscriptionRepository {
 
 class FakeActs implements SubscriptionActivationRepository {
   rows: SubscriptionActivationRecord[] = []
-  async get(executionId: string, userId: number, vendor: SubscriptionVendor, now: number) {
+  async get(executionId: string, userId: string, vendor: SubscriptionVendor, now: number) {
     return (
       this.rows.find(
         (r) =>
@@ -95,7 +95,7 @@ class FakeActs implements SubscriptionActivationRepository {
   }
   async refresh(
     executionId: string,
-    userId: number,
+    userId: string,
     vendor: SubscriptionVendor,
     expiresAt: number,
   ) {
@@ -132,7 +132,7 @@ function makeService(now: () => number = () => 1000) {
 describe('PersonalSubscriptionService', () => {
   it('stores the credential double-encrypted and never returns the secret', async () => {
     const { svc, subs } = makeService()
-    const status = await svc.store(7, {
+    const status = await svc.store('usr_7', {
       vendor: 'claude',
       label: 'mine',
       token: 'sk-ant-oat01-raw',
@@ -148,19 +148,24 @@ describe('PersonalSubscriptionService', () => {
   it('rejects a non-individual (poolable) vendor', async () => {
     const { svc } = makeService()
     await expect(
-      svc.store(7, { vendor: 'kimi', label: 'x', token: 't', password: 'longpassword' }),
+      svc.store('usr_7', { vendor: 'kimi', label: 'x', token: 't', password: 'longpassword' }),
     ).rejects.toBeInstanceOf(CredentialRequiredError)
   })
 
   it('activates a run and leases the decrypted token; unknown run lease fails', async () => {
     const { svc } = makeService()
-    await svc.store(7, { vendor: 'claude', label: 'm', token: 'TOKEN', password: 'longpassword' })
+    await svc.store('usr_7', {
+      vendor: 'claude',
+      label: 'm',
+      token: 'TOKEN',
+      password: 'longpassword',
+    })
 
-    await svc.activateForRun('exec_1', 7, 'claude', 'longpassword')
-    const leased = await svc.leaseForRun('exec_1', 7, 'claude')
+    await svc.activateForRun('exec_1', 'usr_7', 'claude', 'longpassword')
+    const leased = await svc.leaseForRun('exec_1', 'usr_7', 'claude')
     expect(leased).toEqual({ vendor: 'claude', secret: 'TOKEN' })
 
-    await expect(svc.leaseForRun('exec_other', 7, 'claude')).rejects.toMatchObject({
+    await expect(svc.leaseForRun('exec_other', 'usr_7', 'claude')).rejects.toMatchObject({
       code: 'credential_required',
       details: { vendor: 'claude', reason: 'password_required' },
     })
@@ -168,37 +173,44 @@ describe('PersonalSubscriptionService', () => {
 
   it('rejects a wrong password on activation', async () => {
     const { svc } = makeService()
-    await svc.store(7, { vendor: 'claude', label: 'm', token: 'T', password: 'rightpassword' })
+    await svc.store('usr_7', {
+      vendor: 'claude',
+      label: 'm',
+      token: 'T',
+      password: 'rightpassword',
+    })
     await expect(
-      svc.activateForRun('exec_1', 7, 'claude', 'wrongpassword!!'),
+      svc.activateForRun('exec_1', 'usr_7', 'claude', 'wrongpassword!!'),
     ).rejects.toMatchObject({ details: { reason: 'wrong_password' } })
   })
 
   it('blocks a lapsed subscription from unlocking', async () => {
     const { svc } = makeService(() => 10_000)
-    await svc.store(7, {
+    await svc.store('usr_7', {
       vendor: 'claude',
       label: 'm',
       token: 'T',
       password: 'longpassword',
       expiresAt: 9_000, // already past
     })
-    await expect(svc.activateForRun('exec_1', 7, 'claude', 'longpassword')).rejects.toMatchObject({
+    await expect(
+      svc.activateForRun('exec_1', 'usr_7', 'claude', 'longpassword'),
+    ).rejects.toMatchObject({
       details: { reason: 'subscription_expired' },
     })
   })
 
   it('clears a run and sweeps expired activations', async () => {
     const { svc, acts } = makeService()
-    await svc.store(7, { vendor: 'claude', label: 'm', token: 'T', password: 'longpassword' })
-    await svc.activateForRun('exec_1', 7, 'claude', 'longpassword')
+    await svc.store('usr_7', { vendor: 'claude', label: 'm', token: 'T', password: 'longpassword' })
+    await svc.activateForRun('exec_1', 'usr_7', 'claude', 'longpassword')
     expect(acts.rows).toHaveLength(1)
 
     await svc.clearRun('exec_1')
     expect(acts.rows).toHaveLength(0)
 
     // A directly-inserted stale activation is swept.
-    await svc.activateForRun('exec_2', 7, 'claude', 'longpassword')
+    await svc.activateForRun('exec_2', 'usr_7', 'claude', 'longpassword')
     acts.rows[0]!.expiresAt = 0
     expect(await svc.sweepExpiredActivations()).toBe(1)
   })
@@ -206,20 +218,20 @@ describe('PersonalSubscriptionService', () => {
   it('computes expiry/renewal status and lists expiring subscriptions', async () => {
     const day = 24 * 60 * 60 * 1000
     const { svc } = makeService(() => 0)
-    await svc.store(7, {
+    await svc.store('usr_7', {
       vendor: 'claude',
       label: 'm',
       token: 'T',
       password: 'longpassword',
       expiresAt: 3 * day,
     })
-    const [status] = await svc.list(7)
+    const [status] = await svc.list('usr_7')
     expect(status!.expiresInDays).toBe(3)
     expect(status!.expired).toBe(false)
     expect(status!.renewSoon).toBe(true) // within the 7-day warning window
 
     const expiring = await svc.expiringSubscriptions()
-    expect(expiring.map((r) => r.userId)).toEqual([7])
+    expect(expiring.map((r) => r.userId)).toEqual(['usr_7'])
   })
 
   it('uses a short (12h) activation TTL by default', () => {
@@ -228,14 +240,19 @@ describe('PersonalSubscriptionService', () => {
 
   it('enforces one personal password across a user’s individual-usage subscriptions', async () => {
     const { svc } = makeService()
-    await svc.store(7, { vendor: 'claude', label: 'c', token: 'T1', password: 'rightpassword' })
+    await svc.store('usr_7', {
+      vendor: 'claude',
+      label: 'c',
+      token: 'T1',
+      password: 'rightpassword',
+    })
     // A second vendor sealed under a DIFFERENT password is rejected up-front (validation),
     // since one run unlocks every vendor it touches with a single password.
     await expect(
-      svc.store(7, { vendor: 'glm', label: 'g', token: 'T2', password: 'otherpassword' }),
+      svc.store('usr_7', { vendor: 'glm', label: 'g', token: 'T2', password: 'otherpassword' }),
     ).rejects.toMatchObject({ code: 'validation' })
     // The SAME password is accepted.
-    const ok = await svc.store(7, {
+    const ok = await svc.store('usr_7', {
       vendor: 'glm',
       label: 'g',
       token: 'T2',
@@ -243,7 +260,7 @@ describe('PersonalSubscriptionService', () => {
     })
     expect(ok.vendor).toBe('glm')
     // A different USER is unaffected by user 7's password.
-    const other = await svc.store(9, {
+    const other = await svc.store('usr_9', {
       vendor: 'glm',
       label: 'g',
       token: 'T3',

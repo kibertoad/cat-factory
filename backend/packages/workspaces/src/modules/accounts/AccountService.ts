@@ -144,18 +144,19 @@ export class AccountService {
     const list = await this.deps.membershipRepository.listByAccount(accountId)
     const users = this.deps.userRepository
     if (!users) return list.map(toMember)
-    // Enrich the roster with each member's display details for the UI.
-    return Promise.all(
-      list.map(async (m) => {
-        const user = await users.get(m.userId)
-        return {
-          ...toMember(m),
-          name: user?.name ?? null,
-          email: user?.email ?? null,
-          avatarUrl: user?.avatarUrl ?? null,
-        }
-      }),
-    )
+    // Enrich the roster with each member's display details for the UI — one bulk load
+    // rather than a query per member.
+    const records = await users.listByIds(list.map((m) => m.userId))
+    const byId = new Map(records.map((u) => [u.id, u]))
+    return list.map((m) => {
+      const user = byId.get(m.userId)
+      return {
+        ...toMember(m),
+        name: user?.name ?? null,
+        email: user?.email ?? null,
+        avatarUrl: user?.avatarUrl ?? null,
+      }
+    })
   }
 
   /**

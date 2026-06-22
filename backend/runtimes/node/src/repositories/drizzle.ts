@@ -640,6 +640,20 @@ class DrizzleUserRepository implements UserRepository {
     return row ? rowToUser(row.users) : null
   }
 
+  async findByEmail(email: string): Promise<UserRecord | null> {
+    const [row] = await this.db
+      .select()
+      .from(users)
+      .where(eq(users.email, email.toLowerCase().trim()))
+    return row ? rowToUser(row) : null
+  }
+
+  async listByIds(ids: string[]): Promise<UserRecord[]> {
+    if (ids.length === 0) return []
+    const rows = await this.db.select().from(users).where(inArray(users.id, ids))
+    return rows.map(rowToUser)
+  }
+
   async getIdentity(
     provider: IdentityProvider,
     subject: string,
@@ -757,7 +771,7 @@ class DrizzleEmailConnectionRepository implements EmailConnectionRepository {
     const [row] = await this.db
       .select()
       .from(emailConnections)
-      .where(eq(emailConnections.account_id, accountId))
+      .where(and(eq(emailConnections.account_id, accountId), isNull(emailConnections.deleted_at)))
     return row ? rowToEmailConnection(row) : null
   }
 

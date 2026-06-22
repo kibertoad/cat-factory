@@ -39,7 +39,10 @@ export interface EmailConnectionRecord {
 }
 
 export interface EmailConnectionRepository {
-  /** The account's live connection, or null if not connected. */
+  /**
+   * The account's live (non-tombstoned) connection, or null when not connected or
+   * disconnected. Soft-deleted rows are filtered out, so callers never see a tombstone.
+   */
   getByAccount(accountId: string): Promise<EmailConnectionRecord | null>
   /** Create or replace the live connection for an account. */
   upsert(record: EmailConnectionRecord): Promise<void>

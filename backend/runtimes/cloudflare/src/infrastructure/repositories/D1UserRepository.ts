@@ -101,6 +101,24 @@ export class D1UserRepository implements UserRepository {
     return row ? rowToUser(row) : null
   }
 
+  async findByEmail(email: string): Promise<UserRecord | null> {
+    const row = await this.db
+      .prepare('SELECT * FROM users WHERE email = ?')
+      .bind(email.toLowerCase().trim())
+      .first<UserRow>()
+    return row ? rowToUser(row) : null
+  }
+
+  async listByIds(ids: string[]): Promise<UserRecord[]> {
+    if (ids.length === 0) return []
+    const placeholders = ids.map(() => '?').join(', ')
+    const { results } = await this.db
+      .prepare(`SELECT * FROM users WHERE id IN (${placeholders})`)
+      .bind(...ids)
+      .all<UserRow>()
+    return results.map(rowToUser)
+  }
+
   async getIdentity(
     provider: IdentityProvider,
     subject: string,

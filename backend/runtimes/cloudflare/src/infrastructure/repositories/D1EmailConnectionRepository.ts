@@ -37,7 +37,7 @@ export class D1EmailConnectionRepository implements EmailConnectionRepository {
 
   async getByAccount(accountId: string): Promise<EmailConnectionRecord | null> {
     const row = await this.db
-      .prepare('SELECT * FROM email_connections WHERE account_id = ?')
+      .prepare('SELECT * FROM email_connections WHERE account_id = ? AND deleted_at IS NULL')
       .bind(accountId)
       .first<EmailConnectionRow>()
     return row ? rowToRecord(row) : null

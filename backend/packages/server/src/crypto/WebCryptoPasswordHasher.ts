@@ -29,22 +29,41 @@ export class WebCryptoPasswordHasher implements PasswordHasher {
   }
 
   async verify(password: string, stored: string): Promise<boolean> {
-    const parts = stored.split('$')
-    if (parts.length !== 4 || parts[0] !== SCHEME) return false
-    const iterMatch = /^i=(\d+)$/.exec(parts[1]!)
-    if (!iterMatch) return false
-    const iterations = Number(iterMatch[1])
-    if (!Number.isInteger(iterations) || iterations < 1) return false
-    let salt: Uint8Array
-    let expected: Uint8Array
-    try {
-      salt = base64urlToBytes(parts[2]!)
-      expected = base64urlToBytes(parts[3]!)
-    } catch {
-      return false
+    const parsed = parseStored(stored)
+    if (!parsed) return false
+    const derived = new Uint8Array(await deriveBits(password, parsed.salt, parsed.iterations))
+    return timingSafeEqual(derived, parsed.expected)
+  }
+
+  needsRehash(stored: string): boolean {
+    const parsed = parseStored(stored)
+    // Unparseable ⇒ upgrade it; otherwise upgrade anything below the current cost.
+    return !parsed || parsed.iterations < this.iterations
+  }
+}
+
+interface ParsedHash {
+  iterations: number
+  salt: Uint8Array
+  expected: Uint8Array
+}
+
+/** Parse a stored PHC-like value, or null on any malformed input (fail closed). */
+function parseStored(stored: string): ParsedHash | null {
+  const parts = stored.split('$')
+  if (parts.length !== 4 || parts[0] !== SCHEME) return null
+  const iterMatch = /^i=(\d+)$/.exec(parts[1]!)
+  if (!iterMatch) return null
+  const iterations = Number(iterMatch[1])
+  if (!Number.isInteger(iterations) || iterations < 1) return null
+  try {
+    return {
+      iterations,
+      salt: base64urlToBytes(parts[2]!),
+      expected: base64urlToBytes(parts[3]!),
     }
-    const derived = new Uint8Array(await deriveBits(password, salt, iterations))
-    return timingSafeEqual(derived, expected)
+  } catch {
+    return null
   }
 }
 

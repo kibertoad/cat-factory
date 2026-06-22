@@ -24,6 +24,8 @@ interface TokenResponse {
 interface GoogleUserInfo {
   sub: string
   email?: string | null
+  /** Google encodes this as a boolean or the string "true"/"false" depending on flow. */
+  email_verified?: boolean | string | null
   name?: string | null
   picture?: string | null
 }
@@ -33,6 +35,8 @@ export interface GoogleIdentity {
   /** Google `sub` — the stable identity subject. */
   subject: string
   email: string | null
+  /** Whether Google has verified the user owns `email` (gates domain-allowlist + link). */
+  emailVerified: boolean
   name: string | null
   avatarUrl: string | null
 }
@@ -89,6 +93,7 @@ export class GoogleOAuth {
     return {
       subject: info.sub,
       email: info.email ?? null,
+      emailVerified: info.email_verified === true || info.email_verified === 'true',
       name: info.name ?? null,
       avatarUrl: info.picture ?? null,
     }

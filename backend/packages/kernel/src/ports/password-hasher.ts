@@ -11,4 +11,11 @@ export interface PasswordHasher {
   hash(password: string): Promise<string>
   /** Constant-time verify a plaintext password against a stored hash. */
   verify(password: string, stored: string): Promise<boolean>
+  /**
+   * Whether a stored hash was produced with weaker-than-current parameters (a
+   * different scheme or a lower iteration count) and should be transparently
+   * re-hashed after the next successful login. A malformed value returns true so the
+   * caller upgrades it. Used to migrate password cost upward without a flag day.
+   */
+  needsRehash(stored: string): boolean
 }
