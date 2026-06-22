@@ -286,5 +286,16 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
     // Recording the complete prompts is on by default; opt out with
     // `LLM_RECORD_PROMPTS=false` to keep the numeric telemetry but drop the prompt body.
     observability: { recordPrompts: env.LLM_RECORD_PROMPTS?.trim() !== 'false' },
+    // Optional Langfuse trace sink: off unless `LANGFUSE_ENABLED=true` AND both keys are
+    // present (a half-configured sink silently does nothing). Mirrors the Worker mapping.
+    langfuse: {
+      enabled:
+        env.LANGFUSE_ENABLED?.trim() === 'true' &&
+        !!env.LANGFUSE_PUBLIC_KEY?.trim() &&
+        !!env.LANGFUSE_SECRET_KEY?.trim(),
+      publicKey: env.LANGFUSE_PUBLIC_KEY?.trim(),
+      secretKey: env.LANGFUSE_SECRET_KEY?.trim(),
+      baseUrl: env.LANGFUSE_BASE_URL?.trim() || undefined,
+    },
   }
 }

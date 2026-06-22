@@ -1,6 +1,6 @@
 import type { Job, RunResult } from './job.js'
 import { openPullRequest, redactSecrets } from './git.js'
-import type { TodoProgress } from './pi.js'
+import type { TodoProgress, ToolSpan } from './pi.js'
 import { noChangesReason, runCodingAgent } from './coding-agent.js'
 import { log } from './logger.js'
 
@@ -21,6 +21,8 @@ export interface RunOptions {
   onActivity?: () => void
   /** Receives the latest subtask counts as Pi updates its todo list. */
   onProgress?: (progress: TodoProgress) => void
+  /** Receives one compact {@link ToolSpan} per completed tool call (observability). */
+  onSpan?: (span: ToolSpan) => void
 }
 
 /** Run one implementation job end to end: clone → Pi implements → push → PR. */
@@ -110,11 +112,20 @@ export interface JobView<TResult extends JobResultBase = RunResult> {
   result?: TResult
   /** Present when `state === 'failed'`: why the job faulted (or was killed). */
   error?: string
+  /**
+   * Tool spans accumulated SINCE THE LAST POLL (drain-on-read): the GET /jobs/{id}
+   * handler returns the spans buffered since the previous poll and clears the buffer,
+   * so the harness only ever holds one poll-interval's worth. Best-effort observability
+   * — a dropped poll response loses at most one window. Absent until a tool runs.
+   */
+  spans?: ToolSpan[]
 }
 
 interface JobEntry<TResult extends JobResultBase> extends JobView<TResult> {
   /** The in-flight work; retained so the entry isn't GC-surprising (not awaited externally). */
   promise: Promise<void>
+  /** Spans buffered since the last drain (see {@link JobView.spans}). */
+  spanBuffer: ToolSpan[]
 }
 
 /** Watchdog windows that bound every job. Tunable via the container's env. */
@@ -142,7 +153,7 @@ export function loadRunnerLimits(env: NodeJS.ProcessEnv = process.env): RunnerLi
 }
 
 function toView<TResult extends JobResultBase>(entry: JobEntry<TResult>): JobView<TResult> {
-  const { promise: _promise, ...view } = entry
+  const { promise: _promise, spanBuffer: _spanBuffer, ...view } = entry
   return { ...view }
 }
 
@@ -184,15 +195,27 @@ export class JobRegistry<TJob = Job, TResult extends JobResultBase = RunResult> 
       startedAt: now,
       heartbeatAt: now,
       promise: Promise.resolve(),
+      spanBuffer: [],
     }
     this.jobs.set(id, entry)
     entry.promise = this.drive(entry, job)
     return toView(entry)
   }
 
+  /**
+   * Poll the job — and DRAIN its tool-span buffer (drain-on-read). The GET /jobs/{id}
+   * handler is the sole caller, so each poll returns the spans accumulated since the
+   * previous poll and clears them, bounding the harness buffer to one poll interval.
+   */
   get(id: string): JobView<TResult> | undefined {
     const entry = this.jobs.get(id)
-    return entry ? toView(entry) : undefined
+    if (!entry) return undefined
+    const view = toView(entry)
+    if (entry.spanBuffer.length > 0) {
+      view.spans = entry.spanBuffer
+      entry.spanBuffer = []
+    }
+    return view
   }
 
   private async drive(entry: JobEntry<TResult>, job: TJob): Promise<void> {
@@ -226,6 +249,9 @@ export class JobRegistry<TJob = Job, TResult extends JobResultBase = RunResult> 
         onActivity: heartbeat,
         onProgress: (progress) => {
           entry.progress = progress
+        },
+        onSpan: (span) => {
+          entry.spanBuffer.push(span)
         },
       })
       entry.state = 'done'

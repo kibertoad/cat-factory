@@ -17,6 +17,7 @@ import type { Clock, IdGenerator } from '@cat-factory/kernel'
 import type { AgentExecutor } from '@cat-factory/kernel'
 import type { TokenUsageRepository } from '@cat-factory/kernel'
 import type { LlmCallMetricRepository } from '@cat-factory/kernel'
+import type { LlmTraceSink } from '@cat-factory/kernel'
 import { type WorkRunner, NoopWorkRunner } from '@cat-factory/kernel'
 import { type ExecutionEventPublisher, NoopEventPublisher } from '@cat-factory/kernel'
 import type { GitHubClient } from '@cat-factory/kernel'
@@ -177,6 +178,12 @@ export interface CoreDependencies {
    * `llmCallMetricRepository` is wired.
    */
   recordLlmPrompts?: boolean
+  /**
+   * Optional external LLM trace sink (e.g. Langfuse). When wired, the observability
+   * service fans every recorded call out to it as a generation. Opt-in and default-off;
+   * a facade wires it only when configured (`selectLangfuseSink`).
+   */
+  llmTraceSink?: LlmTraceSink
   /**
    * Drives runs durably outside the starting request. Defaults to a no-op (tests);
    * the worker wires WorkflowsWorkRunner when the Workflows binding is present.
@@ -1128,6 +1135,7 @@ export function createCore(dependencies: CoreDependencies): Core {
         idGenerator: dependencies.idGenerator,
         clock: dependencies.clock,
         recordPrompts: dependencies.recordLlmPrompts ?? true,
+        traceSink: dependencies.llmTraceSink,
       })
     : undefined
   const environments = createEnvironmentsModule(dependencies)

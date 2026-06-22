@@ -1,10 +1,12 @@
 import {
   CompositeModelProvider,
+  InstrumentedModelProvider,
   type ProviderRegistry,
   baseProviderRegistry,
 } from '@cat-factory/agents'
 import type { ModelProvider } from '@cat-factory/kernel'
 import { bedrockRegistry } from '@cat-factory/provider-bedrock'
+import { createLangfuseSink } from '@cat-factory/observability-langfuse'
 import {
   DEEPSEEK_BASE_URL,
   MOONSHOT_BASE_URL,
@@ -65,6 +67,26 @@ export function createNodeModelProvider(env: NodeJS.ProcessEnv): ModelProvider {
         supportedModels: supportedModels?.length ? supportedModels : undefined,
       }),
     )
+  }
+
+  // Opt-in Langfuse: wrap the provider so INLINE (non-proxied) calls — requirements
+  // review/rework, the document planner, the fragment selector, the inline agent —
+  // surface on the same trace sink the LLM proxy fans container calls out to. Off
+  // unless `LANGFUSE_ENABLED=true` and both keys are set.
+  if (
+    env.LANGFUSE_ENABLED?.trim() === 'true' &&
+    env.LANGFUSE_PUBLIC_KEY?.trim() &&
+    env.LANGFUSE_SECRET_KEY?.trim()
+  ) {
+    return new InstrumentedModelProvider({
+      inner: provider,
+      traceSink: createLangfuseSink({
+        publicKey: env.LANGFUSE_PUBLIC_KEY.trim(),
+        secretKey: env.LANGFUSE_SECRET_KEY.trim(),
+        baseUrl: env.LANGFUSE_BASE_URL?.trim() || undefined,
+      }),
+      recordPrompts: env.LLM_RECORD_PROMPTS?.trim() !== 'false',
+    })
   }
 
   return provider

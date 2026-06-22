@@ -131,6 +131,7 @@ export type {
   FragmentLibraryConfig,
   GitHubConfig,
   GoogleOAuthConfig,
+  LangfuseConfig,
   ObservabilityConfig,
   PrivilegedAppConfig,
   RetentionConfig,

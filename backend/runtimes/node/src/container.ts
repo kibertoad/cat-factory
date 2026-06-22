@@ -27,12 +27,14 @@ import type {
   FragmentOwnerKind,
   GitHubClient,
   GitHubInstallationRepository,
+  ModelProvider,
   RateLimitRepository,
   RateLimitSnapshot,
   TaskConnectionRepository,
   TaskSourceProvider,
 } from '@cat-factory/kernel'
 import { type CoreDependencies, createCore } from '@cat-factory/orchestration'
+import { createLangfuseSink } from '@cat-factory/observability-langfuse'
 import {
   type AppConfig,
   type ResolveRepoTarget,
@@ -112,6 +114,43 @@ import { JiraProvider } from './tasks/JiraProvider.js'
 // HKDF domain tag separating runner-pool scheduler secrets from any other use of
 // the same master key (mirrors the Worker's `cat-factory:runners`).
 const RUNNERS_CIPHER_INFO = 'cat-factory:runners'
+
+// Memoised per object so a container build shares ONE model provider (hence one inline
+// Langfuse sink) across the agent executor, requirements reviewer, doc planner and
+// fragment selector, and ONE core trace sink — instead of each call constructing its
+// own. Mirrors the Worker's `buildModelProvider` memoisation.
+const modelProviderCache = new WeakMap<NodeJS.ProcessEnv, ModelProvider>()
+const langfuseSinkCache = new WeakMap<AppConfig, CoreDependencies['llmTraceSink']>()
+
+/** The Node model provider (instrumented when Langfuse is on), shared per `env`. */
+function buildModelProvider(env: NodeJS.ProcessEnv): ModelProvider {
+  const cached = modelProviderCache.get(env)
+  if (cached) return cached
+  const provider = createNodeModelProvider(env)
+  modelProviderCache.set(env, provider)
+  return provider
+}
+
+/**
+ * Build the opt-in Langfuse trace sink (fetch-based, so identical to the Worker's
+ * `selectLangfuseSink`). Returns undefined unless `LANGFUSE_ENABLED=true` and both keys
+ * are set; the observability service then fans every recorded LLM call out to it.
+ * Memoised per config so both wiring sites share one sink instance.
+ */
+function buildLangfuseSink(config: AppConfig): CoreDependencies['llmTraceSink'] {
+  if (langfuseSinkCache.has(config)) return langfuseSinkCache.get(config)
+  const sink =
+    !config.langfuse.enabled || !config.langfuse.publicKey || !config.langfuse.secretKey
+      ? undefined
+      : createLangfuseSink({
+          publicKey: config.langfuse.publicKey,
+          secretKey: config.langfuse.secretKey,
+          baseUrl: config.langfuse.baseUrl,
+          logger,
+        })
+  langfuseSinkCache.set(config, sink)
+  return sink
+}
 
 /**
  * Wire the Slack integration when enabled: the notification *channel* (an extra
@@ -387,6 +426,9 @@ function buildNodeContainerExecutor(
     // in the sandbox) whenever an upstream is configured for this deployment.
     webSearchProxyEnabled: Boolean(createWebSearchUpstreamFromEnv(env)),
     githubApiBase: config.github.apiBase,
+    // Forward container tool spans to Langfuse (when configured) as child spans under
+    // the run trace — the same sink the LLM proxy fans generations out to.
+    llmTraceSink: buildLangfuseSink(config),
   })
 }
 
@@ -564,7 +606,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     repos.modelDefaultsRepository.getForKind(workspaceId, agentKind).then((v) => v ?? undefined)
 
   const inline = new AiAgentExecutor({
-    modelProvider: createNodeModelProvider(env),
+    modelProvider: buildModelProvider(env),
     agentRouting: config.agents.routing,
     resolveBlockModel: config.agents.resolveBlockModel,
     resolveWorkspaceModelDefault,
@@ -765,6 +807,9 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     tokenUsageRepository: repos.tokenUsageRepository,
     llmCallMetricRepository: repos.llmCallMetricRepository,
     recordLlmPrompts: config.observability.recordPrompts,
+    // Opt-in Langfuse trace sink (fans every recorded LLM call out as a generation).
+    // Built only when configured; otherwise undefined and there is no external emission.
+    llmTraceSink: buildLangfuseSink(config),
     modelDefaultsRepository: repos.modelDefaultsRepository,
     serviceFragmentDefaultsRepository: repos.serviceFragmentDefaultsRepository,
     // Requirements-review feature (stateless reviewer + the requirements-rework
@@ -789,7 +834,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // scan endpoint returns its graceful 503 (the blueprint decomposition itself runs as
     // a normal `blueprints` pipeline step through the runner transport, like the Worker).
     repoBlueprintRepository: repos.repoBlueprintRepository,
-    modelProvider: createNodeModelProvider(env),
+    modelProvider: buildModelProvider(env),
     requirementReviewModel: config.agents.routing.default.ref,
     requirementReviewResolveModel: config.agents.resolveBlockModel,
     // Notifications subsystem (parity with the Worker, which wires it unconditionally):
@@ -1029,7 +1074,7 @@ function selectNodeFragmentLibraryDeps(
     ...(config.fragmentLibrary.selector === 'llm'
       ? {
           fragmentSelector: new LlmFragmentSelector({
-            modelProvider: createNodeModelProvider(env),
+            modelProvider: buildModelProvider(env),
             modelRef: config.agents.routing.default.ref,
           }),
         }

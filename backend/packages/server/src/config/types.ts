@@ -201,6 +201,21 @@ export interface ObservabilityConfig {
   recordPrompts: boolean
 }
 
+export interface LangfuseConfig {
+  /**
+   * Opt-in flag (`LANGFUSE_ENABLED=true`). Requires both keys; when false (or a key is
+   * missing) no Langfuse sink is built and there is no external emission. Off by default,
+   * exactly like every other opt-in integration (Slack, environments, runners).
+   */
+  enabled: boolean
+  /** Langfuse public key (`pk-lf-…`). */
+  publicKey?: string
+  /** Langfuse secret key (`sk-lf-…`). */
+  secretKey?: string
+  /** Host of the Langfuse instance; defaults to Langfuse Cloud when omitted. */
+  baseUrl?: string
+}
+
 export interface AppConfig {
   agents: AgentsConfig
   /** The effective model picker catalog (each model's active flavour). */
@@ -230,4 +245,6 @@ export interface AppConfig {
   fragmentLibrary: FragmentLibraryConfig
   /** LLM observability config (e.g. whether complete prompts are recorded). */
   observability: ObservabilityConfig
+  /** Optional Langfuse trace-sink config; `enabled` is false unless opted in. */
+  langfuse: LangfuseConfig
 }
