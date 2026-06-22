@@ -59,7 +59,7 @@ const ITEM_ICON: Record<string, string> = {
     <div v-for="(s, i) in steps" :key="i" class="rounded bg-slate-900/60 px-1.5 py-1">
       <div
         class="flex cursor-pointer items-center gap-1"
-        title="View step details & output"
+        :title="`${agentKindMeta(s.agentKind).label} — ${agentKindMeta(s.agentKind).description}\nClick to view step details & output`"
         @click.stop="openStep(i)"
       >
         <UIcon
