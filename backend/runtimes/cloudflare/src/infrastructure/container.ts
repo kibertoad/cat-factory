@@ -1159,7 +1159,11 @@ function selectFragmentLibraryDeps(
   }
 }
 
-export function buildContainer(env: Env, overrides: Partial<CoreDependencies> = {}): Container {
+export function buildContainer(
+  env: Env,
+  overrides: Partial<CoreDependencies> = {},
+  opts: { cloudflareModelsEnabled?: boolean } = {},
+): Container {
   const config = loadConfig(env)
   const db = env.DB
   const clock = new SystemClock()
@@ -1184,8 +1188,10 @@ export function buildContainer(env: Env, overrides: Partial<CoreDependencies> = 
   // API-key controller, the model-provider resolver, and the LLM proxy key lease.
   const apiKeys = buildApiKeyService(env, db, clock)
 
-  // Cloudflare Workers AI is opt-in: enabled when the `AI` binding is present.
-  const cloudflareModelsEnabled = !!env.AI
+  // Cloudflare Workers AI is opt-in: enabled when the `AI` binding is present. A caller
+  // (the cross-runtime conformance suite) may force it off to assert key-driven
+  // selectability + the provider guard uniformly across runtimes.
+  const cloudflareModelsEnabled = opts.cloudflareModelsEnabled ?? !!env.AI
 
   const dependencies: CoreDependencies = {
     workspaceRepository: new D1WorkspaceRepository({ db }),

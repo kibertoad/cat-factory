@@ -13,7 +13,7 @@ if (databaseUrl) {
   const db = await setupTestDb()
   const harness: ConformanceHarness = {
     name: 'node',
-    makeApp: (agentOptions) => makeConformanceApp(db, agentOptions),
+    makeApp: (agentOptions, opts) => makeConformanceApp(db, agentOptions, opts),
   }
   defineConformanceSuite(harness)
 } else {

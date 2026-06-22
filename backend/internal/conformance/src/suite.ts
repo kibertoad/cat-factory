@@ -350,6 +350,88 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
       })
     })
 
+    describe('provider API keys (DB-backed pool) + provider-gated pipelines', () => {
+      // These run with the Cloudflare-AI opt-in forced OFF on every runtime (the Worker
+      // binds `AI` in tests, Node never does), so selectability + the start guard depend
+      // purely on the DB-backed key pool — and assert identically across runtimes.
+      type Opt = { id: string; flavor: string; available?: boolean }
+      const KEY = { provider: 'qwen', label: 'team', key: 'qwen-api-key-secret' }
+
+      it('adds, lists (secret-free), and removes workspace-scoped API keys', async () => {
+        const { call, createWorkspace } = harness.makeApp(undefined, {
+          cloudflareModelsEnabled: false,
+        })
+        const { workspace } = await createWorkspace()
+        const base = `/workspaces/${workspace.id}/api-keys`
+
+        const initial = await call<{ keys: unknown[] }>('GET', base)
+        expect(initial.status).toBe(200)
+        expect(initial.body.keys).toEqual([])
+
+        const created = await call<{ id: string; provider: string; scope: string }>(
+          'POST',
+          base,
+          KEY,
+        )
+        expect(created.status).toBe(201)
+        expect(created.body.provider).toBe('qwen')
+        expect(created.body.scope).toBe('workspace')
+        // The raw key is write-only — never echoed back.
+        expect(JSON.stringify(created.body)).not.toContain('secret')
+
+        const listed = await call<{ keys: { id: string; provider: string }[] }>('GET', base)
+        expect(listed.body.keys).toHaveLength(1)
+        expect(JSON.stringify(listed.body)).not.toContain('secret')
+
+        const del = await call('DELETE', `${base}/${created.body.id}`)
+        expect(del.status).toBe(204)
+        const after = await call<{ keys: unknown[] }>('GET', base)
+        expect(after.body.keys).toEqual([])
+      })
+
+      it('makes a direct model selectable once its provider key is configured', async () => {
+        const { call, createWorkspace } = harness.makeApp(undefined, {
+          cloudflareModelsEnabled: false,
+        })
+        const { workspace } = await createWorkspace()
+        const models = `/workspaces/${workspace.id}/models`
+
+        // Cloudflare AI off + no key ⇒ the dual-mode `qwen` model is unselectable.
+        const before = await call<Opt[]>('GET', models)
+        expect(before.body.find((m) => m.id === 'qwen')?.available).toBe(false)
+
+        await call('POST', `/workspaces/${workspace.id}/api-keys`, KEY)
+
+        // The per-workspace catalog now resolves qwen to its DIRECT flavour, selectable.
+        const after = await call<Opt[]>('GET', models)
+        const qwen = after.body.find((m) => m.id === 'qwen')!
+        expect(qwen.available).toBe(true)
+        expect(qwen.flavor).toBe('direct')
+      })
+
+      it('blocks starting a pipeline with an unconfigured model, then allows it after a key is added', async () => {
+        const { call, createWorkspace } = harness.makeApp(undefined, {
+          cloudflareModelsEnabled: false,
+        })
+        const { workspace } = await createWorkspace()
+        const wsId = workspace.id
+
+        // Pin the seeded task to qwen; with Cloudflare off and no key it has no provider.
+        await call('PATCH', `/workspaces/${wsId}/blocks/task_login`, { modelId: 'qwen' })
+        const blocked = await call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+          pipelineId: 'pl_quick',
+        })
+        expect(blocked.status).toBe(409)
+
+        // Configure a qwen key → the guard passes and the run starts.
+        await call('POST', `/workspaces/${wsId}/api-keys`, KEY)
+        const ok = await call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+          pipelineId: 'pl_quick',
+        })
+        expect(ok.status).toBe(201)
+      })
+    })
+
     describe('merge presets', () => {
       it('seeds a default, enforces the single-default invariant, and guards the default', async () => {
         const { call, createWorkspace } = harness.makeApp()

@@ -77,7 +77,11 @@ export async function setupTestDb(): Promise<DrizzleDb> {
  * `drive`). A thin adapter over the shared conformance harness, identical to the Node
  * helper apart from `buildLocalContainer`.
  */
-export function makeConformanceApp(db: DrizzleDb, agentOptions?: FakeAgentOptions): ConformanceApp {
+export function makeConformanceApp(
+  db: DrizzleDb,
+  agentOptions?: FakeAgentOptions,
+  opts?: { cloudflareModelsEnabled?: boolean },
+): ConformanceApp {
   const recorder = new RecordingEventPublisher()
   const overrides: Partial<CoreDependencies> = {
     agentExecutor: agentOptions?.asyncKinds?.length
@@ -90,7 +94,12 @@ export function makeConformanceApp(db: DrizzleDb, agentOptions?: FakeAgentOption
     repoBootstrapper: new FakeRepoBootstrapper(),
     executionEventPublisher: recorder,
   }
-  const container = buildLocalContainer({ db, env: TEST_ENV, overrides })
+  const container = buildLocalContainer({
+    db,
+    env: TEST_ENV,
+    overrides,
+    cloudflareModelsEnabled: opts?.cloudflareModelsEnabled,
+  })
   const app = createApp(container, TEST_ENV)
 
   async function call<T>(method: string, path: string, body?: unknown) {

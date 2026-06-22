@@ -21,7 +21,7 @@ import { D1RepoBlueprintRepository } from '../../src/infrastructure/repositories
 
 const harness: ConformanceHarness = {
   name: 'cloudflare',
-  makeApp: (agentOptions) => {
+  makeApp: (agentOptions, opts) => {
     // Record emitted run snapshots (shared by the start-time container and drive's
     // own container, since it rides the core overrides) so the suite can assert
     // intermediate transitions. Confined to the conformance adapter so the shared
@@ -40,6 +40,9 @@ const harness: ConformanceHarness = {
         repoBootstrapper: new FakeRepoBootstrapper(),
         ...fragmentLibraryDeps(),
       },
+      // The Worker binds `AI` in tests; let the suite force the opt-in flag off so the
+      // provider-key assertions behave identically to Node (which has no binding).
+      { cloudflareModelsEnabled: opts?.cloudflareModelsEnabled },
     )
     return {
       ...app,

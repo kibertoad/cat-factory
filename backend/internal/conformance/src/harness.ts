@@ -111,6 +111,15 @@ export interface ConformanceHarness {
    * Build an app wired with a deterministic agent. `agentOptions` are forwarded to
    * the shared {@link FakeAgentExecutor}; the durable runner is replaced with a
    * no-op so the suite advances runs itself via {@link ConformanceApp.drive}.
+   *
+   * `opts.cloudflareModelsEnabled` forces the Cloudflare-AI opt-in flag (the Worker
+   * binds `AI` in tests, Node never has it) so the provider-key assertions —
+   * key-driven model selectability + the pipeline-start provider guard — behave
+   * identically on every runtime regardless of the deployment's binding.
    */
-  makeApp(agentOptions?: FakeAgentOptions): ConformanceApp
+  makeApp(agentOptions?: FakeAgentOptions, opts?: ConformanceAppOptions): ConformanceApp
+}
+
+export interface ConformanceAppOptions {
+  cloudflareModelsEnabled?: boolean
 }

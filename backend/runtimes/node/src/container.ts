@@ -320,6 +320,11 @@ export interface NodeContainerOptions {
    * Node behaviour). The local facade passes a PAT-backed client.
    */
   githubClient?: GitHubClient
+  /**
+   * Force the Cloudflare-AI opt-in flag (the cross-runtime conformance suite forces it
+   * off for parity). Undefined → derived from the REST credentials being present.
+   */
+  cloudflareModelsEnabled?: boolean
 }
 
 /**
@@ -657,7 +662,8 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   )
   const modelProviderResolver = buildModelProviderResolver(env, options.db, apiKeys)
   // Cloudflare Workers AI is opt-in on Node: enabled when the REST creds are present.
-  const cloudflareModelsEnabled = !!(env.CLOUDFLARE_ACCOUNT_ID && env.CLOUDFLARE_API_TOKEN)
+  const cloudflareModelsEnabled =
+    options.cloudflareModelsEnabled ?? !!(env.CLOUDFLARE_ACCOUNT_ID && env.CLOUDFLARE_API_TOKEN)
 
   const inline = new AiAgentExecutor({
     modelProviderResolver,
