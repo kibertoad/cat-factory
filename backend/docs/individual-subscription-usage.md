@@ -53,8 +53,8 @@ against an org-owned workspace.
 
 ## 3. What this protects against
 
-Be precise about what the safeguards do and don't buy, so nobody over-trusts them and the
-UI copy stays truthful.
+This section is precise about what the safeguards do and don't buy, so you don't over-trust
+them.
 
 **Goal.** Prevent the _accidental_ misuse of an individual-licensed credential, and make it
 transparent that the system gives you **no easy way** to share one across a workspace. It
