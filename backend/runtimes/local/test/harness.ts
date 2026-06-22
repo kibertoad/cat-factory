@@ -13,7 +13,11 @@ import {
   createDrizzleRepositories,
   migrate,
 } from '@cat-factory/node-server'
-import type { ExecutionInstance, WorkspaceSnapshot } from '@cat-factory/kernel'
+import type {
+  ExecutionInstance,
+  RepoBlueprintRecord,
+  WorkspaceSnapshot,
+} from '@cat-factory/kernel'
 import { NoopBootstrapRunner, NoopWorkRunner } from '@cat-factory/kernel'
 import type { CoreDependencies } from '@cat-factory/orchestration'
 import { buildLocalContainer } from '../src/container.js'
@@ -132,6 +136,12 @@ export function makeConformanceApp(db: DrizzleDb, agentOptions?: FakeAgentOption
     )
   }
 
+  // Reuses Node's Drizzle board-scan repo (the local facade shares all of Node's
+  // persistence), so the blueprint read endpoints assert identically here.
+  function seedBlueprint(record: RepoBlueprintRecord) {
+    return createDrizzleRepositories(db).repoBlueprintRepository.upsert(record)
+  }
+
   return {
     call,
     createWorkspace,
@@ -139,5 +149,6 @@ export function makeConformanceApp(db: DrizzleDb, agentOptions?: FakeAgentOption
     drive,
     executionEmits,
     seedIncorporatedReview,
+    seedBlueprint,
   }
 }

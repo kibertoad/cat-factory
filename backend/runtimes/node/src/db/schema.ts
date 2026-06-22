@@ -487,6 +487,28 @@ export const mergeThresholdPresets = pgTable(
   ],
 )
 
+// Board-scan feature: the persisted "repository blueprint" — a repo decomposed into
+// the canonical service → modules tree (mirror of D1 migration 0011). Exactly one
+// blueprint per (workspace, repo): a re-scan replaces it in place (the unique index
+// is the upsert key). The tree is stored whole as JSON in `service_json`.
+export const repoBlueprints = pgTable(
+  'repo_blueprints',
+  {
+    id: text('id').primaryKey(),
+    workspace_id: text('workspace_id').notNull(),
+    repo_owner: text('repo_owner').notNull(),
+    repo_name: text('repo_name').notNull(),
+    source: text('source').notNull(),
+    service_json: text('service_json').notNull(),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+    updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
+  },
+  (t) => [
+    uniqueIndex('idx_repo_blueprints_repo').on(t.workspace_id, t.repo_owner, t.repo_name),
+    index('idx_repo_blueprints_workspace').on(t.workspace_id, t.updated_at),
+  ],
+)
+
 // Slack integration (mirror of D1 migration 0037). An additional delivery transport
 // for the notification mechanism. Per-account connection (+ encrypted bot token,
 // `token_cipher` is a WebCryptoSecretCipher envelope, never plaintext), per-workspace

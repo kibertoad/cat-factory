@@ -6,13 +6,20 @@ import {
   RecordingEventPublisher,
   makeIncorporatedReview,
 } from '@cat-factory/conformance'
-import type { ExecutionInstance, WorkspaceSnapshot } from '@cat-factory/kernel'
+import type {
+  ExecutionInstance,
+  RepoBlueprintRecord,
+  WorkspaceSnapshot,
+} from '@cat-factory/kernel'
 import { NoopBootstrapRunner, NoopWorkRunner } from '@cat-factory/kernel'
 import type { CoreDependencies } from '@cat-factory/orchestration'
 import { buildNodeContainer } from '../src/container.js'
 import { type DrizzleDb, createDbClient } from '../src/db/client.js'
 import { migrate } from '../src/db/migrate.js'
-import { DrizzleRequirementReviewRepository } from '../src/repositories/drizzle.js'
+import {
+  DrizzleRepoBlueprintRepository,
+  DrizzleRequirementReviewRepository,
+} from '../src/repositories/drizzle.js'
 import { createApp } from '../src/server.js'
 
 const BASE = 'https://cat-factory.test'
@@ -136,6 +143,10 @@ export function makeConformanceApp(db: DrizzleDb, agentOptions?: FakeAgentOption
     )
   }
 
+  function seedBlueprint(record: RepoBlueprintRecord) {
+    return new DrizzleRepoBlueprintRepository(db).upsert(record)
+  }
+
   return {
     call,
     createWorkspace,
@@ -143,5 +154,6 @@ export function makeConformanceApp(db: DrizzleDb, agentOptions?: FakeAgentOption
     drive,
     executionEmits,
     seedIncorporatedReview,
+    seedBlueprint,
   }
 }

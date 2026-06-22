@@ -9,6 +9,7 @@ import {
 import { env } from 'cloudflare:test'
 import { makeApp } from '../helpers'
 import { D1RequirementReviewRepository } from '../../src/infrastructure/repositories/D1RequirementReviewRepository'
+import { D1RepoBlueprintRepository } from '../../src/infrastructure/repositories/D1RepoBlueprintRepository'
 
 // Run the shared cross-runtime conformance suite against the Cloudflare Worker
 // facade (the real Hono app over a real local D1, inside workerd). The Node
@@ -38,6 +39,7 @@ const harness: ConformanceHarness = {
           workspaceId,
           makeIncorporatedReview(blockId, requirements),
         ),
+      seedBlueprint: (record) => new D1RepoBlueprintRepository({ db: env.DB }).upsert(record),
     }
   },
 }

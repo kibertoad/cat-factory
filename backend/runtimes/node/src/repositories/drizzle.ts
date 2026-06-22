@@ -28,6 +28,9 @@ import type {
   PipelineScheduleRepository,
   DueSchedule,
   Recurrence,
+  RepoBlueprintRecord,
+  RepoBlueprintRepository,
+  BlueprintService,
   RequirementReview,
   RequirementReviewItem,
   RequirementReviewRepository,
@@ -69,6 +72,7 @@ import {
   llmCallMetrics,
   memberships,
   mergeThresholdPresets,
+  repoBlueprints,
   pipelineScheduleRuns,
   pipelineSchedules,
   pipelines,
@@ -1553,6 +1557,99 @@ export class DrizzleMergePresetRepository implements MergePresetRepository {
   }
 }
 
+type RepoBlueprintRow = typeof repoBlueprints.$inferSelect
+
+function rowToBlueprintRecord(row: RepoBlueprintRow): RepoBlueprintRecord {
+  return {
+    id: row.id,
+    workspaceId: row.workspace_id,
+    repoOwner: row.repo_owner,
+    repoName: row.repo_name,
+    source: row.source as RepoBlueprintRecord['source'],
+    service: JSON.parse(row.service_json) as BlueprintService,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }
+}
+
+/**
+ * Repository blueprints over Postgres (the Drizzle mirror of the Worker's
+ * `D1RepoBlueprintRepository`, migration 0011). One row per (workspace, repo):
+ * `upsert` replaces the existing blueprint in place, keyed by the unique
+ * `(workspace_id, repo_owner, repo_name)` index, so the row is always the single
+ * current decomposition. The service → modules tree is persisted whole as JSON.
+ */
+export class DrizzleRepoBlueprintRepository implements RepoBlueprintRepository {
+  constructor(private readonly db: DrizzleDb) {}
+
+  async upsert(record: RepoBlueprintRecord): Promise<void> {
+    const values = {
+      id: record.id,
+      workspace_id: record.workspaceId,
+      repo_owner: record.repoOwner,
+      repo_name: record.repoName,
+      source: record.source,
+      service_json: JSON.stringify(record.service),
+      created_at: record.createdAt,
+      updated_at: record.updatedAt,
+    }
+    await this.db
+      .insert(repoBlueprints)
+      .values(values)
+      .onConflictDoUpdate({
+        target: [repoBlueprints.workspace_id, repoBlueprints.repo_owner, repoBlueprints.repo_name],
+        set: {
+          source: values.source,
+          service_json: values.service_json,
+          updated_at: values.updated_at,
+        },
+      })
+  }
+
+  async get(workspaceId: string, id: string): Promise<RepoBlueprintRecord | null> {
+    const rows = await this.db
+      .select()
+      .from(repoBlueprints)
+      .where(and(eq(repoBlueprints.workspace_id, workspaceId), eq(repoBlueprints.id, id)))
+      .limit(1)
+    return rows[0] ? rowToBlueprintRecord(rows[0]) : null
+  }
+
+  async getByRepo(
+    workspaceId: string,
+    repoOwner: string,
+    repoName: string,
+  ): Promise<RepoBlueprintRecord | null> {
+    const rows = await this.db
+      .select()
+      .from(repoBlueprints)
+      .where(
+        and(
+          eq(repoBlueprints.workspace_id, workspaceId),
+          eq(repoBlueprints.repo_owner, repoOwner),
+          eq(repoBlueprints.repo_name, repoName),
+        ),
+      )
+      .limit(1)
+    return rows[0] ? rowToBlueprintRecord(rows[0]) : null
+  }
+
+  async listByWorkspace(workspaceId: string): Promise<RepoBlueprintRecord[]> {
+    const rows = await this.db
+      .select()
+      .from(repoBlueprints)
+      .where(eq(repoBlueprints.workspace_id, workspaceId))
+      .orderBy(desc(repoBlueprints.updated_at))
+    return rows.map(rowToBlueprintRecord)
+  }
+
+  async delete(workspaceId: string, id: string): Promise<void> {
+    await this.db
+      .delete(repoBlueprints)
+      .where(and(eq(repoBlueprints.workspace_id, workspaceId), eq(repoBlueprints.id, id)))
+  }
+}
+
 export interface CoreRepositories {
   workspaceRepository: WorkspaceRepository
   accountRepository: AccountRepository
@@ -1570,6 +1667,7 @@ export interface CoreRepositories {
   workspaceMountRepository: WorkspaceMountRepository
   requirementReviewRepository: RequirementReviewRepository
   mergePresetRepository: MergePresetRepository
+  repoBlueprintRepository: RepoBlueprintRepository
 }
 
 /** Build the Drizzle/Postgres-backed core repositories. */
@@ -1591,5 +1689,6 @@ export function createDrizzleRepositories(db: DrizzleDb, clock: Clock): CoreRepo
     workspaceMountRepository: new DrizzleWorkspaceMountRepository(db),
     requirementReviewRepository: new DrizzleRequirementReviewRepository(db),
     mergePresetRepository: new DrizzleMergePresetRepository(db),
+    repoBlueprintRepository: new DrizzleRepoBlueprintRepository(db),
   }
 }
