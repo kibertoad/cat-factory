@@ -16,10 +16,7 @@ import { jsonBody } from '../../http/validation.js'
 // keys are managed by the AccountController, which admin-gates them.
 
 const unavailable = (c: Context<AppEnv>) =>
-  c.json(
-    { error: { code: 'unavailable', message: 'API key storage is not configured' } },
-    503,
-  )
+  c.json({ error: { code: 'unavailable', message: 'API key storage is not configured' } }, 503)
 
 const signInRequired = (c: Context<AppEnv>) =>
   c.json({ error: { code: 'unauthorized', message: 'Sign in to manage your API keys' } }, 401)

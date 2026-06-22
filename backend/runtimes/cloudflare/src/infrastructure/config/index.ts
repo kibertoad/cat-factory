@@ -1,5 +1,9 @@
 import type { AppConfig } from '@cat-factory/server'
-import { ALL_SUBSCRIPTION_VENDORS, type ProviderCapabilities, effectiveCatalog } from '@cat-factory/kernel'
+import {
+  ALL_SUBSCRIPTION_VENDORS,
+  type ProviderCapabilities,
+  effectiveCatalog,
+} from '@cat-factory/kernel'
 import { modelCostResolver } from '@cat-factory/spend'
 import type { Env } from '../env'
 import { type AgentsConfig, loadAgentsConfig } from './agents'

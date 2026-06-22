@@ -27,7 +27,11 @@ export function modelController(): Hono<AppEnv> {
   // the caller's) configured API keys and subscription tokens.
   app.get('/workspaces/:workspaceId/models', async (c) => {
     const container = c.get('container')
-    const caps = await resolveWorkspaceCapabilities(container, param(c, 'workspaceId'), c.get('user')?.id)
+    const caps = await resolveWorkspaceCapabilities(
+      container,
+      param(c, 'workspaceId'),
+      c.get('user')?.id,
+    )
     const costFor = modelCostResolver(container.config.spend)
     return c.json(effectiveCatalog(caps, costFor))
   })

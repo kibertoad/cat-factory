@@ -83,11 +83,7 @@ export const useAccountsStore = defineStore(
     }
 
     /** Invite a teammate by email; returns the accept link (for manual sharing). */
-    async function invite(
-      accountId: string,
-      email: string,
-      roles: AccountRole[] = ['developer'],
-    ) {
+    async function invite(accountId: string, email: string, roles: AccountRole[] = ['developer']) {
       const { invitation, acceptUrl } = await api.createInvitation(accountId, { email, roles })
       invitations.value = [invitation, ...invitations.value]
       return acceptUrl

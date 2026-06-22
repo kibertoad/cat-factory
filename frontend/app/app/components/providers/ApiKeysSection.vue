@@ -161,13 +161,13 @@ async function remove(k: ApiKey) {
         Direct provider API keys
       </h4>
       <p v-if="isAccount" class="mt-1 text-sm text-slate-400">
-        Connect a vendor API key shared by <strong>every workspace</strong> in this account.
-        Keys are stored encrypted, pooled, and rotated by usage. Account keys are admin-managed.
+        Connect a vendor API key shared by <strong>every workspace</strong> in this account. Keys
+        are stored encrypted, pooled, and rotated by usage. Account keys are admin-managed.
       </p>
       <p v-else class="mt-1 text-sm text-slate-400">
-        Connect a vendor API key so models run directly on that provider. Keys are stored
-        encrypted, pooled, and rotated by usage. Scope a key to this <strong>workspace</strong>
-        (shared with the team) or to <strong>you</strong> (your own pool, usable anywhere).
+        Connect a vendor API key so models run directly on that provider. Keys are stored encrypted,
+        pooled, and rotated by usage. Scope a key to this <strong>workspace</strong> (shared with
+        the team) or to <strong>you</strong> (your own pool, usable anywhere).
       </p>
     </div>
 

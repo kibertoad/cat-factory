@@ -144,10 +144,7 @@ export function accountController(): Hono<AppEnv> {
   // only when the API-key store is wired (ENCRYPTION_KEY).
 
   const apiKeysUnavailable = (c: Context<AppEnv>) =>
-    c.json(
-      { error: { code: 'unavailable', message: 'API key storage is not configured' } },
-      503,
-    )
+    c.json({ error: { code: 'unavailable', message: 'API key storage is not configured' } }, 503)
 
   app.get('/accounts/:accountId/api-keys', async (c) => {
     const user = accountUser(c)
@@ -165,7 +162,11 @@ export function accountController(): Hono<AppEnv> {
     const container = c.get('container')
     if (!container.apiKeys) return apiKeysUnavailable(c)
     await container.accountService.requireAdmin(param(c, 'accountId'), user.id)
-    const summary = await container.apiKeys.addKey('account', param(c, 'accountId'), c.req.valid('json'))
+    const summary = await container.apiKeys.addKey(
+      'account',
+      param(c, 'accountId'),
+      c.req.valid('json'),
+    )
     return c.json(apiKeyToWire(summary), 201)
   })
 

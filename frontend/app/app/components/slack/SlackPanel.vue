@@ -248,12 +248,7 @@ async function saveMapping() {
               requirement-review findings; everyone else only when they created the task.
             </p>
             <div v-for="(entry, i) in mapping" :key="i" class="flex items-center gap-2">
-              <UInput
-                v-model="entry.userId"
-                size="sm"
-                class="w-40"
-                placeholder="User id (usr_…)"
-              />
+              <UInput v-model="entry.userId" size="sm" class="w-40" placeholder="User id (usr_…)" />
               <UInput
                 v-model="entry.slackUserId"
                 size="sm"

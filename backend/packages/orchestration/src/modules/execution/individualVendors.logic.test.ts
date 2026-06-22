@@ -12,22 +12,34 @@ import { resolveIndividualVendors } from './individualVendors.logic.js'
 
 describe('resolveIndividualVendors', () => {
   it('returns no vendor for a block pinned to a Cloudflare model', async () => {
-    const vendors = await resolveIndividualVendors('cloudflare-llama', ['coder'], async () => 'claude-opus')
+    const vendors = await resolveIndividualVendors(
+      'cloudflare-llama',
+      ['coder'],
+      async () => 'claude-opus',
+    )
     expect(vendors).toEqual([])
   })
 
   it('does NOT consult workspace defaults when the pin is a resolvable non-subscription model', async () => {
     let consulted = false
-    const vendors = await resolveIndividualVendors('cloudflare-llama', ['coder', 'reviewer'], async () => {
-      consulted = true
-      return 'claude-opus'
-    })
+    const vendors = await resolveIndividualVendors(
+      'cloudflare-llama',
+      ['coder', 'reviewer'],
+      async () => {
+        consulted = true
+        return 'claude-opus'
+      },
+    )
     expect(consulted).toBe(false)
     expect(vendors).toEqual([])
   })
 
   it('gates on the pinned vendor for an individual-usage model', async () => {
-    const vendors = await resolveIndividualVendors('claude-opus', ['coder'], async () => 'cloudflare-llama')
+    const vendors = await resolveIndividualVendors(
+      'claude-opus',
+      ['coder'],
+      async () => 'cloudflare-llama',
+    )
     expect(vendors).toEqual(['claude'])
   })
 
@@ -39,12 +51,21 @@ describe('resolveIndividualVendors', () => {
   it('falls through a stale/unknown pin to the workspace defaults', async () => {
     // glm is dual-mode, so the gate fires only when the user has their own glm
     // subscription — stub `hasPersonalSubscription` true so it resolves to the vendor.
-    const vendors = await resolveIndividualVendors('gone-stale', ['coder'], async () => 'glm', () => true)
+    const vendors = await resolveIndividualVendors(
+      'gone-stale',
+      ['coder'],
+      async () => 'glm',
+      () => true,
+    )
     expect(vendors).toEqual(['glm'])
   })
 
   it('returns no vendor when an unpinned run resolves only to non-subscription defaults', async () => {
-    const vendors = await resolveIndividualVendors(undefined, ['coder'], async () => 'cloudflare-llama')
+    const vendors = await resolveIndividualVendors(
+      undefined,
+      ['coder'],
+      async () => 'cloudflare-llama',
+    )
     expect(vendors).toEqual([])
   })
 
@@ -54,7 +75,11 @@ describe('resolveIndividualVendors', () => {
       reviewer: 'claude-sonnet',
       mocker: 'cloudflare-llama',
     }
-    const vendors = await resolveIndividualVendors(undefined, ['coder', 'reviewer', 'mocker'], async (kind) => byKind[kind])
+    const vendors = await resolveIndividualVendors(
+      undefined,
+      ['coder', 'reviewer', 'mocker'],
+      async (kind) => byKind[kind],
+    )
     expect(vendors).toEqual(['claude'])
   })
 

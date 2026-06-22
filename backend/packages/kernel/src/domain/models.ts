@@ -316,13 +316,12 @@ function subscriptionUsable(model: SelectableModel, caps: ProviderCapabilities):
  * one usable flavour (a configured direct key, an enabled Cloudflare lib, or a
  * connected subscription vendor). Unknown ids are not usable.
  */
-export function isModelUsable(
-  id: string | undefined | null,
-  caps: ProviderCapabilities,
-): boolean {
+export function isModelUsable(id: string | undefined | null, caps: ProviderCapabilities): boolean {
   const model = getSelectableModel(id)
   if (!model) return false
-  return directUsable(model, caps) || cloudflareUsable(model, caps) || subscriptionUsable(model, caps)
+  return (
+    directUsable(model, caps) || cloudflareUsable(model, caps) || subscriptionUsable(model, caps)
+  )
 }
 
 // The effective variant a model resolves to for a capability set: prefer a usable

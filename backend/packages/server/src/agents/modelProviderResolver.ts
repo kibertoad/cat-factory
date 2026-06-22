@@ -52,7 +52,11 @@ export function createScopedModelProviderResolver(
         const providers = await opts.apiKeys.configuredProviders(scope.workspaceId, poolOpts)
         for (const provider of providers) {
           const leased = await opts.apiKeys.lease(scope.workspaceId, provider, poolOpts)
-          registry[provider] = buildDirectResolver(provider, leased.secret, opts.baseUrlFor(provider))
+          registry[provider] = buildDirectResolver(
+            provider,
+            leased.secret,
+            opts.baseUrlFor(provider),
+          )
         }
       }
       const composite = new CompositeModelProvider(registry, ...(opts.extraRegistries ?? []))

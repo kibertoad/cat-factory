@@ -152,16 +152,11 @@ async function onDrop(event: DragEvent) {
       <div>
         <h2 class="text-base font-semibold text-slate-300">Your board is empty</h2>
         <p class="mt-1 max-w-sm text-sm text-slate-500">
-          Add a service to get started: bootstrap a fresh repo or pull in one you already
-          have.
+          Add a service to get started: bootstrap a fresh repo or pull in one you already have.
         </p>
       </div>
       <div class="pointer-events-auto flex flex-wrap items-center justify-center gap-2">
-        <UButton
-          color="primary"
-          icon="i-lucide-git-branch-plus"
-          @click="ui.openBootstrap()"
-        >
+        <UButton color="primary" icon="i-lucide-git-branch-plus" @click="ui.openBootstrap()">
           Bootstrap repo
         </UButton>
         <UButton

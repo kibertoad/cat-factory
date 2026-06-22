@@ -228,8 +228,7 @@ export function useApi() {
     getModels: () => http<ModelOption[]>('/models'),
     // Per-workspace catalog: selectability reflects the workspace's (+ account's +
     // caller's) configured API keys and subscription tokens (`available` flag).
-    getWorkspaceModels: (workspaceId: string) =>
-      http<ModelOption[]>(`${ws(workspaceId)}/models`),
+    getWorkspaceModels: (workspaceId: string) => http<ModelOption[]>(`${ws(workspaceId)}/models`),
 
     // ---- direct-provider API keys (the DB-backed pool) --------------------
     // Onboarded via UI, stored encrypted, pooled + rotated. Scoped to a workspace,
@@ -241,8 +240,7 @@ export function useApi() {
     removeWorkspaceApiKey: (workspaceId: string, id: string) =>
       http(`${ws(workspaceId)}/api-keys/${encodeURIComponent(id)}`, { method: 'DELETE' }),
     listMyApiKeys: () => http<{ keys: ApiKey[] }>('/me/api-keys'),
-    addMyApiKey: (body: AddApiKeyInput) =>
-      http<ApiKey>('/me/api-keys', { method: 'POST', body }),
+    addMyApiKey: (body: AddApiKeyInput) => http<ApiKey>('/me/api-keys', { method: 'POST', body }),
     removeMyApiKey: (id: string) =>
       http(`/me/api-keys/${encodeURIComponent(id)}`, { method: 'DELETE' }),
     // Account-scoped keys (shared by every workspace in the account); admin-only.

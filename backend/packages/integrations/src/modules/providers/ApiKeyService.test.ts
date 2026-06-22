@@ -168,7 +168,11 @@ describe('ApiKeyService', () => {
   it('rotates to the least-loaded key across scopes (usage-aware)', async () => {
     const { service } = build()
     const wsKey = await service.addKey('workspace', WS, { provider: 'qwen', label: 'ws', key: '1' })
-    const accKey = await service.addKey('account', ACC, { provider: 'qwen', label: 'acc', key: '2' })
+    const accKey = await service.addKey('account', ACC, {
+      provider: 'qwen',
+      label: 'acc',
+      key: '2',
+    })
     // Load up the workspace key; the next lease must pick the (unused) account key.
     await service.recordUsage(wsKey.id, { inputTokens: 5000, outputTokens: 5000 })
     const leased = await service.lease(WS, 'qwen')
