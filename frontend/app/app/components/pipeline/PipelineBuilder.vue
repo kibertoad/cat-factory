@@ -158,6 +158,7 @@ async function clone(p: Pipeline) {
               <span
                 class="min-w-0 flex-1 truncate text-xs text-slate-100"
                 :class="{ 'line-through': pipelines.draftEnabled[i] === false }"
+                :title="agentKindMeta(kind).description"
               >
                 {{ agentKindMeta(kind).label }}
               </span>

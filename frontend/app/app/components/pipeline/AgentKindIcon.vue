@@ -13,17 +13,18 @@ const props = withDefaults(
 )
 
 const meta = computed(() => agentKindMeta(props.kind))
+
+// Hover tooltip explaining what the agent does. Lead with the label (the icon
+// alone is ambiguous) then the catalog description, so every place that renders
+// an agent step through this single path gets the same explanation on hover.
+const tooltip = computed(() =>
+  meta.value.description ? `${meta.value.label} — ${meta.value.description}` : meta.value.label,
+)
 </script>
 
 <template>
-  <span class="inline-flex items-center gap-2">
-    <UIcon
-      :name="meta.icon"
-      :class="iconClass"
-      class="shrink-0"
-      :style="{ color: meta.color }"
-      :title="meta.label"
-    />
+  <span class="inline-flex items-center gap-2" :title="tooltip">
+    <UIcon :name="meta.icon" :class="iconClass" class="shrink-0" :style="{ color: meta.color }" />
     <span v-if="showLabel" class="text-xs text-slate-100">{{ meta.label }}</span>
   </span>
 </template>

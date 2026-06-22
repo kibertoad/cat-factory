@@ -190,8 +190,13 @@ async function choose(kind: AgentKind, modelId: string | null) {
                 :key="a.kind"
                 class="flex items-center gap-3 px-4 py-3"
               >
-                <UIcon :name="a.icon" class="h-4 w-4 shrink-0" :style="{ color: a.color }" />
-                <div class="min-w-0 flex-1">
+                <UIcon
+                  :name="a.icon"
+                  class="h-4 w-4 shrink-0"
+                  :style="{ color: a.color }"
+                  :title="a.description"
+                />
+                <div class="min-w-0 flex-1" :title="a.description">
                   <p class="truncate text-sm text-slate-200">{{ a.label }}</p>
                 </div>
                 <!-- The menu content portals to <body>, where it would sit behind
