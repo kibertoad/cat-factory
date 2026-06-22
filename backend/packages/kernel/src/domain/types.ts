@@ -132,6 +132,9 @@ export type {
   RequirementReview,
   ReplyReviewItemInput,
   UpdateReviewItemStatusInput,
+  IncorporateRequirementsInput,
+  ResolveRequirementsExceededInput,
+  ResolveRequirementsExceededChoice,
   // Structured in-repo specification (`spec.json`) shapes.
   RequirementPriority,
   RequirementKind,
@@ -148,6 +151,7 @@ export type {
   CiStepState,
   MergeAssessment,
   MergeThresholdPreset,
+  RequirementConcernLevel,
   CreateMergePresetInput,
   UpdateMergePresetInput,
   // Agent config-contribution shapes.

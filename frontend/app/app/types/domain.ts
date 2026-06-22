@@ -227,6 +227,13 @@ export interface AgentArchetype {
   /** tailwind-ish accent token used across chips / borders */
   color: string
   description: string
+  /**
+   * Optional id of a DEDICATED result window this agent's step opens instead of the
+   * generic prose step-detail panel. Resolved through the result-view registry
+   * (`STEP_RESULT_VIEWS`) so any agent can declare a bespoke visualization without the
+   * renderer hardcoding a kind. Absent → the generic `AgentStepDetail` panel.
+   */
+  resultView?: string
 }
 
 /** A reusable, linear sequence of agents. */

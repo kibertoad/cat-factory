@@ -10,6 +10,13 @@ export interface MergeAssessment {
   rationale: string
 }
 
+/**
+ * The highest reviewer-finding severity a task tolerates before the requirements review
+ * stops for a human. `none` tolerates nothing; `high` tolerates everything. Ordered
+ * none < low < medium < high.
+ */
+export type RequirementConcernLevel = 'none' | 'low' | 'medium' | 'high'
+
 /** A named, per-workspace merge policy a task can select. */
 export interface MergeThresholdPreset {
   id: string
@@ -22,6 +29,10 @@ export interface MergeThresholdPreset {
   maxImpact: number
   /** How many times the CI-fixer may try before the CI gate gives up. */
   ciMaxAttempts: number
+  /** How many reviewer passes the requirements-review loop runs before asking the human. */
+  maxRequirementIterations: number
+  /** Findings at or below this severity auto-pass without stopping for a human. */
+  maxRequirementConcernAllowed: RequirementConcernLevel
   /** The workspace's fallback preset, used by tasks that pick none. */
   isDefault: boolean
   createdAt: number
@@ -34,6 +45,8 @@ export interface CreateMergePresetInput {
   maxRisk: number
   maxImpact: number
   ciMaxAttempts: number
+  maxRequirementIterations: number
+  maxRequirementConcernAllowed: RequirementConcernLevel
   isDefault?: boolean
 }
 
@@ -44,5 +57,7 @@ export interface UpdateMergePresetInput {
   maxRisk?: number
   maxImpact?: number
   ciMaxAttempts?: number
+  maxRequirementIterations?: number
+  maxRequirementConcernAllowed?: RequirementConcernLevel
   isDefault?: boolean
 }

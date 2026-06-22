@@ -508,9 +508,10 @@ export const requirementReviews = pgTable(
     items: text('items').notNull().default('[]'),
     model: text('model'),
     incorporated_requirements: text('incorporated_requirements'),
-    // JSON ARRAY of { rating, threshold, passed, feedback } — the companion's verdicts
-    // across every rework cycle (migration 0036). Null until a rework has been gated.
-    companion: text('companion'),
+    // Reviewer-pass counter + its budget for the iterative review loop (the initial
+    // review is iteration 1; an "extra round" choice bumps max_iterations).
+    iteration: integer('iteration').notNull().default(1),
+    max_iterations: integer('max_iterations').notNull().default(1),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
     updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
   },
@@ -640,6 +641,10 @@ export const mergeThresholdPresets = pgTable(
     max_risk: doublePrecision('max_risk').notNull(),
     max_impact: doublePrecision('max_impact').notNull(),
     ci_max_attempts: integer('ci_max_attempts').notNull(),
+    max_requirement_iterations: integer('max_requirement_iterations').notNull().default(3),
+    max_requirement_concern_allowed: text('max_requirement_concern_allowed')
+      .notNull()
+      .default('none'),
     is_default: integer('is_default').notNull().default(0),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
   },

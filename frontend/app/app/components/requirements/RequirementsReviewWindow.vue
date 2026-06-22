@@ -1,12 +1,12 @@
 <script setup lang="ts">
-// Requirements review window: the human reacts to the reviewer agent's structured
-// findings about a block's collected requirements — answering the relevant ones and
-// dismissing the irrelevant — then runs the "requirements rework" agent, which folds
-// the answers into ONE standard-format requirements document. That reworked document
-// (not the original description + linked docs/tasks) is what every subsequent agent
-// step and the requirements-writer consume. Modelled on the polished markdown review
-// window (AgentStepDetail.vue): a full-screen overlay with a header, a main column
-// and a right action rail; the reworked result reads as collapsible markdown.
+// Requirements review window — the dedicated surface for the `requirements-review` gate
+// step (opened via the universal result-view host). The human reacts to the reviewer's
+// structured findings (answer the relevant, dismiss the irrelevant), then an incorporation
+// companion folds the answers into ONE standard-format document, and the reviewer
+// re-reviews that document. The cycle repeats until the reviewer converges (or every
+// remaining finding is dismissed); when the task's iteration cap is hit, the human picks
+// how to proceed. The incorporated document — not the original description + linked
+// docs/tasks — is what every downstream agent step and the spec-writer consume.
 import { parseOutputOutline } from '~/utils/agentOutput'
 import type {
   RequirementReview,
@@ -31,17 +31,21 @@ const busy = computed(() => (blockId.value ? requirements.isReviewing(blockId.va
 const reworking = computed(() =>
   review.value ? requirements.isIncorporating(review.value.id) : false,
 )
+const acting = ref(false)
 
 // Draft replies, keyed by item id, so editing one item doesn't disturb others.
 const drafts = ref<Record<string, string>>({})
+// Freeform "do it differently" comment when redoing a merge the human was unhappy with.
+const redoComment = ref('')
+const showRedo = ref(false)
 
-// Load the current review whenever the window opens for a block.
 watch(blockId, (id) => {
   drafts.value = {}
+  redoComment.value = ''
+  showRedo.value = false
   if (id) void requirements.load(id)
 })
 
-// Esc closes, matching the prose review overlay.
 function onKey(e: KeyboardEvent) {
   if (e.key === 'Escape' && open.value) close()
 }
@@ -49,7 +53,7 @@ onMounted(() => window.addEventListener('keydown', onKey))
 onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
 
 function close() {
-  ui.closeRequirementReview()
+  ui.closeResultView()
 }
 
 const SEVERITY_RANK: Record<ReviewItemSeverity, number> = { high: 0, medium: 1, low: 2 }
@@ -61,21 +65,20 @@ const sortedItems = computed<RequirementReviewItem[]>(() => {
 })
 
 const openCount = computed(() => (review.value ? requirements.openCount(review.value) : 0))
-const settledCount = computed(() =>
-  review.value ? review.value.items.length - openCount.value : 0,
+const answeredCount = computed(() =>
+  review.value ? requirements.answeredCount(review.value) : 0,
 )
-const canRework = computed(() => !!review.value && requirements.canRework(review.value))
-const reworked = computed(() => review.value?.status === 'incorporated')
-// The quality companion's verdicts — one per rework cycle, in order. The last is the
-// latest; when it REJECTED the document (passed === false) the rework was not accepted
-// and its challenge is surfaced for the human to address before reworking again.
-const companionVerdicts = computed(() => review.value?.companionVerdicts ?? [])
-const companion = computed(() => companionVerdicts.value.at(-1) ?? null)
-const companionRejected = computed(() => companion.value?.passed === false)
-const pctOf = (n: number) => `${Math.round(n * 100)}%`
+const status = computed(() => review.value?.status ?? null)
+const merged = computed(() => status.value === 'merged')
+const exceeded = computed(() => status.value === 'exceeded')
+const incorporated = computed(() => status.value === 'incorporated')
+const canIncorporate = computed(() => !!review.value && requirements.canIncorporate(review.value))
+const canProceed = computed(() => !!review.value && requirements.canProceed(review.value))
+const iteration = computed(() => review.value?.iteration ?? 1)
+const maxIterations = computed(() => review.value?.maxIterations ?? 1)
 
-// The reworked requirements rendered as collapsible markdown (same reader the prose
-// review window uses), shown once the rework agent has produced them.
+// The incorporated document rendered as collapsible markdown (same reader the prose
+// review window uses), shown once the companion has produced one.
 const outline = computed(() =>
   review.value?.incorporatedRequirements
     ? parseOutputOutline(review.value.incorporatedRequirements)
@@ -86,11 +89,11 @@ function toggle(id: string) {
   collapsed.value = { ...collapsed.value, [id]: !collapsed.value[id] }
 }
 
-const SEVERITY_COLOR: Record<ReviewItemSeverity, string> = {
+const SEVERITY_COLOR = {
   high: 'error',
   medium: 'warning',
   low: 'neutral',
-}
+} as const satisfies Record<ReviewItemSeverity, string>
 const CATEGORY_ICON: Record<ReviewItemCategory, string> = {
   gap: 'i-lucide-puzzle',
   clarification: 'i-lucide-help-circle',
@@ -98,12 +101,12 @@ const CATEGORY_ICON: Record<ReviewItemCategory, string> = {
   risk: 'i-lucide-shield-alert',
   question: 'i-lucide-message-circle-question',
 }
-const STATUS_COLOR: Record<ReviewItemStatus, string> = {
+const STATUS_COLOR = {
   open: 'warning',
   answered: 'info',
   resolved: 'success',
   dismissed: 'neutral',
-}
+} as const satisfies Record<ReviewItemStatus, string>
 
 function notifyError(title: string, e: unknown) {
   toast.add({
@@ -142,22 +145,75 @@ async function submitReply(item: RequirementReviewItem) {
   }
 }
 
-async function setStatus(item: RequirementReviewItem, status: ReviewItemStatus) {
+async function setStatus(item: RequirementReviewItem, itemStatus: ReviewItemStatus) {
   if (!review.value) return
   try {
-    await requirements.setItemStatus(review.value, item.id, status)
+    await requirements.setItemStatus(review.value, item.id, itemStatus)
   } catch (e) {
     notifyError('Could not update the finding', e)
   }
 }
 
-async function rework() {
+async function incorporate(feedback?: string) {
   if (!review.value) return
   try {
-    await requirements.incorporate(review.value)
-    toast.add({ title: 'Requirements reworked', icon: 'i-lucide-check-check' })
+    await requirements.incorporate(review.value, feedback)
+    redoComment.value = ''
+    showRedo.value = false
+    toast.add({ title: 'Answers incorporated', icon: 'i-lucide-check-check' })
   } catch (e) {
-    notifyError('Could not rework the requirements', e)
+    notifyError('Could not incorporate the answers', e)
+  }
+}
+
+async function reReview() {
+  if (!blockId.value) return
+  try {
+    const updated = await requirements.reReview(blockId.value)
+    toast.add({
+      title:
+        updated.status === 'incorporated'
+          ? 'Reviewer is satisfied — continuing the pipeline'
+          : updated.status === 'exceeded'
+            ? 'Iteration limit reached — choose how to proceed'
+            : `${requirements.openCount(updated)} new finding(s) to react to`,
+      icon: 'i-lucide-sparkles',
+    })
+  } catch (e) {
+    notifyError('Could not re-review the requirements', e)
+  }
+}
+
+async function proceed() {
+  if (!blockId.value) return
+  acting.value = true
+  try {
+    await requirements.proceed(blockId.value)
+    toast.add({ title: 'Proceeding to the next phase', icon: 'i-lucide-arrow-right' })
+  } catch (e) {
+    notifyError('Could not proceed', e)
+  } finally {
+    acting.value = false
+  }
+}
+
+async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset') {
+  if (!blockId.value) return
+  acting.value = true
+  try {
+    await requirements.resolveExceeded(blockId.value, choice)
+    if (choice === 'stop-reset') {
+      toast.add({ title: 'Task reset — edit the requirements and resubmit', icon: 'i-lucide-undo' })
+      close()
+    } else if (choice === 'proceed') {
+      toast.add({ title: 'Proceeding to the next phase', icon: 'i-lucide-arrow-right' })
+    } else {
+      toast.add({ title: 'One more review round granted', icon: 'i-lucide-rotate-cw' })
+    }
+  } catch (e) {
+    notifyError('Could not resolve the review', e)
+  } finally {
+    acting.value = false
   }
 }
 </script>
@@ -184,7 +240,11 @@ async function rework() {
             <p v-if="block" class="truncate text-xs text-slate-500">{{ block.title }}</p>
           </div>
           <div class="ml-auto flex items-center gap-1.5">
+            <UBadge v-if="review" color="neutral" variant="subtle" size="sm">
+              Iteration {{ iteration }} / {{ maxIterations }}
+            </UBadge>
             <UButton
+              v-if="!review"
               color="primary"
               variant="soft"
               size="sm"
@@ -192,7 +252,7 @@ async function rework() {
               :loading="busy"
               @click="runReview"
             >
-              {{ review ? 'Re-run review' : 'Run review' }}
+              Run review
             </UButton>
             <UButton icon="i-lucide-x" color="neutral" variant="ghost" size="sm" @click="close" />
           </div>
@@ -205,8 +265,8 @@ async function rework() {
               An AI reviewer inspected this {{ block?.level ?? 'item' }}’s collected requirements —
               its description plus any linked PRDs and tracker issues — and raised the findings
               below. <span class="text-slate-300">Answer</span> the relevant ones and
-              <span class="text-slate-300">dismiss</span> the irrelevant, then rework them into a
-              single standard-format requirements document.
+              <span class="text-slate-300">dismiss</span> the irrelevant, then incorporate them; the
+              reviewer re-reviews until the requirements are clear.
             </p>
 
             <!-- empty / first-run state -->
@@ -227,18 +287,66 @@ async function rework() {
             </div>
 
             <template v-else-if="review">
-              <!-- no findings: requirements look complete -->
+              <!-- converged: reviewer satisfied -->
               <div
-                v-if="review.items.length === 0"
+                v-if="incorporated"
                 class="mb-4 flex items-center gap-2 rounded-lg border border-emerald-900/60 bg-emerald-950/30 p-4 text-sm text-emerald-300"
               >
                 <UIcon name="i-lucide-circle-check" class="h-5 w-5 shrink-0" />
-                The reviewer found no gaps. You can still rework the requirements into the standard
-                format from the panel on the right.
+                The requirements are settled. The document below is what every downstream agent step
+                uses.
+              </div>
+
+              <!-- iteration cap hit -->
+              <div
+                v-else-if="exceeded"
+                class="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/5 p-4 text-sm text-amber-200"
+              >
+                <div class="flex items-center gap-2 font-medium">
+                  <UIcon name="i-lucide-alert-triangle" class="h-5 w-5 shrink-0" />
+                  Reached the {{ maxIterations }}-iteration limit with findings still open.
+                </div>
+                <p class="mt-1 text-[12px] text-amber-200/80">
+                  Do one more review round, proceed to the next phase with the last incorporated
+                  requirements anyway, or stop and reset the task so you can rework the requirements
+                  and resubmit.
+                </p>
+                <div class="mt-3 flex flex-wrap gap-2">
+                  <UButton
+                    color="primary"
+                    variant="soft"
+                    size="xs"
+                    icon="i-lucide-rotate-cw"
+                    :loading="acting"
+                    @click="resolveExceeded('extra-round')"
+                  >
+                    One more round
+                  </UButton>
+                  <UButton
+                    color="warning"
+                    variant="soft"
+                    size="xs"
+                    icon="i-lucide-arrow-right"
+                    :loading="acting"
+                    @click="resolveExceeded('proceed')"
+                  >
+                    Proceed anyway
+                  </UButton>
+                  <UButton
+                    color="error"
+                    variant="soft"
+                    size="xs"
+                    icon="i-lucide-undo"
+                    :loading="acting"
+                    @click="resolveExceeded('stop-reset')"
+                  >
+                    Stop &amp; reset task
+                  </UButton>
+                </div>
               </div>
 
               <!-- findings to react to -->
-              <div v-else class="flex flex-col gap-3">
+              <div v-if="review.items.length" class="flex flex-col gap-3">
                 <div
                   v-for="item in sortedItems"
                   :key="item.id"
@@ -256,7 +364,7 @@ async function rework() {
                         <UBadge
                           size="xs"
                           variant="subtle"
-                          :color="SEVERITY_COLOR[item.severity] as any"
+                          :color="SEVERITY_COLOR[item.severity]"
                         >
                           {{ item.severity }}
                         </UBadge>
@@ -266,7 +374,7 @@ async function rework() {
                         <UBadge
                           size="xs"
                           variant="soft"
-                          :color="STATUS_COLOR[item.status] as any"
+                          :color="STATUS_COLOR[item.status]"
                           class="ml-auto"
                         >
                           {{ item.status }}
@@ -287,8 +395,9 @@ async function rework() {
                         <p class="whitespace-pre-line">{{ item.reply }}</p>
                       </div>
 
-                      <!-- react: answer (relevant) or dismiss (irrelevant) -->
-                      <template v-if="item.status !== 'resolved' && item.status !== 'dismissed'">
+                      <!-- react: answer (relevant) or dismiss (irrelevant). Disabled once the
+                           requirements are settled / awaiting a higher-level decision. -->
+                      <template v-if="item.status === 'open' || item.status === 'answered'">
                         <UTextarea
                           v-model="drafts[item.id]"
                           :rows="2"
@@ -296,6 +405,7 @@ async function rework() {
                           size="sm"
                           class="mt-2 w-full"
                           :placeholder="item.reply ? 'Refine your answer…' : 'Answer this finding…'"
+                          :disabled="incorporated"
                         />
                         <div class="mt-2 flex flex-wrap items-center gap-2">
                           <UButton
@@ -303,25 +413,17 @@ async function rework() {
                             variant="soft"
                             size="xs"
                             icon="i-lucide-corner-down-left"
-                            :disabled="!(drafts[item.id] ?? '').trim()"
+                            :disabled="!(drafts[item.id] ?? '').trim() || incorporated"
                             @click="submitReply(item)"
                           >
                             Save answer
-                          </UButton>
-                          <UButton
-                            color="success"
-                            variant="ghost"
-                            size="xs"
-                            icon="i-lucide-check"
-                            @click="setStatus(item, 'resolved')"
-                          >
-                            Resolve
                           </UButton>
                           <UButton
                             color="neutral"
                             variant="ghost"
                             size="xs"
                             icon="i-lucide-x"
+                            :disabled="incorporated"
                             @click="setStatus(item, 'dismissed')"
                           >
                             Dismiss as irrelevant
@@ -329,14 +431,15 @@ async function rework() {
                         </div>
                       </template>
 
-                      <!-- reopen a settled finding -->
-                      <div v-else class="mt-2">
+                      <!-- reopen a dismissed finding -->
+                      <div v-else-if="item.status === 'dismissed'" class="mt-2">
                         <UButton
                           color="neutral"
                           variant="ghost"
                           size="xs"
                           icon="i-lucide-rotate-ccw"
-                          @click="setStatus(item, item.reply ? 'answered' : 'open')"
+                          :disabled="incorporated"
+                          @click="setStatus(item, 'open')"
                         >
                           Reopen
                         </UButton>
@@ -346,89 +449,13 @@ async function rework() {
                 </div>
               </div>
 
-              <!-- companion verdict on the last rework -->
-              <section
-                v-if="companion"
-                class="mt-6 rounded-lg border p-3"
-                :class="
-                  companionRejected
-                    ? 'border-amber-500/40 bg-amber-500/5'
-                    : 'border-emerald-500/30 bg-emerald-500/5'
-                "
-              >
-                <div
-                  class="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide"
-                  :class="companionRejected ? 'text-amber-400' : 'text-emerald-400'"
-                >
-                  <UIcon
-                    :name="companionRejected ? 'i-lucide-shield-alert' : 'i-lucide-shield-check'"
-                    class="h-3.5 w-3.5"
-                  />
-                  <span>
-                    Quality companion · {{ pctOf(companion.rating) }}
-                    {{ companionRejected ? '<' : '≥' }} {{ pctOf(companion.threshold) }}
-                  </span>
-                </div>
-                <p
-                  v-if="companionRejected"
-                  class="mt-2 whitespace-pre-line text-[12px] leading-relaxed text-amber-200/90"
-                >
-                  {{ companion.feedback }}
-                </p>
-                <p v-if="companionRejected" class="mt-2 text-[11px] text-slate-400">
-                  The reworked requirements were not accepted. Address the points above (answer or
-                  refine the findings), then re-run the rework — the companion's feedback is fed
-                  back into it.
-                </p>
-                <p v-else class="mt-1 text-[11px] text-slate-400">
-                  The reworked requirements cleared the quality bar and now feed every downstream
-                  agent step.
-                </p>
-
-                <!-- full correction sequence: every rework cycle's verdict, in order -->
-                <div
-                  v-if="companionVerdicts.length > 1"
-                  class="mt-3 border-t border-slate-800/60 pt-2"
-                >
-                  <div
-                    class="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500"
-                  >
-                    Correction history · {{ companionVerdicts.length }} iteration(s)
-                  </div>
-                  <ol class="space-y-1.5">
-                    <li
-                      v-for="(v, i) in companionVerdicts"
-                      :key="i"
-                      class="flex items-start gap-2 text-[11px]"
-                    >
-                      <span
-                        class="mt-px inline-flex h-4 shrink-0 items-center rounded px-1 font-mono tabular-nums"
-                        :class="
-                          v.passed
-                            ? 'bg-emerald-500/15 text-emerald-300'
-                            : 'bg-amber-500/15 text-amber-300'
-                        "
-                      >
-                        {{ i + 1 }}
-                      </span>
-                      <div class="min-w-0">
-                        <span :class="v.passed ? 'text-emerald-300' : 'text-amber-300'">
-                          {{ pctOf(v.rating) }} {{ v.passed ? '≥' : '<' }} {{ pctOf(v.threshold) }}
-                        </span>
-                        <span v-if="v.feedback" class="ml-1 text-slate-400"
-                          >— {{ v.feedback }}</span
-                        >
-                      </div>
-                    </li>
-                  </ol>
-                </div>
-              </section>
-
-              <!-- reworked result: the standard-format requirements document -->
+              <!-- incorporated document: the standard-format requirements -->
               <section v-if="outline" class="mt-6 border-t border-slate-800 pt-5">
                 <div class="mb-3 flex items-center gap-1.5 text-[11px] text-emerald-400">
                   <UIcon name="i-lucide-file-check-2" class="h-3.5 w-3.5" />
-                  <span class="font-semibold uppercase tracking-wide">Reworked requirements</span>
+                  <span class="font-semibold uppercase tracking-wide">
+                    {{ incorporated ? 'Final requirements' : 'Incorporated requirements (draft)' }}
+                  </span>
                 </div>
                 <div v-for="s in outline.sections" :key="s.id" class="mb-2">
                   <button
@@ -466,8 +493,12 @@ async function rework() {
                   <span class="text-slate-300">{{ review.items.length }}</span>
                 </div>
                 <div class="flex items-center justify-between">
-                  <span>Reacted</span>
-                  <span class="text-slate-300">{{ settledCount }} / {{ review.items.length }}</span>
+                  <span>Open</span>
+                  <span class="text-slate-300">{{ openCount }}</span>
+                </div>
+                <div class="flex items-center justify-between">
+                  <span>Answered</span>
+                  <span class="text-slate-300">{{ answeredCount }}</span>
                 </div>
                 <div v-if="review.model" class="flex items-center justify-between">
                   <span>Model</span>
@@ -475,31 +506,100 @@ async function rework() {
                 </div>
               </div>
 
-              <div v-if="review" class="border-t border-slate-800 pt-4">
+              <!-- action: ready (answer → incorporate / proceed) -->
+              <div
+                v-if="review && status === 'ready'"
+                class="space-y-2 border-t border-slate-800 pt-4"
+              >
                 <UButton
+                  v-if="canProceed"
+                  color="primary"
+                  size="sm"
+                  block
+                  icon="i-lucide-arrow-right"
+                  :loading="acting"
+                  @click="proceed"
+                >
+                  Proceed (nothing to incorporate)
+                </UButton>
+                <UButton
+                  v-else
                   color="primary"
                   size="sm"
                   block
                   icon="i-lucide-wand-sparkles"
                   :loading="reworking"
-                  :disabled="!canRework"
-                  @click="rework"
+                  :disabled="!canIncorporate"
+                  @click="incorporate()"
                 >
-                  {{ reworked || companionRejected ? 'Re-run rework' : 'Rework requirements' }}
+                  Incorporate answers
                 </UButton>
-                <p class="mt-2 text-[11px] leading-relaxed text-slate-500">
-                  <template v-if="reworked">
-                    Folded into a standard-format document. Subsequent agent steps use it instead of
-                    the original description and linked docs/tasks.
+                <p class="text-[11px] leading-relaxed text-slate-500">
+                  <template v-if="canProceed">
+                    Every finding is dismissed — proceed to the next phase without reworking.
                   </template>
-                  <template v-else-if="canRework">
-                    Sends the requirements + your answers to the rework agent, which produces one
-                    standard-format document.
+                  <template v-else-if="canIncorporate">
+                    Folds your answers into one standard-format document, then you re-review it.
                   </template>
-                  <template v-else>
-                    React to every finding (answer or dismiss) to enable.
-                  </template>
+                  <template v-else> Answer or dismiss every finding to continue. </template>
                 </p>
+              </div>
+
+              <!-- action: merged (inspect → re-review / redo) -->
+              <div v-if="review && merged" class="space-y-2 border-t border-slate-800 pt-4">
+                <UButton
+                  color="primary"
+                  size="sm"
+                  block
+                  icon="i-lucide-sparkles"
+                  :loading="busy"
+                  @click="reReview"
+                >
+                  Looks good — re-review
+                </UButton>
+                <UButton
+                  color="neutral"
+                  variant="soft"
+                  size="sm"
+                  block
+                  icon="i-lucide-pencil"
+                  @click="showRedo = !showRedo"
+                >
+                  Redo incorporation
+                </UButton>
+                <div v-if="showRedo" class="space-y-2">
+                  <UTextarea
+                    v-model="redoComment"
+                    :rows="3"
+                    autoresize
+                    size="sm"
+                    class="w-full"
+                    placeholder="What should the merge do differently?"
+                  />
+                  <UButton
+                    color="primary"
+                    variant="soft"
+                    size="xs"
+                    block
+                    icon="i-lucide-wand-sparkles"
+                    :loading="reworking"
+                    :disabled="!redoComment.trim()"
+                    @click="incorporate(redoComment.trim())"
+                  >
+                    Redo with this direction
+                  </UButton>
+                </div>
+                <p class="text-[11px] leading-relaxed text-slate-500">
+                  Re-review runs the reviewer against this document. If you’re unhappy with how it
+                  was merged, redo it with a comment instead.
+                </p>
+              </div>
+
+              <div
+                v-if="review && incorporated"
+                class="border-t border-slate-800 pt-4 text-[11px] leading-relaxed text-slate-500"
+              >
+                Requirements settled — the pipeline is continuing with the document on the left.
               </div>
             </div>
           </aside>
@@ -513,7 +613,7 @@ async function rework() {
 .pl-5\.5 {
   padding-left: 1.375rem;
 }
-/* Minimal CommonMark styling for the reworked requirements reader (mirrors the
+/* Minimal CommonMark styling for the incorporated requirements reader (mirrors the
    prose review window's reader-prose). */
 .reader-prose :deep(p) {
   margin: 0.4rem 0;

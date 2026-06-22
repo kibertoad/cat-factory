@@ -14,6 +14,9 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
     color: '#f59e0b',
     description:
       'Reviews the collected context (description + linked PRDs/RFCs) for gaps, ambiguities, assumptions and risks before the architect starts.',
+    // Opens the dedicated structured review window (answer/dismiss findings → incorporate
+    // → re-review loop) instead of the generic prose step-detail panel.
+    resultView: 'requirements-review',
   },
   {
     kind: 'architect',

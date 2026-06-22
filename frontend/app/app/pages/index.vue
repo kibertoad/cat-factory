@@ -91,7 +91,7 @@ watch(
       <PipelineBuilder />
       <DecisionModal />
       <AgentStepDetail />
-      <RequirementsReviewWindow />
+      <StepResultViewHost />
       <ObservabilityPanel />
       <DocumentSourceConnectModal />
       <DocumentImportModal />

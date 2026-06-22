@@ -4,7 +4,21 @@
 // ---------------------------------------------------------------------------
 
 import type { AgentKind, TestReport } from './domain'
-import type { CompanionVerdict } from './requirements'
+
+/**
+ * A quality companion's verdict on one producer output — the standardized shape every
+ * pipeline companion step stores, one per rework cycle.
+ */
+export interface CompanionVerdict {
+  /** Overall quality rating of the graded output (0..1, higher = better). */
+  rating: number
+  /** The quality bar the rating had to reach to pass. */
+  threshold: number
+  /** Whether the rating met the threshold. */
+  passed: boolean
+  /** The companion's challenge, shown to the human and fed into the next rework. */
+  feedback: string
+}
 
 /** Live companion state on a companion step: the bar, the budget, and every verdict. */
 export interface StepCompanion {

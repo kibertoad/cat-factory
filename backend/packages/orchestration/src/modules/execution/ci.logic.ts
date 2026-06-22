@@ -4,6 +4,15 @@ import type { CiCheck } from '@cat-factory/kernel'
 export const CI_AGENT_KIND = 'ci'
 
 /**
+ * The agent kind of the special requirements-review gate step. It is NOT a container /
+ * prose agent: the engine runs the inline reviewer (via the requirements module), parks
+ * the run for the dedicated review window, and drives the iterative answer → incorporate →
+ * re-review loop until it converges (or the human resolves a hit iteration cap). Passes
+ * through when the requirements module / reviewer model is not wired.
+ */
+export const REQUIREMENTS_REVIEW_AGENT_KIND = 'requirements-review'
+
+/**
  * The agent kind of the container agent that writes the service's unified, in-repo
  * specification (`spec.json`). It runs BEFORE the coder and aggregates the collected
  * requirements of every task under the service frame — including their acceptance
