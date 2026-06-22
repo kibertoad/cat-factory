@@ -133,7 +133,6 @@ async function submitReply(item: RequirementReviewItem) {
   try {
     await requirements.reply(review.value, item.id, text)
     drafts.value = { ...drafts.value, [item.id]: '' }
-    toast.add({ title: 'Answer saved', icon: 'i-lucide-check' })
   } catch (e) {
     notifyError('Could not save the answer', e)
   }
