@@ -147,10 +147,18 @@ export class FakeAgentExecutor implements AgentExecutor {
         ? (seq[Math.min(this.companionCalls, seq.length - 1)] ?? 1)
         : (this.options.companionRating ?? 1)
       this.companionCalls += 1
+      // A downrating critic also returns anchor-based per-item comments (the shape the
+      // real Spec Reviewer emits: `{anchorId, body}`, with NO `quotedSource`). Emitting
+      // them here exercises the actual `companionAssessmentSchema`/`stepReviewCommentSchema`
+      // parse the engine runs — guarding the regression where an anchor-only comment made
+      // the verdict unparseable and the rating silently defaulted to a passing 1.
+      const comments =
+        rating < 1 ? [{ anchorId: `${context.agentKind}-1`, body: 'address this gap' }] : undefined
       return {
         output: JSON.stringify({
           rating,
           summary: `[${context.agentKind}] rated ${(rating * 100).toFixed(0)}%`,
+          ...(comments ? { comments } : {}),
         }),
         model: 'fake',
         usage: this.options.usage,

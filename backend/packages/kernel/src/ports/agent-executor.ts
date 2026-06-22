@@ -150,13 +150,14 @@ export interface AgentRunContext {
    * previous proposal plus their feedback. Present only on a re-run triggered by
    * "Request changes"; the agent should revise its previous proposal to address
    * the feedback rather than start from scratch. `comments` are GitHub-review-style
-   * notes on specific blocks of the proposal (each carries the verbatim source it
-   * targets), folded into the prompt alongside the freeform `feedback`.
+   * notes on specific blocks of the proposal (a human review carries the verbatim
+   * `quotedSource` it targets; a companion's anchor-based comment omits it), folded
+   * into the prompt alongside the freeform `feedback`.
    */
   revision?: {
     previousProposal: string
     feedback: string
-    comments?: { quotedSource: string; body: string }[]
+    comments?: { quotedSource?: string; body: string }[]
   }
 }
 

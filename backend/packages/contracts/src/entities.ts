@@ -349,15 +349,24 @@ export const stepSubtasksSchema = v.object({
 export type StepSubtasks = v.InferOutput<typeof stepSubtasksSchema>
 
 /**
- * One GitHub-review-style comment a human left on a specific block of an agent's
- * proposal while reviewing an approval gate. `quotedSource` is the verbatim raw
- * markdown of the block the comment targets (sliced from the proposal by its
- * source line range), so a "request changes" re-run can quote the agent's own
- * text back to it rather than a re-rendered approximation.
+ * One GitHub-review-style comment left on a specific block or item of an agent's
+ * proposal — either by a human reviewing an approval gate, or by a quality
+ * companion (e.g. the Spec Reviewer) grading a structured output. `quotedSource`
+ * is the verbatim raw markdown of the block the comment targets (sliced from the
+ * proposal by its source line range), so a "request changes" re-run can quote the
+ * agent's own text back to it rather than a re-rendered approximation. It is
+ * OPTIONAL because a comment may instead anchor to a structured item via
+ * {@link anchorId} (e.g. a spec requirement / acceptance-criterion id), where the
+ * reviewed output is rendered as discrete items rather than free prose and there is
+ * no quoted source range — the shape a companion returns.
  */
 export const stepReviewCommentSchema = v.object({
-  /** Verbatim raw-markdown source of the commented block (or the rendered item text). */
-  quotedSource: v.string(),
+  /**
+   * Verbatim raw-markdown source of the commented prose block. Optional: a comment
+   * may instead anchor to a structured item via {@link anchorId}, where there is no
+   * prose source to quote.
+   */
+  quotedSource: v.optional(v.string()),
   /**
    * 0-based source line range [start, end) of the commented prose block, for
    * best-effort re-anchoring. Optional: a comment may instead anchor to a structured
