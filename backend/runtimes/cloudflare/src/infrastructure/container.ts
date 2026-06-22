@@ -21,6 +21,7 @@ import {
   GitHubDocsProvider,
   HttpEnvironmentProvider,
   NotionProvider,
+  EMAIL_CIPHER_INFO,
   PersonalSubscriptionService,
   ProviderSubscriptionService,
   RunnerPoolConnectionService,
@@ -32,6 +33,7 @@ import { type CoreDependencies, createCore } from '@cat-factory/orchestration'
 import {
   buildResolveRepoTarget as buildSharedResolveRepoTarget,
   FanOutEventPublisher,
+  WebCryptoPasswordHasher,
   WebCryptoPersonalSecretCipher,
   createWebSearchUpstreamFromEnv,
   logger,
@@ -82,6 +84,9 @@ import {
 } from './repositories/D1SlackRepositories'
 import { D1AccountRepository } from './repositories/D1AccountRepository'
 import { D1MembershipRepository } from './repositories/D1MembershipRepository'
+import { D1UserRepository } from './repositories/D1UserRepository'
+import { D1AccountInvitationRepository } from './repositories/D1AccountInvitationRepository'
+import { D1EmailConnectionRepository } from './repositories/D1EmailConnectionRepository'
 import { D1GitHubInstallationRepository } from './repositories/D1GitHubInstallationRepository'
 import { D1RepoProjectionRepository } from './repositories/D1RepoProjectionRepository'
 import { D1BranchProjectionRepository } from './repositories/D1BranchProjectionRepository'
@@ -468,6 +473,27 @@ function selectSlackDeps(config: AppConfig, db: D1Database): Partial<CoreDepende
     slackSecretCipher: infra.cipher,
     ...(config.slack.oauth ? { slackOAuth: config.slack.oauth } : {}),
   }
+}
+
+/**
+ * Wire account invitations + per-account email senders. Invitations are always
+ * available (an invite link works without email); the email-connection store + its
+ * cipher are wired only when EMAIL is enabled (an encryption key is mandatory), so
+ * an account can onboard a SendGrid/Resend key in the UI and have invites emailed.
+ */
+function selectEmailInvitationDeps(config: AppConfig, db: D1Database): Partial<CoreDependencies> {
+  const deps: Partial<CoreDependencies> = {
+    invitationRepository: new D1AccountInvitationRepository({ db }),
+    appBaseUrl: config.email.appBaseUrl || undefined,
+  }
+  if (config.email.enabled && config.email.encryptionKey) {
+    deps.emailConnectionRepository = new D1EmailConnectionRepository({ db })
+    deps.emailSecretCipher = new WebCryptoSecretCipher({
+      masterKeyBase64: config.email.encryptionKey,
+      info: EMAIL_CIPHER_INFO,
+    })
+  }
+  return deps
 }
 
 /**
@@ -1064,6 +1090,8 @@ export function buildContainer(env: Env, overrides: Partial<CoreDependencies> = 
     workspaceRepository: new D1WorkspaceRepository({ db }),
     accountRepository: new D1AccountRepository({ db }),
     membershipRepository: new D1MembershipRepository({ db }),
+    userRepository: new D1UserRepository({ db }),
+    passwordHasher: new WebCryptoPasswordHasher(),
     blockRepository: new D1BlockRepository({ db }),
     pipelineRepository: new D1PipelineRepository({ db }),
     executionRepository: new D1ExecutionRepository({ db, clock }),
@@ -1111,6 +1139,7 @@ export function buildContainer(env: Env, overrides: Partial<CoreDependencies> = 
     ...selectGitHubDeps(env, config, db, clock, idGenerator),
     ...selectMergeLifecycleDeps(env, config, db, clock, idGenerator),
     ...selectSlackDeps(config, db),
+    ...selectEmailInvitationDeps(config, db),
     ...selectRecurringDeps(env, config, db, clock, idGenerator),
     ...selectDocumentsDeps(env, config, db, clock, idGenerator),
     ...selectTasksDeps(env, config, db, clock, idGenerator),

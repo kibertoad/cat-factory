@@ -1,5 +1,8 @@
 import type { EmailMessage, EmailSender } from '@cat-factory/kernel'
 
+/** HKDF info string scoping the email-API-key cipher (mirrors SLACK_CIPHER_INFO). */
+export const EMAIL_CIPHER_INFO = 'cat-factory:email'
+
 // Transactional email adapters behind the single EmailSender port — mirroring how the
 // model registry composes vendor resolvers. Built on `fetch` only, so they run on both
 // Cloudflare workerd and Node. A facade picks whichever provider is configured.

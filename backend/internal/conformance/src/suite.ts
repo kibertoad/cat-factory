@@ -1465,16 +1465,16 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
           `/workspaces/${wsId}/slack/member-mapping`,
           {
             entries: [
-              { githubUserId: 1, slackUserId: 'U1', role: 'engineering' },
-              { githubUserId: 1, slackUserId: 'U1b', role: 'product' },
-              { githubUserId: 2, slackUserId: 'U2', role: 'product' },
+              { userId: 'usr_1', slackUserId: 'U1', role: 'engineering' },
+              { userId: 'usr_1', slackUserId: 'U1b', role: 'product' },
+              { userId: 'usr_2', slackUserId: 'U2', role: 'product' },
             ],
           },
         )
         expect(put.status).toBe(200)
-        // De-duped by github user id (last write wins): 2 entries, not 3.
+        // De-duped by user id (last write wins): 2 entries, not 3.
         expect(put.body.entries).toHaveLength(2)
-        expect(put.body.entries.find((e) => e.githubUserId === 1)?.slackUserId).toBe('U1b')
+        expect(put.body.entries.find((e) => e.userId === 'usr_1')?.slackUserId).toBe('U1b')
 
         const after = await app.call<{ entries: SlackMemberMappingEntry[] }>(
           'GET',
@@ -1482,8 +1482,8 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         )
         expect(after.body.entries).toHaveLength(2)
         // The notification role round-trips on both stores (drives @-mention audience).
-        expect(after.body.entries.find((e) => e.githubUserId === 1)?.role).toBe('product')
-        expect(after.body.entries.find((e) => e.githubUserId === 2)?.role).toBe('product')
+        expect(after.body.entries.find((e) => e.userId === 'usr_1')?.role).toBe('product')
+        expect(after.body.entries.find((e) => e.userId === 'usr_2')?.role).toBe('product')
       })
     })
   })

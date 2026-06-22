@@ -190,6 +190,7 @@ export {
   SendGridEmailSender,
   ResendEmailSender,
   createEmailSender,
+  EMAIL_CIPHER_INFO,
   type EmailProviderConfig,
   type SendGridConfig,
   type ResendConfig,

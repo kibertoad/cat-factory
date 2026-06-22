@@ -14,6 +14,7 @@ import {
   ProviderSubscriptionService,
   RunnerPoolConnectionService,
   RunnerPoolTransport,
+  EMAIL_CIPHER_INFO,
   SLACK_CIPHER_INFO,
   SlackNotificationChannel,
   TicketTrackerService,
@@ -47,6 +48,7 @@ import {
   GitHubCiStatusProvider,
   GitHubMergeabilityProvider,
   GitHubPullRequestMerger,
+  WebCryptoPasswordHasher,
   WebCryptoPersonalSecretCipher,
   WebCryptoSecretCipher,
   WebCryptoWebhookVerifier,
@@ -154,6 +156,31 @@ function selectNodeSlackDeps(
     slackSecretCipher: secretCipher,
     ...(config.slack.oauth ? { slackOAuth: config.slack.oauth } : {}),
   }
+}
+
+/**
+ * Wire account invitations + per-account email senders for the Node facade (parity
+ * with the Worker's `selectEmailInvitationDeps`). Invitations are always available (an
+ * invite link works without email); the email-connection store + cipher are wired only
+ * when EMAIL is enabled, so an account can onboard a SendGrid/Resend key in the UI and
+ * have invites emailed. The provider key is sealed with the shared ENCRYPTION_KEY.
+ */
+function selectNodeEmailInvitationDeps(
+  config: AppConfig,
+  repos: ReturnType<typeof createDrizzleRepositories>,
+): Partial<CoreDependencies> {
+  const deps: Partial<CoreDependencies> = {
+    invitationRepository: repos.invitationRepository,
+    appBaseUrl: config.email.appBaseUrl || undefined,
+  }
+  if (config.email.enabled && config.email.encryptionKey) {
+    deps.emailConnectionRepository = repos.emailConnectionRepository
+    deps.emailSecretCipher = new WebCryptoSecretCipher({
+      masterKeyBase64: config.email.encryptionKey,
+      info: EMAIL_CIPHER_INFO,
+    })
+  }
+  return deps
 }
 
 /**
@@ -721,6 +748,8 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     workspaceRepository: repos.workspaceRepository,
     accountRepository: repos.accountRepository,
     membershipRepository: repos.membershipRepository,
+    userRepository: repos.userRepository,
+    passwordHasher: new WebCryptoPasswordHasher(),
     blockRepository: repos.blockRepository,
     pipelineRepository: repos.pipelineRepository,
     executionRepository: repos.executionRepository,
@@ -850,6 +879,8 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // Default-off; when enabled it composes the Slack channel onto the notification
     // mechanism, identically to the Worker.
     ...selectNodeSlackDeps(config, options.db, repos),
+    // Account invitations + per-account email senders (UI-onboarded, DB-stored).
+    ...selectNodeEmailInvitationDeps(config, repos),
     ...options.overrides,
   }
 
