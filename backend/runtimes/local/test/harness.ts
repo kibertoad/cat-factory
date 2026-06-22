@@ -3,6 +3,7 @@ import {
   type ConformanceApp,
   FakeAgentExecutor,
   type FakeAgentOptions,
+  FakeRepoBootstrapper,
   RecordingEventPublisher,
   makeIncorporatedReview,
 } from '@cat-factory/conformance'
@@ -74,6 +75,9 @@ export function makeConformanceApp(db: DrizzleDb, agentOptions?: FakeAgentOption
       : new FakeAgentExecutor(agentOptions),
     workRunner: new NoopWorkRunner(),
     bootstrapRunner: new NoopBootstrapRunner(),
+    // Deterministic bootstrapper so the suite drives the bootstrap lifecycle through the
+    // local composition root without GitHub/Docker (driven via driveBootstrap).
+    repoBootstrapper: new FakeRepoBootstrapper(),
     executionEventPublisher: recorder,
   }
   const container = buildLocalContainer({ db, env: TEST_ENV, overrides })
@@ -128,6 +132,15 @@ export function makeConformanceApp(db: DrizzleDb, agentOptions?: FakeAgentOption
     return blockId ? recorder.emits.filter((e) => e.blockId === blockId) : recorder.emits
   }
 
+  async function driveBootstrap(workspaceId: string, jobId: string, maxPolls = 50): Promise<number> {
+    if (!container.bootstrap) throw new Error('bootstrap module is not configured in this app')
+    for (let p = 0; p < maxPolls; p++) {
+      const result = await container.bootstrap.service.pollBootstrapJob(workspaceId, jobId)
+      if (result.state !== 'running') return p + 1
+    }
+    return maxPolls
+  }
+
   // Seed a block's incorporated requirements review directly into the (shared
   // Postgres) store so the engine's reworked-requirements substitution can be driven
   // without running the reviewer LLM — the same Drizzle persistence the Node harness
@@ -150,6 +163,7 @@ export function makeConformanceApp(db: DrizzleDb, agentOptions?: FakeAgentOption
     createWorkspace,
     createOrgWorkspace,
     drive,
+    driveBootstrap,
     executionEmits,
     seedIncorporatedReview,
     seedBlueprint,

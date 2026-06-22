@@ -257,6 +257,80 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
       })
     })
 
+    describe('repo bootstrap', () => {
+      it('round-trips reference architectures', async () => {
+        const { call, createWorkspace } = harness.makeApp()
+        const { workspace } = await createWorkspace()
+        const base = `/workspaces/${workspace.id}/bootstrap/reference-architectures`
+
+        const empty = await call<unknown[]>('GET', base)
+        expect(empty.status).toBe(200)
+        expect(empty.body).toEqual([])
+
+        const created = await call<{ id: string; name: string }>('POST', base, {
+          name: 'Node service',
+          repoOwner: 'acme',
+          repoName: 'reference-node',
+          defaultInstructions: 'Adapt the reference service.',
+        })
+        expect(created.status).toBe(201)
+        expect(created.body.name).toBe('Node service')
+
+        const renamed = await call<{ name: string }>('PATCH', `${base}/${created.body.id}`, {
+          name: 'Node service v2',
+        })
+        expect(renamed.status).toBe(200)
+        expect(renamed.body.name).toBe('Node service v2')
+
+        const listed = await call<{ id: string }[]>('GET', base)
+        expect(listed.body.map((r) => r.id)).toEqual([created.body.id])
+
+        const del = await call('DELETE', `${base}/${created.body.id}`)
+        expect(del.status).toBe(204)
+        expect((await call<unknown[]>('GET', base)).body).toEqual([])
+      })
+
+      it('drives a bootstrap run to success and materialises its service frame', async () => {
+        const app = harness.makeApp()
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        // Kick off a from-scratch bootstrap (the FakeRepoBootstrapper reports connected,
+        // so the pre-flight passes). The call returns immediately with a running job that
+        // already carries its provisional service frame.
+        const started = await app.call<{ id: string; status: string; blockId: string | null }>(
+          'POST',
+          `/workspaces/${wsId}/bootstrap/jobs`,
+          { repoName: 'new-service', instructions: 'Scaffold a small HTTP service.' },
+        )
+        expect(started.status).toBe(201)
+        expect(started.body.status).toBe('running')
+        expect(started.body.blockId).toBeTruthy()
+        const jobId = started.body.id
+        const frameId = started.body.blockId!
+
+        // Drive the durable poll loop (production: pg-boss / a BootstrapWorkflow). The
+        // default fake reports `done` on the first poll.
+        const polls = await app.driveBootstrap(wsId, jobId)
+        expect(polls).toBeGreaterThanOrEqual(1)
+
+        // The job is now succeeded and its service frame is materialised on the board
+        // (a real frame, not blocked — the success path flips it ready, after which the
+        // best-effort initial blueprint run may move it to in_progress; both are success
+        // states and identical across facades, so we assert it isn't the failure state).
+        const job = await app.call<{ status: string; blockId: string | null }>(
+          'GET',
+          `/workspaces/${wsId}/bootstrap/jobs/${jobId}`,
+        )
+        expect(job.body.status).toBe('succeeded')
+
+        const snap = await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+        const frame = snap.body.blocks.find((b) => b.id === frameId)
+        expect(frame?.level).toBe('frame')
+        expect(frame?.status).not.toBe('blocked')
+      })
+    })
+
     describe('board scan blueprints', () => {
       it('exposes the module and round-trips persisted repository blueprints', async () => {
         const app = harness.makeApp()

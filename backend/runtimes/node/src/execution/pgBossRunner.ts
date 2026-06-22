@@ -1,6 +1,7 @@
 import type { WorkRunner } from '@cat-factory/kernel'
 import type { Logger, ServerContainer } from '@cat-factory/server'
 import type { Job, PgBoss, SendOptions } from 'pg-boss'
+import { reenqueueStaleBootstrap } from './bootstrapRunner.js'
 import { type DriveConfig, driveExecution } from './drive.js'
 
 // Durable execution on pg-boss: the analogue of the Worker's Cloudflare Workflows
@@ -241,7 +242,15 @@ export function startStaleRunSweeper(
     try {
       const stale = await container.agentRunRepository.listStale(Date.now() - cfg.leaseMs)
       for (const ref of stale) {
-        if (ref.kind !== 'execution') continue // bootstrap isn't durable on Node yet
+        // Both durable kinds are re-driven: an orphaned execution back onto the advance
+        // queue, an orphaned bootstrap onto the bootstrap drive queue (parity with the
+        // Worker's sweepStuckRuns, which covers execution + bootstrap).
+        if (ref.kind === 'bootstrap') {
+          log.warn({ workspaceId: ref.workspaceId, jobId: ref.id }, 're-driving stale bootstrap')
+          await reenqueueStaleBootstrap(boss, ref.workspaceId, ref.id, queueOptions)
+          continue
+        }
+        if (ref.kind !== 'execution') continue
         log.warn({ workspaceId: ref.workspaceId, executionId: ref.id }, 're-driving stale run')
         await boss.send(
           QUEUE,

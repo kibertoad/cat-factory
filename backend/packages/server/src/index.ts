@@ -46,6 +46,10 @@ export {
 } from './agents/ContainerAgentExecutor.js'
 export { RunnerJobClient, type ResolveRunnerTransport } from './agents/RunnerJobClient.js'
 export {
+  ContainerRepoBootstrapper,
+  type ContainerRepoBootstrapperDependencies,
+} from './agents/ContainerRepoBootstrapper.js'
+export {
   buildResolveRepoTarget,
   type ResolveRepoTargetDependencies,
 } from './agents/resolveRepoTarget.js'

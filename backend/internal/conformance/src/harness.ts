@@ -63,6 +63,12 @@ export interface ConformanceApp {
    */
   drive(workspaceId: string, maxRounds?: number): Promise<ExecutionInstance[]>
   /**
+   * Poll a bootstrap run to a terminal state (the Node/CF facades durably drive this via
+   * pg-boss / a BootstrapWorkflow; the suite drives it directly against a deterministic
+   * {@link FakeRepoBootstrapper}). Returns the number of polls taken.
+   */
+  driveBootstrap(workspaceId: string, jobId: string, maxPolls?: number): Promise<number>
+  /**
    * Every {@link ExecutionInstance} the engine emitted (via `executionChanged`), in
    * order and deep-cloned at emit time — so the suite can assert intermediate
    * transitions `drive`'s final state can't show. Optionally filtered to one block.

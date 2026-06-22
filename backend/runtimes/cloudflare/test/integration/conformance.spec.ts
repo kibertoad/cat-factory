@@ -2,6 +2,7 @@ import {
   AsyncFakeAgentExecutor,
   type ConformanceHarness,
   FakeAgentExecutor,
+  FakeRepoBootstrapper,
   RecordingEventPublisher,
   defineConformanceSuite,
   makeIncorporatedReview,
@@ -28,7 +29,9 @@ const harness: ConformanceHarness = {
       agentOptions?.asyncKinds?.length
         ? new AsyncFakeAgentExecutor(agentOptions)
         : new FakeAgentExecutor(agentOptions),
-      { executionEventPublisher: recorder },
+      // A deterministic bootstrapper so the shared suite can drive the bootstrap
+      // lifecycle against D1 without a real container (driven via driveBootstrap).
+      { executionEventPublisher: recorder, repoBootstrapper: new FakeRepoBootstrapper() },
     )
     return {
       ...app,

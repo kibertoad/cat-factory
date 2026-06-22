@@ -1,4 +1,8 @@
-import { AiAgentExecutor, inlineWebSearchOptionsFromEnv } from '@cat-factory/agents'
+import {
+  AiAgentExecutor,
+  inlineWebSearchOptionsFromEnv,
+  resolveAgentConfig,
+} from '@cat-factory/agents'
 import {
   ConfluenceProvider,
   GitHubDocsProvider,
@@ -33,6 +37,7 @@ import {
   type ServerContainer,
   CompositeAgentExecutor,
   ContainerAgentExecutor,
+  ContainerRepoBootstrapper,
   ContainerSessionService,
   FetchGitHubClient,
   GitHubAppAuth,
@@ -51,6 +56,7 @@ import type { PgBoss } from 'pg-boss'
 import { loadNodeConfig } from './config.js'
 import type { DrizzleDb } from './db/client.js'
 import { executionRuntime } from './execution/config.js'
+import { PgBossBootstrapRunner } from './execution/bootstrapRunner.js'
 import { PgBossWorkRunner } from './execution/pgBossRunner.js'
 import { createNodeGateways } from './gateways.js'
 import { createNodeModelProvider } from './modelProvider.js'
@@ -73,6 +79,10 @@ import {
   DrizzleSubscriptionActivationRepository,
 } from './repositories/personalSubscription.js'
 import { createDrizzleRepositories } from './repositories/drizzle.js'
+import {
+  DrizzleBootstrapJobRepository,
+  DrizzleReferenceArchitectureRepository,
+} from './repositories/bootstrap.js'
 import {
   DrizzleDocumentConnectionRepository,
   DrizzleDocumentRepository,
@@ -344,6 +354,54 @@ function buildNodeContainerExecutor(
     // in the sandbox) whenever an upstream is configured for this deployment.
     webSearchProxyEnabled: Boolean(createWebSearchUpstreamFromEnv(env)),
     githubApiBase: config.github.apiBase,
+  })
+}
+
+/**
+ * Build the repo bootstrapper (the "bootstrap repo" container dispatch) when its
+ * prerequisites are configured — mirroring the Worker's `selectRepoBootstrapper` and
+ * the container-executor prerequisites: a resolvable runner transport, the public URL
+ * + session secret backing the LLM proxy, a token source, and a GitHub client.
+ * Returns undefined otherwise (the bootstrap module then has no runner and the service
+ * reports a clean dispatch failure). Bootstrap is an `architect`-kind run, so it
+ * follows that kind's routing. The promoted `ContainerRepoBootstrapper` dispatches
+ * through the same shared runner seam the container executor uses, so on Node it runs
+ * against the self-hosted pool and on local against the per-job Docker container.
+ */
+function selectNodeRepoBootstrapper(deps: {
+  env: NodeJS.ProcessEnv
+  config: AppConfig
+  resolveTransport: ResolveRunnerTransport | null
+  installationRepository: GitHubInstallationRepository
+  bootstrapJobRepository: ConstructorParameters<
+    typeof ContainerRepoBootstrapper
+  >[0]['bootstrapJobRepository']
+  repoRepository: ConstructorParameters<typeof ContainerRepoBootstrapper>[0]['repoRepository']
+  githubClient: GitHubClient | undefined
+  mintInstallationToken: ((installationId: number) => Promise<string>) | undefined
+}): ContainerRepoBootstrapper | undefined {
+  const publicUrl = deps.env.PUBLIC_URL?.trim()
+  const sessionSecret = deps.config.auth.sessionSecret
+  if (
+    !deps.resolveTransport ||
+    !publicUrl ||
+    !sessionSecret ||
+    !deps.githubClient ||
+    !deps.mintInstallationToken
+  ) {
+    return undefined
+  }
+  return new ContainerRepoBootstrapper({
+    resolveTransport: deps.resolveTransport,
+    installationRepository: deps.installationRepository,
+    bootstrapJobRepository: deps.bootstrapJobRepository,
+    repoRepository: deps.repoRepository,
+    githubClient: deps.githubClient,
+    mintInstallationToken: deps.mintInstallationToken,
+    sessionService: new ContainerSessionService({ secret: sessionSecret }),
+    model: resolveAgentConfig(deps.config.agents.routing, 'architect').ref,
+    proxyBaseUrl: `${publicUrl.replace(/\/+$/, '')}/v1`,
+    githubApiBase: deps.config.github.apiBase,
   })
 }
 
@@ -633,6 +691,26 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
         }
       : {}
 
+  // Repo-bootstrap: the reference-architecture library + the bootstrap runs (stored as
+  // kind='bootstrap' rows of agent_runs). The repos are wired unconditionally (the
+  // module + ref-arch CRUD then work like the Worker); the container-dispatching
+  // `repoBootstrapper` wires only when its prerequisites are met (transport + proxy +
+  // token + GitHub client) — the same token source the container executor uses.
+  const bootstrapJobRepository = new DrizzleBootstrapJobRepository(options.db)
+  const bootstrapMintInstallationToken =
+    options.mintInstallationToken ??
+    (appRegistry ? (id: number) => appRegistry.installationToken(id) : undefined)
+  const repoBootstrapper = selectNodeRepoBootstrapper({
+    env,
+    config,
+    resolveTransport,
+    installationRepository: githubInstallationRepository,
+    bootstrapJobRepository,
+    repoRepository: repoProjectionRepository,
+    githubClient,
+    mintInstallationToken: bootstrapMintInstallationToken,
+  })
+
   const dependencies: CoreDependencies = {
     workspaceRepository: repos.workspaceRepository,
     accountRepository: repos.accountRepository,
@@ -723,12 +801,27 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
         }
       : {}),
     ...(options.boss
-      ? { workRunner: new PgBossWorkRunner(options.boss, executionRuntime(config, env).queue) }
+      ? {
+          workRunner: new PgBossWorkRunner(options.boss, executionRuntime(config, env).queue),
+          // The durable bootstrap driver (analogue of the Worker's BootstrapWorkflow):
+          // BootstrapService.startRun enqueues a drive job that polls the run to terminal.
+          bootstrapRunner: new PgBossBootstrapRunner(
+            options.boss,
+            executionRuntime(config, env).queue,
+          ),
+        }
       : {}),
     ...githubGateDeps,
     // GitHub installation + repo/branch/PR/issue/commit/check-run projections + the
     // sync/webhook module (inline ingest persists to these repos on Node).
     ...githubModuleDeps,
+    // Repo-bootstrap: the reference-architecture library + bootstrap-run store make the
+    // module + API available; `repoBootstrapper` (when wired) dispatches the bootstrap
+    // container through the shared runner seam, and `bootstrapRunner` (pg-boss, below)
+    // durably drives its poll loop — parity with the Worker's BootstrapWorkflow.
+    referenceArchitectureRepository: new DrizzleReferenceArchitectureRepository(options.db),
+    bootstrapJobRepository,
+    ...(repoBootstrapper ? { repoBootstrapper } : {}),
     // Document sources (Confluence / Notion / GitHub docs): wired from the shared
     // integration providers exactly like the Worker, so a workspace can connect a
     // source and import requirement/PRD/RFC pages as agent context.

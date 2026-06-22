@@ -605,6 +605,31 @@ export const environments = pgTable(
   ],
 )
 
+// Repo-bootstrap feature: managed reference architectures a new repo is bootstrapped
+// from (mirror of D1 migration 0010). The bootstrap *runs* themselves are stored as
+// kind='bootstrap' rows of the unified agent_runs table (no separate table), exactly
+// like the Worker.
+export const referenceArchitectures = pgTable(
+  'reference_architectures',
+  {
+    id: text('id').primaryKey(),
+    workspace_id: text('workspace_id').notNull(),
+    name: text('name').notNull(),
+    description: text('description').notNull().default(''),
+    repo_owner: text('repo_owner').notNull(),
+    repo_name: text('repo_name').notNull(),
+    default_instructions: text('default_instructions').notNull().default(''),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+    updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
+    deleted_at: bigint('deleted_at', { mode: 'number' }),
+  },
+  (t) => [
+    index('idx_reference_architectures_workspace')
+      .on(t.workspace_id)
+      .where(sql`${t.deleted_at} IS NULL`),
+  ],
+)
+
 // Slack integration (mirror of D1 migration 0037). An additional delivery transport
 // for the notification mechanism. Per-account connection (+ encrypted bot token,
 // `token_cipher` is a WebCryptoSecretCipher envelope, never plaintext), per-workspace

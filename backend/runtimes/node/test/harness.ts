@@ -3,6 +3,7 @@ import {
   type ConformanceApp,
   FakeAgentExecutor,
   type FakeAgentOptions,
+  FakeRepoBootstrapper,
   RecordingEventPublisher,
   makeIncorporatedReview,
 } from '@cat-factory/conformance'
@@ -75,6 +76,9 @@ export function makeConformanceApp(db: DrizzleDb, agentOptions?: FakeAgentOption
       : new FakeAgentExecutor(agentOptions),
     workRunner: new NoopWorkRunner(),
     bootstrapRunner: new NoopBootstrapRunner(),
+    // A deterministic bootstrapper so the suite can drive the dispatch→poll→finalise
+    // lifecycle without GitHub or a container (the suite drives it via driveBootstrap).
+    repoBootstrapper: new FakeRepoBootstrapper(),
     executionEventPublisher: recorder,
   }
   const container = buildNodeContainer({ db, env: TEST_ENV, overrides })
@@ -139,6 +143,16 @@ export function makeConformanceApp(db: DrizzleDb, agentOptions?: FakeAgentOption
     return blockId ? recorder.emits.filter((e) => e.blockId === blockId) : recorder.emits
   }
 
+  // Poll a bootstrap run to terminal directly (production drives this via pg-boss).
+  async function driveBootstrap(workspaceId: string, jobId: string, maxPolls = 50): Promise<number> {
+    if (!container.bootstrap) throw new Error('bootstrap module is not configured in this app')
+    for (let p = 0; p < maxPolls; p++) {
+      const result = await container.bootstrap.service.pollBootstrapJob(workspaceId, jobId)
+      if (result.state !== 'running') return p + 1
+    }
+    return maxPolls
+  }
+
   function seedIncorporatedReview(workspaceId: string, blockId: string, requirements: string) {
     return new DrizzleRequirementReviewRepository(db).upsert(
       workspaceId,
@@ -155,6 +169,7 @@ export function makeConformanceApp(db: DrizzleDb, agentOptions?: FakeAgentOption
     createWorkspace,
     createOrgWorkspace,
     drive,
+    driveBootstrap,
     executionEmits,
     seedIncorporatedReview,
     seedBlueprint,

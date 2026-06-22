@@ -20,6 +20,7 @@ import {
   startExecutionWorker,
   startStaleRunSweeper,
 } from './execution/pgBossRunner.js'
+import { startBootstrapWorker } from './execution/bootstrapRunner.js'
 import { startEnvironmentSweeper } from './environments.js'
 import { startScheduleSweeper } from './recurring.js'
 import { createDrizzleRepositories } from './repositories/drizzle.js'
@@ -119,6 +120,11 @@ export async function start(
   await startExecutionWorker(boss, container, runtime.drive, logger, {
     concurrency: runtime.concurrency,
     decisionTimeoutSeconds: runtime.decisionTimeoutSeconds,
+  })
+  // Durably drive bootstrap runs too (the Worker uses a per-run BootstrapWorkflow);
+  // a no-op queue when the bootstrap module isn't wired.
+  await startBootstrapWorker(boss, container, runtime.drive, logger, {
+    concurrency: runtime.concurrency,
   })
   const stopSweeper = startStaleRunSweeper(boss, container, runtime.sweeper, runtime.queue, logger)
   // Bound the unbounded tables (`token_usage`, the heavy `llm_call_metrics`): the Worker
