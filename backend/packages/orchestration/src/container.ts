@@ -5,6 +5,12 @@ import type {
   WorkspaceRepository,
 } from '@cat-factory/kernel'
 import type { AccountRepository, MembershipRepository } from '@cat-factory/kernel'
+import type {
+  AccountInvitationRepository,
+  EmailSender,
+  PasswordHasher,
+  UserRepository,
+} from '@cat-factory/kernel'
 import type { ServiceRepository, WorkspaceMountRepository } from '@cat-factory/kernel'
 import { ServiceMountService } from './modules/services/ServiceMountService.js'
 import type { Clock, IdGenerator } from '@cat-factory/kernel'
@@ -70,6 +76,8 @@ import { ExecutionService } from './modules/execution/ExecutionService.js'
 import { PipelineService } from './modules/pipelines/PipelineService.js'
 import { WorkspaceService } from '@cat-factory/workspaces'
 import { AccountService } from '@cat-factory/workspaces'
+import { UserService } from '@cat-factory/workspaces'
+import { InvitationService } from '@cat-factory/workspaces'
 import { SpendService, DEFAULT_SPEND_PRICING, type SpendPricing } from '@cat-factory/spend'
 import { LlmObservabilityService } from './modules/observability/LlmObservabilityService.js'
 import {
@@ -122,6 +130,18 @@ export interface CoreDependencies {
   /** Account tenancy: accounts own workspaces; memberships grant access (0017). */
   accountRepository: AccountRepository
   membershipRepository: MembershipRepository
+  /** Canonical user identity (`users` + `user_identities`); keyed off by everything. */
+  userRepository: UserRepository
+  /** Hashes/verifies email-password credentials (WebCrypto PBKDF2). */
+  passwordHasher: PasswordHasher
+  /** Account invitations (email-based org onboarding). Optional: opt-in feature. */
+  invitationRepository?: AccountInvitationRepository
+  /** Transactional email transport (invitations). Optional: returns links when absent. */
+  emailSender?: EmailSender
+  /** Base URL the invite-accept link points at (SPA origin). */
+  appBaseUrl?: string
+  /** From address for transactional email. */
+  emailFrom?: string
   blockRepository: BlockRepository
   pipelineRepository: PipelineRepository
   executionRepository: ExecutionRepository
@@ -493,6 +513,9 @@ export interface FragmentLibraryModule {
 export interface Core {
   workspaceService: WorkspaceService
   accountService: AccountService
+  userService: UserService
+  /** Present only when the invitation repository is wired (see CoreDependencies). */
+  invitations?: InvitationService
   boardService: BoardService
   pipelineService: PipelineService
   executionService: ExecutionService
@@ -1059,9 +1082,28 @@ export function createCore(dependencies: CoreDependencies): Core {
   const accountService = new AccountService({
     accountRepository: dependencies.accountRepository,
     membershipRepository: dependencies.membershipRepository,
+    userRepository: dependencies.userRepository,
     idGenerator: dependencies.idGenerator,
     clock: dependencies.clock,
   })
+  const userService = new UserService({
+    userRepository: dependencies.userRepository,
+    passwordHasher: dependencies.passwordHasher,
+    idGenerator: dependencies.idGenerator,
+    clock: dependencies.clock,
+  })
+  const invitations = dependencies.invitationRepository
+    ? new InvitationService({
+        invitationRepository: dependencies.invitationRepository,
+        accountRepository: dependencies.accountRepository,
+        membershipRepository: dependencies.membershipRepository,
+        idGenerator: dependencies.idGenerator,
+        clock: dependencies.clock,
+        emailSender: dependencies.emailSender,
+        appBaseUrl: dependencies.appBaseUrl,
+        emailFrom: dependencies.emailFrom,
+      })
+    : undefined
   const pipelineService = new PipelineService(dependencies)
   const spendService = new SpendService({
     tokenUsageRepository: dependencies.tokenUsageRepository,
@@ -1130,6 +1172,8 @@ export function createCore(dependencies: CoreDependencies): Core {
   return {
     workspaceService,
     accountService,
+    userService,
+    ...(invitations ? { invitations } : {}),
     boardService,
     pipelineService,
     executionService,

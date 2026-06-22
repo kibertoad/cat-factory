@@ -19,7 +19,7 @@ import type {
  * owner_user_id = them). `null` means "no scoping" — the auth-disabled / local-dev
  * path, where every board is returned.
  */
-export type WorkspaceVisibility = { accountIds: string[]; ownerUserId: number } | null
+export type WorkspaceVisibility = { accountIds: string[]; ownerUserId: string } | null
 
 export interface WorkspaceRepository {
   /**
@@ -30,18 +30,20 @@ export interface WorkspaceRepository {
   listVisible(scope: WorkspaceVisibility): Promise<Workspace[]>
   get(id: string): Promise<Workspace | null>
   /**
-   * The owning user id for a board: a number when owned, `null` for a board with
+   * The owning user id for a board: a string when owned, `null` for a board with
    * no owner, and `undefined` when the board does not exist.
    */
-  ownerOf(id: string): Promise<number | null | undefined>
+  ownerOf(id: string): Promise<string | null | undefined>
   /**
    * The owning account id for a board: a string when account-scoped, `null` for a
    * legacy/unscoped board, and `undefined` when the board does not exist. Used by
    * the API's per-workspace authorization check.
    */
   accountOf(id: string): Promise<string | null | undefined>
-  create(workspace: Workspace, ownerUserId: number | null, accountId: string | null): Promise<void>
+  create(workspace: Workspace, ownerUserId: string | null, accountId: string | null): Promise<void>
   rename(id: string, name: string): Promise<void>
+  /** Update a board's description (null clears it). */
+  setDescription(id: string, description: string | null): Promise<void>
   delete(id: string): Promise<void>
 }
 

@@ -51,10 +51,25 @@ export interface GitHubConfig {
   privilegedApp?: PrivilegedAppConfig
 }
 
+/** Google OAuth credentials + (optional) endpoint overrides for "Login with Google". */
+export interface GoogleOAuthConfig {
+  clientId: string
+  clientSecret: string
+  /** Explicit redirect_uri; '' means derive `${origin}/auth/google/callback`. */
+  redirectUrl: string
+  /** OAuth host (authorize/token); defaults to Google's. */
+  oauthBase?: string
+  /** Userinfo API base; defaults to Google's. */
+  apiBase?: string
+}
+
 export interface AuthConfig {
+  /** True when ANY login provider (GitHub OAuth / password / Google) is configured. */
   enabled: boolean
   /** Local-dev/test ONLY: permit running with auth unconfigured (open API). */
   devOpen: boolean
+  /** GitHub OAuth is offered only when a client id/secret are set. */
+  githubEnabled: boolean
   clientId: string
   clientSecret: string
   sessionSecret: string
@@ -74,6 +89,28 @@ export interface AuthConfig {
   allowedOrgs: string[]
   /** Extra origins the post-login `redirect` query may target, beyond the request origin. */
   allowedRedirectOrigins: string[]
+  /** Whether email/password signup + login is offered. */
+  passwordEnabled: boolean
+  /** Google OAuth config, present only when configured. */
+  google?: GoogleOAuthConfig
+  /**
+   * Lowercased email domains permitted to self-signup (password/Google) without an
+   * invite. Empty ⇒ new-user creation is invite-only (the default, fail-closed).
+   */
+  allowedEmailDomains: string[]
+}
+
+export interface EmailConfig {
+  /** Opt-in flag; false unless a provider API key is configured. */
+  enabled: boolean
+  /** Which provider to send through ('sendgrid' | 'resend'). */
+  provider: 'sendgrid' | 'resend' | null
+  /** The From address for transactional email (invitations). */
+  from: string
+  /** Public base URL the invite-accept link points at (the SPA origin). */
+  appBaseUrl: string
+  sendgrid?: { apiKey: string }
+  resend?: { apiKey: string }
 }
 
 export interface DocumentsConfig {
@@ -183,6 +220,8 @@ export interface AppConfig {
   runners: RunnerPoolConfig
   /** Slack notification-transport config; `enabled` is false unless opted in. */
   slack: SlackConfig
+  /** Transactional email config (invitations); `enabled` is false unless opted in. */
+  email: EmailConfig
   /** Retention windows for the unbounded ledgers/projections (epoch-ms ages). */
   retention: RetentionConfig
   /** Prompt-fragment library config; `enabled` is false unless opted in (ADR 0006). */

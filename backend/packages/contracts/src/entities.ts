@@ -131,12 +131,12 @@ export const blockSchema = v.object({
    */
   pipelineId: v.optional(v.string()),
   /**
-   * GitHub user id of the person who created this block, captured from the
-   * authenticated session at creation (tasks today). Drives "notify the task
+   * Internal user id (`usr_*`) of the person who created this block, captured from
+   * the authenticated session at creation (tasks today). Drives "notify the task
    * creator" routing for notifications. Absent/null on blocks created before this
    * was recorded, or with auth disabled (local/dev), where there is no user.
    */
-  createdBy: v.optional(v.nullable(v.number())),
+  createdBy: v.optional(v.nullable(v.string())),
 })
 export type Block = v.InferOutput<typeof blockSchema>
 
@@ -702,19 +702,21 @@ export const executionInstanceSchema = v.object({
    */
   failure: v.optional(v.nullable(agentFailureSchema)),
   /**
-   * GitHub user id of whoever started this run (or retried it). Recorded so the
-   * individual-usage restricted mode can use the initiator's OWN personal
+   * Internal user id (`usr_*`) of whoever started this run (or retried it). Recorded
+   * so the individual-usage restricted mode can use the initiator's OWN personal
    * subscription (e.g. Claude) for the run's steps — a personal credential is never
    * shared, so only its owner's runs may use it. Absent for runs started without a
    * signed-in user (auth-disabled/local dev) and for legacy runs.
    */
-  initiatedBy: v.optional(v.nullable(v.number())),
+  initiatedBy: v.optional(v.nullable(v.string())),
 })
 export type ExecutionInstance = v.InferOutput<typeof executionInstanceSchema>
 
 export const workspaceSchema = v.object({
   id: v.string(),
   name: v.string(),
+  /** Optional free-text description (null when unset). */
+  description: v.nullable(v.string()),
   createdAt: v.number(),
   /** The account this board belongs to, or null for a legacy/unscoped board. */
   accountId: v.nullable(v.string()),

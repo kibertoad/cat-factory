@@ -36,9 +36,13 @@ export type Account = v.InferOutput<typeof accountSchema>
 /** A member of an account. */
 export const accountMemberSchema = v.object({
   accountId: v.string(),
-  userId: v.number(),
+  userId: v.string(),
   role: accountRoleSchema,
   createdAt: v.number(),
+  /** Display details of the member (resolved from the users table), when available. */
+  name: v.optional(v.nullable(v.string())),
+  email: v.optional(v.nullable(v.string())),
+  avatarUrl: v.optional(v.nullable(v.string())),
 })
 export type AccountMember = v.InferOutput<typeof accountMemberSchema>
 
@@ -58,9 +62,34 @@ export const updateAccountSchema = v.object({
 })
 export type UpdateAccountInput = v.InferOutput<typeof updateAccountSchema>
 
-/** Add a member to an account by their GitHub numeric user id. */
+/** Add a member to an account by their internal user id. */
 export const addMemberSchema = v.object({
-  userId: v.pipe(v.number(), v.integer(), v.minValue(1)),
+  userId: v.pipe(v.string(), v.minLength(1)),
   role: v.optional(accountRoleSchema),
 })
 export type AddMemberInput = v.InferOutput<typeof addMemberSchema>
+
+// ---- Invitations ----------------------------------------------------------
+
+export const invitationStatusSchema = v.picklist(['pending', 'accepted', 'revoked'])
+export type InvitationStatus = v.InferOutput<typeof invitationStatusSchema>
+
+/** An account invitation as exposed to clients (never carries the raw token). */
+export const accountInvitationSchema = v.object({
+  id: v.string(),
+  accountId: v.string(),
+  email: v.string(),
+  role: accountRoleSchema,
+  status: invitationStatusSchema,
+  invitedBy: v.string(),
+  expiresAt: v.number(),
+  createdAt: v.number(),
+})
+export type AccountInvitation = v.InferOutput<typeof accountInvitationSchema>
+
+/** Invite a teammate by email into an org account. */
+export const createInvitationSchema = v.object({
+  email: v.pipe(v.string(), v.trim(), v.email(), v.maxLength(320)),
+  role: v.optional(accountRoleSchema),
+})
+export type CreateInvitationInput = v.InferOutput<typeof createInvitationSchema>

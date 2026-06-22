@@ -9,6 +9,7 @@ import type {
   AccountRepository,
   Membership,
   MembershipRepository,
+  UserRepository,
 } from '@cat-factory/kernel'
 import type { Clock, IdGenerator } from '@cat-factory/kernel'
 import { ConflictError, NotFoundError, ValidationError, assertFound } from '@cat-factory/kernel'
@@ -26,11 +27,15 @@ export interface AccountServiceDependencies {
   membershipRepository: MembershipRepository
   idGenerator: IdGenerator
   clock: Clock
+  /** Optional: resolve member display details (name/email/avatar) for the roster. */
+  userRepository?: UserRepository
 }
 
 /** The signed-in identity the tenancy decisions are made against. */
 export interface AccountUser {
-  id: number
+  /** Internal user id (`usr_*`). */
+  id: string
+  /** GitHub login, when the user signed in via GitHub (else any display handle). */
   login: string
   name: string | null
 }
@@ -60,7 +65,7 @@ export class AccountService {
    * GitHub login, so repeated calls return the same account.
    */
   async ensurePersonalAccount(user: AccountUser): Promise<AccountRecord> {
-    const existing = await this.deps.accountRepository.findPersonalByLogin(user.login)
+    const existing = await this.deps.accountRepository.findPersonalByUser(user.id)
     if (existing) {
       // Self-heal a missing owner membership (e.g. partially-applied prior run).
       await this.ensureMembership(existing.id, user.id, 'owner')
@@ -71,6 +76,7 @@ export class AccountService {
       type: 'personal',
       name: user.name?.trim() || user.login,
       githubAccountLogin: user.login,
+      ownerUserId: user.id,
       createdAt: this.deps.clock.now(),
     }
     await this.deps.accountRepository.create(account)
@@ -85,6 +91,7 @@ export class AccountService {
       type: 'org',
       name: input.name.trim(),
       githubAccountLogin: input.githubAccountLogin?.trim() || null,
+      ownerUserId: null,
       createdAt: this.deps.clock.now(),
     }
     await this.deps.accountRepository.create(account)
@@ -113,17 +120,17 @@ export class AccountService {
   }
 
   /** The set of account ids a user belongs to (used to scope board visibility). */
-  async accessibleAccountIds(userId: number): Promise<string[]> {
+  async accessibleAccountIds(userId: string): Promise<string[]> {
     const memberships = await this.deps.membershipRepository.listByUser(userId)
     return memberships.map((m) => m.accountId)
   }
 
-  async isMember(accountId: string, userId: number): Promise<boolean> {
+  async isMember(accountId: string, userId: string): Promise<boolean> {
     return (await this.deps.membershipRepository.get(accountId, userId)) !== null
   }
 
   /** Resolve the membership or throw 404 — the guard mutating routes use. */
-  async requireMember(accountId: string, userId: number): Promise<Membership> {
+  async requireMember(accountId: string, userId: string): Promise<Membership> {
     const membership = await this.deps.membershipRepository.get(accountId, userId)
     if (!membership) throw new NotFoundError('Account', accountId)
     return membership
@@ -135,7 +142,20 @@ export class AccountService {
 
   async members(accountId: string): Promise<AccountMember[]> {
     const list = await this.deps.membershipRepository.listByAccount(accountId)
-    return list.map(toMember)
+    const users = this.deps.userRepository
+    if (!users) return list.map(toMember)
+    // Enrich the roster with each member's display details for the UI.
+    return Promise.all(
+      list.map(async (m) => {
+        const user = await users.get(m.userId)
+        return {
+          ...toMember(m),
+          name: user?.name ?? null,
+          email: user?.email ?? null,
+          avatarUrl: user?.avatarUrl ?? null,
+        }
+      }),
+    )
   }
 
   /**
@@ -145,7 +165,7 @@ export class AccountService {
    */
   async updateSettings(
     accountId: string,
-    actingUserId: number,
+    actingUserId: string,
     input: UpdateAccountInput,
   ): Promise<Account> {
     const acting = await this.requireMember(accountId, actingUserId)
@@ -172,8 +192,8 @@ export class AccountService {
    */
   async addMember(
     accountId: string,
-    actingUserId: number,
-    userId: number,
+    actingUserId: string,
+    userId: string,
     role: Membership['role'] = 'member',
   ): Promise<AccountMember> {
     const account = assertFound(
@@ -200,7 +220,7 @@ export class AccountService {
 
   private async ensureMembership(
     accountId: string,
-    userId: number,
+    userId: string,
     role: Membership['role'],
   ): Promise<void> {
     if (await this.deps.membershipRepository.get(accountId, userId)) return
