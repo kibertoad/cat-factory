@@ -44,6 +44,7 @@ import {
   getErrorMessage,
   NotFoundError,
   sameSubtasks,
+  ValidationError,
   type SubscriptionVendor,
 } from '@cat-factory/kernel'
 import { DEFAULT_MERGE_PRESET } from '@cat-factory/kernel'
@@ -525,31 +526,42 @@ export class ExecutionService {
 
     await this.executionRepository.deleteByBlock(workspaceId, blockId)
 
-    const steps: PipelineStep[] = pipeline.agentKinds.map((kind, i) => {
-      const companionDef = companionFor(kind)
-      return {
-        agentKind: kind,
-        state: i === 0 ? 'working' : 'pending',
-        progress: 0,
-        decision: null,
-        // A gated step pauses for human approval once its proposal is ready (see
-        // recordStepResult). Copied from the pipeline definition at run start.
-        requiresApproval: pipeline.gates?.[i] ?? false,
-        approval: null,
-        // A companion step carries its quality bar + rework budget, seeded from the
-        // pipeline's per-step threshold (else the companion's default).
-        ...(companionDef
-          ? {
-              companion: {
-                threshold: pipeline.thresholds?.[i] ?? companionDef.defaultThreshold,
-                maxAttempts: DEFAULT_COMPANION_MAX_ATTEMPTS,
-                attempts: 0,
-                verdicts: [],
-              },
-            }
-          : {}),
-      }
-    })
+    // Build the run only from the ENABLED steps. A step the pipeline marked
+    // `enabled[i] === false` is kept in the saved pipeline (so it can be toggled back
+    // on later) but skipped here entirely. Gates/thresholds are read by the kind's
+    // ORIGINAL index `i`, so they stay aligned to the kind even when earlier steps are
+    // skipped; the first SURVIVING step is the one that starts working.
+    const steps: PipelineStep[] = pipeline.agentKinds
+      .map((kind, i) => ({ kind, i }))
+      .filter(({ i }) => pipeline.enabled?.[i] !== false)
+      .map(({ kind, i }, position) => {
+        const companionDef = companionFor(kind)
+        return {
+          agentKind: kind,
+          state: position === 0 ? 'working' : 'pending',
+          progress: 0,
+          decision: null,
+          // A gated step pauses for human approval once its proposal is ready (see
+          // recordStepResult). Copied from the pipeline definition at run start.
+          requiresApproval: pipeline.gates?.[i] ?? false,
+          approval: null,
+          // A companion step carries its quality bar + rework budget, seeded from the
+          // pipeline's per-step threshold (else the companion's default).
+          ...(companionDef
+            ? {
+                companion: {
+                  threshold: pipeline.thresholds?.[i] ?? companionDef.defaultThreshold,
+                  maxAttempts: DEFAULT_COMPANION_MAX_ATTEMPTS,
+                  attempts: 0,
+                  verdicts: [],
+                },
+              }
+            : {}),
+        }
+      })
+    if (steps.length === 0) {
+      throw new ValidationError('Pipeline has no enabled steps to run.')
+    }
     const instance: ExecutionInstance = {
       id: executionId,
       blockId,

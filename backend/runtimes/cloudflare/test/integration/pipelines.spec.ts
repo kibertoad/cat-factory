@@ -67,4 +67,82 @@ describe('pipelines', () => {
     const res = await app.call('DELETE', `/workspaces/${wsId}/pipelines/missing`)
     expect(res.status).toBe(404)
   })
+
+  it('flags built-in pipelines as builtin and custom ones as not', async () => {
+    const list = await app.call<Pipeline[]>('GET', `/workspaces/${wsId}/pipelines`)
+    expect(list.body.find((p) => p.id === 'pl_quick')?.builtin).toBe(true)
+
+    const custom = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+      name: 'Docs only',
+      agentKinds: ['documenter'],
+    })
+    expect(custom.body.builtin ?? false).toBe(false)
+  })
+
+  it('clones a pipeline into an editable, non-builtin copy', async () => {
+    const res = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines/pl_quick/clone`, {
+      name: 'My quick',
+    })
+    expect(res.status).toBe(201)
+    expect(res.body.id).not.toBe('pl_quick')
+    expect(res.body.name).toBe('My quick')
+    expect(res.body.builtin ?? false).toBe(false)
+    // The copy carries the source's steps verbatim.
+    const source = (await app.call<Pipeline[]>('GET', `/workspaces/${wsId}/pipelines`)).body.find(
+      (p) => p.id === 'pl_quick',
+    )!
+    expect(res.body.agentKinds).toEqual(source.agentKinds)
+    // And it now lives in the catalog alongside the original.
+    const list = await app.call<Pipeline[]>('GET', `/workspaces/${wsId}/pipelines`)
+    expect(list.body.map((p) => p.id)).toContain(res.body.id)
+  })
+
+  it('defaults a clone name to "<source> (copy)"', async () => {
+    const res = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines/pl_spec/clone`, {})
+    expect(res.status).toBe(201)
+    expect(res.body.name).toBe('Write spec (copy)')
+  })
+
+  it('refuses to edit a built-in pipeline (must clone first)', async () => {
+    const res = await app.call('PATCH', `/workspaces/${wsId}/pipelines/pl_quick`, {
+      name: 'Renamed default',
+    })
+    expect(res.status).toBe(422)
+    // The built-in is untouched.
+    const list = await app.call<Pipeline[]>('GET', `/workspaces/${wsId}/pipelines`)
+    expect(list.body.find((p) => p.id === 'pl_quick')?.name).toBe('Quick implement')
+  })
+
+  it('edits a cloned pipeline in place, including disabling a step', async () => {
+    const clone = await app.call<Pipeline>(
+      'POST',
+      `/workspaces/${wsId}/pipelines/pl_quick/clone`,
+      {},
+    )
+    const id = clone.body.id
+    const steps = clone.body.agentKinds
+    // Disable the last step and rename; the id (and catalog position) is preserved.
+    const enabled = steps.map((_, i) => i !== steps.length - 1)
+    const res = await app.call<Pipeline>('PATCH', `/workspaces/${wsId}/pipelines/${id}`, {
+      name: 'Quick minus tail',
+      enabled,
+    })
+    expect(res.status).toBe(200)
+    expect(res.body.id).toBe(id)
+    expect(res.body.name).toBe('Quick minus tail')
+    expect(res.body.enabled).toEqual(enabled)
+    expect(res.body.builtin ?? false).toBe(false)
+  })
+
+  it('rejects an edit that disables every step', async () => {
+    const clone = await app.call<Pipeline>(
+      'POST',
+      `/workspaces/${wsId}/pipelines/pl_spec/clone`,
+      {},
+    )
+    const res = await app.call('PATCH', `/workspaces/${wsId}/pipelines/${clone.body.id}`, {
+      enabled: clone.body.agentKinds.map(() => false),
+    })
+    expect(res.status).toBe(422)
+  })
 })

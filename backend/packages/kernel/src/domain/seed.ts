@@ -316,7 +316,9 @@ export function seedPipelines(): Pipeline[] {
     // (and its Gherkin acceptance scenarios) independently.
     { id: 'pl_spec', name: 'Write spec', agentKinds: ['spec-writer'] },
   ]
-  return mergeRegisteredPipelines(builtins)
+  // Every curated catalog pipeline is a read-only template: it can be cloned into an
+  // editable copy but not edited in place (see PipelineService.update / clone).
+  return mergeRegisteredPipelines(builtins.map((p) => ({ ...p, builtin: true })))
 }
 
 /** Pipeline id of the blueprint-only run kicked off after a successful bootstrap. */

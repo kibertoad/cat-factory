@@ -284,6 +284,20 @@ export const pipelineSchema = v.object({
    * means "use the companion's default threshold"; ignored on non-companion steps.
    */
   thresholds: v.optional(v.array(v.nullable(v.pipe(v.number(), v.minValue(0), v.maxValue(1))))),
+  /**
+   * Per-step enable flags, parallel to {@link agentKinds}: when `enabled[i]` is
+   * explicitly `false` the step is kept in the pipeline (so it can be toggled back
+   * on) but SKIPPED at run start — the execution instance is built only from the
+   * enabled steps. Absent / shorter than `agentKinds`, or `true`, means the step
+   * runs, so legacy pipelines run every step unchanged.
+   */
+  enabled: v.optional(v.array(v.boolean())),
+  /**
+   * True for the curated built-in catalog pipelines (`seedPipelines()`). Built-ins
+   * are read-only templates: they can be cloned (into an editable copy) but not
+   * edited in place. Absent / false on user-created and cloned pipelines.
+   */
+  builtin: v.optional(v.boolean()),
 })
 export type Pipeline = v.InferOutput<typeof pipelineSchema>
 

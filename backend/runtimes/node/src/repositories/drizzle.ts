@@ -295,7 +295,24 @@ class DrizzlePipelineRepository implements PipelineRepository {
       agent_kinds: JSON.stringify(pipeline.agentKinds),
       gates: pipeline.gates ? JSON.stringify(pipeline.gates) : null,
       thresholds: pipeline.thresholds ? JSON.stringify(pipeline.thresholds) : null,
+      enabled: pipeline.enabled ? JSON.stringify(pipeline.enabled) : null,
+      builtin: pipeline.builtin ? 1 : null,
     })
+  }
+
+  async update(workspaceId: string, pipeline: Pipeline): Promise<void> {
+    // UPDATE in place preserves the row's `seq`, so an edited pipeline keeps its place
+    // in the catalog order. `builtin` is immutable, so it is not rewritten.
+    await this.db
+      .update(pipelines)
+      .set({
+        name: pipeline.name,
+        agent_kinds: JSON.stringify(pipeline.agentKinds),
+        gates: pipeline.gates ? JSON.stringify(pipeline.gates) : null,
+        thresholds: pipeline.thresholds ? JSON.stringify(pipeline.thresholds) : null,
+        enabled: pipeline.enabled ? JSON.stringify(pipeline.enabled) : null,
+      })
+      .where(and(eq(pipelines.workspace_id, workspaceId), eq(pipelines.id, pipeline.id)))
   }
 
   async delete(workspaceId: string, id: string): Promise<void> {

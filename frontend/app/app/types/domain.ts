@@ -241,6 +241,16 @@ export interface Pipeline {
    * meaningful on companion steps; `null`/absent ⇒ use the companion's default bar.
    */
   thresholds?: (number | null)[]
+  /**
+   * Per-step enable flags, parallel to `agentKinds`: `enabled[i] === false` keeps the
+   * step in the pipeline but skips it at run start. Absent/true ⇒ the step runs.
+   */
+  enabled?: boolean[]
+  /**
+   * True for the curated built-in catalog pipelines. Built-ins are read-only
+   * templates — clone one to make an editable copy. Absent/false on custom pipelines.
+   */
+  builtin?: boolean
 }
 
 /**

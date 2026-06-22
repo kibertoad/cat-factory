@@ -246,6 +246,10 @@ export const pipelines = pgTable(
     agent_kinds: text('agent_kinds').notNull().default('[]'),
     gates: text('gates'),
     thresholds: text('thresholds'),
+    // Nullable JSON array of per-step enable flags; truthy `builtin` marks the curated
+    // read-only catalog templates (mirror of D1 migration 0002).
+    enabled: text('enabled'),
+    builtin: integer('builtin'),
     // Monotonic insert sequence (Postgres has no SQLite rowid): a workspace's pipelines
     // are read back in the order they were seeded — the curated `seedPipelines()` order
     // — so the catalog order (and the UI's default `pipelines[0]`) is deterministic and
