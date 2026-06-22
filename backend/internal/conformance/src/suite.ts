@@ -342,6 +342,63 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
       })
     })
 
+    describe('ephemeral environments', () => {
+      it('registers, reads (secret-free), and unregisters an environment provider', async () => {
+        const { call, createWorkspace } = harness.makeApp()
+        const { workspace } = await createWorkspace()
+        const base = `/workspaces/${workspace.id}/environments`
+
+        // The module is wired on every facade (the test env opts in): a fresh
+        // workspace has no provider connection — a 200, not the 503 a missing module
+        // would return.
+        const initial = await call<{ connection: unknown }>('GET', `${base}/connection`)
+        expect(initial.status).toBe(200)
+        expect(initial.body.connection).toBeNull()
+
+        // Register a provider (a declarative manifest + its secret bundle). register is
+        // pure — it validates the manifest (SSRF + secret completeness) and encrypts the
+        // bundle at rest; no network. The token is never echoed.
+        const manifest = {
+          providerId: 'acme-envs',
+          label: 'Acme Ephemeral Envs',
+          baseUrl: 'https://envs.test/api',
+          auth: { type: 'bearer', secretRef: { key: 'API_TOKEN' } },
+          provision: {
+            method: 'POST',
+            pathTemplate: '/environments',
+            bodyTemplate: '{"ref":"{{input.blockId}}"}',
+          },
+          status: { method: 'GET', pathTemplate: '/environments/{{provision.externalId}}' },
+          teardown: { method: 'DELETE', pathTemplate: '/environments/{{provision.externalId}}' },
+          response: { urlPath: 'url', statusPath: 'state', externalIdPath: 'id' },
+        }
+        const registered = await call<{ providerId: string; secretKeys: string[] }>(
+          'POST',
+          `${base}/connection`,
+          { manifest, secrets: { API_TOKEN: 'super-secret-env-token' } },
+        )
+        expect(registered.status).toBe(201)
+        expect(registered.body.providerId).toBe('acme-envs')
+        expect(registered.body.secretKeys).toEqual(['API_TOKEN'])
+        expect(JSON.stringify(registered.body)).not.toContain('super-secret-env-token')
+
+        // It reads back as metadata only — the secret bundle is never on the wire.
+        const got = await call<{ connection: { providerId: string; secretKeys: string[] } | null }>(
+          'GET',
+          `${base}/connection`,
+        )
+        expect(got.body.connection?.providerId).toBe('acme-envs')
+        expect(got.body.connection?.secretKeys).toEqual(['API_TOKEN'])
+        expect(JSON.stringify(got.body)).not.toContain('super-secret-env-token')
+
+        // Unregister tombstones it; the connection goes null again.
+        const del = await call('DELETE', `${base}/connection`)
+        expect(del.status).toBe(204)
+        const afterDelete = await call<{ connection: unknown }>('GET', `${base}/connection`)
+        expect(afterDelete.body.connection).toBeNull()
+      })
+    })
+
     describe('board', () => {
       it('adds a top-level frame', async () => {
         const app = harness.makeApp()

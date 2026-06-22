@@ -42,6 +42,9 @@ const TEST_ENV: NodeJS.ProcessEnv = {
   // the local facade (parity with the Node/Worker test envs); the conformance Slack
   // CRUD asserts persistence parity and the channel bails when no Slack is connected.
   SLACK_ENABLED: 'true',
+  // Opt into the ephemeral-environment integration (parity with the Node/Worker test
+  // envs) so the conformance env CRUD asserts persistence parity here too.
+  ENVIRONMENTS_ENABLED: 'true',
   LOCAL_HARNESS_IMAGE: 'cat-factory-executor:test',
   GITHUB_PAT: 'test-pat',
 }

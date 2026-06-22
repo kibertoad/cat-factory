@@ -549,6 +549,62 @@ export const documents = pgTable(
   ],
 )
 
+// Ephemeral-environment integration (mirror of D1 migration 0008). A workspace's
+// binding to its own environment-management API (a declarative manifest) and the
+// registry of environments provisioned from it. Credentials are opaque ciphertext
+// (SecretCipher envelopes), never plaintext. At most one live provider per workspace
+// (the partial unique index lets a tombstoned binding be replaced).
+export const environmentConnections = pgTable(
+  'environment_connections',
+  {
+    workspace_id: text('workspace_id').notNull(),
+    provider_id: text('provider_id').notNull(),
+    label: text('label').notNull(),
+    base_url: text('base_url').notNull(),
+    manifest_json: text('manifest_json').notNull(),
+    secrets_cipher: text('secrets_cipher').notNull(),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+    deleted_at: bigint('deleted_at', { mode: 'number' }),
+  },
+  (t) => [
+    primaryKey({ columns: [t.workspace_id, t.provider_id] }),
+    uniqueIndex('idx_environment_conn_workspace')
+      .on(t.workspace_id)
+      .where(sql`${t.deleted_at} IS NULL`),
+  ],
+)
+
+// One row per provisioned environment. `access_cipher` holds the env's own access
+// creds (what the tester uses); `provision_fields_cipher` holds the fields captured at
+// provision time that status/teardown calls interpolate.
+export const environments = pgTable(
+  'environments',
+  {
+    id: text('id').primaryKey(),
+    workspace_id: text('workspace_id').notNull(),
+    block_id: text('block_id'),
+    execution_id: text('execution_id'),
+    provider_id: text('provider_id').notNull(),
+    external_id: text('external_id'),
+    url: text('url'),
+    status: text('status').notNull(),
+    access_cipher: text('access_cipher'),
+    provision_fields_cipher: text('provision_fields_cipher'),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+    expires_at: bigint('expires_at', { mode: 'number' }),
+    last_error: text('last_error'),
+    deleted_at: bigint('deleted_at', { mode: 'number' }),
+  },
+  (t) => [
+    index('idx_environments_block')
+      .on(t.workspace_id, t.block_id)
+      .where(sql`${t.deleted_at} IS NULL`),
+    index('idx_environments_expiry')
+      .on(t.expires_at)
+      .where(sql`${t.deleted_at} IS NULL AND ${t.expires_at} IS NOT NULL`),
+  ],
+)
+
 // Slack integration (mirror of D1 migration 0037). An additional delivery transport
 // for the notification mechanism. Per-account connection (+ encrypted bot token,
 // `token_cipher` is a WebCryptoSecretCipher envelope, never plaintext), per-workspace

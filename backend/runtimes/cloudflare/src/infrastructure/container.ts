@@ -19,6 +19,7 @@ import {
 import {
   ConfluenceProvider,
   GitHubDocsProvider,
+  HttpEnvironmentProvider,
   NotionProvider,
   PersonalSubscriptionService,
   ProviderSubscriptionService,
@@ -107,7 +108,6 @@ import { InAppNotificationChannel } from './events/InAppNotificationChannel'
 import { GitHubCiStatusProvider } from './github/GitHubCiStatusProvider'
 import { GitHubMergeabilityProvider } from './github/GitHubMergeabilityProvider'
 import { GitHubPullRequestMerger } from './github/GitHubPullRequestMerger'
-import { HttpEnvironmentProvider } from './environments/HttpEnvironmentProvider'
 import { WebCryptoSecretCipher } from './environments/WebCryptoSecretCipher'
 import { GitHubAppAuth } from './github/GitHubAppAuth'
 import { GitHubAppRegistry } from './github/GitHubAppRegistry'

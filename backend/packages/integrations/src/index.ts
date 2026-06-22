@@ -104,6 +104,12 @@ export {
   type EnvironmentTeardownServiceDependencies,
 } from './modules/environments/EnvironmentTeardownService.js'
 export * as environmentsLogic from './modules/environments/environments.logic.js'
+// The HTTP environment provider (a `fetch` shell around the manifest logic above),
+// promoted from the Worker infra so every facade composes the same provider.
+export {
+  HttpEnvironmentProvider,
+  EnvironmentApiError,
+} from './modules/environments/HttpEnvironmentProvider.js'
 export {
   isDeployStep,
   DEPLOYER_AGENT_KIND,

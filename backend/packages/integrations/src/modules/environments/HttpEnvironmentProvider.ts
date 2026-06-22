@@ -13,7 +13,7 @@ import {
   type ProvisionedEnvironment,
   type SecretResolver,
 } from '@cat-factory/kernel'
-import { environmentsLogic } from '@cat-factory/integrations'
+import * as environmentsLogic from './environments.logic.js'
 
 // The single generic adapter that interprets ANY environment manifest. There are
 // no per-provider presets: an org's self-rolled management API is described as

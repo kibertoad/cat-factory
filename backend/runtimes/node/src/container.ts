@@ -2,6 +2,7 @@ import { AiAgentExecutor, inlineWebSearchOptionsFromEnv } from '@cat-factory/age
 import {
   ConfluenceProvider,
   GitHubDocsProvider,
+  HttpEnvironmentProvider,
   HttpRunnerPoolProvider,
   NotionProvider,
   PersonalSubscriptionService,
@@ -68,6 +69,10 @@ import {
   DrizzleDocumentConnectionRepository,
   DrizzleDocumentRepository,
 } from './repositories/documents.js'
+import {
+  DrizzleEnvironmentConnectionRepository,
+  DrizzleEnvironmentRegistryRepository,
+} from './repositories/environments.js'
 import { DrizzleNotificationRepository } from './repositories/notifications.js'
 import {
   DrizzleSlackConnectionRepository,
@@ -679,6 +684,9 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // integration providers exactly like the Worker, so a workspace can connect a
     // source and import requirement/PRD/RFC pages as agent context.
     ...selectNodeDocumentsDeps(config, options.db, githubClient, githubInstallationRepository),
+    // Ephemeral environments (opt-in): a workspace registers its own environment
+    // management API; the tester provisions/destroys per-run environments from it.
+    ...selectNodeEnvironmentsDeps(config, options.db),
     // Slack: an extra notification transport (the channel) + its management module.
     // Default-off; when enabled it composes the Slack channel onto the notification
     // mechanism, identically to the Worker.
@@ -772,5 +780,27 @@ function selectNodeDocumentsDeps(
     ...(config.documents.planner === 'llm'
       ? { documentPlannerModel: config.agents.routing.default.ref }
       : {}),
+  }
+}
+
+/**
+ * Wire the ephemeral-environment integration for the Node facade when enabled,
+ * mirroring the Worker's `selectEnvironmentsDeps`: the shared `HttpEnvironmentProvider`
+ * (a manifest-driven `fetch` shell), the Drizzle connection + registry repos, and the
+ * environment-scoped `SecretCipher`. Per-tenant management-API secrets are encrypted at
+ * rest with the shared ENCRYPTION_KEY. Disabled → `{}` and the module stays off.
+ */
+function selectNodeEnvironmentsDeps(
+  config: AppConfig,
+  db: DrizzleDb,
+): Partial<CoreDependencies> {
+  if (!config.environments.enabled || !config.environments.encryptionKey) return {}
+  return {
+    environmentProvider: new HttpEnvironmentProvider(),
+    environmentConnectionRepository: new DrizzleEnvironmentConnectionRepository(db),
+    environmentRegistryRepository: new DrizzleEnvironmentRegistryRepository(db),
+    secretCipher: new WebCryptoSecretCipher({
+      masterKeyBase64: config.environments.encryptionKey,
+    }),
   }
 }

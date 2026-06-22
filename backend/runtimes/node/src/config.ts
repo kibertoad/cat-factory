@@ -222,7 +222,13 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
     // ENCRYPTION_KEY backs credential encryption at rest).
     documents: loadDocumentsConfig(env),
     tasks: loadTasksConfig(env),
-    environments: { enabled: false },
+    // Ephemeral-environment provider integration: opt-in (a tenant rolls its own
+    // environment-management API), gated on ENVIRONMENTS_ENABLED + the shared
+    // ENCRYPTION_KEY (credentials are encrypted at rest), mirroring the Worker.
+    environments:
+      env.ENVIRONMENTS_ENABLED === 'true' && env.ENCRYPTION_KEY?.trim()
+        ? { enabled: true, encryptionKey: env.ENCRYPTION_KEY.trim() }
+        : { enabled: false },
     runners: runnersEncryptionKey
       ? { enabled: true, encryptionKey: runnersEncryptionKey }
       : { enabled: false },
