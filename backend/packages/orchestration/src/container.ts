@@ -23,7 +23,7 @@ import { type ExecutionEventPublisher, NoopEventPublisher } from '@cat-factory/k
 import type { GitHubClient } from '@cat-factory/kernel'
 import type { GitHubProvisioningClient } from '@cat-factory/kernel'
 import type { WebhookVerifier } from '@cat-factory/kernel'
-import type { ModelProvider, ModelRef } from '@cat-factory/kernel'
+import type { ModelProvider, ModelRef, ProviderCapabilities } from '@cat-factory/kernel'
 import type { DocumentSourceProvider } from '@cat-factory/kernel'
 import type { DocumentConnectionRepository, DocumentRepository } from '@cat-factory/kernel'
 import type { TaskSourceProvider } from '@cat-factory/kernel'
@@ -392,6 +392,17 @@ export interface CoreDependencies {
    * routing is used everywhere.
    */
   modelDefaultsRepository?: ModelDefaultsRepository
+  /**
+   * Resolve the provider capabilities (configured direct API keys + subscription
+   * vendors + whether Cloudflare AI is enabled) for a workspace and the run initiator.
+   * The pipeline-start guard uses it to block a run whose steps' canonical models have
+   * no usable provider. Wired by each facade from its API-key + subscription services;
+   * absent → the guard is skipped.
+   */
+  resolveProviderCapabilities?: (
+    workspaceId: string,
+    initiatedBy?: string | null,
+  ) => Promise<ProviderCapabilities>
   /**
    * Stores a workspace's default service-fragment selection (the best-practice
    * fragment ids new services inherit). Optional and default-off: absent → the

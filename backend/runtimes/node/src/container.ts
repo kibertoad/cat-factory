@@ -58,6 +58,7 @@ import {
   buildResolveRepoTarget,
   createWebSearchUpstreamFromEnv,
   logger,
+  resolveWorkspaceCapabilities,
 } from '@cat-factory/server'
 import type { PgBoss } from 'pg-boss'
 import { loadNodeConfig } from './config.js'
@@ -711,6 +712,8 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     idGenerator,
     clock,
   )
+  // Cloudflare Workers AI is opt-in on Node: enabled when the REST creds are present.
+  const cloudflareModelsEnabled = !!(env.CLOUDFLARE_ACCOUNT_ID && env.CLOUDFLARE_API_TOKEN)
 
   const container = buildNodeContainerExecutor(
     env,
@@ -964,6 +967,13 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     ...selectNodeSlackDeps(config, options.db, repos),
     // Account invitations + per-account email senders (UI-onboarded, DB-stored).
     ...selectNodeEmailInvitationDeps(config, repos),
+    // The pipeline-start guard resolves what's configured for a workspace + initiator.
+    resolveProviderCapabilities: (workspaceId, initiatedBy) =>
+      resolveWorkspaceCapabilities(
+        { apiKeys, subscriptions, personalSubscriptions, cloudflareModelsEnabled },
+        workspaceId,
+        initiatedBy,
+      ),
     ...options.overrides,
   }
 
@@ -981,6 +991,8 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // The direct-provider API-key pool (account/workspace/user); present when the
     // shared ENCRYPTION_KEY is configured.
     apiKeys,
+    // Whether the opt-in Cloudflare Workers AI lib is enabled (REST creds present).
+    cloudflareModelsEnabled,
   }
 }
 

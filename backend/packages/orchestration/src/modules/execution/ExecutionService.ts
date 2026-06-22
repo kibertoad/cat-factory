@@ -8,6 +8,7 @@ import type {
   ExecutionInstance,
   MergeAssessment,
   MergePresetRepository,
+  Pipeline,
   PipelineStep,
   PullRequestMerger,
   PullRequestMergeabilityProvider,
@@ -39,7 +40,9 @@ import {
   ConflictError,
   getErrorMessage,
   individualVendorForModelId,
+  isModelUsable,
   NotFoundError,
+  type ProviderCapabilities,
   sameSubtasks,
   type SubscriptionVendor,
 } from '@cat-factory/kernel'
@@ -213,6 +216,17 @@ export interface ExecutionServiceDependencies {
     agentKind: string,
   ) => Promise<string | undefined>
   /**
+   * Optional: resolve the provider capabilities (configured direct keys +
+   * subscription vendors + whether Cloudflare AI is enabled) for a workspace and the
+   * run initiator. The start guard uses it to block a pipeline whose steps' canonical
+   * models have no usable provider. Absent → the guard is skipped (tests / unconfigured
+   * facades), exactly like the existing optional engine deps.
+   */
+  resolveProviderCapabilities?: (
+    workspaceId: string,
+    initiatedBy?: string | null,
+  ) => Promise<ProviderCapabilities>
+  /**
    * Optional: when the environment integration is configured, a `deployer` step
    * provisions an ephemeral environment deterministically through this service
    * (no LLM), and downstream steps discover the resulting env via it.
@@ -313,6 +327,10 @@ export class ExecutionService {
   private readonly mergePresetRepository?: MergePresetRepository
   private readonly ticketTrackerProvider?: TicketTrackerProvider
   private readonly subscriptionActivations?: SubscriptionActivationRepository
+  private readonly resolveProviderCapabilities?: (
+    workspaceId: string,
+    initiatedBy?: string | null,
+  ) => Promise<ProviderCapabilities>
   private readonly resolveWorkspaceModelDefault?: (
     workspaceId: string,
     agentKind: string,
@@ -345,6 +363,7 @@ export class ExecutionService {
     ticketTrackerProvider,
     subscriptionActivationRepository,
     resolveWorkspaceModelDefault,
+    resolveProviderCapabilities,
   }: ExecutionServiceDependencies) {
     this.workspaceRepository = workspaceRepository
     this.blockRepository = blockRepository
@@ -372,6 +391,7 @@ export class ExecutionService {
     this.ticketTrackerProvider = ticketTrackerProvider
     this.subscriptionActivations = subscriptionActivationRepository
     this.resolveWorkspaceModelDefault = resolveWorkspaceModelDefault
+    this.resolveProviderCapabilities = resolveProviderCapabilities
   }
 
   private requireWorkspace(workspaceId: string) {
@@ -459,6 +479,45 @@ export class ExecutionService {
     )
   }
 
+  /**
+   * Guard a pipeline's start on having a usable provider for every step's canonical
+   * model. The model a step runs is resolved by the same precedence the dispatch path
+   * uses (block pin → workspace per-kind default); each canonical id must have a usable
+   * provider given what's configured — a direct API key for its provider, a connected
+   * subscription vendor, or the opt-in Cloudflare lib enabled. Env-routing defaults (the
+   * last fallback, with no catalog id) are operator-level and not gated, matching the
+   * personal-credential gate. A throw aborts the start cleanly before any side effects.
+   * Skipped when no capability resolver is wired (tests / unconfigured facades).
+   */
+  private async assertProvidersConfiguredForPipeline(
+    workspaceId: string,
+    block: Block,
+    pipeline: Pipeline,
+    initiatedBy: string | null | undefined,
+  ): Promise<void> {
+    if (!this.resolveProviderCapabilities) return
+    const caps = await this.resolveProviderCapabilities(workspaceId, initiatedBy)
+    const unconfigured = new Set<string>()
+    const check = (id: string | undefined): void => {
+      if (id && !isModelUsable(id, caps)) unconfigured.add(id)
+    }
+    if (block.modelId) {
+      // A block-level pin applies to every step.
+      check(block.modelId)
+    } else if (this.resolveWorkspaceModelDefault) {
+      for (const kind of pipeline.agentKinds) {
+        check(await this.resolveWorkspaceModelDefault(workspaceId, kind))
+      }
+    }
+    if (unconfigured.size > 0) {
+      throw new ConflictError(
+        `This pipeline uses models with no configured provider: ${[...unconfigured].join(', ')}. ` +
+          'Add an API key for the provider, connect a subscription, or enable Cloudflare AI ' +
+          'before starting.',
+      )
+    }
+  }
+
   /** Start a pipeline against a block, replacing any prior run on it. */
   async start(
     workspaceId: string,
@@ -494,6 +553,10 @@ export class ExecutionService {
     if (pipeline.agentKinds.includes(TESTER_AGENT_KIND)) {
       await this.assertTesterInfraConfigured(workspaceId, block)
     }
+
+    // Block the start when a step's canonical model has no usable provider (no direct
+    // key, no subscription, no Cloudflare) — before any side effects.
+    await this.assertProvidersConfiguredForPipeline(workspaceId, block, pipeline, initiatedBy)
 
     // Mint the activation next: if the credential can't be unlocked, fail before
     // tearing down the block's prior run or creating a new one.

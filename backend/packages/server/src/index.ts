@@ -60,6 +60,10 @@ export {
   type ScopedModelProviderOptions,
 } from './agents/modelProviderResolver.js'
 export {
+  resolveWorkspaceCapabilities,
+  type CapabilityServices,
+} from './agents/providerCapabilities.js'
+export {
   ContainerRepoBootstrapper,
   type ContainerRepoBootstrapperDependencies,
 } from './agents/ContainerRepoBootstrapper.js'

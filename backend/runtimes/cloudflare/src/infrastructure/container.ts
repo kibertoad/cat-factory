@@ -41,6 +41,7 @@ import {
   WebCryptoPersonalSecretCipher,
   createWebSearchUpstreamFromEnv,
   logger,
+  resolveWorkspaceCapabilities,
   type ServerContainer,
 } from '@cat-factory/server'
 import { type AppConfig, loadConfig } from './config'
@@ -1171,6 +1172,9 @@ export function buildContainer(env: Env, overrides: Partial<CoreDependencies> = 
   // API-key controller, the model-provider resolver, and the LLM proxy key lease.
   const apiKeys = buildApiKeyService(env, db, clock)
 
+  // Cloudflare Workers AI is opt-in: enabled when the `AI` binding is present.
+  const cloudflareModelsEnabled = !!env.AI
+
   const dependencies: CoreDependencies = {
     workspaceRepository: new D1WorkspaceRepository({ db }),
     accountRepository: new D1AccountRepository({ db }),
@@ -1233,6 +1237,13 @@ export function buildContainer(env: Env, overrides: Partial<CoreDependencies> = 
     ...selectEnvironmentsDeps(env, config, db),
     ...selectRunnersDeps(env, config, db),
     ...selectFragmentLibraryDeps(env, config, db),
+    // The pipeline-start guard resolves what's configured for a workspace + initiator.
+    resolveProviderCapabilities: (workspaceId, initiatedBy) =>
+      resolveWorkspaceCapabilities(
+        { apiKeys, subscriptions, personalSubscriptions, cloudflareModelsEnabled },
+        workspaceId,
+        initiatedBy,
+      ),
     ...overrides,
   }
 
@@ -1249,6 +1260,8 @@ export function buildContainer(env: Env, overrides: Partial<CoreDependencies> = 
     // The direct-provider API-key pool (account/workspace/user); present when the
     // shared ENCRYPTION_KEY is configured.
     apiKeys,
+    // Whether the opt-in Cloudflare Workers AI lib is enabled (the `AI` binding).
+    cloudflareModelsEnabled,
     gateways: {
       // Real-time event delivery via the per-workspace WorkspaceEventsHub DO (when
       // the WORKSPACE_EVENTS namespace is bound; absent → the events route 501s).
