@@ -8,8 +8,9 @@
 //
 // Styled as a dark full-screen window like the agent-output review overlay
 // (AgentStepDetail) rather than a light modal, so the text stays readable
-// regardless of the OS colour-mode preference.
-import { ref, computed, watch } from 'vue'
+// regardless of the OS colour-mode preference. The filter box narrows the list of
+// AGENT KINDS (the catalog is long); each kind's model picker is a plain dropdown.
+import { computed, ref, watch } from 'vue'
 import { onKeyStroke } from '@vueuse/core'
 import type { AgentKind } from '~/types/domain'
 import { contextLabel, displayFlavor, isSelectable } from '~/stores/models'
@@ -28,8 +29,16 @@ const open = computed({
 })
 
 const busy = ref<string | null>(null)
-// Narrows which models appear in every kind's picker, for finding one fast.
+// Narrows the agent-kind rows below, for finding a kind fast in a long catalog.
 const filter = ref('')
+
+const filteredArchetypes = computed(() => {
+  const q = filter.value.trim().toLowerCase()
+  if (!q) return agents.archetypes
+  return agents.archetypes.filter(
+    (a) => a.label.toLowerCase().includes(q) || String(a.kind).toLowerCase().includes(q),
+  )
+})
 
 watch(open, (isOpen) => {
   if (isOpen) {
@@ -42,6 +51,34 @@ watch(open, (isOpen) => {
 onKeyStroke('Escape', () => {
   if (open.value) open.value = false
 })
+
+/** The dropdown items for a kind's picker: the deployment-default reset plus the catalog. */
+function menuFor(kind: AgentKind) {
+  const configured = creds.configuredVendors
+  return [
+    [
+      {
+        label: 'Deployment default',
+        icon: 'i-lucide-rotate-ccw',
+        onSelect: () => choose(kind, null),
+      },
+      ...models.models
+        .filter((m) => isSelectable(m, configured))
+        .map((m) => {
+          const flavor = displayFlavor(m, configured)
+          const ctx = contextLabel(flavor.contextTokens)
+          const suffix = [flavor.providerLabel, ctx, flavor.quotaBased ? 'quota' : undefined]
+            .filter(Boolean)
+            .join(' · ')
+          return {
+            label: `${m.label} · ${suffix}`,
+            icon: flavor.quotaBased ? 'i-lucide-infinity' : 'i-lucide-cpu',
+            onSelect: () => choose(kind, m.id),
+          }
+        }),
+    ],
+  ]
+}
 
 /** The label shown on a kind's button: its pinned model, else the named deployment default. */
 function buttonLabel(kind: AgentKind): string {
@@ -57,40 +94,6 @@ function buttonLabel(kind: AgentKind): string {
   const ref = defaults.deploymentRefForKind(kind)
   const label = ref ? models.labelForRef(ref) : undefined
   return label ? `${label} (default)` : 'Deployment default'
-}
-
-function menuFor(kind: AgentKind) {
-  const configured = creds.configuredVendors
-  const q = filter.value.trim().toLowerCase()
-  const matches = (label: string, provider: string, model: string) =>
-    !q ||
-    label.toLowerCase().includes(q) ||
-    provider.toLowerCase().includes(q) ||
-    model.toLowerCase().includes(q)
-  return [
-    [
-      {
-        label: 'Deployment default',
-        icon: 'i-lucide-rotate-ccw',
-        onSelect: () => choose(kind, null),
-      },
-      ...models.models
-        .filter((m) => isSelectable(m, configured))
-        .map((m) => ({ m, flavor: displayFlavor(m, configured) }))
-        .filter(({ m, flavor }) => matches(m.label, flavor.providerLabel, flavor.model))
-        .map(({ m, flavor }) => {
-          const ctx = contextLabel(flavor.contextTokens)
-          const suffix = [flavor.providerLabel, ctx, flavor.quotaBased ? 'quota' : undefined]
-            .filter(Boolean)
-            .join(' · ')
-          return {
-            label: `${m.label} · ${suffix}`,
-            icon: flavor.quotaBased ? 'i-lucide-infinity' : 'i-lucide-cpu',
-            onSelect: () => choose(kind, m.id),
-          }
-        }),
-    ],
-  ]
 }
 
 async function choose(kind: AgentKind, modelId: string | null) {
@@ -156,7 +159,7 @@ async function choose(kind: AgentKind, modelId: string | null) {
               v-model="filter"
               icon="i-lucide-search"
               size="sm"
-              placeholder="Filter models…"
+              placeholder="Filter agents…"
               class="w-full"
             >
               <template v-if="filter" #trailing>
@@ -180,7 +183,7 @@ async function choose(kind: AgentKind, modelId: string | null) {
               class="divide-y divide-slate-800 rounded-xl border border-slate-800 bg-slate-900/50"
             >
               <div
-                v-for="a in agents.archetypes"
+                v-for="a in filteredArchetypes"
                 :key="a.kind"
                 class="flex items-center gap-3 px-4 py-3"
               >
@@ -188,9 +191,12 @@ async function choose(kind: AgentKind, modelId: string | null) {
                 <div class="min-w-0 flex-1">
                   <p class="truncate text-sm text-slate-200">{{ a.label }}</p>
                 </div>
+                <!-- The menu content portals to <body>, where it would sit behind
+                     this z-50 overlay (it carries no z-index of its own) and the
+                     overlay would swallow the clicks — so lift it above. -->
                 <UDropdownMenu
                   :items="menuFor(a.kind)"
-                  :ui="{ content: 'max-h-72 overflow-y-auto' }"
+                  :ui="{ content: 'max-h-80 overflow-y-auto z-[60]' }"
                 >
                   <UButton
                     size="xs"
@@ -198,11 +204,18 @@ async function choose(kind: AgentKind, modelId: string | null) {
                     :variant="defaults.forKind(a.kind) ? 'subtle' : 'soft'"
                     trailing-icon="i-lucide-chevron-down"
                     :loading="busy === a.kind"
+                    class="w-64 shrink-0 justify-between"
                   >
-                    {{ buttonLabel(a.kind) }}
+                    <span class="truncate">{{ buttonLabel(a.kind) }}</span>
                   </UButton>
                 </UDropdownMenu>
               </div>
+              <p
+                v-if="filteredArchetypes.length === 0"
+                class="px-4 py-6 text-center text-sm text-slate-500"
+              >
+                No agents match "{{ filter }}".
+              </p>
             </div>
           </div>
         </div>
