@@ -2,6 +2,8 @@ import { createWorkspaceSchema, renameWorkspaceSchema } from '@cat-factory/contr
 import { configContributionCatalog } from '@cat-factory/agents'
 import { Hono } from 'hono'
 import type { WorkspaceSnapshot } from '@cat-factory/contracts'
+import type { AgentRouting } from '@cat-factory/agents'
+import type { ModelRef } from '@cat-factory/kernel'
 
 /**
  * The agent config-contribution catalog for a snapshot: the descriptors contributed
@@ -13,6 +15,21 @@ function snapshotAgentConfigCatalog(snapshot: WorkspaceSnapshot) {
   const kinds = new Set<string>()
   for (const pipeline of snapshot.pipelines) for (const kind of pipeline.agentKinds) kinds.add(kind)
   return configContributionCatalog(kinds)
+}
+
+/**
+ * The deployment's env-routing defaults as `provider:model` ref strings, so the
+ * model-defaults panel can name the model behind "Deployment default" per kind.
+ * Derived from the shared agents config, so identical across facades.
+ */
+function deploymentModelDefaults(routing: AgentRouting) {
+  const ref = (r: ModelRef) => `${r.provider}:${r.model}`
+  return {
+    default: ref(routing.default.ref),
+    byKind: Object.fromEntries(
+      Object.entries(routing.byKind).map(([kind, cfg]) => [kind, ref(cfg.ref)]),
+    ),
+  }
 }
 import type { Context } from 'hono'
 import type { AppEnv } from '../../http/env.js'
@@ -64,7 +81,12 @@ export function workspaceController(): Hono<AppEnv> {
     const snapshot = await container.workspaceService.create(body, user?.id ?? null, accountId)
     const spend = await container.spendService.status()
     return c.json(
-      { ...snapshot, spend, agentConfigCatalog: snapshotAgentConfigCatalog(snapshot) },
+      {
+        ...snapshot,
+        spend,
+        agentConfigCatalog: snapshotAgentConfigCatalog(snapshot),
+        deploymentModelDefaults: deploymentModelDefaults(container.config.agents.routing),
+      },
       201,
     )
   })
@@ -132,6 +154,7 @@ export function workspaceController(): Hono<AppEnv> {
       ...(mounts ? { mounts } : {}),
       ...(serviceCatalog ? { serviceCatalog } : {}),
       agentConfigCatalog: snapshotAgentConfigCatalog(snapshot),
+      deploymentModelDefaults: deploymentModelDefaults(container.config.agents.routing),
     })
   })
 

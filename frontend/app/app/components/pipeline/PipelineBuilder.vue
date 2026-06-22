@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import type { AgentKind } from '~/types/domain'
 import AgentPalette from '~/components/palettes/AgentPalette.vue'
 import AgentKindIcon from '~/components/pipeline/AgentKindIcon.vue'
+import { agentKindMeta } from '~/utils/catalog'
 
 const pipelines = usePipelinesStore()
 const agents = useAgentsStore()
@@ -15,6 +16,17 @@ const open = computed({
 
 function add(kind: AgentKind) {
   pipelines.addToDraft(kind)
+}
+
+// Saved pipelines render collapsed (name + step count); a click expands the full
+// ordered step list. Tracking expansion as a Set keyed by pipeline id keeps the
+// icon row from overflowing the narrow panel the way an always-on inline list did.
+const expandedSaved = ref<Set<string>>(new Set())
+function toggleSaved(id: string) {
+  const next = new Set(expandedSaved.value)
+  if (next.has(id)) next.delete(id)
+  else next.add(id)
+  expandedSaved.value = next
 }
 
 const toast = useToast()
@@ -83,9 +95,21 @@ async function save() {
 
         <!-- draft chain -->
         <div class="flex flex-col">
-          <h3 class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
-            Pipeline
-          </h3>
+          <div class="mb-2 flex items-center justify-between gap-2">
+            <h3 class="text-xs font-semibold uppercase tracking-wide text-slate-400">
+              Pipeline
+            </h3>
+            <UButton
+              color="neutral"
+              variant="soft"
+              size="xs"
+              icon="i-lucide-cpu"
+              title="Pick which model each agent kind runs on"
+              @click="ui.openModelDefaults()"
+            >
+              Configure models
+            </UButton>
+          </div>
           <UInput
             v-model="pipelines.draftName"
             placeholder="Pipeline name"
@@ -104,11 +128,14 @@ async function save() {
             <li
               v-for="(kind, i) in pipelines.draft"
               :key="i"
-              class="flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-800/60 p-2"
+              class="flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/60 p-2"
             >
-              <span class="w-4 text-center text-[10px] text-slate-500">{{ i + 1 }}</span>
-              <AgentKindIcon :kind="kind" show-label />
-              <div class="ml-auto flex items-center">
+              <span class="w-4 shrink-0 text-center text-[10px] text-slate-500">{{ i + 1 }}</span>
+              <AgentKindIcon :kind="kind" icon-class="h-4 w-4" />
+              <span class="min-w-0 flex-1 truncate text-xs text-slate-100">
+                {{ agentKindMeta(kind).label }}
+              </span>
+              <div class="flex shrink-0 items-center">
                 <!-- Approval gate: pause after this step so a human reviews (and
                      can edit) its proposal before the next step runs. -->
                 <UButton
@@ -144,6 +171,7 @@ async function save() {
                   color="error"
                   variant="ghost"
                   size="xs"
+                  title="Remove this step from the pipeline"
                   @click="pipelines.removeFromDraft(i)"
                 />
               </div>
@@ -160,25 +188,51 @@ async function save() {
               <li
                 v-for="p in pipelines.pipelines"
                 :key="p.id"
-                class="group flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-800/40 px-2 py-1.5"
+                class="group rounded-lg border border-slate-700 bg-slate-800/40"
               >
-                <span class="flex-1 truncate text-xs text-slate-200">{{ p.name }}</span>
-                <div class="flex items-center gap-0.5">
-                  <AgentKindIcon
-                    v-for="(k, i) in p.agentKinds"
-                    :key="i"
-                    :kind="k"
-                    icon-class="h-3.5 w-3.5"
+                <div class="flex items-center gap-2 px-2 py-1.5">
+                  <button
+                    type="button"
+                    class="flex min-w-0 flex-1 items-center gap-2 text-left"
+                    @click="toggleSaved(p.id)"
+                  >
+                    <UIcon
+                      :name="
+                        expandedSaved.has(p.id) ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'
+                      "
+                      class="h-3.5 w-3.5 shrink-0 text-slate-500"
+                    />
+                    <span class="min-w-0 flex-1 truncate text-xs text-slate-200">{{ p.name }}</span>
+                    <span class="shrink-0 text-[10px] text-slate-500">
+                      {{ p.agentKinds.length }} {{ p.agentKinds.length === 1 ? 'step' : 'steps' }}
+                    </span>
+                  </button>
+                  <UButton
+                    icon="i-lucide-trash-2"
+                    color="neutral"
+                    variant="ghost"
+                    size="xs"
+                    class="opacity-0 transition group-hover:opacity-100"
+                    @click="pipelines.removePipeline(p.id)"
                   />
                 </div>
-                <UButton
-                  icon="i-lucide-trash-2"
-                  color="neutral"
-                  variant="ghost"
-                  size="xs"
-                  class="opacity-0 transition group-hover:opacity-100"
-                  @click="pipelines.removePipeline(p.id)"
-                />
+
+                <!-- Full ordered step list, revealed on click. -->
+                <ol
+                  v-if="expandedSaved.has(p.id)"
+                  class="space-y-1 border-t border-slate-800 px-2 py-2 pl-7"
+                >
+                  <li
+                    v-for="(k, i) in p.agentKinds"
+                    :key="i"
+                    class="flex items-center gap-2"
+                  >
+                    <span class="w-4 shrink-0 text-center text-[10px] text-slate-500">{{
+                      i + 1
+                    }}</span>
+                    <AgentKindIcon :kind="k" show-label />
+                  </li>
+                </ol>
               </li>
             </ul>
           </div>

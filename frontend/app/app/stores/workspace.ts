@@ -70,6 +70,7 @@ export const useWorkspaceStore = defineStore(
       useMergePresetsStore().hydrate(snapshot.mergePresets ?? [])
       useAgentConfigStore().hydrate(snapshot.agentConfigCatalog ?? [])
       useModelDefaultsStore().hydrate(snapshot.modelDefaults?.defaults)
+      useModelDefaultsStore().hydrateDeployment(snapshot.deploymentModelDefaults)
       useServiceFragmentDefaultsStore().hydrate(snapshot.serviceFragmentDefaults?.fragmentIds)
       useRecurringPipelinesStore().hydrate(snapshot.recurringPipelines ?? [])
       useTrackerStore().hydrate(snapshot.trackerSettings)

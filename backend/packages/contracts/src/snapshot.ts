@@ -65,6 +65,21 @@ export const workspaceSnapshotSchema = v.object({
    */
   modelDefaults: v.optional(modelDefaultsSchema),
   /**
+   * The deployment's env-routing defaults as `provider:model` refs: the model an
+   * agent kind runs on when neither the task nor the workspace pins one. `default`
+   * is the global fallback; `byKind` carries the kinds an operator routed
+   * specifically (e.g. a strong coding model for the coder). The frontend resolves
+   * a kind's deployment default as `byKind[kind] ?? default` and labels it so the
+   * model-defaults panel can name the model behind "Deployment default". Derived
+   * from shared config, attached by the facade, so optional on the wire.
+   */
+  deploymentModelDefaults: v.optional(
+    v.object({
+      default: v.string(),
+      byKind: v.record(v.string(), v.string()),
+    }),
+  ),
+  /**
    * The workspace's default service-fragment selection (the best-practice fragment ids
    * new services inherit). Attached by the facade, so optional on the wire.
    */
