@@ -3,11 +3,12 @@
 '@cat-factory/local-server': minor
 '@cat-factory/server': minor
 '@cat-factory/integrations': minor
+'@cat-factory/agents': minor
 '@cat-factory/conformance': patch
 '@cat-factory/worker': patch
 ---
 
-Bridge the Cloudflare ⇄ Node/local runtime feature-parity gaps: six product
+Bridge the Cloudflare ⇄ Node/local runtime feature-parity gaps: seven product
 features that worked on the Worker but `503`'d on the Node + local facades (their
 repositories were never wired) now work identically on all three, each landed with
 a cross-runtime conformance assertion.
@@ -35,13 +36,23 @@ a cross-runtime conformance assertion.
   kind — the harness `/bootstrap` route needs no Cloudflare primitive, so a pool runner
   serves it just like the local Docker transport — so a real bootstrap run dispatches +
   pushes for real on Node, not just on local.
+- **Prompt-fragment library (ADR 0006)** — `prompt_fragments`/`fragment_sources` +
+  `DrizzlePromptFragmentRepository`/`DrizzleFragmentSourceRepository`; the runtime-neutral
+  `LlmFragmentSelector` promoted into `@cat-factory/agents`. Opt-in via
+  `PROMPT_LIBRARY_ENABLED`/`PROMPT_LIBRARY_SELECTOR`, wired exactly like the Worker's
+  `selectFragmentLibraryDeps` (repos + installation resolver + selector), so the managed
+  tenant fragment catalog feeding every agent run works identically on all three.
 
 The Worker keeps the same behaviour (it gains the new conformance assertions and the
 shared promoted classes). **Breaking on Node/local:** these features now require their
 new tables — boot-time `migrate()` applies them; there is no data to preserve.
 
-Deferred (still Worker-only, flagged for follow-up): the fragment library (being
-reworked separately), real-time push (Node `realtime` gateway still `501`s — needs a
-WebSocket hub over Postgres `LISTEN/NOTIFY`), queue-backed async GitHub ingest (Node
-ingests inline rather than via a pg-boss queue), and GitHub rate-limit telemetry
-(Node keeps the no-op repository).
+The Node/local Drizzle migration lineage was re-baselined to a single fresh
+`drizzle-kit generate` migration off the current `schema.ts` (the prior hand-authored
+folders had no snapshots, which blocked `db:generate`); `db:generate`/`db:check` are
+green again. Safe because no deployed database depends on the old lineage.
+
+Deferred (still Worker-only, flagged for follow-up): real-time push (Node `realtime`
+gateway still `501`s — needs a WebSocket hub over Postgres `LISTEN/NOTIFY`),
+queue-backed async GitHub ingest (Node ingests inline rather than via a pg-boss queue),
+and GitHub rate-limit telemetry (Node keeps the no-op repository).

@@ -1,5 +1,6 @@
 import {
   AiAgentExecutor,
+  LlmFragmentSelector,
   inlineWebSearchOptionsFromEnv,
   resolveAgentConfig,
 } from '@cat-factory/agents'
@@ -22,6 +23,7 @@ import type {
   AgentExecutor,
   Clock,
   DocumentSourceProvider,
+  FragmentOwnerKind,
   GitHubClient,
   GitHubInstallationRepository,
   RateLimitRepository,
@@ -91,6 +93,10 @@ import {
   DrizzleEnvironmentConnectionRepository,
   DrizzleEnvironmentRegistryRepository,
 } from './repositories/environments.js'
+import {
+  DrizzleFragmentSourceRepository,
+  DrizzlePromptFragmentRepository,
+} from './repositories/fragments.js'
 import { DrizzleNotificationRepository } from './repositories/notifications.js'
 import {
   DrizzleSlackConnectionRepository,
@@ -830,6 +836,16 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // Ephemeral environments (opt-in): a workspace registers its own environment
     // management API; the tester provisions/destroys per-run environments from it.
     ...selectNodeEnvironmentsDeps(config, options.db),
+    // Prompt-fragment library (ADR 0006; opt-in): the managed tenant-scoped catalog
+    // of best-practice fragments feeding every agent run, wired exactly like the
+    // Worker's selectFragmentLibraryDeps (repos + installation resolver + selector).
+    ...selectNodeFragmentLibraryDeps(
+      config,
+      env,
+      options.db,
+      githubClient,
+      githubInstallationRepository,
+    ),
     // Slack: an extra notification transport (the channel) + its management module.
     // Default-off; when enabled it composes the Slack channel onto the notification
     // mechanism, identically to the Worker.
@@ -942,5 +958,50 @@ function selectNodeEnvironmentsDeps(config: AppConfig, db: DrizzleDb): Partial<C
     secretCipher: new WebCryptoSecretCipher({
       masterKeyBase64: config.environments.encryptionKey,
     }),
+  }
+}
+
+/**
+ * Wire the prompt-fragment library (ADR 0006) for the Node facade when opted in,
+ * mirroring the Worker's `selectFragmentLibraryDeps`: the two Drizzle repositories,
+ * the installation resolver repo-source sync uses to read guideline repos through the
+ * tier's GitHub installation, and — in `llm` selector mode — the shared
+ * `LlmFragmentSelector` over the Node model provider (else the core deterministic
+ * matcher, via `fragmentSelector: undefined`). Disabled → `{}` and the module stays
+ * unassembled (the engine falls back to the static built-in catalog).
+ */
+function selectNodeFragmentLibraryDeps(
+  config: AppConfig,
+  env: NodeJS.ProcessEnv,
+  db: DrizzleDb,
+  githubClient: GitHubClient | undefined,
+  installations: GitHubInstallationRepository,
+): Partial<CoreDependencies> {
+  if (!config.fragmentLibrary.enabled) return {}
+  const resolveFragmentInstallationId = async (
+    ownerKind: FragmentOwnerKind,
+    ownerId: string,
+  ): Promise<number | null> => {
+    if (ownerKind === 'workspace') {
+      return (await installations.getByWorkspace(ownerId))?.installationId ?? null
+    }
+    const active = await installations.listActive()
+    return active.find((i) => i.accountId === ownerId)?.installationId ?? null
+  }
+  return {
+    promptFragmentRepository: new DrizzlePromptFragmentRepository(db),
+    fragmentSourceRepository: new DrizzleFragmentSourceRepository(db),
+    // Repo-sourced fragments read guideline files through the workspace's App
+    // installation; only wired when a real GitHub client is available (parity with
+    // the Worker — hand-authored fragments work without it).
+    ...(githubClient ? { githubClient, resolveFragmentInstallationId } : {}),
+    ...(config.fragmentLibrary.selector === 'llm'
+      ? {
+          fragmentSelector: new LlmFragmentSelector({
+            modelProvider: createNodeModelProvider(env),
+            modelRef: config.agents.routing.default.ref,
+          }),
+        }
+      : {}),
   }
 }

@@ -52,6 +52,9 @@ const TEST_ENV: NodeJS.ProcessEnv = {
   // Opt into the ephemeral-environment integration (parity with the Node/Worker test
   // envs) so the conformance env CRUD asserts persistence parity here too.
   ENVIRONMENTS_ENABLED: 'true',
+  // Opt into the prompt-fragment library (ADR 0006) so its module wires up (parity
+  // with the Node/Worker test envs); the conformance library CRUD asserts parity.
+  PROMPT_LIBRARY_ENABLED: 'true',
   LOCAL_HARNESS_IMAGE: 'cat-factory-executor:test',
   GITHUB_PAT: 'test-pat',
 }

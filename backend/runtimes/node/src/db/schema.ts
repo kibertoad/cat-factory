@@ -246,6 +246,75 @@ export const workspaceFragmentDefaults = pgTable('workspace_fragment_defaults', 
   updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
 })
 
+// Prompt-fragment library (ADR 0006; mirror of D1 migration 0020). The managed,
+// tenant-scoped catalog of best-practice fragments, scoped by an (owner_kind,
+// owner_id) pair so one table backs both the account and workspace tiers. JSON-shaped
+// columns (`applies_to`, `tags`) are `text`; a tombstone (`deleted_at`) suppresses an
+// inherited or removed-upstream fragment.
+export const promptFragments = pgTable(
+  'prompt_fragments',
+  {
+    fragment_id: text('fragment_id').notNull(),
+    owner_kind: text('owner_kind').notNull(),
+    owner_id: text('owner_id').notNull(),
+    version: text('version').notNull(),
+    title: text('title').notNull(),
+    category: text('category'),
+    summary: text('summary').notNull(),
+    body: text('body').notNull(),
+    applies_to: text('applies_to'),
+    tags: text('tags'),
+    source_id: text('source_id'),
+    source_path: text('source_path'),
+    source_sha: text('source_sha'),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+    updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
+    deleted_at: bigint('deleted_at', { mode: 'number' }),
+  },
+  (t) => [
+    primaryKey({ columns: [t.owner_kind, t.owner_id, t.fragment_id] }),
+    index('idx_prompt_fragments_owner')
+      .on(t.owner_kind, t.owner_id)
+      .where(sql`${t.deleted_at} IS NULL`),
+    index('idx_prompt_fragments_source')
+      .on(t.source_id)
+      .where(sql`${t.deleted_at} IS NULL`),
+  ],
+)
+
+// A repo directory linked as a source of Markdown guideline files (ADR 0006 §3;
+// mirror of D1 migration 0020). At most one live source per (owner, repo, ref, dir) —
+// the unique index is the upsert key; a partial owner index powers the list.
+export const fragmentSources = pgTable(
+  'fragment_sources',
+  {
+    id: text('id').primaryKey(),
+    owner_kind: text('owner_kind').notNull(),
+    owner_id: text('owner_id').notNull(),
+    repo_owner: text('repo_owner').notNull(),
+    repo_name: text('repo_name').notNull(),
+    git_ref: text('git_ref').notNull().default('HEAD'),
+    dir_path: text('dir_path').notNull().default(''),
+    last_synced_sha: text('last_synced_sha'),
+    last_synced_at: bigint('last_synced_at', { mode: 'number' }),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+    deleted_at: bigint('deleted_at', { mode: 'number' }),
+  },
+  (t) => [
+    uniqueIndex('idx_fragment_sources_unique').on(
+      t.owner_kind,
+      t.owner_id,
+      t.repo_owner,
+      t.repo_name,
+      t.git_ref,
+      t.dir_path,
+    ),
+    index('idx_fragment_sources_owner')
+      .on(t.owner_kind, t.owner_id)
+      .where(sql`${t.deleted_at} IS NULL`),
+  ],
+)
+
 // LLM observability sink (mirror of D1 migration 0026). One row per proxied
 // container-agent model call: full prompt/response, output-limit headroom and the
 // transport-vs-execution latency split. Pruned aggressively by retention (the full

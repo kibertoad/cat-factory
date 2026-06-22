@@ -247,7 +247,14 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
       // Heavy full per-call prompt/response; pruned aggressively (default 3 days).
       llmCallMetricsMs: (num(env.LLM_CALL_METRICS_RETENTION_DAYS) ?? 3) * 24 * 60 * 60 * 1000,
     },
-    fragmentLibrary: { enabled: false, selector: 'deterministic' },
+    // Prompt-fragment library (ADR 0006): opt-in (`PROMPT_LIBRARY_ENABLED=true`),
+    // needs no encryption key (fragments are not secrets). Mirrors the Worker's
+    // mapping; `PROMPT_LIBRARY_SELECTOR=llm` ranks per run, else the deterministic
+    // tag matcher (which also backs the `llm` selector's graceful fallback).
+    fragmentLibrary: {
+      enabled: env.PROMPT_LIBRARY_ENABLED?.trim() === 'true',
+      selector: env.PROMPT_LIBRARY_SELECTOR?.trim() === 'llm' ? 'llm' : 'deterministic',
+    },
     // Recording the complete prompts is on by default; opt out with
     // `LLM_RECORD_PROMPTS=false` to keep the numeric telemetry but drop the prompt body.
     observability: { recordPrompts: env.LLM_RECORD_PROMPTS?.trim() !== 'false' },

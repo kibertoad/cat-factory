@@ -208,6 +208,50 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
       })
     })
 
+    describe('prompt-fragment library (managed catalog)', () => {
+      it('lists (200 not 503), creates, edits and removes a tier-owned fragment', async () => {
+        const { call, createWorkspace } = harness.makeApp()
+        const { workspace } = await createWorkspace()
+        const base = `/workspaces/${workspace.id}/prompt-fragments`
+
+        // The library module is wired on every facade (the test env opts in): a fresh
+        // workspace lists no tier-owned fragments (a 200), not the 503 an unconfigured
+        // library returns.
+        const initial = await call<{ id: string }[]>('GET', base)
+        expect(initial.status).toBe(200)
+        expect(initial.body).toEqual([])
+
+        // Create a hand-authored fragment at the workspace tier.
+        const created = await call<{ id: string; title: string }>('POST', base, {
+          id: 'perf',
+          title: 'Performance',
+          summary: 'Keep the hot path allocation-free.',
+          body: 'Avoid allocations in the request hot path; prefer streaming.',
+          tags: ['backend'],
+        })
+        expect(created.status).toBe(201)
+        expect(created.body.id).toBe('perf')
+        expect(created.body.title).toBe('Performance')
+
+        // It lists back at this tier (the merged/built-in catalog is a separate read).
+        const listed = await call<{ id: string }[]>('GET', base)
+        expect(listed.body.map((f) => f.id)).toEqual(['perf'])
+
+        // Edit its summary.
+        const patched = await call<{ summary: string }>('PATCH', `${base}/perf`, {
+          summary: 'Keep the hot path allocation-free and streamed.',
+        })
+        expect(patched.status).toBe(200)
+        expect(patched.body.summary).toBe('Keep the hot path allocation-free and streamed.')
+
+        // Remove it; the tier list goes empty again.
+        const del = await call('DELETE', `${base}/perf`)
+        expect(del.status).toBe(204)
+        const afterDelete = await call<{ id: string }[]>('GET', base)
+        expect(afterDelete.body).toEqual([])
+      })
+    })
+
     describe('vendor credentials (subscription token pool)', () => {
       it('adds, lists (secret-free), and removes pooled subscription tokens', async () => {
         const { call, createWorkspace } = harness.makeApp()
