@@ -1,5 +1,5 @@
 import type { MergePresetRepository } from '@cat-factory/kernel'
-import type { MergeThresholdPreset } from '@cat-factory/contracts'
+import type { MergeThresholdPreset, RequirementConcernLevel } from '@cat-factory/contracts'
 import type { D1Database } from '@cloudflare/workers-types'
 
 interface MergePresetRow {
@@ -9,6 +9,8 @@ interface MergePresetRow {
   max_risk: number
   max_impact: number
   ci_max_attempts: number
+  max_requirement_iterations: number
+  max_requirement_concern_allowed: string
   is_default: number
   created_at: number
 }
@@ -21,6 +23,9 @@ function rowToPreset(row: MergePresetRow): MergeThresholdPreset {
     maxRisk: row.max_risk,
     maxImpact: row.max_impact,
     ciMaxAttempts: row.ci_max_attempts,
+    maxRequirementIterations: row.max_requirement_iterations,
+    maxRequirementConcernAllowed:
+      row.max_requirement_concern_allowed as RequirementConcernLevel,
     isDefault: row.is_default === 1,
     createdAt: row.created_at,
   }
@@ -85,14 +90,16 @@ export class D1MergePresetRepository implements MergePresetRepository {
       .prepare(
         `INSERT INTO merge_threshold_presets
            (workspace_id, id, name, max_complexity, max_risk, max_impact, ci_max_attempts,
-            is_default, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            max_requirement_iterations, max_requirement_concern_allowed, is_default, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (workspace_id, id) DO UPDATE SET
            name = excluded.name,
            max_complexity = excluded.max_complexity,
            max_risk = excluded.max_risk,
            max_impact = excluded.max_impact,
            ci_max_attempts = excluded.ci_max_attempts,
+           max_requirement_iterations = excluded.max_requirement_iterations,
+           max_requirement_concern_allowed = excluded.max_requirement_concern_allowed,
            is_default = excluded.is_default`,
       )
       .bind(
@@ -103,6 +110,8 @@ export class D1MergePresetRepository implements MergePresetRepository {
         preset.maxRisk,
         preset.maxImpact,
         preset.ciMaxAttempts,
+        preset.maxRequirementIterations,
+        preset.maxRequirementConcernAllowed,
         preset.isDefault ? 1 : 0,
         preset.createdAt,
       )

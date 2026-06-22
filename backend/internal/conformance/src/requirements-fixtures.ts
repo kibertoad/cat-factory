@@ -18,7 +18,8 @@ export function makeIncorporatedReview(blockId: string, requirements: string): R
     items: [],
     model: 'fake:fake',
     incorporatedRequirements: requirements,
-    companionVerdicts: [{ rating: 1, threshold: 0.8, passed: true, feedback: '' }],
+    iteration: 1,
+    maxIterations: 3,
     createdAt: 1,
     updatedAt: 2,
   }

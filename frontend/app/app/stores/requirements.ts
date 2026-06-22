@@ -1,16 +1,20 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import type { RequirementReview, ReviewItemStatus } from '~/types/requirements'
+import type {
+  RequirementReview,
+  ResolveRequirementsExceededChoice,
+  ReviewItemStatus,
+} from '~/types/requirements'
 import { useWorkspaceStore } from '~/stores/workspace'
 
 /**
- * Requirements-review state: the stateless reviewer agent's findings per block.
- * A review is generated synchronously (the LLM runs inline server-side and the
- * items come back in the response), so — unlike executions/bootstraps — there is
- * no real-time stream; every mutation returns the updated review and we patch the
- * local cache from it. `available` mirrors the backend's opt-in gate: a 503 from
- * the review probe means the feature is off and the UI hides its entry points.
- * Per-workspace; nothing is persisted client-side.
+ * Requirements-review state. On the pipeline path the reviewer runs as the first gate
+ * step: the run parks while the human drives an iterative loop — answer/dismiss findings →
+ * incorporate (companion) → re-review — until the reviewer converges or the task's
+ * iteration cap is hit (then the human picks: extra round / proceed / reset). Every call
+ * runs an LLM inline server-side and returns the updated review, so there is no real-time
+ * stream; we patch the local cache from each response. `available` mirrors the backend's
+ * opt-in gate (a 503 hides the UI). Per-workspace; nothing is persisted client-side.
  */
 export const useRequirementsStore = defineStore('requirements', () => {
   const api = useApi()
@@ -20,7 +24,7 @@ export const useRequirementsStore = defineStore('requirements', () => {
   const available = ref<boolean | null>(null)
   /** The current review per block id (null = fetched, none exists). */
   const reviews = ref<Record<string, RequirementReview | null>>({})
-  /** Block ids whose review is being (re)generated. */
+  /** Block ids whose reviewer is currently running (review / re-review). */
   const reviewing = ref<Set<string>>(new Set())
   /** Review ids currently incorporating their answers. */
   const incorporating = ref<Set<string>>(new Set())
@@ -35,21 +39,25 @@ export const useRequirementsStore = defineStore('requirements', () => {
     return incorporating.value.has(reviewId)
   }
 
-  /** Open items still needing a human (everything not resolved/dismissed). */
+  /** Findings still needing a human (status `open`). */
   function openCount(review: RequirementReview): number {
-    return review.items.filter((i) => i.status !== 'resolved' && i.status !== 'dismissed').length
+    return review.items.filter((i) => i.status === 'open').length
   }
-  /** Whether every item is settled, so the answers can be incorporated. */
+  /** Findings the human answered (a reply recorded), which the companion folds in. */
+  function answeredCount(review: RequirementReview): number {
+    return review.items.filter((i) => i.status === 'answered' || i.status === 'resolved').length
+  }
+  /** Every finding is settled (answered or dismissed) — none still open. */
   function allSettled(review: RequirementReview): boolean {
-    return review.items.length > 0 && openCount(review) === 0
-  }
-  /**
-   * Whether the requirements can be reworked: no finding is still open. True even
-   * when the reviewer raised zero findings (the "no challenges" path), so a clean
-   * standardized document can still be produced.
-   */
-  function canRework(review: RequirementReview): boolean {
     return openCount(review) === 0
+  }
+  /** Incorporation is possible: all findings settled AND at least one was answered. */
+  function canIncorporate(review: RequirementReview): boolean {
+    return allSettled(review) && answeredCount(review) > 0
+  }
+  /** Proceed (skip the companion) is possible: all findings settled but none answered. */
+  function canProceed(review: RequirementReview): boolean {
+    return allSettled(review) && answeredCount(review) === 0
   }
 
   function store(review: RequirementReview) {
@@ -76,7 +84,7 @@ export const useRequirementsStore = defineStore('requirements', () => {
     }
   }
 
-  /** Run a fresh review of a block's collected requirements. */
+  /** Run a fresh review of a block's collected requirements (off-path / inspector). */
   async function review(blockId: string): Promise<RequirementReview> {
     withFlag(reviewing, blockId, true)
     try {
@@ -94,7 +102,7 @@ export const useRequirementsStore = defineStore('requirements', () => {
     store(await api.replyRequirementItem(workspace.requireId(), review.id, itemId, text))
   }
 
-  /** Set an item's status (resolve / dismiss / reopen). */
+  /** Set an item's status (dismiss / reopen). */
   async function setItemStatus(
     review: RequirementReview,
     itemId: string,
@@ -104,22 +112,52 @@ export const useRequirementsStore = defineStore('requirements', () => {
   }
 
   /**
-   * Rework the answers into one standard-format requirements document. The block's
-   * own description is left untouched; the reworked text lives on the review and is
-   * what subsequent agent steps (and the requirements-writer) consume.
+   * Incorporate the answers into one standard-format document (the companion). Optional
+   * `feedback` is the "do it differently" direction when redoing a merge. The run stays
+   * parked; the review moves to `merged` for the human to re-review or redo.
    */
-  async function incorporate(review: RequirementReview) {
+  async function incorporate(review: RequirementReview, feedback?: string) {
     withFlag(incorporating, review.id, true)
     try {
       const { review: updated } = await api.incorporateRequirements(
         workspace.requireId(),
         review.id,
+        feedback,
       )
       store(updated)
-      return { review: updated }
+      return updated
     } finally {
       withFlag(incorporating, review.id, false)
     }
+  }
+
+  /** Re-review the incorporated document (one more reviewer pass; may converge/advance). */
+  async function reReview(blockId: string): Promise<RequirementReview> {
+    withFlag(reviewing, blockId, true)
+    try {
+      const updated = await api.reReviewRequirements(workspace.requireId(), blockId)
+      store(updated)
+      return updated
+    } finally {
+      withFlag(reviewing, blockId, false)
+    }
+  }
+
+  /** Proceed: settle the requirements and advance the parked run. */
+  async function proceed(blockId: string): Promise<RequirementReview> {
+    const updated = await api.proceedRequirements(workspace.requireId(), blockId)
+    store(updated)
+    return updated
+  }
+
+  /** Resolve a capped review: extra-round / proceed / stop-reset. */
+  async function resolveExceeded(
+    blockId: string,
+    choice: ResolveRequirementsExceededChoice,
+  ): Promise<RequirementReview> {
+    const updated = await api.resolveRequirementsExceeded(workspace.requireId(), blockId, choice)
+    store(updated)
+    return updated
   }
 
   return {
@@ -129,12 +167,17 @@ export const useRequirementsStore = defineStore('requirements', () => {
     isReviewing,
     isIncorporating,
     openCount,
+    answeredCount,
     allSettled,
-    canRework,
+    canIncorporate,
+    canProceed,
     load,
     review,
     reply,
     setItemStatus,
     incorporate,
+    reReview,
+    proceed,
+    resolveExceeded,
   }
 })

@@ -1,9 +1,11 @@
 import type {
   Block,
+  RequirementConcernLevel,
   RequirementReviewItem,
   ReviewItemCategory,
   ReviewItemSeverity,
 } from '@cat-factory/kernel'
+import { REQUIREMENT_CONCERN_RANK } from '@cat-factory/contracts'
 
 // Pure logic for the requirements-review agent: assembling the "collected
 // requirements" text from a block + its linked context, building the review and
@@ -37,26 +39,39 @@ export interface RequirementsContext {
   docs: ReviewContextDoc[]
   tasks: ReviewContextTask[]
   /**
-   * When a prior rework was rejected by the quality companion, its challenge — fed
-   * into the next rework so the regenerated document addresses the gaps. Absent on a
-   * first rework.
+   * The standardized requirements document produced by a prior incorporation. When
+   * present (a re-review or a redo), it is the authoritative requirements text the
+   * reviewer/rework reasons over — the original description + linked context become
+   * background reference. Absent on the first pass.
    */
-  companionFeedback?: string
+  incorporatedDoc?: string
+  /**
+   * The human's freeform "do it differently" comment when redoing a merge they were
+   * unhappy with — folded into the next rework so it corrects course. Absent otherwise.
+   */
+  reworkFeedback?: string
 }
 
 /**
- * Render the block's "collected requirements" as a single Markdown document —
- * its description plus any linked PRD/RFC pages and tracker
- * issues. Used both as the reviewer's input and as the base the incorporate step
- * rewrites.
+ * Render the block's "collected requirements" as a single Markdown document — the
+ * standardized incorporated document when one exists (a later review/rework cycle),
+ * else the block description, plus any linked PRD/RFC pages and tracker issues. Used
+ * both as the reviewer's input and as the base the incorporate step rewrites.
  */
 export function renderRequirements(ctx: RequirementsContext): string {
-  const lines: string[] = [
-    `# ${ctx.block.title} (${ctx.block.type})`,
-    '',
-    '## Description',
-    ctx.block.description?.trim() || '(no description provided)',
-  ]
+  const lines: string[] = ctx.incorporatedDoc?.trim()
+    ? [
+        `# ${ctx.block.title} (${ctx.block.type})`,
+        '',
+        '## Current standardized requirements (under review)',
+        ctx.incorporatedDoc.trim(),
+      ]
+    : [
+        `# ${ctx.block.title} (${ctx.block.type})`,
+        '',
+        '## Description',
+        ctx.block.description?.trim() || '(no description provided)',
+      ]
   if (ctx.docs.length) {
     lines.push('', '## Linked requirement / PRD / RFC documents')
     for (const d of ctx.docs) lines.push('', `### ${d.title} (${d.url})`, d.excerpt)
@@ -88,7 +103,10 @@ export function buildReviewPrompt(ctx: RequirementsContext): string {
     '  ]',
     '}',
     '',
-    'Raise between 0 and 20 items, ordered by severity (high first). If the requirements ' +
+    'Assign a severity to EVERY item — no item may omit it. Use `high` for a gap or ' +
+      'ambiguity that would block correct implementation, `medium` for one that risks ' +
+      'rework or a wrong assumption, and `low` for a minor clarification or nice-to-have. ' +
+      'Raise between 0 and 20 items, ordered by severity (high first). If the requirements ' +
       'are genuinely complete and unambiguous, return an empty items array. Output JSON only.',
   ].join('\n')
 }
@@ -170,11 +188,14 @@ export function buildReworkPrompt(
   items: RequirementReviewItem[],
 ): string {
   const lines: string[] = ['Current collected requirements:', '', renderRequirements(ctx), '']
-  const resolved = items.filter((i) => i.status === 'resolved')
+  // An answered item (the human recorded a reply) is folded in; a resolved one too.
+  const answered = items.filter(
+    (i) => (i.status === 'answered' || i.status === 'resolved') && i.reply?.trim(),
+  )
   const dismissed = items.filter((i) => i.status === 'dismissed')
-  if (resolved.length) {
+  if (answered.length) {
     lines.push('Clarifications the product owner provided (fold these in):', '')
-    for (const i of resolved) {
+    for (const i of answered) {
       lines.push(`- Q (${i.category}): ${i.title} — ${i.detail}`)
       lines.push(`  A: ${i.reply?.trim() || '(no answer recorded)'}`)
     }
@@ -185,22 +206,22 @@ export function buildReworkPrompt(
     for (const i of dismissed) lines.push(`- ${i.title}`)
     lines.push('')
   }
-  if (!resolved.length && !dismissed.length) {
+  if (!answered.length && !dismissed.length) {
     lines.push(
       'The reviewer raised no open questions — restate the requirements cleanly in the ' +
         'standard structure without inventing new facts.',
       '',
     )
   }
-  // When a prior rework was rejected by the quality companion, feed its challenge in
-  // so this attempt addresses the gaps rather than repeating them.
-  if (ctx.companionFeedback?.trim()) {
+  // When the human was unhappy with a previous merge and asked to redo it, fold their
+  // freeform direction in so this attempt corrects course rather than repeating it.
+  if (ctx.reworkFeedback?.trim()) {
     lines.push(
       '',
-      'A quality companion REJECTED your previous reworked document for the following ' +
-        'reasons — address every one of them this time:',
+      'The reviewer was UNHAPPY with your previous reworked document and asked you to ' +
+        'redo it with this specific direction — follow it closely:',
       '',
-      ctx.companionFeedback.trim(),
+      ctx.reworkFeedback.trim(),
       '',
     )
   }
@@ -213,36 +234,30 @@ export function buildReworkPrompt(
 }
 
 /**
- * System prompt for the requirements-rework COMPANION: it challenges the just-reworked
- * requirements document for completeness and quality and returns an overall rating
- * (0..1) plus prose feedback, reusing the shared {@link CompanionAssessment} contract.
+ * What the engine should do with a reviewer pass's findings:
+ * - `auto-pass`: no outstanding findings, or every outstanding finding's severity is at
+ *   or below the task's tolerated level — record them but advance without a human.
+ * - `awaiting`: outstanding findings above the tolerated level and the iteration budget
+ *   has room — pause for the human to answer/dismiss.
+ * - `exceeded`: outstanding findings above the tolerated level but the iteration budget
+ *   is spent — pause for the human to pick how to proceed.
  */
-export const REWORK_COMPANION_SYSTEM_PROMPT =
-  'You are a meticulous requirements quality companion. You are given a unit of ' +
-  "software work's reworked, standard-format requirements document. Challenge it hard " +
-  'for completeness and quality: missing functional or non-functional requirements, ' +
-  'weak or untestable acceptance criteria, unstated assumptions, unaddressed edge / ' +
-  'error cases, ambiguity, and anything that would block confident design or ' +
-  'implementation. Then give a SINGLE overall quality rating between 0 and 1 (1 = ' +
-  'excellent and complete, 0 = unusable). Be a fair but demanding critic — do not ' +
-  'rubber-stamp. Respond with ONLY a JSON object {"rating":0.0,"summary":"…"}: ' +
-  '`summary` is the concrete changes the document still needs. No prose outside the ' +
-  'JSON, no code fences.'
+export type ReviewDisposition = 'auto-pass' | 'awaiting' | 'exceeded'
 
 /**
- * Build the user prompt for the requirements-rework companion: the reworked document
- * to grade, plus the context it was produced from so the companion can judge coverage.
+ * Decide a reviewer pass's disposition from its findings, the task's tolerated concern
+ * level and the iteration budget. Only OUTSTANDING items (not yet resolved/dismissed)
+ * gate the run, so a pass whose findings the human later dismisses converges. Pure so
+ * the engine + tests share one rule.
  */
-export function buildReworkCompanionPrompt(ctx: RequirementsContext, reworked: string): string {
-  return [
-    'Source context the requirements were produced from:',
-    '',
-    renderRequirements(ctx),
-    '',
-    'The reworked requirements document to grade:',
-    '',
-    reworked,
-    '',
-    'Challenge it and return your JSON rating + summary.',
-  ].join('\n')
+export function disposeReview(
+  items: RequirementReviewItem[],
+  opts: { iteration: number; maxIterations: number; concernThreshold: RequirementConcernLevel },
+): ReviewDisposition {
+  const outstanding = items.filter((i) => i.status !== 'dismissed' && i.status !== 'resolved')
+  if (outstanding.length === 0) return 'auto-pass'
+  const maxRank = Math.max(...outstanding.map((i) => REQUIREMENT_CONCERN_RANK[i.severity]))
+  if (maxRank <= REQUIREMENT_CONCERN_RANK[opts.concernThreshold]) return 'auto-pass'
+  if (opts.iteration >= opts.maxIterations) return 'exceeded'
+  return 'awaiting'
 }

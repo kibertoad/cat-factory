@@ -20,6 +20,22 @@ import * as v from 'valibot'
  * 0..1 (higher = more complex / riskier / higher blast-radius); `rationale` is the
  * agent's prose justification, surfaced to a human when the PR needs review.
  */
+/**
+ * The severity threshold a task tolerates from the requirements reviewer before it stops
+ * for a human. Mirrors the review item severities (`low`/`medium`/`high`) plus `none`,
+ * which tolerates nothing. Ordered none < low < medium < high.
+ */
+export const requirementConcernLevelSchema = v.picklist(['none', 'low', 'medium', 'high'])
+export type RequirementConcernLevel = v.InferOutput<typeof requirementConcernLevelSchema>
+
+/** Rank of a {@link RequirementConcernLevel} for "at or below" comparisons. */
+export const REQUIREMENT_CONCERN_RANK: Record<RequirementConcernLevel, number> = {
+  none: 0,
+  low: 1,
+  medium: 2,
+  high: 3,
+}
+
 export const mergeAssessmentSchema = v.object({
   /** How intricate the change is (size, coupling, subtlety). */
   complexity: v.pipe(v.number(), v.minValue(0), v.maxValue(1)),
@@ -49,6 +65,21 @@ export const mergeThresholdPresetSchema = v.object({
   maxImpact: v.pipe(v.number(), v.minValue(0), v.maxValue(1)),
   /** How many times the `ci-fixer` agent may try to turn CI green before giving up. */
   ciMaxAttempts: v.pipe(v.number(), v.integer(), v.minValue(0)),
+  /**
+   * How many reviewer passes the iterative requirements-review loop may run before it
+   * stops on its own and asks the human to pick (extra round / proceed anyway / reset the
+   * task). One reviewer pass = one iteration; the initial review counts as iteration 1.
+   */
+  maxRequirementIterations: v.pipe(v.number(), v.integer(), v.minValue(1)),
+  /**
+   * The highest finding severity the requirements review tolerates WITHOUT stopping. When
+   * every outstanding finding from a reviewer pass is at or below this level, the findings
+   * are recorded but the run does NOT pause for human approval — the incorporation
+   * companion is skipped and the next pipeline step runs automatically. `none` (the
+   * default) tolerates nothing, so any finding pauses for a human; `high` tolerates
+   * everything. Severity order: none < low < medium < high.
+   */
+  maxRequirementConcernAllowed: requirementConcernLevelSchema,
   /** The workspace's fallback preset, used by tasks that pick none. Exactly one is true. */
   isDefault: v.boolean(),
   createdAt: v.number(),
@@ -60,6 +91,7 @@ export type MergeThresholdPreset = v.InferOutput<typeof mergeThresholdPresetSche
 const presetNameSchema = v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(60))
 const scoreSchema = v.pipe(v.number(), v.minValue(0), v.maxValue(1))
 const attemptsSchema = v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(50))
+const iterationsSchema = v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(20))
 
 /** Create a new merge threshold preset in a workspace. */
 export const createMergePresetSchema = v.object({
@@ -68,6 +100,8 @@ export const createMergePresetSchema = v.object({
   maxRisk: scoreSchema,
   maxImpact: scoreSchema,
   ciMaxAttempts: attemptsSchema,
+  maxRequirementIterations: iterationsSchema,
+  maxRequirementConcernAllowed: requirementConcernLevelSchema,
   /** Make this the workspace default (demotes the previous default). */
   isDefault: v.optional(v.boolean(), false),
 })
@@ -80,6 +114,8 @@ export const updateMergePresetSchema = v.object({
   maxRisk: v.optional(scoreSchema),
   maxImpact: v.optional(scoreSchema),
   ciMaxAttempts: v.optional(attemptsSchema),
+  maxRequirementIterations: v.optional(iterationsSchema),
+  maxRequirementConcernAllowed: v.optional(requirementConcernLevelSchema),
   isDefault: v.optional(v.boolean()),
 })
 export type UpdateMergePresetInput = v.InferOutput<typeof updateMergePresetSchema>

@@ -1,11 +1,17 @@
 import { generateText } from 'ai'
 import type {
   Block,
-  CompanionVerdict,
+  RequirementConcernLevel,
   RequirementReview,
+  RequirementReviewItem,
   ReviewItemStatus,
 } from '@cat-factory/kernel'
-import { assertFound, inlineModelRef, ValidationError } from '@cat-factory/kernel'
+import {
+  assertFound,
+  DEFAULT_MAX_REQUIREMENT_ITERATIONS,
+  inlineModelRef,
+  ValidationError,
+} from '@cat-factory/kernel'
 import type { BlockRepository } from '@cat-factory/kernel'
 import type { Clock, IdGenerator } from '@cat-factory/kernel'
 import type { ModelProvider, ModelProviderResolver, ModelRef } from '@cat-factory/kernel'
@@ -18,16 +24,22 @@ import {
   REWORK_SYSTEM_PROMPT,
   catFactoryObservability,
 } from '@cat-factory/agents'
-import { DEFAULT_COMPANION_THRESHOLD, safeParseCompanionAssessment } from '@cat-factory/contracts'
 import {
   type RequirementsContext,
+  type ReviewDisposition,
   buildReviewPrompt,
   buildReworkPrompt,
-  REWORK_COMPANION_SYSTEM_PROMPT,
-  buildReworkCompanionPrompt,
   coerceReviewItems,
+  disposeReview,
   extractJson,
 } from './requirements.logic.js'
+
+/** Map a reviewer pass's disposition to the review status it parks (or advances) at. */
+function statusForDisposition(d: ReviewDisposition): RequirementReview['status'] {
+  if (d === 'auto-pass') return 'incorporated'
+  if (d === 'exceeded') return 'exceeded'
+  return 'ready'
+}
 
 export interface RequirementReviewServiceDependencies {
   requirementReviewRepository: RequirementReviewRepository
@@ -75,8 +87,8 @@ export interface RequirementReviewServiceDependencies {
   notificationService?: NotificationService
 }
 
-/** Settled items no longer need a human; both gate-pass the incorporate step. */
-const SETTLED: ReviewItemStatus[] = ['resolved', 'dismissed']
+/** An item still needs a human while `open`; answering or dismissing it settles it. */
+const isOpen = (i: RequirementReviewItem): boolean => i.status === 'open'
 
 /**
  * Output budget for the requirements-rework generation. The reworked doc is a full
@@ -152,23 +164,108 @@ export class RequirementReviewService {
   }
 
   /**
-   * Run a fresh review of a block's collected requirements. Replaces any prior
-   * review for the block (answers from a stale run don't carry over — the
-   * requirements may have changed underneath them).
+   * Run a fresh review of a block's collected requirements (iteration 1). Replaces any
+   * prior review for the block (answers from a stale run don't carry over — the
+   * requirements may have changed underneath them). The returned review's `status`
+   * encodes the disposition: `incorporated` (auto-pass: nothing, or every finding at or
+   * below the tolerated severity — advance), `ready` (findings to answer) or `exceeded`
+   * (findings but the iteration budget is already 1).
    */
-  async review(workspaceId: string, blockId: string): Promise<RequirementReview> {
+  async review(
+    workspaceId: string,
+    blockId: string,
+    opts: { maxIterations?: number; concernThreshold?: RequirementConcernLevel } = {},
+  ): Promise<RequirementReview> {
     const block = assertFound(
       await this.deps.blockRepository.get(workspaceId, blockId),
       'Block',
       blockId,
     )
+    const maxIterations = opts.maxIterations ?? DEFAULT_MAX_REQUIREMENT_ITERATIONS
+    const concernThreshold = opts.concernThreshold ?? 'none'
+    const { ref, items } = await this.runReviewer(workspaceId, block)
+    const now = this.deps.clock.now()
+    const disposition = disposeReview(items, { iteration: 1, maxIterations, concernThreshold })
+    const review: RequirementReview = {
+      id: this.deps.idGenerator.next('rrv'),
+      blockId,
+      status: statusForDisposition(disposition),
+      items,
+      model: `${ref.provider}:${ref.model}`,
+      incorporatedRequirements: null,
+      iteration: 1,
+      maxIterations,
+      createdAt: now,
+      updatedAt: now,
+    }
+
+    await this.deps.requirementReviewRepository.deleteByBlock(workspaceId, blockId)
+    await this.deps.requirementReviewRepository.upsert(workspaceId, review)
+    if (disposition !== 'auto-pass') await this.notifyFindings(workspaceId, block, items.length)
+    return review
+  }
+
+  /**
+   * Re-review the block against its current incorporated document (one more reviewer
+   * pass; `iteration` increments). Keeps the review id + the document; replaces the items
+   * with the fresh findings and re-encodes the disposition into `status`. Called after an
+   * incorporation so the loop can converge (`incorporated`), continue (`ready`) or stop
+   * for a human (`exceeded`).
+   */
+  async reReview(
+    workspaceId: string,
+    reviewId: string,
+    opts: { concernThreshold?: RequirementConcernLevel } = {},
+  ): Promise<RequirementReview> {
+    const review = assertFound(
+      await this.deps.requirementReviewRepository.get(workspaceId, reviewId),
+      'Requirement review',
+      reviewId,
+    )
+    const block = assertFound(
+      await this.deps.blockRepository.get(workspaceId, review.blockId),
+      'Block',
+      review.blockId,
+    )
+    const concernThreshold = opts.concernThreshold ?? 'none'
+    const { ref, items } = await this.runReviewer(workspaceId, block, {
+      incorporatedDoc: review.incorporatedRequirements ?? undefined,
+    })
+    const now = this.deps.clock.now()
+    const iteration = (review.iteration ?? 1) + 1
+    const maxIterations = review.maxIterations ?? DEFAULT_MAX_REQUIREMENT_ITERATIONS
+    const disposition = disposeReview(items, { iteration, maxIterations, concernThreshold })
+    const updated: RequirementReview = {
+      ...review,
+      status: statusForDisposition(disposition),
+      items,
+      model: `${ref.provider}:${ref.model}`,
+      iteration,
+      maxIterations,
+      updatedAt: now,
+    }
+    await this.deps.requirementReviewRepository.upsert(workspaceId, updated)
+    if (disposition !== 'auto-pass') await this.notifyFindings(workspaceId, block, items.length)
+    return updated
+  }
+
+  /**
+   * Run the reviewer LLM over a block's collected requirements (or, on a re-review, its
+   * incorporated document) and coerce the JSON into review items. Shared by
+   * {@link review} and {@link reReview}.
+   */
+  private async runReviewer(
+    workspaceId: string,
+    block: Block,
+    opts: { incorporatedDoc?: string } = {},
+  ): Promise<{ ref: ModelRef; items: RequirementReviewItem[] }> {
     const modelProvider = await this.providerFor(workspaceId)
     const ref = await this.modelFor(workspaceId, block)
     if (!modelProvider || !ref) {
       throw new ValidationError('No model is configured for the requirements reviewer')
     }
-
     const context = await this.gatherContext(workspaceId, block)
+    if (opts.incorporatedDoc) context.incorporatedDoc = opts.incorporatedDoc
     let text: string
     try {
       const model = modelProvider.resolve(ref)
@@ -193,25 +290,9 @@ export class RequirementReviewService {
         }`,
       )
     }
-
     const now = this.deps.clock.now()
     const items = coerceReviewItems(extractJson(text), () => this.deps.idGenerator.next('rri'), now)
-    const review: RequirementReview = {
-      id: this.deps.idGenerator.next('rrv'),
-      blockId,
-      status: 'ready',
-      items,
-      model: `${ref.provider}:${ref.model}`,
-      incorporatedRequirements: null,
-      companionVerdicts: [],
-      createdAt: now,
-      updatedAt: now,
-    }
-
-    await this.deps.requirementReviewRepository.deleteByBlock(workspaceId, blockId)
-    await this.deps.requirementReviewRepository.upsert(workspaceId, review)
-    await this.notifyFindings(workspaceId, block, items.length)
-    return review
+    return { ref, items }
   }
 
   /**
@@ -278,16 +359,18 @@ export class RequirementReviewService {
   }
 
   /**
-   * Rework the block's requirements: fold the human's answers (and dismissals) into
-   * one self-contained, standard-format requirements document. Requires every
-   * finding to be settled (resolved or dismissed) — an empty findings list (no
-   * challenges raised) passes, so a clean standardized doc is still produced. The
-   * reworked text is stored on the review (`incorporatedRequirements`); the block's
-   * own description and linked docs/tasks are left untouched. Downstream agent steps
-   * and the requirements-writer consume the reworked text instead (see
-   * `ExecutionService`). Returns the updated review.
+   * Incorporate the human's answers (and dismissals) into one self-contained,
+   * standard-format requirements document — the incorporation "companion". Requires every
+   * finding to be answered or dismissed (no `open` items). The optional `feedback` is the
+   * human's "do it differently" direction when redoing a merge they were unhappy with,
+   * folded into the prompt alongside the prior document. Stores the document on the review
+   * and parks it `merged` for the human to re-review or redo. Returns the updated review.
    */
-  async incorporate(workspaceId: string, reviewId: string): Promise<{ review: RequirementReview }> {
+  async incorporate(
+    workspaceId: string,
+    reviewId: string,
+    opts: { feedback?: string } = {},
+  ): Promise<{ review: RequirementReview }> {
     const review = assertFound(
       await this.deps.requirementReviewRepository.get(workspaceId, reviewId),
       'Requirement review',
@@ -298,10 +381,10 @@ export class RequirementReviewService {
       'Block',
       review.blockId,
     )
-    const unsettled = review.items.filter((i) => !SETTLED.includes(i.status))
-    if (unsettled.length > 0) {
+    const open = review.items.filter(isOpen)
+    if (open.length > 0) {
       throw new ValidationError(
-        `Resolve or dismiss all ${unsettled.length} remaining item(s) before reworking`,
+        `Answer or dismiss all ${open.length} remaining item(s) before incorporating`,
       )
     }
     const modelProvider = await this.providerFor(workspaceId)
@@ -311,12 +394,10 @@ export class RequirementReviewService {
     }
 
     const context = await this.gatherContext(workspaceId, block)
-    // A prior rework rejected by the companion feeds its challenge into this attempt so
-    // the regenerated document addresses the gaps rather than repeating them.
-    const lastVerdict = review.companionVerdicts.at(-1)
-    if (lastVerdict && !lastVerdict.passed) {
-      context.companionFeedback = lastVerdict.feedback
-    }
+    // A redo carries the prior document forward (so the rework refines it, not the raw
+    // description) plus the human's freeform correction.
+    if (review.incorporatedRequirements) context.incorporatedDoc = review.incorporatedRequirements
+    if (opts.feedback?.trim()) context.reworkFeedback = opts.feedback.trim()
     let revised: string
     let finishReason: string
     try {
@@ -359,21 +440,13 @@ export class RequirementReviewService {
       )
     }
 
-    // Companion gate: a quality companion challenges the reworked document before it
-    // becomes the spec every downstream agent trusts. Below the threshold the rework is
-    // NOT accepted — the review stays `ready` and the companion's challenge is surfaced
-    // (and fed into the next rework). A companion failure / unparseable verdict passes
-    // through (a broken critic must never wedge the human's flow).
-    const verdict = await this.gradeRework(workspaceId, modelProvider, ref, context, revised)
-
     const now = this.deps.clock.now()
-    const passed = verdict.passed
     const updated: RequirementReview = {
       ...review,
-      status: passed ? 'incorporated' : 'ready',
-      incorporatedRequirements: passed ? revised : null,
-      // Append this cycle's verdict so the whole correction sequence is preserved.
-      companionVerdicts: [...review.companionVerdicts, verdict],
+      // `merged`: the document is produced and awaits the human's re-review / redo. It is
+      // NOT yet the final accepted requirements (that is `incorporated`, set on converge).
+      status: 'merged',
+      incorporatedRequirements: revised,
       updatedAt: now,
     }
     await this.deps.requirementReviewRepository.upsert(workspaceId, updated)
@@ -381,42 +454,39 @@ export class RequirementReviewService {
   }
 
   /**
-   * Grade a reworked requirements document with the quality companion. Returns the
-   * companion verdict (rating, threshold, pass/fail, feedback). A model failure or an
-   * unparseable response yields a passing verdict so a broken critic never blocks the
-   * human — the truncation + empty-doc guards already caught the dangerous cases.
+   * Mark the review settled (`incorporated`) — the requirements phase is done and the
+   * last incorporated document (if any) becomes what downstream agents consume. Used when
+   * the human proceeds (all findings dismissed, or "proceed anyway" past the cap).
    */
-  private async gradeRework(
+  async markIncorporated(workspaceId: string, reviewId: string): Promise<RequirementReview> {
+    return this.patchReview(workspaceId, reviewId, (review) => ({
+      ...review,
+      status: 'incorporated',
+    }))
+  }
+
+  /** Grant one more reviewer pass after the cap was hit, reopening the loop (`ready`). */
+  async grantExtraRound(workspaceId: string, reviewId: string): Promise<RequirementReview> {
+    return this.patchReview(workspaceId, reviewId, (review) => ({
+      ...review,
+      status: 'ready',
+      maxIterations: (review.maxIterations ?? DEFAULT_MAX_REQUIREMENT_ITERATIONS) + 1,
+    }))
+  }
+
+  private async patchReview(
     workspaceId: string,
-    modelProvider: ModelProvider,
-    ref: ModelRef,
-    context: RequirementsContext,
-    reworked: string,
-  ): Promise<CompanionVerdict> {
-    const threshold = DEFAULT_COMPANION_THRESHOLD
-    try {
-      const result = await generateText({
-        model: modelProvider.resolve(ref),
-        system: REWORK_COMPANION_SYSTEM_PROMPT,
-        prompt: buildReworkCompanionPrompt(context, reworked),
-        temperature: 0.1,
-        maxOutputTokens: 2_000,
-        providerOptions: catFactoryObservability({
-          agentKind: 'requirements-rework-companion',
-          workspaceId,
-        }),
-      })
-      const assessment = safeParseCompanionAssessment(extractJson(result.text))
-      if (!assessment) return { rating: 1, threshold, passed: true, feedback: '' }
-      return {
-        rating: assessment.rating,
-        threshold,
-        passed: assessment.rating >= threshold,
-        feedback: assessment.summary,
-      }
-    } catch {
-      return { rating: 1, threshold, passed: true, feedback: '' }
-    }
+    reviewId: string,
+    patch: (review: RequirementReview) => RequirementReview,
+  ): Promise<RequirementReview> {
+    const review = assertFound(
+      await this.deps.requirementReviewRepository.get(workspaceId, reviewId),
+      'Requirement review',
+      reviewId,
+    )
+    const updated = { ...patch(review), updatedAt: this.deps.clock.now() }
+    await this.deps.requirementReviewRepository.upsert(workspaceId, updated)
+    return updated
   }
 
   // ---- internals ----------------------------------------------------------

@@ -1,20 +1,20 @@
 import * as v from 'valibot'
-import { companionVerdictSchema, type CompanionVerdict } from './entities.js'
 
 // ---------------------------------------------------------------------------
-// Requirements-review wire contracts. A stateless reviewer agent inspects a
-// board block's "collected requirements" — its description plus any linked
-// PRD / RFC / requirements documents and tracker issues — and raises a list of
-// review items: gaps, ambiguities, unstated assumptions, risks and open
-// questions. A human answers or dismisses each item; once every item is settled
-// the agent folds the answers back into the block's requirements (the
-// "incorporate" step).
+// Requirements-review wire contracts. A reviewer agent inspects a board block's
+// "collected requirements" — its description plus any linked PRD / RFC /
+// requirements documents and tracker issues — and raises a list of review items:
+// gaps, ambiguities, unstated assumptions, risks and open questions, each with a
+// severity. A human answers or dismisses each item; an incorporation companion
+// folds the answers into one standardized requirements document, then the reviewer
+// re-reviews that document. The cycle repeats until the reviewer is clean (or every
+// remaining finding is dismissed / tolerated by the task's severity threshold), or
+// the task's iteration cap is hit and a human picks how to proceed.
 //
-// Unlike the execution / bootstrap flows this is fully synchronous and
-// stateless — there is no container and no durable driver — so the review and
-// its items are persisted (migration 0021) but mutated in plain request/response
-// round-trips. Storage-only bookkeeping (the owning workspace) is NOT on the
-// wire; it lives in the core ports / D1 layer.
+// On the pipeline path the run parks on the requirements step while the human drives
+// these round-trips; the run only advances (converge / proceed) or resets exactly
+// once. The review + its items are persisted and mutated in plain request/response
+// round-trips. Storage-only bookkeeping (the owning workspace) is NOT on the wire.
 // ---------------------------------------------------------------------------
 
 /** What kind of concern a review item raises. */
@@ -58,20 +58,22 @@ export const requirementReviewItemSchema = v.object({
 export type RequirementReviewItem = v.InferOutput<typeof requirementReviewItemSchema>
 
 /**
- * Lifecycle of the review as a whole: `ready` once items are generated and awaiting
- * human answers (also the state a rework returns to when its companion gate fails, so
- * the human can address the companion's challenge and rework again), `incorporated`
- * once a reworked doc has cleared the companion's quality bar.
+ * Lifecycle of the review as a whole:
+ * - `ready`: the reviewer raised findings that are awaiting human answers/dismissals.
+ * - `merged`: the companion produced an incorporated document the human is inspecting
+ *   (they can re-review it, or redo the merge with a comment).
+ * - `exceeded`: the iteration cap was reached with findings still open — awaiting the
+ *   human's choice (one more round / proceed anyway / reset the task).
+ * - `incorporated`: terminal. The requirements phase is settled; downstream agents
+ *   consume {@link incorporatedRequirements} when present (else the original description).
  */
-export const requirementReviewStatusSchema = v.picklist(['ready', 'incorporated'])
+export const requirementReviewStatusSchema = v.picklist([
+  'ready',
+  'merged',
+  'exceeded',
+  'incorporated',
+])
 export type RequirementReviewStatus = v.InferOutput<typeof requirementReviewStatusSchema>
-
-/**
- * A companion agent's verdict on the last reworked requirements document — the SAME
- * standardized {@link companionVerdictSchema} every companion site stores (the
- * pipeline companion step uses it too). Null until a rework has been gated.
- */
-export type RequirementReviewCompanion = CompanionVerdict
 
 /** A completed requirements review for one board block. */
 export const requirementReviewSchema = v.object({
@@ -82,19 +84,24 @@ export const requirementReviewSchema = v.object({
   /** `provider:model` that produced the review, for transparency; null in tests. */
   model: v.nullable(v.string()),
   /**
-   * The revised requirements text the reviewer last folded the answers into. Set once
-   * a reworked doc has CLEARED the companion gate (status `incorporated`); null while
-   * still `ready` (including after a companion-rejected rework). Consumed by every
-   * downstream agent step + the spec-writer.
+   * The revised requirements text the incorporation companion last folded the answers
+   * into. Set once a doc has been produced (status `merged`/`incorporated`); null while
+   * still awaiting answers on the first pass. Consumed by every downstream agent step +
+   * the spec-writer once the phase is settled.
    */
   incorporatedRequirements: v.nullable(v.string()),
   /**
-   * One standardized {@link companionVerdictSchema} per rework cycle, in order — the
-   * full sequence of correction iterations the quality companion produced (the human
-   * reworks again after each rejected verdict). Empty before any rework; the last
-   * entry is the latest (and gates whether the rework was accepted).
+   * How many reviewer passes have run so far (the initial review is iteration 1; each
+   * re-review adds one). Compared against {@link maxIterations} to decide when the loop
+   * has exhausted its budget.
    */
-  companionVerdicts: v.optional(v.array(companionVerdictSchema), []),
+  iteration: v.optional(v.number(), 1),
+  /**
+   * The reviewer-pass budget for this review, snapshotted from the task's merge preset
+   * (`maxRequirementIterations`) when the review started. An "extra round" choice bumps
+   * it by one.
+   */
+  maxIterations: v.optional(v.number(), 1),
   createdAt: v.number(),
   updatedAt: v.number(),
 })
@@ -113,6 +120,30 @@ export const updateReviewItemStatusSchema = v.object({
   status: reviewItemStatusSchema,
 })
 export type UpdateReviewItemStatusInput = v.InferOutput<typeof updateReviewItemStatusSchema>
+
+/**
+ * Incorporate the settled answers into a standardized requirements document. An optional
+ * `feedback` comment is the human's "do it differently" lever when redoing a merge they
+ * were unhappy with — it is folded into the rework prompt alongside the prior document.
+ */
+export const incorporateRequirementsSchema = v.object({
+  feedback: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(4000))),
+})
+export type IncorporateRequirementsInput = v.InferOutput<typeof incorporateRequirementsSchema>
+
+/**
+ * How a human resolves a requirements review that hit its iteration cap with findings
+ * still open: `extra-round` grants one more reviewer pass, `proceed` advances the
+ * pipeline using the last incorporated document, `stop-reset` cancels the run and
+ * returns the task to phase zero (editable) while keeping the last incorporated doc.
+ */
+export const resolveRequirementsExceededSchema = v.object({
+  choice: v.picklist(['extra-round', 'proceed', 'stop-reset']),
+})
+export type ResolveRequirementsExceededInput = v.InferOutput<
+  typeof resolveRequirementsExceededSchema
+>
+export type ResolveRequirementsExceededChoice = ResolveRequirementsExceededInput['choice']
 
 // NOTE: the durable, in-repo PRESCRIPTIVE specification (the `spec.json` tree with its
 // requirements, domain rules and acceptance criteria) lives in `./spec.ts`. This file

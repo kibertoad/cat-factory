@@ -60,6 +60,7 @@ import {
   describeFailingChecks,
   isCiGreen,
   MERGER_AGENT_KIND,
+  REQUIREMENTS_REVIEW_AGENT_KIND,
   SPEC_WRITER_AGENT_KIND,
   TRACKER_AGENT_KIND,
   ANALYSIS_AGENT_KIND,
@@ -67,6 +68,12 @@ import {
   FIXER_AGENT_KIND,
 } from './ci.logic.js'
 import type { NotificationService } from '../notifications/NotificationService.js'
+import type { RequirementReviewService } from '../requirements/RequirementReviewService.js'
+import type {
+  RequirementConcernLevel,
+  RequirementReview,
+  ResolveRequirementsExceededChoice,
+} from '@cat-factory/kernel'
 import type { LlmObservabilityService } from '../observability/LlmObservabilityService.js'
 import type {
   AccountRepository,
@@ -201,6 +208,13 @@ export interface ExecutionServiceDependencies {
    */
   requirementReviewRepository?: RequirementReviewRepository
   /**
+   * Optional: the requirements-review feature's service, present when the reviewer is
+   * wired. Drives the special `requirements-review` gate step (run reviewer inline, the
+   * iterative answer → incorporate → re-review loop). Absent → the gate step passes
+   * through so pipelines run unchanged without the feature.
+   */
+  requirementReviewService?: RequirementReviewService
+  /**
    * Optional: when the individual-usage subscription store is configured, a finished
    * run's per-run credential activation is deleted here the moment it reaches a terminal
    * state, bounding standing exposure to the run's own lifetime (the TTL sweep is the
@@ -321,6 +335,7 @@ export class ExecutionService {
   private readonly documents?: DocumentRepository
   private readonly tasks?: TaskRepository
   private readonly requirementReviews?: RequirementReviewRepository
+  private readonly requirementReviewService?: RequirementReviewService
   private readonly environmentProvisioning?: EnvironmentProvisioningService
   private readonly blueprintReconciler?: BlueprintReconciler
   private readonly notificationService?: NotificationService
@@ -356,6 +371,7 @@ export class ExecutionService {
     documentRepository,
     taskRepository,
     requirementReviewRepository,
+    requirementReviewService,
     environmentProvisioning,
     blueprintReconciler,
     notificationService,
@@ -384,6 +400,7 @@ export class ExecutionService {
     this.documents = documentRepository
     this.tasks = taskRepository
     this.requirementReviews = requirementReviewRepository
+    this.requirementReviewService = requirementReviewService
     this.environmentProvisioning = environmentProvisioning
     this.blueprintReconciler = blueprintReconciler
     this.notificationService = notificationService
@@ -728,6 +745,14 @@ export class ExecutionService {
     if (step.agentKind === TRACKER_AGENT_KIND) {
       const result = await this.runTracker(workspaceId, instance, block)
       return this.recordStepResult(workspaceId, instance, step, isFinalStep, result)
+    }
+
+    // A `requirements-review` step runs the inline reviewer and parks for the dedicated
+    // review window, driving the iterative answer → incorporate → re-review loop. NOT a
+    // container/prose agent. Pass-through when the reviewer isn't wired. See
+    // {@link evaluateRequirementsReview}.
+    if (step.agentKind === REQUIREMENTS_REVIEW_AGENT_KIND) {
+      return this.evaluateRequirementsReview(workspaceId, instance, step, block, isFinalStep)
     }
 
     // A `ci` step gates the PR on green CI: it polls GitHub check runs and, on
@@ -2040,6 +2065,221 @@ export class ExecutionService {
     return null
   }
 
+  // ---- requirements-review gate -------------------------------------------
+
+  /**
+   * Run the `requirements-review` gate step. When the reviewer isn't wired the step
+   * passes through (pipelines run unchanged without the feature). Otherwise it runs the
+   * initial reviewer pass: an auto-pass (no findings, or all at/below the task's tolerated
+   * severity) advances immediately, recording the findings; anything else parks the run
+   * for the dedicated review window to drive the iterative loop.
+   */
+  private async evaluateRequirementsReview(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    step: PipelineStep,
+    block: Block,
+    isFinalStep: boolean,
+  ): Promise<AdvanceResult> {
+    if (!this.requirementReviewService?.enabled) {
+      return this.completeRequirementsStep(workspaceId, instance, step, isFinalStep)
+    }
+    // Runs the reviewer with the task's preset knobs (shared with the off-path surface).
+    const review = await this.reviewRequirements(workspaceId, block.id)
+    // Auto-pass (status `incorporated`) → advance; the findings stay recorded on the
+    // review for transparency. `ready`/`exceeded` → park for the dedicated window.
+    if (review.status === 'incorporated') {
+      return this.completeRequirementsStep(workspaceId, instance, step, isFinalStep)
+    }
+    return this.parkRequirementsStep(workspaceId, instance, step)
+  }
+
+  /** Finish the requirements gate step and advance to the next step (or finish the run). */
+  private async completeRequirementsStep(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    step: PipelineStep,
+    isFinalStep: boolean,
+  ): Promise<AdvanceResult> {
+    this.finishStep(step)
+    step.progress = 1
+    step.subtasks = undefined
+    step.approval = null
+    if (isFinalStep) {
+      instance.status = 'done'
+      await this.finalizeBlock(workspaceId, instance, undefined)
+      await this.executionRepository.upsert(workspaceId, instance)
+      await this.emitInstance(workspaceId, instance)
+      await this.stopRunContainer(workspaceId, instance.id)
+      return { kind: 'done' }
+    }
+    instance.currentStep += 1
+    const next = instance.steps[instance.currentStep]
+    if (next) this.startStep(next)
+    await this.updateBlockProgress(workspaceId, instance, 'in_progress')
+    await this.executionRepository.upsert(workspaceId, instance)
+    await this.emitInstance(workspaceId, instance)
+    return { kind: 'continue' }
+  }
+
+  /**
+   * Park the requirements gate on the same durable decision-wait the approval gate uses,
+   * so the dedicated review window can drive the loop and resume the run. The frontend
+   * renders the structured window (not the generic approval panel) for this kind via the
+   * universal result-view registry.
+   */
+  private async parkRequirementsStep(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    step: PipelineStep,
+  ): Promise<AdvanceResult> {
+    step.approval = { id: this.idGenerator.next('appr'), status: 'pending', proposal: '' }
+    step.state = 'waiting_decision'
+    instance.status = 'blocked'
+    await this.updateBlockProgress(workspaceId, instance, 'blocked')
+    await this.executionRepository.upsert(workspaceId, instance)
+    await this.emitInstance(workspaceId, instance)
+    return { kind: 'awaiting_decision', decisionId: step.approval.id }
+  }
+
+  private requireReviewService(): RequirementReviewService {
+    if (!this.requirementReviewService?.enabled) {
+      throw new ConflictError('The requirements reviewer is not configured')
+    }
+    return this.requirementReviewService
+  }
+
+  /**
+   * The requirements-review gate parks on a `step.approval`, but it is NOT a generic
+   * prose approval: it is driven by the dedicated review window's endpoints
+   * (re-review / proceed / resolve-exceeded), never the generic approve/request-changes/
+   * reject surface — those would advance the run bypassing the iterative loop. Guard the
+   * generic resolvers so a stray approve can't short-circuit the gate.
+   */
+  private assertNotRequirementsGate(step: PipelineStep): void {
+    if (step.agentKind === REQUIREMENTS_REVIEW_AGENT_KIND) {
+      throw new ConflictError(
+        'Resolve the requirements review through its review window, not the approval gate',
+      )
+    }
+  }
+
+  /** Resolve a block's current review or throw. */
+  private async currentReview(workspaceId: string, blockId: string): Promise<RequirementReview> {
+    return assertFound(
+      await this.requireReviewService().getForBlock(workspaceId, blockId),
+      'Requirement review',
+      blockId,
+    )
+  }
+
+  /**
+   * Run a fresh reviewer pass over a block's collected requirements, snapshotting the
+   * task's merge-preset knobs (iteration budget + tolerated severity) onto the review.
+   * Shared by the pipeline gate ({@link evaluateRequirementsReview}) and the off-path
+   * inspector "Run review" surface, so both honour the task's preset identically.
+   */
+  async reviewRequirements(workspaceId: string, blockId: string): Promise<RequirementReview> {
+    const block = assertFound(await this.blockRepository.get(workspaceId, blockId), 'Block', blockId)
+    const preset = await this.resolveMergePreset(workspaceId, block)
+    return this.requireReviewService().review(workspaceId, blockId, {
+      maxIterations: preset.maxRequirementIterations,
+      concernThreshold: preset.maxRequirementConcernAllowed,
+    })
+  }
+
+  /**
+   * Re-review the incorporated document (one more reviewer pass). On convergence
+   * (`incorporated`) the parked run advances; otherwise the window shows the next cycle
+   * (`ready`) or the iteration-cap choices (`exceeded`). Only valid once an incorporation
+   * has produced a document to re-review (status `merged`).
+   */
+  async reReviewRequirements(workspaceId: string, blockId: string): Promise<RequirementReview> {
+    const review = await this.currentReview(workspaceId, blockId)
+    if (review.status !== 'merged') {
+      throw new ConflictError('Incorporate the answers before re-reviewing')
+    }
+    const block = assertFound(await this.blockRepository.get(workspaceId, blockId), 'Block', blockId)
+    const preset = await this.resolveMergePreset(workspaceId, block)
+    const updated = await this.requireReviewService().reReview(workspaceId, review.id, {
+      concernThreshold: preset.maxRequirementConcernAllowed,
+    })
+    if (updated.status === 'incorporated') await this.resumeRequirementsRun(workspaceId, blockId)
+    return updated
+  }
+
+  /**
+   * Proceed: settle the requirements (the last incorporated doc, if any, becomes what
+   * downstream agents consume) and advance the parked run. Used when every finding is
+   * dismissed, or the human proceeds past the iteration cap.
+   */
+  async proceedRequirements(workspaceId: string, blockId: string): Promise<RequirementReview> {
+    const review = await this.currentReview(workspaceId, blockId)
+    const updated = await this.requireReviewService().markIncorporated(workspaceId, review.id)
+    await this.resumeRequirementsRun(workspaceId, blockId)
+    return updated
+  }
+
+  /**
+   * Resolve a requirements review that hit its iteration cap: grant one more round,
+   * proceed with the last incorporated doc, or stop the task and reset it to phase zero
+   * (the run is cancelled, the block returns to `planned` and is editable again; the
+   * review — with its last incorporated doc — survives as a base for the next attempt).
+   */
+  async resolveRequirementsExceeded(
+    workspaceId: string,
+    blockId: string,
+    choice: ResolveRequirementsExceededChoice,
+  ): Promise<RequirementReview> {
+    const review = await this.currentReview(workspaceId, blockId)
+    if (choice === 'extra-round') {
+      return this.requireReviewService().grantExtraRound(workspaceId, review.id)
+    }
+    if (choice === 'proceed') return this.proceedRequirements(workspaceId, blockId)
+    // stop-reset: cancel the run + reset the block to phase zero, keeping the review.
+    await this.cancel(workspaceId, blockId)
+    return review
+  }
+
+  /**
+   * Resume a run parked on its requirements gate: finish the gate step, advance to the
+   * next step and wake the durable driver. A no-op when the block has no run parked on a
+   * requirements gate (e.g. an off-path inspector review with no active pipeline).
+   */
+  private async resumeRequirementsRun(workspaceId: string, blockId: string): Promise<void> {
+    const block = await this.blockRepository.get(workspaceId, blockId)
+    if (!block?.executionId) return
+    const instance = await this.executionRepository.get(workspaceId, block.executionId)
+    if (!instance) return
+    const idx = instance.steps.findIndex(
+      (s) =>
+        s.agentKind === REQUIREMENTS_REVIEW_AGENT_KIND &&
+        s.state === 'waiting_decision' &&
+        s.approval?.status === 'pending',
+    )
+    if (idx === -1) return
+    const step = instance.steps[idx]!
+    const gateId = step.approval!.id
+    step.approval!.status = 'approved'
+    this.finishStep(step)
+    step.progress = 1
+    const isFinalStep = idx === instance.steps.length - 1
+    if (isFinalStep) {
+      instance.status = 'done'
+      await this.finalizeBlock(workspaceId, instance, undefined)
+      await this.stopRunContainer(workspaceId, instance.id)
+    } else {
+      instance.currentStep = idx + 1
+      const next = instance.steps[instance.currentStep]
+      if (next) this.startStep(next)
+      if (instance.status === 'blocked') instance.status = 'running'
+      await this.updateBlockProgress(workspaceId, instance, 'in_progress')
+    }
+    await this.executionRepository.upsert(workspaceId, instance)
+    await this.workRunner.signalDecision(workspaceId, instance.id, gateId, 'approved')
+    await this.emitInstance(workspaceId, instance)
+  }
+
   /** Walk up `parentId` from a block to its top-level service frame id (or itself). */
   private async resolveServiceFrameId(
     workspaceId: string,
@@ -2496,6 +2736,8 @@ export class ExecutionService {
     maxRisk: number
     maxImpact: number
     ciMaxAttempts: number
+    maxRequirementIterations: number
+    maxRequirementConcernAllowed: RequirementConcernLevel
   }> {
     if (this.mergePresetRepository) {
       if (block.mergePresetId) {
@@ -2667,6 +2909,7 @@ export class ExecutionService {
     const stepIndex = instance.steps.findIndex((s) => s.approval?.id === approvalId)
     const step = instance.steps[stepIndex]
     if (!step || !step.approval) throw new NotFoundError('Approval', approvalId)
+    this.assertNotRequirementsGate(step)
     if (step.approval.status === 'approved') return instance
 
     // A human edit to the proposal replaces the agent's text, so the revised
@@ -2721,6 +2964,7 @@ export class ExecutionService {
     )
     const step = instance.steps.find((s) => s.approval?.id === approvalId)
     if (!step || !step.approval) throw new NotFoundError('Approval', approvalId)
+    this.assertNotRequirementsGate(step)
     if (step.approval.status === 'approved') {
       throw new ConflictError(`Approval '${approvalId}' is already approved`)
     }
@@ -2813,6 +3057,7 @@ export class ExecutionService {
     )
     const step = instance.steps.find((s) => s.approval?.id === approvalId)
     if (!step || !step.approval) throw new NotFoundError('Approval', approvalId)
+    this.assertNotRequirementsGate(step)
     if (step.approval.status === 'approved') {
       throw new ConflictError(`Approval '${approvalId}' is already approved`)
     }

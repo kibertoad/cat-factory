@@ -15,10 +15,19 @@ export const DEFAULT_MERGE_PRESET = {
   maxRisk: 0.4,
   maxImpact: 0.5,
   ciMaxAttempts: 10,
+  maxRequirementIterations: 3,
+  // Tolerate nothing by default: any reviewer finding pauses the run for a human.
+  maxRequirementConcernAllowed: 'none',
 } as const
 
 /** Fallback CI-fixer attempt budget when no preset resolves (defensive default). */
 export const DEFAULT_CI_MAX_ATTEMPTS = DEFAULT_MERGE_PRESET.ciMaxAttempts
+
+/**
+ * Fallback cap on the iterative requirements-review loop (reviewer passes) when no
+ * preset resolves. One reviewer pass = one iteration; the initial review is iteration 1.
+ */
+export const DEFAULT_MAX_REQUIREMENT_ITERATIONS = DEFAULT_MERGE_PRESET.maxRequirementIterations
 
 /** Human-facing label per block type, used when titling freshly dropped frames. */
 export const BLOCK_TYPE_LABEL: Record<BlockType, string> = {

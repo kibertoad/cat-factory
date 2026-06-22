@@ -68,7 +68,11 @@ import type {
   WorkspaceSnapshot,
 } from '~/types/domain'
 import type { LlmCallMetric, LlmMetricsExport, ReviewComment } from '~/types/execution'
-import type { RequirementReview, ReviewItemStatus } from '~/types/requirements'
+import type {
+  RequirementReview,
+  ResolveRequirementsExceededChoice,
+  ReviewItemStatus,
+} from '~/types/requirements'
 import type { Notification } from '~/types/notifications'
 import type {
   SlackChannel,
@@ -655,13 +659,39 @@ export function useApi() {
         { method: 'PATCH', body: { status } },
       ),
 
-    // Rework the requirements into one standard-format document (every finding must
-    // be settled; no findings is allowed). Returns the updated review; the block's
-    // own description is left untouched.
-    incorporateRequirements: (workspaceId: string, reviewId: string) =>
+    // Incorporate the answers into one standard-format document (every finding must be
+    // answered or dismissed). Optional `feedback` is the "do it differently" lever when
+    // redoing a merge. Returns `{ review }`; the run stays parked.
+    incorporateRequirements: (workspaceId: string, reviewId: string, feedback?: string) =>
       http<{ review: RequirementReview }>(
         `${ws(workspaceId)}/requirement-reviews/${encodeURIComponent(reviewId)}/incorporate`,
+        { method: 'POST', body: { ...(feedback ? { feedback } : {}) } },
+      ),
+
+    // Re-review the incorporated document (one more reviewer pass). On convergence the
+    // parked run advances; otherwise the response carries the next cycle / cap state.
+    reReviewRequirements: (workspaceId: string, blockId: string) =>
+      http<RequirementReview>(
+        `${ws(workspaceId)}/blocks/${encodeURIComponent(blockId)}/requirement-review/re-review`,
         { method: 'POST' },
+      ),
+
+    // Proceed: settle the requirements and advance the parked run (all findings dismissed).
+    proceedRequirements: (workspaceId: string, blockId: string) =>
+      http<RequirementReview>(
+        `${ws(workspaceId)}/blocks/${encodeURIComponent(blockId)}/requirement-review/proceed`,
+        { method: 'POST' },
+      ),
+
+    // Resolve a review that hit its iteration cap: extra-round / proceed / stop-reset.
+    resolveRequirementsExceeded: (
+      workspaceId: string,
+      blockId: string,
+      choice: ResolveRequirementsExceededChoice,
+    ) =>
+      http<RequirementReview>(
+        `${ws(workspaceId)}/blocks/${encodeURIComponent(blockId)}/requirement-review/resolve-exceeded`,
+        { method: 'POST', body: { choice } },
       ),
 
     // ---- notifications (human-actionable board items) ---------------------

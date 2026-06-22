@@ -458,9 +458,14 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
           maxRisk: 0.8,
           maxImpact: 0.7,
           ciMaxAttempts: 5,
+          maxRequirementIterations: 5,
+          maxRequirementConcernAllowed: 'medium',
         })
         expect(lenient.status).toBe(201)
         expect(lenient.body.isDefault).toBe(false)
+        // The requirements-loop fields round-trip through the store on both runtimes.
+        expect(lenient.body.maxRequirementIterations).toBe(5)
+        expect(lenient.body.maxRequirementConcernAllowed).toBe('medium')
 
         // Promote a brand-new preset to default; the previous default is demoted
         // (single-default invariant enforced by the repository).
@@ -470,6 +475,8 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
           maxRisk: 0.2,
           maxImpact: 0.2,
           ciMaxAttempts: 10,
+          maxRequirementIterations: 2,
+          maxRequirementConcernAllowed: 'none',
           isDefault: true,
         })
         expect(strict.status).toBe(201)
@@ -1151,6 +1158,22 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         expect(step.state).toBe('done')
         // The agent was handed the reworked document, not the seeded task's description.
         expect(step.output).toContain(`[desc]${REWORKED}[/desc]`)
+      })
+
+      it('wires the requirements-review re-review endpoint and rejects it out of order', async () => {
+        // The dedicated review window resumes a parked run through bespoke endpoints
+        // (re-review / proceed / resolve-exceeded) routed via the execution service. They
+        // must be mounted on EVERY facade. A re-review is only valid once an incorporation
+        // has produced a document (status `merged`); on a settled (`incorporated`) review
+        // the guard rejects it with 409 BEFORE any model call — so this is deterministic
+        // (no live reviewer) yet proves the route is wired and the guard holds identically.
+        const app = harness.makeApp()
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+        await app.seedIncorporatedReview(wsId, 'task_login', '# Login — Requirements')
+
+        const res = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/requirement-review/re-review`)
+        expect(res.status).toBe(409)
       })
 
       it('passes a companion gate when the rating clears the threshold', async () => {
