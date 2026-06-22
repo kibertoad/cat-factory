@@ -27,13 +27,13 @@ const authEnv = {
 } as typeof env
 
 interface TestUser {
-  id: number
+  id: string
   login: string
 }
 
 let nextUserId = 700_000
 function user(login: string): TestUser {
-  return { id: ++nextUserId, login }
+  return { id: `usr_${++nextUserId}`, login }
 }
 
 function token(u: TestUser): Promise<string> {
@@ -133,7 +133,7 @@ describe('accounts', () => {
 
     // A non-member cannot manage an org's roster (reported as 404, not 403).
     const org = (await call<Account>(alice, 'POST', '/accounts', { name: 'Acme' })).body
-    const byOutsider = await call(carol, 'POST', `/accounts/${org.id}/members`, { userId: 999 })
+    const byOutsider = await call(carol, 'POST', `/accounts/${org.id}/members`, { userId: 'usr_999' })
     expect(byOutsider.status).toBe(404)
   })
 
