@@ -446,10 +446,7 @@ export function parseSpecJob(input: unknown): SpecJob {
   const repo = (o.repo ?? {}) as Record<string, unknown>
   // `task` is lenient on its sub-fields (a missing title/description degrades to a
   // thinner increment context, not a failed run) but the object itself is required.
-  const t = (typeof o.task === 'object' && o.task !== null ? o.task : {}) as Record<
-    string,
-    unknown
-  >
+  const t = (typeof o.task === 'object' && o.task !== null ? o.task : {}) as Record<string, unknown>
   const task: SpecTaskContext = {
     id: typeof t.id === 'string' ? t.id : '',
     title: typeof t.title === 'string' ? t.title : '',

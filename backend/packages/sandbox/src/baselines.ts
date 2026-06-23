@@ -62,7 +62,9 @@ export const SANDBOX_AGENT_KINDS: readonly SandboxAgentKindMeta[] = [
   },
 ]
 
-const BY_KIND = new Map<string, SandboxAgentKindMeta>(SANDBOX_AGENT_KINDS.map((m) => [m.agentKind, m]))
+const BY_KIND = new Map<string, SandboxAgentKindMeta>(
+  SANDBOX_AGENT_KINDS.map((m) => [m.agentKind, m]),
+)
 
 /** Metadata for a testable agent kind, or undefined if the kind is not in the catalog. */
 export function sandboxKindMeta(agentKind: string): SandboxAgentKindMeta | undefined {
