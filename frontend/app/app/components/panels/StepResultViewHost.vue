@@ -15,6 +15,7 @@ import RequirementsReviewWindow from '~/components/requirements/RequirementsRevi
 import ClarityReviewWindow from '~/components/clarity/ClarityReviewWindow.vue'
 import TestReportWindow from '~/components/testing/TestReportWindow.vue'
 import GateResultView from '~/components/gates/GateResultView.vue'
+import ConsensusSessionWindow from '~/components/consensus/ConsensusSessionWindow.vue'
 
 const ui = useUiStore()
 
@@ -24,6 +25,8 @@ const STEP_RESULT_VIEWS: Record<string, Component> = {
   tester: TestReportWindow,
   // Shared by both polling gates (`ci` + `conflicts`); the window branches on agentKind.
   gate: GateResultView,
+  // Opened for any step that ran the consensus mechanism (routed in `ui.dispatchStepView`).
+  'consensus-session': ConsensusSessionWindow,
 }
 
 const active = computed<Component | null>(() => {

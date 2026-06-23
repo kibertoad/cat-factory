@@ -33,7 +33,7 @@ export class D1PipelineRepository implements PipelineRepository {
   async insert(workspaceId: string, pipeline: Pipeline): Promise<void> {
     await this.db
       .prepare(
-        'INSERT INTO pipelines (workspace_id, id, name, agent_kinds, gates, thresholds, enabled, builtin) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO pipelines (workspace_id, id, name, agent_kinds, gates, thresholds, enabled, consensus, builtin) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
       )
       .bind(
         workspaceId,
@@ -43,6 +43,7 @@ export class D1PipelineRepository implements PipelineRepository {
         pipeline.gates ? JSON.stringify(pipeline.gates) : null,
         pipeline.thresholds ? JSON.stringify(pipeline.thresholds) : null,
         pipeline.enabled ? JSON.stringify(pipeline.enabled) : null,
+        pipeline.consensus ? JSON.stringify(pipeline.consensus) : null,
         pipeline.builtin ? 1 : null,
       )
       .run()
@@ -53,7 +54,7 @@ export class D1PipelineRepository implements PipelineRepository {
     // its place in the catalog order. `builtin` is immutable, so it is not rewritten.
     await this.db
       .prepare(
-        'UPDATE pipelines SET name = ?, agent_kinds = ?, gates = ?, thresholds = ?, enabled = ? WHERE workspace_id = ? AND id = ?',
+        'UPDATE pipelines SET name = ?, agent_kinds = ?, gates = ?, thresholds = ?, enabled = ?, consensus = ? WHERE workspace_id = ? AND id = ?',
       )
       .bind(
         pipeline.name,
@@ -61,6 +62,7 @@ export class D1PipelineRepository implements PipelineRepository {
         pipeline.gates ? JSON.stringify(pipeline.gates) : null,
         pipeline.thresholds ? JSON.stringify(pipeline.thresholds) : null,
         pipeline.enabled ? JSON.stringify(pipeline.enabled) : null,
+        pipeline.consensus ? JSON.stringify(pipeline.consensus) : null,
         workspaceId,
         pipeline.id,
       )

@@ -140,11 +140,38 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
     description:
       'Reviews a change against the documented domain rules and reports violations, undocumented changes and unexpected drift.',
   },
+  {
+    kind: 'task-estimator',
+    label: 'Task Estimator',
+    icon: 'i-lucide-gauge',
+    color: '#eab308',
+    description:
+      'Triages the task after requirements are clarified — rates Complexity, Risk and Impact (0..1). Used to gate the expensive consensus mechanism and shown as ratings on the task.',
+  },
 ]
 
 export const AGENT_BY_KIND: Record<AgentKind, AgentArchetype> = Object.fromEntries(
   AGENT_ARCHETYPES.map((a) => [a.kind, a]),
 ) as Record<AgentKind, AgentArchetype>
+
+/**
+ * Agent kinds eligible for the optional consensus mechanism (the pipeline builder shows an
+ * "Enable Consensus" toggle for these). Mirrors the backend default-eligible set assigned by
+ * `registerConsensusTraits()` in `@cat-factory/consensus` — hand-synced, like the other
+ * frontend mirrors. In CONSENSUS mode `architect`/`analysis` reason over the provided context
+ * rather than exploring a checkout (a deliberate trade, gated by the task estimate).
+ */
+export const CONSENSUS_ELIGIBLE_KINDS: ReadonlySet<string> = new Set([
+  'architect',
+  'analysis',
+  'reviewer',
+  'task-estimator',
+])
+
+/** Whether a step kind can be flipped into the consensus execution mode. */
+export function isConsensusEligibleKind(kind: string): boolean {
+  return CONSENSUS_ELIGIBLE_KINDS.has(kind)
+}
 
 /**
  * Display metadata for the engine-driven "system" kinds — the gate/automation

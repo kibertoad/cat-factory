@@ -18,6 +18,7 @@ import type { ExecutionInstance, LlmCallActivity } from './execution'
 import type { BootstrapJob } from './bootstrap'
 import type { Notification } from './notifications'
 import type { RequirementReview } from './requirements'
+import type { ConsensusSession, ConsensusStepConfig, TaskEstimate } from './consensus'
 import type { ClarityReview } from './clarity'
 import type { MergeThresholdPreset } from './merge'
 import type { PipelineSchedule } from './recurring'
@@ -81,6 +82,8 @@ export interface Block {
   parentId: string | null
   /** task-only: 0..1 confidence produced when the pipeline finishes. */
   confidence?: number
+  /** task-only: the task-estimator's triage (complexity/risk/impact); absent until it runs. */
+  estimate?: TaskEstimate | null
   /** task-only: the module this task belongs to (created on implement if absent). */
   moduleName?: string
   /** ids of best-practice prompt fragments folded into this block's agent prompts. */
@@ -222,6 +225,9 @@ export type AgentKind =
   // non-LLM `tracker` step that files a GitHub issue / Jira ticket.
   | 'analysis'
   | 'tracker'
+  // Pre-implementation triage: rates Complexity/Risk/Impact after requirements are
+  // clarified, used to gate the optional consensus mechanism (and shown as ratings).
+  | 'task-estimator'
   // Bug-fix pipeline: the `clarity-review` gate triages the bug report (the analogue
   // of `requirements-review`, with its own structured review window), then the
   // read-only `bug-investigator` container agent enriches it into a prose report.
@@ -268,6 +274,12 @@ export interface Pipeline {
    * step in the pipeline but skips it at run start. Absent/true ⇒ the step runs.
    */
   enabled?: boolean[]
+  /**
+   * Per-step consensus config, parallel to `agentKinds`: when set (with `enabled`) and the
+   * step's kind carries a consensus trait, the step runs through the multi-model consensus
+   * mechanism. `null`/absent ⇒ standard single-actor agent.
+   */
+  consensus?: (ConsensusStepConfig | null)[]
   /**
    * True for the curated built-in catalog pipelines. Built-ins are read-only
    * templates — clone one to make an editable copy. Absent/false on custom pipelines.
@@ -373,6 +385,7 @@ export type WorkspaceEvent =
   | { type: 'notification'; notification: Notification; at: number }
   | { type: 'llmCall'; call: LlmCallActivity; at: number }
   | { type: 'requirements'; review: RequirementReview; at: number }
+  | { type: 'consensus'; session: ConsensusSession; at: number }
   | { type: 'clarity'; review: ClarityReview; at: number }
 
 /** Level-of-detail buckets driven by the canvas zoom level. Shallow → deep:

@@ -3,7 +3,7 @@ import type {
   CreatePipelineInput,
   UpdatePipelineInput,
 } from '@cat-factory/contracts'
-import type { Pipeline } from '@cat-factory/kernel'
+import type { ConsensusStepConfig, Pipeline } from '@cat-factory/kernel'
 import { assertFound, ValidationError } from '@cat-factory/kernel'
 import type { PipelineRepository, WorkspaceRepository } from '@cat-factory/kernel'
 import type { IdGenerator } from '@cat-factory/kernel'
@@ -52,6 +52,7 @@ export class PipelineService {
       ...alignedGates(input.agentKinds, input.gates),
       ...alignedThresholds(input.agentKinds, input.thresholds),
       ...alignedEnabled(input.agentKinds, input.enabled),
+      ...alignedConsensus(input.agentKinds, input.consensus),
     }
     await this.pipelineRepository.insert(workspaceId, pipeline)
     return pipeline
@@ -76,6 +77,7 @@ export class PipelineService {
       ...(source.gates ? { gates: [...source.gates] } : {}),
       ...(source.thresholds ? { thresholds: [...source.thresholds] } : {}),
       ...(source.enabled ? { enabled: [...source.enabled] } : {}),
+      ...(source.consensus ? { consensus: [...source.consensus] } : {}),
     }
     await this.pipelineRepository.insert(workspaceId, pipeline)
     return pipeline
@@ -98,6 +100,7 @@ export class PipelineService {
     const gates = input.gates ?? existing.gates
     const thresholds = input.thresholds ?? existing.thresholds
     const enabled = input.enabled ?? existing.enabled
+    const consensus = input.consensus ?? existing.consensus
     assertSomeEnabled(agentKinds, enabled)
     // Re-validate companion placement against the EFFECTIVE (enabled) chain — disabling
     // a producer while leaving its companion on would orphan the companion — so validate
@@ -110,6 +113,7 @@ export class PipelineService {
       ...alignedGates(agentKinds, gates),
       ...alignedThresholds(agentKinds, thresholds),
       ...alignedEnabled(agentKinds, enabled),
+      ...alignedConsensus(agentKinds, consensus),
     }
     await this.pipelineRepository.update(workspaceId, pipeline)
     return pipeline
@@ -152,6 +156,17 @@ function alignedEnabled(
 ): Pick<Pipeline, 'enabled'> {
   return enabled?.some((e) => e === false)
     ? { enabled: agentKinds.map((_, i) => enabled[i] ?? true) }
+    : {}
+}
+
+// Keep consensus configs aligned to agentKinds; only persist when at least one step is
+// consensus-enabled (the default is no array at all → every step is a standard agent).
+function alignedConsensus(
+  agentKinds: string[],
+  consensus: (ConsensusStepConfig | null)[] | undefined,
+): Pick<Pipeline, 'consensus'> {
+  return consensus?.some((c) => c?.enabled)
+    ? { consensus: agentKinds.map((_, i) => consensus[i] ?? null) }
     : {}
 }
 

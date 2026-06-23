@@ -1,6 +1,7 @@
 import type {
   Block,
   BootstrapJob,
+  ConsensusSession,
   ClarityReview,
   ExecutionEventPublisher,
   ExecutionInstance,
@@ -91,6 +92,12 @@ export class FanOutEventPublisher implements ExecutionEventPublisher {
   async requirementReviewChanged(workspaceId: string, review: RequirementReview): Promise<void> {
     for (const ws of await this.targets(workspaceId, review.blockId)) {
       await this.inner.requirementReviewChanged?.(ws, review)
+    }
+  }
+
+  async consensusSessionChanged(workspaceId: string, session: ConsensusSession): Promise<void> {
+    for (const ws of await this.targets(workspaceId, session.blockId)) {
+      await this.inner.consensusSessionChanged?.(ws, session)
     }
   }
 

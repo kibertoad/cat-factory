@@ -119,6 +119,8 @@ import { D1BootstrapJobRepository } from './repositories/D1BootstrapJobRepositor
 import { D1AgentRunRepository } from './repositories/D1AgentRunRepository'
 import { D1RepoBlueprintRepository } from './repositories/D1RepoBlueprintRepository'
 import { D1RequirementReviewRepository } from './repositories/D1RequirementReviewRepository'
+import { D1ConsensusSessionRepository } from './repositories/D1ConsensusSessionRepository'
+import { ConsensusAgentExecutor, registerConsensusTraits } from '@cat-factory/consensus'
 import { D1ClarityReviewRepository } from './repositories/D1ClarityReviewRepository'
 import { D1NotificationRepository } from './repositories/D1NotificationRepository'
 import { D1MergePresetRepository } from './repositories/D1MergePresetRepository'
@@ -280,6 +282,38 @@ function selectAgentExecutor(
   // Always the composite: non-sandbox kinds run inline; sandbox kinds run in the
   // container.
   return new CompositeAgentExecutor(inline, container)
+}
+
+/** Truthy env flag (`true`/`1`/`yes`). */
+function isTruthy(value: string | undefined): boolean {
+  return value === 'true' || value === '1' || value === 'yes'
+}
+
+/**
+ * Wrap the standard executor with the optional consensus mechanism when
+ * `CONSENSUS_ENABLED` is set: register the consensus capability traits (so the builder
+ * offers "Enable Consensus" on eligible steps) and route consensus-enabled steps through
+ * a multi-model process, persisting + pushing the transcript. Off ⇒ returns `standard`
+ * unchanged (no traits, no wrapping), so behaviour is identical to before.
+ */
+function maybeWrapConsensus(
+  standard: AgentExecutor,
+  env: Env,
+  config: AppConfig,
+  db: D1Database,
+  eventPublisher: ExecutionEventPublisher | undefined,
+): AgentExecutor {
+  if (!isTruthy(env.CONSENSUS_ENABLED)) return standard
+  registerConsensusTraits()
+  return new ConsensusAgentExecutor({
+    standard,
+    modelProviderResolver: buildModelProviderResolver(env, db),
+    agentRouting: config.agents.routing,
+    resolveBlockModel: config.agents.resolveBlockModel,
+    resolveWorkspaceModelDefault: buildResolveWorkspaceModelDefault(db),
+    sessionRepository: new D1ConsensusSessionRepository({ db }),
+    ...(eventPublisher ? { eventPublisher } : {}),
+  })
 }
 
 /**
@@ -1245,6 +1279,10 @@ export function buildContainer(
   // selectability + the provider guard uniformly across runtimes.
   const cloudflareModelsEnabled = opts.cloudflareModelsEnabled ?? !!env.AI
 
+  // Built once so the consensus executor and the engine share the same publisher (live
+  // consensus transcript pushes ride the same hub as run/board events).
+  const eventPublisher = selectEventPublisher(env, db)
+
   const dependencies: CoreDependencies = {
     workspaceRepository: new D1WorkspaceRepository({ db }),
     accountRepository: new D1AccountRepository({ db }),
@@ -1269,17 +1307,23 @@ export function buildContainer(
     // production but must not fire for tests that never reach the real executor.
     agentExecutor:
       overrides.agentExecutor ??
-      selectAgentExecutor(
+      maybeWrapConsensus(
+        selectAgentExecutor(
+          env,
+          config,
+          db,
+          clock,
+          resolveTransport,
+          subscriptions,
+          personalSubscriptions,
+        ),
         env,
         config,
         db,
-        clock,
-        resolveTransport,
-        subscriptions,
-        personalSubscriptions,
+        eventPublisher,
       ),
     workRunner: selectWorkRunner(env),
-    executionEventPublisher: selectEventPublisher(env, db),
+    executionEventPublisher: eventPublisher,
     spendPricing: config.spend,
     // Repo-bootstrap repositories are wired unconditionally (reference-architecture
     // CRUD is always available); the run path additionally needs the bootstrapper.
@@ -1328,6 +1372,9 @@ export function buildContainer(
     ...createCore(dependencies),
     config,
     agentRunRepository: new D1AgentRunRepository({ db }),
+    // The consensus transcript store, for the read endpoint (the SPA window's initial
+    // load / reload). Always wired; live updates ride the `consensus` workspace event.
+    consensusSessionRepository: new D1ConsensusSessionRepository({ db }),
     // The vendor-credential (subscription token pool) service the shared controller
     // reads; present when the shared ENCRYPTION_KEY is configured.
     subscriptions,

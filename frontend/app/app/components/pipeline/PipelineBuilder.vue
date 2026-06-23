@@ -3,9 +3,34 @@ import { ref } from 'vue'
 import type { AgentKind, Pipeline } from '~/types/domain'
 import AgentPalette from '~/components/palettes/AgentPalette.vue'
 import AgentKindIcon from '~/components/pipeline/AgentKindIcon.vue'
-import { agentKindMeta } from '~/utils/catalog'
+import { agentKindMeta, isConsensusEligibleKind } from '~/utils/catalog'
+import type { ConsensusStrategy } from '~/types/consensus'
 
 const pipelines = usePipelinesStore()
+
+const CONSENSUS_STRATEGIES: { value: ConsensusStrategy; label: string }[] = [
+  { value: 'specialist-panel', label: 'Specialist panel' },
+  { value: 'debate', label: 'Debate' },
+  { value: 'ranked-voting', label: 'Ranked voting' },
+]
+
+/** Add a blank participant to the draft step's consensus config. */
+function addParticipant(i: number) {
+  const cfg = pipelines.draftConsensus[i]
+  if (!cfg) return
+  cfg.participants.push({ id: `cp_${Math.random().toString(36).slice(2, 9)}`, role: 'Reviewer' })
+}
+function removeParticipant(i: number, pIdx: number) {
+  pipelines.draftConsensus[i]?.participants.splice(pIdx, 1)
+}
+/** Toggle gating on/off for a draft step's consensus config. */
+function toggleGating(i: number) {
+  const cfg = pipelines.draftConsensus[i]
+  if (!cfg) return
+  cfg.gating = cfg.gating?.enabled
+    ? { ...cfg.gating, enabled: false }
+    : { enabled: true, minRisk: 0.6, minImpact: 0.6 }
+}
 const agents = useAgentsStore()
 const ui = useUiStore()
 
@@ -150,70 +175,199 @@ async function clone(p: Pipeline) {
             <li
               v-for="(kind, i) in pipelines.draft"
               :key="i"
-              class="flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/60 p-2"
+              class="flex flex-col gap-2 rounded-lg border border-slate-700 bg-slate-800/60 p-2"
               :class="{ 'opacity-50': pipelines.draftEnabled[i] === false }"
             >
-              <span class="w-4 shrink-0 text-center text-[10px] text-slate-500">{{ i + 1 }}</span>
-              <AgentKindIcon :kind="kind" icon-class="h-4 w-4" />
-              <span
-                class="min-w-0 flex-1 truncate text-xs text-slate-100"
-                :class="{ 'line-through': pipelines.draftEnabled[i] === false }"
-                :title="agentKindMeta(kind).description"
-              >
-                {{ agentKindMeta(kind).label }}
-              </span>
-              <div class="flex shrink-0 items-center">
-                <!-- Enable/disable: keep the step in the pipeline but skip it at run. -->
-                <UButton
-                  :icon="pipelines.draftEnabled[i] === false ? 'i-lucide-eye-off' : 'i-lucide-eye'"
-                  :color="pipelines.draftEnabled[i] === false ? 'neutral' : 'primary'"
-                  variant="ghost"
-                  size="xs"
-                  :title="
-                    pipelines.draftEnabled[i] === false
-                      ? 'Step disabled (skipped at run) — click to enable'
-                      : 'Disable this step (kept in the pipeline but skipped at run)'
-                  "
-                  @click="pipelines.toggleDraftEnabled(i)"
-                />
-                <!-- Approval gate: pause after this step so a human reviews (and
+              <div class="flex items-center gap-1.5">
+                <span class="w-4 shrink-0 text-center text-[10px] text-slate-500">{{ i + 1 }}</span>
+                <AgentKindIcon :kind="kind" icon-class="h-4 w-4" />
+                <span
+                  class="min-w-0 flex-1 truncate text-xs text-slate-100"
+                  :class="{ 'line-through': pipelines.draftEnabled[i] === false }"
+                  :title="agentKindMeta(kind).description"
+                >
+                  {{ agentKindMeta(kind).label }}
+                </span>
+                <div class="flex shrink-0 items-center">
+                  <!-- Enable/disable: keep the step in the pipeline but skip it at run. -->
+                  <UButton
+                    :icon="
+                      pipelines.draftEnabled[i] === false ? 'i-lucide-eye-off' : 'i-lucide-eye'
+                    "
+                    :color="pipelines.draftEnabled[i] === false ? 'neutral' : 'primary'"
+                    variant="ghost"
+                    size="xs"
+                    :title="
+                      pipelines.draftEnabled[i] === false
+                        ? 'Step disabled (skipped at run) — click to enable'
+                        : 'Disable this step (kept in the pipeline but skipped at run)'
+                    "
+                    @click="pipelines.toggleDraftEnabled(i)"
+                  />
+                  <!-- Approval gate: pause after this step so a human reviews (and
                      can edit) its proposal before the next step runs. -->
-                <UButton
-                  :icon="pipelines.draftGates[i] ? 'i-lucide-shield-check' : 'i-lucide-shield'"
-                  :color="pipelines.draftGates[i] ? 'warning' : 'neutral'"
-                  variant="ghost"
-                  size="xs"
-                  :title="
-                    pipelines.draftGates[i]
-                      ? 'Approval required after this step — click to remove the gate'
-                      : 'Require human approval after this step'
-                  "
-                  @click="pipelines.toggleDraftGate(i)"
-                />
-                <UButton
-                  icon="i-lucide-chevron-up"
-                  color="neutral"
-                  variant="ghost"
-                  size="xs"
-                  :disabled="i === 0"
-                  @click="pipelines.moveInDraft(i, i - 1)"
-                />
-                <UButton
-                  icon="i-lucide-chevron-down"
-                  color="neutral"
-                  variant="ghost"
-                  size="xs"
-                  :disabled="i === pipelines.draft.length - 1"
-                  @click="pipelines.moveInDraft(i, i + 1)"
-                />
-                <UButton
-                  icon="i-lucide-x"
-                  color="error"
-                  variant="ghost"
-                  size="xs"
-                  title="Remove this step from the pipeline"
-                  @click="pipelines.removeFromDraft(i)"
-                />
+                  <UButton
+                    :icon="pipelines.draftGates[i] ? 'i-lucide-shield-check' : 'i-lucide-shield'"
+                    :color="pipelines.draftGates[i] ? 'warning' : 'neutral'"
+                    variant="ghost"
+                    size="xs"
+                    :title="
+                      pipelines.draftGates[i]
+                        ? 'Approval required after this step — click to remove the gate'
+                        : 'Require human approval after this step'
+                    "
+                    @click="pipelines.toggleDraftGate(i)"
+                  />
+                  <!-- Consensus: run this step through the multi-model mechanism (eligible
+                     kinds only — architect/analysis/reviewer/task-estimator). -->
+                  <UButton
+                    v-if="isConsensusEligibleKind(kind)"
+                    :icon="
+                      pipelines.draftConsensus[i]?.enabled
+                        ? 'i-lucide-users-round'
+                        : 'i-lucide-user'
+                    "
+                    :color="pipelines.draftConsensus[i]?.enabled ? 'success' : 'neutral'"
+                    variant="ghost"
+                    size="xs"
+                    :title="
+                      pipelines.draftConsensus[i]?.enabled
+                        ? 'Consensus enabled — click to revert to a single agent'
+                        : 'Enable consensus (multi-model panel/debate/voting) for this step'
+                    "
+                    @click="pipelines.toggleDraftConsensus(i)"
+                  />
+                  <UButton
+                    icon="i-lucide-chevron-up"
+                    color="neutral"
+                    variant="ghost"
+                    size="xs"
+                    :disabled="i === 0"
+                    @click="pipelines.moveInDraft(i, i - 1)"
+                  />
+                  <UButton
+                    icon="i-lucide-chevron-down"
+                    color="neutral"
+                    variant="ghost"
+                    size="xs"
+                    :disabled="i === pipelines.draft.length - 1"
+                    @click="pipelines.moveInDraft(i, i + 1)"
+                  />
+                  <UButton
+                    icon="i-lucide-x"
+                    color="error"
+                    variant="ghost"
+                    size="xs"
+                    title="Remove this step from the pipeline"
+                    @click="pipelines.removeFromDraft(i)"
+                  />
+                </div>
+              </div>
+
+              <!-- Consensus config (shown when the step is consensus-enabled). -->
+              <div
+                v-if="pipelines.draftConsensus[i]?.enabled"
+                class="ml-6 space-y-2 rounded-md border border-emerald-800/40 bg-emerald-950/20 p-2 text-xs"
+              >
+                <div class="flex items-center gap-2">
+                  <label class="text-slate-400">Strategy</label>
+                  <select
+                    v-model="pipelines.draftConsensus[i]!.strategy"
+                    class="rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-slate-100"
+                  >
+                    <option v-for="s in CONSENSUS_STRATEGIES" :key="s.value" :value="s.value">
+                      {{ s.label }}
+                    </option>
+                  </select>
+                  <label
+                    v-if="pipelines.draftConsensus[i]!.strategy === 'debate'"
+                    class="ml-2 text-slate-400"
+                    >Rounds</label
+                  >
+                  <input
+                    v-if="pipelines.draftConsensus[i]!.strategy === 'debate'"
+                    v-model.number="pipelines.draftConsensus[i]!.rounds"
+                    type="number"
+                    min="1"
+                    max="5"
+                    placeholder="2"
+                    class="w-12 rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-slate-100"
+                  />
+                </div>
+
+                <!-- participants -->
+                <div class="space-y-1">
+                  <div
+                    v-for="(p, pIdx) in pipelines.draftConsensus[i]!.participants"
+                    :key="p.id"
+                    class="flex items-center gap-1.5"
+                  >
+                    <input
+                      v-model="p.role"
+                      placeholder="Role"
+                      class="w-28 rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-slate-100"
+                    />
+                    <input
+                      v-model="p.modelId"
+                      placeholder="Model id (optional)"
+                      class="flex-1 rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-slate-300"
+                    />
+                    <UButton
+                      icon="i-lucide-x"
+                      color="error"
+                      variant="ghost"
+                      size="xs"
+                      :disabled="pipelines.draftConsensus[i]!.participants.length <= 2"
+                      title="Remove participant (min 2)"
+                      @click="removeParticipant(i, pIdx)"
+                    />
+                  </div>
+                  <UButton
+                    icon="i-lucide-plus"
+                    color="neutral"
+                    variant="ghost"
+                    size="xs"
+                    label="Add participant"
+                    @click="addParticipant(i)"
+                  />
+                </div>
+
+                <!-- gating -->
+                <div class="flex flex-wrap items-center gap-2 border-t border-slate-800 pt-2">
+                  <UButton
+                    :icon="
+                      pipelines.draftConsensus[i]!.gating?.enabled
+                        ? 'i-lucide-toggle-right'
+                        : 'i-lucide-toggle-left'
+                    "
+                    :color="pipelines.draftConsensus[i]!.gating?.enabled ? 'success' : 'neutral'"
+                    variant="ghost"
+                    size="xs"
+                    label="Gate on estimate"
+                    title="Only run consensus when the task estimate clears a threshold (else the standard agent runs)"
+                    @click="toggleGating(i)"
+                  />
+                  <template v-if="pipelines.draftConsensus[i]!.gating?.enabled">
+                    <label class="text-slate-400">risk ≥</label>
+                    <input
+                      v-model.number="pipelines.draftConsensus[i]!.gating!.minRisk"
+                      type="number"
+                      min="0"
+                      max="1"
+                      step="0.1"
+                      class="w-14 rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-slate-100"
+                    />
+                    <label class="text-slate-400">impact ≥</label>
+                    <input
+                      v-model.number="pipelines.draftConsensus[i]!.gating!.minImpact"
+                      type="number"
+                      min="0"
+                      max="1"
+                      step="0.1"
+                      class="w-14 rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-slate-100"
+                    />
+                  </template>
+                </div>
               </div>
             </li>
           </ol>

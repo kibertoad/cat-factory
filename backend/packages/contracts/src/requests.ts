@@ -1,5 +1,6 @@
 import * as v from 'valibot'
 import { agentConfigValuesSchema } from './agent-config.js'
+import { consensusStepConfigSchema } from './consensus.js'
 import { cloudProviderSchema, instanceSizeSchema } from './provisioning.js'
 import { agentKindSchema, blockTypeSchema, positionSchema, sizeSchema } from './primitives.js'
 
@@ -152,6 +153,12 @@ export const createPipelineSchema = v.object({
    * the pipeline but skips it at run start. Optional; omitted means every step runs.
    */
   enabled: v.optional(v.array(v.boolean())),
+  /**
+   * Per-step consensus configs, parallel to {@link agentKinds}: a step whose kind carries
+   * a consensus capability trait may run through the multi-model consensus mechanism.
+   * `null`/omitted ⇒ the standard single-actor agent. Optional.
+   */
+  consensus: v.optional(v.array(v.nullable(consensusStepConfigSchema))),
 })
 export type CreatePipelineInput = v.InferOutput<typeof createPipelineSchema>
 
@@ -166,6 +173,7 @@ export const updatePipelineSchema = v.object({
   gates: v.optional(v.array(v.boolean())),
   thresholds: v.optional(v.array(v.nullable(v.pipe(v.number(), v.minValue(0), v.maxValue(1))))),
   enabled: v.optional(v.array(v.boolean())),
+  consensus: v.optional(v.array(v.nullable(consensusStepConfigSchema))),
 })
 export type UpdatePipelineInput = v.InferOutput<typeof updatePipelineSchema>
 

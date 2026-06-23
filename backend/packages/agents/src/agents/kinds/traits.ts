@@ -84,6 +84,26 @@ export interface AgentTraitDefinition {
 // Process-wide trait registry, mirroring the agent-kind / model-provider registries.
 const traitRegistry = new Map<AgentTrait, AgentTraitDefinition>()
 
+// Extra trait ASSIGNMENTS registered by a deployment/plugin at startup — e.g. the
+// optional `@cat-factory/consensus` package marking which built-in kinds are eligible
+// for a consensus strategy (`specialist-panel-capable`, …). Distinct from a kind's
+// built-in STANDARD_AGENT_TRAITS and from a registered custom kind's own `traits`:
+// this seam adds traits to an EXISTING kind without redefining its prompt. Unioned in
+// {@link traitsFor}. Mirrors the registry seams above.
+const assignedTraits = new Map<AgentKind, Set<AgentTrait>>()
+
+/** Assign extra capability traits to an (existing) agent kind. Additive; idempotent per trait. */
+export function assignAgentTraits(kind: AgentKind, traits: Iterable<AgentTrait>): void {
+  const set = assignedTraits.get(kind) ?? new Set<AgentTrait>()
+  for (const trait of traits) set.add(trait)
+  assignedTraits.set(kind, set)
+}
+
+/** Drop all extra trait assignments. Intended for tests that exercise assignment. */
+export function clearAssignedAgentTraits(): void {
+  assignedTraits.clear()
+}
+
 /** Register a custom trait definition. A later registration of the same id replaces it. */
 export function registerAgentTrait(definition: AgentTraitDefinition): void {
   traitRegistry.set(definition.id, definition)
@@ -109,6 +129,7 @@ export function clearRegisteredAgentTraits(): void {
 export function traitsFor(kind: AgentKind): Set<AgentTrait> {
   const traits = new Set<AgentTrait>(STANDARD_AGENT_TRAITS[kind] ?? [])
   for (const trait of registeredAgentKind(kind)?.traits ?? []) traits.add(trait)
+  for (const trait of assignedTraits.get(kind) ?? []) traits.add(trait)
   return traits
 }
 

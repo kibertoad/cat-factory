@@ -132,7 +132,11 @@ const conflictVerdict = computed(() => {
           <UBadge :color="STATUS_META[status].badge" variant="subtle" size="sm">
             {{ STATUS_META[status].label }}
           </UBadge>
-          <StepRestartControl :instance-id="instanceId" :step-index="stepIndex" @restarted="close" />
+          <StepRestartControl
+            :instance-id="instanceId"
+            :step-index="stepIndex"
+            @restarted="close"
+          />
           <button
             class="rounded-md p-1.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
             @click="close"

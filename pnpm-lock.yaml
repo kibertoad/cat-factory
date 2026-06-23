@@ -175,6 +175,28 @@ importers:
         specifier: 7.0.1-rc
         version: 7.0.1-rc
 
+  backend/packages/consensus:
+    dependencies:
+      '@cat-factory/agents':
+        specifier: workspace:*
+        version: link:../agents
+      '@cat-factory/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@cat-factory/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+      ai:
+        specifier: ^6.0.208
+        version: 6.0.208(zod@3.25.76)
+    devDependencies:
+      typescript:
+        specifier: 7.0.1-rc
+        version: 7.0.1-rc
+      vitest:
+        specifier: ^4.1.9
+        version: 4.1.9(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(happy-dom@15.11.7)(vite@7.3.5(@types/node@24.13.2)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0))
+
   backend/packages/contracts:
     dependencies:
       valibot:
@@ -414,6 +436,9 @@ importers:
       '@cat-factory/agents':
         specifier: workspace:*
         version: link:../../packages/agents
+      '@cat-factory/consensus':
+        specifier: workspace:*
+        version: link:../../packages/consensus
       '@cat-factory/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
@@ -524,6 +549,9 @@ importers:
       '@cat-factory/agents':
         specifier: workspace:*
         version: link:../../packages/agents
+      '@cat-factory/consensus':
+        specifier: workspace:*
+        version: link:../../packages/consensus
       '@cat-factory/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts

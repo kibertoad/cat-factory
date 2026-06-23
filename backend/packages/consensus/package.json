@@ -1,0 +1,37 @@
+{
+  "name": "@cat-factory/consensus",
+  "version": "1.0.0",
+  "description": "Optional consensus-orchestration mechanism (specialist panel / debate / ranked voting) for cat-factory agent steps, with task-estimate gating.",
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -b tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:run": "vitest run"
+  },
+  "dependencies": {
+    "@cat-factory/agents": "workspace:*",
+    "@cat-factory/contracts": "workspace:*",
+    "@cat-factory/kernel": "workspace:*",
+    "ai": "^6.0.208"
+  },
+  "devDependencies": {
+    "typescript": "7.0.1-rc",
+    "vitest": "^4.1.9"
+  }
+}

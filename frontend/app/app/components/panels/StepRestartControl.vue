@@ -30,7 +30,9 @@ const instance = computed(() =>
   props.instanceId ? execution.getInstance(props.instanceId) : undefined,
 )
 const step = computed(() =>
-  instance.value && props.stepIndex !== null ? (instance.value.steps[props.stepIndex] ?? null) : null,
+  instance.value && props.stepIndex !== null
+    ? (instance.value.steps[props.stepIndex] ?? null)
+    : null,
 )
 const approvalPending = computed(() => step.value?.approval?.status === 'pending')
 const canRestart = computed(

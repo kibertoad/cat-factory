@@ -2,6 +2,7 @@ import * as v from 'valibot'
 import { subscriptionVendorSchema } from './vendor-credentials.js'
 import { agentConfigValuesSchema } from './agent-config.js'
 import { testReportSchema } from './testing.js'
+import { consensusStepConfigSchema, taskEstimateSchema } from './consensus.js'
 import { cloudProviderSchema, instanceSizeSchema } from './provisioning.js'
 import {
   agentKindSchema,
@@ -57,6 +58,13 @@ export const blockSchema = v.object({
   level: blockLevelSchema,
   parentId: v.nullable(v.string()),
   confidence: v.optional(v.number()),
+  /**
+   * The `task-estimator` agent's triage of this task (complexity / risk / impact,
+   * each 0..1, + rationale). Written by a `task-estimator` pipeline step once it
+   * runs; surfaced in the UI and used to gate consensus steps. Absent until a
+   * task-estimator step has run. Only meaningful on `task`-level blocks.
+   */
+  estimate: v.optional(v.nullable(taskEstimateSchema)),
   moduleName: v.optional(v.string()),
   /**
    * Ids of curated best-practice prompt fragments selected for this block. Their
@@ -305,6 +313,16 @@ export const pipelineSchema = v.object({
    * runs, so legacy pipelines run every step unchanged.
    */
   enabled: v.optional(v.array(v.boolean())),
+  /**
+   * Per-step consensus configuration, parallel to {@link agentKinds}: when
+   * `consensus[i]` is set and its `enabled` is true AND step `i`'s kind carries a
+   * consensus capability trait, the step runs through the multi-model consensus
+   * mechanism (specialist panel / debate / ranked voting) instead of a single LLM
+   * call — optionally gated on the task estimate (sub-threshold ⇒ standard agent).
+   * `null`/absent means "standard single-actor agent" (the default). Copied onto
+   * the run's step at start, like {@link gates}. See {@link consensusStepConfigSchema}.
+   */
+  consensus: v.optional(v.array(v.nullable(consensusStepConfigSchema))),
   /**
    * True for the curated built-in catalog pipelines (`seedPipelines()`). Built-ins
    * are read-only templates: they can be cloned (into an editable copy) but not
@@ -701,6 +719,14 @@ export const pipelineStepSchema = v.object({
    * direction (a redo). Absent when no incorporation is pending.
    */
   pendingIncorporation: v.optional(v.nullable(v.object({ feedback: v.optional(v.string()) }))),
+  /**
+   * Consensus configuration for this step, copied from the pipeline's `consensus`
+   * array at run start. Present (with `enabled: true`) when this step should run
+   * through the multi-model consensus mechanism; read by the consensus executor
+   * (and to decide gating against the block estimate). Absent ⇒ standard agent.
+   * See {@link consensusStepConfigSchema}.
+   */
+  consensus: v.optional(v.nullable(consensusStepConfigSchema)),
   /** Text the agent produced for this step (when LLM execution is enabled). */
   output: v.optional(v.string()),
   /** Identifier of the model that produced `output`, for transparency. */

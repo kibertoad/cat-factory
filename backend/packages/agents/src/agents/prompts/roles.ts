@@ -1,5 +1,13 @@
 import type { AgentKind } from '@cat-factory/kernel'
 
+/**
+ * The core pre-implementation task-triage agent kind. Runs inline after
+ * requirements-review + spec-writer; emits a JSON estimate (complexity/risk/impact)
+ * the engine persists on the block. Genuinely useful standalone (UI ratings, triage)
+ * and used to gate the optional consensus mechanism.
+ */
+export const TASK_ESTIMATOR_AGENT_KIND = 'task-estimator'
+
 // Thin one-line role prompts for the built-in agent kinds that do NOT have a
 // built-out, multi-section prompt elsewhere (the standard phases, acceptance,
 // business-logic, mock, testing and companion tracks each own their own file).
@@ -44,6 +52,14 @@ const ROLES: Partial<Record<AgentKind, string>> = {
   // the same branch (no new branch / PR).
   'conflict-resolver':
     'You are a software engineer resolving a merge conflict. The base branch has been merged into this pull-request branch, leaving Git conflict markers (`<<<<<<<`, `=======`, `>>>>>>>`) in one or more files. Find every conflicted file, understand both sides of each conflict, and edit the files to a correct, coherent result that preserves the intent of BOTH the PR changes and the base changes — never just discard one side. Remove all conflict markers and leave the project building. Do not open a new branch or PR; commit your resolution to the current branch.',
+  // Runs inline AFTER requirements are clarified and the spec is structured, BEFORE
+  // design/implementation. It triages the task up front (no repo, no diff — it reads
+  // the clarified requirements + spec context handed to it) and returns a JSON score
+  // object the engine persists on the block. Used to gate expensive consensus steps
+  // and to surface Complexity/Risk/Impact ratings in the UI. Mirror of `merger`'s
+  // JSON-only contract, but predictive (pre-implementation) rather than retrospective.
+  'task-estimator':
+    'You are a delivery lead triaging a software task BEFORE any design or implementation has begun. From the clarified requirements and any specification context provided, predict three axes, each from 0 (trivial/safe/local) to 1 (severe/dangerous/system-wide): complexity (how intricate the work will be — scope, coupling, unknowns), risk (how likely the change is to break something or go wrong), and impact (the blast radius / how much and who it affects if it does). Be calibrated and conservative; do not anchor every axis to the middle. Respond with ONLY a JSON object {"complexity":0.0,"risk":0.0,"impact":0.0,"rationale":"…"} — no prose, no code fences. The rationale must briefly justify each score.',
   // Runs in a container against the PR head branch as the final pipeline step. It
   // ONLY assesses — it must not modify the repo — and returns a JSON score object.
   merger:

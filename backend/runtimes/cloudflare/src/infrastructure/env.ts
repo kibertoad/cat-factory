@@ -146,6 +146,13 @@ export interface Env {
   // takes effect on Anthropic/OpenAI models, which expose a server-executed search.
   /** Truthy (`true`/`1`/`yes`) enables provider web search for the inline design/research kinds. */
   INLINE_WEB_SEARCH_ENABLED?: string
+  /**
+   * Truthy (`true`/`1`/`yes`) enables the optional consensus-orchestration mechanism:
+   * the consensus capability traits are registered (so the pipeline builder offers
+   * "Enable Consensus" on eligible steps) and the agent executor is wrapped to run
+   * consensus-enabled steps through a multi-model process. Off ⇒ unchanged behaviour.
+   */
+  CONSENSUS_ENABLED?: string
   /** Comma-separated override of the default `architect,researcher` allow-list. */
   INLINE_WEB_SEARCH_KINDS?: string
   /** Cap on provider web searches per inline run (Anthropic `maxUses`; default 5). */

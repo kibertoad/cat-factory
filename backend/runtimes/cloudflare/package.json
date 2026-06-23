@@ -36,6 +36,7 @@
     "@ai-sdk/openai": "^3.0.73",
     "@ai-sdk/openai-compatible": "^2.0.51",
     "@cat-factory/agents": "workspace:*",
+    "@cat-factory/consensus": "workspace:*",
     "@cat-factory/contracts": "workspace:*",
     "@cat-factory/integrations": "workspace:*",
     "@cat-factory/kernel": "workspace:*",

@@ -1,7 +1,25 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type { AgentKind, Pipeline } from '~/types/domain'
+import type { ConsensusStepConfig } from '~/types/consensus'
+import { uid } from '~/utils/catalog'
 import { useWorkspaceStore } from '~/stores/workspace'
+
+/** A sensible default config when a step is first flipped to consensus in the builder. */
+function defaultConsensusConfig(): ConsensusStepConfig {
+  return {
+    enabled: true,
+    strategy: 'specialist-panel',
+    participants: [
+      { id: uid('cp'), role: 'Pragmatist', systemFraming: 'Favour the simplest viable approach.' },
+      {
+        id: uid('cp'),
+        role: 'Skeptic',
+        systemFraming: 'Probe risks, edge cases and failure modes.',
+      },
+    ],
+  }
+}
 
 /**
  * Saved, reusable pipelines (the pipeline palette) plus the in-progress draft
@@ -26,6 +44,8 @@ export const usePipelinesStore = defineStore('pipelines', () => {
    * survive a save.
    */
   const draftThresholds = ref<(number | null)[]>([])
+  /** Per-step consensus configs, kept index-aligned with `draft` (null ⇒ standard agent). */
+  const draftConsensus = ref<(ConsensusStepConfig | null)[]>([])
   const draftName = ref('New pipeline')
   /** The id of the pipeline being edited, or null when assembling a brand-new one. */
   const editingId = ref<string | null>(null)
@@ -44,6 +64,7 @@ export const usePipelinesStore = defineStore('pipelines', () => {
     draftGates.value.push(false)
     draftEnabled.value.push(true)
     draftThresholds.value.push(null)
+    draftConsensus.value.push(null)
   }
 
   function removeFromDraft(index: number) {
@@ -51,6 +72,7 @@ export const usePipelinesStore = defineStore('pipelines', () => {
     draftGates.value.splice(index, 1)
     draftEnabled.value.splice(index, 1)
     draftThresholds.value.splice(index, 1)
+    draftConsensus.value.splice(index, 1)
   }
 
   function moveInDraft(from: number, to: number) {
@@ -63,6 +85,18 @@ export const usePipelinesStore = defineStore('pipelines', () => {
     draftEnabled.value.splice(to, 0, on ?? true)
     const [th] = draftThresholds.value.splice(from, 1)
     draftThresholds.value.splice(to, 0, th ?? null)
+    const [cons] = draftConsensus.value.splice(from, 1)
+    draftConsensus.value.splice(to, 0, cons ?? null)
+  }
+
+  /** Toggle the consensus mechanism on the draft step at `index` (default config / off). */
+  function toggleDraftConsensus(index: number) {
+    draftConsensus.value[index] = draftConsensus.value[index] ? null : defaultConsensusConfig()
+  }
+
+  /** Replace the consensus config of the draft step at `index` (builder editor edits). */
+  function setDraftConsensus(index: number, config: ConsensusStepConfig | null) {
+    draftConsensus.value[index] = config
   }
 
   /** Toggle the approval gate on the draft step at `index`. */
@@ -80,6 +114,7 @@ export const usePipelinesStore = defineStore('pipelines', () => {
     draftGates.value = []
     draftEnabled.value = []
     draftThresholds.value = []
+    draftConsensus.value = []
     draftName.value = 'New pipeline'
     editingId.value = null
   }
@@ -90,6 +125,7 @@ export const usePipelinesStore = defineStore('pipelines', () => {
     draftGates.value = pipeline.agentKinds.map((_, i) => pipeline.gates?.[i] ?? false)
     draftEnabled.value = pipeline.agentKinds.map((_, i) => pipeline.enabled?.[i] ?? true)
     draftThresholds.value = pipeline.agentKinds.map((_, i) => pipeline.thresholds?.[i] ?? null)
+    draftConsensus.value = pipeline.agentKinds.map((_, i) => pipeline.consensus?.[i] ?? null)
     draftName.value = pipeline.name
     editingId.value = pipeline.id
   }
@@ -106,6 +142,10 @@ export const usePipelinesStore = defineStore('pipelines', () => {
       // Only send thresholds when at least one step pins an explicit value.
       ...(draftThresholds.value.some((t) => t != null)
         ? { thresholds: [...draftThresholds.value] }
+        : {}),
+      // Only send consensus when at least one step is consensus-enabled.
+      ...(draftConsensus.value.some((c) => c?.enabled)
+        ? { consensus: [...draftConsensus.value] }
         : {}),
     }
   }
@@ -148,6 +188,7 @@ export const usePipelinesStore = defineStore('pipelines', () => {
     draftGates,
     draftEnabled,
     draftThresholds,
+    draftConsensus,
     draftName,
     editingId,
     hydrate,
@@ -157,6 +198,8 @@ export const usePipelinesStore = defineStore('pipelines', () => {
     moveInDraft,
     toggleDraftGate,
     toggleDraftEnabled,
+    toggleDraftConsensus,
+    setDraftConsensus,
     clearDraft,
     loadForEdit,
     saveDraft,

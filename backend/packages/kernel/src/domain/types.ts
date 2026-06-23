@@ -167,6 +167,18 @@ export type {
   RequirementConcernLevel,
   CreateMergePresetInput,
   UpdateMergePresetInput,
+  // Consensus-orchestration shapes (optional `@cat-factory/consensus` mechanism)
+  // + the core task-estimator triage that gates it.
+  ConsensusStrategy,
+  ConsensusParticipant,
+  ConsensusGating,
+  ConsensusStepConfig,
+  TaskEstimate,
+  ConsensusScore,
+  ConsensusContribution,
+  ConsensusRound,
+  ConsensusSessionStatus,
+  ConsensusSession,
   // Agent config-contribution shapes.
   AgentConfigOption,
   AgentConfigDescriptor,

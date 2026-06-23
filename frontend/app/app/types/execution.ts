@@ -4,6 +4,7 @@
 // ---------------------------------------------------------------------------
 
 import type { AgentKind, TestReport } from './domain'
+import type { ConsensusStepConfig } from './consensus'
 
 /**
  * A quality companion's verdict on one producer output — the standardized shape every
@@ -281,6 +282,12 @@ export interface PipelineStep {
    * non-companion steps.
    */
   companion?: StepCompanion | null
+  /**
+   * Consensus config for this step, copied from the pipeline at run start; present (with
+   * `enabled`) when the step runs through the multi-model consensus mechanism. Absent ⇒
+   * standard single-actor agent.
+   */
+  consensus?: ConsensusStepConfig | null
   /** text the agent produced for this step (when LLM execution is enabled). */
   output?: string
   /** identifier of the model that produced `output`, for transparency. */

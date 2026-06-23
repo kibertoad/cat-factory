@@ -1,4 +1,4 @@
-import type { AgentRunRepository } from '@cat-factory/kernel'
+import type { AgentRunRepository, ConsensusSessionRepository } from '@cat-factory/kernel'
 import type {
   ApiKeyService,
   LocalModelEndpointService,
@@ -20,6 +20,12 @@ export interface ServerContainer extends Core {
   config: AppConfig
   /** Kind-spanning view over agent_runs (retry dispatch + the cron sweeper). */
   agentRunRepository: AgentRunRepository
+  /**
+   * Consensus session transcripts (the optional `@cat-factory/consensus` mechanism's
+   * observability surface). Present only when the facade wired the repository; the
+   * consensus read endpoint 404s when absent.
+   */
+  consensusSessionRepository?: ConsensusSessionRepository
   /** Per-facade runtime seams (real-time delivery, …) the shared controllers use. */
   gateways: RuntimeGateways
   /**

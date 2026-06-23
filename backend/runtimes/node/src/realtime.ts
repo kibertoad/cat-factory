@@ -3,6 +3,7 @@ import type { Duplex } from 'node:stream'
 import type {
   Block,
   BootstrapJob,
+  ConsensusSession,
   ClarityReview,
   ExecutionInstance,
   LlmCallActivity,
@@ -131,6 +132,10 @@ export class NodeEventPublisher implements ExecutionEventPublisher {
 
   async requirementReviewChanged(workspaceId: string, review: RequirementReview): Promise<void> {
     this.publish(workspaceId, { type: 'requirements', review, at: Date.now() })
+  }
+
+  async consensusSessionChanged(workspaceId: string, session: ConsensusSession): Promise<void> {
+    this.publish(workspaceId, { type: 'consensus', session, at: Date.now() })
   }
 
   async clarityReviewChanged(workspaceId: string, review: ClarityReview): Promise<void> {

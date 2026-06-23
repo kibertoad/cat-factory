@@ -238,6 +238,69 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
       })
     })
 
+    describe('task estimator + consensus', () => {
+      it('parses a task-estimator step output onto block.estimate, persisted identically', async () => {
+        const app = harness.makeApp({
+          taskEstimate: { complexity: 0.7, risk: 0.8, impact: 0.6, rationale: 'fake estimate' },
+        })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Estimate + code',
+          agentKinds: ['task-estimator', 'coder'],
+        })
+        const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+          pipelineId: pipeline.body.id,
+        })
+        expect(start.status).toBe(201)
+        await app.drive(wsId)
+
+        // The estimator's JSON output round-trips onto the block's `estimate` column —
+        // the same shape from D1 (SQLite) and Postgres.
+        const snapshot = await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+        const block = snapshot.body.blocks.find((b) => b.id === 'task_login')!
+        expect(block.estimate).toBeTruthy()
+        expect(block.estimate!.complexity).toBe(0.7)
+        expect(block.estimate!.risk).toBe(0.8)
+        expect(block.estimate!.impact).toBe(0.6)
+        expect(block.estimate!.rationale).toContain('fake estimate')
+      })
+
+      it('persists a consensus config on a pipeline step, surfaced on the snapshot', async () => {
+        const app = harness.makeApp()
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        const created = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Consensus architect',
+          agentKinds: ['architect', 'coder'],
+          consensus: [
+            {
+              enabled: true,
+              strategy: 'debate',
+              rounds: 2,
+              participants: [
+                { id: 'cp1', role: 'Pragmatist' },
+                { id: 'cp2', role: 'Skeptic' },
+              ],
+              gating: { enabled: true, minRisk: 0.6 },
+            },
+            null,
+          ],
+        })
+        expect(created.body.consensus?.[0]?.enabled).toBe(true)
+        expect(created.body.consensus?.[0]?.strategy).toBe('debate')
+
+        // Round-trips through the store on a fresh snapshot read (D1 + Postgres alike).
+        const snapshot = await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+        const reloaded = snapshot.body.pipelines.find((p) => p.id === created.body.id)!
+        expect(reloaded.consensus?.[0]?.strategy).toBe('debate')
+        expect(reloaded.consensus?.[0]?.participants).toHaveLength(2)
+        expect(reloaded.consensus?.[1] ?? null).toBeNull()
+      })
+    })
+
     describe('prompt-fragment library (managed catalog)', () => {
       it('lists (200 not 503), creates, edits and removes a tier-owned fragment', async () => {
         const { call, createWorkspace } = harness.makeApp()
