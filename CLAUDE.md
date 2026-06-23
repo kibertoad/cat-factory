@@ -425,18 +425,18 @@ CI and a **real** GitHub merge, so a task is `done` only when its PR actually me
 `TaskExecution.vue` — purely from a confidence score, while CI was red and the PR
 still open). Two new container agent kinds plus a special gate step implement it.
 
-- **`ci` step (special, like `deployer`)** — auto-inserted second-to-last in the
-  standard pipelines, after all code-producing steps. It is NOT an LLM/container
-  agent: `ExecutionService.evaluateCi` (orchestration) reads the PR head's GitHub
-  check runs via the `CiStatusProvider` port (worker `GitHubCiStatusProvider`),
-  aggregates them (`ci.logic.ts` → green / pending / failure / none), and:
-  green/none → finish + advance (polling **stops**); pending → `awaiting_ci` (the
-  durable driver sleeps `ciPollInterval` then calls `pollCi`); failure → dispatch a
-  `ci-fixer` container job (up to the task preset's `ciMaxAttempts`, default 10),
-  else raise a `ci_failed` notification + fail the run. `ExecutionWorkflow` gained an
-  `awaiting_ci` poll loop mirroring `awaiting_job`; a finished fixer job returns the
-  gate to `checking` (it never advances the step). Pass-through when no
-  `CiStatusProvider` is wired (tests / no GitHub).
+- **`ci` step (a polling Gate — see "Gates vs agents" below)** — auto-inserted
+  second-to-last in the standard pipelines, after all code-producing steps. It is NOT
+  an LLM/container agent: its `GateDefinition` reads the PR head's GitHub check runs via
+  the `CiStatusProvider` port (worker `GitHubCiStatusProvider`), aggregates them
+  (`ci.logic.ts` → green / pending / failure / none), and the shared
+  `ExecutionService.evaluateGate` acts: green/none → finish + advance (polling
+  **stops**, the agent is never spun up); pending → `awaiting_gate` (the durable driver
+  sleeps `ciPollInterval` then calls `pollGate`); failure → dispatch a `ci-fixer`
+  container job (up to the task preset's `ciMaxAttempts`, default 10), else raise a
+  `ci_failed` notification + fail the run. A finished fixer job returns the gate to
+  `checking` (it never advances the step). Pass-through when no `CiStatusProvider` is
+  wired (tests / no GitHub).
 - **`ci-fixer` (container kind)** — `executor-harness/src/ci-fixer.ts` (POST
   `/ci-fix`): clones the PR head branch, runs Pi to make CI pass, commits + pushes
   back onto the **same** branch (no new PR). `ContainerAgentExecutor` builds the body
@@ -469,6 +469,38 @@ still open). Two new container agent kinds plus a special gate step implement it
     (merge / confirm / retry by type), `POST …/dismiss`. SPA: `stores/notifications.ts`
   - the toolbar `NotificationsInbox.vue`; the snapshot carries open notifications +
     the preset library.
+
+## Gates vs agents (the step taxonomy)
+
+A pipeline step's `agentKind` puts it in one of three buckets. Most engine handling
+keys off which bucket, so know them before adding a step:
+
+- **Agents** — a container or inline LLM does the work (`coder`, `architect`,
+  `spec-writer`, `tester`, `merger`, the companions, …). Dispatched via the shared
+  `CompositeAgentExecutor`; container kinds park on `awaiting_job`.
+- **Polling Gates** — `ci` and `conflicts`. A gate is NOT an agent: it runs a
+  **programmatic precheck** against a provider and only escalates to a helper container
+  agent (`ci-fixer` / `conflict-resolver`) on a negative verdict. The skip-unless-needed
+  contract is the whole point: a green CI / mergeable PR advances with **nothing spun
+  up**. One generic machine drives every gate — `ExecutionService.evaluateGate` /
+  `dispatchGateHelper` / `pollGate`, parking on the single `awaiting_gate` result while
+  the precheck is pending. A gate is a `GateDefinition` entry
+  (`modules/execution/gates.ts`) supplying only its differentiators: `wired()`, the
+  `probe()` (→ `pass` / `pending` / `fail`), the `helperKind`, and `onExhausted`. The
+  live loop state is `step.gate` (`GateStepState`: `phase` `checking`/`working`,
+  `attempts`, `maxAttempts`, `headSha`); the gate kind is `step.agentKind`, not stored
+  twice. **Adding a gate is a new registry entry, not a new copy of the machinery** —
+  do not hand-roll another `evaluateX`/`pollX`/`awaiting_x` triple.
+- **One-shot engine steps** — non-LLM steps with bespoke handling: `tracker` (files a
+  ticket), `deployer` (provisions an env), `requirements-review` (inline reviewer + park
+  loop). Not gates because they don't poll-or-escalate.
+
+The same "precheck, then skip the expensive work if it's unnecessary" idea applies to
+the inline requirements-incorporation companion: `hasNotesToIncorporate`
+(`requirements.logic.ts`) short-circuits `runIncorporationCycle` so the rework +
+re-review LLM calls are skipped when the human left nothing to fold in (every finding
+dismissed, no answered replies, no redo feedback) — the review settles `incorporated`
+directly and downstream falls back to the original description.
 
 ## Unified agent runs (failure + retry surface)
 

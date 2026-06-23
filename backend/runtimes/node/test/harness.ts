@@ -140,8 +140,7 @@ export function makeConformanceApp(
         let r = await exec.advanceInstance(workspaceId, e.id)
         for (let hops = 0; hops < 500; hops++) {
           if (r.kind === 'awaiting_job') r = await exec.pollAgentJob(workspaceId, e.id)
-          else if (r.kind === 'awaiting_ci') r = await exec.pollCi(workspaceId, e.id)
-          else if (r.kind === 'awaiting_conflicts') r = await exec.pollConflicts(workspaceId, e.id)
+          else if (r.kind === 'awaiting_gate') r = await exec.pollGate(workspaceId, e.id)
           else break
         }
       }

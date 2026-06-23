@@ -4,7 +4,7 @@ import type {
   ReviewItemSeverity,
   ReviewItemStatus,
 } from '@cat-factory/kernel'
-import { buildReviewPrompt, disposeReview } from './requirements.logic.js'
+import { buildReviewPrompt, disposeReview, hasNotesToIncorporate } from './requirements.logic.js'
 
 function item(
   severity: ReviewItemSeverity,
@@ -65,6 +65,35 @@ describe('disposeReview', () => {
     expect(
       disposeReview([item('low')], { iteration: 3, maxIterations: 3, concernThreshold: 'high' }),
     ).toBe('auto-pass')
+  })
+})
+
+describe('hasNotesToIncorporate', () => {
+  const answered = (): RequirementReviewItem => ({
+    ...item('medium', 'answered'),
+    reply: 'use UTC timestamps',
+  })
+
+  it('is false when every finding was dismissed (nothing to fold in)', () => {
+    expect(hasNotesToIncorporate([item('high', 'dismissed'), item('low', 'dismissed')])).toBe(false)
+  })
+
+  it('is false with no items and no feedback', () => {
+    expect(hasNotesToIncorporate([])).toBe(false)
+  })
+
+  it('is true when a finding was answered with a non-empty reply', () => {
+    expect(hasNotesToIncorporate([item('low', 'dismissed'), answered()])).toBe(true)
+  })
+
+  it('ignores an answered finding whose reply is blank', () => {
+    expect(hasNotesToIncorporate([{ ...item('medium', 'answered'), reply: '   ' }])).toBe(false)
+  })
+
+  it('is true when the human gave freeform redo feedback even with no answers', () => {
+    expect(hasNotesToIncorporate([item('low', 'dismissed')], 'restructure around tenants')).toBe(
+      true,
+    )
   })
 })
 

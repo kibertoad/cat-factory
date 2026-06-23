@@ -234,6 +234,25 @@ export function buildReworkPrompt(
 }
 
 /**
+ * Whether an incorporation pass has anything to fold in: at least one finding the human
+ * answered/resolved with a non-empty reply, or a freeform "do it differently" feedback.
+ * When false, the rework + re-review LLM calls would add no new facts — the only thing
+ * {@link buildReworkPrompt} could still emit is dismissed items as negative "do NOT add"
+ * guidance, never new content — so the engine skips them and settles the review directly
+ * (the parallel of a polling gate's "precheck passed, don't spin up the agent" skip).
+ * Matches the `answered` filter {@link buildReworkPrompt} uses to decide what gets folded
+ * in. Note this changes the all-dismissed case: it no longer produces an LLM-restated
+ * (reformatted-but-fact-identical) document; downstream consumes the last incorporated
+ * doc if an earlier iteration produced one, else the original description.
+ */
+export function hasNotesToIncorporate(items: RequirementReviewItem[], feedback?: string): boolean {
+  if (feedback?.trim()) return true
+  return items.some(
+    (i) => (i.status === 'answered' || i.status === 'resolved') && !!i.reply?.trim(),
+  )
+}
+
+/**
  * What the engine should do with a reviewer pass's findings:
  * - `auto-pass`: no outstanding findings, or every outstanding finding's severity is at
  *   or below the task's tolerated level — record them but advance without a human.
