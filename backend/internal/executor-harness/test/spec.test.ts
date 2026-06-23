@@ -30,25 +30,22 @@ const validBody = {
     cloneUrl: 'https://github.com/acme/widgets.git',
   },
   branch: 'cat-factory/blk_1',
-  tasks: [
-    { id: 'blk_1', title: 'Login', description: 'Users can log in.' },
-    { id: 'blk_2', title: '', description: '' },
-  ],
+  task: { id: 'blk_1', title: 'Login', description: 'Users can log in.' },
 }
 
 describe('parseSpecJob', () => {
-  it('accepts a well-formed body and drops empty tasks', () => {
+  it('accepts a well-formed body and narrows the task', () => {
     const job = parseSpecJob(validBody)
     expect(job.repo.owner).toBe('acme')
     expect(job.branch).toBe('cat-factory/blk_1')
-    // The second task (no title/description) is dropped.
-    expect(job.tasks).toHaveLength(1)
-    expect(job.tasks[0]?.title).toBe('Login')
+    expect(job.task.id).toBe('blk_1')
+    expect(job.task.title).toBe('Login')
+    expect(job.task.description).toBe('Users can log in.')
   })
 
-  it('tolerates a missing/!array tasks field', () => {
-    const { tasks: _t, ...rest } = validBody
-    expect(parseSpecJob(rest).tasks).toEqual([])
+  it('tolerates a missing/malformed task field with empty sub-fields', () => {
+    const { task: _t, ...rest } = validBody
+    expect(parseSpecJob(rest).task).toEqual({ id: '', title: '', description: '' })
   })
 
   it('rejects a clone URL pointing at a non-GitHub host', () => {

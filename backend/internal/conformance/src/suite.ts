@@ -1315,11 +1315,12 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         expect(testerStep.state).not.toBe('done')
       })
 
-      it('aggregates all tasks and ingests the spec-writer document', async () => {
-        // The spec-writer step runs on the implementation branch BEFORE the
-        // coder, aggregating EVERY task under the service frame into the service's
-        // unified spec doc. Driving it identically on both runtimes pins the
-        // engine's `serviceTasks` aggregation + strict ingest so they can't drift.
+      it('applies the task as a spec increment and ingests the spec-writer document', async () => {
+        // The spec-writer step runs on the implementation branch BEFORE the coder,
+        // applying ONLY this task's requirements as an increment onto the baseline spec
+        // (no cross-task aggregation — an unmerged sibling task is invisible). Driving it
+        // identically on both runtimes pins the strict ingest + artifact handoff so they
+        // can't drift.
         const spec = {
           service: 'Auth',
           summary: 'Authentication service',

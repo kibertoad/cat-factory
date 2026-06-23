@@ -67,7 +67,6 @@ import {
   REQUIREMENTS_REVIEW_AGENT_KIND,
   CLARITY_REVIEW_AGENT_KIND,
   BUG_INVESTIGATOR_AGENT_KIND,
-  SPEC_WRITER_AGENT_KIND,
   TRACKER_AGENT_KIND,
   ANALYSIS_AGENT_KIND,
   TESTER_AGENT_KIND,
@@ -2187,38 +2186,6 @@ export class ExecutionService {
   }
 
   /**
-   * The collected requirements of every task under `block`'s service frame, for the
-   * spec-writer step to aggregate. Each task contributes its reworked
-   * ("incorporated") requirements when present — the standard-format document the
-   * rework step produced — else its clarified bug report (a bug task's triaged brief),
-   * and falls back to its plain description otherwise. This mirrors the per-step
-   * substitution in {@link buildAgentContext}, so the spec-writer's aggregate never
-   * shows a task's raw description when a clarified/reworked doc exists. Returns an
-   * empty list when the block has no service frame (the writer then has only the
-   * prior doc).
-   */
-  private async gatherServiceTasks(
-    workspaceId: string,
-    block: Block,
-  ): Promise<{ id: string; title: string; description: string }[]> {
-    const blocks = await this.blockRepository.listByWorkspace(workspaceId)
-    const frame = serviceOf(blocks, block)
-    if (!frame) return []
-    const within = descendantIds(blocks, frame.id)
-    const tasks = blocks.filter((b) => within.has(b.id) && b.level === 'task')
-    return Promise.all(
-      tasks.map(async (b) => ({
-        id: b.id,
-        title: b.title,
-        description:
-          (await this.resolveReworkedRequirements(workspaceId, b.id)) ??
-          (await this.resolveClarifiedBrief(workspaceId, b.id)) ??
-          b.description,
-      })),
-    )
-  }
-
-  /**
    * The reworked ("incorporated") requirements for a block — the standard-format
    * document the requirements-rework step produced — or `null` when the feature is
    * unwired or the block has no incorporated review yet. Used both to substitute the
@@ -3061,12 +3028,6 @@ export class ExecutionService {
     // get the running service's selected fragments unioned with the block's own pins;
     // other kinds keep only their block pins. Recorded on the step for observability.
     const resolved = await this.resolveFragments(workspaceId, step, block)
-    // The spec-writer aggregates the collected requirements of EVERY task under the
-    // service frame; gather them only for that kind (a no-op otherwise).
-    const serviceTasks =
-      step.agentKind === SPEC_WRITER_AGENT_KIND
-        ? await this.gatherServiceTasks(workspaceId, block)
-        : undefined
     return {
       agentKind: step.agentKind,
       pipelineName: instance.pipelineName,
@@ -3099,7 +3060,6 @@ export class ExecutionService {
       },
       ...(environment ? { environment } : {}),
       ...(service ? { service } : {}),
-      ...(serviceTasks ? { serviceTasks } : {}),
       priorOutputs,
       decisions: instance.steps
         .filter((s, i) => i < instance.currentStep && s.decision?.chosen)

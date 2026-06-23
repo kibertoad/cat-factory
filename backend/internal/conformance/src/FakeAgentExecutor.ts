@@ -139,13 +139,12 @@ export class FakeAgentExecutor implements AgentExecutor {
       }
     }
 
-    // Mimic the container spec-writer step returning the unified doc, and surface the
-    // aggregated task context it was given so the engine's population of
-    // `serviceTasks` can be asserted.
+    // Mimic the container spec-writer step returning the updated doc. It applies ONLY
+    // the current task's requirements (the block description) as an increment onto the
+    // baseline — there is no cross-task aggregation to surface.
     if (context.agentKind === 'spec-writer' && this.options.spec !== undefined) {
-      const tasks = context.serviceTasks?.length ?? 0
       return {
-        output: `[spec-writer] wrote spec for "${context.block.title}" from ${tasks} task(s)`,
+        output: `[spec-writer] wrote spec increment for "${context.block.title}"`,
         model: 'fake',
         spec: this.options.spec,
       }

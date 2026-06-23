@@ -385,7 +385,7 @@ export function parseBlueprintJob(input: unknown): BlueprintJob {
 
 // ---- Spec-writer job (POST /spec) -----------------------------------------
 
-/** One task's collected (clarified) requirements, aggregated into the service spec. */
+/** The one task's collected (clarified) requirements applied as a spec increment. */
 export interface SpecTaskContext {
   /** Board block id of the task (provenance / traceability). */
   id: string
@@ -396,13 +396,16 @@ export interface SpecTaskContext {
 /**
  * The job the Worker's ContainerAgentExecutor POSTs to /spec. The spec-writer agent
  * clones `branch` (the implementation branch the coder will resume — created from
- * `repo.baseBranch` if it does not exist yet), reads any existing `spec/spec.json`,
- * and (re)generates the unified, PRESCRIPTIVE specification document for the service
- * from the combined `tasks` context. The harness deterministically renders that
- * document into the in-repo `spec/` folder (the canonical `spec.json`, the
- * `overview.md` / `rules.md` markdown, the `version.json` manifest and the Gherkin
- * `features/*.feature` files) and commits it onto `branch`. Like the blueprint it
- * adds one commit to a branch — it never resets history or force-pushes.
+ * `repo.baseBranch` if it does not exist yet), reads any existing `spec/spec.json`
+ * (the BASELINE: the spec as merged before this task), and applies the single `task`'s
+ * requirements as an INCREMENT onto it — adding what the task introduces and adjusting
+ * existing requirements only where the task changes their behaviour. The harness
+ * deterministically renders the complete updated document into the in-repo `spec/`
+ * folder (the canonical `spec.json`, the `overview.md` / `rules.md` markdown, the
+ * `version.json` manifest and the Gherkin `features/*.feature` files) and commits it
+ * onto `branch`. Like the blueprint it adds one commit to a branch — it never resets
+ * history or force-pushes. An unmerged sibling task's work is never visible here:
+ * the only inputs are this task's requirements and the baseline already on `branch`.
  */
 export interface SpecJob extends HarnessAuthFields {
   /** Stable job id (the execution id); keys the background job + poll endpoint. */
@@ -418,8 +421,8 @@ export interface SpecJob extends HarnessAuthFields {
   repo: RepoSpec
   /** Branch to clone (or create from base) and commit the spec onto. */
   branch: string
-  /** The collected requirements of every task under the service frame (for aggregation). */
-  tasks: SpecTaskContext[]
+  /** This task's collected (clarified) requirements, applied as an increment. */
+  task: SpecTaskContext
   githubApiBase?: string
 }
 
@@ -441,18 +444,17 @@ export function parseSpecJob(input: unknown): SpecJob {
   }
   const o = input as Record<string, unknown>
   const repo = (o.repo ?? {}) as Record<string, unknown>
-  // `tasks` is lenient: drop anything malformed rather than reject the whole job —
-  // the worst case is a thinner aggregation context, not a failed run.
-  const tasks: SpecTaskContext[] = Array.isArray(o.tasks)
-    ? (o.tasks as unknown[])
-        .filter((t): t is Record<string, unknown> => typeof t === 'object' && t !== null)
-        .map((t) => ({
-          id: typeof t.id === 'string' ? t.id : '',
-          title: typeof t.title === 'string' ? t.title : '',
-          description: typeof t.description === 'string' ? t.description : '',
-        }))
-        .filter((t) => t.title !== '' || t.description !== '')
-    : []
+  // `task` is lenient on its sub-fields (a missing title/description degrades to a
+  // thinner increment context, not a failed run) but the object itself is required.
+  const t = (typeof o.task === 'object' && o.task !== null ? o.task : {}) as Record<
+    string,
+    unknown
+  >
+  const task: SpecTaskContext = {
+    id: typeof t.id === 'string' ? t.id : '',
+    title: typeof t.title === 'string' ? t.title : '',
+    description: typeof t.description === 'string' ? t.description : '',
+  }
   const job: SpecJob = {
     jobId: str(o.jobId, 'jobId'),
     systemPrompt: str(o.systemPrompt, 'systemPrompt'),
@@ -462,7 +464,7 @@ export function parseSpecJob(input: unknown): SpecJob {
     ghToken: str(o.ghToken, 'ghToken'),
     repo: parseRepoSpec(repo),
     branch: str(o.branch, 'branch'),
-    tasks,
+    task,
     ...(typeof o.githubApiBase === 'string' ? { githubApiBase: o.githubApiBase } : {}),
   }
   assertAllowedHost(job.repo.cloneUrl, 'repo.cloneUrl')

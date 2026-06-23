@@ -229,4 +229,20 @@ export type {
   PutTrackerSettingsInput,
   // LLM observability: the compact per-call summary pushed over the event stream.
   LlmCallActivity,
+  // Sandbox (parallel prompt/model testing surface) shapes.
+  SandboxPromptOrigin,
+  SandboxPromptVersion,
+  SandboxFixtureKind,
+  SandboxRepoRef,
+  SandboxFixtureObjective,
+  SandboxFixture,
+  SandboxExperimentStatus,
+  SandboxMatrix,
+  SandboxExperiment,
+  SandboxRunStatus,
+  SandboxTokenUsage,
+  SandboxRun,
+  SandboxGradeDimension,
+  SandboxObjectiveResult,
+  SandboxGrade,
 } from '@cat-factory/contracts'

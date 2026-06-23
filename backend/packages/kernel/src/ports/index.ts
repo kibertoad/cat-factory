@@ -258,6 +258,13 @@ export type {
   SlackMemberMappingRepository,
 } from './slack-repositories.js'
 export type { MergePresetRepository } from './merge-preset-repositories.js'
+export type {
+  SandboxPromptVersionRepository,
+  SandboxFixtureRepository,
+  SandboxExperimentRepository,
+  SandboxRunRepository,
+  SandboxGradeRepository,
+} from './sandbox-repositories.js'
 export type { ModelDefaultsRepository } from './model-default-repositories.js'
 export type { ServiceFragmentDefaultsRepository } from './service-fragment-default-repositories.js'
 export type { DueSchedule, PipelineScheduleRepository } from './recurring-repositories.js'
