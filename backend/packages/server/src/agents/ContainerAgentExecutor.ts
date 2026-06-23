@@ -17,18 +17,17 @@ import {
   CredentialRequiredError,
   SUBSCRIPTION_VENDORS,
   isIndividualVendor,
-  subscriptionOptionFor,
 } from '@cat-factory/kernel'
 import { isLocalRunner, resolveInstanceTypeId } from '@cat-factory/contracts'
 import {
   type AgentRouting,
   composeBlockSystemPrompt,
   isReadOnlyAgentKind,
-  resolveStepModelRef,
   systemPromptFor,
   userPromptFor,
   webResearchGuidanceFor,
 } from '@cat-factory/agents'
+import { ModelRouter } from './ModelRouter.js'
 import {
   CI_FIXER_AGENT_KIND,
   CONFLICT_RESOLVER_AGENT_KIND,
@@ -320,8 +319,18 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
    */
   private readonly recordedUsageJobs = new Set<string>()
 
+  /** Resolves which model + subscription path a step runs on (routing policy). */
+  private readonly modelRouter: ModelRouter
+
   constructor(private readonly deps: ContainerAgentExecutorDependencies) {
     this.jobs = new RunnerJobClient(deps.resolveTransport)
+    this.modelRouter = new ModelRouter({
+      agentRouting: deps.agentRouting,
+      resolveBlockModel: deps.resolveBlockModel,
+      resolveWorkspaceModelDefault: deps.resolveWorkspaceModelDefault,
+      hasSubscriptionToken: deps.hasSubscriptionToken,
+      hasPersonalSubscription: deps.hasPersonalSubscription,
+    })
   }
 
   /** Repo-operating steps always run as polled async jobs (the coding can be long). */
@@ -446,95 +455,13 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
   }
 
   /**
-   * Resolve the step's model ref with the shared step precedence (block pin >
-   * workspace per-kind default > env routing). Side-effect-free and dispatch-free,
-   * so it backs both the up-front `resolveModel` preview and `buildJobBody`.
-   */
-  private resolveRef(context: AgentRunContext): Promise<ModelRef> {
-    return resolveStepModelRef(
-      {
-        agentRouting: this.deps.agentRouting,
-        resolveBlockModel: this.deps.resolveBlockModel,
-        resolveWorkspaceModelDefault: this.deps.resolveWorkspaceModelDefault,
-      },
-      {
-        agentKind: context.agentKind,
-        blockModelId: context.block.modelId,
-        workspaceId: context.workspaceId,
-      },
-    )
-  }
-
-  /**
-   * The canonical catalog model id the step resolves to (block pin > workspace
-   * per-kind default), or undefined when it falls through to the env routing
-   * default (a raw ref with no canonical id). Used to look up the model's
-   * subscription path for the "subscriptions always win" override.
-   */
-  private async resolveCanonicalModelId(context: AgentRunContext): Promise<string | undefined> {
-    if (context.block.modelId) return context.block.modelId
-    if (this.deps.resolveWorkspaceModelDefault && context.workspaceId) {
-      return (
-        (await this.deps.resolveWorkspaceModelDefault(context.workspaceId, context.agentKind)) ??
-        undefined
-      )
-    }
-    return undefined
-  }
-
-  /**
    * Preview the model this job will run, without dispatching the container. The
    * proxyable-provider guard is deliberately left to `buildJobBody` (the dispatch
    * path) so an unservable model still fails loudly there; this only names it.
    */
   async resolveModel(context: AgentRunContext): Promise<string> {
-    const ref = await this.resolveRef(context)
+    const ref = await this.modelRouter.resolveRef(context)
     return `${ref.provider}:${ref.model}`
-  }
-
-  /**
-   * Resolve the step's EFFECTIVE model ref plus the subscription vendor (if any) it
-   * will run on, applying the "subscriptions always win" override:
-   *  - a subscription-only model carries its harness already (always its subscription);
-   *  - a dual-mode POOLABLE model (Kimi/DeepSeek) switches to its subscription flavour
-   *    when the WORKSPACE has a pooled token for the vendor;
-   *  - a dual-mode INDIVIDUAL model (GLM — never pooled) switches to the RUN-INITIATOR's
-   *    own personal subscription when they have one, and otherwise stays on its Cloudflare
-   *    base. So a subscriber runs GLM on their plan while a non-subscriber on the same
-   *    workspace falls back to Cloudflare GLM.
-   * Shared by {@link buildJobBody} (which dispatches the resolved ref) and
-   * {@link isQuotaBased} (whether the run is flat-rate quota) so the two can't drift.
-   */
-  private async resolveEffectiveRef(
-    context: AgentRunContext,
-    workspaceId: string,
-  ): Promise<{ ref: ModelRef; subscriptionVendor?: SubscriptionVendor }> {
-    let ref = await this.resolveRef(context)
-    let subscriptionVendor: SubscriptionVendor | undefined
-    const subOption = subscriptionOptionFor(await this.resolveCanonicalModelId(context))
-    if (subOption) {
-      if (ref.harness) {
-        subscriptionVendor = subOption.vendor
-      } else if (isIndividualVendor(subOption.vendor)) {
-        // Dual-mode individual vendor (GLM): use the initiator's OWN personal subscription
-        // when they have one; else leave `ref` on the Cloudflare base (ungated fallback).
-        if (
-          context.initiatedByUserId &&
-          this.deps.hasPersonalSubscription &&
-          (await this.deps.hasPersonalSubscription(context.initiatedByUserId, subOption.vendor))
-        ) {
-          ref = subOption.ref
-          subscriptionVendor = subOption.vendor
-        }
-      } else if (
-        this.deps.hasSubscriptionToken &&
-        (await this.deps.hasSubscriptionToken(workspaceId, subOption.vendor))
-      ) {
-        ref = subOption.ref
-        subscriptionVendor = subOption.vendor
-      }
-    }
-    return { ref, ...(subscriptionVendor ? { subscriptionVendor } : {}) }
   }
 
   /**
@@ -547,7 +474,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
    */
   async isQuotaBased(context: AgentRunContext): Promise<boolean> {
     if (!context.workspaceId) return false
-    const { ref } = await this.resolveEffectiveRef(context, context.workspaceId)
+    const { ref } = await this.modelRouter.resolveEffectiveRef(context, context.workspaceId)
     return ref.harness === 'claude-code' || ref.harness === 'codex'
   }
 
@@ -601,7 +528,10 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     // dual-mode GLM/Kimi step pinned to its Cloudflare base is auto-routed to Claude
     // Code when the workspace has a pooled token for the vendor. Shared with
     // isQuotaBased so the dispatch and the spend gate agree on what the step runs.
-    const { ref, subscriptionVendor } = await this.resolveEffectiveRef(context, workspaceId)
+    const { ref, subscriptionVendor } = await this.modelRouter.resolveEffectiveRef(
+      context,
+      workspaceId,
+    )
     const harness: HarnessKind = ref.harness ?? 'pi'
 
     // The Pi harness reaches models through the LLM proxy, so its model must be a
@@ -647,8 +577,59 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     // Resolve the per-job auth the harness carries: the proxy session token for Pi,
     // or a leased subscription token for Claude Code / Codex. `auth` is spread into
     // every job body so the per-kind bodies can't drift on which auth they forward.
-    let auth: Record<string, unknown>
-    let subscriptionTokenId: string | undefined
+    const { auth, subscriptionTokenId } = await this.resolveAuth(context, {
+      harness,
+      ref,
+      subscriptionVendor,
+      workspaceId,
+      executionId,
+    })
+
+    // The fields EVERY harness job body carries, built once so the per-kind bodies
+    // can't drift on which jobId/model/auth/repo/proxy fields they forward.
+    const common = {
+      jobId,
+      model: ref.model,
+      ...auth,
+      ghToken,
+      repo: buildRepoSpec(repo),
+      ...(this.deps.githubApiBase ? { githubApiBase: this.deps.githubApiBase } : {}),
+    }
+    // The proxy-backed web-tools nudge + switch, shared by the kinds that allow web
+    // access (coder/mocker/ci-fixer/fixer/tester/read-only). The harness surfaces the
+    // tools only when web search is configured in the container env. Per-kind hint
+    // (coder/mocker/analysis/… and any custom container kind resolves its own).
+    const webTools = {
+      webToolsGuidance: webResearchGuidanceFor(context.agentKind, { fetch: true }),
+      ...(this.deps.webSearchProxyEnabled ? { webSearch: true } : {}),
+    }
+
+    const { body, kind } = this.buildKindBody(context, {
+      common,
+      webTools,
+      repo,
+      workBranch,
+      workBranchReady,
+    })
+    return { subscriptionTokenId, body, model: `${ref.provider}:${ref.model}`, kind }
+  }
+
+  /**
+   * Resolve the per-job auth the harness carries: the proxy session token for Pi, or a
+   * leased subscription token for Claude Code / Codex. Spread into every job body
+   * (`common`) so the per-kind bodies can't drift on which auth they forward.
+   */
+  private async resolveAuth(
+    context: AgentRunContext,
+    args: {
+      harness: HarnessKind
+      ref: ModelRef
+      subscriptionVendor: SubscriptionVendor | undefined
+      workspaceId: string
+      executionId: string
+    },
+  ): Promise<{ auth: Record<string, unknown>; subscriptionTokenId?: string }> {
+    const { harness, ref, subscriptionVendor, workspaceId, executionId } = args
     if (harness === 'pi') {
       const accountId = this.deps.resolveAccountId
         ? await this.deps.resolveAccountId(workspaceId)
@@ -662,273 +643,257 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
         provider: ref.provider,
         model: ref.model,
       })
-      auth = { harness, proxyBaseUrl: this.deps.proxyBaseUrl, sessionToken }
+      return { auth: { harness, proxyBaseUrl: this.deps.proxyBaseUrl, sessionToken } }
+    }
+    if (!subscriptionVendor) {
+      throw new Error(
+        `The ${harness} harness is not configured on this deployment; connect a ` +
+          `subscription token or pick a different model.`,
+      )
+    }
+    // Individual-usage vendors (Claude) are NOT pooled: lease the run-initiator's OWN
+    // activated personal credential. Pooled vendors (GLM/Kimi/DeepSeek/Codex) lease
+    // from the workspace pool. Either path hands the RAW credential to the resolved
+    // runner transport (see the trust note below).
+    let secret: string
+    let subscriptionTokenId: string | undefined
+    if (isIndividualVendor(subscriptionVendor)) {
+      if (!this.deps.leasePersonalSubscriptionToken) {
+        throw new Error(
+          `Personal ${subscriptionVendor} subscriptions are not configured on this ` +
+            `deployment (no ENCRYPTION_KEY); pick a different model.`,
+        )
+      }
+      if (!context.initiatedByUserId) {
+        // No identified initiator (auth-disabled/local dev): an individual-usage
+        // credential is owned by a specific user and can't be resolved without one.
+        throw new CredentialRequiredError(
+          `Running a ${subscriptionVendor} model requires a signed-in user with a personal subscription.`,
+          { vendor: subscriptionVendor, reason: 'no_subscription' },
+        )
+      }
+      // Throws CredentialRequiredError(password_required) when the run has no live
+      // activation — the dispatch path surfaces it as a clear, retriable failure.
+      const leased = await this.deps.leasePersonalSubscriptionToken(
+        executionId,
+        context.initiatedByUserId,
+        subscriptionVendor,
+      )
+      secret = leased.secret
     } else {
-      if (!subscriptionVendor) {
+      if (!this.deps.leaseSubscriptionToken) {
         throw new Error(
           `The ${harness} harness is not configured on this deployment; connect a ` +
             `subscription token or pick a different model.`,
         )
       }
-      // Individual-usage vendors (Claude) are NOT pooled: lease the run-initiator's OWN
-      // activated personal credential. Pooled vendors (GLM/Kimi/DeepSeek/Codex) lease
-      // from the workspace pool. Either path hands the RAW credential to the resolved
-      // runner transport (see the trust note below).
-      let secret: string
-      if (isIndividualVendor(subscriptionVendor)) {
-        if (!this.deps.leasePersonalSubscriptionToken) {
-          throw new Error(
-            `Personal ${subscriptionVendor} subscriptions are not configured on this ` +
-              `deployment (no ENCRYPTION_KEY); pick a different model.`,
-          )
-        }
-        if (!context.initiatedByUserId) {
-          // No identified initiator (auth-disabled/local dev): an individual-usage
-          // credential is owned by a specific user and can't be resolved without one.
-          throw new CredentialRequiredError(
-            `Running a ${subscriptionVendor} model requires a signed-in user with a personal subscription.`,
-            { vendor: subscriptionVendor, reason: 'no_subscription' },
-          )
-        }
-        // Throws CredentialRequiredError(password_required) when the run has no live
-        // activation — the dispatch path surfaces it as a clear, retriable failure.
-        const leased = await this.deps.leasePersonalSubscriptionToken(
-          executionId,
-          context.initiatedByUserId,
-          subscriptionVendor,
-        )
-        secret = leased.secret
-      } else {
-        if (!this.deps.leaseSubscriptionToken) {
-          throw new Error(
-            `The ${harness} harness is not configured on this deployment; connect a ` +
-              `subscription token or pick a different model.`,
-          )
-        }
-        const leased = await this.deps.leaseSubscriptionToken(workspaceId, subscriptionVendor)
-        subscriptionTokenId = leased.tokenId
-        secret = leased.secret
-      }
-      // SECURITY/TRUST: unlike the Pi harness (short-lived, model-locked proxy session
-      // token) this hands the RAW, long-lived subscription credential — a Claude OAuth
-      // token or a full ChatGPT auth.json — to the resolved runner transport. For the
-      // Cloudflare backend that is an ephemeral, managed per-run container. For a
-      // self-hosted runner pool it is the WORKSPACE'S OWN BYO infra (it connected the
-      // pool), so the credential stays within the workspace's trust domain — but a
-      // workspace should only point its subscription-harness steps at a runner pool it
-      // operates, since the credential leaves the backend to reach it.
-      // Non-Anthropic Claude-Code vendors (GLM/Kimi/DeepSeek) need their Anthropic-
-      // compatible base URL; Anthropic itself uses the OAuth token against api.anthropic.com.
-      const baseUrl = SUBSCRIPTION_VENDORS[subscriptionVendor].baseUrl
-      auth = {
+      const leased = await this.deps.leaseSubscriptionToken(workspaceId, subscriptionVendor)
+      subscriptionTokenId = leased.tokenId
+      secret = leased.secret
+    }
+    // SECURITY/TRUST: unlike the Pi harness (short-lived, model-locked proxy session
+    // token) this hands the RAW, long-lived subscription credential — a Claude OAuth
+    // token or a full ChatGPT auth.json — to the resolved runner transport. For the
+    // Cloudflare backend that is an ephemeral, managed per-run container. For a
+    // self-hosted runner pool it is the WORKSPACE'S OWN BYO infra (it connected the
+    // pool), so the credential stays within the workspace's trust domain — but a
+    // workspace should only point its subscription-harness steps at a runner pool it
+    // operates, since the credential leaves the backend to reach it.
+    // Non-Anthropic Claude-Code vendors (GLM/Kimi/DeepSeek) need their Anthropic-
+    // compatible base URL; Anthropic itself uses the OAuth token against api.anthropic.com.
+    const baseUrl = SUBSCRIPTION_VENDORS[subscriptionVendor].baseUrl
+    return {
+      auth: {
         harness,
         subscriptionToken: secret,
         ...(baseUrl ? { subscriptionBaseUrl: baseUrl } : {}),
-      }
+      },
+      ...(subscriptionTokenId ? { subscriptionTokenId } : {}),
     }
+  }
 
-    // The Blueprinter step commits the regenerated `blueprints/` folder onto an
-    // existing branch (the earlier `coder` step's PR branch when present, else the
-    // repo's default branch) — never a fresh branch / new PR. Its body targets the
-    // harness `/blueprint` endpoint and returns the decomposition tree.
-    if (context.agentKind === 'blueprints') {
-      const branch = context.block.pullRequest?.branch ?? repo.baseBranch
-      const body = {
-        jobId,
-        systemPrompt: BLUEPRINT_SYSTEM_PROMPT,
-        instructions:
-          'Map (or update) this repository into the canonical service → modules ' +
-          'blueprint, anchored to real file/directory references.',
-        model: ref.model,
-        ...auth,
-        ghToken,
-        repo: buildRepoSpec(repo),
-        branch,
-        mode: context.block.pullRequest?.branch ? 'update' : 'create',
-        ...(this.deps.githubApiBase ? { githubApiBase: this.deps.githubApiBase } : {}),
-      }
-      return { subscriptionTokenId, body, model: `${ref.provider}:${ref.model}`, kind: 'blueprint' }
-    }
+  /**
+   * Build the per-kind harness job body: the shared `common` fields plus ONLY the delta
+   * specific to this kind's harness endpoint (its prompts, the branch it runs on, and
+   * any per-kind extras), and the matching dispatch `kind`. The web-search fields live
+   * in `webTools` (shared by the kinds that allow web access). The dispatch precedence
+   * matches the original if-ladder exactly: the specific kinds first, then any read-only
+   * kind, then the default coder body.
+   */
+  private buildKindBody(
+    context: AgentRunContext,
+    parts: {
+      common: Record<string, unknown>
+      webTools: Record<string, unknown>
+      repo: RepoTarget
+      workBranch: string
+      workBranchReady: boolean
+    },
+  ): { body: Record<string, unknown>; kind: RunnerDispatchKind } {
+    const { common, webTools, repo, workBranch, workBranchReady } = parts
+    const prBranch = context.block.pullRequest?.branch
+    const roleSystemPrompt = composeBlockSystemPrompt(
+      systemPromptFor(context.agentKind),
+      context.block,
+    )
 
-    // The spec-writer commits the regenerated `spec/` folder onto the implementation
-    // branch — the earlier `coder` step's PR branch when present, else the
-    // deterministic `cat-factory/<blockId>` the coder WILL resume (created from base if
-    // absent). It NEVER targets the base branch: the spec is a prescriptive document
-    // for not-yet-landed work, so — like the feature-time blueprint — it must merge
-    // together WITH the feature, never reach `main` ahead of it. Its body carries ONLY
-    // this task's requirements (the block description already IS the task's reworked /
-    // incorporated requirements): the writer reads the baseline spec committed on the
-    // branch and applies this task as an increment, so an unmerged sibling task's work
-    // never bleeds in. Targets the harness `/spec` endpoint.
-    if (context.agentKind === SPEC_WRITER_AGENT_KIND) {
-      const branch = workBranch
-      const body = {
-        jobId,
-        systemPrompt: SPEC_WRITER_SYSTEM_PROMPT,
-        instructions:
-          'Apply this task as an increment onto the specification already committed to ' +
-          'the repository: add requirements for what it introduces, adjust existing ' +
-          'ones only where it changes their behaviour, and leave the rest untouched. ' +
-          'Every requirement you add or change must carry COMPLETE acceptance-scenario ' +
-          'coverage. Return the complete updated specification.',
-        model: ref.model,
-        ...auth,
-        ghToken,
-        repo: buildRepoSpec(repo),
-        branch,
-        task: {
-          id: context.block.id,
-          title: context.block.title,
-          description: context.block.description,
-        },
-        ...(this.deps.githubApiBase ? { githubApiBase: this.deps.githubApiBase } : {}),
-      }
-      return {
-        subscriptionTokenId,
-        body,
-        model: `${ref.provider}:${ref.model}`,
-        kind: 'spec',
-      }
-    }
+    switch (context.agentKind) {
+      // The Blueprinter step commits the regenerated `blueprints/` folder onto an
+      // existing branch (the earlier `coder` step's PR branch when present, else the
+      // repo's default branch) — never a fresh branch / new PR. Its body targets the
+      // harness `/blueprint` endpoint and returns the decomposition tree.
+      case 'blueprints':
+        return {
+          kind: 'blueprint',
+          body: {
+            ...common,
+            systemPrompt: BLUEPRINT_SYSTEM_PROMPT,
+            instructions:
+              'Map (or update) this repository into the canonical service → modules ' +
+              'blueprint, anchored to real file/directory references.',
+            branch: prBranch ?? repo.baseBranch,
+            mode: prBranch ? 'update' : 'create',
+          },
+        }
 
-    // The CI-fixer clones the PR head branch, runs the failing build/tests, fixes
-    // them and pushes back to the SAME branch (no new branch / PR) so CI re-runs.
-    if (context.agentKind === CI_FIXER_AGENT_KIND) {
-      const branch = context.block.pullRequest?.branch
-      if (!branch) {
-        throw new Error('CI-fixer needs the implementation PR branch to push fixes to')
-      }
-      const body = {
-        jobId,
-        systemPrompt: composeBlockSystemPrompt(systemPromptFor(context.agentKind), context.block),
-        userPrompt: userPromptFor(context),
-        model: ref.model,
-        ...auth,
-        ghToken,
-        repo: buildRepoSpec(repo),
-        branch,
-        webToolsGuidance: webResearchGuidanceFor(context.agentKind, { fetch: true }),
-        ...(this.deps.webSearchProxyEnabled ? { webSearch: true } : {}),
-        ...(this.deps.githubApiBase ? { githubApiBase: this.deps.githubApiBase } : {}),
-      }
-      return { subscriptionTokenId, body, model: `${ref.provider}:${ref.model}`, kind: 'ci-fix' }
-    }
+      // The spec-writer commits the regenerated `spec/` folder onto the implementation
+      // branch — the earlier `coder` step's PR branch when present, else the
+      // deterministic `cat-factory/<blockId>` the coder WILL resume (created from base if
+      // absent). It NEVER targets the base branch: the spec is a prescriptive document
+      // for not-yet-landed work, so — like the feature-time blueprint — it must merge
+      // together WITH the feature, never reach `main` ahead of it. Its body carries ONLY
+      // this task's requirements (the block description already IS the task's reworked /
+      // incorporated requirements): the writer reads the baseline spec committed on the
+      // branch and applies this task as an increment, so an unmerged sibling task's work
+      // never bleeds in. Targets the harness `/spec` endpoint.
+      case SPEC_WRITER_AGENT_KIND:
+        return {
+          kind: 'spec',
+          body: {
+            ...common,
+            systemPrompt: SPEC_WRITER_SYSTEM_PROMPT,
+            instructions:
+              'Apply this task as an increment onto the specification already committed to ' +
+              'the repository: add requirements for what it introduces, adjust existing ' +
+              'ones only where it changes their behaviour, and leave the rest untouched. ' +
+              'Every requirement you add or change must carry COMPLETE acceptance-scenario ' +
+              'coverage. Return the complete updated specification.',
+            branch: workBranch,
+            task: {
+              id: context.block.id,
+              title: context.block.title,
+              description: context.block.description,
+            },
+          },
+        }
 
-    // The conflict-resolver clones the PR head branch, merges the base in, resolves
-    // the conflicts and pushes back to the SAME branch (no new branch / PR) so the
-    // PR becomes mergeable and CI re-runs. Mirrors the CI-fixer's body.
-    if (context.agentKind === CONFLICT_RESOLVER_AGENT_KIND) {
-      const branch = context.block.pullRequest?.branch
-      if (!branch) {
-        throw new Error(
-          'Conflict-resolver needs the implementation PR branch to resolve conflicts on',
-        )
-      }
-      const body = {
-        jobId,
-        systemPrompt: composeBlockSystemPrompt(systemPromptFor(context.agentKind), context.block),
-        userPrompt: userPromptFor(context),
-        model: ref.model,
-        ...auth,
-        ghToken,
-        repo: buildRepoSpec(repo),
-        branch,
-        ...(this.deps.githubApiBase ? { githubApiBase: this.deps.githubApiBase } : {}),
-      }
-      return {
-        subscriptionTokenId,
-        body,
-        model: `${ref.provider}:${ref.model}`,
-        kind: 'resolve-conflicts',
-      }
-    }
+      // The CI-fixer clones the PR head branch, runs the failing build/tests, fixes
+      // them and pushes back to the SAME branch (no new branch / PR) so CI re-runs.
+      case CI_FIXER_AGENT_KIND:
+        if (!prBranch) {
+          throw new Error('CI-fixer needs the implementation PR branch to push fixes to')
+        }
+        return {
+          kind: 'ci-fix',
+          body: {
+            ...common,
+            systemPrompt: roleSystemPrompt,
+            userPrompt: userPromptFor(context),
+            branch: prBranch,
+            ...webTools,
+          },
+        }
 
-    // The merger clones the PR head branch to assess the diff vs base; it makes no
-    // commits (the engine performs the real merge through the GitHub API on its
-    // verdict). Returns ONLY a JSON assessment, mapped to `mergeAssessment`.
-    if (context.agentKind === MERGER_AGENT_KIND) {
-      const branch = context.block.pullRequest?.branch ?? repo.baseBranch
-      const body = {
-        jobId,
-        systemPrompt: MERGER_SYSTEM_PROMPT,
-        instructions:
-          'Assess the pull request on the head branch against the base branch and ' +
-          'return the complexity / risk / impact scores + rationale as JSON.',
-        model: ref.model,
-        ...auth,
-        ghToken,
-        repo: buildRepoSpec(repo),
-        branch,
-        ...(context.block.pullRequest?.number !== undefined
-          ? { prNumber: context.block.pullRequest.number }
-          : {}),
-        ...(this.deps.githubApiBase ? { githubApiBase: this.deps.githubApiBase } : {}),
-      }
-      return { subscriptionTokenId, body, model: `${ref.provider}:${ref.model}`, kind: 'merge' }
-    }
+      // The conflict-resolver clones the PR head branch, merges the base in, resolves
+      // the conflicts and pushes back to the SAME branch (no new branch / PR) so the
+      // PR becomes mergeable and CI re-runs. Mirrors the CI-fixer's body.
+      case CONFLICT_RESOLVER_AGENT_KIND:
+        if (!prBranch) {
+          throw new Error(
+            'Conflict-resolver needs the implementation PR branch to resolve conflicts on',
+          )
+        }
+        return {
+          kind: 'resolve-conflicts',
+          body: {
+            ...common,
+            systemPrompt: roleSystemPrompt,
+            userPrompt: userPromptFor(context),
+            branch: prBranch,
+          },
+        }
 
-    // The tester clones the PR head branch, stands up its dependencies (locally via
-    // the service's docker-compose, or against the provisioned ephemeral env — the
-    // task's `tester.environment` config picks which), runs the suite and returns a
-    // structured report. It makes NO commits (the engine loops the `fixer` on a
-    // withheld greenlight). Targets the harness `/test` endpoint; mapped to `testReport`.
-    if (context.agentKind === TESTER_AGENT_KIND) {
-      const branch = context.block.pullRequest?.branch ?? repo.baseBranch
-      const env =
-        context.block.agentConfig?.['tester.environment'] === 'local' ? 'local' : 'ephemeral'
-      const service = context.service
-      const body = {
-        jobId,
-        systemPrompt: composeBlockSystemPrompt(systemPromptFor(context.agentKind), context.block),
-        userPrompt: userPromptFor(context),
-        model: ref.model,
-        ...auth,
-        ghToken,
-        repo: buildRepoSpec(repo),
-        branch,
-        // How the Tester stands up its dependencies for this run.
-        test: {
-          environment: env,
-          ...(env === 'local'
-            ? {
-                noInfraDependencies: service?.noInfraDependencies === true,
-                ...(service?.testComposePath ? { composePath: service.testComposePath } : {}),
-              }
-            : {}),
-          ...(env === 'ephemeral' && context.environment?.url
-            ? { environmentUrl: context.environment.url }
-            : {}),
-        },
-        webToolsGuidance: webResearchGuidanceFor(context.agentKind, { fetch: true }),
-        ...(this.deps.webSearchProxyEnabled ? { webSearch: true } : {}),
-        ...(this.deps.githubApiBase ? { githubApiBase: this.deps.githubApiBase } : {}),
-      }
-      return { subscriptionTokenId, body, model: `${ref.provider}:${ref.model}`, kind: 'test' }
-    }
+      // The merger clones the PR head branch to assess the diff vs base; it makes no
+      // commits (the engine performs the real merge through the GitHub API on its
+      // verdict). Returns ONLY a JSON assessment, mapped to `mergeAssessment`.
+      case MERGER_AGENT_KIND:
+        return {
+          kind: 'merge',
+          body: {
+            ...common,
+            systemPrompt: MERGER_SYSTEM_PROMPT,
+            instructions:
+              'Assess the pull request on the head branch against the base branch and ' +
+              'return the complexity / risk / impact scores + rationale as JSON.',
+            branch: prBranch ?? repo.baseBranch,
+            ...(context.block.pullRequest?.number !== undefined
+              ? { prNumber: context.block.pullRequest.number }
+              : {}),
+          },
+        }
 
-    // The fixer clones the PR head branch, applies fixes for the concerns in the
-    // Tester's report (folded into the user prompt via the prior `tester` output) and
-    // pushes back to the SAME branch (no new branch / PR) so the Tester can re-run.
-    // Mirrors the CI-fixer's body; targets the harness `/fix-tests` endpoint.
-    if (context.agentKind === FIXER_AGENT_KIND) {
-      const branch = context.block.pullRequest?.branch
-      if (!branch) {
-        throw new Error('Fixer needs the implementation PR branch to push fixes to')
+      // The tester clones the PR head branch, stands up its dependencies (locally via
+      // the service's docker-compose, or against the provisioned ephemeral env — the
+      // task's `tester.environment` config picks which), runs the suite and returns a
+      // structured report. It makes NO commits (the engine loops the `fixer` on a
+      // withheld greenlight). Targets the harness `/test` endpoint; mapped to `testReport`.
+      case TESTER_AGENT_KIND: {
+        const env =
+          context.block.agentConfig?.['tester.environment'] === 'local' ? 'local' : 'ephemeral'
+        const service = context.service
+        return {
+          kind: 'test',
+          body: {
+            ...common,
+            systemPrompt: roleSystemPrompt,
+            userPrompt: userPromptFor(context),
+            branch: prBranch ?? repo.baseBranch,
+            // How the Tester stands up its dependencies for this run.
+            test: {
+              environment: env,
+              ...(env === 'local'
+                ? {
+                    noInfraDependencies: service?.noInfraDependencies === true,
+                    ...(service?.testComposePath ? { composePath: service.testComposePath } : {}),
+                  }
+                : {}),
+              ...(env === 'ephemeral' && context.environment?.url
+                ? { environmentUrl: context.environment.url }
+                : {}),
+            },
+            ...webTools,
+          },
+        }
       }
-      const body = {
-        jobId,
-        systemPrompt: composeBlockSystemPrompt(systemPromptFor(context.agentKind), context.block),
-        userPrompt: userPromptFor(context),
-        model: ref.model,
-        ...auth,
-        ghToken,
-        repo: buildRepoSpec(repo),
-        branch,
-        webToolsGuidance: webResearchGuidanceFor(context.agentKind, { fetch: true }),
-        ...(this.deps.webSearchProxyEnabled ? { webSearch: true } : {}),
-        ...(this.deps.githubApiBase ? { githubApiBase: this.deps.githubApiBase } : {}),
-      }
-      return { subscriptionTokenId, body, model: `${ref.provider}:${ref.model}`, kind: 'fix-tests' }
+
+      // The fixer clones the PR head branch, applies fixes for the concerns in the
+      // Tester's report (folded into the user prompt via the prior `tester` output) and
+      // pushes back to the SAME branch (no new branch / PR) so the Tester can re-run.
+      // Mirrors the CI-fixer's body; targets the harness `/fix-tests` endpoint.
+      case FIXER_AGENT_KIND:
+        if (!prBranch) {
+          throw new Error('Fixer needs the implementation PR branch to push fixes to')
+        }
+        return {
+          kind: 'fix-tests',
+          body: {
+            ...common,
+            systemPrompt: roleSystemPrompt,
+            userPrompt: userPromptFor(context),
+            branch: prBranch,
+            ...webTools,
+          },
+        }
     }
 
     // Read-only agents (architect, analysis) explore a real checkout but never edit
@@ -940,67 +905,42 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     // committed `spec/` and any in-progress implementation), falling back to base when
     // it could not be ensured (no GitHub wired) and no PR branch exists yet.
     if (isReadOnlyAgentKind(context.agentKind)) {
-      const branch = workBranchReady
-        ? workBranch
-        : (context.block.pullRequest?.branch ?? repo.baseBranch)
-      const body = {
-        jobId,
-        kind: context.agentKind,
-        systemPrompt: composeBlockSystemPrompt(systemPromptFor(context.agentKind), context.block),
-        userPrompt: userPromptFor(context),
-        model: ref.model,
-        ...auth,
-        ghToken,
-        repo: buildRepoSpec(repo),
-        branch,
-        webToolsGuidance: webResearchGuidanceFor(context.agentKind, { fetch: true }),
-        ...(this.deps.webSearchProxyEnabled ? { webSearch: true } : {}),
-        ...(this.deps.githubApiBase ? { githubApiBase: this.deps.githubApiBase } : {}),
+      return {
+        kind: 'explore',
+        body: {
+          ...common,
+          kind: context.agentKind,
+          systemPrompt: roleSystemPrompt,
+          userPrompt: userPromptFor(context),
+          branch: workBranchReady ? workBranch : (prBranch ?? repo.baseBranch),
+          ...webTools,
+        },
       }
-      return { subscriptionTokenId, body, model: `${ref.provider}:${ref.model}`, kind: 'explore' }
     }
 
-    // The "extra context" Pi runs with: the build-phase role plus the block's
-    // selected best-practice fragments, exactly as the inline executor composes
-    // (engine-resolved tenant catalog when present, else the manual ids).
-    const systemPrompt = composeBlockSystemPrompt(systemPromptFor(context.agentKind), context.block)
-    const userPrompt = userPromptFor(context)
-    // Deterministic per task (block), NOT per dispatch: a retry mints a fresh
-    // executionId but keeps the blockId, and a sweeper re-drive keeps both — so a
+    // The default coder (and any other write-and-PR kind): the build-phase role plus
+    // the block's selected best-practice fragments, exactly as the inline executor
+    // composes (engine-resolved tenant catalog when present, else the manual ids).
+    // `headBranch` is deterministic per task (block), NOT per dispatch: a retry mints a
+    // fresh executionId but keeps the blockId, and a sweeper re-drive keeps both — so a
     // stable name means every re-dispatch of this task targets the SAME branch. The
-    // harness checkpoints commits to it during the run and RESUMES on it if it
-    // already exists, so an evicted/failed run's work survives and a retry continues
-    // on top of it rather than starting over. (The branch is thus "preserved on the
-    // task" by construction, with no extra persistence to fall out of sync.)
-    const headBranch = workBranch
-
-    // The harness keys the background job (and the poll endpoint) on `jobId`; the
-    // per-step id gives an idempotent re-attach across durable-driver replays while
-    // staying distinct from this run's sibling steps in the shared container.
-    const body = {
-      jobId,
-      systemPrompt,
-      userPrompt,
-      model: ref.model,
-      ...auth,
-      ghToken,
-      repo: buildRepoSpec(repo),
-      headBranch,
-      pr: {
-        title: `${context.block.title} (${context.pipelineName})`,
-        body: prBody(context),
+    // harness checkpoints commits to it during the run and RESUMES on it if it already
+    // exists, so an evicted/failed run's work survives and a retry continues on top of
+    // it rather than starting over.
+    return {
+      kind: 'run',
+      body: {
+        ...common,
+        systemPrompt: roleSystemPrompt,
+        userPrompt: userPromptFor(context),
+        headBranch: workBranch,
+        pr: {
+          title: `${context.block.title} (${context.pipelineName})`,
+          body: prBody(context),
+        },
+        ...webTools,
       },
-      // Per-kind web-search nudge (coder/mocker/analysis/… and any custom container
-      // kind, which resolves its own hint from the registry). The harness surfaces it
-      // only when web search is configured in the container env.
-      webToolsGuidance: webResearchGuidanceFor(context.agentKind, { fetch: true }),
-      // Turn on the proxy-backed web tools for this run: the harness points Pi's
-      // SearXNG client at `${proxyBaseUrl}/web-search` with the session token, so the
-      // search runs server-side and no provider key ever reaches the sandbox.
-      ...(this.deps.webSearchProxyEnabled ? { webSearch: true } : {}),
-      ...(this.deps.githubApiBase ? { githubApiBase: this.deps.githubApiBase } : {}),
     }
-    return { subscriptionTokenId, body, model: `${ref.provider}:${ref.model}`, kind: 'run' }
   }
 }
 
