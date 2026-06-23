@@ -49,6 +49,7 @@ const MENTION_AUDIENCE: Record<NotificationType, MentionAudience> = {
   ci_failed: { roles: [], includeCreator: true },
   test_failed: { roles: [], includeCreator: true },
   requirement_review: { roles: ['product'], includeCreator: true },
+  clarity_review: { roles: ['product'], includeCreator: true },
 }
 
 /** The mention audience for a notification type. */
@@ -126,6 +127,7 @@ const TYPE_LABEL: Record<NotificationType, string> = {
   ci_failed: ':rotating_light: CI failed',
   test_failed: ':rotating_light: Tests failed',
   requirement_review: ':memo: Requirement review',
+  clarity_review: ':mag: Bug-report triage',
 }
 
 /** Format a percentage from a 0..1 score for the assessment context line. */

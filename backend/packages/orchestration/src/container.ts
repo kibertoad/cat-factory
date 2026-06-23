@@ -45,6 +45,7 @@ import type { BootstrapRunner } from '@cat-factory/kernel'
 import type { RepoBlueprintRepository } from '@cat-factory/kernel'
 import type { RepoScanner } from '@cat-factory/kernel'
 import type { RequirementReviewRepository } from '@cat-factory/kernel'
+import type { ClarityReviewRepository } from '@cat-factory/kernel'
 import type { SubscriptionActivationRepository } from '@cat-factory/kernel'
 import type {
   CiStatusProvider,
@@ -113,6 +114,7 @@ import {
 import { BootstrapService } from './modules/bootstrap/BootstrapService.js'
 import { BoardScanService } from './modules/boardScan/BoardScanService.js'
 import { RequirementReviewService } from './modules/requirements/RequirementReviewService.js'
+import { ClarityReviewService } from './modules/clarity/ClarityReviewService.js'
 import { NotificationService } from './modules/notifications/NotificationService.js'
 import { MergePresetService } from './modules/merge/MergePresetService.js'
 import { ModelDefaultsService } from './modules/modelDefaults/ModelDefaultsService.js'
@@ -332,6 +334,12 @@ export interface CoreDependencies {
   // PRDs and tracker issues into the reviewed requirements.
   requirementReviewRepository?: RequirementReviewRepository
   /**
+   * Persistence for the clarity-review (bug-report triage) feature. Mirrors
+   * `requirementReviewRepository`: both runtime facades wire it unconditionally. The
+   * clarity service reuses the requirements reviewer's model config below.
+   */
+  clarityReviewRepository?: ClarityReviewRepository
+  /**
    * Optional: per-run personal-credential activations (individual-usage subscriptions).
    * Passed through to the ExecutionService so a finished run's activation is cleared
    * promptly. Both runtime facades wire it when ENCRYPTION_KEY is present.
@@ -492,6 +500,11 @@ export interface RequirementsModule {
   service: RequirementReviewService
 }
 
+/** The clarity-review feature's service, present only when its repository is wired. */
+export interface ClarityModule {
+  service: ClarityReviewService
+}
+
 /** The notifications feature's service, present only when its repository is wired. */
 export interface NotificationsModule {
   service: NotificationService
@@ -578,6 +591,8 @@ export interface Core {
   boardScan?: BoardScanModule
   /** Present only when the requirements-review repository is wired (see CoreDependencies). */
   requirements?: RequirementsModule
+  /** Present only when the clarity-review repository is wired (see CoreDependencies). */
+  clarity?: ClarityModule
   /** Present only when the notifications repository is wired (see CoreDependencies). */
   notifications?: NotificationsModule
   /** Present only when the Slack repositories + cipher are wired (see CoreDependencies). */
@@ -952,6 +967,39 @@ function createRequirementsModule(
 }
 
 /**
+ * Assemble the clarity-review module when its repository is present (both runtime facades
+ * wire it unconditionally). Mirrors {@link createRequirementsModule}: it reuses the
+ * requirements reviewer's model config (the same routing default) since both reviewers
+ * resolve their model identically.
+ */
+function createClarityModule(
+  deps: CoreDependencies,
+  notificationService?: NotificationService,
+): ClarityModule | undefined {
+  const { clarityReviewRepository } = deps
+  if (!clarityReviewRepository) return undefined
+
+  const service = new ClarityReviewService({
+    clarityReviewRepository,
+    blockRepository: deps.blockRepository,
+    idGenerator: deps.idGenerator,
+    clock: deps.clock,
+    notificationService,
+    modelProviderResolver: deps.modelProviderResolver,
+    modelProvider: deps.modelProvider,
+    modelRef: deps.requirementReviewModel ?? deps.documentPlannerModel,
+    resolveBlockModel: deps.requirementReviewResolveModel,
+    resolveWorkspaceModelDefault: deps.modelDefaultsRepository
+      ? (workspaceId, agentKind) =>
+          deps
+            .modelDefaultsRepository!.getForKind(workspaceId, agentKind)
+            .then((v) => v ?? undefined)
+      : undefined,
+  })
+  return { service }
+}
+
+/**
  * Assemble the prompt-fragment library when its fragment repository is present.
  * The library service (CRUD + the per-run catalog resolver) always assembles;
  * the repo-source service additionally needs the GitHub client, the source
@@ -1190,6 +1238,7 @@ export function createCore(dependencies: CoreDependencies): Core {
   // Built before the execution engine so the special `requirements-review` gate step can
   // drive the inline reviewer + the iterative answer → incorporate → re-review loop.
   const requirements = createRequirementsModule(dependencies, notifications?.service)
+  const clarity = createClarityModule(dependencies, notifications?.service)
 
   const executionService = new ExecutionService({
     ...dependencies,
@@ -1198,6 +1247,7 @@ export function createCore(dependencies: CoreDependencies): Core {
     boardService,
     spendService,
     requirementReviewService: requirements?.service,
+    clarityReviewService: clarity?.service,
     environmentProvisioning: environments?.provisioningService,
     blueprintReconciler: boardScan?.service,
     notificationService: notifications?.service,
@@ -1247,6 +1297,7 @@ export function createCore(dependencies: CoreDependencies): Core {
     ...(bootstrap ? { bootstrap } : {}),
     ...(boardScan ? { boardScan } : {}),
     ...(requirements ? { requirements } : {}),
+    ...(clarity ? { clarity } : {}),
     ...(notifications ? { notifications } : {}),
     ...(slack ? { slack } : {}),
     ...(mergePresets ? { mergePresets } : {}),

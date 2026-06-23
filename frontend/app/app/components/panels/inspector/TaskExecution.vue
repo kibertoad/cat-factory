@@ -10,16 +10,17 @@ const execution = useExecutionStore()
 const agentRuns = useAgentRunsStore()
 const ui = useUiStore()
 const models = useModelsStore()
-const requirements = useRequirementsStore()
+const reviews = useReviewStage()
 
-// The async stage this task's requirements-review gate is mid-cycle in (folding the
-// answers, then re-reviewing), or null. While set, the gate is doing background work and
-// needs NO human, so its "Review" button is replaced by a working indicator.
-const reqStage = computed(() => requirements.backgroundStage(props.block.id))
-const reqStageLabel = computed(() =>
-  reqStage.value === 'incorporating'
+// The async stage this task's iterative reviewer gate (requirements-review / clarity-review)
+// is mid-cycle in (folding the answers, then re-reviewing), or null. While set, the gate is
+// doing background work and needs NO human, so its "Review" button is replaced by a working
+// indicator.
+const reviewStage = computed(() => reviews.stageForBlock(props.block.id))
+const reviewStageLabel = computed(() =>
+  reviewStage.value === 'incorporating'
     ? 'Incorporating…'
-    : reqStage.value === 'reviewing'
+    : reviewStage.value === 'reviewing'
       ? 'Re-reviewing…'
       : null,
 )
@@ -59,8 +60,9 @@ function labelForStep(s: {
   companion?: { exceeded?: boolean } | null
   startingContainer?: boolean
 }) {
-  // A requirements gate mid-cycle reads its working stage, not "Needs approval".
-  if (s.agentKind === 'requirements-review' && reqStageLabel.value) return reqStageLabel.value
+  // A reviewer gate mid-cycle reads its working stage, not "Needs approval".
+  if (reviews.isBackground(s.agentKind, props.block.id) && reviewStageLabel.value)
+    return reviewStageLabel.value
   // A companion that spent its rework budget needs a decision, not an approval.
   if (s.approval?.status === 'pending' && s.companion?.exceeded) return 'Needs decision'
   if (s.approval?.status === 'pending') return 'Needs approval'
@@ -207,14 +209,14 @@ async function resetRun() {
             >
               Resolve
             </UButton>
-            <!-- requirements gate folding/re-reviewing in the background: a working
+            <!-- reviewer gate folding/re-reviewing in the background: a working
                  indicator, NOT a "Review" gate (the human is summoned only if needed) -->
             <span
-              v-else-if="s.agentKind === 'requirements-review' && reqStage"
+              v-else-if="reviews.isBackground(s.agentKind, block.id) && reviewStage"
               class="inline-flex shrink-0 items-center gap-1 text-[10px] text-indigo-300"
             >
               <UIcon name="i-lucide-loader-circle" class="h-3 w-3 animate-spin" />
-              {{ reqStageLabel }}
+              {{ reviewStageLabel }}
             </span>
             <!-- A companion that spent its rework budget parks on the iteration-cap
                  gate: it needs a 3-way DECISION (one more round / proceed / stop &

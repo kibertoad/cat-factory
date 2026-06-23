@@ -273,6 +273,32 @@ export function seedPipelines(): Pipeline[] {
       ],
     },
     {
+      // A bug-fix preset, front-loaded with the investigate → triage pair:
+      //   bug-investigator → read the codebase from the raw report (read-only) and emit an
+      //                      enriched report + an optional, confidence-gated hypothesis
+      //   clarity-review   → triage that report for fixability (human gate; the iterative
+      //                      answer → incorporate → re-review loop), producing the clarified
+      //                      brief downstream agents consume
+      //   spec-writer      → fold the clarified brief into the in-repo spec
+      //   architect → coder → reviewer → the design/implement/review core
+      //   conflicts → ci → merger → the standard mergeability / CI / merge tail
+      // Only the clarity review is a human gate; the read-only investigator auto-advances.
+      id: 'pl_bugfix',
+      name: 'Triage & fix bug',
+      agentKinds: [
+        'bug-investigator',
+        'clarity-review',
+        'spec-writer',
+        'architect',
+        'coder',
+        'reviewer',
+        'conflicts',
+        'ci',
+        'merger',
+      ],
+      gates: [false, true, false, false, false, false, false, false, false],
+    },
+    {
       id: 'pl_quick',
       name: 'Quick implement',
       agentKinds: ['coder', 'blueprints', 'mocker', 'tester', 'conflicts', 'ci', 'merger'],
