@@ -213,9 +213,7 @@ const approvalId = computed(() => step.value?.approval?.id ?? null)
 // A companion step parked at its automatic-rework cap: instead of the generic
 // approve/request-changes/reject rail, it shows the shared iteration-cap prompt
 // (one more round / proceed / stop & reset), resolved through its own endpoint.
-const companionExceeded = computed(
-  () => approvalPending.value && !!step.value?.companion?.exceeded,
-)
+const companionExceeded = computed(() => approvalPending.value && !!step.value?.companion?.exceeded)
 const resolvingCap = ref(false)
 async function resolveCompanionCap(choice: IterationCapChoice) {
   if (!ctx.value || !approvalId.value || resolvingCap.value) return

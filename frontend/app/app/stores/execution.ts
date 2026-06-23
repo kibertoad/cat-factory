@@ -1,6 +1,12 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { Decision, ExecutionInstance, Pipeline, PipelineStep, StepApproval } from '~/types/domain'
+import type {
+  Decision,
+  ExecutionInstance,
+  Pipeline,
+  PipelineStep,
+  StepApproval,
+} from '~/types/domain'
 import type { IterationCapChoice, ReviewComment } from '~/types/execution'
 import { useWorkspaceStore } from '~/stores/workspace'
 
