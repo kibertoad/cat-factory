@@ -102,11 +102,7 @@ export interface ConformanceApp {
    * clarified report into the agent context — on EVERY runtime (the clarity mirror of
    * {@link seedIncorporatedReview}).
    */
-  seedIncorporatedClarityReview(
-    workspaceId: string,
-    blockId: string,
-    report: string,
-  ): Promise<void>
+  seedIncorporatedClarityReview(workspaceId: string, blockId: string, report: string): Promise<void>
   /**
    * Seed a persisted repository blueprint straight into the facade's real board-scan
    * store, so the suite can assert the blueprint read endpoints (which the manual scan

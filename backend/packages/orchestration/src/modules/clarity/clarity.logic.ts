@@ -57,7 +57,11 @@ export function renderBugReport(ctx: ClarityContext): string {
         ctx.block.description?.trim() || '(no description provided)',
       ]
   if (!ctx.clarifiedDoc?.trim() && ctx.investigation?.trim()) {
-    lines.push('', '## Investigation (read-only findings from the codebase)', ctx.investigation.trim())
+    lines.push(
+      '',
+      '## Investigation (read-only findings from the codebase)',
+      ctx.investigation.trim(),
+    )
   }
   return lines.join('\n')
 }

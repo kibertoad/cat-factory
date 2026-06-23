@@ -73,6 +73,24 @@ const PROVIDERS: {
       'Copy the key; it authenticates the OpenAI-compatible Moonshot endpoint.',
     ],
   },
+  {
+    value: 'openrouter',
+    label: 'OpenRouter',
+    url: 'https://openrouter.ai/keys',
+    steps: [
+      'Open openrouter.ai → Keys and create an API key.',
+      'Copy the key (starts with sk-or-…); it reaches 300+ models through one gateway.',
+    ],
+  },
+  {
+    value: 'litellm',
+    label: 'LiteLLM (self-hosted gateway)',
+    url: 'https://docs.litellm.ai/docs/proxy/virtual_keys',
+    steps: [
+      'Generate a virtual key on your LiteLLM gateway (or use its master key).',
+      "The gateway's base URL is set by your deployment operator (LITELLM_BASE_URL), not here.",
+    ],
+  },
 ]
 
 const scope = ref<'workspace' | 'user'>('workspace')

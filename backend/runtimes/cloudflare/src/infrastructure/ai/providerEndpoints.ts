@@ -2,6 +2,7 @@ import {
   DEEPSEEK_BASE_URL,
   MOONSHOT_BASE_URL,
   OPENAI_BASE_URL,
+  OPENROUTER_BASE_URL,
   QWEN_BASE_URL,
 } from '@cat-factory/agents'
 import type { Env } from '../env'
@@ -13,7 +14,7 @@ import type { Env } from '../env'
 // the Worker-specific `env` plumbing: each base URL is overridable via env (e.g.
 // QWEN_BASE_URL) so a deployment can point a provider at a self-hosted gateway, a
 // regional endpoint, or — in the acceptance tests — a local stub, without code changes.
-export { DEEPSEEK_BASE_URL, MOONSHOT_BASE_URL, OPENAI_BASE_URL, QWEN_BASE_URL }
+export { DEEPSEEK_BASE_URL, MOONSHOT_BASE_URL, OPENAI_BASE_URL, OPENROUTER_BASE_URL, QWEN_BASE_URL }
 
 /** The effective base URL for a provider: env override, else the built-in default. */
 export function baseUrlFor(provider: string, env: Env): string | null {
@@ -26,6 +27,11 @@ export function baseUrlFor(provider: string, env: Env): string | null {
       return env.MOONSHOT_BASE_URL ?? MOONSHOT_BASE_URL
     case 'openai':
       return env.OPENAI_BASE_URL ?? OPENAI_BASE_URL
+    case 'openrouter':
+      return env.OPENROUTER_BASE_URL ?? OPENROUTER_BASE_URL
+    // LiteLLM is operator-hosted: no public default, only the deployment's own gateway.
+    case 'litellm':
+      return env.LITELLM_BASE_URL ?? null
     default:
       return null
   }

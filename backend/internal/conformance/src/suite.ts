@@ -416,6 +416,55 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         expect(qwen.flavor).toBe('direct')
       })
 
+      it('makes an OpenRouter (OpenAI-compatible) model selectable once its key is configured', async () => {
+        const { call, createWorkspace } = harness.makeApp(undefined, {
+          cloudflareModelsEnabled: false,
+        })
+        const { workspace } = await createWorkspace()
+        const models = `/workspaces/${workspace.id}/models`
+
+        // OpenRouter is a direct-only catalog entry (no Cloudflare fallback): with no key
+        // it is unselectable on both runtimes.
+        const before = await call<Opt[]>('GET', models)
+        expect(before.body.find((m) => m.id === 'openrouter-claude-opus')?.available).toBe(false)
+
+        // Connect an OpenRouter key (exercises the widened apiKeyProviderSchema end to end).
+        const created = await call('POST', `/workspaces/${workspace.id}/api-keys`, {
+          provider: 'openrouter',
+          label: 'team',
+          key: 'sk-or-secret',
+        })
+        expect(created.status).toBe(201)
+
+        // The curated entry now resolves to its OpenAI-compatible direct flavour, selectable.
+        const after = await call<Opt[]>('GET', models)
+        const or = after.body.find((m) => m.id === 'openrouter-claude-opus')!
+        expect(or.available).toBe(true)
+        expect(or.flavor).toBe('direct')
+      })
+
+      it('keeps a base-URL-required provider (LiteLLM) unselectable with a key but no base URL', async () => {
+        const { call, createWorkspace } = harness.makeApp(undefined, {
+          cloudflareModelsEnabled: false,
+        })
+        const { workspace } = await createWorkspace()
+        const models = `/workspaces/${workspace.id}/models`
+
+        // LiteLLM is operator-hosted: it has NO built-in base URL, and the test env sets
+        // no LITELLM_BASE_URL. Connecting a key alone must NOT make it selectable — the
+        // run would otherwise pass the start guard and then throw "No base URL configured"
+        // at dispatch. (OpenRouter, with a public default, IS selectable on a key — above.)
+        const created = await call('POST', `/workspaces/${workspace.id}/api-keys`, {
+          provider: 'litellm',
+          label: 'team',
+          key: 'sk-litellm-secret',
+        })
+        expect(created.status).toBe(201)
+
+        const after = await call<Opt[]>('GET', models)
+        expect(after.body.find((m) => m.id === 'litellm-default')?.available).toBe(false)
+      })
+
       it('blocks starting a pipeline with an unconfigured model, then allows it after a key is added', async () => {
         const { call, createWorkspace } = harness.makeApp(undefined, {
           cloudflareModelsEnabled: false,

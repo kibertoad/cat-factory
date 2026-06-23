@@ -1782,7 +1782,9 @@ export class DrizzleClarityReviewRepository implements ClarityReviewRepository {
     const rows = await this.db
       .select()
       .from(clarityReviews)
-      .where(and(eq(clarityReviews.workspace_id, workspaceId), eq(clarityReviews.block_id, blockId)))
+      .where(
+        and(eq(clarityReviews.workspace_id, workspaceId), eq(clarityReviews.block_id, blockId)),
+      )
       .orderBy(desc(clarityReviews.created_at))
       .limit(1)
     return rows[0] ? rowToClarityReview(rows[0]) : null
@@ -1832,7 +1834,9 @@ export class DrizzleClarityReviewRepository implements ClarityReviewRepository {
   async deleteByBlock(workspaceId: string, blockId: string): Promise<void> {
     await this.db
       .delete(clarityReviews)
-      .where(and(eq(clarityReviews.workspace_id, workspaceId), eq(clarityReviews.block_id, blockId)))
+      .where(
+        and(eq(clarityReviews.workspace_id, workspaceId), eq(clarityReviews.block_id, blockId)),
+      )
   }
 }
 

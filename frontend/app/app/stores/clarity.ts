@@ -1,10 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import type {
-  ClarityReview,
-  ResolveClarityExceededChoice,
-  ReviewItemStatus,
-} from '~/types/clarity'
+import type { ClarityReview, ResolveClarityExceededChoice, ReviewItemStatus } from '~/types/clarity'
 import { useWorkspaceStore } from '~/stores/workspace'
 
 /**
@@ -124,11 +120,7 @@ export const useClarityStore = defineStore('clarity', () => {
   }
 
   /** Set an item's status (dismiss / reopen). */
-  async function setItemStatus(
-    review: ClarityReview,
-    itemId: string,
-    status: ReviewItemStatus,
-  ) {
+  async function setItemStatus(review: ClarityReview, itemId: string, status: ReviewItemStatus) {
     store(await api.setClarityItemStatus(workspace.requireId(), review.id, itemId, status))
   }
 
@@ -141,11 +133,7 @@ export const useClarityStore = defineStore('clarity', () => {
   async function incorporate(review: ClarityReview, feedback?: string) {
     withFlag(incorporating, review.id, true)
     try {
-      const updated = await api.incorporateClarity(
-        workspace.requireId(),
-        review.blockId,
-        feedback,
-      )
+      const updated = await api.incorporateClarity(workspace.requireId(), review.blockId, feedback)
       store(updated)
       return updated
     } finally {

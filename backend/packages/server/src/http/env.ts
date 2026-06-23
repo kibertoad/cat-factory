@@ -48,6 +48,13 @@ export interface ServerContainer extends Core {
    */
   cloudflareModelsEnabled?: boolean
   /**
+   * The deployment's direct-provider base-URL resolver (env override → built-in default,
+   * or null when none — e.g. an unconfigured operator-hosted LiteLLM gateway). The model
+   * catalog uses it to gate selectability: an OpenAI-compatible provider is only
+   * selectable once its base URL resolves, mirroring what the dispatch path requires.
+   */
+  baseUrlFor?: (provider: string) => string | null | undefined
+  /**
    * The per-USER locally-run model endpoints store (Ollama / LM Studio / llama.cpp /
    * vLLM / custom OpenAI-compatible runners). Present only when the facade wired the
    * local-model repository (needs ENCRYPTION_KEY). Drives the local-runner controller,

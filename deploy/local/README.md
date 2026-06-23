@@ -104,16 +104,16 @@ Run agents on a model on your own machine instead of (or alongside) a cloud prov
 The supported runners are all OpenAI-compatible, so the only difference is the default
 port:
 
-| Runner    | Default base URL                 | Example install                              |
-| --------- | -------------------------------- | -------------------------------------------- |
-| Ollama    | `http://localhost:11434/v1`      | `ollama serve` → `ollama pull qwen2.5-coder:32b` |
-| LM Studio | `http://localhost:1234/v1`       | enable the local server in the LM Studio UI  |
-| llama.cpp | `http://localhost:8080/v1`       | `llama-server -m model.gguf`                 |
-| vLLM      | `http://localhost:8000/v1`       | `vllm serve <model>`                         |
-| Custom    | (none — supply your own)         | any OpenAI-compatible server (Jan, GPT4All, …) |
+| Runner    | Default base URL            | Example install                                  |
+| --------- | --------------------------- | ------------------------------------------------ |
+| Ollama    | `http://localhost:11434/v1` | `ollama serve` → `ollama pull qwen2.5-coder:32b` |
+| LM Studio | `http://localhost:1234/v1`  | enable the local server in the LM Studio UI      |
+| llama.cpp | `http://localhost:8080/v1`  | `llama-server -m model.gguf`                     |
+| vLLM      | `http://localhost:8000/v1`  | `vllm serve <model>`                             |
+| Custom    | (none — supply your own)    | any OpenAI-compatible server (Jan, GPT4All, …)   |
 
 Any model the runner serves works — e.g. `qwen2.5-coder:32b`, `qwen3-coder`,
-`deepseek-coder-v2`, `llama3.3`, `gemma3` (Gemma is a *model* served through a runner,
+`deepseek-coder-v2`, `llama3.3`, `gemma3` (Gemma is a _model_ served through a runner,
 not a runner itself).
 
 Local runners are configured **per user** (a runner lives on your machine) in the UI:

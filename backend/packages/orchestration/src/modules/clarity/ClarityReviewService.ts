@@ -100,7 +100,10 @@ export class ClarityReviewService {
     const resolve = (ref: ModelRef): ModelRef => inlineModelRef(ref, fallback ?? ref)
     const fromBlock = this.deps.resolveBlockModel?.(block.modelId)
     if (fromBlock) return resolve(fromBlock)
-    const defaultId = await this.deps.resolveWorkspaceModelDefault?.(workspaceId, CLARITY_AGENT_KIND)
+    const defaultId = await this.deps.resolveWorkspaceModelDefault?.(
+      workspaceId,
+      CLARITY_AGENT_KIND,
+    )
     const fromDefault = this.deps.resolveBlockModel?.(defaultId)
     if (fromDefault) return resolve(fromDefault)
     return fallback
@@ -230,7 +233,11 @@ export class ClarityReviewService {
       )
     }
     const now = this.deps.clock.now()
-    const items = coerceReviewItems(extractJson(text), () => this.deps.idGenerator.next('clri'), now)
+    const items = coerceReviewItems(
+      extractJson(text),
+      () => this.deps.idGenerator.next('clri'),
+      now,
+    )
     return { ref, items }
   }
 
@@ -370,7 +377,10 @@ export class ClarityReviewService {
 
   /** Mark the review settled (`incorporated`) — the last clarified report becomes the brief. */
   async markIncorporated(workspaceId: string, reviewId: string): Promise<ClarityReview> {
-    return this.patchReview(workspaceId, reviewId, (review) => ({ ...review, status: 'incorporated' }))
+    return this.patchReview(workspaceId, reviewId, (review) => ({
+      ...review,
+      status: 'incorporated',
+    }))
   }
 
   /** Grant one more reviewer pass after the cap was hit, reopening the loop (`ready`). */
@@ -384,7 +394,10 @@ export class ClarityReviewService {
 
   /** Flag a review as `incorporating` (the durable driver is about to fold + re-review). */
   async markIncorporating(workspaceId: string, reviewId: string): Promise<ClarityReview> {
-    return this.patchReview(workspaceId, reviewId, (review) => ({ ...review, status: 'incorporating' }))
+    return this.patchReview(workspaceId, reviewId, (review) => ({
+      ...review,
+      status: 'incorporating',
+    }))
   }
 
   /** Flag a review as `reviewing` (the second async stage — re-reviewing the folded report). */

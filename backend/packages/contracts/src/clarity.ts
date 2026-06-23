@@ -1,9 +1,6 @@
 import * as v from 'valibot'
 import { iterationCapChoiceSchema } from './iteration-cap.js'
-import {
-  requirementReviewItemSchema,
-  requirementReviewStatusSchema,
-} from './requirements.js'
+import { requirementReviewItemSchema, requirementReviewStatusSchema } from './requirements.js'
 
 // ---------------------------------------------------------------------------
 // Clarity-review wire contracts. A clarity reviewer triages a board block's BUG

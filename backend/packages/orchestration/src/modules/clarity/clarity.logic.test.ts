@@ -1,10 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Block } from '@cat-factory/kernel'
-import {
-  buildClarityPrompt,
-  buildClarityReworkPrompt,
-  renderBugReport,
-} from './clarity.logic.js'
+import { buildClarityPrompt, buildClarityReworkPrompt, renderBugReport } from './clarity.logic.js'
 
 const block: Pick<Block, 'title' | 'type' | 'description'> = {
   title: 'Login fails',

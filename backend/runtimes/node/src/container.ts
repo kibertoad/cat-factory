@@ -75,7 +75,7 @@ import { executionRuntime } from './execution/config.js'
 import { PgBossBootstrapRunner } from './execution/bootstrapRunner.js'
 import { PgBossWorkRunner } from './execution/pgBossRunner.js'
 import { createNodeGateways } from './gateways.js'
-import { createNodeModelProviderResolver } from './modelProvider.js'
+import { baseUrlForNode, createNodeModelProviderResolver } from './modelProvider.js'
 import { NodeEventPublisher, type NodeRealtimeHub } from './realtime.js'
 import {
   DrizzleGitHubInstallationRepository,
@@ -1090,6 +1090,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
           subscriptions,
           personalSubscriptions,
           cloudflareModelsEnabled,
+          baseUrlFor: (provider) => baseUrlForNode(provider, env),
           localModelEndpoints,
         },
         workspaceId,
@@ -1119,6 +1120,9 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     apiKeys,
     // Whether the opt-in Cloudflare Workers AI lib is enabled (REST creds present).
     cloudflareModelsEnabled,
+    // The direct-provider base-URL resolver the catalog uses to gate selectability on a
+    // resolvable endpoint (e.g. LiteLLM stays unselectable until LITELLM_BASE_URL is set).
+    baseUrlFor: (provider) => baseUrlForNode(provider, env),
     // The per-user locally-run model endpoints store; present when ENCRYPTION_KEY is set.
     localModelEndpoints,
   }

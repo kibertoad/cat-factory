@@ -2,6 +2,7 @@ import {
   DEEPSEEK_BASE_URL,
   MOONSHOT_BASE_URL,
   OPENAI_BASE_URL,
+  OPENROUTER_BASE_URL,
   QWEN_BASE_URL,
 } from '@cat-factory/agents'
 import {
@@ -59,11 +60,15 @@ class InlineGitHubWebhookIngest implements GitHubWebhookIngest {
   }
 }
 
-const OPENAI_COMPATIBLE: Record<string, { baseUrl: string; baseUrlEnv: string }> = {
+// `baseUrl` is the built-in default; LiteLLM has none (operator-hosted), so it relies
+// purely on its env override and resolves to null until LITELLM_BASE_URL is set.
+const OPENAI_COMPATIBLE: Record<string, { baseUrl?: string; baseUrlEnv: string }> = {
   qwen: { baseUrl: QWEN_BASE_URL, baseUrlEnv: 'QWEN_BASE_URL' },
   deepseek: { baseUrl: DEEPSEEK_BASE_URL, baseUrlEnv: 'DEEPSEEK_BASE_URL' },
   moonshot: { baseUrl: MOONSHOT_BASE_URL, baseUrlEnv: 'MOONSHOT_BASE_URL' },
   openai: { baseUrl: OPENAI_BASE_URL, baseUrlEnv: 'OPENAI_BASE_URL' },
+  openrouter: { baseUrl: OPENROUTER_BASE_URL, baseUrlEnv: 'OPENROUTER_BASE_URL' },
+  litellm: { baseUrlEnv: 'LITELLM_BASE_URL' },
 }
 
 /**
@@ -80,8 +85,10 @@ class HttpLlmUpstream implements LlmUpstream {
     const entry = OPENAI_COMPATIBLE[provider]
     if (!entry) return null
     // `||` not `??`: a set-but-blank base-URL env must fall back to the default, not
-    // collapse to an empty URL the SDK then chokes on.
-    return { baseURL: this.env[entry.baseUrlEnv] || entry.baseUrl }
+    // collapse to an empty URL the SDK then chokes on. For a provider with no default
+    // (LiteLLM), an unset env yields null so the proxy reports "not available" cleanly.
+    const baseURL = this.env[entry.baseUrlEnv] || entry.baseUrl
+    return baseURL ? { baseURL } : null
   }
 
   runInProcess(): Promise<Response> | null {

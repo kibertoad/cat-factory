@@ -22,7 +22,7 @@ Adds two new agents at the front of a new `pl_bugfix` ("Triage & fix bug") pipel
   confident, so a low-confidence guess never misdirects the fix. Its output feeds the
   clarity reviewer (the triage subject) and the coder (a non-binding lead, via `priorOutputs`).
 - **`clarity-review`** — an inline engine gate step that triages the bug report for
-  *fixability* (repro steps, expected-vs-actual, environment, affected area), mirroring the
+  _fixability_ (repro steps, expected-vs-actual, environment, affected area), mirroring the
   requirements-review iterative loop (raise findings → answer/dismiss → incorporate into one
   standard-format clarified report → re-review until it converges, with the same per-task
   `maxRequirementIterations` / `maxRequirementConcernAllowed` knobs). The converged clarified

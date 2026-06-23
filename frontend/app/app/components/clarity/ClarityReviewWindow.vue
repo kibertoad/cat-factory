@@ -48,9 +48,7 @@ const busy = computed(() => (blockId.value ? clarity.isReviewing(blockId.value) 
 // True while the initial fetch of an existing review is in flight (opening the window),
 // before the cache is populated — so we show a spinner instead of the empty state.
 const loading = computed(() => (blockId.value ? clarity.isLoading(blockId.value) : false))
-const reworking = computed(() =>
-  review.value ? clarity.isIncorporating(review.value.id) : false,
-)
+const reworking = computed(() => (review.value ? clarity.isIncorporating(review.value.id) : false))
 const acting = ref(false)
 
 const SEVERITY_RANK: Record<ReviewItemSeverity, number> = { high: 0, medium: 1, low: 2 }
@@ -299,12 +297,12 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
               >
                 <UIcon name="i-lucide-loader-circle" class="h-5 w-5 shrink-0 animate-spin" />
                 <span v-if="incorporating">
-                  Incorporating your answers into a clarified bug report… You can close this —
-                  we’ll notify you only if more input is needed.
+                  Incorporating your answers into a clarified bug report… You can close this — we’ll
+                  notify you only if more input is needed.
                 </span>
                 <span v-else>
-                  Re-reviewing the updated bug report… You can close this — we’ll notify you only
-                  if more input is needed.
+                  Re-reviewing the updated bug report… You can close this — we’ll notify you only if
+                  more input is needed.
                 </span>
               </div>
 
@@ -550,8 +548,8 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                   </UButton>
                 </div>
                 <p class="text-[11px] leading-relaxed text-slate-500">
-                  Re-review runs the reviewer against this report. If you’re unhappy with how it
-                  was merged, redo it with a comment instead.
+                  Re-review runs the reviewer against this report. If you’re unhappy with how it was
+                  merged, redo it with a comment instead.
                 </p>
               </div>
 

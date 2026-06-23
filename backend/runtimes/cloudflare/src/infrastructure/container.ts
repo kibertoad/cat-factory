@@ -1315,6 +1315,7 @@ export function buildContainer(
           subscriptions,
           personalSubscriptions,
           cloudflareModelsEnabled,
+          baseUrlFor: (provider) => baseUrlFor(provider, env),
           localModelEndpoints,
         },
         workspaceId,
@@ -1338,6 +1339,9 @@ export function buildContainer(
     apiKeys,
     // Whether the opt-in Cloudflare Workers AI lib is enabled (the `AI` binding).
     cloudflareModelsEnabled,
+    // The direct-provider base-URL resolver the catalog uses to gate selectability on a
+    // resolvable endpoint (e.g. LiteLLM stays unselectable until LITELLM_BASE_URL is set).
+    baseUrlFor: (provider) => baseUrlFor(provider, env),
     // The per-user locally-run model endpoints store; present when ENCRYPTION_KEY is set.
     localModelEndpoints,
     gateways: {

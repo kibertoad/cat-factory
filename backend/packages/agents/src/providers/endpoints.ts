@@ -8,6 +8,10 @@ export const QWEN_BASE_URL = 'https://dashscope-intl.aliyuncs.com/compatible-mod
 export const DEEPSEEK_BASE_URL = 'https://api.deepseek.com/v1'
 export const MOONSHOT_BASE_URL = 'https://api.moonshot.ai/v1'
 export const OPENAI_BASE_URL = 'https://api.openai.com/v1'
+// OpenRouter is a single OpenAI-compatible gateway to 300+ models. LiteLLM has NO
+// built-in default: it is an operator-hosted gateway, so its base URL comes from the
+// deployment's LITELLM_BASE_URL override (there is no public endpoint to default to).
+export const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1'
 
 /** Built-in base URLs for the OpenAI-compatible providers, keyed by provider id. */
 export const DEFAULT_OPENAI_COMPATIBLE_BASE_URLS: Readonly<Record<string, string>> = {
@@ -15,4 +19,5 @@ export const DEFAULT_OPENAI_COMPATIBLE_BASE_URLS: Readonly<Record<string, string
   deepseek: DEEPSEEK_BASE_URL,
   moonshot: MOONSHOT_BASE_URL,
   openai: OPENAI_BASE_URL,
+  openrouter: OPENROUTER_BASE_URL,
 }
