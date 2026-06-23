@@ -1,6 +1,7 @@
 import { redactSecrets } from './git.js'
 import { redactAll, secretsToRedact } from './agent-runner.js'
 import { log } from './logger.js'
+import { PI_MAX_OUTPUT_TOKENS } from './pi.js'
 
 // A reusable abstraction for the "agent returns a structured JSON document as its
 // final assistant message" pattern (requirements, blueprint, merger — and any future
@@ -26,7 +27,7 @@ import { log } from './logger.js'
 // didn't help" are both queryable).
 
 /** Output-token ceiling for the repair call — mirrors the harness's PI_MAX_OUTPUT_TOKENS. */
-const REPAIR_MAX_OUTPUT_TOKENS = 16_384
+const REPAIR_MAX_OUTPUT_TOKENS = PI_MAX_OUTPUT_TOKENS
 
 /** Hard cap on how much malformed text we feed the repair model (keep the call cheap). */
 const MAX_REPAIR_INPUT_CHARS = 40_000

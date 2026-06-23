@@ -12,6 +12,7 @@ import {
   parsePiOutput,
   parseTodoProgress,
   progressGuardLimitsFromEnv,
+  runDiagnostics,
   summarizePiRun,
   terminalRunError,
   webSearchConfigFromEnv,
@@ -245,6 +246,55 @@ describe('summarizePiRun', () => {
       assistantChars: 0,
     })
     expect(summarizePiRun('').stats).toEqual({ toolCalls: 0, assistantChars: 0 })
+  })
+})
+
+describe('runDiagnostics', () => {
+  // A small cap keeps the fixtures readable: `usage.output >= cap` marks truncation.
+  const cap = 100
+
+  it('reports a clean final answer as not truncated and not empty', () => {
+    const stdout =
+      '{"type":"agent_end","messages":[{"role":"assistant","content":[{"type":"text","text":"Here is the spec."}],"usage":{"output":42}}]}'
+    expect(runDiagnostics(stdout, cap)).toEqual({
+      truncated: false,
+      finalTruncated: false,
+      finalAnswerEmpty: false,
+    })
+  })
+
+  it('flags an empty final turn (content: []) despite spent output tokens', () => {
+    // The exact production failure: 10.9k output tokens but an empty content array.
+    const stdout =
+      '{"type":"agent_end","messages":[{"role":"assistant","content":[],"usage":{"output":42}}]}'
+    expect(runDiagnostics(stdout, cap)).toMatchObject({ finalAnswerEmpty: true, finalTruncated: false })
+  })
+
+  it('flags a truncated FINAL answer (output hit the ceiling)', () => {
+    const stdout =
+      '{"type":"agent_end","messages":[{"role":"assistant","content":[{"type":"text","text":"cut off"}],"usage":{"output":100}}]}'
+    expect(runDiagnostics(stdout, cap)).toMatchObject({ truncated: true, finalTruncated: true })
+  })
+
+  it('flags an intermediate truncation without marking the final answer truncated', () => {
+    const stdout =
+      '{"type":"agent_end","messages":[' +
+      '{"role":"assistant","content":[{"type":"toolCall","name":"read"}],"usage":{"output":100}},' +
+      '{"role":"toolResult","content":[{"type":"text","text":"ok"}]},' +
+      '{"role":"assistant","content":[{"type":"text","text":"final"}],"usage":{"output":20}}]}'
+    expect(runDiagnostics(stdout, cap)).toEqual({
+      truncated: true,
+      finalTruncated: false,
+      finalAnswerEmpty: false,
+    })
+  })
+
+  it('is all-false when there is no terminal transcript', () => {
+    expect(runDiagnostics('', cap)).toEqual({
+      truncated: false,
+      finalTruncated: false,
+      finalAnswerEmpty: false,
+    })
   })
 })
 

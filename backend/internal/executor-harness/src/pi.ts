@@ -14,9 +14,13 @@ import { redactSecrets } from './git.js'
  * Generous on purpose: a reasoning model (e.g. GLM-5.2) spends tokens on its
  * `<think>` trace before the answer + tool calls, so a tight cap truncates it
  * mid-reasoning and the agent never commits edits. It is a ceiling, not a target
- * — unused output tokens are not billed — so erring high is safe.
+ * — unused output tokens are not billed and Workers AI clamps the request to the
+ * model's real max — so erring high is safe. Raised to 32k after a spec-writer run
+ * truncated an intermediate tool call at the old 16k cap; the document itself
+ * stopped well under it, so this is headroom for larger specs/diffs, with
+ * {@link runDiagnostics} flagging the rare case where even 32k is not enough.
  */
-export const PI_MAX_OUTPUT_TOKENS = 16_384
+export const PI_MAX_OUTPUT_TOKENS = 32_768
 
 /** Write the Pi provider config that routes all model calls through the proxy. */
 export async function writePiModelsConfig(opts: {
@@ -314,6 +318,25 @@ export interface PiRunStats {
   assistantChars: number
 }
 
+/**
+ * Output-quality signals lifted from the agent's transcript, so the harness can fail
+ * LOUDLY on a malformed run instead of silently handing a half-baked artifact to the
+ * structured-output repair (which would manufacture a doc from garbage — the trap
+ * behind the spec-writer ⇄ companion rework loop). Two distinct invalid states, both
+ * seen in production from `kimi-k2.7-code`:
+ *  - a completion that hit the output ceiling (its answer/tool call was cut off), and
+ *  - a FINAL turn that carried no text at all (an empty `content: []` despite spending
+ *    output tokens), so there is no answer to parse.
+ */
+export interface RunDiagnostics {
+  /** Some completion ended at the output-token ceiling — its content was cut off. */
+  truncated: boolean
+  /** The agent's FINAL completion hit the ceiling: its ANSWER (not a mid-run step) was cut off. */
+  finalTruncated: boolean
+  /** The agent's final turn carried no text content (e.g. an empty `content: []`). */
+  finalAnswerEmpty: boolean
+}
+
 /** Pi's assistant summary plus {@link PiRunStats} describing what it did. */
 export interface PiRunOutcome {
   summary: string
@@ -332,6 +355,8 @@ export interface PiRunOutcome {
    * (usage-aware rotation) and telemetry. Absent for the proxy-metered Pi harness.
    */
   usage?: { inputTokens: number; outputTokens: number }
+  /** Output-quality signals (truncation / empty final answer); see {@link RunDiagnostics}. */
+  diagnostics?: RunDiagnostics
 }
 
 /**
@@ -898,7 +923,61 @@ export function terminalRunError(stdout: string): string | undefined {
  */
 export function summarizePiRun(stdout: string): PiRunOutcome {
   const events = parsePiEvents(stdout)
-  return { summary: summaryFromEvents(events, stdout), stats: statsFromEvents(events) }
+  return {
+    summary: summaryFromEvents(events, stdout),
+    stats: statsFromEvents(events),
+    diagnostics: diagnosticsFromEvents(events),
+  }
+}
+
+/**
+ * Output-quality signals over the canonical `agent_end` transcript: whether any
+ * completion hit the output ceiling (its content was cut off), whether the FINAL
+ * completion did, and whether that final turn carried no text at all. Pure so it is
+ * unit-testable over a fixed event sequence. Defaults to all-false when there is no
+ * terminal transcript (a no-op run is already caught by {@link agentNeverActed}).
+ *
+ * `cap` is the per-completion ceiling Pi requested ({@link PI_MAX_OUTPUT_TOKENS});
+ * truncation is detected by an assistant message whose `usage.output` reached it,
+ * which is reliable even when the model reports a non-`length` stop reason (Workers
+ * AI labelled a cut-off tool call `tool_calls`, not `length`).
+ */
+export function diagnosticsFromEvents(
+  events: Record<string, unknown>[],
+  cap: number = PI_MAX_OUTPUT_TOKENS,
+): RunDiagnostics {
+  let messages: unknown[] | undefined
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i]!
+    if (e.type === 'agent_end' && Array.isArray(e.messages)) {
+      messages = e.messages as unknown[]
+      break
+    }
+  }
+  if (!messages) return { truncated: false, finalTruncated: false, finalAnswerEmpty: false }
+  const assistants = messages.filter(
+    (m): m is Record<string, unknown> => isObject(m) && m.role === 'assistant',
+  )
+  const truncated = assistants.some((m) => assistantOutputTokens(m) >= cap)
+  const last = assistants.at(-1)
+  return {
+    truncated,
+    finalTruncated: last ? assistantOutputTokens(last) >= cap : false,
+    finalAnswerEmpty: last ? messageText(last) === '' : false,
+  }
+}
+
+/** `usage.output` (completion tokens) reported on a Pi assistant message, or 0. */
+function assistantOutputTokens(message: Record<string, unknown>): number {
+  const usage = message.usage
+  if (!isObject(usage)) return 0
+  const output = usage.output
+  return typeof output === 'number' ? output : 0
+}
+
+/** {@link RunDiagnostics} over Pi's raw `--mode json` stdout (see {@link diagnosticsFromEvents}). */
+export function runDiagnostics(stdout: string, cap: number = PI_MAX_OUTPUT_TOKENS): RunDiagnostics {
+  return diagnosticsFromEvents(parsePiEvents(stdout), cap)
 }
 
 /**

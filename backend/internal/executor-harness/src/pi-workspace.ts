@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import {
   type PiRunOutcome,
   type PiRunStats,
+  type RunDiagnostics,
   runPi,
   webSearchConfigFromEnv,
   webSearchProxyEnv,
@@ -177,6 +178,32 @@ export function agentNeverActed(stats: PiRunStats): boolean {
 /** The full-sentence "never acted" cause shared by the structured no-op reasons. */
 export const NEVER_ACTED_CAUSE =
   ' The agent never acted (no tool calls, no model output) — it most likely could not reach the model.'
+
+/**
+ * A human-readable cause when the agent's FINAL answer is unusable — its last turn was
+ * cut off at the output ceiling, or carried no text at all (an empty completion) — or
+ * `undefined` when the final answer looks fine.
+ *
+ * This is OPT-IN per agent, never a blanket harness rule. Only agents whose work
+ * product is a final text/document the pipeline hands ONWARD to be reviewed or parsed
+ * (the spec-writer, the blueprinter) should treat a non-undefined result as a hard
+ * failure — for them an empty/cut-off final turn means there is nothing trustworthy to
+ * review, which is exactly what drove the spec-writer ⇄ companion rework loop. Agents
+ * whose product is a side effect (a pushed PR/commit from the coder or ci-fixer, a
+ * self-contained validation) legitimately end with no final text and MUST NOT call this.
+ */
+export function unusableFinalAnswerCause(
+  diagnostics: RunDiagnostics | undefined,
+): string | undefined {
+  if (!diagnostics) return undefined
+  if (diagnostics.finalTruncated) {
+    return 'its final answer hit the output-token ceiling and was cut off (raise the limit or narrow the task)'
+  }
+  if (diagnostics.finalAnswerEmpty) {
+    return 'its final turn produced no text (an empty completion), so there is no document to read'
+  }
+  return undefined
+}
 
 /**
  * The credential-scrubbed tail where a no-op's real cause shows up: a slice of Pi's

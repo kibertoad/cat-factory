@@ -16,6 +16,7 @@ import {
   agentOutputTail,
   NEVER_ACTED_CAUSE,
   runAgentInWorkspace,
+  unusableFinalAnswerCause,
   withWorkspace,
 } from './pi-workspace.js'
 import {
@@ -594,7 +595,7 @@ export async function handleSpec(job: SpecJob, opts: RunOptions = {}): Promise<S
     const previousVersion = await readExistingVersion(dir)
 
     log.info('requirements: running agent', { ...trace, tasks: job.tasks.length })
-    const { summary, stats, stderrTail, usage } = await runAgentInWorkspace(
+    const { summary, stats, stderrTail, usage, diagnostics: runDiag } = await runAgentInWorkspace(
       {
         dir,
         systemPrompt: job.systemPrompt,
@@ -612,6 +613,22 @@ export async function handleSpec(job: SpecJob, opts: RunOptions = {}): Promise<S
       },
       opts,
     )
+
+    // The spec is HANDED OFF to the spec-companion to review, so an unusable final
+    // answer (cut off at the output ceiling, or an empty completion) must fail LOUDLY
+    // here — not get laundered into a half-baked doc by the structured repair below,
+    // which is how the companion ended up looping on an "unreviewable" artifact. Opt-in
+    // per agent (see `unusableFinalAnswerCause`): only document producers gate on it.
+    const unusable = unusableFinalAnswerCause(runDiag)
+    if (unusable) {
+      log.warn('requirements: unusable final answer', { ...trace, ...stats, ...runDiag })
+      return {
+        summary,
+        stats,
+        error: `the requirements agent did not return a usable specification: ${unusable}.${agentOutputTail(stderrTail, summary)}`,
+        ...(usage ? { usage } : {}),
+      }
+    }
 
     // Parse the agent's document; on a malformed reply, make ONE structured repair
     // call (see json-repair) before giving up. Both the failure and the repair
