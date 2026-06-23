@@ -392,6 +392,7 @@ const showOriginalDescription = ref(false)
         <TaskDependencies :block="block" />
         <TaskStructure :block="block" />
         <TaskAgentConfig :block="block" />
+        <TaskEstimateBadge :block="block" />
         <TaskRunSettings :block="block" />
         <TaskExecution :block="block" />
       </template>

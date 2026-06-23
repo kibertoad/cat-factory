@@ -13,6 +13,7 @@ import type {
   Pipeline,
   PipelineStep,
   PullRequestRef,
+  TaskEstimate,
   Workspace,
 } from '@cat-factory/contracts'
 
@@ -73,6 +74,8 @@ export interface BlockRow {
   instance_size: string | null
   created_by: string | null
   responsible_product_user_id: string | null
+  /** Task-level: the task-estimator's triage (complexity/risk/impact), JSON object. */
+  estimate?: string | null
 }
 
 export function rowToBlock(row: BlockRow): Block {
@@ -109,6 +112,7 @@ export function rowToBlock(row: BlockRow): Block {
   if (row.created_by !== null) block.createdBy = row.created_by
   if (row.responsible_product_user_id !== null)
     block.responsibleProductUserId = row.responsible_product_user_id
+  if (row.estimate != null) block.estimate = JSON.parse(row.estimate) as TaskEstimate
   return block
 }
 
@@ -149,6 +153,7 @@ export function blockInsertValues(block: Block): Record<string, unknown> {
     instance_size: block.instanceSize ?? null,
     created_by: block.createdBy ?? null,
     responsible_product_user_id: block.responsibleProductUserId ?? null,
+    estimate: block.estimate ? JSON.stringify(block.estimate) : null,
   }
 }
 
@@ -219,6 +224,10 @@ export function blockPatchToColumns(patch: BlockPatch): Record<string, unknown> 
   }
   if (patch.cloudProvider !== undefined) set.cloud_provider = patch.cloudProvider ?? null
   if (patch.instanceSize !== undefined) set.instance_size = patch.instanceSize ?? null
+  // The task-estimator's triage; null clears it.
+  if (patch.estimate !== undefined) {
+    set.estimate = patch.estimate ? JSON.stringify(patch.estimate) : null
+  }
   return set
 }
 
@@ -234,6 +243,8 @@ export interface PipelineRow {
   enabled?: string | null
   /** Truthy (1) for the curated built-in catalog templates (migration 0002). */
   builtin?: number | boolean | null
+  /** Nullable JSON array of per-step consensus configs (parallel to agent_kinds). */
+  consensus?: string | null
 }
 
 export function rowToPipeline(row: PipelineRow): Pipeline {
@@ -244,6 +255,7 @@ export function rowToPipeline(row: PipelineRow): Pipeline {
     ...(row.gates ? { gates: JSON.parse(row.gates) as boolean[] } : {}),
     ...(row.thresholds ? { thresholds: JSON.parse(row.thresholds) as Pipeline['thresholds'] } : {}),
     ...(row.enabled ? { enabled: JSON.parse(row.enabled) as boolean[] } : {}),
+    ...(row.consensus ? { consensus: JSON.parse(row.consensus) as Pipeline['consensus'] } : {}),
     ...(row.builtin ? { builtin: true } : {}),
   }
 }

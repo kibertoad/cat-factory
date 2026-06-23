@@ -21,6 +21,7 @@ export function useWorkspaceStream() {
   const notifications = useNotificationsStore()
   const observability = useObservabilityStore()
   const requirements = useRequirementsStore()
+  const consensus = useConsensusStore()
   const api = useApi()
   const apiBase = useRuntimeConfig().public.apiBase
 
@@ -75,6 +76,11 @@ export function useWorkspaceStream() {
       // so an open review window / inspector reflects it live ("incorporating…" → the next
       // cycle / converged). The summons back, when needed, arrives as a `notification`.
       requirements.upsert(event.review)
+    } else if (event.type === 'consensus') {
+      // A consensus session advanced (a round landed, the synthesis completed, or it
+      // failed) — patch the cache so an open Consensus Session window renders the
+      // multi-model process live, round by round.
+      consensus.upsert(event.session)
     }
   }
 

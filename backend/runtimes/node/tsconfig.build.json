@@ -10,6 +10,7 @@
     { "path": "../../packages/spend/tsconfig.build.json" },
     { "path": "../../packages/prompt-fragments/tsconfig.build.json" },
     { "path": "../../packages/agents/tsconfig.build.json" },
+    { "path": "../../packages/consensus/tsconfig.build.json" },
     { "path": "../../packages/integrations/tsconfig.build.json" },
     { "path": "../../packages/orchestration/tsconfig.build.json" },
     { "path": "../../packages/provider-bedrock/tsconfig.build.json" },

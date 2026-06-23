@@ -73,6 +73,7 @@ import { PgBossBootstrapRunner } from './execution/bootstrapRunner.js'
 import { PgBossWorkRunner } from './execution/pgBossRunner.js'
 import { createNodeGateways } from './gateways.js'
 import { createNodeModelProviderResolver } from './modelProvider.js'
+import { ConsensusAgentExecutor, registerConsensusTraits } from '@cat-factory/consensus'
 import { NodeEventPublisher, type NodeRealtimeHub } from './realtime.js'
 import {
   DrizzleGitHubInstallationRepository,
@@ -129,6 +130,11 @@ const RUNNERS_CIPHER_INFO = 'cat-factory:runners'
 // fragment selector, and ONE core trace sink — instead of each call constructing its
 // own. Mirrors the Worker's `buildModelProvider` memoisation.
 const langfuseSinkCache = new WeakMap<AppConfig, CoreDependencies['llmTraceSink']>()
+
+/** Truthy env flag (`true`/`1`/`yes`). */
+function isTruthy(value: string | undefined): boolean {
+  return value === 'true' || value === '1' || value === 'yes'
+}
 
 /**
  * The Node model-provider RESOLVER (instrumented when Langfuse is on), shared per
@@ -787,7 +793,9 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
 
   // Always a composite: inline kinds run as one-shot LLM calls; repo-operating kinds
   // route to the container (and fail loudly when its prerequisites are unconfigured).
-  const agentExecutor = new CompositeAgentExecutor(inline, container)
+  // Optionally wrapped with the consensus mechanism below (after the event publisher
+  // is built, so live consensus pushes ride the same hub).
+  const standardAgentExecutor = new CompositeAgentExecutor(inline, container)
 
   // GitHub-issue tracker: file the tech-debt pipeline's issue through the workspace's
   // own GitHub App installation (per-tenant), resolving the service's repo from the
@@ -897,6 +905,23 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
         workspaceMountRepository: repos.workspaceMountRepository,
       })
     : undefined
+  // Optionally wrap the executor with the consensus mechanism (CONSENSUS_ENABLED). Off ⇒
+  // the standard composite, unchanged. Registers the capability traits + routes
+  // consensus-enabled steps through a multi-model process, persisting + pushing the
+  // transcript (same hub as run/board events).
+  const agentExecutor = isTruthy(env.CONSENSUS_ENABLED)
+    ? (registerConsensusTraits(),
+      new ConsensusAgentExecutor({
+        standard: standardAgentExecutor,
+        modelProviderResolver,
+        agentRouting: config.agents.routing,
+        resolveBlockModel: config.agents.resolveBlockModel,
+        resolveWorkspaceModelDefault,
+        sessionRepository: repos.consensusSessionRepository,
+        ...(executionEventPublisher ? { eventPublisher: executionEventPublisher } : {}),
+      }))
+    : standardAgentExecutor
+
   const notificationChannels: NotificationChannel[] = []
   if (executionEventPublisher)
     notificationChannels.push(new InAppNotificationChannel(executionEventPublisher))
@@ -1068,6 +1093,8 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     ...createCore(dependencies),
     config,
     agentRunRepository: repos.agentRunRepository,
+    // The consensus transcript store, for the read endpoint (window load / reload).
+    consensusSessionRepository: repos.consensusSessionRepository,
     gateways: createNodeGateways(env),
     // The vendor-credential (subscription token pool) service the shared controller
     // reads; present when the shared ENCRYPTION_KEY is configured.

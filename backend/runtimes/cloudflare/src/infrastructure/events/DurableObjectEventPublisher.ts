@@ -1,6 +1,7 @@
 import type {
   Block,
   BootstrapJob,
+  ConsensusSession,
   ExecutionInstance,
   LlmCallActivity,
   Notification,
@@ -63,6 +64,10 @@ export class DurableObjectEventPublisher implements ExecutionEventPublisher {
 
   async requirementReviewChanged(workspaceId: string, review: RequirementReview): Promise<void> {
     await this.publish(workspaceId, { type: 'requirements', review, at: Date.now() })
+  }
+
+  async consensusSessionChanged(workspaceId: string, session: ConsensusSession): Promise<void> {
+    await this.publish(workspaceId, { type: 'consensus', session, at: Date.now() })
   }
 
   private async publish(workspaceId: string, event: WorkspaceEvent): Promise<void> {

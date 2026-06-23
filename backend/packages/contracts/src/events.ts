@@ -3,6 +3,7 @@ import type { BootstrapJob } from './bootstrap.js'
 import type { Notification } from './notifications.js'
 import type { LlmCallActivity } from './observability.js'
 import type { RequirementReview } from './requirements.js'
+import type { ConsensusSession } from './consensus.js'
 
 // Real-time events pushed from the per-workspace events hub to subscribed
 // browsers over WebSocket, replacing the old `tick` polling. The shape is shared
@@ -52,3 +53,10 @@ export type WorkspaceEvent =
    * a summons.
    */
   | { type: 'requirements'; review: RequirementReview; at: number }
+  /**
+   * A consensus session advanced (a participant contributed, a round completed,
+   * the synthesis landed, or it failed). Carries the updated session transcript
+   * so an open Consensus Session window reflects the multi-model process live
+   * without a refetch.
+   */
+  | { type: 'consensus'; session: ConsensusSession; at: number }

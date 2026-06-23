@@ -183,6 +183,9 @@ export const blocks = pgTable(
     created_by: text('created_by'),
     // The responsible product person (usr_*): notified when requirement review flags it.
     responsible_product_user_id: text('responsible_product_user_id'),
+    // Task-level: the task-estimator's triage (complexity/risk/impact + rationale) as
+    // JSON; persisted on the block for gating consensus steps + UI ratings.
+    estimate: text('estimate'),
   },
   (t) => [
     primaryKey({ columns: [t.workspace_id, t.id] }),
@@ -253,6 +256,9 @@ export const pipelines = pgTable(
     // read-only catalog templates (mirror of D1 migration 0002).
     enabled: text('enabled'),
     builtin: integer('builtin'),
+    // Nullable JSON array of per-step consensus configs, parallel to agent_kinds (set in
+    // the pipeline builder for steps whose kind carries a consensus capability trait).
+    consensus: text('consensus'),
     // Monotonic insert sequence (Postgres has no SQLite rowid): a workspace's pipelines
     // are read back in the order they were seeded — the curated `seedPipelines()` order
     // — so the catalog order (and the UI's default `pipelines[0]`) is deterministic and
@@ -519,6 +525,37 @@ export const requirementReviews = pgTable(
     primaryKey({ columns: [t.workspace_id, t.id] }),
     // getByBlock looks up a block's reviews (newest wins), mirroring D1 migration 0021.
     index('idx_requirement_reviews_block').on(t.workspace_id, t.block_id),
+  ],
+)
+
+// Consensus session transcripts (mirror of D1 migration 0002): one row per
+// (execution, step) recording the multi-model process — participants, round-by-round
+// contributions/votes, and the synthesized result. The observability surface the
+// dedicated Consensus Session window renders; written by `@cat-factory/consensus`.
+export const consensusSessions = pgTable(
+  'consensus_sessions',
+  {
+    workspace_id: text('workspace_id').notNull(),
+    id: text('id').notNull(),
+    block_id: text('block_id').notNull(),
+    execution_id: text('execution_id'),
+    step_index: integer('step_index').notNull(),
+    agent_kind: text('agent_kind').notNull(),
+    strategy: text('strategy').notNull(),
+    status: text('status').notNull(),
+    participants: text('participants').notNull().default('[]'),
+    rounds: text('rounds').notNull().default('[]'),
+    synthesis: text('synthesis'),
+    confidence: doublePrecision('confidence'),
+    dissent: text('dissent').notNull().default('[]'),
+    error: text('error'),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+    updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.workspace_id, t.id] }),
+    index('idx_consensus_sessions_step').on(t.workspace_id, t.execution_id, t.step_index),
+    index('idx_consensus_sessions_block').on(t.workspace_id, t.block_id, t.created_at),
   ],
 )
 

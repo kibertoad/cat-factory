@@ -17,6 +17,7 @@ export {
   resolveInlineModelRef,
 } from './agents/runtime/routing.js'
 export { systemPromptFor, userPromptFor } from './agents/catalog.js'
+export { TASK_ESTIMATOR_AGENT_KIND } from './agents/prompts/roles.js'
 // Installation-level extension point for custom agent kinds (mirrors the model-provider
 // registry seam): a deployment registers extra kinds at startup and the prompt catalog +
 // the Worker's executor routing pick them up.
@@ -43,6 +44,8 @@ export {
   registerAgentTraits,
   registeredAgentTrait,
   clearRegisteredAgentTraits,
+  assignAgentTraits,
+  clearAssignedAgentTraits,
   traitsFor,
   hasTrait,
   traitGuidanceFor,

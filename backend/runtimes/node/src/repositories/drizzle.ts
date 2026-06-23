@@ -38,6 +38,8 @@ import type {
   RepoBlueprintRecord,
   RepoBlueprintRepository,
   BlueprintService,
+  ConsensusSession,
+  ConsensusSessionRepository,
   RequirementReview,
   RequirementReviewItem,
   RequirementReviewRepository,
@@ -81,6 +83,7 @@ import {
   accounts,
   agentRuns,
   blocks,
+  consensusSessions,
   emailConnections,
   llmCallMetrics,
   memberships,
@@ -297,6 +300,7 @@ class DrizzlePipelineRepository implements PipelineRepository {
       gates: pipeline.gates ? JSON.stringify(pipeline.gates) : null,
       thresholds: pipeline.thresholds ? JSON.stringify(pipeline.thresholds) : null,
       enabled: pipeline.enabled ? JSON.stringify(pipeline.enabled) : null,
+      consensus: pipeline.consensus ? JSON.stringify(pipeline.consensus) : null,
       builtin: pipeline.builtin ? 1 : null,
     })
   }
@@ -312,6 +316,7 @@ class DrizzlePipelineRepository implements PipelineRepository {
         gates: pipeline.gates ? JSON.stringify(pipeline.gates) : null,
         thresholds: pipeline.thresholds ? JSON.stringify(pipeline.thresholds) : null,
         enabled: pipeline.enabled ? JSON.stringify(pipeline.enabled) : null,
+        consensus: pipeline.consensus ? JSON.stringify(pipeline.consensus) : null,
       })
       .where(and(eq(pipelines.workspace_id, workspaceId), eq(pipelines.id, pipeline.id)))
   }
@@ -1742,6 +1747,129 @@ export class DrizzleRequirementReviewRepository implements RequirementReviewRepo
   }
 }
 
+type ConsensusSessionRow = typeof consensusSessions.$inferSelect
+
+function parseJsonArray<T>(raw: string): T[] {
+  try {
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? (parsed as T[]) : []
+  } catch {
+    return []
+  }
+}
+
+function rowToConsensusSession(row: ConsensusSessionRow): ConsensusSession {
+  return {
+    id: row.id,
+    blockId: row.block_id,
+    executionId: row.execution_id,
+    stepIndex: row.step_index,
+    agentKind: row.agent_kind,
+    strategy: row.strategy as ConsensusSession['strategy'],
+    status: row.status as ConsensusSession['status'],
+    participants: parseJsonArray(row.participants),
+    rounds: parseJsonArray(row.rounds),
+    synthesis: row.synthesis,
+    confidence: row.confidence,
+    dissent: parseJsonArray(row.dissent),
+    error: row.error,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }
+}
+
+/**
+ * Consensus session transcripts (`consensus_sessions`), the Drizzle/Postgres mirror of
+ * {@link D1ConsensusSessionRepository}. One row per (execution, step); the
+ * participants/rounds/dissent live as JSON columns, upserted as the process streams.
+ */
+export class DrizzleConsensusSessionRepository implements ConsensusSessionRepository {
+  constructor(private readonly db: DrizzleDb) {}
+
+  async get(workspaceId: string, id: string): Promise<ConsensusSession | null> {
+    const rows = await this.db
+      .select()
+      .from(consensusSessions)
+      .where(and(eq(consensusSessions.workspace_id, workspaceId), eq(consensusSessions.id, id)))
+      .limit(1)
+    return rows[0] ? rowToConsensusSession(rows[0]) : null
+  }
+
+  async getByStep(
+    workspaceId: string,
+    executionId: string,
+    stepIndex: number,
+  ): Promise<ConsensusSession | null> {
+    const rows = await this.db
+      .select()
+      .from(consensusSessions)
+      .where(
+        and(
+          eq(consensusSessions.workspace_id, workspaceId),
+          eq(consensusSessions.execution_id, executionId),
+          eq(consensusSessions.step_index, stepIndex),
+        ),
+      )
+      .orderBy(desc(consensusSessions.created_at))
+      .limit(1)
+    return rows[0] ? rowToConsensusSession(rows[0]) : null
+  }
+
+  async getByBlock(workspaceId: string, blockId: string): Promise<ConsensusSession | null> {
+    const rows = await this.db
+      .select()
+      .from(consensusSessions)
+      .where(
+        and(eq(consensusSessions.workspace_id, workspaceId), eq(consensusSessions.block_id, blockId)),
+      )
+      .orderBy(desc(consensusSessions.created_at))
+      .limit(1)
+    return rows[0] ? rowToConsensusSession(rows[0]) : null
+  }
+
+  async upsert(workspaceId: string, session: ConsensusSession): Promise<void> {
+    const values = {
+      workspace_id: workspaceId,
+      id: session.id,
+      block_id: session.blockId,
+      execution_id: session.executionId,
+      step_index: session.stepIndex,
+      agent_kind: session.agentKind,
+      strategy: session.strategy,
+      status: session.status,
+      participants: JSON.stringify(session.participants),
+      rounds: JSON.stringify(session.rounds),
+      synthesis: session.synthesis,
+      confidence: session.confidence ?? null,
+      dissent: JSON.stringify(session.dissent ?? []),
+      error: session.error ?? null,
+      created_at: session.createdAt,
+      updated_at: session.updatedAt,
+    }
+    await this.db
+      .insert(consensusSessions)
+      .values(values)
+      .onConflictDoUpdate({
+        target: [consensusSessions.workspace_id, consensusSessions.id],
+        set: {
+          block_id: values.block_id,
+          execution_id: values.execution_id,
+          step_index: values.step_index,
+          agent_kind: values.agent_kind,
+          strategy: values.strategy,
+          status: values.status,
+          participants: values.participants,
+          rounds: values.rounds,
+          synthesis: values.synthesis,
+          confidence: values.confidence,
+          dissent: values.dissent,
+          error: values.error,
+          updated_at: values.updated_at,
+        },
+      })
+  }
+}
+
 type MergePresetRow = typeof mergeThresholdPresets.$inferSelect
 
 function rowToMergePreset(row: MergePresetRow): MergeThresholdPreset {
@@ -1980,6 +2108,7 @@ export interface CoreRepositories {
   serviceRepository: ServiceRepository
   workspaceMountRepository: WorkspaceMountRepository
   requirementReviewRepository: RequirementReviewRepository
+  consensusSessionRepository: ConsensusSessionRepository
   mergePresetRepository: MergePresetRepository
   repoBlueprintRepository: RepoBlueprintRepository
 }
@@ -2006,6 +2135,7 @@ export function createDrizzleRepositories(db: DrizzleDb, clock: Clock): CoreRepo
     serviceRepository: new DrizzleServiceRepository(db),
     workspaceMountRepository: new DrizzleWorkspaceMountRepository(db),
     requirementReviewRepository: new DrizzleRequirementReviewRepository(db),
+    consensusSessionRepository: new DrizzleConsensusSessionRepository(db),
     mergePresetRepository: new DrizzleMergePresetRepository(db),
     repoBlueprintRepository: new DrizzleRepoBlueprintRepository(db),
   }

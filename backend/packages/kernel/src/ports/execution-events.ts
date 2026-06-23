@@ -1,6 +1,7 @@
 import type {
   Block,
   BootstrapJob,
+  ConsensusSession,
   ExecutionInstance,
   LlmCallActivity,
   Notification,
@@ -63,6 +64,13 @@ export interface ExecutionEventPublisher {
    * needed. Optional; a runtime with no real-time transport wired leaves it a no-op.
    */
   requirementReviewChanged?(workspaceId: string, review: RequirementReview): Promise<void>
+  /**
+   * A consensus session advanced (a participant contributed, a round completed, the
+   * synthesis landed, or it failed): push the updated transcript so an open Consensus
+   * Session window reflects the multi-model process live. Optional; a runtime with no
+   * real-time transport — or no consensus package wired — leaves it a no-op.
+   */
+  consensusSessionChanged?(workspaceId: string, session: ConsensusSession): Promise<void>
 }
 
 /**
@@ -77,4 +85,5 @@ export class NoopEventPublisher implements ExecutionEventPublisher {
   async notificationChanged(): Promise<void> {}
   async llmCallObserved(): Promise<void> {}
   async requirementReviewChanged(): Promise<void> {}
+  async consensusSessionChanged(): Promise<void> {}
 }

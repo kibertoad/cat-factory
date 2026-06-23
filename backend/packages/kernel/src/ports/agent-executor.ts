@@ -3,11 +3,13 @@ import type {
   AgentKind,
   BlockType,
   CloudProvider,
+  ConsensusStepConfig,
   EnvironmentAccessHandle,
   EnvironmentStatus,
   InstanceSize,
   PullRequestRef,
   StepSubtasks,
+  TaskEstimate,
 } from '../domain/types.js'
 
 // Port for "an agent doing its work". The execution engine calls this to perform
@@ -43,6 +45,14 @@ export interface AgentRunContext {
   stepIndex: number
   /** Whether this is the pipeline's last step (drives task finalisation). */
   isFinalStep: boolean
+  /**
+   * Consensus configuration for this step, when it is consensus-enabled in the
+   * pipeline (copied from the pipeline's `consensus` array onto the run's step).
+   * Read ONLY by the optional consensus executor (`@cat-factory/consensus`), which
+   * decides — possibly gated on `block.estimate` — whether to run the multi-model
+   * process or delegate to the standard single-actor agent. Absent ⇒ standard agent.
+   */
+  consensus?: ConsensusStepConfig | null
   block: {
     /** Stable block id (set by the engine; used by repo-aware executors). */
     id?: string
@@ -99,6 +109,13 @@ export interface AgentRunContext {
      * one. Absent until a step records a PR.
      */
     pullRequest?: PullRequestRef
+    /**
+     * The task-estimator's triage of this block (complexity / risk / impact), when
+     * a `task-estimator` step has run earlier in the pipeline. Read by the consensus
+     * executor to gate the (expensive) multi-model process against the step's
+     * configured thresholds. Absent until an estimate has been produced.
+     */
+    estimate?: TaskEstimate | null
   }
   /**
    * The collected requirements of every task under this block's service frame —

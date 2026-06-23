@@ -32,8 +32,10 @@ import {
   companionTargets,
   hasTrait,
   isCompanionKind,
+  TASK_ESTIMATOR_AGENT_KIND,
 } from '@cat-factory/agents'
 import { getFragment } from '@cat-factory/prompt-fragments'
+import { coerceTaskEstimate, summarizeEstimate } from '../estimation/estimate.logic.js'
 import { extractJson, hasNotesToIncorporate } from '../requirements/requirements.logic.js'
 import { reviewableArtifactOutput } from './artifact-review.logic.js'
 import {
@@ -663,6 +665,9 @@ export class ExecutionService {
           // recordStepResult). Copied from the pipeline definition at run start.
           requiresApproval: pipeline.gates?.[i] ?? false,
           approval: null,
+          // A consensus-enabled step runs through the multi-model mechanism (the consensus
+          // executor reads this off the context). Copied from the pipeline at run start.
+          ...(pipeline.consensus?.[i] ? { consensus: pipeline.consensus[i] } : {}),
           // A companion step carries its quality bar + rework budget, seeded from the
           // pipeline's per-step threshold (else the companion's default).
           ...(companionDef
@@ -1173,6 +1178,24 @@ export class ExecutionService {
     // must never be trusted), then nudge clients to refresh.
     if (result.spec !== undefined) {
       await this.ingestSpec(workspaceId, result.spec)
+    }
+
+    // A `task-estimator` step emits a JSON triage (complexity/risk/impact). Parse it
+    // tolerantly, persist it on the block (used to gate consensus steps + surfaced in
+    // the UI), and replace the raw JSON output with a readable summary. An unparseable
+    // estimate leaves the block untouched and keeps the raw output (no run failure).
+    // The estimate works the same whether the single-actor estimator or the consensus
+    // ranked-scoring variant produced the JSON — both land here.
+    if (step.agentKind === TASK_ESTIMATOR_AGENT_KIND) {
+      const estimate = coerceTaskEstimate(
+        step.output,
+        result.model ?? step.model ?? null,
+        this.clock.now(),
+      )
+      if (estimate) {
+        await this.blockRepository.update(workspaceId, instance.blockId, { estimate })
+        step.output = summarizeEstimate(estimate)
+      }
     }
 
     // A producer that emits a STRUCTURED ARTIFACT (the spec doc, the blueprint tree, …)
@@ -2744,6 +2767,10 @@ export class ExecutionService {
       ...(instance.initiatedBy != null ? { initiatedByUserId: instance.initiatedBy } : {}),
       stepIndex: instance.currentStep,
       isFinalStep,
+      // Consensus config for this step (copied onto the step at run start). Read only
+      // by the optional consensus executor, which decides — possibly gated on the
+      // block estimate below — whether to run the multi-model process. Absent ⇒ standard.
+      ...(step.consensus ? { consensus: step.consensus } : {}),
       block: {
         id: block.id,
         title: block.title,
@@ -2756,6 +2783,9 @@ export class ExecutionService {
         ...(block.pullRequest ? { pullRequest: block.pullRequest } : {}),
         ...(contextDocs.length ? { contextDocs } : {}),
         ...(contextTasks.length ? { contextTasks } : {}),
+        // The task-estimator's triage, when produced earlier in this run — the
+        // consensus executor's gating input.
+        ...(block.estimate ? { estimate: block.estimate } : {}),
       },
       ...(environment ? { environment } : {}),
       ...(service ? { service } : {}),

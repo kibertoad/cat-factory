@@ -97,6 +97,7 @@ import type {
   UpdateScheduleInput,
 } from '~/types/recurring'
 import type { TrackerSettings, PutTrackerSettingsInput } from '~/types/tracker'
+import type { ConsensusSession } from '~/types/consensus'
 
 type Position = { x: number; y: number }
 
@@ -670,6 +671,13 @@ export function useApi() {
     getRequirementReview: (workspaceId: string, blockId: string) =>
       http<RequirementReview | null>(
         `${ws(workspaceId)}/blocks/${encodeURIComponent(blockId)}/requirement-review`,
+      ),
+
+    // The latest consensus session for a block (`{ session: null }` when none / consensus
+    // off). The live transcript also arrives via the `consensus` stream event.
+    getConsensusSession: (workspaceId: string, blockId: string) =>
+      http<{ session: ConsensusSession | null }>(
+        `${ws(workspaceId)}/blocks/${encodeURIComponent(blockId)}/consensus-session`,
       ),
 
     replyRequirementItem: (workspaceId: string, reviewId: string, itemId: string, reply: string) =>

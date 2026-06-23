@@ -52,6 +52,12 @@ export interface FakeAgentOptions {
    */
   spec?: unknown
   /**
+   * The triage a `task-estimator` step emits (as JSON output the engine parses onto
+   * `block.estimate`). Omitted ⇒ a deterministic default, so the persistence round-trip
+   * can be asserted identically across runtimes.
+   */
+  taskEstimate?: { complexity: number; risk: number; impact: number; rationale: string }
+  /**
    * Overall quality rating (0..1) every companion step returns, so the engine's
    * companion review + rework loop can be exercised deterministically. When omitted a
    * companion returns a passing rating of 1.
@@ -201,6 +207,19 @@ export class FakeAgentExecutor implements AgentExecutor {
     // The `fixer` step just reports success so the engine re-dispatches the Tester.
     if (context.agentKind === 'fixer') {
       return { output: `[fixer] applied fixes for "${context.block.title}"`, model: 'fake' }
+    }
+
+    // The `task-estimator` step emits a JSON triage the engine parses + persists onto
+    // `block.estimate` (the new column on both stores). Deterministic so the conformance
+    // suite can assert the round-trip is identical across runtimes.
+    if (context.agentKind === 'task-estimator') {
+      const estimate = this.options.taskEstimate ?? {
+        complexity: 0.7,
+        risk: 0.8,
+        impact: 0.6,
+        rationale: 'fake estimate',
+      }
+      return { output: JSON.stringify(estimate), model: 'fake' }
     }
 
     const confidence = this.options.confidence ?? 1
