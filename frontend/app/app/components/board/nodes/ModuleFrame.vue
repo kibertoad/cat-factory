@@ -2,6 +2,7 @@
 import DraggableTask from './DraggableTask.vue'
 import { MODULE_META } from '~/utils/catalog'
 import { useBlockDrag } from '~/composables/useBlockDrag'
+import { useFrameResize } from '~/composables/useFrameResize'
 
 const props = defineProps<{ moduleId: string }>()
 const board = useBoardStore()
@@ -22,6 +23,14 @@ const { draggingId, startDrag } = useBlockDrag()
 // modules move within their service but don't get reparented
 function onHandle(e: PointerEvent) {
   if (mod.value) startDrag(mod.value, e)
+}
+
+// Miro-style resizing, same as a service frame: drag the right / bottom edges or
+// the corner. The composable clamps to the module's content extent and persists
+// the size on release.
+const { startResize } = useFrameResize()
+function onResize(e: PointerEvent, edge: 'e' | 's' | 'se') {
+  if (mod.value) startResize(mod.value, e, edge)
 }
 </script>
 
@@ -62,6 +71,27 @@ function onHandle(e: PointerEvent) {
     <!-- drop zone for this module's tasks -->
     <div :data-drop-zone="mod.id" class="relative" :style="{ height: size.h - 30 + 'px' }">
       <DraggableTask v-for="t in tasks" :key="t.id" :task-id="t.id" />
+    </div>
+
+    <!-- resize handles (drag the borders to resize the module, Miro-style) -->
+    <div
+      class="nodrag absolute right-0 top-0 h-full w-2 cursor-ew-resize hover:bg-violet-400/20"
+      title="Drag to resize"
+      @pointerdown="onResize($event, 'e')"
+    />
+    <div
+      class="nodrag absolute bottom-0 left-0 h-2 w-full cursor-ns-resize hover:bg-violet-400/20"
+      title="Drag to resize"
+      @pointerdown="onResize($event, 's')"
+    />
+    <div
+      class="nodrag absolute bottom-0 right-0 h-4 w-4 cursor-nwse-resize"
+      title="Drag to resize"
+      @pointerdown="onResize($event, 'se')"
+    >
+      <span
+        class="absolute bottom-1 right-1 h-2 w-2 rounded-sm border-b-2 border-r-2 border-violet-400/60"
+      />
     </div>
   </div>
 </template>
