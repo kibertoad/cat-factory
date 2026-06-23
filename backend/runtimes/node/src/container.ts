@@ -21,18 +21,20 @@ import {
   TicketTrackerService,
   createGitHubIssueViaToken,
 } from '@cat-factory/integrations'
-import type {
-  AgentExecutor,
-  Clock,
-  DocumentSourceProvider,
-  FragmentOwnerKind,
-  GitHubClient,
-  GitHubInstallationRepository,
-  ModelProviderResolver,
-  RateLimitRepository,
-  RateLimitSnapshot,
-  TaskConnectionRepository,
-  TaskSourceProvider,
+import {
+  type AgentExecutor,
+  type Clock,
+  type DocumentSourceProvider,
+  type FragmentOwnerKind,
+  type GitHubClient,
+  type GitHubInstallationRepository,
+  type ModelProviderResolver,
+  type NotificationChannel,
+  type RateLimitRepository,
+  type RateLimitSnapshot,
+  type TaskConnectionRepository,
+  type TaskSourceProvider,
+  CompositeNotificationChannel,
 } from '@cat-factory/kernel'
 import { type CoreDependencies, createCore } from '@cat-factory/orchestration'
 import { createLangfuseSink } from '@cat-factory/observability-langfuse'
@@ -45,12 +47,14 @@ import {
   ContainerAgentExecutor,
   ContainerRepoBootstrapper,
   ContainerSessionService,
+  FanOutEventPublisher,
   FetchGitHubClient,
   GitHubAppAuth,
   GitHubAppRegistry,
   GitHubCiStatusProvider,
   GitHubMergeabilityProvider,
   GitHubPullRequestMerger,
+  InAppNotificationChannel,
   WebCryptoPasswordHasher,
   WebCryptoPersonalSecretCipher,
   WebCryptoSecretCipher,
@@ -69,6 +73,7 @@ import { PgBossBootstrapRunner } from './execution/bootstrapRunner.js'
 import { PgBossWorkRunner } from './execution/pgBossRunner.js'
 import { createNodeGateways } from './gateways.js'
 import { createNodeModelProviderResolver } from './modelProvider.js'
+import { NodeEventPublisher, type NodeRealtimeHub } from './realtime.js'
 import {
   DrizzleGitHubInstallationRepository,
   DrizzleRunnerPoolConnectionRepository,
@@ -333,6 +338,15 @@ export interface NodeContainerOptions {
    * off for parity). Undefined → derived from the REST credentials being present.
    */
   cloudflareModelsEnabled?: boolean
+  /**
+   * The real-time subscriber registry. When provided, the container wires a
+   * {@link NodeEventPublisher} (so the engine pushes execution/board/notification events
+   * to subscribed browsers) and composes an in-app notification channel. `start()`
+   * creates the hub and attaches it to the HTTP server via {@link attachRealtime};
+   * `createServer`/tests leave it unset and the engine falls back to the no-op publisher
+   * (no live push), exactly as before.
+   */
+  realtimeHub?: NodeRealtimeHub
 }
 
 /**
@@ -871,6 +885,29 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     mintInstallationToken: bootstrapMintInstallationToken,
   })
 
+  // Real-time push + notification delivery. When a realtime hub is wired (start()), the
+  // engine pushes execution/board/notification events to subscribed browsers via the
+  // NodeEventPublisher, decorated with FanOutEventPublisher so a shared service's live
+  // events reach EVERY board that mounts it (parity with the Worker's selectEventPublisher).
+  // The in-app push is also a notification channel, composed alongside Slack (when
+  // enabled) so a raised notification both lands in the inbox live AND fans to Slack.
+  const slackDeps = selectNodeSlackDeps(config, options.db, repos)
+  const executionEventPublisher = options.realtimeHub
+    ? new FanOutEventPublisher(new NodeEventPublisher(options.realtimeHub), {
+        workspaceMountRepository: repos.workspaceMountRepository,
+      })
+    : undefined
+  const notificationChannels: NotificationChannel[] = []
+  if (executionEventPublisher)
+    notificationChannels.push(new InAppNotificationChannel(executionEventPublisher))
+  if (slackDeps.notificationChannel) notificationChannels.push(slackDeps.notificationChannel)
+  const notificationChannel =
+    notificationChannels.length === 0
+      ? undefined
+      : notificationChannels.length === 1
+        ? notificationChannels[0]
+        : new CompositeNotificationChannel(notificationChannels)
+
   const dependencies: CoreDependencies = {
     workspaceRepository: repos.workspaceRepository,
     accountRepository: repos.accountRepository,
@@ -1007,9 +1044,9 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
       modelProviderResolver,
     ),
     // Slack: an extra notification transport (the channel) + its management module.
-    // Default-off; when enabled it composes the Slack channel onto the notification
-    // mechanism, identically to the Worker.
-    ...selectNodeSlackDeps(config, options.db, repos),
+    // Default-off; when enabled its channel is composed into `notificationChannel` below
+    // alongside the in-app push, identically to the Worker.
+    ...slackDeps,
     // Account invitations + per-account email senders (UI-onboarded, DB-stored).
     ...selectNodeEmailInvitationDeps(config, repos),
     // The pipeline-start guard resolves what's configured for a workspace + initiator.
@@ -1019,6 +1056,11 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
         workspaceId,
         initiatedBy,
       ),
+    // Real-time push (when a hub is wired) + the composed notification channel (in-app
+    // push + Slack). These come AFTER the spreads so the composite replaces the bare
+    // Slack channel `slackDeps` set; both are absent (no override) when nothing is wired.
+    ...(executionEventPublisher ? { executionEventPublisher } : {}),
+    ...(notificationChannel ? { notificationChannel } : {}),
     ...options.overrides,
   }
 

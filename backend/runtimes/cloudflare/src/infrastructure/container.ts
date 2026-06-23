@@ -38,6 +38,7 @@ import {
   buildResolveRepoTarget as buildSharedResolveRepoTarget,
   ensureWorkBranchViaRest,
   FanOutEventPublisher,
+  InAppNotificationChannel,
   WebCryptoPasswordHasher,
   WebCryptoPersonalSecretCipher,
   createWebSearchUpstreamFromEnv,
@@ -120,7 +121,6 @@ import { D1PipelineScheduleRepository } from './repositories/D1PipelineScheduleR
 import { D1TrackerSettingsRepository } from './repositories/D1TrackerSettingsRepository'
 import { D1ModelDefaultsRepository } from './repositories/D1ModelDefaultsRepository'
 import { D1ServiceFragmentDefaultsRepository } from './repositories/D1ServiceFragmentDefaultsRepository'
-import { InAppNotificationChannel } from './events/InAppNotificationChannel'
 import { GitHubCiStatusProvider } from './github/GitHubCiStatusProvider'
 import { GitHubMergeabilityProvider } from './github/GitHubMergeabilityProvider'
 import { GitHubPullRequestMerger } from './github/GitHubPullRequestMerger'

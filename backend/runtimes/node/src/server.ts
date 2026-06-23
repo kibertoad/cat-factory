@@ -23,6 +23,7 @@ import {
 import { startBootstrapWorker } from './execution/bootstrapRunner.js'
 import { startEnvironmentSweeper } from './environments.js'
 import { startScheduleSweeper } from './recurring.js'
+import { NodeRealtimeHub, attachRealtime } from './realtime.js'
 import { createDrizzleRepositories } from './repositories/drizzle.js'
 import { DrizzleSubscriptionActivationRepository } from './repositories/personalSubscription.js'
 import { startRetentionSweeper } from './retention.js'
@@ -111,7 +112,13 @@ export async function start(
   const clock = new SystemClock()
   const repos = createDrizzleRepositories(db, clock)
   const buildContainer = options.buildContainer ?? buildNodeContainer
-  const container = buildContainer({ db, boss, env, repos })
+  // The per-workspace real-time subscriber registry. Created here (not in the container
+  // builder) because it must be shared between the engine's event publisher — wired
+  // inside the container — and the HTTP server's WebSocket upgrade listener attached
+  // below. The local facade's builder forwards this option to buildNodeContainer
+  // unchanged, so local mode gets live updates too.
+  const realtimeHub = new NodeRealtimeHub()
+  const container = buildContainer({ db, boss, env, repos, realtimeHub })
 
   const runtime = executionRuntime(container.config, env)
   // The decision-timeout worker creates its queue first so the advance worker's send to
@@ -151,6 +158,10 @@ export async function start(
   const port = Number(env.PORT ?? 8787)
   const host = options.host ?? env.HOST?.trim() ?? undefined
   const server = serve({ fetch: app.fetch, port, ...(host ? { hostname: host } : {}) })
+  // Accept the SPA's WebSocket event-stream upgrades on the same listener and push the
+  // engine's events to subscribers (the Worker uses a per-workspace Durable Object;
+  // `@hono/node-server` doesn't upgrade on its own, so we attach a `ws` server here).
+  const stopRealtime = attachRealtime(server, realtimeHub, container.config.auth, logger)
   logger.info({ port, host: host ?? '0.0.0.0' }, 'cat-factory node server listening')
 
   // Ordered graceful shutdown: stop accepting connections, halt the sweeper + pg-boss
@@ -165,6 +176,7 @@ export async function start(
     stopRetention()
     stopScheduleSweeper()
     stopEnvironmentSweeper()
+    stopRealtime()
     await new Promise<void>((resolve) => server.close(() => resolve()))
     try {
       await boss.stop()

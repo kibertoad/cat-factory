@@ -1,6 +1,7 @@
 ---
 '@cat-factory/node-server': minor
 '@cat-factory/local-server': minor
+'@cat-factory/app': minor
 ---
 
 Local mode can link GitHub repos with the PAT, lighting up the "Add from existing
@@ -26,3 +27,7 @@ through the PAT-backed client:
 and re-exports `DrizzleGitHubInstallationRepository`. This is a local-mode differentiator
 (like the Docker runner and PAT token source); the Cloudflare/Node-proper facades keep
 using the GitHub App.
+
+The "Add from existing repo" picker also gains a search/filter input (filter by
+owner/name, with a "showing X of Y" count), since a PAT or wide App install can expose
+hundreds of repos that overflowed the plain dropdown.

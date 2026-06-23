@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import { HmacSigner, TOKEN_AUDIENCE } from '../../auth/signing.js'
+import { WS_TICKET_TTL_MS, authorizeWsUpgrade, mintWsTicket } from '../../auth/wsTicket.js'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
 
@@ -20,16 +20,11 @@ import { param } from '../../http/params.js'
  *
  * The default-deny gate (in the facade's app) bypasses only the exact GET upgrade;
  * the per-workspace authorization middleware enforces ownership on the POST mint.
+ *
+ * The ticket mint/verify primitives live in {@link ../../auth/wsTicket.js} so the Node
+ * facade (which handles the upgrade in its HTTP-server `upgrade` listener, not through
+ * this controller) authorises identically.
  */
-
-/** Ticket lifetime: just long enough to open the socket. */
-const WS_TICKET_TTL_MS = 60 * 1000
-
-interface WsTicket {
-  aud: typeof TOKEN_AUDIENCE.wsTicket
-  workspaceId: string
-  exp: number
-}
 
 export function eventsController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
@@ -40,15 +35,9 @@ export function eventsController(): Hono<AppEnv> {
   app.post('/workspaces/:workspaceId/events/ticket', async (c) => {
     const cfg = c.get('container').config.auth
     const workspaceId = param(c, 'workspaceId')
-    // Auth disabled (dev): the handshake is open, so no ticket is needed.
-    if (!cfg.enabled) return c.json({ ticket: '' })
-    const ticket: WsTicket = {
-      aud: TOKEN_AUDIENCE.wsTicket,
-      workspaceId,
-      exp: Date.now() + WS_TICKET_TTL_MS,
-    }
-    const signed = await new HmacSigner(cfg.sessionSecret).sign(ticket)
-    return c.json({ ticket: signed, expiresInMs: WS_TICKET_TTL_MS })
+    const ticket = await mintWsTicket(cfg, workspaceId)
+    // Auth disabled (dev) yields an empty ticket: the handshake is open, none needed.
+    return c.json(ticket ? { ticket, expiresInMs: WS_TICKET_TTL_MS } : { ticket: '' })
   })
 
   app.get('/workspaces/:workspaceId/events', async (c) => {
@@ -58,17 +47,8 @@ export function eventsController(): Hono<AppEnv> {
 
     const cfg = c.get('container').config.auth
     const workspaceId = param(c, 'workspaceId')
-    if (cfg.enabled) {
-      const ticket = await new HmacSigner(cfg.sessionSecret).verify<WsTicket>(
-        c.req.query('ticket'),
-        { aud: TOKEN_AUDIENCE.wsTicket },
-      )
-      // Reject a missing/invalid ticket, or one minted for a different workspace.
-      if (!ticket || ticket.workspaceId !== workspaceId) return c.text('unauthorized', 401)
-    } else if (!cfg.devOpen) {
-      // Mirror requireAuth: fail closed when auth is unconfigured in production.
-      return c.text('authentication is required but not configured', 503)
-    }
+    const auth = await authorizeWsUpgrade(cfg, c.req.query('ticket'), workspaceId)
+    if (!auth.ok) return c.text(auth.message, auth.status)
 
     // The actual upgrade is the runtime differentiator (Durable Object on the
     // Worker, a WebSocket hub on Node) — delegate to the realtime gateway.

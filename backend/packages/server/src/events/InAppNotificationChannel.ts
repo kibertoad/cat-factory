@@ -11,10 +11,11 @@ import type {
  * the NotificationService, so this is purely the live push — best-effort, errors
  * swallowed by the publisher.
  *
- * This is the only channel today; future EmailNotificationChannel /
- * SlackNotificationChannel implement the same {@link NotificationChannel} port and
- * are composed alongside it via CompositeNotificationChannel, with no change to the
- * code that raises notifications.
+ * Runtime-neutral: it wraps whatever {@link ExecutionEventPublisher} a facade wires
+ * (the Worker's Durable-Object publisher, the Node service's WebSocket-hub publisher),
+ * so both facades deliver in-app notifications through the same channel. Composed
+ * alongside Slack/email channels via CompositeNotificationChannel, with no change to
+ * the code that raises notifications.
  */
 export class InAppNotificationChannel implements NotificationChannel {
   constructor(private readonly publisher: ExecutionEventPublisher) {}

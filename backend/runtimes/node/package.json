@@ -46,12 +46,14 @@
     "drizzle-orm": "1.0.0-rc.3",
     "hono": "^4.12.26",
     "pg": "^8.22.0",
-    "pg-boss": "^12.19.1"
+    "pg-boss": "^12.19.1",
+    "ws": "^8.18.0"
   },
   "devDependencies": {
     "@cat-factory/conformance": "workspace:*",
     "@types/node": "^24.13.2",
     "@types/pg": "^8.20.0",
+    "@types/ws": "^8.5.13",
     "drizzle-kit": "1.0.0-rc.3",
     "typescript": "7.0.1-rc",
     "vitest": "^4.1.9"

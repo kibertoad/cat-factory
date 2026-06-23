@@ -79,6 +79,7 @@ export {
   FanOutEventPublisher,
   type FanOutEventPublisherDependencies,
 } from './events/FanOutEventPublisher.js'
+export { InAppNotificationChannel } from './events/InAppNotificationChannel.js'
 export { mountAuthGate } from './http/authGate.js'
 export { param } from './http/params.js'
 export { jsonBody } from './http/validation.js'
@@ -130,6 +131,13 @@ export {
   type SessionUser,
   type TokenAudience,
 } from './auth/signing.js'
+export {
+  WS_TICKET_TTL_MS,
+  authorizeWsUpgrade,
+  mintWsTicket,
+  type WsTicket,
+  type WsUpgradeAuth,
+} from './auth/wsTicket.js'
 export type {
   AgentsConfig,
   AppConfig,
