@@ -1,8 +1,19 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import type { AgentKind } from '~/types/domain'
+import { OBSERVABILITY_GATE_ARCHETYPE } from '~/utils/catalog'
 
 const agents = useAgentsStore()
+const releaseHealth = useReleaseHealthStore()
 defineEmits<{ (e: 'add', kind: AgentKind): void }>()
+
+// The post-release-health gate is only meaningful — and only accepted by the backend —
+// with an observability integration connected, so it appears in the palette ONLY then.
+const palette = computed(() =>
+  releaseHealth.connection.connected
+    ? [...agents.archetypes, OBSERVABILITY_GATE_ARCHETYPE]
+    : agents.archetypes,
+)
 </script>
 
 <template>
@@ -10,7 +21,7 @@ defineEmits<{ (e: 'add', kind: AgentKind): void }>()
     <p class="px-1 text-[11px] text-slate-500">Click an agent to append it to the pipeline.</p>
     <div class="space-y-1.5">
       <button
-        v-for="a in agents.archetypes"
+        v-for="a in palette"
         :key="a.kind"
         type="button"
         class="flex w-full items-center gap-2.5 rounded-lg border border-slate-700 bg-slate-800/60 p-2 text-left transition hover:border-slate-500 hover:bg-slate-800"

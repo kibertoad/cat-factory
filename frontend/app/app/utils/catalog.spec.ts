@@ -70,6 +70,7 @@ describe('catalog', () => {
       'ci',
       'ci-fixer',
       'merger',
+      'post-release-health',
     ]) {
       expect(agentKindMeta(kind)).toBe(SYSTEM_AGENT_META[kind])
       expect(agentKindMeta(kind).icon).toEqual(expect.any(String))

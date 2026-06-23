@@ -178,22 +178,17 @@ export function seedPipelines(): Pipeline[] {
         'conflicts',
         'ci',
         'merger',
-        // After merge, watch the deployed release's Datadog monitors/SLOs; on a
-        // regression spawn the on-call agent to investigate (a human decides revert).
-        // Passes through instantly when Datadog / the block's monitors aren't configured.
-        'post-release-health',
       ],
       // Gate only the context requirements review (index 0) and the architecture
       // proposal (`architect`, index 3). The spec is NO LONGER human-gated — its
       // `spec-companion` (index 2) is the quality gate (rate + automatic rework). The
-      // `mocker` / `tester` / `conflicts` / `ci` / `merger` / `post-release-health` tail
+      // `mocker` / `tester` / `conflicts` / `ci` / `merger` tail
       // is never human-gated (it gates/decides itself), so those slots are false too.
       gates: [
         true,
         false,
         false,
         true,
-        false,
         false,
         false,
         false,
@@ -253,7 +248,6 @@ export function seedPipelines(): Pipeline[] {
         'conflicts',
         'ci',
         'merger',
-        'post-release-health',
       ],
       // Human gates: the context requirements review (index 0) and — after its
       // companion has cleared the quality bar — the architecture (on `architect-
@@ -268,7 +262,6 @@ export function seedPipelines(): Pipeline[] {
         false,
         false,
         true,
-        false,
         false,
         false,
         false,
@@ -305,23 +298,13 @@ export function seedPipelines(): Pipeline[] {
         'conflicts',
         'ci',
         'merger',
-        'post-release-health',
       ],
-      gates: [false, true, false, false, false, false, false, false, false, false],
+      gates: [false, true, false, false, false, false, false, false, false],
     },
     {
       id: 'pl_quick',
       name: 'Quick implement',
-      agentKinds: [
-        'coder',
-        'blueprints',
-        'mocker',
-        'tester',
-        'conflicts',
-        'ci',
-        'merger',
-        'post-release-health',
-      ],
+      agentKinds: ['coder', 'blueprints', 'mocker', 'tester', 'conflicts', 'ci', 'merger'],
     },
     // The leanest end-to-end build: implement → review → test, then the standard
     // mergeability / CI / merge tail. The `coder` (Implementer) writes the change,
@@ -332,16 +315,7 @@ export function seedPipelines(): Pipeline[] {
     {
       id: 'pl_simple',
       name: 'Simple',
-      agentKinds: [
-        'coder',
-        'reviewer',
-        'mocker',
-        'tester',
-        'conflicts',
-        'ci',
-        'merger',
-        'post-release-health',
-      ],
+      agentKinds: ['coder', 'reviewer', 'mocker', 'tester', 'conflicts', 'ci', 'merger'],
     },
     {
       id: 'pl_integrate',
@@ -365,7 +339,6 @@ export function seedPipelines(): Pipeline[] {
         'conflicts',
         'ci',
         'merger',
-        'post-release-health',
       ],
     },
     {
@@ -382,7 +355,6 @@ export function seedPipelines(): Pipeline[] {
         'conflicts',
         'ci',
         'merger',
-        'post-release-health',
       ],
     },
     // A blueprint-only pipeline, run after a bootstrap to create the initial

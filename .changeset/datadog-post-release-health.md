@@ -14,11 +14,16 @@
 
 Datadog post-release-health gate + Agent-On-Call.
 
-After a release ships, a new **`post-release-health`** polling gate (the last step of
-the standard pipelines, after `merger`) watches the team's Datadog **monitors/SLOs** over
-a monitoring window. It reuses the existing gate machinery (`ci`/`conflicts`): a clean
-window advances with nothing spun up; a regression escalates — Datadog credentials stay on
-the backend and never enter containers.
+After a release ships, a new **`post-release-health`** polling gate watches the team's
+Datadog **monitors/SLOs** over a monitoring window. It reuses the existing gate machinery
+(`ci`/`conflicts`): a clean window advances with nothing spun up; a regression escalates —
+Datadog credentials stay on the backend and never enter containers.
+
+The gate is **opt-in**: it is NOT in any default pipeline. A user adds it deliberately in
+the pipeline builder, and it only appears in the palette — and is only accepted by the
+backend — once the workspace has an **observability integration connected** (today a
+Datadog connection). `PipelineService` rejects a `create`/`update` that adds an enabled
+`post-release-health` step otherwise.
 
 - **No blind revert.** On a regression the gate dispatches an **`on-call`** container agent
   that clones the base branch (the merged release; the work branch is deleted on merge),
@@ -44,6 +49,5 @@ the backend and never enter containers.
   columns) ⇄ Drizzle/Postgres, wired in both the Cloudflare Worker and Node/local facades.
 - New harness route `POST /on-call`; the executor-harness image is bumped to `1.7.1`.
 
-**Breaking (pre-1.0, acceptable):** the standard seeded pipelines gain a trailing
-`post-release-health` step and `merge_threshold_presets` gains two columns — stale rows are
-re-seeded with the defaults.
+**Breaking (pre-1.0, acceptable):** `merge_threshold_presets` gains two columns — stale rows
+are re-seeded with the defaults.
