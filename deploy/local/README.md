@@ -42,6 +42,33 @@ the durable execution worker, and serves the shared HTTP API. Agent jobs reach t
 LLM through this service's `/v1` proxy (no provider key needs to live in the
 container), addressed at `host.docker.internal` from inside Docker.
 
+`pnpm start` serves the JSON API only. For the board UI run the frontend too (next
+section). You don't need `GITHUB_PAT` to boot: with it unset the service starts and the
+UI shows a banner linking to GitHub's token page (scopes pre-selected); set the token
+and restart to actually run repo-operating agent steps.
+
+`ENCRYPTION_KEY` is generated per process when unset, so a stock boot works with no
+config. If you DO set it, it must be valid base64 of at least 32 bytes (e.g.
+`openssl rand -base64 32`); a non-base64 value like `dummy` fails the cipher at boot
+with `InvalidCharacterError`. Set it explicitly to keep encrypted-at-rest credentials
+(integration tokens, personal subscriptions) decryptable across restarts; otherwise a
+fresh per-process key means they have to be re-entered after each restart.
+
+## Open the UI
+
+The board is a separate SPA ([`deploy/frontend`](../frontend)), not served by this
+process. Run it pointed at this API:
+
+```sh
+cd ../frontend
+pnpm dev                      # Nuxt dev server on http://localhost:3000
+```
+
+`apiBase` defaults to `http://localhost:8787` (this service), so no extra config is
+needed when you keep the default `PORT`. Open http://localhost:3000. CORS allows any
+origin when `CORS_ALLOWED_ORIGINS` is unset (the local default), and the auth gate is
+open in local mode, so the board loads straight away.
+
 ## How a target repo is linked
 
 Container agent steps resolve which repo to operate on from the `github_repos` /
