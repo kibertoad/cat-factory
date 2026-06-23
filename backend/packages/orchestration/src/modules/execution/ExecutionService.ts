@@ -5,7 +5,6 @@ import type {
   BlueprintService,
   CiStatusProvider,
   ExecutionInstance,
-  MergeAssessment,
   MergePresetRepository,
   Pipeline,
   PipelineStep,
@@ -17,13 +16,8 @@ import type {
 } from '@cat-factory/kernel'
 import {
   parseBlueprintService,
-  parseMergeAssessment,
   parseSpecDoc,
-  parseCompanionAssessment,
-  parseTestReport,
   DEFAULT_COMPANION_MAX_ATTEMPTS,
-  type CompanionAssessment,
-  type TestReport,
 } from '@cat-factory/contracts'
 import {
   companionFor,
@@ -32,7 +26,7 @@ import {
   TASK_ESTIMATOR_AGENT_KIND,
 } from '@cat-factory/agents'
 import { coerceTaskEstimate, summarizeEstimate } from '../estimation/estimate.logic.js'
-import { extractJson, hasNotesToIncorporate } from '../requirements/requirements.logic.js'
+import { hasNotesToIncorporate } from '../requirements/requirements.logic.js'
 import { reviewableArtifactOutput } from './artifact-review.logic.js'
 import {
   resolveIndividualVendors,
@@ -66,9 +60,11 @@ import {
   TRACKER_AGENT_KIND,
   ANALYSIS_AGENT_KIND,
   TESTER_AGENT_KIND,
-  FIXER_AGENT_KIND,
 } from './ci.logic.js'
 import { AgentContextBuilder } from './AgentContextBuilder.js'
+import { CompanionController } from './CompanionController.js'
+import { MergeResolver } from './MergeResolver.js'
+import { TesterController } from './TesterController.js'
 import type { GateDefinition, GateProbe } from './gates.js'
 import type { NotificationService } from '../notifications/NotificationService.js'
 import type { RequirementReviewService } from '../requirements/RequirementReviewService.js'
@@ -89,12 +85,7 @@ import type {
   WorkspaceRepository,
 } from '@cat-factory/kernel'
 import type { Clock, IdGenerator } from '@cat-factory/kernel'
-import type {
-  AgentExecutor,
-  AgentRunContext,
-  AgentRunResult,
-  AgentTokenUsage,
-} from '@cat-factory/kernel'
+import type { AgentExecutor, AgentRunContext, AgentRunResult } from '@cat-factory/kernel'
 import { isAsyncAgentExecutor } from '@cat-factory/kernel'
 import type { WorkRunner } from '@cat-factory/kernel'
 import type { ExecutionEventPublisher } from '@cat-factory/kernel'
@@ -139,33 +130,6 @@ const EXECUTION_FAILURE_HINTS: Partial<Record<AgentFailureKind, string>> = {
     'A companion agent could not return a usable quality assessment (its reply was truncated or malformed) even after a repair retry. Review the companion’s raw output on the run, then retry.',
   cancelled: 'You stopped this run; its container was killed. Retry to start it again.',
   unknown: 'The run failed for an unclassified reason. Review the run, then retry.',
-}
-
-/** Format a 0..1 score as a rounded percentage for notification copy. */
-function pct(score: number): string {
-  return `${Math.round(score * 100)}%`
-}
-
-/** Parse a companion's JSON verdict from a model reply, or `undefined` if it won't parse. */
-function parseCompanionOrUndefined(output: string | undefined): CompanionAssessment | undefined {
-  try {
-    return parseCompanionAssessment(extractJson(output ?? ''))
-  } catch {
-    return undefined
-  }
-}
-
-/** Sum the token usage of two model calls (for the companion's repair retry). */
-function sumUsage(
-  a: AgentTokenUsage | undefined,
-  b: AgentTokenUsage | undefined,
-): AgentTokenUsage | undefined {
-  if (!a) return b
-  if (!b) return a
-  return {
-    inputTokens: a.inputTokens + b.inputTokens,
-    outputTokens: a.outputTokens + b.outputTokens,
-  }
 }
 
 export interface ExecutionServiceDependencies {
@@ -345,6 +309,12 @@ export class ExecutionService {
   private readonly environmentProvisioning?: EnvironmentProvisioningService
   /** Assembles the per-step agent context (requirements, docs, env, service frame, fragments). */
   private readonly contextBuilder: AgentContextBuilder
+  /** Resolves a `merger` step's assessment into an auto-merge or a `merge_review` notification. */
+  private readonly mergeResolver: MergeResolver
+  /** Drives a companion (reviewer/spec/architect) step: grade → pass / loop producer / park. */
+  private readonly companionController: CompanionController
+  /** Drives the Tester gate's fix loop: report → greenlight / dispatch fixer / fail. */
+  private readonly testerController: TesterController
   private readonly blueprintReconciler?: BlueprintReconciler
   private readonly notificationService?: NotificationService
   private readonly llmObservability?: LlmObservabilityService
@@ -421,6 +391,40 @@ export class ExecutionService {
       requirementReviews: requirementReviewRepository,
       clarityReviews: clarityReviewRepository,
       environmentProvisioning,
+    })
+    this.mergeResolver = new MergeResolver({
+      blockRepository,
+      notificationService,
+      resolveMergePreset: (ws, block) => this.resolveMergePreset(ws, block),
+      finalizeMerge: (ws, blockId) => this.finalizeMerge(ws, blockId),
+    })
+    this.companionController = new CompanionController({
+      contextBuilder: this.contextBuilder,
+      spend: spendService,
+      idGenerator,
+      previewStepModel: (ctx) => this.previewStepModel(ctx),
+      runAgent: (ctx, opts) => this.runAgent(ctx, opts),
+      finishStep: (s) => this.finishStep(s),
+      startStep: (s) => this.startStep(s),
+      pauseStepForInput: (s) => this.pauseStepForInput(s),
+      updateBlockProgress: (ws, i, st) => this.updateBlockProgress(ws, i, st),
+      persistInstance: (ws, i) => this.executionRepository.upsert(ws, i),
+      emitInstance: (ws, i) => this.emitInstance(ws, i),
+      stopRunContainer: (ws, i) => this.stopRunContainer(ws, i),
+      finalizeBlock: (ws, i, c) => this.finalizeBlock(ws, i, c),
+      parkStepOnDecision: (ws, i, s, p) => this.parkStepOnDecision(ws, i, s, p),
+      raiseDecisionRequired: (ws, i) => this.raiseDecisionRequired(ws, i),
+      loopCompanionProducer: (i, ci, rw) => this.loopCompanionProducer(i, ci, rw),
+    })
+    this.testerController = new TesterController({
+      blockRepository,
+      notificationService,
+      agentExecutor,
+      contextBuilder: this.contextBuilder,
+      resolveMergePreset: (ws, block) => this.resolveMergePreset(ws, block),
+      stopRunContainer: (ws, i) => this.stopRunContainer(ws, i),
+      persistInstance: (ws, i) => this.executionRepository.upsert(ws, i),
+      emitInstance: (ws, i) => this.emitInstance(ws, i),
     })
     this.blueprintReconciler = blueprintReconciler
     this.notificationService = notificationService
@@ -811,7 +815,14 @@ export class ExecutionService {
     // kinds, looping it back for automatic rework below the threshold (and failing
     // the run once the budget is spent) before any human gate. See evaluateCompanion.
     if (isCompanionKind(step.agentKind)) {
-      return this.evaluateCompanion(workspaceId, instance, step, block, isFinalStep, options)
+      return this.companionController.evaluate(
+        workspaceId,
+        instance,
+        step,
+        block,
+        isFinalStep,
+        options,
+      )
     }
 
     // Async (container) steps don't block: dispatch the job and park. The durable
@@ -995,7 +1006,7 @@ export class ExecutionService {
       // boots fresh against the just-pushed fixes (rather than re-attaching to the
       // completed job by run id).
       await this.stopRunContainer(workspaceId, instance)
-      return this.dispatchTester(workspaceId, instance, step, block)
+      return this.testerController.dispatchTester(workspaceId, instance, step, block)
     }
 
     if (update.state === 'failed') {
@@ -1160,7 +1171,12 @@ export class ExecutionService {
     // re-test, mirroring the CI gate. A greenlight (or no provider) falls through to
     // the normal finish/advance below. Records the report on the step either way.
     if (step.agentKind === TESTER_AGENT_KIND && result.testReport !== undefined) {
-      const looped = await this.resolveTesterResult(workspaceId, instance, step, result)
+      const looped = await this.testerController.resolveTesterResult(
+        workspaceId,
+        instance,
+        step,
+        result,
+      )
       if (looped) return looped
     }
 
@@ -1264,7 +1280,7 @@ export class ExecutionService {
       // thresholds and either merge for real or raise a review notification. This
       // owns the block's terminal status, so `finalizeBlock` then leaves it alone.
       if (result.mergeAssessment !== undefined) {
-        await this.resolveMergerStep(workspaceId, instance, result.mergeAssessment)
+        await this.mergeResolver.resolveMergerStep(workspaceId, instance, result.mergeAssessment)
       }
       await this.finalizeBlock(workspaceId, instance, result.confidence)
       await this.executionRepository.upsert(workspaceId, instance)
@@ -1283,217 +1299,6 @@ export class ExecutionService {
     await this.executionRepository.upsert(workspaceId, instance)
     await this.emitInstance(workspaceId, instance)
     return { kind: 'continue' }
-  }
-
-  /**
-   * Run a companion step: an inline LLM that grades the nearest preceding producer
-   * of one of its target kinds, returning an overall quality rating (0..1) + prose
-   * feedback. The rating is compared to the step's threshold:
-   *   - at/above  → the companion finishes; if it is itself gated it raises the human
-   *                 approval gate on the producer's output, else the run advances.
-   *   - below, budget left → the producer is re-run with the companion's feedback
-   *                 folded in (the automatic analogue of "request changes").
-   *   - below, budget spent → the step parks on the iteration-cap gate for a human
-   *                 (one more round / proceed / stop & reset), NOT a failure.
-   * The companion's own JSON output is parsed as the assessment; an unparseable payload
-   * (even after a repair retry) fails the run (`companion_rejected`) rather than passing.
-   */
-  private async evaluateCompanion(
-    workspaceId: string,
-    instance: ExecutionInstance,
-    step: PipelineStep,
-    block: Block,
-    isFinalStep: boolean,
-    options: AdvanceOptions,
-  ): Promise<AdvanceResult> {
-    const targets = companionTargets(step.agentKind)
-    // The nearest earlier step whose kind this companion reviews (the producer).
-    let producerIndex = -1
-    for (let i = instance.currentStep - 1; i >= 0; i--) {
-      if (targets.includes(instance.steps[i]!.agentKind)) {
-        producerIndex = i
-        break
-      }
-    }
-
-    // Run the companion as a normal inline LLM step: its prompt asks for the rating
-    // JSON and `priorOutputs` already carries the producer's output for it to grade.
-    const context = await this.contextBuilder.buildContext(
-      workspaceId,
-      instance,
-      step,
-      isFinalStep,
-      block,
-    )
-    const previewModel = await this.previewStepModel(context)
-    if (previewModel && previewModel !== step.model) step.model = previewModel
-    // Run the companion, parsing its JSON verdict with ONE repair retry when the first
-    // reply doesn't parse (truncated / wrapped in prose). Only retried when there is a
-    // producer to grade. `result` carries the LAST call's output + the summed usage.
-    const { assessment, result } = await this.runCompanionWithRepair(
-      context,
-      options,
-      producerIndex >= 0,
-    )
-    if (result.usage) {
-      await this.spend.record({
-        workspaceId,
-        executionId: instance.id,
-        agentKind: step.agentKind,
-        model: result.model ?? 'unknown',
-        usage: result.usage,
-      })
-    }
-    if (result.model) step.model = result.model
-
-    const companion = step.companion ?? {
-      threshold: companionFor(step.agentKind)?.defaultThreshold ?? 0.8,
-      maxAttempts: DEFAULT_COMPANION_MAX_ATTEMPTS,
-      attempts: 0,
-      verdicts: [],
-    }
-    const feedback = assessment?.summary ?? ''
-
-    // There IS a producer to grade but the companion's own verdict never parsed (even
-    // after the repair retry): do NOT silently treat that as a perfect pass. That is the
-    // bug where a truncated reviewer reply surfaced as "100% ≥ 80%" and dropped a real
-    // review. Surface it for a human instead, recording the raw reply as the detail.
-    if (producerIndex >= 0 && !assessment) {
-      step.output = result.output || ''
-      step.companion = companion
-      await this.executionRepository.upsert(workspaceId, instance)
-      // Hand the precise classification + the raw reply (the whole point of the failure,
-      // for triage) to the driver's single `failRun` funnel. Do NOT fail the run here as
-      // well: a second `failRun` from the driver would clobber this rich record with a
-      // generic `job_failed` ("the implementation container reported a failure", no
-      // detail), which is exactly the misleading surface this path is meant to avoid.
-      return {
-        kind: 'job_failed',
-        failureKind: 'companion_rejected',
-        error:
-          `Companion "${step.agentKind}" did not return a parseable assessment (its reply ` +
-          `was truncated or malformed) after a repair retry.`,
-        detail: (result.output ?? '').slice(0, 2000) || undefined,
-      }
-    }
-
-    // The score to judge: the parsed rating when there is a producer to grade, else a
-    // perfect score (no producer of this companion's target kind precedes it, so there
-    // is genuinely nothing to grade and the run advances).
-    const rating = assessment && producerIndex >= 0 ? assessment.rating : 1
-    // The FIRST review batch ALWAYS loops the producer back when it raised any comments,
-    // regardless of rating; the configured threshold only governs the SECOND pass onward.
-    // `attempts` counts automatic reworks, so it is 0 on the first batch. Applies to every
-    // companion (reviewer / spec-companion / architect-companion). Gated on a real producer
-    // so the loop-back below always has a step to re-run.
-    const firstBatch = companion.attempts === 0
-    const hasComments = producerIndex >= 0 && (assessment?.comments?.length ?? 0) > 0
-    const passed = firstBatch && hasComments ? false : rating >= companion.threshold
-    // Append this cycle's standardized verdict (the same shape the requirements-rework
-    // gate stores) so the whole correction sequence is visible, not just the latest.
-    companion.verdicts.push({
-      rating,
-      threshold: companion.threshold,
-      passed,
-      feedback,
-    })
-    step.companion = companion
-    step.output = feedback || result.output || ''
-
-    // PASS: the producer cleared the bar (and was not force-looped on its first batch).
-    if (passed) {
-      this.finishStep(step)
-      step.progress = 1
-      // A gated companion now raises the HUMAN approval gate on the producer's output
-      // (the human reviews what the companion just cleared). Never on the final step.
-      if (step.requiresApproval && !isFinalStep && step.approval?.status !== 'approved') {
-        const producer = producerIndex >= 0 ? instance.steps[producerIndex] : undefined
-        step.approval = {
-          id: this.idGenerator.next('appr'),
-          status: 'pending',
-          proposal: producer?.output ?? step.output,
-        }
-        this.pauseStepForInput(step)
-        instance.status = 'blocked'
-        await this.updateBlockProgress(workspaceId, instance, 'blocked')
-        await this.executionRepository.upsert(workspaceId, instance)
-        await this.emitInstance(workspaceId, instance)
-        return { kind: 'awaiting_decision', decisionId: step.approval.id }
-      }
-      if (isFinalStep) {
-        instance.status = 'done'
-        await this.finalizeBlock(workspaceId, instance, undefined)
-        await this.executionRepository.upsert(workspaceId, instance)
-        await this.emitInstance(workspaceId, instance)
-        await this.stopRunContainer(workspaceId, instance)
-        return { kind: 'done' }
-      }
-      instance.currentStep += 1
-      const next = instance.steps[instance.currentStep]
-      if (next) this.startStep(next)
-      await this.updateBlockProgress(workspaceId, instance, 'in_progress')
-      await this.executionRepository.upsert(workspaceId, instance)
-      await this.emitInstance(workspaceId, instance)
-      return { kind: 'continue' }
-    }
-
-    // BELOW THRESHOLD, automatic budget spent → DON'T get stuck. Park on a human
-    // decision (one more round / proceed anyway / stop & reset) — the same iteration-cap
-    // surface the requirements reviewer uses at its cap. Only AUTOMATIC reworks count
-    // against the budget (`attempts`); human "request changes" cycles on a gated
-    // companion re-run the producer without consuming it. `step.output` already holds the
-    // companion's latest feedback; the `exceeded` flag + the parked approval gate let the
-    // SPA render the three choices (resolved via `resolveCompanionExceeded`).
-    if (companion.attempts >= companion.maxAttempts) {
-      companion.exceeded = true
-      step.companion = companion
-      await this.raiseDecisionRequired(workspaceId, instance)
-      return this.parkStepOnDecision(workspaceId, instance, step, step.output ?? '')
-    }
-
-    // NOT PASSED, budget left → loop the producer back with the feedback folded in (the
-    // automatic analogue of a human "request changes"). Reached either below threshold or
-    // on the forced first-batch loop. `producerIndex` is guaranteed >= 0 here: a forced
-    // loop requires comments on a real producer, and a below-threshold rating requires a
-    // parsed verdict against a producer (otherwise rating defaulted to 1 and we passed).
-    const producer = instance.steps[producerIndex]!
-    this.loopCompanionProducer(instance, instance.currentStep, {
-      previousProposal: producer.output ?? '',
-      feedback: assessment?.summary ?? '',
-      ...(assessment?.comments?.length ? { comments: assessment.comments } : {}),
-    })
-    await this.updateBlockProgress(workspaceId, instance, 'in_progress')
-    await this.executionRepository.upsert(workspaceId, instance)
-    await this.emitInstance(workspaceId, instance)
-    return { kind: 'continue' }
-  }
-
-  /**
-   * Run a companion step and parse its JSON verdict, with ONE repair retry when the
-   * first reply doesn't parse (truncated, or wrapped in prose `extractJson` can't
-   * recover). The retry runs only when there is a producer to grade (`gradable`) — with
-   * none there is nothing to assess, so a malformed reply is irrelevant. Returns the
-   * parsed assessment (or `undefined` if even the repair failed) and the LAST call's
-   * result, with usage summed across both calls so the caller's single `spend.record`
-   * prices the whole thing. A still-unparseable verdict is handled by the caller (it
-   * surfaces to a human rather than passing), so this never wedges the run.
-   */
-  private async runCompanionWithRepair(
-    context: AgentRunContext,
-    options: AdvanceOptions,
-    gradable: boolean,
-  ): Promise<{ assessment: CompanionAssessment | undefined; result: AgentRunResult }> {
-    const first = await this.runAgent(context, options)
-    const parsed = parseCompanionOrUndefined(first.output)
-    if (parsed || !gradable) return { assessment: parsed, result: first }
-    // The first reply didn't parse. Re-run the same grading step once more; with the
-    // companion's raised output budget this almost always clears a one-off truncation.
-    const second = await this.runAgent(context, options)
-    const repaired = parseCompanionOrUndefined(second.output)
-    return {
-      assessment: repaired,
-      result: { ...second, usage: sumUsage(first.usage, second.usage) },
-    }
   }
 
   /**
@@ -1872,112 +1677,12 @@ export class ExecutionService {
   }
 
   /**
-   * Apply a Tester report to its step's gate. Records the report on the step, then:
-   *  - greenlight → returns `null` so {@link recordStepResult} finishes + advances;
-   *  - withheld + budget left → dispatches the `fixer` and parks (re-tested on its
-   *    completion, see {@link pollAgentJob});
-   *  - withheld + budget spent (or unparseable) → fails the run for human attention.
-   */
-  private async resolveTesterResult(
-    workspaceId: string,
-    instance: ExecutionInstance,
-    step: PipelineStep,
-    result: AgentRunResult,
-  ): Promise<AdvanceResult | null> {
-    const block = await this.blockRepository.get(workspaceId, instance.blockId)
-    let report: TestReport | null = null
-    try {
-      report = parseTestReport(result.testReport)
-    } catch {
-      report = null
-    }
-    if (!step.test) {
-      const maxAttempts = block
-        ? (await this.resolveMergePreset(workspaceId, block)).ciMaxAttempts
-        : DEFAULT_MERGE_PRESET.ciMaxAttempts
-      step.test = { phase: 'testing', attempts: 0, maxAttempts, lastReport: null }
-    }
-    if (report) step.test.lastReport = report
-    step.test.phase = 'testing'
-    step.subtasks = undefined
-
-    // An unparseable report can't gate a release — fail loudly rather than silently
-    // greenlighting or looping forever.
-    if (!report) {
-      return this.failTester(
-        workspaceId,
-        instance,
-        step,
-        block,
-        result.output ?? 'Tester returned an unparseable report.',
-        'Tester returned an unparseable test report.',
-        step.test.attempts,
-      )
-    }
-
-    // The FIRST testing round always loops the fixer when the report flags ANYTHING — any
-    // concern (regardless of severity) or a withheld greenlight — so the first batch of
-    // findings is always handed to the fixer. From the SECOND round onward the normal
-    // threshold applies (`isGreenlit`: a greenlight stands unless a high/critical concern
-    // is open; low/medium concerns are advisory). The defensive greenlight+no-blocker
-    // check still protects every round against a harness that greenlights with blockers.
-    const firstRound = step.test.attempts === 0
-    const accepted = firstRound
-      ? report.greenlight === true && report.concerns.length === 0
-      : isGreenlit(report)
-    if (accepted) return null
-
-    // Withheld greenlight: loop the fixer if any budget remains, else give up.
-    const executor = this.agentExecutor
-    if (isAsyncAgentExecutor(executor) && block && step.test.attempts < step.test.maxAttempts) {
-      // Reclaim the finished Tester container before dispatching the Fixer so the
-      // next job boots fresh — the per-run container would otherwise re-attach to the
-      // completed Tester job (idempotent dispatch by run id), replaying its result.
-      await this.stopRunContainer(workspaceId, instance)
-      return this.dispatchFixer(workspaceId, instance, step, block, report)
-    }
-    // Budget spent (or no async executor to fix with): give up for human attention.
-    return this.failTester(
-      workspaceId,
-      instance,
-      step,
-      block,
-      report.summary || 'Tester withheld its greenlight.',
-      `Tester withheld its greenlight after ${step.test.attempts} fix attempt(s). ${describeTestConcerns(report)}`.trim(),
-      step.test.attempts,
-    )
-  }
-
-  /**
-   * Give up on a Tester gate that can't be greenlit. Persists the step (left
-   * un-`done`, like the CI gate — never falsely completed), raises a human-actionable
-   * `test_failed` notification, and fails the run for human attention. Returns the
-   * `job_failed` result the driver propagates.
-   */
-  private async failTester(
-    workspaceId: string,
-    instance: ExecutionInstance,
-    step: PipelineStep,
-    block: Block | null,
-    output: string,
-    error: string,
-    attempts: number,
-  ): Promise<AdvanceResult> {
-    step.output = output
-    await this.executionRepository.upsert(workspaceId, instance)
-    await this.raiseTestFailed(workspaceId, instance, block, error, attempts)
-    // Carry the precise classification (`agent`, not the generic container `job_failed`)
-    // and the Tester's own summary to the driver's single `failRun` funnel; failing the
-    // run here too would let the driver's second `failRun` clobber it (see evaluateCompanion).
-    return { kind: 'job_failed', failureKind: 'agent', error, detail: output || undefined }
-  }
-
-  /**
    * Raise a `decision_required` notification when a run parks on an iteration-cap gate
-   * after spending its automatic budget — a quality companion at its rework cap or the
-   * requirements reviewer at its iteration cap. Without it the three-choice decision is
-   * reachable only by drilling into the parked step, so the run looks silently stuck.
-   * Best-effort: a missing notification service (tests) or block is a no-op.
+   * after spending its automatic budget — a quality companion at its rework cap or an
+   * iterative reviewer (requirements / clarity) at its iteration cap. Without it the
+   * three-choice decision is reachable only by drilling into the parked step, so the run
+   * looks silently stuck. Best-effort: a missing notification service (tests) or block is
+   * a no-op.
    */
   private async raiseDecisionRequired(
     workspaceId: string,
@@ -1996,128 +1701,6 @@ export class ExecutionService {
         'task to choose: one more round, proceed with the current result, or stop and reset.',
       payload: { pipelineName: instance.pipelineName },
     })
-  }
-
-  /** Raise a `test_failed` notification when the Tester gate gives up. */
-  private async raiseTestFailed(
-    workspaceId: string,
-    instance: ExecutionInstance,
-    block: Block | null,
-    summary: string,
-    attempts: number,
-  ): Promise<void> {
-    if (!this.notificationService || !block) return
-    await this.notificationService.raise(workspaceId, {
-      type: 'test_failed',
-      blockId: block.id,
-      executionId: instance.id,
-      title: `Tests are still failing for "${block.title}"`,
-      body:
-        `The Fixer agent tried ${attempts} time(s) but the Tester still won't greenlight. ${summary} ` +
-        `Take a look and retry the run once fixed.`,
-      payload: {
-        ...(block.pullRequest?.url ? { prUrl: block.pullRequest.url } : {}),
-        pipelineName: instance.pipelineName,
-      },
-    })
-  }
-
-  /**
-   * Dispatch a `fixer` container job for a Tester step that withheld its greenlight:
-   * build the agent context with the kind overridden to `fixer` and the Tester's
-   * report folded in as resolved context, park on the job, and flip the gate to
-   * `fixing`. On the fixer's completion {@link pollAgentJob} re-dispatches the Tester.
-   */
-  private async dispatchFixer(
-    workspaceId: string,
-    instance: ExecutionInstance,
-    step: PipelineStep,
-    block: Block,
-    report: TestReport,
-  ): Promise<AdvanceResult> {
-    const executor = this.agentExecutor
-    if (!isAsyncAgentExecutor(executor)) {
-      return { kind: 'job_failed', error: 'No async executor available to fix test failures.' }
-    }
-    // The fixer pushes its commits onto the implementation PR branch, so it can only
-    // run once a coder/integrator step opened one. A Tester-only pipeline (or one whose
-    // earlier step never produced a PR) can't be auto-fixed — fail cleanly with the
-    // report instead of letting the job-body builder throw out of the advance.
-    if (!block.pullRequest?.branch) {
-      return this.failTester(
-        workspaceId,
-        instance,
-        step,
-        block,
-        report.summary || 'Tester withheld its greenlight.',
-        `Tester withheld its greenlight and there is no PR branch for the fixer to push to. ${describeTestConcerns(report)}`.trim(),
-        step.test?.attempts ?? 0,
-      )
-    }
-    const isFinalStep = instance.currentStep === instance.steps.length - 1
-    const base = await this.contextBuilder.buildContext(
-      workspaceId,
-      instance,
-      step,
-      isFinalStep,
-      block,
-    )
-    const context: AgentRunContext = {
-      ...base,
-      agentKind: FIXER_AGENT_KIND,
-      // Hand the fixer the Tester's report (what failed + the concerns) as context.
-      priorOutputs: [
-        ...base.priorOutputs,
-        { agentKind: TESTER_AGENT_KIND, output: renderReportForFixer(report) },
-      ],
-    }
-    const handle = await executor.startJob(context)
-    step.jobId = handle.jobId
-    if (handle.model) step.model = handle.model
-    step.startingContainer = true
-    step.subtasks = undefined
-    step.test = {
-      phase: 'fixing',
-      attempts: (step.test?.attempts ?? 0) + 1,
-      maxAttempts: step.test?.maxAttempts ?? DEFAULT_MERGE_PRESET.ciMaxAttempts,
-      lastReport: report,
-    }
-    await this.executionRepository.upsert(workspaceId, instance)
-    await this.emitInstance(workspaceId, instance)
-    return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
-  }
-
-  /**
-   * Re-dispatch the Tester after a Fixer job finished, against the (now-fixed) PR
-   * branch. Parks on the fresh Tester job; its report then drives greenlight-or-loop.
-   */
-  private async dispatchTester(
-    workspaceId: string,
-    instance: ExecutionInstance,
-    step: PipelineStep,
-    block: Block,
-  ): Promise<AdvanceResult> {
-    const executor = this.agentExecutor
-    if (!isAsyncAgentExecutor(executor)) {
-      return { kind: 'job_failed', error: 'No async executor available to run the tester.' }
-    }
-    const isFinalStep = instance.currentStep === instance.steps.length - 1
-    const context = await this.contextBuilder.buildContext(
-      workspaceId,
-      instance,
-      step,
-      isFinalStep,
-      block,
-    )
-    const handle = await executor.startJob(context)
-    step.jobId = handle.jobId
-    if (handle.model) step.model = handle.model
-    step.startingContainer = true
-    step.subtasks = undefined
-    if (step.test) step.test.phase = 'testing'
-    await this.executionRepository.upsert(workspaceId, instance)
-    await this.emitInstance(workspaceId, instance)
-    return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
   }
 
   /** Raise a `ci_failed` notification when the CI gate exhausts its fixer budget. */
@@ -2753,6 +2336,7 @@ export class ExecutionService {
       if (review.status === 'incorporated') {
         return this.completeRequirementsStep(workspaceId, instance, step, isFinalStep)
       }
+      if (review.status === 'exceeded') await this.raiseDecisionRequired(workspaceId, instance)
       return this.parkStepOnDecision(workspaceId, instance, step)
     }
 
@@ -2760,6 +2344,7 @@ export class ExecutionService {
     if (review.status === 'incorporated') {
       return this.completeRequirementsStep(workspaceId, instance, step, isFinalStep)
     }
+    if (review.status === 'exceeded') await this.raiseDecisionRequired(workspaceId, instance)
     return this.parkStepOnDecision(workspaceId, instance, step)
   }
 
@@ -3101,56 +2686,6 @@ export class ExecutionService {
   }
 
   /**
-   * Resolve a `merger` step's assessment: parse + validate it, compare each axis
-   * against the task's resolved merge preset, and either merge the PR for real
-   * (all within threshold) or raise a `merge_review` notification leaving the
-   * block `pr_ready`. A malformed/unexplained assessment or a failed auto-merge also
-   * falls back to a review notification — never a silent merge.
-   */
-  private async resolveMergerStep(
-    workspaceId: string,
-    instance: ExecutionInstance,
-    rawAssessment: unknown,
-  ): Promise<void> {
-    const block = await this.blockRepository.get(workspaceId, instance.blockId)
-    if (!block) return
-
-    let assessment: MergeAssessment | null = null
-    try {
-      assessment = parseMergeAssessment(rawAssessment)
-    } catch {
-      assessment = null
-    }
-
-    const preset = await this.resolveMergePreset(workspaceId, block)
-    // Auto-merge only on a CREDIBLE within-threshold assessment. A credible assessment
-    // explains itself: a merger that actually examined the diff always returns a
-    // rationale, while a merger that failed to inspect the change (the bug that
-    // auto-merged on a bogus 0/0/0) is forced upstream to a conservative, explained
-    // verdict that fails the threshold. The non-empty rationale check is the engine-side
-    // backstop so bare, unexplained scores can never silently merge.
-    const within =
-      assessment !== null &&
-      assessment.rationale.trim() !== '' &&
-      assessment.complexity <= preset.maxComplexity &&
-      assessment.risk <= preset.maxRisk &&
-      assessment.impact <= preset.maxImpact
-
-    if (within) {
-      try {
-        await this.finalizeMerge(workspaceId, block.id)
-        return
-      } catch {
-        // Auto-merge failed (e.g. branch protection / conflict): fall through to a
-        // review notification so a human can sort it out.
-      }
-    }
-
-    await this.blockRepository.update(workspaceId, block.id, { status: 'pr_ready', progress: 1 })
-    await this.raiseMergeReview(workspaceId, instance, block, assessment)
-  }
-
-  /**
    * Resolve the merge threshold preset that governs a task: its explicitly-picked
    * preset, else the workspace default, else the built-in {@link DEFAULT_MERGE_PRESET}.
    * Returns just the thresholds the engine compares against (+ the CI attempt budget).
@@ -3175,33 +2710,6 @@ export class ExecutionService {
       if (fallback) return fallback
     }
     return DEFAULT_MERGE_PRESET
-  }
-
-  /** Raise a `merge_review` notification carrying the agent's assessment + the PR. */
-  private async raiseMergeReview(
-    workspaceId: string,
-    instance: ExecutionInstance,
-    block: Block,
-    assessment: MergeAssessment | null,
-  ): Promise<void> {
-    if (!this.notificationService) return
-    const body = assessment
-      ? `The merger scored this PR outside the task's auto-merge thresholds ` +
-        `(complexity ${pct(assessment.complexity)}, risk ${pct(assessment.risk)}, ` +
-        `impact ${pct(assessment.impact)}). ${assessment.rationale}`
-      : `The merger could not produce a valid assessment for this PR. Review and merge manually.`
-    await this.notificationService.raise(workspaceId, {
-      type: 'merge_review',
-      blockId: block.id,
-      executionId: instance.id,
-      title: `Review PR for "${block.title}"`,
-      body,
-      payload: {
-        ...(assessment ? { assessment } : {}),
-        ...(block.pullRequest?.url ? { prUrl: block.pullRequest.url } : {}),
-        pipelineName: instance.pipelineName,
-      },
-    })
   }
 
   /** Raise a `pipeline_complete` notification for a no-merger run awaiting confirmation. */
@@ -3825,46 +3333,4 @@ export class ExecutionService {
       // The container may already be gone (eviction/completion) — nothing to reclaim.
     }
   }
-}
-
-/** Whether a Tester report raised any concern serious enough to block a release. */
-function hasBlockingConcerns(report: TestReport): boolean {
-  return report.concerns.some((c) => c.severity === 'high' || c.severity === 'critical')
-}
-
-/**
- * The engine's release verdict for a Tester report: greenlit only when the Tester
- * said so AND it raised no blocking (high/critical) concern. Defensive against a
- * harness that greenlights with open blockers — low/medium concerns are advisory
- * and do not, on their own, withhold the greenlight or loop the fixer.
- */
-function isGreenlit(report: TestReport): boolean {
-  return report.greenlight === true && !hasBlockingConcerns(report)
-}
-
-/** One-line, human-readable summary of a Tester report's concerns, for failure messages. */
-function describeTestConcerns(report: TestReport): string {
-  if (!report.concerns.length) return report.summary || 'No greenlight given.'
-  const names = report.concerns
-    .map((c) => `${c.title} (${c.severity})`)
-    .slice(0, 5)
-    .join(', ')
-  return `Concerns: ${names}${report.concerns.length > 5 ? ', …' : ''}`
-}
-
-/** Render a Tester report as the resolved-context block handed to the fixer. */
-function renderReportForFixer(report: TestReport): string {
-  const lines = ['Tester report — fix the concerns below, then the tester will re-run.', '']
-  if (report.summary) lines.push(report.summary, '')
-  if (report.concerns.length) {
-    lines.push('Concerns to fix:')
-    for (const c of report.concerns) lines.push(`- [${c.severity}] ${c.title}: ${c.detail}`)
-    lines.push('')
-  }
-  const failed = report.outcomes.filter((o) => o.status === 'failed')
-  if (failed.length) {
-    lines.push('Failed checks:')
-    for (const o of failed) lines.push(`- ${o.name}${o.detail ? `: ${o.detail}` : ''}`)
-  }
-  return lines.join('\n').trim()
 }
