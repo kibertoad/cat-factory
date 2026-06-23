@@ -273,7 +273,12 @@ const SPEC_WRITER_SYSTEM_PROMPT =
   'imply — since the Gherkin `.feature` files and the runnable tests are derived ' +
   'mechanically from them. Preserve the baseline’s existing `sourceBlockIds`; tag the ' +
   'requirements this task adds or changes with this task’s block id. Return the ' +
-  'COMPLETE updated specification (baseline plus this increment), not a diff. Respond ' +
+  'COMPLETE updated specification (baseline plus this increment), not a diff. You have ' +
+  'NO repository write access and MUST NOT write, edit, or commit any file: the platform ' +
+  'persists the specification you return, so returning it IS the whole job. Emit the JSON ' +
+  'as the visible text of your FINAL reply, NOT inside your private reasoning or thinking. ' +
+  'A final reply whose visible content is empty is treated as a failure even when your ' +
+  'reasoning contains the document. Respond ' +
   'with ONLY a JSON object of ' +
   'shape {"service","summary","groups":[{"name","summary","requirements":[{"id",' +
   '"title","statement","kind","priority","sourceBlockIds":[],"acceptance":[{"id",' +
