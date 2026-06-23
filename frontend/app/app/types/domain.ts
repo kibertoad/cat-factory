@@ -18,6 +18,7 @@ import type { ExecutionInstance, LlmCallActivity } from './execution'
 import type { BootstrapJob } from './bootstrap'
 import type { Notification } from './notifications'
 import type { RequirementReview } from './requirements'
+import type { ClarityReview } from './clarity'
 import type { MergeThresholdPreset } from './merge'
 import type { PipelineSchedule } from './recurring'
 import type { Service, WorkspaceMount } from './services'
@@ -221,6 +222,11 @@ export type AgentKind =
   // non-LLM `tracker` step that files a GitHub issue / Jira ticket.
   | 'analysis'
   | 'tracker'
+  // Bug-fix pipeline: the `clarity-review` gate triages the bug report (the analogue
+  // of `requirements-review`, with its own structured review window), then the
+  // read-only `bug-investigator` container agent enriches it into a prose report.
+  | 'clarity-review'
+  | 'bug-investigator'
 
 /** A draggable agent definition shown in the agent palette. */
 export interface AgentArchetype {
@@ -367,6 +373,7 @@ export type WorkspaceEvent =
   | { type: 'notification'; notification: Notification; at: number }
   | { type: 'llmCall'; call: LlmCallActivity; at: number }
   | { type: 'requirements'; review: RequirementReview; at: number }
+  | { type: 'clarity'; review: ClarityReview; at: number }
 
 /** Level-of-detail buckets driven by the canvas zoom level. Shallow → deep:
  * `far`/`mid`/`close` govern a service frame (chip → card → opened with tasks);

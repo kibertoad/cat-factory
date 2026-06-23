@@ -1181,6 +1181,39 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         expect(step.output).toContain(`[desc]${REWORKED}[/desc]`)
       })
 
+      it("substitutes a block's clarified bug report for its description in every step", async () => {
+        // The clarity mirror of the requirements substitution above: once a bug task's
+        // report has been triaged + clarified ("incorporated"), that clarified report — not
+        // the raw description — is what every agent step consumes. This must hold on EVERY
+        // runtime: the Cloudflare facade wires the D1 clarity store, the Node facade the
+        // Drizzle one, both feeding the engine through the optional `clarityReviewRepository`.
+        // A facade that forgets to wire that store fails this shared test.
+        const CLARIFIED = '# Login — Bug Report\n\n## Steps to Reproduce\n1. POST /login twice.'
+        const app = harness.makeApp({ confidence: 1, echoDescription: true })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        await app.seedIncorporatedClarityReview(wsId, 'task_login', CLARIFIED)
+
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Coder only',
+          agentKinds: ['coder'],
+        })
+        const start = await app.call<ExecutionInstance>(
+          'POST',
+          `/workspaces/${wsId}/blocks/task_login/executions`,
+          { pipelineId: pipeline.body.id },
+        )
+        expect(start.status).toBe(201)
+
+        const ticked = await app.drive(wsId)
+        const exec = ticked.find((e) => e.blockId === 'task_login')!
+        const step = exec.steps.find((s) => s.agentKind === 'coder')!
+        expect(step.state).toBe('done')
+        // The agent was handed the clarified report, not the seeded task's description.
+        expect(step.output).toContain(`[desc]${CLARIFIED}[/desc]`)
+      })
+
       it('restarts a run from a chosen step, preserving prior outputs and the block requirements', async () => {
         // "Restart from this step" re-runs the pipeline from a human-chosen step
         // (even on a finished run), keeping the earlier steps' outputs as handoff

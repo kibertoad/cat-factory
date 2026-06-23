@@ -6,6 +6,7 @@ import {
   FakeRepoBootstrapper,
   RecordingEventPublisher,
   driveWorkspace,
+  makeIncorporatedClarityReview,
   makeIncorporatedReview,
   makeOnboardingProbe,
   makeReadyReviewWithOpenItem,
@@ -177,6 +178,13 @@ export function makeConformanceApp(
     )
   }
 
+  function seedIncorporatedClarityReview(workspaceId: string, blockId: string, report: string) {
+    return createDrizzleRepositories(db, SEED_CLOCK).clarityReviewRepository.upsert(
+      workspaceId,
+      makeIncorporatedClarityReview(blockId, report),
+    )
+  }
+
   // Reuses Node's Drizzle board-scan repo (the local facade shares all of Node's
   // persistence), so the blueprint read endpoints assert identically here.
   function seedBlueprint(record: RepoBlueprintRecord) {
@@ -192,6 +200,7 @@ export function makeConformanceApp(
     executionEmits,
     seedIncorporatedReview,
     seedReadyReview,
+    seedIncorporatedClarityReview,
     seedBlueprint,
     onboarding: () => makeOnboardingProbe(container),
   }

@@ -5,6 +5,7 @@ import {
   FakeRepoBootstrapper,
   RecordingEventPublisher,
   defineConformanceSuite,
+  makeIncorporatedClarityReview,
   makeIncorporatedReview,
   makeOnboardingProbe,
   makeReadyReviewWithOpenItem,
@@ -13,6 +14,7 @@ import { env } from 'cloudflare:test'
 import { makeApp, fragmentLibraryDeps } from '../helpers'
 import { buildContainer } from '../../src/infrastructure/container'
 import { D1RequirementReviewRepository } from '../../src/infrastructure/repositories/D1RequirementReviewRepository'
+import { D1ClarityReviewRepository } from '../../src/infrastructure/repositories/D1ClarityReviewRepository'
 import { D1RepoBlueprintRepository } from '../../src/infrastructure/repositories/D1RepoBlueprintRepository'
 
 // Run the shared cross-runtime conformance suite against the Cloudflare Worker
@@ -58,6 +60,11 @@ const harness: ConformanceHarness = {
         new D1RequirementReviewRepository({ db: env.DB }).upsert(
           workspaceId,
           makeReadyReviewWithOpenItem(blockId),
+        ),
+      seedIncorporatedClarityReview: (workspaceId, blockId, report) =>
+        new D1ClarityReviewRepository({ db: env.DB }).upsert(
+          workspaceId,
+          makeIncorporatedClarityReview(blockId, report),
         ),
       seedBlueprint: (record) => new D1RepoBlueprintRepository({ db: env.DB }).upsert(record),
       // The identity/onboarding services over the same local D1 (invitations are always

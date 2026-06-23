@@ -6,6 +6,7 @@ import {
   FakeRepoBootstrapper,
   RecordingEventPublisher,
   driveWorkspace,
+  makeIncorporatedClarityReview,
   makeIncorporatedReview,
   makeOnboardingProbe,
   makeReadyReviewWithOpenItem,
@@ -17,6 +18,7 @@ import { buildNodeContainer } from '../src/container.js'
 import { type DrizzleDb, createDbClient } from '../src/db/client.js'
 import { migrate } from '../src/db/migrate.js'
 import {
+  DrizzleClarityReviewRepository,
   DrizzleRepoBlueprintRepository,
   DrizzleRequirementReviewRepository,
 } from '../src/repositories/drizzle.js'
@@ -165,6 +167,13 @@ export function makeConformanceApp(
     )
   }
 
+  function seedIncorporatedClarityReview(workspaceId: string, blockId: string, report: string) {
+    return new DrizzleClarityReviewRepository(db).upsert(
+      workspaceId,
+      makeIncorporatedClarityReview(blockId, report),
+    )
+  }
+
   function seedBlueprint(record: RepoBlueprintRecord) {
     return new DrizzleRepoBlueprintRepository(db).upsert(record)
   }
@@ -178,6 +187,7 @@ export function makeConformanceApp(
     executionEmits,
     seedIncorporatedReview,
     seedReadyReview,
+    seedIncorporatedClarityReview,
     seedBlueprint,
     onboarding: () => makeOnboardingProbe(container),
   }

@@ -78,6 +78,7 @@ import type {
   ResolveRequirementsExceededChoice,
   ReviewItemStatus,
 } from '~/types/requirements'
+import type { ClarityReview, ResolveClarityExceededChoice } from '~/types/clarity'
 import type { Notification } from '~/types/notifications'
 import type {
   SlackChannel,
@@ -722,6 +723,67 @@ export function useApi() {
     ) =>
       http<RequirementReview>(
         `${ws(workspaceId)}/blocks/${encodeURIComponent(blockId)}/requirement-review/resolve-exceeded`,
+        { method: 'POST', body: { choice } },
+      ),
+
+    // ---- clarity review (bug-report triage reviewer agent) ---------------
+    // The current review for a block (null when none has been run). A 503 means
+    // the feature is unconfigured (the panel hides on any error here).
+    getClarityReview: (workspaceId: string, blockId: string) =>
+      http<ClarityReview | null>(
+        `${ws(workspaceId)}/blocks/${encodeURIComponent(blockId)}/clarity-review`,
+      ),
+
+    replyClarityItem: (workspaceId: string, reviewId: string, itemId: string, reply: string) =>
+      http<ClarityReview>(
+        `${ws(workspaceId)}/clarity-reviews/${encodeURIComponent(reviewId)}/items/${encodeURIComponent(itemId)}/reply`,
+        { method: 'POST', body: { reply } },
+      ),
+
+    setClarityItemStatus: (
+      workspaceId: string,
+      reviewId: string,
+      itemId: string,
+      status: ReviewItemStatus,
+    ) =>
+      http<ClarityReview>(
+        `${ws(workspaceId)}/clarity-reviews/${encodeURIComponent(reviewId)}/items/${encodeURIComponent(itemId)}`,
+        { method: 'PATCH', body: { status } },
+      ),
+
+    // Incorporate the answers ASYNCHRONOUSLY (every finding must be answered or dismissed).
+    // The durable driver folds them and re-reviews in the background. Optional `feedback` is
+    // the "do it differently" lever when redoing a merge. Returns the `incorporating` review
+    // at once; a notification calls the user back only if the re-review needs input.
+    incorporateClarity: (workspaceId: string, blockId: string, feedback?: string) =>
+      http<ClarityReview>(
+        `${ws(workspaceId)}/blocks/${encodeURIComponent(blockId)}/clarity-review/incorporate`,
+        { method: 'POST', body: feedback ? { feedback } : {} },
+      ),
+
+    // Re-review the clarified report (one more reviewer pass). On convergence the parked run
+    // advances; otherwise the response carries the next cycle / cap state.
+    reReviewClarity: (workspaceId: string, blockId: string) =>
+      http<ClarityReview>(
+        `${ws(workspaceId)}/blocks/${encodeURIComponent(blockId)}/clarity-review/re-review`,
+        { method: 'POST' },
+      ),
+
+    // Proceed: settle the clarity review and advance the parked run (all findings dismissed).
+    proceedClarity: (workspaceId: string, blockId: string) =>
+      http<ClarityReview>(
+        `${ws(workspaceId)}/blocks/${encodeURIComponent(blockId)}/clarity-review/proceed`,
+        { method: 'POST' },
+      ),
+
+    // Resolve a review that hit its iteration cap: extra-round / proceed / stop-reset.
+    resolveClarityExceeded: (
+      workspaceId: string,
+      blockId: string,
+      choice: ResolveClarityExceededChoice,
+    ) =>
+      http<ClarityReview>(
+        `${ws(workspaceId)}/blocks/${encodeURIComponent(blockId)}/clarity-review/resolve-exceeded`,
         { method: 'POST', body: { choice } },
       ),
 

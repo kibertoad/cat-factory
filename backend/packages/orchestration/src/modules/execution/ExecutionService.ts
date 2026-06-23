@@ -63,6 +63,8 @@ import {
   isCiGreen,
   MERGER_AGENT_KIND,
   REQUIREMENTS_REVIEW_AGENT_KIND,
+  CLARITY_REVIEW_AGENT_KIND,
+  BUG_INVESTIGATOR_AGENT_KIND,
   SPEC_WRITER_AGENT_KIND,
   TRACKER_AGENT_KIND,
   ANALYSIS_AGENT_KIND,
@@ -72,10 +74,12 @@ import {
 import type { GateDefinition, GateProbe } from './gates.js'
 import type { NotificationService } from '../notifications/NotificationService.js'
 import type { RequirementReviewService } from '../requirements/RequirementReviewService.js'
+import type { ClarityReviewService } from '../clarity/ClarityReviewService.js'
 import type {
   IterationCapChoice,
   RequirementConcernLevel,
   RequirementReview,
+  ClarityReview,
   ResolveRequirementsExceededChoice,
 } from '@cat-factory/kernel'
 import type { LlmObservabilityService } from '../observability/LlmObservabilityService.js'
@@ -99,6 +103,7 @@ import type { ExecutionEventPublisher } from '@cat-factory/kernel'
 import type { DocumentRepository } from '@cat-factory/kernel'
 import type { TaskRepository } from '@cat-factory/kernel'
 import type { RequirementReviewRepository } from '@cat-factory/kernel'
+import type { ClarityReviewRepository } from '@cat-factory/kernel'
 import type { EnvironmentProvisioningService } from '@cat-factory/integrations'
 import { isDeployStep } from '@cat-factory/integrations'
 import { descendantIds, serviceOf } from '../board/board.logic.js'
@@ -251,6 +256,18 @@ export interface ExecutionServiceDependencies {
    */
   requirementReviewService?: RequirementReviewService
   /**
+   * Optional: persistence for the clarity-review (bug-report triage) feature. Read here
+   * to substitute a converged clarified report as the downstream agent context (the
+   * mirror of `requirementReviewRepository`). Absent → no substitution.
+   */
+  clarityReviewRepository?: ClarityReviewRepository
+  /**
+   * Optional: the clarity-review feature's service, present when the reviewer is wired.
+   * Drives the special `clarity-review` gate step (inline reviewer + the iterative
+   * answer → incorporate → re-review loop). Absent → the gate step passes through.
+   */
+  clarityReviewService?: ClarityReviewService
+  /**
    * Optional: when the individual-usage subscription store is configured, a finished
    * run's per-run credential activation is deleted here the moment it reaches a terminal
    * state, bounding standing exposure to the run's own lifetime (the TTL sweep is the
@@ -372,6 +389,8 @@ export class ExecutionService {
   private readonly tasks?: TaskRepository
   private readonly requirementReviews?: RequirementReviewRepository
   private readonly requirementReviewService?: RequirementReviewService
+  private readonly clarityReviews?: ClarityReviewRepository
+  private readonly clarityReviewService?: ClarityReviewService
   private readonly environmentProvisioning?: EnvironmentProvisioningService
   private readonly blueprintReconciler?: BlueprintReconciler
   private readonly notificationService?: NotificationService
@@ -410,6 +429,8 @@ export class ExecutionService {
     taskRepository,
     requirementReviewRepository,
     requirementReviewService,
+    clarityReviewRepository,
+    clarityReviewService,
     environmentProvisioning,
     blueprintReconciler,
     notificationService,
@@ -439,6 +460,8 @@ export class ExecutionService {
     this.tasks = taskRepository
     this.requirementReviews = requirementReviewRepository
     this.requirementReviewService = requirementReviewService
+    this.clarityReviews = clarityReviewRepository
+    this.clarityReviewService = clarityReviewService
     this.environmentProvisioning = environmentProvisioning
     this.blueprintReconciler = blueprintReconciler
     this.notificationService = notificationService
@@ -759,7 +782,9 @@ export class ExecutionService {
       // HTTP request) — instead of immediately re-parking. Every other parked step (and a
       // requirements gate with nothing pending) re-parks on its durable decision id.
       const reentrantRequirements =
-        step.agentKind === REQUIREMENTS_REVIEW_AGENT_KIND && !!step.pendingIncorporation
+        (step.agentKind === REQUIREMENTS_REVIEW_AGENT_KIND ||
+          step.agentKind === CLARITY_REVIEW_AGENT_KIND) &&
+        !!step.pendingIncorporation
       if (!reentrantRequirements) {
         // Parked on either an agent-raised decision or a human approval gate; both
         // are addressed by the same durable event id.
@@ -801,6 +826,14 @@ export class ExecutionService {
     // {@link evaluateRequirementsReview}.
     if (step.agentKind === REQUIREMENTS_REVIEW_AGENT_KIND) {
       return this.evaluateRequirementsReview(workspaceId, instance, step, block, isFinalStep)
+    }
+
+    // A `clarity-review` step triages the block's bug report (optionally enriched by an
+    // upstream `bug-investigator` step) and parks for the dedicated review window, driving
+    // the same iterative loop as the requirements gate. NOT a container/prose agent.
+    // Pass-through when the reviewer isn't wired. See {@link evaluateClarityReview}.
+    if (step.agentKind === CLARITY_REVIEW_AGENT_KIND) {
+      return this.evaluateClarityReview(workspaceId, instance, step, block, isFinalStep)
     }
 
     // A polling gate step (`ci` / `conflicts`) runs a programmatic precheck and only
@@ -2174,6 +2207,23 @@ export class ExecutionService {
     return null
   }
 
+  /**
+   * The clarified bug report for a block — the standard-format document the clarity-rework
+   * step produced — or `null` when the feature is unwired or the block has no incorporated
+   * clarity review yet. The clarity mirror of {@link resolveReworkedRequirements}.
+   */
+  private async resolveClarifiedBrief(
+    workspaceId: string,
+    blockId: string,
+  ): Promise<string | null> {
+    if (!this.clarityReviews) return null
+    const review = await this.clarityReviews.getByBlock(workspaceId, blockId)
+    if (review?.status === 'incorporated' && review.clarifiedReport) {
+      return review.clarifiedReport
+    }
+    return null
+  }
+
   // ---- requirements-review gate -------------------------------------------
 
   /**
@@ -2342,6 +2392,11 @@ export class ExecutionService {
     if (step.agentKind === REQUIREMENTS_REVIEW_AGENT_KIND) {
       throw new ConflictError(
         'Resolve the requirements review through its review window, not the approval gate',
+      )
+    }
+    if (step.agentKind === CLARITY_REVIEW_AGENT_KIND) {
+      throw new ConflictError(
+        'Resolve the clarity review through its review window, not the approval gate',
       )
     }
     if (step.companion?.exceeded) {
@@ -2638,6 +2693,242 @@ export class ExecutionService {
     await this.advancePastResolvedGate(workspaceId, instance, idx)
   }
 
+  // ---- clarity-review gate (bug-report triage) -----------------------------
+  // The clarity mirror of the requirements-review gate above. It triages a block's bug
+  // report — optionally enriched by an upstream `bug-investigator` step's prose output —
+  // and drives the SAME iterative answer → incorporate → re-review loop, reusing the
+  // shared park/advance/iteration-cap plumbing. Only the subject + the persisted document
+  // differ; everything structural is shared.
+
+  /** The latest `bug-investigator` step output on a run (the triage subject), or undefined. */
+  private investigationFor(instance: ExecutionInstance): string | undefined {
+    for (let i = instance.steps.length - 1; i >= 0; i--) {
+      const s = instance.steps[i]!
+      if (s.agentKind === BUG_INVESTIGATOR_AGENT_KIND && s.output) return s.output
+    }
+    return undefined
+  }
+
+  /** Resolve a block's investigator output via its current execution (off the gate path). */
+  private async investigationForBlock(
+    workspaceId: string,
+    blockId: string,
+  ): Promise<string | undefined> {
+    const block = await this.blockRepository.get(workspaceId, blockId)
+    if (!block?.executionId) return undefined
+    const instance = await this.executionRepository.get(workspaceId, block.executionId)
+    return instance ? this.investigationFor(instance) : undefined
+  }
+
+  /**
+   * Run the `clarity-review` gate step. Pass-through when the reviewer isn't wired. Otherwise
+   * runs the initial reviewer pass: an auto-pass advances immediately (findings recorded);
+   * anything else parks the run for the dedicated review window. Re-entrant on incorporation,
+   * exactly like {@link evaluateRequirementsReview}.
+   */
+  private async evaluateClarityReview(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    step: PipelineStep,
+    block: Block,
+    isFinalStep: boolean,
+  ): Promise<AdvanceResult> {
+    if (!this.clarityReviewService?.enabled) {
+      return this.completeRequirementsStep(workspaceId, instance, step, isFinalStep)
+    }
+
+    const pending = step.pendingIncorporation
+    if (pending) {
+      step.pendingIncorporation = null
+      const review = await this.runClarityIncorporationCycle(workspaceId, block.id, pending.feedback)
+      if (review.status === 'incorporated') {
+        return this.completeRequirementsStep(workspaceId, instance, step, isFinalStep)
+      }
+      return this.parkStepOnDecision(workspaceId, instance, step)
+    }
+
+    const review = await this.reviewClarity(workspaceId, block.id)
+    if (review.status === 'incorporated') {
+      return this.completeRequirementsStep(workspaceId, instance, step, isFinalStep)
+    }
+    return this.parkStepOnDecision(workspaceId, instance, step)
+  }
+
+  /** Fold the human's settled answers into a clarified report and re-review it (one iteration). */
+  private async runClarityIncorporationCycle(
+    workspaceId: string,
+    blockId: string,
+    feedback?: string,
+  ): Promise<ClarityReview> {
+    const review = await this.currentClarityReview(workspaceId, blockId)
+    if (!hasNotesToIncorporate(review.items, feedback)) {
+      const settled = await this.requireClarityService().markIncorporated(workspaceId, review.id)
+      await this.emitClarityReview(workspaceId, settled)
+      return settled
+    }
+    const block = assertFound(
+      await this.blockRepository.get(workspaceId, blockId),
+      'Block',
+      blockId,
+    )
+    const preset = await this.resolveMergePreset(workspaceId, block)
+    const investigation = await this.investigationForBlock(workspaceId, blockId)
+    await this.requireClarityService().incorporate(workspaceId, review.id, { feedback, investigation })
+    const reReviewing = await this.requireClarityService().markReReviewing(workspaceId, review.id)
+    await this.emitClarityReview(workspaceId, reReviewing)
+    const reviewed = await this.requireClarityService().reReview(workspaceId, review.id, {
+      concernThreshold: preset.maxRequirementConcernAllowed,
+    })
+    await this.emitClarityReview(workspaceId, reviewed)
+    return reviewed
+  }
+
+  /** Push a live `clarity` event so an open window/inspector reflects the new status. */
+  private async emitClarityReview(workspaceId: string, review: ClarityReview): Promise<void> {
+    await this.events.clarityReviewChanged?.(workspaceId, review)
+  }
+
+  private requireClarityService(): ClarityReviewService {
+    if (!this.clarityReviewService?.enabled) {
+      throw new ConflictError('The clarity reviewer is not configured')
+    }
+    return this.clarityReviewService
+  }
+
+  private async currentClarityReview(workspaceId: string, blockId: string): Promise<ClarityReview> {
+    return assertFound(
+      await this.requireClarityService().getForBlock(workspaceId, blockId),
+      'Clarity review',
+      blockId,
+    )
+  }
+
+  /**
+   * Run a fresh clarity reviewer pass over a block's bug report, snapshotting the task's
+   * merge-preset knobs (iteration budget + tolerated severity) and threading in any
+   * `bug-investigator` output as the triage subject. Shared by the gate + the off-path
+   * inspector "Run review" surface.
+   */
+  async reviewClarity(workspaceId: string, blockId: string): Promise<ClarityReview> {
+    const block = assertFound(
+      await this.blockRepository.get(workspaceId, blockId),
+      'Block',
+      blockId,
+    )
+    const preset = await this.resolveMergePreset(workspaceId, block)
+    return this.requireClarityService().review(workspaceId, blockId, {
+      maxIterations: preset.maxRequirementIterations,
+      concernThreshold: preset.maxRequirementConcernAllowed,
+      investigation: await this.investigationForBlock(workspaceId, blockId),
+    })
+  }
+
+  /** Incorporate the human's settled answers ASYNCHRONOUSLY (the clarity mirror of {@link incorporateRequirements}). */
+  async incorporateClarity(
+    workspaceId: string,
+    blockId: string,
+    feedback?: string,
+  ): Promise<ClarityReview> {
+    const review = await this.currentClarityReview(workspaceId, blockId)
+    const open = review.items.filter((i) => i.status === 'open')
+    if (open.length > 0) {
+      throw new ValidationError(
+        `Answer or dismiss all ${open.length} remaining item(s) before incorporating`,
+      )
+    }
+
+    const parked = await this.findParkedClarityStep(workspaceId, blockId)
+    if (!parked) {
+      return this.runClarityIncorporationCycle(workspaceId, blockId, feedback)
+    }
+
+    const { instance, step } = parked
+    step.pendingIncorporation = feedback ? { feedback } : {}
+    if (instance.status === 'blocked') instance.status = 'running'
+    const updated = await this.requireClarityService().markIncorporating(workspaceId, review.id)
+    await this.executionRepository.upsert(workspaceId, instance)
+    await this.emitInstance(workspaceId, instance)
+    await this.emitClarityReview(workspaceId, updated)
+    await this.workRunner.signalDecision(workspaceId, instance.id, step.approval!.id, 'incorporate')
+    return updated
+  }
+
+  /** Locate the run + gate step a block's clarity review is parked on (or null). */
+  private async findParkedClarityStep(
+    workspaceId: string,
+    blockId: string,
+  ): Promise<{ instance: ExecutionInstance; step: PipelineStep } | null> {
+    const block = await this.blockRepository.get(workspaceId, blockId)
+    if (!block?.executionId) return null
+    const instance = await this.executionRepository.get(workspaceId, block.executionId)
+    if (!instance) return null
+    const step = instance.steps.find(
+      (s) =>
+        s.agentKind === CLARITY_REVIEW_AGENT_KIND &&
+        s.state === 'waiting_decision' &&
+        s.approval?.status === 'pending',
+    )
+    return step ? { instance, step } : null
+  }
+
+  /** Re-review the clarified report (one more pass). On convergence the parked run advances. */
+  async reReviewClarity(workspaceId: string, blockId: string): Promise<ClarityReview> {
+    const review = await this.currentClarityReview(workspaceId, blockId)
+    if (review.status !== 'merged') {
+      throw new ConflictError('Incorporate the answers before re-reviewing')
+    }
+    const block = assertFound(
+      await this.blockRepository.get(workspaceId, blockId),
+      'Block',
+      blockId,
+    )
+    const preset = await this.resolveMergePreset(workspaceId, block)
+    const updated = await this.requireClarityService().reReview(workspaceId, review.id, {
+      concernThreshold: preset.maxRequirementConcernAllowed,
+    })
+    if (updated.status === 'incorporated') await this.resumeClarityRun(workspaceId, blockId)
+    return updated
+  }
+
+  /** Proceed: settle the clarity review and advance the parked run. */
+  async proceedClarity(workspaceId: string, blockId: string): Promise<ClarityReview> {
+    const review = await this.currentClarityReview(workspaceId, blockId)
+    const updated = await this.requireClarityService().markIncorporated(workspaceId, review.id)
+    await this.resumeClarityRun(workspaceId, blockId)
+    return updated
+  }
+
+  /** Resolve a clarity review that hit its iteration cap (extra-round / proceed / stop-reset). */
+  async resolveClarityExceeded(
+    workspaceId: string,
+    blockId: string,
+    choice: ResolveRequirementsExceededChoice,
+  ): Promise<ClarityReview> {
+    const review = await this.currentClarityReview(workspaceId, blockId)
+    await this.dispatchIterationCap(workspaceId, blockId, choice, {
+      extraRound: () => this.requireClarityService().grantExtraRound(workspaceId, review.id),
+      proceed: () => this.proceedClarity(workspaceId, blockId),
+    })
+    return this.currentClarityReview(workspaceId, blockId)
+  }
+
+  /** Resume a run parked on its clarity gate (the clarity mirror of {@link resumeRequirementsRun}). */
+  private async resumeClarityRun(workspaceId: string, blockId: string): Promise<void> {
+    const block = await this.blockRepository.get(workspaceId, blockId)
+    if (!block?.executionId) return
+    const instance = await this.executionRepository.get(workspaceId, block.executionId)
+    if (!instance) return
+    const idx = instance.steps.findIndex(
+      (s) =>
+        s.agentKind === CLARITY_REVIEW_AGENT_KIND &&
+        s.state === 'waiting_decision' &&
+        s.approval?.status === 'pending',
+    )
+    if (idx === -1) return
+    instance.steps[idx]!.approval!.status = 'approved'
+    await this.advancePastResolvedGate(workspaceId, instance, idx)
+  }
+
   /** Walk up `parentId` from a block to its top-level service frame id (or itself). */
   private async resolveServiceFrameId(
     workspaceId: string,
@@ -2713,8 +3004,14 @@ export class ExecutionService {
     // description and the (now-redundant) doc/task context. Reviews are only ever run
     // on task blocks, so skip the lookup entirely for frames/modules — that keeps the
     // extra read off every container/frame step rather than on the whole hot path.
+    // A converged clarity (bug-report triage) report substitutes downstream exactly like a
+    // reworked requirements doc. When both exist on one task the requirements doc — which
+    // runs after clarity and is the more refined artifact — takes precedence.
     const reworked =
-      block.level === 'task' ? await this.resolveReworkedRequirements(workspaceId, block.id) : null
+      block.level === 'task'
+        ? ((await this.resolveReworkedRequirements(workspaceId, block.id)) ??
+          (await this.resolveClarifiedBrief(workspaceId, block.id)))
+        : null
     const description = reworked ?? block.description
     const contextDocs = reworked ? [] : await this.resolveContextDocs(workspaceId, block.id)
     const contextTasks = reworked ? [] : await this.resolveContextTasks(workspaceId, block.id)

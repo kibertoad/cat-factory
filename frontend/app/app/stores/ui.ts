@@ -290,6 +290,9 @@ export const useUiStore = defineStore('ui', () => {
   function openRequirementReview(blockId: string) {
     resultView.value = { view: 'requirements-review', blockId, instanceId: null, stepIndex: null }
   }
+  function openClarityReview(blockId: string) {
+    resultView.value = { view: 'clarity-review', blockId, instanceId: null, stepIndex: null }
+  }
   function closeResultView() {
     resultView.value = null
   }
@@ -382,6 +385,7 @@ export const useUiStore = defineStore('ui', () => {
     openVendorCredentials,
     closeVendorCredentials,
     openRequirementReview,
+    openClarityReview,
     closeRequirementReview,
     openStepDetail,
     closeStepDetail,
