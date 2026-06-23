@@ -73,8 +73,19 @@ open in local mode, so the board loads straight away.
 
 Container agent steps resolve which repo to operate on from the `github_repos` /
 `github_installations` projection (the same as the cloud facades). Local mode has no
-GitHub-App connect flow, so seed those rows for your target repo with the bundled
-helper before running a pipeline against a board service frame:
+GitHub-App connect flow, so those rows are seeded from the PAT instead. Two ways:
+
+### From the board (recommended)
+
+With `GITHUB_PAT` set, the GitHub integration works through the token: the workspace is
+treated as connected automatically (a synthetic installation is provisioned from the
+PAT), so the sidebar's "Add from existing repo" button is available. It lists the repos
+the PAT can access (via `/user/repos`); pick one to create a `ready` service frame linked
+to that repo. No connect step, no App.
+
+### From the CLI
+
+Or seed the rows directly for a specific frame:
 
 ```sh
 # node dist/link-repo.js <workspaceId> <frameBlockId> <owner/repo>
@@ -83,6 +94,7 @@ pnpm --filter @cat-factory/local-server link:repo ws_123 blk_frame your-org/your
 
 It reads `GITHUB_PAT` + `DATABASE_URL` from the environment, fetches the repo's
 metadata with the PAT, and upserts the installation + repo rows (linked to the frame).
+It shares the synthetic installation id with the board flow, so the two agree.
 
 ## Networking notes
 

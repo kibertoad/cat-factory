@@ -71,11 +71,23 @@ const repoItems = computed(() =>
     const mono = r.isMonorepo ? ' · monorepo' : ''
     return {
       label: `${r.owner}/${r.name}${r.private ? ' (private)' : ''}${mono}${onBoard ? ' · already on board' : ''}`,
+      // Searched on (lowercased once) — the owner/name, so the filter matches either.
+      search: `${r.owner}/${r.name}`.toLowerCase(),
       value: r.githubId,
       disabled: onBoard,
     }
   }),
 )
+
+// The PAT (or a wide App install) can expose hundreds of repos, too many for a plain
+// dropdown — filter by owner/name. The currently selected repo is always kept in the
+// list so a selection doesn't vanish when the query no longer matches it.
+const repoSearch = ref('')
+const filteredRepoItems = computed(() => {
+  const q = repoSearch.value.trim().toLowerCase()
+  if (!q) return repoItems.value
+  return repoItems.value.filter((r) => r.search.includes(q) || r.value === selectedRepoId.value)
+})
 
 const hasRepos = computed(() => github.availableRepos.length > 0)
 const selectedRepo = computed(() =>
@@ -109,6 +121,7 @@ function resetSelection() {
   selectedDirectory.value = undefined
   isMonorepo.value = false
   configuredBlockId.value = undefined
+  repoSearch.value = ''
 }
 
 // The App's installation settings page — where the user grants it access to a
@@ -213,13 +226,35 @@ function done() {
             <div v-if="!hasRepos" class="text-sm text-slate-400">
               No repositories available yet — grant the App access to one below, then refresh.
             </div>
-            <USelect
-              v-else
-              v-model="selectedRepoId"
-              :items="repoItems"
-              placeholder="Choose a repository"
-              class="w-full"
-            />
+            <div v-else class="space-y-1.5">
+              <UInput
+                v-model="repoSearch"
+                icon="i-lucide-search"
+                placeholder="Filter by owner/name…"
+                class="w-full"
+                :ui="{ trailing: 'pe-1' }"
+              >
+                <template v-if="repoSearch" #trailing>
+                  <UButton
+                    color="neutral"
+                    variant="link"
+                    size="sm"
+                    icon="i-lucide-x"
+                    aria-label="Clear filter"
+                    @click="repoSearch = ''"
+                  />
+                </template>
+              </UInput>
+              <USelect
+                v-model="selectedRepoId"
+                :items="filteredRepoItems"
+                placeholder="Choose a repository"
+                class="w-full"
+              />
+              <p class="text-xs text-slate-500">
+                Showing {{ filteredRepoItems.length }} of {{ repoItems.length }} repositories.
+              </p>
+            </div>
           </UFormField>
 
           <!-- monorepo handling: flag + directory picker -->
