@@ -1,11 +1,9 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "93c360cd-0fb6-450b-8bc4-5188ccefee0a",
+  "id": "30f52a43-e9e6-4d31-892f-243a10ddfcaa",
   "prevIds": [
-    "627de849-8a5b-4dee-9d00-89d1b3fdbacf",
-    "7cec788a-25db-4616-8603-5df16f4fe9e5",
-    "eabbd7b3-19ec-4d8c-b89a-01605a88b181"
+    "d26a93c0-e10c-4e5d-a6c3-d4d589f2c0b5"
   ],
   "ddl": [
     {
@@ -3585,6 +3583,19 @@
       "generated": null,
       "identity": null,
       "name": "response_text",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "llm_call_metrics"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "''",
+      "generated": null,
+      "identity": null,
+      "name": "reasoning_text",
       "entityType": "columns",
       "schema": "public",
       "table": "llm_call_metrics"

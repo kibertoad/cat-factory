@@ -22,10 +22,7 @@ describe('pickIncidentToEnrich', () => {
   })
 
   it('falls back to the most recent incident when none reference a signal', () => {
-    const candidates = [
-      c('older', 'unrelated A', 1),
-      c('newer', 'unrelated B', 5),
-    ]
+    const candidates = [c('older', 'unrelated A', 1), c('newer', 'unrelated B', 5)]
     expect(pickIncidentToEnrich(candidates, ['123'])).toBe('newer')
   })
 
