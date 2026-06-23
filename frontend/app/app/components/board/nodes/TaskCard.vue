@@ -11,7 +11,7 @@ const execution = useExecutionStore()
 const pipelines = usePipelinesStore()
 const ui = useUiStore()
 const agentRuns = useAgentRunsStore()
-const requirements = useRequirementsStore()
+const reviews = useReviewStage()
 const toast = useToast()
 
 const task = computed<Block | undefined>(() => board.getBlock(props.taskId))
@@ -107,22 +107,23 @@ function merge() {
 const pendingDecision = computed(() =>
   execution.openDecisions.find((d) => d.blockId === props.taskId),
 )
-// The async stage a requirements-review gate is mid-cycle in (folding the answers, then
-// re-reviewing), or null. While set, the gate needs NO human action, so its approval is
-// suppressed below and a working indicator shows instead.
-const reqStage = computed(() => requirements.backgroundStage(props.taskId))
-const reqStageLabel = computed(() =>
-  reqStage.value === 'incorporating'
+// The async stage an iterative reviewer gate (requirements-review / clarity-review) is
+// mid-cycle in (folding the answers, then re-reviewing), or null. While set, the gate
+// needs NO human action, so its approval is suppressed below and a working indicator
+// shows instead.
+const reviewStage = computed(() => reviews.stageForBlock(props.taskId))
+const reviewStageLabel = computed(() =>
+  reviewStage.value === 'incorporating'
     ? 'Incorporating answers…'
-    : reqStage.value === 'reviewing'
+    : reviewStage.value === 'reviewing'
       ? 'Re-reviewing…'
       : null,
 )
 const pendingApproval = computed(() => {
   const a = execution.openApprovals.find((a) => a.blockId === props.taskId)
-  // A requirements-review gate whose review is incorporating / re-reviewing in the driver
-  // is doing background work, not awaiting a human — don't surface it as "Approval needed".
-  if (a && a.agentKind === 'requirements-review' && reqStage.value) return undefined
+  // A reviewer gate whose review is incorporating / re-reviewing in the driver is doing
+  // background work, not awaiting a human — don't surface it as "Approval needed".
+  if (a && reviews.isBackground(a.agentKind, props.taskId)) return undefined
   return a
 })
 
@@ -159,7 +160,7 @@ const attention = computed<{
 const statusText = computed(() =>
   runFailed.value
     ? 'Failed'
-    : (reqStageLabel.value ?? attention.value?.label ?? statusMeta.value?.label ?? ''),
+    : (reviewStageLabel.value ?? attention.value?.label ?? statusMeta.value?.label ?? ''),
 )
 
 // Clicking the card body only selects the task (opening the inspector so the human can
@@ -198,7 +199,7 @@ function selectTask() {
         :class="
           runFailed
             ? 'text-rose-400'
-            : reqStage
+            : reviewStage
               ? 'text-indigo-300'
               : attention
                 ? 'text-amber-400'
@@ -253,11 +254,11 @@ function selectTask() {
 
     <!-- actions by state -->
     <div class="nodrag mt-2 flex flex-wrap items-center gap-1">
-      <!-- requirements review folding/re-reviewing in the background: a working indicator,
+      <!-- a reviewer gate folding/re-reviewing in the background: a working indicator,
            NOT a gate — the human is back on the board and summoned only if input is needed -->
-      <span v-if="reqStage" class="inline-flex items-center gap-1 text-[9px] text-indigo-300">
+      <span v-if="reviewStage" class="inline-flex items-center gap-1 text-[9px] text-indigo-300">
         <UIcon name="i-lucide-loader-circle" class="h-3 w-3 animate-spin" />
-        {{ reqStageLabel }}
+        {{ reviewStageLabel }}
       </span>
 
       <!-- parked for a human: a decision to resolve or an approval gate to clear -->

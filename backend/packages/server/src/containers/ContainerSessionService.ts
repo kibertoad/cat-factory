@@ -35,8 +35,17 @@ export interface ContainerSession {
   exp: number
 }
 
-/** Default session lifetime: long enough for a coding run, short enough to bound risk. */
-export const DEFAULT_SESSION_TTL_MS = 30 * 60 * 1000
+/**
+ * Default session lifetime. Must clear the harness job watchdog ceiling
+ * (`JOB_MAX_DURATION_MS`, default 60 min) PLUS the dispatch→container-boot lead
+ * (the token is minted at dispatch, before Pi starts), or a long but healthy step
+ * 401s mid-run once the token expires while the watchdog still considers it alive.
+ * 90 min = 60 min job + ~10 min boot lead + margin. The token is tightly scoped
+ * (audience `llm-proxy`, one workspace, one execution, locked provider+model), so a
+ * longer life is a small risk increase: a leak can only spend that run's metered
+ * budget on that one model. If you raise `JOB_MAX_DURATION_MS`, raise this too.
+ */
+export const DEFAULT_SESSION_TTL_MS = 90 * 60 * 1000
 
 export interface MintInput {
   workspaceId: string

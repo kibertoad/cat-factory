@@ -522,6 +522,30 @@ export const requirementReviews = pgTable(
   ],
 )
 
+// Clarity (bug-report triage) reviews (mirror of D1 migration 0002_clarity_reviews). The
+// clarity analogue of `requirement_reviews`: items as a JSON array, at most one live review
+// per block. `clarified_report` holds the standard-format clarified bug report.
+export const clarityReviews = pgTable(
+  'clarity_reviews',
+  {
+    workspace_id: text('workspace_id').notNull(),
+    id: text('id').notNull(),
+    block_id: text('block_id').notNull(),
+    status: text('status').notNull(),
+    items: text('items').notNull().default('[]'),
+    model: text('model'),
+    clarified_report: text('clarified_report'),
+    iteration: integer('iteration').notNull().default(1),
+    max_iterations: integer('max_iterations').notNull().default(1),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+    updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.workspace_id, t.id] }),
+    index('idx_clarity_reviews_block').on(t.workspace_id, t.block_id),
+  ],
+)
+
 // A workspace's issue-tracker selection (mirror of D1 migration 0029).
 export const trackerSettings = pgTable('tracker_settings', {
   workspace_id: text('workspace_id').primaryKey(),

@@ -20,6 +20,8 @@ import { mergeAssessmentSchema } from './merge.js'
 //                          task's creator are told to go react to them. Purely
 //                          informational (no typed side-effect — `act` just marks
 //                          it read), unlike the engineering notifications above.
+//   - `clarity_review`    — a clarity-review (bug-report triage) agent raised findings
+//                          on a bug task; same informational shape as `requirement_review`.
 //
 // In-app delivery is the only channel today, but the core models delivery behind
 // a `NotificationChannel` port so email / Slack channels can be added later
@@ -37,6 +39,7 @@ export const notificationTypeSchema = v.picklist([
   'ci_failed',
   'test_failed',
   'requirement_review',
+  'clarity_review',
 ])
 export type NotificationType = v.InferOutput<typeof notificationTypeSchema>
 

@@ -15,7 +15,6 @@ import {
   tool,
 } from 'ai'
 import { createWorkersAI } from 'workers-ai-provider'
-import { openai as openAiGatewayPlugin } from 'workers-ai-provider/openai'
 import type { Env } from '../env'
 import { resolveOpenAiCompatibleUpstream } from './providerEndpoints'
 
@@ -34,8 +33,26 @@ export class WorkersAiLlmUpstream implements LlmUpstream {
 
   runInProcess(request: LlmInProcessRequest): Promise<Response> | null {
     if (!this.env.AI) return null
+    // Two binding shapes share the `workers-ai` provider id. A native Workers AI id
+    // (`@cf/...`) runs through the AI SDK + workers-ai-provider, which translates its
+    // bespoke I/O. A `<provider>/<model>` catalog slug (e.g. `deepseek/deepseek-v4-pro`,
+    // a unified-billing run-catalog model Cloudflare serves via a partner) is plain
+    // OpenAI Chat Completions on the binding, so it runs directly via `binding.run`.
+    if (isCatalogSlug(request.model)) {
+      return runCatalogModel({ binding: this.env.AI, ...request })
+    }
     return runWorkersAi({ binding: this.env.AI, ...request })
   }
+}
+
+/**
+ * A `<provider>/<model>` AI-catalog slug (e.g. `deepseek/deepseek-v4-pro`) rather than a
+ * native Workers AI id (`@cf/...`). Cloudflare serves these as unified-billing run-catalog
+ * models on the binding (and the `/ai/v1` REST endpoint) in the OpenAI Chat Completions
+ * shape, with the account's own token — no AI Gateway, no BYOK.
+ */
+function isCatalogSlug(model: string): boolean {
+  return model.includes('/') && !model.startsWith('@')
 }
 
 interface WorkersAiArgs extends LlmInProcessRequest {
@@ -53,12 +70,9 @@ async function runWorkersAi(args: WorkersAiArgs): Promise<Response> {
   // Model-execution clock for the observability split: the in-process work the proxy
   // attributes to the model (everything else it does is transport overhead).
   const upstreamStart = Date.now()
-  // `providers: [openai]` lets a `<provider>/<model>` AI Gateway catalog slug (e.g.
-  // `deepseek/deepseek-v4-pro`, served via Fireworks) route through the account's AI
-  // Gateway delegate; a `@cf/...` Workers AI id is unaffected and still runs in
-  // process on the binding. The catalog route uses the account's `"default"` gateway
-  // unless an id is set; it requires that gateway to exist with catalog billing on.
-  const workersai = createWorkersAI({ binding, providers: [openAiGatewayPlugin] })
+  // Native Workers AI (`@cf/...`) only; `<provider>/<model>` catalog slugs take the
+  // direct `binding.run` path in `runCatalogModel`, not the AI SDK.
+  const workersai = createWorkersAI({ binding })
   // workers-ai-provider must implement the same provider spec as `ai`
   // (`@ai-sdk/provider`); workers-ai-provider@3 matches `ai` v6, so the model is used
   // directly with no cast. Keep these majors in lockstep.
@@ -168,6 +182,116 @@ async function runWorkersAi(args: WorkersAiArgs): Promise<Response> {
     },
   })
   return new Response(stream, { headers: { 'content-type': 'text/event-stream' } })
+}
+
+/**
+ * Serve a chat completion from a Cloudflare AI-catalog model (`<provider>/<model>`,
+ * e.g. `deepseek/deepseek-v4-pro`) via the `AI` binding's run path. These are
+ * unified-billing run-catalog models Cloudflare proxies to a partner (DeepSeek V4 Pro
+ * is served via Fireworks), reached with the account's own token — no AI Gateway, no
+ * BYOK. Unlike the `@cf/...` path they speak OpenAI Chat Completions natively, so the
+ * proxy's already-OpenAI request body and the binding's OpenAI response pass through
+ * with no translation. Always run buffered then replay as one chunk when the caller
+ * asked to stream, matching `runWorkersAi`'s deliberate non-streamed-delta design.
+ */
+async function runCatalogModel(args: WorkersAiArgs): Promise<Response> {
+  const { binding, model: modelId, payload, streaming, record, recordMetric, log } = args
+  const upstreamStart = Date.now()
+
+  // The proxy's payload is already an OpenAI Chat Completions body (messages, tools,
+  // tool_choice, temperature, max_tokens). Force buffered: we replay as one chunk.
+  const input = { ...payload, model: modelId, stream: false }
+  // The binding's `run` is typed to the native `@cf/...` model union; a catalog slug is
+  // valid at runtime but not in that type, so go through a plain call signature here.
+  const run = binding.run as (model: string, inputs: unknown) => Promise<unknown>
+  const completion = (await run(modelId, input)) as OpenAiCompletion
+
+  const choice = completion?.choices?.[0]
+  const message = choice?.message
+  const text = typeof message?.content === 'string' ? message.content : ''
+  const oaToolCalls = Array.isArray(message?.tool_calls) ? message.tool_calls : []
+  const finishReason = choice?.finish_reason ?? (oaToolCalls.length > 0 ? 'tool_calls' : 'stop')
+  const u: LlmTokenUsage = {
+    prompt_tokens: completion?.usage?.prompt_tokens ?? 0,
+    completion_tokens: completion?.usage?.completion_tokens ?? 0,
+  }
+
+  log.info(
+    {
+      inputTokens: u.prompt_tokens,
+      outputTokens: u.completion_tokens,
+      textLength: text.length,
+      toolCalls: oaToolCalls.length,
+      finishReason,
+      streaming,
+    },
+    'llm proxy: AI-catalog completion ok',
+  )
+  await record(u)
+  recordMetric?.({
+    usage: u,
+    finishReason,
+    responseText: text,
+    ok: true,
+    httpStatus: null,
+    errorMessage: null,
+    upstreamMs: Date.now() - upstreamStart,
+  })
+
+  if (!streaming) {
+    // Relay the upstream completion verbatim (with usage normalized) — it is already
+    // the OpenAI shape Pi expects.
+    const body = {
+      id: completion?.id ?? `chatcmpl-${crypto.randomUUID()}`,
+      object: 'chat.completion',
+      created: completion?.created ?? Math.floor(Date.now() / 1000),
+      model: modelId,
+      choices: [
+        {
+          index: 0,
+          message: {
+            role: 'assistant',
+            content: text.length > 0 ? text : null,
+            ...(oaToolCalls.length > 0 ? { tool_calls: oaToolCalls } : {}),
+          },
+          finish_reason: finishReason,
+        },
+      ],
+      usage: { ...u, total_tokens: (u.prompt_tokens ?? 0) + (u.completion_tokens ?? 0) },
+    }
+    return Response.json(body)
+  }
+
+  const encoder = new TextEncoder()
+  const sse = (obj: unknown) => encoder.encode(`data: ${JSON.stringify(obj)}\n\n`)
+  const meta = {
+    id: completion?.id ?? `chatcmpl-${crypto.randomUUID()}`,
+    created: completion?.created ?? Math.floor(Date.now() / 1000),
+    model: modelId,
+  }
+  const chunks = buildStreamChunks(meta, { text, toolCalls: oaToolCalls, finishReason, usage: u })
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      for (const c of chunks) controller.enqueue(sse(c))
+      controller.enqueue(encoder.encode('data: [DONE]\n\n'))
+      controller.close()
+    },
+  })
+  return new Response(stream, { headers: { 'content-type': 'text/event-stream' } })
+}
+
+/** The slice of an OpenAI Chat Completions response the catalog path reads. */
+interface OpenAiCompletion {
+  id?: string
+  created?: number
+  choices?: Array<{
+    message?: {
+      content?: string | null
+      tool_calls?: Array<Record<string, unknown>>
+    }
+    finish_reason?: string | null
+  }>
+  usage?: { prompt_tokens?: number; completion_tokens?: number }
 }
 
 /**

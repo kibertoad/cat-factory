@@ -24,6 +24,7 @@ import { promptFragmentController } from './modules/promptFragments/PromptFragme
 import { recurringPipelineController } from './modules/recurring/RecurringPipelineController.js'
 import { trackerSettingsController } from './modules/recurring/TrackerSettingsController.js'
 import { requirementReviewController } from './modules/requirements/RequirementReviewController.js'
+import { clarityReviewController } from './modules/clarity/ClarityReviewController.js'
 import { webSearchProxyController } from './modules/webSearch/WebSearchProxyController.js'
 import { runnerPoolController } from './modules/runners/RunnerPoolController.js'
 import { slackController, slackOAuthController } from './modules/slack/SlackController.js'
@@ -84,6 +85,7 @@ export function registerCoreControllers<E extends AppEnv>(app: Hono<E>): void {
   app.route('/workspaces/:workspaceId', agentRunController())
   app.route('/workspaces/:workspaceId', boardScanController())
   app.route('/workspaces/:workspaceId', requirementReviewController())
+  app.route('/workspaces/:workspaceId', clarityReviewController())
   app.route('/workspaces/:workspaceId', notificationController())
   app.route('/workspaces/:workspaceId', mergePresetController())
   app.route('/workspaces/:workspaceId', modelDefaultsController())

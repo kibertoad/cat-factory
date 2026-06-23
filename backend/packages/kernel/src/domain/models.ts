@@ -212,6 +212,10 @@ export const MODEL_CATALOG: SelectableModel[] = [
     label: 'DeepSeek V4 Pro',
     description:
       "DeepSeek's flagship V4 Pro agentic-coding model, served on Cloudflare (131K context).",
+    // A Cloudflare AI-catalog model: a `<provider>/<model>` slug (not a native `@cf/...`
+    // id) Cloudflare serves on its unified-billing run catalog via a partner (Fireworks),
+    // reached with the account's own Workers AI binding/token — no AI Gateway, no BYOK.
+    // The Worker runs it through `binding.run` directly (see WorkersAiLlmUpstream).
     cloudflare: {
       provider: 'workers-ai',
       model: 'deepseek/deepseek-v4-pro',

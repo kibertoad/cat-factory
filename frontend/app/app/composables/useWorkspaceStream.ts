@@ -21,6 +21,7 @@ export function useWorkspaceStream() {
   const notifications = useNotificationsStore()
   const observability = useObservabilityStore()
   const requirements = useRequirementsStore()
+  const clarity = useClarityStore()
   const api = useApi()
   const apiBase = useRuntimeConfig().public.apiBase
 
@@ -75,6 +76,11 @@ export function useWorkspaceStream() {
       // so an open review window / inspector reflects it live ("incorporating…" → the next
       // cycle / converged). The summons back, when needed, arrives as a `notification`.
       requirements.upsert(event.review)
+    } else if (event.type === 'clarity') {
+      // The async incorporate + re-review cycle changed a clarity review's status — patch the
+      // cache so an open review window / inspector reflects it live ("incorporating…" → the
+      // next cycle / converged). The summons back, when needed, arrives as a `notification`.
+      clarity.upsert(event.review)
     }
   }
 

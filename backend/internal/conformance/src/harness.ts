@@ -97,6 +97,13 @@ export interface ConformanceApp {
    */
   seedReadyReview(workspaceId: string, blockId: string): Promise<void>
   /**
+   * Seed an already-"incorporated" clarity (bug-report triage) review for a block straight
+   * into the facade's real clarity store, so the suite can assert the engine substitutes the
+   * clarified report into the agent context — on EVERY runtime (the clarity mirror of
+   * {@link seedIncorporatedReview}).
+   */
+  seedIncorporatedClarityReview(workspaceId: string, blockId: string, report: string): Promise<void>
+  /**
    * Seed a persisted repository blueprint straight into the facade's real board-scan
    * store, so the suite can assert the blueprint read endpoints (which the manual scan
    * + the blueprint pipeline step write) return it identically on every runtime —

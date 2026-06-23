@@ -41,6 +41,9 @@ import type {
   RequirementReview,
   RequirementReviewItem,
   RequirementReviewRepository,
+  ClarityReview,
+  ClarityReviewItem,
+  ClarityReviewRepository,
   RunRef,
   Service,
   ServicePatch,
@@ -90,6 +93,7 @@ import {
   pipelineSchedules,
   pipelines,
   requirementReviews,
+  clarityReviews,
   services,
   tokenUsage,
   trackerSettings,
@@ -1742,6 +1746,100 @@ export class DrizzleRequirementReviewRepository implements RequirementReviewRepo
   }
 }
 
+type ClarityReviewRow = typeof clarityReviews.$inferSelect
+
+function rowToClarityReview(row: ClarityReviewRow): ClarityReview {
+  let items: ClarityReviewItem[] = []
+  try {
+    const parsed = JSON.parse(row.items)
+    if (Array.isArray(parsed)) items = parsed as ClarityReviewItem[]
+  } catch {
+    items = []
+  }
+  return {
+    id: row.id,
+    blockId: row.block_id,
+    status: row.status as ClarityReview['status'],
+    items,
+    model: row.model,
+    clarifiedReport: row.clarified_report,
+    iteration: row.iteration,
+    maxIterations: row.max_iterations,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }
+}
+
+/**
+ * Clarity (bug-report triage) reviews over Postgres — the Drizzle mirror of the Worker's
+ * `D1ClarityReviewRepository`. Behaviourally identical to the D1 repo so the cross-runtime
+ * conformance suite asserts the same clarified-brief substitution against both stores.
+ */
+export class DrizzleClarityReviewRepository implements ClarityReviewRepository {
+  constructor(private readonly db: DrizzleDb) {}
+
+  async getByBlock(workspaceId: string, blockId: string): Promise<ClarityReview | null> {
+    const rows = await this.db
+      .select()
+      .from(clarityReviews)
+      .where(
+        and(eq(clarityReviews.workspace_id, workspaceId), eq(clarityReviews.block_id, blockId)),
+      )
+      .orderBy(desc(clarityReviews.created_at))
+      .limit(1)
+    return rows[0] ? rowToClarityReview(rows[0]) : null
+  }
+
+  async get(workspaceId: string, id: string): Promise<ClarityReview | null> {
+    const rows = await this.db
+      .select()
+      .from(clarityReviews)
+      .where(and(eq(clarityReviews.workspace_id, workspaceId), eq(clarityReviews.id, id)))
+      .limit(1)
+    return rows[0] ? rowToClarityReview(rows[0]) : null
+  }
+
+  async upsert(workspaceId: string, review: ClarityReview): Promise<void> {
+    const values = {
+      workspace_id: workspaceId,
+      id: review.id,
+      block_id: review.blockId,
+      status: review.status,
+      items: JSON.stringify(review.items),
+      model: review.model,
+      clarified_report: review.clarifiedReport,
+      iteration: review.iteration ?? 1,
+      max_iterations: review.maxIterations ?? 1,
+      created_at: review.createdAt,
+      updated_at: review.updatedAt,
+    }
+    await this.db
+      .insert(clarityReviews)
+      .values(values)
+      .onConflictDoUpdate({
+        target: [clarityReviews.workspace_id, clarityReviews.id],
+        set: {
+          block_id: values.block_id,
+          status: values.status,
+          items: values.items,
+          model: values.model,
+          clarified_report: values.clarified_report,
+          iteration: values.iteration,
+          max_iterations: values.max_iterations,
+          updated_at: values.updated_at,
+        },
+      })
+  }
+
+  async deleteByBlock(workspaceId: string, blockId: string): Promise<void> {
+    await this.db
+      .delete(clarityReviews)
+      .where(
+        and(eq(clarityReviews.workspace_id, workspaceId), eq(clarityReviews.block_id, blockId)),
+      )
+  }
+}
+
 type MergePresetRow = typeof mergeThresholdPresets.$inferSelect
 
 function rowToMergePreset(row: MergePresetRow): MergeThresholdPreset {
@@ -1980,6 +2078,7 @@ export interface CoreRepositories {
   serviceRepository: ServiceRepository
   workspaceMountRepository: WorkspaceMountRepository
   requirementReviewRepository: RequirementReviewRepository
+  clarityReviewRepository: ClarityReviewRepository
   mergePresetRepository: MergePresetRepository
   repoBlueprintRepository: RepoBlueprintRepository
 }
@@ -2006,6 +2105,7 @@ export function createDrizzleRepositories(db: DrizzleDb, clock: Clock): CoreRepo
     serviceRepository: new DrizzleServiceRepository(db),
     workspaceMountRepository: new DrizzleWorkspaceMountRepository(db),
     requirementReviewRepository: new DrizzleRequirementReviewRepository(db),
+    clarityReviewRepository: new DrizzleClarityReviewRepository(db),
     mergePresetRepository: new DrizzleMergePresetRepository(db),
     repoBlueprintRepository: new DrizzleRepoBlueprintRepository(db),
   }

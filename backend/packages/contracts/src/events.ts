@@ -3,6 +3,7 @@ import type { BootstrapJob } from './bootstrap.js'
 import type { Notification } from './notifications.js'
 import type { LlmCallActivity } from './observability.js'
 import type { RequirementReview } from './requirements.js'
+import type { ClarityReview } from './clarity.js'
 
 // Real-time events pushed from the per-workspace events hub to subscribed
 // browsers over WebSocket, replacing the old `tick` polling. The shape is shared
@@ -52,3 +53,9 @@ export type WorkspaceEvent =
    * a summons.
    */
   | { type: 'requirements'; review: RequirementReview; at: number }
+  /**
+   * A block's clarity (bug-report triage) review changed status — the clarity mirror of
+   * the `requirements` event. Carries the updated review so an open review window /
+   * inspector reflects the transition live without a refetch.
+   */
+  | { type: 'clarity'; review: ClarityReview; at: number }

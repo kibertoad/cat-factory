@@ -12,6 +12,8 @@ import {
 
 const AGENT_KINDS: AgentKind[] = [
   'requirements-review',
+  'clarity-review',
+  'bug-investigator',
   'architect',
   'researcher',
   'coder',

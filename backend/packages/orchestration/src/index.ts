@@ -101,6 +101,12 @@ export {
 export * as requirementsLogic from './modules/requirements/requirements.logic.js'
 
 export {
+  ClarityReviewService,
+  type ClarityReviewServiceDependencies,
+} from './modules/clarity/ClarityReviewService.js'
+export * as clarityLogic from './modules/clarity/clarity.logic.js'
+
+export {
   type Core,
   type CoreDependencies,
   type GitHubModule,
@@ -111,6 +117,7 @@ export {
   type BootstrapModule,
   type BoardScanModule,
   type RequirementsModule,
+  type ClarityModule,
   type NotificationsModule,
   type SlackModule,
   type MergePresetsModule,
