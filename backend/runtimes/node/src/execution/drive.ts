@@ -98,25 +98,16 @@ export async function driveExecution(
         result = next
         continue
       }
-      if (result.kind === 'awaiting_ci') {
+      // A polling gate step (`ci` / `conflicts`): re-run its precheck between sleeps;
+      // which gate is resolved inside `pollGate` from the current step, so one branch
+      // drives both.
+      if (result.kind === 'awaiting_gate') {
         const next = await pollUntil(
-          'awaiting_ci',
-          () => exec.pollCi(workspaceId, executionId),
+          'awaiting_gate',
+          () => exec.pollGate(workspaceId, executionId),
           cfg.ciPollIntervalMs,
           cfg.ciMaxPolls,
-          'CI',
-        )
-        if (!next) return {}
-        result = next
-        continue
-      }
-      if (result.kind === 'awaiting_conflicts') {
-        const next = await pollUntil(
-          'awaiting_conflicts',
-          () => exec.pollConflicts(workspaceId, executionId),
-          cfg.ciPollIntervalMs,
-          cfg.ciMaxPolls,
-          'PR mergeability',
+          'Gate precheck',
         )
         if (!next) return {}
         result = next

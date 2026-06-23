@@ -13,20 +13,14 @@ export type AdvanceResult =
    */
   | { kind: 'awaiting_job'; jobId: string; stepIndex: number }
   /**
-   * A `ci` step is gating the PR on green CI. The run is parked: the durable driver
-   * sleeps, then polls {@link ExecutionService.pollCi} to re-check GitHub check
-   * runs. Polling stops the moment `pollCi` returns anything else — green CI yields
-   * `continue`, a dispatched CI-fixer yields `awaiting_job`, exhaustion fails the run.
+   * A polling **gate** step (`ci` / `conflicts`) is gating the PR on its precheck.
+   * The run is parked: the durable driver sleeps, then polls
+   * {@link ExecutionService.pollGate} to re-run the precheck (which gate is resolved
+   * from the current step's `agentKind`). Polling stops the moment `pollGate` returns
+   * anything else — a passing precheck yields `continue`, a dispatched helper agent
+   * (ci-fixer / conflict-resolver) yields `awaiting_job`, exhaustion fails the run.
    */
-  | { kind: 'awaiting_ci'; stepIndex: number }
-  /**
-   * A `conflicts` step is gating the PR on being mergeable. The run is parked: the
-   * durable driver sleeps, then polls {@link ExecutionService.pollConflicts} to
-   * re-check mergeability. Polling stops the moment it returns anything else —
-   * mergeable yields `continue`, a dispatched conflict-resolver yields
-   * `awaiting_job`, exhaustion fails the run.
-   */
-  | { kind: 'awaiting_conflicts'; stepIndex: number }
+  | { kind: 'awaiting_gate'; stepIndex: number }
   /** A polled async job finished with a failure; the driver should fail the run. */
   | { kind: 'job_failed'; error: string }
   /**

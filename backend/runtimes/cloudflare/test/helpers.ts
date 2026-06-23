@@ -132,9 +132,8 @@ export function makeApp(
         for (let hops = 0; hops < 500; hops++) {
           if (r.kind === 'awaiting_job')
             r = await c.executionService.pollAgentJob(workspaceId, e.id)
-          else if (r.kind === 'awaiting_ci') r = await c.executionService.pollCi(workspaceId, e.id)
-          else if (r.kind === 'awaiting_conflicts')
-            r = await c.executionService.pollConflicts(workspaceId, e.id)
+          else if (r.kind === 'awaiting_gate')
+            r = await c.executionService.pollGate(workspaceId, e.id)
           else break
         }
       }

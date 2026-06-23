@@ -150,8 +150,8 @@ export type {
   // Companion-agent shapes: the raw model assessment + the standardized stored verdict.
   CompanionAssessment,
   CompanionVerdict,
-  // CI gate / merge-policy shapes.
-  CiStepState,
+  // Gate (ci/conflicts) / merge-policy shapes.
+  GateStepState,
   MergeAssessment,
   MergeThresholdPreset,
   RequirementConcernLevel,

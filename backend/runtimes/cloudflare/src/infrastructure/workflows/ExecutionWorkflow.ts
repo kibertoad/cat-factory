@@ -116,33 +116,34 @@ export class ExecutionWorkflow extends WorkflowEntrypoint<Env, ExecutionWorkflow
         }
       }
 
-      // A `ci` step is gating the PR on green CI. Poll GitHub check runs between
-      // durable sleeps — mirroring the job-poll loop above — until the gate yields
-      // something terminal: green CI returns `continue`, a dispatched CI-fixer
-      // returns `awaiting_job` (handled on the next outer-loop iteration), and a
-      // spent budget returns `job_failed`. Each poll is its own short, retriable
-      // step so the gate can wait far longer than one step's timeout while the
-      // driver stays cheap and survives eviction.
-      if (result.kind === 'awaiting_ci') {
+      // A polling gate step (`ci` / `conflicts`) is gating the PR on its precheck.
+      // Re-run the precheck between durable sleeps — mirroring the job-poll loop above
+      // — until the gate yields something terminal: a passing precheck returns
+      // `continue`, a dispatched helper agent returns `awaiting_job` (handled on the
+      // next outer-loop iteration), and a spent budget returns `job_failed`. Which gate
+      // is resolved inside `pollGate` from the current step, so one loop drives both.
+      // Each poll is its own short, retriable step so the gate can wait far longer than
+      // one step's timeout while the driver stays cheap and survives eviction.
+      if (result.kind === 'awaiting_gate') {
         let settled = false
         let pollReadFailures = 0
         for (let p = 0; p < execConfig.ciMaxPolls; p++) {
-          await step.sleep(`ci-wait-${i}-${p}`, ciPollInterval)
+          await step.sleep(`gate-wait-${i}-${p}`, ciPollInterval)
           try {
-            result = (await step.do(`ci-poll-${i}-${p}`, STEP_CONFIG, () =>
-              buildContainer(this.env).executionService.pollCi(workspaceId, executionId),
+            result = (await step.do(`gate-poll-${i}-${p}`, STEP_CONFIG, () =>
+              buildContainer(this.env).executionService.pollGate(workspaceId, executionId),
             )) as AdvanceResult
           } catch (error) {
             pollReadFailures += 1
             const message = error instanceof Error ? error.message : String(error)
             logger.warn(
               { workspaceId, executionId, step: i, poll: p, pollReadFailures, err: message },
-              'CI poll could not read status; treating as still pending and retrying',
+              'gate poll could not read its precheck; treating as still pending and retrying',
             )
             if (pollReadFailures >= execConfig.jobPollFailureTolerance) {
               await failRun(
                 i,
-                `CI status was unreadable for ${pollReadFailures} consecutive polls (last error: ${message})`,
+                `Gate precheck was unreadable for ${pollReadFailures} consecutive polls (last error: ${message})`,
                 'timeout',
               )
               return
@@ -150,61 +151,17 @@ export class ExecutionWorkflow extends WorkflowEntrypoint<Env, ExecutionWorkflow
             continue
           }
           pollReadFailures = 0
-          if (result.kind !== 'awaiting_ci') {
+          if (result.kind !== 'awaiting_gate') {
             settled = true
             break
           }
         }
-        if (!settled && result.kind === 'awaiting_ci') {
-          await failRun(i, 'CI did not settle within its polling budget', 'timeout')
+        if (!settled && result.kind === 'awaiting_gate') {
+          await failRun(i, 'Gate precheck did not settle within its polling budget', 'timeout')
           return
         }
         // Fall through: the now-updated `result` (continue / awaiting_job / job_failed)
         // is handled by the checks below and the next outer-loop iteration.
-      }
-
-      // A `conflicts` step is gating the PR on being mergeable. Poll mergeability
-      // between durable sleeps — mirroring the CI loop above, reusing the CI poll
-      // cadence — until the gate yields something terminal: a mergeable PR returns
-      // `continue`, a dispatched conflict-resolver returns `awaiting_job` (handled on
-      // the next outer-loop iteration), and a spent budget returns `job_failed`.
-      if (result.kind === 'awaiting_conflicts') {
-        let settled = false
-        let pollReadFailures = 0
-        for (let p = 0; p < execConfig.ciMaxPolls; p++) {
-          await step.sleep(`conflicts-wait-${i}-${p}`, ciPollInterval)
-          try {
-            result = (await step.do(`conflicts-poll-${i}-${p}`, STEP_CONFIG, () =>
-              buildContainer(this.env).executionService.pollConflicts(workspaceId, executionId),
-            )) as AdvanceResult
-          } catch (error) {
-            pollReadFailures += 1
-            const message = error instanceof Error ? error.message : String(error)
-            logger.warn(
-              { workspaceId, executionId, step: i, poll: p, pollReadFailures, err: message },
-              'conflict poll could not read mergeability; treating as still pending and retrying',
-            )
-            if (pollReadFailures >= execConfig.jobPollFailureTolerance) {
-              await failRun(
-                i,
-                `PR mergeability was unreadable for ${pollReadFailures} consecutive polls (last error: ${message})`,
-                'timeout',
-              )
-              return
-            }
-            continue
-          }
-          pollReadFailures = 0
-          if (result.kind !== 'awaiting_conflicts') {
-            settled = true
-            break
-          }
-        }
-        if (!settled && result.kind === 'awaiting_conflicts') {
-          await failRun(i, 'PR mergeability did not settle within its polling budget', 'timeout')
-          return
-        }
-        // Fall through: the now-updated `result` is handled below / next iteration.
       }
 
       if (result.kind === 'job_failed') {
