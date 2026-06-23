@@ -4,6 +4,7 @@ import {
   FakeAgentExecutor,
   type FakeAgentOptions,
   FakeRepoBootstrapper,
+  FakeTaskSourceProvider,
   RecordingEventPublisher,
   driveWorkspace,
   makeIncorporatedReview,
@@ -95,6 +96,10 @@ export function makeConformanceApp(
     // local composition root without GitHub/Docker (driven via driveBootstrap).
     repoBootstrapper: new FakeRepoBootstrapper(),
     executionEventPublisher: recorder,
+    // Swap the config-wired real Jira provider for a deterministic fake (the Drizzle
+    // task repos stay), so the shared suite asserts create-task-from-issue against
+    // Postgres without hitting the network. Override wins over the config providers.
+    taskSourceProviders: [new FakeTaskSourceProvider('jira')],
   }
   const container = buildLocalContainer({
     db,

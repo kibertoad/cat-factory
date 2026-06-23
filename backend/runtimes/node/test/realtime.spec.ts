@@ -15,7 +15,12 @@ const silentLog = { info: () => {}, warn: () => {} }
 
 /** A minimal AuthConfig — `authorizeWsUpgrade` only reads enabled/devOpen/sessionSecret. */
 function authConfig(over: Partial<AuthConfig>): AuthConfig {
-  return { enabled: false, devOpen: true, sessionSecret: 'test-secret-please', ...over } as AuthConfig
+  return {
+    enabled: false,
+    devOpen: true,
+    sessionSecret: 'test-secret-please',
+    ...over,
+  } as AuthConfig
 }
 
 /** A throwaway instance object — the publisher only serialises it onto the wire. */
@@ -63,7 +68,9 @@ describe('Node real-time WebSocket transport', () => {
       client.once('error', reject)
     })
 
-    const received = new Promise<string>((resolve) => client.once('message', (d) => resolve(String(d))))
+    const received = new Promise<string>((resolve) =>
+      client.once('message', (d) => resolve(String(d))),
+    )
     // Poll-publish to defeat the subscribe-vs-handshake race: the server registers the
     // socket in the hub a beat after the client sees `open`, so publish until it lands.
     const pump = setInterval(() => void publisher.executionChanged('ws_a', fakeInstance, null), 15)

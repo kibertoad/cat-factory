@@ -595,7 +595,13 @@ export async function handleSpec(job: SpecJob, opts: RunOptions = {}): Promise<S
     const previousVersion = await readExistingVersion(dir)
 
     log.info('requirements: running agent', { ...trace, tasks: job.tasks.length })
-    const { summary, stats, stderrTail, usage, diagnostics: runDiag } = await runAgentInWorkspace(
+    const {
+      summary,
+      stats,
+      stderrTail,
+      usage,
+      diagnostics: runDiag,
+    } = await runAgentInWorkspace(
       {
         dir,
         systemPrompt: job.systemPrompt,

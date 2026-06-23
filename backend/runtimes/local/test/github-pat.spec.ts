@@ -27,7 +27,7 @@ describe('[local] PAT GitHub linking', () => {
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
       const url = typeof input === 'string' ? input : input.toString()
       calls.push(url)
-      if (/\/user$/.test(url)) {
+      if (url.endsWith('/user')) {
         return new Response(JSON.stringify({ id: 42, login: 'octocat', type: 'User' }), {
           status: 200,
           headers: { 'content-type': 'application/json' },

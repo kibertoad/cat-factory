@@ -41,9 +41,7 @@ export async function mintWsTicket(auth: AuthConfig, workspaceId: string): Promi
  * transport's rejection (an HTTP status on the Worker's `Response`, a raw status line
  * on the Node socket).
  */
-export type WsUpgradeAuth =
-  | { ok: true }
-  | { ok: false; status: 401 | 503; message: string }
+export type WsUpgradeAuth = { ok: true } | { ok: false; status: 401 | 503; message: string }
 
 /**
  * Authorise a WS event-stream upgrade for `workspaceId` from its `?ticket=`:
