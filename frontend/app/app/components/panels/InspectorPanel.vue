@@ -158,8 +158,10 @@ const runningRun = computed(() => {
 })
 
 // ---- requirements review (collected requirements → react → rework) ----------
-// Probe + cache the block's review when a task is selected, so the entry point can
-// show its open-finding count (and hide entirely when the feature is unconfigured).
+// The reviewer runs automatically as the first pipeline gate step (no manual entry
+// point), but the inspector still probes + caches the block's review so the
+// description can freeze in favour of the reworked requirements document once it
+// exists (and so a prior incorporated doc can surface as a base after a reset).
 watch(
   () => (isTask.value ? block.value?.id : undefined),
   (id) => {
@@ -168,7 +170,6 @@ watch(
   { immediate: true },
 )
 const reqReview = computed(() => (block.value ? requirements.reviewFor(block.value.id) : null))
-const reqOpenCount = computed(() => (reqReview.value ? requirements.openCount(reqReview.value) : 0))
 const reqReworked = computed(() => reqReview.value?.status === 'incorporated')
 const reqReworkedText = computed(() => reqReview.value?.incorporatedRequirements ?? '')
 // Once a task's requirements have been reworked, the standardized document is what
@@ -391,38 +392,6 @@ const showOriginalDescription = ref(false)
         <TaskAgentConfig :block="block" />
         <TaskRunSettings :block="block" />
         <TaskExecution :block="block" />
-
-        <!-- requirements review: react to the reviewer's findings, then rework the
-             collected requirements into one standard-format document the agents use. -->
-        <UButton
-          v-if="requirements.available !== false"
-          color="neutral"
-          variant="soft"
-          size="sm"
-          block
-          icon="i-lucide-clipboard-check"
-          @click="ui.openRequirementReview(block.id)"
-        >
-          Review requirements
-          <UBadge
-            v-if="reqOpenCount > 0"
-            color="warning"
-            variant="subtle"
-            size="xs"
-            class="ml-auto"
-          >
-            {{ reqOpenCount }} open
-          </UBadge>
-          <UBadge
-            v-else-if="reqReworked"
-            color="success"
-            variant="subtle"
-            size="xs"
-            class="ml-auto"
-          >
-            reworked
-          </UBadge>
-        </UButton>
       </template>
 
       <!-- actions -->
