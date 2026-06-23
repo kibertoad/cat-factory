@@ -54,6 +54,12 @@ export const llmCallMetricSchema = v.object({
   promptHash: v.optional(v.string(), ''),
   /** The full assistant response text. */
   responseText: v.string(),
+  /**
+   * The model's reasoning / "thinking" trace on a separate channel, when emitted
+   * (empty for non-reasoning models). Optional/defaulted so exports predating reasoning
+   * capture still parse.
+   */
+  reasoningText: v.optional(v.string(), ''),
 })
 export type LlmCallMetric = v.InferOutput<typeof llmCallMetricSchema>
 

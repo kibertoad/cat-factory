@@ -104,6 +104,7 @@ export const useObservabilityStore = defineStore('observability', () => {
       promptPrefixCount: 0,
       promptHash: '',
       responseText: '',
+      reasoningText: '',
     }
     callsByExecution.value = { ...callsByExecution.value, [executionId]: [row, ...existing] }
   }

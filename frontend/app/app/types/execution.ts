@@ -209,6 +209,12 @@ export interface LlmCallMetric {
   promptHash: string
   /** the full assistant response text */
   responseText: string
+  /**
+   * the model's reasoning/"thinking" trace on a separate channel, when emitted (empty
+   * for non-reasoning models). a thinking model can spend its whole output budget here
+   * and return empty `responseText`.
+   */
+  reasoningText: string
 }
 
 /**
@@ -221,7 +227,7 @@ export interface LlmCallMetric {
  */
 export type LlmCallActivity = Omit<
   LlmCallMetric,
-  'promptText' | 'responseText' | 'promptPrefixCount' | 'promptHash'
+  'promptText' | 'responseText' | 'reasoningText' | 'promptPrefixCount' | 'promptHash'
 >
 
 /** One per-agent-kind insight in the LLM-friendly export (rollup + derived ratios). */
@@ -256,6 +262,11 @@ export interface LlmMetricsExport {
 
 /** One agent's slot in a running pipeline. */
 export interface PipelineStep {
+  /**
+   * Id of the run this step belongs to (always the enclosing ExecutionInstance's id);
+   * surfaced on every step so a lone step is self-describing for debugging.
+   */
+  runId?: string
   agentKind: AgentKind
   state: AgentState
   /** 0..1 progress of this individual step */
@@ -298,6 +309,12 @@ export interface PipelineStep {
   startedAt?: number | null
   /** epoch ms the step finished (transitioned to `done`); with `startedAt` gives duration. */
   finishedAt?: number | null
+  /**
+   * epoch ms the step parked on a human (approval / decision / iteration-cap gate),
+   * freezing its duration while it waits for input; cleared (null) once it resumes or
+   * finishes. The counterpart of `finishedAt` for the "waiting on input" freeze.
+   */
+  pausedAt?: number | null
   /**
    * Live Tester→Fixer loop state when this step is a `tester` kind: which phase is in
    * flight (testing vs fixing the issues it found), the fixer attempt budget, and the

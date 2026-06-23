@@ -313,7 +313,9 @@ export function rowToExecution(row: ExecutionRow): ExecutionInstance {
     blockId: row.block_id ?? '',
     pipelineId: detail.pipelineId ?? '',
     pipelineName: detail.pipelineName ?? '',
-    steps: detail.steps ?? [],
+    // Stamp each step with its run id (a projection of the row id) so a lone step is
+    // self-describing for debugging; never read back from the detail JSON.
+    steps: (detail.steps ?? []).map((s) => ({ ...s, runId: row.id })),
     currentStep: detail.currentStep ?? 0,
     status: row.status as ExecutionStatus,
     failure: parseAgentFailure(row.failure),
@@ -326,7 +328,9 @@ export function executionToDetail(instance: ExecutionInstance): string {
   return JSON.stringify({
     pipelineId: instance.pipelineId,
     pipelineName: instance.pipelineName,
-    steps: instance.steps,
+    // `runId` is a read-time projection (it equals the row id) — drop it from the
+    // stored JSON so it isn't persisted twice (JSON.stringify omits undefined keys).
+    steps: instance.steps.map((s) => ({ ...s, runId: undefined })),
     currentStep: instance.currentStep,
     initiatedBy: instance.initiatedBy ?? null,
   } satisfies ExecutionDetail)

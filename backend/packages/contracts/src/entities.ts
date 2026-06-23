@@ -638,6 +638,14 @@ export const stepMetricsSchema = v.object({
 export type StepMetrics = v.InferOutput<typeof stepMetricsSchema>
 
 export const pipelineStepSchema = v.object({
+  /**
+   * Id of the execution run (the {@link executionInstanceSchema} `id`) this step
+   * belongs to — surfaced on every step so a lone step in a log line or a detail view
+   * can name its run, for easier debugging. A projection that always equals the parent
+   * instance's `id`: stamped from the enclosing instance when the run is read or
+   * emitted, not persisted independently. Absent only on steps not yet round-tripped.
+   */
+  runId: v.optional(v.string()),
   agentKind: agentKindSchema,
   state: agentStateSchema,
   progress: v.number(),
@@ -780,6 +788,14 @@ export const pipelineStepSchema = v.object({
    * this yields the step's execution duration. Absent until the step completes.
    */
   finishedAt: v.optional(v.nullable(v.number())),
+  /**
+   * Epoch ms the step parked on a human (an approval gate, a raised decision, or an
+   * iteration-cap gate), freezing its duration clock: while parked, elapsed time stops
+   * accruing — the symmetric counterpart of {@link finishedAt}'s terminal freeze, so a
+   * step waiting on input is not billed for the human's deliberation. Set once on park,
+   * cleared (null) when the step resumes working or finishes. Absent until first parked.
+   */
+  pausedAt: v.optional(v.nullable(v.number())),
   /**
    * How many times this step's container was evicted/crashed and recovered by
    * automatically re-dispatching a fresh container (bounded by

@@ -13,6 +13,7 @@ export type NotificationType =
   | 'requirement_review'
   | 'clarity_review'
   | 'release_regression'
+  | 'decision_required'
 export type NotificationStatus = 'open' | 'acted' | 'dismissed'
 
 /** The on-call agent's recommendation on a `release_regression`. */

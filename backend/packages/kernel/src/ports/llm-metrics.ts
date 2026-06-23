@@ -79,6 +79,14 @@ export interface LlmCallMetric {
   promptHash: string
   /** The full assistant response text (concatenated for streamed calls). */
   responseText: string
+  /**
+   * The model's reasoning / "thinking" trace, when it emits one on a separate channel
+   * (AI SDK `reasoningText`; OpenAI-compatible `reasoning_content` / `reasoning`).
+   * Empty for non-reasoning models. Captured so a turn that spends its whole output
+   * budget thinking and returns empty {@link responseText} is still diagnosable
+   * (otherwise those tokens look like they vanished).
+   */
+  reasoningText: string
 }
 
 /**

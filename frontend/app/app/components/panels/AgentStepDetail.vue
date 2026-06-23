@@ -79,18 +79,28 @@ onUnmounted(() => {
 // `working`, no `finishedAt`) must stop looking live — no ticking clock, no
 // "spinning up" phase, no spinner.
 const runFailed = computed(() => instance.value?.status === 'failed')
+// A step that is finished, failed, or parked on a human is not actively executing —
+// no ticking clock or spinner. `pausedAt` is the "waiting on input" freeze.
 const isRunning = computed(
-  () => !!step.value?.startedAt && !step.value?.finishedAt && !runFailed.value,
+  () =>
+    !!step.value?.startedAt &&
+    !step.value?.finishedAt &&
+    step.value?.pausedAt == null &&
+    !runFailed.value,
 )
 /** Elapsed/total execution time in ms — null until the step has started. */
 const durationMs = computed(() => {
   const s = step.value
   if (s?.startedAt == null) return null
-  // Freeze the clock at the failure time once the run has failed (a mid-flight
-  // step has no `finishedAt`, so the live tick would otherwise count up forever).
+  // Freeze the clock once the step stops working: at its finish, else at the failure
+  // time once the run has failed, else at the moment it parked on a human (`pausedAt`).
+  // Otherwise it is live, so count up to the current tick. (A mid-flight step has no
+  // `finishedAt`, so without these freezes the tick would count up forever.)
   const end =
     s.finishedAt ??
-    (runFailed.value ? (instance.value?.failure?.occurredAt ?? s.startedAt) : nowTick.value)
+    (runFailed.value
+      ? (instance.value?.failure?.occurredAt ?? s.startedAt)
+      : (s.pausedAt ?? nowTick.value))
   return Math.max(0, end - s.startedAt)
 })
 
@@ -195,6 +205,11 @@ function onScroll() {
 
 async function copyOutput() {
   if (step.value?.output) await navigator.clipboard?.writeText(step.value.output)
+}
+
+async function copyRunId() {
+  const id = step.value?.runId ?? instance.value?.id
+  if (id) await navigator.clipboard?.writeText(id)
 }
 
 // --- approval mode (GitHub-style review of a pending gate) -------------------
@@ -549,6 +564,17 @@ watch(
                     <dt class="text-[11px] uppercase tracking-wide text-slate-500">Model</dt>
                     <dd class="mt-0.5 truncate text-slate-300" :title="step.model">
                       {{ modelLabel ?? 'Not recorded' }}
+                    </dd>
+                  </div>
+                  <!-- The run id this step belongs to, surfaced for debugging (copyable). -->
+                  <div class="col-span-2 sm:col-span-3">
+                    <dt class="text-[11px] uppercase tracking-wide text-slate-500">Run</dt>
+                    <dd
+                      class="mt-0.5 cursor-pointer truncate font-mono text-[12px] text-slate-400 hover:text-slate-200"
+                      :title="`${step.runId ?? instance?.id ?? ''} — click to copy`"
+                      @click="copyRunId"
+                    >
+                      {{ step.runId ?? instance?.id ?? '—' }}
                     </dd>
                   </div>
                 </dl>

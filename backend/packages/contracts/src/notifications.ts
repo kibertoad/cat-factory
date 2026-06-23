@@ -27,6 +27,12 @@ import { onCallAssessmentSchema, releaseSignalSchema } from './release.js'
 //                          regression after deploy and the `on-call` agent investigated;
 //                          a human decides whether to revert the PR or acknowledge. Carries
 //                          the on-call assessment + the regressed signals in its payload.
+//   - `decision_required`— an iterative gate parked on a human decision after spending
+//                          its automatic budget (a quality companion at its rework cap,
+//                          or the requirements reviewer at its iteration cap). Without
+//                          this the three-choice decision is reachable only by drilling
+//                          into the parked step, so the run looks silently stuck; acting
+//                          on it opens that step's decision surface.
 //
 // In-app delivery is the only channel today, but the core models delivery behind
 // a `NotificationChannel` port so email / Slack channels can be added later
@@ -46,6 +52,7 @@ export const notificationTypeSchema = v.picklist([
   'requirement_review',
   'clarity_review',
   'release_regression',
+  'decision_required',
 ])
 export type NotificationType = v.InferOutput<typeof notificationTypeSchema>
 

@@ -36,6 +36,7 @@ function metric(overrides: Partial<LlmCallMetric> & Pick<LlmCallMetric, 'id'>): 
     promptPrefixCount: 0,
     promptHash: '',
     responseText: 'ok',
+    reasoningText: '',
     ...overrides,
   }
 }
@@ -72,6 +73,27 @@ export function defineLlmMetricsSuite(name: string, makeRepo: () => LlmCallMetri
       expect(first.responseText).toBe('ok')
       expect(first.streaming).toBe(false)
       expect(first.requestMaxTokens).toBe(1000)
+    })
+
+    it('round-trips the reasoning trace (a thinking model with empty response text)', async () => {
+      const repo = makeRepo()
+      const { ws, e1 } = ids()
+      // The signature this column exists for: output tokens spent, but no response text —
+      // the thinking trace is the only record of what those tokens produced.
+      await repo.record(
+        metric({
+          id: `${ws}-r`,
+          workspaceId: ws,
+          executionId: e1,
+          completionTokens: 17856,
+          finishReason: 'stop',
+          responseText: '',
+          reasoningText: 'Let me work through the spec…',
+        }),
+      )
+      const stored = (await repo.listByExecution(ws, e1))[0]!
+      expect(stored.responseText).toBe('')
+      expect(stored.reasoningText).toBe('Let me work through the spec…')
     })
 
     it('round-trips the delta prompt fields and reports the newest chain tip', async () => {

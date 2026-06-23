@@ -6,7 +6,12 @@ import {
   resolveModelRef,
 } from '@cat-factory/kernel'
 import type { DocumentSourceKind, TaskSourceKind } from '@cat-factory/kernel'
-import type { AppConfig, DocumentsConfig, TasksConfig } from '@cat-factory/server'
+import type {
+  AppConfig,
+  DocumentsConfig,
+  PrivilegedAppConfig,
+  TasksConfig,
+} from '@cat-factory/server'
 import { DEFAULT_SPEND_PRICING, modelCostResolver } from '@cat-factory/spend'
 
 // Translate the Node process environment into the shared AppConfig contract. This is
@@ -29,6 +34,15 @@ function csv(value: string | undefined): string[] {
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean)
+}
+
+// The privileged App tier (ADR 0005) only activates when both its id and key are
+// present; either alone is treated as unconfigured so a half-set env never silently
+// authenticates as a misconfigured App. Mirrors the Worker's `loadPrivilegedApp`.
+function loadPrivilegedApp(env: NodeJS.ProcessEnv): PrivilegedAppConfig | undefined {
+  const appId = env.GITHUB_PRIVILEGED_APP_ID?.trim() ?? ''
+  if (appId === '' || !env.GITHUB_PRIVILEGED_APP_PRIVATE_KEY?.trim()) return undefined
+  return { appId }
 }
 
 // The task sources the Node facade can serve, mirroring the Worker's `ALL_SOURCES`.
@@ -230,6 +244,7 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
       apiBase: env.GITHUB_API_BASE?.trim() || 'https://api.github.com',
       setupRedirectUrl: env.GITHUB_SETUP_REDIRECT_URL?.trim() || '/',
       webhookSecret: env.GITHUB_WEBHOOK_SECRET ?? '',
+      privilegedApp: loadPrivilegedApp(env),
     },
     auth: {
       enabled: githubEnabled || googleEnabled || passwordEnabled,

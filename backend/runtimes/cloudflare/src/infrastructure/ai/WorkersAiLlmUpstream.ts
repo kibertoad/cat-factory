@@ -123,7 +123,14 @@ async function runWorkersAi(args: WorkersAiArgs): Promise<Response> {
   // single generation as one content chunk; Pi (and any OpenAI client) concatenates
   // deltas, so a one-shot chunk is equivalent — the harness reads the final message,
   // and live progress comes from the todo tool, not token streaming.
-  const { text, toolCalls, finishReason: rawFinish, usage } = await generateText(common)
+  const {
+    text,
+    reasoningText,
+    toolCalls,
+    finishReason: rawFinish,
+    usage,
+  } = await generateText(common)
+  const reasoning = typeof reasoningText === 'string' ? reasoningText : ''
   const u = usageOf(usage)
   const oaToolCalls = toOpenAiToolCalls(toolCalls)
   const finishReason = toOpenAiFinish(rawFinish, oaToolCalls.length > 0)
@@ -132,6 +139,10 @@ async function runWorkersAi(args: WorkersAiArgs): Promise<Response> {
       inputTokens: u.prompt_tokens,
       outputTokens: u.completion_tokens,
       textLength: text.length,
+      // A reasoning model can spend its whole output budget thinking and return empty
+      // text (the kimi-k2.7 empty-completion failure); log the reasoning size so that
+      // "N output tokens, 0 text" is no longer a black hole.
+      reasoningLength: reasoning.length,
       toolCalls: oaToolCalls.length,
       finishReason,
       streaming,
@@ -143,6 +154,7 @@ async function runWorkersAi(args: WorkersAiArgs): Promise<Response> {
     usage: u,
     finishReason,
     responseText: text,
+    reasoningText: reasoning,
     ok: true,
     httpStatus: null,
     errorMessage: null,
@@ -209,6 +221,8 @@ async function runCatalogModel(args: WorkersAiArgs): Promise<Response> {
   const choice = completion?.choices?.[0]
   const message = choice?.message
   const text = typeof message?.content === 'string' ? message.content : ''
+  const rawReasoning = message?.reasoning_content ?? message?.reasoning
+  const reasoning = typeof rawReasoning === 'string' ? rawReasoning : ''
   const oaToolCalls = Array.isArray(message?.tool_calls) ? message.tool_calls : []
   const finishReason = choice?.finish_reason ?? (oaToolCalls.length > 0 ? 'tool_calls' : 'stop')
   const u: LlmTokenUsage = {
@@ -221,6 +235,7 @@ async function runCatalogModel(args: WorkersAiArgs): Promise<Response> {
       inputTokens: u.prompt_tokens,
       outputTokens: u.completion_tokens,
       textLength: text.length,
+      reasoningLength: reasoning.length,
       toolCalls: oaToolCalls.length,
       finishReason,
       streaming,
@@ -232,6 +247,7 @@ async function runCatalogModel(args: WorkersAiArgs): Promise<Response> {
     usage: u,
     finishReason,
     responseText: text,
+    reasoningText: reasoning,
     ok: true,
     httpStatus: null,
     errorMessage: null,
@@ -287,6 +303,8 @@ interface OpenAiCompletion {
   choices?: Array<{
     message?: {
       content?: string | null
+      reasoning_content?: string | null
+      reasoning?: string | null
       tool_calls?: Array<Record<string, unknown>>
     }
     finish_reason?: string | null

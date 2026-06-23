@@ -58,6 +58,7 @@ import {
   ContainerSessionService,
   FanOutEventPublisher,
   FetchGitHubClient,
+  FetchGitHubProvisioningClient,
   GitHubAppAuth,
   GitHubAppRegistry,
   GitHubCiStatusProvider,
@@ -283,17 +284,31 @@ function buildNodeAppRegistry(
 ): GitHubAppRegistry | undefined {
   const privateKeyPem = env.GITHUB_APP_PRIVATE_KEY?.trim()
   if (!config.github.enabled || !privateKeyPem) return undefined
+  const makeAuth = (appId: string, key: string) =>
+    new GitHubAppAuth({
+      appId,
+      privateKeyPem: key,
+      installationRepository,
+      clock,
+      apiBase: config.github.apiBase,
+    })
+  // Privileged App tier (ADR 0005): the second App carries `Administration: write`
+  // for repo provisioning. Activates only when both its config id and key are
+  // present, mirroring the Worker's `buildAppRegistry`.
+  const privilegedKey = env.GITHUB_PRIVILEGED_APP_PRIVATE_KEY?.trim()
+  const privileged =
+    config.github.privilegedApp && privilegedKey
+      ? {
+          appId: config.github.privilegedApp.appId,
+          auth: makeAuth(config.github.privilegedApp.appId, privilegedKey),
+        }
+      : undefined
   return new GitHubAppRegistry({
     default: {
       appId: config.github.appId,
-      auth: new GitHubAppAuth({
-        appId: config.github.appId,
-        privateKeyPem,
-        installationRepository,
-        clock,
-        apiBase: config.github.apiBase,
-      }),
+      auth: makeAuth(config.github.appId, privateKeyPem),
     },
+    privileged,
     installationRepository,
   })
 }
@@ -899,6 +914,16 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
           commitBackfillHorizonMs: config.retention.commitMs || undefined,
           ...(appRegistry
             ? {
+                // Privileged App tier (ADR 0005): when configured, its client backs the
+                // create-repo endpoint; `canCreateRepos` flags a connection whose
+                // installation is owned by the privileged App. Absent → repo creation
+                // stays the manual flow (parity with the Worker's selectGitHubDeps).
+                repoProvisioningClient: config.github.privilegedApp
+                  ? new FetchGitHubProvisioningClient({
+                      registry: appRegistry,
+                      apiBase: config.github.apiBase,
+                    })
+                  : undefined,
                 canCreateRepos: (installation) => appRegistry.canCreateRepos(installation),
                 workflowsGranted: async (installation) => {
                   const perms = await appRegistry.installationPermissions(

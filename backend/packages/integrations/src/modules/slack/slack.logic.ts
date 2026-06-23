@@ -54,6 +54,7 @@ const MENTION_AUDIENCE: Record<NotificationType, MentionAudience> = {
   // A post-release regression is an operational event: tell the on-call engineers and
   // the task's creator.
   release_regression: { roles: ['engineering'], includeCreator: true },
+  decision_required: { roles: [], includeCreator: true },
 }
 
 /** The mention audience for a notification type. */
@@ -133,6 +134,7 @@ const TYPE_LABEL: Record<NotificationType, string> = {
   requirement_review: ':memo: Requirement review',
   clarity_review: ':mag: Bug-report triage',
   release_regression: ':rotating_light: Release regression',
+  decision_required: ':vertical_traffic_light: Decision needed',
 }
 
 /** Format a percentage from a 0..1 score for the assessment context line. */

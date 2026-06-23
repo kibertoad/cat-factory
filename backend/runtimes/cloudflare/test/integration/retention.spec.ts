@@ -64,6 +64,7 @@ function llmMetric(id: string, createdAt: number, ws: string) {
     promptPrefixCount: 0,
     promptHash: '',
     responseText: 'ok',
+    reasoningText: '',
   }
 }
 
