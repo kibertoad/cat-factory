@@ -28,6 +28,11 @@ export function applyLocalDefaults(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
     AUTH_DEV_OPEN: env.AUTH_DEV_OPEN?.trim() || 'true',
     // Stable within a process; only signs short-lived proxy tokens for local jobs.
     AUTH_SESSION_SECRET: env.AUTH_SESSION_SECRET?.trim() || randomBytes(32).toString('hex'),
+    // The shared key backing credential encryption at rest (document/task/runner/slack
+    // integrations, personal subscriptions). `loadNodeConfig` requires it, so generate a
+    // per-process key when absent — enough to boot and run a pipeline. Set ENCRYPTION_KEY
+    // explicitly to keep encrypted-at-rest credentials decryptable across restarts.
+    ENCRYPTION_KEY: env.ENCRYPTION_KEY?.trim() || randomBytes(32).toString('base64'),
     // The harness (inside Docker) posts to `${PUBLIC_URL}/v1`; host.docker.internal
     // routes back to this service on the host. The transport publishes the gateway
     // host alias on Linux via `--add-host`.
