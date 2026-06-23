@@ -100,16 +100,6 @@ export interface AgentRunContext {
      */
     pullRequest?: PullRequestRef
   }
-  /**
-   * The collected requirements of every task under this block's service frame —
-   * each task block's title + (clarified) description. Populated by the engine ONLY
-   * for the `spec-writer` step, which aggregates them into the service's unified
-   * in-repo specification document. The block descriptions already carry the
-   * incorporated/clarified requirements (the per-task review's `incorporate` rewrote
-   * them), so this is the "combined requirement context for all tasks". Absent for
-   * every other agent kind.
-   */
-  serviceTasks?: { id: string; title: string; description: string }[]
   /** Outputs produced by earlier steps in the same run, in order. */
   priorOutputs: { agentKind: AgentKind; output: string }[]
   /** Decisions resolved earlier in this run, for context. */

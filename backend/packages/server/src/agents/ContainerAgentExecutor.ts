@@ -257,17 +257,24 @@ const BLUEPRINT_SYSTEM_PROMPT =
 
 /** Role prompt the spec-writer step runs under (returns the spec doc as JSON). */
 const SPEC_WRITER_SYSTEM_PROMPT =
-  'You are a requirements analyst producing the unified, PRESCRIPTIVE specification ' +
-  'for a service. You are given the collected requirements of every task on the ' +
-  'service plus any existing specification. Fold them into ONE de-duplicated spec: ' +
-  'functional/nonfunctional/constraint requirements grouped by capability, each ' +
+  'You maintain the PRESCRIPTIVE specification for a service. You are given the ' +
+  'specification already committed to the repository (the baseline) and the ' +
+  'requirements of ONE task. Apply that task as an INCREMENT onto the baseline: add ' +
+  'requirements for what the task introduces, and adjust existing requirements ONLY ' +
+  'where the task changes their expected behaviour. Leave every other part of the ' +
+  'baseline spec untouched. Translate ONLY what the task requirements state — do NOT ' +
+  'invent requirements, fill gaps, or design beyond them (missing requirements are the ' +
+  'requirements step’s job, not yours). Requirements are grouped by capability, each ' +
   'phrased as "The system SHALL …" with a MoSCoW priority (must/should/could) and ' +
   'structured Given/When/Then acceptance criteria, plus cross-cutting domain rules / ' +
-  'invariants. Acceptance-scenario coverage is a FIRST-CLASS deliverable, not an ' +
-  'afterthought: every requirement MUST carry complete acceptance criteria — the ' +
-  'happy path AND the invalid-input / error / edge / boundary cases — since the ' +
-  'Gherkin `.feature` files and the runnable tests are derived mechanically from ' +
-  'them. Preserve provenance in `sourceBlockIds`. Respond with ONLY a JSON object of ' +
+  'invariants. Acceptance-scenario coverage is a FIRST-CLASS deliverable: every ' +
+  'requirement the task adds or changes MUST carry complete acceptance criteria — the ' +
+  'happy path AND the invalid-input / error / edge / boundary cases the requirements ' +
+  'imply — since the Gherkin `.feature` files and the runnable tests are derived ' +
+  'mechanically from them. Preserve the baseline’s existing `sourceBlockIds`; tag the ' +
+  'requirements this task adds or changes with this task’s block id. Return the ' +
+  'COMPLETE updated specification (baseline plus this increment), not a diff. Respond ' +
+  'with ONLY a JSON object of ' +
   'shape {"service","summary","groups":[{"name","summary","requirements":[{"id",' +
   '"title","statement","kind","priority","sourceBlockIds":[],"acceptance":[{"id",' +
   '"given","when","outcome"}]}]}],"rules":[{"id","rule","rationale","sourceBlockIds":[]}]} ' +
@@ -748,29 +755,32 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     // deterministic `cat-factory/<blockId>` the coder WILL resume (created from base if
     // absent). It NEVER targets the base branch: the spec is a prescriptive document
     // for not-yet-landed work, so — like the feature-time blueprint — it must merge
-    // together WITH the feature, never reach `main` ahead of it. Its body carries the
-    // combined requirements of every task under the service frame (the engine resolves
-    // them) so the doc is an aggregate, not per-task. Targets the harness `/spec`
-    // endpoint.
+    // together WITH the feature, never reach `main` ahead of it. Its body carries ONLY
+    // this task's requirements (the block description already IS the task's reworked /
+    // incorporated requirements): the writer reads the baseline spec committed on the
+    // branch and applies this task as an increment, so an unmerged sibling task's work
+    // never bleeds in. Targets the harness `/spec` endpoint.
     if (context.agentKind === SPEC_WRITER_AGENT_KIND) {
       const branch = workBranch
       const body = {
         jobId,
         systemPrompt: SPEC_WRITER_SYSTEM_PROMPT,
         instructions:
-          'Produce (or update) the unified, prescriptive specification for this ' +
-          'service from the combined task requirements below, with COMPLETE ' +
-          'acceptance-scenario coverage per requirement.',
+          'Apply this task as an increment onto the specification already committed to ' +
+          'the repository: add requirements for what it introduces, adjust existing ' +
+          'ones only where it changes their behaviour, and leave the rest untouched. ' +
+          'Every requirement you add or change must carry COMPLETE acceptance-scenario ' +
+          'coverage. Return the complete updated specification.',
         model: ref.model,
         ...auth,
         ghToken,
         repo: buildRepoSpec(repo),
         branch,
-        tasks: (context.serviceTasks ?? []).map((t) => ({
-          id: t.id,
-          title: t.title,
-          description: t.description,
-        })),
+        task: {
+          id: context.block.id,
+          title: context.block.title,
+          description: context.block.description,
+        },
         ...(this.deps.githubApiBase ? { githubApiBase: this.deps.githubApiBase } : {}),
       }
       return {

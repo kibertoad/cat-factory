@@ -33,7 +33,9 @@ export const COMPANIONS: CompanionDefinition[] = [
     kind: 'spec-companion',
     targets: ['spec-writer'],
     defaultThreshold: DEFAULT_COMPANION_THRESHOLD,
-    reviews: 'service specification and the completeness of its acceptance-scenario coverage',
+    reviews:
+      "specification increment's fidelity to the task requirements it was given and the " +
+      'completeness of its acceptance-scenario coverage',
   },
   {
     // `reviewer` is the coder's companion: it directly challenges the builder's

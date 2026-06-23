@@ -131,7 +131,8 @@ export function seedPipelines(): Pipeline[] {
       id: 'pl_full',
       name: 'Full build',
       // `requirements` runs first and reviews the collected requirements; the
-      // spec-writer then folds them into the in-repo spec, and only THEN does the
+      // spec-writer then applies them as an increment onto the in-repo spec baseline,
+      // and only THEN does the
       // architect design the solution — against that written spec (the architect is
       // spec-aware, so it reads `spec/` from its checkout). The requirements review and
       // the architecture pause for human approval (their proposals are reviewed/edited
@@ -146,12 +147,13 @@ export function seedPipelines(): Pipeline[] {
       // (within the task's thresholds) or raises a review notification.
       agentKinds: [
         'requirements-review',
-        // The spec-writer aggregates every task's clarified requirements into the
-        // service's unified in-repo `spec/` document, committed to the shared work
+        // The spec-writer applies THIS task's clarified requirements as an increment
+        // onto the spec already committed at the branch's baseline (what's merged so
+        // far), writing the complete updated in-repo `spec/` document onto the work
         // branch BEFORE the architect and coder run — so the spec (and its Gherkin
         // acceptance scenarios) is the source of truth the architect designs against
-        // and the code is written to satisfy. Every task's work branch is created up
-        // front, so the read-only architect reads what the spec-writer committed. It
+        // and the code is written to satisfy. An unmerged sibling task's work is never
+        // visible: the only inputs are this task's requirements and the baseline. It
         // is NOT human-gated: the `spec-companion` (Spec Reviewer) below rates the
         // spec and loops the spec-writer back for automatic rework below threshold.
         'spec-writer',
@@ -207,8 +209,9 @@ export function seedPipelines(): Pipeline[] {
       //
       //   requirements-review → analyse + clarify the collected context (human gate)
       //   researcher          → investigate prior art, libraries and constraints
-      //   spec-writer         → aggregate the clarified spec (+ acceptance scenarios)
-      //                         onto the shared work branch BEFORE the design/code
+      //   spec-writer         → apply this task's clarified requirements as a spec
+      //                         increment (+ acceptance scenarios) onto the baseline
+      //                         on the work branch BEFORE the design/code
       //   spec-companion      → challenge acceptance-scenario coverage; loop the
       //                         spec-writer back below threshold (no human gate)
       //   architect           → design the solution against the written spec

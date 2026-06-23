@@ -388,8 +388,10 @@ concernThreshold})` (`requirements.logic.ts`) decides auto-pass / awaiting / exc
   block's incorporated review (optional `requirementReviewRepository` dep). When
   present, `buildAgentContext` uses it as the block description (only for `task`-level
   blocks — reviews are task-scoped, so frame/module steps skip the lookup) and
-  **drops** `contextDocs`/`contextTasks` (already folded in); `gatherServiceTasks`
-  feeds it (not the raw description) to the requirements-writer. Absent → original
+  **drops** `contextDocs`/`contextTasks` (already folded in). The spec-writer then
+  receives that same reworked description as its single-task input and applies it as an
+  increment onto the baseline spec already committed on the branch (it is NOT a
+  service-wide aggregate — an unmerged sibling task is invisible). Absent → original
   behavior. The rework LLM call rejects a length-truncated document (it would become a
   silently-incomplete spec for every downstream agent) rather than persisting it.
 - Persistence: `requirement_reviews`, mirrored on **both** runtimes (parity is
