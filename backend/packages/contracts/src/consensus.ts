@@ -70,8 +70,6 @@ export const consensusStepConfigSchema = v.object({
   synthesizerModelId: v.optional(v.string()),
   /** Debate rounds (1..5); ignored by non-debate strategies. Default applied by the engine. */
   rounds: v.optional(v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(5))),
-  /** When true the step parks on its approval gate for a human to accept/override the synthesis. */
-  ratify: v.optional(v.boolean()),
   /** Optional gating of the process on the task estimate; absent ⇒ always run when enabled. */
   gating: v.optional(consensusGatingSchema),
 })

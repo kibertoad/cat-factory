@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeAll, describe, expect, it, vi } from 'vitest'
 import type {
   AgentExecutor,
   AgentRunContext,
@@ -9,6 +9,7 @@ import type {
 import { decideConsensusMode } from './gating.js'
 import { parseScoreMap } from './strategies/rankedVoting.js'
 import { ConsensusAgentExecutor } from './ConsensusAgentExecutor.js'
+import { registerConsensusTraits } from './traits.js'
 import type { GenerateFn } from './strategies/types.js'
 
 const estimate = (over: Partial<TaskEstimate> = {}): TaskEstimate => ({
@@ -110,6 +111,13 @@ const twoParticipants = [
 ]
 
 describe('ConsensusAgentExecutor', () => {
+  // The executor only runs consensus for kinds that carry a consensus capability trait
+  // (the runtime backstop for the builder's eligibility UI). `architect` is in the
+  // default-eligible set, so register the traits before exercising the run path.
+  beforeAll(() => {
+    registerConsensusTraits()
+  })
+
   it('delegates to the standard executor when no consensus config', async () => {
     const exec = new ConsensusAgentExecutor(baseDeps)
     const res = await exec.run(makeContext())
@@ -130,6 +138,23 @@ describe('ConsensusAgentExecutor', () => {
       }),
     )
     expect(res.output).toBe('STANDARD')
+  })
+
+  it('delegates when the kind is not consensus-eligible, even with a full config', async () => {
+    const exec = new ConsensusAgentExecutor(baseDeps)
+    const res = await exec.run(
+      // `coder` is a container kind that must clone/edit/commit/PR — it carries no
+      // consensus trait, so a hand-crafted config must NOT divert it to an inline panel.
+      makeContext({
+        agentKind: 'coder',
+        consensus: { enabled: true, strategy: 'specialist-panel', participants: twoParticipants },
+      }),
+    )
+    expect(res.output).toBe('STANDARD')
+    expect(exec.runsAsync(makeContext({
+      agentKind: 'coder',
+      consensus: { enabled: true, strategy: 'debate', participants: twoParticipants },
+    }))).toBe(false) // standard fake is not async
   })
 
   it('runs the panel, persists + emits a session, and returns the synthesis', async () => {

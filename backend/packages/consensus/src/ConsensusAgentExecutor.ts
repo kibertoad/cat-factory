@@ -24,6 +24,7 @@ import {
   userPromptFor,
 } from '@cat-factory/agents'
 import { decideConsensusMode } from './gating.js'
+import { isConsensusEligible } from './traits.js'
 import { runSpecialistPanel } from './strategies/specialistPanel.js'
 import { runDebate } from './strategies/debate.js'
 import { runRankedVoting } from './strategies/rankedVoting.js'
@@ -89,10 +90,18 @@ export class ConsensusAgentExecutor implements AsyncAgentExecutor {
     this.generate = deps.generate ?? defaultGenerate
   }
 
-  /** Whether this step should actually run consensus (enabled, ≥2 participants, gate passes). */
+  /**
+   * Whether this step should actually run consensus (enabled, the kind carries a
+   * consensus capability trait, ≥2 participants, gate passes). The eligibility check
+   * is the runtime backstop for the builder's UI guard: a pipeline crafted via the
+   * API with a consensus config on an INELIGIBLE kind (e.g. the container `coder`,
+   * which must clone/edit/commit/PR) must NOT be diverted to an inline multi-model
+   * panel — it falls through to the standard executor unchanged.
+   */
   private consensusActive(context: AgentRunContext): boolean {
     const cfg = context.consensus
     if (!cfg || !cfg.enabled) return false
+    if (!isConsensusEligible(context.agentKind)) return false
     if (cfg.participants.length < 2) return false
     return decideConsensusMode(context.block.estimate, cfg.gating) === 'consensus'
   }

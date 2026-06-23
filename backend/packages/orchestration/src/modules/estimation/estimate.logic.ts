@@ -1,25 +1,15 @@
 import type { TaskEstimate } from '@cat-factory/kernel'
+import { extractJson } from '../requirements/requirements.logic.js'
 
 // Pure helpers for the core `task-estimator` step: tolerant parsing of the
 // agent's JSON triage into a {@link TaskEstimate}, plus a readable summary the
-// board shows in place of the raw JSON. Kept pure (no I/O) for unit testing.
+// board shows in place of the raw JSON. Kept pure (no I/O) for unit testing. The
+// tolerant JSON extraction is the shared `extractJson` helper (same package).
 
 /** Clamp a finite number into [0,1]; null for anything non-numeric. */
 function clamp01(value: unknown): number | null {
   if (typeof value !== 'number' || !Number.isFinite(value)) return null
   return Math.max(0, Math.min(1, value))
-}
-
-/** Extract the first balanced-looking JSON object from free text, or null. */
-export function extractJsonObject(text: string): unknown {
-  const start = text.indexOf('{')
-  const end = text.lastIndexOf('}')
-  if (start === -1 || end <= start) return null
-  try {
-    return JSON.parse(text.slice(start, end + 1))
-  } catch {
-    return null
-  }
 }
 
 /**
@@ -33,7 +23,7 @@ export function coerceTaskEstimate(
   model: string | null,
   now: number,
 ): TaskEstimate | null {
-  const raw = extractJsonObject(output)
+  const raw = extractJson(output)
   if (!raw || typeof raw !== 'object') return null
   const obj = raw as Record<string, unknown>
   const complexity = clamp01(obj.complexity)

@@ -24,7 +24,6 @@ export interface ConsensusStepConfig {
   participants: ConsensusParticipant[]
   synthesizerModelId?: string
   rounds?: number
-  ratify?: boolean
   gating?: ConsensusGating
 }
 
