@@ -2,6 +2,7 @@
 '@cat-factory/contracts': patch
 '@cat-factory/kernel': patch
 '@cat-factory/agents': patch
+'@cat-factory/integrations': patch
 '@cat-factory/orchestration': patch
 '@cat-factory/server': patch
 '@cat-factory/worker': patch

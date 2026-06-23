@@ -2167,8 +2167,11 @@ export class ExecutionService {
    * The collected requirements of every task under `block`'s service frame, for the
    * spec-writer step to aggregate. Each task contributes its reworked
    * ("incorporated") requirements when present — the standard-format document the
-   * rework step produced — and falls back to its plain description otherwise. Returns
-   * an empty list when the block has no service frame (the writer then has only the
+   * rework step produced — else its clarified bug report (a bug task's triaged brief),
+   * and falls back to its plain description otherwise. This mirrors the per-step
+   * substitution in {@link buildAgentContext}, so the spec-writer's aggregate never
+   * shows a task's raw description when a clarified/reworked doc exists. Returns an
+   * empty list when the block has no service frame (the writer then has only the
    * prior doc).
    */
   private async gatherServiceTasks(
@@ -2184,7 +2187,10 @@ export class ExecutionService {
       tasks.map(async (b) => ({
         id: b.id,
         title: b.title,
-        description: (await this.resolveReworkedRequirements(workspaceId, b.id)) ?? b.description,
+        description:
+          (await this.resolveReworkedRequirements(workspaceId, b.id)) ??
+          (await this.resolveClarifiedBrief(workspaceId, b.id)) ??
+          b.description,
       })),
     )
   }
@@ -2740,7 +2746,11 @@ export class ExecutionService {
     const pending = step.pendingIncorporation
     if (pending) {
       step.pendingIncorporation = null
-      const review = await this.runClarityIncorporationCycle(workspaceId, block.id, pending.feedback)
+      const review = await this.runClarityIncorporationCycle(
+        workspaceId,
+        block.id,
+        pending.feedback,
+      )
       if (review.status === 'incorporated') {
         return this.completeRequirementsStep(workspaceId, instance, step, isFinalStep)
       }
@@ -2773,7 +2783,10 @@ export class ExecutionService {
     )
     const preset = await this.resolveMergePreset(workspaceId, block)
     const investigation = await this.investigationForBlock(workspaceId, blockId)
-    await this.requireClarityService().incorporate(workspaceId, review.id, { feedback, investigation })
+    await this.requireClarityService().incorporate(workspaceId, review.id, {
+      feedback,
+      investigation,
+    })
     const reReviewing = await this.requireClarityService().markReReviewing(workspaceId, review.id)
     await this.emitClarityReview(workspaceId, reReviewing)
     const reviewed = await this.requireClarityService().reReview(workspaceId, review.id, {
