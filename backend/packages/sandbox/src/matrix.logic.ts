@@ -7,9 +7,7 @@ import type { SandboxExperiment, SandboxMatrix, SandboxRun } from '@cat-factory/
 
 /** The number of cells a matrix expands to (for the pre-launch cost estimate). */
 export function cellCount(matrix: SandboxMatrix, repeats: number): number {
-  return (
-    matrix.promptVersionIds.length * matrix.models.length * matrix.fixtureIds.length * repeats
-  )
+  return matrix.promptVersionIds.length * matrix.models.length * matrix.fixtureIds.length * repeats
 }
 
 export interface ExpandDeps {
@@ -67,8 +65,6 @@ export function expandMatrix(
 /** A non-empty matrix references at least one of each axis. */
 export function isRunnableMatrix(matrix: SandboxMatrix): boolean {
   return (
-    matrix.promptVersionIds.length > 0 &&
-    matrix.models.length > 0 &&
-    matrix.fixtureIds.length > 0
+    matrix.promptVersionIds.length > 0 && matrix.models.length > 0 && matrix.fixtureIds.length > 0
   )
 }
