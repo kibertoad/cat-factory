@@ -86,6 +86,13 @@ export {
 } from './modules/tracker/github.create.logic.js'
 export * as githubIssuesLogic from './modules/tasks/github-issues.logic.js'
 export { GITHUB_ISSUES_DESCRIPTOR } from './modules/tasks/github-issues.logic.js'
+export {
+  GitHubIssuesProvider,
+  type GitHubIssuesProviderDependencies,
+} from './modules/tasks/GitHubIssuesProvider.js'
+// The Jira task-source provider (a thin `fetch` shell around the pure Jira logic):
+// runtime-neutral, so both facades compose the SAME class instead of a per-runtime copy.
+export { JiraProvider, JiraApiError } from './modules/tasks/JiraProvider.js'
 
 export {
   EnvironmentConnectionService,

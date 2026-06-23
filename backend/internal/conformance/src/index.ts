@@ -12,6 +12,7 @@ export {
   type TestResponse,
 } from './harness.js'
 export { FakeRepoBootstrapper } from './FakeRepoBootstrapper.js'
+export { FakeTaskSourceProvider } from './FakeTaskSourceProvider.js'
 export {
   makeOnboardingProbe,
   type OnboardingContainer,

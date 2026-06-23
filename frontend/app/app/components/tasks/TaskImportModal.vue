@@ -1,12 +1,15 @@
 <script setup lang="ts">
 // Import an issue from a connected task source (by key or URL) and review the
-// issues already imported into the workspace. Unlike the document import flow
-// there is no plan/spawn — issues are attached to a task block for context from
-// the inspector (see TaskContextIssues.vue).
-import type { TaskSourceKind } from '~/types/domain'
+// issues already imported into the workspace. An imported issue can be attached
+// to an existing task for context from the inspector (see TaskContextIssues.vue),
+// or turned directly into a new board task here — pick a container (service frame
+// or module) and "Create task", which seeds a leaf block from the issue and links
+// the issue to it for context.
+import type { Block, TaskSourceKind } from '~/types/domain'
 
 const ui = useUiStore()
 const tasks = useTasksStore()
+const board = useBoardStore()
 const toast = useToast()
 
 const open = computed({
@@ -29,13 +32,51 @@ const sourceTasks = computed(() =>
   source.value ? tasks.tasks.filter((t) => t.source === source.value) : [],
 )
 
+// Containers a new task can be created in: every service frame and module on the
+// board. Modules are labelled with their parent frame so the choice is unambiguous.
+const containerId = ref<string | undefined>(undefined)
+const containerItems = computed(() =>
+  board.blocks
+    .filter((b) => b.level === 'frame' || b.level === 'module')
+    .map((b) => ({
+      label:
+        b.level === 'module'
+          ? `${board.getBlock(b.parentId ?? '')?.title ?? '?'} › ${b.title}`
+          : b.title,
+      value: b.id,
+    })),
+)
+// The issue currently being turned into a task (its row shows a spinner).
+const creatingId = ref<string | null>(null)
+
 watch(open, (isOpen) => {
   if (isOpen) {
     ref_.value = ''
     source.value = ui.taskImport?.source ?? tasks.connectedSources[0]?.source ?? undefined
+    containerId.value = containerItems.value[0]?.value
+    creatingId.value = null
     tasks.loadTasks().catch(() => {})
   }
 })
+
+async function createTask(externalId: string) {
+  if (!source.value || !containerId.value) return
+  creatingId.value = externalId
+  try {
+    const { block } = await tasks.createTaskFromIssue(source.value, externalId, containerId.value)
+    board.upsert(block as Block)
+    toast.add({ title: `Created task "${block.title}"`, icon: 'i-lucide-square-check' })
+  } catch (e) {
+    toast.add({
+      title: 'Could not create task',
+      description: e instanceof Error ? e.message : String(e),
+      icon: 'i-lucide-triangle-alert',
+      color: 'error',
+    })
+  } finally {
+    creatingId.value = null
+  }
+}
 
 async function doImport() {
   const value = ref_.value.trim()
@@ -107,9 +148,19 @@ async function doImport() {
 
         <!-- List of already-imported issues -->
         <div v-if="sourceTasks.length" class="space-y-2">
-          <h3 class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-            Imported issues
-          </h3>
+          <div class="flex items-end justify-between gap-3">
+            <h3 class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+              Imported issues
+            </h3>
+            <UFormField v-if="containerItems.length" label="Create tasks in" size="xs" class="w-56">
+              <USelect
+                v-model="containerId"
+                :items="containerItems"
+                placeholder="Pick a frame or module"
+                class="w-full"
+              />
+            </UFormField>
+          </div>
           <div
             v-for="task in sourceTasks"
             :key="`${task.source}:${task.externalId}`"
@@ -127,11 +178,27 @@ async function doImport() {
                 </a>
                 <p class="mt-0.5 line-clamp-2 text-xs text-slate-500">{{ task.excerpt }}</p>
               </div>
-              <UBadge color="neutral" variant="soft" size="xs" class="shrink-0">
-                {{ task.status }}
-              </UBadge>
+              <div class="flex shrink-0 items-center gap-2">
+                <UBadge color="neutral" variant="soft" size="xs">
+                  {{ task.status }}
+                </UBadge>
+                <UButton
+                  color="primary"
+                  variant="soft"
+                  size="xs"
+                  icon="i-lucide-square-check"
+                  :loading="creatingId === task.externalId"
+                  :disabled="!containerId || creatingId !== null"
+                  @click="createTask(task.externalId)"
+                >
+                  Create task
+                </UButton>
+              </div>
             </div>
           </div>
+          <p v-if="!containerItems.length" class="text-[11px] text-slate-500">
+            Add a service frame to the board first to create tasks from issues.
+          </p>
         </div>
         <p v-else class="text-center text-xs text-slate-500">No issues imported yet.</p>
       </div>

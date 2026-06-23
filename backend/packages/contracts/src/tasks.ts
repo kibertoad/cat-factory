@@ -158,3 +158,17 @@ export const linkTaskSchema = v.object({
   blockId: v.pipe(v.string(), v.trim(), v.minLength(1)),
 })
 export type LinkTaskInput = v.InferOutput<typeof linkTaskSchema>
+
+/**
+ * Materialise an imported issue as a new board task (a leaf block) inside a
+ * container (service frame or module), and link the issue to it for context. The
+ * issue must already be imported (its key is `externalId`). The new task's
+ * title/description are seeded from the issue.
+ */
+export const createTaskFromIssueSchema = v.object({
+  source: taskSourceKindSchema,
+  externalId: v.pipe(v.string(), v.trim(), v.minLength(1)),
+  /** The frame or module the new task is created in. */
+  containerId: v.pipe(v.string(), v.trim(), v.minLength(1)),
+})
+export type CreateTaskFromIssueInput = v.InferOutput<typeof createTaskFromIssueSchema>

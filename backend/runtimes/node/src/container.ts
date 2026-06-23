@@ -7,6 +7,8 @@ import {
 import {
   ConfluenceProvider,
   GitHubDocsProvider,
+  GitHubIssuesProvider,
+  JiraProvider,
   HttpEnvironmentProvider,
   HttpRunnerPoolProvider,
   NotionProvider,
@@ -120,7 +122,6 @@ import {
 } from './repositories/slack.js'
 import { DrizzleTaskConnectionRepository, DrizzleTaskRepository } from './repositories/tasks.js'
 import { CryptoIdGenerator, SystemClock } from './runtime.js'
-import { JiraProvider } from './tasks/JiraProvider.js'
 
 // HKDF domain tag separating runner-pool scheduler secrets from any other use of
 // the same master key (mirrors the Worker's `cat-factory:runners`).
@@ -742,12 +743,6 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     webSearch: inlineWebSearchOptionsFromEnv(env),
   })
 
-  // Task-source integration (Jira). Always on (config load requires ENCRYPTION_KEY);
-  // tenants connect their own Jira site through the UI and the credentials are stored
-  // per-workspace, encrypted at rest. The tracker resolves each workspace's own
-  // credentials from this same store (multi-tenant), mirroring the Cloudflare facade.
-  const tasks = selectNodeTasksDeps(config, options.db)
-
   // Persistence the container-execution path needs (built from the same db). The
   // runner-pool repo also backs the `runners` Core module so a pool is registrable
   // via the API; the installation repo backs both token minting and repo resolution.
@@ -839,6 +834,14 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
           apiBase: config.github.apiBase,
         })
       : undefined)
+
+  // Task-source integration (Jira + GitHub issues). Tenants connect their own Jira
+  // site through the UI (credentials stored per-workspace, encrypted at rest); the
+  // tracker resolves each workspace's own credentials from this same store. GitHub
+  // issues reuse the workspace's installed App, so they wire only when `githubClient`
+  // is available — kept here, after the client is built, for parity with the Worker.
+  const tasks = selectNodeTasksDeps(config, options.db, githubClient, githubInstallationRepository)
+
   const githubGateDeps: Partial<CoreDependencies> = githubClient
     ? {
         ciStatusProvider: new GitHubCiStatusProvider({
@@ -1131,10 +1134,19 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
 function selectNodeTasksDeps(
   config: AppConfig,
   db: DrizzleDb,
+  githubClient: GitHubClient | undefined,
+  installations: GitHubInstallationRepository,
 ): { deps: Partial<CoreDependencies>; taskConnectionRepository?: TaskConnectionRepository } {
   if (!config.tasks.enabled || !config.tasks.encryptionKey) return { deps: {} }
   const providers: TaskSourceProvider[] = []
   if (config.tasks.sources.includes('jira')) providers.push(new JiraProvider())
+  // GitHub issues reuse the workspace's installed GitHub App, so this provider is
+  // wired only when a GitHub client is available (the App is configured) — it has
+  // no credentials of its own and resolves the installation per issue. Mirrors the
+  // Cloudflare facade's `config.github.enabled` gate (see CLAUDE.md parity rule).
+  if (config.tasks.sources.includes('github') && githubClient) {
+    providers.push(new GitHubIssuesProvider({ githubClient, installations }))
+  }
   if (providers.length === 0) return { deps: {} }
 
   const taskConnectionRepository = new DrizzleTaskConnectionRepository(

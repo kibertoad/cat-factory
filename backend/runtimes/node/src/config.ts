@@ -31,9 +31,10 @@ function csv(value: string | undefined): string[] {
     .filter(Boolean)
 }
 
-// Node only ships the runtime-neutral Jira provider today; GitHub Issues need the
-// per-tenant GitHub App installation infra, wired separately.
-const NODE_TASK_SOURCES: readonly TaskSourceKind[] = ['jira']
+// The task sources the Node facade can serve, mirroring the Worker's `ALL_SOURCES`.
+// GitHub issues reuse the workspace's installed GitHub App (wired in the container
+// only when a GitHub client is available); Jira carries its own per-workspace creds.
+const NODE_TASK_SOURCES: readonly TaskSourceKind[] = ['jira', 'github']
 
 const ALL_DOCUMENT_SOURCES: readonly DocumentSourceKind[] = ['confluence', 'notion', 'github']
 
