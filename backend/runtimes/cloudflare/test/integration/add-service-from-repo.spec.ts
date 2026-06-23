@@ -126,6 +126,68 @@ describe('add service from existing repo', () => {
     expect(repos.body.find((r) => r.githubId === 101)?.isMonorepo).toBe(true)
   })
 
+  it('flags the repo as a monorepo via the add request and pins each service to a directory', async () => {
+    const installationId = uniqueInstallationId()
+    const app = makeApp(
+      new FakeAgentExecutor(),
+      githubDeps({ client: clientWithRepo(installationId) }),
+    )
+    const { workspace } = await app.createWorkspace()
+    const ws = workspace.id
+    await app.call('POST', `/workspaces/${ws}/github/connect`, { installationId })
+
+    // Adding the first service flags the repo a monorepo (no separate PATCH) and pins
+    // it to a subdirectory — the frame is titled after the directory's base name.
+    const first = await app.call<Block>('POST', `/workspaces/${ws}/blocks/from-repo`, {
+      repoGithubId: 101,
+      isMonorepo: true,
+      directory: 'packages/api',
+    })
+    expect(first.status).toBe(201)
+    expect(first.body.title).toBe('api')
+
+    // The repo is now flagged a monorepo and (being one) is NOT block-linked, so it can
+    // back further services.
+    const repos = await app.call<GitHubRepo[]>('GET', `/workspaces/${ws}/github/repos`)
+    const repo = repos.body.find((r) => r.githubId === 101)
+    expect(repo?.isMonorepo).toBe(true)
+    expect(repo?.blockId).toBeNull()
+
+    // A second subdirectory adds a second service from the same repo.
+    const second = await app.call<Block>('POST', `/workspaces/${ws}/blocks/from-repo`, {
+      repoGithubId: 101,
+      isMonorepo: true,
+      directory: 'packages/web',
+    })
+    expect(second.status).toBe(201)
+    expect(second.body.title).toBe('web')
+
+    // The same subdirectory can't back two services.
+    const dup = await app.call('POST', `/workspaces/${ws}/blocks/from-repo`, {
+      repoGithubId: 101,
+      isMonorepo: true,
+      directory: 'packages/api',
+    })
+    expect(dup.status).toBe(422)
+  })
+
+  it('rejects a monorepo add request with no directory', async () => {
+    const installationId = uniqueInstallationId()
+    const app = makeApp(
+      new FakeAgentExecutor(),
+      githubDeps({ client: clientWithRepo(installationId) }),
+    )
+    const { workspace } = await app.createWorkspace()
+    const ws = workspace.id
+    await app.call('POST', `/workspaces/${ws}/github/connect`, { installationId })
+
+    const res = await app.call('POST', `/workspaces/${ws}/blocks/from-repo`, {
+      repoGithubId: 101,
+      isMonorepo: true,
+    })
+    expect(res.status).toBe(422)
+  })
+
   it('409s when the App cannot access the requested repo', async () => {
     const installationId = uniqueInstallationId()
     const app = makeApp(

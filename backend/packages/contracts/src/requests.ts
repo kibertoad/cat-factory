@@ -56,6 +56,13 @@ export const addServiceFromRepoSchema = v.object({
    * frame is titled after the directory's base name when given.
    */
   directory: v.optional(v.string()),
+  /**
+   * Whether the backing repo is a monorepo (hosts several services). Sent as part of
+   * the add request instead of a separate up-front PATCH; when provided the backend
+   * persists the repo's monorepo flag, then requires a {@link directory}. A monorepo
+   * repo can back several service frames, each pinned to its own subdirectory.
+   */
+  isMonorepo: v.optional(v.boolean()),
 })
 export type AddServiceFromRepoInput = v.InferOutput<typeof addServiceFromRepoSchema>
 

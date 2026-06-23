@@ -11,8 +11,17 @@ import { useBlockQueries } from '~/composables/useBlockQueries'
  * pure client logic (see {@link useBlockQueries}); every mutation calls the API
  * and applies the authoritative block the server returns.
  */
+/** A detached subtree captured before an optimistic delete, restored on failure. */
+interface RemovalSnapshot {
+  /** The removed block + all its descendants, in their original order. */
+  removed: Block[]
+  /** Survivors whose `dependsOn` lost an edge to a removed block (originals to restore). */
+  edges: { id: string; dependsOn: string[] }[]
+}
+
 export const useBoardStore = defineStore('board', () => {
   const api = useApi()
+  const toast = useToast()
   const blocks = ref<Block[]>([])
 
   // Pure derivations (hierarchy, status/progress, sizing) live in the composable.
@@ -42,10 +51,14 @@ export const useBoardStore = defineStore('board', () => {
    * service frame, with no bootstrap run. The backend links the repo to the new
    * frame and returns it `ready`; we upsert it onto the board.
    */
-  async function addServiceFromRepo(repoGithubId: number, directory?: string): Promise<Block> {
+  async function addServiceFromRepo(
+    repoGithubId: number,
+    opts?: { directory?: string; isMonorepo?: boolean },
+  ): Promise<Block> {
     const block = await api.addServiceFromRepo(useWorkspaceStore().requireId(), {
       repoGithubId,
-      ...(directory ? { directory } : {}),
+      ...(opts?.directory ? { directory: opts.directory } : {}),
+      ...(opts?.isMonorepo !== undefined ? { isMonorepo: opts.isMonorepo } : {}),
     })
     upsert(block)
     return block
@@ -113,10 +126,14 @@ export const useBoardStore = defineStore('board', () => {
     )
   }
 
-  async function removeBlock(id: string) {
-    if (!getBlock(id)) return
-    await api.removeBlock(useWorkspaceStore().requireId(), id)
-    // the server cascades to descendants; mirror that in the local cache
+  /**
+   * Optimistically drop a block and its descendants from the cache, returning a
+   * snapshot so the removal can be undone if the backend call fails. The server
+   * cascades to descendants, so we mirror that here. Exposed for other stores
+   * (e.g. recurring pipelines) that delete a block through their own endpoint.
+   */
+  function detach(id: string): RemovalSnapshot | null {
+    if (!getBlock(id)) return null
     const doomed = new Set<string>([id])
     let grew = true
     while (grew) {
@@ -128,9 +145,47 @@ export const useBoardStore = defineStore('board', () => {
         }
       }
     }
+    const removed = blocks.value.filter((b) => doomed.has(b.id))
+    // Survivors that pointed at a doomed block lose that edge — snapshot the originals.
+    const edges = blocks.value
+      .filter((b) => !doomed.has(b.id) && b.dependsOn.some((d) => doomed.has(d)))
+      .map((b) => ({ id: b.id, dependsOn: [...b.dependsOn] }))
     blocks.value = blocks.value.filter((b) => !doomed.has(b.id))
     for (const b of blocks.value) {
-      b.dependsOn = b.dependsOn.filter((d) => !doomed.has(d))
+      if (b.dependsOn.some((d) => doomed.has(d))) {
+        b.dependsOn = b.dependsOn.filter((d) => !doomed.has(d))
+      }
+    }
+    return { removed, edges }
+  }
+
+  /** Re-insert a detached subtree and restore its broken edges (delete rollback). */
+  function reattach(snap: RemovalSnapshot) {
+    for (const b of snap.removed) if (!getBlock(b.id)) blocks.value.push(b)
+    for (const e of snap.edges) {
+      const b = getBlock(e.id)
+      if (b) b.dependsOn = e.dependsOn
+    }
+  }
+
+  /**
+   * Delete a block. The subtree is hidden IMMEDIATELY (optimistic) so the board
+   * feels instant; if the backend rejects the delete we put it back and surface a
+   * toast rather than silently leaving a ghost.
+   */
+  async function removeBlock(id: string) {
+    const snap = detach(id)
+    if (!snap) return
+    try {
+      await api.removeBlock(useWorkspaceStore().requireId(), id)
+    } catch (e) {
+      reattach(snap)
+      toast.add({
+        title: 'Could not delete',
+        description: e instanceof Error ? e.message : String(e),
+        icon: 'i-lucide-triangle-alert',
+        color: 'error',
+      })
     }
   }
 
@@ -183,6 +238,8 @@ export const useBoardStore = defineStore('board', () => {
     addTask,
     addModule,
     reparentBlock,
+    detach,
+    reattach,
     removeBlock,
     moveBlock,
     updateBlock,

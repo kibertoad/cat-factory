@@ -222,6 +222,13 @@ export class BoardService {
       'GitHubRepo',
       String(input.repoGithubId),
     )
+    // The monorepo flag is sent with the add request (no separate up-front PATCH).
+    // Persist it when provided so it sticks for subsequent adds + the repo picker, then
+    // proceed with the guards below reading the now-current flag.
+    if (input.isMonorepo !== undefined && input.isMonorepo !== repo.isMonorepo) {
+      await this.repoProjectionRepository.setMonorepo(workspaceId, repo.githubId, input.isMonorepo)
+      repo.isMonorepo = input.isMonorepo
+    }
     // Normalise the requested service subdirectory to a clean, SAFE relative path:
     // strip slashes/`.` and reject any `..` segment, so a stored directory can never
     // point an agent's cwd outside the checkout (the harness enforces the same — this
