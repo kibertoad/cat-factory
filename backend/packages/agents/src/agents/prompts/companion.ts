@@ -45,7 +45,7 @@ export function companionSystemPrompt(kind: AgentKind): string | undefined {
           '  open; raising that belongs to the requirements step.',
           'Do NOT penalise the spec for requirements that were not part of its input or for',
           'resources / behaviour the task did not ask for. Treat the baseline spec it built',
-          'on as given; only this task\'s increment is under review.',
+          "on as given; only this task's increment is under review.",
         ]
       : []),
     '',
