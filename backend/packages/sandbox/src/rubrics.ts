@@ -151,21 +151,24 @@ export function weightedTotal(
 /**
  * Heuristic objective score for `findings` fixtures: how many of the planted
  * expected findings appear in the candidate output. Each expected finding is matched
- * case-insensitively as a normalized substring (whitespace collapsed). This is a
- * cheap, deterministic recall signal recorded ALONGSIDE the judge grade — it is not a
- * substitute for the judge and intentionally does not penalize extra findings (that's
+ * case-insensitively as a contiguous run of word tokens (alphanumeric runs, so
+ * punctuation/whitespace differences are ignored). Token-sequence matching avoids the
+ * false positives raw substring matching produces — e.g. `reset logic` no longer matches
+ * inside `preset logic`, and `off by one` no longer matches inside `offset by one`. This
+ * is a cheap, deterministic recall signal recorded ALONGSIDE the judge grade — it is not
+ * a substitute for the judge and intentionally does not penalize extra findings (that's
  * the judge's `false_positives` dimension). Returns matched count, total, and recall.
  */
 export function scoreExpectedFindings(
   expectedFindings: string[],
   output: string,
 ): { matched: number; total: number; recall: number; missing: string[] } {
-  const haystack = normalize(output)
+  const haystack = tokenize(output)
   const missing: string[] = []
   let matched = 0
   for (const finding of expectedFindings) {
-    const needle = normalize(finding)
-    if (needle.length > 0 && haystack.includes(needle)) matched++
+    const needle = tokenize(finding)
+    if (needle.length > 0 && containsSequence(haystack, needle)) matched++
     else missing.push(finding)
   }
   const total = expectedFindings.length
@@ -173,6 +176,23 @@ export function scoreExpectedFindings(
   return { matched, total, recall, missing }
 }
 
-function normalize(text: string): string {
-  return text.toLowerCase().replace(/\s+/g, ' ').trim()
+/** Lowercase alphanumeric word tokens (drops punctuation/whitespace). */
+function tokenize(text: string): string[] {
+  return text.toLowerCase().match(/[a-z0-9]+/g) ?? []
+}
+
+/** Whether `needle`'s tokens appear as a contiguous run within `haystack`'s tokens. */
+function containsSequence(haystack: string[], needle: string[]): boolean {
+  if (needle.length === 0) return false
+  for (let i = 0; i + needle.length <= haystack.length; i++) {
+    let hit = true
+    for (let j = 0; j < needle.length; j++) {
+      if (haystack[i + j] !== needle[j]) {
+        hit = false
+        break
+      }
+    }
+    if (hit) return true
+  }
+  return false
 }

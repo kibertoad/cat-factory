@@ -82,6 +82,30 @@ export const sandboxRepoRefSchema = v.object({
 })
 export type SandboxRepoRef = v.InferOutput<typeof sandboxRepoRefSchema>
 
+/** Fixture kinds whose starting point is a repo seed (vs. an inline payload). */
+export const SANDBOX_REPO_FIXTURE_KINDS = ['repo-feature', 'repo-bug'] as const
+
+/**
+ * A fixture's shape must match its kind: repo kinds (`repo-feature`/`repo-bug`) carry a
+ * `repoRef` and no inline `payload`; inline kinds carry a `payload` and no `repoRef`.
+ * Enforced as a cross-field check so a contradictory fixture (e.g. a `repo-feature` with
+ * a null `repoRef`, or an inline fixture with a null `payload`) can never be stored and
+ * then crash the run driver when it resolves the seed/context at dispatch.
+ */
+const fixtureShapeMatchesKind = (input: {
+  kind: SandboxFixtureKind
+  payload: Record<string, unknown> | null
+  repoRef: SandboxRepoRef | null
+}): boolean => {
+  const isRepo = (SANDBOX_REPO_FIXTURE_KINDS as readonly string[]).includes(input.kind)
+  return isRepo
+    ? input.repoRef !== null && input.payload === null
+    : input.payload !== null && input.repoRef === null
+}
+
+const FIXTURE_SHAPE_MESSAGE =
+  'Repo fixtures (repo-feature/repo-bug) require a repoRef and no payload; inline fixtures require a payload and no repoRef'
+
 /**
  * The optional objective check a fixture declares, used alongside the LLM judge.
  * `tests` runs a hidden command against the agent's produced branch (pass/fail);
@@ -101,7 +125,7 @@ export const sandboxFixtureObjectiveSchema = v.variant('kind', [
 ])
 export type SandboxFixtureObjective = v.InferOutput<typeof sandboxFixtureObjectiveSchema>
 
-export const sandboxFixtureSchema = v.object({
+const sandboxFixtureObjectSchema = v.object({
   id: v.string(),
   kind: sandboxFixtureKindSchema,
   name: v.string(),
@@ -115,6 +139,13 @@ export const sandboxFixtureSchema = v.object({
   origin: v.picklist(['builtin', 'custom']),
   createdAt: v.number(),
 })
+export const sandboxFixtureSchema = v.pipe(
+  sandboxFixtureObjectSchema,
+  v.check(
+    (f: v.InferOutput<typeof sandboxFixtureObjectSchema>) => fixtureShapeMatchesKind(f),
+    FIXTURE_SHAPE_MESSAGE,
+  ),
+)
 export type SandboxFixture = v.InferOutput<typeof sandboxFixtureSchema>
 
 // ---- Experiments ----------------------------------------------------------
@@ -250,13 +281,20 @@ export const setSandboxLabelsSchema = v.object({
 export type SetSandboxLabelsInput = v.InferOutput<typeof setSandboxLabelsSchema>
 
 /** Create a custom fixture in a workspace. */
-export const createSandboxFixtureSchema = v.object({
+const createSandboxFixtureObjectSchema = v.object({
   kind: sandboxFixtureKindSchema,
   name: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(80)),
   payload: v.optional(v.nullable(v.record(v.string(), v.unknown())), null),
   repoRef: v.optional(v.nullable(sandboxRepoRefSchema), null),
   objective: v.optional(v.nullable(sandboxFixtureObjectiveSchema), null),
 })
+export const createSandboxFixtureSchema = v.pipe(
+  createSandboxFixtureObjectSchema,
+  v.check(
+    (f: v.InferOutput<typeof createSandboxFixtureObjectSchema>) => fixtureShapeMatchesKind(f),
+    FIXTURE_SHAPE_MESSAGE,
+  ),
+)
 export type CreateSandboxFixtureInput = v.InferOutput<typeof createSandboxFixtureSchema>
 
 /** Create an experiment (status `draft`); launching it expands the matrix into runs. */

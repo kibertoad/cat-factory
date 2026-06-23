@@ -49,4 +49,16 @@ describe('scoreExpectedFindings', () => {
   it('treats an empty expected set as full recall', () => {
     expect(scoreExpectedFindings([], 'anything')).toMatchObject({ matched: 0, total: 0, recall: 1 })
   })
+
+  it('matches whole word tokens, not substrings of larger words', () => {
+    // `reset logic` must NOT match inside `preset logic`, and `off by one` must NOT
+    // match inside `offset by one` — raw substring matching would over-count both.
+    const out = scoreExpectedFindings(
+      ['reset logic', 'off by one'],
+      'The preset logic is fine and the index is offset by one deliberately.',
+    )
+    expect(out.matched).toBe(0)
+    expect(out.recall).toBe(0)
+    expect(out.missing).toEqual(['reset logic', 'off by one'])
+  })
 })
