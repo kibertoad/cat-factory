@@ -164,3 +164,23 @@ export function safeParseBlueprintService(value: unknown): BlueprintService | un
   const result = v.safeParse(blueprintServiceSchema, value)
   return result.success ? result.output : undefined
 }
+
+/**
+ * Render a {@link BlueprintService} as readable markdown for HUMAN + COMPANION
+ * review — the descriptive counterpart of {@link renderSpecForReview}. A Blueprinter
+ * is a container agent whose reviewable work product is the decomposition tree, not
+ * its raw Pi transcript summary, so any companion grading it (today or in future)
+ * must see the tree itself: the service, its entrypoints, and each module with its
+ * responsibility and owned paths. Deterministic and dependency-free.
+ */
+export function renderBlueprintForReview(service: BlueprintService): string {
+  const lines: string[] = [`# Service: ${service.name} (${service.type})`]
+  if (service.summary) lines.push('', service.summary)
+  if (service.references?.length) lines.push('', `Entrypoints: ${service.references.join(', ')}`)
+  for (const mod of service.modules ?? []) {
+    lines.push('', `## Module: ${mod.name}`)
+    if (mod.summary) lines.push('', mod.summary)
+    if (mod.references?.length) lines.push('', `Paths: ${mod.references.join(', ')}`)
+  }
+  return lines.join('\n')
+}

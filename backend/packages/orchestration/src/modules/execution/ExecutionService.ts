@@ -35,6 +35,7 @@ import {
 } from '@cat-factory/agents'
 import { getFragment } from '@cat-factory/prompt-fragments'
 import { extractJson, hasNotesToIncorporate } from '../requirements/requirements.logic.js'
+import { reviewableArtifactOutput } from './artifact-review.logic.js'
 import {
   resolveIndividualVendors,
   type HasPersonalSubscription,
@@ -1173,6 +1174,17 @@ export class ExecutionService {
     if (result.spec !== undefined) {
       await this.ingestSpec(workspaceId, result.spec)
     }
+
+    // A producer that emits a STRUCTURED ARTIFACT (the spec doc, the blueprint tree, …)
+    // returns its raw Pi transcript summary as `result.output` — useless for review.
+    // Replace the step's reviewable output with a rendering of the artifact ITSELF, so
+    // its companion grades the PRODUCT (and the SPA reader + downstream steps see it),
+    // not the agent's chatter. Grading the transcript is what made the spec-companion
+    // declare every pass "unreviewable" and loop the producer to its rework cap on every
+    // spec task — a trap for ANY artifact-producing agent with a companion, now and
+    // future, which is why this is keyed off the artifact, not a specific agentKind.
+    const reviewable = reviewableArtifactOutput(result)
+    if (reviewable !== undefined) step.output = reviewable
 
     // Human approval gate: a step the pipeline marked `requiresApproval` pauses
     // here once its proposal is ready, so a human can review (and edit) it before

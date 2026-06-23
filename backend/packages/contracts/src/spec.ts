@@ -154,3 +154,43 @@ export function safeParseSpecDoc(value: unknown): SpecDoc | undefined {
   const result = v.safeParse(specDocSchema, value)
   return result.success ? result.output : undefined
 }
+
+/**
+ * Render a {@link SpecDoc} as readable markdown for HUMAN + COMPANION review.
+ *
+ * The spec-writer is a container agent: it emits the spec as JSON, renders the
+ * in-repo files and commits them, then its raw `summary` (a fragment of the Pi
+ * transcript) is all that survives on the step. Grading that transcript instead of
+ * the document is what made the spec-companion declare every pass "unreviewable" and
+ * loop the producer to its cap. This renders the actual tree — every group, its
+ * requirements (statement / kind / priority) and their Given/When/Then acceptance
+ * criteria, plus the cross-cutting rules — so the reviewer (and the SPA reader, and
+ * downstream steps) see the spec itself, not the agent's chatter. Deterministic and
+ * dependency-free so it is safe to call at the ingest trust boundary.
+ */
+export function renderSpecForReview(spec: SpecDoc): string {
+  const lines: string[] = [`# Specification: ${spec.service}`]
+  if (spec.summary) lines.push('', spec.summary)
+  for (const group of spec.groups ?? []) {
+    lines.push('', `## ${group.name}`)
+    if (group.summary) lines.push('', group.summary)
+    for (const req of group.requirements ?? []) {
+      lines.push('', `### ${req.title} (${req.id})`, '', `- Kind: ${req.kind}`)
+      lines.push(`- Priority: ${req.priority}`)
+      lines.push(`- Statement: ${req.statement}`)
+      for (const ac of req.acceptance ?? []) {
+        lines.push(
+          `  - Acceptance ${ac.id}: GIVEN ${ac.given} WHEN ${ac.when} THEN ${ac.outcome}`,
+        )
+      }
+    }
+  }
+  const rules = spec.rules ?? []
+  if (rules.length) {
+    lines.push('', '## Domain rules')
+    for (const rule of rules) {
+      lines.push(`- ${rule.rule}${rule.rationale ? ` (${rule.rationale})` : ''}`)
+    }
+  }
+  return lines.join('\n')
+}

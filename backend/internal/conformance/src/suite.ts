@@ -1102,11 +1102,15 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         expect(exec.status).toBe('done')
         const step = exec.steps.find((s) => s.agentKind === 'spec-writer')!
         expect(step.state).toBe('done')
-        // The engine populated `serviceTasks` with at least the running task, and the
-        // doc parsed + ingested cleanly (a strict-parse failure would not throw, but a
-        // completed step with this output proves the happy path ran end to end).
-        expect(step.output).toContain('[spec-writer]')
-        expect(step.output).toMatch(/from [1-9]\d* task/)
+        // The doc parsed + ingested cleanly, and the engine replaced the step's
+        // reviewable output (the raw container transcript summary) with a rendering of
+        // the SPEC ITSELF — the universal artifact-review handoff a companion grades.
+        // Pinned on both runtimes so a facade can't drift back to surfacing the
+        // transcript (which made the spec-companion loop on an "unreviewable" artifact).
+        expect(step.output).not.toContain('[spec-writer]')
+        expect(step.output).toContain('# Specification: Auth')
+        expect(step.output).toContain('The system SHALL let a user log in.')
+        expect(step.output).toContain('GIVEN a registered user WHEN they sign in THEN a session starts')
       })
 
       it('skips a disabled step at run start but keeps it in the saved pipeline', async () => {
