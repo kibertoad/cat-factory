@@ -178,6 +178,31 @@ export class BoardService {
     return assertFound<{ homeWorkspaceId: string; block: Block }>(null, 'Block', id)
   }
 
+  /**
+   * Resolve the home workspace to run a {@link removeBlock} against. Deletion is idempotent and
+   * best-effort, so unlike {@link resolveBlock} this NEVER 404s: a block local to this workspace
+   * resolves here; a block belonging to a service this workspace mounts resolves to that service's
+   * home (so a shared frame is deleted from any board that mounts it); anything else — a block row
+   * that's already gone, or one only another (un-mounted) workspace can see — resolves to THIS
+   * workspace, where the caller mops up whatever related rows survive. Every cleanup the caller
+   * does is scoped to the returned workspace, so falling back here can only ever touch this
+   * workspace's data, never reach across into another's.
+   */
+  private async resolveBlockHomeForRemoval(workspaceId: string, id: string): Promise<string> {
+    const local = await this.blockRepository.get(workspaceId, id)
+    if (local) return workspaceId
+    if (this.serviceRepository && this.workspaceMountRepository) {
+      const found = await this.blockRepository.findById(id)
+      if (
+        found?.serviceId &&
+        (await this.workspaceMountRepository.get(workspaceId, found.serviceId))
+      ) {
+        return found.workspaceId
+      }
+    }
+    return workspaceId
+  }
+
   /** Add a top-level frame (service/api/database/…) to the board. */
   async addFrame(workspaceId: string, input: AddFrameInput): Promise<Block> {
     await this.requireWorkspace(workspaceId)
@@ -477,8 +502,14 @@ export class BoardService {
   async removeBlock(workspaceId: string, id: string): Promise<void> {
     await this.requireWorkspace(workspaceId)
     // Resolve the block at its home so a shared service's block can be deleted from any board
-    // that mounts it (the delete then applies to the one shared copy everywhere).
-    const { homeWorkspaceId } = await this.resolveBlock(workspaceId, id)
+    // that mounts it (the delete then applies to the one shared copy everywhere). Deletion is
+    // best-effort and idempotent: if the block row is already GONE (e.g. a half-deleted service
+    // that left a dangling mount/repo-link/execution), we must NOT 404 — a thing not existing
+    // can't be allowed to block cleanup of the related entities that do still exist. The resolve
+    // never throws; it falls back to this workspace, and every cleanup below is scoped to that
+    // home, so we tear down whatever references the id (+ its surviving descendants) without ever
+    // touching another workspace's data.
+    const homeWorkspaceId = await this.resolveBlockHomeForRemoval(workspaceId, id)
     const blocks = await this.blockRepository.listByWorkspace(homeWorkspaceId)
     const doomed = descendantIds(blocks, id)
 
@@ -498,17 +529,23 @@ export class BoardService {
     // service frame, so deleting a frame doesn't leave an orphaned service lingering in the
     // org catalog (mountable, badged, yet rendering nothing) on other boards.
     if (this.serviceRepository && this.workspaceMountRepository) {
-      const doomedServiceIds: string[] = []
+      const doomedServiceIds = new Set<string>()
       for (const b of blocks) {
         if (!doomed.has(b.id) || b.level !== 'frame' || b.parentId !== null) continue
         const service = await this.serviceRepository.getByFrameBlock(b.id)
-        if (service) doomedServiceIds.push(service.id)
+        if (service) doomedServiceIds.add(service.id)
       }
-      if (doomedServiceIds.length > 0) {
+      // The frame block may already be gone (the dangling case), so it isn't in `blocks` above —
+      // look the service up directly by the deleted id too, so the orphaned service + its mounts
+      // are still reclaimed rather than lingering in the org catalog forever.
+      const danglingService = await this.serviceRepository.getByFrameBlock(id)
+      if (danglingService) doomedServiceIds.add(danglingService.id)
+      if (doomedServiceIds.size > 0) {
         // Batched: clear every board's mount of the doomed services, then delete the services
         // (two queries, not a listByService + per-mount remove + per-service delete loop).
-        await this.workspaceMountRepository.removeByServices(doomedServiceIds)
-        await this.serviceRepository.deleteMany(doomedServiceIds)
+        const ids = [...doomedServiceIds]
+        await this.workspaceMountRepository.removeByServices(ids)
+        await this.serviceRepository.deleteMany(ids)
       }
     }
     await this.blockRepository.deleteMany(homeWorkspaceId, [...doomed])
