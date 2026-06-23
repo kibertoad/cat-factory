@@ -5,6 +5,7 @@ import {
   type FakeAgentOptions,
   FakeRepoBootstrapper,
   RecordingEventPublisher,
+  driveWorkspace,
   makeIncorporatedReview,
   makeOnboardingProbe,
   makeReadyReviewWithOpenItem,
@@ -120,32 +121,16 @@ export function makeConformanceApp(
     return container.workspaceService.create({ name, seed: false }, user.id, org.id)
   }
 
-  // Drive every active run to a standstill via the engine directly — the Node analogue
-  // of the Worker helper's `drive` (production uses the pg-boss durable runner).
+  // Drive every active run to a standstill through the SHARED production driver
+  // (`driveExecution`, via `driveWorkspace`) — the same loop the pg-boss runner uses, so
+  // the suite can't pass against a hand-rolled twin that diverges from production.
   async function drive(workspaceId: string, maxRounds = 50): Promise<ExecutionInstance[]> {
-    for (let round = 0; round < maxRounds; round++) {
-      const { executions } = await container.workspaceService.snapshot(workspaceId)
-      // The suite also advances `paused` (spend-gated) runs so a spend pause→resume is
-      // exercised deterministically. Production diverges intentionally: `driveExecution`
-      // parks on `paused` and the stale-run sweeper only re-drives `running`, so a real
-      // spend-paused run resumes on an explicit signal, not automatically — that resume
-      // path is out of the cross-runtime conformance suite's scope (see drive.ts).
-      const active = executions.filter((e) => e.status === 'running' || e.status === 'paused')
-      if (active.length === 0) break
-      for (const e of active) {
-        // Mirror the durable driver: an advance that parks on an async job / CI / conflicts
-        // gate is drained by polling, so a polled (container-style) agent step completes
-        // here exactly as it does under pg-boss. Inert for the inline fake (never parks).
-        const exec = container.executionService
-        let r = await exec.advanceInstance(workspaceId, e.id)
-        for (let hops = 0; hops < 500; hops++) {
-          if (r.kind === 'awaiting_job') r = await exec.pollAgentJob(workspaceId, e.id)
-          else if (r.kind === 'awaiting_gate') r = await exec.pollGate(workspaceId, e.id)
-          else break
-        }
-      }
-    }
-    return (await container.workspaceService.snapshot(workspaceId)).executions
+    return driveWorkspace(
+      container.executionService,
+      workspaceId,
+      async () => (await container.workspaceService.snapshot(workspaceId)).executions,
+      maxRounds,
+    )
   }
 
   function executionEmits(blockId?: string): ExecutionInstance[] {

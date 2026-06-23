@@ -78,6 +78,9 @@ importers:
       '@cat-factory/kernel':
         specifier: workspace:*
         version: link:../../packages/kernel
+      '@cat-factory/orchestration':
+        specifier: workspace:*
+        version: link:../../packages/orchestration
       '@cat-factory/prompt-fragments':
         specifier: workspace:*
         version: link:../../packages/prompt-fragments

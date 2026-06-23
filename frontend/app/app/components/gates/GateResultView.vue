@@ -149,8 +149,8 @@ const conflictVerdict = computed(() => {
               <UIcon :name="meta.icon" class="h-8 w-8 opacity-40" />
               <p class="text-sm">No gate activity yet.</p>
               <p class="max-w-sm text-[11px] text-slate-500">
-                The precheck runs once the PR is open. While it polls, the step shows live
-                state on the board.
+                The precheck runs once the PR is open. While it polls, the step shows live state on
+                the board.
               </p>
             </div>
 
@@ -160,9 +160,14 @@ const conflictVerdict = computed(() => {
                 v-if="status === 'passed'"
                 class="flex items-start gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2.5"
               >
-                <UIcon name="i-lucide-circle-check" class="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
+                <UIcon
+                  name="i-lucide-circle-check"
+                  class="mt-0.5 h-4 w-4 shrink-0 text-emerald-400"
+                />
                 <p class="text-[13px] leading-relaxed text-emerald-200">
-                  {{ step?.output || (isCi ? 'CI is green.' : 'The PR merges cleanly with its base.') }}
+                  {{
+                    step?.output || (isCi ? 'CI is green.' : 'The PR merges cleanly with its base.')
+                  }}
                 </p>
               </div>
 
@@ -178,7 +183,9 @@ const conflictVerdict = computed(() => {
                     class="flex items-center gap-2 rounded-md border border-slate-800 bg-slate-950/40 px-3 py-1.5"
                   >
                     <UIcon name="i-lucide-circle-x" class="h-3.5 w-3.5 shrink-0 text-rose-400" />
-                    <span class="min-w-0 flex-1 truncate text-[13px] text-slate-200">{{ c.name }}</span>
+                    <span class="min-w-0 flex-1 truncate text-[13px] text-slate-200">{{
+                      c.name
+                    }}</span>
                     <span class="shrink-0 text-[11px] uppercase text-rose-300">
                       {{ c.conclusion ?? 'failure' }}
                     </span>
@@ -205,8 +212,8 @@ const conflictVerdict = computed(() => {
                   <span class="text-[13px] text-slate-200">{{ conflictVerdict }}</span>
                 </div>
                 <p class="mt-2 text-[11px] leading-relaxed text-slate-500">
-                  GitHub reports mergeability as a single verdict, so there's no file-level
-                  conflict list here. The conflict resolver inspects the branch directly.
+                  GitHub reports mergeability as a single verdict, so there's no file-level conflict
+                  list here. The conflict resolver inspects the branch directly.
                 </p>
               </template>
             </template>
@@ -221,7 +228,11 @@ const conflictVerdict = computed(() => {
                 State
               </h4>
               <div class="flex items-center gap-2 text-[13px]">
-                <UIcon :name="STATUS_META[status].icon" class="h-4 w-4" :class="STATUS_META[status].text" />
+                <UIcon
+                  :name="STATUS_META[status].icon"
+                  class="h-4 w-4"
+                  :class="STATUS_META[status].text"
+                />
                 <span :class="STATUS_META[status].text">{{ STATUS_META[status].label }}</span>
               </div>
             </div>
@@ -231,7 +242,9 @@ const conflictVerdict = computed(() => {
                 {{ helperMeta.label }}
               </h4>
               <p class="text-[12px] text-slate-300">
-                {{ gate.attempts }}/{{ gate.maxAttempts }} attempt{{ gate.maxAttempts === 1 ? '' : 's' }}
+                {{ gate.attempts }}/{{ gate.maxAttempts }} attempt{{
+                  gate.maxAttempts === 1 ? '' : 's'
+                }}
                 <template v-if="gate.phase === 'working'"> · running…</template>
                 <template v-else-if="gate.attempts === 0"> · not needed yet</template>
               </p>
@@ -253,8 +266,7 @@ const conflictVerdict = computed(() => {
 
             <p class="mt-auto text-[10px] leading-relaxed text-slate-600">
               A gate runs a programmatic precheck and only spins up the
-              {{ helperMeta.label }} when it fails — a green check advances with nothing
-              spun up.
+              {{ helperMeta.label }} when it fails — a green check advances with nothing spun up.
             </p>
           </aside>
         </div>

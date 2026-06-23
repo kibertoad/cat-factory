@@ -20,6 +20,7 @@
   "dependencies": {
     "@cat-factory/agents": "workspace:*",
     "@cat-factory/kernel": "workspace:*",
+    "@cat-factory/orchestration": "workspace:*",
     "@cat-factory/prompt-fragments": "workspace:*"
   },
   "devDependencies": {

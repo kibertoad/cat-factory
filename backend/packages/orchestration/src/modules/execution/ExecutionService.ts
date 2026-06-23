@@ -1301,15 +1301,19 @@ export class ExecutionService {
       step.output = result.output || ''
       step.companion = companion
       await this.executionRepository.upsert(workspaceId, instance)
-      await this.failRun(
-        workspaceId,
-        instance.id,
-        `Companion "${step.agentKind}" did not return a parseable assessment (its reply ` +
+      // Hand the precise classification + the raw reply (the whole point of the failure,
+      // for triage) to the driver's single `failRun` funnel. Do NOT fail the run here as
+      // well: a second `failRun` from the driver would clobber this rich record with a
+      // generic `job_failed` ("the implementation container reported a failure", no
+      // detail), which is exactly the misleading surface this path is meant to avoid.
+      return {
+        kind: 'job_failed',
+        failureKind: 'companion_rejected',
+        error:
+          `Companion "${step.agentKind}" did not return a parseable assessment (its reply ` +
           `was truncated or malformed) after a repair retry.`,
-        'companion_rejected',
-        (result.output ?? '').slice(0, 2000) || null,
-      )
-      return { kind: 'job_failed', error: 'companion_rejected' }
+        detail: (result.output ?? '').slice(0, 2000) || undefined,
+      }
     }
 
     // The score to judge: the parsed rating when there is a producer to grade, else a
@@ -1892,8 +1896,10 @@ export class ExecutionService {
     step.output = output
     await this.executionRepository.upsert(workspaceId, instance)
     await this.raiseTestFailed(workspaceId, instance, block, error, attempts)
-    await this.failRun(workspaceId, instance.id, error, 'agent')
-    return { kind: 'job_failed', error }
+    // Carry the precise classification (`agent`, not the generic container `job_failed`)
+    // and the Tester's own summary to the driver's single `failRun` funnel; failing the
+    // run here too would let the driver's second `failRun` clobber it (see evaluateCompanion).
+    return { kind: 'job_failed', failureKind: 'agent', error, detail: output || undefined }
   }
 
   /** Raise a `test_failed` notification when the Tester gate gives up. */
@@ -3444,6 +3450,13 @@ export class ExecutionService {
     // every failure kind (job_failed from the driver, the spend/decision timeouts,
     // and the user-facing stopRun, which already reclaimed — the call is idempotent).
     await this.stopRunContainer(workspaceId, instance)
+    // The FIRST recorded failure wins: a run already in a terminal `failed` state keeps
+    // its existing (richest) failure rather than being overwritten. An inline gate that
+    // knows the precise kind/detail returns a `job_failed` result the driver funnels here,
+    // so there should only ever be one write — but this guards against a future path that
+    // both records a failure and returns `job_failed`, which would otherwise clobber the
+    // good record with a generic one (the companion-rejected regression).
+    if (instance.status === 'failed') return
     const failure: AgentFailure = {
       kind,
       message,

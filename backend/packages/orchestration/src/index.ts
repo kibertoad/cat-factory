@@ -14,6 +14,13 @@ export {
 } from './modules/execution/ExecutionService.js'
 export type { AdvanceOptions, AdvanceResult } from './modules/execution/advance.js'
 export {
+  driveExecution,
+  type DriveConfig,
+  type DriveLogger,
+  type DriveOptions,
+  type DriveOutcome,
+} from './modules/execution/drive.js'
+export {
   aggregateCi,
   isCiGreen,
   describeFailingChecks,

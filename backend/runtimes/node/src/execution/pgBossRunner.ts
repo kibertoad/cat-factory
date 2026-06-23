@@ -145,7 +145,7 @@ export async function startExecutionWorker(
             workspaceId,
             executionId,
             cfg,
-            log,
+            { log },
           )
           // Arm a decision timeout when the run parked awaiting a human. There is no
           // event to cancel it on resolution (unlike Cloudflare's waitForEvent), so the
