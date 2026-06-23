@@ -2,6 +2,7 @@
 import { ref, reactive, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { onKeyStroke } from '@vueuse/core'
 import type { AgentState } from '~/types/domain'
+import type { IterationCapChoice } from '~/types/execution'
 import { agentKindMeta } from '~/utils/catalog'
 import { parseOutputOutline, sliceSource } from '~/utils/agentOutput'
 import { subtaskIconClass } from '~/utils/pipelineRender'
@@ -208,6 +209,24 @@ interface DraftComment {
 }
 const approvalPending = computed(() => step.value?.approval?.status === 'pending')
 const approvalId = computed(() => step.value?.approval?.id ?? null)
+
+// A companion step parked at its automatic-rework cap: instead of the generic
+// approve/request-changes/reject rail, it shows the shared iteration-cap prompt
+// (one more round / proceed / stop & reset), resolved through its own endpoint.
+const companionExceeded = computed(
+  () => approvalPending.value && !!step.value?.companion?.exceeded,
+)
+const resolvingCap = ref(false)
+async function resolveCompanionCap(choice: IterationCapChoice) {
+  if (!ctx.value || !approvalId.value || resolvingCap.value) return
+  resolvingCap.value = true
+  try {
+    await execution.resolveCompanionExceeded(ctx.value.instanceId, approvalId.value, choice)
+    close()
+  } finally {
+    resolvingCap.value = false
+  }
+}
 const reviewComments = ref<DraftComment[]>([])
 const feedback = ref('')
 const submitting = ref(false)
@@ -231,7 +250,7 @@ function syncHighlights() {
 
 /** Click a rendered block to start commenting on it (links keep working). */
 function onProseClick(e: MouseEvent) {
-  if (!approvalPending.value || editing.value) return
+  if (!approvalPending.value || companionExceeded.value || editing.value) return
   const target = e.target as HTMLElement
   if (target.closest('a')) return
   const blockEl = target.closest('[data-src-start]') as HTMLElement | null
@@ -426,7 +445,7 @@ watch(
             </div>
             <div class="ml-auto flex items-center gap-1.5">
               <UBadge
-                v-if="approvalPending"
+                v-if="approvalPending && !companionExceeded"
                 color="warning"
                 variant="subtle"
                 size="sm"
@@ -434,6 +453,16 @@ watch(
               >
                 <UIcon name="i-lucide-shield-check" class="mr-1 h-3 w-3" />
                 Approval required
+              </UBadge>
+              <UBadge
+                v-else-if="companionExceeded"
+                color="warning"
+                variant="subtle"
+                size="sm"
+                class="mr-1"
+              >
+                <UIcon name="i-lucide-alert-triangle" class="mr-1 h-3 w-3" />
+                Decision required
               </UBadge>
               <UButton
                 v-if="outline.sections.length"
@@ -675,6 +704,16 @@ watch(
                 </div>
               </section>
 
+              <!-- companion rework budget spent: the shared iteration-cap decision
+                   (one more round / proceed with the current output / stop & reset) -->
+              <IterationCapPrompt
+                v-if="companionExceeded"
+                :heading="`${agent.label} hit its ${step.companion?.maxAttempts}-attempt rework limit, still below the ${pctOf(latestVerdict?.threshold ?? 0)} bar.`"
+                detail="Do one more automatic rework round, proceed to the next step accepting the current output, or stop and reset the task so you can edit the inputs and resubmit."
+                :loading="resolvingCap"
+                @resolve="resolveCompanionCap"
+              />
+
               <!-- tester report: what was tested, the per-area outcomes, the concerns
                    it raised and the greenlight verdict; plus the fixer-loop phase -->
               <section v-if="testReport" class="mt-4 scroll-mt-4">
@@ -802,7 +841,7 @@ watch(
                     class="reader-prose mt-1 text-[13px] leading-relaxed text-slate-300"
                     :class="[
                       s.depth > 0 ? 'pl-6' : '',
-                      approvalPending && !editing ? 'review-mode' : '',
+                      approvalPending && !editing && !companionExceeded ? 'review-mode' : '',
                     ]"
                     @click="onProseClick"
                     v-html="s.bodyHtml"
@@ -824,7 +863,7 @@ watch(
              Approve / Request changes / Reject. A right-side rail on wide screens; a
              bottom sheet (still reachable) below lg, so the gate is always actionable. -->
         <aside
-          v-if="approvalPending"
+          v-if="approvalPending && !companionExceeded"
           class="absolute inset-x-0 bottom-0 z-10 flex max-h-[70vh] flex-col rounded-t-2xl border-t border-slate-700 bg-slate-900/95 shadow-2xl backdrop-blur lg:static lg:inset-auto lg:z-auto lg:max-h-none lg:w-96 lg:shrink-0 lg:rounded-none lg:border-l lg:border-t-0 lg:border-slate-800 lg:bg-slate-900/60 lg:shadow-none lg:backdrop-blur-none"
         >
           <div class="border-b border-slate-800 px-4 py-3">

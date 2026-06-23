@@ -67,7 +67,12 @@ import type {
   WorkspaceMount,
   WorkspaceSnapshot,
 } from '~/types/domain'
-import type { LlmCallMetric, LlmMetricsExport, ReviewComment } from '~/types/execution'
+import type {
+  IterationCapChoice,
+  LlmCallMetric,
+  LlmMetricsExport,
+  ReviewComment,
+} from '~/types/execution'
 import type {
   RequirementReview,
   ResolveRequirementsExceededChoice,
@@ -509,6 +514,20 @@ export function useApi() {
       http<ExecutionInstance>(
         `${ws(workspaceId)}/executions/${executionId}/steps/${approvalId}/reject`,
         { method: 'POST', body },
+      ),
+
+    // Resolve a companion step parked at its rework cap: one more round / proceed /
+    // stop & reset (the companion analogue of resolveRequirementsExceeded).
+    resolveCompanionExceeded: (
+      workspaceId: string,
+      executionId: string,
+      approvalId: string,
+      body: { choice: IterationCapChoice },
+      password?: string,
+    ) =>
+      http<ExecutionInstance>(
+        `${ws(workspaceId)}/executions/${executionId}/steps/${approvalId}/resolve-exceeded`,
+        { method: 'POST', body, headers: pwHeaders(password) },
       ),
 
     // ---- LLM observability (per-run model-call metrics) -------------------

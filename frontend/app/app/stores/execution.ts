@@ -1,13 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type {
-  Decision,
-  ExecutionInstance,
-  Pipeline,
-  PipelineStep,
-  ReviewComment,
-  StepApproval,
-} from '~/types/domain'
+import type { Decision, ExecutionInstance, Pipeline, PipelineStep, StepApproval } from '~/types/domain'
+import type { IterationCapChoice, ReviewComment } from '~/types/execution'
 import { useWorkspaceStore } from '~/stores/workspace'
 
 /**
@@ -173,6 +167,29 @@ export const useExecutionStore = defineStore('execution', () => {
     await ws.refresh()
   }
 
+  /**
+   * Resolve a companion step parked at its rework cap: extra-round (one more pass) /
+   * proceed (advance with the current output) / stop-reset (cancel + reset the task).
+   * Rides the cached personal password so the server can re-mint the run's activation
+   * before re-dispatching on extra-round/proceed.
+   */
+  async function resolveCompanionExceeded(
+    instanceId: string,
+    approvalId: string,
+    choice: IterationCapChoice,
+  ) {
+    const ws = useWorkspaceStore()
+    const personal = usePersonalSubscriptionsStore()
+    await api.resolveCompanionExceeded(
+      ws.requireId(),
+      instanceId,
+      approvalId,
+      { choice },
+      personal.getCachedPassword(),
+    )
+    await ws.refresh()
+  }
+
   /** How many approval gates anywhere are awaiting a human. */
   const pendingApprovalCount = computed(() =>
     instances.value.reduce(
@@ -212,6 +229,7 @@ export const useExecutionStore = defineStore('execution', () => {
     approveStep,
     requestStepChanges,
     rejectStep,
+    resolveCompanionExceeded,
     mergePr,
     cancel,
   }

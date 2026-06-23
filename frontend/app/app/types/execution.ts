@@ -24,13 +24,26 @@ export interface CompanionVerdict {
 export interface StepCompanion {
   /** the quality bar (0..1) the latest verdict's rating must reach */
   threshold: number
-  /** the automatic rework budget: once `attempts` reaches this the run fails */
+  /** the automatic rework budget: once `attempts` reaches this the gate parks for a human */
   maxAttempts: number
   /** how many AUTOMATIC reworks have run (human "request changes" cycles don't count) */
   attempts?: number
   /** one verdict per correction cycle, in order; the last is the latest */
   verdicts: CompanionVerdict[]
+  /**
+   * Set once the automatic rework budget is spent with the rating still below the bar:
+   * the step parks on its approval gate for a human to resolve via the iteration-cap
+   * prompt (one more round / proceed / stop & reset). Cleared on an extra round.
+   */
+  exceeded?: boolean
 }
+
+/**
+ * How a human resolves an iterative agent gate that hit its budget — shared by the
+ * requirements reviewer and the quality companions. Mirror of the backend's
+ * `IterationCapChoice` (see `@cat-factory/contracts` iteration-cap.ts).
+ */
+export type IterationCapChoice = 'extra-round' | 'proceed' | 'stop-reset'
 
 /** Runtime state of a single agent within a running execution. */
 export type AgentState =

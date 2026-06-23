@@ -304,52 +304,14 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
               </div>
 
               <!-- iteration cap hit -->
-              <div
+              <IterationCapPrompt
                 v-else-if="exceeded"
-                class="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/5 p-4 text-sm text-amber-200"
-              >
-                <div class="flex items-center gap-2 font-medium">
-                  <UIcon name="i-lucide-alert-triangle" class="h-5 w-5 shrink-0" />
-                  Reached the {{ maxIterations }}-iteration limit with findings still open.
-                </div>
-                <p class="mt-1 text-[12px] text-amber-200/80">
-                  Do one more review round, proceed to the next phase with the last incorporated
-                  requirements anyway, or stop and reset the task so you can rework the requirements
-                  and resubmit.
-                </p>
-                <div class="mt-3 flex flex-wrap gap-2">
-                  <UButton
-                    color="primary"
-                    variant="soft"
-                    size="xs"
-                    icon="i-lucide-rotate-cw"
-                    :loading="acting"
-                    @click="resolveExceeded('extra-round')"
-                  >
-                    One more round
-                  </UButton>
-                  <UButton
-                    color="warning"
-                    variant="soft"
-                    size="xs"
-                    icon="i-lucide-arrow-right"
-                    :loading="acting"
-                    @click="resolveExceeded('proceed')"
-                  >
-                    Proceed anyway
-                  </UButton>
-                  <UButton
-                    color="error"
-                    variant="soft"
-                    size="xs"
-                    icon="i-lucide-undo"
-                    :loading="acting"
-                    @click="resolveExceeded('stop-reset')"
-                  >
-                    Stop &amp; reset task
-                  </UButton>
-                </div>
-              </div>
+                class="mb-4"
+                :heading="`Reached the ${maxIterations}-iteration limit with findings still open.`"
+                detail="Do one more review round, proceed to the next phase with the last incorporated requirements anyway, or stop and reset the task so you can rework the requirements and resubmit."
+                :loading="acting"
+                @resolve="resolveExceeded"
+              />
 
               <!-- incorporating: the async fold + re-review is running in the driver -->
               <div
