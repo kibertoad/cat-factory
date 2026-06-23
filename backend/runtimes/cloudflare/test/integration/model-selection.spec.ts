@@ -43,10 +43,16 @@ const directModels = MODEL_CATALOG.filter((m) => m.direct)
 // the executor — so a dual-mode base model (GLM/Kimi) still resolves to its base here.
 const cloudflareOnlyModels = MODEL_CATALOG.filter((m) => m.cloudflare && !m.direct)
 const subscriptionOnlyModels = MODEL_CATALOG.filter((m) => !m.cloudflare && !m.direct)
+// Direct-ONLY models (OpenRouter/LiteLLM): a direct variant with no Cloudflare or
+// subscription base. With no key they have no base to fall back to, so the resolver
+// returns their direct ref as a best-effort (selectability is reported separately).
+const directOnlyModels = MODEL_CATALOG.filter((m) => m.direct && !m.cloudflare && !m.subscription)
 
-/** The ref the base resolver lands on with no direct key (Cloudflare base, else the
- *  subscription ref for a subscription-only model). */
-const baseRef = (m: (typeof MODEL_CATALOG)[number]) => m.cloudflare ?? m.subscription?.ref
+/** The ref the base resolver lands on with no direct key: the Cloudflare base, else a
+ *  subscription-only model's subscription ref, else (a direct-only model) its direct ref
+ *  as the best-effort fallback — matching `effectiveVariant`'s direct→cloudflare→sub order. */
+const baseRef = (m: (typeof MODEL_CATALOG)[number]) =>
+  m.cloudflare ?? m.subscription?.ref ?? m.direct?.ref
 
 describe('per-block model selection', () => {
   describe('catalog resolution', () => {
@@ -92,10 +98,16 @@ describe('per-block model selection', () => {
       expect(cloud.map((m) => m.id)).toEqual(MODEL_CATALOG.map((m) => m.id))
       for (const model of MODEL_CATALOG) {
         const option = cloud.find((o) => o.id === model.id)!
-        if (model.cloudflare || model.direct) {
-          // A base-having model projects to its Cloudflare flavour when no key is set.
+        if (model.cloudflare) {
+          // A Cloudflare-having model projects to its Cloudflare flavour when no key is set.
           expect(option.flavor).toBe('cloudflare')
           expect(option.providerLabel).toBe('Cloudflare')
+        } else if (model.direct) {
+          // Direct-only (OpenRouter/LiteLLM): no base, so it projects to its best-effort
+          // direct flavour but is NOT selectable until its provider key is configured.
+          expect(option.flavor).toBe('direct')
+          expect(option.providerLabel).toBe(model.direct.providerLabel)
+          expect(option.available).toBe(false)
         } else {
           // Subscription-only: no base, so its flavour IS the (flat-rate quota) subscription.
           expect(option.flavor).toBe('subscription')
@@ -121,10 +133,11 @@ describe('per-block model selection', () => {
           expect(option.flavor).toBe('subscription')
         }
       }
-      // The three flavour branches above are only meaningful if the catalog exercises each.
+      // The flavour branches above are only meaningful if the catalog exercises each.
       expect(directModels.length).toBeGreaterThan(0)
       expect(cloudflareOnlyModels.length).toBeGreaterThan(0)
       expect(subscriptionOnlyModels.length).toBeGreaterThan(0)
+      expect(directOnlyModels.length).toBeGreaterThan(0)
     })
 
     it('returns undefined for unknown/empty ids so the caller falls back', () => {

@@ -50,9 +50,7 @@ export async function resolveWorkspaceCapabilities(
   const directProviders = new Set<string>(
     // Drop a key whose provider needs a base URL the deployment hasn't configured: it
     // would pass the catalog/start guard but throw "No base URL configured" at dispatch.
-    baseUrlFor
-      ? configured.filter((p) => BASE_URL_OPTIONAL.has(p) || !!baseUrlFor(p))
-      : configured,
+    baseUrlFor ? configured.filter((p) => BASE_URL_OPTIONAL.has(p) || !!baseUrlFor(p)) : configured,
   )
   const subscriptionVendors = new Set<SubscriptionVendor>()
   for (const vendor of ALL_SUBSCRIPTION_VENDORS) {
