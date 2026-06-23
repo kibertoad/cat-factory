@@ -110,6 +110,12 @@ export {
   GitHubApiError,
   type FetchGitHubClientDependencies,
 } from './github/FetchGitHubClient.js'
+// The privileged provisioning slice (ADR 0005): runtime-neutral so every facade can
+// back the create-repo endpoint when a privileged App is configured.
+export {
+  FetchGitHubProvisioningClient,
+  type FetchGitHubProvisioningClientDependencies,
+} from './github/FetchGitHubProvisioningClient.js'
 export { WebCryptoWebhookVerifier } from './github/WebCryptoWebhookVerifier.js'
 export {
   GitHubCiStatusProvider,
