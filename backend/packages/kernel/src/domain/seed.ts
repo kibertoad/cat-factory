@@ -182,8 +182,8 @@ export function seedPipelines(): Pipeline[] {
       // Gate only the context requirements review (index 0) and the architecture
       // proposal (`architect`, index 3). The spec is NO LONGER human-gated — its
       // `spec-companion` (index 2) is the quality gate (rate + automatic rework). The
-      // `mocker` / `tester` / `conflicts` / `ci` / `merger` tail is never human-gated
-      // (it gates/decides itself), so those slots are false too.
+      // `mocker` / `tester` / `conflicts` / `ci` / `merger` tail
+      // is never human-gated (it gates/decides itself), so those slots are false too.
       gates: [
         true,
         false,

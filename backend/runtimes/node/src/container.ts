@@ -23,6 +23,10 @@ import {
   SlackNotificationChannel,
   TicketTrackerService,
   createGitHubIssueViaToken,
+  DATADOG_CIPHER_INFO,
+  DatadogReleaseHealthProvider,
+  PagerDutyEnrichmentProvider,
+  IncidentIoEnrichmentProvider,
 } from '@cat-factory/integrations'
 import {
   type AgentExecutor,
@@ -31,6 +35,7 @@ import {
   type FragmentOwnerKind,
   type GitHubClient,
   type GitHubInstallationRepository,
+  type IncidentEnrichmentProvider,
   type ModelProviderResolver,
   type NotificationChannel,
   type RateLimitRepository,
@@ -38,6 +43,7 @@ import {
   type TaskConnectionRepository,
   type TaskSourceProvider,
   CompositeNotificationChannel,
+  CompositeIncidentEnrichmentProvider,
 } from '@cat-factory/kernel'
 import { type CoreDependencies, createCore } from '@cat-factory/orchestration'
 import { createLangfuseSink } from '@cat-factory/observability-langfuse'
@@ -990,7 +996,38 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
         ? notificationChannels[0]
         : new CompositeNotificationChannel(notificationChannels)
 
+  // Datadog post-release-health: wire the gate + the release-health settings module when
+  // enabled (+ ENCRYPTION_KEY), mirroring the Worker's `selectReleaseHealthDeps`. Off →
+  // the `post-release-health` gate is a pass-through and the module isn't assembled.
+  const releaseHealthDeps: Partial<CoreDependencies> = {}
+  if (config.datadog.enabled && config.datadog.encryptionKey) {
+    const datadogSecretCipher = new WebCryptoSecretCipher({
+      masterKeyBase64: config.datadog.encryptionKey,
+      info: DATADOG_CIPHER_INFO,
+    })
+    releaseHealthDeps.datadogConnectionRepository = repos.datadogConnectionRepository
+    releaseHealthDeps.releaseHealthConfigRepository = repos.releaseHealthConfigRepository
+    releaseHealthDeps.datadogSecretCipher = datadogSecretCipher
+    releaseHealthDeps.releaseHealthProvider = new DatadogReleaseHealthProvider({
+      datadogConnectionRepository: repos.datadogConnectionRepository,
+      releaseHealthConfigRepository: repos.releaseHealthConfigRepository,
+      blockRepository: repos.blockRepository,
+      secretCipher: datadogSecretCipher,
+    })
+    const enrichers: IncidentEnrichmentProvider[] = []
+    if (config.incidentEnrichment.pagerDuty) {
+      enrichers.push(new PagerDutyEnrichmentProvider(config.incidentEnrichment.pagerDuty))
+    }
+    if (config.incidentEnrichment.incidentIo) {
+      enrichers.push(new IncidentIoEnrichmentProvider(config.incidentEnrichment.incidentIo))
+    }
+    if (enrichers.length > 0) {
+      releaseHealthDeps.incidentEnrichment = new CompositeIncidentEnrichmentProvider(enrichers)
+    }
+  }
+
   const dependencies: CoreDependencies = {
+    ...releaseHealthDeps,
     workspaceRepository: repos.workspaceRepository,
     accountRepository: repos.accountRepository,
     membershipRepository: repos.membershipRepository,

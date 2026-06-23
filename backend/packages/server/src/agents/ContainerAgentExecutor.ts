@@ -33,6 +33,7 @@ import {
   CONFLICT_RESOLVER_AGENT_KIND,
   FIXER_AGENT_KIND,
   MERGER_AGENT_KIND,
+  ON_CALL_AGENT_KIND,
   SPEC_WRITER_AGENT_KIND,
   TESTER_AGENT_KIND,
 } from '@cat-factory/orchestration'
@@ -288,6 +289,17 @@ const MERGER_SYSTEM_PROMPT =
   'change is), risk (how likely it is to break something), and impact (blast radius ' +
   'if it does). Be conservative. Respond with ONLY a JSON object of shape ' +
   '{"complexity":0.0,"risk":0.0,"impact":0.0,"rationale":"…"} — no prose, no code fences.'
+
+const ON_CALL_SYSTEM_PROMPT =
+  'You are an on-call engineer investigating a possible post-release regression. A ' +
+  'recently merged pull request shipped, and the evidence below (alerting Datadog ' +
+  'monitors/SLOs and recent error logs) suggests the service regressed afterward. Read ' +
+  'the PR diff on the head branch and weigh whether THIS change is the likely cause — ' +
+  'beware correlation vs causation; a coincident deploy is not proof. You may read and ' +
+  'inspect any file, but you MUST NOT modify, commit or revert anything; a human decides ' +
+  'whether to revert. Respond with ONLY a JSON object of shape ' +
+  '{"culpritConfidence":0.0,"recommendation":"revert"|"hold"|"monitor","rationale":"…",' +
+  '"evidence":["…"]} — no prose, no code fences.'
 
 /**
  * An {@link AgentExecutor} that performs implementation work in a real sandbox:
@@ -842,6 +854,31 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
           },
         }
 
+      // The on-call agent investigates a post-release regression: it correlates the
+      // RELEASED change with the Datadog regression evidence (handed in via priorOutputs)
+      // and returns ONLY a JSON assessment — it makes NO commits and reverts nothing (the
+      // engine raises a notification for a human). The gate only escalates AFTER the merger
+      // step, which merges the PR and DELETES the work branch, so the head branch is gone by
+      // now — clone the BASE branch (which always exists and contains the merged change) and
+      // hand the agent the PR number + the now-historical head branch name so it can locate
+      // the merged commit in history. Targets the harness `/on-call` endpoint.
+      case ON_CALL_AGENT_KIND:
+        return {
+          kind: 'on-call',
+          body: {
+            ...common,
+            systemPrompt: ON_CALL_SYSTEM_PROMPT,
+            userPrompt: userPromptFor(context),
+            branch: repo.baseBranch,
+            ...(context.block.pullRequest?.branch
+              ? { headBranch: context.block.pullRequest.branch }
+              : {}),
+            ...(context.block.pullRequest?.number !== undefined
+              ? { prNumber: context.block.pullRequest.number }
+              : {}),
+          },
+        }
+
       // The tester clones the PR head branch, stands up its dependencies (locally via
       // the service's docker-compose, or against the provisioned ephemeral env — the
       // task's `tester.environment` config picks which), runs the suite and returns a
@@ -968,6 +1005,14 @@ function toRunResult(result: RunnerJobResult): AgentRunResult {
     return {
       output: result.summary?.trim() || 'Pull request assessed.',
       mergeAssessment: result.assessment,
+    }
+  }
+  // An `on-call` job carries a release-regression assessment; surface it so the engine
+  // can raise the `release_regression` notification + enrich any open incident.
+  if (result.onCallAssessment !== undefined) {
+    return {
+      output: result.summary?.trim() || 'Release regression investigated.',
+      onCallAssessment: result.onCallAssessment,
     }
   }
   // A `tester` job carries a structured test report instead of a PR; surface it so

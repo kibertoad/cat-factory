@@ -476,6 +476,39 @@ still open). Two new container agent kinds plus a special gate step implement it
   - the toolbar `NotificationsInbox.vue`; the snapshot carries open notifications +
     the preset library.
 
+## Post-release health flow (Datadog gate → Agent-On-Call → notify/enrich)
+
+After a release ships, the **`post-release-health`** gate (the LAST standard-pipeline
+step, after `merger`) watches the team's Datadog monitors/SLOs for a window and, on a
+regression, spawns an **`on-call`** agent to investigate — it never auto-reverts.
+
+- **Polling gate** (a `GateDefinition` in `buildGateRegistry`, not a copy of the
+  machinery): `wired()` = a `ReleaseHealthProvider` is configured; `probe()` reads the
+  block's monitors/SLOs since a **release marker** (`step.gate.watchSince`, set on first
+  entry) and combines the verdict with the watch window via `classifyReleaseHealth`
+  (`release.logic.ts`) → `pass` (healthy + window elapsed; or no monitors configured →
+  pass through immediately), `pending` (keep polling), `fail` (a monitor alerts / SLO
+  breached). `attemptBudget` = the merge preset's `releaseMaxAttempts` (default 1);
+  the window is `releaseWatchWindowMinutes` (default 30).
+- **Provider**: `DatadogReleaseHealthProvider` (`integrations/modules/datadog`) reads
+  monitor state + SLO SLI-vs-target and (for the on-call bundle) recent error logs, behind
+  the kernel `ReleaseHealthProvider` port. Datadog creds live on the backend
+  (`datadog_connections`, sealed `cat-factory:datadog`) — never in containers. Per-block
+  monitor/SLO mapping is `release_health_configs` (resolved up the frame chain). Both
+  tables mirror D1 ⇄ Drizzle; managed via `ReleaseHealthService` + the
+  `GET|PUT|DELETE /workspaces/:ws/datadog/connection` + `…/release-health-configs/:blockId`
+  controller and the SPA `DatadogPanel.vue` (`stores/releaseHealth.ts`).
+- **On-call agent** (`on-call` container kind, `executor-harness/src/on-call.ts`, `/on-call`):
+  the gate escalates via `gatherHelperPriorOutputs` (renders the evidence bundle into the
+  agent's prompt). The agent clones the released PR head, correlates the diff with the
+  evidence, and returns ONLY a JSON assessment (`onCallAssessment`: culprit confidence +
+  `revert`/`hold`/`monitor`). Its completion is resolved SPECIALLY (not the generic gate
+  re-probe): `ExecutionService.resolveOnCallStep` parses it, raises a `release_regression`
+  notification (Slack + in-app inbox), best-effort **enriches** any incident PagerDuty /
+  incident.io already opened (the `IncidentEnrichmentProvider` port — annotate, NOT
+  re-alert, since those systems page off the same signals), then finishes the gate step so
+  the run completes (the human decides revert/acknowledge out-of-band).
+
 ## Gates vs agents (the step taxonomy)
 
 A pipeline step's `agentKind` puts it in one of three buckets. Most engine handling

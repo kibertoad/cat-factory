@@ -207,6 +207,33 @@ export {
   type PoolRotationRecord,
 } from './modules/providers/providers.logic.js'
 
+// Datadog post-release-health: the release-health provider the gate reads + its thin
+// fetch client, plus the optional incident-enrichment providers (PagerDuty / incident.io)
+// that annotate — never re-alert — an incident those systems already opened.
+export {
+  DatadogReleaseHealthProvider,
+  type DatadogReleaseHealthProviderDependencies,
+} from './modules/datadog/DatadogReleaseHealthProvider.js'
+export {
+  DatadogClient,
+  type DatadogCredentials,
+  type DatadogClientOptions,
+} from './modules/datadog/DatadogClient.js'
+export {
+  DATADOG_CIPHER_INFO,
+  DatadogApiError,
+  normalizeDatadogSite,
+  datadogApiBase,
+} from './modules/datadog/datadog.logic.js'
+export {
+  PagerDutyEnrichmentProvider,
+  type PagerDutyEnrichmentProviderOptions,
+} from './modules/pagerduty/PagerDutyEnrichmentProvider.js'
+export {
+  IncidentIoEnrichmentProvider,
+  type IncidentIoEnrichmentProviderOptions,
+} from './modules/incidentio/IncidentIoEnrichmentProvider.js'
+
 export {
   SendGridEmailSender,
   ResendEmailSender,

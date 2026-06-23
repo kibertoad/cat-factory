@@ -26,6 +26,9 @@ const META: Record<Notification['type'], { icon: string; color: Accent; action: 
   // Clicking the title opens the clarity review window for the task (see `reveal`); "act"
   // just marks it read (the server performs no side-effect for this type).
   clarity_review: { icon: 'i-lucide-bug', color: 'primary', action: 'Mark read' },
+  // A post-release Datadog regression the on-call agent investigated. The human decides
+  // whether to revert (in GitHub via the PR link) or acknowledge; "act" marks it handled.
+  release_regression: { icon: 'i-lucide-activity', color: 'error', action: 'Acknowledge' },
   // Clicking the title opens the parked step's decision surface (companion → step detail
   // with the iteration-cap prompt; requirements → the review window); "act" just marks it
   // read (the decision itself is resolved in that surface, not here).

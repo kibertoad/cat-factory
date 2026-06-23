@@ -18,6 +18,12 @@ export const DEFAULT_MERGE_PRESET = {
   maxRequirementIterations: 6,
   // Tolerate nothing by default: any reviewer finding pauses the run for a human.
   maxRequirementConcernAllowed: 'none',
+  // Post-release-health gate: how long (minutes) the gate watches the deployed
+  // release's monitors/SLOs before declaring it healthy, and how many on-call
+  // investigations may be dispatched while watching (the on-call agent investigates
+  // rather than fixing prod, so 1 pass is the sensible default).
+  releaseWatchWindowMinutes: 30,
+  releaseMaxAttempts: 1,
 } as const
 
 /** Fallback CI-fixer attempt budget when no preset resolves (defensive default). */

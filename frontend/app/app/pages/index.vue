@@ -26,6 +26,7 @@ import GitHubOnboarding from '~/components/github/GitHubOnboarding.vue'
 import FragmentLibraryPanel from '~/components/fragments/FragmentLibraryPanel.vue'
 import CommandBar from '~/components/layout/CommandBar.vue'
 import MergeThresholdsPanel from '~/components/settings/MergeThresholdsPanel.vue'
+import DatadogPanel from '~/components/settings/DatadogPanel.vue'
 import ModelDefaultsPanel from '~/components/settings/ModelDefaultsPanel.vue'
 import ServiceFragmentDefaultsPanel from '~/components/settings/ServiceFragmentDefaultsPanel.vue'
 import LocalModelEndpointsPanel from '~/components/settings/LocalModelEndpointsPanel.vue'
@@ -113,6 +114,7 @@ watch(
       <FragmentLibraryPanel />
       <CommandBar />
       <MergeThresholdsPanel />
+      <DatadogPanel />
       <ModelDefaultsPanel />
       <ServiceFragmentDefaultsPanel />
       <LocalModelEndpointsPanel />

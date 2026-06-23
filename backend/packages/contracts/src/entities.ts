@@ -4,6 +4,7 @@ import { agentConfigValuesSchema } from './agent-config.js'
 import { testReportSchema } from './testing.js'
 import { consensusStepConfigSchema, taskEstimateSchema } from './consensus.js'
 import { cloudProviderSchema, instanceSizeSchema } from './provisioning.js'
+import { releaseSignalSchema } from './release.js'
 import {
   agentKindSchema,
   agentStateSchema,
@@ -558,6 +559,29 @@ export const gateStepStateSchema = v.object({
    * gate (GitHub reports no file-level detail) and when the last probe passed.
    */
   failingChecks: v.optional(v.nullable(v.array(gateFailingCheckSchema))),
+  /**
+   * Epoch ms of the release marker for a time-windowed gate (post-release-health) — the
+   * moment it began watching the deployed release. The gate keeps polling `pending`
+   * until this + the preset's watch window has elapsed (then a clean run passes) or a
+   * monitor/SLO regresses (then it escalates to the on-call agent). Absent for the
+   * CI/conflicts gates.
+   */
+  watchSince: v.optional(v.nullable(v.number())),
+  /**
+   * The watch-window length (minutes) for a time-windowed gate (post-release-health),
+   * resolved from the task's merge preset ONCE on first entry (alongside `maxAttempts`)
+   * so the probe doesn't re-load the block + re-resolve the preset on every poll. Absent
+   * for the CI/conflicts gates.
+   */
+  watchWindowMinutes: v.optional(v.nullable(v.number())),
+  /**
+   * The regressed signals captured when the post-release-health gate escalated to the
+   * on-call agent, so the agent's completion handler can build the `release_regression`
+   * notification + incident enrichment from the SAME evidence the agent investigated
+   * — rather than re-reading Datadog (a third round-trip that could also disagree with
+   * what the agent saw if the window moved). Absent for the CI/conflicts gates.
+   */
+  regressedSignals: v.optional(v.nullable(v.array(releaseSignalSchema))),
 })
 export type GateStepState = v.InferOutput<typeof gateStepStateSchema>
 

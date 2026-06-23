@@ -85,7 +85,7 @@ class_name = "BootstrapWorkflow"
 # pin that tag here (the account id below is THIS deployment's — change it).
 [[containers]]
 class_name = "ExecutionContainer"
-image = "registry.cloudflare.com/fe0047c6e869c8cb875ca425a9c341af/cat-factory-executor:1.7.0"
+image = "registry.cloudflare.com/fe0047c6e869c8cb875ca425a9c341af/cat-factory-executor:1.7.1"
 max_instances = 10
 # Coding/bootstrap runs legitimately install dependencies and run build/test/e2e
 # suites inside the box. The default `dev` tier (~256 MiB / ~1/16 vCPU) thrashes
@@ -325,3 +325,13 @@ ENVIRONMENTS_ENABLED = "false"
 # pool can stand in for the EXEC_CONTAINER binding as the mandatory runner backend.
 # Its scheduler secrets are sealed with the shared ENCRYPTION_KEY above.
 RUNNERS_ENABLED = "false"
+
+# Datadog post-release-health gate. Off by default. Turn it on to let the
+# `post-release-health` pipeline step watch a workspace's configured Datadog
+# monitors/SLOs after a release ships; on a regression an on-call agent investigates
+# (a human decides whether to revert). Per-workspace API/app keys are connected in the
+# UI and sealed with the shared ENCRYPTION_KEY above. Optional incident enrichment
+# (PagerDuty / incident.io) is set via the PAGERDUTY_* / INCIDENTIO_API_KEY secrets:
+# the on-call investigation is posted onto an incident those systems ALREADY opened
+# from the same monitors/SLOs (annotate, never re-alert).
+DATADOG_ENABLED = "false"

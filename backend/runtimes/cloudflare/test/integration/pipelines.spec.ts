@@ -158,6 +158,16 @@ describe('pipelines', () => {
     expect(list.body.map((p) => p.id)).not.toContain(clone.body.id)
   })
 
+  it('rejects adding the post-release-health gate without an observability integration', async () => {
+    // post-release-health is observability-gated and not in any default pipeline; the
+    // test deployment has no Datadog connection wired, so the controller must reject it.
+    const res = await app.call('POST', `/workspaces/${wsId}/pipelines`, {
+      name: 'Ship + watch',
+      agentKinds: ['coder', 'post-release-health'],
+    })
+    expect(res.status).toBe(422)
+  })
+
   it('rejects a pipeline whose enabled companion has no enabled producer', async () => {
     // `reviewer` reviews `coder`; disabling the `coder` it grades while leaving the
     // `reviewer` enabled would orphan the companion at run start, so it is rejected.

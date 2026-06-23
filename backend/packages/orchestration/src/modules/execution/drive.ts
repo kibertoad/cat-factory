@@ -73,6 +73,7 @@ export async function driveExecution(
     intervalMs: number,
     maxPolls: number,
     label: string,
+    onExhausted?: () => Promise<AdvanceResult>,
   ): Promise<AdvanceResult | null> => {
     let readFailures = 0
     for (let p = 0; p < maxPolls; p++) {
@@ -91,6 +92,9 @@ export async function driveExecution(
       readFailures = 0
       if (result.kind !== awaiting) return result
     }
+    // Budget spent. A gate may resolve exhaustion itself (a watch gate PASSES rather than
+    // timing out) — let it; otherwise fail the run as a generic timeout.
+    if (onExhausted) return onExhausted()
     await fail(`${label} did not settle within its polling budget`, 'timeout')
     return null
   }
@@ -135,6 +139,7 @@ export async function driveExecution(
           cfg.ciPollIntervalMs,
           cfg.ciMaxPolls,
           'Gate precheck',
+          () => exec.resolveGatePollExhaustion(workspaceId, executionId),
         )
         if (!next) return {}
         result = next

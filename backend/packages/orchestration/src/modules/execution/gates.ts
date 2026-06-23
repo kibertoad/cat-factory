@@ -1,4 +1,10 @@
-import type { Block, ExecutionInstance, PipelineStep } from '@cat-factory/kernel'
+import type {
+  Block,
+  ExecutionInstance,
+  GateStepState,
+  MergeThresholdPreset,
+  PipelineStep,
+} from '@cat-factory/kernel'
 
 // The polling-gate abstraction. A "gate" step (today `ci` and `conflicts`) is NOT a
 // container/inline LLM agent: it runs a programmatic precheck against a provider and
@@ -57,13 +63,44 @@ export interface GateDefinition {
   wired(): boolean
   /** Step output recorded when the gate passes through (no provider configured). */
   unwiredOutput: string
-  /** Run the precheck against the provider and classify it. */
-  probe(workspaceId: string, blockId: string): Promise<GateProbe>
+  /**
+   * What to do when the durable driver's poll budget (ciMaxPolls × ciPollInterval) is
+   * spent while the gate is still `pending` — distinct from the attempt budget (helper
+   * dispatches) handled by {@link onExhausted}:
+   *   - `fail` (default) — the precheck never settled, which is a failure for the CI /
+   *     conflicts gates (CI never went green / the PR never became mergeable).
+   *   - `pass` — for a time-windowed watch gate (post-release-health), running out of
+   *     polls just means the watch window outlasted the budget with NO regression seen,
+   *     which is a healthy pass — not a timeout failure.
+   * Resolved by {@link ExecutionService.resolveGatePollExhaustion}.
+   */
+  pollExhaustion?: 'pass' | 'fail'
+  /**
+   * Run the precheck against the provider and classify it. Receives the live gate
+   * state so a time-windowed gate (post-release-health) can read its `watchSince`.
+   */
+  probe(workspaceId: string, blockId: string, gateState: GateStepState): Promise<GateProbe>
+  /**
+   * Optional: the attempt budget for this gate, resolved from the task's merge preset.
+   * Defaults to `ciMaxAttempts` when omitted (the CI/conflicts gates use that).
+   */
+  attemptBudget?(preset: Pick<MergeThresholdPreset, 'ciMaxAttempts' | 'releaseMaxAttempts'>): number
   /**
    * Optional extra context handed to the helper agent on escalation (the CI gate
    * passes the failing-check summary; the conflicts gate passes nothing).
    */
   helperPriorOutput?(summary: string): { agentKind: string; output: string } | undefined
+  /**
+   * Optional async builder for richer helper context (gathered at dispatch time), used
+   * when a gate's helper needs more than the precheck summary — e.g. the on-call agent
+   * gets the full Datadog evidence bundle. Returns prior-output entries appended after
+   * the base context's. Takes precedence over {@link helperPriorOutput} when present.
+   */
+  gatherHelperPriorOutputs?(
+    workspaceId: string,
+    blockId: string,
+    gateState: GateStepState,
+  ): Promise<{ agentKind: string; output: string }[]>
   /**
    * Called when the attempt budget is spent (or there is no async executor to escalate
    * to). May raise a notification; returns the message used to fail the run.

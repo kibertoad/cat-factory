@@ -245,6 +245,28 @@ export type { BoardWritePort } from './board-operations.js'
 export type { PullRequestMerger } from './pr-merger.js'
 export type { CiCheck, CiStatusReport, CiStatusProvider } from './ci-status.js'
 export type {
+  ReleaseSignal,
+  ReleaseSignalKind,
+  ReleaseSignalState,
+  ReleaseHealthStatus,
+  ReleaseHealthReport,
+  ReleaseErrorSample,
+  ReleaseEvidence,
+  ReleaseHealthProvider,
+} from './release-health.js'
+export type {
+  IncidentMatchQuery,
+  IncidentUpdate,
+  IncidentEnrichmentProvider,
+} from './incident-enrichment.js'
+export { CompositeIncidentEnrichmentProvider } from './incident-enrichment.js'
+export type {
+  DatadogConnectionRecord,
+  DatadogConnectionRepository,
+  ReleaseHealthConfigRecord,
+  ReleaseHealthConfigRepository,
+} from './release-health-repositories.js'
+export type {
   MergeabilityVerdict,
   MergeabilityReport,
   PullRequestMergeabilityProvider,

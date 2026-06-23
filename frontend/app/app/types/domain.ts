@@ -221,6 +221,10 @@ export type AgentKind =
   // Tester found, then the Tester re-runs (skipped when the tests pass).
   | 'fixer'
   | 'merger'
+  // The observability-gated post-release-health gate: not in any default pipeline and
+  // only addable once an observability integration is connected. Watches the released
+  // PR's monitors/SLOs and escalates to the on-call agent on a regression.
+  | 'post-release-health'
   // Recurring tech-debt pipeline: read-only code `analysis`, then a special
   // non-LLM `tracker` step that files a GitHub issue / Jira ticket.
   | 'analysis'

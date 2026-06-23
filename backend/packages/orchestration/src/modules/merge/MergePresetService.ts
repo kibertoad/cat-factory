@@ -61,6 +61,8 @@ export class MergePresetService {
       ciMaxAttempts: input.ciMaxAttempts,
       maxRequirementIterations: input.maxRequirementIterations,
       maxRequirementConcernAllowed: input.maxRequirementConcernAllowed,
+      releaseWatchWindowMinutes: input.releaseWatchWindowMinutes,
+      releaseMaxAttempts: input.releaseMaxAttempts,
       // The very first preset must be the default; otherwise honour the request.
       isDefault: existing.length === 0 ? true : input.isDefault,
       createdAt: this.clock.now(),
@@ -93,6 +95,12 @@ export class MergePresetService {
       ...(patch.maxRequirementConcernAllowed !== undefined
         ? { maxRequirementConcernAllowed: patch.maxRequirementConcernAllowed }
         : {}),
+      ...(patch.releaseWatchWindowMinutes !== undefined
+        ? { releaseWatchWindowMinutes: patch.releaseWatchWindowMinutes }
+        : {}),
+      ...(patch.releaseMaxAttempts !== undefined
+        ? { releaseMaxAttempts: patch.releaseMaxAttempts }
+        : {}),
       ...(patch.isDefault !== undefined ? { isDefault: patch.isDefault } : {}),
     }
     await this.presets.upsert(workspaceId, updated)
@@ -122,6 +130,8 @@ export class MergePresetService {
       ciMaxAttempts: DEFAULT_MERGE_PRESET.ciMaxAttempts,
       maxRequirementIterations: DEFAULT_MERGE_PRESET.maxRequirementIterations,
       maxRequirementConcernAllowed: DEFAULT_MERGE_PRESET.maxRequirementConcernAllowed,
+      releaseWatchWindowMinutes: DEFAULT_MERGE_PRESET.releaseWatchWindowMinutes,
+      releaseMaxAttempts: DEFAULT_MERGE_PRESET.releaseMaxAttempts,
       isDefault: true,
       createdAt: this.clock.now(),
     })

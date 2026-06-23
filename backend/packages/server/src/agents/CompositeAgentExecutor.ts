@@ -80,6 +80,12 @@ const CONTAINER_KINDS = new Set([
   // The fixer clones the PR head branch, applies fixes from the Tester's report and
   // pushes back to the same branch — a real-checkout operation, like `ci-fixer`.
   'fixer',
+  // The on-call agent clones the released PR head to correlate its diff with the
+  // Datadog regression evidence and returns a JSON assessment — a real-checkout
+  // operation (makes no commits). (The `post-release-health` gate itself is NOT here:
+  // like `ci` it is a non-agent engine gate that *dispatches* an `on-call` job; only
+  // the on-call agent reaches this executor.)
+  'on-call',
 ])
 
 export class CompositeAgentExecutor implements AsyncAgentExecutor {

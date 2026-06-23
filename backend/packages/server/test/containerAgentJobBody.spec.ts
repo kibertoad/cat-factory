@@ -131,6 +131,13 @@ describe('ContainerAgentExecutor.buildJobBody (per-kind body shapes)', () => {
     expect(captured[0]).toMatchSnapshot()
   })
 
+  it('on-call', async () => {
+    // Escalated after merge: clones the base branch and carries the (now-historical)
+    // head branch + PR number so the agent can locate the merged commit.
+    await executor.startJob(context('on-call', { pullRequest: PR }))
+    expect(captured[0]).toMatchSnapshot()
+  })
+
   it('tester (local env)', async () => {
     await executor.startJob(
       context('tester', { pullRequest: PR, agentConfig: { 'tester.environment': 'local' } }),

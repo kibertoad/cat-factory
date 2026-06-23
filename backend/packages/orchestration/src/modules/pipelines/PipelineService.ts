@@ -5,15 +5,32 @@ import type {
 } from '@cat-factory/contracts'
 import type { ConsensusStepConfig, Pipeline } from '@cat-factory/kernel'
 import { assertFound, ValidationError } from '@cat-factory/kernel'
-import type { PipelineRepository, WorkspaceRepository } from '@cat-factory/kernel'
+import type {
+  DatadogConnectionRepository,
+  PipelineRepository,
+  WorkspaceRepository,
+} from '@cat-factory/kernel'
 import type { IdGenerator } from '@cat-factory/kernel'
 import { requireWorkspace } from '@cat-factory/kernel'
 import { companionTargets, isCompanionKind } from '@cat-factory/agents'
+
+/**
+ * The post-release-health gate watches a released PR's observability signals, so it is
+ * meaningless (and rejected) on a workspace with no observability integration wired. It
+ * is NOT part of any default pipeline — a user adds it deliberately, and only then.
+ */
+const OBSERVABILITY_GATED_KIND = 'post-release-health'
 
 export interface PipelineServiceDependencies {
   workspaceRepository: WorkspaceRepository
   pipelineRepository: PipelineRepository
   idGenerator: IdGenerator
+  /**
+   * Resolves whether the workspace has any observability integration enabled (today: a
+   * Datadog connection). When absent (no observability persistence wired at all), the
+   * observability-gated step can never be added.
+   */
+  datadogConnectionRepository?: DatadogConnectionRepository
 }
 
 /** Saved, reusable pipelines (the pipeline palette). */
@@ -21,15 +38,41 @@ export class PipelineService {
   private readonly workspaceRepository: WorkspaceRepository
   private readonly pipelineRepository: PipelineRepository
   private readonly idGenerator: IdGenerator
+  private readonly datadogConnectionRepository?: DatadogConnectionRepository
 
   constructor({
     workspaceRepository,
     pipelineRepository,
     idGenerator,
+    datadogConnectionRepository,
   }: PipelineServiceDependencies) {
     this.workspaceRepository = workspaceRepository
     this.pipelineRepository = pipelineRepository
     this.idGenerator = idGenerator
+    this.datadogConnectionRepository = datadogConnectionRepository
+  }
+
+  /**
+   * The post-release-health gate is only meaningful with an observability integration, so
+   * reject a chain that includes an ENABLED post-release-health step unless the workspace
+   * has one wired. Validated only when the chain/enable mask is being authored (create, or
+   * an update that changes them) so an unrelated edit to an existing pipeline never trips.
+   */
+  private async assertObservabilityGatedStepAllowed(
+    workspaceId: string,
+    agentKinds: string[],
+    enabled: boolean[] | undefined,
+  ): Promise<void> {
+    const present = agentKinds.some(
+      (kind, i) => kind === OBSERVABILITY_GATED_KIND && enabled?.[i] !== false,
+    )
+    if (!present) return
+    const connection = await this.datadogConnectionRepository?.get(workspaceId)
+    if (!connection) {
+      throw new ValidationError(
+        `The '${OBSERVABILITY_GATED_KIND}' step needs an observability integration. Connect Datadog for this workspace first.`,
+      )
+    }
   }
 
   private requireWorkspace(workspaceId: string) {
@@ -45,6 +88,7 @@ export class PipelineService {
     await this.requireWorkspace(workspaceId)
     assertSomeEnabled(input.agentKinds, input.enabled)
     assertValidCompanionPlacement(input.agentKinds, input.enabled)
+    await this.assertObservabilityGatedStepAllowed(workspaceId, input.agentKinds, input.enabled)
     const pipeline: Pipeline = {
       id: this.idGenerator.next('pl'),
       name: input.name.trim() || 'Untitled pipeline',
@@ -105,7 +149,10 @@ export class PipelineService {
     // Re-validate companion placement against the EFFECTIVE (enabled) chain — disabling
     // a producer while leaving its companion on would orphan the companion — so validate
     // whenever the chain OR the enable flags change, not just on a chain replacement.
-    if (input.agentKinds || input.enabled) assertValidCompanionPlacement(agentKinds, enabled)
+    if (input.agentKinds || input.enabled) {
+      assertValidCompanionPlacement(agentKinds, enabled)
+      await this.assertObservabilityGatedStepAllowed(workspaceId, agentKinds, enabled)
+    }
     const pipeline: Pipeline = {
       id: existing.id,
       name: input.name?.trim() || existing.name,

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import type { AgentKind, Pipeline } from '~/types/domain'
 import AgentPalette from '~/components/palettes/AgentPalette.vue'
 import AgentKindIcon from '~/components/pipeline/AgentKindIcon.vue'
@@ -33,10 +33,18 @@ function toggleGating(i: number) {
 }
 const agents = useAgentsStore()
 const ui = useUiStore()
+const releaseHealth = useReleaseHealthStore()
 
 const open = computed({
   get: () => ui.builderOpen,
   set: (v: boolean) => (ui.builderOpen = v),
+})
+
+// Refresh the observability-integration state whenever the builder opens so the palette
+// knows whether to offer the post-release-health gate (it's loaded on demand, not from
+// the snapshot). Best-effort: a failure just leaves the gate hidden.
+watch(open, (isOpen) => {
+  if (isOpen) releaseHealth.load().catch(() => {})
 })
 
 function add(kind: AgentKind) {
@@ -94,8 +102,14 @@ async function save() {
     } else {
       toast.add({ title: 'Add at least one agent first', color: 'warning' })
     }
-  } catch {
-    toast.add({ title: 'Could not save pipeline', color: 'error' })
+  } catch (e) {
+    // Surface the backend reason (e.g. post-release-health rejected without an
+    // observability integration) rather than a generic failure.
+    toast.add({
+      title: 'Could not save pipeline',
+      description: e instanceof Error ? e.message : undefined,
+      color: 'error',
+    })
   }
 }
 

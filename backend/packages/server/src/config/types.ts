@@ -156,6 +156,27 @@ export interface RunnerPoolConfig {
   encryptionKey?: string
 }
 
+export interface DatadogConfig {
+  /**
+   * Opt-in flag (`DATADOG_ENABLED=true`). Requires an encryption key (the per-workspace
+   * API/app keys are sealed at rest, no silent plaintext fallback). When false the
+   * post-release-health gate is a pass-through and no release-health module is assembled.
+   */
+  enabled: boolean
+  /** Service-level master key (base64) backing Datadog-credential encryption at rest. */
+  encryptionKey?: string
+}
+
+export interface IncidentEnrichmentConfig {
+  /**
+   * PagerDuty incident-enrichment, present only when configured. Annotates (never
+   * re-alerts) an incident PagerDuty already opened with the on-call investigation.
+   */
+  pagerDuty?: { apiToken: string; fromEmail: string }
+  /** incident.io incident-enrichment, present only when configured. */
+  incidentIo?: { apiKey: string }
+}
+
 export interface SlackConfig {
   /**
    * Opt-in flag. Requires an encryption key (the per-account bot token is sealed
@@ -252,6 +273,10 @@ export interface AppConfig {
   runners: RunnerPoolConfig
   /** Slack notification-transport config; `enabled` is false unless opted in. */
   slack: SlackConfig
+  /** Datadog post-release-health config; `enabled` is false unless opted in. */
+  datadog: DatadogConfig
+  /** Optional PagerDuty / incident.io incident-enrichment config (additive, opt-in). */
+  incidentEnrichment: IncidentEnrichmentConfig
   /** Transactional email config (invitations); `enabled` is false unless opted in. */
   email: EmailConfig
   /** Retention windows for the unbounded ledgers/projections (epoch-ms ages). */

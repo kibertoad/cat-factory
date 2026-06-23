@@ -314,6 +314,26 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
             ...(slackOAuth ? { oauth: slackOAuth } : {}),
           }
         : { enabled: false },
+    // Datadog post-release-health: opt-in (`DATADOG_ENABLED=true`) + the shared
+    // ENCRYPTION_KEY (the per-workspace API/app keys are sealed at rest). Mirrors the Worker.
+    datadog:
+      env.DATADOG_ENABLED === 'true' && env.ENCRYPTION_KEY?.trim()
+        ? { enabled: true, encryptionKey: env.ENCRYPTION_KEY.trim() }
+        : { enabled: false },
+    // Optional incident enrichment (annotate, never re-alert): deployment-level creds.
+    incidentEnrichment: {
+      ...(env.PAGERDUTY_API_TOKEN?.trim() && env.PAGERDUTY_FROM_EMAIL?.trim()
+        ? {
+            pagerDuty: {
+              apiToken: env.PAGERDUTY_API_TOKEN.trim(),
+              fromEmail: env.PAGERDUTY_FROM_EMAIL.trim(),
+            },
+          }
+        : {}),
+      ...(env.INCIDENTIO_API_KEY?.trim()
+        ? { incidentIo: { apiKey: env.INCIDENTIO_API_KEY.trim() } }
+        : {}),
+    },
     retention: {
       tokenUsageMs: (num(env.TOKEN_USAGE_RETENTION_DAYS) ?? 395) * 24 * 60 * 60 * 1000,
       rateLimitMs: (num(env.GITHUB_RATE_LIMIT_RETENTION_DAYS) ?? 7) * 24 * 60 * 60 * 1000,

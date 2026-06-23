@@ -245,7 +245,31 @@ export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
     color: '#a3e635',
     description: 'Scores the PR and auto-merges within the task thresholds, or asks for review.',
   },
+  // A polling gate (no model of its own) that watches the released PR's observability
+  // signals after merge and escalates to the on-call agent on a regression. NOT in any
+  // default pipeline and NOT a standing palette archetype — the palette surfaces it
+  // conditionally (only with an observability integration connected, see AgentPalette),
+  // but it still needs display metadata here so timelines/saved pipelines render it.
+  'post-release-health': {
+    kind: 'post-release-health',
+    label: 'Post-Release Health',
+    icon: 'i-lucide-activity',
+    color: '#f43f5e',
+    description:
+      'Watches the released PR’s Datadog monitors/SLOs after merge and escalates to the on-call agent on a regression.',
+    // Opens the dedicated gate window (verdict, attempts, watch window) like the other gates.
+    resultView: 'gate',
+  },
 }
+
+/**
+ * The observability-gated palette block. NOT in {@link AGENT_ARCHETYPES} (so it never
+ * pollutes model-defaults — it runs no model — and is never offered unconditionally):
+ * the pipeline builder appends it to the palette ONLY when the workspace has an
+ * observability integration connected, and the backend rejects it otherwise.
+ */
+export const OBSERVABILITY_GATE_ARCHETYPE: AgentArchetype =
+  SYSTEM_AGENT_META['post-release-health']!
 
 /**
  * Engine-driven kinds that still run an LLM, so their model is worth pinning per

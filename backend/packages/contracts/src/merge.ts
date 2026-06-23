@@ -80,6 +80,17 @@ export const mergeThresholdPresetSchema = v.object({
    * everything. Severity order: none < low < medium < high.
    */
   maxRequirementConcernAllowed: requirementConcernLevelSchema,
+  /**
+   * How long (minutes) the post-release-health gate watches the deployed release's
+   * Datadog monitors/SLOs before declaring it healthy and advancing.
+   */
+  releaseWatchWindowMinutes: v.pipe(v.number(), v.integer(), v.minValue(1)),
+  /**
+   * How many `on-call` investigations the post-release-health gate may dispatch while
+   * watching before it gives up and raises a notification. The on-call agent investigates
+   * rather than fixing prod, so 1 is the sensible default.
+   */
+  releaseMaxAttempts: v.pipe(v.number(), v.integer(), v.minValue(0)),
   /** The workspace's fallback preset, used by tasks that pick none. Exactly one is true. */
   isDefault: v.boolean(),
   createdAt: v.number(),
@@ -92,6 +103,8 @@ const presetNameSchema = v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLengt
 const scoreSchema = v.pipe(v.number(), v.minValue(0), v.maxValue(1))
 const attemptsSchema = v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(50))
 const iterationsSchema = v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(20))
+const releaseWindowSchema = v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(720))
+const releaseAttemptsSchema = v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(10))
 
 /** Create a new merge threshold preset in a workspace. */
 export const createMergePresetSchema = v.object({
@@ -102,6 +115,8 @@ export const createMergePresetSchema = v.object({
   ciMaxAttempts: attemptsSchema,
   maxRequirementIterations: iterationsSchema,
   maxRequirementConcernAllowed: requirementConcernLevelSchema,
+  releaseWatchWindowMinutes: v.optional(releaseWindowSchema, 30),
+  releaseMaxAttempts: v.optional(releaseAttemptsSchema, 1),
   /** Make this the workspace default (demotes the previous default). */
   isDefault: v.optional(v.boolean(), false),
 })
@@ -116,6 +131,8 @@ export const updateMergePresetSchema = v.object({
   ciMaxAttempts: v.optional(attemptsSchema),
   maxRequirementIterations: v.optional(iterationsSchema),
   maxRequirementConcernAllowed: v.optional(requirementConcernLevelSchema),
+  releaseWatchWindowMinutes: v.optional(releaseWindowSchema),
+  releaseMaxAttempts: v.optional(releaseAttemptsSchema),
   isDefault: v.optional(v.boolean()),
 })
 export type UpdateMergePresetInput = v.InferOutput<typeof updateMergePresetSchema>

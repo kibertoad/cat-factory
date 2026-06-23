@@ -41,6 +41,8 @@ export interface RunnerJobResult {
   defaultBranch?: string
   /** A `merger` job's PR assessment (the `/merge` endpoint's product). */
   assessment?: unknown
+  /** An `on-call` job's release-regression assessment (the `/on-call` endpoint's product). */
+  onCallAssessment?: unknown
   /** A `ci-fixer` job's outcome: whether it pushed a fix to the PR branch. */
   pushed?: boolean
   /**
@@ -82,6 +84,9 @@ export type RunnerDispatchKind =
   | 'ci-fix'
   | 'resolve-conflicts'
   | 'merge'
+  // Investigate a post-release regression (read the released PR diff + Datadog evidence)
+  // and return a JSON assessment; makes no commits, like `merge`.
+  | 'on-call'
   // Run the project's tests (against an ephemeral env or local docker-compose infra)
   // and return a structured report; makes no commits, like `merge`.
   | 'test'

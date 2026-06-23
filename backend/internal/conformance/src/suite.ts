@@ -562,6 +562,9 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         expect(initial.status).toBe(200)
         expect(initial.body).toHaveLength(1)
         expect(initial.body[0]!.isDefault).toBe(true)
+        // The post-release-health knobs round-trip with their defaults through both stores.
+        expect(initial.body[0]!.releaseWatchWindowMinutes).toBe(30)
+        expect(initial.body[0]!.releaseMaxAttempts).toBe(1)
         const seededDefaultId = initial.body[0]!.id
 
         // Add a non-default preset; the seeded default stays the default.
@@ -573,12 +576,16 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
           ciMaxAttempts: 5,
           maxRequirementIterations: 5,
           maxRequirementConcernAllowed: 'medium',
+          releaseWatchWindowMinutes: 45,
+          releaseMaxAttempts: 2,
         })
         expect(lenient.status).toBe(201)
         expect(lenient.body.isDefault).toBe(false)
-        // The requirements-loop fields round-trip through the store on both runtimes.
+        // The requirements-loop + release-health fields round-trip through the store on both runtimes.
         expect(lenient.body.maxRequirementIterations).toBe(5)
         expect(lenient.body.maxRequirementConcernAllowed).toBe('medium')
+        expect(lenient.body.releaseWatchWindowMinutes).toBe(45)
+        expect(lenient.body.releaseMaxAttempts).toBe(2)
 
         // Promote a brand-new preset to default; the previous default is demoted
         // (single-default invariant enforced by the repository).
@@ -1721,6 +1728,44 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         const task = snap.blocks.find((b) => b.id === 'task_login')!
         expect(task.status).toBe('pr_ready')
         expect(task.status).not.toBe('done')
+      })
+
+      it('runs the merger merge at its step even when a later step follows it', async () => {
+        // Regression guard for the parity-critical bug where a step AFTER `merger` silently
+        // disabled auto-merge: the real merge is a DETERMINISTIC post-completion resolver
+        // registered on the `merger` kind, so it fires when the MERGER STEP finishes — not
+        // only when the merger happens to be the pipeline's last step. With a credible
+        // within-threshold assessment the task must reach `done` even though a trailing
+        // pass-through gate follows. (The original trailing step was `post-release-health`;
+        // that gate is now opt-in + observability-gated, so the unwired `ci` gate — likewise
+        // a pass-through here — stands in as the trailing step.)
+        const app = harness.makeApp({
+          confidence: 1,
+          mergeAssessment: {
+            complexity: 0,
+            risk: 0,
+            impact: 0,
+            rationale: 'Trivial, well-tested change.',
+          },
+        })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Build + merger + trailing gate',
+          agentKinds: ['coder', 'merger', 'ci'],
+        })
+        const start = await app.call<ExecutionInstance>(
+          'POST',
+          `/workspaces/${wsId}/blocks/task_login/executions`,
+          { pipelineId: pipeline.body.id },
+        )
+        expect(start.status).toBe(201)
+        await app.drive(wsId)
+        const snap = (await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)).body
+        const task = snap.blocks.find((b) => b.id === 'task_login')!
+        // The merge ran at the (non-final) merger step → the block is `done`, not left
+        // unmerged as `pr_ready`.
+        expect(task.status).toBe('done')
       })
 
       it('parks for a human when a companion spends its rework budget (no longer fails)', async () => {

@@ -281,6 +281,40 @@ exports[`ContainerAgentExecutor.buildJobBody (per-kind body shapes) > merger 1`]
 }
 `;
 
+exports[`ContainerAgentExecutor.buildJobBody (per-kind body shapes) > on-call 1`] = `
+{
+  "kind": "on-call",
+  "ref": {
+    "jobId": "ex_1-on-call",
+    "runId": "ex_1",
+  },
+  "spec": {
+    "branch": "main",
+    "ghToken": "GH-TOKEN",
+    "githubApiBase": "https://api.github.com",
+    "harness": "pi",
+    "headBranch": "cat-factory/blk_1",
+    "jobId": "ex_1-on-call",
+    "model": "@cf/test/model",
+    "prNumber": 9,
+    "proxyBaseUrl": "https://proxy.test/v1",
+    "repo": {
+      "baseBranch": "main",
+      "cloneUrl": "https://github.com/acme/widgets.git",
+      "name": "widgets",
+      "owner": "acme",
+    },
+    "sessionToken": "SESSION-TOKEN",
+    "systemPrompt": "You are an on-call engineer investigating a possible post-release regression. A recently merged pull request shipped, and the evidence below (alerting Datadog monitors/SLOs and recent error logs) suggests the service regressed afterward. Read the PR diff on the head branch and weigh whether THIS change is the likely cause — beware correlation vs causation; a coincident deploy is not proof. You may read and inspect any file, but you MUST NOT modify, commit or revert anything; a human decides whether to revert. Respond with ONLY a JSON object of shape {"culpritConfidence":0.0,"recommendation":"revert"|"hold"|"monitor","rationale":"…","evidence":["…"]} — no prose, no code fences.",
+    "userPrompt": "Pipeline: Standard build
+Block: Add widget (feature)
+Description: Implement the widget feature.
+
+Produce your contribution. Be concise and concrete.",
+  },
+}
+`;
+
 exports[`ContainerAgentExecutor.buildJobBody (per-kind body shapes) > read-only (architect) 1`] = `
 {
   "kind": "explore",
