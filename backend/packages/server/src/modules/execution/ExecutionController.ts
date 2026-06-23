@@ -4,6 +4,7 @@ import {
   requestStepChangesSchema,
   resolveDecisionSchema,
   resolveIterationCapSchema,
+  restartFromStepSchema,
   startExecutionSchema,
 } from '@cat-factory/contracts'
 import { Hono } from 'hono'
@@ -12,6 +13,7 @@ import { param } from '../../http/params.js'
 import { jsonBody } from '../../http/validation.js'
 import {
   personalGateForBlock,
+  personalGateForRun,
   readPersonalPassword,
   remintActivations,
 } from '../providers/personalCredentialGate.js'
@@ -202,6 +204,34 @@ export function executionController(): Hono<AppEnv> {
       return c.json(instance)
     },
   )
+
+  // Restart a run from a chosen step: re-run from `fromStepIndex` onward (resetting
+  // that step + every later step's iteration counters) while keeping the earlier
+  // steps' outputs as handoff context. Works on a run in any state — the engine tears
+  // down a still-running driver/container first. Mints a fresh run id, so it re-drives
+  // like a retry. Individual-usage models (Claude/GLM/Codex) need the initiator's
+  // personal subscription, resolved + activated here (428 when a password is needed).
+  app.post('/executions/:executionId/restart', jsonBody(restartFromStepSchema), async (c) => {
+    const container = c.get('container')
+    const workspaceId = param(c, 'workspaceId')
+    const executionId = param(c, 'executionId')
+    const { fromStepIndex } = c.req.valid('json')
+    const { initiatedBy, activate } = await personalGateForRun(
+      container,
+      workspaceId,
+      executionId,
+      c.get('user'),
+      readPersonalPassword(c),
+    )
+    const instance = await container.executionService.restartFromStep(
+      workspaceId,
+      executionId,
+      fromStepIndex,
+      initiatedBy,
+      activate,
+    )
+    return c.json(instance)
+  })
 
   // Reject a gated proposal: the run stops entirely (a terminal, retryable failure).
   app.post(

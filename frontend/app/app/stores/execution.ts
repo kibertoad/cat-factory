@@ -211,6 +211,23 @@ export const useExecutionStore = defineStore('execution', () => {
     await ws.refresh()
   }
 
+  /**
+   * Restart a run from a chosen step: the server re-runs from `stepIndex` onward
+   * (resetting that step + later steps' iteration counters) while preserving the
+   * earlier steps' outputs as handoff context, and re-drives a fresh run. Like
+   * start/retry it may dispatch an individual-usage (Claude) step, so it rides the
+   * initiator's personal password — prompted (then retried) on a 428. Returns false
+   * when the user cancels that prompt (nothing was restarted).
+   */
+  async function restartFromStep(instanceId: string, stepIndex: number): Promise<boolean> {
+    const ws = useWorkspaceStore()
+    const personal = usePersonalSubscriptionsStore()
+    return personal.withCredential(async (password) => {
+      await api.restartFromStep(ws.requireId(), instanceId, stepIndex, password)
+      await ws.refresh()
+    })
+  }
+
   /** Cancel the execution running against a block and reset it to planned. */
   async function cancel(blockId: string) {
     const ws = useWorkspaceStore()
@@ -236,6 +253,7 @@ export const useExecutionStore = defineStore('execution', () => {
     requestStepChanges,
     rejectStep,
     resolveCompanionExceeded,
+    restartFromStep,
     mergePr,
     cancel,
   }

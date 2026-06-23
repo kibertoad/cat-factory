@@ -232,3 +232,14 @@ export const rejectStepSchema = v.object({
   reason: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(2000))),
 })
 export type RejectStepInput = v.InferOutput<typeof rejectStepSchema>
+
+/**
+ * Restart a run from a chosen step: re-run from `fromStepIndex` onward, keeping the
+ * earlier steps (and their outputs) as handoff context and resetting that step plus
+ * every later one's iteration counters. The service validates the index against the
+ * run's real step count; this only enforces a non-negative integer up front.
+ */
+export const restartFromStepSchema = v.object({
+  fromStepIndex: v.pipe(v.number(), v.integer(), v.minValue(0)),
+})
+export type RestartFromStepInput = v.InferOutput<typeof restartFromStepSchema>

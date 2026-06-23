@@ -530,6 +530,22 @@ export function useApi() {
         { method: 'POST', body, headers: pwHeaders(password) },
       ),
 
+    // Restart a run from a chosen step: re-run from `fromStepIndex` onward (resetting
+    // that step + later steps' iteration counters) while keeping the earlier steps'
+    // outputs as handoff context. Like retry it may need the initiator's personal
+    // password for an individual-usage (Claude) block, prompted + retried on a 428.
+    restartFromStep: (
+      workspaceId: string,
+      executionId: string,
+      fromStepIndex: number,
+      password?: string,
+    ) =>
+      http<ExecutionInstance>(`${ws(workspaceId)}/executions/${executionId}/restart`, {
+        method: 'POST',
+        body: { fromStepIndex },
+        headers: pwHeaders(password),
+      }),
+
     // ---- LLM observability (per-run model-call metrics) -------------------
     // The full per-call detail behind the board's step rollups. Empty when the
     // observability sink is not wired.
