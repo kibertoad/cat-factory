@@ -27,3 +27,12 @@ assertion for the store (CRUD + bearer-key encryption round-trip + enabled-model
 JSON). Container kinds (coder/tester/merger/…) and the inline reviewer/planner all
 run on the local model. Breaking only in the pre-1.0 sense: a new table is added,
 no migration of existing data is needed.
+
+Because the user-supplied base URL is forwarded server-side (the test probe + the
+LLM proxy), it is constrained to a loopback/LAN allow-list (`localRunnerUrlError`):
+`localhost`, `*.local`, and RFC1918/ULA private addresses are accepted, while public
+hosts and the link-local cloud-metadata endpoint (`169.254.169.254` / `fe80::`) are
+rejected at the write boundary and the probe (anti-SSRF). Model usability is gated on
+the specific enabled model id (`localModels` capability), not merely the runner being
+configured, so a stale pin to a since-disabled model is caught at the pipeline-start
+guard.

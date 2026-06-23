@@ -191,6 +191,7 @@ export {
   type LocalModelEndpointServiceDependencies,
   type ResolvedLocalEndpoint,
 } from './modules/providers/LocalModelEndpointService.js'
+export { localRunnerUrlError } from './modules/providers/localModelUrl.js'
 export * as providersLogic from './modules/providers/providers.logic.js'
 export {
   DEFAULT_USAGE_WINDOW_MS,

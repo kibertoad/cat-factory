@@ -553,6 +553,37 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         const after = await probe.list(userId)
         expect(after.map((e) => e.provider)).toEqual(['lmstudio'])
       })
+
+      it('rejects a non-local base URL at the write boundary (anti-SSRF) — identically per store', async () => {
+        const app = harness.makeApp()
+        const probe = app.localModelEndpoints?.()
+        if (!probe) return
+        const userId = `usr_local_ssrf_${Date.now()}`
+
+        // A runner lives on the user's own machine/LAN; the base URL is forwarded
+        // server-side, so a public host or the link-local metadata endpoint must be
+        // refused before anything is persisted.
+        for (const baseUrl of [
+          'http://evil.example.com/v1',
+          'http://169.254.169.254/latest/meta-data',
+          'http://8.8.8.8/v1',
+        ]) {
+          await expect(
+            probe.upsert(userId, { provider: 'custom', baseUrl, models: ['m'] }),
+          ).rejects.toThrow()
+        }
+        // Nothing was stored.
+        expect(await probe.list(userId)).toEqual([])
+
+        // A loopback URL is still accepted.
+        const ok = await probe.upsert(userId, {
+          provider: 'custom',
+          baseUrl: 'http://127.0.0.1:8080/v1',
+          models: ['m'],
+        })
+        expect(ok.provider).toBe('custom')
+        await probe.remove(userId, 'custom')
+      })
     })
 
     describe('repo bootstrap', () => {

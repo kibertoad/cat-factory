@@ -644,12 +644,16 @@ differentiators behind the shared kernel ports + the `container.gateways` seam.
   the `local_model_endpoints` table (D1 ⇄ Drizzle parity), validated on the fly via
   `LocalModelEndpointService.testConnection` (probes `/v1/models`). Enabled models are
   appended to `GET /models` dynamically (id `"<provider>:<model>"`) as the `direct` flavour
-  gated by the `localProviders` capability — NO API key. At run time the LLM proxy + the
+  gated by the `localModels` capability (the per-user set of enabled model ids — usability
+  is model-granular, not just per-runner) — NO API key. At run time the LLM proxy + the
   inline model provider resolve the **run initiator's** endpoint and SKIP the DB key lease
   (the keyless local branch; `isProxyableProvider` + `isLocalRunner`), exactly like the
   personal-subscription initiator model. `parseLocalModelId` turns the dynamic id into a
-  `ModelRef`. Runtime-neutral and runs on the cross-runtime conformance suite; in practice
-  only local/Node deployments reach `localhost`.
+  `ModelRef`. The base URL is forwarded server-side, so it's constrained to a loopback/LAN
+  host allow-list (`localRunnerUrlError`) at the write boundary + the test probe (public
+  hosts and the link-local metadata endpoint are rejected — anti-SSRF). Runtime-neutral and
+  runs on the cross-runtime conformance suite; in practice only local/Node deployments reach
+  `localhost`.
 
 **Cross-runtime conformance** keeps the facades behaviourally identical:
 `@cat-factory/conformance` exposes `defineConformanceSuite(harness)` — the key backend

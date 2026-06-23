@@ -293,11 +293,13 @@ export interface ProviderCapabilities {
   /** Whether the opt-in Cloudflare Workers AI lib is registered for this deployment. */
   cloudflareEnabled: boolean
   /**
-   * Local runner providers (`ollama`/`lmstudio`/…) the resolving USER has configured
-   * with ≥1 enabled model. A local model is a "direct provider that needs no key", so a
-   * model whose direct provider is in this set is usable without a pooled API key.
+   * The dynamic local-runner model ids (`"<provider>:<model>"`, e.g. `ollama:gemma3`) the
+   * resolving USER has enabled. A local model needs no pooled key — the user's configured
+   * endpoint carries the (optional) key — so usability is gated on the SPECIFIC model
+   * being enabled, not merely the runner being configured (a stale pin to a model the user
+   * later un-enabled must NOT pass the start guard).
    */
-  localProviders?: Set<string>
+  localModels?: Set<string>
 }
 
 /** Resolve the informational list cost for a model ref (e.g. from spend pricing). */
@@ -315,9 +317,10 @@ interface EffectiveVariant {
 function directUsable(model: SelectableModel, caps: ProviderCapabilities): boolean {
   if (!model.direct) return false
   const provider = model.direct.ref.provider
-  // A local-runner provider needs no pooled key: the user's configured endpoint carries
-  // the (optional) key, so it's usable purely on the basis of being configured.
-  return caps.directProviders.has(provider) || (caps.localProviders?.has(provider) ?? false)
+  if (caps.directProviders.has(provider)) return true
+  // A local-runner model needs no pooled key (the user's endpoint carries the optional
+  // key), but it's only usable when THIS specific model is enabled — keyed by its id.
+  return isLocalRunner(provider) && (caps.localModels?.has(model.id) ?? false)
 }
 function cloudflareUsable(model: SelectableModel, caps: ProviderCapabilities): boolean {
   return !!model.cloudflare && caps.cloudflareEnabled
@@ -334,10 +337,10 @@ function subscriptionUsable(model: SelectableModel, caps: ProviderCapabilities):
 export function isModelUsable(id: string | undefined | null, caps: ProviderCapabilities): boolean {
   const model = getSelectableModel(id)
   if (!model) {
-    // Dynamic local-runner model: usable when the resolving user has that runner
-    // configured (its provider is in `localProviders`).
+    // Dynamic local-runner model: usable when the resolving user has enabled this exact
+    // model (`"<provider>:<model>"` is in `localModels`), not merely the runner configured.
     const local = parseLocalModelId(id)
-    return !!local && (caps.localProviders?.has(local.provider) ?? false)
+    return !!local && (caps.localModels?.has(`${local.provider}:${local.model}`) ?? false)
   }
   return (
     directUsable(model, caps) || cloudflareUsable(model, caps) || subscriptionUsable(model, caps)
@@ -531,7 +534,7 @@ export interface LocalEndpointModels {
 /**
  * Build the dynamic, per-user catalog entries for a set of configured local endpoints.
  * Each enabled model becomes a `direct`-flavour {@link SelectableModel} with a stable id
- * `"<provider>:<model>"` and no key requirement (gated by `localProviders`).
+ * `"<provider>:<model>"` and no key requirement (gated by `localModels`).
  */
 export function localSelectableModels(endpoints: LocalEndpointModels[]): SelectableModel[] {
   const out: SelectableModel[] = []

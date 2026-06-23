@@ -4,7 +4,7 @@ import type {
   LocalModelEndpointRepository,
   SecretCipher,
 } from '@cat-factory/kernel'
-import { getErrorMessage } from '@cat-factory/kernel'
+import { getErrorMessage, ValidationError } from '@cat-factory/kernel'
 import type {
   LocalModelEndpoint,
   LocalModelEndpointTestResult,
@@ -13,6 +13,7 @@ import type {
   UpsertLocalModelEndpointInput,
 } from '@cat-factory/contracts'
 import { LOCAL_RUNNER_LABELS } from '@cat-factory/contracts'
+import { localRunnerUrlError } from './localModelUrl.js'
 
 // LocalModelEndpointService: owns each USER's locally-run model endpoints (Ollama / LM
 // Studio / llama.cpp / vLLM / a custom OpenAI-compatible server) — the per-user analogue
@@ -52,6 +53,11 @@ export class LocalModelEndpointService {
 
   /** Create or replace the user's endpoint for a runner. */
   async upsert(userId: string, input: UpsertLocalModelEndpointInput): Promise<LocalModelEndpoint> {
+    // SSRF guard: the stored base URL is later forwarded to server-side (the LLM proxy +
+    // inline provider resolve it by the run initiator), so reject a non-local host here at
+    // the write boundary — the run-time paths then trust the persisted URL.
+    const urlError = localRunnerUrlError(input.baseUrl)
+    if (urlError) throw new ValidationError(urlError)
     const now = this.deps.clock.now()
     const existing = await this.deps.localModelEndpointRepository.getByUserProvider(
       userId,
@@ -134,6 +140,10 @@ export class LocalModelEndpointService {
    * `{ reachable: false, error }` so the UI can surface them.
    */
   async testConnection(input: TestLocalModelEndpointInput): Promise<LocalModelEndpointTestResult> {
+    // SSRF guard: this probe forwards to a user-supplied URL server-side, so refuse a
+    // non-local host before issuing the fetch (same allow-list as `upsert`).
+    const urlError = localRunnerUrlError(input.baseUrl)
+    if (urlError) return { reachable: false, models: [], error: urlError }
     const doFetch = this.deps.fetch ?? fetch
     const url = `${input.baseUrl.replace(/\/+$/, '')}/models`
     try {

@@ -43,17 +43,19 @@ export async function resolveWorkspaceCapabilities(
         : false
     if (pooled || personal) subscriptionVendors.add(vendor)
   }
-  // Local runners are per-user: a model is usable when the resolving user has that
-  // runner configured with ≥1 enabled model.
-  const localProviders = new Set<string>(
-    userId && services.localModelEndpoints
-      ? (await services.localModelEndpoints.capabilitiesFor(userId)).map((c) => c.provider)
-      : [],
-  )
+  // Local runners are per-user: a model is usable when the resolving user has enabled it.
+  // Keyed by the dynamic model id (`"<provider>:<model>"`) so usability is model-granular
+  // (a runner configured but with this model un-enabled must not pass).
+  const localModels = new Set<string>()
+  if (userId && services.localModelEndpoints) {
+    for (const cap of await services.localModelEndpoints.capabilitiesFor(userId)) {
+      for (const model of cap.models) localModels.add(`${cap.provider}:${model}`)
+    }
+  }
   return {
     directProviders,
     subscriptionVendors,
     cloudflareEnabled: services.cloudflareModelsEnabled ?? false,
-    localProviders,
+    localModels,
   }
 }

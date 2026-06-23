@@ -63,12 +63,14 @@ Three shapes of catalog entry fall out of this:
   configures runners in the UI ("My local runners", stored per-user in
   `local_model_endpoints`), and their enabled models are appended to `GET /models`
   dynamically (id `"<provider>:<model>"`, e.g. `ollama:gemma3`). They present as the
-  `direct` flavour but need **no API key** — gated by the new `localProviders` capability
-  (the user has the runner configured), not a `keyEnv`. At run time the LLM proxy + inline
-  provider resolve the **run initiator's** endpoint (base URL + optional bearer key) and
-  skip the DB key lease, mirroring the personal-subscription initiator model. `parseLocalModelId`
-  turns the dynamic id into a `ModelRef` so `resolveModelRef`/`resolveBlockModel` resolve it
-  even at config time (when per-user capabilities aren't known).
+  `direct` flavour but need **no API key** — gated by the new `localModels` capability (the
+  set of model ids the user has *enabled*, so usability is model-granular), not a `keyEnv`.
+  At run time the LLM proxy + inline provider resolve the **run initiator's** endpoint (base
+  URL + optional bearer key) and skip the DB key lease, mirroring the personal-subscription
+  initiator model. The base URL is constrained to a loopback/LAN allow-list
+  (`localRunnerUrlError`) since it's forwarded server-side. `parseLocalModelId` turns the
+  dynamic id into a `ModelRef` so `resolveModelRef`/`resolveBlockModel` resolve it even at
+  config time (when per-user capabilities aren't known).
 
 The effective, display-ready projection (which flavour is actually active, plus
 informational cost and context window) is computed by `effectiveCatalog()` and served
