@@ -9,6 +9,7 @@ import {
   agentOutputTail,
   NEVER_ACTED_CAUSE,
   runAgentInWorkspace,
+  unusableFinalAnswerCause,
   withWorkspace,
 } from './pi-workspace.js'
 import {
@@ -367,7 +368,7 @@ export async function handleBlueprint(
     const previousVersion = await readExistingVersion(dir)
 
     log.info('blueprint: running agent', { ...trace, mode: job.mode })
-    const { summary, stats, stderrTail, usage } = await runAgentInWorkspace(
+    const { summary, stats, stderrTail, usage, diagnostics: runDiag } = await runAgentInWorkspace(
       {
         dir,
         systemPrompt: job.systemPrompt,
@@ -387,6 +388,21 @@ export async function handleBlueprint(
       },
       opts,
     )
+
+    // The tree is HANDED OFF to be reconciled onto the board (and reviewed), so an
+    // unusable final answer (cut off at the ceiling, or an empty completion) fails
+    // loudly here rather than being laundered into a half tree by the repair below —
+    // the same opt-in document-producer guard the spec-writer uses.
+    const unusable = unusableFinalAnswerCause(runDiag)
+    if (unusable) {
+      log.warn('blueprint: unusable final answer', { ...trace, ...stats, ...runDiag })
+      return {
+        summary,
+        stats,
+        error: `the blueprint agent did not return a usable service tree: ${unusable}.${agentOutputTail(stderrTail, summary)}`,
+        ...(usage ? { usage } : {}),
+      }
+    }
 
     // Parse the agent's tree; on a malformed reply, make ONE structured repair call
     // (see json-repair) before giving up. The failure + repair outcome are logged and
