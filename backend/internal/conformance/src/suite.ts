@@ -1731,12 +1731,14 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
       })
 
       it('runs the merger merge at its step even when a later step follows it', async () => {
-        // Regression guard for the parity-critical bug where appending `post-release-health`
-        // after `merger` silently disabled auto-merge: the real merge is a DETERMINISTIC
-        // post-completion resolver registered on the `merger` kind, so it fires when the
-        // MERGER STEP finishes — not only when the merger happens to be the pipeline's last
-        // step. With a credible within-threshold assessment the task must reach `done` even
-        // though a trailing gate (post-release-health, here unwired → pass-through) follows.
+        // Regression guard for the parity-critical bug where a step AFTER `merger` silently
+        // disabled auto-merge: the real merge is a DETERMINISTIC post-completion resolver
+        // registered on the `merger` kind, so it fires when the MERGER STEP finishes — not
+        // only when the merger happens to be the pipeline's last step. With a credible
+        // within-threshold assessment the task must reach `done` even though a trailing
+        // pass-through gate follows. (The original trailing step was `post-release-health`;
+        // that gate is now opt-in + observability-gated, so the unwired `ci` gate — likewise
+        // a pass-through here — stands in as the trailing step.)
         const app = harness.makeApp({
           confidence: 1,
           mergeAssessment: {
@@ -1749,8 +1751,8 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         const { workspace } = await app.createWorkspace()
         const wsId = workspace.id
         const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
-          name: 'Build + merger + health',
-          agentKinds: ['coder', 'merger', 'post-release-health'],
+          name: 'Build + merger + trailing gate',
+          agentKinds: ['coder', 'merger', 'ci'],
         })
         const start = await app.call<ExecutionInstance>(
           'POST',
