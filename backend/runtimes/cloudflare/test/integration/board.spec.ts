@@ -121,6 +121,19 @@ describe('board', () => {
     expect(refresh?.dependsOn).not.toContain('task_login')
   })
 
+  it('deletes idempotently — a gone or unknown block is a 204, not a 404', async () => {
+    // First delete tears the subtree down; a second delete (or a delete of a never-existed id)
+    // must NOT 404. A thing not existing can't block cleanup of whatever DID survive.
+    const first = await app.call('DELETE', `/workspaces/${wsId}/blocks/blk_auth`)
+    expect(first.status).toBe(204)
+
+    const again = await app.call('DELETE', `/workspaces/${wsId}/blocks/blk_auth`)
+    expect(again.status).toBe(204)
+
+    const unknown = await app.call('DELETE', `/workspaces/${wsId}/blocks/blk_does_not_exist`)
+    expect(unknown.status).toBe(204)
+  })
+
   it('removes a module and its nested tasks', async () => {
     await app.call('DELETE', `/workspaces/${wsId}/blocks/mod_sessions`)
     const snap = (await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)).body

@@ -795,6 +795,19 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         expect(patched.status).toBe(200)
         expect(patched.body.description).toBe('Updated description')
       })
+
+      it('deletes a block idempotently — gone or unknown is a 204, never a 404', async () => {
+        const app = harness.makeApp()
+        const { workspace } = await app.createWorkspace()
+        // A block not existing must never block deletion: a repeated delete, and a delete of an
+        // id that never existed, both clean up best-effort and return 204 rather than 404.
+        const first = await app.call('DELETE', `/workspaces/${workspace.id}/blocks/blk_auth`)
+        expect(first.status).toBe(204)
+        const again = await app.call('DELETE', `/workspaces/${workspace.id}/blocks/blk_auth`)
+        expect(again.status).toBe(204)
+        const unknown = await app.call('DELETE', `/workspaces/${workspace.id}/blocks/blk_nope`)
+        expect(unknown.status).toBe(204)
+      })
     })
 
     describe('execution engine', () => {
