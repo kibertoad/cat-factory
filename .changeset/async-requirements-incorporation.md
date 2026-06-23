@@ -30,7 +30,7 @@ re-review (`incorporated`) just advances the pipeline with no interruption.
   `{ type: 'requirements' }` `WorkspaceEvent`, so an open window/inspector tracks the status
   transitions live (Cloudflare pushes via the DO hub; Node reconciles on poll, as today).
 - **API.** Incorporation moves to the block-scoped `POST
-  /blocks/:blockId/requirement-review/incorporate` (was the reviewId-scoped
+/blocks/:blockId/requirement-review/incorporate` (was the reviewId-scoped
   `/requirement-reviews/:reviewId/incorporate`) and returns the `incorporating` review
   rather than `{ review }`.
 - **Conformance.** A new cross-runtime assertion proves the async-incorporate route is

@@ -100,11 +100,11 @@ describe('requirements review HTTP surface', () => {
   })
 
   it('gates incorporation until every item is settled', async () => {
-    const { app, ws } = await setup()
+    const { app, ws, blockId } = await setup()
     // One item still open → incorporate is rejected with a validation error.
     const blocked = await app.call(
       'POST',
-      `/workspaces/${ws}/requirement-reviews/rrv_test/incorporate`,
+      `/workspaces/${ws}/blocks/${blockId}/requirement-review/incorporate`,
     )
     expect(blocked.status).toBe(422)
     expect(JSON.stringify(blocked.body)).toContain('Answer or dismiss')

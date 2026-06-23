@@ -1,9 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import {
-  createLocalGitHubClient,
-  githubPatCreationUrl,
-  StaticTokenAppRegistry,
-} from './github.js'
+import { createLocalGitHubClient, githubPatCreationUrl, StaticTokenAppRegistry } from './github.js'
 
 describe('StaticTokenAppRegistry', () => {
   it('returns the PAT for installation tokens and rejects app-JWT use', async () => {
