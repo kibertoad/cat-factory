@@ -58,6 +58,7 @@ import {
   CONFLICTS_AGENT_KIND,
   CONFLICT_RESOLVER_AGENT_KIND,
   describeFailingChecks,
+  listFailingChecks,
   isCiGreen,
   MERGER_AGENT_KIND,
   REQUIREMENTS_REVIEW_AGENT_KIND,
@@ -1615,6 +1616,7 @@ export class ExecutionService {
             status: 'fail',
             headSha: report.headSha,
             failureSummary: describeFailingChecks(report.checks),
+            failingChecks: listFailingChecks(report.checks),
           }
         },
         // Surface the failing-check summary to the fixer as resolved context.
@@ -1704,6 +1706,12 @@ export class ExecutionService {
 
     const probe = await gate.probe(workspaceId, block.id)
     step.gate.headSha = probe.headSha
+    // Persist the precheck outcome so the run-detail UI can surface why the gate is
+    // looping (the failing checks / conflict reason) — detail that was previously fed
+    // only to the helper agent and then discarded.
+    step.gate.lastVerdict = probe.status
+    step.gate.lastFailureSummary = probe.failureSummary ?? null
+    step.gate.failingChecks = probe.failingChecks ?? null
 
     if (probe.status === 'pass') {
       // Stop the moment the precheck passes — finish the step and advance.
@@ -1776,6 +1784,9 @@ export class ExecutionService {
     step.jobId = handle.jobId
     if (handle.model) step.model = handle.model
     step.gate = {
+      // Preserve the recorded verdict/failure detail (set in evaluateGate) so the UI
+      // keeps showing what the helper is fixing while it works.
+      ...step.gate,
       phase: 'working',
       attempts: (step.gate?.attempts ?? 0) + 1,
       maxAttempts: step.gate?.maxAttempts ?? DEFAULT_MERGE_PRESET.ciMaxAttempts,

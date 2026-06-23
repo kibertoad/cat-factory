@@ -105,11 +105,16 @@ export function isCiGreen(verdict: CiVerdict): boolean {
   return verdict === 'success' || verdict === 'none'
 }
 
+/** The completed-and-non-passing checks behind a `failure` verdict. */
+export function listFailingChecks(checks: CiCheck[]): { name: string; conclusion: string | null }[] {
+  return checks
+    .filter((c) => c.status === 'completed' && !PASSING_CONCLUSIONS.has(c.conclusion ?? ''))
+    .map((c) => ({ name: c.name, conclusion: c.conclusion }))
+}
+
 /** A short, human-readable summary of the failing checks, for the step output / notification. */
 export function describeFailingChecks(checks: CiCheck[]): string {
-  const failing = checks.filter(
-    (c) => c.status === 'completed' && !PASSING_CONCLUSIONS.has(c.conclusion ?? ''),
-  )
+  const failing = listFailingChecks(checks)
   if (failing.length === 0) return 'CI reported a failure.'
   const names = failing.map((c) => `${c.name} (${c.conclusion ?? 'failure'})`).join(', ')
   return `Failing checks: ${names}`
