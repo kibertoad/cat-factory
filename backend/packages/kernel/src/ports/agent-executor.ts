@@ -228,6 +228,14 @@ export interface AgentRunResult {
    */
   testReport?: unknown
   /**
+   * An `on-call` step's structured release-regression assessment (culprit confidence,
+   * recommendation, rationale, evidence). The post-release-health gate dispatched the
+   * agent on a Datadog regression; the engine validates this, raises a
+   * `release_regression` notification and enriches any open incident. Carried as
+   * `unknown` so the port stays free of the contracts schema; the engine parses it.
+   */
+  onCallAssessment?: unknown
+  /**
    * Tokens the model consumed for this call. Reported by inline LLM executors so
    * the spend safeguard can meter usage; absent for the container executor (whose
    * proxy meters tokens itself, to avoid double-counting) and test fakes.

@@ -57,6 +57,10 @@ import type {
   PipelineScheduleRepository,
   PullRequestMerger,
   PullRequestMergeabilityProvider,
+  ReleaseHealthProvider,
+  IncidentEnrichmentProvider,
+  DatadogConnectionRepository,
+  ReleaseHealthConfigRepository,
   TicketTrackerProvider,
   TrackerSettingsRepository,
 } from '@cat-factory/kernel'
@@ -117,6 +121,7 @@ import { RequirementReviewService } from './modules/requirements/RequirementRevi
 import { ClarityReviewService } from './modules/clarity/ClarityReviewService.js'
 import { NotificationService } from './modules/notifications/NotificationService.js'
 import { MergePresetService } from './modules/merge/MergePresetService.js'
+import { ReleaseHealthService } from './modules/releaseHealth/ReleaseHealthService.js'
 import { ModelDefaultsService } from './modules/modelDefaults/ModelDefaultsService.js'
 import { ServiceFragmentDefaultsService } from './modules/serviceFragmentDefaults/ServiceFragmentDefaultsService.js'
 import { RecurringPipelineService } from './modules/recurring/RecurringPipelineService.js'
@@ -403,6 +408,16 @@ export interface CoreDependencies {
   mergeabilityProvider?: PullRequestMergeabilityProvider
   /** Performs the real GitHub merge so a task's `done` means "PR merged". */
   pullRequestMerger?: PullRequestMerger
+  /** Reads a release's Datadog monitors/SLOs so the `post-release-health` gate can watch. */
+  releaseHealthProvider?: ReleaseHealthProvider
+  /** Annotates an open PagerDuty/incident.io incident with the on-call investigation. */
+  incidentEnrichment?: IncidentEnrichmentProvider
+  /** Stores a workspace's Datadog connection (sealed keys) for the post-release-health gate. */
+  datadogConnectionRepository?: DatadogConnectionRepository
+  /** Stores per-block monitor/SLO mappings the post-release-health gate reads. */
+  releaseHealthConfigRepository?: ReleaseHealthConfigRepository
+  /** Seals Datadog credentials at rest (domain tag 'cat-factory:datadog'). */
+  datadogSecretCipher?: SecretCipher
   /** Resolves a task's merge threshold preset (auto-merge ceilings + CI attempt budget). */
   mergePresetRepository?: MergePresetRepository
   /**
@@ -510,6 +525,11 @@ export interface NotificationsModule {
   service: NotificationService
 }
 
+/** The post-release-health (Datadog) settings service, present only when wired. */
+export interface ReleaseHealthModule {
+  service: ReleaseHealthService
+}
+
 /** The Slack integration's services, present only when its repositories are wired. */
 export interface SlackModule {
   connectionService: SlackConnectionService
@@ -595,6 +615,8 @@ export interface Core {
   clarity?: ClarityModule
   /** Present only when the notifications repository is wired (see CoreDependencies). */
   notifications?: NotificationsModule
+  /** Present only when the Datadog connection + release-health config repos + cipher are wired. */
+  releaseHealth?: ReleaseHealthModule
   /** Present only when the Slack repositories + cipher are wired (see CoreDependencies). */
   slack?: SlackModule
   /** Present only when the merge-preset repository is wired (see CoreDependencies). */
@@ -1107,6 +1129,22 @@ function createMergePresetsModule(deps: CoreDependencies): MergePresetsModule | 
   return { service }
 }
 
+/** Assemble the release-health (Datadog) module when its repos + cipher are present. */
+function createReleaseHealthModule(deps: CoreDependencies): ReleaseHealthModule | undefined {
+  const { datadogConnectionRepository, releaseHealthConfigRepository, datadogSecretCipher } = deps
+  if (!datadogConnectionRepository || !releaseHealthConfigRepository || !datadogSecretCipher) {
+    return undefined
+  }
+  const service = new ReleaseHealthService({
+    datadogConnectionRepository,
+    releaseHealthConfigRepository,
+    datadogSecretCipher,
+    workspaceRepository: deps.workspaceRepository,
+    clock: deps.clock,
+  })
+  return { service }
+}
+
 /** Assemble the model-defaults module when its repository is present. */
 function createModelDefaultsModule(deps: CoreDependencies): ModelDefaultsModule | undefined {
   const { modelDefaultsRepository } = deps
@@ -1233,6 +1271,7 @@ export function createCore(dependencies: CoreDependencies): Core {
   const notifications = createNotificationsModule(dependencies)
   const slack = createSlackModule(dependencies)
   const mergePresets = createMergePresetsModule(dependencies)
+  const releaseHealth = createReleaseHealthModule(dependencies)
   const modelDefaults = createModelDefaultsModule(dependencies)
   const serviceFragmentDefaults = createServiceFragmentDefaultsModule(dependencies)
   // Built before the execution engine so the special `requirements-review` gate step can
@@ -1301,6 +1340,7 @@ export function createCore(dependencies: CoreDependencies): Core {
     ...(notifications ? { notifications } : {}),
     ...(slack ? { slack } : {}),
     ...(mergePresets ? { mergePresets } : {}),
+    ...(releaseHealth ? { releaseHealth } : {}),
     ...(modelDefaults ? { modelDefaults } : {}),
     ...(serviceFragmentDefaults ? { serviceFragmentDefaults } : {}),
     ...(fragmentLibrary ? { fragmentLibrary } : {}),

@@ -142,6 +142,8 @@ export type {
   AgentsConfig,
   AppConfig,
   AuthConfig,
+  DatadogConfig,
+  IncidentEnrichmentConfig,
   DocumentsConfig,
   EmailConfig,
   EnvironmentsConfig,

@@ -706,6 +706,8 @@ export const mergeThresholdPresets = pgTable(
     max_requirement_concern_allowed: text('max_requirement_concern_allowed')
       .notNull()
       .default('none'),
+    release_watch_window_minutes: integer('release_watch_window_minutes').notNull().default(30),
+    release_max_attempts: integer('release_max_attempts').notNull().default(1),
     is_default: integer('is_default').notNull().default(0),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
   },
@@ -714,6 +716,35 @@ export const mergeThresholdPresets = pgTable(
     // Fast lookup of a workspace's default preset (mirrors idx_merge_presets_default).
     index('idx_merge_presets_default').on(t.workspace_id, t.is_default),
   ],
+)
+
+// Post-release-health gate (Datadog). One connection per workspace (mirror of D1
+// migration 0003's `datadog_connections`). `api_key`/`app_key` are sealed at rest by
+// the facade's SecretCipher (domain tag 'cat-factory:datadog'); plaintext only in memory.
+export const datadogConnections = pgTable('datadog_connections', {
+  workspace_id: text('workspace_id').primaryKey(),
+  site: text('site').notNull(),
+  api_key: text('api_key').notNull(),
+  app_key: text('app_key').notNull(),
+  created_at: bigint('created_at', { mode: 'number' }).notNull(),
+  updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
+})
+
+// Per-block (service frame) monitor/SLO mapping the gate reads (mirror of D1
+// `release_health_configs`). `monitor_ids`/`slo_ids` are JSON arrays as `text`.
+export const releaseHealthConfigs = pgTable(
+  'release_health_configs',
+  {
+    workspace_id: text('workspace_id').notNull(),
+    block_id: text('block_id').notNull(),
+    monitor_ids: text('monitor_ids').notNull().default('[]'),
+    slo_ids: text('slo_ids').notNull().default('[]'),
+    env_tag: text('env_tag'),
+    bugsnag_project: text('bugsnag_project'),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+    updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.workspace_id, t.block_id] })],
 )
 
 // Board-scan feature: the persisted "repository blueprint" — a repo decomposed into

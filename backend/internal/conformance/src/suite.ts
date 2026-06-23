@@ -562,6 +562,9 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         expect(initial.status).toBe(200)
         expect(initial.body).toHaveLength(1)
         expect(initial.body[0]!.isDefault).toBe(true)
+        // The post-release-health knobs round-trip with their defaults through both stores.
+        expect(initial.body[0]!.releaseWatchWindowMinutes).toBe(30)
+        expect(initial.body[0]!.releaseMaxAttempts).toBe(1)
         const seededDefaultId = initial.body[0]!.id
 
         // Add a non-default preset; the seeded default stays the default.
@@ -573,12 +576,16 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
           ciMaxAttempts: 5,
           maxRequirementIterations: 5,
           maxRequirementConcernAllowed: 'medium',
+          releaseWatchWindowMinutes: 45,
+          releaseMaxAttempts: 2,
         })
         expect(lenient.status).toBe(201)
         expect(lenient.body.isDefault).toBe(false)
-        // The requirements-loop fields round-trip through the store on both runtimes.
+        // The requirements-loop + release-health fields round-trip through the store on both runtimes.
         expect(lenient.body.maxRequirementIterations).toBe(5)
         expect(lenient.body.maxRequirementConcernAllowed).toBe('medium')
+        expect(lenient.body.releaseWatchWindowMinutes).toBe(45)
+        expect(lenient.body.releaseMaxAttempts).toBe(2)
 
         // Promote a brand-new preset to default; the previous default is demoted
         // (single-default invariant enforced by the repository).

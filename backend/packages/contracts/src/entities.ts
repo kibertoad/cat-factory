@@ -558,6 +558,14 @@ export const gateStepStateSchema = v.object({
    * gate (GitHub reports no file-level detail) and when the last probe passed.
    */
   failingChecks: v.optional(v.nullable(v.array(gateFailingCheckSchema))),
+  /**
+   * Epoch ms of the release marker for a time-windowed gate (post-release-health) — the
+   * moment it began watching the deployed release. The gate keeps polling `pending`
+   * until this + the preset's watch window has elapsed (then a clean run passes) or a
+   * monitor/SLO regresses (then it escalates to the on-call agent). Absent for the
+   * CI/conflicts gates.
+   */
+  watchSince: v.optional(v.nullable(v.number())),
 })
 export type GateStepState = v.InferOutput<typeof gateStepStateSchema>
 

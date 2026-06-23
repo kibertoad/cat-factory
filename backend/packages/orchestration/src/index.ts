@@ -36,6 +36,13 @@ export {
   FIXER_AGENT_KIND,
   type CiVerdict,
 } from './modules/execution/ci.logic.js'
+export {
+  POST_RELEASE_HEALTH_AGENT_KIND,
+  ON_CALL_AGENT_KIND,
+  classifyReleaseHealth,
+  describeRegressedSignals,
+  type ReleaseGateVerdict,
+} from './modules/execution/release.logic.js'
 // A runtime facade tags an eviction it knows to be transient infra churn with this
 // marker so the engine's job.logic classifier recovers it on the larger budget.
 export { TRANSIENT_EVICTION_MARKER } from './modules/execution/job.logic.js'
@@ -59,6 +66,10 @@ export {
   MergePresetService,
   type MergePresetServiceDependencies,
 } from './modules/merge/MergePresetService.js'
+export {
+  ReleaseHealthService,
+  type ReleaseHealthServiceDependencies,
+} from './modules/releaseHealth/ReleaseHealthService.js'
 export {
   ModelDefaultsService,
   type ModelDefaultsServiceDependencies,
@@ -119,6 +130,7 @@ export {
   type RequirementsModule,
   type ClarityModule,
   type NotificationsModule,
+  type ReleaseHealthModule,
   type SlackModule,
   type MergePresetsModule,
   type ModelDefaultsModule,

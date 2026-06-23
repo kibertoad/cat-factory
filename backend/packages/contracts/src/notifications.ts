@@ -1,5 +1,6 @@
 import * as v from 'valibot'
 import { mergeAssessmentSchema } from './merge.js'
+import { onCallAssessmentSchema, releaseSignalSchema } from './release.js'
 
 // ---------------------------------------------------------------------------
 // Notification wire contracts. A notification is a first-class, human-actionable
@@ -22,6 +23,10 @@ import { mergeAssessmentSchema } from './merge.js'
 //                          it read), unlike the engineering notifications above.
 //   - `clarity_review`    — a clarity-review (bug-report triage) agent raised findings
 //                          on a bug task; same informational shape as `requirement_review`.
+//   - `release_regression`— the post-release-health gate detected a Datadog monitor/SLO
+//                          regression after deploy and the `on-call` agent investigated;
+//                          a human decides whether to revert the PR or acknowledge. Carries
+//                          the on-call assessment + the regressed signals in its payload.
 //
 // In-app delivery is the only channel today, but the core models delivery behind
 // a `NotificationChannel` port so email / Slack channels can be added later
@@ -40,6 +45,7 @@ export const notificationTypeSchema = v.picklist([
   'test_failed',
   'requirement_review',
   'clarity_review',
+  'release_regression',
 ])
 export type NotificationType = v.InferOutput<typeof notificationTypeSchema>
 
@@ -66,6 +72,12 @@ export const notificationPayloadSchema = v.object({
   pipelineName: v.optional(v.string()),
   /** Number of open findings, on a `requirement_review`. */
   findingCount: v.optional(v.number()),
+  /** The `on-call` agent's assessment, on a `release_regression`. */
+  onCallAssessment: v.optional(onCallAssessmentSchema),
+  /** The monitors/SLOs that regressed, on a `release_regression`. */
+  releaseSignals: v.optional(v.array(releaseSignalSchema)),
+  /** Web URL of a proposed revert PR the human can open/merge, when known. */
+  revertUrl: v.optional(v.string()),
   /**
    * Internal user id (`usr_*`) of the member this notification is directed at — the
    * task's responsible product person on a `requirement_review`. The inbox highlights

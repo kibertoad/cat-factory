@@ -23,6 +23,10 @@ import type {
   MembershipRepository,
   MergePresetRepository,
   MergeThresholdPreset,
+  DatadogConnectionRecord,
+  DatadogConnectionRepository,
+  ReleaseHealthConfigRecord,
+  ReleaseHealthConfigRepository,
   ModelDefaultsRepository,
   ServiceFragmentDefaultsRepository,
   LlmCallMetric,
@@ -87,10 +91,12 @@ import {
   agentRuns,
   blocks,
   consensusSessions,
+  datadogConnections,
   emailConnections,
   llmCallMetrics,
   memberships,
   mergeThresholdPresets,
+  releaseHealthConfigs,
   repoBlueprints,
   pipelineScheduleRuns,
   pipelineSchedules,
@@ -1984,6 +1990,8 @@ function rowToMergePreset(row: MergePresetRow): MergeThresholdPreset {
     maxRequirementIterations: row.max_requirement_iterations,
     maxRequirementConcernAllowed:
       row.max_requirement_concern_allowed as MergeThresholdPreset['maxRequirementConcernAllowed'],
+    releaseWatchWindowMinutes: row.release_watch_window_minutes,
+    releaseMaxAttempts: row.release_max_attempts,
     isDefault: row.is_default === 1,
     createdAt: row.created_at,
   }
@@ -2046,6 +2054,8 @@ export class DrizzleMergePresetRepository implements MergePresetRepository {
       ci_max_attempts: preset.ciMaxAttempts,
       max_requirement_iterations: preset.maxRequirementIterations,
       max_requirement_concern_allowed: preset.maxRequirementConcernAllowed,
+      release_watch_window_minutes: preset.releaseWatchWindowMinutes,
+      release_max_attempts: preset.releaseMaxAttempts,
       is_default: preset.isDefault ? 1 : 0,
       created_at: preset.createdAt,
     }
@@ -2077,6 +2087,8 @@ export class DrizzleMergePresetRepository implements MergePresetRepository {
             ci_max_attempts: values.ci_max_attempts,
             max_requirement_iterations: values.max_requirement_iterations,
             max_requirement_concern_allowed: values.max_requirement_concern_allowed,
+            release_watch_window_minutes: values.release_watch_window_minutes,
+            release_max_attempts: values.release_max_attempts,
             is_default: values.is_default,
           },
         })
@@ -2091,6 +2103,155 @@ export class DrizzleMergePresetRepository implements MergePresetRepository {
           eq(mergeThresholdPresets.workspace_id, workspaceId),
           eq(mergeThresholdPresets.id, id),
           eq(mergeThresholdPresets.is_default, 0),
+        ),
+      )
+  }
+}
+
+/**
+ * A workspace's Datadog connection over Postgres (the Drizzle mirror of the Worker's
+ * `D1DatadogConnectionRepository`, migration 0003). One row per workspace; the keys are
+ * stored as sealed envelopes (encrypted by the caller).
+ */
+export class DrizzleDatadogConnectionRepository implements DatadogConnectionRepository {
+  constructor(private readonly db: DrizzleDb) {}
+
+  async get(workspaceId: string): Promise<DatadogConnectionRecord | null> {
+    const rows = await this.db
+      .select()
+      .from(datadogConnections)
+      .where(eq(datadogConnections.workspace_id, workspaceId))
+      .limit(1)
+    const row = rows[0]
+    if (!row) return null
+    return {
+      workspaceId: row.workspace_id,
+      site: row.site,
+      apiKey: row.api_key,
+      appKey: row.app_key,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    }
+  }
+
+  async upsert(record: DatadogConnectionRecord): Promise<void> {
+    const values = {
+      workspace_id: record.workspaceId,
+      site: record.site,
+      api_key: record.apiKey,
+      app_key: record.appKey,
+      created_at: record.createdAt,
+      updated_at: record.updatedAt,
+    }
+    await this.db
+      .insert(datadogConnections)
+      .values(values)
+      .onConflictDoUpdate({
+        target: datadogConnections.workspace_id,
+        set: {
+          site: values.site,
+          api_key: values.api_key,
+          app_key: values.app_key,
+          updated_at: values.updated_at,
+        },
+      })
+  }
+
+  async delete(workspaceId: string): Promise<void> {
+    await this.db.delete(datadogConnections).where(eq(datadogConnections.workspace_id, workspaceId))
+  }
+}
+
+function parseReleaseIds(json: string): string[] {
+  try {
+    const parsed = JSON.parse(json)
+    return Array.isArray(parsed) ? parsed.map((x) => String(x)) : []
+  } catch {
+    return []
+  }
+}
+
+type ReleaseHealthConfigRow = typeof releaseHealthConfigs.$inferSelect
+
+function rowToReleaseHealthConfig(row: ReleaseHealthConfigRow): ReleaseHealthConfigRecord {
+  return {
+    workspaceId: row.workspace_id,
+    blockId: row.block_id,
+    monitorIds: parseReleaseIds(row.monitor_ids),
+    sloIds: parseReleaseIds(row.slo_ids),
+    envTag: row.env_tag,
+    bugsnagProject: row.bugsnag_project,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }
+}
+
+/**
+ * Per-block monitor/SLO mapping for the post-release-health gate over Postgres (the
+ * Drizzle mirror of the Worker's `D1ReleaseHealthConfigRepository`, migration 0003).
+ */
+export class DrizzleReleaseHealthConfigRepository implements ReleaseHealthConfigRepository {
+  constructor(private readonly db: DrizzleDb) {}
+
+  async getByBlock(
+    workspaceId: string,
+    blockId: string,
+  ): Promise<ReleaseHealthConfigRecord | null> {
+    const rows = await this.db
+      .select()
+      .from(releaseHealthConfigs)
+      .where(
+        and(
+          eq(releaseHealthConfigs.workspace_id, workspaceId),
+          eq(releaseHealthConfigs.block_id, blockId),
+        ),
+      )
+      .limit(1)
+    return rows[0] ? rowToReleaseHealthConfig(rows[0]) : null
+  }
+
+  async listByWorkspace(workspaceId: string): Promise<ReleaseHealthConfigRecord[]> {
+    const rows = await this.db
+      .select()
+      .from(releaseHealthConfigs)
+      .where(eq(releaseHealthConfigs.workspace_id, workspaceId))
+      .orderBy(releaseHealthConfigs.block_id)
+    return rows.map(rowToReleaseHealthConfig)
+  }
+
+  async upsert(record: ReleaseHealthConfigRecord): Promise<void> {
+    const values = {
+      workspace_id: record.workspaceId,
+      block_id: record.blockId,
+      monitor_ids: JSON.stringify(record.monitorIds),
+      slo_ids: JSON.stringify(record.sloIds),
+      env_tag: record.envTag,
+      bugsnag_project: record.bugsnagProject,
+      created_at: record.createdAt,
+      updated_at: record.updatedAt,
+    }
+    await this.db
+      .insert(releaseHealthConfigs)
+      .values(values)
+      .onConflictDoUpdate({
+        target: [releaseHealthConfigs.workspace_id, releaseHealthConfigs.block_id],
+        set: {
+          monitor_ids: values.monitor_ids,
+          slo_ids: values.slo_ids,
+          env_tag: values.env_tag,
+          bugsnag_project: values.bugsnag_project,
+          updated_at: values.updated_at,
+        },
+      })
+  }
+
+  async delete(workspaceId: string, blockId: string): Promise<void> {
+    await this.db
+      .delete(releaseHealthConfigs)
+      .where(
+        and(
+          eq(releaseHealthConfigs.workspace_id, workspaceId),
+          eq(releaseHealthConfigs.block_id, blockId),
         ),
       )
   }
@@ -2213,6 +2374,8 @@ export interface CoreRepositories {
   clarityReviewRepository: ClarityReviewRepository
   mergePresetRepository: MergePresetRepository
   repoBlueprintRepository: RepoBlueprintRepository
+  datadogConnectionRepository: DatadogConnectionRepository
+  releaseHealthConfigRepository: ReleaseHealthConfigRepository
 }
 
 /** Build the Drizzle/Postgres-backed core repositories. */
@@ -2241,5 +2404,7 @@ export function createDrizzleRepositories(db: DrizzleDb, clock: Clock): CoreRepo
     clarityReviewRepository: new DrizzleClarityReviewRepository(db),
     mergePresetRepository: new DrizzleMergePresetRepository(db),
     repoBlueprintRepository: new DrizzleRepoBlueprintRepository(db),
+    datadogConnectionRepository: new DrizzleDatadogConnectionRepository(db),
+    releaseHealthConfigRepository: new DrizzleReleaseHealthConfigRepository(db),
   }
 }

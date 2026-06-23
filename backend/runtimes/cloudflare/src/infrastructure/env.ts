@@ -335,6 +335,22 @@ export interface Env {
   SLACK_CLIENT_SECRET?: string
   SLACK_REDIRECT_URL?: string
 
+  // ---- Datadog post-release-health (see config/datadog.ts; opt-in) --------
+  /**
+   * Enables the Datadog post-release-health gate ('true'). The per-workspace API/app
+   * keys are sealed with the shared `ENCRYPTION_KEY` (datadog-scoped HKDF info). Off →
+   * the `post-release-health` gate is a pass-through.
+   */
+  DATADOG_ENABLED?: string
+  /**
+   * Optional incident-enrichment credentials (deployment-level): on a regression the
+   * on-call investigation is posted onto an incident PagerDuty / incident.io ALREADY
+   * opened from the same monitors/SLOs (annotate, never re-alert).
+   */
+  PAGERDUTY_API_TOKEN?: string
+  PAGERDUTY_FROM_EMAIL?: string
+  INCIDENTIO_API_KEY?: string
+
   // ---- Prompt-fragment library (see config.ts; opt-in; ADR 0006) ----------
   /**
    * Enables the tenant-scoped prompt-fragment library ('true'). Fragments and

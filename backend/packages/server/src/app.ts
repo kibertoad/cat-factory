@@ -15,6 +15,7 @@ import { githubController } from './modules/github/GitHubController.js'
 import { githubWebhookController } from './modules/github/GitHubWebhookController.js'
 import { llmProxyController } from './modules/llmProxy/LlmProxyController.js'
 import { mergePresetController } from './modules/merge/MergePresetController.js'
+import { releaseHealthController } from './modules/releaseHealth/ReleaseHealthController.js'
 import { modelDefaultsController } from './modules/modelDefaults/ModelDefaultsController.js'
 import { serviceFragmentDefaultsController } from './modules/serviceFragmentDefaults/ServiceFragmentDefaultsController.js'
 import { modelController } from './modules/models/ModelController.js'
@@ -90,6 +91,7 @@ export function registerCoreControllers<E extends AppEnv>(app: Hono<E>): void {
   app.route('/workspaces/:workspaceId', clarityReviewController())
   app.route('/workspaces/:workspaceId', notificationController())
   app.route('/workspaces/:workspaceId', mergePresetController())
+  app.route('/workspaces/:workspaceId', releaseHealthController())
   app.route('/workspaces/:workspaceId', modelDefaultsController())
   app.route('/workspaces/:workspaceId', serviceFragmentDefaultsController())
   app.route('/workspaces/:workspaceId', recurringPipelineController())

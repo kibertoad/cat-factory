@@ -11,6 +11,8 @@ import {
   type ConflictResolverResult,
   type MergerJob,
   type MergerResult,
+  type OnCallJob,
+  type OnCallResult,
   type SpecJob,
   type SpecResult,
   type ExploreJob,
@@ -24,6 +26,7 @@ import {
   parseCiFixerJob,
   parseConflictResolverJob,
   parseMergerJob,
+  parseOnCallJob,
   parseSpecJob,
   parseExploreJob,
   parseTesterJob,
@@ -38,6 +41,7 @@ import { handleExplore } from './explore.js'
 import { handleCiFixer } from './ci-fixer.js'
 import { handleConflictResolver } from './conflict-resolver.js'
 import { handleMerger } from './merger.js'
+import { handleOnCall } from './on-call.js'
 import { handleTester } from './tester.js'
 import { handleFixer } from './fixer.js'
 import { redactSecrets } from './git.js'
@@ -93,6 +97,7 @@ const conflictResolverJobs = new JobRegistry<ConflictResolverJob, ConflictResolv
   handleConflictResolver,
 )
 const mergerJobs = new JobRegistry<MergerJob, MergerResult>(limits, handleMerger)
+const onCallJobs = new JobRegistry<OnCallJob, OnCallResult>(limits, handleOnCall)
 const testerJobs = new JobRegistry<TesterJob, TesterResult>(limits, handleTester)
 const fixerJobs = new JobRegistry<FixerJob, FixerResult>(limits, handleFixer)
 
@@ -218,6 +223,19 @@ const server = createServer((req, res) => {
         return send(res, 400, { error: message } satisfies MergerResult)
       }
     }
+    // Start (or re-attach to) an on-call job: POST /on-call. Clones the released PR
+    // branch and returns a JSON regression assessment (no commits).
+    if (req.method === 'POST' && req.url === '/on-call') {
+      try {
+        const job = parseOnCallJob(JSON.parse(await readBody(req)))
+        const view = onCallJobs.start(job.jobId, job)
+        return send(res, 202, { jobId: view.id, state: view.state })
+      } catch (error) {
+        const message = redactSecrets(error instanceof Error ? error.message : String(error))
+        log.error('failed to start on-call', { error: message })
+        return send(res, 400, { error: message } satisfies OnCallResult)
+      }
+    }
     // Start (or re-attach to) a tester job: POST /test. Clones the PR branch, stands
     // up infra, runs the suite and returns a JSON report (no commits).
     if (req.method === 'POST' && req.url === '/test') {
@@ -258,6 +276,7 @@ const server = createServer((req, res) => {
         ciFixerJobs.get(id) ??
         conflictResolverJobs.get(id) ??
         mergerJobs.get(id) ??
+        onCallJobs.get(id) ??
         testerJobs.get(id) ??
         fixerJobs.get(id)
       if (!view) return send(res, 404, { error: 'job not found' })

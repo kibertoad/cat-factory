@@ -16,6 +16,12 @@ import { type TasksConfig, loadTasksConfig } from './tasks'
 import { type EnvironmentsConfig, loadEnvironmentsConfig } from './environments'
 import { type RunnerPoolConfig, loadRunnerPoolConfig } from './runners'
 import { type SlackConfig, loadSlackConfig } from './slack'
+import {
+  type DatadogConfig,
+  type IncidentEnrichmentConfig,
+  loadDatadogConfig,
+  loadIncidentEnrichmentConfig,
+} from './datadog'
 import { type EmailConfig, loadEmailConfig } from './email'
 import { type RetentionConfig, loadRetentionConfig } from './retention'
 import { type FragmentLibraryConfig, loadFragmentLibraryConfig } from './fragmentLibrary'
@@ -41,6 +47,8 @@ export type {
   EnvironmentsConfig,
   RunnerPoolConfig,
   SlackConfig,
+  DatadogConfig,
+  IncidentEnrichmentConfig,
   EmailConfig,
   RetentionConfig,
   FragmentLibraryConfig,
@@ -72,6 +80,8 @@ export function loadConfig(env: Env): AppConfig {
     environments: loadEnvironmentsConfig(env),
     runners: loadRunnerPoolConfig(env),
     slack: loadSlackConfig(env),
+    datadog: loadDatadogConfig(env),
+    incidentEnrichment: loadIncidentEnrichmentConfig(env),
     email: loadEmailConfig(env),
     retention: loadRetentionConfig(env),
     fragmentLibrary: loadFragmentLibraryConfig(env),

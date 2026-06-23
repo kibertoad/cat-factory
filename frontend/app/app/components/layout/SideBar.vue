@@ -256,6 +256,17 @@ watch(
           color="primary"
           variant="soft"
           size="sm"
+          icon="i-lucide-activity"
+          class="justify-start"
+          @click="ui.openDatadog()"
+        >
+          Post-release health
+        </UButton>
+        <UButton
+          block
+          color="primary"
+          variant="soft"
+          size="sm"
           icon="i-lucide-cpu"
           class="justify-start"
           @click="ui.openModelDefaults()"

@@ -39,6 +39,7 @@ const KIND_ROUTE: Record<RunnerDispatchKind, string> = {
   'ci-fix': '/ci-fix',
   'resolve-conflicts': '/resolve-conflicts',
   merge: '/merge',
+  'on-call': '/on-call',
   test: '/test',
   'fix-tests': '/fix-tests',
 }

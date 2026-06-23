@@ -2,6 +2,8 @@ import {
   type AgentExecutor,
   type Clock,
   CompositeNotificationChannel,
+  CompositeIncidentEnrichmentProvider,
+  type IncidentEnrichmentProvider,
   type DocumentSourceProvider,
   type ExecutionEventPublisher,
   type FragmentOwnerKind,
@@ -34,6 +36,10 @@ import {
   SLACK_CIPHER_INFO,
   SlackNotificationChannel,
   TicketTrackerService,
+  DATADOG_CIPHER_INFO,
+  DatadogReleaseHealthProvider,
+  PagerDutyEnrichmentProvider,
+  IncidentIoEnrichmentProvider,
 } from '@cat-factory/integrations'
 import { type CoreDependencies, createCore } from '@cat-factory/orchestration'
 import { createLangfuseSink } from '@cat-factory/observability-langfuse'
@@ -124,6 +130,8 @@ import { ConsensusAgentExecutor, registerConsensusTraits } from '@cat-factory/co
 import { D1ClarityReviewRepository } from './repositories/D1ClarityReviewRepository'
 import { D1NotificationRepository } from './repositories/D1NotificationRepository'
 import { D1MergePresetRepository } from './repositories/D1MergePresetRepository'
+import { D1DatadogConnectionRepository } from './repositories/D1DatadogConnectionRepository'
+import { D1ReleaseHealthConfigRepository } from './repositories/D1ReleaseHealthConfigRepository'
 import { D1PipelineScheduleRepository } from './repositories/D1PipelineScheduleRepository'
 import { D1TrackerSettingsRepository } from './repositories/D1TrackerSettingsRepository'
 import { D1ModelDefaultsRepository } from './repositories/D1ModelDefaultsRepository'
@@ -498,6 +506,48 @@ function selectMergeLifecycleDeps(
       resolveRepoTarget,
       blockRepository,
     })
+  }
+  return deps
+}
+
+/**
+ * Wire the Datadog post-release-health gate when enabled (+ ENCRYPTION_KEY): the
+ * connection + per-block config repos, the cipher that seals the keys, the release-health
+ * provider the gate probes, and (optionally) the PagerDuty / incident.io enrichment
+ * providers. Off → the gate is a pass-through and the release-health module isn't built.
+ */
+function selectReleaseHealthDeps(
+  env: Env,
+  config: AppConfig,
+  db: D1Database,
+): Partial<CoreDependencies> {
+  if (!config.datadog.enabled || !config.datadog.encryptionKey) return {}
+  const datadogConnectionRepository = new D1DatadogConnectionRepository({ db })
+  const releaseHealthConfigRepository = new D1ReleaseHealthConfigRepository({ db })
+  const datadogSecretCipher = new WebCryptoSecretCipher({
+    masterKeyBase64: config.datadog.encryptionKey,
+    info: DATADOG_CIPHER_INFO,
+  })
+  const deps: Partial<CoreDependencies> = {
+    datadogConnectionRepository,
+    releaseHealthConfigRepository,
+    datadogSecretCipher,
+    releaseHealthProvider: new DatadogReleaseHealthProvider({
+      datadogConnectionRepository,
+      releaseHealthConfigRepository,
+      blockRepository: new D1BlockRepository({ db }),
+      secretCipher: datadogSecretCipher,
+    }),
+  }
+  const enrichers: IncidentEnrichmentProvider[] = []
+  if (config.incidentEnrichment.pagerDuty) {
+    enrichers.push(new PagerDutyEnrichmentProvider(config.incidentEnrichment.pagerDuty))
+  }
+  if (config.incidentEnrichment.incidentIo) {
+    enrichers.push(new IncidentIoEnrichmentProvider(config.incidentEnrichment.incidentIo))
+  }
+  if (enrichers.length > 0) {
+    deps.incidentEnrichment = new CompositeIncidentEnrichmentProvider(enrichers)
   }
   return deps
 }
@@ -1341,6 +1391,7 @@ export function buildContainer(
     repoScanner: selectRepoScanner(env, config, db, clock),
     ...selectGitHubDeps(env, config, db, clock, idGenerator),
     ...selectMergeLifecycleDeps(env, config, db, clock, idGenerator),
+    ...selectReleaseHealthDeps(env, config, db),
     ...selectSlackDeps(config, db),
     ...selectEmailInvitationDeps(config, db),
     ...selectLangfuseSink(config),

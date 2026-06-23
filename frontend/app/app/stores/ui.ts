@@ -67,6 +67,7 @@ export const useUiStore = defineStore('ui', () => {
   // Workspace-settings panels: merge-threshold preset library + per-agent-kind
   // default model overrides.
   const mergeThresholdsOpen = ref(false)
+  const datadogOpen = ref(false)
   const modelDefaultsOpen = ref(false)
   // Workspace-settings panel: the default service-fragment selection new services inherit.
   const serviceFragmentDefaultsOpen = ref(false)
@@ -278,6 +279,12 @@ export const useUiStore = defineStore('ui', () => {
   function closeMergeThresholds() {
     mergeThresholdsOpen.value = false
   }
+  function openDatadog() {
+    datadogOpen.value = true
+  }
+  function closeDatadog() {
+    datadogOpen.value = false
+  }
   function openModelDefaults() {
     modelDefaultsOpen.value = true
   }
@@ -345,6 +352,7 @@ export const useUiStore = defineStore('ui', () => {
     fragmentLibraryOpen,
     commandBarOpen,
     mergeThresholdsOpen,
+    datadogOpen,
     modelDefaultsOpen,
     serviceFragmentDefaultsOpen,
     vendorCredentialsOpen,
@@ -394,6 +402,8 @@ export const useUiStore = defineStore('ui', () => {
     toggleCommandBar,
     openMergeThresholds,
     closeMergeThresholds,
+    openDatadog,
+    closeDatadog,
     openModelDefaults,
     closeModelDefaults,
     openServiceFragmentDefaults,

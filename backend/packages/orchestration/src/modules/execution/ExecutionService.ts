@@ -12,6 +12,11 @@ import type {
   PipelineStep,
   PullRequestMerger,
   PullRequestMergeabilityProvider,
+  ReleaseHealthProvider,
+  ReleaseEvidence,
+  ReleaseSignal,
+  IncidentEnrichmentProvider,
+  IncidentUpdate,
   StepReviewComment,
   SubscriptionActivationRepository,
   TicketTrackerProvider,
@@ -19,11 +24,13 @@ import type {
 import {
   parseBlueprintService,
   parseMergeAssessment,
+  parseOnCallAssessment,
   parseSpecDoc,
   parseCompanionAssessment,
   parseTestReport,
   DEFAULT_COMPANION_MAX_ATTEMPTS,
   type CompanionAssessment,
+  type OnCallAssessment,
   type TestReport,
 } from '@cat-factory/contracts'
 import {
@@ -72,6 +79,12 @@ import {
   TESTER_AGENT_KIND,
   FIXER_AGENT_KIND,
 } from './ci.logic.js'
+import {
+  POST_RELEASE_HEALTH_AGENT_KIND,
+  ON_CALL_AGENT_KIND,
+  classifyReleaseHealth,
+  describeRegressedSignals,
+} from './release.logic.js'
 import type { GateDefinition, GateProbe } from './gates.js'
 import type { NotificationService } from '../notifications/NotificationService.js'
 import type { RequirementReviewService } from '../requirements/RequirementReviewService.js'
@@ -190,6 +203,41 @@ function buildRevisionContext(step: PipelineStep): {
 /** Format a 0..1 score as a rounded percentage for notification copy. */
 function pct(score: number): string {
   return `${Math.round(score * 100)}%`
+}
+
+/**
+ * Render the Datadog evidence bundle into the prior-output text the on-call agent reads:
+ * the regressed monitors/SLOs, recent error groups, and the investigation brief (correlate
+ * the diff with the signals, return a JSON assessment, do NOT revert).
+ */
+function renderReleaseEvidence(evidence: ReleaseEvidence): string {
+  const lines: string[] = ['## Post-release regression evidence', '']
+  if (evidence.regressedSignals.length > 0) {
+    lines.push('Regressed signals:')
+    for (const s of evidence.regressedSignals) {
+      lines.push(
+        `- ${s.kind} "${s.name}" (${s.id}): ${s.state}${s.detail ? ` — ${s.detail}` : ''}`,
+      )
+    }
+    lines.push('')
+  }
+  if (evidence.errors.length > 0) {
+    lines.push('Recent errors:')
+    for (const e of evidence.errors) {
+      lines.push(
+        `- ${e.title}${e.count != null ? ` ×${e.count}` : ''}${e.sampleMessage ? ` — ${e.sampleMessage}` : ''}`,
+      )
+    }
+    lines.push('')
+  }
+  if (evidence.notes) lines.push(evidence.notes, '')
+  lines.push(
+    'Investigate whether THIS PR is the likely cause: correlate its diff with the regressed ' +
+      'signals and errors above (and the service logs). Beware correlation ≠ causation. Return a ' +
+      'JSON assessment: { "culpritConfidence": 0..1, "recommendation": "revert"|"hold"|"monitor", ' +
+      '"rationale": "…", "evidence": ["…"] }. Do NOT make commits or revert anything — a human decides.',
+  )
+  return lines.join('\n')
 }
 
 /** Parse a companion's JSON verdict from a model reply, or `undefined` if it won't parse. */
@@ -330,6 +378,19 @@ export interface ExecutionServiceDependencies {
    */
   mergeabilityProvider?: PullRequestMergeabilityProvider
   /**
+   * Optional: reads a deployed release's Datadog monitors/SLOs so the
+   * `post-release-health` step can gate on the release looking healthy after deploy.
+   * Absent → the step is a pass-through (nothing to watch), so the engine works
+   * unchanged when Datadog isn't wired.
+   */
+  releaseHealthProvider?: ReleaseHealthProvider
+  /**
+   * Optional: annotates an incident PagerDuty / incident.io already opened from the
+   * same monitors/SLOs with the on-call agent's investigation. Best-effort enrichment,
+   * NOT alerting (those systems already paged). Absent → no enrichment.
+   */
+  incidentEnrichment?: IncidentEnrichmentProvider
+  /**
    * Optional: performs the real GitHub merge when a task should become `done`.
    * Absent → `done` is a board-only flip (tests); when wired, `done` provably
    * means the PR was merged on the remote.
@@ -398,6 +459,8 @@ export class ExecutionService {
   private readonly llmObservability?: LlmObservabilityService
   private readonly ciStatusProvider?: CiStatusProvider
   private readonly mergeabilityProvider?: PullRequestMergeabilityProvider
+  private readonly releaseHealthProvider?: ReleaseHealthProvider
+  private readonly incidentEnrichment?: IncidentEnrichmentProvider
   private readonly prMerger?: PullRequestMerger
   private readonly mergePresetRepository?: MergePresetRepository
   private readonly ticketTrackerProvider?: TicketTrackerProvider
@@ -438,6 +501,8 @@ export class ExecutionService {
     llmObservability,
     ciStatusProvider,
     mergeabilityProvider,
+    releaseHealthProvider,
+    incidentEnrichment,
     pullRequestMerger,
     mergePresetRepository,
     ticketTrackerProvider,
@@ -469,6 +534,8 @@ export class ExecutionService {
     this.llmObservability = llmObservability
     this.ciStatusProvider = ciStatusProvider
     this.mergeabilityProvider = mergeabilityProvider
+    this.releaseHealthProvider = releaseHealthProvider
+    this.incidentEnrichment = incidentEnrichment
     this.prMerger = pullRequestMerger
     this.mergePresetRepository = mergePresetRepository
     this.ticketTrackerProvider = ticketTrackerProvider
@@ -994,6 +1061,26 @@ export class ExecutionService {
         await this.emitInstance(workspaceId, instance)
       }
       return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
+    }
+
+    // The post-release-health gate's helper is the `on-call` agent, which INVESTIGATES
+    // (it makes no commits and doesn't change prod), so unlike ci-fixer/conflict-resolver
+    // its completion must NOT re-probe to green — re-probing would just regress again and
+    // burn the budget. When it finishes, resolve its assessment: raise the
+    // `release_regression` notification, enrich any open incident, then finish the gate
+    // step so the run completes (a human acts on the notification out-of-band). A failed
+    // investigation falls through to the generic gate path (re-probe → exhausted → notify).
+    if (
+      step.agentKind === POST_RELEASE_HEALTH_AGENT_KIND &&
+      step.gate?.phase === 'working' &&
+      update.state === 'done'
+    ) {
+      const block = await this.blockRepository.get(workspaceId, instance.blockId)
+      step.jobId = undefined
+      step.subtasks = undefined
+      if (!block) return { kind: 'noop' }
+      const isFinalStep = instance.currentStep === instance.steps.length - 1
+      return this.resolveOnCallStep(workspaceId, instance, step, block, update.result, isFinalStep)
     }
 
     // A polling gate step's in-flight job is its helper agent (ci-fixer /
@@ -1730,6 +1817,69 @@ export class ExecutionService {
             `manually, then retry the run.`,
         }),
       },
+      // Post-release-health gate: after deploy, watch the release's Datadog monitors/SLOs
+      // over a window; escalate to the `on-call` agent on a regression (it investigates,
+      // it does NOT fix prod, so its completion is resolved specially — see
+      // resolveOnCallStep — rather than re-probing to green).
+      {
+        kind: POST_RELEASE_HEALTH_AGENT_KIND,
+        helperKind: ON_CALL_AGENT_KIND,
+        wired: () => !!this.releaseHealthProvider,
+        unwiredOutput: 'Post-release health gate skipped (no release-health provider configured).',
+        attemptBudget: (preset) => preset.releaseMaxAttempts,
+        probe: async (workspaceId, blockId, gateState): Promise<GateProbe> => {
+          const since = gateState.watchSince ?? this.clock.now()
+          const report = await this.releaseHealthProvider!.probe(workspaceId, blockId, since)
+          // No signals configured for this block → nothing to watch; advance immediately
+          // (don't park for the whole window on an unmapped release).
+          if (report.signals.length === 0) {
+            return {
+              status: 'pass',
+              headSha: null,
+              passOutput: 'Post-release health gate passed: no monitors/SLOs configured for this release.',
+            }
+          }
+          const block = await this.blockRepository.get(workspaceId, blockId)
+          const windowMinutes = block
+            ? (await this.resolveMergePreset(workspaceId, block)).releaseWatchWindowMinutes
+            : DEFAULT_MERGE_PRESET.releaseWatchWindowMinutes
+          const windowElapsed = this.clock.now() - since >= windowMinutes * 60_000
+          const verdict = classifyReleaseHealth({ report, windowElapsed })
+          if (verdict === 'pass') {
+            return {
+              status: 'pass',
+              headSha: null,
+              passOutput: `Post-release health gate passed: ${report.signals.length} signal(s) healthy through the watch window.`,
+            }
+          }
+          if (verdict === 'pending') return { status: 'pending', headSha: null }
+          return {
+            status: 'fail',
+            headSha: null,
+            failureSummary: describeRegressedSignals(report.signals),
+          }
+        },
+        // The on-call agent gets the full evidence bundle (regressed signals + recent
+        // error logs), gathered fresh at dispatch.
+        gatherHelperPriorOutputs: async (workspaceId, blockId, gateState) => {
+          const since = gateState.watchSince ?? this.clock.now()
+          const evidence = await this.releaseHealthProvider!.gatherEvidence(
+            workspaceId,
+            blockId,
+            since,
+          )
+          return [{ agentKind: POST_RELEASE_HEALTH_AGENT_KIND, output: renderReleaseEvidence(evidence) }]
+        },
+        onExhausted: async ({ workspaceId, instance, block, summary }) => {
+          // Reached only when releaseMaxAttempts is 0 (operator disabled the on-call
+          // investigation): still alert a human via the notification, then flag the run.
+          await this.raiseReleaseRegression(workspaceId, instance, block, null, [], summary ?? '')
+          return {
+            error:
+              `Post-release health regressed and no on-call investigation was configured. ${summary ?? ''}`.trim(),
+          }
+        },
+      },
     ]
     return new Map(gates.map((gate) => [gate.kind, gate]))
   }
@@ -1770,12 +1920,16 @@ export class ExecutionService {
       step.gate = {
         phase: 'checking',
         attempts: 0,
-        maxAttempts: preset.ciMaxAttempts,
+        maxAttempts: gate.attemptBudget ? gate.attemptBudget(preset) : preset.ciMaxAttempts,
         headSha: null,
       }
     }
+    // A time-windowed gate (post-release-health) marks when it began watching, on first
+    // entry, so its probe knows whether the monitoring window has elapsed. Harmless for
+    // the CI/conflicts gates, which ignore it.
+    if (step.gate.watchSince == null) step.gate.watchSince = this.clock.now()
 
-    const probe = await gate.probe(workspaceId, block.id)
+    const probe = await gate.probe(workspaceId, block.id, step.gate)
     step.gate.headSha = probe.headSha
     // Persist the precheck outcome so the run-detail UI can surface why the gate is
     // looping (the failing checks / conflict reason) — detail that was previously fed
@@ -1845,11 +1999,17 @@ export class ExecutionService {
       return { kind: 'job_failed', error: `No async executor available for the ${gate.kind} gate.` }
     }
     const base = await this.buildAgentContext(workspaceId, instance, step, isFinalStep, block)
-    const extra = gate.helperPriorOutput?.(failureSummary ?? '')
+    // A gate may build richer helper context asynchronously (the on-call agent gets the
+    // full Datadog evidence bundle); otherwise fall back to the simple summary prior.
+    const extras = gate.gatherHelperPriorOutputs
+      ? await gate.gatherHelperPriorOutputs(workspaceId, block.id, step.gate ?? { phase: 'checking', attempts: 0, maxAttempts: 0 })
+      : [gate.helperPriorOutput?.(failureSummary ?? '')].filter(
+          (o): o is { agentKind: string; output: string } => o != null,
+        )
     const context: AgentRunContext = {
       ...base,
       agentKind: gate.helperKind,
-      priorOutputs: extra ? [...base.priorOutputs, extra] : base.priorOutputs,
+      priorOutputs: [...base.priorOutputs, ...extras],
     }
     const handle = await executor.startJob(context)
     step.jobId = handle.jobId
@@ -3403,6 +3563,8 @@ export class ExecutionService {
     ciMaxAttempts: number
     maxRequirementIterations: number
     maxRequirementConcernAllowed: RequirementConcernLevel
+    releaseWatchWindowMinutes: number
+    releaseMaxAttempts: number
   }> {
     if (this.mergePresetRepository) {
       if (block.mergePresetId) {
@@ -3440,6 +3602,117 @@ export class ExecutionService {
         pipelineName: instance.pipelineName,
       },
     })
+  }
+
+  /**
+   * Resolve a finished `on-call` investigation (the post-release-health gate's helper):
+   * parse its assessment, raise a `release_regression` notification for a human, enrich
+   * any incident PagerDuty/incident.io already opened, then finish the gate step so the
+   * run completes (the human acts on the notification out-of-band — the engine never
+   * auto-reverts). Best-effort on the side-effects; the step always finishes.
+   */
+  private async resolveOnCallStep(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    step: PipelineStep,
+    block: Block,
+    result: AgentRunResult,
+    isFinalStep: boolean,
+  ): Promise<AdvanceResult> {
+    let assessment: OnCallAssessment | null = null
+    try {
+      assessment = parseOnCallAssessment(result.onCallAssessment)
+    } catch {
+      assessment = null
+    }
+
+    // Re-gather the regressed signals for the notification payload + incident match.
+    const since = step.gate?.watchSince ?? this.clock.now()
+    let regressedSignals: ReleaseSignal[] = []
+    if (this.releaseHealthProvider) {
+      try {
+        const evidence = await this.releaseHealthProvider.gatherEvidence(workspaceId, block.id, since)
+        regressedSignals = evidence.regressedSignals
+      } catch {
+        // best-effort: the assessment + summary still drive the notification
+      }
+    }
+
+    await this.raiseReleaseRegression(
+      workspaceId,
+      instance,
+      block,
+      assessment,
+      regressedSignals,
+      step.gate?.lastFailureSummary ?? '',
+    )
+    await this.enrichIncident(workspaceId, block, assessment, regressedSignals, since)
+
+    const output = assessment
+      ? `On-call investigation: ${assessment.recommendation} (culprit confidence ${pct(assessment.culpritConfidence)}). ${assessment.rationale}`
+      : 'On-call investigation completed; see the release-regression notification.'
+    return this.recordStepResult(workspaceId, instance, step, isFinalStep, { ...result, output })
+  }
+
+  /** Raise a `release_regression` notification carrying the on-call assessment + signals. */
+  private async raiseReleaseRegression(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    block: Block,
+    assessment: OnCallAssessment | null,
+    signals: ReleaseSignal[],
+    summary: string,
+  ): Promise<void> {
+    if (!this.notificationService) return
+    const body = assessment
+      ? `Post-release monitoring flagged a regression after this PR shipped. On-call recommends ` +
+        `**${assessment.recommendation}** (culprit confidence ${pct(assessment.culpritConfidence)}). ` +
+        `${assessment.rationale}`
+      : `Post-release monitoring flagged a regression after this PR shipped. ${summary} ` +
+        `Investigate before deciding whether to revert.`
+    await this.notificationService.raise(workspaceId, {
+      type: 'release_regression',
+      blockId: block.id,
+      executionId: instance.id,
+      title: `Release regression for "${block.title}"`,
+      body,
+      payload: {
+        ...(assessment ? { onCallAssessment: assessment } : {}),
+        ...(signals.length ? { releaseSignals: signals } : {}),
+        ...(block.pullRequest?.url ? { prUrl: block.pullRequest.url } : {}),
+        pipelineName: instance.pipelineName,
+      },
+    })
+  }
+
+  /**
+   * Best-effort: annotate an incident PagerDuty / incident.io already opened (from the
+   * same monitors/SLOs) with the on-call investigation. NOT alerting — those systems
+   * already paged. A no-op when no provider is wired or no matching incident exists.
+   */
+  private async enrichIncident(
+    workspaceId: string,
+    block: Block,
+    assessment: OnCallAssessment | null,
+    signals: ReleaseSignal[],
+    since: number,
+  ): Promise<void> {
+    if (!this.incidentEnrichment) return
+    const update: IncidentUpdate = {
+      title: `Regression suspected from "${block.title}"`,
+      body: assessment
+        ? `${assessment.rationale} (recommendation: ${assessment.recommendation}, culprit confidence ${pct(assessment.culpritConfidence)})`
+        : 'cat-factory on-call investigated a post-release regression suspected from this change.',
+      ...(block.pullRequest?.url ? { prUrl: block.pullRequest.url } : {}),
+    }
+    try {
+      await this.incidentEnrichment.enrich(
+        { workspaceId, signalIds: signals.map((s) => s.id), since },
+        update,
+      )
+    } catch {
+      // best-effort: a failing enrichment must not block the run or the notification
+    }
   }
 
   /** Raise a `pipeline_complete` notification for a no-merger run awaiting confirmation. */

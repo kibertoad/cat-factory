@@ -33,6 +33,10 @@ export interface MergeThresholdPreset {
   maxRequirementIterations: number
   /** Findings at or below this severity auto-pass without stopping for a human. */
   maxRequirementConcernAllowed: RequirementConcernLevel
+  /** Minutes the post-release-health gate watches the release's monitors/SLOs after deploy. */
+  releaseWatchWindowMinutes: number
+  /** How many on-call investigations the post-release-health gate may dispatch. */
+  releaseMaxAttempts: number
   /** The workspace's fallback preset, used by tasks that pick none. */
   isDefault: boolean
   createdAt: number
@@ -47,6 +51,8 @@ export interface CreateMergePresetInput {
   ciMaxAttempts: number
   maxRequirementIterations: number
   maxRequirementConcernAllowed: RequirementConcernLevel
+  releaseWatchWindowMinutes?: number
+  releaseMaxAttempts?: number
   isDefault?: boolean
 }
 
@@ -59,5 +65,7 @@ export interface UpdateMergePresetInput {
   ciMaxAttempts?: number
   maxRequirementIterations?: number
   maxRequirementConcernAllowed?: RequirementConcernLevel
+  releaseWatchWindowMinutes?: number
+  releaseMaxAttempts?: number
   isDefault?: boolean
 }

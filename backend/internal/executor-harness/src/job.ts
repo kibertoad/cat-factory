@@ -711,6 +711,63 @@ export function parseMergerJob(input: unknown): MergerJob {
   return job
 }
 
+// ---- On-call job (POST /on-call) ------------------------------------------
+
+/**
+ * The job the backend's ContainerAgentExecutor POSTs to /on-call on a post-release
+ * regression. The on-call agent clones the released PR head `branch` to correlate its
+ * diff with the Datadog regression evidence (carried in `userPrompt`) and returns ONLY
+ * a JSON assessment — it makes NO commits and reverts nothing (a human decides).
+ */
+export interface OnCallJob extends HarnessAuthFields {
+  jobId: string
+  systemPrompt: string
+  userPrompt: string
+  model: string
+  proxyBaseUrl?: string
+  sessionToken?: string
+  ghToken: string
+  repo: RepoSpec
+  /** The released PR head branch to clone and correlate against the base. */
+  branch: string
+  /** The PR number, for the agent's context (optional). */
+  prNumber?: number
+  githubApiBase?: string
+}
+
+/** The /on-call response. `onCallAssessment` (when set) is the assessment to ingest. */
+export interface OnCallResult {
+  onCallAssessment?: unknown
+  summary?: string
+  stats?: PiRunStats
+  error?: string
+  usage?: { inputTokens: number; outputTokens: number }
+}
+
+/** Validate + narrow an untrusted body into an {@link OnCallJob}, throwing on bad input. */
+export function parseOnCallJob(input: unknown): OnCallJob {
+  if (typeof input !== 'object' || input === null) {
+    throw new Error('Invalid job: body must be an object')
+  }
+  const o = input as Record<string, unknown>
+  const repo = (o.repo ?? {}) as Record<string, unknown>
+  const job: OnCallJob = {
+    jobId: str(o.jobId, 'jobId'),
+    systemPrompt: str(o.systemPrompt, 'systemPrompt'),
+    userPrompt: str(o.userPrompt, 'userPrompt'),
+    model: str(o.model, 'model'),
+    ...parseHarnessAuth(o),
+    ghToken: str(o.ghToken, 'ghToken'),
+    repo: parseRepoSpec(repo),
+    branch: str(o.branch, 'branch'),
+    ...(typeof o.prNumber === 'number' ? { prNumber: o.prNumber } : {}),
+    ...(typeof o.githubApiBase === 'string' ? { githubApiBase: o.githubApiBase } : {}),
+  }
+  assertAllowedHost(job.repo.cloneUrl, 'repo.cloneUrl')
+  if (job.githubApiBase) assertAllowedHost(job.githubApiBase, 'githubApiBase')
+  return job
+}
+
 /** Validate + narrow an untrusted body into a {@link Job}, throwing on bad input. */
 export function parseJob(input: unknown): Job {
   if (typeof input !== 'object' || input === null) {
