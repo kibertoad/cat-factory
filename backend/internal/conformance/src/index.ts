@@ -7,6 +7,7 @@ export {
   type ConformanceApp,
   type ConformanceAppOptions,
   type ConformanceHarness,
+  type LocalModelEndpointsProbe,
   RecordingEventPublisher,
   type TestResponse,
 } from './harness.js'

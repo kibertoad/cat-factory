@@ -235,6 +235,10 @@ export type {
   SubscriptionActivationRecord,
   SubscriptionActivationRepository,
 } from './personal-subscription-repositories.js'
+export type {
+  LocalModelEndpointRecord,
+  LocalModelEndpointRepository,
+} from './local-model-repositories.js'
 export type { BoardWritePort } from './board-operations.js'
 export type { PullRequestMerger } from './pr-merger.js'
 export type { CiCheck, CiStatusReport, CiStatusProvider } from './ci-status.js'

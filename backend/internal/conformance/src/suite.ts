@@ -507,6 +507,85 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
       })
     })
 
+    describe('local model endpoints (per-user runners)', () => {
+      it('stores, lists key-free, resolves with the key, and removes — identically per store', async () => {
+        const app = harness.makeApp()
+        const probe = app.localModelEndpoints?.()
+        // Facades without ENCRYPTION_KEY don't wire the store; nothing to assert there.
+        if (!probe) return
+        const userId = `usr_local_${Date.now()}`
+
+        // Upsert an Ollama runner with a bearer key + duplicate model ids.
+        const created = await probe.upsert(userId, {
+          provider: 'ollama',
+          baseUrl: 'http://localhost:11434/v1',
+          apiKey: 'secret-bearer-key',
+          models: ['qwen2.5-coder:32b', 'gemma3', 'qwen2.5-coder:32b'],
+        })
+        expect(created.provider).toBe('ollama')
+        expect(created.hasApiKey).toBe(true)
+        // The enabled-models JSON round-trips through the store, de-duplicated.
+        expect(created.models).toEqual(['qwen2.5-coder:32b', 'gemma3'])
+
+        // The list (wire) shape never leaks the key.
+        const listed = await probe.list(userId)
+        expect(listed).toHaveLength(1)
+        expect(JSON.stringify(listed)).not.toContain('secret-bearer-key')
+        expect(listed[0]!.hasApiKey).toBe(true)
+        expect(listed[0]!.models).toEqual(['qwen2.5-coder:32b', 'gemma3'])
+
+        // The run-time resolve path decrypts the key (the proxy / inline provider use this).
+        const resolved = await probe.resolve(userId, 'ollama')
+        expect(resolved?.baseUrl).toBe('http://localhost:11434/v1')
+        expect(resolved?.apiKey).toBe('secret-bearer-key')
+
+        // A second, keyless runner resolves with a null key (the common local case).
+        await probe.upsert(userId, {
+          provider: 'lmstudio',
+          baseUrl: 'http://localhost:1234/v1',
+          models: ['llama3.3'],
+        })
+        const both = await probe.list(userId)
+        expect(both.map((e) => e.provider).sort()).toEqual(['lmstudio', 'ollama'])
+        expect((await probe.resolve(userId, 'lmstudio'))?.apiKey).toBeNull()
+
+        await probe.remove(userId, 'ollama')
+        const after = await probe.list(userId)
+        expect(after.map((e) => e.provider)).toEqual(['lmstudio'])
+      })
+
+      it('rejects a non-local base URL at the write boundary (anti-SSRF) — identically per store', async () => {
+        const app = harness.makeApp()
+        const probe = app.localModelEndpoints?.()
+        if (!probe) return
+        const userId = `usr_local_ssrf_${Date.now()}`
+
+        // A runner lives on the user's own machine/LAN; the base URL is forwarded
+        // server-side, so a public host or the link-local metadata endpoint must be
+        // refused before anything is persisted.
+        for (const baseUrl of [
+          'http://evil.example.com/v1',
+          'http://169.254.169.254/latest/meta-data',
+          'http://8.8.8.8/v1',
+        ]) {
+          await expect(
+            probe.upsert(userId, { provider: 'custom', baseUrl, models: ['m'] }),
+          ).rejects.toThrow()
+        }
+        // Nothing was stored.
+        expect(await probe.list(userId)).toEqual([])
+
+        // A loopback URL is still accepted.
+        const ok = await probe.upsert(userId, {
+          provider: 'custom',
+          baseUrl: 'http://127.0.0.1:8080/v1',
+          models: ['m'],
+        })
+        expect(ok.provider).toBe('custom')
+        await probe.remove(userId, 'custom')
+      })
+    })
+
     describe('repo bootstrap', () => {
       it('round-trips reference architectures', async () => {
         const { call, createWorkspace } = harness.makeApp()
@@ -1110,7 +1189,9 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         expect(step.output).not.toContain('[spec-writer]')
         expect(step.output).toContain('# Specification: Auth')
         expect(step.output).toContain('The system SHALL let a user log in.')
-        expect(step.output).toContain('GIVEN a registered user WHEN they sign in THEN a session starts')
+        expect(step.output).toContain(
+          'GIVEN a registered user WHEN they sign in THEN a session starts',
+        )
       })
 
       it('skips a disabled step at run start but keeps it in the saved pipeline', async () => {

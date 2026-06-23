@@ -19,7 +19,7 @@ import {
   isIndividualVendor,
   subscriptionOptionFor,
 } from '@cat-factory/kernel'
-import { resolveInstanceTypeId } from '@cat-factory/contracts'
+import { isLocalRunner, resolveInstanceTypeId } from '@cat-factory/contracts'
 import {
   type AgentRouting,
   composeBlockSystemPrompt,
@@ -604,9 +604,10 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     if (harness === 'pi' && !isProxyableProvider(ref.provider)) {
       throw new Error(
         `Container implementation needs a model the LLM proxy can serve ` +
-          `(Workers AI, or a direct OpenAI-compatible provider); ` +
-          `'${ref.provider}' is not supported. Pick a Workers AI model, or configure a ` +
-          `provider key (QWEN_API_KEY / DEEPSEEK_API_KEY / MOONSHOT_API_KEY) and pick that model.`,
+          `(Workers AI, a direct OpenAI-compatible provider, or a local runner); ` +
+          `'${ref.provider}' is not supported. Pick a Workers AI model, configure a ` +
+          `provider key (QWEN_API_KEY / DEEPSEEK_API_KEY / MOONSHOT_API_KEY), or add a local ` +
+          `runner (Ollama / LM Studio / …) and pick that model.`,
       )
     }
 
@@ -1079,7 +1080,9 @@ function prNumberFromUrl(url: string): number | undefined {
 /**
  * Providers the LLM proxy can serve: the direct OpenAI Chat Completions-compatible
  * upstreams it forwards to, plus `workers-ai`, which it runs in-Worker through the
- * AI binding (no provider key required).
+ * AI binding (no provider key required), plus the local runners (Ollama / LM Studio /
+ * llama.cpp / vLLM / custom), which the proxy forwards to the run initiator's own
+ * OpenAI-compatible endpoint (no key lease).
  */
 function isProxyableProvider(provider: string): boolean {
   return (
@@ -1087,7 +1090,8 @@ function isProxyableProvider(provider: string): boolean {
     provider === 'qwen' ||
     provider === 'deepseek' ||
     provider === 'moonshot' ||
-    provider === 'openai'
+    provider === 'openai' ||
+    isLocalRunner(provider)
   )
 }
 

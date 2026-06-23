@@ -1,6 +1,7 @@
 import type { Context } from 'hono'
 import { Hono } from 'hono'
 import { cachedTokensFromUsage, promptCacheParams } from '@cat-factory/agents'
+import { isLocalRunner } from '@cat-factory/contracts'
 import type { ApiKeyProvider } from '@cat-factory/kernel'
 import { ContainerSessionService } from '../../containers/ContainerSessionService.js'
 import type { AppEnv } from '../../http/env.js'
@@ -57,8 +58,15 @@ export function llmProxyController(): Hono<AppEnv> {
     // response) is transport overhead; the slice spent waiting on the model is the
     // actual execution. The two are split in the observability sink.
     const t0 = Date.now()
-    const { config, spendService, gateways, llmObservability, executionEventPublisher, apiKeys } =
-      c.get('container')
+    const {
+      config,
+      spendService,
+      gateways,
+      llmObservability,
+      executionEventPublisher,
+      apiKeys,
+      localModelEndpoints,
+    } = c.get('container')
     const secret = config.auth.sessionSecret
     if (!secret) {
       logger.error({ scope: 'llmProxy' }, 'llm proxy: session secret not configured')
@@ -312,60 +320,102 @@ export function llmProxyController(): Hono<AppEnv> {
       }
     }
 
-    const upstream = gateways.llmUpstream.resolveOpenAiCompatible(session.provider)
-    if (!upstream) {
-      log.error('llm proxy: provider is not available (no base URL resolved)')
-      observe({
-        usage: null,
-        finishReason: null,
-        responseText: '',
-        ok: false,
-        httpStatus: 502,
-        errorMessage: `Provider '${session.provider}' is not available`,
-        upstreamMs: 0,
-      })
-      return c.json({ error: { message: `Provider '${session.provider}' is not available` } }, 502)
-    }
-    // Lease the API key for this provider from the DB-backed pool (workspace + owning
-    // account + the run initiator), scoped from the signed session claims. Keys are no
-    // longer env-baked: an empty pool means the provider is not configured.
-    if (!apiKeys) {
-      log.error('llm proxy: API-key store is not configured')
-      observe({
-        usage: null,
-        finishReason: null,
-        responseText: '',
-        ok: false,
-        httpStatus: 502,
-        errorMessage: 'API-key store is not configured',
-        upstreamMs: 0,
-      })
-      return c.json({ error: { message: 'API-key store is not configured' } }, 502)
-    }
+    // Resolve the upstream base URL + bearer key. Two paths:
+    //  - LOCAL runners (Ollama / LM Studio / …): the endpoint is configured PER USER, so
+    //    resolve it by the run INITIATOR (`session.userId`) and use its optional key
+    //    directly — NO DB key lease (these runners are keyless by default; a placeholder
+    //    bearer is harmless). `leasedApiKeyId` stays undefined so no spend key is attributed.
+    //  - Cloud providers: resolve the base URL from the gateway and lease the key from the
+    //    DB-backed pool (workspace + account + initiator).
+    let baseURL: string
     let apiKey: string
-    try {
-      const leased = await apiKeys.lease(session.workspaceId, session.provider as ApiKeyProvider, {
-        accountId: session.accountId,
-        userId: session.userId,
-      })
-      leasedApiKeyId = leased.keyId
-      apiKey = leased.secret
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
-      log.error({ err: message }, 'llm proxy: no API key configured for provider')
-      observe({
-        usage: null,
-        finishReason: null,
-        responseText: '',
-        ok: false,
-        httpStatus: 502,
-        errorMessage: message,
-        upstreamMs: 0,
-      })
-      return c.json(
-        { error: { message: `No API key configured for provider '${session.provider}'` } },
-        502,
-      )
+    if (isLocalRunner(session.provider)) {
+      const resolved =
+        session.userId && localModelEndpoints
+          ? await localModelEndpoints.resolve(session.userId, session.provider)
+          : null
+      if (!resolved) {
+        log.error('llm proxy: no local runner endpoint configured for the run initiator')
+        observe({
+          usage: null,
+          finishReason: null,
+          responseText: '',
+          ok: false,
+          httpStatus: 502,
+          errorMessage: `No local runner '${session.provider}' configured for this run`,
+          upstreamMs: 0,
+        })
+        return c.json(
+          { error: { message: `No local runner '${session.provider}' configured for this run` } },
+          502,
+        )
+      }
+      baseURL = resolved.baseUrl.replace(/\/+$/, '')
+      // Most local runners ignore auth; the SDK/fetch still emit an Authorization header.
+      apiKey = resolved.apiKey || 'local'
+    } else {
+      const upstream = gateways.llmUpstream.resolveOpenAiCompatible(session.provider)
+      if (!upstream) {
+        log.error('llm proxy: provider is not available (no base URL resolved)')
+        observe({
+          usage: null,
+          finishReason: null,
+          responseText: '',
+          ok: false,
+          httpStatus: 502,
+          errorMessage: `Provider '${session.provider}' is not available`,
+          upstreamMs: 0,
+        })
+        return c.json(
+          { error: { message: `Provider '${session.provider}' is not available` } },
+          502,
+        )
+      }
+      // Lease the API key for this provider from the DB-backed pool (workspace + owning
+      // account + the run initiator), scoped from the signed session claims. Keys are no
+      // longer env-baked: an empty pool means the provider is not configured.
+      if (!apiKeys) {
+        log.error('llm proxy: API-key store is not configured')
+        observe({
+          usage: null,
+          finishReason: null,
+          responseText: '',
+          ok: false,
+          httpStatus: 502,
+          errorMessage: 'API-key store is not configured',
+          upstreamMs: 0,
+        })
+        return c.json({ error: { message: 'API-key store is not configured' } }, 502)
+      }
+      try {
+        const leased = await apiKeys.lease(
+          session.workspaceId,
+          session.provider as ApiKeyProvider,
+          {
+            accountId: session.accountId,
+            userId: session.userId,
+          },
+        )
+        leasedApiKeyId = leased.keyId
+        apiKey = leased.secret
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err)
+        log.error({ err: message }, 'llm proxy: no API key configured for provider')
+        observe({
+          usage: null,
+          finishReason: null,
+          responseText: '',
+          ok: false,
+          httpStatus: 502,
+          errorMessage: message,
+          upstreamMs: 0,
+        })
+        return c.json(
+          { error: { message: `No API key configured for provider '${session.provider}'` } },
+          502,
+        )
+      }
+      baseURL = upstream.baseURL
     }
     if (streaming) {
       payload.stream_options = { include_usage: true }
@@ -374,7 +424,7 @@ export function llmProxyController(): Hono<AppEnv> {
     // Upstream-dispatch clock: the slice between here and the response is the model's
     // execution; the rest of the proxy's time is transport overhead.
     const dispatchAt = Date.now()
-    const upstreamRes = await fetch(`${upstream.baseURL}/chat/completions`, {
+    const upstreamRes = await fetch(`${baseURL}/chat/completions`, {
       method: 'POST',
       headers: {
         authorization: `Bearer ${apiKey}`,

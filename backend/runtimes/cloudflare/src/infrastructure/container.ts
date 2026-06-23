@@ -25,6 +25,7 @@ import {
   NotionProvider,
   EMAIL_CIPHER_INFO,
   ApiKeyService,
+  LocalModelEndpointService,
   PersonalSubscriptionService,
   ProviderSubscriptionService,
   RunnerPoolConnectionService,
@@ -73,6 +74,7 @@ import {
   D1PersonalSubscriptionRepository,
   D1SubscriptionActivationRepository,
 } from './repositories/D1PersonalSubscriptionRepository'
+import { D1LocalModelEndpointRepository } from './repositories/D1LocalModelEndpointRepository'
 import { ContainerRepoBootstrapper } from './ai/ContainerRepoBootstrapper'
 import { ContainerRepoScanner } from './ai/ContainerRepoScanner'
 import { CompositeAgentExecutor } from './ai/CompositeAgentExecutor'
@@ -187,10 +189,14 @@ function buildModelProviderResolver(env: Env, db: D1Database): ModelProviderReso
           recordPrompts: loadObservabilityConfig(env).recordPrompts,
         }
       : undefined
+  const localModelEndpoints = buildLocalModelEndpointService(env, db, { now: () => Date.now() })
   const resolver = createScopedModelProviderResolver({
     apiKeys: buildApiKeyService(env, db, { now: () => Date.now() }),
     baseUrlFor: (provider) => baseUrlFor(provider, env) ?? undefined,
     extraRegistries,
+    localEndpointsFor: localModelEndpoints
+      ? (userId) => localModelEndpoints.listResolved(userId)
+      : undefined,
     instrument,
   })
   modelResolverCache.set(env, resolver)
@@ -705,6 +711,29 @@ function buildPersonalSubscriptionService(
   })
 }
 
+/**
+ * The per-USER locally-run model endpoints store (Ollama / LM Studio / …), or undefined
+ * when no ENCRYPTION_KEY is configured (the optional bearer key is sealed with the system
+ * cipher). Shared by the local-runner controller, the per-user model catalog, and the LLM
+ * proxy's base-URL/key resolution for a locally-run model.
+ */
+function buildLocalModelEndpointService(
+  env: Env,
+  db: D1Database,
+  clock: Clock,
+): LocalModelEndpointService | undefined {
+  const masterKeyBase64 = env.ENCRYPTION_KEY?.trim()
+  if (!masterKeyBase64) return undefined
+  return new LocalModelEndpointService({
+    localModelEndpointRepository: new D1LocalModelEndpointRepository({ db }),
+    secretCipher: new WebCryptoSecretCipher({
+      masterKeyBase64,
+      info: 'cat-factory:local-model-endpoints',
+    }),
+    clock,
+  })
+}
+
 function buildContainerExecutor(
   env: Env,
   config: AppConfig,
@@ -1205,6 +1234,10 @@ export function buildContainer(
   // API-key controller, the model-provider resolver, and the LLM proxy key lease.
   const apiKeys = buildApiKeyService(env, db, clock)
 
+  // The per-user locally-run model endpoints store (Ollama / LM Studio / …) — shared by
+  // the local-runner controller, the per-user model catalog, and the LLM proxy.
+  const localModelEndpoints = buildLocalModelEndpointService(env, db, clock)
+
   // Cloudflare Workers AI is opt-in: enabled when the `AI` binding is present. A caller
   // (the cross-runtime conformance suite) may force it off to assert key-driven
   // selectability + the provider guard uniformly across runtimes.
@@ -1275,7 +1308,13 @@ export function buildContainer(
     // The pipeline-start guard resolves what's configured for a workspace + initiator.
     resolveProviderCapabilities: (workspaceId, initiatedBy) =>
       resolveWorkspaceCapabilities(
-        { apiKeys, subscriptions, personalSubscriptions, cloudflareModelsEnabled },
+        {
+          apiKeys,
+          subscriptions,
+          personalSubscriptions,
+          cloudflareModelsEnabled,
+          localModelEndpoints,
+        },
         workspaceId,
         initiatedBy,
       ),
@@ -1297,6 +1336,8 @@ export function buildContainer(
     apiKeys,
     // Whether the opt-in Cloudflare Workers AI lib is enabled (the `AI` binding).
     cloudflareModelsEnabled,
+    // The per-user locally-run model endpoints store; present when ENCRYPTION_KEY is set.
+    localModelEndpoints,
     gateways: {
       // Real-time event delivery via the per-workspace WorkspaceEventsHub DO (when
       // the WORKSPACE_EVENTS namespace is bound; absent → the events route 501s).

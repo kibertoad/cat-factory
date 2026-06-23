@@ -24,6 +24,7 @@ import type {
   WorkspaceSnapshot,
 } from '@cat-factory/kernel'
 import { NoopBootstrapRunner, NoopWorkRunner } from '@cat-factory/kernel'
+import type { LocalRunner, UpsertLocalModelEndpointInput } from '@cat-factory/contracts'
 import type { CoreDependencies } from '@cat-factory/orchestration'
 import { buildLocalContainer } from '../src/container.js'
 
@@ -194,5 +195,16 @@ export function makeConformanceApp(
     seedReadyReview,
     seedBlueprint,
     onboarding: () => makeOnboardingProbe(container),
+    localModelEndpoints: () => {
+      const svc = container.localModelEndpoints
+      if (!svc) return undefined
+      return {
+        list: (userId: string) => svc.list(userId),
+        upsert: (userId: string, input) =>
+          svc.upsert(userId, input as UpsertLocalModelEndpointInput),
+        resolve: (userId: string, provider: string) => svc.resolve(userId, provider),
+        remove: (userId: string, provider: string) => svc.remove(userId, provider as LocalRunner),
+      }
+    },
   }
 }
