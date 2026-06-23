@@ -117,6 +117,20 @@ const serviceRepoUrl = computed(() =>
   serviceRepo.value ? github.repoUrl(serviceRepo.value.githubId) : null,
 )
 
+// A task's work branch on GitHub, once the agent has pushed one (a PR branch is
+// recorded on the block). Repo linkage lives on the owning service frame, not the
+// task, so resolve the repo by walking up to the frame; fall back to deriving the
+// repo base from the PR url when the projection hasn't loaded. Null until a branch
+// exists, so the link only appears after one is created.
+const taskBranchUrl = computed(() => {
+  const pr = isTask.value ? block.value?.pullRequest : undefined
+  if (!pr?.branch || !block.value) return null
+  const frame = board.serviceOf(block.value)
+  const repo = frame ? github.repoForBlock(frame.id) : undefined
+  const base = repo ? github.repoUrl(repo.githubId) : pr.url.replace(/\/pull\/\d+$/, '')
+  return base ? `${base}/tree/${pr.branch}` : null
+})
+
 const runMenu = computed(() =>
   pipelines.pipelines.map((p) => ({
     label: p.name,
@@ -349,6 +363,19 @@ const showOriginalDescription = ref(false)
           trailing-icon="i-lucide-external-link"
         >
           {{ serviceRepo!.owner }}/{{ serviceRepo!.name }}
+        </UButton>
+        <UButton
+          v-if="taskBranchUrl"
+          :to="taskBranchUrl"
+          target="_blank"
+          rel="noopener"
+          color="neutral"
+          variant="soft"
+          size="xs"
+          icon="i-lucide-git-branch"
+          trailing-icon="i-lucide-external-link"
+        >
+          {{ block!.pullRequest!.branch }}
         </UButton>
         <UButton
           v-if="tasks.available"
