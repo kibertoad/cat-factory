@@ -664,6 +664,15 @@ export function useApi() {
       body: { source: TaskSourceKind; externalId: string; blockId: string },
     ) => http<SourceTask>(`${ws(workspaceId)}/tasks/link`, { method: 'POST', body }),
 
+    createTaskFromIssue: (
+      workspaceId: string,
+      body: { source: TaskSourceKind; externalId: string; containerId: string },
+    ) =>
+      http<{ block: Block; task: SourceTask }>(`${ws(workspaceId)}/tasks/create-block`, {
+        method: 'POST',
+        body,
+      }),
+
     // ---- requirements review (stateless reviewer agent) ------------------
     // The current review for a block (null when none has been run). A 503 means
     // the feature is unconfigured (the panel hides on any error here).

@@ -86,6 +86,10 @@ export {
 } from './modules/tracker/github.create.logic.js'
 export * as githubIssuesLogic from './modules/tasks/github-issues.logic.js'
 export { GITHUB_ISSUES_DESCRIPTOR } from './modules/tasks/github-issues.logic.js'
+export {
+  GitHubIssuesProvider,
+  type GitHubIssuesProviderDependencies,
+} from './modules/tasks/GitHubIssuesProvider.js'
 
 export {
   EnvironmentConnectionService,

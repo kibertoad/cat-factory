@@ -4,7 +4,7 @@ import type {
   GitHubInstallationRepository,
   GitHubIssueDetail,
 } from '@cat-factory/kernel'
-import { GitHubIssuesProvider } from '../../src/infrastructure/tasks/GitHubIssuesProvider'
+import { GitHubIssuesProvider } from '@cat-factory/integrations'
 import { FakeGitHubClient } from '../fakes/FakeGitHubClient'
 
 // Pure unit test for the GitHub-issues task-source provider: it resolves the

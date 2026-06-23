@@ -750,7 +750,10 @@ function createDocumentsModule(
  * Unlike the documents module there is no planner — issues are linked for
  * context, not expanded into board structure.
  */
-function createTasksModule(deps: CoreDependencies): TasksModule | undefined {
+function createTasksModule(
+  deps: CoreDependencies,
+  boardService: BoardService,
+): TasksModule | undefined {
   const { taskSourceProviders, taskConnectionRepository, taskRepository } = deps
   if (
     !taskSourceProviders ||
@@ -776,6 +779,7 @@ function createTasksModule(deps: CoreDependencies): TasksModule | undefined {
     clock: deps.clock,
   })
   const linkService = new TaskLinkService({
+    boardService,
     blockRepository: deps.blockRepository,
     taskRepository,
   })
@@ -1212,7 +1216,7 @@ export function createCore(dependencies: CoreDependencies): Core {
 
   const github = createGitHubModule(dependencies)
   const documents = createDocumentsModule(dependencies, boardService)
-  const tasks = createTasksModule(dependencies)
+  const tasks = createTasksModule(dependencies, boardService)
   const runners = createRunnersModule(dependencies)
   // After a bootstrap succeeds, map the new repo into a blueprint + the board by
   // starting the blueprint-only pipeline against the service frame.
