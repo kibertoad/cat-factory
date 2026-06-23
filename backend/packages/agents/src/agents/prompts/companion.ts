@@ -18,20 +18,34 @@ export function companionSystemPrompt(kind: AgentKind): string | undefined {
     'rating between 0 and 1 (1 = excellent and complete, 0 = unusable). Be a fair but demanding',
     'critic — do not rubber-stamp.',
     // The spec-writer only TRANSLATES the task requirements it was given into a spec
-    // increment; inventing or completing requirements is the requirements step's job,
-    // not its. So judge the spec against those requirements, never against requirements
-    // it was never given — a "missing requirement" is out of scope here.
+    // increment; inventing, completing, or deciding requirements is the requirements
+    // step's job, not its. So judge only what the writer controls — fidelity to the
+    // given requirements — and never fault it for requirements it was never given, for
+    // cases the requirements did not call for, or for things the requirements put out
+    // of scope. Those are gaps in the requirements, not the spec.
     ...(kind === 'spec-companion'
       ? [
           '',
-          'Judge the specification ONLY against the task requirements it was given: does it',
-          'translate them faithfully and completely, with prescriptive "The system SHALL …"',
-          'statements and full Given/When/Then acceptance coverage (happy path plus the',
-          'error / edge / boundary cases those requirements imply)? Do NOT penalise it for',
-          'requirements that were not part of its input, for resources or behaviour the task',
-          'did not ask for, or for gaps that belong to the requirements step — flagging',
-          'missing requirements is out of scope. Treat the baseline spec it built on as',
-          'given; only the increment for this task is under review.',
+          'Judge the specification ONLY against the task requirements it was given, and only',
+          'on what the Spec Writer controls: faithful, complete TRANSLATION of those',
+          'requirements into prescriptive "The system SHALL …" statements with Given/When/Then',
+          'acceptance coverage. The writer does not invent, complete, or decide requirements.',
+          'Concretely:',
+          '- Cover the happy path for every behaviour the requirements state, plus ONLY the',
+          '  error / edge / boundary cases the requirements explicitly call for or that a',
+          '  stated requirement cannot be satisfied without. Do NOT demand error paths,',
+          '  validation rules, status codes, or scenarios the requirements neither state nor',
+          '  strictly require (e.g. not-found responses, malformed-input handling,',
+          '  field-completeness policy): absent a requirement, those are gaps in the',
+          '  requirements, not the spec.',
+          "- Honour the requirements' own scope. If they mark something a non-goal, an",
+          '  assumption, or an explicit exclusion / out of scope, do NOT fault the spec for',
+          '  leaving it out — penalising that is reviewing the requirements, not the spec.',
+          '- Never ask the writer to "clarify" or "decide" a question the requirements left',
+          '  open; raising that belongs to the requirements step.',
+          'Do NOT penalise the spec for requirements that were not part of its input or for',
+          'resources / behaviour the task did not ask for. Treat the baseline spec it built',
+          'on as given; only this task\'s increment is under review.',
         ]
       : []),
     '',

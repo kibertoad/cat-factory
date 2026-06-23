@@ -9,6 +9,7 @@ import type { Notification } from '~/types/domain'
 
 const notifications = useNotificationsStore()
 const ui = useUiStore()
+const execution = useExecutionStore()
 
 const busy = ref<string | null>(null)
 
@@ -25,6 +26,10 @@ const META: Record<Notification['type'], { icon: string; color: Accent; action: 
   // Clicking the title opens the clarity review window for the task (see `reveal`); "act"
   // just marks it read (the server performs no side-effect for this type).
   clarity_review: { icon: 'i-lucide-bug', color: 'primary', action: 'Mark read' },
+  // Clicking the title opens the parked step's decision surface (companion → step detail
+  // with the iteration-cap prompt; requirements → the review window); "act" just marks it
+  // read (the decision itself is resolved in that surface, not here).
+  decision_required: { icon: 'i-lucide-circle-help', color: 'warning', action: 'Mark read' },
 }
 
 async function act(n: Notification) {
@@ -55,7 +60,21 @@ function reveal(n: Notification) {
   if (!n.blockId) return
   if (n.type === 'requirement_review') ui.openRequirementReview(n.blockId)
   else if (n.type === 'clarity_review') ui.openClarityReview(n.blockId)
+  else if (n.type === 'decision_required') revealDecision(n)
   else ui.select(n.blockId)
+}
+
+/**
+ * Open the decision surface for a parked iteration-cap run: find the run's step that is
+ * waiting on a human and open it through the universal step dispatch — which routes a
+ * `requirements-review` step to the review window and a companion step to its detail
+ * panel (where the iteration-cap prompt lives). Falls back to focusing the block.
+ */
+function revealDecision(n: Notification) {
+  const instance = n.executionId ? execution.getInstance(n.executionId) : undefined
+  const idx = instance?.steps.findIndex((s) => s.state === 'waiting_decision') ?? -1
+  if (instance && idx >= 0) ui.openStepDetail(instance.id, idx)
+  else if (n.blockId) ui.select(n.blockId)
 }
 </script>
 

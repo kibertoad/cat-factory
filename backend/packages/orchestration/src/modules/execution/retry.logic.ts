@@ -93,5 +93,6 @@ function resetStep(step: PipelineStep, state: 'working' | 'pending'): PipelineSt
     jobId: undefined,
     startedAt: undefined,
     finishedAt: undefined,
+    pausedAt: undefined,
   }
 }

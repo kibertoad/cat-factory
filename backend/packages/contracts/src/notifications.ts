@@ -22,6 +22,12 @@ import { mergeAssessmentSchema } from './merge.js'
 //                          it read), unlike the engineering notifications above.
 //   - `clarity_review`    — a clarity-review (bug-report triage) agent raised findings
 //                          on a bug task; same informational shape as `requirement_review`.
+//   - `decision_required`— an iterative gate parked on a human decision after spending
+//                          its automatic budget (a quality companion at its rework cap,
+//                          or the requirements reviewer at its iteration cap). Without
+//                          this the three-choice decision is reachable only by drilling
+//                          into the parked step, so the run looks silently stuck; acting
+//                          on it opens that step's decision surface.
 //
 // In-app delivery is the only channel today, but the core models delivery behind
 // a `NotificationChannel` port so email / Slack channels can be added later
@@ -40,6 +46,7 @@ export const notificationTypeSchema = v.picklist([
   'test_failed',
   'requirement_review',
   'clarity_review',
+  'decision_required',
 ])
 export type NotificationType = v.InferOutput<typeof notificationTypeSchema>
 

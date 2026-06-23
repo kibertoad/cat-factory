@@ -1082,6 +1082,9 @@ export class ExecutionService {
   private startStep(step: PipelineStep): void {
     step.state = 'working'
     if (step.startedAt == null) step.startedAt = this.clock.now()
+    // (Re)entering `working` means the step is no longer parked on a human: resume
+    // its duration clock (see {@link pauseStepForInput}).
+    step.pausedAt = null
   }
 
   /**
@@ -1089,11 +1092,26 @@ export class ExecutionService {
    * approval-gate flow (which re-asserts `done` after a human approves, long after
    * the agent actually finished) keeps the agent's true completion time, and so a
    * replay doesn't move it. With {@link startStep}'s `startedAt` this yields the
-   * step's execution duration.
+   * step's execution duration. A step finished directly out of a parked approval
+   * stopped *working* when it parked, so its duration is billed to the pause instant
+   * ({@link pauseStepForInput}), not the (later) moment the human decided.
    */
   private finishStep(step: PipelineStep): void {
     step.state = 'done'
-    if (step.finishedAt == null) step.finishedAt = this.clock.now()
+    if (step.finishedAt == null) step.finishedAt = step.pausedAt ?? this.clock.now()
+    step.pausedAt = null
+  }
+
+  /**
+   * Park a step on a human decision and freeze its duration clock. Records when the
+   * step stopped working (`pausedAt`) so elapsed time no longer accrues while it waits
+   * for input — the symmetric counterpart of the terminal freeze on `finishedAt`.
+   * Set-once (a Workflows replay re-parking keeps the original instant); cleared when
+   * the step resumes ({@link startStep}) or finishes ({@link finishStep}).
+   */
+  private pauseStepForInput(step: PipelineStep): void {
+    step.state = 'waiting_decision'
+    if (step.pausedAt == null) step.pausedAt = this.clock.now()
   }
 
   /**
@@ -1129,7 +1147,7 @@ export class ExecutionService {
         options: [...result.decision.options],
         chosen: null,
       }
-      step.state = 'waiting_decision'
+      this.pauseStepForInput(step)
       instance.status = 'blocked'
       await this.updateBlockProgress(workspaceId, instance, 'blocked')
       await this.executionRepository.upsert(workspaceId, instance)
@@ -1224,7 +1242,7 @@ export class ExecutionService {
         status: 'pending',
         proposal: step.output,
       }
-      step.state = 'waiting_decision'
+      this.pauseStepForInput(step)
       instance.status = 'blocked'
       await this.updateBlockProgress(workspaceId, instance, 'blocked')
       await this.executionRepository.upsert(workspaceId, instance)
@@ -1395,7 +1413,7 @@ export class ExecutionService {
           status: 'pending',
           proposal: producer?.output ?? step.output,
         }
-        step.state = 'waiting_decision'
+        this.pauseStepForInput(step)
         instance.status = 'blocked'
         await this.updateBlockProgress(workspaceId, instance, 'blocked')
         await this.executionRepository.upsert(workspaceId, instance)
@@ -1429,6 +1447,7 @@ export class ExecutionService {
     if (companion.attempts >= companion.maxAttempts) {
       companion.exceeded = true
       step.companion = companion
+      await this.raiseDecisionRequired(workspaceId, instance)
       return this.parkStepOnDecision(workspaceId, instance, step, step.output ?? '')
     }
 
@@ -1488,6 +1507,7 @@ export class ExecutionService {
     step.state = 'pending'
     step.startedAt = null
     step.finishedAt = null
+    step.pausedAt = null
     step.jobId = undefined
     step.approval = null
     step.subtasks = undefined
@@ -1952,6 +1972,32 @@ export class ExecutionService {
     return { kind: 'job_failed', failureKind: 'agent', error, detail: output || undefined }
   }
 
+  /**
+   * Raise a `decision_required` notification when a run parks on an iteration-cap gate
+   * after spending its automatic budget — a quality companion at its rework cap or the
+   * requirements reviewer at its iteration cap. Without it the three-choice decision is
+   * reachable only by drilling into the parked step, so the run looks silently stuck.
+   * Best-effort: a missing notification service (tests) or block is a no-op.
+   */
+  private async raiseDecisionRequired(
+    workspaceId: string,
+    instance: ExecutionInstance,
+  ): Promise<void> {
+    if (!this.notificationService) return
+    const block = await this.blockRepository.get(workspaceId, instance.blockId)
+    if (!block) return
+    await this.notificationService.raise(workspaceId, {
+      type: 'decision_required',
+      blockId: block.id,
+      executionId: instance.id,
+      title: `"${block.title}" ran out of automatic iterations and needs your decision`,
+      body:
+        'An automatic review loop reached its iteration cap without converging. Open the ' +
+        'task to choose: one more round, proceed with the current result, or stop and reset.',
+      payload: { pipelineName: instance.pipelineName },
+    })
+  }
+
   /** Raise a `test_failed` notification when the Tester gate gives up. */
   private async raiseTestFailed(
     workspaceId: string,
@@ -2212,6 +2258,8 @@ export class ExecutionService {
         return this.completeRequirementsStep(workspaceId, instance, step, isFinalStep)
       }
       // `ready`/`exceeded`: re-park (a fresh decision id) and wait for the human again.
+      // At the cap, raise a notification so the three-choice decision is discoverable.
+      if (review.status === 'exceeded') await this.raiseDecisionRequired(workspaceId, instance)
       return this.parkStepOnDecision(workspaceId, instance, step)
     }
 
@@ -2223,6 +2271,7 @@ export class ExecutionService {
     if (review.status === 'incorporated') {
       return this.completeRequirementsStep(workspaceId, instance, step, isFinalStep)
     }
+    if (review.status === 'exceeded') await this.raiseDecisionRequired(workspaceId, instance)
     return this.parkStepOnDecision(workspaceId, instance, step)
   }
 
@@ -2320,7 +2369,7 @@ export class ExecutionService {
     proposal = '',
   ): Promise<AdvanceResult> {
     step.approval = { id: this.idGenerator.next('appr'), status: 'pending', proposal }
-    step.state = 'waiting_decision'
+    this.pauseStepForInput(step)
     instance.status = 'blocked'
     await this.updateBlockProgress(workspaceId, instance, 'blocked')
     await this.executionRepository.upsert(workspaceId, instance)
@@ -2898,6 +2947,9 @@ export class ExecutionService {
    * swallows its own errors, and the persisted run remains the source of truth.
    */
   private async emitInstance(workspaceId: string, instance: ExecutionInstance): Promise<void> {
+    // Stamp each step with the run id so a lone step (in a pushed event, a log line, a
+    // detail view) is self-describing for debugging; the value always equals the run id.
+    for (const step of instance.steps) step.runId = instance.id
     // The metrics rollup and the block fetch are independent, so run them concurrently
     // — the rollup adds no serial latency to the (frequent) emit path.
     const [, block] = await Promise.all([

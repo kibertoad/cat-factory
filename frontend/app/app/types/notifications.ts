@@ -12,6 +12,7 @@ export type NotificationType =
   | 'test_failed'
   | 'requirement_review'
   | 'clarity_review'
+  | 'decision_required'
 export type NotificationStatus = 'open' | 'acted' | 'dismissed'
 
 /** Optional structured detail for rendering a notification card. */
