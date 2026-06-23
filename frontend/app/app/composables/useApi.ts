@@ -376,7 +376,7 @@ export function useApi() {
     // Import an existing GitHub repo as a service frame (no bootstrap run).
     addServiceFromRepo: (
       workspaceId: string,
-      body: { repoGithubId: number; position?: Position; directory?: string },
+      body: { repoGithubId: number; position?: Position; directory?: string; isMonorepo?: boolean },
     ) => http<Block>(`${ws(workspaceId)}/blocks/from-repo`, { method: 'POST', body }),
 
     addTask: (
@@ -880,13 +880,6 @@ export function useApi() {
       http<GitHubRepo[]>(`${ws(workspaceId)}/github/repos`, {
         method: 'PUT',
         body: { repoGithubIds },
-      }),
-
-    // Flag (or unflag) a linked repo as a monorepo (lets several services target it).
-    setGitHubRepoMonorepo: (workspaceId: string, repoGithubId: number, isMonorepo: boolean) =>
-      http<GitHubRepo>(`${ws(workspaceId)}/github/repos/${repoGithubId}`, {
-        method: 'PATCH',
-        body: { isMonorepo },
       }),
 
     // Browse one level of a (monorepo) repo's tree to pin a service to a subdirectory.

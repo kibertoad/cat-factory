@@ -127,16 +127,18 @@ const runMenu = computed(() =>
 
 function remove() {
   if (!block.value) return
+  const id = block.value.id
+  // Close the inspector right away; the stores hide the block optimistically and
+  // restore it (with a toast) only if the backend delete fails.
+  ui.select(null)
   // A schedule owns its reused block + run history — removing the schedule deletes
   // them server-side, so delete the schedule rather than orphaning it.
   if (schedule.value) {
-    recurring.remove(schedule.value.id).catch(() => {})
-    ui.select(null)
+    void recurring.remove(schedule.value.id)
     return
   }
-  execution.cancel(block.value.id)
-  board.removeBlock(block.value.id)
-  ui.select(null)
+  execution.cancel(id)
+  void board.removeBlock(id)
 }
 
 // ---- failed agent run (bootstrap or execution) ------------------------------

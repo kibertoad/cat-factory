@@ -1,19 +1,53 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import type { Block, CloudProvider, InstanceSize } from '~/types/domain'
+import RepoTreeBrowser from '~/components/github/RepoTreeBrowser.vue'
 
 // Service-level (frame) configuration: where the Tester's local-mode infra comes
 // from (a docker-compose path, or an explicit "no infra dependencies" toggle — a
 // Tester pipeline can't start until one is set), plus the cloud provider + instance
 // size the service's container jobs run on. Autodiscovery suggests a compose path
-// when the service is added; it can be set/changed here later.
-const props = defineProps<{ block: Block }>()
+// when the service is added; it can be set/changed here later — or browsed for in
+// the backing repository.
+const props = defineProps<{
+  block: Block
+  // Repo backing this service, supplied by the add-service modal when the block is
+  // too fresh to be resolvable from the stores yet. Otherwise resolved below.
+  repo?: { githubId: number; directory?: string | null }
+}>()
 
 const board = useBoardStore()
 const accounts = useAccountsStore()
+const github = useGitHubStore()
+const services = useServicesStore()
 
 const composePath = computed(() => props.block.testComposePath ?? '')
 const noInfra = computed(() => props.block.noInfraDependencies === true)
+
+// The repo + service subdirectory backing this frame, for the compose-file browser.
+// A monorepo service isn't on the `github_repos` blockId link (that stays null), so
+// fall back to the service catalog mapping, which carries the repo + directory.
+const repoContext = computed<{ githubId: number; directory?: string | null } | undefined>(() => {
+  if (props.repo) return props.repo
+  const svc = services.serviceByFrameBlock[props.block.id]
+  if (svc?.repoGithubId != null) return { githubId: svc.repoGithubId, directory: svc.directory }
+  const r = github.repoForBlock(props.block.id)
+  return r ? { githubId: r.githubId } : undefined
+})
+
+// Compose-file picker: browse the repo and pin the compose file. The Tester runs
+// `docker compose -f <path>` from the CLONE ROOT, so the stored path is relative to
+// the repo root (the browser starts inside the service's subdirectory for convenience).
+const browseOpen = ref(false)
+const pickedPath = ref<string | undefined>(undefined)
+function openBrowse() {
+  pickedPath.value = composePath.value || undefined
+  browseOpen.value = true
+}
+function applyPicked() {
+  if (pickedPath.value) setComposePath(pickedPath.value)
+  browseOpen.value = false
+}
 
 // A service with no explicit provider inherits the active account's default (else the
 // built-in `cloudflare`); show that as the selected chip so the inherited value is visible.
@@ -61,18 +95,60 @@ const missingInfra = computed(() => !noInfra.value && composePath.value.trim() =
 
     <div class="space-y-1">
       <label class="text-[11px] text-slate-400">docker-compose path</label>
-      <UInput
-        :model-value="composePath"
-        size="xs"
-        placeholder="docker-compose.yml"
-        :disabled="noInfra"
-        @blur="(e: FocusEvent) => setComposePath((e.target as HTMLInputElement).value)"
-        @keydown.enter="(e: KeyboardEvent) => setComposePath((e.target as HTMLInputElement).value)"
-      />
+      <div class="flex items-center gap-1">
+        <UInput
+          :model-value="composePath"
+          size="xs"
+          class="flex-1"
+          placeholder="docker-compose.yml"
+          :disabled="noInfra"
+          @blur="(e: FocusEvent) => setComposePath((e.target as HTMLInputElement).value)"
+          @keydown.enter="
+            (e: KeyboardEvent) => setComposePath((e.target as HTMLInputElement).value)
+          "
+        />
+        <UButton
+          v-if="repoContext"
+          size="xs"
+          variant="soft"
+          color="neutral"
+          icon="i-lucide-folder-search"
+          :disabled="noInfra"
+          title="Browse the repository for the compose file"
+          @click="openBrowse"
+        />
+      </div>
       <p class="text-[11px] leading-snug text-slate-500">
         Used by the Tester to stand up the service's dependencies locally.
       </p>
     </div>
+
+    <UModal v-model:open="browseOpen" title="Select the docker-compose file">
+      <template #body>
+        <div v-if="repoContext" class="space-y-3">
+          <p class="text-xs text-slate-400">
+            Pick the compose file in the repository — its path is stored relative to the repo root.
+          </p>
+          <RepoTreeBrowser
+            v-model="pickedPath"
+            :repo-github-id="repoContext.githubId"
+            mode="file"
+            :start-path="repoContext.directory ?? ''"
+          />
+          <div class="flex items-center justify-between gap-2">
+            <p class="truncate text-xs text-slate-400">
+              <template v-if="pickedPath">
+                Selected: <code class="text-slate-200">{{ pickedPath }}</code>
+              </template>
+              <template v-else>No file selected.</template>
+            </p>
+            <UButton size="xs" color="primary" :disabled="!pickedPath" @click="applyPicked">
+              Use this file
+            </UButton>
+          </div>
+        </div>
+      </template>
+    </UModal>
 
     <label class="flex items-center gap-2 text-[11px] text-slate-400">
       <UCheckbox

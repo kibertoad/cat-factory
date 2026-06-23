@@ -11,7 +11,9 @@
 // browses its tree and picks the service's directory before adding (and may add
 // more than one, a subset of the repo's services).
 import GitHubConnect from '~/components/github/GitHubConnect.vue'
-import type { RepoTreeEntry } from '~/types/domain'
+import RepoTreeBrowser from '~/components/github/RepoTreeBrowser.vue'
+import ServiceTestConfig from '~/components/panels/inspector/ServiceTestConfig.vue'
+import ServiceFragments from '~/components/panels/inspector/ServiceFragments.vue'
 
 const ui = useUiStore()
 const github = useGitHubStore()
@@ -79,83 +81,34 @@ const hasRepos = computed(() => github.availableRepos.length > 0)
 const selectedRepo = computed(() =>
   github.availableRepos.find((r) => r.githubId === selectedRepoId.value),
 )
-const isMonorepo = computed(() => selectedRepo.value?.isMonorepo === true)
 
-// ---- monorepo flag + directory browser ----------------------------------
+// ---- monorepo flag + directory picker ------------------------------------
 
-// The monorepo flag is board-owned state on the repo projection, NOT modal-local: the
-// backend reads it to allow several services on one repo and to require a directory, so
-// the toggle persists immediately (the directory browser and `add` both depend on it
-// being set server-side). Flipping it on and then closing the modal without adding a
-// service intentionally leaves the repo flagged — it's benign (the subdirectory only
-// reaches agents once a directory-pinned service exists) and is undone by toggling off.
-const settingMonorepo = ref(false)
-async function toggleMonorepo(value: boolean) {
-  if (selectedRepoId.value === undefined) return
-  settingMonorepo.value = true
-  try {
-    await github.setMonorepo(selectedRepoId.value, value)
-    selectedDirectory.value = undefined
-    if (value) await browseTo('')
-  } catch (e) {
-    toast.add({
-      title: 'Could not update repository',
-      description: e instanceof Error ? e.message : String(e),
-      icon: 'i-lucide-triangle-alert',
-      color: 'error',
-    })
-  } finally {
-    settingMonorepo.value = false
-  }
-}
-
-const currentPath = ref('')
-const treeEntries = ref<RepoTreeEntry[]>([])
-const loadingTree = ref(false)
+// The monorepo flag is MODAL-LOCAL state, sent as part of the add-service request
+// rather than persisted up-front on a toggle: there's no need to round-trip a PATCH
+// before adding (browsing the tree needs only the repo id, and the backend flags the
+// repo + requires a directory when it creates the service). A repo already flagged a
+// monorepo (it backs other services) seeds the toggle on when selected.
+const isMonorepo = ref(false)
 const selectedDirectory = ref<string | undefined>(undefined)
 
-const dirEntries = computed(() => treeEntries.value.filter((e) => e.type === 'dir'))
-const breadcrumbs = computed(() => {
-  const segments = currentPath.value ? currentPath.value.split('/') : []
-  let acc = ''
-  return segments.map((seg) => {
-    acc = acc ? `${acc}/${seg}` : seg
-    return { label: seg, path: acc }
-  })
-})
-
-async function browseTo(path: string) {
-  if (selectedRepoId.value === undefined) return
-  loadingTree.value = true
-  try {
-    currentPath.value = path
-    treeEntries.value = await github.loadRepoTree(selectedRepoId.value, path)
-  } catch (e) {
-    treeEntries.value = []
-    toast.add({
-      title: 'Could not list directory',
-      description: e instanceof Error ? e.message : String(e),
-      icon: 'i-lucide-triangle-alert',
-      color: 'error',
-    })
-  } finally {
-    loadingTree.value = false
-  }
+function toggleMonorepo(value: boolean) {
+  isMonorepo.value = value
+  selectedDirectory.value = undefined
 }
 
-// When the selected repo changes, load its tree if it's already a monorepo.
+// On repo change, seed the toggle from the repo's persisted flag and clear the rest.
 watch(selectedRepoId, () => {
+  isMonorepo.value = selectedRepo.value?.isMonorepo === true
   selectedDirectory.value = undefined
-  currentPath.value = ''
-  treeEntries.value = []
-  if (isMonorepo.value) void browseTo('')
+  configuredBlockId.value = undefined
 })
 
 function resetSelection() {
   selectedRepoId.value = undefined
   selectedDirectory.value = undefined
-  currentPath.value = ''
-  treeEntries.value = []
+  isMonorepo.value = false
+  configuredBlockId.value = undefined
 }
 
 // The App's installation settings page — where the user grants it access to a
@@ -172,37 +125,44 @@ function openManageInstall() {
   if (manageInstallUrl.value) window.open(manageInstallUrl.value, '_blank', 'noopener')
 }
 
-// A monorepo service needs a chosen directory; a whole-repo service does not.
+// The just-added service, kept on the board store so the user can configure it (test
+// infra + fragments) right here — the same controls as the inspector. A monorepo can
+// host several services, so adding another keeps the modal open; a whole-repo service
+// can only be added once (its repo is then on the board).
+const configuredBlockId = ref<string | undefined>(undefined)
+const configuredDirectory = ref<string | undefined>(undefined)
+const configuredBlock = computed(() =>
+  configuredBlockId.value ? board.getBlock(configuredBlockId.value) : undefined,
+)
+
+// A monorepo service needs a chosen directory; a whole-repo service can be added once.
 const canAdd = computed(
   () =>
     !needsGitHub.value &&
     selectedRepoId.value !== undefined &&
-    (!isMonorepo.value || !!selectedDirectory.value),
+    (isMonorepo.value ? !!selectedDirectory.value : !configuredBlockId.value),
 )
 
 async function add() {
   if (!canAdd.value || selectedRepoId.value === undefined) return
   adding.value = true
   try {
-    const block = await board.addServiceFromRepo(
-      selectedRepoId.value,
-      isMonorepo.value ? selectedDirectory.value : undefined,
-    )
+    const block = await board.addServiceFromRepo(selectedRepoId.value, {
+      directory: isMonorepo.value ? selectedDirectory.value : undefined,
+      isMonorepo: isMonorepo.value,
+    })
     // Refresh the projection so the new repo↔block link is reflected locally.
     await github.load()
+    configuredBlockId.value = block.id
+    configuredDirectory.value = isMonorepo.value ? selectedDirectory.value : undefined
     toast.add({
       title: 'Service added',
-      description: `${block.title} is now on the board.`,
+      description: `${block.title} is on the board — configure it below.`,
       icon: 'i-lucide-check',
       color: 'success',
     })
-    // For a monorepo keep the modal open so the user can add more of its services;
-    // otherwise close as before.
-    if (isMonorepo.value) {
-      selectedDirectory.value = undefined
-    } else {
-      ui.closeAddService()
-    }
+    // Ready to pick another monorepo service (the just-added directory is taken).
+    selectedDirectory.value = undefined
   } catch (e) {
     toast.add({
       title: 'Could not add service',
@@ -213,6 +173,10 @@ async function add() {
   } finally {
     adding.value = false
   }
+}
+
+function done() {
+  ui.closeAddService()
 }
 </script>
 
@@ -262,9 +226,8 @@ async function add() {
           <div v-if="selectedRepoId !== undefined" class="space-y-3">
             <USwitch
               :model-value="isMonorepo"
-              :loading="settingMonorepo"
               label="This is a monorepo (hosts more than one service)"
-              description="Flag the repo so you can add several services from it, each pinned to a subdirectory."
+              description="Add several services from one repo, each pinned to a subdirectory."
               @update:model-value="toggleMonorepo"
             />
 
@@ -276,84 +239,37 @@ async function add() {
                 Browse the repository and pick the directory of the service you want to add. Agents
                 working on this service will run within that subdirectory.
               </p>
-
-              <!-- breadcrumbs -->
-              <div class="mb-2 flex flex-wrap items-center gap-1 text-sm">
-                <UButton
-                  size="xs"
-                  variant="ghost"
-                  color="neutral"
-                  icon="i-lucide-folder-tree"
-                  :disabled="loadingTree"
-                  @click="browseTo('')"
-                >
-                  root
-                </UButton>
-                <template v-for="crumb in breadcrumbs" :key="crumb.path">
-                  <span class="text-slate-600">/</span>
-                  <UButton
-                    size="xs"
-                    variant="ghost"
-                    color="neutral"
-                    :disabled="loadingTree"
-                    @click="browseTo(crumb.path)"
-                  >
-                    {{ crumb.label }}
-                  </UButton>
+              <RepoTreeBrowser
+                v-model="selectedDirectory"
+                :repo-github-id="selectedRepoId!"
+                mode="dir"
+              />
+              <p class="mt-2 truncate text-xs text-slate-400">
+                <template v-if="selectedDirectory">
+                  Service directory:
+                  <code class="text-slate-200">{{ selectedDirectory }}</code>
                 </template>
-              </div>
-
-              <!-- directory list -->
-              <div class="max-h-56 overflow-auto rounded border border-slate-800">
-                <div v-if="loadingTree" class="p-3 text-sm text-slate-400">Loading…</div>
-                <div v-else-if="dirEntries.length === 0" class="p-3 text-sm text-slate-400">
-                  No subdirectories here.
-                </div>
-                <ul v-else class="divide-y divide-slate-800">
-                  <li
-                    v-for="entry in dirEntries"
-                    :key="entry.path"
-                    class="flex items-center justify-between gap-2 px-3 py-1.5"
-                  >
-                    <button
-                      type="button"
-                      class="flex items-center gap-2 truncate text-sm text-slate-200 hover:text-primary-400"
-                      @click="browseTo(entry.path)"
-                    >
-                      <UIcon name="i-lucide-folder" class="h-4 w-4 shrink-0 text-amber-400" />
-                      <span class="truncate">{{ entry.name }}</span>
-                    </button>
-                    <UButton
-                      size="xs"
-                      variant="soft"
-                      :color="selectedDirectory === entry.path ? 'primary' : 'neutral'"
-                      @click="selectedDirectory = entry.path"
-                    >
-                      {{ selectedDirectory === entry.path ? 'Selected' : 'Select' }}
-                    </UButton>
-                  </li>
-                </ul>
-              </div>
-
-              <div class="mt-2 flex items-center justify-between gap-2">
-                <p class="truncate text-xs text-slate-400">
-                  <template v-if="selectedDirectory">
-                    Service directory:
-                    <code class="text-slate-200">{{ selectedDirectory }}</code>
-                  </template>
-                  <template v-else>No directory selected yet.</template>
-                </p>
-                <UButton
-                  v-if="currentPath"
-                  size="xs"
-                  variant="soft"
-                  :color="selectedDirectory === currentPath ? 'primary' : 'neutral'"
-                  @click="selectedDirectory = currentPath"
-                >
-                  Use this folder
-                </UButton>
-              </div>
+                <template v-else>No directory selected yet.</template>
+              </p>
             </div>
+          </div>
+
+          <!-- just-added service: configure it with the same controls as the inspector -->
+          <div
+            v-if="configuredBlock"
+            class="space-y-4 rounded-md border border-emerald-900/50 bg-emerald-950/20 p-3"
+          >
+            <div
+              class="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-emerald-400"
+            >
+              <UIcon name="i-lucide-check" class="h-3.5 w-3.5" />
+              {{ configuredBlock.title }} added — configure it
+            </div>
+            <ServiceTestConfig
+              :block="configuredBlock"
+              :repo="{ githubId: selectedRepoId!, directory: configuredDirectory }"
+            />
+            <ServiceFragments :block="configuredBlock" />
           </div>
 
           <div class="flex flex-wrap items-center gap-2">
@@ -381,15 +297,19 @@ async function add() {
             </UButton>
           </div>
 
-          <div class="flex justify-end">
+          <div class="flex justify-end gap-2">
+            <UButton v-if="configuredBlock" color="neutral" variant="soft" size="sm" @click="done">
+              Done
+            </UButton>
             <UButton
+              v-if="!configuredBlock || isMonorepo"
               color="primary"
               icon="i-lucide-plus"
               :loading="adding"
               :disabled="!canAdd"
               @click="add"
             >
-              Add service
+              {{ configuredBlock && isMonorepo ? 'Add another service' : 'Add service' }}
             </UButton>
           </div>
         </template>

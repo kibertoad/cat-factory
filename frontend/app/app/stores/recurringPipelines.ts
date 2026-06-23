@@ -7,6 +7,7 @@ import type {
   UpdateScheduleInput,
 } from '~/types/recurring'
 import { useWorkspaceStore } from '~/stores/workspace'
+import { useBoardStore } from '~/stores/board'
 
 /**
  * The workspace's recurring pipelines — schedules that re-run a pipeline against a
@@ -16,6 +17,7 @@ import { useWorkspaceStore } from '~/stores/workspace'
  */
 export const useRecurringPipelinesStore = defineStore('recurringPipelines', () => {
   const api = useApi()
+  const toast = useToast()
 
   const schedules = ref<PipelineSchedule[]>([])
   /** Lazily-loaded run history, keyed by schedule id. */
@@ -51,11 +53,32 @@ export const useRecurringPipelinesStore = defineStore('recurringPipelines', () =
     return updated
   }
 
+  /**
+   * Delete a recurring pipeline. Deleting the schedule cascades to its reused block
+   * + run history server-side, so we hide BOTH immediately (optimistic) and restore
+   * them with a toast if the backend rejects the delete.
+   */
   async function remove(id: string) {
     const ws = useWorkspaceStore()
-    await api.deleteRecurringPipeline(ws.requireId(), id)
-    delete runsBySchedule.value[id]
-    await ws.refresh()
+    const board = useBoardStore()
+    const sched = schedules.value.find((s) => s.id === id)
+    const blockSnap = sched ? board.detach(sched.blockId) : null
+    const prevSchedules = schedules.value
+    schedules.value = schedules.value.filter((s) => s.id !== id)
+    try {
+      await api.deleteRecurringPipeline(ws.requireId(), id)
+      delete runsBySchedule.value[id]
+      await ws.refresh()
+    } catch (e) {
+      schedules.value = prevSchedules
+      if (blockSnap) board.reattach(blockSnap)
+      toast.add({
+        title: 'Could not delete recurring pipeline',
+        description: e instanceof Error ? e.message : String(e),
+        icon: 'i-lucide-triangle-alert',
+        color: 'error',
+      })
+    }
   }
 
   async function runNow(id: string) {
