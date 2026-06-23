@@ -46,6 +46,13 @@ export interface ServerContainer extends Core {
    * not selectable.
    */
   cloudflareModelsEnabled?: boolean
+  /**
+   * The deployment's direct-provider base-URL resolver (env override → built-in default,
+   * or null when none — e.g. an unconfigured operator-hosted LiteLLM gateway). The model
+   * catalog uses it to gate selectability: an OpenAI-compatible provider is only
+   * selectable once its base URL resolves, mirroring what the dispatch path requires.
+   */
+  baseUrlFor?: (provider: string) => string | null | undefined
 }
 
 /** Hono generics shared by the cross-runtime controllers (Variables only — no Bindings). */

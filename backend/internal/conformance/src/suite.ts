@@ -442,6 +442,28 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         expect(or.flavor).toBe('direct')
       })
 
+      it('keeps a base-URL-required provider (LiteLLM) unselectable with a key but no base URL', async () => {
+        const { call, createWorkspace } = harness.makeApp(undefined, {
+          cloudflareModelsEnabled: false,
+        })
+        const { workspace } = await createWorkspace()
+        const models = `/workspaces/${workspace.id}/models`
+
+        // LiteLLM is operator-hosted: it has NO built-in base URL, and the test env sets
+        // no LITELLM_BASE_URL. Connecting a key alone must NOT make it selectable — the
+        // run would otherwise pass the start guard and then throw "No base URL configured"
+        // at dispatch. (OpenRouter, with a public default, IS selectable on a key — above.)
+        const created = await call('POST', `/workspaces/${workspace.id}/api-keys`, {
+          provider: 'litellm',
+          label: 'team',
+          key: 'sk-litellm-secret',
+        })
+        expect(created.status).toBe(201)
+
+        const after = await call<Opt[]>('GET', models)
+        expect(after.body.find((m) => m.id === 'litellm-default')?.available).toBe(false)
+      })
+
       it('blocks starting a pipeline with an unconfigured model, then allows it after a key is added', async () => {
         const { call, createWorkspace } = harness.makeApp(undefined, {
           cloudflareModelsEnabled: false,

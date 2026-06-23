@@ -72,7 +72,7 @@ import { executionRuntime } from './execution/config.js'
 import { PgBossBootstrapRunner } from './execution/bootstrapRunner.js'
 import { PgBossWorkRunner } from './execution/pgBossRunner.js'
 import { createNodeGateways } from './gateways.js'
-import { createNodeModelProviderResolver } from './modelProvider.js'
+import { baseUrlForNode, createNodeModelProviderResolver } from './modelProvider.js'
 import { NodeEventPublisher, type NodeRealtimeHub } from './realtime.js'
 import {
   DrizzleGitHubInstallationRepository,
@@ -1052,7 +1052,13 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // The pipeline-start guard resolves what's configured for a workspace + initiator.
     resolveProviderCapabilities: (workspaceId, initiatedBy) =>
       resolveWorkspaceCapabilities(
-        { apiKeys, subscriptions, personalSubscriptions, cloudflareModelsEnabled },
+        {
+          apiKeys,
+          subscriptions,
+          personalSubscriptions,
+          cloudflareModelsEnabled,
+          baseUrlFor: (provider) => baseUrlForNode(provider, env),
+        },
         workspaceId,
         initiatedBy,
       ),
@@ -1080,6 +1086,9 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     apiKeys,
     // Whether the opt-in Cloudflare Workers AI lib is enabled (REST creds present).
     cloudflareModelsEnabled,
+    // The direct-provider base-URL resolver the catalog uses to gate selectability on a
+    // resolvable endpoint (e.g. LiteLLM stays unselectable until LITELLM_BASE_URL is set).
+    baseUrlFor: (provider) => baseUrlForNode(provider, env),
   }
 }
 

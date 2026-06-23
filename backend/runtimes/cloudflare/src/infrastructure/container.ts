@@ -1275,7 +1275,13 @@ export function buildContainer(
     // The pipeline-start guard resolves what's configured for a workspace + initiator.
     resolveProviderCapabilities: (workspaceId, initiatedBy) =>
       resolveWorkspaceCapabilities(
-        { apiKeys, subscriptions, personalSubscriptions, cloudflareModelsEnabled },
+        {
+          apiKeys,
+          subscriptions,
+          personalSubscriptions,
+          cloudflareModelsEnabled,
+          baseUrlFor: (provider) => baseUrlFor(provider, env),
+        },
         workspaceId,
         initiatedBy,
       ),
@@ -1297,6 +1303,9 @@ export function buildContainer(
     apiKeys,
     // Whether the opt-in Cloudflare Workers AI lib is enabled (the `AI` binding).
     cloudflareModelsEnabled,
+    // The direct-provider base-URL resolver the catalog uses to gate selectability on a
+    // resolvable endpoint (e.g. LiteLLM stays unselectable until LITELLM_BASE_URL is set).
+    baseUrlFor: (provider) => baseUrlFor(provider, env),
     gateways: {
       // Real-time event delivery via the per-workspace WorkspaceEventsHub DO (when
       // the WORKSPACE_EVENTS namespace is bound; absent → the events route 501s).

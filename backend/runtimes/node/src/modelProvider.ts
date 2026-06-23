@@ -31,7 +31,7 @@ const NODE_BASE_URLS: Record<string, string> = {
 }
 
 /** The base URL for a direct provider: env override (e.g. QWEN_BASE_URL), else default. */
-function baseUrlForNode(provider: string, env: NodeJS.ProcessEnv): string | undefined {
+export function baseUrlForNode(provider: string, env: NodeJS.ProcessEnv): string | undefined {
   // `||` not `??`: a set-but-blank override must fall back to the default.
   return env[`${provider.toUpperCase()}_BASE_URL`] || NODE_BASE_URLS[provider]
 }

@@ -3,6 +3,7 @@
 '@cat-factory/kernel': minor
 '@cat-factory/agents': minor
 '@cat-factory/spend': minor
+'@cat-factory/server': minor
 '@cat-factory/app': minor
 '@cat-factory/worker': minor
 '@cat-factory/node-server': minor
@@ -18,5 +19,11 @@ so `LITELLM_BASE_URL` is required to enable it. Ships curated, direct-only catal
 (OpenRouter: Claude Opus, Gemini 3 Pro, GPT-5.5, DeepSeek, Llama 3.3; LiteLLM: a generic
 gateway-default entry) with approximate pricing/context, overridable via
 `SPEND_MODEL_PRICES`.
+
+Catalog selectability now also gates on a **resolvable base URL**: an OpenAI-compatible
+provider (everything but `openai`/`anthropic`) is only offered once its base URL resolves,
+so a LiteLLM model stays unselectable — and a pipeline using it is blocked at start —
+until `LITELLM_BASE_URL` is set, instead of passing the guard and throwing "No base URL
+configured" mid-run. Wired symmetrically into both facades' capability resolution.
 
 **Wire change:** `apiKeyProviderSchema` is widened with `'openrouter'` and `'litellm'`.
