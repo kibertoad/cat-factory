@@ -56,10 +56,13 @@ function labelForStep(s: {
   state: string
   agentKind?: string
   approval?: { status: string } | null
+  companion?: { exceeded?: boolean } | null
   startingContainer?: boolean
 }) {
   // A requirements gate mid-cycle reads its working stage, not "Needs approval".
   if (s.agentKind === 'requirements-review' && reqStageLabel.value) return reqStageLabel.value
+  // A companion that spent its rework budget needs a decision, not an approval.
+  if (s.approval?.status === 'pending' && s.companion?.exceeded) return 'Needs decision'
   if (s.approval?.status === 'pending') return 'Needs approval'
   // A container-backed step whose container is still cold-booting (only while the
   // run is live — a failed run's mid-flight step is no longer spinning up).
@@ -80,6 +83,31 @@ function openApprovalFor(approvalId: string) {
 function openStep(i: number) {
   if (instance.value) ui.openStepDetail(instance.value.id, i)
 }
+
+// Stop the run WITHOUT deleting it: halts the container + driver and records a
+// `cancelled` failure, leaving the run readable + retryable (the block goes
+// `blocked`). The destructive reset (delete the run, return the task to `planned`)
+// is a separate, explicit action.
+const stopping = ref(false)
+async function stopRun() {
+  if (!instance.value || stopping.value) return
+  stopping.value = true
+  try {
+    await execution.stop(instance.value.id)
+  } finally {
+    stopping.value = false
+  }
+}
+const resetting = ref(false)
+async function resetRun() {
+  if (resetting.value) return
+  resetting.value = true
+  try {
+    await execution.cancel(props.block.id)
+  } finally {
+    resetting.value = false
+  }
+}
 </script>
 
 <template>
@@ -90,15 +118,34 @@ function openStep(i: number) {
         <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
           {{ instance.pipelineName }}
         </span>
-        <UButton
-          icon="i-lucide-square"
-          color="error"
-          variant="ghost"
-          size="xs"
-          @click="execution.cancel(block.id)"
-        >
-          Stop
-        </UButton>
+        <div class="flex items-center gap-1">
+          <!-- Stop without deleting: halts the run but keeps it readable + retryable. -->
+          <UButton
+            icon="i-lucide-square"
+            color="warning"
+            variant="ghost"
+            size="xs"
+            :loading="stopping"
+            :disabled="resetting"
+            title="Stop the run but keep it (readable + retryable)"
+            @click="stopRun"
+          >
+            Stop
+          </UButton>
+          <!-- Destructive: discard the run and return the task to planned. -->
+          <UButton
+            icon="i-lucide-trash-2"
+            color="error"
+            variant="ghost"
+            size="xs"
+            :loading="resetting"
+            :disabled="stopping"
+            title="Discard this run and reset the task to planned"
+            @click="resetRun"
+          >
+            Reset
+          </UButton>
+        </div>
       </div>
       <ul class="space-y-1">
         <li
@@ -169,6 +216,20 @@ function openStep(i: number) {
               <UIcon name="i-lucide-loader-circle" class="h-3 w-3 animate-spin" />
               {{ reqStageLabel }}
             </span>
+            <!-- A companion that spent its rework budget parks on the iteration-cap
+                 gate: it needs a 3-way DECISION (one more round / proceed / stop &
+                 reset), not a plain approval — flag it distinctly so it can't read as
+                 a normal "Approve". Opens the same detail surface (IterationCapPrompt). -->
+            <UButton
+              v-else-if="s.approval && s.approval.status === 'pending' && s.companion?.exceeded"
+              color="error"
+              variant="soft"
+              size="xs"
+              icon="i-lucide-alert-triangle"
+              @click="openApprovalFor(s.approval.id)"
+            >
+              Decide
+            </UButton>
             <UButton
               v-else-if="s.approval && s.approval.status === 'pending'"
               color="warning"

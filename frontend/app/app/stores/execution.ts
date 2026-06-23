@@ -219,6 +219,18 @@ export const useExecutionStore = defineStore('execution', () => {
     await ws.refresh()
   }
 
+  /**
+   * Stop a running execution WITHOUT deleting it: halts the container + durable driver
+   * and records the run as `cancelled` (a retryable failure), leaving the block
+   * `blocked`. Unlike {@link cancel} the run is kept — its steps/output stay readable on
+   * the board and it can be retried from where it stopped. `runId` is the execution id.
+   */
+  async function stop(runId: string) {
+    const ws = useWorkspaceStore()
+    await api.stopAgentRun(ws.requireId(), runId)
+    await ws.refresh()
+  }
+
   return {
     instances,
     hydrate,
@@ -238,5 +250,6 @@ export const useExecutionStore = defineStore('execution', () => {
     resolveCompanionExceeded,
     mergePr,
     cancel,
+    stop,
   }
 })
