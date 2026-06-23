@@ -171,6 +171,7 @@ describe('llm proxy /v1/chat/completions', () => {
     // Compact wire shape: the heavy bodies are never pushed over the stream.
     expect(activity).not.toHaveProperty('promptText')
     expect(activity).not.toHaveProperty('responseText')
+    expect(activity).not.toHaveProperty('reasoningText')
   })
 
   it('returns 502 when the locked provider has no configured key', async () => {

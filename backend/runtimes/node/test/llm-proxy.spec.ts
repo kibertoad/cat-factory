@@ -107,6 +107,7 @@ if (databaseUrl) {
       // Compact wire shape: the heavy bodies are never pushed over the stream.
       expect(activity).not.toHaveProperty('promptText')
       expect(activity).not.toHaveProperty('responseText')
+      expect(activity).not.toHaveProperty('reasoningText')
     })
   })
 } else {
