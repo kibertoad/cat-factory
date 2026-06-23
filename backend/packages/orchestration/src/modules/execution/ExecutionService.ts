@@ -2211,8 +2211,10 @@ export class ExecutionService {
     )
     // Nothing to fold in (every finding dismissed, no answered replies, no redo
     // feedback) → the requirements stand as-is. Skip the rework + re-review LLM calls
-    // and settle the review directly; downstream agents fall back to the original
-    // description (nothing was clarified). Mirrors a polling gate's precheck skip.
+    // and settle the review directly. `markIncorporated` preserves any
+    // `incorporatedRequirements` from an earlier iteration, so downstream consumes that
+    // prior doc when one exists, else falls back to the original description (nothing
+    // was clarified). Mirrors a polling gate's precheck skip.
     if (!hasNotesToIncorporate(review.items, feedback)) {
       const settled = await this.requireReviewService().markIncorporated(workspaceId, review.id)
       await this.emitRequirementReview(workspaceId, settled)
