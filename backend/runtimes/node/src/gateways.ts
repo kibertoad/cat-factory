@@ -14,15 +14,27 @@ import {
   createWebSearchUpstreamFromEnv,
 } from '@cat-factory/server'
 
-// Node implementations of the runtime gateway seams. This MVP keeps them simple and
-// dependency-free: real-time delivery and async GitHub ingest fall back to the
-// "inline / not enabled" paths the shared controllers already handle, and the LLM
+// Node implementations of the runtime gateway seams. Async GitHub ingest still falls
+// back to the "inline / not enabled" paths the shared controllers handle, and the LLM
 // proxy forwards to OpenAI-compatible providers over HTTP (no in-process binding).
 //
-// Production swap-ins (follow-ups): a WebSocket hub (Postgres LISTEN/NOTIFY) for
-// `realtime`, and pg-boss-backed `githubBackfill` / `githubWebhook`.
+// Real-time delivery, by contrast, IS implemented — but NOT through this gateway seam.
+// The seam returns a Hono `Response` (the Cloudflare model: a 101 from the per-workspace
+// Durable Object). `@hono/node-server` can't complete a WebSocket upgrade from a
+// `Response`, so the Node facade intercepts the `/workspaces/:ws/events` upgrade on the
+// HTTP server directly (see `attachRealtime` in `realtime.ts`) before it reaches this
+// controller. This gateway therefore stays a no-op: it is never invoked for an actual
+// upgrade on Node, and the shared events route only ever falls through to its 426/501.
+//
+// Production swap-in for a multi-replica deployment (follow-up): front the in-process
+// `NodeRealtimeHub` with a shared bus (Postgres LISTEN/NOTIFY); single-process Node and
+// local mode need nothing more. Async GitHub ingest: pg-boss `githubBackfill` / `githubWebhook`.
 
-/** No real-time transport yet: the events route replies 501 and clients reconcile on poll. */
+/**
+ * No-op: Node handles the WebSocket upgrade at the HTTP-server level (`attachRealtime`),
+ * not through this Response-returning seam — see the file header. Returning null keeps
+ * the shared controller's contract intact for the (unreachable on Node) delegation path.
+ */
 class NodeRealtimeGateway implements RealtimeGateway {
   upgrade(): Promise<Response | null> {
     return Promise.resolve(null)

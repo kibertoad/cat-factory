@@ -919,11 +919,11 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     executionRepository: repos.executionRepository,
     // Clear a finished run's personal-credential activation promptly (TTL sweep is the backstop).
     subscriptionActivationRepository: new DrizzleSubscriptionActivationRepository(options.db),
-    // In-org shared services. NOTE: the Node facade has no real-time transport yet (runs fall
-    // back to the engine's NoopEventPublisher), so it does NOT wrap a FanOutEventPublisher the
-    // way the Cloudflare facade does. When real-time lands here, decorate the publisher with
-    // `FanOutEventPublisher` (from @cat-factory/server) — wired with these two repos — to fan a
-    // shared service's live events out to every board that mounts it.
+    // In-org shared services. When a realtime hub is wired (start()), the engine's
+    // event publisher (composed above) is a `FanOutEventPublisher` over these two repos,
+    // so a shared service's live events reach every board that mounts it — parity with
+    // the Cloudflare facade. Without a hub (createServer/tests) the engine uses its
+    // NoopEventPublisher and nothing is pushed.
     serviceRepository: repos.serviceRepository,
     workspaceMountRepository: repos.workspaceMountRepository,
     tokenUsageRepository: repos.tokenUsageRepository,
