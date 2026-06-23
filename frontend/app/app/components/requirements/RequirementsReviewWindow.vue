@@ -8,6 +8,7 @@
 // document — not the original description + linked docs/tasks — is what every downstream
 // agent step and the spec-writer consume.
 import { parseOutputOutline } from '~/utils/agentOutput'
+import StepRestartControl from '~/components/panels/StepRestartControl.vue'
 import type {
   RequirementReview,
   RequirementReviewItem,
@@ -31,7 +32,7 @@ const showRedo = ref(false)
 // review load on EVERY open regardless of navigation route: the host mounts this window
 // fresh each open, so a non-immediate per-window watch used to leave it empty for whichever
 // route (a pipeline step / "Review & approve") didn't warm the cache by selecting the block.
-const { open, blockId, close } = useResultView('requirements-review', {
+const { open, blockId, instanceId, stepIndex, close } = useResultView('requirements-review', {
   onOpen: (id) => {
     drafts.value = {}
     redoComment.value = ''
@@ -237,6 +238,11 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
             <UBadge v-if="review" color="neutral" variant="subtle" size="sm">
               Iteration {{ iteration }} / {{ maxIterations }}
             </UBadge>
+            <StepRestartControl
+              :instance-id="instanceId"
+              :step-index="stepIndex"
+              @restarted="close"
+            />
             <UButton icon="i-lucide-x" color="neutral" variant="ghost" size="sm" @click="close" />
           </div>
         </header>
