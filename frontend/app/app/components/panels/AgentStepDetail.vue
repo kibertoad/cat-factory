@@ -144,6 +144,7 @@ watch(
     draftTarget.value = null
     draftBody.value = ''
     rejectArmed.value = false
+    restartArmed.value = false
     editing.value = false
     draftProposal.value = ''
     if (key) void nextTick(() => scrollEl.value?.scrollTo({ top: 0 }))
@@ -371,6 +372,27 @@ async function reject() {
   }
 }
 
+// --- restart from this step --------------------------------------------------
+// Re-run the pipeline from this step onward: the server resets this step + every
+// later step's iteration counters and re-drives a fresh run, preserving the earlier
+// steps' outputs as handoff context. Destructive (later steps' results are dropped),
+// so it's a two-click confirm like reject. Offered whenever the run isn't mid-flight
+// on an unresolved gate for THIS step (the approval rail owns that interaction).
+const restartArmed = ref(false)
+const restarting = ref(false)
+const canRestart = computed(() => !!instance.value && !approvalPending.value)
+async function restartFromHere() {
+  if (!ctx.value || restarting.value) return
+  restarting.value = true
+  try {
+    await execution.restartFromStep(ctx.value.instanceId, ctx.value.stepIndex)
+    close()
+  } finally {
+    restarting.value = false
+    restartArmed.value = false
+  }
+}
+
 // Keep the in-document highlights in sync as the output renders or comments change.
 watch(
   [approvalPending, () => step.value?.output, reviewComments, draftTarget],
@@ -480,6 +502,41 @@ watch(
                 title="Copy raw output"
                 @click="copyOutput"
               />
+              <!-- Restart the pipeline from this step (two-click confirm: resetting
+                   later steps is destructive). The earlier steps' outputs are kept as
+                   handoff context server-side. -->
+              <template v-if="canRestart">
+                <UButton
+                  v-if="!restartArmed"
+                  icon="i-lucide-rotate-ccw"
+                  color="neutral"
+                  variant="ghost"
+                  size="sm"
+                  title="Restart pipeline from this step"
+                  @click="restartArmed = true"
+                />
+                <template v-else>
+                  <UButton
+                    color="warning"
+                    variant="soft"
+                    size="sm"
+                    icon="i-lucide-rotate-ccw"
+                    :loading="restarting"
+                    @click="restartFromHere"
+                  >
+                    Restart from here
+                  </UButton>
+                  <UButton
+                    color="neutral"
+                    variant="ghost"
+                    size="sm"
+                    :disabled="restarting"
+                    @click="restartArmed = false"
+                  >
+                    Cancel
+                  </UButton>
+                </template>
+              </template>
               <UButton
                 icon="i-lucide-x"
                 color="neutral"

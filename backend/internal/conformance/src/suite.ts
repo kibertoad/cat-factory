@@ -1181,6 +1181,88 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         expect(step.output).toContain(`[desc]${REWORKED}[/desc]`)
       })
 
+      it('restarts a run from a chosen step, preserving prior outputs and the block requirements', async () => {
+        // "Restart from this step" re-runs the pipeline from a human-chosen step
+        // (even on a finished run), keeping the earlier steps' outputs as handoff
+        // context and resetting that step + every later one. The requirements a
+        // restarted step receives must survive the restart: they live on the
+        // requirement-review record, not the run, so a restarted spec-writer/coder
+        // still reads the incorporated document. Driving it on BOTH runtimes pins the
+        // restart endpoint + the handoff so neither facade can drift.
+        const REWORKED = '# Login — Requirements\n\nSessions SHALL persist for 24h.'
+        const app = harness.makeApp({ confidence: 1, echoDescription: true })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        await app.seedIncorporatedReview(wsId, 'task_login', REWORKED)
+
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Spec then code',
+          agentKinds: ['spec-writer', 'coder'],
+        })
+        const start = await app.call<ExecutionInstance>(
+          'POST',
+          `/workspaces/${wsId}/blocks/task_login/executions`,
+          { pipelineId: pipeline.body.id },
+        )
+        expect(start.status).toBe(201)
+
+        const firstRun = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+        expect(firstRun.status).toBe('done')
+        expect(firstRun.steps.map((s) => s.state)).toEqual(['done', 'done'])
+        const originalSpec = firstRun.steps[0]!.output
+        expect(originalSpec).toContain('[spec-writer]')
+
+        // Restart from the LAST step (coder). The earlier spec-writer is preserved
+        // untouched; the coder is reset to re-run. A fresh run id is minted and the
+        // response comes back already running on the chosen step.
+        const restarted = await app.call<ExecutionInstance>(
+          'POST',
+          `/workspaces/${wsId}/executions/${firstRun.id}/restart`,
+          { fromStepIndex: 1 },
+        )
+        expect(restarted.status).toBe(200)
+        expect(restarted.body.id).not.toBe(firstRun.id)
+        expect(restarted.body.status).toBe('running')
+        expect(restarted.body.currentStep).toBe(1)
+        // Step 0 is preserved verbatim (output + done state are the handoff context).
+        expect(restarted.body.steps[0]!.state).toBe('done')
+        expect(restarted.body.steps[0]!.output).toBe(originalSpec)
+        // Step 1 was reset (no stale output; re-running, not done).
+        expect(restarted.body.steps[1]!.state).not.toBe('done')
+        expect(restarted.body.steps[1]!.output).toBeFalsy()
+
+        const afterCoder = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+        expect(afterCoder.status).toBe('done')
+        expect(afterCoder.id).toBe(restarted.body.id)
+        // The restarted coder still received the block's incorporated requirements —
+        // not the raw description — proving the restart preserved the requirements handoff.
+        expect(afterCoder.steps[1]!.output).toContain(`[desc]${REWORKED}[/desc]`)
+
+        // Restarting from step 0 re-runs the spec-writer itself, which must ALSO still
+        // receive the incorporated requirements (the explicit spec-writer guarantee).
+        const restartedHead = await app.call<ExecutionInstance>(
+          'POST',
+          `/workspaces/${wsId}/executions/${afterCoder.id}/restart`,
+          { fromStepIndex: 0 },
+        )
+        expect(restartedHead.status).toBe(200)
+        expect(restartedHead.body.currentStep).toBe(0)
+        expect(restartedHead.body.steps.every((s) => s.state !== 'done')).toBe(true)
+
+        const afterHead = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+        expect(afterHead.status).toBe('done')
+        expect(afterHead.steps[0]!.output).toContain(`[desc]${REWORKED}[/desc]`)
+
+        // An out-of-range step index is rejected (422) rather than stranding the run.
+        const bad = await app.call(
+          'POST',
+          `/workspaces/${wsId}/executions/${afterHead.id}/restart`,
+          { fromStepIndex: 9 },
+        )
+        expect(bad.status).toBe(422)
+      })
+
       it('wires the requirements-review re-review endpoint and rejects it out of order', async () => {
         // The dedicated review window resumes a parked run through bespoke endpoints
         // (re-review / proceed / resolve-exceeded) routed via the execution service. They

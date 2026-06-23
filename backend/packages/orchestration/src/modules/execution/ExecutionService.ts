@@ -106,7 +106,7 @@ import type { BoardService } from '../board/BoardService.js'
 import type { SpendService } from '@cat-factory/spend'
 import { requireWorkspace } from '@cat-factory/kernel'
 import type { AdvanceOptions, AdvanceResult } from './advance.js'
-import { planResumedSteps } from './retry.logic.js'
+import { planResumedSteps, planRestartFromStep } from './retry.logic.js'
 import {
   isContainerEvictionError,
   isTransientEviction,
@@ -3537,6 +3537,94 @@ export class ExecutionService {
     await activate?.(newId)
     // Replace the terminal failed run for this block with the resumed one (single
     // run per block, matching the board's by-block projection).
+    await this.executionRepository.deleteByBlock(workspaceId, previous.blockId)
+    const instance: ExecutionInstance = {
+      id: newId,
+      blockId: previous.blockId,
+      pipelineId: previous.pipelineId,
+      pipelineName: previous.pipelineName,
+      steps,
+      currentStep,
+      status: 'running',
+      initiatedBy: initiatedBy ?? previous.initiatedBy ?? null,
+    }
+    await this.executionRepository.upsert(workspaceId, instance)
+    const done = steps.filter((s) => s.state === 'done').length
+    await this.blockRepository.update(workspaceId, previous.blockId, {
+      status: 'in_progress',
+      progress: steps.length > 0 ? done / steps.length : 0,
+      executionId: instance.id,
+    })
+    await this.workRunner.startRun(workspaceId, instance.id)
+    await this.emitInstance(workspaceId, instance)
+    return instance
+  }
+
+  /**
+   * Restart a run from a human-chosen step: re-run from `fromStepIndex` onward,
+   * regardless of how far the run had progressed (a `done`, `failed`, `blocked`,
+   * `paused` or still-`running` run are all valid sources). Unlike {@link retry}
+   * (which resumes at the first FAILURE) this rewinds to an arbitrary step the user
+   * picked — so it can re-run steps that already completed.
+   *
+   * What is preserved vs reset:
+   * - Steps BEFORE `fromStepIndex` keep their `output`/approval/timing untouched, so
+   *   the engine still hands the restarted step its predecessors' work as
+   *   `priorOutputs` (and their resolved `decisions`) — a useful handoff.
+   * - The chosen step and every later one are reset to a clean, re-runnable state,
+   *   dropping each step's iteration counters (companion attempts, gate/test attempts,
+   *   eviction recoveries) so the restart starts those loops from zero.
+   * - A block's incorporated requirements are NOT touched: they live on the
+   *   requirement-review record, so a restarted spec-writer/coder still receives the
+   *   incorporated document (or the base description when none was generated). When the
+   *   chosen step is the `requirements-review` gate ITSELF, re-running it mints a fresh
+   *   iteration-1 review (the reviewer's `review()` replaces the prior one), which is
+   *   exactly the "reset the iterations counter from this step" semantics.
+   *
+   * Like {@link retry} a fresh instance id is minted (the durable runner addresses one
+   * driver per execution id). Any still-live driver/container for the run being
+   * replaced is torn down first, so restarting a RUNNING run never orphans a container
+   * or a parked Workflows instance.
+   */
+  async restartFromStep(
+    workspaceId: string,
+    executionId: string,
+    fromStepIndex: number,
+    /** The restarting user (their personal subscription is used for individual-usage
+     *  models). Falls back to the original initiator when omitted. */
+    initiatedBy?: string | null,
+    /** Mint the per-run personal-credential activation (see {@link start}). */
+    activate?: (executionId: string) => Promise<void>,
+  ): Promise<ExecutionInstance> {
+    await this.requireWorkspace(workspaceId)
+    const previous = assertFound(
+      await this.executionRepository.get(workspaceId, executionId),
+      'Execution',
+      executionId,
+    )
+    await this.requireBlock(workspaceId, previous.blockId)
+    if (
+      !Number.isInteger(fromStepIndex) ||
+      fromStepIndex < 0 ||
+      fromStepIndex >= previous.steps.length
+    ) {
+      throw new ValidationError(
+        `Step ${fromStepIndex} is out of range for this run (it has ${previous.steps.length} step(s)).`,
+      )
+    }
+
+    // Tear down whatever was driving the run we're about to replace — its per-run
+    // container AND its durable driver — before minting the restart. A `done`/`failed`
+    // run is already terminal (a no-op teardown), but a still-`running` run would
+    // otherwise leak a container and a live Workflows/pg-boss driver.
+    await this.stopRunContainer(workspaceId, previous)
+    await this.workRunner.cancelRun(workspaceId, executionId)
+
+    const { steps, currentStep } = planRestartFromStep(previous, fromStepIndex)
+    // Mint the activation before replacing the prior run, so a bad password aborts the
+    // restart without losing the source run.
+    const newId = this.idGenerator.next('exec')
+    await activate?.(newId)
     await this.executionRepository.deleteByBlock(workspaceId, previous.blockId)
     const instance: ExecutionInstance = {
       id: newId,
