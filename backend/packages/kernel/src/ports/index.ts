@@ -253,7 +253,6 @@ export type {
   ReleaseErrorSample,
   ReleaseEvidence,
   ReleaseHealthProvider,
-  ErrorTrackingProvider,
 } from './release-health.js'
 export type {
   IncidentMatchQuery,

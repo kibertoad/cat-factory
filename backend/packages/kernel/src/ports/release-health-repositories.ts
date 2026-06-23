@@ -37,8 +37,6 @@ export interface ReleaseHealthConfigRecord {
   sloIds: string[]
   /** Optional env tag (e.g. 'prod') used when querying logs/errors. */
   envTag: string | null
-  /** Optional Bugsnag project id for error evidence. */
-  bugsnagProject: string | null
   createdAt: number
   updatedAt: number
 }

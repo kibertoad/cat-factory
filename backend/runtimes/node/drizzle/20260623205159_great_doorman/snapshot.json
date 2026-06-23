@@ -5371,19 +5371,6 @@
       "table": "release_health_configs"
     },
     {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "bugsnag_project",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "release_health_configs"
-    },
-    {
       "type": "bigint",
       "typeSchema": null,
       "notNull": true,

@@ -10,7 +10,10 @@ const sig = (state: ReleaseSignal['state'], over: Partial<ReleaseSignal> = {}): 
   ...over,
 })
 
-const report = (status: ReleaseHealthReport['status'], signals: ReleaseSignal[]): ReleaseHealthReport => ({
+const report = (
+  status: ReleaseHealthReport['status'],
+  signals: ReleaseSignal[],
+): ReleaseHealthReport => ({
   status,
   signals,
 })
@@ -25,18 +28,24 @@ describe('classifyReleaseHealth', () => {
     ).toBe('fail')
   })
 
-  it('keeps polling while the provider has no verdict yet', () => {
+  it('keeps polling while the window is still open and nothing has regressed', () => {
     expect(
-      classifyReleaseHealth({ report: report('pending', [sig('no_data')]), windowElapsed: true }),
+      classifyReleaseHealth({ report: report('pending', [sig('no_data')]), windowElapsed: false }),
     ).toBe('pending')
-  })
-
-  it('passes only once a healthy window has fully elapsed', () => {
     expect(
       classifyReleaseHealth({ report: report('healthy', [sig('ok')]), windowElapsed: false }),
     ).toBe('pending')
+  })
+
+  it('passes once the window elapses with no regression — including a quiet/no_data signal', () => {
+    // A healthy window passes…
     expect(
       classifyReleaseHealth({ report: report('healthy', [sig('ok')]), windowElapsed: true }),
+    ).toBe('pass')
+    // …and so does a still-`pending`/`no_data` one: the window is the grace period, and a
+    // permanently-`no_data` monitor must NOT hang the gate until it fails as a timeout.
+    expect(
+      classifyReleaseHealth({ report: report('pending', [sig('no_data')]), windowElapsed: true }),
     ).toBe('pass')
   })
 })

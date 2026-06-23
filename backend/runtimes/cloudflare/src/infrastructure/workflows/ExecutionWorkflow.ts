@@ -164,11 +164,19 @@ export class ExecutionWorkflow extends WorkflowEntrypoint<Env, ExecutionWorkflow
           }
         }
         if (!settled && result.kind === 'awaiting_gate') {
-          await failRun(i, 'Gate precheck did not settle within its polling budget', 'timeout')
-          return
+          // Poll budget spent. Let the gate decide: a time-windowed watch gate
+          // (post-release-health) PASSES (the window outlasted the budget with no
+          // regression), while CI/conflicts resolve to a `job_failed` timeout the
+          // checks below funnel through `failRun`. One policy, both runtimes.
+          result = (await step.do(`gate-exhausted-${i}`, STEP_CONFIG, () =>
+            buildContainer(this.env).executionService.resolveGatePollExhaustion(
+              workspaceId,
+              executionId,
+            ),
+          )) as AdvanceResult
         }
-        // Fall through: the now-updated `result` (continue / awaiting_job / job_failed)
-        // is handled by the checks below and the next outer-loop iteration.
+        // Fall through: the now-updated `result` (continue / done / awaiting_job /
+        // job_failed) is handled by the checks below and the next outer-loop iteration.
       }
 
       if (result.kind === 'job_failed') {

@@ -74,7 +74,6 @@ export const releaseHealthConfigSchema = v.object({
   monitorIds: v.array(v.string()),
   sloIds: v.array(v.string()),
   envTag: v.nullable(v.string()),
-  bugsnagProject: v.nullable(v.string()),
 })
 export type ReleaseHealthConfigWire = v.InferOutput<typeof releaseHealthConfigSchema>
 
@@ -83,6 +82,5 @@ export const upsertReleaseHealthConfigSchema = v.object({
   monitorIds: v.optional(v.array(v.pipe(v.string(), v.trim(), v.minLength(1))), []),
   sloIds: v.optional(v.array(v.pipe(v.string(), v.trim(), v.minLength(1))), []),
   envTag: v.optional(v.nullable(v.pipe(v.string(), v.trim()))),
-  bugsnagProject: v.optional(v.nullable(v.pipe(v.string(), v.trim()))),
 })
 export type UpsertReleaseHealthConfigInput = v.InferOutput<typeof upsertReleaseHealthConfigSchema>

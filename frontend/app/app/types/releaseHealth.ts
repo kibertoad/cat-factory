@@ -21,7 +21,6 @@ export interface ReleaseHealthConfig {
   monitorIds: string[]
   sloIds: string[]
   envTag: string | null
-  bugsnagProject: string | null
 }
 
 /** Create/replace a block's release-health config. */
@@ -29,5 +28,4 @@ export interface UpsertReleaseHealthConfigInput {
   monitorIds?: string[]
   sloIds?: string[]
   envTag?: string | null
-  bugsnagProject?: string | null
 }

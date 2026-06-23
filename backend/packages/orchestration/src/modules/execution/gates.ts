@@ -64,6 +64,18 @@ export interface GateDefinition {
   /** Step output recorded when the gate passes through (no provider configured). */
   unwiredOutput: string
   /**
+   * What to do when the durable driver's poll budget (ciMaxPolls × ciPollInterval) is
+   * spent while the gate is still `pending` — distinct from the attempt budget (helper
+   * dispatches) handled by {@link onExhausted}:
+   *   - `fail` (default) — the precheck never settled, which is a failure for the CI /
+   *     conflicts gates (CI never went green / the PR never became mergeable).
+   *   - `pass` — for a time-windowed watch gate (post-release-health), running out of
+   *     polls just means the watch window outlasted the budget with NO regression seen,
+   *     which is a healthy pass — not a timeout failure.
+   * Resolved by {@link ExecutionService.resolveGatePollExhaustion}.
+   */
+  pollExhaustion?: 'pass' | 'fail'
+  /**
    * Run the precheck against the provider and classify it. Receives the live gate
    * state so a time-windowed gate (post-release-health) can read its `watchSince`.
    */

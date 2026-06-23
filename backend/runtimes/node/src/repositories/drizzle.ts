@@ -2180,7 +2180,6 @@ function rowToReleaseHealthConfig(row: ReleaseHealthConfigRow): ReleaseHealthCon
     monitorIds: parseReleaseIds(row.monitor_ids),
     sloIds: parseReleaseIds(row.slo_ids),
     envTag: row.env_tag,
-    bugsnagProject: row.bugsnag_project,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -2226,7 +2225,6 @@ export class DrizzleReleaseHealthConfigRepository implements ReleaseHealthConfig
       monitor_ids: JSON.stringify(record.monitorIds),
       slo_ids: JSON.stringify(record.sloIds),
       env_tag: record.envTag,
-      bugsnag_project: record.bugsnagProject,
       created_at: record.createdAt,
       updated_at: record.updatedAt,
     }
@@ -2239,7 +2237,6 @@ export class DrizzleReleaseHealthConfigRepository implements ReleaseHealthConfig
           monitor_ids: values.monitor_ids,
           slo_ids: values.slo_ids,
           env_tag: values.env_tag,
-          bugsnag_project: values.bugsnag_project,
           updated_at: values.updated_at,
         },
       })

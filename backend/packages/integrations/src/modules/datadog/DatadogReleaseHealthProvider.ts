@@ -1,7 +1,6 @@
 import type {
   BlockRepository,
   DatadogConnectionRepository,
-  ErrorTrackingProvider,
   ReleaseEvidence,
   ReleaseHealthConfigRecord,
   ReleaseHealthConfigRepository,
@@ -20,8 +19,6 @@ export interface DatadogReleaseHealthProviderDependencies {
   blockRepository: BlockRepository
   /** Decrypts the workspace's Datadog API/app keys at call time. */
   secretCipher: SecretCipher
-  /** Optional secondary error source (e.g. Bugsnag) folded into the evidence bundle. */
-  errorTracking?: ErrorTrackingProvider
   /** Override fetch (tests). */
   fetchImpl?: typeof fetch
 }
@@ -70,13 +67,6 @@ export class DatadogReleaseHealthProvider implements ReleaseHealthProvider {
       sampleMessage: e.sampleMessage,
     }))
 
-    if (this.deps.errorTracking) {
-      const extra = await this.deps.errorTracking
-        .recentErrors(workspaceId, blockId, since)
-        .catch(() => [])
-      errors.push(...extra)
-    }
-
     return {
       regressedSignals,
       errors,
@@ -113,7 +103,10 @@ export class DatadogReleaseHealthProvider implements ReleaseHealthProvider {
     let currentId: string | null = blockId
     // Walk up the parent chain (task → module → frame), bounded against cycles.
     for (let hops = 0; currentId && hops < 5; hops++) {
-      const config = await this.deps.releaseHealthConfigRepository.getByBlock(workspaceId, currentId)
+      const config = await this.deps.releaseHealthConfigRepository.getByBlock(
+        workspaceId,
+        currentId,
+      )
       if (config) return config
       const block = await this.deps.blockRepository.get(workspaceId, currentId)
       currentId = block?.parentId ?? null

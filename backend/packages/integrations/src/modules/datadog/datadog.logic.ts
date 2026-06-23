@@ -23,7 +23,11 @@ const ALLOWED_SITE_SUFFIXES = [
  * can't turn the server into an SSRF vector. Accepts a bare host or a full URL.
  */
 export function normalizeDatadogSite(site: string): string {
-  const trimmed = site.trim().replace(/^https?:\/\//i, '').replace(/\/.*$/, '').toLowerCase()
+  const trimmed = site
+    .trim()
+    .replace(/^https?:\/\//i, '')
+    .replace(/\/.*$/, '')
+    .toLowerCase()
   if (!trimmed) throw new DatadogApiError('config', 'Datadog site is empty')
   const ok = ALLOWED_SITE_SUFFIXES.some((s) => trimmed === s || trimmed.endsWith(`.${s}`))
   if (!ok) {

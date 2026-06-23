@@ -62,5 +62,14 @@ export const useReleaseHealthStore = defineStore('releaseHealth', () => {
     configs.value = configs.value.filter((c) => c.blockId !== blockId)
   }
 
-  return { connection, configs, loading, load, saveConnection, removeConnection, saveConfig, removeConfig }
+  return {
+    connection,
+    configs,
+    loading,
+    load,
+    saveConnection,
+    removeConnection,
+    saveConfig,
+    removeConfig,
+  }
 })

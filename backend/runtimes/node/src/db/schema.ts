@@ -740,7 +740,6 @@ export const releaseHealthConfigs = pgTable(
     monitor_ids: text('monitor_ids').notNull().default('[]'),
     slo_ids: text('slo_ids').notNull().default('[]'),
     env_tag: text('env_tag'),
-    bugsnag_project: text('bugsnag_project'),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
     updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
   },

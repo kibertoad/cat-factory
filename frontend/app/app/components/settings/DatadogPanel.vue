@@ -121,7 +121,11 @@ async function removeMapping(blockId: string) {
           <div class="flex items-center justify-between">
             <h3 class="text-sm font-semibold">Connection</h3>
             <UBadge :color="store.connection.connected ? 'success' : 'neutral'" variant="soft">
-              {{ store.connection.connected ? `Connected (${store.connection.site})` : 'Not connected' }}
+              {{
+                store.connection.connected
+                  ? `Connected (${store.connection.site})`
+                  : 'Not connected'
+              }}
             </UBadge>
           </div>
           <UFormField label="Datadog site">
@@ -134,7 +138,11 @@ async function removeMapping(blockId: string) {
             <UInput v-model="conn.appKey" type="password" placeholder="DD-APPLICATION-KEY" />
           </UFormField>
           <div class="flex gap-2">
-            <UButton :loading="busy" :disabled="!conn.apiKey || !conn.appKey" @click="saveConnection">
+            <UButton
+              :loading="busy"
+              :disabled="!conn.apiKey || !conn.appKey"
+              @click="saveConnection"
+            >
               Save connection
             </UButton>
             <UButton
@@ -164,7 +172,8 @@ async function removeMapping(blockId: string) {
             <div class="space-y-0.5">
               <div class="font-mono text-slate-300">{{ c.blockId }}</div>
               <div class="text-slate-400">
-                monitors: {{ c.monitorIds.join(', ') || '—' }} · slos: {{ c.sloIds.join(', ') || '—' }}
+                monitors: {{ c.monitorIds.join(', ') || '—' }} · slos:
+                {{ c.sloIds.join(', ') || '—' }}
                 <span v-if="c.envTag"> · env: {{ c.envTag }}</span>
               </div>
             </div>

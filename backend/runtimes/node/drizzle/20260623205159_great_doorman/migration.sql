@@ -13,7 +13,6 @@ CREATE TABLE "release_health_configs" (
 	"monitor_ids" text DEFAULT '[]' NOT NULL,
 	"slo_ids" text DEFAULT '[]' NOT NULL,
 	"env_tag" text,
-	"bugsnag_project" text,
 	"created_at" bigint NOT NULL,
 	"updated_at" bigint NOT NULL,
 	CONSTRAINT "release_health_configs_pkey" PRIMARY KEY("workspace_id","block_id")

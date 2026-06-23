@@ -40,6 +40,33 @@ export interface DatadogClientOptions {
   fetchImpl?: FetchLike
 }
 
+/**
+ * Pick the SLO target to compare the window SLI against. Datadog's SLO-history response
+ * keys `thresholds` by timeframe (e.g. `7d` / `30d` / `90d`), and a multi-timeframe SLO
+ * can carry a different target per timeframe — so `Object.values(...)[0]` would compare
+ * the (short) release-window SLI against whichever timeframe Datadog happened to list
+ * first, a non-deterministic, often-wrong verdict. Pick the SHORTEST configured timeframe
+ * deterministically: it is the one most sensitive to a just-shipped regression and is a
+ * stable choice across calls. Falls back to the only/first target when timeframes are
+ * unparseable, and to `null` when there are none (Datadog has no data).
+ */
+function pickSloTarget(thresholds: Record<string, { target?: number }>): number | null {
+  const entries = Object.entries(thresholds)
+  if (entries.length === 0) return null
+  const days = (timeframe: string): number => {
+    const m = /^(\d+)\s*([smhdwy])$/.exec(timeframe.trim())
+    if (!m) return Number.POSITIVE_INFINITY
+    const n = Number(m[1])
+    const unit = { s: 1 / 86400, m: 1 / 1440, h: 1 / 24, d: 1, w: 7, y: 365 }[m[2]!] ?? 1
+    return n * unit
+  }
+  const sorted = [...entries].sort((a, b) => days(a[0]) - days(b[0]))
+  for (const [, threshold] of sorted) {
+    if (typeof threshold.target === 'number') return threshold.target
+  }
+  return null
+}
+
 export class DatadogClient {
   private readonly fetchImpl: FetchLike
 
@@ -63,19 +90,19 @@ export class DatadogClient {
   async getSloState(id: string, fromTs: number, toTs: number): Promise<DatadogSloState> {
     const data = await this.get<{
       data?: {
-        slo?: { name?: string };
-        overall?: { sli_value?: number | null };
-        thresholds?: Record<string, { target?: number }>;
+        slo?: { name?: string }
+        overall?: { sli_value?: number | null }
+        thresholds?: Record<string, { target?: number }>
       }
     }>(`/api/v1/slo/${id}/history?from_ts=${fromTs}&to_ts=${toTs}`)
     const overall = data.data?.overall
     const thresholds = data.data?.thresholds ?? {}
-    const target = Object.values(thresholds)[0]?.target ?? null
+    const target = pickSloTarget(thresholds)
     return {
       id,
       name: data.data?.slo?.name ?? `slo ${id}`,
       sliValue: typeof overall?.sli_value === 'number' ? overall.sli_value : null,
-      target: typeof target === 'number' ? target : null,
+      target,
     }
   }
 
@@ -84,7 +111,12 @@ export class DatadogClient {
    * error groups for the window. Best-effort: a query failure yields an empty list (the
    * monitor/SLO signals are the gate's primary verdict).
    */
-  async recentErrorLogs(query: string, fromMs: number, toMs: number, limit = 5): Promise<DatadogLogSample[]> {
+  async recentErrorLogs(
+    query: string,
+    fromMs: number,
+    toMs: number,
+    limit = 5,
+  ): Promise<DatadogLogSample[]> {
     try {
       const body = {
         compute: [{ aggregation: 'count', type: 'total' }],

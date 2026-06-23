@@ -42,7 +42,7 @@ function makeProvider(
   }
   const blockRepo = {
     get: async (_ws: string, id: string): Promise<Block | null> =>
-      ({ id, parentId: null } as Block),
+      ({ id, parentId: null }) as Block,
   } as unknown as BlockRepository
 
   // Fake Datadog: every monitor returns `monitorState`.
@@ -66,7 +66,6 @@ const config: ReleaseHealthConfigRecord = {
   monitorIds: ['123'],
   sloIds: [],
   envTag: 'prod',
-  bugsnagProject: null,
   createdAt: 0,
   updatedAt: 0,
 }

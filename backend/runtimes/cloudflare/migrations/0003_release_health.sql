@@ -28,7 +28,6 @@ CREATE TABLE release_health_configs (
   monitor_ids     TEXT    NOT NULL DEFAULT '[]',
   slo_ids         TEXT    NOT NULL DEFAULT '[]',
   env_tag         TEXT,
-  bugsnag_project TEXT,
   created_at      INTEGER NOT NULL,
   updated_at      INTEGER NOT NULL,
   PRIMARY KEY (workspace_id, block_id)

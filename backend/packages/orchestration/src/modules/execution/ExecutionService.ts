@@ -86,6 +86,7 @@ import {
   describeRegressedSignals,
 } from './release.logic.js'
 import type { GateDefinition, GateProbe } from './gates.js'
+import type { StepCompletionResolver } from './stepResolvers.js'
 import type { NotificationService } from '../notifications/NotificationService.js'
 import type { RequirementReviewService } from '../requirements/RequirementReviewService.js'
 import type { ClarityReviewService } from '../clarity/ClarityReviewService.js'
@@ -215,9 +216,7 @@ function renderReleaseEvidence(evidence: ReleaseEvidence): string {
   if (evidence.regressedSignals.length > 0) {
     lines.push('Regressed signals:')
     for (const s of evidence.regressedSignals) {
-      lines.push(
-        `- ${s.kind} "${s.name}" (${s.id}): ${s.state}${s.detail ? ` — ${s.detail}` : ''}`,
-      )
+      lines.push(`- ${s.kind} "${s.name}" (${s.id}): ${s.state}${s.detail ? ` — ${s.detail}` : ''}`)
     }
     lines.push('')
   }
@@ -475,6 +474,11 @@ export class ExecutionService {
   ) => Promise<string | undefined>
   /** Lazily-built polling-gate registry, keyed by `agentKind`. See {@link gateFor}. */
   private gateRegistryCache?: Map<string, GateDefinition>
+  /**
+   * Lazily-built post-completion resolver registry, keyed by `agentKind`. See
+   * {@link stepResolverFor} and {@link StepCompletionResolver}.
+   */
+  private stepResolverCache?: Map<string, StepCompletionResolver>
 
   constructor({
     workspaceRepository,
@@ -1190,6 +1194,38 @@ export class ExecutionService {
   }
 
   /**
+   * Decide what happens when the durable driver's GATE poll budget (ciMaxPolls ×
+   * ciPollInterval) is spent while a gate is still `pending` — called by both runtime
+   * drivers (Cloudflare ExecutionWorkflow / Node `driveExecution`) instead of failing
+   * the run directly, so the per-gate policy lives in one place. Most gates `fail`
+   * (CI never went green / the PR never became mergeable). A time-windowed watch gate
+   * (post-release-health, `pollExhaustion: 'pass'`) instead PASSES: the watch window
+   * simply outlasted the poll budget with no regression observed, which is healthy — not
+   * a timeout. Returns the result the driver should act on (it never re-fails for a fail
+   * gate; it returns a `job_failed` the driver funnels through its single `failRun`).
+   */
+  async resolveGatePollExhaustion(
+    workspaceId: string,
+    executionId: string,
+  ): Promise<AdvanceResult> {
+    const instance = await this.executionRepository.get(workspaceId, executionId)
+    if (!instance || (instance.status !== 'running' && instance.status !== 'paused')) {
+      return { kind: 'noop' }
+    }
+    const step = instance.steps[instance.currentStep]
+    const gate = step ? this.gateFor(step.agentKind) : undefined
+    const timeoutError = 'Gate precheck did not settle within its polling budget'
+    if (!step || !gate || gate.pollExhaustion !== 'pass') {
+      return { kind: 'job_failed', error: timeoutError, failureKind: 'timeout' }
+    }
+    // Pass-on-exhaustion gate: finish the step as a healthy pass and advance.
+    const isFinalStep = instance.currentStep === instance.steps.length - 1
+    return this.recordStepResult(workspaceId, instance, step, isFinalStep, {
+      output: `${gate.kind} gate passed: watch window elapsed with no regression observed.`,
+    })
+  }
+
+  /**
    * Transition a step into `working`, stamping its start time the first time it
    * actually begins. Set-once so a Workflows replay (which re-runs `advance`)
    * preserves the original start rather than resetting it on every replay. An
@@ -1349,22 +1385,35 @@ export class ExecutionService {
       return { kind: 'awaiting_decision', decisionId: step.approval.id }
     }
 
+    // Persist the agent's reported confidence whenever a step reports it, for board
+    // transparency. Position-independent: it must NOT be tied to the final step, since a
+    // confidence-reporting producer (e.g. the merger) may now be followed by a gate.
+    if (result.confidence !== undefined) {
+      await this.blockRepository.update(workspaceId, instance.blockId, {
+        confidence: result.confidence,
+      })
+    }
+
+    // Run any DETERMINISTIC post-completion logic registered for this agent kind (e.g.
+    // the merger performs the real GitHub merge with backend-held credentials). This is
+    // POSITION-INDEPENDENT — it fires whenever the step finishes, not only when it's last
+    // — so inserting a later step (post-release-health) can't silently disable it. A
+    // resolver that owns the block's terminal status (the merger sets `done`/`pr_ready`)
+    // tells `finalizeBlock` to leave it alone.
+    const resolver = this.stepResolverFor(step.agentKind)
+    if (resolver && (resolver.applies?.(result) ?? true)) {
+      const resolution = await resolver.resolve({
+        workspaceId,
+        instance,
+        step,
+        result,
+        isFinalStep,
+      })
+      if (resolution?.output !== undefined) step.output = resolution.output
+    }
+
     if (isFinalStep) {
       instance.status = 'done'
-      // Record the reported confidence for transparency BEFORE any merge — once a
-      // task auto-merges it is `done` and `finalizeBlock` early-returns, so this is
-      // the single place confidence is persisted across both the merge and review paths.
-      if (result.confidence !== undefined) {
-        await this.blockRepository.update(workspaceId, instance.blockId, {
-          confidence: result.confidence,
-        })
-      }
-      // A `merger` step produced a PR assessment: compare it against the task's
-      // thresholds and either merge for real or raise a review notification. This
-      // owns the block's terminal status, so `finalizeBlock` then leaves it alone.
-      if (result.mergeAssessment !== undefined) {
-        await this.resolveMergerStep(workspaceId, instance, result.mergeAssessment)
-      }
       await this.finalizeBlock(workspaceId, instance, result.confidence)
       await this.executionRepository.upsert(workspaceId, instance)
       await this.emitInstance(workspaceId, instance)
@@ -1748,6 +1797,36 @@ export class ExecutionService {
     return this.gateRegistryCache.get(agentKind)
   }
 
+  /**
+   * The post-completion resolver for an agent kind, or undefined when the kind has none.
+   * A resolver runs DETERMINISTIC backend follow-up once the step's agent finishes — e.g.
+   * the merger performs the real GitHub merge — independent of the step's position in the
+   * pipeline. Built lazily (closures capture `this`). See {@link StepCompletionResolver}.
+   */
+  private stepResolverFor(agentKind: string): StepCompletionResolver | undefined {
+    if (!this.stepResolverCache) this.stepResolverCache = this.buildStepResolverRegistry()
+    return this.stepResolverCache.get(agentKind)
+  }
+
+  private buildStepResolverRegistry(): Map<string, StepCompletionResolver> {
+    const resolvers: StepCompletionResolver[] = [
+      // The `merger` agent OWNS the merge decision, but the merge itself is mechanical
+      // and uses backend-held GitHub credentials the sandboxed agent never sees — so the
+      // engine performs it deterministically from the agent's assessment here, the moment
+      // the merger step finishes (NOT only when it is the pipeline's last step, which is
+      // why a trailing `post-release-health` step no longer disables auto-merge).
+      {
+        kind: MERGER_AGENT_KIND,
+        applies: (result) => result.mergeAssessment !== undefined,
+        resolve: async ({ workspaceId, instance, result }) => {
+          await this.resolveMergerStep(workspaceId, instance, result.mergeAssessment)
+          return { ownsTerminalStatus: true }
+        },
+      },
+    ]
+    return new Map(resolvers.map((r) => [r.kind, r]))
+  }
+
   private buildGateRegistry(): Map<string, GateDefinition> {
     const gates: GateDefinition[] = [
       // CI gate: poll the PR head's check runs; escalate to a `ci-fixer` on red CI.
@@ -1827,6 +1906,9 @@ export class ExecutionService {
         wired: () => !!this.releaseHealthProvider,
         unwiredOutput: 'Post-release health gate skipped (no release-health provider configured).',
         attemptBudget: (preset) => preset.releaseMaxAttempts,
+        // Running out of poll budget while still watching means the window outlasted the
+        // driver's budget with NO regression observed — a healthy pass, not a timeout.
+        pollExhaustion: 'pass',
         probe: async (workspaceId, blockId, gateState): Promise<GateProbe> => {
           const since = gateState.watchSince ?? this.clock.now()
           const report = await this.releaseHealthProvider!.probe(workspaceId, blockId, since)
@@ -1836,13 +1918,15 @@ export class ExecutionService {
             return {
               status: 'pass',
               headSha: null,
-              passOutput: 'Post-release health gate passed: no monitors/SLOs configured for this release.',
+              passOutput:
+                'Post-release health gate passed: no monitors/SLOs configured for this release.',
             }
           }
-          const block = await this.blockRepository.get(workspaceId, blockId)
-          const windowMinutes = block
-            ? (await this.resolveMergePreset(workspaceId, block)).releaseWatchWindowMinutes
-            : DEFAULT_MERGE_PRESET.releaseWatchWindowMinutes
+          // The watch window is resolved ONCE on first entry and stashed on the gate
+          // state (see evaluateGate), so the probe doesn't re-load the block + re-resolve
+          // the merge preset on every poll over the window.
+          const windowMinutes =
+            gateState.watchWindowMinutes ?? DEFAULT_MERGE_PRESET.releaseWatchWindowMinutes
           const windowElapsed = this.clock.now() - since >= windowMinutes * 60_000
           const verdict = classifyReleaseHealth({ report, windowElapsed })
           if (verdict === 'pass') {
@@ -1868,7 +1952,15 @@ export class ExecutionService {
             blockId,
             since,
           )
-          return [{ agentKind: POST_RELEASE_HEALTH_AGENT_KIND, output: renderReleaseEvidence(evidence) }]
+          // Stash the regressed signals on the gate state so the on-call COMPLETION handler
+          // (resolveOnCallStep) builds the notification + incident enrichment from the SAME
+          // evidence the agent investigated — rather than re-reading Datadog a third time
+          // (which also risks disagreeing with what the agent saw if the window moved).
+          // The caller spreads `...step.gate` right after, so this mutation persists.
+          gateState.regressedSignals = evidence.regressedSignals
+          return [
+            { agentKind: POST_RELEASE_HEALTH_AGENT_KIND, output: renderReleaseEvidence(evidence) },
+          ]
         },
         onExhausted: async ({ workspaceId, instance, block, summary }) => {
           // Reached only when releaseMaxAttempts is 0 (operator disabled the on-call
@@ -1922,6 +2014,9 @@ export class ExecutionService {
         attempts: 0,
         maxAttempts: gate.attemptBudget ? gate.attemptBudget(preset) : preset.ciMaxAttempts,
         headSha: null,
+        // Stash the watch window once (read on every poll by a time-windowed gate's
+        // probe; harmless/unused for the CI/conflicts gates).
+        watchWindowMinutes: preset.releaseWatchWindowMinutes,
       }
     }
     // A time-windowed gate (post-release-health) marks when it began watching, on first
@@ -2002,7 +2097,11 @@ export class ExecutionService {
     // A gate may build richer helper context asynchronously (the on-call agent gets the
     // full Datadog evidence bundle); otherwise fall back to the simple summary prior.
     const extras = gate.gatherHelperPriorOutputs
-      ? await gate.gatherHelperPriorOutputs(workspaceId, block.id, step.gate ?? { phase: 'checking', attempts: 0, maxAttempts: 0 })
+      ? await gate.gatherHelperPriorOutputs(
+          workspaceId,
+          block.id,
+          step.gate ?? { phase: 'checking', attempts: 0, maxAttempts: 0 },
+        )
       : [gate.helperPriorOutput?.(failureSummary ?? '')].filter(
           (o): o is { agentKind: string; output: string } => o != null,
         )
@@ -3626,12 +3725,19 @@ export class ExecutionService {
       assessment = null
     }
 
-    // Re-gather the regressed signals for the notification payload + incident match.
+    // Reuse the regressed signals captured when the gate escalated (see the gate's
+    // gatherHelperPriorOutputs) so the notification + incident enrichment reflect exactly
+    // what the on-call agent investigated and we don't re-read Datadog a third time. Only
+    // fall back to a fresh gather if they weren't persisted (e.g. an older parked run).
     const since = step.gate?.watchSince ?? this.clock.now()
-    let regressedSignals: ReleaseSignal[] = []
-    if (this.releaseHealthProvider) {
+    let regressedSignals: ReleaseSignal[] = step.gate?.regressedSignals ?? []
+    if (regressedSignals.length === 0 && this.releaseHealthProvider) {
       try {
-        const evidence = await this.releaseHealthProvider.gatherEvidence(workspaceId, block.id, since)
+        const evidence = await this.releaseHealthProvider.gatherEvidence(
+          workspaceId,
+          block.id,
+          since,
+        )
         regressedSignals = evidence.regressedSignals
       } catch {
         // best-effort: the assessment + summary still drive the notification

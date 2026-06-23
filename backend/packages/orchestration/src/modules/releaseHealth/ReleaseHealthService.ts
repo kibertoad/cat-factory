@@ -47,7 +47,9 @@ export class ReleaseHealthService {
   async getConnection(workspaceId: string): Promise<DatadogConnectionView> {
     await requireWorkspace(this.workspaceRepository, workspaceId)
     const connection = await this.connections.get(workspaceId)
-    return connection ? { connected: true, site: connection.site } : { connected: false, site: null }
+    return connection
+      ? { connected: true, site: connection.site }
+      : { connected: false, site: null }
   }
 
   /** Set/replace the workspace's Datadog connection, sealing the keys at rest. */
@@ -87,7 +89,6 @@ export class ReleaseHealthService {
       monitorIds: r.monitorIds,
       sloIds: r.sloIds,
       envTag: r.envTag,
-      bugsnagProject: r.bugsnagProject,
     }))
   }
 
@@ -106,7 +107,6 @@ export class ReleaseHealthService {
       monitorIds: input.monitorIds ?? [],
       sloIds: input.sloIds ?? [],
       envTag: input.envTag ?? null,
-      bugsnagProject: input.bugsnagProject ?? null,
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
     }
@@ -116,7 +116,6 @@ export class ReleaseHealthService {
       monitorIds: record.monitorIds,
       sloIds: record.sloIds,
       envTag: record.envTag,
-      bugsnagProject: record.bugsnagProject,
     }
   }
 

@@ -23,10 +23,17 @@ export type ReleaseGateVerdict = 'pass' | 'pending' | 'fail'
 /**
  * Decide the gate verdict from the provider's signal verdict + the monitoring-window
  * timing:
- *  - `regressed`                     → `fail` (escalate to the on-call agent).
- *  - `pending` (no verdict yet)      → `pending` (keep watching).
- *  - `healthy` & window elapsed      → `pass` (the release looks good; advance).
- *  - `healthy` & window not elapsed  → `pending` (keep watching the rest of the window).
+ *  - `regressed`                       → `fail` (escalate to the on-call agent).
+ *  - anything else & window not elapsed → `pending` (keep watching the rest of the window).
+ *  - anything else & window elapsed     → `pass` (no regression observed in the window).
+ *
+ * The non-regressed states (`healthy` AND `pending`/`no_data`) are treated the same way:
+ * keep watching until the window elapses, then pass. This is deliberate — a `pending`
+ * verdict means "no regression detected yet" (e.g. a quiet or `no_data` monitor right
+ * after deploy), NOT "broken". Blocking advancement on it forever (the old behaviour)
+ * meant a permanently-`no_data` monitor burned the whole poll budget and then failed an
+ * otherwise-healthy release as a false `timeout`. The window is the grace period; once it
+ * elapses with nothing alerting, the release ships.
  *
  * `warn` states do not regress the gate — only `alert`/SLO-breach (which the provider
  * maps to `regressed`) do — so a warning threshold doesn't pause the pipeline.
@@ -36,7 +43,6 @@ export function classifyReleaseHealth(args: {
   windowElapsed: boolean
 }): ReleaseGateVerdict {
   if (args.report.status === 'regressed') return 'fail'
-  if (args.report.status === 'pending') return 'pending'
   return args.windowElapsed ? 'pass' : 'pending'
 }
 

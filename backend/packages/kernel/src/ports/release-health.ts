@@ -46,7 +46,7 @@ export interface ReleaseErrorSample {
   firstSeen?: number
   /** A representative message / sample line. */
   sampleMessage?: string
-  /** Deep link to the source (Datadog log view / Bugsnag error), when known. */
+  /** Deep link to the source (Datadog log view), when known. */
   url?: string
 }
 
@@ -69,12 +69,4 @@ export interface ReleaseHealthProvider {
   probe(workspaceId: string, blockId: string, since: number): Promise<ReleaseHealthReport>
   /** Gather the investigation evidence bundle for the on-call agent. */
   gatherEvidence(workspaceId: string, blockId: string, since: number): Promise<ReleaseEvidence>
-}
-
-/**
- * Optional secondary error-tracking source (e.g. Bugsnag) feeding the evidence
- * bundle. Wired only when configured; Datadog is the required source.
- */
-export interface ErrorTrackingProvider {
-  recentErrors(workspaceId: string, blockId: string, since: number): Promise<ReleaseErrorSample[]>
 }

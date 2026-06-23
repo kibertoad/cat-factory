@@ -60,20 +60,37 @@ export class IncidentIoEnrichmentProvider implements IncidentEnrichmentProvider 
   }
 
   private async findActiveIncident(query: IncidentMatchQuery): Promise<IoIncident | null> {
-    const res = await this.fetchImpl(`${this.apiBase}/v2/incidents?page_size=25`, {
-      method: 'GET',
-      headers: this.headers(),
-    })
-    if (!res.ok) return null
-    const data = (await res.json()) as { incidents?: IoIncident[] }
-    const live = (data.incidents ?? [])
-      .filter((i) => {
-        const category = i.incident_status?.category
-        if (category && (category === 'closed' || category === 'declined')) return false
-        if (!i.created_at) return true
-        return new Date(i.created_at).getTime() >= query.since
+    // incident.io's list endpoint has no server-side recency filter we can rely on (its
+    // `status` filter keys on workspace-specific status ids, not categories), so we page
+    // through with the `after` cursor and filter client-side. Bounded to a handful of
+    // pages so a busy workspace's live incident isn't missed behind the first page (the
+    // old `page_size=25`-only read) while we still can't loop unboundedly.
+    const live: IoIncident[] = []
+    let after: string | undefined
+    for (let page = 0; page < 8; page++) {
+      const params = new URLSearchParams({ page_size: '50' })
+      if (after) params.set('after', after)
+      const res = await this.fetchImpl(`${this.apiBase}/v2/incidents?${params.toString()}`, {
+        method: 'GET',
+        headers: this.headers(),
       })
-      .sort((a, b) => new Date(b.created_at ?? 0).getTime() - new Date(a.created_at ?? 0).getTime())
+      if (!res.ok) break
+      const data = (await res.json()) as {
+        incidents?: IoIncident[]
+        pagination_meta?: { after?: string | null }
+      }
+      const batch = data.incidents ?? []
+      for (const i of batch) {
+        const category = i.incident_status?.category
+        if (category && (category === 'closed' || category === 'declined')) continue
+        if (!i.created_at || new Date(i.created_at).getTime() >= query.since) live.push(i)
+      }
+      after = data.pagination_meta?.after ?? undefined
+      if (!after || batch.length === 0) break
+    }
+    live.sort(
+      (a, b) => new Date(b.created_at ?? 0).getTime() - new Date(a.created_at ?? 0).getTime(),
+    )
     return live[0] ?? null
   }
 
