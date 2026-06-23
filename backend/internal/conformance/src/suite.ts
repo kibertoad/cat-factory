@@ -415,6 +415,33 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         expect(qwen.flavor).toBe('direct')
       })
 
+      it('makes an OpenRouter (OpenAI-compatible) model selectable once its key is configured', async () => {
+        const { call, createWorkspace } = harness.makeApp(undefined, {
+          cloudflareModelsEnabled: false,
+        })
+        const { workspace } = await createWorkspace()
+        const models = `/workspaces/${workspace.id}/models`
+
+        // OpenRouter is a direct-only catalog entry (no Cloudflare fallback): with no key
+        // it is unselectable on both runtimes.
+        const before = await call<Opt[]>('GET', models)
+        expect(before.body.find((m) => m.id === 'openrouter-claude-opus')?.available).toBe(false)
+
+        // Connect an OpenRouter key (exercises the widened apiKeyProviderSchema end to end).
+        const created = await call('POST', `/workspaces/${workspace.id}/api-keys`, {
+          provider: 'openrouter',
+          label: 'team',
+          key: 'sk-or-secret',
+        })
+        expect(created.status).toBe(201)
+
+        // The curated entry now resolves to its OpenAI-compatible direct flavour, selectable.
+        const after = await call<Opt[]>('GET', models)
+        const or = after.body.find((m) => m.id === 'openrouter-claude-opus')!
+        expect(or.available).toBe(true)
+        expect(or.flavor).toBe('direct')
+      })
+
       it('blocks starting a pipeline with an unconfigured model, then allows it after a key is added', async () => {
         const { call, createWorkspace } = harness.makeApp(undefined, {
           cloudflareModelsEnabled: false,

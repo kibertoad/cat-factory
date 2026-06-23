@@ -89,10 +89,14 @@ facade so the runtimes can't drift (see "Cross-runtime conformance" below).
   - `backend/packages/agents` — agent catalog + prompt composition
     (`systemPromptFor`/`userPromptFor`, the per-kind `ROLES`) **and the AI
     provisioning facade**: `CompositeModelProvider` + the runtime-neutral
-    single-provider resolvers (`openai`/`anthropic`/the OpenAI-compatible trio +
+    single-provider resolvers (`openai`/`anthropic`/the OpenAI-compatible vendors —
+    Qwen/DeepSeek/Moonshot plus the **OpenRouter** + **LiteLLM** gateways — +
     the Cloudflare-over-REST resolver) and `providerEndpoints` (the base-URL/key
     source of truth, also used by the LLM proxy). Each facade composes the registry
-    from the resolvers it can serve.
+    from the resolvers it can serve. OpenRouter/LiteLLM are pure OpenAI-compatible
+    entries: keys live in the UI key pool like the other direct vendors, OpenRouter
+    defaults to the public gateway, and LiteLLM is operator-hosted (`LITELLM_BASE_URL`
+    required, no public default).
   - `backend/packages/provider-bedrock` — `@cat-factory/provider-bedrock`, the
     opt-in AWS Bedrock resolver (`@ai-sdk/amazon-bedrock`) with a **supported-model
     allow-list** that throws `Unsupported Bedrock model` for anything outside it.

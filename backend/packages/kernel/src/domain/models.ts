@@ -265,6 +265,79 @@ export const MODEL_CATALOG: SelectableModel[] = [
       vendor: 'codex',
     },
   },
+  // OpenRouter — a single OpenAI-compatible gateway to 300+ models, billed at provider
+  // rates with no per-token markup. These are curated, direct-only entries (no Cloudflare
+  // fallback): they become selectable once an OpenRouter API key is connected for the
+  // workspace/user. Model slugs follow OpenRouter's `vendor/model` ids (see
+  // openrouter.ai/models); verify them against the live catalog when they change.
+  {
+    id: 'openrouter-claude-opus',
+    label: 'Claude Opus (OpenRouter)',
+    description: "Anthropic's flagship Claude Opus via OpenRouter — billed at Anthropic rates.",
+    direct: {
+      ref: { provider: 'openrouter', model: 'anthropic/claude-opus-4.8', contextTokens: 1_000_000 },
+      keyEnv: 'OPENROUTER_API_KEY',
+      providerLabel: 'OpenRouter',
+    },
+  },
+  {
+    id: 'openrouter-gemini-pro',
+    label: 'Gemini 3 Pro (OpenRouter)',
+    description: "Google's Gemini 3 Pro via OpenRouter — 1M-token context.",
+    direct: {
+      ref: { provider: 'openrouter', model: 'google/gemini-3-pro', contextTokens: 1_048_576 },
+      keyEnv: 'OPENROUTER_API_KEY',
+      providerLabel: 'OpenRouter',
+    },
+  },
+  {
+    id: 'openrouter-gpt',
+    label: 'GPT-5.5 (OpenRouter)',
+    description: "OpenAI's flagship GPT-5.5 via OpenRouter — billed at OpenAI rates.",
+    direct: {
+      ref: { provider: 'openrouter', model: 'openai/gpt-5.5', contextTokens: 400_000 },
+      keyEnv: 'OPENROUTER_API_KEY',
+      providerLabel: 'OpenRouter',
+    },
+  },
+  {
+    id: 'openrouter-deepseek',
+    label: 'DeepSeek Chat (OpenRouter)',
+    description: "DeepSeek's flagship chat model via OpenRouter — low-cost, 64K context.",
+    direct: {
+      ref: { provider: 'openrouter', model: 'deepseek/deepseek-chat', contextTokens: 64_000 },
+      keyEnv: 'OPENROUTER_API_KEY',
+      providerLabel: 'OpenRouter',
+    },
+  },
+  {
+    id: 'openrouter-llama',
+    label: 'Llama 3.3 70B (OpenRouter)',
+    description: "Meta's Llama 3.3 70B Instruct via OpenRouter — open-weight, 131K context.",
+    direct: {
+      ref: {
+        provider: 'openrouter',
+        model: 'meta-llama/llama-3.3-70b-instruct',
+        contextTokens: 131_072,
+      },
+      keyEnv: 'OPENROUTER_API_KEY',
+      providerLabel: 'OpenRouter',
+    },
+  },
+  // LiteLLM — an operator-hosted OpenAI-compatible gateway. Model names are defined by the
+  // operator's LiteLLM `config.yaml` (`model_name`), so this generic entry assumes a
+  // `gpt-4o` route; rename the model (or pin via AGENT_DEFAULT_MODEL) to match your
+  // gateway. Selectable once a LiteLLM API key is connected AND LITELLM_BASE_URL is set.
+  {
+    id: 'litellm-default',
+    label: 'LiteLLM (gateway default)',
+    description: "Your LiteLLM gateway's `gpt-4o` route — rename to match your config.yaml.",
+    direct: {
+      ref: { provider: 'litellm', model: 'gpt-4o', contextTokens: 128_000 },
+      keyEnv: 'LITELLM_API_KEY',
+      providerLabel: 'LiteLLM',
+    },
+  },
 ]
 
 const BY_ID = new Map(MODEL_CATALOG.map((m) => [m.id, m]))

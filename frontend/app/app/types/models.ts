@@ -88,7 +88,14 @@ export interface StorePersonalSubscriptionInput {
 export type ApiKeyScope = 'account' | 'workspace' | 'user'
 
 /** The direct providers that own a poolable API key. */
-export type ApiKeyProvider = 'openai' | 'anthropic' | 'qwen' | 'deepseek' | 'moonshot'
+export type ApiKeyProvider =
+  | 'openai'
+  | 'anthropic'
+  | 'qwen'
+  | 'deepseek'
+  | 'moonshot'
+  | 'openrouter'
+  | 'litellm'
 
 /** A connected direct-provider API key (metadata + usage), never the secret. */
 export interface ApiKey {
