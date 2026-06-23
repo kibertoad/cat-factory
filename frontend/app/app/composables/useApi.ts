@@ -97,6 +97,13 @@ import type {
   UpdateScheduleInput,
 } from '~/types/recurring'
 import type { TrackerSettings, PutTrackerSettingsInput } from '~/types/tracker'
+import type {
+  LocalModelEndpoint,
+  LocalModelEndpointTestResult,
+  LocalRunner,
+  TestLocalModelEndpointInput,
+  UpsertLocalModelEndpointInput,
+} from '~/types/localModels'
 
 type Position = { x: number; y: number }
 
@@ -285,6 +292,30 @@ export function useApi() {
 
     removePersonalSubscription: (vendor: SubscriptionVendor) =>
       http(`/personal-subscriptions/${encodeURIComponent(vendor)}`, { method: 'DELETE' }),
+
+    // ---- local model runners (per-user, e.g. Ollama / LM Studio) ----------
+    // A developer's own-machine LLM endpoints, stored per signed-in user (the API
+    // key is write-only, never returned). User-scoped (no workspace). The enabled
+    // models then surface automatically in the per-workspace `/models` catalog.
+    listLocalModelEndpoints: () =>
+      http<{ endpoints: LocalModelEndpoint[] }>('/local-model-endpoints'),
+
+    upsertLocalModelEndpoint: (provider: LocalRunner, body: UpsertLocalModelEndpointInput) =>
+      http<LocalModelEndpoint>(`/local-model-endpoints/${encodeURIComponent(provider)}`, {
+        method: 'PUT',
+        body,
+      }),
+
+    deleteLocalModelEndpoint: (provider: LocalRunner) =>
+      http(`/local-model-endpoints/${encodeURIComponent(provider)}`, { method: 'DELETE' }),
+
+    // Probe a runner endpoint for reachability + the models it currently serves
+    // (no persistence — drives the "Test connection" model multi-select).
+    testLocalModelEndpoint: (body: TestLocalModelEndpointInput) =>
+      http<LocalModelEndpointTestResult>('/local-model-endpoints/test', {
+        method: 'POST',
+        body,
+      }),
 
     // ---- accounts (tenancy) -----------------------------------------------
     // The accounts the user can switch between (personal + orgs), org creation
@@ -663,6 +694,15 @@ export function useApi() {
       workspaceId: string,
       body: { source: TaskSourceKind; externalId: string; blockId: string },
     ) => http<SourceTask>(`${ws(workspaceId)}/tasks/link`, { method: 'POST', body }),
+
+    createTaskFromIssue: (
+      workspaceId: string,
+      body: { source: TaskSourceKind; externalId: string; containerId: string },
+    ) =>
+      http<{ block: Block; task: SourceTask }>(`${ws(workspaceId)}/tasks/create-block`, {
+        method: 'POST',
+        body,
+      }),
 
     // ---- requirements review (stateless reviewer agent) ------------------
     // The current review for a block (null when none has been run). A 503 means

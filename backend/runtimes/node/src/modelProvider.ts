@@ -6,7 +6,7 @@ import {
   OPENROUTER_BASE_URL,
   QWEN_BASE_URL,
 } from '@cat-factory/agents'
-import type { ApiKeyService } from '@cat-factory/integrations'
+import type { ApiKeyService, LocalModelEndpointService } from '@cat-factory/integrations'
 import type { ModelProviderResolver } from '@cat-factory/kernel'
 import { bedrockRegistry } from '@cat-factory/provider-bedrock'
 import { cloudflareRestRegistry } from '@cat-factory/provider-cloudflare'
@@ -39,6 +39,7 @@ export function baseUrlForNode(provider: string, env: NodeJS.ProcessEnv): string
 export function createNodeModelProviderResolver(
   env: NodeJS.ProcessEnv,
   apiKeys: ApiKeyService | undefined,
+  localModelEndpoints?: LocalModelEndpointService,
 ): ModelProviderResolver {
   const extraRegistries: ProviderRegistry[] = []
 
@@ -87,6 +88,9 @@ export function createNodeModelProviderResolver(
     apiKeys,
     baseUrlFor: (provider) => baseUrlForNode(provider, env),
     extraRegistries,
+    localEndpointsFor: localModelEndpoints
+      ? (userId) => localModelEndpoints.listResolved(userId)
+      : undefined,
     instrument,
   })
 }

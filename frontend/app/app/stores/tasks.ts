@@ -134,6 +134,24 @@ export const useTasksStore = defineStore('tasks', () => {
     return task
   }
 
+  /**
+   * Create a new board task from an imported issue inside a container, linking the
+   * issue to it for context. The caller upserts the returned block onto the board.
+   */
+  async function createTaskFromIssue(
+    source: TaskSourceKind,
+    externalId: string,
+    containerId: string,
+  ) {
+    const result = await api.createTaskFromIssue(workspace.requireId(), {
+      source,
+      externalId,
+      containerId,
+    })
+    upsertTask(result.task)
+    return result
+  }
+
   return {
     available,
     sources,
@@ -153,5 +171,6 @@ export const useTasksStore = defineStore('tasks', () => {
     importTask,
     search,
     linkToBlock,
+    createTaskFromIssue,
   }
 })

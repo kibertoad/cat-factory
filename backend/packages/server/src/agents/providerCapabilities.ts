@@ -1,5 +1,6 @@
 import type {
   ApiKeyService,
+  LocalModelEndpointService,
   PersonalSubscriptionService,
   ProviderSubscriptionService,
 } from '@cat-factory/integrations'
@@ -28,6 +29,8 @@ export interface CapabilityServices {
    * resolves, so the catalog + start guard don't offer a model that fails at dispatch.
    */
   baseUrlFor?: (provider: string) => string | null | undefined
+  /** Per-user locally-run model endpoints (resolved by the requesting/initiating user). */
+  localModelEndpoints?: LocalModelEndpointService
 }
 
 // Direct providers whose AI-SDK resolver works without an explicit base URL (the SDK
@@ -62,9 +65,19 @@ export async function resolveWorkspaceCapabilities(
         : false
     if (pooled || personal) subscriptionVendors.add(vendor)
   }
+  // Local runners are per-user: a model is usable when the resolving user has enabled it.
+  // Keyed by the dynamic model id (`"<provider>:<model>"`) so usability is model-granular
+  // (a runner configured but with this model un-enabled must not pass).
+  const localModels = new Set<string>()
+  if (userId && services.localModelEndpoints) {
+    for (const cap of await services.localModelEndpoints.capabilitiesFor(userId)) {
+      for (const model of cap.models) localModels.add(`${cap.provider}:${model}`)
+    }
+  }
   return {
     directProviders,
     subscriptionVendors,
     cloudflareEnabled: services.cloudflareModelsEnabled ?? false,
+    localModels,
   }
 }

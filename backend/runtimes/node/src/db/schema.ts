@@ -910,6 +910,25 @@ export const personalSubscriptions = pgTable(
   ],
 )
 
+// Per-USER locally-run model endpoints (Ollama / LM Studio / llama.cpp / vLLM / custom),
+// keyed by (user_id, provider). The optional bearer key is system-key-encrypted in
+// `api_key_cipher`; `models` is a JSON array of enabled model ids (mirror of D1
+// migration 0002).
+export const localModelEndpoints = pgTable(
+  'local_model_endpoints',
+  {
+    user_id: text('user_id').notNull(),
+    provider: text('provider').notNull(),
+    label: text('label').notNull(),
+    base_url: text('base_url').notNull(),
+    api_key_cipher: text('api_key_cipher'),
+    models: text('models').notNull(),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+    updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.user_id, t.provider] })],
+)
+
 // Per-run activations of a personal credential: the raw token re-encrypted with the
 // system key only, scoped to one execution with a TTL (mirror of D1 migration 0039).
 export const subscriptionActivations = pgTable(

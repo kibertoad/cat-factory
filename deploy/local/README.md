@@ -94,8 +94,44 @@ curl -s https://api.cloudflare.com/client/v4/accounts \
 config. If you DO set it, it must be valid base64 of at least 32 bytes (e.g.
 `openssl rand -base64 32`); a non-base64 value like `dummy` fails the cipher at boot
 with `InvalidCharacterError`. Set it explicitly to keep encrypted-at-rest credentials
-(integration tokens, personal subscriptions) decryptable across restarts; otherwise a
-fresh per-process key means they have to be re-entered after each restart.
+(integration tokens, personal subscriptions, local-runner keys) decryptable across
+restarts; otherwise a fresh per-process key means they have to be re-entered after
+each restart.
+
+## Using a local model (Ollama / LM Studio / llama.cpp / vLLM)
+
+Run agents on a model on your own machine instead of (or alongside) a cloud provider.
+The supported runners are all OpenAI-compatible, so the only difference is the default
+port:
+
+| Runner    | Default base URL                 | Example install                              |
+| --------- | -------------------------------- | -------------------------------------------- |
+| Ollama    | `http://localhost:11434/v1`      | `ollama serve` → `ollama pull qwen2.5-coder:32b` |
+| LM Studio | `http://localhost:1234/v1`       | enable the local server in the LM Studio UI  |
+| llama.cpp | `http://localhost:8080/v1`       | `llama-server -m model.gguf`                 |
+| vLLM      | `http://localhost:8000/v1`       | `vllm serve <model>`                         |
+| Custom    | (none — supply your own)         | any OpenAI-compatible server (Jan, GPT4All, …) |
+
+Any model the runner serves works — e.g. `qwen2.5-coder:32b`, `qwen3-coder`,
+`deepseek-coder-v2`, `llama3.3`, `gemma3` (Gemma is a *model* served through a runner,
+not a runner itself).
+
+Local runners are configured **per user** (a runner lives on your machine) in the UI:
+
+1. Pull/serve a model with your runner (e.g. `ollama pull gemma3`).
+2. Sidebar → **Configuration → My local runners** → add a runner. Pick the type (the
+   base URL prefills), optionally set a bearer key (most runners ignore auth), then
+   **Test connection** — the server probes the runner's `/v1/models` and lists what's
+   installed. Tick the models you want to enable.
+3. Those models now appear in the model picker (as the `direct` flavour). Pin one on a
+   task and run the pipeline — the agent containers reach the model through this
+   service's LLM proxy (no key leaves your machine).
+
+Local models need no API key, so no `*_API_KEY` env var. `ENCRYPTION_KEY` must be set
+(local mode generates one per process; set it explicitly to keep your runner config and
+optional keys across restarts). Networking: the LLM proxy runs in **this host process**,
+so it reaches the runner at `localhost` directly — you only need a non-default base URL
+if your runner listens elsewhere or you run the orchestrator itself in a container.
 
 ## Open the UI
 

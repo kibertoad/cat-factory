@@ -8,6 +8,7 @@ import {
   type RepoBlueprintRecord,
   type ScheduleRun,
   seedPipelines,
+  type SourceTask,
   type SlackMemberMappingEntry,
   type SlackNotificationSettings,
   type TrackerSettings,
@@ -556,6 +557,85 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
       })
     })
 
+    describe('local model endpoints (per-user runners)', () => {
+      it('stores, lists key-free, resolves with the key, and removes — identically per store', async () => {
+        const app = harness.makeApp()
+        const probe = app.localModelEndpoints?.()
+        // Facades without ENCRYPTION_KEY don't wire the store; nothing to assert there.
+        if (!probe) return
+        const userId = `usr_local_${Date.now()}`
+
+        // Upsert an Ollama runner with a bearer key + duplicate model ids.
+        const created = await probe.upsert(userId, {
+          provider: 'ollama',
+          baseUrl: 'http://localhost:11434/v1',
+          apiKey: 'secret-bearer-key',
+          models: ['qwen2.5-coder:32b', 'gemma3', 'qwen2.5-coder:32b'],
+        })
+        expect(created.provider).toBe('ollama')
+        expect(created.hasApiKey).toBe(true)
+        // The enabled-models JSON round-trips through the store, de-duplicated.
+        expect(created.models).toEqual(['qwen2.5-coder:32b', 'gemma3'])
+
+        // The list (wire) shape never leaks the key.
+        const listed = await probe.list(userId)
+        expect(listed).toHaveLength(1)
+        expect(JSON.stringify(listed)).not.toContain('secret-bearer-key')
+        expect(listed[0]!.hasApiKey).toBe(true)
+        expect(listed[0]!.models).toEqual(['qwen2.5-coder:32b', 'gemma3'])
+
+        // The run-time resolve path decrypts the key (the proxy / inline provider use this).
+        const resolved = await probe.resolve(userId, 'ollama')
+        expect(resolved?.baseUrl).toBe('http://localhost:11434/v1')
+        expect(resolved?.apiKey).toBe('secret-bearer-key')
+
+        // A second, keyless runner resolves with a null key (the common local case).
+        await probe.upsert(userId, {
+          provider: 'lmstudio',
+          baseUrl: 'http://localhost:1234/v1',
+          models: ['llama3.3'],
+        })
+        const both = await probe.list(userId)
+        expect(both.map((e) => e.provider).sort()).toEqual(['lmstudio', 'ollama'])
+        expect((await probe.resolve(userId, 'lmstudio'))?.apiKey).toBeNull()
+
+        await probe.remove(userId, 'ollama')
+        const after = await probe.list(userId)
+        expect(after.map((e) => e.provider)).toEqual(['lmstudio'])
+      })
+
+      it('rejects a non-local base URL at the write boundary (anti-SSRF) — identically per store', async () => {
+        const app = harness.makeApp()
+        const probe = app.localModelEndpoints?.()
+        if (!probe) return
+        const userId = `usr_local_ssrf_${Date.now()}`
+
+        // A runner lives on the user's own machine/LAN; the base URL is forwarded
+        // server-side, so a public host or the link-local metadata endpoint must be
+        // refused before anything is persisted.
+        for (const baseUrl of [
+          'http://evil.example.com/v1',
+          'http://169.254.169.254/latest/meta-data',
+          'http://8.8.8.8/v1',
+        ]) {
+          await expect(
+            probe.upsert(userId, { provider: 'custom', baseUrl, models: ['m'] }),
+          ).rejects.toThrow()
+        }
+        // Nothing was stored.
+        expect(await probe.list(userId)).toEqual([])
+
+        // A loopback URL is still accepted.
+        const ok = await probe.upsert(userId, {
+          provider: 'custom',
+          baseUrl: 'http://127.0.0.1:8080/v1',
+          models: ['m'],
+        })
+        expect(ok.provider).toBe('custom')
+        await probe.remove(userId, 'custom')
+      })
+    })
+
     describe('repo bootstrap', () => {
       it('round-trips reference architectures', async () => {
         const { call, createWorkspace } = harness.makeApp()
@@ -676,6 +756,81 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         expect(del.status).toBe(204)
         const afterDelete = await app.call<RepoBlueprintRecord[]>('GET', base)
         expect(afterDelete.body).toEqual([])
+      })
+    })
+
+    describe('task sources', () => {
+      it('creates a board task from an imported issue and links the issue to it', async () => {
+        const { call, createWorkspace } = harness.makeApp()
+        const { workspace } = await createWorkspace({ seed: false })
+        const ws = workspace.id
+
+        // A service frame to create the task inside.
+        const frame = await call<Block>('POST', `/workspaces/${ws}/blocks`, {
+          type: 'service',
+          position: { x: 0, y: 0 },
+        })
+        expect(frame.status).toBe(201)
+
+        // Connect + import the issue (the fake provider accepts any credentials and
+        // generates a deterministic issue), then materialise it as a board task.
+        await call('POST', `/workspaces/${ws}/task-sources/jira/connect`, {
+          credentials: {
+            baseUrl: 'https://acme.atlassian.net',
+            accountEmail: 'd@a.io',
+            apiToken: 't',
+          },
+        })
+        await call('POST', `/workspaces/${ws}/task-sources/jira/import`, { ref: 'PROJ-42' })
+
+        const created = await call<{ block: Block; task: SourceTask }>(
+          'POST',
+          `/workspaces/${ws}/tasks/create-block`,
+          { source: 'jira', externalId: 'PROJ-42', containerId: frame.body.id },
+        )
+        expect(created.status).toBe(201)
+
+        // The new block is a leaf task under the frame, seeded from the issue.
+        const block = created.body.block
+        expect(block.level).toBe('task')
+        expect(block.parentId).toBe(frame.body.id)
+        expect(block.title).toContain('PROJ-42')
+        expect(block.description).toContain('Description for PROJ-42')
+        expect(block.status).toBe('planned')
+
+        // The issue is linked to the new task for context, and it's persisted: the
+        // board snapshot includes it and the issue list reflects the link.
+        expect(created.body.task.linkedBlockId).toBe(block.id)
+        const snapshot = await call<WorkspaceSnapshot>('GET', `/workspaces/${ws}`)
+        expect(snapshot.body.blocks.some((b) => b.id === block.id && b.level === 'task')).toBe(true)
+        const issues = await call<SourceTask[]>('GET', `/workspaces/${ws}/tasks`)
+        expect(issues.body.find((t) => t.externalId === 'PROJ-42')?.linkedBlockId).toBe(block.id)
+
+        // Creating a second task from the already-linked issue is refused (409), so the
+        // single issue→block link is never silently re-pointed away from the first task.
+        const again = await call('POST', `/workspaces/${ws}/tasks/create-block`, {
+          source: 'jira',
+          externalId: 'PROJ-42',
+          containerId: frame.body.id,
+        })
+        expect(again.status).toBe(409)
+      })
+
+      it('404s when the issue was never imported', async () => {
+        const { call, createWorkspace } = harness.makeApp()
+        const { workspace } = await createWorkspace({ seed: false })
+        const ws = workspace.id
+        const frame = await call<Block>('POST', `/workspaces/${ws}/blocks`, {
+          type: 'service',
+          position: { x: 0, y: 0 },
+        })
+
+        const res = await call('POST', `/workspaces/${ws}/tasks/create-block`, {
+          source: 'jira',
+          externalId: 'PROJ-999',
+          containerId: frame.body.id,
+        })
+        expect(res.status).toBe(404)
       })
     })
 
@@ -1159,7 +1314,9 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         expect(step.output).not.toContain('[spec-writer]')
         expect(step.output).toContain('# Specification: Auth')
         expect(step.output).toContain('The system SHALL let a user log in.')
-        expect(step.output).toContain('GIVEN a registered user WHEN they sign in THEN a session starts')
+        expect(step.output).toContain(
+          'GIVEN a registered user WHEN they sign in THEN a session starts',
+        )
       })
 
       it('skips a disabled step at run start but keeps it in the saved pipeline', async () => {
