@@ -89,10 +89,14 @@ facade so the runtimes can't drift (see "Cross-runtime conformance" below).
   - `backend/packages/agents` — agent catalog + prompt composition
     (`systemPromptFor`/`userPromptFor`, the per-kind `ROLES`) **and the AI
     provisioning facade**: `CompositeModelProvider` + the runtime-neutral
-    single-provider resolvers (`openai`/`anthropic`/the OpenAI-compatible trio +
+    single-provider resolvers (`openai`/`anthropic`/the OpenAI-compatible vendors —
+    Qwen/DeepSeek/Moonshot plus the **OpenRouter** + **LiteLLM** gateways — +
     the Cloudflare-over-REST resolver) and `providerEndpoints` (the base-URL/key
     source of truth, also used by the LLM proxy). Each facade composes the registry
-    from the resolvers it can serve.
+    from the resolvers it can serve. OpenRouter/LiteLLM are pure OpenAI-compatible
+    entries: keys live in the UI key pool like the other direct vendors, OpenRouter
+    defaults to the public gateway, and LiteLLM is operator-hosted (`LITELLM_BASE_URL`
+    required, no public default).
   - `backend/packages/provider-bedrock` — `@cat-factory/provider-bedrock`, the
     opt-in AWS Bedrock resolver (`@ai-sdk/amazon-bedrock`) with a **supported-model
     allow-list** that throws `Unsupported Bedrock model` for anything outside it.
@@ -639,6 +643,21 @@ differentiators behind the shared kernel ports + the `container.gateways` seam.
   workers-ai binding + direct vendors + Cloudflare-REST + Bedrock; Node = direct
   vendors + Cloudflare-REST + Bedrock (no binding). Unconfigured providers aren't
   registered, so `resolve` throws a clear error instead of failing deep in the SDK.
+- **Locally-run models (per-user)** — Ollama / LM Studio / llama.cpp / vLLM / a custom
+  OpenAI-compatible runner. Configured per USER in the UI ("My local runners"), stored in
+  the `local_model_endpoints` table (D1 ⇄ Drizzle parity), validated on the fly via
+  `LocalModelEndpointService.testConnection` (probes `/v1/models`). Enabled models are
+  appended to `GET /models` dynamically (id `"<provider>:<model>"`) as the `direct` flavour
+  gated by the `localModels` capability (the per-user set of enabled model ids — usability
+  is model-granular, not just per-runner) — NO API key. At run time the LLM proxy + the
+  inline model provider resolve the **run initiator's** endpoint and SKIP the DB key lease
+  (the keyless local branch; `isProxyableProvider` + `isLocalRunner`), exactly like the
+  personal-subscription initiator model. `parseLocalModelId` turns the dynamic id into a
+  `ModelRef`. The base URL is forwarded server-side, so it's constrained to a loopback/LAN
+  host allow-list (`localRunnerUrlError`) at the write boundary + the test probe (public
+  hosts and the link-local metadata endpoint are rejected — anti-SSRF). Runtime-neutral and
+  runs on the cross-runtime conformance suite; in practice only local/Node deployments reach
+  `localhost`.
 
 **Cross-runtime conformance** keeps the facades behaviourally identical:
 `@cat-factory/conformance` exposes `defineConformanceSuite(harness)` — the key backend

@@ -78,6 +78,7 @@ import type {
   ResolveRequirementsExceededChoice,
   ReviewItemStatus,
 } from '~/types/requirements'
+import type { ClarityReview, ResolveClarityExceededChoice } from '~/types/clarity'
 import type { Notification } from '~/types/notifications'
 import type {
   SlackChannel,
@@ -98,6 +99,13 @@ import type {
 } from '~/types/recurring'
 import type { TrackerSettings, PutTrackerSettingsInput } from '~/types/tracker'
 import type { ConsensusSession } from '~/types/consensus'
+import type {
+  LocalModelEndpoint,
+  LocalModelEndpointTestResult,
+  LocalRunner,
+  TestLocalModelEndpointInput,
+  UpsertLocalModelEndpointInput,
+} from '~/types/localModels'
 
 type Position = { x: number; y: number }
 
@@ -286,6 +294,30 @@ export function useApi() {
 
     removePersonalSubscription: (vendor: SubscriptionVendor) =>
       http(`/personal-subscriptions/${encodeURIComponent(vendor)}`, { method: 'DELETE' }),
+
+    // ---- local model runners (per-user, e.g. Ollama / LM Studio) ----------
+    // A developer's own-machine LLM endpoints, stored per signed-in user (the API
+    // key is write-only, never returned). User-scoped (no workspace). The enabled
+    // models then surface automatically in the per-workspace `/models` catalog.
+    listLocalModelEndpoints: () =>
+      http<{ endpoints: LocalModelEndpoint[] }>('/local-model-endpoints'),
+
+    upsertLocalModelEndpoint: (provider: LocalRunner, body: UpsertLocalModelEndpointInput) =>
+      http<LocalModelEndpoint>(`/local-model-endpoints/${encodeURIComponent(provider)}`, {
+        method: 'PUT',
+        body,
+      }),
+
+    deleteLocalModelEndpoint: (provider: LocalRunner) =>
+      http(`/local-model-endpoints/${encodeURIComponent(provider)}`, { method: 'DELETE' }),
+
+    // Probe a runner endpoint for reachability + the models it currently serves
+    // (no persistence — drives the "Test connection" model multi-select).
+    testLocalModelEndpoint: (body: TestLocalModelEndpointInput) =>
+      http<LocalModelEndpointTestResult>('/local-model-endpoints/test', {
+        method: 'POST',
+        body,
+      }),
 
     // ---- accounts (tenancy) -----------------------------------------------
     // The accounts the user can switch between (personal + orgs), org creation
@@ -665,6 +697,15 @@ export function useApi() {
       body: { source: TaskSourceKind; externalId: string; blockId: string },
     ) => http<SourceTask>(`${ws(workspaceId)}/tasks/link`, { method: 'POST', body }),
 
+    createTaskFromIssue: (
+      workspaceId: string,
+      body: { source: TaskSourceKind; externalId: string; containerId: string },
+    ) =>
+      http<{ block: Block; task: SourceTask }>(`${ws(workspaceId)}/tasks/create-block`, {
+        method: 'POST',
+        body,
+      }),
+
     // ---- requirements review (stateless reviewer agent) ------------------
     // The current review for a block (null when none has been run). A 503 means
     // the feature is unconfigured (the panel hides on any error here).
@@ -730,6 +771,67 @@ export function useApi() {
     ) =>
       http<RequirementReview>(
         `${ws(workspaceId)}/blocks/${encodeURIComponent(blockId)}/requirement-review/resolve-exceeded`,
+        { method: 'POST', body: { choice } },
+      ),
+
+    // ---- clarity review (bug-report triage reviewer agent) ---------------
+    // The current review for a block (null when none has been run). A 503 means
+    // the feature is unconfigured (the panel hides on any error here).
+    getClarityReview: (workspaceId: string, blockId: string) =>
+      http<ClarityReview | null>(
+        `${ws(workspaceId)}/blocks/${encodeURIComponent(blockId)}/clarity-review`,
+      ),
+
+    replyClarityItem: (workspaceId: string, reviewId: string, itemId: string, reply: string) =>
+      http<ClarityReview>(
+        `${ws(workspaceId)}/clarity-reviews/${encodeURIComponent(reviewId)}/items/${encodeURIComponent(itemId)}/reply`,
+        { method: 'POST', body: { reply } },
+      ),
+
+    setClarityItemStatus: (
+      workspaceId: string,
+      reviewId: string,
+      itemId: string,
+      status: ReviewItemStatus,
+    ) =>
+      http<ClarityReview>(
+        `${ws(workspaceId)}/clarity-reviews/${encodeURIComponent(reviewId)}/items/${encodeURIComponent(itemId)}`,
+        { method: 'PATCH', body: { status } },
+      ),
+
+    // Incorporate the answers ASYNCHRONOUSLY (every finding must be answered or dismissed).
+    // The durable driver folds them and re-reviews in the background. Optional `feedback` is
+    // the "do it differently" lever when redoing a merge. Returns the `incorporating` review
+    // at once; a notification calls the user back only if the re-review needs input.
+    incorporateClarity: (workspaceId: string, blockId: string, feedback?: string) =>
+      http<ClarityReview>(
+        `${ws(workspaceId)}/blocks/${encodeURIComponent(blockId)}/clarity-review/incorporate`,
+        { method: 'POST', body: feedback ? { feedback } : {} },
+      ),
+
+    // Re-review the clarified report (one more reviewer pass). On convergence the parked run
+    // advances; otherwise the response carries the next cycle / cap state.
+    reReviewClarity: (workspaceId: string, blockId: string) =>
+      http<ClarityReview>(
+        `${ws(workspaceId)}/blocks/${encodeURIComponent(blockId)}/clarity-review/re-review`,
+        { method: 'POST' },
+      ),
+
+    // Proceed: settle the clarity review and advance the parked run (all findings dismissed).
+    proceedClarity: (workspaceId: string, blockId: string) =>
+      http<ClarityReview>(
+        `${ws(workspaceId)}/blocks/${encodeURIComponent(blockId)}/clarity-review/proceed`,
+        { method: 'POST' },
+      ),
+
+    // Resolve a review that hit its iteration cap: extra-round / proceed / stop-reset.
+    resolveClarityExceeded: (
+      workspaceId: string,
+      blockId: string,
+      choice: ResolveClarityExceededChoice,
+    ) =>
+      http<ClarityReview>(
+        `${ws(workspaceId)}/blocks/${encodeURIComponent(blockId)}/clarity-review/resolve-exceeded`,
         { method: 'POST', body: { choice } },
       ),
 

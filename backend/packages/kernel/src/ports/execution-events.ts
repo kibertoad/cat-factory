@@ -2,6 +2,7 @@ import type {
   Block,
   BootstrapJob,
   ConsensusSession,
+  ClarityReview,
   ExecutionInstance,
   LlmCallActivity,
   Notification,
@@ -71,6 +72,13 @@ export interface ExecutionEventPublisher {
    * real-time transport — or no consensus package wired — leaves it a no-op.
    */
   consensusSessionChanged?(workspaceId: string, session: ConsensusSession): Promise<void>
+  /**
+   * A block's clarity (bug-report triage) review changed status — the mirror of
+   * {@link requirementReviewChanged} for the clarity loop: push the updated review so an
+   * open review window / inspector reflects the transition live. Optional; a runtime with
+   * no real-time transport wired leaves it a no-op.
+   */
+  clarityReviewChanged?(workspaceId: string, review: ClarityReview): Promise<void>
 }
 
 /**
@@ -86,4 +94,5 @@ export class NoopEventPublisher implements ExecutionEventPublisher {
   async llmCallObserved(): Promise<void> {}
   async requirementReviewChanged(): Promise<void> {}
   async consensusSessionChanged(): Promise<void> {}
+  async clarityReviewChanged(): Promise<void> {}
 }

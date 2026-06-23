@@ -4,19 +4,23 @@ import {
   FakeAgentExecutor,
   type FakeAgentOptions,
   FakeRepoBootstrapper,
+  FakeTaskSourceProvider,
   RecordingEventPublisher,
   driveWorkspace,
+  makeIncorporatedClarityReview,
   makeIncorporatedReview,
   makeOnboardingProbe,
   makeReadyReviewWithOpenItem,
 } from '@cat-factory/conformance'
 import type { ExecutionInstance, RepoBlueprintRecord, WorkspaceSnapshot } from '@cat-factory/kernel'
 import { NoopBootstrapRunner, NoopWorkRunner } from '@cat-factory/kernel'
+import type { LocalRunner, UpsertLocalModelEndpointInput } from '@cat-factory/contracts'
 import type { CoreDependencies } from '@cat-factory/orchestration'
 import { buildNodeContainer } from '../src/container.js'
 import { type DrizzleDb, createDbClient } from '../src/db/client.js'
 import { migrate } from '../src/db/migrate.js'
 import {
+  DrizzleClarityReviewRepository,
   DrizzleRepoBlueprintRepository,
   DrizzleRequirementReviewRepository,
 } from '../src/repositories/drizzle.js'
@@ -86,6 +90,10 @@ export function makeConformanceApp(
     // lifecycle without GitHub or a container (the suite drives it via driveBootstrap).
     repoBootstrapper: new FakeRepoBootstrapper(),
     executionEventPublisher: recorder,
+    // Swap the config-wired real Jira provider for a deterministic fake (the Drizzle
+    // task repos stay), so the shared suite asserts create-task-from-issue against
+    // Postgres without hitting the network. Override wins over the config providers.
+    taskSourceProviders: [new FakeTaskSourceProvider('jira')],
   }
   const container = buildNodeContainer({
     db,
@@ -165,6 +173,13 @@ export function makeConformanceApp(
     )
   }
 
+  function seedIncorporatedClarityReview(workspaceId: string, blockId: string, report: string) {
+    return new DrizzleClarityReviewRepository(db).upsert(
+      workspaceId,
+      makeIncorporatedClarityReview(blockId, report),
+    )
+  }
+
   function seedBlueprint(record: RepoBlueprintRecord) {
     return new DrizzleRepoBlueprintRepository(db).upsert(record)
   }
@@ -178,7 +193,19 @@ export function makeConformanceApp(
     executionEmits,
     seedIncorporatedReview,
     seedReadyReview,
+    seedIncorporatedClarityReview,
     seedBlueprint,
     onboarding: () => makeOnboardingProbe(container),
+    localModelEndpoints: () => {
+      const svc = container.localModelEndpoints
+      if (!svc) return undefined
+      return {
+        list: (userId: string) => svc.list(userId),
+        upsert: (userId: string, input) =>
+          svc.upsert(userId, input as UpsertLocalModelEndpointInput),
+        resolve: (userId: string, provider: string) => svc.resolve(userId, provider),
+        remove: (userId: string, provider: string) => svc.remove(userId, provider as LocalRunner),
+      }
+    },
   }
 }

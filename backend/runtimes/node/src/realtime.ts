@@ -4,6 +4,7 @@ import type {
   Block,
   BootstrapJob,
   ConsensusSession,
+  ClarityReview,
   ExecutionInstance,
   LlmCallActivity,
   Notification,
@@ -135,6 +136,10 @@ export class NodeEventPublisher implements ExecutionEventPublisher {
 
   async consensusSessionChanged(workspaceId: string, session: ConsensusSession): Promise<void> {
     this.publish(workspaceId, { type: 'consensus', session, at: Date.now() })
+  }
+
+  async clarityReviewChanged(workspaceId: string, review: ClarityReview): Promise<void> {
+    this.publish(workspaceId, { type: 'clarity', review, at: Date.now() })
   }
 
   private publish(workspaceId: string, event: WorkspaceEvent): void {

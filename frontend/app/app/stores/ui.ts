@@ -73,6 +73,8 @@ export const useUiStore = defineStore('ui', () => {
   // LLM-vendor subscription credentials (the token pool powering the Claude Code
   // / Codex harnesses).
   const vendorCredentialsOpen = ref(false)
+  // Per-user settings panel: the signed-in user's own-machine local model runners.
+  const localModelsOpen = ref(false)
 
   // Dedicated result-view overlay: a step whose agent kind declares a bespoke
   // visualization (via the archetype's `resultView`) opens here instead of the generic
@@ -295,8 +297,17 @@ export const useUiStore = defineStore('ui', () => {
   function closeVendorCredentials() {
     vendorCredentialsOpen.value = false
   }
+  function openLocalModels() {
+    localModelsOpen.value = true
+  }
+  function closeLocalModels() {
+    localModelsOpen.value = false
+  }
   function openRequirementReview(blockId: string) {
     resultView.value = { view: 'requirements-review', blockId, instanceId: null, stepIndex: null }
+  }
+  function openClarityReview(blockId: string) {
+    resultView.value = { view: 'clarity-review', blockId, instanceId: null, stepIndex: null }
   }
   function closeResultView() {
     resultView.value = null
@@ -338,6 +349,7 @@ export const useUiStore = defineStore('ui', () => {
     modelDefaultsOpen,
     serviceFragmentDefaultsOpen,
     vendorCredentialsOpen,
+    localModelsOpen,
     resultView,
     closeResultView,
     stepDetail,
@@ -389,7 +401,10 @@ export const useUiStore = defineStore('ui', () => {
     closeServiceFragmentDefaults,
     openVendorCredentials,
     closeVendorCredentials,
+    openLocalModels,
+    closeLocalModels,
     openRequirementReview,
+    openClarityReview,
     closeRequirementReview,
     openStepDetail,
     closeStepDetail,

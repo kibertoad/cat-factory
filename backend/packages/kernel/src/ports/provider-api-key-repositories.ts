@@ -16,7 +16,14 @@
 export type ApiKeyScope = 'account' | 'workspace' | 'user'
 
 /** The direct providers that own a poolable API key (NOT subscription vendors). */
-export type ApiKeyProvider = 'openai' | 'anthropic' | 'qwen' | 'deepseek' | 'moonshot'
+export type ApiKeyProvider =
+  | 'openai'
+  | 'anthropic'
+  | 'qwen'
+  | 'deepseek'
+  | 'moonshot'
+  | 'openrouter'
+  | 'litellm'
 
 /** A (scope, scopeId) pair — the addressing of a pool segment. */
 export interface ApiKeyScopeRef {

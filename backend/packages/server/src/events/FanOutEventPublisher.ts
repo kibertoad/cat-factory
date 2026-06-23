@@ -2,6 +2,7 @@ import type {
   Block,
   BootstrapJob,
   ConsensusSession,
+  ClarityReview,
   ExecutionEventPublisher,
   ExecutionInstance,
   LlmCallActivity,
@@ -97,6 +98,12 @@ export class FanOutEventPublisher implements ExecutionEventPublisher {
   async consensusSessionChanged(workspaceId: string, session: ConsensusSession): Promise<void> {
     for (const ws of await this.targets(workspaceId, session.blockId)) {
       await this.inner.consensusSessionChanged?.(ws, session)
+    }
+  }
+
+  async clarityReviewChanged(workspaceId: string, review: ClarityReview): Promise<void> {
+    for (const ws of await this.targets(workspaceId, review.blockId)) {
+      await this.inner.clarityReviewChanged?.(ws, review)
     }
   }
 }

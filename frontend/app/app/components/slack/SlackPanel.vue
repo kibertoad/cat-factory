@@ -23,6 +23,7 @@ const ROUTABLE: { type: NotificationType; label: string }[] = [
   { type: 'ci_failed', label: 'CI failed' },
   { type: 'test_failed', label: 'Tests failed' },
   { type: 'requirement_review', label: 'Requirement review' },
+  { type: 'clarity_review', label: 'Clarity review' },
 ]
 
 /** Notification-role options for a mapped member (drives who gets @-mentioned). */
@@ -35,6 +36,7 @@ const routes = reactive<Record<NotificationType, SlackRoute>>({
   ci_failed: { enabled: false, channel: '' },
   test_failed: { enabled: false, channel: '' },
   requirement_review: { enabled: false, channel: '' },
+  clarity_review: { enabled: false, channel: '' },
 })
 const mentionsEnabled = ref(false)
 const mapping = ref<SlackMemberMappingEntry[]>([])

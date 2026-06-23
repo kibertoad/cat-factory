@@ -17,11 +17,34 @@ const emit = defineEmits<{
 
 const models = useModelsStore()
 const ui = useUiStore()
+const execution = useExecutionStore()
 
 // Clicking an agent opens its step-detail overlay — execution metadata (state,
 // timing, model, subtasks) plus the full prose output when the agent produced one.
 function openStep(i: number) {
   ui.openStepDetail(props.instance.id, i)
+}
+
+// --- restart from a step -----------------------------------------------------
+// Re-run the pipeline from a chosen step onward: the server resets that step +
+// every later step's iteration counters and re-drives a fresh run, keeping the
+// earlier steps' outputs as handoff context. Destructive (later results are
+// dropped), so the hover button arms a two-click confirm. A step with its own
+// unresolved approval is excluded — the approval rail owns that interaction.
+const restartArmed = ref<number | null>(null)
+const restarting = ref<number | null>(null)
+function canRestart(s: ExecutionInstance['steps'][number]) {
+  return !(s.approval && s.approval.status === 'pending')
+}
+async function restartFromHere(i: number) {
+  if (restarting.value !== null) return
+  restarting.value = i
+  try {
+    await execution.restartFromStep(props.instance.id, i)
+  } finally {
+    restarting.value = null
+    restartArmed.value = null
+  }
 }
 
 /** Visual language for an individual agent's runtime state. */
@@ -208,6 +231,46 @@ const ITEM_ICON: Record<string, string> = {
             >
               {{ STATE_META[s.state].label }}
             </span>
+
+            <!-- restart-from-here: revealed on row hover, arms a two-click confirm
+                 (resetting later steps is destructive). Stops propagation so it
+                 doesn't also open the step-detail overlay. -->
+            <template v-if="canRestart(s)">
+              <UButton
+                v-if="restartArmed !== i"
+                icon="i-lucide-rotate-ccw"
+                color="neutral"
+                variant="ghost"
+                size="xs"
+                class="shrink-0 opacity-0 transition-opacity group-hover:opacity-100"
+                title="Restart pipeline from this step"
+                @click.stop="restartArmed = i"
+              />
+              <template v-else>
+                <UButton
+                  color="warning"
+                  variant="soft"
+                  size="xs"
+                  icon="i-lucide-rotate-ccw"
+                  :loading="restarting === i"
+                  class="shrink-0"
+                  @click.stop="restartFromHere(i)"
+                >
+                  Restart from here
+                </UButton>
+                <UButton
+                  color="neutral"
+                  variant="ghost"
+                  size="xs"
+                  class="shrink-0"
+                  :disabled="restarting === i"
+                  @click.stop="restartArmed = null"
+                >
+                  Cancel
+                </UButton>
+              </template>
+            </template>
+
             <UIcon
               :name="s.output ? 'i-lucide-book-open-text' : 'i-lucide-info'"
               class="h-4 w-4 shrink-0 text-slate-500 transition-colors group-hover:text-indigo-300"

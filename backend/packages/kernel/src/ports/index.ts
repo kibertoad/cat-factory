@@ -42,6 +42,7 @@ export type {
 export type { Clock, IdGenerator } from './runtime.js'
 export type { RequirementReviewRepository } from './requirement-review-repositories.js'
 export type { ConsensusSessionRepository } from './consensus-repositories.js'
+export type { ClarityReviewRepository } from './clarity-review-repositories.js'
 export type { AgentRunRef, AgentRunRepository } from './agent-runs.js'
 export type {
   HarnessKind,
@@ -236,6 +237,10 @@ export type {
   SubscriptionActivationRecord,
   SubscriptionActivationRepository,
 } from './personal-subscription-repositories.js'
+export type {
+  LocalModelEndpointRecord,
+  LocalModelEndpointRepository,
+} from './local-model-repositories.js'
 export type { BoardWritePort } from './board-operations.js'
 export type { PullRequestMerger } from './pr-merger.js'
 export type { CiCheck, CiStatusReport, CiStatusProvider } from './ci-status.js'

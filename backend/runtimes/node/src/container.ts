@@ -7,10 +7,13 @@ import {
 import {
   ConfluenceProvider,
   GitHubDocsProvider,
+  GitHubIssuesProvider,
+  JiraProvider,
   HttpEnvironmentProvider,
   HttpRunnerPoolProvider,
   NotionProvider,
   ApiKeyService,
+  LocalModelEndpointService,
   PersonalSubscriptionService,
   ProviderSubscriptionService,
   RunnerPoolConnectionService,
@@ -72,7 +75,7 @@ import { executionRuntime } from './execution/config.js'
 import { PgBossBootstrapRunner } from './execution/bootstrapRunner.js'
 import { PgBossWorkRunner } from './execution/pgBossRunner.js'
 import { createNodeGateways } from './gateways.js'
-import { createNodeModelProviderResolver } from './modelProvider.js'
+import { baseUrlForNode, createNodeModelProviderResolver } from './modelProvider.js'
 import { ConsensusAgentExecutor, registerConsensusTraits } from '@cat-factory/consensus'
 import { NodeEventPublisher, type NodeRealtimeHub } from './realtime.js'
 import {
@@ -94,6 +97,7 @@ import {
   DrizzlePersonalSubscriptionRepository,
   DrizzleSubscriptionActivationRepository,
 } from './repositories/personalSubscription.js'
+import { DrizzleLocalModelEndpointRepository } from './repositories/localModelEndpoint.js'
 import { createDrizzleRepositories } from './repositories/drizzle.js'
 import {
   DrizzleBootstrapJobRepository,
@@ -119,7 +123,6 @@ import {
 } from './repositories/slack.js'
 import { DrizzleTaskConnectionRepository, DrizzleTaskRepository } from './repositories/tasks.js'
 import { CryptoIdGenerator, SystemClock } from './runtime.js'
-import { JiraProvider } from './tasks/JiraProvider.js'
 
 // HKDF domain tag separating runner-pool scheduler secrets from any other use of
 // the same master key (mirrors the Worker's `cat-factory:runners`).
@@ -146,10 +149,11 @@ function buildModelProviderResolver(
   env: NodeJS.ProcessEnv,
   db: DrizzleDb,
   apiKeys: ApiKeyService | undefined,
+  localModelEndpoints: LocalModelEndpointService | undefined,
 ): ModelProviderResolver {
   const cached = modelResolverCache.get(db)
   if (cached) return cached
-  const resolver = createNodeModelProviderResolver(env, apiKeys)
+  const resolver = createNodeModelProviderResolver(env, apiKeys, localModelEndpoints)
   modelResolverCache.set(db, resolver)
   return resolver
 }
@@ -601,6 +605,23 @@ function buildNodeApiKeyService(
  * Double-encrypts the credential (password layer inside the system layer). Mirrors the
  * Worker's buildPersonalSubscriptionService.
  */
+function buildNodeLocalModelEndpointService(
+  env: NodeJS.ProcessEnv,
+  db: DrizzleDb,
+  clock: Clock,
+): LocalModelEndpointService | undefined {
+  const masterKeyBase64 = env.ENCRYPTION_KEY?.trim()
+  if (!masterKeyBase64) return undefined
+  return new LocalModelEndpointService({
+    localModelEndpointRepository: new DrizzleLocalModelEndpointRepository(db),
+    secretCipher: new WebCryptoSecretCipher({
+      masterKeyBase64,
+      info: 'cat-factory:local-model-endpoints',
+    }),
+    clock,
+  })
+}
+
 function buildNodePersonalSubscriptionService(
   env: NodeJS.ProcessEnv,
   db: DrizzleDb,
@@ -704,7 +725,16 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     idGenerator,
     clock,
   )
-  const modelProviderResolver = buildModelProviderResolver(env, options.db, apiKeys)
+  // The per-user locally-run model endpoints store (Ollama / LM Studio / …), shared by
+  // the local-runner controller, the per-user model catalog, the inline model provider,
+  // and the LLM proxy.
+  const localModelEndpoints = buildNodeLocalModelEndpointService(env, options.db, clock)
+  const modelProviderResolver = buildModelProviderResolver(
+    env,
+    options.db,
+    apiKeys,
+    localModelEndpoints,
+  )
   // Cloudflare Workers AI is opt-in on Node: enabled when the REST creds are present.
   const cloudflareModelsEnabled =
     options.cloudflareModelsEnabled ?? !!(env.CLOUDFLARE_ACCOUNT_ID && env.CLOUDFLARE_API_TOKEN)
@@ -718,12 +748,6 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // INLINE_WEB_SEARCH_ENABLED and an Anthropic/OpenAI model).
     webSearch: inlineWebSearchOptionsFromEnv(env),
   })
-
-  // Task-source integration (Jira). Always on (config load requires ENCRYPTION_KEY);
-  // tenants connect their own Jira site through the UI and the credentials are stored
-  // per-workspace, encrypted at rest. The tracker resolves each workspace's own
-  // credentials from this same store (multi-tenant), mirroring the Cloudflare facade.
-  const tasks = selectNodeTasksDeps(config, options.db)
 
   // Persistence the container-execution path needs (built from the same db). The
   // runner-pool repo also backs the `runners` Core module so a pool is registrable
@@ -818,6 +842,14 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
           apiBase: config.github.apiBase,
         })
       : undefined)
+
+  // Task-source integration (Jira + GitHub issues). Tenants connect their own Jira
+  // site through the UI (credentials stored per-workspace, encrypted at rest); the
+  // tracker resolves each workspace's own credentials from this same store. GitHub
+  // issues reuse the workspace's installed App, so they wire only when `githubClient`
+  // is available — kept here, after the client is built, for parity with the Worker.
+  const tasks = selectNodeTasksDeps(config, options.db, githubClient, githubInstallationRepository)
+
   const githubGateDeps: Partial<CoreDependencies> = githubClient
     ? {
         ciStatusProvider: new GitHubCiStatusProvider({
@@ -967,6 +999,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // like a pipeline step: block-pin > workspace per-kind default > routing default
     // (which falls back to Cloudflare Workers AI unless a direct key is set).
     requirementReviewRepository: repos.requirementReviewRepository,
+    clarityReviewRepository: repos.clarityReviewRepository,
     // Merge threshold presets: the per-workspace auto-merge ceiling library a task's
     // merge gate resolves (block-pinned preset > workspace default). Wired
     // unconditionally, exactly like the Worker's `selectMergeLifecycleDeps`, so the
@@ -1077,7 +1110,14 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // The pipeline-start guard resolves what's configured for a workspace + initiator.
     resolveProviderCapabilities: (workspaceId, initiatedBy) =>
       resolveWorkspaceCapabilities(
-        { apiKeys, subscriptions, personalSubscriptions, cloudflareModelsEnabled },
+        {
+          apiKeys,
+          subscriptions,
+          personalSubscriptions,
+          cloudflareModelsEnabled,
+          baseUrlFor: (provider) => baseUrlForNode(provider, env),
+          localModelEndpoints,
+        },
         workspaceId,
         initiatedBy,
       ),
@@ -1107,6 +1147,11 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     apiKeys,
     // Whether the opt-in Cloudflare Workers AI lib is enabled (REST creds present).
     cloudflareModelsEnabled,
+    // The direct-provider base-URL resolver the catalog uses to gate selectability on a
+    // resolvable endpoint (e.g. LiteLLM stays unselectable until LITELLM_BASE_URL is set).
+    baseUrlFor: (provider) => baseUrlForNode(provider, env),
+    // The per-user locally-run model endpoints store; present when ENCRYPTION_KEY is set.
+    localModelEndpoints,
   }
 }
 
@@ -1121,10 +1166,19 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
 function selectNodeTasksDeps(
   config: AppConfig,
   db: DrizzleDb,
+  githubClient: GitHubClient | undefined,
+  installations: GitHubInstallationRepository,
 ): { deps: Partial<CoreDependencies>; taskConnectionRepository?: TaskConnectionRepository } {
   if (!config.tasks.enabled || !config.tasks.encryptionKey) return { deps: {} }
   const providers: TaskSourceProvider[] = []
   if (config.tasks.sources.includes('jira')) providers.push(new JiraProvider())
+  // GitHub issues reuse the workspace's installed GitHub App, so this provider is
+  // wired only when a GitHub client is available (the App is configured) — it has
+  // no credentials of its own and resolves the installation per issue. Mirrors the
+  // Cloudflare facade's `config.github.enabled` gate (see CLAUDE.md parity rule).
+  if (config.tasks.sources.includes('github') && githubClient) {
+    providers.push(new GitHubIssuesProvider({ githubClient, installations }))
+  }
   if (providers.length === 0) return { deps: {} }
 
   const taskConnectionRepository = new DrizzleTaskConnectionRepository(

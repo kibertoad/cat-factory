@@ -3,9 +3,10 @@ import {
   DEEPSEEK_BASE_URL,
   MOONSHOT_BASE_URL,
   OPENAI_BASE_URL,
+  OPENROUTER_BASE_URL,
   QWEN_BASE_URL,
 } from '@cat-factory/agents'
-import type { ApiKeyService } from '@cat-factory/integrations'
+import type { ApiKeyService, LocalModelEndpointService } from '@cat-factory/integrations'
 import type { ModelProviderResolver } from '@cat-factory/kernel'
 import { bedrockRegistry } from '@cat-factory/provider-bedrock'
 import { cloudflareRestRegistry } from '@cat-factory/provider-cloudflare'
@@ -24,10 +25,13 @@ const NODE_BASE_URLS: Record<string, string> = {
   qwen: QWEN_BASE_URL,
   deepseek: DEEPSEEK_BASE_URL,
   moonshot: MOONSHOT_BASE_URL,
+  openrouter: OPENROUTER_BASE_URL,
+  // `litellm` has no default: its base URL is the operator's own gateway, supplied via
+  // LITELLM_BASE_URL (honored automatically by baseUrlForNode's `${PROVIDER}_BASE_URL`).
 }
 
 /** The base URL for a direct provider: env override (e.g. QWEN_BASE_URL), else default. */
-function baseUrlForNode(provider: string, env: NodeJS.ProcessEnv): string | undefined {
+export function baseUrlForNode(provider: string, env: NodeJS.ProcessEnv): string | undefined {
   // `||` not `??`: a set-but-blank override must fall back to the default.
   return env[`${provider.toUpperCase()}_BASE_URL`] || NODE_BASE_URLS[provider]
 }
@@ -35,6 +39,7 @@ function baseUrlForNode(provider: string, env: NodeJS.ProcessEnv): string | unde
 export function createNodeModelProviderResolver(
   env: NodeJS.ProcessEnv,
   apiKeys: ApiKeyService | undefined,
+  localModelEndpoints?: LocalModelEndpointService,
 ): ModelProviderResolver {
   const extraRegistries: ProviderRegistry[] = []
 
@@ -83,6 +88,9 @@ export function createNodeModelProviderResolver(
     apiKeys,
     baseUrlFor: (provider) => baseUrlForNode(provider, env),
     extraRegistries,
+    localEndpointsFor: localModelEndpoints
+      ? (userId) => localModelEndpoints.listResolved(userId)
+      : undefined,
     instrument,
   })
 }

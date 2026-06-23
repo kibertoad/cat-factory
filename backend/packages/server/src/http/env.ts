@@ -1,6 +1,7 @@
 import type { AgentRunRepository, ConsensusSessionRepository } from '@cat-factory/kernel'
 import type {
   ApiKeyService,
+  LocalModelEndpointService,
   PersonalSubscriptionService,
   ProviderSubscriptionService,
 } from '@cat-factory/integrations'
@@ -52,6 +53,21 @@ export interface ServerContainer extends Core {
    * not selectable.
    */
   cloudflareModelsEnabled?: boolean
+  /**
+   * The deployment's direct-provider base-URL resolver (env override → built-in default,
+   * or null when none — e.g. an unconfigured operator-hosted LiteLLM gateway). The model
+   * catalog uses it to gate selectability: an OpenAI-compatible provider is only
+   * selectable once its base URL resolves, mirroring what the dispatch path requires.
+   */
+  baseUrlFor?: (provider: string) => string | null | undefined
+  /**
+   * The per-USER locally-run model endpoints store (Ollama / LM Studio / llama.cpp /
+   * vLLM / custom OpenAI-compatible runners). Present only when the facade wired the
+   * local-model repository (needs ENCRYPTION_KEY). Drives the local-runner controller,
+   * the per-user model catalog, and the LLM proxy's base-URL/key resolution for a
+   * locally-run model — resolved by the run initiator.
+   */
+  localModelEndpoints?: LocalModelEndpointService
 }
 
 /** Hono generics shared by the cross-runtime controllers (Variables only — no Bindings). */

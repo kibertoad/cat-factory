@@ -135,6 +135,16 @@ export type {
   IncorporateRequirementsInput,
   ResolveRequirementsExceededInput,
   ResolveRequirementsExceededChoice,
+  // Clarity-review (bug-report triage reviewer agent) shapes — reuse the requirements
+  // review item/status shapes, differ only in subject + the persisted document field.
+  ClarityReviewItem,
+  ClarityReviewStatus,
+  ClarityReview,
+  ReplyClarityItemInput,
+  UpdateClarityItemStatusInput,
+  IncorporateClarityInput,
+  ResolveClarityExceededInput,
+  ResolveClarityExceededChoice,
   // Shared iterative-gate cap resolution (requirements reviewer + quality companions).
   IterationCapChoice,
   ResolveIterationCapInput,

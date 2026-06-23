@@ -85,7 +85,7 @@ class_name = "BootstrapWorkflow"
 # pin that tag here (the account id below is THIS deployment's — change it).
 [[containers]]
 class_name = "ExecutionContainer"
-image = "registry.cloudflare.com/fe0047c6e869c8cb875ca425a9c341af/cat-factory-executor:1.5.0"
+image = "registry.cloudflare.com/fe0047c6e869c8cb875ca425a9c341af/cat-factory-executor:1.6.0"
 max_instances = 10
 # Coding/bootstrap runs legitimately install dependencies and run build/test/e2e
 # suites inside the box. The default `dev` tier (~256 MiB / ~1/16 vCPU) thrashes
@@ -224,6 +224,13 @@ SPEND_CURRENCY = "EUR"
 #   wrangler secret put QWEN_API_KEY       # Qwen → Alibaba DashScope (intl endpoint)
 #   wrangler secret put DEEPSEEK_API_KEY   # DeepSeek → DeepSeek API
 #   wrangler secret put MOONSHOT_API_KEY   # Kimi → Moonshot AI
+#
+# OpenRouter + LiteLLM (OpenAI-compatible gateways): their API keys are added per
+# workspace/user via the UI (Settings → Direct provider API keys), NOT as secrets here.
+# Only the base URLs are deployment config — OpenRouter defaults to the public gateway,
+# LiteLLM is operator-hosted so LITELLM_BASE_URL is REQUIRED to enable it.
+# OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+# LITELLM_BASE_URL = "https://litellm.internal.example.com/v1"
 
 # Storage retention. The cron sweeper prunes the tables that don't self-limit to
 # these age windows (in days); 0 disables a table's pass. Defaults are applied

@@ -7,10 +7,12 @@ export {
   type ConformanceApp,
   type ConformanceAppOptions,
   type ConformanceHarness,
+  type LocalModelEndpointsProbe,
   RecordingEventPublisher,
   type TestResponse,
 } from './harness.js'
 export { FakeRepoBootstrapper } from './FakeRepoBootstrapper.js'
+export { FakeTaskSourceProvider } from './FakeTaskSourceProvider.js'
 export {
   makeOnboardingProbe,
   type OnboardingContainer,
@@ -19,6 +21,7 @@ export {
   type OnboardingUsersProbe,
 } from './onboarding.js'
 export { makeIncorporatedReview, makeReadyReviewWithOpenItem } from './requirements-fixtures.js'
+export { makeIncorporatedClarityReview } from './clarity-fixtures.js'
 export { defineConformanceSuite } from './suite.js'
 export { defineLlmMetricsSuite } from './llm-metrics-suite.js'
 export { CONFORMANCE_DRIVE_CONFIG, driveWorkspace } from './drive.js'

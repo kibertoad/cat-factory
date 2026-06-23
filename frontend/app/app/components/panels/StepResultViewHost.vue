@@ -12,6 +12,7 @@
 // on mount — declare an `onOpen` loader and it fires on every open.
 import { computed, type Component } from 'vue'
 import RequirementsReviewWindow from '~/components/requirements/RequirementsReviewWindow.vue'
+import ClarityReviewWindow from '~/components/clarity/ClarityReviewWindow.vue'
 import TestReportWindow from '~/components/testing/TestReportWindow.vue'
 import GateResultView from '~/components/gates/GateResultView.vue'
 import ConsensusSessionWindow from '~/components/consensus/ConsensusSessionWindow.vue'
@@ -20,6 +21,7 @@ const ui = useUiStore()
 
 const STEP_RESULT_VIEWS: Record<string, Component> = {
   'requirements-review': RequirementsReviewWindow,
+  'clarity-review': ClarityReviewWindow,
   tester: TestReportWindow,
   // Shared by both polling gates (`ci` + `conflicts`); the window branches on agentKind.
   gate: GateResultView,

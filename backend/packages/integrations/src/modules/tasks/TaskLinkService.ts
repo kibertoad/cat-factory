@@ -1,19 +1,27 @@
-import type { Block, SourceTask, TaskSourceKind } from '@cat-factory/kernel'
-import { assertFound } from '@cat-factory/kernel'
+import type { Block, SourceTask, TaskRecord, TaskSourceKind } from '@cat-factory/kernel'
+import { assertFound, ConflictError } from '@cat-factory/kernel'
 import type { BlockRepository } from '@cat-factory/kernel'
+import type { BoardWritePort } from '@cat-factory/kernel'
 import type { TaskRepository } from '@cat-factory/kernel'
 import { toSourceTask } from './TaskImportService.js'
 
 // TaskLinkService: the write side that attaches an imported issue to the board.
 // `linkToBlock` records the link so the execution engine feeds the issue to
-// agents as extra context. Unlike the document integration there is no spawn —
-// an issue is linked for context, never expanded into board structure — so this
-// service only needs the block + task repositories. Source-agnostic: it works on
-// the projected task records.
+// agents as extra context; `createTaskFromIssue` goes one step further and
+// materialises the issue as a brand-new board task (seeded from the issue), then
+// links the issue to it — the inbound analogue of the document integration's
+// spawn. Source-agnostic: it works on the projected task records.
 
 export interface TaskLinkServiceDependencies {
+  boardService: BoardWritePort
   blockRepository: BlockRepository
   taskRepository: TaskRepository
+}
+
+/** A board task created from an imported issue, plus the now-linked issue. */
+export interface TaskFromIssue {
+  block: Block
+  task: SourceTask
 }
 
 export class TaskLinkService {
@@ -39,4 +47,64 @@ export class TaskLinkService {
     await this.deps.taskRepository.linkBlock(workspaceId, source, externalId, block.id)
     return toSourceTask({ ...task, linkedBlockId: block.id })
   }
+
+  /**
+   * Create a new board task from an already-imported issue, inside a container
+   * (service frame or module), and link the issue to the new task for context.
+   * The title/description are seeded from the issue; the issue stays the source
+   * of truth (re-importing refreshes it) and is fed to every agent step via the
+   * link. Reuses BoardService.addTask so scope/placement rules stay in one place.
+   * `createdBy` (the signed-in user) flows onto the new task for notification routing.
+   */
+  async createTaskFromIssue(
+    workspaceId: string,
+    containerId: string,
+    source: TaskSourceKind,
+    externalId: string,
+    createdBy?: string | null,
+  ): Promise<TaskFromIssue> {
+    const issue = assertFound(
+      await this.deps.taskRepository.get(workspaceId, source, externalId),
+      'Task',
+      externalId,
+    )
+    // An issue carries a single `linkedBlockId`, so creating a second task from it
+    // would silently re-point the link and orphan the first task's issue context.
+    // Refuse rather than lose the existing link (the issue is the source of truth).
+    if (issue.linkedBlockId) {
+      throw new ConflictError(
+        `Issue ${externalId} is already linked to task ${issue.linkedBlockId}; unlink it first`,
+      )
+    }
+    // Resolve the container in the REQUEST workspace (like linkToBlock) so the new
+    // block and the issue projection share a workspace — the issue link is workspace-
+    // scoped, so creating the task in a service mounted from another workspace would
+    // leave the link unresolvable at execution time. A foreign/unknown container 404s.
+    assertFound(await this.deps.blockRepository.get(workspaceId, containerId), 'Block', containerId)
+    const block = await this.deps.boardService.addTask(
+      workspaceId,
+      containerId,
+      {
+        title: issueTaskTitle(issue),
+        description: issueTaskDescription(issue),
+      },
+      createdBy ?? null,
+    )
+    // Link the issue to the new task so agents get the full issue (description,
+    // comments, metadata) as context — and the task carries the back-reference.
+    await this.deps.taskRepository.linkBlock(workspaceId, source, externalId, block.id)
+    return { block, task: toSourceTask({ ...issue, linkedBlockId: block.id }) }
+  }
+}
+
+/** Seed the new task's title from the issue (keyed for traceability). */
+function issueTaskTitle(issue: TaskRecord): string {
+  return `${issue.externalId}: ${issue.title}`
+}
+
+/** Seed the new task's description: a source reference line + the issue body. */
+function issueTaskDescription(issue: TaskRecord): string {
+  const reference = `Imported from ${issue.url}`
+  const body = issue.description.trim() || issue.excerpt.trim()
+  return body ? `${reference}\n\n${body}` : reference
 }

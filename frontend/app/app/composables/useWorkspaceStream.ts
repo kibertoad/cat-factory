@@ -22,6 +22,7 @@ export function useWorkspaceStream() {
   const observability = useObservabilityStore()
   const requirements = useRequirementsStore()
   const consensus = useConsensusStore()
+  const clarity = useClarityStore()
   const api = useApi()
   const apiBase = useRuntimeConfig().public.apiBase
 
@@ -81,6 +82,11 @@ export function useWorkspaceStream() {
       // failed) — patch the cache so an open Consensus Session window renders the
       // multi-model process live, round by round.
       consensus.upsert(event.session)
+    } else if (event.type === 'clarity') {
+      // The async incorporate + re-review cycle changed a clarity review's status — patch the
+      // cache so an open review window / inspector reflects it live ("incorporating…" → the
+      // next cycle / converged). The summons back, when needed, arrives as a `notification`.
+      clarity.upsert(event.review)
     }
   }
 

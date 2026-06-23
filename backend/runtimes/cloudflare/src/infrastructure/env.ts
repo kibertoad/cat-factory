@@ -135,6 +135,10 @@ export interface Env {
   DEEPSEEK_BASE_URL?: string
   MOONSHOT_BASE_URL?: string
   OPENAI_BASE_URL?: string
+  // OpenRouter override (defaults to the public gateway). LiteLLM is operator-hosted, so
+  // LITELLM_BASE_URL is REQUIRED to enable the `litellm` provider (no public default).
+  OPENROUTER_BASE_URL?: string
+  LITELLM_BASE_URL?: string
 
   // ---- Inline agent web search (opt-in; design/research kinds) -------------
   // Provider-hosted web search for the INLINE architect/researcher steps (the

@@ -19,6 +19,7 @@ import type { BootstrapJob } from './bootstrap'
 import type { Notification } from './notifications'
 import type { RequirementReview } from './requirements'
 import type { ConsensusSession, ConsensusStepConfig, TaskEstimate } from './consensus'
+import type { ClarityReview } from './clarity'
 import type { MergeThresholdPreset } from './merge'
 import type { PipelineSchedule } from './recurring'
 import type { Service, WorkspaceMount } from './services'
@@ -227,6 +228,11 @@ export type AgentKind =
   // Pre-implementation triage: rates Complexity/Risk/Impact after requirements are
   // clarified, used to gate the optional consensus mechanism (and shown as ratings).
   | 'task-estimator'
+  // Bug-fix pipeline: the `clarity-review` gate triages the bug report (the analogue
+  // of `requirements-review`, with its own structured review window), then the
+  // read-only `bug-investigator` container agent enriches it into a prose report.
+  | 'clarity-review'
+  | 'bug-investigator'
 
 /** A draggable agent definition shown in the agent palette. */
 export interface AgentArchetype {
@@ -380,6 +386,7 @@ export type WorkspaceEvent =
   | { type: 'llmCall'; call: LlmCallActivity; at: number }
   | { type: 'requirements'; review: RequirementReview; at: number }
   | { type: 'consensus'; session: ConsensusSession; at: number }
+  | { type: 'clarity'; review: ClarityReview; at: number }
 
 /** Level-of-detail buckets driven by the canvas zoom level. Shallow → deep:
  * `far`/`mid`/`close` govern a service frame (chip → card → opened with tasks);

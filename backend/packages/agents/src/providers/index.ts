@@ -16,6 +16,7 @@ export {
   DEFAULT_OPENAI_COMPATIBLE_BASE_URLS,
   MOONSHOT_BASE_URL,
   OPENAI_BASE_URL,
+  OPENROUTER_BASE_URL,
   QWEN_BASE_URL,
 } from './endpoints.js'
 export {

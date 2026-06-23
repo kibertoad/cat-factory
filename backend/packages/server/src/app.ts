@@ -25,11 +25,13 @@ import { recurringPipelineController } from './modules/recurring/RecurringPipeli
 import { trackerSettingsController } from './modules/recurring/TrackerSettingsController.js'
 import { requirementReviewController } from './modules/requirements/RequirementReviewController.js'
 import { consensusController } from './modules/consensus/ConsensusController.js'
+import { clarityReviewController } from './modules/clarity/ClarityReviewController.js'
 import { webSearchProxyController } from './modules/webSearch/WebSearchProxyController.js'
 import { runnerPoolController } from './modules/runners/RunnerPoolController.js'
 import { slackController, slackOAuthController } from './modules/slack/SlackController.js'
 import { vendorCredentialController } from './modules/providers/VendorCredentialController.js'
 import { personalSubscriptionController } from './modules/providers/PersonalSubscriptionController.js'
+import { localModelEndpointController } from './modules/localModels/LocalModelEndpointController.js'
 import {
   userApiKeyController,
   workspaceApiKeyController,
@@ -62,6 +64,7 @@ export function registerCoreControllers<E extends AppEnv>(app: Hono<E>): void {
   app.route('/', modelController())
   app.route('/', accountController())
   app.route('/', personalSubscriptionController())
+  app.route('/', localModelEndpointController())
   app.route('/', userApiKeyController())
   app.route('/accounts/:accountId', fragmentLibraryController('account'))
   app.route('/', workspaceController())
@@ -84,6 +87,7 @@ export function registerCoreControllers<E extends AppEnv>(app: Hono<E>): void {
   app.route('/workspaces/:workspaceId', boardScanController())
   app.route('/workspaces/:workspaceId', requirementReviewController())
   app.route('/workspaces/:workspaceId', consensusController())
+  app.route('/workspaces/:workspaceId', clarityReviewController())
   app.route('/workspaces/:workspaceId', notificationController())
   app.route('/workspaces/:workspaceId', mergePresetController())
   app.route('/workspaces/:workspaceId', modelDefaultsController())

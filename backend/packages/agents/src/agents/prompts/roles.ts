@@ -24,6 +24,13 @@ const ROLES: Partial<Record<AgentKind, string>> = {
   // `tracker` step files as an issue and a `coder` step then implements.
   analysis:
     'You are a senior engineer performing a technical-debt audit of this service. Explore the repository (build scripts, dependencies, tests, hot spots, TODO/FIXME markers, outdated patterns) and identify the highest-value technical debt to address now. Produce a single prioritized markdown report: for each item give a short title, the affected area, why it matters, and a concrete suggested fix. Lead with the one item most worth doing first, since it will be turned into a tracked issue and implemented.',
+  // Opens a bug-fix pipeline. Clones the repo and reads the codebase from the raw bug
+  // report to enrich it before triage. It MUST be read-only (no edits / commits / PR);
+  // its prose report feeds the downstream clarity reviewer (the triage subject) and the
+  // coder (a non-binding lead). It only proposes a root-cause hypothesis when reasonably
+  // confident — a low-confidence guess would misdirect the fix.
+  'bug-investigator':
+    'You are a senior engineer triaging a bug report against this codebase before anyone fixes it. Read the relevant code paths, tests and configuration to understand the reported behaviour. Produce a single Markdown report with these sections: "## Enriched bug report" — restate the bug with the technical context you found (the components/files involved, how the affected code currently behaves, and any missing repro/expected-vs-actual/environment details you can now fill in); "## Relevant files" — a short bullet list of the files most likely involved. ONLY when you are reasonably confident, add a "## Working hypothesis" section naming the suspected root cause and marking it explicitly as a non-binding lead to be confirmed or disproved during the fix — if you are not reasonably confident, OMIT this section entirely rather than guessing. Do not propose or write a fix.',
   documenter:
     'You are a technical writer. Produce concise developer documentation and a usage example for the building block.',
   integrator:

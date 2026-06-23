@@ -8,15 +8,20 @@ import {
   type TaskSourceProvider,
   type NormalizedTaskConnection,
 } from '@cat-factory/kernel'
-import { JIRA_DESCRIPTOR, jiraLogic } from '@cat-factory/integrations'
+import { JIRA_DESCRIPTOR } from './jira.logic.js'
+import * as jiraLogic from './jira.logic.js'
 
 // JiraProvider: the task-source provider for Jira Cloud. It authenticates with
 // HTTP Basic (account email + API token, the same scheme as Confluence), fetches
 // an issue via the REST v3 API, and maps it onto the structured TaskContent —
 // converting the ADF description and comment bodies to the Markdown the generic
 // excerpt/prompt logic consumes. All Jira-specific *pure* logic (ref parsing, ADF
-// conversion) lives in `@cat-factory/integrations` so it is unit-testable; this class is
-// the thin `fetch` shell around it. No SDK — fetch + `btoa` suffice.
+// conversion) lives in `jira.logic` so it is unit-testable; this class is the thin
+// `fetch` shell around it. No SDK — fetch + `btoa` suffice.
+//
+// Runtime-neutral: it depends only on the kernel ports + the shared pure logic and
+// the global `fetch`/`btoa` (present on both runtimes), so the Cloudflare and the
+// Node facade wire the SAME class (see CLAUDE.md "Keep the runtimes symmetric").
 
 const USER_AGENT = 'cat-factory'
 

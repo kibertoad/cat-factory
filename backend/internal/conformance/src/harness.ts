@@ -97,6 +97,13 @@ export interface ConformanceApp {
    */
   seedReadyReview(workspaceId: string, blockId: string): Promise<void>
   /**
+   * Seed an already-"incorporated" clarity (bug-report triage) review for a block straight
+   * into the facade's real clarity store, so the suite can assert the engine substitutes the
+   * clarified report into the agent context — on EVERY runtime (the clarity mirror of
+   * {@link seedIncorporatedReview}).
+   */
+  seedIncorporatedClarityReview(workspaceId: string, blockId: string, report: string): Promise<void>
+  /**
    * Seed a persisted repository blueprint straight into the facade's real board-scan
    * store, so the suite can assert the blueprint read endpoints (which the manual scan
    * + the blueprint pipeline step write) return it identically on every runtime —
@@ -109,6 +116,31 @@ export interface ConformanceApp {
    * path can't reach the authenticated identity layer).
    */
   onboarding(): OnboardingProbe
+  /**
+   * The facade's per-user locally-run model endpoints service over its real store, so the
+   * suite can assert repository/service parity (CRUD + the optional bearer-key encryption
+   * round-trip + the enabled-models JSON) across D1 and Postgres. The HTTP routes are
+   * user-scoped and the dev-open `call` path has no signed-in user, so — like personal
+   * subscriptions — this is exercised through the service directly. Undefined when the
+   * facade did not wire the store (no ENCRYPTION_KEY).
+   */
+  localModelEndpoints?(): LocalModelEndpointsProbe | undefined
+}
+
+/** The subset of the local-model-endpoints service the conformance suite drives. */
+export interface LocalModelEndpointsProbe {
+  list(
+    userId: string,
+  ): Promise<{ provider: string; baseUrl: string; hasApiKey: boolean; models: string[] }[]>
+  upsert(
+    userId: string,
+    input: { provider: string; label?: string; baseUrl: string; apiKey?: string; models: string[] },
+  ): Promise<{ provider: string; hasApiKey: boolean; models: string[] }>
+  resolve(
+    userId: string,
+    provider: string,
+  ): Promise<{ baseUrl: string; apiKey: string | null } | null>
+  remove(userId: string, provider: string): Promise<void>
 }
 
 export interface ConformanceHarness {

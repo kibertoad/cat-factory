@@ -267,7 +267,10 @@ describe('runDiagnostics', () => {
     // The exact production failure: 10.9k output tokens but an empty content array.
     const stdout =
       '{"type":"agent_end","messages":[{"role":"assistant","content":[],"usage":{"output":42}}]}'
-    expect(runDiagnostics(stdout, cap)).toMatchObject({ finalAnswerEmpty: true, finalTruncated: false })
+    expect(runDiagnostics(stdout, cap)).toMatchObject({
+      finalAnswerEmpty: true,
+      finalTruncated: false,
+    })
   })
 
   it('flags a truncated FINAL answer (output hit the ceiling)', () => {

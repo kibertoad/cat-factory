@@ -2,6 +2,7 @@ import type {
   Block,
   BootstrapJob,
   ConsensusSession,
+  ClarityReview,
   ExecutionInstance,
   LlmCallActivity,
   Notification,
@@ -68,6 +69,10 @@ export class DurableObjectEventPublisher implements ExecutionEventPublisher {
 
   async consensusSessionChanged(workspaceId: string, session: ConsensusSession): Promise<void> {
     await this.publish(workspaceId, { type: 'consensus', session, at: Date.now() })
+  }
+
+  async clarityReviewChanged(workspaceId: string, review: ClarityReview): Promise<void> {
+    await this.publish(workspaceId, { type: 'clarity', review, at: Date.now() })
   }
 
   private async publish(workspaceId: string, event: WorkspaceEvent): Promise<void> {
