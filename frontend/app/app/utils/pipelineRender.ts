@@ -52,10 +52,9 @@ export const COMPANION_STATE_META: Record<
 /**
  * The conditionally-run companion (if any) a gate step drives, with its current
  * state — so the pipeline views can render it as a distinct sub-node marked
- * possible / running / completed / skipped. Today only the Tester's `fixer` loop is
- * modelled on the SPA (via `step.test`); the CI gate's `ci-fixer` and the conflicts
- * gate's `conflict-resolver` follow the same shape once their gate state is wired
- * onto the client step.
+ * possible / running / completed / skipped. The Tester's `fixer` loop is modelled via
+ * `step.test`; the polling gates (`ci` → `ci-fixer`, `conflicts` → `conflict-resolver`)
+ * via `step.gate`, which all share the same possible/running/completed/skipped shape.
  */
 export function gateCompanionFor(step: PipelineStep): GateCompanion | null {
   if (step.agentKind === 'tester') {
@@ -68,6 +67,23 @@ export function gateCompanionFor(step: PipelineStep): GateCompanion | null {
     if (attempts > 0) return { kind: 'fixer', state: 'completed' }
     // Pending, or testing with no attempt yet — the fixer might still be needed.
     return { kind: 'fixer', state: 'possible' }
+  }
+  const helper =
+    step.agentKind === 'ci'
+      ? 'ci-fixer'
+      : step.agentKind === 'conflicts'
+        ? 'conflict-resolver'
+        : null
+  if (helper) {
+    const attempts = step.gate?.attempts ?? 0
+    if (step.state === 'done') {
+      // The gate passed: it ran the helper iff it ever dispatched one.
+      return { kind: helper, state: attempts > 0 ? 'completed' : 'skipped' }
+    }
+    if (step.gate?.phase === 'working') return { kind: helper, state: 'running' }
+    if (attempts > 0) return { kind: helper, state: 'completed' }
+    // Checking the precheck with no escalation yet — the helper might still be needed.
+    return { kind: helper, state: 'possible' }
   }
   return null
 }

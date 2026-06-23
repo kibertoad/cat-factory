@@ -34,7 +34,7 @@ import {
   isCompanionKind,
 } from '@cat-factory/agents'
 import { getFragment } from '@cat-factory/prompt-fragments'
-import { extractJson } from '../requirements/requirements.logic.js'
+import { extractJson, hasNotesToIncorporate } from '../requirements/requirements.logic.js'
 import {
   resolveIndividualVendors,
   type HasPersonalSubscription,
@@ -58,6 +58,7 @@ import {
   CONFLICTS_AGENT_KIND,
   CONFLICT_RESOLVER_AGENT_KIND,
   describeFailingChecks,
+  listFailingChecks,
   isCiGreen,
   MERGER_AGENT_KIND,
   REQUIREMENTS_REVIEW_AGENT_KIND,
@@ -67,6 +68,7 @@ import {
   TESTER_AGENT_KIND,
   FIXER_AGENT_KIND,
 } from './ci.logic.js'
+import type { GateDefinition, GateProbe } from './gates.js'
 import type { NotificationService } from '../notifications/NotificationService.js'
 import type { RequirementReviewService } from '../requirements/RequirementReviewService.js'
 import type {
@@ -387,6 +389,8 @@ export class ExecutionService {
     workspaceId: string,
     agentKind: string,
   ) => Promise<string | undefined>
+  /** Lazily-built polling-gate registry, keyed by `agentKind`. See {@link gateFor}. */
+  private gateRegistryCache?: Map<string, GateDefinition>
 
   constructor({
     workspaceRepository,
@@ -798,20 +802,13 @@ export class ExecutionService {
       return this.evaluateRequirementsReview(workspaceId, instance, step, block, isFinalStep)
     }
 
-    // A `ci` step gates the PR on green CI: it polls GitHub check runs and, on
-    // failure, dispatches the `ci-fixer` container agent — no LLM of its own. It
-    // is a pass-through when no CI status provider is wired (the engine works
-    // unchanged without GitHub CI). See {@link evaluateCi}.
-    if (step.agentKind === CI_AGENT_KIND) {
-      return this.evaluateCi(workspaceId, instance, step, block, isFinalStep)
-    }
-
-    // A `conflicts` step gates the PR on being mergeable: it checks the PR's
-    // mergeability and, on a conflict, dispatches the `conflict-resolver` container
-    // agent — no LLM of its own. Pass-through when no mergeability provider is wired.
-    // See {@link evaluateConflicts}.
-    if (step.agentKind === CONFLICTS_AGENT_KIND) {
-      return this.evaluateConflicts(workspaceId, instance, step, block, isFinalStep)
+    // A polling gate step (`ci` / `conflicts`) runs a programmatic precheck and only
+    // escalates to a helper container agent (`ci-fixer` / `conflict-resolver`) on a
+    // negative verdict — no LLM of its own. Pass-through when the gate's provider is
+    // not wired. One generic machine drives every gate; see {@link evaluateGate}.
+    const gate = this.gateFor(step.agentKind)
+    if (gate) {
+      return this.evaluateGate(workspaceId, instance, step, block, isFinalStep, gate)
     }
 
     // A companion step grades the nearest preceding producer of one of its target
@@ -961,32 +958,19 @@ export class ExecutionService {
       return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
     }
 
-    // A `ci` step's in-flight job is a CI-fixer run, NOT the step's own work: when
-    // it finishes (or fails) we don't record a result or advance — we drop the
-    // handle, return the gate to `checking`, and re-poll CI (the fixer's push
-    // triggers a fresh run). A fixer that failed without pushing leaves CI red, so
-    // the next CI check re-dispatches (until the attempt budget is spent).
-    if (step.agentKind === CI_AGENT_KIND) {
+    // A polling gate step's in-flight job is its helper agent (ci-fixer /
+    // conflict-resolver), NOT the step's own work: when it finishes (or fails) we
+    // don't record a result or advance — we drop the handle, return the gate to
+    // `checking`, and re-run the precheck (the helper's push triggers a fresh CI run /
+    // updates mergeability). A helper that failed without pushing leaves the precheck
+    // negative, so the next check re-dispatches (until the attempt budget is spent).
+    if (this.gateFor(step.agentKind)) {
       step.jobId = undefined
       step.subtasks = undefined
-      if (step.ci) step.ci.phase = 'checking'
+      if (step.gate) step.gate.phase = 'checking'
       await this.executionRepository.upsert(workspaceId, instance)
       await this.emitInstance(workspaceId, instance)
-      return { kind: 'awaiting_ci', stepIndex: instance.currentStep }
-    }
-
-    // A `conflicts` step's in-flight job is a conflict-resolver run, NOT the step's
-    // own work: when it finishes (or fails) we drop the handle, return the gate to
-    // `checking` and re-check mergeability (the resolver's push updates it). A
-    // resolver that failed without pushing leaves the PR conflicted, so the next
-    // check re-dispatches (until the attempt budget is spent).
-    if (step.agentKind === CONFLICTS_AGENT_KIND) {
-      step.jobId = undefined
-      step.subtasks = undefined
-      if (step.conflicts) step.conflicts.phase = 'checking'
-      await this.executionRepository.upsert(workspaceId, instance)
-      await this.emitInstance(workspaceId, instance)
-      return { kind: 'awaiting_conflicts', stepIndex: instance.currentStep }
+      return { kind: 'awaiting_gate', stepIndex: instance.currentStep }
     }
 
     // A `tester` step in its `fixing` phase has a Fixer job in flight, NOT the
@@ -1055,50 +1039,29 @@ export class ExecutionService {
   }
 
   /**
-   * Re-check a `ci` step's gate from the durable driver's `awaiting_ci` loop:
-   * re-reads CI check runs and returns the same outcomes as the initial evaluation
-   * (green → advance, still running → keep polling, failure → dispatch a fixer or
-   * give up). Safe under replay: reading run state fresh each call. A no-op unless
-   * the current step is a `ci` step actively in its `checking` phase.
+   * Re-run a polling gate step's precheck from the durable driver's `awaiting_gate`
+   * loop: which gate (ci / conflicts) is resolved from the current step's `agentKind`,
+   * and it returns the same outcomes as the initial evaluation (precheck passes →
+   * advance, still computing → keep polling, fails → dispatch a helper or give up).
+   * Safe under replay: reads run state fresh each call. A no-op unless the current
+   * step is a gate actively in its `checking` phase.
    */
-  async pollCi(workspaceId: string, executionId: string): Promise<AdvanceResult> {
+  async pollGate(workspaceId: string, executionId: string): Promise<AdvanceResult> {
     const instance = await this.executionRepository.get(workspaceId, executionId)
     if (!instance || (instance.status !== 'running' && instance.status !== 'paused')) {
       return { kind: 'noop' }
     }
     const step = instance.steps[instance.currentStep]
-    if (!step || step.agentKind !== CI_AGENT_KIND) return { kind: 'continue' }
-    // A fixer job is in flight — the driver should be polling it, not CI; let the
-    // job-poll loop drive (defensive; a replay could route here).
+    const gate = step ? this.gateFor(step.agentKind) : undefined
+    if (!step || !gate) return { kind: 'continue' }
+    // A helper job is in flight — the driver should be polling it, not the gate; let
+    // the job-poll loop drive (defensive; a replay could route here).
     if (step.jobId)
       return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
     const block = await this.blockRepository.get(workspaceId, instance.blockId)
     if (!block) return { kind: 'noop' }
     const isFinalStep = instance.currentStep === instance.steps.length - 1
-    return this.evaluateCi(workspaceId, instance, step, block, isFinalStep)
-  }
-
-  /**
-   * Re-check a `conflicts` step's gate from the durable driver's `awaiting_conflicts`
-   * loop: re-reads the PR's mergeability and returns the same outcomes as the initial
-   * evaluation (mergeable → advance, still computing → keep polling, conflicted →
-   * dispatch a resolver or give up). Safe under replay; a no-op unless the current
-   * step is a `conflicts` step actively in its `checking` phase.
-   */
-  async pollConflicts(workspaceId: string, executionId: string): Promise<AdvanceResult> {
-    const instance = await this.executionRepository.get(workspaceId, executionId)
-    if (!instance || (instance.status !== 'running' && instance.status !== 'paused')) {
-      return { kind: 'noop' }
-    }
-    const step = instance.steps[instance.currentStep]
-    if (!step || step.agentKind !== CONFLICTS_AGENT_KIND) return { kind: 'continue' }
-    // A resolver job is in flight — the driver should be polling it, not mergeability.
-    if (step.jobId)
-      return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
-    const block = await this.blockRepository.get(workspaceId, instance.blockId)
-    if (!block) return { kind: 'noop' }
-    const isFinalStep = instance.currentStep === instance.steps.length - 1
-    return this.evaluateConflicts(workspaceId, instance, step, block, isFinalStep)
+    return this.evaluateGate(workspaceId, instance, step, block, isFinalStep, gate)
   }
 
   /**
@@ -1620,113 +1583,218 @@ export class ExecutionService {
   }
 
   /**
-   * Evaluate a `ci` step's gate once: read the PR's CI check runs and decide.
-   *   - no provider wired → pass-through (advance; nothing to gate);
-   *   - green / no checks → advance to the next step;
-   *   - still running     → `awaiting_ci` (the driver sleeps then calls {@link pollCi});
-   *   - failing, budget left → dispatch a `ci-fixer` container job (`awaiting_job`);
-   *   - failing, budget spent → raise a `ci_failed` notification + fail the run.
-   * Shared by the initial advance and the durable `awaiting_ci` re-poll.
+   * The polling-gate registry, keyed by `agentKind`. A gate runs a programmatic
+   * precheck against a provider and only escalates to a helper container agent on a
+   * negative verdict. Built lazily (the closures capture `this`, so the providers /
+   * merge preset / notification helpers resolve at call time). Returns undefined for a
+   * non-gate kind. See {@link GateDefinition} and {@link evaluateGate}.
    */
-  private async evaluateCi(
-    workspaceId: string,
-    instance: ExecutionInstance,
-    step: PipelineStep,
-    block: Block,
-    isFinalStep: boolean,
-  ): Promise<AdvanceResult> {
-    // Re-attach after a replay: a fixer is already in flight for this gate.
-    if (step.ci?.phase === 'fixing' && step.jobId) {
-      return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
-    }
+  private gateFor(agentKind: string): GateDefinition | undefined {
+    if (!this.gateRegistryCache) this.gateRegistryCache = this.buildGateRegistry()
+    return this.gateRegistryCache.get(agentKind)
+  }
 
-    // No CI status wired: the gate is a pass-through so the engine works without
-    // GitHub CI. Advance via the normal result path.
-    if (!this.ciStatusProvider) {
-      return this.recordStepResult(workspaceId, instance, step, isFinalStep, {
-        output: 'CI gate skipped (no CI status provider configured).',
-      })
-    }
-
-    // Initialise the gate's state on first entry, resolving the attempt budget from
-    // the task's merge preset (stable across polls once set).
-    if (!step.ci) {
-      const preset = await this.resolveMergePreset(workspaceId, block)
-      step.ci = { phase: 'checking', attempts: 0, maxAttempts: preset.ciMaxAttempts, headSha: null }
-    }
-
-    const report = await this.ciStatusProvider.getStatus(workspaceId, block.id)
-    step.ci.headSha = report.headSha
-    const verdict = aggregateCi(report.checks)
-
-    if (isCiGreen(verdict)) {
-      // Stop polling the moment CI is green — finish the step and advance.
-      return this.recordStepResult(workspaceId, instance, step, isFinalStep, {
-        output:
-          verdict === 'none'
-            ? 'CI gate passed: no checks configured for the PR head.'
-            : `CI gate passed: ${report.checks.length} check(s) green.`,
-      })
-    }
-
-    if (verdict === 'pending') {
-      // Keep polling. Persist the head sha + phase so the board can reflect it.
-      step.ci.phase = 'checking'
-      await this.executionRepository.upsert(workspaceId, instance)
-      await this.emitInstance(workspaceId, instance)
-      return { kind: 'awaiting_ci', stepIndex: instance.currentStep }
-    }
-
-    // verdict === 'failure'.
-    const summary = describeFailingChecks(report.checks)
-    const executor = this.agentExecutor
-    const canFix = isAsyncAgentExecutor(executor)
-    if (canFix && step.ci.attempts < step.ci.maxAttempts) {
-      return this.dispatchCiFixer(workspaceId, instance, step, block, isFinalStep, summary)
-    }
-
-    // Budget spent (or no async executor to fix with): give up and notify a human.
-    await this.raiseCiFailed(workspaceId, instance, block, summary, step.ci.attempts)
-    return {
-      kind: 'job_failed',
-      error: `CI did not pass after ${step.ci.attempts} CI-fixer attempt(s). ${summary}`.trim(),
-    }
+  private buildGateRegistry(): Map<string, GateDefinition> {
+    const gates: GateDefinition[] = [
+      // CI gate: poll the PR head's check runs; escalate to a `ci-fixer` on red CI.
+      {
+        kind: CI_AGENT_KIND,
+        helperKind: CI_FIXER_AGENT_KIND,
+        wired: () => !!this.ciStatusProvider,
+        unwiredOutput: 'CI gate skipped (no CI status provider configured).',
+        probe: async (workspaceId, blockId): Promise<GateProbe> => {
+          const report = await this.ciStatusProvider!.getStatus(workspaceId, blockId)
+          const verdict = aggregateCi(report.checks)
+          if (isCiGreen(verdict)) {
+            return {
+              status: 'pass',
+              headSha: report.headSha,
+              passOutput:
+                verdict === 'none'
+                  ? 'CI gate passed: no checks configured for the PR head.'
+                  : `CI gate passed: ${report.checks.length} check(s) green.`,
+            }
+          }
+          if (verdict === 'pending') return { status: 'pending', headSha: report.headSha }
+          return {
+            status: 'fail',
+            headSha: report.headSha,
+            failureSummary: describeFailingChecks(report.checks),
+            failingChecks: listFailingChecks(report.checks),
+          }
+        },
+        // Surface the failing-check summary to the fixer as resolved context.
+        helperPriorOutput: (summary) => ({ agentKind: CI_AGENT_KIND, output: summary }),
+        onExhausted: async ({ workspaceId, instance, block, step, summary }) => {
+          const attempts = step.gate?.attempts ?? 0
+          await this.raiseCiFailed(workspaceId, instance, block, summary ?? '', attempts)
+          return {
+            error: `CI did not pass after ${attempts} CI-fixer attempt(s). ${summary ?? ''}`.trim(),
+          }
+        },
+      },
+      // Conflicts gate: check PR mergeability; escalate to a `conflict-resolver` on conflict.
+      {
+        kind: CONFLICTS_AGENT_KIND,
+        helperKind: CONFLICT_RESOLVER_AGENT_KIND,
+        wired: () => !!this.mergeabilityProvider,
+        unwiredOutput: 'Conflict gate skipped (no mergeability provider configured).',
+        probe: async (workspaceId, blockId): Promise<GateProbe> => {
+          const report = await this.mergeabilityProvider!.getMergeability(workspaceId, blockId)
+          // No PR resolved, or it merges cleanly → nothing to do; advance.
+          if (report.headSha === null || report.verdict === 'mergeable') {
+            return {
+              status: 'pass',
+              headSha: report.headSha,
+              passOutput:
+                report.headSha === null
+                  ? 'Conflict gate passed: no open PR to gate.'
+                  : 'Conflict gate passed: the PR merges cleanly with its base.',
+            }
+          }
+          // GitHub still computing mergeability → keep polling.
+          if (report.verdict === 'unknown') return { status: 'pending', headSha: report.headSha }
+          return { status: 'fail', headSha: report.headSha }
+        },
+        onExhausted: async ({ step }) => ({
+          error:
+            `The pull request still conflicts with its base after ` +
+            `${step.gate?.attempts ?? 0} conflict-resolver attempt(s). Resolve the conflict ` +
+            `manually, then retry the run.`,
+        }),
+      },
+    ]
+    return new Map(gates.map((gate) => [gate.kind, gate]))
   }
 
   /**
-   * Dispatch a `ci-fixer` container job for a failing `ci` gate: build the agent
-   * context with the kind overridden to `ci-fixer` (it clones the PR head branch
-   * and pushes a fix — no new PR), park on the job, and flip the gate to `fixing`.
-   * Idempotent under replay via the step's `jobId` (re-attach handled in {@link evaluateCi}).
+   * Evaluate a polling gate step once and decide (shared by the initial advance and the
+   * durable `awaiting_gate` re-poll):
+   *   - no provider wired → pass-through (advance; nothing to gate);
+   *   - precheck passes   → advance to the next step (the helper agent is NEVER spun up);
+   *   - still computing   → `awaiting_gate` (the driver sleeps then calls {@link pollGate});
+   *   - fails, budget left → dispatch the helper container agent (`awaiting_job`);
+   *   - fails, budget spent → the gate's exhaustion handler, then fail the run.
    */
-  private async dispatchCiFixer(
+  private async evaluateGate(
     workspaceId: string,
     instance: ExecutionInstance,
     step: PipelineStep,
     block: Block,
     isFinalStep: boolean,
-    failureSummary: string,
+    gate: GateDefinition,
+  ): Promise<AdvanceResult> {
+    // Re-attach after a replay: a helper is already in flight for this gate.
+    if (step.gate?.phase === 'working' && step.jobId) {
+      return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
+    }
+
+    // Provider not wired: the gate is a pass-through so the engine works without it.
+    if (!gate.wired()) {
+      return this.recordStepResult(workspaceId, instance, step, isFinalStep, {
+        output: gate.unwiredOutput,
+      })
+    }
+
+    // Initialise the gate's state on first entry, resolving the attempt budget from the
+    // task's merge preset (stable across polls once set).
+    if (!step.gate) {
+      const preset = await this.resolveMergePreset(workspaceId, block)
+      step.gate = {
+        phase: 'checking',
+        attempts: 0,
+        maxAttempts: preset.ciMaxAttempts,
+        headSha: null,
+      }
+    }
+
+    const probe = await gate.probe(workspaceId, block.id)
+    step.gate.headSha = probe.headSha
+    // Persist the precheck outcome so the run-detail UI can surface why the gate is
+    // looping (the failing checks / conflict reason) — detail that was previously fed
+    // only to the helper agent and then discarded.
+    step.gate.lastVerdict = probe.status
+    step.gate.lastFailureSummary = probe.failureSummary ?? null
+    step.gate.failingChecks = probe.failingChecks ?? null
+
+    if (probe.status === 'pass') {
+      // Stop the moment the precheck passes — finish the step and advance.
+      return this.recordStepResult(workspaceId, instance, step, isFinalStep, {
+        output: probe.passOutput ?? `${gate.kind} gate passed.`,
+      })
+    }
+
+    if (probe.status === 'pending') {
+      // Keep polling. Persist the head sha + phase so the board can reflect it.
+      step.gate.phase = 'checking'
+      await this.executionRepository.upsert(workspaceId, instance)
+      await this.emitInstance(workspaceId, instance)
+      return { kind: 'awaiting_gate', stepIndex: instance.currentStep }
+    }
+
+    // probe.status === 'fail'.
+    const canEscalate = isAsyncAgentExecutor(this.agentExecutor)
+    if (canEscalate && step.gate.attempts < step.gate.maxAttempts) {
+      return this.dispatchGateHelper(
+        workspaceId,
+        instance,
+        step,
+        block,
+        isFinalStep,
+        gate,
+        probe.failureSummary,
+      )
+    }
+
+    // Budget spent (or no async executor to escalate to): give up.
+    const { error } = await gate.onExhausted({
+      workspaceId,
+      instance,
+      block,
+      step,
+      summary: probe.failureSummary,
+    })
+    return { kind: 'job_failed', error }
+  }
+
+  /**
+   * Dispatch a gate's helper container agent on a failed precheck: build the agent
+   * context with the kind overridden to the helper (it clones the PR head branch and
+   * pushes — no new PR), park on the job, and flip the gate to `working`. Idempotent
+   * under replay via the step's `jobId` (re-attach handled in {@link evaluateGate}).
+   */
+  private async dispatchGateHelper(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    step: PipelineStep,
+    block: Block,
+    isFinalStep: boolean,
+    gate: GateDefinition,
+    failureSummary?: string,
   ): Promise<AdvanceResult> {
     const executor = this.agentExecutor
     if (!isAsyncAgentExecutor(executor)) {
-      // Defensive: evaluateCi only calls this when async-capable.
-      return { kind: 'job_failed', error: 'No async executor available to fix CI.' }
+      // Defensive: evaluateGate only calls this when async-capable.
+      return { kind: 'job_failed', error: `No async executor available for the ${gate.kind} gate.` }
     }
     const base = await this.buildAgentContext(workspaceId, instance, step, isFinalStep, block)
+    const extra = gate.helperPriorOutput?.(failureSummary ?? '')
     const context: AgentRunContext = {
       ...base,
-      agentKind: CI_FIXER_AGENT_KIND,
-      // Surface the failing-check summary to the fixer as resolved context.
-      priorOutputs: [...base.priorOutputs, { agentKind: CI_AGENT_KIND, output: failureSummary }],
+      agentKind: gate.helperKind,
+      priorOutputs: extra ? [...base.priorOutputs, extra] : base.priorOutputs,
     }
     const handle = await executor.startJob(context)
     step.jobId = handle.jobId
     if (handle.model) step.model = handle.model
-    step.ci = {
-      phase: 'fixing',
-      attempts: (step.ci?.attempts ?? 0) + 1,
-      maxAttempts: step.ci?.maxAttempts ?? DEFAULT_MERGE_PRESET.ciMaxAttempts,
-      headSha: step.ci?.headSha ?? null,
+    step.gate = {
+      // Preserve the recorded verdict/failure detail (set in evaluateGate) so the UI
+      // keeps showing what the helper is fixing while it works.
+      ...step.gate,
+      phase: 'working',
+      attempts: (step.gate?.attempts ?? 0) + 1,
+      maxAttempts: step.gate?.maxAttempts ?? DEFAULT_MERGE_PRESET.ciMaxAttempts,
+      headSha: step.gate?.headSha ?? null,
     }
     await this.executionRepository.upsert(workspaceId, instance)
     await this.emitInstance(workspaceId, instance)
@@ -1968,121 +2036,6 @@ export class ExecutionService {
     })
   }
 
-  /**
-   * Evaluate a `conflicts` step's gate once: read the PR's mergeability and decide.
-   *   - no provider wired → pass-through (advance; nothing to gate);
-   *   - mergeable / no PR  → advance to the next step;
-   *   - still computing    → `awaiting_conflicts` (the driver sleeps then re-polls);
-   *   - conflicted, budget left → dispatch a `conflict-resolver` container job;
-   *   - conflicted, budget spent → fail the run (a human resolves + retries).
-   * Shared by the initial advance and the durable `awaiting_conflicts` re-poll.
-   */
-  private async evaluateConflicts(
-    workspaceId: string,
-    instance: ExecutionInstance,
-    step: PipelineStep,
-    block: Block,
-    isFinalStep: boolean,
-  ): Promise<AdvanceResult> {
-    // Re-attach after a replay: a resolver is already in flight for this gate.
-    if (step.conflicts?.phase === 'resolving' && step.jobId) {
-      return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
-    }
-
-    // No mergeability provider wired: the gate is a pass-through so the engine works
-    // without GitHub. Advance via the normal result path.
-    if (!this.mergeabilityProvider) {
-      return this.recordStepResult(workspaceId, instance, step, isFinalStep, {
-        output: 'Conflict gate skipped (no mergeability provider configured).',
-      })
-    }
-
-    // Initialise the gate's state on first entry, resolving the attempt budget from
-    // the task's merge preset (shares the CI-fixer budget; stable across polls).
-    if (!step.conflicts) {
-      const preset = await this.resolveMergePreset(workspaceId, block)
-      step.conflicts = {
-        phase: 'checking',
-        attempts: 0,
-        maxAttempts: preset.ciMaxAttempts,
-        headSha: null,
-      }
-    }
-
-    const report = await this.mergeabilityProvider.getMergeability(workspaceId, block.id)
-    step.conflicts.headSha = report.headSha
-
-    // No PR resolved, or it merges cleanly → nothing to do; advance.
-    if (report.headSha === null || report.verdict === 'mergeable') {
-      return this.recordStepResult(workspaceId, instance, step, isFinalStep, {
-        output:
-          report.headSha === null
-            ? 'Conflict gate passed: no open PR to gate.'
-            : 'Conflict gate passed: the PR merges cleanly with its base.',
-      })
-    }
-
-    if (report.verdict === 'unknown') {
-      // GitHub is still computing mergeability — keep polling.
-      step.conflicts.phase = 'checking'
-      await this.executionRepository.upsert(workspaceId, instance)
-      await this.emitInstance(workspaceId, instance)
-      return { kind: 'awaiting_conflicts', stepIndex: instance.currentStep }
-    }
-
-    // verdict === 'conflicted'.
-    const executor = this.agentExecutor
-    const canResolve = isAsyncAgentExecutor(executor)
-    if (canResolve && step.conflicts.attempts < step.conflicts.maxAttempts) {
-      return this.dispatchConflictResolver(workspaceId, instance, step, block, isFinalStep)
-    }
-
-    // Budget spent (or no async executor to resolve with): give up and fail the run
-    // so a human resolves the conflict manually and retries.
-    return {
-      kind: 'job_failed',
-      error:
-        `The pull request still conflicts with its base after ` +
-        `${step.conflicts.attempts} conflict-resolver attempt(s). Resolve the conflict ` +
-        `manually, then retry the run.`,
-    }
-  }
-
-  /**
-   * Dispatch a `conflict-resolver` container job for a conflicted `conflicts` gate:
-   * build the agent context with the kind overridden to `conflict-resolver` (it
-   * clones the PR head branch, merges the base in, resolves the conflicts and pushes
-   * — no new PR), park on the job, and flip the gate to `resolving`. Idempotent under
-   * replay via the step's `jobId` (re-attach handled in {@link evaluateConflicts}).
-   */
-  private async dispatchConflictResolver(
-    workspaceId: string,
-    instance: ExecutionInstance,
-    step: PipelineStep,
-    block: Block,
-    isFinalStep: boolean,
-  ): Promise<AdvanceResult> {
-    const executor = this.agentExecutor
-    if (!isAsyncAgentExecutor(executor)) {
-      // Defensive: evaluateConflicts only calls this when async-capable.
-      return { kind: 'job_failed', error: 'No async executor available to resolve conflicts.' }
-    }
-    const base = await this.buildAgentContext(workspaceId, instance, step, isFinalStep, block)
-    const context: AgentRunContext = { ...base, agentKind: CONFLICT_RESOLVER_AGENT_KIND }
-    const handle = await executor.startJob(context)
-    step.jobId = handle.jobId
-    if (handle.model) step.model = handle.model
-    step.conflicts = {
-      phase: 'resolving',
-      attempts: (step.conflicts?.attempts ?? 0) + 1,
-      maxAttempts: step.conflicts?.maxAttempts ?? DEFAULT_MERGE_PRESET.ciMaxAttempts,
-      headSha: step.conflicts?.headSha ?? null,
-    }
-    await this.executionRepository.upsert(workspaceId, instance)
-    await this.emitInstance(workspaceId, instance)
-    return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
-  }
-
   /** Provision inputs (`{{input.*}}`) derived from the block under deployment. */
   private deployInputs(block: Block): Record<string, string> {
     const inputs: Record<string, string> = {
@@ -2273,6 +2226,17 @@ export class ExecutionService {
       'Block',
       blockId,
     )
+    // Nothing to fold in (every finding dismissed, no answered replies, no redo
+    // feedback) → the requirements stand as-is. Skip the rework + re-review LLM calls
+    // and settle the review directly. `markIncorporated` preserves any
+    // `incorporatedRequirements` from an earlier iteration, so downstream consumes that
+    // prior doc when one exists, else falls back to the original description (nothing
+    // was clarified). Mirrors a polling gate's precheck skip.
+    if (!hasNotesToIncorporate(review.items, feedback)) {
+      const settled = await this.requireReviewService().markIncorporated(workspaceId, review.id)
+      await this.emitRequirementReview(workspaceId, settled)
+      return settled
+    }
     const preset = await this.resolveMergePreset(workspaceId, block)
     const { review: merged } = await this.requireReviewService().incorporate(
       workspaceId,

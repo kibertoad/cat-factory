@@ -6,16 +6,20 @@ import type { ExecutionInstance } from '@cat-factory/kernel'
 type ExecutionService = Parameters<typeof driveExecution>[0]
 
 /**
- * Instant polls (no real waiting) + generous budgets, for the suite's deterministic
- * fake agents. The fakes finish a job in a poll or two, so the cadence is irrelevant —
- * only the budget ceilings matter, kept well above any fixture's step/fix count.
+ * Instant polls (no real waiting) for the suite's deterministic fakes, so the cadence is
+ * irrelevant — only the budget ceilings matter. A fake job settles in `asyncPolls` polls
+ * (≤ 2 in every fixture) and a fake gate precheck resolves on the first poll, so 50 is
+ * ample headroom while still failing a genuinely stuck run fast (the budget only bites
+ * when a job never settles, and each poll is a real store read — a 500 ceiling would make
+ * that timeout path needlessly slow). The gate↔fixer ping-pong is bounded separately by
+ * the driver's own gate-hop guard, not this budget.
  */
 export const CONFORMANCE_DRIVE_CONFIG: DriveConfig = {
   jobPollIntervalMs: 0,
-  jobMaxPolls: 500,
+  jobMaxPolls: 50,
   jobPollFailureTolerance: 3,
   ciPollIntervalMs: 0,
-  ciMaxPolls: 500,
+  ciMaxPolls: 50,
 }
 
 const noWait = (): Promise<void> => Promise.resolve()

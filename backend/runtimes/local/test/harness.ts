@@ -5,6 +5,7 @@ import {
   type FakeAgentOptions,
   FakeRepoBootstrapper,
   RecordingEventPublisher,
+  driveWorkspace,
   makeIncorporatedReview,
   makeOnboardingProbe,
   makeReadyReviewWithOpenItem,
@@ -129,23 +130,16 @@ export function makeConformanceApp(
     return container.workspaceService.create({ name, seed: false }, user.id, org.id)
   }
 
+  // Drive every active run to a standstill through the SHARED production driver
+  // (`driveExecution`, via `driveWorkspace`) — the local facade reuses Node's pg-boss
+  // runner, so this is the same loop production runs; no hand-rolled twin to drift.
   async function drive(workspaceId: string, maxRounds = 50): Promise<ExecutionInstance[]> {
-    for (let round = 0; round < maxRounds; round++) {
-      const { executions } = await container.workspaceService.snapshot(workspaceId)
-      const active = executions.filter((e) => e.status === 'running' || e.status === 'paused')
-      if (active.length === 0) break
-      for (const e of active) {
-        const exec = container.executionService
-        let r = await exec.advanceInstance(workspaceId, e.id)
-        for (let hops = 0; hops < 500; hops++) {
-          if (r.kind === 'awaiting_job') r = await exec.pollAgentJob(workspaceId, e.id)
-          else if (r.kind === 'awaiting_ci') r = await exec.pollCi(workspaceId, e.id)
-          else if (r.kind === 'awaiting_conflicts') r = await exec.pollConflicts(workspaceId, e.id)
-          else break
-        }
-      }
-    }
-    return (await container.workspaceService.snapshot(workspaceId)).executions
+    return driveWorkspace(
+      container.executionService,
+      workspaceId,
+      async () => (await container.workspaceService.snapshot(workspaceId)).executions,
+      maxRounds,
+    )
   }
 
   function executionEmits(blockId?: string): ExecutionInstance[] {

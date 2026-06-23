@@ -153,6 +153,9 @@ export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
     icon: 'i-lucide-git-merge',
     color: '#f97316',
     description: 'Ensures the PR is mergeable with its base, looping the resolver on conflicts.',
+    // Opens the dedicated gate window (verdict, attempts, conflict detail) instead of
+    // the generic prose step-detail panel. Shared with the CI gate.
+    resultView: 'gate',
   },
   'conflict-resolver': {
     kind: 'conflict-resolver',
@@ -167,6 +170,9 @@ export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
     icon: 'i-lucide-shield-check',
     color: '#38bdf8',
     description: 'Gates the PR on green CI, looping the CI fixer on failure.',
+    // Opens the dedicated gate window (verdict, attempts, the failing checks) instead
+    // of the generic prose step-detail panel. Shared with the conflicts gate.
+    resultView: 'gate',
   },
   'ci-fixer': {
     kind: 'ci-fixer',
