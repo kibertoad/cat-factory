@@ -1275,9 +1275,10 @@ export class ExecutionService {
    *                 approval gate on the producer's output, else the run advances.
    *   - below, budget left → the producer is re-run with the companion's feedback
    *                 folded in (the automatic analogue of "request changes").
-   *   - below, budget spent → the run fails (`companion_rejected`) for a human.
-   * The companion's own JSON output is parsed as the assessment; a malformed payload
-   * is treated as a pass (a broken critic must never wedge a run).
+   *   - below, budget spent → the step parks on the iteration-cap gate for a human
+   *                 (one more round / proceed / stop & reset), NOT a failure.
+   * The companion's own JSON output is parsed as the assessment; an unparseable payload
+   * (even after a repair retry) fails the run (`companion_rejected`) rather than passing.
    */
   private async evaluateCompanion(
     workspaceId: string,

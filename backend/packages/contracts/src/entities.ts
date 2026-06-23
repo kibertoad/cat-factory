@@ -292,8 +292,9 @@ export const pipelineSchema = v.object({
    * Per-step companion quality thresholds, parallel to {@link agentKinds}: when step
    * `i` is a companion kind, `thresholds[i]` is the minimum rating (0..1) its review
    * must reach for the run to proceed; below it the preceding producer is re-run, and
-   * the run fails once the rework budget is spent. `null`/absent on a companion step
-   * means "use the companion's default threshold"; ignored on non-companion steps.
+   * once the rework budget is spent the step parks for a human (the iteration-cap gate).
+   * `null`/absent on a companion step means "use the companion's default threshold";
+   * ignored on non-companion steps.
    */
   thresholds: v.optional(v.array(v.nullable(v.pipe(v.number(), v.minValue(0), v.maxValue(1))))),
   /**
