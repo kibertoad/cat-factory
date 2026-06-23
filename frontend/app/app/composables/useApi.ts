@@ -656,13 +656,6 @@ export function useApi() {
         `${ws(workspaceId)}/blocks/${encodeURIComponent(blockId)}/requirement-review`,
       ),
 
-    // Run a fresh review (synchronous — the LLM runs inline and returns the items).
-    reviewRequirements: (workspaceId: string, blockId: string) =>
-      http<RequirementReview>(
-        `${ws(workspaceId)}/blocks/${encodeURIComponent(blockId)}/requirement-review`,
-        { method: 'POST' },
-      ),
-
     replyRequirementItem: (workspaceId: string, reviewId: string, itemId: string, reply: string) =>
       http<RequirementReview>(
         `${ws(workspaceId)}/requirement-reviews/${encodeURIComponent(reviewId)}/items/${encodeURIComponent(itemId)}/reply`,

@@ -116,21 +116,6 @@ function notifyError(title: string, e: unknown) {
   })
 }
 
-async function runReview() {
-  if (!blockId.value) return
-  try {
-    const result = await requirements.review(blockId.value)
-    toast.add({
-      title: result.items.length
-        ? `${result.items.length} finding(s) to react to`
-        : 'No gaps found — requirements look complete',
-      icon: 'i-lucide-sparkles',
-    })
-  } catch (e) {
-    notifyError('Could not run the requirements review', e)
-  }
-}
-
 async function submitReply(item: RequirementReviewItem) {
   if (!review.value) return
   const text = (drafts.value[item.id] ?? '').trim()
@@ -249,17 +234,6 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
             <UBadge v-if="review" color="neutral" variant="subtle" size="sm">
               Iteration {{ iteration }} / {{ maxIterations }}
             </UBadge>
-            <UButton
-              v-if="!review && !loading"
-              color="primary"
-              variant="soft"
-              size="sm"
-              icon="i-lucide-sparkles"
-              :loading="busy"
-              @click="runReview"
-            >
-              Run review
-            </UButton>
             <UButton icon="i-lucide-x" color="neutral" variant="ghost" size="sm" @click="close" />
           </div>
         </header>
@@ -275,12 +249,14 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
               reviewer re-reviews until the requirements are clear.
             </p>
 
-            <!-- empty / first-run state -->
+            <!-- empty state — the reviewer runs automatically as the first pipeline
+                 gate step, so there's nothing to do here until then -->
             <div
               v-if="!review && !busy && !loading"
               class="rounded-lg border border-dashed border-slate-700 p-8 text-center text-sm text-slate-500"
             >
-              No review yet. Run the reviewer to surface findings about the requirements.
+              No review yet. The reviewer runs automatically as the first step when this task's
+              pipeline starts.
             </div>
 
             <!-- working state (initial fetch on open, or a reviewer pass running) -->

@@ -108,19 +108,6 @@ export const useRequirementsStore = defineStore('requirements', () => {
     return promise
   }
 
-  /** Run a fresh review of a block's collected requirements (off-path / inspector). */
-  async function review(blockId: string): Promise<RequirementReview> {
-    withFlag(reviewing, blockId, true)
-    try {
-      const result = await api.reviewRequirements(workspace.requireId(), blockId)
-      available.value = true
-      store(result)
-      return result
-    } finally {
-      withFlag(reviewing, blockId, false)
-    }
-  }
-
   /** Record a human's answer to one item. */
   async function reply(review: RequirementReview, itemId: string, text: string) {
     store(await api.replyRequirementItem(workspace.requireId(), review.id, itemId, text))
@@ -198,7 +185,6 @@ export const useRequirementsStore = defineStore('requirements', () => {
     canIncorporate,
     canProceed,
     load,
-    review,
     reply,
     setItemStatus,
     incorporate,
