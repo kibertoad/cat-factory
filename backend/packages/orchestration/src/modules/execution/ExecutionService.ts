@@ -4,7 +4,6 @@ import type {
   Block,
   BlueprintService,
   CiStatusProvider,
-  CloudProvider,
   ExecutionInstance,
   MergeAssessment,
   MergePresetRepository,
@@ -27,14 +26,11 @@ import {
   type TestReport,
 } from '@cat-factory/contracts'
 import {
-  CODE_AWARE_TRAIT,
   companionFor,
   companionTargets,
-  hasTrait,
   isCompanionKind,
   TASK_ESTIMATOR_AGENT_KIND,
 } from '@cat-factory/agents'
-import { getFragment } from '@cat-factory/prompt-fragments'
 import { coerceTaskEstimate, summarizeEstimate } from '../estimation/estimate.logic.js'
 import { extractJson, hasNotesToIncorporate } from '../requirements/requirements.logic.js'
 import { reviewableArtifactOutput } from './artifact-review.logic.js'
@@ -72,6 +68,7 @@ import {
   TESTER_AGENT_KIND,
   FIXER_AGENT_KIND,
 } from './ci.logic.js'
+import { AgentContextBuilder } from './AgentContextBuilder.js'
 import type { GateDefinition, GateProbe } from './gates.js'
 import type { NotificationService } from '../notifications/NotificationService.js'
 import type { RequirementReviewService } from '../requirements/RequirementReviewService.js'
@@ -142,49 +139,6 @@ const EXECUTION_FAILURE_HINTS: Partial<Record<AgentFailureKind, string>> = {
     'A companion agent could not return a usable quality assessment (its reply was truncated or malformed) even after a repair retry. Review the companion’s raw output on the run, then retry.',
   cancelled: 'You stopped this run; its container was killed. Retry to start it again.',
   unknown: 'The run failed for an unclassified reason. Review the run, then retry.',
-}
-
-/**
- * The `revision` slice of an agent context when a step is being re-run with feedback
- * — either a human's "request changes" on its approval gate, or a downstream
- * companion's automatic rework (`step.rework`). The companion path wins when both are
- * present. Empty object when neither applies (no revision context).
- */
-function buildRevisionContext(step: PipelineStep): {
-  revision?: {
-    previousProposal: string
-    feedback: string
-    comments?: { quotedSource?: string; body: string }[]
-  }
-} {
-  const source = step.rework
-    ? {
-        previousProposal: step.rework.previousProposal,
-        feedback: step.rework.feedback,
-        comments: step.rework.comments,
-      }
-    : step.approval?.status === 'changes_requested'
-      ? {
-          previousProposal: step.approval.proposal,
-          feedback: step.approval.feedback ?? '',
-          comments: step.approval.comments,
-        }
-      : undefined
-  if (!source) return {}
-  return {
-    revision: {
-      previousProposal: source.previousProposal,
-      feedback: source.feedback,
-      ...(source.comments?.length
-        ? {
-            comments: source.comments.map((c) => ({
-              ...(c.quotedSource ? { quotedSource: c.quotedSource } : {}),
-              body: c.body,
-            })),
-          }
-        : {}),
-    },
-  }
 }
 
 /** Format a 0..1 score as a rounded percentage for notification copy. */
@@ -386,13 +340,11 @@ export class ExecutionService {
   private readonly events: ExecutionEventPublisher
   private readonly board: BoardService
   private readonly spend: SpendService
-  private readonly documents?: DocumentRepository
-  private readonly tasks?: TaskRepository
-  private readonly requirementReviews?: RequirementReviewRepository
   private readonly requirementReviewService?: RequirementReviewService
-  private readonly clarityReviews?: ClarityReviewRepository
   private readonly clarityReviewService?: ClarityReviewService
   private readonly environmentProvisioning?: EnvironmentProvisioningService
+  /** Assembles the per-step agent context (requirements, docs, env, service frame, fragments). */
+  private readonly contextBuilder: AgentContextBuilder
   private readonly blueprintReconciler?: BlueprintReconciler
   private readonly notificationService?: NotificationService
   private readonly llmObservability?: LlmObservabilityService
@@ -457,13 +409,19 @@ export class ExecutionService {
     this.events = executionEventPublisher
     this.board = boardService
     this.spend = spendService
-    this.documents = documentRepository
-    this.tasks = taskRepository
-    this.requirementReviews = requirementReviewRepository
     this.requirementReviewService = requirementReviewService
-    this.clarityReviews = clarityReviewRepository
     this.clarityReviewService = clarityReviewService
     this.environmentProvisioning = environmentProvisioning
+    this.contextBuilder = new AgentContextBuilder({
+      workspaceRepository,
+      blockRepository,
+      accountRepository,
+      documents: documentRepository,
+      tasks: taskRepository,
+      requirementReviews: requirementReviewRepository,
+      clarityReviews: clarityReviewRepository,
+      environmentProvisioning,
+    })
     this.blueprintReconciler = blueprintReconciler
     this.notificationService = notificationService
     this.llmObservability = llmObservability
@@ -562,7 +520,7 @@ export class ExecutionService {
     // The local-infra requirement applies only when the Tester runs in LOCAL mode.
     // Ephemeral is the default, so an unset choice needs no service infra config.
     if (block.agentConfig?.['tester.environment'] !== 'local') return
-    const service = await this.resolveServiceConfig(workspaceId, block)
+    const service = await this.contextBuilder.resolveServiceConfig(workspaceId, block)
     if (service?.noInfraDependencies || service?.testComposePath) return
     throw new ConflictError(
       "This task's pipeline runs the Tester locally, but its service has no test infra " +
@@ -861,7 +819,13 @@ export class ExecutionService {
     // than a single durable step's timeout, while each step stays short. A set
     // `jobId` means a prior (possibly replayed) dispatch already started the job,
     // so we re-attach instead of starting a duplicate.
-    const context = await this.buildAgentContext(workspaceId, instance, step, isFinalStep, block)
+    const context = await this.contextBuilder.buildContext(
+      workspaceId,
+      instance,
+      step,
+      isFinalStep,
+      block,
+    )
     const executor = this.agentExecutor
     if (isAsyncAgentExecutor(executor) && executor.runsAsync(context)) {
       if (!step.jobId) {
@@ -940,7 +904,13 @@ export class ExecutionService {
       const block = await this.blockRepository.get(workspaceId, instance.blockId)
       if (!block) return false
       const isFinalStep = instance.currentStep === instance.steps.length - 1
-      const context = await this.buildAgentContext(workspaceId, instance, step, isFinalStep, block)
+      const context = await this.contextBuilder.buildContext(
+        workspaceId,
+        instance,
+        step,
+        isFinalStep,
+        block,
+      )
       return await this.agentExecutor.isQuotaBased(context)
     } catch {
       return false
@@ -1330,7 +1300,13 @@ export class ExecutionService {
 
     // Run the companion as a normal inline LLM step: its prompt asks for the rating
     // JSON and `priorOutputs` already carries the producer's output for it to grade.
-    const context = await this.buildAgentContext(workspaceId, instance, step, isFinalStep, block)
+    const context = await this.contextBuilder.buildContext(
+      workspaceId,
+      instance,
+      step,
+      isFinalStep,
+      block,
+    )
     const previewModel = await this.previewStepModel(context)
     if (previewModel && previewModel !== step.model) step.model = previewModel
     // Run the companion, parsing its JSON verdict with ONE repair retry when the first
@@ -1632,7 +1608,8 @@ export class ExecutionService {
       .map((s) => s.output as string)
       .pop()
     const body = (analysis ?? block.description ?? '').trim() || 'Automated tech-debt remediation.'
-    const frameId = (await this.resolveServiceFrameId(workspaceId, block.id)) ?? block.id
+    const frameId =
+      (await this.contextBuilder.resolveServiceFrameId(workspaceId, block.id)) ?? block.id
     try {
       const ticket = await this.ticketTrackerProvider.createTicket({
         workspaceId,
@@ -1844,7 +1821,13 @@ export class ExecutionService {
       // Defensive: evaluateGate only calls this when async-capable.
       return { kind: 'job_failed', error: `No async executor available for the ${gate.kind} gate.` }
     }
-    const base = await this.buildAgentContext(workspaceId, instance, step, isFinalStep, block)
+    const base = await this.contextBuilder.buildContext(
+      workspaceId,
+      instance,
+      step,
+      isFinalStep,
+      block,
+    )
     const extra = gate.helperPriorOutput?.(failureSummary ?? '')
     const context: AgentRunContext = {
       ...base,
@@ -2026,7 +2009,13 @@ export class ExecutionService {
       )
     }
     const isFinalStep = instance.currentStep === instance.steps.length - 1
-    const base = await this.buildAgentContext(workspaceId, instance, step, isFinalStep, block)
+    const base = await this.contextBuilder.buildContext(
+      workspaceId,
+      instance,
+      step,
+      isFinalStep,
+      block,
+    )
     const context: AgentRunContext = {
       ...base,
       agentKind: FIXER_AGENT_KIND,
@@ -2067,7 +2056,13 @@ export class ExecutionService {
       return { kind: 'job_failed', error: 'No async executor available to run the tester.' }
     }
     const isFinalStep = instance.currentStep === instance.steps.length - 1
-    const context = await this.buildAgentContext(workspaceId, instance, step, isFinalStep, block)
+    const context = await this.contextBuilder.buildContext(
+      workspaceId,
+      instance,
+      step,
+      isFinalStep,
+      block,
+    )
     const handle = await executor.startJob(context)
     step.jobId = handle.jobId
     if (handle.model) step.model = handle.model
@@ -2159,7 +2154,7 @@ export class ExecutionService {
       // committed); skip the board reconcile.
       return
     }
-    const frameId = await this.resolveServiceFrameId(workspaceId, blockId)
+    const frameId = await this.contextBuilder.resolveServiceFrameId(workspaceId, blockId)
     await this.blueprintReconciler.reconcileBlueprint(workspaceId, frameId, service)
     // The reconcile may have created/updated module + task blocks that aren't
     // individually pushed; nudge clients to refresh the board so they appear. Name the service
@@ -2183,41 +2178,6 @@ export class ExecutionService {
     }
     // Nudge clients to refresh so they can re-read the service's spec files.
     await this.events.boardChanged(workspaceId, 'requirements-updated')
-  }
-
-  /**
-   * The reworked ("incorporated") requirements for a block — the standard-format
-   * document the requirements-rework step produced — or `null` when the feature is
-   * unwired or the block has no incorporated review yet. Used both to substitute the
-   * agent context for every step and to feed the spec-writer.
-   */
-  private async resolveReworkedRequirements(
-    workspaceId: string,
-    blockId: string,
-  ): Promise<string | null> {
-    if (!this.requirementReviews) return null
-    const review = await this.requirementReviews.getByBlock(workspaceId, blockId)
-    if (review?.status === 'incorporated' && review.incorporatedRequirements) {
-      return review.incorporatedRequirements
-    }
-    return null
-  }
-
-  /**
-   * The clarified bug report for a block — the standard-format document the clarity-rework
-   * step produced — or `null` when the feature is unwired or the block has no incorporated
-   * clarity review yet. The clarity mirror of {@link resolveReworkedRequirements}.
-   */
-  private async resolveClarifiedBrief(
-    workspaceId: string,
-    blockId: string,
-  ): Promise<string | null> {
-    if (!this.clarityReviews) return null
-    const review = await this.clarityReviews.getByBlock(workspaceId, blockId)
-    if (review?.status === 'incorporated' && review.clarifiedReport) {
-      return review.clarifiedReport
-    }
-    return null
   }
 
   // ---- requirements-review gate -------------------------------------------
@@ -2932,256 +2892,6 @@ export class ExecutionService {
     await this.advancePastResolvedGate(workspaceId, instance, idx)
   }
 
-  /** Walk up `parentId` from a block to its top-level service frame id (or itself). */
-  private async resolveServiceFrameId(
-    workspaceId: string,
-    blockId: string,
-  ): Promise<string | null> {
-    let current = await this.blockRepository.get(workspaceId, blockId)
-    // Bounded walk (the tree is at most frame → module → task) guarded against cycles.
-    for (let i = 0; current && i < 8; i++) {
-      if (current.level === 'frame' || !current.parentId) return current.id
-      current = await this.blockRepository.get(workspaceId, current.parentId)
-    }
-    return current?.id ?? null
-  }
-
-  /**
-   * Resolve the service-level (frame) configuration for a run's block — the
-   * Tester's local-infra docker-compose path / "no infra" flag and the provisioning
-   * provider + instance size — by walking up to the service frame. When the frame
-   * pins no cloud provider it inherits the owning account's `defaultCloudProvider`
-   * (so the account-level default actually reaches dispatch, not just the UI).
-   * Returns undefined when no frame carries any of these settings, so callers can
-   * spread it conditionally onto the agent context.
-   */
-  private async resolveServiceConfig(
-    workspaceId: string,
-    block: Block,
-  ): Promise<AgentRunContext['service'] | undefined> {
-    const frame =
-      block.level === 'frame'
-        ? block
-        : await this.resolveServiceFrameId(workspaceId, block.id).then((id) =>
-            id ? this.blockRepository.get(workspaceId, id) : null,
-          )
-    if (!frame) return undefined
-    const service: NonNullable<AgentRunContext['service']> = {}
-    if (frame.testComposePath) service.testComposePath = frame.testComposePath
-    if (frame.noInfraDependencies) service.noInfraDependencies = frame.noInfraDependencies
-    if (frame.cloudProvider) service.cloudProvider = frame.cloudProvider
-    else {
-      // No per-service override: fall back to the owning account's default provider
-      // so a pool/local deployment honours the account-level choice at dispatch.
-      const accountDefault = await this.resolveAccountDefaultProvider(workspaceId)
-      if (accountDefault) service.cloudProvider = accountDefault
-    }
-    if (frame.instanceSize) service.instanceSize = frame.instanceSize
-    return Object.keys(service).length ? service : undefined
-  }
-
-  /**
-   * The owning account's `defaultCloudProvider`, or undefined when the workspace
-   * has no account or the account pins no default (so the transport keeps its own).
-   */
-  private async resolveAccountDefaultProvider(
-    workspaceId: string,
-  ): Promise<CloudProvider | undefined> {
-    const workspace = await this.workspaceRepository.get(workspaceId)
-    if (!workspace?.accountId) return undefined
-    const account = await this.accountRepository.get(workspace.accountId)
-    return account?.defaultCloudProvider
-  }
-
-  /** Assemble the {@link AgentRunContext} for a step from the run + block state. */
-  private async buildAgentContext(
-    workspaceId: string,
-    instance: ExecutionInstance,
-    step: PipelineStep,
-    isFinalStep: boolean,
-    block: Block,
-  ): Promise<AgentRunContext> {
-    // When a block's requirements have been reworked, that standardized document is
-    // the single source of truth for every agent step: it already folds in the
-    // description plus the linked docs / tracker issues, so it REPLACES the
-    // description and the (now-redundant) doc/task context. Reviews are only ever run
-    // on task blocks, so skip the lookup entirely for frames/modules — that keeps the
-    // extra read off every container/frame step rather than on the whole hot path.
-    // A converged clarity (bug-report triage) report substitutes downstream exactly like a
-    // reworked requirements doc. When both exist on one task the requirements doc — which
-    // runs after clarity and is the more refined artifact — takes precedence.
-    const reworked =
-      block.level === 'task'
-        ? ((await this.resolveReworkedRequirements(workspaceId, block.id)) ??
-          (await this.resolveClarifiedBrief(workspaceId, block.id)))
-        : null
-    const description = reworked ?? block.description
-    const contextDocs = reworked ? [] : await this.resolveContextDocs(workspaceId, block.id)
-    const contextTasks = reworked ? [] : await this.resolveContextTasks(workspaceId, block.id)
-    const environment = await this.resolveEnvironment(workspaceId, block.id)
-    const service = await this.resolveServiceConfig(workspaceId, block)
-    const priorOutputs = instance.steps
-      .slice(0, instance.currentStep)
-      .filter((s) => s.output)
-      .map((s) => ({ agentKind: s.agentKind, output: s.output! }))
-    // Resolve the best-practice fragments to inject for this step. `code-aware` kinds
-    // get the running service's selected fragments unioned with the block's own pins;
-    // other kinds keep only their block pins. Recorded on the step for observability.
-    const resolved = await this.resolveFragments(workspaceId, step, block)
-    return {
-      agentKind: step.agentKind,
-      pipelineName: instance.pipelineName,
-      workspaceId,
-      executionId: instance.id,
-      // Carry the run initiator so the container executor can lease their OWN personal
-      // (individual-usage) subscription for the step. Null on system/dev runs.
-      ...(instance.initiatedBy != null ? { initiatedByUserId: instance.initiatedBy } : {}),
-      stepIndex: instance.currentStep,
-      isFinalStep,
-      // Consensus config for this step (copied onto the step at run start). Read only
-      // by the optional consensus executor, which decides — possibly gated on the
-      // block estimate below — whether to run the multi-model process. Absent ⇒ standard.
-      ...(step.consensus ? { consensus: step.consensus } : {}),
-      block: {
-        id: block.id,
-        title: block.title,
-        type: block.type,
-        description,
-        fragmentIds: block.fragmentIds,
-        ...(resolved ? { resolvedFragments: resolved.fragments } : {}),
-        modelId: block.modelId,
-        ...(block.agentConfig ? { agentConfig: block.agentConfig } : {}),
-        ...(block.pullRequest ? { pullRequest: block.pullRequest } : {}),
-        ...(contextDocs.length ? { contextDocs } : {}),
-        ...(contextTasks.length ? { contextTasks } : {}),
-        // The task-estimator's triage, when produced earlier in this run — the
-        // consensus executor's gating input.
-        ...(block.estimate ? { estimate: block.estimate } : {}),
-      },
-      ...(environment ? { environment } : {}),
-      ...(service ? { service } : {}),
-      priorOutputs,
-      decisions: instance.steps
-        .filter((s, i) => i < instance.currentStep && s.decision?.chosen)
-        .map((s) => ({ question: s.decision!.question, chosen: s.decision!.chosen! })),
-      resolvedDecision: step.decision?.chosen
-        ? { question: step.decision.question, chosen: step.decision.chosen }
-        : null,
-      // A re-run triggered either by a human "Request changes" on this step's
-      // approval gate OR by a downstream companion looping it back for rework: hand
-      // the agent its previous proposal plus the feedback so it revises rather than
-      // starting over. The companion's automatic rework (`step.rework`) and the
-      // human's gate feedback share one revision shape; the companion path takes
-      // precedence when both are present.
-      ...buildRevisionContext(step),
-    }
-  }
-
-  /**
-   * Resolve the best-practice fragments to fold into a step's system prompt. Service
-   * fragments reach an agent ONLY when its kind carries the `code-aware` trait: those
-   * kinds get the running SERVICE's selected fragments (the frame's
-   * `serviceFragmentIds`, seeded from the workspace default and editable per service)
-   * unioned with the block's own manual pins, resolved against the universal pool. A
-   * non-code-aware kind returns null so `composeBlockSystemPrompt` falls back to the
-   * block's own `fragmentIds` unchanged. Records the selected ids on the step for
-   * observability; never throws (a lookup failure degrades to the block pins).
-   */
-  private async resolveFragments(
-    workspaceId: string,
-    step: PipelineStep,
-    block: Block,
-  ): Promise<{ fragments: { id: string; body: string }[] } | null> {
-    if (!hasTrait(step.agentKind, CODE_AWARE_TRAIT)) return null
-    try {
-      const serviceIds = await this.resolveServiceFragmentIds(workspaceId, block)
-      // Service standards first, then the block's own pins; deduped, stable order.
-      const ids: string[] = []
-      const seen = new Set<string>()
-      for (const id of [...serviceIds, ...(block.fragmentIds ?? [])]) {
-        if (seen.has(id)) continue
-        seen.add(id)
-        ids.push(id)
-      }
-      const fragments = ids
-        .map((id) => {
-          const fragment = getFragment(id)
-          return fragment ? { id, body: fragment.body } : null
-        })
-        .filter((f): f is { id: string; body: string } => f !== null)
-      if (fragments.length === 0) return null
-      step.selectedFragmentIds = fragments.map((f) => f.id)
-      return { fragments }
-    } catch {
-      // Resolution must never wedge a run; fall back to the block's own pins.
-      return null
-    }
-  }
-
-  /**
-   * The selected best-practice fragment ids of the block's owning service frame. Walks
-   * up from the block we already hold (bounded: frame → module → task, cycle-guarded),
-   * reading the frame's `serviceFragmentIds` — without re-fetching the block in hand or
-   * fetching the frame twice.
-   */
-  private async resolveServiceFragmentIds(workspaceId: string, block: Block): Promise<string[]> {
-    let current: Block | null = block
-    for (let i = 0; current && i < 8; i++) {
-      if (current.level === 'frame' || !current.parentId) return current.serviceFragmentIds ?? []
-      current = await this.blockRepository.get(workspaceId, current.parentId)
-    }
-    return []
-  }
-
-  /**
-   * Resolve documents (from any source) linked to the running block into compact
-   * agent context. A no-op unless the document-source integration is wired (the
-   * repository is an optional dependency), so the engine stays unchanged when it
-   * is off.
-   */
-  private async resolveContextDocs(
-    workspaceId: string,
-    blockId: string,
-  ): Promise<{ title: string; url: string; excerpt: string }[]> {
-    if (!this.documents) return []
-    const docs = await this.documents.listByBlock(workspaceId, blockId)
-    return docs.map((d) => ({ title: d.title, url: d.url, excerpt: d.excerpt }))
-  }
-
-  /**
-   * Resolve tracker issues (from any source) linked to the running block into
-   * structured agent context. A no-op unless the task-source integration is
-   * wired (the repository is an optional dependency), so the engine stays
-   * unchanged when it is off.
-   */
-  private async resolveContextTasks(workspaceId: string, blockId: string) {
-    if (!this.tasks) return []
-    const tasks = await this.tasks.listByBlock(workspaceId, blockId)
-    return tasks.map((t) => ({
-      key: t.externalId,
-      url: t.url,
-      title: t.title,
-      status: t.status,
-      type: t.type,
-      assignee: t.assignee,
-      priority: t.priority,
-      labels: t.labels,
-      description: t.description,
-      comments: t.comments,
-    }))
-  }
-
-  /**
-   * Resolve the live ephemeral environment provisioned for the running block
-   * into compact agent context. A no-op unless the environment integration is
-   * wired (the provisioning service is an optional dependency), so the engine
-   * stays unchanged when it is off.
-   */
-  private async resolveEnvironment(workspaceId: string, blockId: string) {
-    if (!this.environmentProvisioning) return null
-    return this.environmentProvisioning.resolveForBlock(workspaceId, blockId)
-  }
-
   /**
    * Push the run's latest state to subscribed clients, alongside its rolled-up
    * block so the board updates without a refetch. Best-effort: the publisher
@@ -3592,7 +3302,7 @@ export class ExecutionService {
   /**
    * Request changes on a step's gated proposal: the same step re-runs with the
    * human's freeform feedback and/or per-block comments (and its prior proposal)
-   * folded into the agent's context (see `buildAgentContext`). The run is left
+   * folded into the agent's context (see {@link AgentContextBuilder}). The run is left
    * `running` on the same step; on the re-run's completion the gate is raised
    * afresh. At least one of `feedback`/`comments` is expected (the controller
    * validates this), but an empty review is harmless — the agent simply re-runs.
