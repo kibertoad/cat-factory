@@ -1481,6 +1481,7 @@ export class ExecutionService {
     // resolver that owns the block's terminal status (the merger sets `done`/`pr_ready`)
     // tells `finalizeBlock` to leave it alone.
     const resolver = this.stepResolverFor(step.agentKind)
+    let resolverOwnsTerminalStatus = false
     if (resolver && (resolver.applies?.(result) ?? true)) {
       const resolution = await resolver.resolve({
         workspaceId,
@@ -1490,6 +1491,7 @@ export class ExecutionService {
         isFinalStep,
       })
       if (resolution?.output !== undefined) step.output = resolution.output
+      if (resolution?.ownsTerminalStatus) resolverOwnsTerminalStatus = true
     }
 
     if (isFinalStep) {
@@ -1511,7 +1513,15 @@ export class ExecutionService {
     instance.currentStep += 1
     const next = instance.steps[instance.currentStep]
     if (next) this.startStep(next)
-    await this.updateBlockProgress(workspaceId, instance, 'in_progress')
+    // A resolver that already set the block's TERMINAL status (the merger flips it to
+    // `done`/`pr_ready` mid-pipeline) must not be clobbered back to `in_progress` as we
+    // advance to a trailing step — refresh progress only, preserving that status. (The
+    // final step's `finalizeBlock` then leaves a `done` block alone.)
+    if (resolverOwnsTerminalStatus) {
+      await this.refreshBlockProgress(workspaceId, instance)
+    } else {
+      await this.updateBlockProgress(workspaceId, instance, 'in_progress')
+    }
     await this.executionRepository.upsert(workspaceId, instance)
     await this.emitInstance(workspaceId, instance)
     return { kind: 'continue' }
@@ -2615,6 +2625,22 @@ export class ExecutionService {
     const done = instance.steps.filter((s) => s.state === 'done').length
     await this.blockRepository.update(workspaceId, instance.blockId, {
       status,
+      progress: Math.min(1, done / total),
+    })
+  }
+
+  /**
+   * Advance the block's step PROGRESS without touching its status — used when a step
+   * resolver already owns the block's terminal status (the merger set `done`/`pr_ready`)
+   * and a trailing step still follows, so the bar moves on without downgrading that status.
+   */
+  private async refreshBlockProgress(
+    workspaceId: string,
+    instance: ExecutionInstance,
+  ): Promise<void> {
+    const total = instance.steps.length || 1
+    const done = instance.steps.filter((s) => s.state === 'done').length
+    await this.blockRepository.update(workspaceId, instance.blockId, {
       progress: Math.min(1, done / total),
     })
   }
