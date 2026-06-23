@@ -10,7 +10,8 @@ import {
   makeReadyReviewWithOpenItem,
 } from '@cat-factory/conformance'
 import { env } from 'cloudflare:test'
-import { makeApp, fragmentLibraryDeps } from '../helpers'
+import { makeApp, fragmentLibraryDeps, tasksDeps } from '../helpers'
+import { FakeTaskSourceProvider } from '../fakes/FakeTaskSourceProvider'
 import { buildContainer } from '../../src/infrastructure/container'
 import { D1RequirementReviewRepository } from '../../src/infrastructure/repositories/D1RequirementReviewRepository'
 import { D1RepoBlueprintRepository } from '../../src/infrastructure/repositories/D1RepoBlueprintRepository'
@@ -40,6 +41,9 @@ const harness: ConformanceHarness = {
         executionEventPublisher: recorder,
         repoBootstrapper: new FakeRepoBootstrapper(),
         ...fragmentLibraryDeps(),
+        // A deterministic task source (fake 'jira') over the real D1 task repos, so the
+        // shared suite can assert create-task-from-issue parity against D1 too.
+        ...tasksDeps({ providers: [new FakeTaskSourceProvider('jira')] }),
       },
       // The Worker binds `AI` in tests; let the suite force the opt-in flag off so the
       // provider-key assertions behave identically to Node (which has no binding).

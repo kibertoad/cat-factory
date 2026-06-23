@@ -22,6 +22,7 @@ import {
   ConfluenceProvider,
   GitHubDocsProvider,
   GitHubIssuesProvider,
+  JiraProvider,
   HttpEnvironmentProvider,
   NotionProvider,
   EMAIL_CIPHER_INFO,
@@ -131,7 +132,6 @@ import { GitHubAppRegistry } from './github/GitHubAppRegistry'
 import { FetchGitHubClient } from './github/FetchGitHubClient'
 import { FetchGitHubProvisioningClient } from './github/FetchGitHubProvisioningClient'
 import { WebCryptoWebhookVerifier } from './github/WebCryptoWebhookVerifier'
-import { JiraProvider } from './tasks/JiraProvider'
 import { D1TaskConnectionRepository } from './repositories/D1TaskConnectionRepository'
 import { D1TaskRepository } from './repositories/D1TaskRepository'
 import { D1PromptFragmentRepository } from './repositories/D1PromptFragmentRepository'

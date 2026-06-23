@@ -140,6 +140,7 @@ export function taskSourceController(): Hono<AppEnv> {
       containerId,
       source,
       externalId,
+      c.get('user')?.id ?? null,
     )
     return c.json(result, 201)
   })

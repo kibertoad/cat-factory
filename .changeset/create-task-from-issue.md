@@ -1,5 +1,6 @@
 ---
 '@cat-factory/contracts': minor
+'@cat-factory/kernel': minor
 '@cat-factory/integrations': minor
 '@cat-factory/orchestration': minor
 '@cat-factory/server': minor
@@ -10,7 +11,7 @@
 
 Create board tasks directly from imported GitHub issues or Jira tickets.
 
-Previously an imported issue could only be attached to an *existing* task block as
+Previously an imported issue could only be attached to an _existing_ task block as
 agent context. The task-source integration now also materialises an issue as a
 brand-new board task: `TaskLinkService.createTaskFromIssue` seeds a leaf block
 (title `KEY: summary`, description = a source-reference line + the issue body)
@@ -22,15 +23,28 @@ refreshes it. Backed by `POST /workspaces/:ws/tasks/create-block`
 task-source import modal gains a "create tasks in" container picker and a per-issue
 "Create task" action.
 
+The new task carries `createdBy` (the signed-in user, threaded through the widened
+`BoardWritePort.addTask`) for notification routing, the container is resolved in the
+request workspace so the workspace-scoped issue link always resolves at execution
+time, and creating a second task from an already-linked issue is refused (`409`)
+rather than silently re-pointing the single issue→block link. The shared
+cross-runtime conformance suite now asserts the whole create-task-from-issue flow
+(seeded over a deterministic task source) against BOTH the Cloudflare/D1 and the
+Node/Postgres facades.
+
 Also closes two cross-runtime parity gaps in the task-source layer so the feature
 works identically on both facades:
 
 - **GitHub issues as a task source now work on the Node runtime.** The
   runtime-neutral `GitHubIssuesProvider` (it depends only on the `GitHubClient` /
   `GitHubInstallationRepository` ports) moved from the Cloudflare package into the
-  shared `@cat-factory/integrations`, and the Node facade wires it whenever a GitHub
+  shared `@cat-factory/integrations`, the Node facade wires it whenever a GitHub
   client is available (the App is configured) — mirroring the Worker's
-  `config.github.enabled` gate. Previously only the Worker offered GitHub issues.
-- **Jira search now works on the Node runtime.** The Node `JiraProvider` gained the
-  `search()` method its Cloudflare twin already had (the legacy Node copy had
-  silently dropped it).
+  `config.github.enabled` gate — AND `github` was added to the Node facade's
+  task-source allow-list (it had been omitted, so the provider could never register).
+  Previously only the Worker offered GitHub issues.
+- **Jira search now works on the Node runtime.** The duplicated per-runtime
+  `JiraProvider` was hoisted into the shared `@cat-factory/integrations` (it is a thin
+  runtime-neutral `fetch` shell, like `GitHubIssuesProvider`), so both facades now
+  compose the SAME class — including `search()`, which the legacy Node copy had
+  silently dropped.

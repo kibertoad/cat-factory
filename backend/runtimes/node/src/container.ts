@@ -8,6 +8,7 @@ import {
   ConfluenceProvider,
   GitHubDocsProvider,
   GitHubIssuesProvider,
+  JiraProvider,
   HttpEnvironmentProvider,
   HttpRunnerPoolProvider,
   NotionProvider,
@@ -119,7 +120,6 @@ import {
 } from './repositories/slack.js'
 import { DrizzleTaskConnectionRepository, DrizzleTaskRepository } from './repositories/tasks.js'
 import { CryptoIdGenerator, SystemClock } from './runtime.js'
-import { JiraProvider } from './tasks/JiraProvider.js'
 
 // HKDF domain tag separating runner-pool scheduler secrets from any other use of
 // the same master key (mirrors the Worker's `cat-factory:runners`).

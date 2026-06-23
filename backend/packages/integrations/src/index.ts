@@ -90,6 +90,9 @@ export {
   GitHubIssuesProvider,
   type GitHubIssuesProviderDependencies,
 } from './modules/tasks/GitHubIssuesProvider.js'
+// The Jira task-source provider (a thin `fetch` shell around the pure Jira logic):
+// runtime-neutral, so both facades compose the SAME class instead of a per-runtime copy.
+export { JiraProvider, JiraApiError } from './modules/tasks/JiraProvider.js'
 
 export {
   EnvironmentConnectionService,

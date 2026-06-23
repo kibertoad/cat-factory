@@ -8,6 +8,7 @@ import {
   type RepoBlueprintRecord,
   type ScheduleRun,
   seedPipelines,
+  type SourceTask,
   type SlackMemberMappingEntry,
   type SlackNotificationSettings,
   type TrackerSettings,
@@ -630,6 +631,81 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
       })
     })
 
+    describe('task sources', () => {
+      it('creates a board task from an imported issue and links the issue to it', async () => {
+        const { call, createWorkspace } = harness.makeApp()
+        const { workspace } = await createWorkspace({ seed: false })
+        const ws = workspace.id
+
+        // A service frame to create the task inside.
+        const frame = await call<Block>('POST', `/workspaces/${ws}/blocks`, {
+          type: 'service',
+          position: { x: 0, y: 0 },
+        })
+        expect(frame.status).toBe(201)
+
+        // Connect + import the issue (the fake provider accepts any credentials and
+        // generates a deterministic issue), then materialise it as a board task.
+        await call('POST', `/workspaces/${ws}/task-sources/jira/connect`, {
+          credentials: {
+            baseUrl: 'https://acme.atlassian.net',
+            accountEmail: 'd@a.io',
+            apiToken: 't',
+          },
+        })
+        await call('POST', `/workspaces/${ws}/task-sources/jira/import`, { ref: 'PROJ-42' })
+
+        const created = await call<{ block: Block; task: SourceTask }>(
+          'POST',
+          `/workspaces/${ws}/tasks/create-block`,
+          { source: 'jira', externalId: 'PROJ-42', containerId: frame.body.id },
+        )
+        expect(created.status).toBe(201)
+
+        // The new block is a leaf task under the frame, seeded from the issue.
+        const block = created.body.block
+        expect(block.level).toBe('task')
+        expect(block.parentId).toBe(frame.body.id)
+        expect(block.title).toContain('PROJ-42')
+        expect(block.description).toContain('Description for PROJ-42')
+        expect(block.status).toBe('planned')
+
+        // The issue is linked to the new task for context, and it's persisted: the
+        // board snapshot includes it and the issue list reflects the link.
+        expect(created.body.task.linkedBlockId).toBe(block.id)
+        const snapshot = await call<WorkspaceSnapshot>('GET', `/workspaces/${ws}`)
+        expect(snapshot.body.blocks.some((b) => b.id === block.id && b.level === 'task')).toBe(true)
+        const issues = await call<SourceTask[]>('GET', `/workspaces/${ws}/tasks`)
+        expect(issues.body.find((t) => t.externalId === 'PROJ-42')?.linkedBlockId).toBe(block.id)
+
+        // Creating a second task from the already-linked issue is refused (409), so the
+        // single issue→block link is never silently re-pointed away from the first task.
+        const again = await call('POST', `/workspaces/${ws}/tasks/create-block`, {
+          source: 'jira',
+          externalId: 'PROJ-42',
+          containerId: frame.body.id,
+        })
+        expect(again.status).toBe(409)
+      })
+
+      it('404s when the issue was never imported', async () => {
+        const { call, createWorkspace } = harness.makeApp()
+        const { workspace } = await createWorkspace({ seed: false })
+        const ws = workspace.id
+        const frame = await call<Block>('POST', `/workspaces/${ws}/blocks`, {
+          type: 'service',
+          position: { x: 0, y: 0 },
+        })
+
+        const res = await call('POST', `/workspaces/${ws}/tasks/create-block`, {
+          source: 'jira',
+          externalId: 'PROJ-999',
+          containerId: frame.body.id,
+        })
+        expect(res.status).toBe(404)
+      })
+    })
+
     describe('document sources', () => {
       it('connects, lists (secret-free), and disconnects a document source', async () => {
         const { call, createWorkspace } = harness.makeApp()
@@ -1110,7 +1186,9 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         expect(step.output).not.toContain('[spec-writer]')
         expect(step.output).toContain('# Specification: Auth')
         expect(step.output).toContain('The system SHALL let a user log in.')
-        expect(step.output).toContain('GIVEN a registered user WHEN they sign in THEN a session starts')
+        expect(step.output).toContain(
+          'GIVEN a registered user WHEN they sign in THEN a session starts',
+        )
       })
 
       it('skips a disabled step at run start but keeps it in the saved pipeline', async () => {
