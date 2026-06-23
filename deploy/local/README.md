@@ -47,6 +47,49 @@ section). You don't need `GITHUB_PAT` to boot: with it unset the service starts 
 UI shows a banner linking to GitHub's token page (scopes pre-selected); set the token
 and restart to actually run repo-operating agent steps.
 
+## Using Cloudflare AI
+
+At least one model provider must be configured or the picker shows nothing selectable
+(every model comes back `available: false`) and pipelines can't start. The Cloudflare
+Worker uses an in-process `workers-ai` binding for this; Node/local has no binding, so
+it serves the same `workers-ai` models over Cloudflare's **REST** API. Set both:
+
+```sh
+CLOUDFLARE_ACCOUNT_ID=...
+CLOUDFLARE_API_TOKEN=...
+# CLOUDFLARE_AI_GATEWAY=<slug>   # optional: route through an AI Gateway
+```
+
+With both set, the Cloudflare models become selectable in the picker and runnable
+(inline and in agent containers), exactly like on the Worker. A direct vendor key
+(`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, …) works too and can be combined.
+
+### Mint an API token
+
+Use the dashboard's token UI and pick the built-in **Workers AI** template (it grants
+`Account > Workers AI > Read`, which is all inference needs):
+
+- https://dash.cloudflare.com/profile/api-tokens → "Create Token" → "Workers AI" → "Use template"
+
+If you also set `CLOUDFLARE_AI_GATEWAY`, add `Account > AI Gateway > Read` to the token.
+
+### Find your account ID
+
+With wrangler logged in (`pnpm dlx wrangler login`), `whoami` prints the account name
+and ID for the current session:
+
+```sh
+pnpm dlx wrangler whoami
+```
+
+Or read it back from the token you just minted (no wrangler needed):
+
+```sh
+curl -s https://api.cloudflare.com/client/v4/accounts \
+  -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+  | python -c 'import json,sys; [print(a["id"], a["name"]) for a in json.load(sys.stdin)["result"]]'
+```
+
 `ENCRYPTION_KEY` is generated per process when unset, so a stock boot works with no
 config. If you DO set it, it must be valid base64 of at least 32 bytes (e.g.
 `openssl rand -base64 32`); a non-base64 value like `dummy` fails the cipher at boot

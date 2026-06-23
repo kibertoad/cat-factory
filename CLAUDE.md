@@ -592,8 +592,19 @@ differentiators behind the shared kernel ports + the `container.gateways` seam.
   `driveExecution` runs the same advance/poll loop the `ExecutionWorkflow` does, with
   plain async sleeps instead of durable steps; `signalDecision` re-enqueues a parked
   run). `start()` connects to `DATABASE_URL`, runs `migrate()`, boots pg-boss + the
-  execution worker, and serves over `@hono/node-server`. Real-time + async GitHub
-  ingest fall back to the inline/not-enabled paths for now.
+  execution worker, attaches the **real-time WebSocket transport** to the HTTP listener,
+  and serves over `@hono/node-server`. Async GitHub ingest still falls back to the
+  inline/not-enabled paths for now. **Real-time** is implemented: `start()` creates a
+  per-workspace `NodeRealtimeHub` (in-memory subscriber registry), wires a
+  `NodeEventPublisher` (decorated with `FanOutEventPublisher`) as the engine's
+  `executionEventPublisher` + an `InAppNotificationChannel`, and `attachRealtime`
+  (`runtimes/node/src/realtime.ts`) accepts the SAME raw-WebSocket + `?ticket=` protocol
+  the Worker serves via a `ws` server on the HTTP `upgrade` event (`@hono/node-server`
+  can't upgrade from a Hono `Response`, and the SPA speaks raw WebSocket — not socket.io —
+  so this keeps the client unchanged across runtimes). The ticket mint/verify is the
+  shared `@cat-factory/server` `auth/wsTicket.ts` used by both the Worker's
+  `EventsController` and this upgrade handler. Single-process only for now (a
+  multi-replica deployment would front the hub with Postgres LISTEN/NOTIFY).
   **Container agent steps** (coder/mocker/tester/playwright/blueprints/ci-fixer/
   conflict-resolver/merger) run via the **same** shared `CompositeAgentExecutor` +
   `ContainerAgentExecutor` the Worker uses (now in `@cat-factory/server`),

@@ -52,7 +52,7 @@ export interface ExecutionEventPublisher {
    * (no prompt/response bodies) so an open "Model activity" view updates live,
    * independent of the durable driver (the proxy records calls even while the run's
    * poll loop is frozen). Optional so publishers/tests that predate it need no change;
-   * a runtime with no real-time transport (Node today) leaves it a no-op.
+   * a runtime with no real-time transport wired leaves it a no-op.
    */
   llmCallObserved?(workspaceId: string, activity: LlmCallActivity): Promise<void>
   /**
@@ -60,7 +60,7 @@ export interface ExecutionEventPublisher {
    * started, produced new findings, converged, or hit its cap): push the updated review so
    * an open review window / inspector reflects the transition live. This is live state, not
    * a summons — the user is called back via a `notificationChanged` event when input is
-   * needed. Optional; a runtime with no real-time transport (Node today) leaves it a no-op.
+   * needed. Optional; a runtime with no real-time transport wired leaves it a no-op.
    */
   requirementReviewChanged?(workspaceId: string, review: RequirementReview): Promise<void>
 }
