@@ -18,6 +18,7 @@ const execution = useExecutionStore()
 const ui = useUiStore()
 const agentRuns = useAgentRunsStore()
 const services = useServicesStore()
+const requirements = useRequirementsStore()
 const { lod } = useSemanticZoom()
 
 const block = computed<Block | undefined>(() => board.getBlock(props.id))
@@ -65,9 +66,15 @@ function openFirstDecision() {
   if (d) ui.openDecision(d.instanceId, d.decision.id)
 }
 
-// Surface a pending approval gate from this frame OR any of its tasks.
+// Surface a pending approval gate from this frame OR any of its tasks — but NOT a
+// requirements-review gate that's mid-cycle (incorporating / re-reviewing in the driver),
+// which is background work needing no human, so it stays off the frame's "Approval" badge.
 const blockApprovals = computed(() =>
-  execution.openApprovals.filter((a) => a.blockId === props.id || taskIds.value.has(a.blockId)),
+  execution.openApprovals.filter(
+    (a) =>
+      (a.blockId === props.id || taskIds.value.has(a.blockId)) &&
+      !(a.agentKind === 'requirements-review' && requirements.backgroundStage(a.blockId)),
+  ),
 )
 
 function openFirstApproval() {

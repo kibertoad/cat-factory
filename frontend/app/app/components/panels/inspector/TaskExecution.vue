@@ -10,6 +10,19 @@ const execution = useExecutionStore()
 const agentRuns = useAgentRunsStore()
 const ui = useUiStore()
 const models = useModelsStore()
+const requirements = useRequirementsStore()
+
+// The async stage this task's requirements-review gate is mid-cycle in (folding the
+// answers, then re-reviewing), or null. While set, the gate is doing background work and
+// needs NO human, so its "Review" button is replaced by a working indicator.
+const reqStage = computed(() => requirements.backgroundStage(props.block.id))
+const reqStageLabel = computed(() =>
+  reqStage.value === 'incorporating'
+    ? 'Incorporating…'
+    : reqStage.value === 'reviewing'
+      ? 'Re-reviewing…'
+      : null,
+)
 
 const instance = computed(() => execution.getInstance(props.block.executionId))
 // A failed run is no longer executing: a step left mid-flight must stop showing
@@ -41,9 +54,12 @@ const stepLabel: Record<string, string> = {
 /** A gated step parked for approval reads "Needs approval", not "Needs decision". */
 function labelForStep(s: {
   state: string
+  agentKind?: string
   approval?: { status: string } | null
   startingContainer?: boolean
 }) {
+  // A requirements gate mid-cycle reads its working stage, not "Needs approval".
+  if (s.agentKind === 'requirements-review' && reqStageLabel.value) return reqStageLabel.value
   if (s.approval?.status === 'pending') return 'Needs approval'
   // A container-backed step whose container is still cold-booting (only while the
   // run is live — a failed run's mid-flight step is no longer spinning up).
@@ -144,6 +160,15 @@ function openStep(i: number) {
             >
               Resolve
             </UButton>
+            <!-- requirements gate folding/re-reviewing in the background: a working
+                 indicator, NOT a "Review" gate (the human is summoned only if needed) -->
+            <span
+              v-else-if="s.agentKind === 'requirements-review' && reqStage"
+              class="inline-flex shrink-0 items-center gap-1 text-[10px] text-indigo-300"
+            >
+              <UIcon name="i-lucide-loader-circle" class="h-3 w-3 animate-spin" />
+              {{ reqStageLabel }}
+            </span>
             <UButton
               v-else-if="s.approval && s.approval.status === 'pending'"
               color="warning"
