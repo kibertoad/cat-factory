@@ -277,6 +277,17 @@ export function seedPipelines(): Pipeline[] {
       name: 'Quick implement',
       agentKinds: ['coder', 'blueprints', 'mocker', 'tester', 'conflicts', 'ci', 'merger'],
     },
+    // The leanest end-to-end build: implement → review → test, then the standard
+    // mergeability / CI / merge tail. The `coder` (Implementer) writes the change,
+    // its `reviewer` companion rates it immediately and loops it back for automatic
+    // rework below threshold, `mocker` stands up the external-dependency mocks the
+    // `tester` needs to run the suite, and `conflicts` / `ci` / `merger` gate and
+    // ship the PR — no design, spec or docs phases.
+    {
+      id: 'pl_simple',
+      name: 'Simple',
+      agentKinds: ['coder', 'reviewer', 'mocker', 'tester', 'conflicts', 'ci', 'merger'],
+    },
     {
       id: 'pl_integrate',
       name: 'Integrate & ship',
