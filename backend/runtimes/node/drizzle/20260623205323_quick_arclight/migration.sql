@@ -1,0 +1,1 @@
+ALTER TABLE "llm_call_metrics" ADD COLUMN "reasoning_text" text DEFAULT '' NOT NULL;

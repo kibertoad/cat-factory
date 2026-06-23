@@ -918,6 +918,7 @@ function rowToLlmMetric(row: typeof llmCallMetrics.$inferSelect): LlmCallMetric 
     promptPrefixCount: row.prompt_prefix_count,
     promptHash: row.prompt_hash,
     responseText: row.response_text,
+    reasoningText: row.reasoning_text,
   }
 }
 
@@ -952,6 +953,7 @@ class DrizzleLlmCallMetricRepository implements LlmCallMetricRepository {
       prompt_prefix_count: metric.promptPrefixCount,
       prompt_hash: metric.promptHash,
       response_text: metric.responseText,
+      reasoning_text: metric.reasoningText,
     })
   }
 

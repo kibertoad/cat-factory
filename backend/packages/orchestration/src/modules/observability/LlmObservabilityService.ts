@@ -86,6 +86,8 @@ export interface RecordLlmCallInput {
   errorMessage: string | null
   promptText: string
   responseText: string
+  /** The model's reasoning/thinking trace, when emitted on a separate channel (else ''). */
+  reasoningText: string
 }
 
 /**
@@ -147,6 +149,7 @@ export class LlmObservabilityService {
       promptPrefixCount: stored.promptPrefixCount,
       promptHash: stored.promptHash,
       responseText: clampBody(input.responseText),
+      reasoningText: clampBody(input.reasoningText),
     }
     await this.repository.record(metric)
     // Fan out to the external trace sink (Langfuse), if wired. We send the FULL prompt
@@ -174,7 +177,9 @@ export class LlmObservabilityService {
             ok: input.ok,
             errorMessage: input.errorMessage,
             input: this.recordPrompts ? input.promptText : '',
-            output: this.recordPrompts ? input.responseText : '',
+            // Fall back to the reasoning trace when the turn produced no response text
+            // (a thinking model that spent its budget reasoning) so the trace isn't blank.
+            output: this.recordPrompts ? input.responseText || input.reasoningText : '',
           }),
         ).catch(() => {})
       } catch {

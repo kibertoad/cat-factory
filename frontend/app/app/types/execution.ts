@@ -209,6 +209,12 @@ export interface LlmCallMetric {
   promptHash: string
   /** the full assistant response text */
   responseText: string
+  /**
+   * the model's reasoning/"thinking" trace on a separate channel, when emitted (empty
+   * for non-reasoning models). a thinking model can spend its whole output budget here
+   * and return empty `responseText`.
+   */
+  reasoningText: string
 }
 
 /**
@@ -221,7 +227,7 @@ export interface LlmCallMetric {
  */
 export type LlmCallActivity = Omit<
   LlmCallMetric,
-  'promptText' | 'responseText' | 'promptPrefixCount' | 'promptHash'
+  'promptText' | 'responseText' | 'reasoningText' | 'promptPrefixCount' | 'promptHash'
 >
 
 /** One per-agent-kind insight in the LLM-friendly export (rollup + derived ratios). */

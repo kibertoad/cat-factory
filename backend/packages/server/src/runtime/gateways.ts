@@ -62,6 +62,13 @@ export interface ProxyCallObservation {
   finishReason: string | null
   /** The assistant response text (concatenated for streamed calls). */
   responseText: string
+  /**
+   * The model's reasoning / "thinking" trace, when it emits one on a separate channel
+   * (AI SDK `reasoningText`; OpenAI-compatible `reasoning_content` / `reasoning`).
+   * Absent/empty for non-reasoning models. Lets the sink record a thinking turn whose
+   * `responseText` came back empty so its output tokens are still accounted for.
+   */
+  reasoningText?: string
   ok: boolean
   httpStatus: number | null
   errorMessage: string | null

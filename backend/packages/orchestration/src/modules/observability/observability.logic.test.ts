@@ -38,6 +38,7 @@ function metric(overrides: Partial<LlmCallMetric> & Pick<LlmCallMetric, 'id'>): 
     promptPrefixCount: 0,
     promptHash: '',
     responseText: 'ok',
+    reasoningText: '',
     ...overrides,
   }
 }

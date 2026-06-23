@@ -211,6 +211,7 @@ export function llmProxyController(): Hono<AppEnv> {
             errorMessage: obs.errorMessage,
             promptText,
             responseText: obs.responseText,
+            reasoningText: obs.reasoningText ?? '',
           })
           // Observability must never break the proxy.
           .catch((err) =>
@@ -481,6 +482,7 @@ export function llmProxyController(): Hono<AppEnv> {
       usage: json.usage ?? null,
       finishReason: json.choices?.[0]?.finish_reason ?? null,
       responseText: assistantTextFromCompletion(json),
+      reasoningText: reasoningTextFromCompletion(json),
       ok: true,
       httpStatus: upstreamRes.status,
       errorMessage: null,
@@ -496,7 +498,12 @@ export function llmProxyController(): Hono<AppEnv> {
 interface BufferedCompletion {
   usage?: LlmTokenUsage
   choices?: Array<{
-    message?: { content?: string | null }
+    message?: {
+      content?: string | null
+      /** Reasoning trace on a separate channel: DeepSeek-style / OpenRouter-style. */
+      reasoning_content?: string | null
+      reasoning?: string | null
+    }
     finish_reason?: string | null
   }>
 }
@@ -507,11 +514,27 @@ function assistantTextFromCompletion(json: BufferedCompletion): string {
   return typeof content === 'string' ? content : ''
 }
 
+/**
+ * Pull the reasoning/"thinking" trace out of a buffered completion, across the field
+ * names OpenAI-compatible providers use (`reasoning_content` on DeepSeek, `reasoning`
+ * on OpenRouter and others). Empty for non-reasoning models.
+ */
+function reasoningTextFromCompletion(json: BufferedCompletion): string {
+  const message = json.choices?.[0]?.message
+  const reasoning = message?.reasoning_content ?? message?.reasoning
+  return typeof reasoning === 'string' ? reasoning : ''
+}
+
 /** One OpenAI SSE chunk shape the observation scanner reads. */
 interface StreamChunk {
   usage?: LlmTokenUsage | null
   choices?: Array<{
-    delta?: { content?: string | null }
+    delta?: {
+      content?: string | null
+      /** Streamed reasoning deltas (DeepSeek-style / OpenRouter-style). */
+      reasoning_content?: string | null
+      reasoning?: string | null
+    }
     finish_reason?: string | null
   }>
 }
@@ -548,6 +571,7 @@ function observationStream(
   let lastUsage: LlmTokenUsage | null = null
   let finishReason: string | null = null
   let text = ''
+  let reasoning = ''
 
   const scan = (input: string) => {
     buffer += input
@@ -565,6 +589,8 @@ function observationStream(
         if (choice) {
           const delta = choice.delta?.content
           if (typeof delta === 'string') text += delta
+          const reasoningDelta = choice.delta?.reasoning_content ?? choice.delta?.reasoning
+          if (typeof reasoningDelta === 'string') reasoning += reasoningDelta
           if (choice.finish_reason) finishReason = choice.finish_reason
         }
       } catch {
@@ -584,6 +610,7 @@ function observationStream(
         usage: lastUsage,
         finishReason,
         responseText: text,
+        reasoningText: reasoning,
         ok: true,
         httpStatus: 200,
         errorMessage: null,

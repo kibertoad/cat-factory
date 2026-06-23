@@ -38,6 +38,7 @@ interface MetricRow {
   prompt_prefix_count: number
   prompt_hash: string
   response_text: string
+  reasoning_text: string
 }
 
 function rowToMetric(row: MetricRow): LlmCallMetric {
@@ -68,6 +69,7 @@ function rowToMetric(row: MetricRow): LlmCallMetric {
     promptPrefixCount: row.prompt_prefix_count,
     promptHash: row.prompt_hash,
     responseText: row.response_text,
+    reasoningText: row.reasoning_text,
   }
 }
 
@@ -87,8 +89,8 @@ export class D1LlmCallMetricRepository implements LlmCallMetricRepository {
             streaming, message_count, tool_count, request_max_tokens,
             prompt_tokens, cached_prompt_tokens, completion_tokens, total_tokens, finish_reason,
             upstream_ms, overhead_ms, total_ms, ok, http_status, error_message,
-            prompt_text, prompt_prefix_count, prompt_hash, response_text)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            prompt_text, prompt_prefix_count, prompt_hash, response_text, reasoning_text)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .bind(
         metric.id,
@@ -117,6 +119,7 @@ export class D1LlmCallMetricRepository implements LlmCallMetricRepository {
         metric.promptPrefixCount,
         metric.promptHash,
         metric.responseText,
+        metric.reasoningText,
       )
       .run()
   }

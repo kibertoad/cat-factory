@@ -82,6 +82,7 @@ function input(overrides: Partial<RecordLlmCallInput> = {}): RecordLlmCallInput 
     errorMessage: null,
     promptText: '[]',
     responseText: 'ok',
+    reasoningText: '',
     ...overrides,
   }
 }

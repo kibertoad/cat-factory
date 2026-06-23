@@ -440,6 +440,10 @@ export const llmCallMetrics = pgTable(
     prompt_prefix_count: integer('prompt_prefix_count').notNull().default(0),
     prompt_hash: text('prompt_hash').notNull().default(''),
     response_text: text('response_text').notNull().default(''),
+    // The model's reasoning/"thinking" trace on a separate channel, when emitted (a
+    // reasoning model can spend its whole output budget here and return empty
+    // response_text). Mirrors D1 migration 0002_llm_reasoning_text.
+    reasoning_text: text('reasoning_text').notNull().default(''),
   },
   (t) => [
     index('idx_llm_call_metrics_execution').on(t.workspace_id, t.execution_id, t.created_at),

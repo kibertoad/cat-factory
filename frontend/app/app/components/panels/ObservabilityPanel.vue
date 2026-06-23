@@ -320,6 +320,15 @@ function exportJson() {
                       >{{ c.responseText || '—' }}</pre
                     >
                   </div>
+                  <div v-if="c.reasoningText">
+                    <div class="mb-1 text-[11px] uppercase tracking-wide text-slate-500">
+                      Reasoning
+                    </div>
+                    <pre
+                      class="max-h-72 overflow-auto rounded-lg bg-slate-950/70 p-3 text-[11px] leading-relaxed text-slate-400"
+                      >{{ c.reasoningText }}</pre
+                    >
+                  </div>
                 </div>
               </li>
             </ul>
