@@ -27,6 +27,12 @@ export interface GateProbe {
   passOutput?: string
   /** A summary of what failed on `fail` — fed to the helper agent and the give-up error. */
   failureSummary?: string
+  /**
+   * Structured failing checks behind {@link failureSummary} (the CI gate populates
+   * this from the red check runs; the conflicts gate leaves it undefined). Persisted
+   * onto `step.gate` so the run-detail UI can list each failing check.
+   */
+  failingChecks?: { name: string; conclusion: string | null }[]
 }
 
 /** Inputs to a gate's exhaustion handler (budget spent / no executor to escalate to). */

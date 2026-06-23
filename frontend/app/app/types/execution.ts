@@ -297,6 +297,36 @@ export interface PipelineStep {
    * latest structured test report. Absent on non-tester steps.
    */
   test?: TesterStepState | null
+  /**
+   * Live gate state when this step is a polling gate (`ci` / `conflicts`): which phase
+   * is in flight (checking the precheck vs a helper working), the helper attempt
+   * budget, the gated commit, and the latest precheck verdict + failure detail. Absent
+   * on non-gate steps. Mirrors `gateStepStateSchema`.
+   */
+  gate?: GateStepState | null
+}
+
+/** One failing CI check the gate's precheck saw (mirrors `gateFailingCheckSchema`). */
+export interface GateFailingCheck {
+  name: string
+  conclusion: string | null
+}
+
+/** Live state of a polling gate step (`ci` / `conflicts`); mirrors `gateStepStateSchema`. */
+export interface GateStepState {
+  phase: 'checking' | 'working'
+  /** how many helper-agent attempts have been dispatched so far */
+  attempts: number
+  /** ceiling on helper attempts (from the task's merge preset) */
+  maxAttempts: number
+  /** the PR head commit being gated, once resolved */
+  headSha?: string | null
+  /** the most recent precheck verdict (why the gate is looping vs idle-passing) */
+  lastVerdict?: 'pass' | 'pending' | 'fail' | null
+  /** human-readable summary of the latest failing precheck (failing checks / conflict reason) */
+  lastFailureSummary?: string | null
+  /** structured failing checks behind the summary (CI gate only; absent for conflicts) */
+  failingChecks?: GateFailingCheck[] | null
 }
 
 /** Live state of a `tester` step's Tester→Fixer loop (mirrors `testerStepStateSchema`). */

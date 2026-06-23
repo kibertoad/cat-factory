@@ -506,6 +506,14 @@ export type AgentFailure = v.InferOutput<typeof agentFailureSchema>
  *   - `phase: 'working'`  — a helper agent is in flight (tracked via the step's
  *                           `jobId`); on completion the gate returns to `checking`.
  */
+/** One failing check the CI gate's precheck saw, flattened for display. */
+export const gateFailingCheckSchema = v.object({
+  name: v.string(),
+  /** GitHub conclusion (e.g. `failure`, `timed_out`), or null when not reported. */
+  conclusion: v.nullable(v.string()),
+})
+export type GateFailingCheck = v.InferOutput<typeof gateFailingCheckSchema>
+
 export const gateStepStateSchema = v.object({
   phase: v.picklist(['checking', 'working']),
   /** How many helper-agent attempts have been dispatched so far. */
@@ -514,6 +522,24 @@ export const gateStepStateSchema = v.object({
   maxAttempts: v.number(),
   /** The PR head commit being gated, once resolved. */
   headSha: v.optional(v.nullable(v.string())),
+  /**
+   * The most recent precheck verdict, so the UI can show why the gate is looping
+   * (failing → a helper is fixing) vs idle-passing. Set on every probe.
+   */
+  lastVerdict: v.optional(v.nullable(v.picklist(['pass', 'pending', 'fail']))),
+  /**
+   * Human-readable summary of the latest failing precheck (the failing CI checks /
+   * the conflict reason) — the conclusion detail that used to be fed only to the
+   * helper agent and then discarded. Carried across the helper dispatch so the
+   * window keeps showing what is being fixed. Null when the last probe passed.
+   */
+  lastFailureSummary: v.optional(v.nullable(v.string())),
+  /**
+   * Structured failing checks behind {@link lastFailureSummary} for the CI gate, so
+   * the UI can list each red check by name + conclusion. Absent for the conflicts
+   * gate (GitHub reports no file-level detail) and when the last probe passed.
+   */
+  failingChecks: v.optional(v.nullable(v.array(gateFailingCheckSchema))),
 })
 export type GateStepState = v.InferOutput<typeof gateStepStateSchema>
 
