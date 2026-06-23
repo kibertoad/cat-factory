@@ -8,6 +8,7 @@ import TaskDependencyEdges from './TaskDependencyEdges.vue'
 import { STATUS_META } from '~/utils/catalog'
 import { readDndPayload, blockIdFromEvent } from '~/utils/dnd'
 import { BOARD_FLOW_ID } from '~/composables/useBoardFlow'
+import { useTaskExpansion } from '~/composables/useTaskExpansion'
 
 const board = useBoardStore()
 const pipelines = usePipelinesStore()
@@ -17,6 +18,11 @@ const github = useGitHubStore()
 const toast = useToast()
 
 const { onNodeDragStop, onViewportChange, screenToFlowCoordinate } = useVueFlow(BOARD_FLOW_ID)
+
+// Gate which task cards expand their pipeline list on deep zoom: only on-screen
+// cards, and only the centre-most of any that would overlap (see useTaskExpansion).
+const boardEl = ref<HTMLElement | null>(null)
+useTaskExpansion(boardEl)
 
 // Only frames are board nodes. Dependencies live on tasks (rendered inside the
 // frames), so there are no frame-to-frame edges on the canvas.
@@ -118,7 +124,7 @@ async function onDrop(event: DragEvent) {
 </script>
 
 <template>
-  <div class="relative h-full w-full" @drop="onDrop" @dragover="onDragOver">
+  <div ref="boardEl" class="relative h-full w-full" @drop="onDrop" @dragover="onDragOver">
     <VueFlow
       :id="BOARD_FLOW_ID"
       :nodes="nodes"

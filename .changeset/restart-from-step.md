@@ -7,9 +7,10 @@
 
 Restart a pipeline run from a chosen step.
 
-A run's step-detail overlay (`AgentStepDetail`) now offers **"Restart from here"**:
-re-run the pipeline from that step onward — even on a finished run — resetting the
-chosen step plus every later step's iteration counters (companion attempts,
+Both the run's step-detail overlay (`AgentStepDetail`) and each step on the pipeline
+timeline (`PipelineProgress`, a hover-revealed side button) now offer **"Restart from
+here"**: re-run the pipeline from that step onward — even on a finished run — resetting
+the chosen step plus every later step's iteration counters (companion attempts,
 gate/test attempts, eviction recoveries) and re-driving a fresh run. The steps
 BEFORE the chosen one are preserved verbatim, so their outputs (and resolved
 decisions) still reach the restarted step as its `priorOutputs` handoff context.

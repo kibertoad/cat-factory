@@ -13,6 +13,7 @@ const props = defineProps<{ taskId: string }>()
 
 const execution = useExecutionStore()
 const ui = useUiStore()
+const expansion = useTaskExpansionStore()
 const { lod } = useSemanticZoom()
 
 const instance = computed(() => execution.getByBlock(props.taskId))
@@ -22,7 +23,12 @@ const steps = computed(() => instance.value?.steps ?? [])
 // `working`) must stop spinning, matching the failure card the task card shows.
 const runFailed = computed(() => instance.value?.status === 'failed')
 
-const showSteps = computed(() => lodAtLeast(lod.value, 'steps') && steps.value.length > 0)
+// Expand the pipeline list only when zoomed in far enough AND the board driver
+// permits this card — on-screen, and the centre-most of any cards that would
+// otherwise overlap (see useTaskExpansion) — so deep-zoom expansions don't pile up.
+const showSteps = computed(
+  () => lodAtLeast(lod.value, 'steps') && steps.value.length > 0 && expansion.canExpand(props.taskId),
+)
 const showItems = computed(() => lodAtLeast(lod.value, 'subtasks'))
 
 // Clicking a step opens the full agent step-detail overlay — execution metadata

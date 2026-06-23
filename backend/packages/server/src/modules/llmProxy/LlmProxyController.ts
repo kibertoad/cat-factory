@@ -20,12 +20,18 @@ import type { LlmTokenUsage, ProxyCallObservation } from '../../runtime/gateways
 // providers (Cloudflare Workers AI) — are delegated to the `llmUpstream` gateway.
 
 /**
- * Defense-in-depth floor on a container agent's per-call output budget for in-process
- * (Workers AI) models. The primary control is Pi's own model-entry `maxTokens`; this
- * is a safety net so a reasoning model is never truncated mid-`<think>`. A ceiling,
- * not a target — unused tokens are not billed.
+ * Output-token floor applied to every container-agent call on a `workers-ai` provider
+ * (native `@cf/...` and AI-catalog slugs both): `max_tokens = max(asked, this)`.
+ *
+ * This is the EFFECTIVE per-call output ceiling, not a mere safety net. Production
+ * telemetry showed every workers-ai call recording exactly 16384 — Pi does NOT forward
+ * its model-entry `maxTokens` (the harness `PI_MAX_OUTPUT_TOKENS`) as the request
+ * `max_tokens`, so `asked` is always ≤ this floor and the floor governs. Raising the
+ * harness ceiling alone therefore does nothing; this is the value to change. Keep it in
+ * step with the harness `PI_MAX_OUTPUT_TOKENS` (32k). A ceiling, not a target — unused
+ * tokens are not billed and Workers AI clamps to the model's real max.
  */
-const PI_MIN_OUTPUT_TOKENS = 16_384
+const PI_MIN_OUTPUT_TOKENS = 32_768
 
 /** Pull the bearer token from the Authorization header. */
 function bearer(header: string | undefined): string | null {
