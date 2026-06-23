@@ -13,6 +13,26 @@ export const CI_AGENT_KIND = 'ci'
 export const REQUIREMENTS_REVIEW_AGENT_KIND = 'requirements-review'
 
 /**
+ * The agent kind of the special clarity-review gate step. Like the requirements reviewer
+ * it is an INLINE engine step (not a container/prose agent): the engine runs the inline
+ * clarity reviewer (via the clarity module), parks the run for the dedicated review
+ * window, and drives the iterative answer → incorporate → re-review loop until it
+ * converges. It triages a BUG REPORT for fixability rather than reviewing requirements
+ * completeness. Passes through when the clarity module / reviewer model is not wired.
+ */
+export const CLARITY_REVIEW_AGENT_KIND = 'clarity-review'
+
+/**
+ * The agent kind of the read-only `bug-investigator` container agent. It clones the repo,
+ * reads the codebase from the raw bug report, and returns a prose report: an enriched bug
+ * report plus an OPTIONAL working hypothesis (omitted unless reasonably confident). It
+ * makes no commits and opens no PR — it runs the shared read-only `/explore` harness path
+ * (like `architect`/`analysis`). Its prose output feeds the downstream clarity reviewer
+ * (as the triage subject) and the coder (via `priorOutputs`, as a non-binding lead).
+ */
+export const BUG_INVESTIGATOR_AGENT_KIND = 'bug-investigator'
+
+/**
  * The agent kind of the container agent that writes the service's unified, in-repo
  * specification (`spec.json`). It runs BEFORE the coder and aggregates the collected
  * requirements of every task under the service frame — including their acceptance

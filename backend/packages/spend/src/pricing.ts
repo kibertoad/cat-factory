@@ -69,6 +69,20 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
   // Moonshot AI direct (approximate kimi-k2.6 list prices, USD→EUR ~0.92).
   'moonshot:kimi-k2.6': { inputPerMillion: 0.55, outputPerMillion: 2.3 },
   moonshot: { inputPerMillion: 0.55, outputPerMillion: 2.3 },
+  // OpenRouter — a passthrough gateway billed at the underlying provider's rates (no
+  // per-token markup), so each curated model carries the upstream vendor's list price
+  // (USD→EUR ~0.92). Keyed by the OpenRouter `vendor/model` slug. The bare `openrouter`
+  // fallback is a mid-range guess for any uncatalogued slug — tune via SPEND_MODEL_PRICES.
+  'openrouter:anthropic/claude-opus-4.8': { inputPerMillion: 4.6, outputPerMillion: 23 },
+  'openrouter:google/gemini-3-pro': { inputPerMillion: 1.84, outputPerMillion: 11.04 },
+  'openrouter:openai/gpt-5.5': { inputPerMillion: 3.68, outputPerMillion: 22.08 },
+  'openrouter:deepseek/deepseek-chat': { inputPerMillion: 0.26, outputPerMillion: 1.01 },
+  'openrouter:meta-llama/llama-3.3-70b-instruct': { inputPerMillion: 0.12, outputPerMillion: 0.37 },
+  openrouter: { inputPerMillion: 1.84, outputPerMillion: 11.04 },
+  // LiteLLM — an operator-hosted gateway whose true cost depends entirely on the backend
+  // model it routes to, which we can't know here. Default to the generic fallback rate;
+  // operators should override per their routing via SPEND_MODEL_PRICES.
+  litellm: { inputPerMillion: 0.14, outputPerMillion: 0.55 },
 }
 
 /** Default budget: roughly 100 EUR of tokens per calendar month. */

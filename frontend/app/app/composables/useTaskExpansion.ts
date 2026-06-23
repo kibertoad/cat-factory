@@ -54,7 +54,7 @@ export function useTaskExpansion(container: Ref<HTMLElement | null>) {
     const candidates: { id: string; rect: DOMRect; dist: number }[] = []
     for (const t of board.allTasks) {
       // Only tasks whose run actually has steps would expand a pipeline list.
-      if (!(execution.getByBlock(t.id)?.steps.length)) continue
+      if (!execution.getByBlock(t.id)?.steps.length) continue
       const rect = rectOf(t.id)
       if (!rect) continue
       // Visibility: the card must intersect the board viewport.

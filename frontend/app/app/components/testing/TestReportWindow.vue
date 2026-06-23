@@ -11,6 +11,7 @@
 // outcomes / concerns are grouped under it by name. Deeper linkage to the in-repo
 // `spec/features/*.feature` files would need a spec endpoint (a future enhancement).
 import type { TestConcern, TestOutcome, TestReport } from '~/types/domain'
+import StepRestartControl from '~/components/panels/StepRestartControl.vue'
 
 const board = useBoardStore()
 const execution = useExecutionStore()
@@ -203,6 +204,11 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
             {{ testState.attempts }}/{{ testState.maxAttempts }} fix
             <template v-if="testState.phase === 'fixing'"> · fixing…</template>
           </span>
+          <StepRestartControl
+            :instance-id="instanceId"
+            :step-index="stepIndex"
+            @restarted="close"
+          />
           <button
             class="rounded-md p-1.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
             @click="close"

@@ -22,11 +22,12 @@ initiator, exactly like personal subscriptions.
 
 New per-user `local_model_endpoints` table mirrored across both runtimes (D1
 migration `0002` ⇄ Drizzle), a user-scoped `GET|PUT|DELETE /local-model-endpoints`
-+ `POST /local-model-endpoints/test` API, and a cross-runtime conformance
-assertion for the store (CRUD + bearer-key encryption round-trip + enabled-models
-JSON). Container kinds (coder/tester/merger/…) and the inline reviewer/planner all
-run on the local model. Breaking only in the pre-1.0 sense: a new table is added,
-no migration of existing data is needed.
+
+- `POST /local-model-endpoints/test` API, and a cross-runtime conformance
+  assertion for the store (CRUD + bearer-key encryption round-trip + enabled-models
+  JSON). Container kinds (coder/tester/merger/…) and the inline reviewer/planner all
+  run on the local model. Breaking only in the pre-1.0 sense: a new table is added,
+  no migration of existing data is needed.
 
 Because the user-supplied base URL is forwarded server-side (the test probe + the
 LLM proxy), it is constrained to a loopback/LAN allow-list (`localRunnerUrlError`):

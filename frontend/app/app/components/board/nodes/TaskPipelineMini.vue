@@ -27,7 +27,8 @@ const runFailed = computed(() => instance.value?.status === 'failed')
 // permits this card — on-screen, and the centre-most of any cards that would
 // otherwise overlap (see useTaskExpansion) — so deep-zoom expansions don't pile up.
 const showSteps = computed(
-  () => lodAtLeast(lod.value, 'steps') && steps.value.length > 0 && expansion.canExpand(props.taskId),
+  () =>
+    lodAtLeast(lod.value, 'steps') && steps.value.length > 0 && expansion.canExpand(props.taskId),
 )
 const showItems = computed(() => lodAtLeast(lod.value, 'subtasks'))
 

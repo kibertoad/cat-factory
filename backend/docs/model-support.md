@@ -64,7 +64,7 @@ Three shapes of catalog entry fall out of this:
   `local_model_endpoints`), and their enabled models are appended to `GET /models`
   dynamically (id `"<provider>:<model>"`, e.g. `ollama:gemma3`). They present as the
   `direct` flavour but need **no API key** — gated by the new `localModels` capability (the
-  set of model ids the user has *enabled*, so usability is model-granular), not a `keyEnv`.
+  set of model ids the user has _enabled_, so usability is model-granular), not a `keyEnv`.
   At run time the LLM proxy + inline provider resolve the **run initiator's** endpoint (base
   URL + optional bearer key) and skip the DB key lease, mirroring the personal-subscription
   initiator model. The base URL is constrained to a loopback/LAN allow-list

@@ -22,6 +22,9 @@ const META: Record<Notification['type'], { icon: string; color: Accent; action: 
   // Clicking the title opens the review window for the task (see `reveal`); "act" just marks
   // it read (the server performs no side-effect for this type).
   requirement_review: { icon: 'i-lucide-clipboard-list', color: 'primary', action: 'Mark read' },
+  // Clicking the title opens the clarity review window for the task (see `reveal`); "act"
+  // just marks it read (the server performs no side-effect for this type).
+  clarity_review: { icon: 'i-lucide-bug', color: 'primary', action: 'Mark read' },
 }
 
 async function act(n: Notification) {
@@ -44,13 +47,14 @@ async function dismiss(n: Notification) {
 
 /**
  * Clicking a notification's title takes the user where they can act on it. A
- * `requirement_review` summons them straight back into the review window (the async
- * incorporate/re-review raised new findings or hit the cap); every other type just focuses
- * the related block on the board.
+ * `requirement_review` / `clarity_review` summons them straight back into the matching review
+ * window (the async incorporate/re-review raised new findings or hit the cap); every other
+ * type just focuses the related block on the board.
  */
 function reveal(n: Notification) {
   if (!n.blockId) return
   if (n.type === 'requirement_review') ui.openRequirementReview(n.blockId)
+  else if (n.type === 'clarity_review') ui.openClarityReview(n.blockId)
   else ui.select(n.blockId)
 }
 </script>

@@ -416,6 +416,55 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         expect(qwen.flavor).toBe('direct')
       })
 
+      it('makes an OpenRouter (OpenAI-compatible) model selectable once its key is configured', async () => {
+        const { call, createWorkspace } = harness.makeApp(undefined, {
+          cloudflareModelsEnabled: false,
+        })
+        const { workspace } = await createWorkspace()
+        const models = `/workspaces/${workspace.id}/models`
+
+        // OpenRouter is a direct-only catalog entry (no Cloudflare fallback): with no key
+        // it is unselectable on both runtimes.
+        const before = await call<Opt[]>('GET', models)
+        expect(before.body.find((m) => m.id === 'openrouter-claude-opus')?.available).toBe(false)
+
+        // Connect an OpenRouter key (exercises the widened apiKeyProviderSchema end to end).
+        const created = await call('POST', `/workspaces/${workspace.id}/api-keys`, {
+          provider: 'openrouter',
+          label: 'team',
+          key: 'sk-or-secret',
+        })
+        expect(created.status).toBe(201)
+
+        // The curated entry now resolves to its OpenAI-compatible direct flavour, selectable.
+        const after = await call<Opt[]>('GET', models)
+        const or = after.body.find((m) => m.id === 'openrouter-claude-opus')!
+        expect(or.available).toBe(true)
+        expect(or.flavor).toBe('direct')
+      })
+
+      it('keeps a base-URL-required provider (LiteLLM) unselectable with a key but no base URL', async () => {
+        const { call, createWorkspace } = harness.makeApp(undefined, {
+          cloudflareModelsEnabled: false,
+        })
+        const { workspace } = await createWorkspace()
+        const models = `/workspaces/${workspace.id}/models`
+
+        // LiteLLM is operator-hosted: it has NO built-in base URL, and the test env sets
+        // no LITELLM_BASE_URL. Connecting a key alone must NOT make it selectable — the
+        // run would otherwise pass the start guard and then throw "No base URL configured"
+        // at dispatch. (OpenRouter, with a public default, IS selectable on a key — above.)
+        const created = await call('POST', `/workspaces/${workspace.id}/api-keys`, {
+          provider: 'litellm',
+          label: 'team',
+          key: 'sk-litellm-secret',
+        })
+        expect(created.status).toBe(201)
+
+        const after = await call<Opt[]>('GET', models)
+        expect(after.body.find((m) => m.id === 'litellm-default')?.available).toBe(false)
+      })
+
       it('blocks starting a pipeline with an unconfigured model, then allows it after a key is added', async () => {
         const { call, createWorkspace } = harness.makeApp(undefined, {
           cloudflareModelsEnabled: false,
@@ -1337,6 +1386,39 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         expect(step.state).toBe('done')
         // The agent was handed the reworked document, not the seeded task's description.
         expect(step.output).toContain(`[desc]${REWORKED}[/desc]`)
+      })
+
+      it("substitutes a block's clarified bug report for its description in every step", async () => {
+        // The clarity mirror of the requirements substitution above: once a bug task's
+        // report has been triaged + clarified ("incorporated"), that clarified report — not
+        // the raw description — is what every agent step consumes. This must hold on EVERY
+        // runtime: the Cloudflare facade wires the D1 clarity store, the Node facade the
+        // Drizzle one, both feeding the engine through the optional `clarityReviewRepository`.
+        // A facade that forgets to wire that store fails this shared test.
+        const CLARIFIED = '# Login — Bug Report\n\n## Steps to Reproduce\n1. POST /login twice.'
+        const app = harness.makeApp({ confidence: 1, echoDescription: true })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        await app.seedIncorporatedClarityReview(wsId, 'task_login', CLARIFIED)
+
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Coder only',
+          agentKinds: ['coder'],
+        })
+        const start = await app.call<ExecutionInstance>(
+          'POST',
+          `/workspaces/${wsId}/blocks/task_login/executions`,
+          { pipelineId: pipeline.body.id },
+        )
+        expect(start.status).toBe(201)
+
+        const ticked = await app.drive(wsId)
+        const exec = ticked.find((e) => e.blockId === 'task_login')!
+        const step = exec.steps.find((s) => s.agentKind === 'coder')!
+        expect(step.state).toBe('done')
+        // The agent was handed the clarified report, not the seeded task's description.
+        expect(step.output).toContain(`[desc]${CLARIFIED}[/desc]`)
       })
 
       it('restarts a run from a chosen step, preserving prior outputs and the block requirements', async () => {

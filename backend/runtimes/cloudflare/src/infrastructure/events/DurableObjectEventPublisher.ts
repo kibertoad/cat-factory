@@ -1,6 +1,7 @@
 import type {
   Block,
   BootstrapJob,
+  ClarityReview,
   ExecutionInstance,
   LlmCallActivity,
   Notification,
@@ -63,6 +64,10 @@ export class DurableObjectEventPublisher implements ExecutionEventPublisher {
 
   async requirementReviewChanged(workspaceId: string, review: RequirementReview): Promise<void> {
     await this.publish(workspaceId, { type: 'requirements', review, at: Date.now() })
+  }
+
+  async clarityReviewChanged(workspaceId: string, review: ClarityReview): Promise<void> {
+    await this.publish(workspaceId, { type: 'clarity', review, at: Date.now() })
   }
 
   private async publish(workspaceId: string, event: WorkspaceEvent): Promise<void> {

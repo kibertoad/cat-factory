@@ -63,6 +63,11 @@ export {
 } from './agents/prompts/testing.js'
 // Requirements-review prompt text + its versioned-prompt registry.
 export { REVIEW_SYSTEM_PROMPT, REWORK_SYSTEM_PROMPT } from './agents/prompts/requirements.js'
+// Clarity-review (bug-report triage) prompt text.
+export {
+  CLARITY_REVIEW_SYSTEM_PROMPT,
+  CLARITY_REWORK_SYSTEM_PROMPT,
+} from './agents/prompts/clarity.js'
 export {
   type VersionedPrompt,
   type PromptId,
@@ -134,6 +139,7 @@ export {
   DEFAULT_OPENAI_COMPATIBLE_BASE_URLS,
   MOONSHOT_BASE_URL,
   OPENAI_BASE_URL,
+  OPENROUTER_BASE_URL,
   QWEN_BASE_URL,
   type CachePolicy,
   cachedTokensFromUsage,

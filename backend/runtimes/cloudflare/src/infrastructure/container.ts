@@ -119,6 +119,7 @@ import { D1BootstrapJobRepository } from './repositories/D1BootstrapJobRepositor
 import { D1AgentRunRepository } from './repositories/D1AgentRunRepository'
 import { D1RepoBlueprintRepository } from './repositories/D1RepoBlueprintRepository'
 import { D1RequirementReviewRepository } from './repositories/D1RequirementReviewRepository'
+import { D1ClarityReviewRepository } from './repositories/D1ClarityReviewRepository'
 import { D1NotificationRepository } from './repositories/D1NotificationRepository'
 import { D1MergePresetRepository } from './repositories/D1MergePresetRepository'
 import { D1PipelineScheduleRepository } from './repositories/D1PipelineScheduleRepository'
@@ -1024,6 +1025,7 @@ function selectRequirementsDeps(
 ): Partial<CoreDependencies> {
   return {
     requirementReviewRepository: new D1RequirementReviewRepository({ db }),
+    clarityReviewRepository: new D1ClarityReviewRepository({ db }),
     modelProviderResolver: buildModelProviderResolver(env, db),
     // The routing default already resolves to Cloudflare Workers AI unless a
     // direct provider key is set, so the reviewer runs on Cloudflare by default.
@@ -1313,6 +1315,7 @@ export function buildContainer(
           subscriptions,
           personalSubscriptions,
           cloudflareModelsEnabled,
+          baseUrlFor: (provider) => baseUrlFor(provider, env),
           localModelEndpoints,
         },
         workspaceId,
@@ -1336,6 +1339,9 @@ export function buildContainer(
     apiKeys,
     // Whether the opt-in Cloudflare Workers AI lib is enabled (the `AI` binding).
     cloudflareModelsEnabled,
+    // The direct-provider base-URL resolver the catalog uses to gate selectability on a
+    // resolvable endpoint (e.g. LiteLLM stays unselectable until LITELLM_BASE_URL is set).
+    baseUrlFor: (provider) => baseUrlFor(provider, env),
     // The per-user locally-run model endpoints store; present when ENCRYPTION_KEY is set.
     localModelEndpoints,
     gateways: {

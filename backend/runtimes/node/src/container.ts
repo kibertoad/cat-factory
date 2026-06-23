@@ -75,7 +75,7 @@ import { executionRuntime } from './execution/config.js'
 import { PgBossBootstrapRunner } from './execution/bootstrapRunner.js'
 import { PgBossWorkRunner } from './execution/pgBossRunner.js'
 import { createNodeGateways } from './gateways.js'
-import { createNodeModelProviderResolver } from './modelProvider.js'
+import { baseUrlForNode, createNodeModelProviderResolver } from './modelProvider.js'
 import { NodeEventPublisher, type NodeRealtimeHub } from './realtime.js'
 import {
   DrizzleGitHubInstallationRepository,
@@ -974,6 +974,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // like a pipeline step: block-pin > workspace per-kind default > routing default
     // (which falls back to Cloudflare Workers AI unless a direct key is set).
     requirementReviewRepository: repos.requirementReviewRepository,
+    clarityReviewRepository: repos.clarityReviewRepository,
     // Merge threshold presets: the per-workspace auto-merge ceiling library a task's
     // merge gate resolves (block-pinned preset > workspace default). Wired
     // unconditionally, exactly like the Worker's `selectMergeLifecycleDeps`, so the
@@ -1089,6 +1090,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
           subscriptions,
           personalSubscriptions,
           cloudflareModelsEnabled,
+          baseUrlFor: (provider) => baseUrlForNode(provider, env),
           localModelEndpoints,
         },
         workspaceId,
@@ -1118,6 +1120,9 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     apiKeys,
     // Whether the opt-in Cloudflare Workers AI lib is enabled (REST creds present).
     cloudflareModelsEnabled,
+    // The direct-provider base-URL resolver the catalog uses to gate selectability on a
+    // resolvable endpoint (e.g. LiteLLM stays unselectable until LITELLM_BASE_URL is set).
+    baseUrlFor: (provider) => baseUrlForNode(provider, env),
     // The per-user locally-run model endpoints store; present when ENCRYPTION_KEY is set.
     localModelEndpoints,
   }

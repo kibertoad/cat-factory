@@ -13,8 +13,11 @@ import type { AgentKind } from '@cat-factory/kernel'
 // single reusable read-only execution path (see ContainerAgentExecutor's explore
 // body + the harness `handleExplore`).
 
+// The `bug-investigator` joins this set: it clones the repo, reads the codebase from a
+// raw bug report and returns a prose enriched report (+ an optional, confidence-gated
+// hypothesis), making no edits — the same read-only `/explore` path as architect/analysis.
 /** Container agent kinds that operate read-only (explore + report; no edits/commits/PR). */
-export const READ_ONLY_AGENT_KINDS = new Set<string>(['architect', 'analysis'])
+export const READ_ONLY_AGENT_KINDS = new Set<string>(['architect', 'analysis', 'bug-investigator'])
 
 /** Whether `kind` is a read-only container agent (runs the harness `/explore` path). */
 export function isReadOnlyAgentKind(kind: AgentKind): boolean {
