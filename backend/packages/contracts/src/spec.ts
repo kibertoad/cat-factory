@@ -179,9 +179,7 @@ export function renderSpecForReview(spec: SpecDoc): string {
       lines.push(`- Priority: ${req.priority}`)
       lines.push(`- Statement: ${req.statement}`)
       for (const ac of req.acceptance ?? []) {
-        lines.push(
-          `  - Acceptance ${ac.id}: GIVEN ${ac.given} WHEN ${ac.when} THEN ${ac.outcome}`,
-        )
+        lines.push(`  - Acceptance ${ac.id}: GIVEN ${ac.given} WHEN ${ac.when} THEN ${ac.outcome}`)
       }
     }
   }

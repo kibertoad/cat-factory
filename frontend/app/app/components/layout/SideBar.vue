@@ -273,6 +273,17 @@ watch(
         >
           Default service best practices
         </UButton>
+        <UButton
+          block
+          color="primary"
+          variant="soft"
+          size="sm"
+          icon="i-lucide-server"
+          class="justify-start"
+          @click="ui.openLocalModels()"
+        >
+          My local runners
+        </UButton>
       </div>
     </section>
 

@@ -9,7 +9,8 @@ import {
   type TaskSourceProvider,
   type NormalizedTaskConnection,
 } from '@cat-factory/kernel'
-import { GITHUB_ISSUES_DESCRIPTOR, githubIssuesLogic } from '@cat-factory/integrations'
+import { GITHUB_ISSUES_DESCRIPTOR } from './github-issues.logic.js'
+import * as githubIssuesLogic from './github-issues.logic.js'
 
 // GitHubIssuesProvider: the task-source provider for GitHub issues. Unlike Jira,
 // it stores NO per-workspace credentials — it reuses the workspace's installed
@@ -18,6 +19,11 @@ import { GITHUB_ISSUES_DESCRIPTOR, githubIssuesLogic } from '@cat-factory/integr
 // installation that owns the issue's repo by account login and reads the issue
 // via the shared GitHubClient (installation token). GitHub issue bodies are
 // already Markdown, so no body conversion is needed.
+//
+// Runtime-neutral: it depends only on the kernel ports (GitHubClient,
+// GitHubInstallationRepository) and the shared pure logic, so both the Cloudflare
+// and the Node facade wire the SAME class (see CLAUDE.md "Keep the runtimes
+// symmetric").
 
 export interface GitHubIssuesProviderDependencies {
   githubClient: GitHubClient

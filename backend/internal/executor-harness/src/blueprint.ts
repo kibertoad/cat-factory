@@ -368,7 +368,13 @@ export async function handleBlueprint(
     const previousVersion = await readExistingVersion(dir)
 
     log.info('blueprint: running agent', { ...trace, mode: job.mode })
-    const { summary, stats, stderrTail, usage, diagnostics: runDiag } = await runAgentInWorkspace(
+    const {
+      summary,
+      stats,
+      stderrTail,
+      usage,
+      diagnostics: runDiag,
+    } = await runAgentInWorkspace(
       {
         dir,
         systemPrompt: job.systemPrompt,

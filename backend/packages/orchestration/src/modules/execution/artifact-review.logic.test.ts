@@ -21,7 +21,12 @@ describe('reviewableArtifactOutput', () => {
                 kind: 'functional',
                 priority: 'must',
                 acceptance: [
-                  { id: 'ac-1', given: 'a valid payload', when: 'POST /buildings', outcome: '201 returned' },
+                  {
+                    id: 'ac-1',
+                    given: 'a valid payload',
+                    when: 'POST /buildings',
+                    outcome: '201 returned',
+                  },
                 ],
               },
             ],
@@ -49,7 +54,9 @@ describe('reviewableArtifactOutput', () => {
         name: 'billing',
         summary: 'Handles billing.',
         references: ['package.json'],
-        modules: [{ name: 'Invoices', summary: 'Invoice lifecycle.', references: ['src/invoices'] }],
+        modules: [
+          { name: 'Invoices', summary: 'Invoice lifecycle.', references: ['src/invoices'] },
+        ],
       },
     }
     const out = reviewableArtifactOutput(result)
@@ -60,11 +67,15 @@ describe('reviewableArtifactOutput', () => {
   })
 
   it('falls back to undefined for a prose producer (no artifact)', () => {
-    expect(reviewableArtifactOutput({ output: 'An architecture proposal in prose.' })).toBeUndefined()
+    expect(
+      reviewableArtifactOutput({ output: 'An architecture proposal in prose.' }),
+    ).toBeUndefined()
   })
 
   it('falls back to undefined when the artifact is present but malformed', () => {
     expect(reviewableArtifactOutput({ output: 'x', spec: { not: 'a spec' } })).toBeUndefined()
-    expect(reviewableArtifactOutput({ output: 'x', blueprintService: { bad: true } })).toBeUndefined()
+    expect(
+      reviewableArtifactOutput({ output: 'x', blueprintService: { bad: true } }),
+    ).toBeUndefined()
   })
 })

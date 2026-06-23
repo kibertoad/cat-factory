@@ -1,5 +1,6 @@
 import type {
   ApiKeyService,
+  LocalModelEndpointService,
   PersonalSubscriptionService,
   ProviderSubscriptionService,
 } from '@cat-factory/integrations'
@@ -19,6 +20,8 @@ export interface CapabilityServices {
   personalSubscriptions?: PersonalSubscriptionService
   /** Whether the opt-in Cloudflare Workers AI lib is registered for this deployment. */
   cloudflareModelsEnabled?: boolean
+  /** Per-user locally-run model endpoints (resolved by the requesting/initiating user). */
+  localModelEndpoints?: LocalModelEndpointService
 }
 
 export async function resolveWorkspaceCapabilities(
@@ -40,9 +43,19 @@ export async function resolveWorkspaceCapabilities(
         : false
     if (pooled || personal) subscriptionVendors.add(vendor)
   }
+  // Local runners are per-user: a model is usable when the resolving user has enabled it.
+  // Keyed by the dynamic model id (`"<provider>:<model>"`) so usability is model-granular
+  // (a runner configured but with this model un-enabled must not pass).
+  const localModels = new Set<string>()
+  if (userId && services.localModelEndpoints) {
+    for (const cap of await services.localModelEndpoints.capabilitiesFor(userId)) {
+      for (const model of cap.models) localModels.add(`${cap.provider}:${model}`)
+    }
+  }
   return {
     directProviders,
     subscriptionVendors,
     cloudflareEnabled: services.cloudflareModelsEnabled ?? false,
+    localModels,
   }
 }

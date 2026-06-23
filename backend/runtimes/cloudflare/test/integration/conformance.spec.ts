@@ -10,7 +10,8 @@ import {
   makeReadyReviewWithOpenItem,
 } from '@cat-factory/conformance'
 import { env } from 'cloudflare:test'
-import { makeApp, fragmentLibraryDeps } from '../helpers'
+import { makeApp, fragmentLibraryDeps, tasksDeps } from '../helpers'
+import { FakeTaskSourceProvider } from '../fakes/FakeTaskSourceProvider'
 import { buildContainer } from '../../src/infrastructure/container'
 import { D1RequirementReviewRepository } from '../../src/infrastructure/repositories/D1RequirementReviewRepository'
 import { D1RepoBlueprintRepository } from '../../src/infrastructure/repositories/D1RepoBlueprintRepository'
@@ -40,6 +41,9 @@ const harness: ConformanceHarness = {
         executionEventPublisher: recorder,
         repoBootstrapper: new FakeRepoBootstrapper(),
         ...fragmentLibraryDeps(),
+        // A deterministic task source (fake 'jira') over the real D1 task repos, so the
+        // shared suite can assert create-task-from-issue parity against D1 too.
+        ...tasksDeps({ providers: [new FakeTaskSourceProvider('jira')] }),
       },
       // The Worker binds `AI` in tests; let the suite force the opt-in flag off so the
       // provider-key assertions behave identically to Node (which has no binding).
@@ -60,6 +64,18 @@ const harness: ConformanceHarness = {
           makeReadyReviewWithOpenItem(blockId),
         ),
       seedBlueprint: (record) => new D1RepoBlueprintRepository({ db: env.DB }).upsert(record),
+      localModelEndpoints: () => {
+        const svc = buildContainer(env, {
+          agentExecutor: new FakeAgentExecutor(),
+        }).localModelEndpoints
+        if (!svc) return undefined
+        return {
+          list: (userId: string) => svc.list(userId),
+          upsert: (userId: string, input) => svc.upsert(userId, input as never),
+          resolve: (userId: string, provider: string) => svc.resolve(userId, provider),
+          remove: (userId: string, provider: string) => svc.remove(userId, provider as never),
+        }
+      },
       // The identity/onboarding services over the same local D1 (invitations are always
       // wired in the worker; email senders stay opt-in and out of the probe). A fake
       // executor override skips the strict container-executor selection (the identity

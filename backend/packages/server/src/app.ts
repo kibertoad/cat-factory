@@ -29,6 +29,7 @@ import { runnerPoolController } from './modules/runners/RunnerPoolController.js'
 import { slackController, slackOAuthController } from './modules/slack/SlackController.js'
 import { vendorCredentialController } from './modules/providers/VendorCredentialController.js'
 import { personalSubscriptionController } from './modules/providers/PersonalSubscriptionController.js'
+import { localModelEndpointController } from './modules/localModels/LocalModelEndpointController.js'
 import {
   userApiKeyController,
   workspaceApiKeyController,
@@ -61,6 +62,7 @@ export function registerCoreControllers<E extends AppEnv>(app: Hono<E>): void {
   app.route('/', modelController())
   app.route('/', accountController())
   app.route('/', personalSubscriptionController())
+  app.route('/', localModelEndpointController())
   app.route('/', userApiKeyController())
   app.route('/accounts/:accountId', fragmentLibraryController('account'))
   app.route('/', workspaceController())

@@ -4,6 +4,7 @@ import {
   FakeAgentExecutor,
   type FakeAgentOptions,
   FakeRepoBootstrapper,
+  FakeTaskSourceProvider,
   RecordingEventPublisher,
   driveWorkspace,
   makeIncorporatedReview,
@@ -24,6 +25,7 @@ import type {
   WorkspaceSnapshot,
 } from '@cat-factory/kernel'
 import { NoopBootstrapRunner, NoopWorkRunner } from '@cat-factory/kernel'
+import type { LocalRunner, UpsertLocalModelEndpointInput } from '@cat-factory/contracts'
 import type { CoreDependencies } from '@cat-factory/orchestration'
 import { buildLocalContainer } from '../src/container.js'
 
@@ -95,6 +97,10 @@ export function makeConformanceApp(
     // local composition root without GitHub/Docker (driven via driveBootstrap).
     repoBootstrapper: new FakeRepoBootstrapper(),
     executionEventPublisher: recorder,
+    // Swap the config-wired real Jira provider for a deterministic fake (the Drizzle
+    // task repos stay), so the shared suite asserts create-task-from-issue against
+    // Postgres without hitting the network. Override wins over the config providers.
+    taskSourceProviders: [new FakeTaskSourceProvider('jira')],
   }
   const container = buildLocalContainer({
     db,
@@ -194,5 +200,16 @@ export function makeConformanceApp(
     seedReadyReview,
     seedBlueprint,
     onboarding: () => makeOnboardingProbe(container),
+    localModelEndpoints: () => {
+      const svc = container.localModelEndpoints
+      if (!svc) return undefined
+      return {
+        list: (userId: string) => svc.list(userId),
+        upsert: (userId: string, input) =>
+          svc.upsert(userId, input as UpsertLocalModelEndpointInput),
+        resolve: (userId: string, provider: string) => svc.resolve(userId, provider),
+        remove: (userId: string, provider: string) => svc.remove(userId, provider as LocalRunner),
+      }
+    },
   }
 }

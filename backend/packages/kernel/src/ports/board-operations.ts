@@ -15,6 +15,11 @@ import type { Block } from '../domain/types.js'
 export interface BoardWritePort {
   addFrame(workspaceId: string, input: AddFrameInput): Promise<Block>
   addModule(workspaceId: string, frameId: string, input: AddModuleInput): Promise<Block>
-  addTask(workspaceId: string, containerId: string, input: AddTaskInput): Promise<Block>
+  addTask(
+    workspaceId: string,
+    containerId: string,
+    input: AddTaskInput,
+    createdBy?: string | null,
+  ): Promise<Block>
   updateBlock(workspaceId: string, blockId: string, patch: UpdateBlockInput): Promise<Block>
 }

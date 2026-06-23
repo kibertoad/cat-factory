@@ -1,5 +1,6 @@
 import {
   connectTaskSourceSchema,
+  createTaskFromIssueSchema,
   taskSourceKindSchema,
   importTaskSchema,
   linkTaskSchema,
@@ -126,6 +127,22 @@ export function taskSourceController(): Hono<AppEnv> {
       externalId,
     )
     return c.json(task, 201)
+  })
+
+  // Materialise an imported issue as a new board task inside a container, linking
+  // the issue to it for context. Returns the created block + the linked issue.
+  app.post('/tasks/create-block', jsonBody(createTaskFromIssueSchema), async (c) => {
+    const tasks = requireTasks(c)
+    if (!tasks) return unavailable(c)
+    const { source, externalId, containerId } = c.req.valid('json')
+    const result = await tasks.linkService.createTaskFromIssue(
+      param(c, 'workspaceId'),
+      containerId,
+      source,
+      externalId,
+      c.get('user')?.id ?? null,
+    )
+    return c.json(result, 201)
   })
 
   return app
