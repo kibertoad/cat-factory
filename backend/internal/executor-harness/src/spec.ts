@@ -484,41 +484,43 @@ export function extractJsonObject(text: string): unknown {
   }
 }
 
-/** Render the aggregated task context the agent folds into the service requirements. */
-function renderTasks(tasks: SpecTaskContext[]): string {
-  if (tasks.length === 0) return '_No task requirements supplied._'
-  return tasks
-    .map((t) => {
-      const header = `### ${t.title}${t.id ? ` (block ${t.id})` : ''}`
-      return `${header}\n\n${t.description || '(no description)'}`
-    })
-    .join('\n\n')
+/** Render this task's requirements that the agent applies onto the baseline spec. */
+function renderTask(task: SpecTaskContext): string {
+  const header = `### ${task.title || '(untitled task)'}${task.id ? ` (block ${task.id})` : ''}`
+  return `${header}\n\n${task.description || '(no description)'}`
 }
 
-/** Compose the task prompt: the worker's guidance, the prior doc, and the task context. */
+/** Compose the task prompt: the worker's guidance, the baseline spec, and this task. */
 function buildUserPrompt(job: SpecJob, existing: SpecDocTree | null): string {
   const lines = [job.instructions.trim()]
-  lines.push(
-    '',
-    'Combined requirements collected for the tasks of this service (each task’s',
-    'clarified description). Fold these into ONE unified, de-duplicated, prescriptive',
-    'requirements document for the whole service:',
-    '',
-    renderTasks(job.tasks),
-  )
   if (existing) {
     lines.push(
       '',
-      'An existing requirements document is present. Update it in place: keep accurate',
-      'requirements, refine wording, add what is missing, and preserve provenance',
-      '(`sourceBlockIds`). Return the COMPLETE updated document (not a diff).',
+      'The specification ALREADY committed to the repository is the baseline (the spec',
+      'as merged before this task). Keep every part of it that this task does not touch',
+      'exactly as-is, preserving its `sourceBlockIds`. Adjust an existing requirement',
+      'only where this task changes its expected behaviour. Return the COMPLETE updated',
+      'document (baseline plus this task’s increment), not a diff.',
       '',
-      'Existing requirements:',
+      'Baseline specification:',
       '```json',
       JSON.stringify(existing, null, 2),
       '```',
     )
+  } else {
+    lines.push(
+      '',
+      'No specification exists in the repository yet, so this task starts a new one.',
+    )
   }
+  lines.push(
+    '',
+    'Requirements for the ONE task to apply as an increment (its clarified description).',
+    'Translate ONLY what these state into prescriptive requirements with complete',
+    'acceptance-scenario coverage — do NOT invent requirements or fill gaps they leave:',
+    '',
+    renderTask(job.task),
+  )
   lines.push(
     '',
     'Respond with ONLY the JSON object for the requirements document — no prose, no',
@@ -594,7 +596,7 @@ export async function handleSpec(job: SpecJob, opts: RunOptions = {}): Promise<S
     const existing = await readExistingSpec(dir, job.repo.name)
     const previousVersion = await readExistingVersion(dir)
 
-    log.info('requirements: running agent', { ...trace, tasks: job.tasks.length })
+    log.info('requirements: running agent', { ...trace, task: job.task.id })
     const {
       summary,
       stats,

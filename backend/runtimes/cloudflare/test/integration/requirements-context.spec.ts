@@ -111,6 +111,13 @@ describe('reworked requirements as agent context', () => {
       title: 'Implement limiter',
       description: 'ORIGINAL task description',
     })
+    // A SIBLING task under the same service frame: its requirements must NOT leak into
+    // the spec-writer running on `task` (it is unmerged work, invisible to this task).
+    const sibling = await app.call<Block>(
+      'POST',
+      `/workspaces/${ws}/blocks/${frame.body.id}/tasks`,
+      { title: 'Unrelated bicycles CRUD', description: 'SIBLING task description' },
+    )
     await new D1RequirementReviewRepository({ db: env.DB }).upsert(
       ws,
       incorporatedReview(task.body.id),
@@ -127,9 +134,12 @@ describe('reworked requirements as agent context', () => {
 
     const ctx = recorder.contexts.find((c) => c.agentKind === 'spec-writer')
     expect(ctx).toBeDefined()
-    const aggregated = ctx!.serviceTasks ?? []
-    const seeded = aggregated.find((t) => t.id === task.body.id)
-    expect(seeded).toBeDefined()
-    expect(seeded!.description).toBe(REWORKED)
+    // The spec-writer's input is ONLY this task's reworked requirements (carried as the
+    // block description), not a service-wide aggregate. The sibling task is invisible.
+    expect(ctx!.block.id).toBe(task.body.id)
+    expect(ctx!.block.description).toBe(REWORKED)
+    const serialized = JSON.stringify(ctx)
+    expect(serialized).not.toContain('SIBLING task description')
+    expect(serialized).not.toContain(sibling.body.id)
   })
 })
