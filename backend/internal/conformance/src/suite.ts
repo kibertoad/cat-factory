@@ -1312,10 +1312,12 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         expect(task.status).not.toBe('done')
       })
 
-      it('fails the run when a companion stays below threshold past its rework budget', async () => {
+      it('parks for a human when a companion spends its rework budget (no longer fails)', async () => {
         // Below the threshold the companion loops the producer back for automatic rework;
-        // once the budget is spent the run fails (`companion_rejected`) for human
-        // attention. A fixed low rating drives straight to that terminal state.
+        // once the budget is spent the run no longer fails — it PARKS on the shared
+        // iteration-cap gate for a human (one more round / proceed / stop & reset),
+        // mirroring the requirements reviewer at its cap. A fixed low rating drives
+        // straight to the cap on both runtimes.
         const app = harness.makeApp({ confidence: 1, companionRating: 0.4 })
         const { workspace } = await app.createWorkspace()
         const wsId = workspace.id
@@ -1331,16 +1333,126 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         expect(start.status).toBe(201)
         const ticked = await app.drive(wsId)
         const exec = ticked.find((e) => e.blockId === 'task_login')!
-        expect(exec.status).toBe('failed')
-        expect(exec.failure?.kind).toBe('companion_rejected')
-        // The recorded verdicts must carry the critic's REAL low rating, not the
-        // pass-through `1` the engine falls back to when an assessment is unparseable.
-        // The fake critic returns anchor-based comments (no `quotedSource`) alongside
-        // its rating, so this also guards that `stepReviewCommentSchema` accepts the
-        // shape the real Spec Reviewer emits.
+        // Parked, not failed.
+        expect(exec.status).toBe('blocked')
+        expect(exec.failure).toBeFalsy()
         const companionStep = exec.steps.find((s) => s.agentKind === 'reviewer')!
+        expect(companionStep.state).toBe('waiting_decision')
+        expect(companionStep.approval?.status).toBe('pending')
+        expect(companionStep.companion?.exceeded).toBe(true)
+        // The full automatic budget was spent before parking, and the recorded verdicts
+        // carry the critic's REAL low rating (not the pass-through `1` for an unparseable
+        // assessment). The fake critic emits anchor-based comments (no `quotedSource`),
+        // so this also guards that `stepReviewCommentSchema` accepts the real shape.
+        expect(companionStep.companion?.attempts).toBe(companionStep.companion?.maxAttempts)
         expect(companionStep.companion?.verdicts.every((v) => v.rating === 0.4)).toBe(true)
         expect(companionStep.companion?.verdicts.at(-1)?.passed).toBe(false)
+
+        // The generic approve resolver can't short-circuit the iteration-cap gate.
+        const stray = await app.call(
+          'POST',
+          `/workspaces/${wsId}/executions/${exec.id}/steps/${companionStep.approval!.id}/approve`,
+          {},
+        )
+        expect(stray.status).toBe(409)
+      })
+
+      it('grants one more round at the companion cap, then completes when it passes', async () => {
+        // `extra-round` raises the budget by one and loops the producer back through the
+        // companion to re-grade. Four low grades drive to the cap; the post-extra-round
+        // grade passes, so the run completes — proving the human can rescue a stuck run.
+        const app = harness.makeApp({
+          confidence: 1,
+          companionRatings: [0.4, 0.4, 0.4, 0.4, 1],
+        })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Build + rescued companion',
+          agentKinds: ['coder', 'reviewer'],
+        })
+        await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+          pipelineId: pipeline.body.id,
+        })
+        const parked = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+        expect(parked.status).toBe('blocked')
+        const gate = parked.steps.find((s) => s.agentKind === 'reviewer')!
+        const budgetAtCap = gate.companion!.maxAttempts
+
+        const res = await app.call(
+          'POST',
+          `/workspaces/${wsId}/executions/${parked.id}/steps/${gate.approval!.id}/resolve-exceeded`,
+          { choice: 'extra-round' },
+        )
+        expect(res.status).toBe(200)
+
+        const done = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+        expect(done.status).toBe('done')
+        const companionStep = done.steps.find((s) => s.agentKind === 'reviewer')!
+        // The budget was raised by exactly one and the gate is no longer flagged exceeded.
+        expect(companionStep.companion?.maxAttempts).toBe(budgetAtCap + 1)
+        expect(companionStep.companion?.exceeded).toBeFalsy()
+        expect(companionStep.companion?.verdicts.at(-1)?.passed).toBe(true)
+      })
+
+      it('proceeds past the companion cap, advancing with the current output', async () => {
+        // `proceed` accepts the producer's current (below-bar) output and advances past
+        // the gate; since the companion is the final step, the run completes.
+        const app = harness.makeApp({ confidence: 1, companionRating: 0.4 })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Build + proceed companion',
+          agentKinds: ['coder', 'reviewer'],
+        })
+        await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+          pipelineId: pipeline.body.id,
+        })
+        const parked = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+        const gate = parked.steps.find((s) => s.agentKind === 'reviewer')!
+
+        const res = await app.call(
+          'POST',
+          `/workspaces/${wsId}/executions/${parked.id}/steps/${gate.approval!.id}/resolve-exceeded`,
+          { choice: 'proceed' },
+        )
+        expect(res.status).toBe(200)
+
+        const done = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+        expect(done.status).toBe('done')
+        const companionStep = done.steps.find((s) => s.agentKind === 'reviewer')!
+        expect(companionStep.state).toBe('done')
+        expect(companionStep.companion?.exceeded).toBeFalsy()
+      })
+
+      it('stops and resets the task to phase zero at the companion cap', async () => {
+        // `stop-reset` tears the run down and returns the block to `planned` (editable),
+        // identical to the requirements gate's stop-reset — the same `cancel()` path.
+        const app = harness.makeApp({ confidence: 1, companionRating: 0.4 })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Build + reset companion',
+          agentKinds: ['coder', 'reviewer'],
+        })
+        await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+          pipelineId: pipeline.body.id,
+        })
+        const parked = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+        const gate = parked.steps.find((s) => s.agentKind === 'reviewer')!
+
+        const res = await app.call(
+          'POST',
+          `/workspaces/${wsId}/executions/${parked.id}/steps/${gate.approval!.id}/resolve-exceeded`,
+          { choice: 'stop-reset' },
+        )
+        expect(res.status).toBe(200)
+
+        const snap = (await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)).body
+        const task = snap.blocks.find((b) => b.id === 'task_login')!
+        expect(task.status).toBe('planned')
+        // The run record is gone — the task is back to phase zero, editable.
+        expect(snap.executions.some((e) => e.blockId === 'task_login')).toBe(false)
       })
 
       it('reworks an earlier producer through an intermediate step, then recovers', async () => {

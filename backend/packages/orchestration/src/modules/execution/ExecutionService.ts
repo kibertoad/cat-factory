@@ -70,6 +70,7 @@ import {
 import type { NotificationService } from '../notifications/NotificationService.js'
 import type { RequirementReviewService } from '../requirements/RequirementReviewService.js'
 import type {
+  IterationCapChoice,
   RequirementConcernLevel,
   RequirementReview,
   ResolveRequirementsExceededChoice,
@@ -129,7 +130,7 @@ const EXECUTION_FAILURE_HINTS: Partial<Record<AgentFailureKind, string>> = {
   rejected:
     'You rejected this step’s proposal, stopping the run. Retry to re-run the pipeline from the rejected step.',
   companion_rejected:
-    'A companion agent kept rating the output below its quality threshold after the automatic rework attempts were spent. Review the companion’s feedback on the run, address it (or lower the threshold in the pipeline), then retry.',
+    'A companion agent could not return a usable quality assessment (its reply was truncated or malformed) even after a repair retry. Review the companion’s raw output on the run, then retry.',
   cancelled: 'You stopped this run; its container was killed. Retry to start it again.',
   unknown: 'The run failed for an unclassified reason. Review the run, then retry.',
 }
@@ -1407,21 +1408,17 @@ export class ExecutionService {
       return { kind: 'continue' }
     }
 
-    // BELOW THRESHOLD, automatic budget spent → fail the run for human attention.
-    // Only AUTOMATIC reworks count against the budget (`attempts`); human "request
-    // changes" cycles on the companion's gate re-run the producer without consuming it.
+    // BELOW THRESHOLD, automatic budget spent → DON'T get stuck. Park on a human
+    // decision (one more round / proceed anyway / stop & reset) — the same iteration-cap
+    // surface the requirements reviewer uses at its cap. Only AUTOMATIC reworks count
+    // against the budget (`attempts`); human "request changes" cycles on a gated
+    // companion re-run the producer without consuming it. `step.output` already holds the
+    // companion's latest feedback; the `exceeded` flag + the parked approval gate let the
+    // SPA render the three choices (resolved via `resolveCompanionExceeded`).
     if (companion.attempts >= companion.maxAttempts) {
-      const detail = assessment?.summary ?? 'No further detail.'
-      await this.failRun(
-        workspaceId,
-        instance.id,
-        `Companion "${step.agentKind}" rated the output ${(rating * 100).toFixed(0)}% ` +
-          `(below the ${(companion.threshold * 100).toFixed(0)}% bar) after ` +
-          `${companion.attempts} automatic rework attempt(s).`,
-        'companion_rejected',
-        detail,
-      )
-      return { kind: 'job_failed', error: 'companion_rejected' }
+      companion.exceeded = true
+      step.companion = companion
+      return this.parkStepOnDecision(workspaceId, instance, step, step.output ?? '')
     }
 
     // NOT PASSED, budget left → loop the producer back with the feedback folded in (the
@@ -1429,15 +1426,12 @@ export class ExecutionService {
     // on the forced first-batch loop. `producerIndex` is guaranteed >= 0 here: a forced
     // loop requires comments on a real producer, and a below-threshold rating requires a
     // parsed verdict against a producer (otherwise rating defaulted to 1 and we passed).
-    companion.attempts += 1
     const producer = instance.steps[producerIndex]!
-    const previousProposal = producer.output ?? ''
-    this.rerunProducerThrough(instance, producerIndex, instance.currentStep, {
-      previousProposal,
+    this.loopCompanionProducer(instance, instance.currentStep, {
+      previousProposal: producer.output ?? '',
       feedback: assessment?.summary ?? '',
       ...(assessment?.comments?.length ? { comments: assessment.comments } : {}),
     })
-    if (instance.status === 'blocked') instance.status = 'running'
     await this.updateBlockProgress(workspaceId, instance, 'in_progress')
     await this.executionRepository.upsert(workspaceId, instance)
     await this.emitInstance(workspaceId, instance)
@@ -1512,6 +1506,39 @@ export class ExecutionService {
     producer.rework = rework
     this.startStep(producer)
     instance.currentStep = producerIndex
+  }
+
+  /**
+   * The index of the nearest preceding step a companion grades (one of its target
+   * producer kinds), or -1 when none precedes it. The single producer-search used by the
+   * automatic companion loop, the human "request changes" redirect, and the iteration-cap
+   * extra-round resolution.
+   */
+  private companionProducerIndex(instance: ExecutionInstance, companionIndex: number): number {
+    const targets = companionTargets(instance.steps[companionIndex]!.agentKind)
+    for (let i = companionIndex - 1; i >= 0; i--) {
+      if (targets.includes(instance.steps[i]!.agentKind)) return i
+    }
+    return -1
+  }
+
+  /**
+   * Loop a companion's producer back for one more automatic rework cycle: charge one
+   * attempt against the budget, then re-run the producer (and any intermediate steps) up
+   * to and including the companion so it re-grades. Shared by the automatic
+   * below-threshold loop ({@link evaluateCompanion}) and the human-granted extra round
+   * ({@link resolveCompanionExceeded}), so both consume the budget identically.
+   */
+  private loopCompanionProducer(
+    instance: ExecutionInstance,
+    companionIndex: number,
+    rework: NonNullable<PipelineStep['rework']>,
+  ): void {
+    const companionStep = instance.steps[companionIndex]!
+    const producerIndex = this.companionProducerIndex(instance, companionIndex)
+    companionStep.companion!.attempts += 1
+    this.rerunProducerThrough(instance, producerIndex, companionIndex, rework)
+    if (instance.status === 'blocked') instance.status = 'running'
   }
 
   /**
@@ -2207,7 +2234,7 @@ export class ExecutionService {
         return this.completeRequirementsStep(workspaceId, instance, step, isFinalStep)
       }
       // `ready`/`exceeded`: re-park (a fresh decision id) and wait for the human again.
-      return this.parkRequirementsStep(workspaceId, instance, step)
+      return this.parkStepOnDecision(workspaceId, instance, step)
     }
 
     // Fresh entry: run the initial reviewer pass with the task's preset knobs (shared with
@@ -2218,7 +2245,7 @@ export class ExecutionService {
     if (review.status === 'incorporated') {
       return this.completeRequirementsStep(workspaceId, instance, step, isFinalStep)
     }
-    return this.parkRequirementsStep(workspaceId, instance, step)
+    return this.parkStepOnDecision(workspaceId, instance, step)
   }
 
   /**
@@ -2290,17 +2317,20 @@ export class ExecutionService {
   }
 
   /**
-   * Park the requirements gate on the same durable decision-wait the approval gate uses,
-   * so the dedicated review window can drive the loop and resume the run. The frontend
-   * renders the structured window (not the generic approval panel) for this kind via the
-   * universal result-view registry.
+   * Park a step on the durable decision-wait the approval gate uses, so a human (or the
+   * dedicated review window) can drive an iterative loop and resume the run. Shared by the
+   * requirements gate and the companion iteration-cap gate: both reuse the SAME parking
+   * mechanism rather than each rolling its own. `proposal` seeds the gate's stored text
+   * (the companion's latest feedback; empty for the requirements window, which renders its
+   * own structured surface via the universal result-view registry).
    */
-  private async parkRequirementsStep(
+  private async parkStepOnDecision(
     workspaceId: string,
     instance: ExecutionInstance,
     step: PipelineStep,
+    proposal = '',
   ): Promise<AdvanceResult> {
-    step.approval = { id: this.idGenerator.next('appr'), status: 'pending', proposal: '' }
+    step.approval = { id: this.idGenerator.next('appr'), status: 'pending', proposal }
     step.state = 'waiting_decision'
     instance.status = 'blocked'
     await this.updateBlockProgress(workspaceId, instance, 'blocked')
@@ -2317,16 +2347,23 @@ export class ExecutionService {
   }
 
   /**
-   * The requirements-review gate parks on a `step.approval`, but it is NOT a generic
-   * prose approval: it is driven by the dedicated review window's endpoints
-   * (re-review / proceed / resolve-exceeded), never the generic approve/request-changes/
-   * reject surface — those would advance the run bypassing the iterative loop. Guard the
-   * generic resolvers so a stray approve can't short-circuit the gate.
+   * Two gates park on a `step.approval` but are NOT generic prose approvals — they are
+   * iterative gates driven by their own dedicated surface, never the generic
+   * approve/request-changes/reject resolvers (which would advance the run bypassing the
+   * loop). Guard those resolvers so a stray approve can't short-circuit either gate:
+   * - the requirements-review gate (driven by re-review / proceed / resolve-exceeded);
+   * - a companion gate that hit its rework cap (`companion.exceeded`), driven by
+   *   {@link resolveCompanionExceeded}'s one-more-round / proceed / stop-reset choices.
    */
-  private assertNotRequirementsGate(step: PipelineStep): void {
+  private assertNotIterativeGate(step: PipelineStep): void {
     if (step.agentKind === REQUIREMENTS_REVIEW_AGENT_KIND) {
       throw new ConflictError(
         'Resolve the requirements review through its review window, not the approval gate',
+      )
+    }
+    if (step.companion?.exceeded) {
+      throw new ConflictError(
+        'Resolve this companion review through its iteration-cap prompt, not the approval gate',
       )
     }
   }
@@ -2457,6 +2494,30 @@ export class ExecutionService {
   }
 
   /**
+   * Route an iteration-cap resolution to its gate-specific handlers. `stop-reset` is
+   * uniform across gates: cancel the run and return the block to phase zero (editable),
+   * keeping whatever reference artifact each gate persists (the requirements doc on its
+   * own table; a companion's producer output on its branch). Shared by the requirements
+   * gate ({@link resolveRequirementsExceeded}) and the companion gate
+   * ({@link resolveCompanionExceeded}) so the three-way choice lives in one place.
+   */
+  private async dispatchIterationCap(
+    workspaceId: string,
+    blockId: string,
+    choice: IterationCapChoice,
+    handlers: { extraRound: () => Promise<unknown>; proceed: () => Promise<unknown> },
+  ): Promise<void> {
+    if (choice === 'extra-round') {
+      await handlers.extraRound()
+    } else if (choice === 'proceed') {
+      await handlers.proceed()
+    } else {
+      // stop-reset: tear down the run + reset the block to phase zero (editable).
+      await this.cancel(workspaceId, blockId)
+    }
+  }
+
+  /**
    * Resolve a requirements review that hit its iteration cap: grant one more round,
    * proceed with the last incorporated doc, or stop the task and reset it to phase zero
    * (the run is cancelled, the block returns to `planned` and is editable again; the
@@ -2468,13 +2529,103 @@ export class ExecutionService {
     choice: ResolveRequirementsExceededChoice,
   ): Promise<RequirementReview> {
     const review = await this.currentReview(workspaceId, blockId)
-    if (choice === 'extra-round') {
-      return this.requireReviewService().grantExtraRound(workspaceId, review.id)
+    await this.dispatchIterationCap(workspaceId, blockId, choice, {
+      extraRound: () => this.requireReviewService().grantExtraRound(workspaceId, review.id),
+      proceed: () => this.proceedRequirements(workspaceId, blockId),
+    })
+    // Re-read so the caller sees the post-resolution state (the doc survives stop-reset).
+    return this.currentReview(workspaceId, blockId)
+  }
+
+  /**
+   * Resolve a companion step parked at its automatic-rework cap (`companion.exceeded`):
+   * grant one more round, proceed accepting the producer's current output, or stop the
+   * task and reset it to phase zero. The companion mirror of
+   * {@link resolveRequirementsExceeded}, sharing the iteration-cap dispatch + the
+   * gate-resume plumbing. Idempotent — an already-resolved gate returns the instance
+   * unchanged. Scoped by execution + approval id (the execution controller surface),
+   * since a companion gate is not block-addressed like the requirements window.
+   */
+  async resolveCompanionExceeded(
+    workspaceId: string,
+    executionId: string,
+    approvalId: string,
+    choice: IterationCapChoice,
+  ): Promise<ExecutionInstance> {
+    await this.requireWorkspace(workspaceId)
+    const instance = assertFound(
+      await this.executionRepository.get(workspaceId, executionId),
+      'Execution',
+      executionId,
+    )
+    const stepIndex = instance.steps.findIndex((s) => s.approval?.id === approvalId)
+    const step = instance.steps[stepIndex]
+    if (!step || !step.approval) throw new NotFoundError('Approval', approvalId)
+    if (!step.companion?.exceeded) {
+      throw new ConflictError(`Approval '${approvalId}' is not a companion iteration-cap gate`)
     }
-    if (choice === 'proceed') return this.proceedRequirements(workspaceId, blockId)
-    // stop-reset: cancel the run + reset the block to phase zero, keeping the review.
-    await this.cancel(workspaceId, blockId)
-    return review
+    if (step.approval.status === 'approved') return instance
+
+    await this.dispatchIterationCap(workspaceId, instance.blockId, choice, {
+      // Grant one more automatic rework: raise the budget by one, clear the cap flag, then
+      // loop the producer back through the companion to re-grade (`rerunProducerThrough`
+      // un-parks the gate by resetting the companion step). The last verdict's feedback
+      // drives the rework, the same way the automatic loop folds the live assessment in.
+      extraRound: async () => {
+        step.companion!.maxAttempts += 1
+        step.companion!.exceeded = undefined
+        const producer = instance.steps[this.companionProducerIndex(instance, stepIndex)]
+        this.loopCompanionProducer(instance, stepIndex, {
+          previousProposal: producer?.output ?? '',
+          feedback: step.companion!.verdicts.at(-1)?.feedback ?? '',
+        })
+        await this.updateBlockProgress(workspaceId, instance, 'in_progress')
+        await this.executionRepository.upsert(workspaceId, instance)
+        await this.workRunner.signalDecision(workspaceId, instance.id, approvalId, 'extra-round')
+        await this.emitInstance(workspaceId, instance)
+      },
+      // Proceed: accept the producer's current output and advance past the gate.
+      proceed: async () => {
+        step.companion!.exceeded = undefined
+        step.approval!.status = 'approved'
+        await this.advancePastResolvedGate(workspaceId, instance, stepIndex)
+      },
+    })
+    return instance
+  }
+
+  /**
+   * Finish a gate step the human just resolved (its `approval` already marked `approved`),
+   * then either finish the run (final step) or advance to the next step, persist, and wake
+   * the parked durable driver. The single advance/finalize/signal path shared by every
+   * gate-resume site — the generic approval ({@link approveStep}), the requirements gate
+   * ({@link resumeRequirementsRun}) and the companion iteration-cap proceed
+   * ({@link resolveCompanionExceeded}) — so the logic lives in exactly one place.
+   */
+  private async advancePastResolvedGate(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    stepIndex: number,
+  ): Promise<void> {
+    const step = instance.steps[stepIndex]!
+    const decisionId = step.approval!.id
+    this.finishStep(step)
+    step.progress = 1
+    const isFinalStep = stepIndex === instance.steps.length - 1
+    if (isFinalStep) {
+      instance.status = 'done'
+      await this.finalizeBlock(workspaceId, instance, undefined)
+      await this.stopRunContainer(workspaceId, instance)
+    } else {
+      instance.currentStep = stepIndex + 1
+      const next = instance.steps[instance.currentStep]
+      if (next) this.startStep(next)
+      if (instance.status === 'blocked') instance.status = 'running'
+      await this.updateBlockProgress(workspaceId, instance, 'in_progress')
+    }
+    await this.executionRepository.upsert(workspaceId, instance)
+    await this.workRunner.signalDecision(workspaceId, instance.id, decisionId, 'approved')
+    await this.emitInstance(workspaceId, instance)
   }
 
   /**
@@ -2494,26 +2645,8 @@ export class ExecutionService {
         s.approval?.status === 'pending',
     )
     if (idx === -1) return
-    const step = instance.steps[idx]!
-    const gateId = step.approval!.id
-    step.approval!.status = 'approved'
-    this.finishStep(step)
-    step.progress = 1
-    const isFinalStep = idx === instance.steps.length - 1
-    if (isFinalStep) {
-      instance.status = 'done'
-      await this.finalizeBlock(workspaceId, instance, undefined)
-      await this.stopRunContainer(workspaceId, instance)
-    } else {
-      instance.currentStep = idx + 1
-      const next = instance.steps[instance.currentStep]
-      if (next) this.startStep(next)
-      if (instance.status === 'blocked') instance.status = 'running'
-      await this.updateBlockProgress(workspaceId, instance, 'in_progress')
-    }
-    await this.executionRepository.upsert(workspaceId, instance)
-    await this.workRunner.signalDecision(workspaceId, instance.id, gateId, 'approved')
-    await this.emitInstance(workspaceId, instance)
+    instance.steps[idx]!.approval!.status = 'approved'
+    await this.advancePastResolvedGate(workspaceId, instance, idx)
   }
 
   /** Walk up `parentId` from a block to its top-level service frame id (or itself). */
@@ -3152,7 +3285,7 @@ export class ExecutionService {
     const stepIndex = instance.steps.findIndex((s) => s.approval?.id === approvalId)
     const step = instance.steps[stepIndex]
     if (!step || !step.approval) throw new NotFoundError('Approval', approvalId)
-    this.assertNotRequirementsGate(step)
+    this.assertNotIterativeGate(step)
     if (step.approval.status === 'approved') return instance
 
     // A human edit to the proposal replaces the agent's text, so the revised
@@ -3162,26 +3295,8 @@ export class ExecutionService {
       step.approval.proposal = opts.proposal
     }
     step.approval.status = 'approved'
-    this.finishStep(step)
-    step.progress = 1
-
-    const isFinalStep = stepIndex === instance.steps.length - 1
-    if (isFinalStep) {
-      // A gate is never raised on the final step, but stay defensive: just finish.
-      instance.status = 'done'
-      await this.finalizeBlock(workspaceId, instance, undefined)
-      await this.stopRunContainer(workspaceId, instance)
-    } else {
-      instance.currentStep = stepIndex + 1
-      const next = instance.steps[instance.currentStep]
-      if (next) this.startStep(next)
-      if (instance.status === 'blocked') instance.status = 'running'
-      await this.updateBlockProgress(workspaceId, instance, 'in_progress')
-    }
-    await this.executionRepository.upsert(workspaceId, instance)
-    // Wake the parked durable run (the DB write above is the source of truth).
-    await this.workRunner.signalDecision(workspaceId, instance.id, approvalId, 'approved')
-    await this.emitInstance(workspaceId, instance)
+    // A gate is never raised on the final step, but the shared advance stays defensive.
+    await this.advancePastResolvedGate(workspaceId, instance, stepIndex)
     return instance
   }
 
@@ -3207,7 +3322,7 @@ export class ExecutionService {
     )
     const step = instance.steps.find((s) => s.approval?.id === approvalId)
     if (!step || !step.approval) throw new NotFoundError('Approval', approvalId)
-    this.assertNotRequirementsGate(step)
+    this.assertNotIterativeGate(step)
     if (step.approval.status === 'approved') {
       throw new ConflictError(`Approval '${approvalId}' is already approved`)
     }
@@ -3300,7 +3415,7 @@ export class ExecutionService {
     )
     const step = instance.steps.find((s) => s.approval?.id === approvalId)
     if (!step || !step.approval) throw new NotFoundError('Approval', approvalId)
-    this.assertNotRequirementsGate(step)
+    this.assertNotIterativeGate(step)
     if (step.approval.status === 'approved') {
       throw new ConflictError(`Approval '${approvalId}' is already approved`)
     }

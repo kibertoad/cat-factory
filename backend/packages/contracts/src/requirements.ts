@@ -1,4 +1,5 @@
 import * as v from 'valibot'
+import { iterationCapChoiceSchema } from './iteration-cap.js'
 
 // ---------------------------------------------------------------------------
 // Requirements-review wire contracts. A reviewer agent inspects a board block's
@@ -142,9 +143,11 @@ export type IncorporateRequirementsInput = v.InferOutput<typeof incorporateRequi
  * still open: `extra-round` grants one more reviewer pass, `proceed` advances the
  * pipeline using the last incorporated document, `stop-reset` cancels the run and
  * returns the task to phase zero (editable) while keeping the last incorporated doc.
+ * Shares the {@link iterationCapChoiceSchema} with the companion gate — same three
+ * choices, one source of truth (see `./iteration-cap.ts`).
  */
 export const resolveRequirementsExceededSchema = v.object({
-  choice: v.picklist(['extra-round', 'proceed', 'stop-reset']),
+  choice: iterationCapChoiceSchema,
 })
 export type ResolveRequirementsExceededInput = v.InferOutput<
   typeof resolveRequirementsExceededSchema

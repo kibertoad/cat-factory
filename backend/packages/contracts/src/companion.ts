@@ -9,14 +9,15 @@ import { stepReviewCommentSchema } from './entities.js'
 // actionable feedback. The execution engine compares the rating against the
 // step's configured threshold (default 0.8): at or above it the run proceeds to
 // the human gate / next step; below it the producer step is re-run with the
-// companion's feedback folded in, and the run fails once the rework budget is
-// exhausted.
+// companion's feedback folded in, and once the rework budget is exhausted the step
+// parks on a human iteration-cap gate (one more round / proceed anyway / stop & reset)
+// instead of failing.
 // ---------------------------------------------------------------------------
 
 /** The default quality bar a companion's rating must reach for the run to proceed. */
 export const DEFAULT_COMPANION_THRESHOLD = 0.8
 
-/** The default number of automatic rework attempts before a companion fails the run. */
+/** The default number of automatic rework attempts before a companion parks for a human. */
 export const DEFAULT_COMPANION_MAX_ATTEMPTS = 3
 
 /**

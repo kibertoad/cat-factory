@@ -3,6 +3,7 @@ import {
   rejectStepSchema,
   requestStepChangesSchema,
   resolveDecisionSchema,
+  resolveIterationCapSchema,
   startExecutionSchema,
 } from '@cat-factory/contracts'
 import { Hono } from 'hono'
@@ -175,6 +176,28 @@ export function executionController(): Hono<AppEnv> {
           param(c, 'executionId'),
           param(c, 'approvalId'),
           { feedback, comments },
+        )
+      return c.json(instance)
+    },
+  )
+
+  // Resolve a companion step parked at its automatic-rework cap: one more round /
+  // proceed accepting the current output / stop and reset the task to phase zero. The
+  // companion analogue of the requirements gate's resolve-exceeded; guarded so the
+  // generic approve/reject can't short-circuit it.
+  app.post(
+    '/executions/:executionId/steps/:approvalId/resolve-exceeded',
+    jsonBody(resolveIterationCapSchema),
+    async (c) => {
+      // extra-round / proceed re-dispatch the next agent step — re-mint first.
+      await remintActivations(c, param(c, 'workspaceId'), param(c, 'executionId'))
+      const instance = await c
+        .get('container')
+        .executionService.resolveCompanionExceeded(
+          param(c, 'workspaceId'),
+          param(c, 'executionId'),
+          param(c, 'approvalId'),
+          c.req.valid('json').choice,
         )
       return c.json(instance)
     },

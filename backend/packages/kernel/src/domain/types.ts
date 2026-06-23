@@ -135,6 +135,9 @@ export type {
   IncorporateRequirementsInput,
   ResolveRequirementsExceededInput,
   ResolveRequirementsExceededChoice,
+  // Shared iterative-gate cap resolution (requirements reviewer + quality companions).
+  IterationCapChoice,
+  ResolveIterationCapInput,
   // Structured in-repo specification (`spec.json`) shapes.
   RequirementPriority,
   RequirementKind,

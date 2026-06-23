@@ -462,8 +462,10 @@ export const agentFailureKindSchema = v.picklist([
   'job_failed',
   'decision_timeout',
   'rejected',
-  // A companion agent's quality rating stayed below the step's threshold after the
-  // automatic rework budget was exhausted, so the run was failed for human attention.
+  // A companion agent could not return a parseable quality assessment (truncated /
+  // malformed) even after a repair retry, so the run was failed for human attention.
+  // (Exhausting the automatic rework budget no longer fails the run — it parks on the
+  // companion iteration-cap gate for a human; see `companion.exceeded`.)
   'companion_rejected',
   'cancelled',
   'unknown',
@@ -625,22 +627,23 @@ export const pipelineStepSchema = v.object({
    * Live state of a companion step that reviews a preceding producer step. Set when
    * this step's `agentKind` is a companion kind. `threshold` is the quality bar the
    * companion's latest rating (the last `verdicts` entry) must reach; `attempts`
-   * counts only the AUTOMATIC reworks performed, and the run fails once it reaches
-   * `maxAttempts`. A human "request changes" on the companion's gate also re-runs the
-   * producer but does NOT consume `attempts` (only the automatic loop is budgeted).
-   * Absent for non-companion steps.
+   * counts only the AUTOMATIC reworks performed, and once it reaches `maxAttempts` the
+   * step parks on the iteration-cap gate (`exceeded`) for a human rather than failing.
+   * A human "request changes" on the companion's gate also re-runs the producer but does
+   * NOT consume `attempts` (only the automatic loop is budgeted). Absent for non-companion steps.
    */
   companion: v.optional(
     v.nullable(
       v.object({
         /** The quality bar (0..1) the latest verdict's rating must reach; seeded from the pipeline. */
         threshold: v.number(),
-        /** The automatic rework budget: once `attempts` reaches this the run fails (`companion_rejected`). */
+        /** The automatic rework budget: once `attempts` reaches this the gate parks for a human (`exceeded`). */
         maxAttempts: v.number(),
         /**
          * How many AUTOMATIC reworks the companion has driven so far (the producer is
          * looped back once per failed verdict). Human "request changes" cycles are not
-         * counted. Defaults to 0; the run fails once it reaches `maxAttempts`.
+         * counted. Defaults to 0; once it reaches `maxAttempts` the step parks on the
+         * iteration-cap gate (`exceeded`) — an "extra round" raises `maxAttempts` by one.
          */
         attempts: v.optional(v.number(), 0),
         /**
@@ -650,6 +653,14 @@ export const pipelineStepSchema = v.object({
          * grade; the last entry is the latest.
          */
         verdicts: v.array(companionVerdictSchema),
+        /**
+         * Set true when the automatic rework budget (`maxAttempts`) was spent with the
+         * rating still below the bar: instead of failing the run, the step parks on its
+         * approval gate for a human to resolve via the shared iteration-cap surface
+         * (one more round / proceed anyway / stop & reset). Cleared once the human grants
+         * an extra round (the loop resumes). Absent until/unless the cap is hit.
+         */
+        exceeded: v.optional(v.boolean()),
       }),
     ),
   ),
