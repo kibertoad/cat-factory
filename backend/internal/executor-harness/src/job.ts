@@ -715,9 +715,12 @@ export function parseMergerJob(input: unknown): MergerJob {
 
 /**
  * The job the backend's ContainerAgentExecutor POSTs to /on-call on a post-release
- * regression. The on-call agent clones the released PR head `branch` to correlate its
- * diff with the Datadog regression evidence (carried in `userPrompt`) and returns ONLY
- * a JSON assessment — it makes NO commits and reverts nothing (a human decides).
+ * regression. The released PR has already merged (and its work branch was deleted), so
+ * the on-call agent clones the `branch` (the BASE branch, which contains the merged
+ * change) and locates the merged commit — via the PR number / the now-historical
+ * `headBranch` — to correlate its diff with the Datadog regression evidence (carried in
+ * `userPrompt`). It returns ONLY a JSON assessment — it makes NO commits and reverts
+ * nothing (a human decides).
  */
 export interface OnCallJob extends HarnessAuthFields {
   jobId: string
@@ -728,8 +731,10 @@ export interface OnCallJob extends HarnessAuthFields {
   sessionToken?: string
   ghToken: string
   repo: RepoSpec
-  /** The released PR head branch to clone and correlate against the base. */
+  /** The branch to clone — the base branch, which contains the merged release. */
   branch: string
+  /** The deleted PR head branch name, for locating the merged commit (optional). */
+  headBranch?: string
   /** The PR number, for the agent's context (optional). */
   prNumber?: number
   githubApiBase?: string
@@ -760,6 +765,7 @@ export function parseOnCallJob(input: unknown): OnCallJob {
     ghToken: str(o.ghToken, 'ghToken'),
     repo: parseRepoSpec(repo),
     branch: str(o.branch, 'branch'),
+    ...(typeof o.headBranch === 'string' ? { headBranch: o.headBranch } : {}),
     ...(typeof o.prNumber === 'number' ? { prNumber: o.prNumber } : {}),
     ...(typeof o.githubApiBase === 'string' ? { githubApiBase: o.githubApiBase } : {}),
   }

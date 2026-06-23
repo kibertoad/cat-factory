@@ -41,11 +41,33 @@ export function datadogApiBase(site: string): string {
   return `https://api.${normalizeDatadogSite(site)}`
 }
 
-/** Map Datadog's monitor `overall_state` string onto a release signal state. */
-export function mapMonitorState(overallState: string | undefined): ReleaseSignalState {
+/**
+ * Map Datadog's monitor `overall_state` string onto a release signal state.
+ *
+ * `attribution` lets the post-release-health gate ignore an alert that PREDATES the
+ * release it is watching: a monitor already alerting before `since` (an unrelated /
+ * flaky / never-recovered incident) is not attributable to this release, so it is
+ * downgraded to `warn` (which does NOT regress the gate) rather than escalating an
+ * on-call investigation that blames an innocent PR. When the transition timestamp is
+ * unknown (Datadog didn't report `overall_state_modified`) we keep the alert — better
+ * to investigate than to silently miss a real regression.
+ */
+export function mapMonitorState(
+  overallState: string | undefined,
+  attribution?: { stateModifiedMs?: number; since: number },
+): ReleaseSignalState {
   switch ((overallState ?? '').toLowerCase()) {
     case 'alert':
     case 'alert_recovery':
+      // A pre-existing alert (state last changed before the release marker) is not this
+      // release's regression — don't escalate on it.
+      if (
+        attribution &&
+        attribution.stateModifiedMs !== undefined &&
+        attribution.stateModifiedMs < attribution.since
+      ) {
+        return 'warn'
+      }
       return 'alert'
     case 'warn':
     case 'warn_recovery':

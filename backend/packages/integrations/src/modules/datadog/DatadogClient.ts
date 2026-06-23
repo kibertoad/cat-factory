@@ -19,6 +19,8 @@ export interface DatadogMonitorState {
   id: string
   name: string
   overallState: string | undefined
+  /** When `overall_state` last changed (epoch ms), if Datadog reported it. */
+  stateModifiedMs?: number
 }
 
 /** An SLO's current SLI value vs its target (the breach check). */
@@ -67,6 +69,19 @@ function pickSloTarget(thresholds: Record<string, { target?: number }>): number 
   return null
 }
 
+/**
+ * Parse a Datadog timestamp (`overall_state_modified` is an ISO-8601 string, but some
+ * endpoints report epoch seconds) into epoch ms. Returns undefined when absent/unparseable.
+ */
+function parseDatadogTimestamp(value: string | number | undefined): number | undefined {
+  if (typeof value === 'number') return Number.isFinite(value) ? value * 1000 : undefined
+  if (typeof value === 'string' && value.trim() !== '') {
+    const ms = Date.parse(value)
+    return Number.isNaN(ms) ? undefined : ms
+  }
+  return undefined
+}
+
 export class DatadogClient {
   private readonly fetchImpl: FetchLike
 
@@ -77,10 +92,20 @@ export class DatadogClient {
     this.fetchImpl = options.fetchImpl ?? fetch
   }
 
-  /** Read a monitor's overall state (`GET /api/v1/monitor/{id}`). */
+  /** Read a monitor's overall state + when it last changed (`GET /api/v1/monitor/{id}`). */
   async getMonitor(id: string): Promise<DatadogMonitorState> {
-    const data = await this.get<{ name?: string; overall_state?: string }>(`/api/v1/monitor/${id}`)
-    return { id, name: data.name ?? `monitor ${id}`, overallState: data.overall_state }
+    const data = await this.get<{
+      name?: string
+      overall_state?: string
+      overall_state_modified?: string | number
+    }>(`/api/v1/monitor/${id}`)
+    const stateModifiedMs = parseDatadogTimestamp(data.overall_state_modified)
+    return {
+      id,
+      name: data.name ?? `monitor ${id}`,
+      overallState: data.overall_state,
+      ...(stateModifiedMs !== undefined ? { stateModifiedMs } : {}),
+    }
   }
 
   /**

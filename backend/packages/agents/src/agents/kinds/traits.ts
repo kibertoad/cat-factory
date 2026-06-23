@@ -67,6 +67,9 @@ export const STANDARD_AGENT_TRAITS: Partial<Record<AgentKind, AgentTrait[]>> = {
   analysis: [SPEC_AWARE_TRAIT],
   mocker: [SPEC_AWARE_TRAIT],
   merger: [SPEC_AWARE_TRAIT],
+  // The on-call agent clones the released change and reads the code to correlate the diff
+  // with the regression evidence, so it gets the service's best-practice + spec context.
+  'on-call': [CODE_AWARE_TRAIT, SPEC_AWARE_TRAIT],
 }
 
 /** Definition of a (custom) trait: its id and optional system-prompt guidance. */

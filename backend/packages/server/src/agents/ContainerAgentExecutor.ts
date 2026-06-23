@@ -879,12 +879,15 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       return { subscriptionTokenId, body, model: `${ref.provider}:${ref.model}`, kind: 'merge' }
     }
 
-    // The on-call agent clones the released PR head branch to correlate the diff with
-    // the Datadog regression evidence (handed in via priorOutputs) and returns ONLY a
-    // JSON assessment — it makes NO commits and reverts nothing (the engine raises a
-    // notification for a human). Targets the harness `/on-call` endpoint.
+    // The on-call agent investigates a post-release regression: it correlates the
+    // RELEASED change with the Datadog regression evidence (handed in via priorOutputs)
+    // and returns ONLY a JSON assessment — it makes NO commits and reverts nothing (the
+    // engine raises a notification for a human). The gate only escalates AFTER the merger
+    // step, which merges the PR and DELETES the work branch, so the head branch is gone by
+    // now — clone the BASE branch (which always exists and contains the merged change) and
+    // hand the agent the PR number + the now-historical head branch name so it can locate
+    // the merged commit in history. Targets the harness `/on-call` endpoint.
     if (context.agentKind === ON_CALL_AGENT_KIND) {
-      const branch = context.block.pullRequest?.branch ?? repo.baseBranch
       const body = {
         jobId,
         systemPrompt: ON_CALL_SYSTEM_PROMPT,
@@ -893,7 +896,10 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
         ...auth,
         ghToken,
         repo: buildRepoSpec(repo),
-        branch,
+        branch: repo.baseBranch,
+        ...(context.block.pullRequest?.branch
+          ? { headBranch: context.block.pullRequest.branch }
+          : {}),
         ...(context.block.pullRequest?.number !== undefined
           ? { prNumber: context.block.pullRequest.number }
           : {}),

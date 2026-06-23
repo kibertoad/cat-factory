@@ -126,7 +126,10 @@ export class DatadogReleaseHealthProvider implements ReleaseHealthProvider {
     const monitors = await Promise.all(
       config.monitorIds.map(async (id): Promise<ReleaseSignal> => {
         const m = await client.getMonitor(id)
-        return { kind: 'monitor', id, name: m.name, state: mapMonitorState(m.overallState) }
+        // Attribute the alert to THIS release: a monitor already alerting before the
+        // release marker (`since`) is a pre-existing incident, not this PR's regression.
+        const state = mapMonitorState(m.overallState, { stateModifiedMs: m.stateModifiedMs, since })
+        return { kind: 'monitor', id, name: m.name, state }
       }),
     )
     const slos = await Promise.all(

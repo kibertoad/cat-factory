@@ -28,6 +28,7 @@ const connection: DatadogConnectionRecord = {
 function makeProvider(
   config: ReleaseHealthConfigRecord | null,
   monitorState: string,
+  monitorStateModified?: string,
 ): DatadogReleaseHealthProvider {
   const connectionRepo: DatadogConnectionRepository = {
     get: async () => connection,
@@ -45,11 +46,16 @@ function makeProvider(
       ({ id, parentId: null }) as Block,
   } as unknown as BlockRepository
 
-  // Fake Datadog: every monitor returns `monitorState`.
+  // Fake Datadog: every monitor returns `monitorState` (+ optional last-change time).
   const fetchImpl = (async () =>
-    new Response(JSON.stringify({ name: 'errors', overall_state: monitorState }), {
-      status: 200,
-    })) as unknown as typeof fetch
+    new Response(
+      JSON.stringify({
+        name: 'errors',
+        overall_state: monitorState,
+        ...(monitorStateModified ? { overall_state_modified: monitorStateModified } : {}),
+      }),
+      { status: 200 },
+    )) as unknown as typeof fetch
 
   return new DatadogReleaseHealthProvider({
     datadogConnectionRepository: connectionRepo,
@@ -90,6 +96,24 @@ describe('DatadogReleaseHealthProvider.probe', () => {
     const report = await provider.probe('ws', 'blk', Date.now())
     expect(report.status).toBe('regressed')
     expect(report.signals[0]!.state).toBe('alert')
+  })
+
+  it('reports regressed when the alert started AFTER the release marker', async () => {
+    const since = Date.parse('2026-06-24T12:00:00Z')
+    const provider = makeProvider(config, 'Alert', '2026-06-24T12:05:00Z')
+    const report = await provider.probe('ws', 'blk', since)
+    expect(report.status).toBe('regressed')
+    expect(report.signals[0]!.state).toBe('alert')
+  })
+
+  it('does NOT regress on a pre-existing alert that started before the release marker', async () => {
+    const since = Date.parse('2026-06-24T12:00:00Z')
+    // Monitor went into alert 5 minutes BEFORE this release shipped — an unrelated/flaky
+    // incident, not attributable to this PR; the gate must not escalate on-call.
+    const provider = makeProvider(config, 'Alert', '2026-06-24T11:55:00Z')
+    const report = await provider.probe('ws', 'blk', since)
+    expect(report.status).toBe('healthy')
+    expect(report.signals[0]!.state).toBe('warn')
   })
 
   it('reports pending when the monitor has no data yet', async () => {

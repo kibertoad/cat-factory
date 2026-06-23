@@ -1,11 +1,12 @@
 import type {
+  BlockRepository,
   Clock,
   DatadogConnectionRepository,
   ReleaseHealthConfigRepository,
   SecretCipher,
   WorkspaceRepository,
 } from '@cat-factory/kernel'
-import { requireWorkspace } from '@cat-factory/kernel'
+import { assertFound, requireWorkspace } from '@cat-factory/kernel'
 import type {
   DatadogConnectionView,
   ReleaseHealthConfigWire,
@@ -19,6 +20,8 @@ export interface ReleaseHealthServiceDependencies {
   /** Seals the Datadog API/app keys at rest (domain tag 'cat-factory:datadog'). */
   datadogSecretCipher: SecretCipher
   workspaceRepository: WorkspaceRepository
+  /** Validates a per-block config targets a block that exists in the workspace. */
+  blockRepository: BlockRepository
   clock: Clock
 }
 
@@ -33,6 +36,7 @@ export class ReleaseHealthService {
   private readonly configs: ReleaseHealthConfigRepository
   private readonly cipher: SecretCipher
   private readonly workspaceRepository: WorkspaceRepository
+  private readonly blocks: BlockRepository
   private readonly clock: Clock
 
   constructor(deps: ReleaseHealthServiceDependencies) {
@@ -40,6 +44,7 @@ export class ReleaseHealthService {
     this.configs = deps.releaseHealthConfigRepository
     this.cipher = deps.datadogSecretCipher
     this.workspaceRepository = deps.workspaceRepository
+    this.blocks = deps.blockRepository
     this.clock = deps.clock
   }
 
@@ -99,6 +104,9 @@ export class ReleaseHealthService {
     input: UpsertReleaseHealthConfigInput,
   ): Promise<ReleaseHealthConfigWire> {
     await requireWorkspace(this.workspaceRepository, workspaceId)
+    // The config is keyed by (workspace, block); reject a block that isn't in this
+    // workspace so a config can't be planted against a foreign/non-existent block id.
+    assertFound(await this.blocks.get(workspaceId, blockId), 'Block', blockId)
     const now = this.clock.now()
     const existing = await this.configs.getByBlock(workspaceId, blockId)
     const record = {
@@ -121,6 +129,7 @@ export class ReleaseHealthService {
 
   async deleteConfig(workspaceId: string, blockId: string): Promise<void> {
     await requireWorkspace(this.workspaceRepository, workspaceId)
+    assertFound(await this.blocks.get(workspaceId, blockId), 'Block', blockId)
     await this.configs.delete(workspaceId, blockId)
   }
 }

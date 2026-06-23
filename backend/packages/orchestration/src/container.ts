@@ -1140,6 +1140,7 @@ function createReleaseHealthModule(deps: CoreDependencies): ReleaseHealthModule 
     releaseHealthConfigRepository,
     datadogSecretCipher,
     workspaceRepository: deps.workspaceRepository,
+    blockRepository: deps.blockRepository,
     clock: deps.clock,
   })
   return { service }

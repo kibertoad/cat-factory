@@ -77,10 +77,27 @@ export const releaseHealthConfigSchema = v.object({
 })
 export type ReleaseHealthConfigWire = v.InferOutput<typeof releaseHealthConfigSchema>
 
+/**
+ * A Datadog env tag value. Constrained to the characters a real env/tag value uses so it
+ * can be interpolated into a Datadog log query (`status:error env:<tag>`) without spaces
+ * or query metacharacters (`* ( ) :` and whitespace) that would silently broaden or break
+ * the query — and silently empty the on-call evidence bundle.
+ */
+const envTagSchema = v.pipe(
+  v.string(),
+  v.trim(),
+  v.minLength(1),
+  v.maxLength(120),
+  v.regex(
+    /^[A-Za-z0-9_.\-/]+$/,
+    'envTag may only contain letters, digits and _.-/ (no spaces or query characters)',
+  ),
+)
+
 /** Create/replace a block's release-health config. */
 export const upsertReleaseHealthConfigSchema = v.object({
   monitorIds: v.optional(v.array(v.pipe(v.string(), v.trim(), v.minLength(1))), []),
   sloIds: v.optional(v.array(v.pipe(v.string(), v.trim(), v.minLength(1))), []),
-  envTag: v.optional(v.nullable(v.pipe(v.string(), v.trim()))),
+  envTag: v.optional(v.nullable(envTagSchema)),
 })
 export type UpsertReleaseHealthConfigInput = v.InferOutput<typeof upsertReleaseHealthConfigSchema>

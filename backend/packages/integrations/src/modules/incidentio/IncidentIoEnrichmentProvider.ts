@@ -3,6 +3,7 @@ import type {
   IncidentMatchQuery,
   IncidentUpdate,
 } from '@cat-factory/kernel'
+import { pickIncidentToEnrich } from '../incident/incident.logic.js'
 
 // Enriches (does NOT create) an incident.io incident already opened from the same Datadog
 // monitors/SLOs the post-release-health gate watches. On a regression the on-call agent's
@@ -25,6 +26,8 @@ interface IoIncident {
   reference?: string
   permalink?: string
   created_at?: string
+  name?: string
+  summary?: string
   incident_status?: { category?: string }
 }
 
@@ -38,10 +41,10 @@ export class IncidentIoEnrichmentProvider implements IncidentEnrichmentProvider 
   }
 
   /**
-   * Find the most-recent live incident created since the release marker and post the
-   * investigation as an incident update onto it. No-op when none matches. incident.io
-   * incidents don't carry the originating Datadog monitor id, so we match on recency
-   * within the release window among non-closed incidents.
+   * Find the live incident the regression most likely belongs to — preferring one whose
+   * name/summary references a regressed signal id, else the most recent live incident in
+   * the window — and post the investigation as an incident update onto it. No-op when none
+   * matches.
    */
   async enrich(query: IncidentMatchQuery, update: IncidentUpdate): Promise<void> {
     const incident = await this.findActiveIncident(query)
@@ -88,10 +91,14 @@ export class IncidentIoEnrichmentProvider implements IncidentEnrichmentProvider 
       after = data.pagination_meta?.after ?? undefined
       if (!after || batch.length === 0) break
     }
-    live.sort(
-      (a, b) => new Date(b.created_at ?? 0).getTime() - new Date(a.created_at ?? 0).getTime(),
+    return pickIncidentToEnrich(
+      live.map((i) => ({
+        raw: i,
+        text: `${i.name ?? ''} ${i.summary ?? ''} ${i.reference ?? ''}`,
+        createdAtMs: i.created_at ? new Date(i.created_at).getTime() : 0,
+      })),
+      query.signalIds,
     )
-    return live[0] ?? null
   }
 
   private headers(): Record<string, string> {
@@ -106,6 +113,5 @@ export class IncidentIoEnrichmentProvider implements IncidentEnrichmentProvider 
 function renderUpdate(update: IncidentUpdate): string {
   const lines = [`**cat-factory on-call: ${update.title}**`, '', update.body]
   if (update.prUrl) lines.push('', `Suspect PR: ${update.prUrl}`)
-  if (update.revertUrl) lines.push(`Proposed revert: ${update.revertUrl}`)
   return lines.join('\n')
 }

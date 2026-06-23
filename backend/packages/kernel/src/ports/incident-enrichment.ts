@@ -9,7 +9,12 @@
 
 export interface IncidentMatchQuery {
   workspaceId: string
-  /** The monitor/SLO ids the regression fired on (used to match the incident). */
+  /**
+   * The monitor/SLO ids the regression fired on. A provider PREFERS an active incident
+   * whose text references one of these (the precise match), falling back to the most
+   * recent active incident in the window when none reference a signal (these systems
+   * don't reliably carry the originating monitor id).
+   */
   signalIds: string[]
   /** Release marker time (epoch ms); only incidents active since then match. */
   since: number
@@ -23,8 +28,6 @@ export interface IncidentUpdate {
   body: string
   /** Web URL of the suspect PR, when known. */
   prUrl?: string
-  /** Web URL of a proposed revert PR, when the agent opened one. */
-  revertUrl?: string
 }
 
 export interface IncidentEnrichmentProvider {

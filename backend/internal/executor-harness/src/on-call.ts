@@ -18,11 +18,13 @@ import type { RunOptions } from './runner.js'
 import { log } from './logger.js'
 
 // Async job execution for the on-call agent. The engine dispatches this when the
-// post-release-health gate detects a Datadog regression: clone the released PR HEAD
-// branch, have Pi correlate the diff with the regression evidence (handed in via the
-// user prompt) and return ONLY a JSON assessment of whether THIS PR is the likely
-// culprit. The on-call agent makes NO commits and reverts nothing — the engine raises a
-// `release_regression` notification carrying this assessment for a human to act on.
+// post-release-health gate detects a Datadog regression. The released PR has already
+// merged and its work branch was deleted, so we clone the BASE branch (which contains
+// the merged change), have Pi locate the merged commit (via the PR number / the
+// now-historical head branch) and correlate its diff with the regression evidence
+// (handed in via the user prompt), then return ONLY a JSON assessment of whether THIS
+// change is the likely culprit. The on-call agent makes NO commits and reverts nothing —
+// the engine raises a `release_regression` notification carrying this assessment.
 
 const ASSESSMENT_SHAPE_HINT =
   'Expected an on-call assessment: {"culpritConfidence": number 0..1, "recommendation": ' +
@@ -67,14 +69,24 @@ function coerceAssessment(raw: unknown, summary: string): OnCallAssessmentShape 
 }
 
 function buildUserPrompt(job: OnCallJob): string {
-  const pr = job.prNumber !== undefined ? ` (PR #${job.prNumber})` : ''
+  const pr = job.prNumber !== undefined ? `#${job.prNumber}` : ''
+  // The PR has already merged into the base branch and its work branch was deleted, so the
+  // checkout is the base branch. Point the agent at how to find the merged commit.
+  const locate = job.prNumber
+    ? `It merged as a commit referencing ${pr} — find it with ` +
+      `\`git log --oneline -n 50\` (squash/merge commits include \`(${pr})\`; a merge commit ` +
+      `mentions \`#${job.prNumber}\`), then inspect it with \`git show <sha>\`.`
+    : job.headBranch
+      ? `Its work branch was \`${job.headBranch}\` (now deleted) — find the merged commit in ` +
+        `\`git log --oneline -n 50\` and inspect it with \`git show <sha>\`.`
+      : `Find the most recent merge/feature commit with \`git log --oneline -n 50\` and inspect ` +
+        `it with \`git show <sha>\`.`
   return [
     job.userPrompt,
     '',
-    `The released pull request${pr} is on branch \`${job.branch}\`; the base branch is ` +
-      `\`${job.repo.baseBranch}\`. Inspect the change (e.g. \`git fetch origin ${job.repo.baseBranch}\` ` +
-      `then \`git diff origin/${job.repo.baseBranch}...HEAD\`) and correlate it with the regression ` +
-      `evidence above. Beware correlation vs causation.`,
+    `You are on the base branch \`${job.repo.baseBranch}\`, which already contains the released ` +
+      `pull request ${pr}. ${locate} Correlate that change with the regression evidence above. ` +
+      `Beware correlation vs causation.`,
     '',
     'Respond with ONLY a JSON object {"culpritConfidence":0.0,"recommendation":"revert"|"hold"|"monitor","rationale":"…","evidence":["…"]}.',
   ].join('\n')
@@ -84,12 +96,12 @@ function buildUserPrompt(job: OnCallJob): string {
 export async function handleOnCall(job: OnCallJob, opts: RunOptions = {}): Promise<OnCallResult> {
   const trace = { jobId: job.jobId, repo: `${job.repo.owner}/${job.repo.name}`, branch: job.branch }
   return withWorkspace('on-call', async (dir) => {
-    log.info('on-call: cloning PR branch', trace)
+    log.info('on-call: cloning base branch', trace)
     await cloneRepo({
       repo: { ...job.repo, baseBranch: job.branch },
       ghToken: job.ghToken,
       dir,
-      // Full clone so the agent can diff the PR against the base (origin/<base>...HEAD).
+      // Full clone so the agent has the history to locate + diff the merged commit.
       full: true,
       signal: opts.signal,
     })

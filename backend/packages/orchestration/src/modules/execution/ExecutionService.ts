@@ -1070,21 +1070,35 @@ export class ExecutionService {
     // The post-release-health gate's helper is the `on-call` agent, which INVESTIGATES
     // (it makes no commits and doesn't change prod), so unlike ci-fixer/conflict-resolver
     // its completion must NOT re-probe to green — re-probing would just regress again and
-    // burn the budget. When it finishes, resolve its assessment: raise the
-    // `release_regression` notification, enrich any open incident, then finish the gate
-    // step so the run completes (a human acts on the notification out-of-band). A failed
-    // investigation falls through to the generic gate path (re-probe → exhausted → notify).
+    // burn the budget. When it finishes — OR fails — resolve it the same way: raise the
+    // `release_regression` notification (with the regressed signals stashed at escalation),
+    // enrich any open incident, then finish the gate step so the run completes (a human
+    // acts on the notification out-of-band). A FAILED investigation must NOT fall through
+    // to the generic gate path: that would re-probe → still regress → exhaust the budget,
+    // discarding the stashed signals and failing the run with a thinner notification.
     if (
       step.agentKind === POST_RELEASE_HEALTH_AGENT_KIND &&
       step.gate?.phase === 'working' &&
-      update.state === 'done'
+      (update.state === 'done' || update.state === 'failed')
     ) {
       const block = await this.blockRepository.get(workspaceId, instance.blockId)
       step.jobId = undefined
       step.subtasks = undefined
       if (!block) return { kind: 'noop' }
       const isFinalStep = instance.currentStep === instance.steps.length - 1
-      return this.resolveOnCallStep(workspaceId, instance, step, block, update.result, isFinalStep)
+      const result: AgentRunResult =
+        update.state === 'done'
+          ? update.result
+          : { output: `On-call investigation did not complete: ${update.error ?? 'unknown error'}` }
+      return this.resolveOnCallStep(
+        workspaceId,
+        instance,
+        step,
+        block,
+        result,
+        isFinalStep,
+        update.state === 'failed',
+      )
     }
 
     // A polling gate step's in-flight job is its helper agent (ci-fixer /
@@ -1218,7 +1232,23 @@ export class ExecutionService {
     if (!step || !gate || gate.pollExhaustion !== 'pass') {
       return { kind: 'job_failed', error: timeoutError, failureKind: 'timeout' }
     }
-    // Pass-on-exhaustion gate: finish the step as a healthy pass and advance.
+    // A time-windowed watch gate (post-release-health) may be configured to watch LONGER
+    // than the driver's single gate-poll budget (ciMaxPolls × ciPollInterval). Running out
+    // of polls before the window has actually elapsed is NOT a healthy pass — the release
+    // could still regress later in the window. Re-arm another poll cycle (the driver loops
+    // back into the gate-poll loop on `awaiting_gate`) so the full configured window is
+    // honoured rather than silently truncated to the poll budget.
+    const watchSince = step.gate?.watchSince
+    const windowMinutes = step.gate?.watchWindowMinutes
+    if (watchSince != null && windowMinutes != null) {
+      const windowElapsed = this.clock.now() - watchSince >= windowMinutes * 60_000
+      if (!windowElapsed) {
+        if (step.gate) step.gate.phase = 'checking'
+        await this.executionRepository.upsert(workspaceId, instance)
+        return { kind: 'awaiting_gate', stepIndex: instance.currentStep }
+      }
+    }
+    // Window genuinely elapsed (or a non-windowed pass gate): finish as a healthy pass.
     const isFinalStep = instance.currentStep === instance.steps.length - 1
     return this.recordStepResult(workspaceId, instance, step, isFinalStep, {
       output: `${gate.kind} gate passed: watch window elapsed with no regression observed.`,
@@ -1910,6 +1940,21 @@ export class ExecutionService {
         // driver's budget with NO regression observed — a healthy pass, not a timeout.
         pollExhaustion: 'pass',
         probe: async (workspaceId, blockId, gateState): Promise<GateProbe> => {
+          // Only watch a release that actually SHIPPED. The merger sets the block `done`
+          // when it merges for real, but leaves it `pr_ready` when it raises a review
+          // (assessment outside thresholds) without merging — and a no-merger pipeline
+          // also never auto-merges. There is nothing deployed to watch in those cases, so
+          // pass through immediately instead of polling Datadog (and possibly escalating
+          // an on-call investigation) for a change that was never released.
+          const block = await this.blockRepository.get(workspaceId, blockId)
+          if (!block || block.status !== 'done') {
+            return {
+              status: 'pass',
+              headSha: null,
+              passOutput:
+                'Post-release health gate skipped: the PR was not merged (nothing deployed to watch).',
+            }
+          }
           const since = gateState.watchSince ?? this.clock.now()
           const report = await this.releaseHealthProvider!.probe(workspaceId, blockId, since)
           // No signals configured for this block → nothing to watch; advance immediately
@@ -1962,10 +2007,19 @@ export class ExecutionService {
             { agentKind: POST_RELEASE_HEALTH_AGENT_KIND, output: renderReleaseEvidence(evidence) },
           ]
         },
-        onExhausted: async ({ workspaceId, instance, block, summary }) => {
-          // Reached only when releaseMaxAttempts is 0 (operator disabled the on-call
-          // investigation): still alert a human via the notification, then flag the run.
-          await this.raiseReleaseRegression(workspaceId, instance, block, null, [], summary ?? '')
+        onExhausted: async ({ workspaceId, instance, block, step, summary }) => {
+          // Reached when releaseMaxAttempts is 0 (operator disabled the on-call
+          // investigation) or there is no async executor to escalate to — a FAILED
+          // investigation is handled in pollAgentJob, not here. Alert a human via the
+          // notification (with any signals already captured), then flag the run.
+          await this.raiseReleaseRegression(
+            workspaceId,
+            instance,
+            block,
+            null,
+            step.gate?.regressedSignals ?? [],
+            summary ?? '',
+          )
           return {
             error:
               `Post-release health regressed and no on-call investigation was configured. ${summary ?? ''}`.trim(),
@@ -3717,6 +3771,7 @@ export class ExecutionService {
     block: Block,
     result: AgentRunResult,
     isFinalStep: boolean,
+    investigationFailed = false,
   ): Promise<AdvanceResult> {
     let assessment: OnCallAssessment | null = null
     try {
@@ -3744,19 +3799,25 @@ export class ExecutionService {
       }
     }
 
+    const baseSummary = step.gate?.lastFailureSummary ?? ''
+    const summary = investigationFailed
+      ? `${baseSummary} The automated on-call investigation could not complete, so no culprit assessment is available — investigate manually.`.trim()
+      : baseSummary
     await this.raiseReleaseRegression(
       workspaceId,
       instance,
       block,
       assessment,
       regressedSignals,
-      step.gate?.lastFailureSummary ?? '',
+      summary,
     )
     await this.enrichIncident(workspaceId, block, assessment, regressedSignals, since)
 
     const output = assessment
       ? `On-call investigation: ${assessment.recommendation} (culprit confidence ${pct(assessment.culpritConfidence)}). ${assessment.rationale}`
-      : 'On-call investigation completed; see the release-regression notification.'
+      : investigationFailed
+        ? 'On-call investigation did not complete; raised a release-regression notification for manual triage.'
+        : 'On-call investigation completed; see the release-regression notification.'
     return this.recordStepResult(workspaceId, instance, step, isFinalStep, { ...result, output })
   }
 
