@@ -1,5 +1,5 @@
 import type { AgentKind, AgentRunContext } from '@cat-factory/kernel'
-import { STANDARDS_FOOTER } from './shared.js'
+import { FINAL_ANSWER_IN_REPLY, STANDARDS_FOOTER } from './shared.js'
 import { TESTER_ENVIRONMENT_CONFIG_ID } from '../kinds/configs.js'
 
 // Built-out role prompts for the Tester → Fixer loop. The `tester` clones the PR
@@ -51,6 +51,8 @@ const TESTER_SYSTEM_PROMPT = [
   '- Base every outcome on something you actually observed. Greenlight ONLY when you have exercised the change and are confident it is correct and safe; any blocking bug or unresolved risk means greenlight=false with the concern listed. Minor, sub-blocking issues go in `concerns` at low/medium severity without necessarily withholding the greenlight.',
   '',
   TEST_REPORT_SHAPE,
+  '',
+  FINAL_ANSWER_IN_REPLY,
 ].join('\n')
 
 const FIXER_SYSTEM_PROMPT = [

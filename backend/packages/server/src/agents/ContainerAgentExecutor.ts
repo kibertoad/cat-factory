@@ -22,6 +22,7 @@ import { isLocalRunner, resolveInstanceTypeId } from '@cat-factory/contracts'
 import {
   type AgentRouting,
   composeBlockSystemPrompt,
+  FINAL_ANSWER_IN_REPLY,
   isReadOnlyAgentKind,
   systemPromptFor,
   userPromptFor,
@@ -253,7 +254,8 @@ const BLUEPRINT_SYSTEM_PROMPT =
   'file type. Anchor every node to the codebase with explicit repo-relative ' +
   'file/directory references. Keep names short and descriptive. ' +
   'Respond with ONLY a JSON object of shape {"type","name","summary","references":[],' +
-  '"modules":[{"name","summary","references":[]}]} — no prose, no code fences.'
+  '"modules":[{"name","summary","references":[]}]} — no prose, no code fences. ' +
+  FINAL_ANSWER_IN_REPLY
 
 /** Role prompt the spec-writer step runs under (returns the spec doc as JSON). */
 const SPEC_WRITER_SYSTEM_PROMPT =
@@ -275,16 +277,14 @@ const SPEC_WRITER_SYSTEM_PROMPT =
   'requirements this task adds or changes with this task’s block id. Return the ' +
   'COMPLETE updated specification (baseline plus this increment), not a diff. You have ' +
   'NO repository write access and MUST NOT write, edit, or commit any file: the platform ' +
-  'persists the specification you return, so returning it IS the whole job. Emit the JSON ' +
-  'as the visible text of your FINAL reply, NOT inside your private reasoning or thinking. ' +
-  'A final reply whose visible content is empty is treated as a failure even when your ' +
-  'reasoning contains the document. Respond ' +
+  'persists the specification you return, so returning it IS the whole job. Respond ' +
   'with ONLY a JSON object of ' +
   'shape {"service","summary","groups":[{"name","summary","requirements":[{"id",' +
   '"title","statement","kind","priority","sourceBlockIds":[],"acceptance":[{"id",' +
   '"given","when","outcome"}]}]}],"rules":[{"id","rule","rationale","sourceBlockIds":[]}]} ' +
   '(each acceptance criterion is a Given/When/Then, with the Then clause in `outcome`) — ' +
-  'no prose, no code fences.'
+  'no prose, no code fences. ' +
+  FINAL_ANSWER_IN_REPLY
 
 /** Role prompt the `merger` step runs under (scores the PR; returns JSON only). */
 const MERGER_SYSTEM_PROMPT =
@@ -293,7 +293,8 @@ const MERGER_SYSTEM_PROMPT =
   'as a number from 0 (trivial/safe) to 1 (severe): complexity (how intricate the ' +
   'change is), risk (how likely it is to break something), and impact (blast radius ' +
   'if it does). Be conservative. Respond with ONLY a JSON object of shape ' +
-  '{"complexity":0.0,"risk":0.0,"impact":0.0,"rationale":"…"} — no prose, no code fences.'
+  '{"complexity":0.0,"risk":0.0,"impact":0.0,"rationale":"…"} — no prose, no code fences. ' +
+  FINAL_ANSWER_IN_REPLY
 
 const ON_CALL_SYSTEM_PROMPT =
   'You are an on-call engineer investigating a possible post-release regression. A ' +
@@ -304,7 +305,8 @@ const ON_CALL_SYSTEM_PROMPT =
   'inspect any file, but you MUST NOT modify, commit or revert anything; a human decides ' +
   'whether to revert. Respond with ONLY a JSON object of shape ' +
   '{"culpritConfidence":0.0,"recommendation":"revert"|"hold"|"monitor","rationale":"…",' +
-  '"evidence":["…"]} — no prose, no code fences.'
+  '"evidence":["…"]} — no prose, no code fences. ' +
+  FINAL_ANSWER_IN_REPLY
 
 /**
  * An {@link AgentExecutor} that performs implementation work in a real sandbox:

@@ -1,4 +1,5 @@
 import type { AgentKind } from '@cat-factory/kernel'
+import { FINAL_ANSWER_IN_REPLY } from './shared.js'
 
 /**
  * The core pre-implementation task-triage agent kind. Runs inline after
@@ -67,14 +68,23 @@ const ROLES: Partial<Record<AgentKind, string>> = {
 }
 
 /**
+ * Role kinds whose deliverable is a side effect (a pushed branch / commit), not a
+ * final-text answer the platform reads. They legitimately end with little or no
+ * final reply, so the `FINAL_ANSWER_IN_REPLY` directive must NOT be appended to them.
+ */
+const SIDE_EFFECT_ROLE_KINDS: ReadonlySet<AgentKind> = new Set(['ci-fixer', 'conflict-resolver'])
+
+/**
  * The thin role prompt for a kind, or the generic fallback when the kind has no
  * built-in role. This is the catalog's last resort, applied only after the
  * companion / standard-phase / testing / acceptance / mock / business-logic tracks
  * and the custom-kind registry have all declined the kind.
  */
 export function roleSystemPrompt(kind: AgentKind): string {
-  return (
+  const base =
     ROLES[kind] ??
     `You are the "${kind}" agent. Do your part of the work for the given building block and report the result concisely.`
-  )
+  // Every role here returns a report / document / JSON as its final reply, so it must
+  // land in the visible content — except the side-effect kinds, whose product is a push.
+  return SIDE_EFFECT_ROLE_KINDS.has(kind) ? base : `${base}\n\n${FINAL_ANSWER_IN_REPLY}`
 }

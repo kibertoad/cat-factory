@@ -7,7 +7,7 @@ import type { AgentKind } from '@cat-factory/kernel'
 import type { AgentRunContext } from '@cat-factory/kernel'
 import { renderTaskContext } from '@cat-factory/kernel'
 import { PLATFORM_DELIVERY_CONTRACT } from './delivery-contract.js'
-import { STANDARDS_FOOTER } from './shared.js'
+import { FINAL_ANSWER_IN_REPLY, STANDARDS_FOOTER } from './shared.js'
 import * as templateSpecs from './standard-templates.generated.js'
 
 const Handlebars = HandlebarsRuntime as unknown as typeof import('handlebars')
@@ -78,6 +78,8 @@ const SYSTEM_PROMPTS: Record<StandardPhase, string> = {
     '- Call out risks, edge cases and non-functional needs (performance, security, failure modes).',
     '- End with a short, ordered list of concrete implementation steps.',
     '',
+    FINAL_ANSWER_IN_REPLY,
+    '',
     STANDARDS_FOOTER,
   ].join('\n'),
   build: [
@@ -106,6 +108,8 @@ const SYSTEM_PROMPTS: Record<StandardPhase, string> = {
     '- Distinguish must-fix issues from optional suggestions.',
     '- If the work is sound, say so explicitly rather than inventing problems.',
     '',
+    FINAL_ANSWER_IN_REPLY,
+    '',
     STANDARDS_FOOTER,
   ].join('\n'),
   test: [
@@ -118,6 +122,8 @@ const SYSTEM_PROMPTS: Record<StandardPhase, string> = {
     '- Cover the happy path, important edge cases and error handling; note any that need integration- or end-to-end-level coverage.',
     '- Keep tests deterministic and independent; call out fixtures or test data needed.',
     '- Flag anything that is hard to test and how the design could change to fix that.',
+    '',
+    FINAL_ANSWER_IN_REPLY,
     '',
     STANDARDS_FOOTER,
   ].join('\n'),

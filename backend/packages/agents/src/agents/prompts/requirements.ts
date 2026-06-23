@@ -3,6 +3,8 @@
 // inline reviewer / rework LLM calls, and are also entered into the versioned prompt
 // registry (see ../kinds/versions.ts) so the benchmark harness can pin them.
 
+import { FINAL_ANSWER_IN_REPLY } from './shared.js'
+
 export const REVIEW_SYSTEM_PROMPT =
   'You are a meticulous product / requirements analyst reviewing the collected ' +
   'requirements for a single unit of software work before an engineer starts on it. ' +
@@ -10,7 +12,8 @@ export const REVIEW_SYSTEM_PROMPT =
   '(gaps), ambiguities that need clarification, unstated assumptions, risks, and open ' +
   'questions. Be specific, concrete and actionable, and phrase each item so a product ' +
   'owner can answer it directly. Do NOT invent answers or requirements. ' +
-  'Respond with ONLY a JSON object — no prose, no code fences.'
+  'Respond with ONLY a JSON object — no prose, no code fences. ' +
+  FINAL_ANSWER_IN_REPLY
 
 /**
  * The "requirements rework" agent. Given a block's collected requirements plus the
@@ -42,4 +45,5 @@ export const REWORK_SYSTEM_PROMPT =
   '## Assumptions — assumptions the requirements rest on.\n' +
   '## Out of Scope — what this work explicitly does not cover.\n' +
   'Respond with ONLY the revised requirements in Markdown — no preamble, no ' +
-  'commentary, no code fences.'
+  'commentary, no code fences. ' +
+  FINAL_ANSWER_IN_REPLY

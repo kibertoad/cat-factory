@@ -22,12 +22,12 @@ export interface VersionedPrompt {
 
 /** The currently-shipping version of each numbered prompt. */
 export const PROMPT_VERSIONS = {
-  'requirement-review': { id: 'requirement-review', version: 1, text: REVIEW_SYSTEM_PROMPT },
-  'requirement-rework': { id: 'requirement-rework', version: 1, text: REWORK_SYSTEM_PROMPT },
+  'requirement-review': { id: 'requirement-review', version: 2, text: REVIEW_SYSTEM_PROMPT },
+  'requirement-rework': { id: 'requirement-rework', version: 2, text: REWORK_SYSTEM_PROMPT },
   'clarity-review': { id: 'clarity-review', version: 1, text: CLARITY_REVIEW_SYSTEM_PROMPT },
   'clarity-rework': { id: 'clarity-rework', version: 1, text: CLARITY_REWORK_SYSTEM_PROMPT },
   build: { id: 'build', version: 2, text: standardSystemPrompt('build') },
-  review: { id: 'review', version: 1, text: standardSystemPrompt('review') },
+  review: { id: 'review', version: 2, text: standardSystemPrompt('review') },
 } as const satisfies Record<string, VersionedPrompt>
 
 /** Ids of the prompts currently under version control. */

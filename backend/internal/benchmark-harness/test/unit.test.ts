@@ -138,11 +138,11 @@ describe('runBenchmark', () => {
     const rr = results.find((r) => r.cell.task === 'requirement-review')!
     expect(rr.error).toBeUndefined()
     expect(rr.cell.model).toBe('workers-ai:@cf/test')
-    expect(rr.cell.prompt).toBe('requirement-review@v1')
+    expect(rr.cell.prompt).toBe('requirement-review@v2')
     expect(rr.output).toContain('Link expiry')
     expect(rr.usage).toEqual({ inputTokens: 11, outputTokens: 22 })
     const cr = results.find((r) => r.cell.task === 'code-review')!
-    expect(cr.cell.prompt).toBe('review@v1')
+    expect(cr.cell.prompt).toBe('review@v2')
     expect(cr.usage).toEqual({ inputTokens: 11, outputTokens: 22 })
     expect(cr.output).toContain(reviewJson)
     // Cost is metered from the usage via core pricing.

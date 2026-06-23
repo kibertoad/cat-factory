@@ -722,6 +722,22 @@ drives a run to completion through the real pg-boss runner.
   renders the component registered for that id (`STEP_RESULT_VIEWS`). Give a new agent a
   bespoke window by declaring `resultView` + registering a component — no caller changes.
   `requirements-review` is the first consumer (the review window).
+- **Final answer must land in the reply, not the reasoning channel.** Any agent whose
+  deliverable IS its final reply (a document, report, or JSON object the platform reads
+  or parses — spec-writer, blueprinter, merger, on-call, task-estimator, the tester
+  report, the reviewers/companions, the requirements reviewer + rework, the design /
+  review / test phases) MUST append the shared `FINAL_ANSWER_IN_REPLY` fragment
+  (`@cat-factory/agents`, `prompts/shared.ts`). Some reasoning models (seen on
+  `@cf/moonshotai/kimi-k2.7-code`) emit the whole answer into their private
+  reasoning/thinking channel and return an empty visible reply; the harness reads only
+  the visible content, so that empty reply fails the run via `unusableFinalAnswerCause`
+  (executor-harness `pi-workspace.ts`) even though the model "answered". The fragment
+  names the channel. It is applied centrally for `systemPromptFor` kinds (via the track
+  prompts / `roleSystemPrompt`) and inline on the four container constants in
+  `ContainerAgentExecutor.ts`. Do NOT append it to side-effect agents whose product is a
+  pushed commit (coder/build, ci-fixer, conflict-resolver, mocker, playwright,
+  business-documenter): they legitimately end with no final text. Editing a versioned
+  prompt (`agents/kinds/versions.ts`) means bumping its number.
 - The Worker's integration tests use the real `workerd` + real local D1
   (`@cloudflare/vitest-pool-workers`); the Node tests use real Postgres
   (`DATABASE_URL`, a Postgres 18 service in CI); only the LLM is faked in both. Run

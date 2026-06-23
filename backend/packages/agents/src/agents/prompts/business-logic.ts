@@ -1,6 +1,6 @@
 import type { AgentKind } from '@cat-factory/kernel'
 import { PLATFORM_DELIVERY_CONTRACT } from './delivery-contract.js'
-import { STANDARDS_FOOTER } from './shared.js'
+import { FINAL_ANSWER_IN_REPLY, STANDARDS_FOOTER } from './shared.js'
 
 // Built-out role prompts for the business-logic / domain-rules track. Two kinds
 // keep a service's encoded business rules honest and documented:
@@ -110,6 +110,8 @@ const SYSTEM_PROMPTS: Record<BusinessLogicAgentKind, string> = {
     '- Open with a one-line verdict (is the change safe to ship with respect to the documented rules?) and a summary count of findings per bucket.',
     '- Then list the findings grouped by bucket, ordered violations first. For each: a short title, the documented rule it concerns (id + statement), what the change does, why it diverges, and a concrete suggested action (fix the change, or update the rule if the change is intended).',
     '- Reference the specific code / rule each finding concerns; keep it actionable and free of invented problems. If the change is fully consistent, say so explicitly.',
+    '',
+    FINAL_ANSWER_IN_REPLY,
     '',
     STANDARDS_FOOTER,
   ].join('\n'),

@@ -122,6 +122,7 @@ export {
   businessLogicSystemPrompt,
 } from './agents/prompts/business-logic.js'
 export { PLATFORM_DELIVERY_CONTRACT } from './agents/prompts/delivery-contract.js'
+export { FINAL_ANSWER_IN_REPLY, STANDARDS_FOOTER } from './agents/prompts/shared.js'
 
 // The generic AI provisioning facade: a mixable provider registry + the base,
 // runtime-neutral resolvers. Optional/heavier backends ship as their own packages

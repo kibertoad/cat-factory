@@ -1,5 +1,6 @@
 import type { AgentKind } from '@cat-factory/kernel'
 import { companionFor } from '../kinds/companions.js'
+import { FINAL_ANSWER_IN_REPLY } from './shared.js'
 
 // System prompt for a companion agent, parameterised by the producer kind it
 // reviews. The companion returns a single overall quality rating (0..1) plus prose
@@ -55,5 +56,7 @@ export function companionSystemPrompt(kind: AgentKind): string | undefined {
     'make, and `comments` (optional) anchors specific challenges to an item id when the',
     'reviewed output is structured (e.g. a spec requirement / acceptance-criterion id). No',
     'prose outside the JSON, no code fences.',
+    '',
+    FINAL_ANSWER_IN_REPLY,
   ].join('\n')
 }
