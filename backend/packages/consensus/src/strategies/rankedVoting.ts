@@ -1,5 +1,5 @@
 import type { ConsensusContribution, ConsensusRound, ConsensusScore } from '@cat-factory/kernel'
-import type { ConsensusUsage, ResolvedParticipant, StrategyInput, StrategyResult } from './types.js'
+import type { ConsensusUsage, StrategyInput, StrategyResult } from './types.js'
 import { anonLabel, participantSystem, renderAnonymized, sumUsage } from './shared.js'
 
 /**

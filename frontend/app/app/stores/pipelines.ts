@@ -12,7 +12,11 @@ function defaultConsensusConfig(): ConsensusStepConfig {
     strategy: 'specialist-panel',
     participants: [
       { id: uid('cp'), role: 'Pragmatist', systemFraming: 'Favour the simplest viable approach.' },
-      { id: uid('cp'), role: 'Skeptic', systemFraming: 'Probe risks, edge cases and failure modes.' },
+      {
+        id: uid('cp'),
+        role: 'Skeptic',
+        systemFraming: 'Probe risks, edge cases and failure modes.',
+      },
     ],
   }
 }
@@ -87,9 +91,7 @@ export const usePipelinesStore = defineStore('pipelines', () => {
 
   /** Toggle the consensus mechanism on the draft step at `index` (default config / off). */
   function toggleDraftConsensus(index: number) {
-    draftConsensus.value[index] = draftConsensus.value[index]
-      ? null
-      : defaultConsensusConfig()
+    draftConsensus.value[index] = draftConsensus.value[index] ? null : defaultConsensusConfig()
   }
 
   /** Replace the consensus config of the draft step at `index` (builder editor edits). */

@@ -134,7 +134,13 @@ describe('ConsensusAgentExecutor', () => {
           participants: twoParticipants,
           gating: { enabled: true, minRisk: 0.8 },
         },
-        block: { id: 'blk', title: 'T', type: 'service', description: 'D', estimate: estimate({ risk: 0.2, impact: 0.2, complexity: 0.2 }) },
+        block: {
+          id: 'blk',
+          title: 'T',
+          type: 'service',
+          description: 'D',
+          estimate: estimate({ risk: 0.2, impact: 0.2, complexity: 0.2 }),
+        },
       }),
     )
     expect(res.output).toBe('STANDARD')
@@ -151,10 +157,14 @@ describe('ConsensusAgentExecutor', () => {
       }),
     )
     expect(res.output).toBe('STANDARD')
-    expect(exec.runsAsync(makeContext({
-      agentKind: 'coder',
-      consensus: { enabled: true, strategy: 'debate', participants: twoParticipants },
-    }))).toBe(false) // standard fake is not async
+    expect(
+      exec.runsAsync(
+        makeContext({
+          agentKind: 'coder',
+          consensus: { enabled: true, strategy: 'debate', participants: twoParticipants },
+        }),
+      ),
+    ).toBe(false) // standard fake is not async
   })
 
   it('runs the panel, persists + emits a session, and returns the synthesis', async () => {

@@ -172,12 +172,11 @@ export const useUiStore = defineStore('ui', () => {
     // A step that actually ran the consensus mechanism opens the dedicated Consensus
     // Session window, regardless of its kind's normal result view — consensus is an
     // execution MODE on a kind, not a kind, so it can't be a static archetype `resultView`.
-    const view =
-      step?.consensus?.enabled
-        ? 'consensus-session'
-        : step
-          ? agentKindMeta(step.agentKind).resultView
-          : undefined
+    const view = step?.consensus?.enabled
+      ? 'consensus-session'
+      : step
+        ? agentKindMeta(step.agentKind).resultView
+        : undefined
     if (view && instance) {
       resultView.value = { view, blockId: instance.blockId, instanceId, stepIndex }
       return

@@ -62,7 +62,10 @@ export interface StrategyInput {
    * Stream progress so the executor can persist + push the live transcript after each
    * round / on synthesis. Best-effort; failures are swallowed by the executor's wiring.
    */
-  onProgress?: (update: { rounds: ConsensusRound[]; status: ConsensusSessionStatus }) => Promise<void>
+  onProgress?: (update: {
+    rounds: ConsensusRound[]
+    status: ConsensusSessionStatus
+  }) => Promise<void>
 }
 
 export interface StrategyResult {

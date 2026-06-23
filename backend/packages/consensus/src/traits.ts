@@ -53,7 +53,9 @@ export const DEFAULT_CONSENSUS_ELIGIBLE_KINDS: AgentKind[] = [
  *
  * @param kinds override the default-eligible set (e.g. a deployment's own kinds).
  */
-export function registerConsensusTraits(kinds: AgentKind[] = DEFAULT_CONSENSUS_ELIGIBLE_KINDS): void {
+export function registerConsensusTraits(
+  kinds: AgentKind[] = DEFAULT_CONSENSUS_ELIGIBLE_KINDS,
+): void {
   for (const trait of CONSENSUS_TRAITS) registerAgentTrait({ id: trait })
   for (const kind of kinds) assignAgentTraits(kind, CONSENSUS_TRAITS)
 }

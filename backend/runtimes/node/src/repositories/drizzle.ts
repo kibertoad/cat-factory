@@ -1848,7 +1848,10 @@ export class DrizzleConsensusSessionRepository implements ConsensusSessionReposi
       .select()
       .from(consensusSessions)
       .where(
-        and(eq(consensusSessions.workspace_id, workspaceId), eq(consensusSessions.block_id, blockId)),
+        and(
+          eq(consensusSessions.workspace_id, workspaceId),
+          eq(consensusSessions.block_id, blockId),
+        ),
       )
       .orderBy(desc(consensusSessions.created_at))
       .limit(1)

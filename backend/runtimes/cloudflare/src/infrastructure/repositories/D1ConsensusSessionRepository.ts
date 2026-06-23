@@ -1,9 +1,5 @@
 import type { ConsensusSessionRepository } from '@cat-factory/kernel'
-import type {
-  ConsensusParticipant,
-  ConsensusRound,
-  ConsensusSession,
-} from '@cat-factory/contracts'
+import type { ConsensusParticipant, ConsensusRound, ConsensusSession } from '@cat-factory/contracts'
 import type { D1Database } from '@cloudflare/workers-types'
 
 interface ConsensusSessionRow {

@@ -29,7 +29,12 @@ import { runSpecialistPanel } from './strategies/specialistPanel.js'
 import { runDebate } from './strategies/debate.js'
 import { runRankedVoting } from './strategies/rankedVoting.js'
 import { defaultGenerate } from './strategies/shared.js'
-import type { GenerateFn, ResolvedParticipant, StrategyInput, StrategyResult } from './strategies/types.js'
+import type {
+  GenerateFn,
+  ResolvedParticipant,
+  StrategyInput,
+  StrategyResult,
+} from './strategies/types.js'
 
 export interface ConsensusAgentExecutorDependencies {
   /**
@@ -168,7 +173,10 @@ export class ConsensusAgentExecutor implements AsyncAgentExecutor {
       }
     })
     const synthRef = this.refForModelId(cfg.synthesizerModelId, base)
-    const synthesizer = { model: provider.resolve(synthRef), modelLabel: `${synthRef.provider}:${synthRef.model}` }
+    const synthesizer = {
+      model: provider.resolve(synthRef),
+      modelLabel: `${synthRef.provider}:${synthRef.model}`,
+    }
 
     const session: ConsensusSession = {
       id: `cns_${context.executionId ?? 'x'}_${context.stepIndex}`,
@@ -243,7 +251,10 @@ export class ConsensusAgentExecutor implements AsyncAgentExecutor {
       session.error = error instanceof Error ? error.message : String(error)
       session.updatedAt = this.now()
       await this.emit(context, session)
-      this.deps.logger?.warn?.({ msg: 'consensus.failed', error: session.error }, 'consensus session failed')
+      this.deps.logger?.warn?.(
+        { msg: 'consensus.failed', error: session.error },
+        'consensus session failed',
+      )
       throw error
     }
   }

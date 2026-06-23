@@ -28,7 +28,9 @@ function barClass(n: number): string {
 
 <template>
   <section v-if="estimate" class="space-y-2">
-    <div class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400">
+    <div
+      class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400"
+    >
       <UIcon name="i-lucide-gauge" class="h-3.5 w-3.5" />
       Estimate
     </div>

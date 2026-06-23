@@ -80,7 +80,8 @@ function topScore(c: ConsensusContribution): { label: string; value: number } | 
           </div>
           <div class="min-w-0 flex-1">
             <h2 class="truncate text-sm font-semibold text-slate-100">
-              Consensus · {{ session ? STRATEGY_LABEL[session.strategy] ?? session.strategy : '' }}
+              Consensus ·
+              {{ session ? (STRATEGY_LABEL[session.strategy] ?? session.strategy) : '' }}
               <span v-if="block" class="font-normal text-slate-400">— {{ block.title }}</span>
             </h2>
             <p v-if="session" class="text-xs text-slate-500">
@@ -157,7 +158,9 @@ function topScore(c: ConsensusContribution): { label: string; value: number } | 
                   :key="p.id"
                   class="rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-1.5 text-xs"
                 >
-                  <span class="font-medium text-slate-200">Expert {{ String.fromCharCode(65 + i) }}</span>
+                  <span class="font-medium text-slate-200"
+                    >Expert {{ String.fromCharCode(65 + i) }}</span
+                  >
                   <span class="text-slate-400"> · {{ p.role }}</span>
                   <span v-if="p.modelId" class="ml-1 text-slate-500">({{ p.modelId }})</span>
                 </div>
@@ -165,14 +168,10 @@ function topScore(c: ConsensusContribution): { label: string; value: number } | 
             </section>
 
             <!-- rounds -->
-            <section
-              v-for="round in session.rounds"
-              :key="round.index"
-              class="mb-5"
-            >
+            <section v-for="round in session.rounds" :key="round.index" class="mb-5">
               <h3 class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
                 Round {{ round.index + 1 }} ·
-                {{ round.kind ? ROUND_LABEL[round.kind] ?? round.kind : 'Contributions' }}
+                {{ round.kind ? (ROUND_LABEL[round.kind] ?? round.kind) : 'Contributions' }}
               </h3>
               <div class="space-y-3">
                 <div
