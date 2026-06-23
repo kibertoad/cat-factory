@@ -1279,6 +1279,15 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
         expect(exec.status).toBe('failed')
         expect(exec.failure?.kind).toBe('companion_rejected')
+        // The RICH failure record survives the drive: the driver funnels the inline gate's
+        // `job_failed` through the single `failRun` with the gate's own kind/message/detail,
+        // and never re-fails the (already-failed) run with a generic record. Guards the
+        // regression where a second `failRun` clobbered this with kind `job_failed`,
+        // message "companion_rejected" and a misleading "container reported a failure" hint.
+        expect(exec.failure?.message).toContain('did not return a parseable assessment')
+        // The companion's raw (unparseable) reply is stored as the detail for triage —
+        // the whole point of the failure, lost when the record was clobbered.
+        expect(exec.failure?.detail).toContain('my reply got cut off')
         // The companion step was NOT marked done / passed off as a clean review.
         const companionStep = exec.steps.find((s) => s.agentKind === 'reviewer')!
         expect(companionStep.state).not.toBe('done')

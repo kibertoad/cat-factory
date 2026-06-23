@@ -42,10 +42,17 @@ export class ExecutionWorkflow extends WorkflowEntrypoint<Env, ExecutionWorkflow
       i: number,
       message: string,
       kind: AgentFailureKind = 'agent',
+      detail: string | null = null,
     ): Promise<void> => {
       logger.warn({ workspaceId, executionId, step: i }, `failing run: ${message}`)
       await step.do(`fail-${i}`, () =>
-        buildContainer(this.env).executionService.failRun(workspaceId, executionId, message, kind),
+        buildContainer(this.env).executionService.failRun(
+          workspaceId,
+          executionId,
+          message,
+          kind,
+          detail,
+        ),
       )
     }
 
@@ -208,7 +215,10 @@ export class ExecutionWorkflow extends WorkflowEntrypoint<Env, ExecutionWorkflow
       }
 
       if (result.kind === 'job_failed') {
-        await failRun(i, result.error, 'job_failed')
+        // An inline gate may carry the precise classification + diagnostic (e.g. an
+        // unparseable companion verdict → `companion_rejected` with its raw reply as
+        // detail); record those instead of the generic container-failure framing.
+        await failRun(i, result.error, result.failureKind ?? 'job_failed', result.detail ?? null)
         return
       }
 

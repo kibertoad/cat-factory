@@ -9,6 +9,7 @@ import type {
   WorkspaceSnapshot,
 } from '@cat-factory/kernel'
 import { NoopBootstrapRunner, NoopWorkRunner } from '@cat-factory/kernel'
+import { driveWorkspace } from '@cat-factory/conformance'
 import type { CoreDependencies } from '@cat-factory/orchestration'
 import { env } from 'cloudflare:test'
 import { createApp } from '../src/app'
@@ -115,31 +116,19 @@ export function makeApp(
     return c.workspaceService.create({ name, seed: false }, user.id, org.id)
   }
 
+  // Drive every active run to a standstill through the SHARED production driver
+  // (`driveExecution`, via `driveWorkspace`). The Cloudflare ExecutionWorkflow wraps the
+  // same advance/poll calls in durable steps; using the shared loop here (against the real
+  // local D1) means the suite exercises the production driving logic — including the
+  // single `failRun` funnel — rather than a hand-rolled copy that can diverge from it.
   async function drive(workspaceId: string, maxRounds = 50): Promise<ExecutionInstance[]> {
     const c = buildContainer(env, coreOverrides)
-    for (let round = 0; round < maxRounds; round++) {
-      const { executions } = await c.workspaceService.snapshot(workspaceId)
-      // Mirror the old tick: advance running/paused runs; a run parked on a
-      // decision stays put until it is resolved (then it is running again).
-      const active = executions.filter((e) => e.status === 'running' || e.status === 'paused')
-      if (active.length === 0) break
-      for (const e of active) {
-        // Mirror the durable driver: an advance that parks on an async job / CI / conflicts
-        // gate is drained by polling, so a polled (container-style) agent step completes
-        // here exactly as it does under Cloudflare Workflows. Inert for the inline fake
-        // (which never parks on a job — no worker test reaches these gate kinds via drive).
-        let r = await c.executionService.advanceInstance(workspaceId, e.id)
-        for (let hops = 0; hops < 500; hops++) {
-          if (r.kind === 'awaiting_job')
-            r = await c.executionService.pollAgentJob(workspaceId, e.id)
-          else if (r.kind === 'awaiting_ci') r = await c.executionService.pollCi(workspaceId, e.id)
-          else if (r.kind === 'awaiting_conflicts')
-            r = await c.executionService.pollConflicts(workspaceId, e.id)
-          else break
-        }
-      }
-    }
-    return (await c.workspaceService.snapshot(workspaceId)).executions
+    return driveWorkspace(
+      c.executionService,
+      workspaceId,
+      async () => (await c.workspaceService.snapshot(workspaceId)).executions,
+      maxRounds,
+    )
   }
 
   async function driveBootstrap(
