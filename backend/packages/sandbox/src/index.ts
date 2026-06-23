@@ -30,9 +30,4 @@ export {
   filterByLabels,
 } from './promptVersions.logic.js'
 
-export {
-  type ExpandDeps,
-  cellCount,
-  expandMatrix,
-  isRunnableMatrix,
-} from './matrix.logic.js'
+export { type ExpandDeps, cellCount, expandMatrix, isRunnableMatrix } from './matrix.logic.js'

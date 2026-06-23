@@ -508,10 +508,7 @@ function buildUserPrompt(job: SpecJob, existing: SpecDocTree | null): string {
       '```',
     )
   } else {
-    lines.push(
-      '',
-      'No specification exists in the repository yet, so this task starts a new one.',
-    )
+    lines.push('', 'No specification exists in the repository yet, so this task starts a new one.')
   }
   lines.push(
     '',

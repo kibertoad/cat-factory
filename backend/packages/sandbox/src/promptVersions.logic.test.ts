@@ -37,7 +37,11 @@ describe('firstVersionFromBaseline', () => {
   })
 
   it('defaults labels to empty', () => {
-    const v1 = firstVersionFromBaseline(baseline, 'r', { id: 'pv_1', createdAt: 1, createdBy: null })
+    const v1 = firstVersionFromBaseline(baseline, 'r', {
+      id: 'pv_1',
+      createdAt: 1,
+      createdBy: null,
+    })
     expect(v1.labels).toEqual([])
   })
 })
@@ -68,7 +72,11 @@ describe('nextVersion', () => {
   })
 
   it('chains so a third version still points at the same lineage', () => {
-    const v1 = firstVersionFromBaseline(baseline, 'r', { id: 'pv_1', createdAt: 1, createdBy: null })
+    const v1 = firstVersionFromBaseline(baseline, 'r', {
+      id: 'pv_1',
+      createdAt: 1,
+      createdBy: null,
+    })
     const v2 = nextVersion(v1, 'edit', { id: 'pv_2', createdAt: 2, createdBy: null })
     const v3 = nextVersion(v2, 'edit again', { id: 'pv_3', createdAt: 3, createdBy: null })
     expect(v3.version).toBe(3)
@@ -79,7 +87,11 @@ describe('nextVersion', () => {
 
 describe('versionLabel', () => {
   it('formats name@vN', () => {
-    const v1 = firstVersionFromBaseline(baseline, 'strict', { id: 'pv_1', createdAt: 1, createdBy: null })
+    const v1 = firstVersionFromBaseline(baseline, 'strict', {
+      id: 'pv_1',
+      createdAt: 1,
+      createdBy: null,
+    })
     expect(versionLabel(v1)).toBe('strict@v1')
   })
 })
