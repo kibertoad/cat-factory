@@ -1,6 +1,6 @@
-import { createHash } from 'node:crypto'
 import { type DrizzleDb, createDbClient, schema } from '@cat-factory/node-server'
 import { and, eq, ne } from 'drizzle-orm'
+import { syntheticInstallationId } from './installations.js'
 
 // Link a real GitHub repo to a board service frame for LOCAL mode. Container agent
 // steps resolve which repo to operate on from the `github_repos` /
@@ -15,15 +15,6 @@ import { and, eq, ne } from 'drizzle-orm'
 // Idempotent: re-linking the same repo/frame updates the rows in place.
 
 const GITHUB_API_BASE = 'https://api.github.com'
-
-/** A stable, positive, safe-integer installation id derived from the workspace id. */
-function syntheticInstallationId(workspaceId: string): number {
-  // 48 bits keeps it well inside Number.MAX_SAFE_INTEGER and the bigint column; the
-  // value is per-workspace (the table's workspace_id is unique) so two workspaces never
-  // collide, and re-linking a workspace reuses the same id (upsert, not a new row).
-  const hex = createHash('sha1').update(workspaceId).digest('hex').slice(0, 12)
-  return Number.parseInt(hex, 16)
-}
 
 export interface LinkRepoOptions {
   /** The board workspace id. */

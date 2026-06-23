@@ -322,6 +322,13 @@ export interface NodeContainerOptions {
    */
   githubClient?: GitHubClient
   /**
+   * Override the GitHub installation repository. When provided it REPLACES the default
+   * Drizzle one, so a sibling facade can wrap it — e.g. local mode decorates it to
+   * auto-provision a synthetic per-workspace installation for its PAT, since there is no
+   * GitHub-App connect flow. Undefined → the default Drizzle repository over {@link db}.
+   */
+  githubInstallationRepository?: GitHubInstallationRepository
+  /**
    * Force the Cloudflare-AI opt-in flag (the cross-runtime conformance suite forces it
    * off for parity). Undefined → derived from the REST credentials being present.
    */
@@ -702,7 +709,8 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   // runner-pool repo also backs the `runners` Core module so a pool is registrable
   // via the API; the installation repo backs both token minting and repo resolution.
   const runnerPoolConnectionRepository = new DrizzleRunnerPoolConnectionRepository(options.db)
-  const githubInstallationRepository = new DrizzleGitHubInstallationRepository(options.db)
+  const githubInstallationRepository =
+    options.githubInstallationRepository ?? new DrizzleGitHubInstallationRepository(options.db)
   // The repositories projection (+ sync cursors), shared by `buildResolveRepoTarget`
   // (block→repo resolution) and the GitHub sync/webhook module below.
   const repoProjectionRepository = new DrizzleRepoProjectionRepository(options.db)

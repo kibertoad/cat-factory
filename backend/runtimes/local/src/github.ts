@@ -2,11 +2,14 @@ import { randomUUID } from 'node:crypto'
 import type {
   Clock,
   GitHubClient,
+  GitHubRepo,
   IdGenerator,
+  Paged,
   RateLimitRepository,
   RateLimitSnapshot,
 } from '@cat-factory/kernel'
 import { type AppTokenSource, FetchGitHubClient } from '@cat-factory/server'
+import type { PatAccount } from './installations.js'
 
 // PAT-backed GitHub access for local mode. The shared FetchGitHubClient normally mints
 // per-installation tokens via the GitHub App registry; here we feed it a static-token
@@ -73,20 +76,131 @@ const localIdGenerator: IdGenerator = {
 
 const localClock: Clock = { now: () => Date.now() }
 
+const PER_PAGE = 100
+const MAX_PAGES = 20
+
+/** Parse the `rel="next"` URL out of a GitHub `Link` response header, if present. */
+function nextLink(header: string | null): string | null {
+  if (!header) return null
+  for (const part of header.split(',')) {
+    const m = part.match(/<([^>]+)>\s*;\s*rel="next"/)
+    if (m) return m[1] ?? null
+  }
+  return null
+}
+
+/** The slice of a `/user/repos` item we map to a repo projection. */
+interface GhUserRepo {
+  id: number
+  name: string
+  private?: boolean
+  default_branch?: string | null
+  owner?: { login?: string } | null
+}
+
+function toRepoProjection(p: GhUserRepo, installationId: number, syncedAt: number): GitHubRepo {
+  return {
+    githubId: p.id,
+    installationId,
+    owner: p.owner?.login ?? '',
+    name: p.name,
+    defaultBranch: p.default_branch ?? null,
+    private: p.private ?? false,
+    blockId: null,
+    syncedAt,
+  }
+}
+
+function patHeaders(pat: string): Record<string, string> {
+  return {
+    authorization: `Bearer ${pat}`,
+    accept: 'application/vnd.github+json',
+    'x-github-api-version': '2022-11-28',
+    'user-agent': 'cat-factory',
+  }
+}
+
+/**
+ * A {@link FetchGitHubClient} that lists repos a PAT can access via `/user/repos`, the
+ * personal-token analogue of the App-only `/installation/repositories` the base client
+ * uses (which 403s for a PAT). The board's "Add from existing repo" picker, the
+ * link-a-repo flow and the monorepo browser all enumerate repos through
+ * `listInstallationRepos`, so overriding this one method makes them work under a PAT.
+ * Every other call (repo/branch/PR/issue reads, merges) already works with the PAT via
+ * the installation-token paths, so they fall through to the base implementation.
+ */
+class PatGitHubClient extends FetchGitHubClient {
+  constructor(
+    deps: ConstructorParameters<typeof FetchGitHubClient>[0],
+    private readonly pat: string,
+    private readonly apiBase: string,
+    private readonly clock: Clock,
+  ) {
+    super(deps)
+  }
+
+  override async listInstallationRepos(installationId: number): Promise<Paged<GitHubRepo>> {
+    const syncedAt = this.clock.now()
+    const items: GitHubRepo[] = []
+    let url: string | null =
+      `${this.apiBase}/user/repos?per_page=${PER_PAGE}&sort=full_name&affiliation=owner,collaborator,organization_member`
+    for (let page = 0; url && page < MAX_PAGES; page++) {
+      const res: Response = await fetch(url, { headers: patHeaders(this.pat) })
+      if (!res.ok) {
+        const text = await res.text().catch(() => '')
+        throw new Error(`GitHub /user/repos failed (HTTP ${res.status}): ${text.slice(0, 200)}`)
+      }
+      const payload = (await res.json()) as GhUserRepo[]
+      for (const repo of payload) items.push(toRepoProjection(repo, installationId, syncedAt))
+      url = nextLink(res.headers.get('link'))
+    }
+    return { items }
+  }
+}
+
+/**
+ * Read the PAT's own account (`GET /user`) so a synthetic installation can be attributed
+ * to it in the connect UI. Best-effort: a failed/forbidden call falls back to an empty
+ * login (the link flow only needs the installation row to exist, not its account label).
+ */
+export async function fetchPatAccount(env: NodeJS.ProcessEnv): Promise<PatAccount> {
+  const fallback: PatAccount = { accountId: null, accountLogin: '', targetType: 'User' }
+  const pat = env.GITHUB_PAT?.trim()
+  if (!pat) return fallback
+  const apiBase = (env.GITHUB_API_BASE?.trim() || 'https://api.github.com').replace(/\/+$/, '')
+  try {
+    const res = await fetch(`${apiBase}/user`, { headers: patHeaders(pat) })
+    if (!res.ok) return fallback
+    const user = (await res.json()) as { id?: number; login?: string; type?: string }
+    return {
+      accountId: user.id != null ? String(user.id) : null,
+      accountLogin: user.login ?? '',
+      targetType: user.type === 'Organization' ? 'Organization' : 'User',
+    }
+  } catch {
+    return fallback
+  }
+}
+
 /**
  * Build a {@link GitHubClient} that authenticates with the PAT, for the CI / merge /
- * mergeability gates. Returns undefined when no PAT is configured (the gates then pass
- * through, like the Node default).
+ * mergeability gates AND the repo-link / board "add from repo" flows. Returns undefined
+ * when no PAT is configured (the gates then pass through, like the Node default).
  */
 export function createLocalGitHubClient(env: NodeJS.ProcessEnv): GitHubClient | undefined {
   const pat = env.GITHUB_PAT?.trim()
   if (!pat) return undefined
   const apiBase = env.GITHUB_API_BASE?.trim() || 'https://api.github.com'
-  return new FetchGitHubClient({
-    registry: new StaticTokenAppRegistry(pat),
-    rateLimitRepository: new NoopRateLimitRepository(),
-    idGenerator: localIdGenerator,
-    clock: localClock,
+  return new PatGitHubClient(
+    {
+      registry: new StaticTokenAppRegistry(pat),
+      rateLimitRepository: new NoopRateLimitRepository(),
+      idGenerator: localIdGenerator,
+      clock: localClock,
+      apiBase,
+    },
+    pat,
     apiBase,
-  })
+    localClock,
+  )
 }
