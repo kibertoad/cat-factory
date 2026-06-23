@@ -494,6 +494,19 @@ export class RequirementReviewService {
     }))
   }
 
+  /**
+   * Flag a review as `reviewing`: the answers are folded into a document and the reviewer is
+   * now RE-reviewing it (the second async stage). Transient — the re-review overwrites it
+   * with its disposition. Lets the board/window distinguish "re-reviewing" from the earlier
+   * "incorporating" stage so the human can see which of the two LLM calls is running.
+   */
+  async markReReviewing(workspaceId: string, reviewId: string): Promise<RequirementReview> {
+    return this.patchReview(workspaceId, reviewId, (review) => ({
+      ...review,
+      status: 'reviewing',
+    }))
+  }
+
   private async patchReview(
     workspaceId: string,
     reviewId: string,

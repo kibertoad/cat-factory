@@ -26,8 +26,10 @@ export interface RequirementReviewItem {
 
 /**
  * - `ready`: the reviewer raised findings awaiting human answers/dismissals.
- * - `incorporating`: transient; the driver is folding the answers + re-reviewing in the
- *   background (the user is back on the board, summoned again only if input is needed).
+ * - `incorporating`: transient; the driver is folding the answers into a document (the FIRST
+ *   async stage — the user is back on the board).
+ * - `reviewing`: transient; the reviewer is RE-reviewing the folded document (the SECOND
+ *   async stage). Distinct from `incorporating` so the UI can show which stage is running.
  * - `merged`: the companion produced a document (an internal transient on the async path).
  * - `exceeded`: the iteration cap was hit with findings open — awaiting the human's choice.
  * - `incorporated`: terminal; the requirements phase is settled.
@@ -35,6 +37,7 @@ export interface RequirementReviewItem {
 export type RequirementReviewStatus =
   | 'ready'
   | 'incorporating'
+  | 'reviewing'
   | 'merged'
   | 'exceeded'
   | 'incorporated'

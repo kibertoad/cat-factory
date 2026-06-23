@@ -2238,12 +2238,12 @@ export class ExecutionService {
       return settled
     }
     const preset = await this.resolveMergePreset(workspaceId, block)
-    const { review: merged } = await this.requireReviewService().incorporate(
-      workspaceId,
-      review.id,
-      { feedback },
-    )
-    await this.emitRequirementReview(workspaceId, merged)
+    await this.requireReviewService().incorporate(workspaceId, review.id, { feedback })
+    // The fold is done; flag the SECOND stage (`reviewing`) so the board/window can show
+    // "re-reviewing" distinctly from "incorporating" — either of the two LLM calls can be
+    // the slow one, so the human needs to know which is currently running.
+    const reReviewing = await this.requireReviewService().markReReviewing(workspaceId, review.id)
+    await this.emitRequirementReview(workspaceId, reReviewing)
     const reviewed = await this.requireReviewService().reReview(workspaceId, review.id, {
       concernThreshold: preset.maxRequirementConcernAllowed,
     })
@@ -2402,6 +2402,12 @@ export class ExecutionService {
 
     const { instance, step } = parked
     step.pendingIncorporation = feedback ? { feedback } : {}
+    // Re-arm the run BEFORE signalling the driver: the park left it `blocked`, but
+    // `advanceInstance` no-ops unless the run is `running`/`paused`, so a woken driver
+    // would otherwise return `noop` (and the workflow would end) WITHOUT running the
+    // re-entrant incorporate + re-review cycle — leaving the review stuck `incorporating`
+    // forever. Mirrors every other resume path (e.g. `advancePastResolvedGate`).
+    if (instance.status === 'blocked') instance.status = 'running'
     const updated = await this.requireReviewService().markIncorporating(workspaceId, review.id)
     await this.executionRepository.upsert(workspaceId, instance)
     await this.emitInstance(workspaceId, instance)

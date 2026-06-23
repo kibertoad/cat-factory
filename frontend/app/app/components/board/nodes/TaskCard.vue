@@ -11,6 +11,7 @@ const execution = useExecutionStore()
 const pipelines = usePipelinesStore()
 const ui = useUiStore()
 const agentRuns = useAgentRunsStore()
+const requirements = useRequirementsStore()
 const toast = useToast()
 
 const task = computed<Block | undefined>(() => board.getBlock(props.taskId))
@@ -106,9 +107,24 @@ function merge() {
 const pendingDecision = computed(() =>
   execution.openDecisions.find((d) => d.blockId === props.taskId),
 )
-const pendingApproval = computed(() =>
-  execution.openApprovals.find((a) => a.blockId === props.taskId),
+// The async stage a requirements-review gate is mid-cycle in (folding the answers, then
+// re-reviewing), or null. While set, the gate needs NO human action, so its approval is
+// suppressed below and a working indicator shows instead.
+const reqStage = computed(() => requirements.backgroundStage(props.taskId))
+const reqStageLabel = computed(() =>
+  reqStage.value === 'incorporating'
+    ? 'Incorporating answers…'
+    : reqStage.value === 'reviewing'
+      ? 'Re-reviewing…'
+      : null,
 )
+const pendingApproval = computed(() => {
+  const a = execution.openApprovals.find((a) => a.blockId === props.taskId)
+  // A requirements-review gate whose review is incorporating / re-reviewing in the driver
+  // is doing background work, not awaiting a human — don't surface it as "Approval needed".
+  if (a && a.agentKind === 'requirements-review' && reqStage.value) return undefined
+  return a
+})
 
 /** What this blocked task actually needs from a human — drives the card's label,
  * pulse and action. Decision takes precedence over approval (a step never holds
@@ -141,7 +157,9 @@ const attention = computed<{
 /** Specific header copy: a failed run reads "Failed", a parked task reads its
  * decision/approval reason, otherwise the generic status label. */
 const statusText = computed(() =>
-  runFailed.value ? 'Failed' : (attention.value?.label ?? statusMeta.value?.label ?? ''),
+  runFailed.value
+    ? 'Failed'
+    : (reqStageLabel.value ?? attention.value?.label ?? statusMeta.value?.label ?? ''),
 )
 
 // Clicking the card body only selects the task (opening the inspector so the human can
@@ -177,7 +195,15 @@ function selectTask() {
       <span class="truncate text-[11px] font-semibold text-slate-100">{{ task.title }}</span>
       <span
         class="ml-auto shrink-0 text-[9px] uppercase tracking-wide"
-        :class="runFailed ? 'text-rose-400' : attention ? 'text-amber-400' : 'text-slate-500'"
+        :class="
+          runFailed
+            ? 'text-rose-400'
+            : reqStage
+              ? 'text-indigo-300'
+              : attention
+                ? 'text-amber-400'
+                : 'text-slate-500'
+        "
       >
         {{ statusText }}
       </span>
@@ -227,6 +253,13 @@ function selectTask() {
 
     <!-- actions by state -->
     <div class="nodrag mt-2 flex flex-wrap items-center gap-1">
+      <!-- requirements review folding/re-reviewing in the background: a working indicator,
+           NOT a gate — the human is back on the board and summoned only if input is needed -->
+      <span v-if="reqStage" class="inline-flex items-center gap-1 text-[9px] text-indigo-300">
+        <UIcon name="i-lucide-loader-circle" class="h-3 w-3 animate-spin" />
+        {{ reqStageLabel }}
+      </span>
+
       <!-- parked for a human: a decision to resolve or an approval gate to clear -->
       <UButton
         v-if="attention"

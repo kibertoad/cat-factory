@@ -42,6 +42,16 @@ export const useRequirementsStore = defineStore('requirements', () => {
   function reviewFor(blockId: string): RequirementReview | null {
     return reviews.value[blockId] ?? null
   }
+  /**
+   * The async background stage a block's review is in, or null. While the driver folds the
+   * answers (`incorporating`) then re-reviews the document (`reviewing`), NO human action is
+   * needed — so the board suppresses the "Approval needed" gate and shows this working state
+   * instead, with copy that names which of the two stages is running.
+   */
+  function backgroundStage(blockId: string): 'incorporating' | 'reviewing' | null {
+    const status = reviews.value[blockId]?.status
+    return status === 'incorporating' || status === 'reviewing' ? status : null
+  }
   function isReviewing(blockId: string): boolean {
     return reviewing.value.has(blockId)
   }
@@ -176,6 +186,7 @@ export const useRequirementsStore = defineStore('requirements', () => {
     available,
     reviews,
     reviewFor,
+    backgroundStage,
     isReviewing,
     isLoading,
     isIncorporating,

@@ -66,11 +66,14 @@ const status = computed(() => review.value?.status ?? null)
 const merged = computed(() => status.value === 'merged')
 const exceeded = computed(() => status.value === 'exceeded')
 const incorporated = computed(() => status.value === 'incorporated')
-// The async fold + re-review is running in the driver. The window normally closes the
-// moment it's requested; this state only shows if the window is later re-opened mid-cycle.
+// The async cycle runs in the driver in two stages — folding the answers (`incorporating`)
+// then re-reviewing the document (`reviewing`). The window normally closes the moment
+// incorporation is requested; these states only show if it's later re-opened mid-cycle.
 const incorporating = computed(() => status.value === 'incorporating')
+const reReviewing = computed(() => status.value === 'reviewing')
+const working = computed(() => incorporating.value || reReviewing.value)
 // No edits while the requirements are settled or a cycle is running in the background.
-const frozen = computed(() => incorporated.value || incorporating.value)
+const frozen = computed(() => incorporated.value || working.value)
 const canIncorporate = computed(() => !!review.value && requirements.canIncorporate(review.value))
 const canProceed = computed(() => !!review.value && requirements.canProceed(review.value))
 const iteration = computed(() => review.value?.iteration ?? 1)
@@ -289,14 +292,21 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                 @resolve="resolveExceeded"
               />
 
-              <!-- incorporating: the async fold + re-review is running in the driver -->
+              <!-- working: the async cycle is running in the driver. Two distinct stages so
+                   the human can see which of the two LLM calls is currently in progress. -->
               <div
-                v-else-if="incorporating"
+                v-else-if="working"
                 class="mb-4 flex items-center gap-2 rounded-lg border border-indigo-900/60 bg-indigo-950/30 p-4 text-sm text-indigo-200"
               >
                 <UIcon name="i-lucide-loader-circle" class="h-5 w-5 shrink-0 animate-spin" />
-                Incorporating your answers and re-reviewing in the background. You can close this —
-                we’ll notify you only if more input is needed.
+                <span v-if="incorporating">
+                  Incorporating your answers into a requirements document… You can close this —
+                  we’ll notify you only if more input is needed.
+                </span>
+                <span v-else>
+                  Re-reviewing the updated requirements… You can close this — we’ll notify you only
+                  if more input is needed.
+                </span>
               </div>
 
               <!-- findings to react to -->
