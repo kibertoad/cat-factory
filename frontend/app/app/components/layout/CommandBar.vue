@@ -191,6 +191,14 @@ const commands = computed<Command[]>(() => {
     keywords: 'fragment best practice guideline service default code-aware',
     run: () => ui.openServiceFragmentDefaults(),
   })
+  list.push({
+    id: 'local-models',
+    label: 'My local runners',
+    group: 'Workspace',
+    icon: 'i-lucide-server',
+    keywords: 'local model runner ollama lm studio llamacpp vllm endpoint',
+    run: () => ui.openLocalModels(),
+  })
 
   return list
 })

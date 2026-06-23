@@ -28,6 +28,7 @@ import CommandBar from '~/components/layout/CommandBar.vue'
 import MergeThresholdsPanel from '~/components/settings/MergeThresholdsPanel.vue'
 import ModelDefaultsPanel from '~/components/settings/ModelDefaultsPanel.vue'
 import ServiceFragmentDefaultsPanel from '~/components/settings/ServiceFragmentDefaultsPanel.vue'
+import LocalModelEndpointsPanel from '~/components/settings/LocalModelEndpointsPanel.vue'
 
 const workspace = useWorkspaceStore()
 const github = useGitHubStore()
@@ -114,6 +115,7 @@ watch(
       <MergeThresholdsPanel />
       <ModelDefaultsPanel />
       <ServiceFragmentDefaultsPanel />
+      <LocalModelEndpointsPanel />
     </template>
 
     <!-- Backend unreachable / bootstrap failed -->

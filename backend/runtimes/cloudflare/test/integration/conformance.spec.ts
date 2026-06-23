@@ -60,6 +60,18 @@ const harness: ConformanceHarness = {
           makeReadyReviewWithOpenItem(blockId),
         ),
       seedBlueprint: (record) => new D1RepoBlueprintRepository({ db: env.DB }).upsert(record),
+      localModelEndpoints: () => {
+        const svc = buildContainer(env, {
+          agentExecutor: new FakeAgentExecutor(),
+        }).localModelEndpoints
+        if (!svc) return undefined
+        return {
+          list: (userId: string) => svc.list(userId),
+          upsert: (userId: string, input) => svc.upsert(userId, input as never),
+          resolve: (userId: string, provider: string) => svc.resolve(userId, provider),
+          remove: (userId: string, provider: string) => svc.remove(userId, provider as never),
+        }
+      },
       // The identity/onboarding services over the same local D1 (invitations are always
       // wired in the worker; email senders stay opt-in and out of the probe). A fake
       // executor override skips the strict container-executor selection (the identity

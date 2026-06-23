@@ -186,6 +186,11 @@ export {
   DEFAULT_ACTIVATION_TTL_MS,
   DEFAULT_RENEW_WARNING_MS,
 } from './modules/providers/PersonalSubscriptionService.js'
+export {
+  LocalModelEndpointService,
+  type LocalModelEndpointServiceDependencies,
+  type ResolvedLocalEndpoint,
+} from './modules/providers/LocalModelEndpointService.js'
 export * as providersLogic from './modules/providers/providers.logic.js'
 export {
   DEFAULT_USAGE_WINDOW_MS,

@@ -58,6 +58,17 @@ Three shapes of catalog entry fall out of this:
 - **Subscription-only** — `claude-opus`, `claude-sonnet`, `gpt-5.5`, `gpt-5.4`. No
   Cloudflare/direct base; the subscription harness is the _only_ way to run them, so
   they require a connected vendor token (§6) and there is **no inline fallback** (§5).
+- **Local (per-user)** — locally-run models on a user's own runner (Ollama / LM Studio /
+  llama.cpp / vLLM / custom OpenAI-compatible). NOT static catalog entries: each user
+  configures runners in the UI ("My local runners", stored per-user in
+  `local_model_endpoints`), and their enabled models are appended to `GET /models`
+  dynamically (id `"<provider>:<model>"`, e.g. `ollama:gemma3`). They present as the
+  `direct` flavour but need **no API key** — gated by the new `localProviders` capability
+  (the user has the runner configured), not a `keyEnv`. At run time the LLM proxy + inline
+  provider resolve the **run initiator's** endpoint (base URL + optional bearer key) and
+  skip the DB key lease, mirroring the personal-subscription initiator model. `parseLocalModelId`
+  turns the dynamic id into a `ModelRef` so `resolveModelRef`/`resolveBlockModel` resolve it
+  even at config time (when per-user capabilities aren't known).
 
 The effective, display-ready projection (which flavour is actually active, plus
 informational cost and context window) is computed by `effectiveCatalog()` and served

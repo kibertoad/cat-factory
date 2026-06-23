@@ -37,6 +37,15 @@ export interface ScopedModelProviderOptions {
   baseUrlFor: (provider: string) => string | undefined
   /** Opt-in registries that need no DB key — the Cloudflare lib + Bedrock. */
   extraRegistries?: ProviderRegistry[]
+  /**
+   * Resolve a user's locally-run model endpoints (Ollama / LM Studio / …) so inline LLM
+   * calls reach them like the proxied path. Keyless by design (the endpoint carries an
+   * optional key), so these register into the per-scope registry directly rather than via
+   * the DB API-key pool. Keyed by the scope's user (the run initiator).
+   */
+  localEndpointsFor?: (
+    userId: string,
+  ) => Promise<{ provider: string; baseUrl: string; apiKey: string | null }[]>
   /** Wrap the scoped provider so inline calls feed the trace sink (Langfuse). */
   instrument?: { traceSink: LlmTraceSink; recordPrompts?: boolean }
 }
@@ -57,6 +66,16 @@ export function createScopedModelProviderResolver(
             leased.secret,
             opts.baseUrlFor(provider),
           )
+        }
+      }
+      // The initiating user's locally-run runners (keyless OpenAI-compatible endpoints).
+      if (scope.userId && opts.localEndpointsFor) {
+        for (const ep of await opts.localEndpointsFor(scope.userId)) {
+          registry[ep.provider] = openAiCompatibleResolver({
+            name: ep.provider,
+            apiKey: ep.apiKey || 'local',
+            baseURL: ep.baseUrl,
+          })
         }
       }
       const composite = new CompositeModelProvider(registry, ...(opts.extraRegistries ?? []))
