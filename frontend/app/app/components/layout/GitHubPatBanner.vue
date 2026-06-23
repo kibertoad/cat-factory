@@ -23,9 +23,7 @@ const show = computed(() => !!setupUrl.value && !dismissed.value)
           <UIcon name="i-lucide-key-round" class="mt-0.5 h-9 w-9 shrink-0 text-amber-400" />
           <div class="min-w-0 flex-1">
             <div class="flex items-start justify-between gap-3">
-              <h2 class="text-lg font-semibold text-amber-100">
-                GitHub PAT not configured
-              </h2>
+              <h2 class="text-lg font-semibold text-amber-100">GitHub PAT not configured</h2>
               <UButton
                 color="neutral"
                 variant="ghost"
@@ -36,8 +34,8 @@ const show = computed(() => !!setupUrl.value && !dismissed.value)
               />
             </div>
             <p class="mt-1 text-sm text-amber-200/90">
-              Local mode reaches GitHub with a personal access token. Without one, agent steps
-              that clone, push, open PRs, gate on CI or merge will fail.
+              Local mode reaches GitHub with a personal access token. Without one, agent steps that
+              clone, push, open PRs, gate on CI or merge will fail.
             </p>
 
             <div class="mt-4">

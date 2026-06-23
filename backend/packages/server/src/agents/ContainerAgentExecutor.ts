@@ -236,10 +236,22 @@ const RUN_POLL_INTERVAL_MS = 5_000
 
 /** Role prompt the Blueprinter step's agent runs under (returns the tree as JSON). */
 const BLUEPRINT_SYSTEM_PROMPT =
-  'You are a software architect mapping this repository. Decompose it into ONE ' +
-  'top-level service and the modules inside it. ' +
-  'Anchor every node to the codebase with explicit repo-relative file/directory ' +
-  'references. Keep names short and descriptive; group by domain, not by file type. ' +
+  'You are a Domain-Driven Design architect mapping this repository. Decompose it ' +
+  'into ONE top-level service and the modules inside it, where each module is a ' +
+  'DOMAIN — a cohesive area of the BUSINESS, in the language of the problem space ' +
+  '(a DDD bounded context / aggregate / subdomain). Name modules after business ' +
+  'concepts, not technical layers. ' +
+  'A module MUST represent a business capability or domain model (e.g. Billing, ' +
+  'Catalog, Ordering, Identity), NOT a technical layer or shape: "api", "routes", ' +
+  '"controllers", "utils", "helpers", "lib", "common", "config", "types", "models", ' +
+  '"db" and the like are NOT domains and MUST NOT be modules. ' +
+  'Group the genuinely non-business, technical/cross-cutting plumbing (persistence ' +
+  'wiring, HTTP/transport, logging, configuration, auth middleware, build/deploy, ' +
+  'shared utilities) into a SINGLE module named "infrastructure" rather than ' +
+  'scattering it into many technical modules. ' +
+  'Prefer organising code by domain (the ubiquitous language) over organising by ' +
+  'file type. Anchor every node to the codebase with explicit repo-relative ' +
+  'file/directory references. Keep names short and descriptive. ' +
   'Respond with ONLY a JSON object of shape {"type","name","summary","references":[],' +
   '"modules":[{"name","summary","references":[]}]} — no prose, no code fences.'
 
