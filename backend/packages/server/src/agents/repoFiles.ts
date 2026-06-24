@@ -24,12 +24,9 @@ export function makeRepoFiles(
   return {
     getFile: (path, gitRef) => client.getFileContent(installationId, ref, path, gitRef),
     listDirectory: (path, gitRef) => client.listDirectory(installationId, ref, path, gitRef),
-    headSha: async (branch) => {
-      // GitHub has no single-branch sha endpoint in the client port; find it in the
-      // (paged) branch list. Absent ⇒ the branch does not exist yet (create-vs-commit).
-      const page = await client.listBranches(installationId, ref)
-      return page.items.find((b) => b.name === branch)?.headSha ?? null
-    },
+    // Exact single-ref lookup — correct even on repos with more branches than one
+    // `listBranches` page. Null ⇒ the branch does not exist yet (create-vs-commit).
+    headSha: (branch) => client.branchHeadSha(installationId, ref, branch),
     createBranch: (branch, fromSha) => client.createBranch(installationId, ref, branch, fromSha),
     commitFiles: (input) => client.commitFiles(installationId, ref, input),
     openPullRequest: (input) => client.openPullRequest(installationId, ref, input),

@@ -217,6 +217,27 @@ export class FetchGitHubClient implements GitHubClient {
     }
   }
 
+  async branchHeadSha(
+    installationId: number,
+    ref: GitHubRepoRef,
+    branch: string,
+  ): Promise<string | null> {
+    // Exact single-ref lookup (mirrors commitFiles' base-sha resolution) so it stays
+    // correct regardless of branch count; a 404 means the branch does not exist yet.
+    // Encode each segment so a slashed branch (`feature/x`) keeps its path separators.
+    const encoded = branch.split('/').map(encodeURIComponent).join('/')
+    try {
+      const { json } = await this.request(
+        `/repos/${ref.owner}/${ref.repo}/git/ref/heads/${encoded}`,
+        { installationId },
+      )
+      return (json as { object?: { sha?: string } }).object?.sha ?? null
+    } catch (err) {
+      if (err instanceof GitHubApiError && err.status === 404) return null
+      throw err
+    }
+  }
+
   async listRootEntries(installationId: number, ref: GitHubRepoRef): Promise<RepoEntry[]> {
     let json: unknown
     try {

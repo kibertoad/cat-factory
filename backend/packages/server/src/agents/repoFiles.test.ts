@@ -11,18 +11,9 @@ function fakeClient(overrides: Partial<GitHubClient> = {}): GitHubClient {
     listDirectory: vi.fn(async () => [
       { path: 'spec/features/a.feature', name: 'a.feature', type: 'file', sha: 's' },
     ]),
-    listBranches: vi.fn(async () => ({
-      items: [
-        { repoGithubId: 1, name: 'main', headSha: 'sha-main', protected: false, syncedAt: 0 },
-        {
-          repoGithubId: 1,
-          name: 'cat-factory/blk',
-          headSha: 'sha-work',
-          protected: false,
-          syncedAt: 0,
-        },
-      ],
-    })),
+    branchHeadSha: vi.fn(async (_inst: number, _ref: unknown, branch: string) =>
+      branch === 'main' ? 'sha-main' : branch === 'cat-factory/blk' ? 'sha-work' : null,
+    ),
     createBranch: vi.fn(async () => undefined),
     commitFiles: vi.fn(async () => ({ sha: 'commit1' })),
     openPullRequest: vi.fn(async () => ({
@@ -46,10 +37,14 @@ describe('makeRepoFiles', () => {
     expect(client.listDirectory).toHaveBeenCalledWith(42, REF, 'spec/features', undefined)
   })
 
-  it('resolves a branch head sha, or null when the branch is absent', async () => {
-    const repo = makeRepoFiles(fakeClient(), 42, REF)
+  it('resolves a branch head sha via the exact single-ref lookup, or null when absent', async () => {
+    const client = fakeClient()
+    const repo = makeRepoFiles(client, 42, REF)
     expect(await repo.headSha('cat-factory/blk')).toBe('sha-work')
     expect(await repo.headSha('does-not-exist')).toBeNull()
+    // Uses the exact per-branch lookup, not the first-page-only `listBranches` projection
+    // (which would miss a branch beyond page one in a repo with many branches).
+    expect(client.branchHeadSha).toHaveBeenCalledWith(42, REF, 'cat-factory/blk')
   })
 
   it('delegates writes (createBranch / commitFiles / openPullRequest)', async () => {

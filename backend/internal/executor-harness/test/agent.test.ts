@@ -34,6 +34,17 @@ describe('parseAgentJob', () => {
     expect(job.branch).toBe('main')
   })
 
+  it('carries an explicit repair:false through (so the handler skips the repair call)', () => {
+    const job = parseAgentJob({
+      ...base,
+      mode: 'explore',
+      output: { kind: 'structured', repair: false },
+    })
+    // The handler keys off `output.repair === false`; dropping it would silently re-enable
+    // the one-shot repair call for a kind that opted out.
+    expect(job.output).toEqual({ kind: 'structured', repair: false })
+  })
+
   it('accepts a coding job with a fresh branch + PR', () => {
     const job = parseAgentJob({
       ...base,

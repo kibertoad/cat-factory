@@ -1022,7 +1022,10 @@ export function parseAgentJob(input: unknown): AgentJob {
           const kind = so.kind === 'structured' ? 'structured' : 'prose'
           const spec: AgentOutputSpec = { kind }
           if (typeof so.shapeHint === 'string') spec.shapeHint = so.shapeHint
-          if (so.repair === true) spec.repair = true
+          // Carry an explicit `repair: false` through — the handler defaults to repair-on
+          // when absent, so dropping `false` would silently re-enable the repair call for a
+          // kind that opted out (it keys off `output.repair === false`).
+          if (typeof so.repair === 'boolean') spec.repair = so.repair
           return spec
         })()
       : undefined

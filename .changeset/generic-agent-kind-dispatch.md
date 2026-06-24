@@ -14,7 +14,10 @@ Add the generic, manifest-driven `agent` harness kind + its backend dispatch.
   per-agent-kind logic; the bespoke kinds remain during migration. **Image bump** (the
   deploy tag moves to `1.9.0` so the new kind rolls out).
 - `@cat-factory/kernel`: `RunnerDispatchKind` gains `'agent'`; `RunnerJobResult` and
-  `AgentRunResult` gain a generic `custom` channel for a structured agent's output.
+  `AgentRunResult` gain a generic `custom` channel for a structured agent's output. The
+  `GitHubClient` port gains `branchHeadSha` — an exact single-ref head lookup that stays
+  correct on repos with more branches than one `listBranches` page (the create-vs-commit
+  signal `RepoFiles.headSha` relies on).
 - `@cat-factory/server`: `ContainerAgentExecutor` dispatches any registered kind that
   declares an `agent` step through the generic `agent` kind (`buildRegisteredAgentBody`)
   and maps `custom` results; built-in kinds are unchanged. New `RepoFiles` implementation
