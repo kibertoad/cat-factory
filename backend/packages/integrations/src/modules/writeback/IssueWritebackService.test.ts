@@ -164,11 +164,17 @@ describe('IssueWritebackService — Jira dispatch', () => {
   }
 
   it('comments then transitions the Jira issue to a Done-category status on merge', async () => {
-    const calls: { method: string; url: string; body: string }[] = []
+    const calls: { method: string; url: string; body: string | undefined }[] = []
     const fetchImpl = async (
       url: string,
-      init: { method: string; headers: Record<string, string>; body: string },
+      init: { method: string; headers: Record<string, string>; body?: string },
     ) => {
+      // Mirror the real `fetch`: a GET/HEAD with ANY non-null body throws. This is
+      // what makes the empty-string-body bug surface in production but not in a
+      // permissive fake — so assert it here too.
+      if ((init.method === 'GET' || init.method === 'HEAD') && init.body != null) {
+        throw new TypeError('Request with GET/HEAD method cannot have body.')
+      }
       calls.push({ method: init.method, url, body: init.body })
       if (url.endsWith('/transitions') && init.method === 'GET') {
         return {
@@ -201,6 +207,8 @@ describe('IssueWritebackService — Jira dispatch', () => {
     const postTransition = calls.find((c) => c.url.endsWith('/transitions') && c.method === 'POST')
     expect(comment).toBeDefined()
     expect(getTransitions).toBeDefined()
+    // The GET must carry no body (a real `fetch` throws otherwise).
+    expect(getTransitions!.body).toBeUndefined()
     expect(postTransition).toBeDefined()
     expect(postTransition!.body).toContain('"id":"31"')
   })

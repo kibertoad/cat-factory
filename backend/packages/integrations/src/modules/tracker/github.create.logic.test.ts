@@ -4,7 +4,7 @@ import type { FetchLike } from './TicketTrackerService.js'
 
 describe('createGitHubIssueViaToken', () => {
   it('POSTs to the repo issues endpoint with bearer auth and returns number + url', async () => {
-    let captured: { url: string; init: { headers: Record<string, string>; body: string } } | null =
+    let captured: { url: string; init: { headers: Record<string, string>; body?: string } } | null =
       null
     const fetchImpl: FetchLike = async (url, init) => {
       captured = { url, init }
@@ -28,7 +28,7 @@ describe('createGitHubIssueViaToken', () => {
     expect(result).toEqual({ number: 12, url: 'https://github.com/a/b/issues/12' })
     expect(captured!.url).toBe('https://api.github.com/repos/a/b/issues')
     expect(captured!.init.headers.authorization).toBe('Bearer ghp_x')
-    expect(JSON.parse(captured!.init.body)).toEqual({ title: 'T', body: 'B' })
+    expect(JSON.parse(captured!.init.body ?? '')).toEqual({ title: 'T', body: 'B' })
   })
 
   it('honours a custom apiBase (GitHub Enterprise)', async () => {

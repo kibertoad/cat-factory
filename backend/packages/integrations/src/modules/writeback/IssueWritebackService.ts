@@ -149,7 +149,10 @@ export class IssueWritebackService implements IssueWritebackProvider {
         'content-type': 'application/json',
         'user-agent': USER_AGENT,
       },
-      body: init.body === undefined ? '' : JSON.stringify(init.body),
+      // Omit the body entirely for a bodyless (GET) request: the real `fetch` throws
+      // for ANY non-null body on a GET — including an empty string — which the
+      // per-issue catch would silently swallow, leaving Jira issues never resolved.
+      ...(init.body === undefined ? {} : { body: JSON.stringify(init.body) }),
     })
     if (!res.ok) {
       const text = await res.text().catch(() => '')

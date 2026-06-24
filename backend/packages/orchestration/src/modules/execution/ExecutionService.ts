@@ -1512,19 +1512,23 @@ export class ExecutionService {
     // its work. Record it on the block so the board can surface and link to it,
     // regardless of whether this is the final step.
     if (result.pullRequest) {
+      // Read the block before the update so we can tell whether this PR is newly
+      // opened (vs. the same PR re-reported by a re-run/retry of the coder step).
+      const priorBlock = this.issueWriteback
+        ? await this.blockRepository.get(workspaceId, instance.blockId)
+        : null
       await this.blockRepository.update(workspaceId, instance.blockId, {
         pullRequest: result.pullRequest,
       })
       // Best-effort writeback: comment on the task's linked tracker issue(s) that a
-      // PR opened. Gated inside the provider by the workspace setting + per-task
-      // override; fire-and-forget so a tracker outage never fails the run.
-      if (this.issueWriteback) {
-        const block = await this.blockRepository.get(workspaceId, instance.blockId)
-        if (block) {
-          await this.issueWriteback
-            .onPullRequestOpened(workspaceId, block, result.pullRequest)
-            .catch(() => {})
-        }
+      // PR opened. Only when the PR is newly recorded — a retry that re-reports the
+      // same PR must not re-comment (the tracker comment is not idempotent). Gated
+      // inside the provider by the workspace setting + per-task override;
+      // fire-and-forget so a tracker outage never fails the run.
+      if (this.issueWriteback && priorBlock && priorBlock.pullRequest?.url !== result.pullRequest.url) {
+        await this.issueWriteback
+          .onPullRequestOpened(workspaceId, priorBlock, result.pullRequest)
+          .catch(() => {})
       }
     }
 
