@@ -2,7 +2,14 @@ import * as v from 'valibot'
 import { agentConfigValuesSchema } from './agent-config.js'
 import { consensusStepConfigSchema, stepGatingSchema } from './consensus.js'
 import { cloudProviderSchema, instanceSizeSchema } from './provisioning.js'
-import { agentKindSchema, blockTypeSchema, positionSchema, sizeSchema } from './primitives.js'
+import {
+  agentKindSchema,
+  blockTypeSchema,
+  createTaskTypeSchema,
+  positionSchema,
+  sizeSchema,
+  taskTypeFieldsSchema,
+} from './primitives.js'
 
 // Request body schemas. The Hono facade validates inbound JSON against these via
 // @hono/valibot-validator; the frontend API client can import the inferred input
@@ -71,6 +78,11 @@ export const addTaskSchema = v.object({
   // The user always names the task — no auto-generated placeholder titles.
   title: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200)),
   description: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(2000))),
+  // The kind of work this task represents; omitted → 'feature'. `recurring` is NOT
+  // allowed here (recurring tasks are created via a recurring-pipeline schedule).
+  taskType: v.optional(createTaskTypeSchema),
+  // Small per-type fields collected on the form (e.g. a bug's severity / repro).
+  taskTypeFields: v.optional(taskTypeFieldsSchema),
   // The merge threshold preset governing this task's auto-merge; omitted/empty →
   // the workspace default preset.
   mergePresetId: v.optional(v.pipe(v.string(), v.maxLength(120))),

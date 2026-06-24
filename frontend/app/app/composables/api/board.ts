@@ -1,4 +1,4 @@
-import type { Block, BlockType, Pipeline } from '~/types/domain'
+import type { Block, BlockType, CreateTaskType, Pipeline, TaskTypeFields } from '~/types/domain'
 import type { ConsensusStepConfig, StepGating } from '~/types/consensus'
 import type { ApiContext, Position } from './context'
 
@@ -36,6 +36,8 @@ export function boardApi({ http, ws }: ApiContext) {
       body: {
         title: string
         description?: string
+        taskType?: CreateTaskType
+        taskTypeFields?: TaskTypeFields
         mergePresetId?: string
         pipelineId?: string
         agentConfig?: Record<string, string>

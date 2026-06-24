@@ -14,6 +14,8 @@ import type {
   PipelineStep,
   PullRequestRef,
   TaskEstimate,
+  TaskType,
+  TaskTypeFields,
   Workspace,
 } from '@cat-factory/contracts'
 
@@ -76,6 +78,10 @@ export interface BlockRow {
   responsible_product_user_id: string | null
   /** Task-level: the task-estimator's triage (complexity/risk/impact), JSON object. */
   estimate?: string | null
+  /** Task-level: the kind of work (feature/bug/document/spike/recurring). */
+  task_type?: string | null
+  /** Task-level: small per-type form fields (bug severity, spike timebox…), JSON object. */
+  task_type_fields?: string | null
 }
 
 export function rowToBlock(row: BlockRow): Block {
@@ -113,6 +119,9 @@ export function rowToBlock(row: BlockRow): Block {
   if (row.responsible_product_user_id !== null)
     block.responsibleProductUserId = row.responsible_product_user_id
   if (row.estimate != null) block.estimate = JSON.parse(row.estimate) as TaskEstimate
+  if (row.task_type != null) block.taskType = row.task_type as TaskType
+  if (row.task_type_fields != null)
+    block.taskTypeFields = JSON.parse(row.task_type_fields) as TaskTypeFields
   return block
 }
 
@@ -154,6 +163,8 @@ export function blockInsertValues(block: Block): Record<string, unknown> {
     created_by: block.createdBy ?? null,
     responsible_product_user_id: block.responsibleProductUserId ?? null,
     estimate: block.estimate ? JSON.stringify(block.estimate) : null,
+    task_type: block.taskType ?? null,
+    task_type_fields: block.taskTypeFields ? JSON.stringify(block.taskTypeFields) : null,
   }
 }
 
@@ -227,6 +238,10 @@ export function blockPatchToColumns(patch: BlockPatch): Record<string, unknown> 
   // The task-estimator's triage; null clears it.
   if (patch.estimate !== undefined) {
     set.estimate = patch.estimate ? JSON.stringify(patch.estimate) : null
+  }
+  if (patch.taskType !== undefined) set.task_type = patch.taskType ?? null
+  if (patch.taskTypeFields !== undefined) {
+    set.task_type_fields = patch.taskTypeFields ? JSON.stringify(patch.taskTypeFields) : null
   }
   return set
 }

@@ -26,6 +26,7 @@ const frame = computed(() =>
 )
 
 const name = ref('')
+const description = ref('')
 const pipelineId = ref('')
 const saving = ref(false)
 const recurrence = ref<Recurrence>(defaultRecurrence())
@@ -66,6 +67,7 @@ const isTechDebt = computed(() => template.value === 'tech-debt')
 watch(open, (isOpen) => {
   if (!isOpen) return
   name.value = ''
+  description.value = ''
   // Default to the Dependency-updates pipeline if present, else the first.
   pipelineId.value =
     pipelines.pipelines.find((p) => p.id === 'pl_dep_update')?.id ??
@@ -98,6 +100,7 @@ async function add() {
       template: template.value,
       name: name.value.trim(),
       recurrence: recurrence.value,
+      ...(description.value.trim() ? { description: description.value.trim() } : {}),
     })
     ui.closeAddRecurring()
   } catch (e) {
@@ -144,6 +147,16 @@ async function add() {
               {{ selectedPipelineLabel }}
             </UButton>
           </UDropdownMenu>
+        </UFormField>
+
+        <UFormField label="Prompt">
+          <UTextarea
+            v-model="description"
+            :rows="3"
+            autoresize
+            placeholder="What should each run do? Describe the work — the same prompt a normal task carries. Leave blank to use the pipeline's default."
+            class="w-full"
+          />
         </UFormField>
 
         <RecurringRecurrenceEditor v-model="recurrence" />

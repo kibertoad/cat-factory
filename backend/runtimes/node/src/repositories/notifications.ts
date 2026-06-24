@@ -2,6 +2,7 @@ import type {
   Notification,
   NotificationPayload,
   NotificationRepository,
+  NotificationSeverity,
   NotificationType,
 } from '@cat-factory/kernel'
 import { and, desc, eq } from 'drizzle-orm'
@@ -29,6 +30,7 @@ function rowToNotification(row: NotificationRow): Notification {
     id: row.id,
     type: row.type as NotificationType,
     status: row.status as Notification['status'],
+    severity: (row.severity as NotificationSeverity | null) ?? 'normal',
     blockId: row.block_id,
     executionId: row.execution_id,
     title: row.title,
@@ -92,6 +94,7 @@ export class DrizzleNotificationRepository implements NotificationRepository {
       title: notification.title,
       body: notification.body,
       payload: notification.payload ? JSON.stringify(notification.payload) : null,
+      severity: notification.severity ?? 'normal',
       created_at: notification.createdAt,
       resolved_at: notification.resolvedAt,
     }
@@ -108,6 +111,7 @@ export class DrizzleNotificationRepository implements NotificationRepository {
           title: values.title,
           body: values.body,
           payload: values.payload,
+          severity: values.severity,
           resolved_at: values.resolved_at,
         },
       })

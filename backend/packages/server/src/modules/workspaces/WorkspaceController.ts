@@ -131,6 +131,11 @@ export function workspaceController(): Hono<AppEnv> {
     const trackerSettings = container.tracker
       ? await container.tracker.service.get(workspaceId)
       : undefined
+    // The workspace's runtime settings (human-wait escalation threshold + per-service
+    // task limit), so the board renders the settings panel on load. No-op when unconfigured.
+    const settings = container.settings
+      ? await container.settings.service.get(workspaceId)
+      : undefined
     // In-org shared services: the workspace's mounts + the org catalog it can mount from
     // (each catalog service annotated with its mount count for the "Shared" badge).
     const mounts = container.services
@@ -153,6 +158,7 @@ export function workspaceController(): Hono<AppEnv> {
       ...(serviceFragmentDefaults ? { serviceFragmentDefaults } : {}),
       ...(recurringPipelines ? { recurringPipelines } : {}),
       ...(trackerSettings ? { trackerSettings } : {}),
+      ...(settings ? { settings } : {}),
       ...(mounts ? { mounts } : {}),
       ...(serviceCatalog ? { serviceCatalog } : {}),
       agentConfigCatalog: snapshotAgentConfigCatalog(snapshot),

@@ -57,6 +57,8 @@ export interface CreateScheduleInput {
   name: string
   recurrence: Recurrence
   enabled?: boolean
+  /** The prompt/description for the reused on-board task; empty → the template seed. */
+  description?: string
 }
 
 export interface UpdateScheduleInput {

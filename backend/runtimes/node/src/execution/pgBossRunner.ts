@@ -12,11 +12,6 @@ import { type DriveConfig, driveExecution } from './drive.js'
 // job, and the stale-run sweeper re-enqueues runs still `running` in storage.
 
 const QUEUE = 'execution.advance'
-// A separate, delayed queue that fails a run still parked on a decision after the
-// `decisionTimeout` window — the Node analogue of the Cloudflare driver's
-// `waitForEvent(..., { timeout })`. Kept off the advance queue so the delay never holds
-// up real drives, and `exclusive` so at most one pending timeout exists per (run, decision).
-const DECISION_TIMEOUT_QUEUE = 'execution.decision-timeout'
 
 // The queue MUST be created with the `exclusive` policy for the dedup below to hold.
 // Under pg-boss's default `standard` policy, `singletonKey` alone enforces NO uniqueness
@@ -29,12 +24,6 @@ const QUEUE_POLICY = 'exclusive' as const
 interface AdvanceJob {
   workspaceId: string
   executionId: string
-}
-
-interface DecisionTimeoutJob {
-  workspaceId: string
-  executionId: string
-  decisionId: string
 }
 
 /**
@@ -128,10 +117,9 @@ export async function startExecutionWorker(
   container: ServerContainer,
   cfg: DriveConfig,
   log: Logger,
-  options: { concurrency?: number; decisionTimeoutSeconds?: number } = {},
+  options: { concurrency?: number } = {},
 ): Promise<void> {
   const concurrency = options.concurrency ?? 10
-  const decisionTimeoutSeconds = options.decisionTimeoutSeconds ?? 0
   await boss.createQueue(QUEUE, { policy: QUEUE_POLICY })
   await boss.work<AdvanceJob>(
     QUEUE,
@@ -140,26 +128,11 @@ export async function startExecutionWorker(
       for (const job of jobs) {
         const { workspaceId, executionId } = job.data
         try {
-          const outcome = await driveExecution(
-            container.executionService,
-            workspaceId,
-            executionId,
-            cfg,
-            { log },
-          )
-          // Arm a decision timeout when the run parked awaiting a human. There is no
-          // event to cancel it on resolution (unlike Cloudflare's waitForEvent), so the
-          // timeout job re-checks state and `expireDecision` no-ops if it was resolved.
-          if (outcome.parkedDecisionId && decisionTimeoutSeconds > 0) {
-            await boss.send(
-              DECISION_TIMEOUT_QUEUE,
-              { workspaceId, executionId, decisionId: outcome.parkedDecisionId },
-              {
-                startAfter: decisionTimeoutSeconds,
-                singletonKey: `${executionId}:${outcome.parkedDecisionId}`,
-              },
-            )
-          }
+          // A parked run waits for a human indefinitely — it is never failed for waiting
+          // (the old decision-timeout was removed). It simply parks here; `signalDecision`
+          // re-enqueues an advance when the human resolves it, and the stale-run sweeper
+          // leaves a `blocked` run alone. Urgency is conveyed by the escalating notification.
+          await driveExecution(container.executionService, workspaceId, executionId, cfg, { log })
         } catch (error) {
           log.error(
             {
@@ -168,45 +141,6 @@ export async function startExecutionWorker(
               err: error instanceof Error ? error.message : String(error),
             },
             'execution driver failed',
-          )
-          throw error
-        }
-      }
-    },
-  )
-}
-
-/**
- * Start the worker that expires overdue decisions. A delayed job (armed by
- * {@link startExecutionWorker} when a run parks on a decision) fires after the
- * `decisionTimeout`; `expireDecision` fails the run as `decision_timeout` ONLY if it is
- * still parked on that exact decision, so a decision resolved meanwhile is a safe no-op
- * (no driving — that stays on the advance queue). This is the Node analogue of the
- * Cloudflare driver's `waitForEvent` timeout. Create the queue before the advance worker
- * so the advance worker's `boss.send` to it always has a target.
- */
-export async function startDecisionTimeoutWorker(
-  boss: PgBoss,
-  container: ServerContainer,
-  log: Logger,
-): Promise<void> {
-  await boss.createQueue(DECISION_TIMEOUT_QUEUE, { policy: QUEUE_POLICY })
-  await boss.work<DecisionTimeoutJob>(
-    DECISION_TIMEOUT_QUEUE,
-    async (jobs: Job<DecisionTimeoutJob>[]) => {
-      for (const job of jobs) {
-        const { workspaceId, executionId, decisionId } = job.data
-        try {
-          await container.executionService.expireDecision(workspaceId, executionId, decisionId)
-        } catch (error) {
-          log.error(
-            {
-              workspaceId,
-              executionId,
-              decisionId,
-              err: error instanceof Error ? error.message : String(error),
-            },
-            'decision-timeout check failed',
           )
           throw error
         }

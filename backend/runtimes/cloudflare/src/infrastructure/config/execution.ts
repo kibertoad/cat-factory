@@ -10,6 +10,9 @@ function intEnv(value: string | undefined, fallback: number): number {
 
 export function loadExecutionConfig(env: Env): ExecutionConfig {
   return {
+    // NOT a hard deadline: a parked run waits for a human indefinitely and is never failed
+    // for waiting. This is just the chunk length for each `waitForEvent` wait — on expiry the
+    // driver re-loops (re-checking storage, then re-arming) rather than killing the run.
     decisionTimeout: env.DECISION_TIMEOUT?.trim() || '24 hours',
     jobPollInterval: env.JOB_POLL_INTERVAL?.trim() || '15 seconds',
     jobMaxPolls: intEnv(env.JOB_MAX_POLLS, 280),

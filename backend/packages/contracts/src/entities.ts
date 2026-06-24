@@ -13,6 +13,8 @@ import {
   blockTypeSchema,
   positionSchema,
   sizeSchema,
+  taskTypeFieldsSchema,
+  taskTypeSchema,
 } from './primitives.js'
 
 // ---------------------------------------------------------------------------
@@ -67,6 +69,19 @@ export const blockSchema = v.object({
    */
   estimate: v.optional(v.nullable(taskEstimateSchema)),
   moduleName: v.optional(v.string()),
+  /**
+   * The kind of work this task represents (feature / bug / document / spike / recurring),
+   * chosen by the human at creation. Drives the card's icon/badge, the per-type creation
+   * fields, and the per-service running-task limit's optional per-type bucketing. Only
+   * meaningful on `task`-level blocks; absent ⇒ treated as `feature`.
+   */
+  taskType: v.optional(taskTypeSchema),
+  /**
+   * Small per-type fields collected on the create-task form (see {@link taskTypeFieldsSchema}),
+   * e.g. a bug's severity / repro steps, a spike's time-box. Only meaningful on `task`-level
+   * blocks; absent ⇒ none collected.
+   */
+  taskTypeFields: v.optional(v.nullable(taskTypeFieldsSchema)),
   /**
    * Ids of curated best-practice prompt fragments selected for this block. Their
    * bodies are composed into the agent system prompt at run time. The catalog
@@ -488,7 +503,6 @@ export type AgentRunKind = v.InferOutput<typeof agentRunKindSchema>
  *   - `timeout`          — a container watchdog fired (inactivity or max-duration).
  *   - `agent`            — the agent / git push reported a failure.
  *   - `job_failed`       — an async container job came back failed. [execution]
- *   - `decision_timeout` — a human decision was not answered in time. [execution]
  *   - `rejected`         — a human rejected a gated proposal, stopping the run. [execution]
  *   - `cancelled`        — the user (or an orphan sweep) explicitly stopped the run.
  *   - `unknown`          — anything not otherwise classified.
@@ -500,7 +514,6 @@ export const agentFailureKindSchema = v.picklist([
   'timeout',
   'agent',
   'job_failed',
-  'decision_timeout',
   'rejected',
   // A companion agent could not return a parseable quality assessment (truncated /
   // malformed) even after a repair retry, so the run was failed for human attention.
