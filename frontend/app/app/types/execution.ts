@@ -95,7 +95,6 @@ export type AgentFailureKind =
   | 'timeout'
   | 'agent'
   | 'job_failed'
-  | 'decision_timeout'
   | 'rejected'
   | 'cancelled'
   | 'unknown'

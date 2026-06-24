@@ -1067,6 +1067,10 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // unconditionally, exactly like the Worker's `selectMergeLifecycleDeps`, so the
     // preset CRUD API + the merger step's threshold resolution work identically.
     mergePresetRepository: repos.mergePresetRepository,
+    // Per-workspace runtime settings (human-wait escalation threshold + per-service task
+    // limit). Wired unconditionally so the settings API + the limit enforcement + the
+    // escalation sweep work identically to the Worker.
+    workspaceSettingsRepository: repos.workspaceSettingsRepository,
     modelProviderResolver,
     requirementReviewModel: config.agents.routing.default.ref,
     requirementReviewResolveModel: config.agents.resolveBlockModel,

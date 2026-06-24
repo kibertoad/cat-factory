@@ -91,10 +91,16 @@ const ITEM_ICON: Record<string, string> = {
         </span>
         <UIcon
           v-else
-          :name="isFailedStep(s.state, runFailed) ? FAILED_STEP_META.icon : STATE_META[s.state].icon"
+          :name="
+            isFailedStep(s.state, runFailed) ? FAILED_STEP_META.icon : STATE_META[s.state].icon
+          "
           class="ml-auto h-2.5 w-2.5 shrink-0"
           :class="s.state === 'working' && !runFailed ? 'animate-spin' : ''"
-          :style="{ color: isFailedStep(s.state, runFailed) ? FAILED_STEP_META.color : STATE_META[s.state].color }"
+          :style="{
+            color: isFailedStep(s.state, runFailed)
+              ? FAILED_STEP_META.color
+              : STATE_META[s.state].color,
+          }"
         />
       </div>
 

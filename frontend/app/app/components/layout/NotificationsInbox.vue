@@ -35,6 +35,19 @@ const META: Record<Notification['type'], { icon: string; color: Accent; action: 
   decision_required: { icon: 'i-lucide-circle-help', color: 'warning', action: 'Mark read' },
 }
 
+/** A notification the escalation sweep has flagged as overdue (waited past the threshold). */
+function isUrgent(n: Notification): boolean {
+  return n.severity === 'urgent'
+}
+
+/** True when any open notification is overdue — turns the toolbar bell red. */
+const hasUrgent = computed(() => notifications.open.some(isUrgent))
+
+/** Effective accent: urgent (red) overrides the type's base colour to convey "overdue". */
+function accent(n: Notification): Accent {
+  return isUrgent(n) ? 'error' : META[n.type].color
+}
+
 async function act(n: Notification) {
   busy.value = n.id
   try {
@@ -83,7 +96,7 @@ function revealDecision(n: Notification) {
 
 <template>
   <UPopover v-if="notifications.count" :content="{ align: 'end' }">
-    <UButton color="warning" variant="soft" size="sm" icon="i-lucide-bell">
+    <UButton :color="hasUrgent ? 'error' : 'warning'" variant="soft" size="sm" icon="i-lucide-bell">
       {{ notifications.count }}
     </UButton>
 
@@ -95,21 +108,34 @@ function revealDecision(n: Notification) {
         <div
           v-for="n in notifications.open"
           :key="n.id"
-          class="rounded-lg border border-slate-700/60 bg-slate-800/40 p-2.5 mt-1.5"
+          class="rounded-lg border p-2.5 mt-1.5"
+          :class="
+            isUrgent(n)
+              ? 'border-error-500/60 bg-error-500/10'
+              : 'border-slate-700/60 bg-slate-800/40'
+          "
         >
           <div class="flex items-start gap-2">
             <UIcon
               :name="META[n.type].icon"
-              :class="`mt-0.5 h-4 w-4 text-${META[n.type].color}-400 shrink-0`"
+              :class="`mt-0.5 h-4 w-4 text-${accent(n)}-400 shrink-0`"
             />
             <div class="min-w-0 flex-1">
-              <button
-                class="block w-full truncate text-left text-sm font-medium text-slate-200 hover:underline"
-                :title="n.title"
-                @click="reveal(n)"
-              >
-                {{ n.title }}
-              </button>
+              <div class="flex items-center gap-1.5">
+                <button
+                  class="block min-w-0 flex-1 truncate text-left text-sm font-medium text-slate-200 hover:underline"
+                  :title="n.title"
+                  @click="reveal(n)"
+                >
+                  {{ n.title }}
+                </button>
+                <span
+                  v-if="isUrgent(n)"
+                  class="shrink-0 rounded bg-error-500/20 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-error-400"
+                >
+                  Overdue
+                </span>
+              </div>
               <p class="mt-0.5 text-[11px] leading-snug text-slate-400">{{ n.body }}</p>
               <a
                 v-if="n.payload?.prUrl"
@@ -122,7 +148,7 @@ function revealDecision(n: Notification) {
               </a>
               <div class="mt-2 flex items-center gap-1.5">
                 <UButton
-                  :color="META[n.type].color"
+                  :color="accent(n)"
                   variant="soft"
                   size="xs"
                   :loading="busy === n.id"

@@ -81,6 +81,7 @@ import { TesterController } from './TesterController.js'
 import type { GateDefinition, GateProbe } from './gates.js'
 import type { StepCompletionResolver } from './stepResolvers.js'
 import type { NotificationService } from '../notifications/NotificationService.js'
+import type { WorkspaceSettingsService } from '../settings/WorkspaceSettingsService.js'
 import type { RequirementReviewService } from '../requirements/RequirementReviewService.js'
 import type { ClarityReviewService } from '../clarity/ClarityReviewService.js'
 import type {
@@ -145,8 +146,6 @@ const EXECUTION_FAILURE_HINTS: Partial<Record<AgentFailureKind, string>> = {
     'The implementation container kept vanishing mid-run even after automatic fresh-container restarts. Most often this is transient: a deploy / new-version rollout draining the container, in which case simply retrying once the rollout has finished succeeds. If it persists, it points at a memory or crash issue on the run — inspect its logs (Cloudflare Workers Observability, filtered by the run id) and consider a heavier container instance type. Retry to try again.',
   timeout:
     'The run exceeded its time budget — a step or the implementation job did not finish in time. Retry to start it again.',
-  decision_timeout:
-    'A required decision was not answered in time, so the run was stopped. Retry to re-run the pipeline.',
   rejected:
     'You rejected this step’s proposal, stopping the run. Retry to re-run the pipeline from the rejected step.',
   companion_rejected:
@@ -297,6 +296,12 @@ export interface ExecutionServiceDependencies {
    */
   notificationService?: NotificationService
   /**
+   * Optional: resolves a workspace's runtime settings so {@link ExecutionService.start}
+   * can enforce the per-service running-task limit. Absent → the limit is never enforced
+   * (tests / unconfigured facades start runs unbounded).
+   */
+  workspaceSettingsService?: WorkspaceSettingsService
+  /**
    * Optional: reads a block's CI check runs so the `ci` step can gate the PR on
    * green CI. Absent → the `ci` step is a pass-through (nothing to gate), so the
    * engine works unchanged when GitHub CI isn't wired.
@@ -397,6 +402,7 @@ export class ExecutionService {
   private readonly clarityKind: ReviewKind<ClarityReview>
   private readonly blueprintReconciler?: BlueprintReconciler
   private readonly notificationService?: NotificationService
+  private readonly workspaceSettingsService?: WorkspaceSettingsService
   private readonly llmObservability?: LlmObservabilityService
   private readonly ciStatusProvider?: CiStatusProvider
   private readonly mergeabilityProvider?: PullRequestMergeabilityProvider
@@ -444,6 +450,7 @@ export class ExecutionService {
     environmentProvisioning,
     blueprintReconciler,
     notificationService,
+    workspaceSettingsService,
     llmObservability,
     ciStatusProvider,
     mergeabilityProvider,
@@ -537,6 +544,7 @@ export class ExecutionService {
     this.clarityKind = this.buildClarityKind()
     this.blueprintReconciler = blueprintReconciler
     this.notificationService = notificationService
+    this.workspaceSettingsService = workspaceSettingsService
     this.llmObservability = llmObservability
     this.ciStatusProvider = ciStatusProvider
     this.mergeabilityProvider = mergeabilityProvider
@@ -723,6 +731,10 @@ export class ExecutionService {
     // key, no subscription, no Cloudflare) — before any side effects.
     await this.assertProvidersConfiguredForPipeline(workspaceId, block, pipeline, initiatedBy)
 
+    // Enforce the workspace's per-service running-task limit (off by default) — a clear,
+    // actionable error before any side effects, so the human knows why the start was refused.
+    await this.assertWithinTaskLimit(workspaceId, block)
+
     // Mint the activation next: if the credential can't be unlocked, fail before
     // tearing down the block's prior run or creating a new one.
     const executionId = this.idGenerator.next('exec')
@@ -805,6 +817,78 @@ export class ExecutionService {
   }
 
   /**
+   * Enforce the workspace's per-service running-task limit before a task run starts.
+   * No-ops unless the settings module is wired, the block is a task, and a limit mode
+   * is active. Counts the tasks under the same service frame that already have a live
+   * run (running / blocked / paused) — bucketed by task type when the mode is
+   * `per_type`, else shared across all types — and throws a {@link ConflictError} (→ 409,
+   * shown as a toast) when the cap is reached. The starting block is excluded from the
+   * count (its prior run is about to be replaced).
+   */
+  private async assertWithinTaskLimit(workspaceId: string, block: Block): Promise<void> {
+    const settingsService = this.workspaceSettingsService
+    if (!settingsService || block.level !== 'task') return
+    const settings = await settingsService.get(workspaceId)
+    if (settings.taskLimitMode === 'off') return
+
+    const all = await this.blockRepository.listByWorkspace(workspaceId)
+    const byId = new Map(all.map((b) => [b.id, b]))
+    // Walk up to the owning service frame.
+    let frame: Block | undefined = block
+    let guard = 0
+    while (frame && frame.level !== 'frame' && guard++ < 1000) {
+      frame = frame.parentId ? byId.get(frame.parentId) : undefined
+    }
+    if (!frame || frame.level !== 'frame') return // orphan task — nothing to scope a service limit to
+    const frameId = frame.id
+
+    const underFrame = (b: Block): boolean => {
+      let cur: Block | undefined = b
+      let hops = 0
+      while (cur && hops++ < 1000) {
+        if (cur.id === frameId) return true
+        cur = cur.parentId ? byId.get(cur.parentId) : undefined
+      }
+      return false
+    }
+
+    const executions = await this.executionRepository.listByWorkspace(workspaceId)
+    const liveBlockIds = new Set(
+      executions
+        .filter((e) => e.status === 'running' || e.status === 'blocked' || e.status === 'paused')
+        .map((e) => e.blockId),
+    )
+    const siblingTasks = all.filter((b) => b.level === 'task' && b.id !== block.id && underFrame(b))
+
+    if (settings.taskLimitMode === 'shared') {
+      const limit = settings.taskLimitShared ?? 0
+      const running = siblingTasks.filter((b) => liveBlockIds.has(b.id)).length
+      if (running >= limit) {
+        throw new ConflictError(
+          `"${frame.title}" is already running ${running} of ${limit} allowed task(s). ` +
+            `Wait for one to finish before starting another.`,
+        )
+      }
+      return
+    }
+
+    // per_type: only the configured types are capped; an unconfigured type is unbounded.
+    const type = block.taskType ?? 'feature'
+    const perType = (settings.taskLimitPerType ?? {}) as Record<string, number>
+    const limit = perType[type]
+    if (limit == null) return
+    const running = siblingTasks.filter(
+      (b) => liveBlockIds.has(b.id) && (b.taskType ?? 'feature') === type,
+    ).length
+    if (running >= limit) {
+      throw new ConflictError(
+        `"${frame.title}" is already running ${running} of ${limit} allowed ${type} task(s). ` +
+          `Wait for one to finish before starting another ${type} task.`,
+      )
+    }
+  }
+
+  /**
    * Advance a single run by exactly one step and report what happened. This is
    * the durable driver's entry point: it reloads the run from storage (so it is
    * safe under replay/retry), no-ops unless the run is actively running, and
@@ -821,7 +905,19 @@ export class ExecutionService {
     if (!instance || (instance.status !== 'running' && instance.status !== 'paused')) {
       return { kind: 'noop' }
     }
-    return this.stepInstance(workspaceId, instance, options)
+    const result = await this.stepInstance(workspaceId, instance, options)
+    // Whenever a run parks waiting for a human, make sure there is an open notification
+    // for it — runs no longer time out, so the (escalating) notification is the only
+    // signal a human is needed. Best-effort and non-clobbering (see the helper).
+    // Conversely, once the run advances past the decision (the human responded, or it
+    // auto-passed, or the run reached a terminal state) clear that waiting card so the
+    // escalation sweep can't later flip a settled decision red ("Overdue").
+    if (result.kind === 'awaiting_decision') {
+      await this.ensureWaitingNotification(workspaceId, instance)
+    } else {
+      await this.clearWaitingNotification(workspaceId, instance)
+    }
+    return result
   }
 
   /** Advance a single running instance by one step, persisting the result. */
@@ -2092,6 +2188,52 @@ export class ExecutionService {
     })
   }
 
+  /**
+   * Ensure an open notification exists for a run that has just parked waiting for a human
+   * (an agent-raised decision, an approval gate, or an iterative review gate). Without
+   * the old decision timeout the run waits indefinitely, so the inbox card — which the
+   * periodic sweep escalates yellow → red — is the only signal a human is needed.
+   *
+   * Non-clobbering: if ANY open notification is already on the block (a more specific
+   * `merge_review`, iteration-cap `decision_required`, etc.), it is left untouched and we
+   * raise nothing — so the richer message wins. Best-effort: no notification service
+   * (tests) or a missing block is a no-op.
+   */
+  private async ensureWaitingNotification(
+    workspaceId: string,
+    instance: ExecutionInstance,
+  ): Promise<void> {
+    const svc = this.notificationService
+    if (!svc) return
+    const open = await svc.listOpen(workspaceId)
+    if (open.some((n) => n.blockId === instance.blockId)) return
+    const block = await this.blockRepository.get(workspaceId, instance.blockId)
+    if (!block) return
+    await svc.raise(workspaceId, {
+      type: 'decision_required',
+      blockId: block.id,
+      executionId: instance.id,
+      title: `"${block.title}" is waiting for your input`,
+      body: 'A pipeline step is parked awaiting a human decision. Open the task to respond.',
+      payload: { pipelineName: instance.pipelineName },
+    })
+  }
+
+  /**
+   * Clear the auto-raised "waiting for a human decision" card once a run advances past
+   * the decision it was parked on (so the escalation sweep can't flip a settled decision
+   * red). Scoped to the `decision_required` type, so the human-actionable cards a stopped
+   * run leaves behind are untouched. Best-effort: no notification service (tests) is a no-op.
+   */
+  private async clearWaitingNotification(
+    workspaceId: string,
+    instance: ExecutionInstance,
+  ): Promise<void> {
+    const svc = this.notificationService
+    if (!svc) return
+    await svc.clearWaitingDecision(workspaceId, instance.blockId)
+  }
+
   /** Raise a `ci_failed` notification when the CI gate exhausts its fixer budget. */
   private async raiseCiFailed(
     workspaceId: string,
@@ -2970,33 +3112,6 @@ export class ExecutionService {
     await this.workRunner.signalDecision(workspaceId, instance.id, decisionId, choice)
     await this.emitInstance(workspaceId, instance)
     return instance
-  }
-
-  /**
-   * Expire a decision no human resolved within the timeout. Safe + idempotent: a no-op
-   * unless the run is still parked (`blocked`) on EXACTLY this decision/approval id, so a
-   * decision already resolved (the run advanced past it) or an already-terminal run is left
-   * untouched. The Node durable driver schedules this `decisionTimeout` after parking on a
-   * decision; the Cloudflare driver instead relies on `waitForEvent`'s own timeout firing
-   * its failRun. Keeping the check here (not in the runtime) means both facades reason about
-   * decision state identically.
-   */
-  async expireDecision(
-    workspaceId: string,
-    executionId: string,
-    decisionId: string,
-  ): Promise<void> {
-    const instance = await this.executionRepository.get(workspaceId, executionId)
-    if (!instance || instance.status !== 'blocked') return
-    const step = instance.steps[instance.currentStep]
-    const pendingId = step?.decision?.id ?? step?.approval?.id
-    if (step?.state !== 'waiting_decision' || pendingId !== decisionId) return
-    await this.failRun(
-      workspaceId,
-      executionId,
-      'Decision timed out awaiting a human response',
-      'decision_timeout',
-    )
   }
 
   /**

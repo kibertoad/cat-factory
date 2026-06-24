@@ -256,6 +256,17 @@ watch(
           color="primary"
           variant="soft"
           size="sm"
+          icon="i-lucide-sliders-horizontal"
+          class="justify-start"
+          @click="ui.openWorkspaceSettings()"
+        >
+          Workspace settings
+        </UButton>
+        <UButton
+          block
+          color="primary"
+          variant="soft"
+          size="sm"
           icon="i-lucide-activity"
           class="justify-start"
           @click="ui.openDatadog()"

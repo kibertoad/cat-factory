@@ -61,24 +61,24 @@ The domain lives in `core/src/modules/*` — each is a small service (or cluster
 services) over ports, assembled in `core/src/container.ts`. The Worker mounts a
 matching controller per module in `worker/src/modules/*`.
 
-| Module                                        | Responsibility                                                                                                                             |
-| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `workspaces`                                  | Board (workspace) lifecycle; assembles the full snapshot (blocks, pipelines, executions, spend) the SPA hydrates from.                     |
-| `accounts`                                    | Tenancy: personal/org accounts, GitHub-membership-based visibility, the account ↔ workspace ownership graph.                               |
-| `board`                                       | Block mutations — frames/modules/tasks CRUD, reparenting, dependency edges.                                                                |
-| `pipelines`                                   | Saved, reusable agent-kind sequences (the pipeline palette).                                                                               |
-| `agents`                                      | Agent-kind catalog, role/phase prompts, and the inline `AiAgentExecutor`.                                                                  |
-| `execution`                                   | The run state machine: `advanceInstance` moves a run one step, handles decisions, failures/retries, context injection, and the spend gate. |
-| `spend`                                       | Token metering + org-wide monthly budget enforcement.                                                                                      |
-| `bootstrap`                                   | Reference architectures + the async repo-bootstrap task.                                                                                   |
-| `blueprints` _(pipeline agent step)_          | The Blueprinter step that writes the in-repo `blueprints/` map and reconciles it onto the board (via `BoardScanService`).                   |
-| `requirements`                                | Stateless reviewer agent over a block's collected requirements.                                                                            |
-| `github`                                      | GitHub App installs, repo/PR/issue projections, webhooks, repo provisioning (two-app tiering).                                             |
-| `documents`                                   | Connect Confluence/Notion sources, import pages, plan board structure, link docs to blocks.                                                |
-| `tasks`                                       | Connect Jira/Linear/issue trackers, import issues, link them to blocks as context.                                                         |
-| `environments`                                | Provision/teardown ephemeral environments from a per-workspace provider manifest.                                                          |
-| `fragmentLibrary`                             | Tenant-scoped prompt-fragment catalog + repo-linked sources + per-run relevance selection.                                                 |
-| `runners`                                     | Bind a workspace to a self-hosted runner pool (manifest + encrypted secrets).                                                              |
+| Module                               | Responsibility                                                                                                                             |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `workspaces`                         | Board (workspace) lifecycle; assembles the full snapshot (blocks, pipelines, executions, spend) the SPA hydrates from.                     |
+| `accounts`                           | Tenancy: personal/org accounts, GitHub-membership-based visibility, the account ↔ workspace ownership graph.                               |
+| `board`                              | Block mutations — frames/modules/tasks CRUD, reparenting, dependency edges.                                                                |
+| `pipelines`                          | Saved, reusable agent-kind sequences (the pipeline palette).                                                                               |
+| `agents`                             | Agent-kind catalog, role/phase prompts, and the inline `AiAgentExecutor`.                                                                  |
+| `execution`                          | The run state machine: `advanceInstance` moves a run one step, handles decisions, failures/retries, context injection, and the spend gate. |
+| `spend`                              | Token metering + org-wide monthly budget enforcement.                                                                                      |
+| `bootstrap`                          | Reference architectures + the async repo-bootstrap task.                                                                                   |
+| `blueprints` _(pipeline agent step)_ | The Blueprinter step that writes the in-repo `blueprints/` map and reconciles it onto the board (via `BoardScanService`).                  |
+| `requirements`                       | Stateless reviewer agent over a block's collected requirements.                                                                            |
+| `github`                             | GitHub App installs, repo/PR/issue projections, webhooks, repo provisioning (two-app tiering).                                             |
+| `documents`                          | Connect Confluence/Notion sources, import pages, plan board structure, link docs to blocks.                                                |
+| `tasks`                              | Connect Jira/Linear/issue trackers, import issues, link them to blocks as context.                                                         |
+| `environments`                       | Provision/teardown ephemeral environments from a per-workspace provider manifest.                                                          |
+| `fragmentLibrary`                    | Tenant-scoped prompt-fragment catalog + repo-linked sources + per-run relevance selection.                                                 |
+| `runners`                            | Bind a workspace to a self-hosted runner pool (manifest + encrypted secrets).                                                              |
 
 The repository **ports** these depend on live in `core/src/ports/*`
 (`agent-executor`, `model-provider`, `*-repositories`, `github-client`,

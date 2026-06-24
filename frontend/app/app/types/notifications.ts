@@ -51,10 +51,19 @@ export interface NotificationPayload {
 }
 
 /** A human-actionable item surfaced on the board. */
+/**
+ * Render urgency. A notification starts `normal` (the inbox's usual per-type colour) and
+ * is escalated to `urgent` (red) by the backend's sweep once it has waited for a human
+ * past the workspace's `waitingEscalationMinutes` threshold. Absent ⇒ `normal`.
+ */
+export type NotificationSeverity = 'normal' | 'urgent'
+
 export interface Notification {
   id: string
   type: NotificationType
   status: NotificationStatus
+  /** Render urgency (yellow vs red); escalated by the backend sweep. Absent ⇒ normal. */
+  severity?: NotificationSeverity
   blockId: string | null
   executionId: string | null
   title: string

@@ -87,6 +87,10 @@ jobs:
 
       - name: Resolve image tags
         id: tags
+        env:
+          # Routed through env (not inlined as ${{ }} in the run block) to avoid
+          # template-injection into the shell — zizmor[template-injection].
+          DOCKERHUB_ENABLED: ${{ steps.cfg.outputs.dockerhub }}
         run: |
           version="$(node -p "require('./${CONTEXT}/package.json').version")"
           short_sha="${GITHUB_SHA::7}"
@@ -98,7 +102,7 @@ jobs:
           {
             echo "tags<<EOF"
             emit "${GHCR_IMAGE}"
-            if [ "${{ steps.cfg.outputs.dockerhub }}" = "true" ]; then
+            if [ "${DOCKERHUB_ENABLED}" = "true" ]; then
               emit "${DOCKERHUB_IMAGE}"
             fi
             echo "EOF"

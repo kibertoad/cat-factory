@@ -8,6 +8,7 @@ import { useExecutionStore } from '~/stores/execution'
 import { useAgentRunsStore } from '~/stores/agentRuns'
 import { useNotificationsStore } from '~/stores/notifications'
 import { useMergePresetsStore } from '~/stores/mergePresets'
+import { useWorkspaceSettingsStore } from '~/stores/workspaceSettings'
 import { useAgentConfigStore } from '~/stores/agentConfig'
 import { useModelDefaultsStore } from '~/stores/modelDefaults'
 import { useServiceFragmentDefaultsStore } from '~/stores/serviceFragmentDefaults'
@@ -68,6 +69,7 @@ export const useWorkspaceStore = defineStore(
       useAgentRunsStore().hydrate(snapshot.bootstrapJobs ?? [])
       useNotificationsStore().hydrate(snapshot.notifications ?? [])
       useMergePresetsStore().hydrate(snapshot.mergePresets ?? [])
+      useWorkspaceSettingsStore().hydrate(snapshot.settings)
       useAgentConfigStore().hydrate(snapshot.agentConfigCatalog ?? [])
       useModelDefaultsStore().hydrate(snapshot.modelDefaults?.defaults)
       useModelDefaultsStore().hydrateDeployment(snapshot.deploymentModelDefaults)

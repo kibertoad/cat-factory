@@ -205,7 +205,10 @@ async function resetRun() {
             </span>
             <span
               class="inline-flex items-center gap-1 text-[10px]"
-              :class="[stepFailed(s) ? 'text-rose-400' : 'text-slate-400', { 'ml-auto': !s.subtasks }]"
+              :class="[
+                stepFailed(s) ? 'text-rose-400' : 'text-slate-400',
+                { 'ml-auto': !s.subtasks },
+              ]"
             >
               <UIcon v-if="stepFailed(s)" name="i-lucide-circle-x" class="h-3 w-3 shrink-0" />
               {{ labelForStep(s) }}

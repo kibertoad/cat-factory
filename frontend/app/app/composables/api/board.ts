@@ -1,4 +1,4 @@
-import type { Block, BlockType, Pipeline } from '~/types/domain'
+import type { Block, BlockType, CreateTaskType, Pipeline, TaskTypeFields } from '~/types/domain'
 import type { ApiContext, Position } from './context'
 
 /** Board structure: block (frame/module/task) mutations + the pipeline library. */
@@ -20,6 +20,8 @@ export function boardApi({ http, ws }: ApiContext) {
       body: {
         title: string
         description?: string
+        taskType?: CreateTaskType
+        taskTypeFields?: TaskTypeFields
         mergePresetId?: string
         pipelineId?: string
         agentConfig?: Record<string, string>
