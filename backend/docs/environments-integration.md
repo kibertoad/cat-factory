@@ -93,14 +93,96 @@ A manifest describes your management API. The worker's single generic
 }
 ```
 
+### Worked example — a PR-environment platform
+
+Most preview-environment platforms expose three calls: "create an environment for
+this PR", "get its status", "delete it" — and key the environment on the PR's git
+ref. Here is a complete manifest for that common shape. A project/tenant slug the
+platform requires (`my-project` below) isn't derivable from a block, so it lives as
+a literal in the paths; the git ref + repo come from the
+[git/PR/repo context](#gitprrepo-context-input-on-a-deployer-step):
+
+```jsonc
+{
+  "providerId": "preview-envs",
+  "label": "Preview Environments",
+  "baseUrl": "https://envs.example.com/v2",
+  "auth": { "type": "bearer", "secretRef": { "key": "API_TOKEN" } },
+
+  // Create: target the PR by number + repo. The platform returns a stable "ref"
+  // (or id) we capture and reuse on status/teardown.
+  "provision": {
+    "method": "POST",
+    "pathTemplate": "/projects/my-project/prenvs",
+    "bodyTemplate": "{\"git_ref\":{\"pr_number\":{{input.pullNumber}}},\"github\":{\"owner\":\"{{input.repoOwner}}\",\"repo\":\"{{input.repoName}}\"}}"
+  },
+  // Status/teardown address the env by the ref captured from the provision response.
+  "status":   { "method": "GET",    "pathTemplate": "/projects/my-project/prenvs/{{provision.externalId}}" },
+  "teardown": { "method": "DELETE", "pathTemplate": "/projects/my-project/prenvs/{{provision.externalId}}" },
+
+  "response": {
+    "externalIdPath": "data.ref",      // the per-PR ref, reused as {{provision.externalId}}
+    "urlPath": "data.url",
+    "statusPath": "data.status",
+    "statusMap": [
+      { "from": "pending",  "to": "provisioning" },
+      { "from": "online",   "to": "ready" },
+      { "from": "failed",   "to": "failed" },
+      { "from": "deleting", "to": "tearing_down" },
+      { "from": "deleted",  "to": "torn_down" }
+    ]
+  },
+  "defaultTtlMs": 3600000
+}
+```
+
+Two things to check against your platform's real API:
+
+- **Where the URL lives.** `urlPath` reads a single string via a dot-path
+  (`data.url`, or an array index like `data.links.0.href`). If your platform returns
+  the reachable URL only inside a nested/array-valued or templated structure that a
+  dot-path can't pull out cleanly, you have outgrown the manifest path — use the
+  [code-adapter seam](#code-adapter-seam-when-the-manifest-isnt-enough).
+- **Async provisioning.** If create returns before the environment is live, supply a
+  `status` template; the cron sweep polls it until `statusMap` yields `ready` (or
+  `failed`). A synchronous platform that returns a ready URL can omit `status`.
+
 ### Templating
 
 - `{{input.*}}` — provision inputs. On a pipeline `deployer` step these are derived
-  from the block (`blockId`, `title`, `type`, `description`, `features`); on a manual
-  provision they come from the request `inputs` (plus `blockId`).
+  from the block (`blockId`, `title`, `type`, `description`, `features`) plus the
+  **git/PR/repo context** below; on a manual provision they come from the request
+  `inputs` (plus `blockId`). Explicit request `inputs` always win over the derived
+  values.
 - `{{provision.*}}` — fields captured from the provision response (`externalId`,
   `url`), available to `status`/`teardown`.
 - Unknown references resolve to empty — a manifest can't reach arbitrary state.
+
+#### Git/PR/repo context (`{{input.*}}` on a `deployer` step)
+
+A preview/PR-environment platform almost always keys an environment on **the git
+ref it is building** and **the repo it belongs to**, not on an opaque block id. So
+the `deployer` step derives that context from the block's open PR and exposes it
+both as flattened `{{input.*}}` strings (for the manifest path) and as a typed
+object for a [code adapter](#code-adapter-seam-when-the-manifest-isnt-enough). Each
+is present only when known (a manual provision, or a block with no PR, carries
+fewer):
+
+| Variable             | Value                                                        |
+| -------------------- | ------------------------------------------------------------ |
+| `{{input.blockId}}`  | The board block being deployed (always present).             |
+| `{{input.branch}}`   | The head branch the agent pushed its work to.                |
+| `{{input.pullNumber}}` | The pull request number within the repo (e.g. `42`).       |
+| `{{input.pullUrl}}`  | The pull request web URL.                                    |
+| `{{input.repoOwner}}` | The repo owner (org/user login), parsed from the PR URL.    |
+| `{{input.repoName}}` | The repo name, parsed from the PR URL.                       |
+
+This is what lets a manifest build a "create an environment for PR #N of
+owner/repo" request without any per-block configuration. Note that any identifier a
+platform needs which is **not** derivable from the block (a project/team/tenant
+slug, a target cluster) is not in this namespace: bake it into the manifest as a
+literal in the `pathTemplate`/`bodyTemplate`, or pass it as a manual-provision
+`input`. Register one manifest per such project if they differ.
 
 ### Auth schemes (calling the management API)
 
@@ -115,6 +197,91 @@ Each references its secret(s) by **logical key**; values are supplied separately
 | `basic`                     | `usernameSecretRef`, `passwordSecretRef`                                        | `Authorization: Basic base64(u:p)`     |
 | `oauth2_client_credentials` | `tokenUrl`, `clientIdSecretRef`, `clientSecretSecretRef`, `scope?`, `audience?` | POST token → `Authorization: Bearer …` |
 | `custom_headers`            | `headers: [{ name, secretRef }]`                                                | each header set from its secret        |
+
+## Code-adapter seam (when the manifest isn't enough)
+
+The manifest path is declarative and code-free, but a single `fetch` + dot-path
+mapping can't express everything: a platform that paginates, needs a multi-step
+handshake, returns the env URL inside a structure no dot-path can address, signs
+requests in a bespoke way, or wants the typed git/PR/repo context as real fields
+rather than interpolated strings. For those, a **trusted, operator-installed** code
+adapter replaces the generic HTTP provider while keeping the rest of the
+integration (the connection registry, secret encryption, TTL sweep, agent-context
+surfacing) unchanged.
+
+An adapter implements the `EnvironmentProvider` port (`@cat-factory/kernel`):
+
+```ts
+import type {
+  EnvironmentProvider,
+  ProvisionEnvironmentRequest,
+  ProvisionedEnvironment,
+} from '@cat-factory/kernel'
+
+export class MyEnvironmentProvider implements EnvironmentProvider {
+  async provision(req: ProvisionEnvironmentRequest): Promise<ProvisionedEnvironment> {
+    // Typed context — no string parsing. Present when the block has an open PR.
+    const ctx = req.provisionContext // { branch?, pullNumber?, pullUrl?, repoOwner?, repoName?, blockId? }
+    const token = req.resolveSecret('API_TOKEN') // resolved from the encrypted bundle
+    // ...call your platform however it needs to be called...
+    return {
+      externalId: createdRef,
+      url: liveUrl,                 // SSRF-guarded by the engine before it is stored
+      status: 'ready',             // or 'provisioning' for async — status() is polled
+      expiresAt: null,             // epoch ms, or null to use defaultTtlMs
+      access: null,                // per-env creds for the tester, when applicable
+      fields: { ref: createdRef }, // arbitrary, persisted (encrypted) for status/teardown
+    }
+  }
+  async status(req) { /* read live status; `req.provisionFields` carries `fields` back */ }
+  async teardown(req) { /* destroy; best-effort, retried by the sweep */ }
+}
+```
+
+The adapter still registers a connection (so secrets are encrypted at rest and the
+module assembles), but the `manifest`'s request templates are ignored in favour of
+your code — the `secrets`, `providerId`, and `label` still apply. Wire it per
+facade:
+
+- **Node / local facade:** pass it to `buildNodeContainer({ environmentProvider:
+  new MyEnvironmentProvider(...) })`. It replaces the default
+  `HttpEnvironmentProvider`; the env repos + secret cipher still wire from config, so
+  `ENVIRONMENTS_ENABLED` + `ENCRYPTION_KEY` are still required.
+- **Cloudflare Worker facade:** inject it through `buildContainer`'s `overrides`
+  (spread last over the default deps), e.g. `{ environmentProvider: new
+  MyEnvironmentProvider(...) }`.
+
+Because the adapter is code you install and run, the URL it returns is still
+SSRF-guarded by the engine. To let it reach an internal platform, widen the URL
+policy (next section).
+
+## Reaching an internal / VPN-hosted platform
+
+By default every URL the integration fetches or exposes must be public `https` (see
+[Security notes](#security-notes)). A platform reachable only on an internal/VPN host
+(`*.internal`, an RFC1918 address) is rejected by that guard. A **trusted operator**
+(not an arbitrary workspace) can widen the guard per facade so the manifest
+`baseUrl`, the OAuth `tokenUrl`, and the returned env URL may use specific
+hosts/schemes:
+
+| Setting (env var / Worker `[vars]`) | Effect                                                                 |
+| ----------------------------------- | ---------------------------------------------------------------------- |
+| `ENVIRONMENTS_ALLOW_URL_HOSTS`      | Comma-separated hostnames exempt from the private/internal-host block. Each entry matches the URL host exactly (`envs.corp`, `10.1.2.3`), or as a dot suffix when it starts with `.` (`.internal` matches `a.b.internal`). |
+| `ENVIRONMENTS_ALLOW_HTTP_URLS`      | `true` to also permit `http` (not just `https`).                       |
+
+```toml
+# wrangler.toml (Worker)  —  or env vars on the Node facade
+ENVIRONMENTS_ALLOW_URL_HOSTS = "envs.corp.internal,.preview.internal"
+ENVIRONMENTS_ALLOW_HTTP_URLS = "false"
+```
+
+The widening only exempts the hosts you list; everything else stays strict, and
+embedded URL credentials are forbidden regardless. Leave both unset (the default) to
+keep the strict public-https guard everywhere.
+
+> The runner-pool integration has the matching `RUNNERS_ALLOW_URL_HOSTS` /
+> `RUNNERS_ALLOW_HTTP_URLS` knobs. The two are merged into one policy, so a host
+> allowed for one integration is allowed for the other — set only what you need.
 
 ## Registering a provider
 
@@ -172,4 +339,7 @@ retried on the next pass rather than wedging the registry.
   token).
 - **SSRF guard.** Every URL the worker fetches or exposes (manifest `baseUrl`, OAuth
   `tokenUrl`, the extracted env URL) must be https, carry no embedded credentials,
-  and resolve to a public host (loopback/link-local/RFC1918 are rejected).
+  and resolve to a public host (loopback/link-local/RFC1918 are rejected). A trusted
+  operator can widen the host/scheme allow-list per facade to reach an internal
+  platform — see [Reaching an internal / VPN-hosted platform](#reaching-an-internal--vpn-hosted-platform).
+  Embedded credentials stay forbidden regardless.
