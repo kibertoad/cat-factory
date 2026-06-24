@@ -121,6 +121,7 @@ import {
   MAX_EVICTION_RECOVERIES,
   MAX_TRANSIENT_EVICTION_RECOVERIES,
 } from './job.logic.js'
+import { decideTesterInfra, TESTER_INFRA_MESSAGES } from './tester-infra.logic.js'
 
 /**
  * Max `conflict-resolver` escalations before the conflicts gate gives up. Deliberately
@@ -345,6 +346,15 @@ export interface ExecutionServiceDependencies {
    * live. Absent (tests / unconfigured) → steps carry no `metrics`.
    */
   llmObservability?: LlmObservabilityService
+  /**
+   * Optional: whether the runtime can run the Tester's LOCAL docker-compose infra via
+   * Docker-in-Docker. Defaults to `true` (Cloudflare, Node, tests). The local facade
+   * sets it `false` for runtimes without nesting (Apple `container`), which makes
+   * {@link ExecutionService.assertTesterInfraConfigured} refuse a local-infra Tester run
+   * (steering it to the ephemeral environment or a no-infra service) instead of
+   * dispatching a job that can't stand its dependencies up.
+   */
+  localTestInfraSupported?: boolean
 }
 
 /** Reconciles a Blueprinter step's tree onto the board in place (BoardScanService). */
@@ -414,6 +424,8 @@ export class ExecutionService {
     workspaceId: string,
     agentKind: string,
   ) => Promise<string | undefined>
+  /** Whether the runtime can run the Tester's local DinD infra (false = limited mode). */
+  private readonly localTestInfraSupported: boolean
   /** Lazily-built polling-gate registry, keyed by `agentKind`. See {@link gateFor}. */
   private gateRegistryCache?: Map<string, GateDefinition>
   /**
@@ -455,6 +467,7 @@ export class ExecutionService {
     subscriptionActivationRepository,
     resolveWorkspaceModelDefault,
     resolveProviderCapabilities,
+    localTestInfraSupported,
   }: ExecutionServiceDependencies) {
     this.workspaceRepository = workspaceRepository
     this.blockRepository = blockRepository
@@ -548,6 +561,7 @@ export class ExecutionService {
     this.subscriptionActivations = subscriptionActivationRepository
     this.resolveWorkspaceModelDefault = resolveWorkspaceModelDefault
     this.resolveProviderCapabilities = resolveProviderCapabilities
+    this.localTestInfraSupported = localTestInfraSupported ?? true
   }
 
   private requireWorkspace(workspaceId: string) {
@@ -632,16 +646,23 @@ export class ExecutionService {
    * {@link ConflictError} (surfaced as an actionable message) when neither is set.
    */
   private async assertTesterInfraConfigured(workspaceId: string, block: Block): Promise<void> {
-    // The local-infra requirement applies only when the Tester runs in LOCAL mode.
-    // Ephemeral is the default, so an unset choice needs no service infra config.
-    if (block.agentConfig?.['tester.environment'] !== 'local') return
-    const service = await this.contextBuilder.resolveServiceConfig(workspaceId, block)
-    if (service?.noInfraDependencies || service?.testComposePath) return
-    throw new ConflictError(
-      "This task's pipeline runs the Tester locally, but its service has no test infra " +
-        "configured. Set the service's docker-compose path, or mark it as having no infra " +
-        'dependencies, before starting — or switch the Tester to the ephemeral environment.',
-    )
+    const environment =
+      block.agentConfig?.['tester.environment'] === 'local' ? 'local' : 'ephemeral'
+    // The service's infra config is only needed for a `local` run; an ephemeral run is
+    // decided by the runtime capability + whether a provider is wired.
+    const service =
+      environment === 'local'
+        ? await this.contextBuilder.resolveServiceConfig(workspaceId, block)
+        : undefined
+    const decision = decideTesterInfra({
+      localTestInfraSupported: this.localTestInfraSupported,
+      environment,
+      noInfraDependencies: service?.noInfraDependencies === true,
+      hasComposePath: !!service?.testComposePath,
+      hasEnvironmentProvider: this.environmentProvisioning !== undefined,
+    })
+    if (decision.ok) return
+    throw new ConflictError(TESTER_INFRA_MESSAGES[decision.reason])
   }
 
   /**

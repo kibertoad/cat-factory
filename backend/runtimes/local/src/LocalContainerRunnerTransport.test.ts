@@ -1,15 +1,19 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { type DockerExec, LocalDockerRunnerTransport } from './LocalDockerRunnerTransport.js'
+import {
+  type ContainerExec,
+  LocalContainerRunnerTransport,
+} from './LocalContainerRunnerTransport.js'
 
-// Unit coverage for the local Docker transport with the docker CLI + fetch injected,
-// so it runs anywhere (no Docker daemon, no Postgres). It asserts the container
-// lifecycle (run → port → health → dispatch), idempotent re-attach by label, the
-// kind→route mapping, and the eviction mapping a vanished container produces.
+// Unit coverage for the local container transport with the CLI + fetch injected, so it
+// runs anywhere (no daemon, no Postgres). With no adapter supplied it defaults to the
+// Docker-CLI adapter, so these assert the docker-family lifecycle (run → port → health →
+// dispatch), idempotent re-attach by label, the kind→route mapping, and the eviction
+// mapping a vanished container produces. The Apple adapter is covered separately.
 
 /** A scripted docker CLI: records calls and returns canned stdout per subcommand. */
 function fakeDocker(overrides: Partial<Record<string, string>> = {}) {
   const calls: string[][] = []
-  const exec: DockerExec = (args) => {
+  const exec: ContainerExec = (args) => {
     calls.push(args)
     const sub = args[0]
     if (sub === 'run') return Promise.resolve({ stdout: 'container-abc\n', stderr: '' })
@@ -35,7 +39,7 @@ function jsonResponse(body: unknown, status = 200): Response {
 
 afterEach(() => vi.restoreAllMocks())
 
-describe('LocalDockerRunnerTransport', () => {
+describe('LocalContainerRunnerTransport', () => {
   it('starts a labelled container, waits for health, then POSTs the job to the kind route', async () => {
     const { exec, calls } = fakeDocker()
     const fetchImpl = vi.fn(async (input: string | URL | Request, _init?: RequestInit) => {
@@ -44,7 +48,7 @@ describe('LocalDockerRunnerTransport', () => {
       if (url.endsWith('/run')) return jsonResponse({ jobId: 'job-1', state: 'running' }, 202)
       throw new Error(`unexpected fetch ${url}`)
     })
-    const transport = new LocalDockerRunnerTransport({
+    const transport = new LocalContainerRunnerTransport({
       image: 'harness:test',
       sharedSecret: 'sek',
       exec,
@@ -75,7 +79,7 @@ describe('LocalDockerRunnerTransport', () => {
       if (String(input).endsWith('/health')) return new Response('ok', { status: 200 })
       return jsonResponse({ state: 'running' }, 202)
     })
-    const transport = new LocalDockerRunnerTransport({
+    const transport = new LocalContainerRunnerTransport({
       image: 'harness:test',
       exec,
       fetchImpl: fetchImpl as unknown as typeof fetch,
@@ -105,7 +109,7 @@ describe('LocalDockerRunnerTransport', () => {
       }
       return jsonResponse({ state: 'running' }, 202)
     })
-    const transport = new LocalDockerRunnerTransport({
+    const transport = new LocalContainerRunnerTransport({
       image: 'harness:test',
       exec,
       fetchImpl: fetchImpl as unknown as typeof fetch,
@@ -130,7 +134,7 @@ describe('LocalDockerRunnerTransport', () => {
       routes.push(new URL(url).pathname)
       return jsonResponse({ state: 'running' }, 202)
     })
-    const transport = new LocalDockerRunnerTransport({
+    const transport = new LocalContainerRunnerTransport({
       image: 'harness:test',
       exec,
       fetchImpl: fetchImpl as unknown as typeof fetch,
@@ -147,7 +151,7 @@ describe('LocalDockerRunnerTransport', () => {
       if (String(input).endsWith('/health')) return new Response('ok', { status: 200 })
       return jsonResponse({ state: 'running' }, 202)
     })
-    const transport = new LocalDockerRunnerTransport({
+    const transport = new LocalContainerRunnerTransport({
       image: 'harness:test',
       exec,
       fetchImpl: fetchImpl as unknown as typeof fetch,
@@ -166,7 +170,7 @@ describe('LocalDockerRunnerTransport', () => {
       if (String(input).endsWith('/health')) return new Response('ok', { status: 200 })
       return jsonResponse({ state: 'running' }, 202)
     })
-    const transport = new LocalDockerRunnerTransport({
+    const transport = new LocalContainerRunnerTransport({
       image: 'harness:test',
       privilegedTestJobs: false,
       exec,
@@ -182,7 +186,7 @@ describe('LocalDockerRunnerTransport', () => {
       if (String(input).endsWith('/health')) return new Response('ok', { status: 200 })
       return jsonResponse({ state: 'running' }, 202)
     })
-    const transport = new LocalDockerRunnerTransport({
+    const transport = new LocalContainerRunnerTransport({
       image: 'harness:test',
       exec,
       fetchImpl: fetchImpl as unknown as typeof fetch,
@@ -203,7 +207,7 @@ describe('LocalDockerRunnerTransport', () => {
       }
       return jsonResponse({ state: 'running' }, 202)
     })
-    const transport = new LocalDockerRunnerTransport({
+    const transport = new LocalContainerRunnerTransport({
       image: 'harness:test',
       exec,
       fetchImpl: fetchImpl as unknown as typeof fetch,
@@ -217,7 +221,7 @@ describe('LocalDockerRunnerTransport', () => {
   it('reports an eviction when no container exists for the job', async () => {
     // ps returns nothing → the job has no container.
     const { exec } = fakeDocker({ ps: '' })
-    const transport = new LocalDockerRunnerTransport({
+    const transport = new LocalContainerRunnerTransport({
       image: 'harness:test',
       exec,
       fetchImpl: (() => {
@@ -237,7 +241,7 @@ describe('LocalDockerRunnerTransport', () => {
       if (url.includes('/jobs/')) throw new Error('ECONNREFUSED')
       return jsonResponse({ state: 'running' }, 202)
     })
-    const transport = new LocalDockerRunnerTransport({
+    const transport = new LocalContainerRunnerTransport({
       image: 'harness:test',
       exec,
       fetchImpl: fetchImpl as unknown as typeof fetch,
@@ -254,7 +258,7 @@ describe('LocalDockerRunnerTransport', () => {
       if (String(input).endsWith('/health')) return new Response('ok', { status: 200 })
       return jsonResponse({ state: 'running' }, 202)
     })
-    const transport = new LocalDockerRunnerTransport({
+    const transport = new LocalContainerRunnerTransport({
       image: 'harness:test',
       exec,
       fetchImpl: fetchImpl as unknown as typeof fetch,
@@ -265,7 +269,7 @@ describe('LocalDockerRunnerTransport', () => {
 
     // A second release (now uncached, ps empty) does not throw.
     const empty = fakeDocker({ ps: '' })
-    const t2 = new LocalDockerRunnerTransport({ image: 'i', exec: empty.exec })
+    const t2 = new LocalContainerRunnerTransport({ image: 'i', exec: empty.exec })
     await expect(t2.release({ runId: 'missing', jobId: 'missing' })).resolves.toBeUndefined()
   })
 
@@ -277,7 +281,7 @@ describe('LocalDockerRunnerTransport', () => {
       if (url.includes('/jobs/')) return new Response('not found', { status: 404 })
       return jsonResponse({ state: 'running' }, 202)
     })
-    const transport = new LocalDockerRunnerTransport({
+    const transport = new LocalContainerRunnerTransport({
       image: 'harness:test',
       exec,
       fetchImpl: fetchImpl as unknown as typeof fetch,
@@ -295,7 +299,7 @@ describe('LocalDockerRunnerTransport', () => {
       if (url.endsWith('/health')) return new Response('ok', { status: 200 })
       return new Response('boom', { status: 500 })
     })
-    const transport = new LocalDockerRunnerTransport({
+    const transport = new LocalContainerRunnerTransport({
       image: 'harness:test',
       exec,
       fetchImpl: fetchImpl as unknown as typeof fetch,
@@ -310,7 +314,7 @@ describe('LocalDockerRunnerTransport', () => {
     // dispatch must `rm -f` the stale container before `docker run`.
     let firstPortLookup = true
     const calls: string[][] = []
-    const exec: DockerExec = (args) => {
+    const exec: ContainerExec = (args) => {
       calls.push(args)
       const sub = args[0]
       if (sub === 'run') return Promise.resolve({ stdout: 'fresh-container\n', stderr: '' })
@@ -330,7 +334,7 @@ describe('LocalDockerRunnerTransport', () => {
       if (String(input).endsWith('/health')) return new Response('ok', { status: 200 })
       return jsonResponse({ state: 'running' }, 202)
     })
-    const transport = new LocalDockerRunnerTransport({
+    const transport = new LocalContainerRunnerTransport({
       image: 'harness:test',
       exec,
       fetchImpl: fetchImpl as unknown as typeof fetch,
@@ -343,12 +347,12 @@ describe('LocalDockerRunnerTransport', () => {
 
   it('reapExited force-removes exited managed containers and returns the count', async () => {
     const calls: string[][] = []
-    const exec: DockerExec = (args) => {
+    const exec: ContainerExec = (args) => {
       calls.push(args)
       if (args[0] === 'ps') return Promise.resolve({ stdout: 'c1\nc2\n', stderr: '' })
       return Promise.resolve({ stdout: '', stderr: '' })
     }
-    const transport = new LocalDockerRunnerTransport({ image: 'harness:test', exec })
+    const transport = new LocalContainerRunnerTransport({ image: 'harness:test', exec })
     const reaped = await transport.reapExited()
     expect(reaped).toBe(2)
     const psCall = calls.find((c) => c[0] === 'ps')!
@@ -360,7 +364,7 @@ describe('LocalDockerRunnerTransport', () => {
 
   it('reapExited is a no-op (count 0) when no exited containers exist', async () => {
     const { exec, calls } = fakeDocker({ ps: '' })
-    const transport = new LocalDockerRunnerTransport({ image: 'harness:test', exec })
+    const transport = new LocalContainerRunnerTransport({ image: 'harness:test', exec })
     expect(await transport.reapExited()).toBe(0)
     expect(calls.some((c) => c[0] === 'rm')).toBe(false)
   })

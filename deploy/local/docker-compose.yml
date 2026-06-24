@@ -1,7 +1,8 @@
 # Local-mode supporting services. Only Postgres is needed: the orchestrator itself
-# runs as a plain Node process on the host (so it can drive the local Docker daemon to
-# spawn one executor-harness container per agent job), and the agent jobs are launched
-# directly via `docker run` by the LocalDockerRunnerTransport — not defined here.
+# runs as a plain Node process on the host (so it can drive the local container runtime
+# to spawn one executor-harness container per agent job), and the agent jobs are launched
+# by the LocalContainerRunnerTransport (Docker/Podman/OrbStack/Colima/Apple `container`,
+# per LOCAL_CONTAINER_RUNTIME) — not defined here.
 #
 #   docker compose up -d postgres   # or: pnpm db:up
 #   DATABASE_URL=postgres://cat:cat@localhost:5432/catfactory pnpm start

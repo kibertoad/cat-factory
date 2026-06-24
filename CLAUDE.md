@@ -144,14 +144,23 @@ facade so the runtimes can't drift (see "Cross-runtime conformance" below).
   CI and merges for real, exactly like the Worker (previously only local mode did).
 - `backend/runtimes/local` — `@cat-factory/local-server`, the **local-mode facade**:
   the Node facade with two differentiators so a developer can run the whole product on
-  their own machine. Agent jobs run as **per-run local Docker/Podman containers** (the
-  `LocalDockerRunnerTransport` — the local analogue of `CloudflareContainerTransport`
-  and `RunnerPoolTransport`, driven through the same `RunnerTransport` port: `docker run`
-  the executor-harness image per run, publish `:8080` to an ephemeral host port,
-  re-attach the run's later steps by `cat-factory.runId` label (each step's harness job
-  is keyed by the per-step `RunnerJobRef.jobId`), eviction-maps a vanished
-  container), and GitHub is reached via a **PAT** (`GITHUB_PAT` → `mintInstallationToken`)
-  instead of a GitHub App. `buildLocalContainer` reuses ALL of Node's persistence/
+  their own machine. Agent jobs run as **per-run local containers** (the
+  `LocalContainerRunnerTransport` — the local analogue of `CloudflareContainerTransport`
+  and `RunnerPoolTransport`, driven through the same `RunnerTransport` port: start the
+  executor-harness image per run, re-attach the run's later steps to it (each step's
+  harness job is keyed by the per-step `RunnerJobRef.jobId`), eviction-maps a vanished
+  container). HOW it talks to the runtime is delegated to a `ContainerRuntimeAdapter`
+  (`src/runtimes/*`), selected by `LOCAL_CONTAINER_RUNTIME` (docker | podman | orbstack |
+  colima | apple): **Docker/Podman/OrbStack/Colima** share the Docker-CLI adapter
+  (`docker run`, publish `:8080` to an ephemeral host port read with `docker port`,
+  `cat-factory.runId` label), while **Apple `container`** has its own adapter
+  (VM-per-container: `container run` addressed by a deterministic name, connect to the
+  container's own IP, no Docker-in-Docker). Each adapter exposes a `localDind` capability;
+  the local facade threads it into `ExecutionService` as `localTestInfraSupported` so a
+  runtime that can't nest containers (Apple) **refuses a local-infra Tester run at start**
+  ("limited mode" — steer to the ephemeral env or a no-infra service; see
+  `tester-infra.logic.ts`). GitHub is reached via a **PAT** (`GITHUB_PAT` →
+  `mintInstallationToken`) instead of a GitHub App. `buildLocalContainer` reuses ALL of Node's persistence/
   pg-boss/gateways and only swaps the runner transport + the GitHub token/client seams;
   `startLocal()` reuses Node's `start()`. The harness itself opens the PR via the PAT,
   and the **CI gate + merge / mergeability providers are wired from a PAT-backed
@@ -670,7 +679,8 @@ differentiators behind the shared kernel ports + the `container.gateways` seam.
   `github_repos` still needs the GitHub connect/sync integration on Postgres (the
   remaining follow-up); the executor reads those rows once present.
 - **Local mode** (`runtimes/local`, `@cat-factory/local-server`): the Node facade with
-  the runner backend swapped for a **per-job local Docker container** (`LocalDockerRunnerTransport`,
+  the runner backend swapped for a **per-run local container** (`LocalContainerRunnerTransport`
+  over a `ContainerRuntimeAdapter` for Docker/Podman/OrbStack/Colima/Apple `container`,
   injected via `buildNodeContainer`'s `resolveTransport` seam) and GitHub reached via a
   **PAT** — both the push token (`mintInstallationToken` seam) and a PAT-backed
   `FetchGitHubClient` (`githubClient` seam) that wires the CI gate + merge / mergeability

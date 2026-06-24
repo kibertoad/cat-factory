@@ -1,18 +1,29 @@
 // @cat-factory/local-server — the local-mode runtime facade. It is the Node.js
 // facade (@cat-factory/node-server: shared Hono app + Drizzle/Postgres + pg-boss)
 // with two differentiators so a developer can run the whole product on their own
-// machine: agent jobs run as per-job local Docker/Podman containers, and GitHub is
+// machine: agent jobs run as per-run local containers (Docker/Podman/OrbStack/Colima/
+// Apple `container`, selected by LOCAL_CONTAINER_RUNTIME), and GitHub is
 // reached via a personal access token (no GitHub App). `startLocal()` boots the
 // service; `buildLocalContainer()` is the composition root.
 export { startLocal } from './server.js'
 export { buildLocalContainer } from './container.js'
 export { loadLocalConfig, applyLocalDefaults } from './config.js'
 export {
-  LocalDockerRunnerTransport,
-  createLocalDockerTransportFromEnv,
-  type LocalDockerRunnerTransportOptions,
-  type DockerExec,
-} from './LocalDockerRunnerTransport.js'
+  LocalContainerRunnerTransport,
+  createLocalContainerTransportFromEnv,
+  type LocalContainerRunnerTransportOptions,
+} from './LocalContainerRunnerTransport.js'
+export {
+  type ContainerRuntimeAdapter,
+  type ContainerExec,
+  type RuntimeId,
+  createRuntimeAdapter,
+  resolveRuntimeId,
+  runtimeProfile,
+  resolveHostAlias,
+  DockerRuntimeAdapter,
+  AppleContainerRuntimeAdapter,
+} from './runtimes/index.js'
 // Seed the github_installations/github_repos projection so container agent steps can
 // resolve a target repo in local mode (no GitHub App connect flow). Also a CLI:
 // `node dist/link-repo.js <workspaceId> <frameBlockId> <owner/repo>`.
