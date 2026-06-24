@@ -63,15 +63,15 @@ export interface RunnerJobResult {
 }
 
 /**
- * Which harness endpoint a dispatch targets (a coding run, a blueprint run, a
+ * Which harness agent a dispatch targets (a coding run, a blueprint run, a
  * read-only repo exploration, a repo-bootstrap run, a CI fix, a merge-conflict
  * resolution, or a merge assessment). All are dispatched + polled identically
- * through this transport; `kind` only selects the harness endpoint (e.g. `/run` |
- * `/blueprint` | `/explore` | `/resolve-conflicts`). The Cloudflare backend serves all
- * of them, and so does a self-hosted pool: it runs the same executor-harness image, and
- * runtime parity is the default (the "keep the runtimes symmetric" guideline), so a pool
- * serves every kind with no opt-in allow-list — a new harness kind reaches it
- * automatically, never silently diverging from Cloudflare.
+ * through this transport; `kind` travels in the job body to the harness's single
+ * `POST /jobs` endpoint, which reads it to pick the right agent. The Cloudflare
+ * backend serves all of them, and so does a self-hosted pool: it runs the same
+ * executor-harness image, and runtime parity is the default (the "keep the runtimes
+ * symmetric" guideline), so a pool serves every kind with no opt-in allow-list — a
+ * new harness kind reaches it automatically, never silently diverging from Cloudflare.
  */
 export type RunnerDispatchKind =
   | 'run'
@@ -146,9 +146,10 @@ export interface RunnerTransport {
   /**
    * Start the job `ref.jobId` (in run `ref.runId`) with the harness job `spec`, or
    * re-attach to one already running for that ref. Must be idempotent per ref so a
-   * replayed dispatch never starts a duplicate. `kind` selects the harness endpoint
-   * (`run` by default, `blueprint` for a Blueprinter job, `bootstrap` for a
-   * repo-bootstrap job, …); all are polled identically via {@link poll}.
+   * replayed dispatch never starts a duplicate. `kind` selects which harness agent
+   * runs (`run` by default, `blueprint` for a Blueprinter job, `bootstrap` for a
+   * repo-bootstrap job, …) and is carried in the job body; all are polled identically
+   * via {@link poll}.
    */
   dispatch(
     ref: RunnerJobRef,

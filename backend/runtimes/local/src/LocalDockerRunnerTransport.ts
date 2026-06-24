@@ -29,21 +29,6 @@ const execFileAsync = promisify(execFile)
 // long-lived is mounted: the per-job GitHub + proxy tokens travel in the POST body
 // and live only for the job, in the container's ephemeral filesystem.
 
-/** Maps a dispatch kind to the harness HTTP route that starts that job. */
-const KIND_ROUTE: Record<RunnerDispatchKind, string> = {
-  run: '/run',
-  blueprint: '/blueprint',
-  spec: '/spec',
-  explore: '/explore',
-  bootstrap: '/bootstrap',
-  'ci-fix': '/ci-fix',
-  'resolve-conflicts': '/resolve-conflicts',
-  merge: '/merge',
-  'on-call': '/on-call',
-  test: '/test',
-  'fix-tests': '/fix-tests',
-}
-
 // The failed-poll error the engine classifies as a container eviction (matched by
 // orchestration `isContainerEvictionError`, also used by the bootstrap flow). A
 // vanished/exited local container maps to it so the run stops and the stale-run
@@ -191,12 +176,13 @@ export class LocalDockerRunnerTransport implements RunnerTransport {
       await this.waitForHealth(resolved.port)
     }
 
-    // POST the job to the kind's route. Idempotent: re-attaching to an already-running
-    // container re-POSTs, which the harness's per-id registry treats as a re-attach.
-    const res = await this.fetchImpl(this.url(resolved.port, KIND_ROUTE[kind]), {
+    // POST the job to the single harness endpoint, with the kind in the body.
+    // Idempotent: re-attaching to an already-running container re-POSTs, which the
+    // harness's per-id registry treats as a re-attach.
+    const res = await this.fetchImpl(this.url(resolved.port, '/jobs'), {
       method: 'POST',
       headers: { 'content-type': 'application/json', [SECRET_HEADER]: this.sharedSecret },
-      body: JSON.stringify(spec),
+      body: JSON.stringify({ ...spec, kind }),
       signal: AbortSignal.timeout(this.requestTimeoutMs),
     })
     if (!res.ok) {

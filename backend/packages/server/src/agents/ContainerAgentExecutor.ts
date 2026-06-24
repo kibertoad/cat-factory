@@ -963,7 +963,9 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
         kind: 'explore',
         body: {
           ...common,
-          kind: context.agentKind,
+          // The harness explore job's temp-dir/log label. Named `label`, not `kind`:
+          // `kind` is the dispatch discriminator the transport stamps onto the body.
+          label: context.agentKind,
           systemPrompt: roleSystemPrompt,
           userPrompt: userPromptFor(context),
           branch: workBranchReady ? workBranch : (prBranch ?? repo.baseBranch),
