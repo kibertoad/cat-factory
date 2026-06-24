@@ -82,6 +82,7 @@ import { MergeResolver } from './MergeResolver.js'
 import { ReviewGateController, type ReviewKind } from './ReviewGateController.js'
 import { TesterController } from './TesterController.js'
 import type { GateDefinition, GateProbe } from './gates.js'
+import { recordGateAttempt } from './gates.js'
 import type { StepCompletionResolver } from './stepResolvers.js'
 import type { NotificationService } from '../notifications/NotificationService.js'
 import type { WorkspaceSettingsService } from '../settings/WorkspaceSettingsService.js'
@@ -1304,6 +1305,28 @@ export class ExecutionService {
     // updates mergeability). A helper that failed without pushing leaves the precheck
     // negative, so the next check re-dispatches (until the attempt budget is spent).
     if (this.gateFor(step.agentKind)) {
+      // Record the just-finished helper attempt before re-probing. The gate's next
+      // precheck stays the source of truth for pass/fail, but the helper's own account
+      // (what it did, and for the conflict-resolver which files it left conflicting) is
+      // otherwise discarded here — leaving the gate window with only a bare attempt
+      // count. Capture it so the UI can show what each attempt tried.
+      if (step.gate) {
+        const attempt = recordGateAttempt(
+          step.gate,
+          update.state === 'done'
+            ? { state: 'done', output: update.result.output ?? null }
+            : { state: 'failed', error: update.error ?? null },
+          this.clock.now(),
+        )
+        step.gate.attemptLog = [...(step.gate.attemptLog ?? []), attempt]
+        // The conflicts gate's precheck carries no failure detail of its own (GitHub
+        // reports mergeability as a single bit), so surface the resolver's account as
+        // the gate's last failure summary. CI's probe already sets a richer summary
+        // (the red checks) — don't clobber it with the fixer's push note.
+        if (step.agentKind === CONFLICTS_AGENT_KIND && attempt.summary) {
+          step.gate.lastFailureSummary = attempt.summary
+        }
+      }
       step.jobId = undefined
       step.subtasks = undefined
       if (step.gate) step.gate.phase = 'checking'

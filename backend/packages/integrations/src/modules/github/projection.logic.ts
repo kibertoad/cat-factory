@@ -173,6 +173,7 @@ export interface GhCheckRunPayload {
   status: string
   conclusion?: string | null
   head_sha: string
+  html_url?: string | null
 }
 
 export function toCheckRunProjection(
@@ -187,6 +188,7 @@ export function toCheckRunProjection(
     name: p.name,
     status: p.status,
     conclusion: p.conclusion ?? null,
+    htmlUrl: p.html_url ?? null,
     syncedAt,
   }
 }

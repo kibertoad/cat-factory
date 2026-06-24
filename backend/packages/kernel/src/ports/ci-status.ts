@@ -12,6 +12,8 @@ export interface CiCheck {
   status: string
   /** GitHub conclusion when completed: 'success' | 'failure' | 'neutral' | … (null while running). */
   conclusion: string | null
+  /** The check run's GitHub web URL (`html_url`), so the gate UI can link to its logs. */
+  url?: string | null
 }
 
 export interface CiStatusReport {

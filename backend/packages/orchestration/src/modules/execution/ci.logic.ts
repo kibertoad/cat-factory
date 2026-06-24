@@ -128,10 +128,10 @@ export function isCiGreen(verdict: CiVerdict): boolean {
 /** The completed-and-non-passing checks behind a `failure` verdict. */
 export function listFailingChecks(
   checks: CiCheck[],
-): { name: string; conclusion: string | null }[] {
+): { name: string; conclusion: string | null; url: string | null }[] {
   return checks
     .filter((c) => c.status === 'completed' && !PASSING_CONCLUSIONS.has(c.conclusion ?? ''))
-    .map((c) => ({ name: c.name, conclusion: c.conclusion }))
+    .map((c) => ({ name: c.name, conclusion: c.conclusion, url: c.url ?? null }))
 }
 
 /** A short, human-readable summary of the failing checks, for the step output / notification. */

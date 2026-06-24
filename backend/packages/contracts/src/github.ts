@@ -99,6 +99,12 @@ export const githubCheckRunSchema = v.object({
   name: v.string(),
   status: v.string(),
   conclusion: v.nullable(v.string()),
+  /**
+   * The check run's GitHub web URL (`html_url`). Optional: the live check-runs read
+   * (used by the CI gate) populates it so the UI can link to the failed run; the
+   * persisted projection doesn't store it, so rows read back from the DB omit it.
+   */
+  htmlUrl: v.optional(v.nullable(v.string())),
   syncedAt: v.number(),
 })
 export type GitHubCheckRun = v.InferOutput<typeof githubCheckRunSchema>
