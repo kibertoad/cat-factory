@@ -1,13 +1,14 @@
 <script setup lang="ts">
-import { ref, reactive, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { onKeyStroke } from '@vueuse/core'
-import type { AgentState } from '~/types/domain'
 import type { IterationCapChoice } from '~/types/execution'
 import { agentKindMeta } from '~/utils/catalog'
-import { parseOutputOutline, sliceSource } from '~/utils/agentOutput'
-import { subtaskIconClass } from '~/utils/pipelineRender'
-import StepMetricsBar from '~/components/observability/StepMetricsBar.vue'
 import StepRestartControl from '~/components/panels/StepRestartControl.vue'
+import StepMetadataCard from '~/components/panels/StepMetadataCard.vue'
+import StepTestReport from '~/components/panels/StepTestReport.vue'
+import { useStepTimer } from '~/composables/useStepTimer'
+import { useStepProse } from '~/composables/useStepProse'
+import { useStepApproval } from '~/composables/useStepApproval'
 
 // Detail overlay for a single pipeline step. Opened by clicking an agent in the
 // inspector list (TaskExecution) or the focus-view pipeline (PipelineProgress) via
@@ -16,6 +17,9 @@ import StepRestartControl from '~/components/panels/StepRestartControl.vue'
 // (state, timing, model, subtasks, fragments, decision/approval). When the agent
 // produced prose (architect, researcher, reviewer, …) it also renders that output
 // as markdown, split into collapsible sections with an auto-generated ToC sidebar.
+// This component is orchestration only: the metadata card + the tester report are
+// child components, and the live clock / prose reader / approval-review state machine
+// live in the `useStepTimer` / `useStepProse` / `useStepApproval` composables.
 const ui = useUiStore()
 const execution = useExecutionStore()
 const board = useBoardStore()
@@ -45,199 +49,84 @@ const pctOf = (n: number) => `${Math.round(n * 100)}%`
 // greenlight) + its loop phase/attempts, surfaced when this is a `tester` step.
 const testReport = computed(() => step.value?.test?.lastReport ?? null)
 const testPhase = computed(() => step.value?.test ?? null)
-const SEVERITY_COLOR: Record<string, string> = {
-  low: '#64748b',
-  medium: '#f59e0b',
-  high: '#f97316',
-  critical: '#ef4444',
-}
-const OUTCOME_COLOR: Record<string, string> = {
-  passed: '#22c55e',
-  failed: '#ef4444',
-  skipped: '#64748b',
-}
-
-const STATE_META: Record<AgentState, { label: string; color: string }> = {
-  pending: { label: 'Pending', color: '#64748b' },
-  working: { label: 'Working', color: '#6366f1' },
-  waiting_decision: { label: 'Needs input', color: '#f59e0b' },
-  done: { label: 'Done', color: '#22c55e' },
-}
-
-// A 1s tick so a still-running step's elapsed time counts up live while open.
-const nowTick = ref(0)
-let timer: ReturnType<typeof setInterval> | undefined
-onMounted(() => {
-  nowTick.value = Date.now()
-  timer = setInterval(() => (nowTick.value = Date.now()), 1000)
-})
-onUnmounted(() => {
-  if (timer) clearInterval(timer)
-})
 
 // A failed run is no longer executing: a step left mid-flight (state still
 // `working`, no `finishedAt`) must stop looking live — no ticking clock, no
 // "spinning up" phase, no spinner.
 const runFailed = computed(() => instance.value?.status === 'failed')
-// A step that is finished, failed, or parked on a human is not actively executing —
-// no ticking clock or spinner. `pausedAt` is the "waiting on input" freeze.
-const isRunning = computed(
-  () =>
-    !!step.value?.startedAt &&
-    !step.value?.finishedAt &&
-    step.value?.pausedAt == null &&
-    !runFailed.value,
-)
-// The state badge: a step left mid-flight on a failed run keeps `state: 'working'`,
-// so report it as "Failed" rather than the misleading "Working".
-const stateMeta = computed(() => {
-  const s = step.value
-  if (!s) return STATE_META.pending
-  if (runFailed.value && s.state === 'working') return { label: 'Failed', color: '#ef4444' }
-  return STATE_META[s.state]
-})
-/** Elapsed/total execution time in ms — null until the step has started. */
-const durationMs = computed(() => {
-  const s = step.value
-  if (s?.startedAt == null) return null
-  // Freeze the clock once the step stops working: at its finish, else at the failure
-  // time once the run has failed, else at the moment it parked on a human (`pausedAt`).
-  // Otherwise it is live, so count up to the current tick. (A mid-flight step has no
-  // `finishedAt`, so without these freezes the tick would count up forever.)
-  const end =
-    s.finishedAt ??
-    (runFailed.value
-      ? (instance.value?.failure?.occurredAt ?? s.startedAt)
-      : (s.pausedAt ?? nowTick.value))
-  return Math.max(0, end - s.startedAt)
+
+// Live elapsed-time clock for the open step.
+const { isRunning, durationLabel } = useStepTimer({
+  step: () => step.value,
+  runFailed: () => runFailed.value,
+  failureAt: () => instance.value?.failure?.occurredAt,
 })
 
-function formatDuration(ms: number): string {
-  const totalSec = Math.round(ms / 1000)
-  if (totalSec < 60) return `${totalSec}s`
-  const m = Math.floor(totalSec / 60)
-  const sec = totalSec % 60
-  if (m < 60) return sec ? `${m}m ${sec}s` : `${m}m`
-  const h = Math.floor(m / 60)
-  const min = m % 60
-  return min ? `${h}h ${min}m` : `${h}h`
-}
-function formatClock(ms?: number | null): string | null {
-  return ms ? new Date(ms).toLocaleString() : null
-}
+// The prose reader: heading outline, collapse state, scroll-spy + scroll refs.
+const prose = useStepProse(() => step.value?.output ?? '')
+const {
+  outline,
+  tocSections,
+  hasOutput,
+  collapsed,
+  activeId,
+  scrollEl,
+  sectionEls,
+  toggle,
+  setAll,
+  allCollapsed,
+  goTo,
+  onScroll,
+} = prose
 
-const durationLabel = computed(() =>
-  durationMs.value == null ? null : formatDuration(durationMs.value),
-)
-const modelLabel = computed(() => (step.value?.model ? models.labelForRef(step.value.model) : null))
-
-const ITEM_ICON: Record<string, string> = {
-  completed: 'i-lucide-check-circle-2',
-  in_progress: 'i-lucide-loader-circle',
-  pending: 'i-lucide-circle',
-}
-
-// --- prose reader (only when the step produced output) -----------------------
-const outline = computed(() => parseOutputOutline(step.value?.output ?? ''))
-const tocSections = computed(() => outline.value.sections.filter((s) => s.depth > 0))
-const hasOutput = computed(() => !!step.value?.output?.trim())
-
-const collapsed = reactive<Record<string, boolean>>({})
-const activeId = ref<string>('step-details')
-const scrollEl = ref<HTMLElement | null>(null)
-const sectionEls = reactive<Record<string, HTMLElement | null>>({})
-
-// Anchors the ToC navigates + the scroll-spy tracks: the details card first, then
-// every heading section of the prose.
-const anchors = computed(() => ['step-details', ...tocSections.value.map((s) => s.id)])
-
-// Re-seed (all sections expanded, scrolled to top) whenever a different step opens.
-watch(
-  () => ctx.value && `${ctx.value.instanceId}:${ctx.value.stepIndex}`,
-  (key) => {
-    for (const k of Object.keys(collapsed)) delete collapsed[k]
-    activeId.value = 'step-details'
-    // Reset the review draft whenever a different gate/step opens.
-    reviewComments.value = []
-    feedback.value = ''
-    draftTarget.value = null
-    draftBody.value = ''
-    rejectArmed.value = false
-    editing.value = false
-    draftProposal.value = ''
-    if (key) void nextTick(() => scrollEl.value?.scrollTo({ top: 0 }))
-  },
-)
-
-function close() {
-  // Reset the new approval-mode sub-states so reopening the same step is clean
-  // (the step-change watch only fires when the step key actually changes).
-  editing.value = false
-  draftProposal.value = ''
-  rejectArmed.value = false
-  ui.closeStepDetail()
-}
-onKeyStroke('Escape', () => {
-  if (open.value) close()
-})
-
-function toggle(id: string) {
-  collapsed[id] = !collapsed[id]
-}
-function setAll(value: boolean) {
-  for (const s of outline.value.sections) collapsed[s.id] = value
-}
-const allCollapsed = computed(
-  () => outline.value.sections.length > 0 && outline.value.sections.every((s) => collapsed[s.id]),
-)
-
-async function goTo(id: string) {
-  if (collapsed[id]) collapsed[id] = false
-  activeId.value = id
-  await nextTick()
-  sectionEls[id]?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-}
-
-function onScroll() {
-  const container = scrollEl.value
-  if (!container) return
-  const line = container.getBoundingClientRect().top + 80
-  let current = anchors.value[0] ?? 'step-details'
-  for (const id of anchors.value) {
-    const el = sectionEls[id]
-    if (el && el.getBoundingClientRect().top <= line) current = id
-    else break
-  }
-  activeId.value = current
-}
-
-async function copyOutput() {
-  if (step.value?.output) await navigator.clipboard?.writeText(step.value.output)
-}
-
-async function copyRunId() {
-  const id = step.value?.runId ?? instance.value?.id
-  if (id) await navigator.clipboard?.writeText(id)
-}
-
-// --- approval mode (GitHub-style review of a pending gate) -------------------
-// When the step's gate is pending the reader doubles as the approval surface: the
-// human can comment on individual blocks of the output (the rendered markdown
-// carries `data-src-start/end` from agentOutput), leave overall feedback, then
-// Approve / Request changes / Reject.
-interface DraftComment {
-  srcStart: number
-  srcEnd: number
-  quotedSource: string
-  body: string
-}
 const approvalPending = computed(() => step.value?.approval?.status === 'pending')
 const approvalId = computed(() => step.value?.approval?.id ?? null)
-
 // A companion step parked at its automatic-rework cap: instead of the generic
 // approve/request-changes/reject rail, it shows the shared iteration-cap prompt
 // (one more round / proceed / stop & reset), resolved through its own endpoint.
 const companionExceeded = computed(() => approvalPending.value && !!step.value?.companion?.exceeded)
+
+function close() {
+  // Reset the approval-mode sub-states so reopening the same step is clean
+  // (the step-change watch only fires when the step key actually changes).
+  approval.resetForClose()
+  ui.closeStepDetail()
+}
+
+// The GitHub-style approval/review state machine for a pending gate step.
+const approval = useStepApproval({
+  step: () => step.value,
+  scrollEl: () => scrollEl.value,
+  instanceId: () => ctx.value?.instanceId,
+  approvalId: () => approvalId.value,
+  approvalPending: () => approvalPending.value,
+  companionExceeded: () => companionExceeded.value,
+  close,
+})
+const {
+  reviewComments,
+  feedback,
+  submitting,
+  draftTarget,
+  draftBody,
+  editing,
+  draftProposal,
+  rejectArmed,
+  canRequestChanges,
+  onProseClick,
+  addDraftComment,
+  cancelDraft,
+  removeComment,
+  approve,
+  startEditing,
+  cancelEditing,
+  approveWithEdits,
+  requestChanges,
+  armReject,
+  disarmReject,
+  reject,
+} = approval
+
 const resolvingCap = ref(false)
 async function resolveCompanionCap(choice: IterationCapChoice) {
   if (!ctx.value || !approvalId.value || resolvingCap.value) return
@@ -249,158 +138,24 @@ async function resolveCompanionCap(choice: IterationCapChoice) {
     resolvingCap.value = false
   }
 }
-const reviewComments = ref<DraftComment[]>([])
-const feedback = ref('')
-const submitting = ref(false)
-const draftTarget = ref<{ srcStart: number; srcEnd: number; quotedSource: string } | null>(null)
-const draftBody = ref('')
 
-const blockKey = (c: { srcStart: number; srcEnd: number }) => `${c.srcStart}:${c.srcEnd}`
-
-/** Toggle the highlight classes on commented / selected blocks within the reader. */
-function syncHighlights() {
-  const root = scrollEl.value
-  if (!root) return
-  const commented = new Set(reviewComments.value.map(blockKey))
-  const selected = draftTarget.value ? blockKey(draftTarget.value) : null
-  for (const el of Array.from(root.querySelectorAll('[data-src-start]'))) {
-    const key = `${el.getAttribute('data-src-start')}:${el.getAttribute('data-src-end')}`
-    el.classList.toggle('cf-commented', commented.has(key))
-    el.classList.toggle('cf-selected', key === selected)
-  }
-}
-
-/** Click a rendered block to start commenting on it (links keep working). */
-function onProseClick(e: MouseEvent) {
-  if (!approvalPending.value || companionExceeded.value || editing.value) return
-  const target = e.target as HTMLElement
-  if (target.closest('a')) return
-  const blockEl = target.closest('[data-src-start]') as HTMLElement | null
-  if (!blockEl) return
-  const srcStart = Number(blockEl.getAttribute('data-src-start'))
-  const srcEnd = Number(blockEl.getAttribute('data-src-end'))
-  if (Number.isNaN(srcStart) || Number.isNaN(srcEnd)) return
-  draftTarget.value = {
-    srcStart,
-    srcEnd,
-    quotedSource: sliceSource(step.value?.output ?? '', srcStart, srcEnd),
-  }
-  draftBody.value = ''
-  void nextTick(syncHighlights)
-}
-
-function addDraftComment() {
-  if (!draftTarget.value || !draftBody.value.trim()) return
-  reviewComments.value.push({ ...draftTarget.value, body: draftBody.value.trim() })
-  draftTarget.value = null
-  draftBody.value = ''
-  void nextTick(syncHighlights)
-}
-function cancelDraft() {
-  draftTarget.value = null
-  draftBody.value = ''
-  void nextTick(syncHighlights)
-}
-function removeComment(idx: number) {
-  reviewComments.value.splice(idx, 1)
-  void nextTick(syncHighlights)
-}
-
-const canRequestChanges = computed(() => !!feedback.value.trim() || reviewComments.value.length > 0)
-
-// Plain approve: accept the agent's proposal verbatim and advance.
-async function approve() {
-  if (!ctx.value || !approvalId.value || submitting.value) return
-  submitting.value = true
-  try {
-    await execution.approveStep(ctx.value.instanceId, approvalId.value)
-    close()
-  } finally {
-    submitting.value = false
-  }
-}
-
-// --- "Approve with corrections" (edit-then-approve) --------------------------
-// A deliberate mode distinct from the read-only review: the human edits the
-// conclusions directly and those edits flow forward as the approved proposal. It
-// CANNOT be mixed with the request-changes/comments path — manual edits only ever
-// happen *together with* approving (the backend's `approveStep` proposal override).
-const editing = ref(false)
-const draftProposal = ref('')
-function startEditing() {
-  draftProposal.value = step.value?.output ?? ''
-  editing.value = true
-  // Editing and the review/reject path are mutually exclusive — clear the other.
-  rejectArmed.value = false
-  draftTarget.value = null
-  void nextTick(syncHighlights)
-}
-function cancelEditing() {
-  editing.value = false
-  draftProposal.value = ''
-}
-async function approveWithEdits() {
-  if (!ctx.value || !approvalId.value || submitting.value) return
-  submitting.value = true
-  try {
-    await execution.approveStep(ctx.value.instanceId, approvalId.value, draftProposal.value)
-    close()
-  } finally {
-    submitting.value = false
-  }
-}
-async function requestChanges() {
-  if (!ctx.value || !approvalId.value || submitting.value || !canRequestChanges.value) return
-  submitting.value = true
-  try {
-    await execution.requestStepChanges(ctx.value.instanceId, approvalId.value, {
-      feedback: feedback.value.trim() || undefined,
-      comments: reviewComments.value.length
-        ? reviewComments.value.map((c) => ({
-            quotedSource: c.quotedSource,
-            srcStart: c.srcStart,
-            srcEnd: c.srcEnd,
-            body: c.body,
-          }))
-        : undefined,
-    })
-    close()
-  } finally {
-    submitting.value = false
-  }
-}
-// Reject stops the whole run, so it's a two-step inline confirm (no native dialog,
-// consistent with the rest of the Nuxt-UI surface): `armReject` reveals the confirm
-// row, `reject` performs it.
-const rejectArmed = ref(false)
-function armReject() {
-  rejectArmed.value = true
-}
-function disarmReject() {
-  rejectArmed.value = false
-}
-async function reject() {
-  if (!ctx.value || !approvalId.value || submitting.value) return
-  submitting.value = true
-  try {
-    await execution.rejectStep(
-      ctx.value.instanceId,
-      approvalId.value,
-      feedback.value.trim() || undefined,
-    )
-    close()
-  } finally {
-    submitting.value = false
-    rejectArmed.value = false
-  }
-}
-
-// Keep the in-document highlights in sync as the output renders or comments change.
+// Re-seed the reader (all sections expanded, scrolled to top) + reset the review
+// drafts whenever a different step opens.
 watch(
-  [approvalPending, () => step.value?.output, reviewComments, draftTarget],
-  () => void nextTick(syncHighlights),
-  { deep: true },
+  () => ctx.value && `${ctx.value.instanceId}:${ctx.value.stepIndex}`,
+  () => {
+    prose.reset()
+    approval.resetForStep()
+  },
 )
+
+onKeyStroke('Escape', () => {
+  if (open.value) close()
+})
+
+async function copyOutput() {
+  if (step.value?.output) await navigator.clipboard?.writeText(step.value.output)
+}
 </script>
 
 <template>
@@ -532,225 +287,17 @@ watch(
                 :ref="(el) => (sectionEls['step-details'] = el as HTMLElement | null)"
                 class="scroll-mt-4 rounded-xl border border-slate-800 bg-slate-900/50 p-4"
               >
-                <dl class="grid grid-cols-2 gap-x-6 gap-y-3 text-[13px] sm:grid-cols-3">
-                  <div>
-                    <dt class="text-[11px] uppercase tracking-wide text-slate-500">State</dt>
-                    <dd class="mt-0.5 flex items-center gap-1.5 text-slate-200">
-                      <UIcon
-                        v-if="runFailed && step.state === 'working'"
-                        name="i-lucide-circle-x"
-                        class="h-3.5 w-3.5 shrink-0"
-                        :style="{ color: stateMeta.color }"
-                      />
-                      <span
-                        v-else
-                        class="h-2 w-2 rounded-full"
-                        :style="{ backgroundColor: stateMeta.color }"
-                      />
-                      {{ stateMeta.label }}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt class="text-[11px] uppercase tracking-wide text-slate-500">Duration</dt>
-                    <dd class="mt-0.5 flex items-center gap-1.5 tabular-nums text-slate-200">
-                      <UIcon
-                        v-if="isRunning"
-                        name="i-lucide-loader-circle"
-                        class="h-3 w-3 animate-spin text-indigo-400"
-                      />
-                      <span v-if="durationLabel">{{ durationLabel }}</span>
-                      <span v-else class="text-slate-500">—</span>
-                      <span v-if="isRunning" class="text-[11px] text-slate-500">elapsed</span>
-                    </dd>
-                  </div>
-                  <div>
-                    <dt class="text-[11px] uppercase tracking-wide text-slate-500">Step</dt>
-                    <dd class="mt-0.5 text-slate-200">{{ stepNumber }} of {{ totalSteps }}</dd>
-                  </div>
-                  <div>
-                    <dt class="text-[11px] uppercase tracking-wide text-slate-500">Started</dt>
-                    <dd class="mt-0.5 text-slate-300">{{ formatClock(step.startedAt) ?? '—' }}</dd>
-                  </div>
-                  <div>
-                    <dt class="text-[11px] uppercase tracking-wide text-slate-500">Finished</dt>
-                    <dd class="mt-0.5 text-slate-300">{{ formatClock(step.finishedAt) ?? '—' }}</dd>
-                  </div>
-                  <div>
-                    <dt class="text-[11px] uppercase tracking-wide text-slate-500">Model</dt>
-                    <dd class="mt-0.5 truncate text-slate-300" :title="step.model">
-                      {{ modelLabel ?? 'Not recorded' }}
-                    </dd>
-                  </div>
-                  <!-- The run id this step belongs to, surfaced for debugging (copyable). -->
-                  <div class="col-span-2 sm:col-span-3">
-                    <dt class="text-[11px] uppercase tracking-wide text-slate-500">Run</dt>
-                    <dd
-                      class="mt-0.5 cursor-pointer truncate font-mono text-[12px] text-slate-400 hover:text-slate-200"
-                      :title="`${step.runId ?? instance?.id ?? ''} — click to copy`"
-                      @click="copyRunId"
-                    >
-                      {{ step.runId ?? instance?.id ?? '—' }}
-                    </dd>
-                  </div>
-                </dl>
-
-                <!-- container cold-boot phase: shown until the container is up and
-                     the agent starts reporting progress -->
-                <div
-                  v-if="step.startingContainer && !runFailed"
-                  class="mt-4 flex items-center gap-2 rounded-lg border border-sky-900/50 bg-sky-950/30 px-3 py-2 text-[12px] text-sky-300"
-                >
-                  <UIcon name="i-lucide-loader-circle" class="h-4 w-4 shrink-0 animate-spin" />
-                  <span>Spinning up container…</span>
-                </div>
-
-                <!-- live subtask breakdown -->
-                <div v-if="step.subtasks && step.subtasks.total > 0" class="mt-4">
-                  <div class="text-[11px] uppercase tracking-wide text-slate-500">
-                    Subtasks · {{ step.subtasks.completed }}/{{ step.subtasks.total }}
-                  </div>
-                  <div class="mt-1 h-1 overflow-hidden rounded-full bg-slate-700/60">
-                    <div
-                      class="h-full rounded-full bg-indigo-400 transition-all duration-500"
-                      :style="{
-                        width: `${(step.subtasks.completed / step.subtasks.total) * 100}%`,
-                      }"
-                    />
-                  </div>
-                  <ul v-if="step.subtasks.items?.length" class="mt-2 space-y-1">
-                    <li
-                      v-for="(item, idx) in step.subtasks.items"
-                      :key="idx"
-                      class="flex items-start gap-1.5 text-[12px]"
-                      :class="
-                        item.status === 'completed'
-                          ? 'text-slate-500 line-through'
-                          : item.status === 'in_progress'
-                            ? 'text-slate-100'
-                            : 'text-slate-400'
-                      "
-                    >
-                      <UIcon
-                        :name="ITEM_ICON[item.status]"
-                        class="mt-px h-3 w-3 shrink-0"
-                        :class="subtaskIconClass(item.status, runFailed)"
-                      />
-                      <span>{{ item.label }}</span>
-                    </li>
-                  </ul>
-                </div>
-
-                <!-- LLM observability rollup (tokens, output-limit headroom,
-                     transport-vs-execution); click to open the full per-call panel -->
-                <div v-if="step.metrics && step.metrics.calls > 0" class="mt-4">
-                  <div class="mb-1 flex items-center justify-between">
-                    <span class="text-[11px] uppercase tracking-wide text-slate-500">
-                      Model activity
-                    </span>
-                    <button
-                      class="text-[11px] text-sky-400 hover:text-sky-300"
-                      @click="ctx && ui.openObservability(ctx.instanceId)"
-                    >
-                      View all calls →
-                    </button>
-                  </div>
-                  <StepMetricsBar
-                    :metrics="step.metrics"
-                    clickable
-                    @inspect="ctx && ui.openObservability(ctx.instanceId)"
-                  />
-                </div>
-
-                <!-- standards (prompt fragments) folded into this step -->
-                <div
-                  v-if="step.selectedFragmentIds && step.selectedFragmentIds.length"
-                  class="mt-4"
-                >
-                  <div class="text-[11px] uppercase tracking-wide text-slate-500">
-                    Standards applied
-                  </div>
-                  <div class="mt-1 flex flex-wrap gap-1">
-                    <UBadge
-                      v-for="id in step.selectedFragmentIds"
-                      :key="id"
-                      color="neutral"
-                      variant="subtle"
-                      size="sm"
-                    >
-                      {{ id }}
-                    </UBadge>
-                  </div>
-                </div>
-
-                <!-- decision raised on this step -->
-                <div v-if="step.decision" class="mt-4">
-                  <div class="text-[11px] uppercase tracking-wide text-slate-500">Decision</div>
-                  <p class="mt-0.5 text-[13px] text-slate-200">{{ step.decision.question }}</p>
-                  <p
-                    v-if="step.decision.chosen"
-                    class="mt-0.5 flex items-center gap-1 text-[12px] text-emerald-400"
-                  >
-                    <UIcon name="i-lucide-check" class="h-3 w-3 shrink-0" />
-                    {{ step.decision.chosen }}
-                  </p>
-                  <p v-else class="mt-0.5 text-[12px] text-amber-400">Awaiting a human choice</p>
-                </div>
-
-                <!-- approval gate state -->
-                <div v-if="step.approval" class="mt-4">
-                  <div class="text-[11px] uppercase tracking-wide text-slate-500">
-                    Approval gate
-                  </div>
-                  <p class="mt-0.5 text-[13px] text-slate-200 capitalize">
-                    {{ step.approval.status.replace('_', ' ') }}
-                  </p>
-                </div>
-
-                <!-- companion verdict + full correction sequence -->
-                <div v-if="companionVerdicts.length" class="mt-4">
-                  <div class="flex items-center justify-between">
-                    <span class="text-[11px] uppercase tracking-wide text-slate-500">
-                      Companion review
-                    </span>
-                    <UBadge
-                      :color="latestVerdict?.passed ? 'success' : 'warning'"
-                      variant="subtle"
-                      size="sm"
-                    >
-                      {{ pctOf(latestVerdict!.rating) }}
-                      {{ latestVerdict?.passed ? '≥' : '<' }} {{ pctOf(latestVerdict!.threshold) }}
-                    </UBadge>
-                  </div>
-                  <ol class="mt-2 space-y-1.5">
-                    <li
-                      v-for="(v, i) in companionVerdicts"
-                      :key="i"
-                      class="flex items-start gap-2 text-[12px]"
-                    >
-                      <span
-                        class="mt-px inline-flex h-4 shrink-0 items-center rounded px-1 font-mono text-[11px] tabular-nums"
-                        :class="
-                          v.passed
-                            ? 'bg-emerald-500/15 text-emerald-300'
-                            : 'bg-amber-500/15 text-amber-300'
-                        "
-                      >
-                        {{ i + 1 }}
-                      </span>
-                      <div class="min-w-0">
-                        <span :class="v.passed ? 'text-emerald-300' : 'text-amber-300'">
-                          {{ pctOf(v.rating) }} {{ v.passed ? '≥' : '<' }} {{ pctOf(v.threshold) }}
-                        </span>
-                        <span v-if="v.feedback" class="ml-1 text-slate-400"
-                          >— {{ v.feedback }}</span
-                        >
-                      </div>
-                    </li>
-                  </ol>
-                  <p v-if="companionVerdicts.length > 1" class="mt-1 text-[11px] text-slate-500">
-                    {{ companionVerdicts.length }} correction iteration(s).
-                  </p>
-                </div>
+                <StepMetadataCard
+                  :step="step"
+                  :run-failed="runFailed"
+                  :duration-label="durationLabel"
+                  :is-running="isRunning"
+                  :step-number="stepNumber"
+                  :total-steps="totalSteps"
+                  :instance-id="instance?.id"
+                  :companion-verdicts="companionVerdicts"
+                  :latest-verdict="latestVerdict"
+                />
               </section>
 
               <!-- companion rework budget spent: the shared iteration-cap decision
@@ -765,81 +312,7 @@ watch(
 
               <!-- tester report: what was tested, the per-area outcomes, the concerns
                    it raised and the greenlight verdict; plus the fixer-loop phase -->
-              <section v-if="testReport" class="mt-4 scroll-mt-4">
-                <div class="mb-2 flex items-center gap-1.5 text-[11px]">
-                  <UIcon name="i-lucide-flask-conical" class="h-3.5 w-3.5 text-slate-400" />
-                  <span class="font-semibold uppercase tracking-wide text-slate-400">
-                    Test report
-                  </span>
-                  <UBadge
-                    :color="testReport.greenlight ? 'success' : 'warning'"
-                    variant="subtle"
-                    size="sm"
-                  >
-                    {{ testReport.greenlight ? 'Greenlit' : 'Needs fixes' }}
-                  </UBadge>
-                  <span
-                    v-if="testPhase && testPhase.attempts > 0"
-                    class="text-[11px] text-slate-500"
-                  >
-                    {{ testPhase.attempts }}/{{ testPhase.maxAttempts }} fix attempt(s)<span
-                      v-if="testPhase.phase === 'fixing'"
-                    >
-                      · fixing…</span
-                    >
-                  </span>
-                </div>
-                <p
-                  v-if="testReport.summary"
-                  class="mb-3 text-[13px] leading-relaxed text-slate-300"
-                >
-                  {{ testReport.summary }}
-                </p>
-
-                <div v-if="testReport.tested.length" class="mb-3">
-                  <div class="mb-1 text-[11px] text-slate-500">Tested</div>
-                  <ul class="space-y-0.5 text-[12px] text-slate-300">
-                    <li v-for="(t, i) in testReport.tested" :key="i">• {{ t }}</li>
-                  </ul>
-                </div>
-
-                <div v-if="testReport.outcomes.length" class="mb-3 space-y-1">
-                  <div class="text-[11px] text-slate-500">Outcomes</div>
-                  <div
-                    v-for="(o, i) in testReport.outcomes"
-                    :key="i"
-                    class="flex items-start gap-2 text-[12px]"
-                  >
-                    <span
-                      class="mt-1 h-2 w-2 shrink-0 rounded-full"
-                      :style="{ backgroundColor: OUTCOME_COLOR[o.status] ?? '#64748b' }"
-                    />
-                    <span class="text-slate-300"
-                      >{{ o.name
-                      }}<span v-if="o.detail" class="text-slate-500"> — {{ o.detail }}</span></span
-                    >
-                  </div>
-                </div>
-
-                <div v-if="testReport.concerns.length" class="space-y-1">
-                  <div class="text-[11px] text-slate-500">Concerns</div>
-                  <div
-                    v-for="(c, i) in testReport.concerns"
-                    :key="i"
-                    class="rounded border border-slate-700/60 p-2 text-[12px]"
-                  >
-                    <div class="flex items-center gap-1.5">
-                      <span
-                        class="rounded px-1 text-[10px] font-semibold uppercase text-white"
-                        :style="{ backgroundColor: SEVERITY_COLOR[c.severity] ?? '#64748b' }"
-                        >{{ c.severity }}</span
-                      >
-                      <span class="font-medium text-slate-200">{{ c.title }}</span>
-                    </div>
-                    <p v-if="c.detail" class="mt-1 text-slate-400">{{ c.detail }}</p>
-                  </div>
-                </div>
-              </section>
+              <StepTestReport v-if="testReport" :report="testReport" :phase="testPhase" />
 
               <!-- edit-then-approve: a direct editor over the raw conclusions; the
                    edits become the approved proposal that flows to the next step -->
