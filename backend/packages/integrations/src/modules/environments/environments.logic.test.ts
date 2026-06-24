@@ -142,8 +142,8 @@ describe('URL safety policy — trusted internal-host widening', () => {
   })
 
   it('forbids embedded credentials regardless of policy', () => {
-    expect(() =>
-      assertSafeEnvironmentUrl('https://u:p@kargo', 'base URL', internalHosts),
-    ).toThrow(ValidationError)
+    expect(() => assertSafeEnvironmentUrl('https://u:p@kargo', 'base URL', internalHosts)).toThrow(
+      ValidationError,
+    )
   })
 })

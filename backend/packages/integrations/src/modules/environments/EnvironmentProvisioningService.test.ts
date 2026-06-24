@@ -161,9 +161,7 @@ describe('EnvironmentProvisioningService — provision context', () => {
     const service = makeService(recordingProvider(READY), registry)
     await service.provision({ workspaceId: 'ws1', blockId: 'blk1' })
     // The provider's arbitrary `fields` (here a Kargo-style ref) round-trip encrypted.
-    expect(registry.records[0]!.provisionFieldsCipher).toBe(
-      `enc:${JSON.stringify(READY.fields)}`,
-    )
+    expect(registry.records[0]!.provisionFieldsCipher).toBe(`enc:${JSON.stringify(READY.fields)}`)
   })
 })
 

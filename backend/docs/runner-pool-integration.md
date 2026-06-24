@@ -509,10 +509,10 @@ Job`, `poll → read Job + harness status`, `release → delete Job`. Use
   an internal/VPN host rather than behind a public ingress, widen the guard per
   facade:
 
-  | Setting (env var / Worker `[vars]`) | Effect                                                                 |
-  | ----------------------------------- | ---------------------------------------------------------------------- |
+  | Setting (env var / Worker `[vars]`) | Effect                                                                                                                                                                                       |
+  | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
   | `RUNNERS_ALLOW_URL_HOSTS`           | Comma-separated hostnames exempt from the private/internal-host block. Each matches the URL host exactly (`pool.corp`, `10.1.2.3`) or as a dot suffix when it starts with `.` (`.internal`). |
-  | `RUNNERS_ALLOW_HTTP_URLS`           | `true` to also permit `http` (not just `https`).                       |
+  | `RUNNERS_ALLOW_HTTP_URLS`           | `true` to also permit `http` (not just `https`).                                                                                                                                             |
 
   Only the listed hosts are exempted; everything else stays strict, and embedded URL
   credentials remain forbidden. This policy is scoped to the runner pool **only** —

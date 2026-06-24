@@ -187,13 +187,13 @@ runtime with `LOCAL_CONTAINER_RUNTIME` (default `docker`); it sets sensible defa
 the CLI binary, the host alias the harness uses to reach this service, and whether the
 Tester's local infra works:
 
-| `LOCAL_CONTAINER_RUNTIME` | CLI       | Harness → host LLM proxy                          | Tester local infra (Docker-in-Docker) |
-| ------------------------- | --------- | ------------------------------------------------- | ------------------------------------- |
-| `docker` (default)        | `docker`  | `host.docker.internal` (Desktop) / host-gateway (Linux) | ✅                              |
-| `orbstack`                | `docker`  | `host.docker.internal` (native)                   | ✅                                     |
-| `podman`                  | `podman`  | `host.docker.internal:host-gateway` (v4+)         | ✅ (rootless: set `LOCAL_DOCKER_PRIVILEGED_TEST_JOBS=false`) |
-| `colima`                  | `docker`  | `host.lima.internal` (often needs a LAN-IP `PUBLIC_URL`) | ✅                              |
-| `apple`                   | `container` | container's own IP; host via the vmnet gateway  | ❌ **limited mode** (see below)        |
+| `LOCAL_CONTAINER_RUNTIME` | CLI         | Harness → host LLM proxy                                 | Tester local infra (Docker-in-Docker)                        |
+| ------------------------- | ----------- | -------------------------------------------------------- | ------------------------------------------------------------ |
+| `docker` (default)        | `docker`    | `host.docker.internal` (Desktop) / host-gateway (Linux)  | ✅                                                           |
+| `orbstack`                | `docker`    | `host.docker.internal` (native)                          | ✅                                                           |
+| `podman`                  | `podman`    | `host.docker.internal:host-gateway` (v4+)                | ✅ (rootless: set `LOCAL_DOCKER_PRIVILEGED_TEST_JOBS=false`) |
+| `colima`                  | `docker`    | `host.lima.internal` (often needs a LAN-IP `PUBLIC_URL`) | ✅                                                           |
+| `apple`                   | `container` | container's own IP; host via the vmnet gateway           | ❌ **limited mode** (see below)                              |
 
 Notes:
 

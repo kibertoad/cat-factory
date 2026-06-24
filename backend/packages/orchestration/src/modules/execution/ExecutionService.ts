@@ -1637,7 +1637,11 @@ export class ExecutionService {
       // same PR must not re-comment (the tracker comment is not idempotent). Gated
       // inside the provider by the workspace setting + per-task override;
       // fire-and-forget so a tracker outage never fails the run.
-      if (this.issueWriteback && priorBlock && priorBlock.pullRequest?.url !== result.pullRequest.url) {
+      if (
+        this.issueWriteback &&
+        priorBlock &&
+        priorBlock.pullRequest?.url !== result.pullRequest.url
+      ) {
         await this.issueWriteback
           .onPullRequestOpened(workspaceId, priorBlock, result.pullRequest)
           .catch(() => {})

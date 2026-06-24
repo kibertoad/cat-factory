@@ -381,7 +381,11 @@ jobs:
 
   changeset:
     name: Changeset present
-    if: github.event_name == 'pull_request'
+    # Skip on the Changesets "Release Packages" PR: it consumes the pending
+    # changesets (deletes the .changeset/*.md files + applies version bumps), so
+    # `changeset status` would always see changed packages with no changeset and
+    # fail by construction.
+    if: github.event_name == 'pull_request' && github.head_ref != 'changeset-release/main'
     runs-on: ubuntu-latest
     permissions:
       contents: read

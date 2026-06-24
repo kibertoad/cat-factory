@@ -114,25 +114,31 @@ a literal in the paths; the git ref + repo come from the
   "provision": {
     "method": "POST",
     "pathTemplate": "/projects/my-project/prenvs",
-    "bodyTemplate": "{\"git_ref\":{\"pr_number\":{{input.pullNumber}}},\"github\":{\"owner\":\"{{input.repoOwner}}\",\"repo\":\"{{input.repoName}}\"}}"
+    "bodyTemplate": "{\"git_ref\":{\"pr_number\":{{input.pullNumber}}},\"github\":{\"owner\":\"{{input.repoOwner}}\",\"repo\":\"{{input.repoName}}\"}}",
   },
   // Status/teardown address the env by the ref captured from the provision response.
-  "status":   { "method": "GET",    "pathTemplate": "/projects/my-project/prenvs/{{provision.externalId}}" },
-  "teardown": { "method": "DELETE", "pathTemplate": "/projects/my-project/prenvs/{{provision.externalId}}" },
+  "status": {
+    "method": "GET",
+    "pathTemplate": "/projects/my-project/prenvs/{{provision.externalId}}",
+  },
+  "teardown": {
+    "method": "DELETE",
+    "pathTemplate": "/projects/my-project/prenvs/{{provision.externalId}}",
+  },
 
   "response": {
-    "externalIdPath": "data.ref",      // the per-PR ref, reused as {{provision.externalId}}
+    "externalIdPath": "data.ref", // the per-PR ref, reused as {{provision.externalId}}
     "urlPath": "data.url",
     "statusPath": "data.status",
     "statusMap": [
-      { "from": "pending",  "to": "provisioning" },
-      { "from": "online",   "to": "ready" },
-      { "from": "failed",   "to": "failed" },
+      { "from": "pending", "to": "provisioning" },
+      { "from": "online", "to": "ready" },
+      { "from": "failed", "to": "failed" },
       { "from": "deleting", "to": "tearing_down" },
-      { "from": "deleted",  "to": "torn_down" }
-    ]
+      { "from": "deleted", "to": "torn_down" },
+    ],
   },
-  "defaultTtlMs": 3600000
+  "defaultTtlMs": 3600000,
 }
 ```
 
@@ -168,14 +174,14 @@ object for a [code adapter](#code-adapter-seam-when-the-manifest-isnt-enough). E
 is present only when known (a manual provision, or a block with no PR, carries
 fewer):
 
-| Variable             | Value                                                        |
-| -------------------- | ------------------------------------------------------------ |
-| `{{input.blockId}}`  | The board block being deployed (always present).             |
-| `{{input.branch}}`   | The head branch the agent pushed its work to.                |
-| `{{input.pullNumber}}` | The pull request number within the repo (e.g. `42`).       |
-| `{{input.pullUrl}}`  | The pull request web URL.                                    |
-| `{{input.repoOwner}}` | The repo owner (org/user login), parsed from the PR URL.    |
-| `{{input.repoName}}` | The repo name, parsed from the PR URL.                       |
+| Variable               | Value                                                    |
+| ---------------------- | -------------------------------------------------------- |
+| `{{input.blockId}}`    | The board block being deployed (always present).         |
+| `{{input.branch}}`     | The head branch the agent pushed its work to.            |
+| `{{input.pullNumber}}` | The pull request number within the repo (e.g. `42`).     |
+| `{{input.pullUrl}}`    | The pull request web URL.                                |
+| `{{input.repoOwner}}`  | The repo owner (org/user login), parsed from the PR URL. |
+| `{{input.repoName}}`   | The repo name, parsed from the PR URL.                   |
 
 This is what lets a manifest build a "create an environment for PR #N of
 owner/repo" request without any per-block configuration. Note that any identifier a
@@ -226,15 +232,19 @@ export class MyEnvironmentProvider implements EnvironmentProvider {
     // ...call your platform however it needs to be called...
     return {
       externalId: createdRef,
-      url: liveUrl,                 // SSRF-guarded by the engine before it is stored
-      status: 'ready',             // or 'provisioning' for async — status() is polled
-      expiresAt: null,             // epoch ms, or null to use defaultTtlMs
-      access: null,                // per-env creds for the tester, when applicable
+      url: liveUrl, // SSRF-guarded by the engine before it is stored
+      status: 'ready', // or 'provisioning' for async — status() is polled
+      expiresAt: null, // epoch ms, or null to use defaultTtlMs
+      access: null, // per-env creds for the tester, when applicable
       fields: { ref: createdRef }, // arbitrary, persisted (encrypted) for status/teardown
     }
   }
-  async status(req) { /* read live status; `req.provisionFields` carries `fields` back */ }
-  async teardown(req) { /* destroy; best-effort, retried by the sweep */ }
+  async status(req) {
+    /* read live status; `req.provisionFields` carries `fields` back */
+  }
+  async teardown(req) {
+    /* destroy; best-effort, retried by the sweep */
+  }
 }
 ```
 
@@ -244,12 +254,12 @@ your code — the `secrets`, `providerId`, and `label` still apply. Wire it per
 facade:
 
 - **Node / local facade:** pass it to `buildNodeContainer({ environmentProvider:
-  new MyEnvironmentProvider(...) })`. It replaces the default
+new MyEnvironmentProvider(...) })`. It replaces the default
   `HttpEnvironmentProvider`; the env repos + secret cipher still wire from config, so
   `ENVIRONMENTS_ENABLED` + `ENCRYPTION_KEY` are still required.
 - **Cloudflare Worker facade:** inject it through `buildContainer`'s `overrides`
   (spread last over the default deps), e.g. `{ environmentProvider: new
-  MyEnvironmentProvider(...) }`.
+MyEnvironmentProvider(...) }`.
 
 Because the adapter is code you install and run, the URL it returns is still
 SSRF-guarded by the engine. To let it reach an internal platform, widen the URL
@@ -264,10 +274,10 @@ By default every URL the integration fetches or exposes must be public `https` (
 `baseUrl`, the OAuth `tokenUrl`, and the returned env URL may use specific
 hosts/schemes:
 
-| Setting (env var / Worker `[vars]`) | Effect                                                                 |
-| ----------------------------------- | ---------------------------------------------------------------------- |
+| Setting (env var / Worker `[vars]`) | Effect                                                                                                                                                                                                                     |
+| ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `ENVIRONMENTS_ALLOW_URL_HOSTS`      | Comma-separated hostnames exempt from the private/internal-host block. Each entry matches the URL host exactly (`envs.corp`, `10.1.2.3`), or as a dot suffix when it starts with `.` (`.internal` matches `a.b.internal`). |
-| `ENVIRONMENTS_ALLOW_HTTP_URLS`      | `true` to also permit `http` (not just `https`).                       |
+| `ENVIRONMENTS_ALLOW_HTTP_URLS`      | `true` to also permit `http` (not just `https`).                                                                                                                                                                           |
 
 ```toml
 # wrangler.toml (Worker)  —  or env vars on the Node facade

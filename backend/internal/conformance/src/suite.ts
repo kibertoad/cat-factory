@@ -1036,11 +1036,10 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
           provision: { method: 'POST', pathTemplate: '/environments' },
           response: { urlPath: 'url', statusPath: 'state', externalIdPath: 'id' },
         }
-        const res = await call(
-          'POST',
-          `/workspaces/${workspace.id}/environments/connection`,
-          { manifest, secrets: { API_TOKEN: 't' } },
-        )
+        const res = await call('POST', `/workspaces/${workspace.id}/environments/connection`, {
+          manifest,
+          secrets: { API_TOKEN: 't' },
+        })
         // A validation failure (the SSRF/internal-host guard), not a 201.
         expect(res.status).toBeGreaterThanOrEqual(400)
       })

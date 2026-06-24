@@ -27,7 +27,11 @@ describe('recordGateAttempt', () => {
   })
 
   it('records a failed helper run with the error as the summary', () => {
-    const attempt = recordGateAttempt(gate(), { state: 'failed', error: 'Container evicted' }, 2_000)
+    const attempt = recordGateAttempt(
+      gate(),
+      { state: 'failed', error: 'Container evicted' },
+      2_000,
+    )
     expect(attempt.outcome).toBe('failed')
     expect(attempt.summary).toBe('Container evicted')
     expect(attempt.attempt).toBe(2)

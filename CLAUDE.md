@@ -27,6 +27,13 @@ tokens with no data migration — that's acceptable, not a bug to fix.)
   by code changes. Use `pnpm test:run` from `backend/packages/orchestration` (or any other
   non-worker package with a vitest setup, e.g. `integrations`) to verify pure-logic changes;
   the worker integration suite only runs cleanly on Linux/macOS.
+- **`oxfmt .` on Windows rewrites line endings across the whole tree**, so it touches
+  hundreds of files even when CI's `oxfmt --check` (run on a Linux checkout) flags only a
+  handful. This is expected, not a sign something is wrong: **committing the seemingly
+  large drift is fine.** Git's line-ending normalization (`core.autocrlf` / `.gitattributes`)
+  absorbs the CRLF↔LF churn at commit time, so only the genuine formatting changes survive
+  in the recorded diff. Do not revert the mass reformat or try to hand-pick the files CI
+  named — run `pnpm exec oxfmt .`, stage everything, and let git collapse the noise.
 
 ## Keep the runtimes symmetric
 
