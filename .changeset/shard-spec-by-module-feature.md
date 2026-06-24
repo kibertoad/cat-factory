@@ -1,8 +1,8 @@
 ---
-"@cat-factory/contracts": minor
-"@cat-factory/executor-harness": minor
-"@cat-factory/agents": minor
-"@cat-factory/server": minor
+'@cat-factory/contracts': minor
+'@cat-factory/executor-harness': minor
+'@cat-factory/agents': minor
+'@cat-factory/server': minor
 ---
 
 Shard the in-repo `spec/` artifact by a module → feature taxonomy to kill merge churn.
@@ -17,6 +17,7 @@ file bytes depend only on that group, so concurrent branches editing different
 features never touch the same file.
 
 **Breaking (acceptable per pre-1.0 policy — no migration):**
+
 - `@cat-factory/contracts`: `SpecDoc` gains a two-level taxonomy — `modules: SpecModule[]`
   where each module holds `groups`, and each group carries BOTH its `requirements` and the
   domain `rules` scoped to it. The top-level `SpecDoc.groups`/`SpecDoc.rules`,

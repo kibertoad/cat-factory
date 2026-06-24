@@ -1,7 +1,7 @@
 ---
-"@cat-factory/executor-harness": minor
-"@cat-factory/kernel": minor
-"@cat-factory/server": minor
+'@cat-factory/executor-harness': minor
+'@cat-factory/kernel': minor
+'@cat-factory/server': minor
 ---
 
 Add the generic, manifest-driven `agent` harness kind + its backend dispatch.

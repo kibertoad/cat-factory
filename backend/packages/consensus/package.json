@@ -1,12 +1,12 @@
 {
   "name": "@cat-factory/consensus",
   "version": "0.7.4",
+  "description": "Optional consensus-orchestration mechanism (specialist panel / debate / ranked voting) for cat-factory agent steps, with task-estimate gating.",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/kibertoad/cat-factory.git",
     "directory": "backend/packages/consensus"
   },
-  "description": "Optional consensus-orchestration mechanism (specialist panel / debate / ranked voting) for cat-factory agent steps, with task-estimate gating.",
   "files": [
     "dist"
   ],
