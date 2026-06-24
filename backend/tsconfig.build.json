@@ -14,6 +14,7 @@
     { "path": "packages/integrations/tsconfig.build.json" },
     { "path": "packages/workspaces/tsconfig.build.json" },
     { "path": "packages/agents/tsconfig.build.json" },
+    { "path": "packages/sandbox/tsconfig.build.json" },
     { "path": "packages/provider-bedrock/tsconfig.build.json" },
     { "path": "packages/provider-cloudflare/tsconfig.build.json" },
     { "path": "packages/observability-langfuse/tsconfig.build.json" },
@@ -21,6 +22,7 @@
     { "path": "packages/server/tsconfig.build.json" },
     { "path": "internal/conformance/tsconfig.build.json" },
     { "path": "runtimes/cloudflare/tsconfig.build.json" },
-    { "path": "runtimes/node/tsconfig.build.json" }
+    { "path": "runtimes/node/tsconfig.build.json" },
+    { "path": "runtimes/local/tsconfig.build.json" }
   ]
 }
