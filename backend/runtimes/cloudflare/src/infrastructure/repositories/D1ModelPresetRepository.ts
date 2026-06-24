@@ -71,35 +71,41 @@ export class D1ModelPresetRepository implements ModelPresetRepository {
   }
 
   async upsert(workspaceId: string, preset: ModelPreset): Promise<void> {
-    // Promoting this preset to default demotes any other default first, so the
-    // single-default invariant holds.
+    // Demote + upsert run in ONE batch so the single-default invariant can never be
+    // observed broken (zero or two defaults) by a concurrent reader or a partial
+    // failure — matching the Drizzle mirror's transaction. Promoting this preset to
+    // default demotes any other default in the same atomic step.
+    const statements = []
     if (preset.isDefault) {
-      await this.db
-        .prepare(`UPDATE model_presets SET is_default = 0 WHERE workspace_id = ? AND id <> ?`)
-        .bind(workspaceId, preset.id)
-        .run()
+      statements.push(
+        this.db
+          .prepare(`UPDATE model_presets SET is_default = 0 WHERE workspace_id = ? AND id <> ?`)
+          .bind(workspaceId, preset.id),
+      )
     }
-    await this.db
-      .prepare(
-        `INSERT INTO model_presets
-           (workspace_id, id, name, base_model_id, overrides, is_default, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT (workspace_id, id) DO UPDATE SET
-           name = excluded.name,
-           base_model_id = excluded.base_model_id,
-           overrides = excluded.overrides,
-           is_default = excluded.is_default`,
-      )
-      .bind(
-        workspaceId,
-        preset.id,
-        preset.name,
-        preset.baseModelId,
-        JSON.stringify(preset.overrides),
-        preset.isDefault ? 1 : 0,
-        preset.createdAt,
-      )
-      .run()
+    statements.push(
+      this.db
+        .prepare(
+          `INSERT INTO model_presets
+             (workspace_id, id, name, base_model_id, overrides, is_default, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT (workspace_id, id) DO UPDATE SET
+             name = excluded.name,
+             base_model_id = excluded.base_model_id,
+             overrides = excluded.overrides,
+             is_default = excluded.is_default`,
+        )
+        .bind(
+          workspaceId,
+          preset.id,
+          preset.name,
+          preset.baseModelId,
+          JSON.stringify(preset.overrides),
+          preset.isDefault ? 1 : 0,
+          preset.createdAt,
+        ),
+    )
+    await this.db.batch(statements)
   }
 
   async remove(workspaceId: string, id: string): Promise<void> {
