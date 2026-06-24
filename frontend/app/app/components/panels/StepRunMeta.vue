@@ -25,7 +25,6 @@ const props = defineProps<{
 }>()
 
 const models = useModelsStore()
-const ui = useUiStore()
 
 const { isRunning, durationLabel } = useStepTimer({
   step: () => props.step,
@@ -35,7 +34,6 @@ const { isRunning, durationLabel } = useStepTimer({
 
 const modelLabel = computed(() => (props.step.model ? models.labelForRef(props.step.model) : null))
 const runId = computed(() => props.step.runId ?? props.instanceId ?? null)
-const hasMetrics = computed(() => !!props.step.metrics && props.step.metrics.calls > 0)
 
 function formatClock(ms?: number | null): string | null {
   return ms ? new Date(ms).toLocaleString() : null
@@ -43,10 +41,6 @@ function formatClock(ms?: number | null): string | null {
 
 async function copyRunId() {
   if (runId.value) await navigator.clipboard?.writeText(runId.value)
-}
-
-function openObservability() {
-  if (props.instanceId) ui.openObservability(props.instanceId)
 }
 </script>
 
@@ -102,17 +96,10 @@ function openObservability() {
       </p>
     </div>
 
-    <!-- The model-activity rollup, embedded inline. Falls back to a link into the run's
-         observability panel only when no calls were recorded (e.g. a gate that passed
-         its precheck with no helper spun up). -->
-    <StepModelActivity v-if="hasMetrics" :metrics="step.metrics" :instance-id="instanceId" />
-    <button
-      v-else-if="instanceId"
-      class="inline-flex items-center gap-1 self-start text-[11px] text-sky-300 hover:text-sky-200"
-      @click="openObservability"
-    >
-      <UIcon name="i-lucide-activity" class="h-3 w-3" />
-      Open observability
-    </button>
+    <!-- The model-activity rollup, embedded inline. The "View all calls →" link opens the
+         run's observability panel even when this step recorded no calls (e.g. a gate that
+         passed its precheck with no helper spun up), so every window reaches it the same
+         way; the metrics bar shows only when the step itself made calls. -->
+    <StepModelActivity :metrics="step.metrics" :instance-id="instanceId" />
   </div>
 </template>

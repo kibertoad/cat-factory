@@ -109,7 +109,7 @@ function exportJson() {
     <Transition name="obs-fade">
       <div
         v-if="open"
-        class="fixed inset-0 z-50 flex flex-col bg-slate-950/96 backdrop-blur-sm"
+        class="fixed inset-0 z-[60] flex flex-col bg-slate-950/96 backdrop-blur-sm"
         role="dialog"
         aria-modal="true"
       >

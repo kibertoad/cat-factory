@@ -7,7 +7,10 @@ import StepMetricsBar from '~/components/observability/StepMetricsBar.vue'
 // a labelled header with a "View all calls →" link into the full per-call panel. Used by
 // every step surface that shows a single step's metrics (the step metadata card, the
 // gate / tester result windows) so the embedded-observability treatment can't drift.
-// Renders nothing when the step recorded no calls.
+// The "View all calls →" link opens the run-level panel, so it appears for any step that
+// belongs to a run — including a gate, whose programmatic precheck records no per-step
+// calls (the bar is omitted, but the link still reaches the helper agents' calls). Renders
+// nothing only when there's neither a run to inspect nor any recorded calls.
 const props = defineProps<{
   metrics?: StepMetrics | null
   /** The run whose per-call panel the header link / bar click opens. */
@@ -23,15 +26,24 @@ function openObservability() {
 </script>
 
 <template>
-  <div v-if="hasCalls && metrics">
+  <div v-if="instanceId || hasCalls">
     <div class="mb-1 flex items-center justify-between">
       <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
         Model activity
       </span>
-      <button class="text-[11px] text-sky-400 hover:text-sky-300" @click="openObservability">
+      <button
+        v-if="instanceId"
+        class="text-[11px] text-sky-400 hover:text-sky-300"
+        @click="openObservability"
+      >
         View all calls →
       </button>
     </div>
-    <StepMetricsBar :metrics="metrics" clickable @inspect="openObservability" />
+    <StepMetricsBar
+      v-if="hasCalls && metrics"
+      :metrics="metrics"
+      clickable
+      @inspect="openObservability"
+    />
   </div>
 </template>
