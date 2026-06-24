@@ -14,4 +14,6 @@ drag and persisted with a single write on release, instead of firing one move
 request per pointer event — the old burst raced, and an out-of-order response could
 land a stale position last and snap the block back (worst when dragging far, e.g.
 toward the end of a service frame). A reparent now also optimistically drops the
-block into its new container so it doesn't briefly flash back to its old home.
+block into its new container so it doesn't briefly flash back to its old home; if
+the reparent request is rejected the block is restored to its old container and an
+error toast is shown, rather than leaving it in the wrong place until re-hydrate.

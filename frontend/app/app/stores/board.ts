@@ -123,15 +123,30 @@ export const useBoardStore = defineStore('board', () => {
     if (b.level === 'task' && parent.level !== 'frame' && parent.level !== 'module') return
     if (b.level === 'module' && parent.level !== 'frame') return
     // Optimistic: drop the block into the new container immediately so it doesn't
-    // briefly snap back to its old home while the request is in flight.
+    // briefly snap back to its old home while the request is in flight. Snapshot
+    // the old home so a rejected reparent restores it rather than leaving the
+    // block in the wrong container (a structural lie that survives until re-hydrate).
+    const prevParentId = b.parentId
+    const prevPosition = b.position
     b.parentId = newParentId
     b.position = position
-    upsert(
-      await api.reparentBlock(useWorkspaceStore().requireId(), id, {
-        parentId: newParentId,
-        position,
-      }),
-    )
+    try {
+      upsert(
+        await api.reparentBlock(useWorkspaceStore().requireId(), id, {
+          parentId: newParentId,
+          position,
+        }),
+      )
+    } catch (e) {
+      b.parentId = prevParentId
+      b.position = prevPosition
+      toast.add({
+        title: 'Could not move',
+        description: e instanceof Error ? e.message : String(e),
+        icon: 'i-lucide-triangle-alert',
+        color: 'error',
+      })
+    }
   }
 
   /**
