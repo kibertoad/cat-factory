@@ -164,13 +164,9 @@ async function copyRunId() {
     </div>
 
     <!-- LLM observability rollup (tokens, output-limit headroom,
-         transport-vs-execution); click to open the full per-call panel -->
-    <StepModelActivity
-      v-if="step.metrics && step.metrics.calls > 0"
-      class="mt-4"
-      :metrics="step.metrics"
-      :instance-id="instanceId"
-    />
+         transport-vs-execution); click to open the full per-call panel. Self-gates: the
+         "View all calls →" link shows for any run, the metrics bar only when calls exist. -->
+    <StepModelActivity class="mt-4" :metrics="step.metrics" :instance-id="instanceId" />
 
     <!-- standards (prompt fragments) folded into this step -->
     <div v-if="step.selectedFragmentIds && step.selectedFragmentIds.length" class="mt-4">

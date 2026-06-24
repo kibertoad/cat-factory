@@ -249,19 +249,16 @@ const conflictVerdict = computed(() => {
                 >
                   {{ gate.lastFailureSummary }}
                 </p>
-                <p class="mt-2 text-[11px] leading-relaxed text-slate-500">
-                  GitHub's API doesn't expose a file-level conflict list, so the resolver inspects
-                  the branch directly.<template v-if="prUrl">
-                    For the exact conflicting hunks, open the
-                    <a
-                      :href="prUrl"
-                      target="_blank"
-                      rel="noopener"
-                      class="text-sky-300 hover:text-sky-200 hover:underline"
-                      >pull request on GitHub</a
-                    >.</template
-                  >
-                </p>
+                <a
+                  v-if="prUrl"
+                  :href="prUrl"
+                  target="_blank"
+                  rel="noopener"
+                  class="mt-2 inline-flex items-center gap-1 text-[12px] text-sky-300 hover:text-sky-200 hover:underline"
+                >
+                  View pull request on GitHub
+                  <UIcon name="i-lucide-external-link" class="h-3 w-3" />
+                </a>
               </template>
 
               <!-- Attempt history (both gates): what each helper run did and how it ended. -->
