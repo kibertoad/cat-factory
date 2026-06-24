@@ -7,6 +7,15 @@ export function num(value: string | undefined): number | undefined {
   return Number.isFinite(n) ? n : undefined
 }
 
+/** Parse a comma-separated var into a trimmed, non-empty list (empty when unset). */
+export function csv(value: string | undefined): string[] {
+  if (!value) return []
+  return value
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0)
+}
+
 const DAY_MS = 24 * 60 * 60 * 1000
 
 /** Parse a non-negative retention-day var into ms, falling back to `defaultDays`. */

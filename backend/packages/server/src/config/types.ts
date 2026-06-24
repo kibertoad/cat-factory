@@ -147,6 +147,16 @@ export interface EnvironmentsConfig {
   enabled: boolean
   /** Service-level master key (base64) backing credential encryption at rest. */
   encryptionKey?: string
+  /**
+   * Hostnames exempt from the strict public-https URL guard, for a TRUSTED in-house
+   * adapter pointing at an internal env platform on a private/VPN host. Each entry
+   * matches the URL hostname exactly, or as a dot suffix when it starts with `.`
+   * (`.internal`). Absent/empty => strict (no exemptions). Folds into the shared
+   * {@link UrlSafetyPolicy} via `resolveUrlSafetyPolicy`.
+   */
+  allowUrlHosts?: string[]
+  /** Permit `http` (not just `https`) for trusted provider/env URLs. */
+  allowHttpUrls?: boolean
 }
 
 export interface RunnerPoolConfig {
@@ -154,6 +164,10 @@ export interface RunnerPoolConfig {
   enabled: boolean
   /** Service-level master key (base64) backing credential encryption at rest. */
   encryptionKey?: string
+  /** Hostnames exempt from the strict public-https URL guard (see EnvironmentsConfig). */
+  allowUrlHosts?: string[]
+  /** Permit `http` (not just `https`) for a trusted internal pool scheduler URL. */
+  allowHttpUrls?: boolean
 }
 
 export interface DatadogConfig {

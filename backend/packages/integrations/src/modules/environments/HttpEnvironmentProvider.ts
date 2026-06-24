@@ -12,6 +12,8 @@ import {
   type ProvisionFields,
   type ProvisionedEnvironment,
   type SecretResolver,
+  type UrlSafetyPolicy,
+  STRICT_URL_SAFETY_POLICY,
 } from '@cat-factory/kernel'
 import * as environmentsLogic from './environments.logic.js'
 
@@ -129,15 +131,19 @@ async function readCappedText(
 
 export interface HttpEnvironmentProviderOptions {
   defaultTimeoutMs?: number
+  /** URL/host safety policy; defaults to strict (https-only, no private hosts). */
+  urlPolicy?: UrlSafetyPolicy
 }
 
 export class HttpEnvironmentProvider implements EnvironmentProvider {
   private readonly defaultTimeoutMs: number
+  private readonly urlPolicy: UrlSafetyPolicy
   /** Per-isolate OAuth token cache, keyed by token URL + client id. */
   private readonly oauthCache = new Map<string, { token: string; expiresAt: number }>()
 
   constructor(options: HttpEnvironmentProviderOptions = {}) {
     this.defaultTimeoutMs = options.defaultTimeoutMs ?? DEFAULT_TIMEOUT_MS
+    this.urlPolicy = options.urlPolicy ?? STRICT_URL_SAFETY_POLICY
   }
 
   async provision(req: ProvisionEnvironmentRequest): Promise<ProvisionedEnvironment> {
@@ -229,7 +235,7 @@ export class HttpEnvironmentProvider implements EnvironmentProvider {
         body,
         signal: AbortSignal.timeout(template.timeoutMs ?? this.defaultTimeoutMs),
       },
-      (u) => environmentsLogic.assertSafeEnvironmentUrl(u, 'request URL'),
+      (u) => environmentsLogic.assertSafeEnvironmentUrl(u, 'request URL', this.urlPolicy),
     )
 
     if (!res.ok) {
@@ -330,7 +336,7 @@ export class HttpEnvironmentProvider implements EnvironmentProvider {
         body: form.toString(),
         signal: AbortSignal.timeout(this.defaultTimeoutMs),
       },
-      (u) => environmentsLogic.assertSafeEnvironmentUrl(u, 'OAuth token URL'),
+      (u) => environmentsLogic.assertSafeEnvironmentUrl(u, 'OAuth token URL', this.urlPolicy),
     )
     if (!res.ok) {
       const text = await readCappedText(res, MAX_RESPONSE_BYTES, false).catch(() => '')

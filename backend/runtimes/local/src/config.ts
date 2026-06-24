@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto'
 import { loadNodeConfig } from '@cat-factory/node-server'
 import type { AppConfig } from '@cat-factory/server'
+import { resolveHostAlias } from './runtimes/index.js'
 
 // Local mode is a single developer running the whole product on their own machine.
 // It reuses the Node facade's config loader verbatim and only changes the defaults
@@ -21,6 +22,10 @@ const DEFAULT_PORT = '8787'
  */
 export function applyLocalDefaults(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   const port = env.PORT?.trim() || DEFAULT_PORT
+  // The host alias the harness uses to reach this service depends on the runtime:
+  // `host.docker.internal` (Docker/Podman/OrbStack), `host.lima.internal` (Colima), or
+  // the vmnet gateway (Apple). An explicit LOCAL_HARNESS_HOST_ALIAS / PUBLIC_URL wins.
+  const hostAlias = resolveHostAlias(env)
   return {
     ...env,
     // `|| 'true'` (not `??`) so an explicit empty `AUTH_DEV_OPEN=` still defaults open,
@@ -33,10 +38,10 @@ export function applyLocalDefaults(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
     // per-process key when absent — enough to boot and run a pipeline. Set ENCRYPTION_KEY
     // explicitly to keep encrypted-at-rest credentials decryptable across restarts.
     ENCRYPTION_KEY: env.ENCRYPTION_KEY?.trim() || randomBytes(32).toString('base64'),
-    // The harness (inside Docker) posts to `${PUBLIC_URL}/v1`; host.docker.internal
-    // routes back to this service on the host. The transport publishes the gateway
-    // host alias on Linux via `--add-host`.
-    PUBLIC_URL: env.PUBLIC_URL?.trim() || `http://host.docker.internal:${port}`,
+    // The harness (inside the container) posts to `${PUBLIC_URL}/v1`; the runtime's host
+    // alias routes back to this service on the host. The docker-family transport
+    // publishes that alias on Linux via `--add-host=<alias>:host-gateway`.
+    PUBLIC_URL: env.PUBLIC_URL?.trim() || `http://${hostAlias}:${port}`,
   }
 }
 

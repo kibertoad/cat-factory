@@ -1,14 +1,14 @@
 import type { AgentKind } from '@cat-factory/kernel'
 import { DEFAULT_COMPANION_THRESHOLD } from '@cat-factory/contracts'
 
-// Companion agents review the output of an immediately-preceding producer step,
+// Companion agents review the output of the immediately-preceding producer step,
 // rate its overall quality (0..1) and — below the step's threshold — loop the
 // producer back for automatic rework before a human is asked, failing the run once
 // the rework budget is spent. Each companion declares the producer kinds it may be
 // attached to (its allow-list) and a default threshold; both are configurable in the
-// pipeline builder. A companion reviews the NEAREST preceding step whose kind is in
-// its `targets` (not necessarily the immediately-adjacent step), so e.g. `reviewer`
-// can challenge a `coder` change even with `blueprints`/`tester` in between.
+// pipeline builder. A companion must run immediately after a step whose kind is in its
+// `targets` — pipeline validation enforces that adjacency (see `assertValidCompanionPlacement`),
+// so the nearest preceding target the engine reviews is always the immediate predecessor.
 
 export interface CompanionDefinition {
   /** The companion's own agent kind. */

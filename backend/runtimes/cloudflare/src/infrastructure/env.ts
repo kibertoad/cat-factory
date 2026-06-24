@@ -307,6 +307,14 @@ export interface Env {
    * sealed with the shared `ENCRYPTION_KEY`.
    */
   ENVIRONMENTS_ENABLED?: string
+  /**
+   * Comma-separated hostnames exempt from the strict public-https URL guard, for a
+   * TRUSTED in-house adapter pointing at an internal env platform (a private/VPN host).
+   * Each entry matches exactly, or as a dot suffix when it starts with `.` (`.internal`).
+   */
+  ENVIRONMENTS_ALLOW_URL_HOSTS?: string
+  /** `true` to permit `http` (not just `https`) for trusted env/provider URLs. */
+  ENVIRONMENTS_ALLOW_HTTP_URLS?: string
 
   // ---- Self-hosted runner pool ("bring your own infra"; opt-in) -----------
   /**
@@ -322,6 +330,10 @@ export interface Env {
    * with the shared `ENCRYPTION_KEY`.
    */
   RUNNERS_ENABLED?: string
+  /** Comma-separated hostnames exempt from the strict public-https guard (see ENVIRONMENTS_ALLOW_URL_HOSTS). */
+  RUNNERS_ALLOW_URL_HOSTS?: string
+  /** `true` to permit `http` for a trusted internal pool scheduler URL. */
+  RUNNERS_ALLOW_HTTP_URLS?: string
 
   // ---- Slack notification transport (see config/slack.ts; opt-in) ---------
   /**

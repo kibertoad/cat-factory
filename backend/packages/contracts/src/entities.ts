@@ -2,7 +2,7 @@ import * as v from 'valibot'
 import { subscriptionVendorSchema } from './vendor-credentials.js'
 import { agentConfigValuesSchema } from './agent-config.js'
 import { testReportSchema } from './testing.js'
-import { consensusStepConfigSchema, taskEstimateSchema } from './consensus.js'
+import { consensusStepConfigSchema, stepGatingSchema, taskEstimateSchema } from './consensus.js'
 import { cloudProviderSchema, instanceSizeSchema } from './provisioning.js'
 import { releaseSignalSchema } from './release.js'
 import {
@@ -359,6 +359,26 @@ export const pipelineSchema = v.object({
    * the run's step at start, like {@link gates}. See {@link consensusStepConfigSchema}.
    */
   consensus: v.optional(v.array(v.nullable(consensusStepConfigSchema))),
+  /**
+   * Per-step gating, parallel to {@link agentKinds}: when `gating[i]` is set and its
+   * `enabled` is true, step `i` runs only if the task estimate meets the threshold
+   * (OR across the supplied axes); otherwise it is transparently SKIPPED at runtime.
+   * `null`/absent means "always run" (the default). Copied onto the run's step at
+   * start, like {@link gates}. A pipeline with any enabled gating requires a
+   * `task-estimator` step earlier in the chain. See {@link stepGatingSchema}.
+   */
+  gating: v.optional(v.array(v.nullable(stepGatingSchema))),
+  /**
+   * Free-form organizational labels for the saved-pipeline library (filter/search).
+   * Absent ⇒ no labels. Applies to built-in and custom pipelines alike.
+   */
+  labels: v.optional(v.array(v.string())),
+  /**
+   * When true the pipeline is archived: kept but hidden from the default library view
+   * (a "show archived" toggle reveals it). Organizational only — an archived built-in
+   * is still read-only for structure. Absent / false ⇒ active.
+   */
+  archived: v.optional(v.boolean()),
   /**
    * True for the curated built-in catalog pipelines (`seedPipelines()`). Built-ins
    * are read-only templates: they can be cloned (into an editable copy) but not
@@ -792,6 +812,19 @@ export const pipelineStepSchema = v.object({
    * See {@link consensusStepConfigSchema}.
    */
   consensus: v.optional(v.nullable(consensusStepConfigSchema)),
+  /**
+   * Estimate-based gating for this step, copied from the pipeline's `gating` array at
+   * run start. When present (with `enabled: true`) the step is skipped at runtime unless
+   * the block's task estimate meets the threshold. Absent ⇒ always run. See
+   * {@link stepGatingSchema}.
+   */
+  gating: v.optional(v.nullable(stepGatingSchema)),
+  /**
+   * True when this step was skipped at runtime because its `gating` was not satisfied
+   * (the task estimate fell below the threshold). The step's `state` is `done` with no
+   * output; the UI renders it as "skipped (gated)". Absent ⇒ the step ran normally.
+   */
+  skipped: v.optional(v.boolean()),
   /** Text the agent produced for this step (when LLM execution is enabled). */
   output: v.optional(v.string()),
   /** Identifier of the model that produced `output`, for transparency. */

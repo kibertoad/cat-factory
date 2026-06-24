@@ -20,7 +20,7 @@ instead:
 ```jsonc
 // deploy/backend/package.json
 "dependencies": {
-  "@cat-factory/worker": "^0.1.0"   // instead of "workspace:*"
+  "@cat-factory/worker": "^0.6.0"   // instead of "workspace:*"
 }
 ```
 

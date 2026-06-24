@@ -34,6 +34,8 @@ import {
   TASK_ESTIMATOR_AGENT_KIND,
 } from '@cat-factory/agents'
 import { coerceTaskEstimate, summarizeEstimate } from '../estimation/estimate.logic.js'
+import { validatePipelineShape } from '../pipelines/pipelineShape.js'
+import { shouldRunGatedStep } from './stepGating.logic.js'
 import { reviewableArtifactOutput } from './artifact-review.logic.js'
 import {
   resolveIndividualVendors,
@@ -101,6 +103,7 @@ import type {
   WorkspaceRepository,
 } from '@cat-factory/kernel'
 import type { Clock, IdGenerator } from '@cat-factory/kernel'
+import type { ProvisionContext } from '@cat-factory/kernel'
 import type { AgentExecutor, AgentRunContext, AgentRunResult } from '@cat-factory/kernel'
 import { isAsyncAgentExecutor } from '@cat-factory/kernel'
 import type { WorkRunner } from '@cat-factory/kernel'
@@ -123,6 +126,7 @@ import {
   MAX_EVICTION_RECOVERIES,
   MAX_TRANSIENT_EVICTION_RECOVERIES,
 } from './job.logic.js'
+import { decideTesterInfra, TESTER_INFRA_MESSAGES } from './tester-infra.logic.js'
 
 /**
  * Max `conflict-resolver` escalations before the conflicts gate gives up. Deliberately
@@ -158,6 +162,17 @@ const EXECUTION_FAILURE_HINTS: Partial<Record<AgentFailureKind, string>> = {
 /** Format a 0..1 score as a rounded percentage for notification copy. */
 function pct(score: number): string {
   return `${Math.round(score * 100)}%`
+}
+
+/**
+ * Parse `owner`/`repo` from a GitHub pull-request URL (`https://github.com/o/r/pull/42`).
+ * Returns undefined for any URL that doesn't carry both segments. Host-agnostic on
+ * purpose (GitHub Enterprise hosts work too); only the `/owner/repo/...` shape matters.
+ */
+function parseRepoFromPullUrl(url: string): { owner: string; repo: string } | undefined {
+  const match = /^https?:\/\/[^/]+\/([^/]+)\/([^/]+)\//.exec(url)
+  if (!match) return undefined
+  return { owner: match[1]!, repo: match[2]! }
 }
 
 /**
@@ -358,6 +373,15 @@ export interface ExecutionServiceDependencies {
    * live. Absent (tests / unconfigured) → steps carry no `metrics`.
    */
   llmObservability?: LlmObservabilityService
+  /**
+   * Optional: whether the runtime can run the Tester's LOCAL docker-compose infra via
+   * Docker-in-Docker. Defaults to `true` (Cloudflare, Node, tests). The local facade
+   * sets it `false` for runtimes without nesting (Apple `container`), which makes
+   * {@link ExecutionService.assertTesterInfraConfigured} refuse a local-infra Tester run
+   * (steering it to the ephemeral environment or a no-infra service) instead of
+   * dispatching a job that can't stand its dependencies up.
+   */
+  localTestInfraSupported?: boolean
 }
 
 /** Reconciles a Blueprinter step's tree onto the board in place (BoardScanService). */
@@ -429,6 +453,8 @@ export class ExecutionService {
     workspaceId: string,
     agentKind: string,
   ) => Promise<string | undefined>
+  /** Whether the runtime can run the Tester's local DinD infra (false = limited mode). */
+  private readonly localTestInfraSupported: boolean
   /** Lazily-built polling-gate registry, keyed by `agentKind`. See {@link gateFor}. */
   private gateRegistryCache?: Map<string, GateDefinition>
   /**
@@ -472,6 +498,7 @@ export class ExecutionService {
     subscriptionActivationRepository,
     resolveWorkspaceModelDefault,
     resolveProviderCapabilities,
+    localTestInfraSupported,
   }: ExecutionServiceDependencies) {
     this.workspaceRepository = workspaceRepository
     this.blockRepository = blockRepository
@@ -567,6 +594,7 @@ export class ExecutionService {
     this.subscriptionActivations = subscriptionActivationRepository
     this.resolveWorkspaceModelDefault = resolveWorkspaceModelDefault
     this.resolveProviderCapabilities = resolveProviderCapabilities
+    this.localTestInfraSupported = localTestInfraSupported ?? true
   }
 
   private requireWorkspace(workspaceId: string) {
@@ -651,16 +679,23 @@ export class ExecutionService {
    * {@link ConflictError} (surfaced as an actionable message) when neither is set.
    */
   private async assertTesterInfraConfigured(workspaceId: string, block: Block): Promise<void> {
-    // The local-infra requirement applies only when the Tester runs in LOCAL mode.
-    // Ephemeral is the default, so an unset choice needs no service infra config.
-    if (block.agentConfig?.['tester.environment'] !== 'local') return
-    const service = await this.contextBuilder.resolveServiceConfig(workspaceId, block)
-    if (service?.noInfraDependencies || service?.testComposePath) return
-    throw new ConflictError(
-      "This task's pipeline runs the Tester locally, but its service has no test infra " +
-        "configured. Set the service's docker-compose path, or mark it as having no infra " +
-        'dependencies, before starting — or switch the Tester to the ephemeral environment.',
-    )
+    const environment =
+      block.agentConfig?.['tester.environment'] === 'local' ? 'local' : 'ephemeral'
+    // The service's infra config is only needed for a `local` run; an ephemeral run is
+    // decided by the runtime capability + whether a provider is wired.
+    const service =
+      environment === 'local'
+        ? await this.contextBuilder.resolveServiceConfig(workspaceId, block)
+        : undefined
+    const decision = decideTesterInfra({
+      localTestInfraSupported: this.localTestInfraSupported,
+      environment,
+      noInfraDependencies: service?.noInfraDependencies === true,
+      hasComposePath: !!service?.testComposePath,
+      hasEnvironmentProvider: this.environmentProvisioning !== undefined,
+    })
+    if (decision.ok) return
+    throw new ConflictError(TESTER_INFRA_MESSAGES[decision.reason])
   }
 
   /**
@@ -730,6 +765,12 @@ export class ExecutionService {
       pipelineId,
     )
 
+    // Reject a structurally-invalid pipeline before any side effects — a misplaced
+    // companion or estimate-gating without a preceding task-estimator. The builder also
+    // rejects these at save, but a pipeline can become invalid out of band, so a run
+    // refuses to START as well (the same shared check).
+    validatePipelineShape(pipeline)
+
     // A pipeline with a Tester that runs locally needs the service's test infra
     // configured (a docker-compose path, or an explicit "no infra dependencies"
     // flag). Block the start with a clear, actionable error otherwise — before any
@@ -786,6 +827,9 @@ export class ExecutionService {
           // A consensus-enabled step runs through the multi-model mechanism (the consensus
           // executor reads this off the context). Copied from the pipeline at run start.
           ...(pipeline.consensus?.[i] ? { consensus: pipeline.consensus[i] } : {}),
+          // Estimate gating: when set+enabled the step is skipped at runtime unless the
+          // block estimate (written by an earlier task-estimator step) meets the threshold.
+          ...(pipeline.gating?.[i] ? { gating: pipeline.gating[i] } : {}),
           // A companion step carries its quality bar + rework budget, seeded from the
           // pipeline's per-step threshold (else the companion's default).
           ...(companionDef
@@ -986,6 +1030,15 @@ export class ExecutionService {
     const block = await this.blockRepository.get(workspaceId, instance.blockId)
     if (!block) return { kind: 'noop' }
     const isFinalStep = instance.currentStep === instance.steps.length - 1
+
+    // Estimate gating: a step gated on the task estimate (today a conditional companion)
+    // is transparently SKIPPED when the estimate — written by an earlier task-estimator
+    // step in this same run — falls below the threshold. No agent is spun up; the step
+    // finishes as `skipped` and the run advances. Evaluated here (not at build time)
+    // because the estimate only exists once the estimator step has run.
+    if (step.gating?.enabled && !shouldRunGatedStep(block.estimate, step.gating)) {
+      return this.skipGatedStep(workspaceId, instance, step, isFinalStep)
+    }
 
     // A `deployer` step provisions an ephemeral environment deterministically via
     // the provider — no LLM, no token usage — when the integration is wired.
@@ -1429,6 +1482,42 @@ export class ExecutionService {
   }
 
   /**
+   * Finish a gated step that was skipped (its estimate gate was not satisfied) and either
+   * complete the run or advance to the next step — the deterministic finish/advance tail
+   * of {@link recordStepResult}, minus all the agent-result handling (no LLM ran, so there
+   * is no usage / decision / PR / artifact / approval / resolver to process). The step is
+   * marked `skipped` with empty output so the UI renders "skipped (gated)".
+   */
+  private async skipGatedStep(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    step: PipelineStep,
+    isFinalStep: boolean,
+  ): Promise<AdvanceResult> {
+    step.skipped = true
+    step.output = ''
+    step.progress = 1
+    step.subtasks = undefined
+    this.finishStep(step)
+
+    if (isFinalStep) {
+      instance.status = 'done'
+      await this.finalizeBlock(workspaceId, instance, undefined)
+      await this.executionRepository.upsert(workspaceId, instance)
+      await this.emitInstance(workspaceId, instance)
+      await this.stopRunContainer(workspaceId, instance)
+      return { kind: 'done' }
+    }
+    instance.currentStep += 1
+    const next = instance.steps[instance.currentStep]
+    if (next) this.startStep(next)
+    await this.updateBlockProgress(workspaceId, instance, 'in_progress')
+    await this.executionRepository.upsert(workspaceId, instance)
+    await this.emitInstance(workspaceId, instance)
+    return { kind: 'continue' }
+  }
+
+  /**
    * Park a step on a human decision and freeze its duration clock. Records when the
    * step stopped working (`pausedAt`) so elapsed time no longer accrues while it waits
    * for input — the symmetric counterpart of the terminal freeze on `finishedAt`.
@@ -1752,6 +1841,7 @@ export class ExecutionService {
         blockId: block.id,
         executionId: instance.id,
         inputs: this.deployInputs(block),
+        context: this.deployContext(block),
       })
       const lines = [
         `Provisioned ephemeral environment via '${handle.providerId}'.`,
@@ -2293,6 +2383,29 @@ export class ExecutionService {
       description: block.description,
     }
     return inputs
+  }
+
+  /**
+   * Typed git/PR/repo context for the deployer, derived from the block's PR ref. A
+   * PR-environment provider (e.g. an in-house adapter) needs the branch/repo to target
+   * the right environment; the same values are also flattened into `{{input.*}}` for
+   * the manifest path. `owner`/`repo` are parsed from the PR url when present.
+   */
+  private deployContext(block: Block): ProvisionContext {
+    const context: ProvisionContext = { blockId: block.id }
+    const pr = block.pullRequest
+    if (!pr) return context
+    if (pr.branch) context.branch = pr.branch
+    if (pr.number !== undefined) context.pullNumber = pr.number
+    if (pr.url) {
+      context.pullUrl = pr.url
+      const repo = parseRepoFromPullUrl(pr.url)
+      if (repo) {
+        context.repoOwner = repo.owner
+        context.repoName = repo.repo
+      }
+    }
+    return context
   }
 
   /**

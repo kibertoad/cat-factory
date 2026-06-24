@@ -267,6 +267,13 @@ export const pipelines = pgTable(
     // Nullable JSON array of per-step consensus configs, parallel to agent_kinds (set in
     // the pipeline builder for steps whose kind carries a consensus capability trait).
     consensus: text('consensus'),
+    // Nullable JSON array of per-step StepGating, parallel to agent_kinds: an enabled entry
+    // makes the step run only when the task estimate meets the threshold (mirror of D1 0003).
+    gating: text('gating'),
+    // Nullable JSON array of free-form organizational labels; `archived` (truthy) hides the
+    // pipeline from the default library view (mirror of D1 0003).
+    labels: text('labels'),
+    archived: integer('archived'),
     // Monotonic insert sequence (Postgres has no SQLite rowid): a workspace's pipelines
     // are read back in the order they were seeded — the curated `seedPipelines()` order
     // — so the catalog order (and the UI's default `pipelines[0]`) is deterministic and

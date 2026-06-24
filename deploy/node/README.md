@@ -24,7 +24,7 @@ instead:
 ```jsonc
 // deploy/node/package.json
 "dependencies": {
-  "@cat-factory/node-server": "^0.1.0"   // instead of "workspace:*"
+  "@cat-factory/node-server": "^0.6.0"   // instead of "workspace:*"
 }
 ```
 

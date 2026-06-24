@@ -34,6 +34,7 @@ import {
   type AgentExecutor,
   type Clock,
   type DocumentSourceProvider,
+  type EnvironmentProvider,
   type FragmentOwnerKind,
   type GitHubClient,
   type GitHubInstallationRepository,
@@ -75,6 +76,7 @@ import {
   createWebSearchUpstreamFromEnv,
   ensureWorkBranchViaRest,
   logger,
+  resolveUrlSafetyPolicy,
   resolveWorkspaceCapabilities,
 } from '@cat-factory/server'
 import type { PgBoss } from 'pg-boss'
@@ -380,6 +382,15 @@ export interface NodeContainerOptions {
    * (no live push), exactly as before.
    */
   realtimeHub?: NodeRealtimeHub
+  /**
+   * Override the ephemeral-environment provider. When provided it REPLACES the default
+   * manifest-driven `HttpEnvironmentProvider`, so a trusted in-house adapter package (one
+   * implementing the `EnvironmentProvider` port for an internal env-orchestration platform)
+   * can be wired into a stock build without forking the facade. The environment repos +
+   * secret cipher still wire from config, so `ENVIRONMENTS_ENABLED` + `ENCRYPTION_KEY` are
+   * still required for the module to assemble. Undefined → the default HTTP provider.
+   */
+  environmentProvider?: EnvironmentProvider
 }
 
 /**
@@ -406,7 +417,8 @@ function buildNodeResolveTransport(
     }),
     clock,
   })
-  const poolProvider = new HttpRunnerPoolProvider()
+  const urlPolicy = resolveUrlSafetyPolicy(config.runners)
+  const poolProvider = new HttpRunnerPoolProvider(urlPolicy ? { urlPolicy } : {})
   return async (workspaceId) => {
     if (workspaceId) {
       const resolved = await runnerService.resolve(workspaceId)
@@ -1084,6 +1096,10 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     }
   }
 
+  // Runner-pool URL/host guard, scoped to its own config (independent of the environment
+  // allow-list); absent => strict public-https.
+  const runnerUrlPolicy = resolveUrlSafetyPolicy(config.runners)
+
   const dependencies: CoreDependencies = {
     ...releaseHealthDeps,
     workspaceRepository: repos.workspaceRepository,
@@ -1175,6 +1191,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
             masterKeyBase64: config.runners.encryptionKey,
             info: RUNNERS_CIPHER_INFO,
           }),
+          ...(runnerUrlPolicy ? { runnerUrlSafetyPolicy: runnerUrlPolicy } : {}),
         }
       : {}),
     ...(options.boss
@@ -1204,8 +1221,11 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // source and import requirement/PRD/RFC pages as agent context.
     ...selectNodeDocumentsDeps(config, options.db, githubClient, githubInstallationRepository),
     // Ephemeral environments (opt-in): a workspace registers its own environment
-    // management API; the tester provisions/destroys per-run environments from it.
-    ...selectNodeEnvironmentsDeps(config, options.db),
+    // management API; the tester provisions/destroys per-run environments from it. A
+    // trusted in-house adapter can replace the default HTTP provider via the seam.
+    // The environment integration scopes its own URL/host policy from
+    // `config.environments` inside this selector (separate from the runner pool's).
+    ...selectNodeEnvironmentsDeps(config, options.db, options.environmentProvider),
     // Prompt-fragment library (ADR 0006; opt-in): the managed tenant-scoped catalog
     // of best-practice fragments feeding every agent run, wired exactly like the
     // Worker's selectFragmentLibraryDeps (repos + installation resolver + selector).
@@ -1357,20 +1377,27 @@ function selectNodeDocumentsDeps(
 
 /**
  * Wire the ephemeral-environment integration for the Node facade when enabled,
- * mirroring the Worker's `selectEnvironmentsDeps`: the shared `HttpEnvironmentProvider`
- * (a manifest-driven `fetch` shell), the Drizzle connection + registry repos, and the
+ * mirroring the Worker's `selectEnvironmentsDeps`: the environment provider (the default
+ * manifest-driven `HttpEnvironmentProvider`, or an injected in-house adapter via the
+ * `environmentProvider` seam), the Drizzle connection + registry repos, and the
  * environment-scoped `SecretCipher`. Per-tenant management-API secrets are encrypted at
  * rest with the shared ENCRYPTION_KEY. Disabled → `{}` and the module stays off.
  */
-function selectNodeEnvironmentsDeps(config: AppConfig, db: DrizzleDb): Partial<CoreDependencies> {
+function selectNodeEnvironmentsDeps(
+  config: AppConfig,
+  db: DrizzleDb,
+  override?: EnvironmentProvider,
+): Partial<CoreDependencies> {
   if (!config.environments.enabled || !config.environments.encryptionKey) return {}
+  const urlPolicy = resolveUrlSafetyPolicy(config.environments)
   return {
-    environmentProvider: new HttpEnvironmentProvider(),
+    environmentProvider: override ?? new HttpEnvironmentProvider(urlPolicy ? { urlPolicy } : {}),
     environmentConnectionRepository: new DrizzleEnvironmentConnectionRepository(db),
     environmentRegistryRepository: new DrizzleEnvironmentRegistryRepository(db),
     secretCipher: new WebCryptoSecretCipher({
       masterKeyBase64: config.environments.encryptionKey,
     }),
+    ...(urlPolicy ? { environmentUrlSafetyPolicy: urlPolicy } : {}),
   }
 }
 

@@ -163,7 +163,10 @@ const server = createServer((req, res) => {
       } catch (error) {
         // Parse failures (incl. host-allowlist rejection) are client errors → 400.
         const message = redactSecrets(error instanceof Error ? error.message : String(error))
-        log.error('failed to start job', { kind: typeof kind === 'string' ? kind : undefined, error: message })
+        log.error('failed to start job', {
+          kind: typeof kind === 'string' ? kind : undefined,
+          error: message,
+        })
         return send(res, 400, { error: message })
       }
     }

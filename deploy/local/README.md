@@ -6,11 +6,13 @@ developer's laptop. The reusable logic lives in
 ([`@cat-factory/node-server`](../../backend/runtimes/node): shared Hono app +
 Drizzle/Postgres + pg-boss) with two local differentiators:
 
-- **Agent jobs run as local Docker/Podman containers.** Each repo-operating step
-  (coder, mocker, playwright, blueprints, tester, fixer, ci-fixer, conflict-resolver,
-  merger) is launched as its own `docker run` of the executor-harness image — the same
-  image the Cloudflare Worker runs per-run Containers from — via the
-  `LocalDockerRunnerTransport`. No Cloudflare and no self-hosted runner pool required.
+- **Agent jobs run as local containers.** Each repo-operating step (coder, mocker,
+  playwright, blueprints, tester, fixer, ci-fixer, conflict-resolver, merger) is launched
+  as its own container of the executor-harness image — the same image the Cloudflare
+  Worker runs per-run Containers from — via the `LocalContainerRunnerTransport`. Docker,
+  Podman, OrbStack, Colima and Apple's `container` are all supported (see
+  [Container runtimes](#container-runtimes)). No Cloudflare and no self-hosted runner
+  pool required.
 - **GitHub is reached via a personal access token** (`GITHUB_PAT`) instead of a GitHub
   App. The agent containers clone, push branches and **open real PRs on github.com**
   with that token.
@@ -19,8 +21,9 @@ Persistence is a **local Postgres** (the bundled `docker-compose.yml`).
 
 ## Prerequisites
 
-- Docker (or Podman) running locally — used both for Postgres and for the per-job
-  agent containers.
+- A container runtime running locally — used both for Postgres and for the per-run
+  agent containers. Docker, Podman, OrbStack, Colima and Apple `container` all work; see
+  [Container runtimes](#container-runtimes) for selecting and configuring one.
 - The executor-harness image available locally. Pull the published image (GHCR or
   Docker Hub), or build it from source:
   ```sh
@@ -177,12 +180,70 @@ It reads `GITHUB_PAT` + `DATABASE_URL` from the environment, fetches the repo's
 metadata with the PAT, and upserts the installation + repo rows (linked to the frame).
 It shares the synthetic installation id with the board flow, so the two agree.
 
+## Container runtimes
+
+Agent jobs run as per-run containers spun up by the orchestrator on the host. Select the
+runtime with `LOCAL_CONTAINER_RUNTIME` (default `docker`); it sets sensible defaults for
+the CLI binary, the host alias the harness uses to reach this service, and whether the
+Tester's local infra works:
+
+| `LOCAL_CONTAINER_RUNTIME` | CLI       | Harness → host LLM proxy                          | Tester local infra (Docker-in-Docker) |
+| ------------------------- | --------- | ------------------------------------------------- | ------------------------------------- |
+| `docker` (default)        | `docker`  | `host.docker.internal` (Desktop) / host-gateway (Linux) | ✅                              |
+| `orbstack`                | `docker`  | `host.docker.internal` (native)                   | ✅                                     |
+| `podman`                  | `podman`  | `host.docker.internal:host-gateway` (v4+)         | ✅ (rootless: set `LOCAL_DOCKER_PRIVILEGED_TEST_JOBS=false`) |
+| `colima`                  | `docker`  | `host.lima.internal` (often needs a LAN-IP `PUBLIC_URL`) | ✅                              |
+| `apple`                   | `container` | container's own IP; host via the vmnet gateway  | ❌ **limited mode** (see below)        |
+
+Notes:
+
+- **Podman** needs fully-qualified image refs (`ghcr.io/…`, `localhost/…`) — set
+  `LOCAL_HARNESS_IMAGE` accordingly. Rootless Podman nests containers without
+  `--privileged`, so set `LOCAL_DOCKER_PRIVILEGED_TEST_JOBS=false`.
+- **Colima / Apple** run the daemon in a VM, so `host.docker.internal` may not route to
+  the Mac host where the orchestrator listens. The defaults (`host.lima.internal` for
+  Colima, the `192.168.64.1` vmnet gateway for Apple) work in common setups; if a job
+  container can't reach the LLM proxy, set `PUBLIC_URL` (or `LOCAL_HARNESS_HOST_ALIAS`)
+  to your machine's LAN IP.
+- **Apple `container` — limited mode.** Each container runs in its own lightweight VM
+  with no Docker-in-Docker, so the Tester's **Local** infra mode (`docker compose up`
+  inside the job container) is unavailable. A pipeline whose Tester needs it is **refused
+  at start** with an actionable message. The Tester still works on Apple when the task
+  uses the **Ephemeral** test environment (with an [environment provider](#ephemeral-test-environments)
+  configured, so the infra is provisioned elsewhere) or the service is marked **No infra
+  dependencies**. (Standing a service's compose dependencies up as sibling Apple
+  containers, rather than DinD, is a possible future enhancement.)
+
+At boot the service logs the resolved runtime, its capabilities and the host alias, and
+probes that the CLI is installed — so a misconfiguration shows up immediately rather than
+on the first agent job.
+
+## Ephemeral test environments
+
+A task's **Test environment** (inspector → Agent configuration) chooses how the Tester
+gets something to test against:
+
+- **Local** — stands the service's docker-compose dependencies up inside the job
+  container (Docker-in-Docker). Self-contained and offline, but requires a runtime that
+  can nest containers (every runtime except Apple `container`).
+- **Ephemeral** (default) — a **deployer** step provisions an environment through a
+  registered **environment provider** (your own HTTP management API — e.g. a custom
+  container pool) and the Tester tests the returned URL. Runtime-independent (it's just
+  HTTP), offloads the heavy infra, and is the way to run the Tester on Apple `container`.
+
+The environment provider is opt-in and identical to the cloud facades: set
+`ENVIRONMENTS_ENABLED=true` (+ `ENCRYPTION_KEY`) and register a connection in the UI.
+Without it, ephemeral tasks have no URL to test — fine on a DinD-capable runtime (use
+Local instead), but on Apple `container` a Tester with neither a provider nor a no-infra
+service is refused at start.
+
 ## Networking notes
 
 - The harness inside a job container reaches this service's LLM proxy at
-  `http://host.docker.internal:<PORT>/v1`. On Linux the transport publishes that alias
-  with `--add-host=host.docker.internal:host-gateway`; on Docker Desktop it already
-  resolves.
+  `${PUBLIC_URL}/v1` — `PUBLIC_URL` defaults to the selected runtime's host alias (see
+  [Container runtimes](#container-runtimes)). On Linux the docker-family transport
+  publishes the alias with `--add-host=<alias>:host-gateway`; on Docker Desktop / OrbStack
+  it already resolves.
 - github.com is reached directly from the job container with the PAT.
 
 ## Merge lifecycle
@@ -216,6 +277,11 @@ nested containers without it (e.g. rootless Podman), set
 `LOCAL_DOCKER_PRIVILEGED_TEST_JOBS=false`. Standing the infra up is best-effort: if the
 in-container daemon can't start, the Tester is told and runs what it can rather than
 failing the job.
+
+On **Apple `container`** there is no Docker-in-Docker, so the **Local** mode is
+unavailable and a pipeline that needs it is refused at start — use the **Ephemeral** test
+environment (with a provider, see [Ephemeral test environments](#ephemeral-test-environments))
+or mark the service **No infra dependencies**.
 
 ## Container sizing & the `docker` provider
 

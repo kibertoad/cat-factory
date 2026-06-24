@@ -318,6 +318,12 @@ TASK_SOURCES = "jira"
 # `deployer` agent can provision ephemeral environments a `tester` then runs
 # against. Its secrets are sealed with the shared ENCRYPTION_KEY above.
 ENVIRONMENTS_ENABLED = "false"
+# Trusted-operator escape hatch: let the env management API / returned env URL live on
+# an internal/VPN host (otherwise the strict public-https SSRF guard rejects it). Each
+# host matches exactly or as a dot suffix when it starts with `.` (`.internal`). Leave
+# unset for the strict default. See backend/docs/environments-integration.md.
+# ENVIRONMENTS_ALLOW_URL_HOSTS = "envs.corp.internal,.preview.internal"
+# ENVIRONMENTS_ALLOW_HTTP_URLS = "false"
 
 # Self-hosted runner pool — "bring your own infra". Off by default. Turn it on to
 # let a workspace register its OWN container runner pool and run the repo-operating
@@ -325,6 +331,12 @@ ENVIRONMENTS_ENABLED = "false"
 # pool can stand in for the EXEC_CONTAINER binding as the mandatory runner backend.
 # Its scheduler secrets are sealed with the shared ENCRYPTION_KEY above.
 RUNNERS_ENABLED = "false"
+# Trusted-operator escape hatch: let the pool scheduler API live on an internal/VPN host.
+# Scoped independently of ENVIRONMENTS_ALLOW_* (a host allowed here is NOT reachable by the
+# env provider). Leave unset for the strict public-https default.
+# See backend/docs/runner-pool-integration.md §6.
+# RUNNERS_ALLOW_URL_HOSTS = "pool.corp.internal"
+# RUNNERS_ALLOW_HTTP_URLS = "false"
 
 # Datadog post-release-health gate. Off by default. Turn it on to let the
 # `post-release-health` pipeline step watch a workspace's configured Datadog

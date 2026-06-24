@@ -169,6 +169,7 @@ export type { SecretCipher } from './secret-cipher.js'
 export type { PersonalSecretCipher } from './personal-secret-cipher.js'
 export type {
   EnvironmentProvider,
+  ProvisionContext,
   ProvisionEnvironmentRequest,
   EnvironmentStatusRequest,
   EnvironmentTeardownRequest,
@@ -176,6 +177,7 @@ export type {
   ProvisionFields,
   SecretResolver,
 } from './environment-provider.js'
+export { type UrlSafetyPolicy, STRICT_URL_SAFETY_POLICY } from './url-safety-policy.js'
 export type {
   EnvironmentConnectionRecord,
   EnvironmentConnectionRepository,

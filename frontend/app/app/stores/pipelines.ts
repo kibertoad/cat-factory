@@ -1,8 +1,8 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import type { AgentKind, Pipeline } from '~/types/domain'
-import type { ConsensusStepConfig } from '~/types/consensus'
-import { uid } from '~/utils/catalog'
+import type { ConsensusStepConfig, StepGating } from '~/types/consensus'
+import { companionForProducer, uid } from '~/utils/catalog'
 import { useWorkspaceStore } from '~/stores/workspace'
 
 /** A sensible default config when a step is first flipped to consensus in the builder. */
@@ -46,6 +46,10 @@ export const usePipelinesStore = defineStore('pipelines', () => {
   const draftThresholds = ref<(number | null)[]>([])
   /** Per-step consensus configs, kept index-aligned with `draft` (null ⇒ standard agent). */
   const draftConsensus = ref<(ConsensusStepConfig | null)[]>([])
+  /** Per-step estimate gating, kept index-aligned with `draft` (null ⇒ always run). */
+  const draftGating = ref<(StepGating | null)[]>([])
+  /** Organizational labels for the pipeline being assembled/edited. */
+  const draftLabels = ref<string[]>([])
   const draftName = ref('New pipeline')
   /** The id of the pipeline being edited, or null when assembling a brand-new one. */
   const editingId = ref<string | null>(null)
@@ -59,12 +63,18 @@ export const usePipelinesStore = defineStore('pipelines', () => {
     return pipelines.value.find((p) => p.id === id)
   }
 
+  /** Insert a step (with its default per-step config) at `index`, keeping arrays aligned. */
+  function insertAt(index: number, kind: AgentKind) {
+    draft.value.splice(index, 0, kind)
+    draftGates.value.splice(index, 0, false)
+    draftEnabled.value.splice(index, 0, true)
+    draftThresholds.value.splice(index, 0, null)
+    draftConsensus.value.splice(index, 0, null)
+    draftGating.value.splice(index, 0, null)
+  }
+
   function addToDraft(kind: AgentKind) {
-    draft.value.push(kind)
-    draftGates.value.push(false)
-    draftEnabled.value.push(true)
-    draftThresholds.value.push(null)
-    draftConsensus.value.push(null)
+    insertAt(draft.value.length, kind)
   }
 
   function removeFromDraft(index: number) {
@@ -73,6 +83,7 @@ export const usePipelinesStore = defineStore('pipelines', () => {
     draftEnabled.value.splice(index, 1)
     draftThresholds.value.splice(index, 1)
     draftConsensus.value.splice(index, 1)
+    draftGating.value.splice(index, 1)
   }
 
   function moveInDraft(from: number, to: number) {
@@ -87,6 +98,82 @@ export const usePipelinesStore = defineStore('pipelines', () => {
     draftThresholds.value.splice(to, 0, th ?? null)
     const [cons] = draftConsensus.value.splice(from, 1)
     draftConsensus.value.splice(to, 0, cons ?? null)
+    const [gat] = draftGating.value.splice(from, 1)
+    draftGating.value.splice(to, 0, gat ?? null)
+  }
+
+  /** Whether the producer step at `index` currently has its companion attached after it. */
+  function hasCompanion(index: number): boolean {
+    const companion = companionForProducer(draft.value[index] ?? '')
+    return companion !== undefined && draft.value[index + 1] === companion
+  }
+
+  /**
+   * Toggle the dependent companion on the producer step at `index`: insert it immediately
+   * after (turn on) or remove it (turn off). A no-op for a kind that has no companion.
+   */
+  function toggleCompanion(index: number) {
+    const companion = companionForProducer(draft.value[index] ?? '')
+    if (!companion) return
+    if (draft.value[index + 1] === companion) removeFromDraft(index + 1)
+    else insertAt(index + 1, companion)
+  }
+
+  /** Toggle estimate gating on/off for the (companion) step at `index`. */
+  function toggleDraftGating(index: number) {
+    draftGating.value[index] = draftGating.value[index]?.enabled
+      ? null
+      : { enabled: true, minRisk: 0.5, minImpact: 0.5 }
+  }
+
+  /**
+   * The draft as a list of "units" for rendering: each step is one unit, EXCEPT a companion
+   * that sits immediately after its producer — that companion is folded into the producer's
+   * unit (`companionIndex`) and surfaced as a toggle on it, not a standalone row. The backend
+   * now REJECTS a companion that is not immediately after its producer (strict adjacency in
+   * `validatePipelineShape`), so a saved pipeline never has one — but a stray companion that
+   * still shows up in the draft (e.g. a pre-existing pipeline saved before adjacency was
+   * enforced) is emitted as its own standalone unit so it stays visible and removable/
+   * reorderable into a valid shape rather than being silently dropped — and, crucially, so
+   * every `draft` index belongs to exactly one unit, which is what lets {@link moveUnit}
+   * reorder by unit boundaries without ever dropping a step.
+   * `index`/`companionIndex` are positions in the raw `draft` arrays.
+   */
+  const units = computed(() => {
+    const out: { index: number; kind: AgentKind; companionIndex: number | null }[] = []
+    let folded = -1 // draft index already consumed as the previous unit's adjacent companion
+    for (let i = 0; i < draft.value.length; i++) {
+      const kind = draft.value[i]
+      if (kind === undefined || i === folded) continue
+      const companion = companionForProducer(kind)
+      const companionIndex = companion && draft.value[i + 1] === companion ? i + 1 : null
+      if (companionIndex !== null) folded = companionIndex
+      out.push({ index: i, kind, companionIndex })
+    }
+    return out
+  })
+
+  /**
+   * Move the unit at visible position `from` to `to`, carrying its attached companion. Rebuilds
+   * every parallel array by the SAME unit boundaries so they stay index-aligned.
+   */
+  function moveUnit(from: number, to: number) {
+    const u = units.value
+    if (to < 0 || to >= u.length || from === to) return
+    const reorder = <T>(arr: T[]): T[] => {
+      const chunks = u.map((unit) =>
+        arr.slice(unit.index, unit.index + (unit.companionIndex !== null ? 2 : 1)),
+      )
+      const [moved] = chunks.splice(from, 1)
+      if (moved) chunks.splice(to, 0, moved)
+      return chunks.flat()
+    }
+    draft.value = reorder(draft.value)
+    draftGates.value = reorder(draftGates.value)
+    draftEnabled.value = reorder(draftEnabled.value)
+    draftThresholds.value = reorder(draftThresholds.value)
+    draftConsensus.value = reorder(draftConsensus.value)
+    draftGating.value = reorder(draftGating.value)
   }
 
   /** Toggle the consensus mechanism on the draft step at `index` (default config / off). */
@@ -115,6 +202,8 @@ export const usePipelinesStore = defineStore('pipelines', () => {
     draftEnabled.value = []
     draftThresholds.value = []
     draftConsensus.value = []
+    draftGating.value = []
+    draftLabels.value = []
     draftName.value = 'New pipeline'
     editingId.value = null
   }
@@ -126,6 +215,8 @@ export const usePipelinesStore = defineStore('pipelines', () => {
     draftEnabled.value = pipeline.agentKinds.map((_, i) => pipeline.enabled?.[i] ?? true)
     draftThresholds.value = pipeline.agentKinds.map((_, i) => pipeline.thresholds?.[i] ?? null)
     draftConsensus.value = pipeline.agentKinds.map((_, i) => pipeline.consensus?.[i] ?? null)
+    draftGating.value = pipeline.agentKinds.map((_, i) => pipeline.gating?.[i] ?? null)
+    draftLabels.value = [...(pipeline.labels ?? [])]
     draftName.value = pipeline.name
     editingId.value = pipeline.id
   }
@@ -147,6 +238,10 @@ export const usePipelinesStore = defineStore('pipelines', () => {
       ...(draftConsensus.value.some((c) => c?.enabled)
         ? { consensus: [...draftConsensus.value] }
         : {}),
+      // Only send gating when at least one step has gating enabled.
+      ...(draftGating.value.some((g) => g?.enabled) ? { gating: [...draftGating.value] } : {}),
+      // Only send labels when there are any.
+      ...(draftLabels.value.length ? { labels: [...draftLabels.value] } : {}),
     }
   }
 
@@ -182,6 +277,18 @@ export const usePipelinesStore = defineStore('pipelines', () => {
     if (editingId.value === id) clearDraft()
   }
 
+  /** Set a pipeline's organizational metadata (labels / archive). Works on built-ins too. */
+  async function organize(id: string, body: { labels?: string[]; archived?: boolean }) {
+    const updated = await api.organizePipeline(useWorkspaceStore().requireId(), id, body)
+    const i = pipelines.value.findIndex((p) => p.id === updated.id)
+    if (i >= 0) pipelines.value[i] = updated
+    return updated
+  }
+
+  const archive = (id: string) => organize(id, { archived: true })
+  const unarchive = (id: string) => organize(id, { archived: false })
+  const setLabels = (id: string, labels: string[]) => organize(id, { labels })
+
   return {
     pipelines,
     draft,
@@ -189,13 +296,20 @@ export const usePipelinesStore = defineStore('pipelines', () => {
     draftEnabled,
     draftThresholds,
     draftConsensus,
+    draftGating,
+    draftLabels,
     draftName,
     editingId,
+    units,
     hydrate,
     getPipeline,
     addToDraft,
     removeFromDraft,
     moveInDraft,
+    moveUnit,
+    hasCompanion,
+    toggleCompanion,
+    toggleDraftGating,
     toggleDraftGate,
     toggleDraftEnabled,
     toggleDraftConsensus,
@@ -205,5 +319,9 @@ export const usePipelinesStore = defineStore('pipelines', () => {
     saveDraft,
     clonePipeline,
     removePipeline,
+    organize,
+    archive,
+    unarchive,
+    setLabels,
   }
 })
