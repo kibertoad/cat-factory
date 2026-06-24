@@ -388,12 +388,15 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
         expect(exec.status).toBe('done')
 
-        // The pre-op read the baseline artifact on the resolved (default) branch…
+        // The pre-op read the baseline artifact on the resolved branch…
         expect(reads).toContain('compliance/POLICY.md')
         // …and the post-op committed the rendered file from the agent's `custom` output —
-        // via the checkout-free RepoFiles port, identically on D1 and Postgres.
+        // via the checkout-free RepoFiles port, identically on D1 and Postgres. The kind
+        // declares no clone target, so it resolves to the per-block work branch
+        // `cat-factory/<blockId>` the container agent would use — NOT the default branch,
+        // so a committing post-op never silently lands on `main`.
         expect(commits).toHaveLength(1)
-        expect(commits[0]?.branch).toBe('main')
+        expect(commits[0]?.branch).toBe('cat-factory/task_login')
         expect(commits[0]?.files[0]?.path).toBe('compliance/REPORT.md')
         expect(commits[0]?.files[0]?.content).toContain('all clear')
       })

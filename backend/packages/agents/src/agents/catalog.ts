@@ -11,9 +11,14 @@ import { READ_ONLY_GUARDRAIL, isReadOnlyAgentKind } from './kinds/read-only.js'
 import { businessLogicSystemPrompt } from './prompts/business-logic.js'
 import { mockSystemPrompt } from './prompts/mock.js'
 import { testingSystemPrompt, testerEnvironmentSection } from './prompts/testing.js'
-import { registeredSystemPrompt, registeredUserPrompt } from './kinds/registry.js'
+import {
+  registeredAgentStep,
+  registeredSystemPrompt,
+  registeredUserPrompt,
+} from './kinds/registry.js'
 import { traitGuidanceFor } from './kinds/traits.js'
 import { roleSystemPrompt } from './prompts/roles.js'
+import { FINAL_ANSWER_IN_REPLY } from './prompts/shared.js'
 import {
   environmentSection,
   linkedContextSection,
@@ -61,9 +66,21 @@ function baseSystemPromptFor(kind: AgentKind): string {
   const businessLogic = businessLogicSystemPrompt(kind)
   if (businessLogic) return businessLogic
   // Custom kinds registered by a deployment (e.g. a proprietary org package) win over
-  // the generic fallback below, but never shadow the built-in tracks above.
+  // the generic fallback below, but never shadow the built-in tracks above. A registered
+  // prompt is authored by the deployment and never flows through `roleSystemPrompt`, so
+  // append the shared FINAL_ANSWER_IN_REPLY directive HERE for the surfaces whose
+  // deliverable IS the reply — an `inline` or `container-explore` kind returning a report /
+  // structured JSON the platform parses into `result.custom` — otherwise that answer can
+  // be silently lost to a reasoning model's hidden channel. NOT appended for
+  // `container-coding` (its product is a pushed commit, a side effect, like
+  // roleSystemPrompt's SIDE_EFFECT kinds) nor for a kind with no LLM `agent` step at all
+  // (the prompt is never used).
   const registered = registeredSystemPrompt(kind)
-  if (registered !== undefined) return registered
+  if (registered !== undefined) {
+    const surface = registeredAgentStep(kind)?.surface
+    const producesFinalReply = surface === 'inline' || surface === 'container-explore'
+    return producesFinalReply ? `${registered}\n\n${FINAL_ANSWER_IN_REPLY}` : registered
+  }
   return roleSystemPrompt(kind)
 }
 

@@ -114,7 +114,9 @@ import type {
   AgentRunContext,
   AgentRunResult,
   AgentStepSpec,
+  RepoFiles,
   ResolveRunRepoContext,
+  RunRepoContext,
 } from '@cat-factory/kernel'
 import { isAsyncAgentExecutor } from '@cat-factory/kernel'
 import type { WorkRunner } from '@cat-factory/kernel'
@@ -1835,6 +1837,9 @@ export class ExecutionService {
     step.subtasks = undefined
     step.progress = 0
     step.output = undefined
+    // Drop the prior run's structured output too, so a re-run that produces no `custom`
+    // doesn't leave stale JSON for the `generic-structured` result view to render.
+    step.custom = undefined
     step.rework = undefined
   }
 
@@ -1985,29 +1990,59 @@ export class ExecutionService {
    * Resolve the concrete branch a registered kind's pre/post-op reads or writes, from
    * its declared clone target — mirroring the container executor's mapping so a backend
    * op and the container agent operate on the SAME branch:
-   *   - `base` → the repo default branch
-   *   - `pr`   → the block's PR branch (the coder's branch), else base
-   *   - `work` (default) → the per-block work branch once the PR sits on it, else PR/base
+   *   - `base` → the repo default branch (the ONLY way a committing op targets `main`).
+   *   - `pr`   → the block's PR branch (the coder's branch); when no PR is open, the
+   *              per-block work branch (created from base if missing) — NOT base, so a
+   *              committing post-op can't silently land on the default branch.
+   *   - `work` (default) → the per-block work branch, ENSURED to exist exactly as
+   *              {@link ContainerAgentExecutor}'s `ensureWorkBranch` does. The old code
+   *              returned base here whenever no PR was open yet, diverging from the
+   *              container agent (which clones `cat-factory/<blockId>`) and letting a
+   *              post-op commit onto the default branch.
    * The work-branch name (`cat-factory/<blockId>`) is the same convention
    * {@link ContainerAgentExecutor} uses.
    */
-  private resolveRepoOpBranch(
+  private async resolveRepoOpBranch(
     step: AgentStepSpec | undefined,
     block: Block,
-    baseBranch: string,
-  ): string {
+    runRepo: RunRepoContext,
+  ): Promise<string> {
+    const { repo, baseBranch } = runRepo
     const prBranch = block.pullRequest?.branch
     const workBranch = `cat-factory/${block.id}`
     switch (step?.clone?.branch) {
       case 'base':
         return baseBranch
       case 'pr':
-        return prBranch ?? baseBranch
+        return prBranch ?? (await this.ensureWorkBranch(repo, workBranch, baseBranch))
       default:
-        // 'work' (or unspecified): the work branch once the PR is on it, else the PR
-        // branch (the coder may have pushed it), else base.
-        return prBranch === workBranch ? workBranch : (prBranch ?? baseBranch)
+        // 'work' (or unspecified): the work branch the container agent operates on. A PR
+        // is normally opened on that branch, but even before one exists we ensure it so
+        // the backend op and the container agent share the same branch.
+        return prBranch && prBranch !== workBranch
+          ? prBranch
+          : await this.ensureWorkBranch(repo, workBranch, baseBranch)
     }
+  }
+
+  /**
+   * Ensure the per-block work branch `cat-factory/<blockId>` exists — creating it from the
+   * repo default branch's head when absent — and return it. The checkout-free analogue of
+   * {@link ContainerAgentExecutor}'s `ensureWorkBranch`, so a backend pre/post-op writes
+   * the SAME branch the container agent does instead of the default branch. Falls back to
+   * the base branch only when the repo has no default-branch head to fork from (an empty
+   * repo), so the caller always gets a real branch.
+   */
+  private async ensureWorkBranch(
+    repo: RepoFiles,
+    workBranch: string,
+    baseBranch: string,
+  ): Promise<string> {
+    if (await repo.headSha(workBranch)) return workBranch
+    const baseSha = await repo.headSha(baseBranch)
+    if (!baseSha) return baseBranch
+    await repo.createBranch(workBranch, baseSha)
+    return workBranch
   }
 
   /**
@@ -2024,15 +2059,36 @@ export class ExecutionService {
     context: AgentRunContext,
   ): Promise<void> {
     const ops = registeredPreOps(step.agentKind)
-    if (ops.length === 0 || !this.resolveRunRepoContext) return
-    const runRepo = await this.resolveRunRepoContext(workspaceId, block.id)
+    if (ops.length === 0) return
+    const runRepo = await this.resolveRunRepo(workspaceId, block.id)
     if (!runRepo) return
-    const branch = this.resolveRepoOpBranch(
+    const branch = await this.resolveRepoOpBranch(
       registeredAgentStep(step.agentKind),
       block,
-      runRepo.baseBranch,
+      runRepo,
     )
     await runRepoOps(ops, { repo: runRepo.repo, context, branch })
+  }
+
+  /**
+   * Resolve a block's run-repo context for its pre/post-op hooks, treating an unresolved
+   * repo as "skip the hooks" rather than failing the run. A registered kind's hooks are an
+   * OPTIONAL engine capability, so a block that isn't under a linked service (which makes
+   * `resolveRepoTarget` throw to avoid guessing a repo), or any resolution error, degrades
+   * to a no-op exactly as an unwired resolver does — never writing to a guessed repo and
+   * never aborting an otherwise-valid run. (A container custom kind still fails loudly at
+   * dispatch for the same misconfiguration, where writing to the wrong repo is the danger.)
+   */
+  private async resolveRunRepo(
+    workspaceId: string,
+    blockId: string,
+  ): Promise<RunRepoContext | null> {
+    if (!this.resolveRunRepoContext) return null
+    try {
+      return await this.resolveRunRepoContext(workspaceId, blockId)
+    } catch {
+      return null
+    }
   }
 
   /**
@@ -2050,10 +2106,10 @@ export class ExecutionService {
     result: AgentRunResult,
   ): Promise<void> {
     const ops = registeredPostOps(step.agentKind)
-    if (ops.length === 0 || !this.resolveRunRepoContext) return
+    if (ops.length === 0) return
     const block = await this.blockRepository.get(workspaceId, instance.blockId)
     if (!block) return
-    const runRepo = await this.resolveRunRepoContext(workspaceId, block.id)
+    const runRepo = await this.resolveRunRepo(workspaceId, block.id)
     if (!runRepo) return
     const context = await this.contextBuilder.buildContext(
       workspaceId,
@@ -2062,10 +2118,10 @@ export class ExecutionService {
       isFinalStep,
       block,
     )
-    const branch = this.resolveRepoOpBranch(
+    const branch = await this.resolveRepoOpBranch(
       registeredAgentStep(step.agentKind),
       block,
-      runRepo.baseBranch,
+      runRepo,
     )
     await runRepoOps(ops, { repo: runRepo.repo, context, branch, result })
   }

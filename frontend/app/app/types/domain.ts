@@ -294,7 +294,7 @@ export interface AgentArchetype {
 /**
  * A registered CUSTOM agent kind carried in the workspace snapshot: its id + display
  * metadata + whether it runs in a container. The SPA merges these into its palette
- * catalog (`registerCustomArchetypes`) so a deployment's proprietary kind becomes a
+ * catalog (`registerCustomKinds`) so a deployment's proprietary kind becomes a
  * first-class palette block + result view. Mirrors `CustomAgentKind` in
  * `@cat-factory/contracts`.
  */

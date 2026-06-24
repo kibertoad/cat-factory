@@ -83,7 +83,9 @@ describe('example custom agents', () => {
 
   it('post-op commits the rendered report onto the run branch via RepoFiles', async () => {
     const commitFiles = vi.fn(async () => ({ sha: 'sha' }))
-    const repo = { commitFiles } as unknown as RepoFiles
+    // No report on the branch yet (getFile → null), so the idempotency guard lets the commit through.
+    const getFile = vi.fn(async () => null)
+    const repo = { getFile, commitFiles } as unknown as RepoFiles
     const [postOp] = registeredPostOps(SECURITY_AUDITOR_KIND)
     expect(postOp).toBeTruthy()
 
@@ -99,6 +101,24 @@ describe('example custom agents', () => {
     expect(input.branch).toBe('cat-factory/blk_1')
     expect(input.files[0]!.path).toBe('compliance/REPORT.md')
     expect(input.files[0]!.content).toContain('# Security compliance report')
+  })
+
+  it('post-op is idempotent: skips the commit when the report on the branch is unchanged', async () => {
+    const [postOp] = registeredPostOps(SECURITY_AUDITOR_KIND)
+    const assessment = { risk: 0.1, summary: 'Clean', findings: [] }
+    // The branch already holds the byte-identical render the post-op would produce.
+    const existing = renderComplianceReport(assessment)
+    const commitFiles = vi.fn(async () => ({ sha: 'sha' }))
+    const getFile = vi.fn(async () => ({ content: existing, sha: 'blob-sha' }))
+    const repo = { getFile, commitFiles } as unknown as RepoFiles
+    await postOp!({
+      repo,
+      branch: 'cat-factory/blk_1',
+      context: { agentKind: SECURITY_AUDITOR_KIND } as never,
+      result: { output: 'done', custom: assessment },
+    })
+    // No duplicate commit on a replay that re-runs the post-op after the prior one landed.
+    expect(commitFiles).not.toHaveBeenCalled()
   })
 
   it('post-op is a no-op when the agent returned nothing parseable', async () => {

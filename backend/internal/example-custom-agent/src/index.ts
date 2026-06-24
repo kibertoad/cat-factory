@@ -96,14 +96,22 @@ export function renderComplianceReport(assessment: SecurityAssessment): string {
  * port. This is the whole point of the model: the mechanical render lives here, in plain
  * TypeScript, never in a per-kind branch inside the container. A no-op when the agent
  * returned nothing parseable (so a malformed run doesn't commit an empty report).
+ *
+ * IDEMPOTENT: the render is deterministic, so we read the report already on the branch and
+ * skip the commit when it's byte-identical. This matters because a post-op runs inside
+ * `recordStepResult` BEFORE the run state is persisted — a durable-driver replay (Workflows
+ * / pg-boss) that re-enters after the commit landed but before the upsert would otherwise
+ * push a duplicate commit. The template every deployment copies should model this guard.
  */
 const renderReportPostOp: RepoOp = async (ctx) => {
   if (ctx.result?.custom === undefined) return
-  const assessment = coerceAssessment(ctx.result.custom)
+  const content = renderComplianceReport(coerceAssessment(ctx.result.custom))
+  const existing = await ctx.repo.getFile(REPORT_PATH, ctx.branch)
+  if (existing?.content === content) return
   await ctx.repo.commitFiles({
     branch: ctx.branch,
     message: 'chore(compliance): update security audit report',
-    files: [{ path: REPORT_PATH, content: renderComplianceReport(assessment) }],
+    files: [{ path: REPORT_PATH, content }],
   })
 }
 

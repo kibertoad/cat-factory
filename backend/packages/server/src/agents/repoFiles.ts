@@ -48,8 +48,10 @@ export function makeResolveRepoFiles(client: GitHubClient): ResolveRepoFiles {
  * to find a block's repo. The engine calls the result to bind a registered kind's
  * pre/post-ops to the run's repo (installation + repo + default branch) — checkout-free,
  * so it works identically on the Worker and Node. Returns null when the block resolves to
- * no repo (GitHub not connected); a throw from the target resolver (a block under no
- * linked service) propagates so the misconfiguration surfaces rather than guessing a repo.
+ * no repo (GitHub not connected). A throw from the target resolver (a block under no
+ * linked service) propagates rather than guessing a repo; the engine's optional pre/post-op
+ * path catches it and skips the hooks (never writing to a guessed repo), while a container
+ * kind still surfaces the misconfiguration loudly at dispatch.
  */
 export function makeResolveRunRepoContext(
   client: GitHubClient,
