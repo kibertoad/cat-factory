@@ -1,6 +1,6 @@
 {
   "name": "@cat-factory/deploy-node",
-  "version": "1.0.0",
+  "version": "0.6.0",
   "private": true,
   "description": "Example Node.js service deployment of the @cat-factory/node-server library. Carries the Dockerfile + env config; copy this package to deploy the backend as a long-running Node service (Postgres + pg-boss) on your own infrastructure.",
   "type": "module",

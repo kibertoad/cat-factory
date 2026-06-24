@@ -28,7 +28,6 @@ a minimal deployment is just boards + pipelines.
 - [Requirements review](#requirements-review)
 - [Service blueprints](#service-blueprints)
 - [Ephemeral environments](#ephemeral-environments--the-deployer-agent-optional)
-- [On-demand board scan](#on-demand-board-scan-repository--blueprint)
 - [Prompt-fragment library](#prompt-fragment-library-optional)
 - [Self-hosted runner pool](#self-hosted-runner-pool-optional)
 - [Persistence & migrations](#persistence--migrations)
@@ -72,8 +71,7 @@ matching controller per module in `worker/src/modules/*`.
 | `execution`                                   | The run state machine: `advanceInstance` moves a run one step, handles decisions, failures/retries, context injection, and the spend gate. |
 | `spend`                                       | Token metering + org-wide monthly budget enforcement.                                                                                      |
 | `bootstrap`                                   | Reference architectures + the async repo-bootstrap task.                                                                                   |
-| `boardScan`                                   | "Scan repository" → a `service → modules → features` blueprint, optionally spawned onto the board.                                         |
-| `blueprints` _(in `agents`/`boardScan` flow)_ | The Blueprinter step that writes the in-repo `blueprints/` map and reconciles the board.                                                   |
+| `blueprints` _(pipeline agent step)_          | The Blueprinter step that writes the in-repo `blueprints/` map and reconciles it onto the board (via `BoardScanService`).                   |
 | `requirements`                                | Stateless reviewer agent over a block's collected requirements.                                                                            |
 | `github`                                      | GitHub App installs, repo/PR/issue projections, webhooks, repo provisioning (two-app tiering).                                             |
 | `documents`                                   | Connect Confluence/Notion sources, import pages, plan board structure, link docs to blocks.                                                |
@@ -221,13 +219,15 @@ to Workers AI). Full flow in [`../CLAUDE.md`](../CLAUDE.md).
 ## Service blueprints
 
 A **Blueprinter** agent (`agentKind: 'blueprints'`, run as a normal pipeline step)
-decomposes a repo into the canonical `service → modules → features` tree and
-persists it **in the repo** under `blueprints/` (`blueprint.json`, `overview.md`,
-`modules/<slug>.md`, `version.json`), then reconciles the board's service frame
-from it (match by name, add missing, refresh descriptions, **never delete**). It
+decomposes a repo into the canonical `service → modules` tree and persists it **in
+the repo** under `blueprints/` (`blueprint.json`, `overview.md`, `modules/<slug>.md`,
+`version.json`), then reconciles the board's service frame from it (match by name,
+add missing, refresh descriptions, **never delete**) via `BoardScanService`. It
 reuses the whole execution engine, runs on the prior `coder` step's PR branch when
 present (else the repo default branch), and is also kicked off after a successful
-bootstrap to seed the initial map. Full flow in [`../CLAUDE.md`](../CLAUDE.md).
+bootstrap to seed the initial map. There is **no** standalone "scan repository"
+command — repository decomposition is always this pipeline agent. Full flow in
+[`../CLAUDE.md`](../CLAUDE.md).
 
 ## Ephemeral environments + the Deployer agent (optional)
 
@@ -255,32 +255,6 @@ shared `ENCRYPTION_KEY` master. Configure via `ENVIRONMENTS_ENABLED=true` (the
 migration `0008_environments.sql`. See
 [`docs/environments-integration.md`](./docs/environments-integration.md) and
 [`docs/adr/0003-ephemeral-environment-provider.md`](./docs/adr/0003-ephemeral-environment-provider.md).
-
-## On-demand board scan (repository → blueprint)
-
-A workspace-scoped **"scan repository"** command that decomposes an existing
-codebase into one canonical board structure — a single **service**, the **modules**
-inside it, and the **features** within each module — with every node anchored to the
-code by explicit file/directory **references**. The result is persisted as a reusable
-**repository blueprint**: a durable, LLM-friendly map kept per workspace (one per
-`owner/name`, replaced in place on re-scan) that future work is scoped against and
-re-run to keep current. A scan can also **spawn** the blueprint onto the board as a
-frame/modules/tasks, folding each node's references into the block descriptions under
-a parseable `Code references:` marker.
-
-The shape mirrors the board's `frame → module → task` levels exactly, so a blueprint
-reads the way an agent would navigate the code and materialises onto the board with no
-translation. The decomposition tree lives in `core/src/modules/boardScan` (the
-framework-agnostic `BoardScanService` + pure `board-scan.logic` coercion/rendering);
-the persisted blueprints are stored in D1 (migration `0011_repo_blueprints.sql`).
-
-Like GitHub/Confluence/bootstrap it is **layered and opt-in at the edges**: reading
-blueprints always works (the `RepoBlueprintRepository` is wired unconditionally), while
-running a scan needs the `RepoScanner` port — a per-run Cloudflare Container
-(`ContainerRepoScanner`) that clones the repo read-only and has a scanner agent produce
-the blueprint, gated on the same prerequisites as the implementation container (the
-`EXEC_CONTAINER` binding, a configured GitHub App, `WORKER_PUBLIC_URL` and
-`AUTH_SESSION_SECRET`). Without it the scan endpoint reports itself unavailable.
 
 ## Prompt-fragment library (optional)
 
@@ -319,8 +293,8 @@ Containers. Opt-in via `RUNNERS_ENABLED`. Operator playbook in
 [`docs/runner-pool-integration.md`](./docs/runner-pool-integration.md);
 rationale in [ADR 0004](./docs/adr/0004-self-hosted-runner-pool.md).
 
-> Scope (v1): only the async coding jobs route to a self-hosted pool. Repo
-> **bootstrap** and **scan** still use Cloudflare Containers.
+> Every asynchronous agent kind routes to a registered pool with no allow-list
+> (incl. repo **bootstrap**); only the synchronous board reconcile path differs.
 
 ## Persistence & migrations
 
@@ -332,7 +306,7 @@ boards/blocks/pipelines/executions) through, notably:
 
 - `0003_token_usage`, `0006_storage_retention` — spend ledger + retention.
 - `0004_github_projections`, `0019_github_installation_app` — GitHub projections + two-app tiering.
-- `0008_environments`, `0011_repo_blueprints`, `0012_document_sources`, `0013_runner_pools`, `0014_task_sources` — the opt-in integrations.
+- `0008_environments`, `0012_document_sources`, `0013_runner_pools`, `0014_task_sources` — the opt-in integrations.
 - `0010_bootstrap` (+ `0017_bootstrap_board`, `0018_bootstrap_failure`), `0017_accounts`, `0019_agent_runs` — bootstrap, tenancy, and the unified `agent_runs` table.
 - `0020_prompt_fragments`, `0021_requirement_reviews` — the prompt-fragment library and requirements review.
 
@@ -409,12 +383,6 @@ GET    /workspaces/:ws/environments/:id                         one environment 
 GET    /workspaces/:ws/environments/:id/access                  decrypted access creds (TLS only)
 POST   /workspaces/:ws/environments/provision                   manually provision { blockId?, inputs? }
 POST   /workspaces/:ws/environments/:id/teardown                tear down now
-
-# On-demand board scan (blueprint reads always; scanning needs the container + GitHub App)
-GET    /workspaces/:ws/board-scan/blueprints                    list persisted repository blueprints
-GET    /workspaces/:ws/board-scan/blueprints/:id                one blueprint (service → modules → features)
-DELETE /workspaces/:ws/board-scan/blueprints/:id                forget a blueprint
-POST   /workspaces/:ws/board-scan/scans                          scan { repoOwner, repoName, instructions?, spawn? }
 
 # Accounts & tenancy
 GET    /accounts                                             accounts the signed-in user can act within

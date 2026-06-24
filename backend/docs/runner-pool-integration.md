@@ -128,15 +128,29 @@ route names, so a transparent proxy can route with `pathTemplate: "/{{input.kind
 
 ## 1. The runner: image + job protocol  *(Platform team)*
 
-### Build the image
+### Get the image
 
-There is no separately published image — build the harness from this repo:
+The runner image is published publicly (multi-arch, `amd64` + `arm64`) to both
+GHCR and Docker Hub, so you can pull it directly — no build needed:
+
+```bash
+docker pull ghcr.io/kibertoad/cat-factory-executor:latest
+# or
+docker pull docker.io/kibertoad/cat-factory-executor:latest
+```
+
+Pin a version tag (not `latest`) for reproducible pools; the tags track the
+harness package version. Or build it yourself from this repo to customize it:
 
 ```bash
 docker build -t my-org/cat-factory-runner \
   -f backend/internal/executor-harness/Dockerfile \
   backend/internal/executor-harness
 ```
+
+(Maintainers / forks: publish your own with
+`pnpm --filter @cat-factory/executor-harness run image:publish` — see that
+package's README.)
 
 The image **carries no secrets**. It bundles git + the pinned Pi coding-agent CLI
 (and the Claude Code / Codex CLIs for subscription harnesses) and runs an HTTP

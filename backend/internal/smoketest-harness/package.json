@@ -1,6 +1,6 @@
 {
   "name": "@cat-factory/smoketest-harness",
-  "version": "1.0.0",
+  "version": "0.6.0",
   "private": true,
   "description": "Headless smoketest harness for cat-factory's Pi coding agent: runs real coding tasks through the actual Pi setup against Cloudflare AI, captures the full prompt/response transcript, and analyses it for breakage, dead-ends and non-productive loops. No grading.",
   "bin": {
