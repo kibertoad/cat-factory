@@ -6,7 +6,32 @@ it. The integration is declarative and **API-only**: you describe your self-roll
 management API as an HTTP manifest — there are no provider presets and no code to
 write. It is **opt-in** and wired exactly like the GitHub/Confluence modules.
 
+This is the **sibling** of the [self-hosted runner pool](./runner-pool-integration.md):
+same manifest machinery (auth schemes, `{{var}}` templating, dot-path response
+mapping, SSRF guard, at-rest encryption), but it provisions a **preview deployment to
+test against** rather than a **runner to execute agents on**. The work splits the same
+way: a **Platform/Infra team** stands up the management API in front of your
+environment tooling (k8s namespaces, a Vercel-style service, an internal provisioner);
+an **Application team** writes the manifest and registers it per workspace.
+
 See also [ADR 0003](./adr/0003-ephemeral-environment-provider.md).
+
+## How it works (the sequence of actions)
+
+1. A pipeline on an `environment` block reaches its **`deployer`** step. The engine
+   calls `HttpEnvironmentProvider.provision` — interpolating your manifest's
+   `provision` template (with `{{input.*}}` from the block) and `POST`ing to your
+   management API with your auth. It runs **deterministically** (no LLM, no token
+   spend) and persists an environment handle.
+2. If your `provision` response is async, the cron sweep polls your `status` template
+   until the mapped status reaches `ready` (or `failed`); the handle's URL + access
+   creds are captured via the `response` dot-paths.
+3. Downstream **`tester`** (and later) steps receive the live environment in their
+   prompt context — the URL and how to authenticate — so they test the real build.
+   (The tester job's `test.environmentUrl` is wired straight from this handle.)
+4. When the handle's TTL elapses (from `expiresAtPath`, or `defaultTtlMs`), the cron
+   sweep (every 2 min) calls your `teardown` template and tombstones the record.
+   Teardown is best-effort and retried on the next pass.
 
 ## Enabling it
 
