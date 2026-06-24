@@ -1,3 +1,5 @@
+import type { SandboxExpectation } from '@cat-factory/contracts'
+
 // Grading rubrics for the Sandbox judge. These are lifted verbatim (and kept in
 // sync) with the benchmark harness's rubrics (`backend/internal/benchmark-harness/
 // src/rubrics.ts`) so the in-product Sandbox and the offline `cat-bench` grade on
@@ -148,32 +150,102 @@ export function weightedTotal(
   return weight === 0 ? 0 : Math.round((sum / weight) * 100) / 100
 }
 
+/** An expectation is "high-impact" (a serious miss) at or above this impact rating. */
+export const HIGH_IMPACT_THRESHOLD = 4
+/** An expectation is "tricky" (its catch earns the wow bonus) at or above this rating. */
+export const TRICKY_THRESHOLD = 4
+
+export interface ExpectationScore {
+  /** Expectations the candidate output surfaced. */
+  caught: SandboxExpectation[]
+  /** Expectations the candidate output missed. */
+  missed: SandboxExpectation[]
+  /**
+   * Impact-weighted recall in [0,1]: `1 − Σ(impact of missed) / Σ(impact of all)`. Missing
+   * a high-impact item moves this far more than missing a low-impact one — the asymmetry the
+   * fixtures are graded on. 1 when there are no expectations.
+   */
+  impactRecall: number
+  /**
+   * Trickiness-weighted "wow" bonus in [0,1]: `Σ(trickiness of caught tricky items) /
+   * Σ(trickiness of all tricky items)`. Only the genuinely tricky items (trickiness ≥
+   * {@link TRICKY_THRESHOLD}) contribute, so catching a hard-to-spot finding is rewarded
+   * while missing one is not penalized here (impact handles penalties). 1 when nothing is
+   * tricky (no wow on offer).
+   */
+  wowBonus: number
+  /** Ids of missed expectations with impact ≥ {@link HIGH_IMPACT_THRESHOLD}. */
+  missedHighImpact: string[]
+}
+
 /**
- * Heuristic objective score for `findings` fixtures: how many of the planted
- * expected findings appear in the candidate output. Each expected finding is matched
- * case-insensitively as a contiguous run of word tokens (alphanumeric runs, so
- * punctuation/whitespace differences are ignored). Token-sequence matching avoids the
- * false positives raw substring matching produces — e.g. `reset logic` no longer matches
- * inside `preset logic`, and `off by one` no longer matches inside `offset by one`. This
- * is a cheap, deterministic recall signal recorded ALONGSIDE the judge grade — it is not
- * a substitute for the judge and intentionally does not penalize extra findings (that's
- * the judge's `false_positives` dimension). Returns matched count, total, and recall.
+ * Deterministic, asymmetric objective score for `findings` fixtures. An expectation is
+ * "caught" when any of its `matchHints` (defaulting to its `summary`) appears in the
+ * candidate output as a contiguous run of word tokens — case/whitespace/punctuation
+ * insensitive, so `reset logic` does not match inside `preset logic`. Recorded ALONGSIDE
+ * the judge grade (never blended in); it intentionally does not penalize extra findings
+ * (that is the judge's `false_positives` dimension). The two signals are deliberately
+ * different: `impactRecall` punishes missing what matters, `wowBonus` rewards catching what
+ * is hard to spot. See {@link SandboxExpectation}.
  */
-export function scoreExpectedFindings(
-  expectedFindings: string[],
+export function scoreExpectations(
+  expectations: readonly SandboxExpectation[],
   output: string,
-): { matched: number; total: number; recall: number; missing: string[] } {
+): ExpectationScore {
   const haystack = tokenize(output)
-  const missing: string[] = []
-  let matched = 0
-  for (const finding of expectedFindings) {
-    const needle = tokenize(finding)
-    if (needle.length > 0 && containsSequence(haystack, needle)) matched++
-    else missing.push(finding)
+  const caught: SandboxExpectation[] = []
+  const missed: SandboxExpectation[] = []
+  for (const expectation of expectations) {
+    const hints = expectation.matchHints.length > 0 ? expectation.matchHints : [expectation.summary]
+    const hit = hints.some((hint) => {
+      const needle = tokenize(hint)
+      return needle.length > 0 && containsSequence(haystack, needle)
+    })
+    ;(hit ? caught : missed).push(expectation)
   }
-  const total = expectedFindings.length
-  const recall = total === 0 ? 1 : Math.round((matched / total) * 100) / 100
-  return { matched, total, recall, missing }
+
+  const totalImpact = expectations.reduce((sum, e) => sum + e.impact, 0)
+  const missedImpact = missed.reduce((sum, e) => sum + e.impact, 0)
+  const impactRecall = totalImpact === 0 ? 1 : round2(1 - missedImpact / totalImpact)
+
+  const trickyTotal = expectations
+    .filter((e) => e.trickiness >= TRICKY_THRESHOLD)
+    .reduce((sum, e) => sum + e.trickiness, 0)
+  const trickyCaught = caught
+    .filter((e) => e.trickiness >= TRICKY_THRESHOLD)
+    .reduce((sum, e) => sum + e.trickiness, 0)
+  const wowBonus = trickyTotal === 0 ? 1 : round2(trickyCaught / trickyTotal)
+
+  const missedHighImpact = missed.filter((e) => e.impact >= HIGH_IMPACT_THRESHOLD).map((e) => e.id)
+  return { caught, missed, impactRecall, wowBonus, missedHighImpact }
+}
+
+/**
+ * Render the graded expectations into a Markdown section to append to the judge prompt —
+ * "what the judge should expect to see", with the scoring guidance the asymmetry implies.
+ * Returns an empty string when there are no expectations (an un-graded fixture).
+ */
+export function renderExpectationBrief(expectations: readonly SandboxExpectation[]): string {
+  if (expectations.length === 0) return ''
+  const lines = [
+    '## Expected findings (grading reference)',
+    '',
+    'A strong response should surface the following. Each is rated by **impact** (how bad it',
+    'is to miss, 1–5) and **trickiness** (how hard it is to spot, 1–5). Reward catching',
+    'high-trickiness items — those are the impressive catches. Penalize missing high-impact',
+    'items most heavily; missing a merely tricky item is a smaller concern.',
+    '',
+  ]
+  for (const e of expectations) {
+    lines.push(`- **${e.summary}** _(impact ${e.impact}, trickiness ${e.trickiness})_`)
+    if (e.detail.trim()) lines.push(`  - ${e.detail.trim()}`)
+  }
+  return lines.join('\n')
+}
+
+/** Round to 2 decimal places. */
+function round2(n: number): number {
+  return Math.round(n * 100) / 100
 }
 
 /** Lowercase alphanumeric word tokens (drops punctuation/whitespace). */

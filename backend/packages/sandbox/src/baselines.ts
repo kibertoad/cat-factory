@@ -54,6 +54,17 @@ export const SANDBOX_AGENT_KINDS: readonly SandboxAgentKindMeta[] = [
     basePromptId: 'review',
   },
   {
+    // Reviews an `architect`'s design proposal (the architect-companion grades it). A
+    // proposal critique is graded on the same axes as a requirements review — gap
+    // coverage, no-hallucination, specificity. No numbered baseline prompt: the text is
+    // read live from `systemPromptFor('architect-companion')`.
+    agentKind: 'architect-companion',
+    label: 'Architecture-proposal review',
+    bucket: 'inline',
+    rubric: 'requirement-review',
+    basePromptId: null,
+  },
+  {
     agentKind: 'coder',
     label: 'Coder (implementation)',
     bucket: 'container',

@@ -66,6 +66,7 @@ export type SandboxPromptVersion = v.InferOutput<typeof sandboxPromptVersionSche
  */
 export const sandboxFixtureKindSchema = v.picklist([
   'requirements',
+  'clarity',
   'architecture',
   'code-review',
   'repo-feature',
@@ -107,9 +108,37 @@ const FIXTURE_SHAPE_MESSAGE =
   'Repo fixtures (repo-feature/repo-bug) require a repoRef and no payload; inline fixtures require a payload and no repoRef'
 
 /**
+ * A single thing a strong answer should surface, graded on two axes the judge and the
+ * objective scorer both consume:
+ * - `trickiness` (1..5): how hard the item is to spot. Catching a tricky item is a "wow"
+ *   (it earns a bonus); MISSING a tricky item is not, by itself, scary.
+ * - `impact` (1..5): how bad it is to miss. Missing a high-impact item harms the score
+ *   the most — impact, not trickiness, drives the miss penalty.
+ * The asymmetry is deliberate (see `scoreExpectations` in `@cat-factory/sandbox`).
+ */
+export const sandboxExpectationSchema = v.object({
+  id: v.string(),
+  /** The finding to look for, phrased as the judge should see it. */
+  summary: v.pipe(v.string(), v.trim(), v.minLength(1)),
+  /** Fuller description woven into the judge brief; defaults to empty. */
+  detail: v.optional(v.string(), ''),
+  /** How hard it is to spot (1..5); drives the "wow" bonus when caught. */
+  trickiness: v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(5)),
+  /** How bad it is to miss (1..5); drives the miss penalty. */
+  impact: v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(5)),
+  /**
+   * Phrases the deterministic scorer matches (token-sequence) to decide whether the
+   * candidate caught this item. Empty ⇒ the scorer falls back to matching `summary`.
+   */
+  matchHints: v.optional(v.array(v.pipe(v.string(), v.trim(), v.minLength(1))), []),
+})
+export type SandboxExpectation = v.InferOutput<typeof sandboxExpectationSchema>
+
+/**
  * The optional objective check a fixture declares, used alongside the LLM judge.
  * `tests` runs a hidden command against the agent's produced branch (pass/fail);
- * `findings` matches the candidate output against a set of planted expected findings.
+ * `findings` matches the candidate output against a set of graded expected findings
+ * (each with trickiness/impact), scored asymmetrically by `scoreExpectations`.
  */
 export const sandboxFixtureObjectiveSchema = v.variant('kind', [
   v.object({
@@ -119,8 +148,8 @@ export const sandboxFixtureObjectiveSchema = v.variant('kind', [
   }),
   v.object({
     kind: v.literal('findings'),
-    /** The genuine issues a good output should surface (matched for precision/recall). */
-    expectedFindings: v.array(v.pipe(v.string(), v.trim(), v.minLength(1))),
+    /** The genuine issues a good output should surface, each graded by trickiness/impact. */
+    expectations: v.array(sandboxExpectationSchema),
   }),
 ])
 export type SandboxFixtureObjective = v.InferOutput<typeof sandboxFixtureObjectiveSchema>
@@ -230,11 +259,28 @@ export const sandboxGradeDimensionSchema = v.object({
 })
 export type SandboxGradeDimension = v.InferOutput<typeof sandboxGradeDimensionSchema>
 
-/** The objective check's outcome, recorded alongside (never blended into) the rubric grade. */
+/**
+ * The objective check's outcome, recorded alongside (never blended into) the rubric grade.
+ * For `findings`, `pass` means no high-impact expectation was missed, and the asymmetric
+ * breakdown is carried in the nullable fields (see `scoreExpectations`): `impactRecall`
+ * (1 − impact-weighted miss rate), `wowBonus` (trickiness-weighted catch rate over the
+ * tricky items), `caught`/`total` counts, and the ids of any missed high-impact items.
+ * `tests` results leave the findings-only fields null.
+ */
 export const sandboxObjectiveResultSchema = v.object({
   kind: v.picklist(['tests', 'findings']),
   pass: v.boolean(),
   detail: v.string(),
+  /** Impact-weighted recall in [0,1] (findings only; null for tests). */
+  impactRecall: v.nullable(v.number()),
+  /** Trickiness-weighted "wow" bonus in [0,1] (findings only; null for tests). */
+  wowBonus: v.nullable(v.number()),
+  /** Expectations the candidate caught (findings only; null for tests). */
+  caught: v.nullable(v.pipe(v.number(), v.integer(), v.minValue(0))),
+  /** Total expectations declared (findings only; null for tests). */
+  total: v.nullable(v.pipe(v.number(), v.integer(), v.minValue(0))),
+  /** Ids of missed expectations with impact ≥ 4 (findings only; null for tests). */
+  missedHighImpact: v.nullable(v.array(v.string())),
 })
 export type SandboxObjectiveResult = v.InferOutput<typeof sandboxObjectiveResultSchema>
 

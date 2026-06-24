@@ -7,6 +7,7 @@
   "files": [],
   "references": [
     { "path": "packages/contracts/tsconfig.build.json" },
+    { "path": "packages/sandbox-fixtures/tsconfig.build.json" },
     { "path": "packages/prompt-fragments/tsconfig.build.json" },
     { "path": "packages/kernel/tsconfig.build.json" },
     { "path": "packages/spend/tsconfig.build.json" },
