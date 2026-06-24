@@ -100,18 +100,25 @@ export class ModelPresetService {
     await this.presets.remove(workspaceId, id)
   }
 
-  /** Seed the built-in presets for a workspace that has none yet. Idempotent. */
+  /**
+   * Seed the built-in presets for a workspace that has none yet. Idempotent and
+   * safe under concurrent first-reads: each seed gets a DETERMINISTIC id
+   * (`mdp-seed-<index>`), so two readers racing to seed upsert onto the same rows
+   * (ON CONFLICT) rather than creating duplicate built-ins. User-created presets use
+   * random ids, so they never collide with these.
+   */
   private async ensureSeeded(workspaceId: string): Promise<void> {
     const current = await this.presets.list(workspaceId)
     if (current.length > 0) return
-    for (const seed of DEFAULT_MODEL_PRESETS) {
+    const now = this.clock.now()
+    for (const [i, seed] of DEFAULT_MODEL_PRESETS.entries()) {
       await this.presets.upsert(workspaceId, {
-        id: this.idGenerator.next('mdp'),
+        id: `mdp-seed-${i}`,
         name: seed.name,
         baseModelId: seed.baseModelId,
         overrides: { ...seed.overrides },
         isDefault: seed.isDefault,
-        createdAt: this.clock.now(),
+        createdAt: now + i,
       })
     }
   }
