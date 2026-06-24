@@ -480,8 +480,12 @@ export function parseSpecJob(input: unknown): SpecJob {
  */
 export interface ExploreJob extends HarnessAuthFields {
   jobId: string
-  /** Short label for the temp dir + logs (e.g. the agent kind). */
-  kind?: string
+  /**
+   * Short label for the temp dir + logs (e.g. the agent kind). Named `label`, not
+   * `kind`, because `kind` is the reserved dispatch discriminator the transport
+   * stamps onto every job body to route it to the right harness agent.
+   */
+  label?: string
   /** Composed role + best-practice fragments; written to Pi's global AGENTS.md context. */
   systemPrompt: string
   /** The concrete task prompt handed to Pi. */
@@ -525,7 +529,7 @@ export function parseExploreJob(input: unknown): ExploreJob {
     ghToken: str(o.ghToken, 'ghToken'),
     repo: parseRepoSpec(repo),
     branch: str(o.branch, 'branch'),
-    ...(typeof o.kind === 'string' && o.kind ? { kind: o.kind } : {}),
+    ...(typeof o.label === 'string' && o.label ? { label: o.label } : {}),
     ...(typeof o.webToolsGuidance === 'string' ? { webToolsGuidance: o.webToolsGuidance } : {}),
     ...(o.webSearch === true ? { webSearch: true } : {}),
     ...(typeof o.githubApiBase === 'string' ? { githubApiBase: o.githubApiBase } : {}),

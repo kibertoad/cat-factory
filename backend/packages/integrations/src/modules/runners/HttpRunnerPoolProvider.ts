@@ -88,12 +88,14 @@ export class HttpRunnerPoolProvider implements RunnerPoolProvider {
    *   - `{{input.jobId}}` — the id the pool is keyed on (sticky routing target);
    *   - `{{input.job}}`   — the full harness job spec as JSON, so a body template can
    *                         forward it verbatim (`{"payload":{{input.job}}}`);
-   *   - `{{input.kind}}`  — the harness route the job targets (`run` | `blueprint` |
-   *                         `spec` | `explore` | `bootstrap` | `ci-fix` |
-   *                         `resolve-conflicts` | `merge` | `on-call` | `test` |
-   *                         `fix-tests`), so a manifest can dispatch straight to a
-   *                         per-kind endpoint (`/{{input.kind}}`) instead of parsing
-   *                         the embedded job JSON to route;
+   *   - `{{input.kind}}`  — the harness job kind (`run` | `blueprint` | `spec` |
+   *                         `explore` | `bootstrap` | `ci-fix` | `resolve-conflicts` |
+   *                         `merge` | `on-call` | `test` | `fix-tests`). The harness
+   *                         itself reads the kind from the job body (`POST /jobs`), so
+   *                         a manifest does NOT need to route by kind; this is exposed
+   *                         flat only so a manifest can map it to a scheduler-side
+   *                         node selector / queue / resource hint without decoding the
+   *                         embedded `{{input.job}}` JSON;
    *   - `{{input.instanceType}}` / `{{input.cloudProvider}}` — the provisioning hints
    *                         the transport stamped on for a self-provisioning pool
    *                         (present only when the service pins a size/provider), so a

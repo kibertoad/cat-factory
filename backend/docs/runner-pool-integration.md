@@ -35,7 +35,7 @@ The work splits cleanly across two teams:
 
 ```
  cat-factory backend                  your infra (the trust boundary)
-┌─────────────────────┐   dispatch   ┌──────────────────┐   POST /run, /merge …  ┌──────────┐
+┌─────────────────────┐   dispatch   ┌──────────────────┐   POST /jobs           ┌──────────┐
 │ ContainerAgent      │ ───────────► │ your pool        │ ─────────────────────► │ a runner │
 │ Executor            │   poll       │ scheduler API    │   GET /jobs/{id}       │ (harness │
 │  (RunnerTransport)  │ ◄─────────── │ (manifest target)│ ◄───────────────────── │  image)  │
@@ -99,30 +99,35 @@ job) or re-polls — there is only a **connection table**, no job registry.
 **Every asynchronous agent kind** routes to a registered pool — there is no opt-in
 allow-list, because a pool runs the same harness image as Cloudflare:
 
-| `kind`              | Harness route        | What the job does                                   |
-| ------------------- | -------------------- | --------------------------------------------------- |
-| `run`               | `POST /run`          | Implement a task: branch + commits + open a PR.     |
-| `bootstrap`         | `POST /bootstrap`    | Scaffold/adapt a new repo and force-push it.        |
-| `blueprint`         | `POST /blueprint`    | Decompose the repo into the service→modules tree.   |
-| `spec`              | `POST /spec`         | Write/extend the in-repo prescriptive spec.         |
-| `explore`           | `POST /explore`      | Read-only architect/analysis; returns prose.        |
-| `ci-fix`            | `POST /ci-fix`       | Fix red CI on the PR branch; push back.             |
-| `resolve-conflicts` | `POST /resolve-conflicts` | Resolve merge conflicts on the PR branch.      |
-| `merge`             | `POST /merge`        | Score the PR diff; return a JSON assessment.        |
-| `on-call`           | `POST /on-call`      | Investigate a post-release regression (JSON).       |
-| `test`              | `POST /test`         | Run the suite; return a structured report.          |
-| `fix-tests`         | `POST /fix-tests`    | Apply fixes from a test report; push back.          |
+Every kind is dispatched to the **same** harness endpoint, `POST /jobs`, with the
+`kind` carried in the job body:
+
+| `kind`              | What the job does                                   |
+| ------------------- | --------------------------------------------------- |
+| `run`               | Implement a task: branch + commits + open a PR.     |
+| `bootstrap`         | Scaffold/adapt a new repo and force-push it.        |
+| `blueprint`         | Decompose the repo into the service→modules tree.   |
+| `spec`              | Write/extend the in-repo prescriptive spec.         |
+| `explore`           | Read-only architect/analysis; returns prose.        |
+| `ci-fix`            | Fix red CI on the PR branch; push back.             |
+| `resolve-conflicts` | Resolve merge conflicts on the PR branch.           |
+| `merge`             | Score the PR diff; return a JSON assessment.        |
+| `on-call`           | Investigate a post-release regression (JSON).       |
+| `test`              | Run the suite; return a structured report.          |
+| `fix-tests`         | Apply fixes from a test report; push back.          |
 
 > **The one exception:** the synchronous repo **scan** (the manual board-scan
 > "import this repo") still uses a Cloudflare Container directly and does **not**
 > route to a pool. A pure-BYO deployment with no `EXEC_CONTAINER` binding can do
 > everything above (including bootstrap) but cannot run a manual scan yet.
 
-The crucial consequence for you: **the manifest has a single `dispatch` template, but
-it dispatches all eleven kinds.** Your scheduler learns which harness route to hit
-from the `kind` field — exposed both inside `{{input.job}}` and as the first-class
-template variable `{{input.kind}}` (§3). The `kind` values map **1:1** to the harness
-route names, so a transparent proxy can route with `pathTemplate: "/{{input.kind}}"`.
+The crucial consequence for you: **the manifest has a single `dispatch` template, and
+all eleven kinds go to the one harness endpoint `POST /jobs`.** The harness reads the
+`kind` from the job body to pick the agent, so a transparent proxy in front of the
+harness just forwards to `pathTemplate: "/jobs"`. The `kind` is exposed both inside
+`{{input.job}}` (where the harness reads it) and as the first-class template variable
+`{{input.kind}}` (§3), so your scheduler can still branch on it for node selection /
+sizing without decoding the job JSON.
 
 ---
 
@@ -160,25 +165,16 @@ build secret — see the comment block at the top of the Dockerfile.)
 
 ### The job protocol a runner speaks
 
-| Method & path                  | Purpose                                                |
-| ------------------------------ | ------------------------------------------------------ |
-| `GET /health`                  | Liveness. `{ "status": "ok" }`.                        |
-| `POST /run`                    | Start (or re-attach to) an implementation job.         |
-| `POST /bootstrap`              | Start a repo-bootstrap job.                            |
-| `POST /blueprint`              | Start a repo-decomposition job.                        |
-| `POST /spec`                   | Start a spec-writer job.                               |
-| `POST /explore`                | Start a read-only exploration job.                     |
-| `POST /ci-fix`                 | Start a CI-fixer job.                                  |
-| `POST /resolve-conflicts`      | Start a conflict-resolver job.                         |
-| `POST /merge`                  | Start a merge-assessment job.                          |
-| `POST /on-call`                | Start a post-release investigation job.                |
-| `POST /test`                   | Start a tester job.                                    |
-| `POST /fix-tests`              | Start a test-fixer job.                                |
-| `GET /jobs/{id}`               | Poll any job. Returns the **job view** below.          |
+| Method & path     | Purpose                                                          |
+| ----------------- | ---------------------------------------------------------------- |
+| `GET /health`     | Liveness. `{ "status": "ok" }`.                                  |
+| `POST /jobs`      | Start (or re-attach to) any job; the body's `kind` picks the agent. |
+| `GET /jobs/{id}`  | Poll any job. Returns the **job view** below.                    |
 
-Every `POST` returns `202 { jobId, state }`. **All kinds are polled identically** on
-`GET /jobs/{id}` — there is one uniform job view regardless of which route started
-the job; the per-kind work product lands in its `result` fields.
+`POST /jobs` returns `202 { jobId, state }`. **All kinds are dispatched and polled
+identically** — one endpoint to start (the `kind` field in the body selects the
+agent), one uniform job view on `GET /jobs/{id}` regardless of kind; the per-kind work
+product lands in its `result` fields.
 
 **Dispatch body** — the job spec cat-factory sends. Treat it as **opaque and
 forward it verbatim**; do not depend on its exact shape (it grows as agent kinds are
@@ -279,7 +275,7 @@ references resolve to empty — a manifest can never reach arbitrary host state)
 | ----------------------- | ------------------------------------------------------------------------------ |
 | `{{input.jobId}}`       | The job id the pool is keyed on (sticky-routing target).                       |
 | `{{input.job}}`         | The **full** harness job spec as a JSON string — embed raw to forward verbatim. |
-| `{{input.kind}}`        | The harness route the job targets (`run`, `merge`, …); maps **1:1** to the path. |
+| `{{input.kind}}`        | The agent kind the job runs (`run`, `merge`, …). The harness reads this from the job body; use it to route/size on your scheduler side. |
 | `{{input.instanceType}}`| Concrete instance-type id, when the service pins a size (else empty).          |
 | `{{input.cloudProvider}}`| The cloud the service selected, when pinned (else empty).                     |
 

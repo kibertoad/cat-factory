@@ -60,6 +60,7 @@ describe.skipIf(!docker)('executor container acceptance', () => {
     await waitForHealth(hostPort)
 
     const job = {
+      kind: 'run',
       jobId: 'acc-1',
       systemPrompt: 'You are a builder. Create exactly the file the user asks for.',
       userPrompt: 'Create IMPLEMENTED.md containing "hello from pi".',
@@ -76,7 +77,7 @@ describe.skipIf(!docker)('executor container acceptance', () => {
     let result: { prUrl?: string; branch?: string; summary?: string; error?: string }
     try {
       // Start the async job, then poll until it reaches a terminal state.
-      const start = await fetch(`http://127.0.0.1:${hostPort}/run`, {
+      const start = await fetch(`http://127.0.0.1:${hostPort}/jobs`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(job),
@@ -156,6 +157,7 @@ describe.skipIf(!docker)('executor container acceptance', () => {
     await waitForHealth(hostPort)
 
     const job = {
+      kind: 'run',
       jobId: 'acc-todo',
       systemPrompt: 'You are a builder. Plan with the todo tool, then create the file.',
       userPrompt: 'Create IMPLEMENTED.md containing "hello from pi".',
@@ -181,7 +183,7 @@ describe.skipIf(!docker)('executor container acceptance', () => {
     // assertion holds whether or not the terminal view still carries it.
     let lastProgress: ProgressView['progress']
     try {
-      const start = await fetch(`http://127.0.0.1:${hostPort}/run`, {
+      const start = await fetch(`http://127.0.0.1:${hostPort}/jobs`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(job),
