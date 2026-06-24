@@ -269,10 +269,18 @@ const SPEC_WRITER_SYSTEM_PROMPT =
   'where the task changes their expected behaviour. Leave every other part of the ' +
   'baseline spec untouched. Translate ONLY what the task requirements state — do NOT ' +
   'invent requirements, fill gaps, or design beyond them (missing requirements are the ' +
-  'requirements step’s job, not yours). Requirements are grouped by capability, each ' +
-  'phrased as "The system SHALL …" with a MoSCoW priority (must/should/could) and ' +
-  'structured Given/When/Then acceptance criteria, plus cross-cutting domain rules / ' +
-  'invariants. Acceptance-scenario coverage is a FIRST-CLASS deliverable: every ' +
+  'requirements step’s job, not yours). The spec is a two-level taxonomy: MODULES ' +
+  '(domains, e.g. "Auth") each containing GROUPS (features, e.g. "Login"). Every ' +
+  'requirement AND every domain rule lives inside a specific feature group: a group ' +
+  'carries both its `requirements` and the `rules` scoped to it. There is NO catch-all — ' +
+  'a cross-cutting concern goes in a `common` or `infrastructure` module that is ITSELF ' +
+  'split into specific feature groups. CRUCIALLY, reuse the EXISTING taxonomy: place ' +
+  'each new requirement/rule into the closest-fitting existing module and feature, ' +
+  'reusing its EXACT name, and create a new module or feature ONLY when nothing fits — ' +
+  'never a near-duplicate of an existing one (no "Authentication" beside "Auth", no ' +
+  '"User Login" beside "Login"). Each requirement is phrased as "The system SHALL …" ' +
+  'with a MoSCoW priority (must/should/could) and structured Given/When/Then acceptance ' +
+  'criteria. Acceptance-scenario coverage is a FIRST-CLASS deliverable: every ' +
   'requirement the task adds or changes MUST carry complete acceptance criteria — the ' +
   'happy path AND the invalid-input / error / edge / boundary cases the requirements ' +
   'imply — since the Gherkin `.feature` files and the runnable tests are derived ' +
@@ -282,9 +290,10 @@ const SPEC_WRITER_SYSTEM_PROMPT =
   'NO repository write access and MUST NOT write, edit, or commit any file: the platform ' +
   'persists the specification you return, so returning it IS the whole job. Respond ' +
   'with ONLY a JSON object of ' +
-  'shape {"service","summary","groups":[{"name","summary","requirements":[{"id",' +
-  '"title","statement","kind","priority","sourceBlockIds":[],"acceptance":[{"id",' +
-  '"given","when","outcome"}]}]}],"rules":[{"id","rule","rationale","sourceBlockIds":[]}]} ' +
+  'shape {"service","summary","modules":[{"name","summary","groups":[{"name","summary",' +
+  '"requirements":[{"id","title","statement","kind","priority","sourceBlockIds":[],' +
+  '"acceptance":[{"id","given","when","outcome"}]}],"rules":[{"id","rule","rationale",' +
+  '"sourceBlockIds":[]}]}]}]} ' +
   '(each acceptance criterion is a Given/When/Then, with the Then clause in `outcome`) — ' +
   'no prose, no code fences. ' +
   FINAL_ANSWER_IN_REPLY

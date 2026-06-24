@@ -108,12 +108,14 @@ const SPEC_GUIDANCE = `
 
 ## Service specification (the prescriptive spec)
 
-If a \`spec/\` folder exists, it is the specification for this service. **Read
-\`spec/overview.md\` first** — it states what MUST be true (the requirements, grouped
-by capability). \`spec/rules.md\` lists cross-cutting domain invariants you must not
-violate. \`spec/features/*.feature\` are the Gherkin acceptance scenarios your work
-must satisfy — treat them as the source of truth for behaviour and tests.
-\`spec/version.json\` is a tiny staleness manifest.`
+If a \`spec/\` folder exists, it is the specification for this service. It is sharded
+by a module (domain) → feature (group) taxonomy. **Read \`spec/overview.md\` first** —
+it states what MUST be true and indexes the modules and their features (with links).
+Open \`spec/modules/<module>/<feature>.md\` (or its \`.json\` for exact detail) for the
+feature you are working on — it carries that feature's requirements AND the domain
+rules scoped to it. \`spec/features/<module>/<feature>.feature\` are the Gherkin
+acceptance scenarios your work must satisfy — treat them as the source of truth for
+behaviour and tests. Read only the modules/features relevant to your task.`
 
 /**
  * Write the composed system prompt as Pi's GLOBAL agent context

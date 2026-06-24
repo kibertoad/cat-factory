@@ -117,6 +117,32 @@ export interface ConformanceApp {
    * facade did not wire the store (no ENCRYPTION_KEY).
    */
   localModelEndpoints?(): LocalModelEndpointsProbe | undefined
+  /**
+   * The facade's per-workspace OpenRouter dynamic-catalog service over its real store, so the
+   * suite can assert repository/service parity (enabled-subset round-trip) across D1 and
+   * Postgres. The HTTP routes need a signed-in user the dev-open `call` path lacks, so the
+   * persistence is exercised through the service directly. Undefined when the facade did not
+   * wire the store (no ENCRYPTION_KEY / API-key pool).
+   */
+  openRouterCatalog?(): OpenRouterCatalogProbe | undefined
+}
+
+/** One OpenRouter model's cached metadata, as stored in the dynamic catalog. */
+export interface OpenRouterCatalogModel {
+  id: string
+  name: string
+  contextLength?: number
+  inputPerMillion: number
+  outputPerMillion: number
+}
+
+/** The subset of the OpenRouter-catalog service the conformance suite drives. */
+export interface OpenRouterCatalogProbe {
+  get(workspaceId: string): Promise<{ models: OpenRouterCatalogModel[] }>
+  upsert(
+    workspaceId: string,
+    input: { models: OpenRouterCatalogModel[] },
+  ): Promise<{ models: OpenRouterCatalogModel[] }>
 }
 
 /** The subset of the local-model-endpoints service the conformance suite drives. */

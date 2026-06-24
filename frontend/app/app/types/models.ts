@@ -19,15 +19,15 @@ export interface ModelCost {
  * A selectable LLM model, resolved to the flavour in use for this deployment
  * (served by `GET /models`). Mirrors `ModelOption` in `@cat-factory/contracts`.
  * The base `flavor`/`provider`/`model` is the always-available fallback
- * (cloudflare/direct), or the subscription itself for subscription-only models.
- * `subscription` (when present) is the alternative the picker prefers once the
- * workspace has a token for its vendor.
+ * (cloudflare/direct/openrouter), or the subscription itself for subscription-only
+ * models. `subscription` (when present) is the alternative the picker prefers once
+ * the workspace has a token for its vendor.
  */
 export interface ModelOption {
   id: string
   label: string
   description: string
-  flavor: 'cloudflare' | 'direct' | 'subscription'
+  flavor: 'cloudflare' | 'direct' | 'openrouter' | 'subscription'
   /**
    * Whether this model is actually selectable for the workspace: a direct API key for
    * its provider, a connected subscription vendor, or Cloudflare AI enabled. Absent on

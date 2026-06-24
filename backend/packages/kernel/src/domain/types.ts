@@ -149,15 +149,15 @@ export type {
   // Shared iterative-gate cap resolution (requirements reviewer + quality companions).
   IterationCapChoice,
   ResolveIterationCapInput,
-  // Structured in-repo specification (`spec.json`) shapes.
+  // Structured in-repo specification (sharded module → group tree) shapes.
   RequirementPriority,
   RequirementKind,
   AcceptanceCriterion,
   RequirementItem,
   DomainRule,
   RequirementGroup,
+  SpecModule,
   SpecDoc,
-  SpecVersion,
   // Companion-agent shapes: the raw model assessment + the standardized stored verdict.
   CompanionAssessment,
   CompanionVerdict,

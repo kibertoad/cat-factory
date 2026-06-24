@@ -81,13 +81,13 @@ not a quirk to design around: the connection is the per-workspace anchor that
 
 So a native adapter's connection is **not** a dummy. Map the manifest fields like this:
 
-| Manifest field | Native adapter use |
-|---|---|
-| `baseUrl` | the provider's API root (the adapter reads it) |
-| `auth` + `resolveSecret` | the per-workspace machine token |
-| `providerConfig` | per-workspace native settings (project, link key, status map, …) |
-| `provision`/`status`/`teardown` request **templates** | **the only** fields a native adapter legitimately ignores |
-| `response`, `defaultTtlMs` | optional — the adapter may honour or ignore them |
+| Manifest field                                        | Native adapter use                                               |
+| ----------------------------------------------------- | ---------------------------------------------------------------- |
+| `baseUrl`                                             | the provider's API root (the adapter reads it)                   |
+| `auth` + `resolveSecret`                              | the per-workspace machine token                                  |
+| `providerConfig`                                      | per-workspace native settings (project, link key, status map, …) |
+| `provision`/`status`/`teardown` request **templates** | **the only** fields a native adapter legitimately ignores        |
+| `response`, `defaultTtlMs`                            | optional — the adapter may honour or ignore them                 |
 
 > We considered letting an injected provider declare "I need no manifest/connection" so the
 > module could assemble from deployment env alone. We rejected it: that loses per-workspace
@@ -101,7 +101,7 @@ So a native adapter's connection is **not** a dummy. Map the manifest fields lik
   coding agents run** (coder, mocker, merger, …).
 
 Kargo PREnvs are **environments** — implement `EnvironmentProvider`. A Kargo-backed
-*runner* (mapping Kargo CI jobs / AI sandboxes onto the executor-harness via the
+_runner_ (mapping Kargo CI jobs / AI sandboxes onto the executor-harness via the
 `resolveTransport` seam) is a separate, larger piece and is **out of scope** until there is
 a Kargo ↔ executor-harness story.
 

@@ -91,6 +91,7 @@ import { UserService } from '@cat-factory/workspaces'
 import { InvitationService } from '@cat-factory/workspaces'
 import { EmailConnectionService } from '@cat-factory/integrations'
 import { SpendService, DEFAULT_SPEND_PRICING, type SpendPricing } from '@cat-factory/spend'
+import type { OpenRouterModelMeta } from '@cat-factory/contracts'
 import { LlmObservabilityService } from './modules/observability/LlmObservabilityService.js'
 import {
   GitHubInstallationService,
@@ -218,6 +219,13 @@ export interface CoreDependencies {
    * this from env, and tests can inject a tiny limit to exercise pausing.
    */
   spendPricing?: SpendPricing
+  /**
+   * Optional resolver for a workspace's enabled OpenRouter dynamic-catalog models, so the
+   * spend safeguard prices a metered `openrouter:<slug>` call at its real per-model rate
+   * instead of the bare-`openrouter` fallback. Wired by each facade from its
+   * `OpenRouterCatalogService`; absent → the static price table is used.
+   */
+  dynamicModelPricesFor?: (workspaceId: string) => Promise<OpenRouterModelMeta[]>
 
   // ---- GitHub integration (optional; wired only when configured) ----------
   // These follow the integrations' "default-off" convention: the
@@ -1278,6 +1286,7 @@ export function createCore(dependencies: CoreDependencies): Core {
     idGenerator: dependencies.idGenerator,
     clock: dependencies.clock,
     pricing: dependencies.spendPricing ?? DEFAULT_SPEND_PRICING,
+    dynamicPricesFor: dependencies.dynamicModelPricesFor,
   })
   const llmObservability = dependencies.llmCallMetricRepository
     ? new LlmObservabilityService({

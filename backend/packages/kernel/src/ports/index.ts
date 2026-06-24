@@ -250,6 +250,10 @@ export type {
   LocalModelEndpointRecord,
   LocalModelEndpointRepository,
 } from './local-model-repositories.js'
+export type {
+  ProviderModelCatalogRecord,
+  ProviderModelCatalogRepository,
+} from './provider-model-catalog-repositories.js'
 export type { BoardWritePort } from './board-operations.js'
 export type { PullRequestMerger } from './pr-merger.js'
 export type { CiCheck, CiStatusReport, CiStatusProvider } from './ci-status.js'

@@ -143,12 +143,8 @@ export {
   nextBlueprintVersion,
   coerceSpecDoc,
   dedupeSpecIds,
-  canonicalSpecJson,
-  hashSpec,
   renderSpecFiles,
   renderSpecFeatureFiles,
-  renderSpecVersionFile,
-  nextSpecVersion,
 } from './repo-ops/render.js'
 
 // The generic AI provisioning facade: a mixable provider registry + the base,

@@ -1046,6 +1046,22 @@ export const localModelEndpoints = pgTable(
   (t) => [primaryKey({ columns: [t.user_id, t.provider] })],
 )
 
+// Per-WORKSPACE enabled GATEWAY models (the dynamic catalog subset) — OpenRouter today,
+// LiteLLM and others later. `models` is a JSON array of { id, name, contextLength?,
+// inputPerMillion, outputPerMillion } — the enabled subset with cached context + price
+// (mirror of D1 migration 0006). Keyed by (workspace_id, provider).
+export const providerModelCatalog = pgTable(
+  'provider_model_catalog',
+  {
+    workspace_id: text('workspace_id').notNull(),
+    provider: text('provider').notNull(),
+    models: text('models').notNull(),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+    updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.workspace_id, t.provider] })],
+)
+
 // Per-run activations of a personal credential: the raw token re-encrypted with the
 // system key only, scoped to one execution with a TTL (mirror of D1 migration 0039).
 export const subscriptionActivations = pgTable(

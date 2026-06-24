@@ -263,10 +263,11 @@ export type ModelCost = v.InferOutput<typeof modelCostSchema>
 /**
  * A selectable LLM model, resolved to the flavour actually in use for this
  * deployment (`GET /models`). `flavor` is `direct` when the model's own provider
- * API key is configured, `cloudflare` for the Workers AI fallback, or
- * `subscription` for a Claude Code / Codex model run via a stored subscription
- * token. `provider`/`model` are the effective {@link ModelRef} parts the agent
- * will run with; the picker stores only `id`.
+ * API key is configured, `openrouter` when it routes through the OpenRouter
+ * gateway, `cloudflare` for the Workers AI fallback, or `subscription` for a
+ * Claude Code / Codex model run via a stored subscription token. `provider`/`model`
+ * are the effective {@link ModelRef} parts the agent will run with; the picker
+ * stores only `id`.
  */
 export const modelOptionSchema = v.object({
   /** Stable id persisted on a block (`Block.modelId`). */
@@ -276,7 +277,7 @@ export const modelOptionSchema = v.object({
   /** One-line description shown in the picker. */
   description: v.string(),
   /** Which flavour is active for this deployment. */
-  flavor: v.picklist(['cloudflare', 'direct', 'subscription']),
+  flavor: v.picklist(['cloudflare', 'direct', 'openrouter', 'subscription']),
   /**
    * Whether this model is actually selectable given what the workspace has
    * configured: a direct key for its provider, a subscription token for its vendor,

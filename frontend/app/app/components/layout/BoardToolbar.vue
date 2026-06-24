@@ -1,8 +1,6 @@
 <script setup lang="ts">
 import { useBoardFlow } from '~/composables/useBoardFlow'
 import NotificationsInbox from '~/components/layout/NotificationsInbox.vue'
-import VendorCredentialsModal from '~/components/providers/VendorCredentialsModal.vue'
-import PersonalCredentialModal from '~/components/providers/PersonalCredentialModal.vue'
 
 const ui = useUiStore()
 const board = useBoardStore()
@@ -126,20 +124,6 @@ const decisionItems = computed(() =>
 
     <!-- human-actionable notifications (merge review, pipeline complete, CI failed) -->
     <NotificationsInbox />
-
-    <!-- LLM vendor subscriptions (Claude Code / Codex token pool) -->
-    <UButton
-      color="neutral"
-      variant="ghost"
-      size="sm"
-      icon="i-lucide-key-round"
-      title="Connect LLM vendor subscriptions (Claude Code / Codex)"
-      @click="ui.openVendorCredentials()"
-    >
-      Vendors
-    </UButton>
-    <VendorCredentialsModal />
-    <PersonalCredentialModal />
 
     <!-- spend safeguard usage -->
     <UButton

@@ -1,12 +1,12 @@
 {
   "name": "@cat-factory/integrations",
-  "version": "0.7.4",
+  "version": "0.8.1",
+  "description": "External-system integration domain logic for the Agent Architecture Board (GitHub, documents, tasks, environments, runners).",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/kibertoad/cat-factory.git",
     "directory": "backend/packages/integrations"
   },
-  "description": "External-system integration domain logic for the Agent Architecture Board (GitHub, documents, tasks, environments, runners).",
   "files": [
     "dist"
   ],

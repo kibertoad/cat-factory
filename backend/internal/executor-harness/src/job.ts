@@ -396,7 +396,7 @@ export interface SpecTaskContext {
 /**
  * The job the Worker's ContainerAgentExecutor POSTs to /spec. The spec-writer agent
  * clones `branch` (the implementation branch the coder will resume — created from
- * `repo.baseBranch` if it does not exist yet), reads any existing `spec/spec.json`
+ * `repo.baseBranch` if it does not exist yet), reassembles any existing sharded spec
  * (the BASELINE: the spec as merged before this task), and applies the single `task`'s
  * requirements as an INCREMENT onto it — adding what the task introduces and adjusting
  * existing requirements only where the task changes their behaviour. The harness

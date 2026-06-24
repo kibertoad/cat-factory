@@ -1,12 +1,12 @@
 {
   "name": "@cat-factory/contracts",
-  "version": "0.8.0",
+  "version": "0.10.0",
+  "description": "Valibot wire contract shared between the Agent Architecture Board frontend and backend.",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/kibertoad/cat-factory.git",
     "directory": "backend/packages/contracts"
   },
-  "description": "Valibot wire contract shared between the Agent Architecture Board frontend and backend.",
   "files": [
     "dist"
   ],
