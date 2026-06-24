@@ -27,6 +27,11 @@ function onHandle(e: PointerEvent) {
         left: task.position.x + 'px',
         top: task.position.y + 'px',
         zIndex: draggingId === taskId ? 60 : 10,
+        // While this task is being dragged it must not capture hit-tests, so the
+        // drop-zone (service or module) beneath the cursor can be resolved on
+        // release — including the drag handle, which lives in this wrapper above
+        // the card and would otherwise mask the zone under it.
+        pointerEvents: draggingId === taskId ? 'none' : undefined,
       }"
     >
       <!-- drag handle -->

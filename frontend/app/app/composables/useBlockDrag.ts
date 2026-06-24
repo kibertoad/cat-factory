@@ -28,47 +28,62 @@ export function useBlockDrag() {
     // frames live in free-floating flow space, so they opt out via `clamp: false`.
     const clamp = opts.clamp ?? true
     draggingId.value = block.id
+    // Position is only previewed locally while dragging and persisted once on
+    // release. Writing every move raced — a late, out-of-order response could land
+    // a stale position last and make the block jump after the user let go.
+    let moved = false
+    let last = orig
 
     const onMove = (ev: PointerEvent) => {
       const z = ui.zoom || 1
       const nx = orig.x + (ev.clientX - startX) / z
       const ny = orig.y + (ev.clientY - startY) / z
-      board.moveBlock(block.id, {
-        x: clamp ? Math.max(0, nx) : nx,
-        y: clamp ? Math.max(0, ny) : ny,
-      })
+      moved = true
+      last = { x: clamp ? Math.max(0, nx) : nx, y: clamp ? Math.max(0, ny) : ny }
+      board.previewMove(block.id, last)
     }
     const onUp = (ev: PointerEvent) => {
       window.removeEventListener('pointermove', onMove)
       window.removeEventListener('pointerup', onUp)
-      if (opts.reparent) reparentAt(block, ev.clientX, ev.clientY)
+      if (moved) {
+        // A successful reparent persists the move itself; otherwise commit the final
+        // position in place. Either way it's a single write, not one per frame. Run
+        // the hit-test BEFORE clearing draggingId so the dragged element is still
+        // marked non-interactive (see DraggableTask) and the zone beneath resolves.
+        const reparented = opts.reparent && reparentAt(block, ev.clientX, ev.clientY)
+        if (!reparented) void board.moveBlock(block.id, last)
+      }
       draggingId.value = null
     }
     window.addEventListener('pointermove', onMove)
     window.addEventListener('pointerup', onUp)
   }
 
-  function reparentAt(block: Block, clientX: number, clientY: number) {
+  /** Returns true when the block was dropped into a *different* container. */
+  function reparentAt(block: Block, clientX: number, clientY: number): boolean {
     const el = document.querySelector(`[data-block-id="${block.id}"]`) as HTMLElement | null
-    if (!el) return
-    // hide the dragged element so elementFromPoint sees the zone beneath it
+    if (!el) return false
+    // The dragged block is already non-interactive while dragging (DraggableTask
+    // drops pointer-events on the whole wrapper, handle included); belt-and-braces,
+    // also neutralise this node so elementFromPoint resolves the zone beneath it.
     const prev = el.style.pointerEvents
     el.style.pointerEvents = 'none'
     const under = document.elementFromPoint(clientX, clientY) as HTMLElement | null
     const zoneEl = under?.closest('[data-drop-zone]') as HTMLElement | null
     el.style.pointerEvents = prev
-    if (!zoneEl) return
+    if (!zoneEl) return false
 
     const newParent = zoneEl.getAttribute('data-drop-zone')!
-    if (newParent === block.parentId) return // same container — keep the new position
+    if (newParent === block.parentId) return false // same container — caller commits position
 
     const z = ui.zoom || 1
     const zr = zoneEl.getBoundingClientRect()
     const er = el.getBoundingClientRect()
-    board.reparentBlock(block.id, newParent, {
+    void board.reparentBlock(block.id, newParent, {
       x: Math.max(0, (er.left - zr.left) / z),
       y: Math.max(0, (er.top - zr.top) / z),
     })
+    return true
   }
 
   return { draggingId, startDrag }

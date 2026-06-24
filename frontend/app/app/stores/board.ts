@@ -122,12 +122,31 @@ export const useBoardStore = defineStore('board', () => {
     // tasks may live in services or modules; modules only in services
     if (b.level === 'task' && parent.level !== 'frame' && parent.level !== 'module') return
     if (b.level === 'module' && parent.level !== 'frame') return
-    upsert(
-      await api.reparentBlock(useWorkspaceStore().requireId(), id, {
-        parentId: newParentId,
-        position,
-      }),
-    )
+    // Optimistic: drop the block into the new container immediately so it doesn't
+    // briefly snap back to its old home while the request is in flight. Snapshot
+    // the old home so a rejected reparent restores it rather than leaving the
+    // block in the wrong container (a structural lie that survives until re-hydrate).
+    const prevParentId = b.parentId
+    const prevPosition = b.position
+    b.parentId = newParentId
+    b.position = position
+    try {
+      upsert(
+        await api.reparentBlock(useWorkspaceStore().requireId(), id, {
+          parentId: newParentId,
+          position,
+        }),
+      )
+    } catch (e) {
+      b.parentId = prevParentId
+      b.position = prevPosition
+      toast.add({
+        title: 'Could not move',
+        description: e instanceof Error ? e.message : String(e),
+        icon: 'i-lucide-triangle-alert',
+        color: 'error',
+      })
+    }
   }
 
   /**
@@ -193,6 +212,19 @@ export const useBoardStore = defineStore('board', () => {
     }
   }
 
+  /**
+   * Local-only optimistic position update during an active drag — no persistence.
+   * A drag fires this on every pointer move so the block tracks the cursor without
+   * a per-move API round-trip; the final position is committed once via
+   * {@link moveBlock} (or {@link reparentBlock}) on release. Persisting every move
+   * raced: out-of-order responses to the burst of in-flight writes could land a
+   * stale position last, snapping the block back after the user let go.
+   */
+  function previewMove(id: string, position: { x: number; y: number }) {
+    const b = getBlock(id)
+    if (b) b.position = position
+  }
+
   async function moveBlock(id: string, position: { x: number; y: number }) {
     const b = getBlock(id)
     if (!b) return
@@ -245,6 +277,7 @@ export const useBoardStore = defineStore('board', () => {
     detach,
     reattach,
     removeBlock,
+    previewMove,
     moveBlock,
     updateBlock,
     toggleDependency,

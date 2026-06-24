@@ -186,6 +186,14 @@ describe('board store read getters', () => {
     })
   })
 
+  it('previewMove updates a block position locally without persisting', () => {
+    store.hydrate([frame('f1'), task('t1', 'f1', { position: { x: 0, y: 0 } })])
+    store.previewMove('t1', { x: 120, y: 40 })
+    expect(store.getBlock('t1')?.position).toEqual({ x: 120, y: 40 })
+    // a no-op for unknown ids (no throw)
+    expect(() => store.previewMove('missing', { x: 1, y: 1 })).not.toThrow()
+  })
+
   it('hydrate replaces and upsert inserts/updates cached blocks', () => {
     store.hydrate([frame('f1')])
     store.upsert(task('t1', 'f1', { title: 'first' }))
