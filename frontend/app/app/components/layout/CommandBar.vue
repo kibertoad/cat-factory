@@ -176,6 +176,14 @@ const commands = computed<Command[]>(() => {
     run: () => ui.openMergeThresholds(),
   })
   list.push({
+    id: 'workspace-settings',
+    label: 'Workspace settings',
+    group: 'Workspace',
+    icon: 'i-lucide-sliders-horizontal',
+    keywords: 'limit running tasks per service waiting escalation overdue notification timeout',
+    run: () => ui.openWorkspaceSettings(),
+  })
+  list.push({
     id: 'model-defaults',
     label: 'Default models for agents',
     group: 'Workspace',

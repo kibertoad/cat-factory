@@ -11,7 +11,7 @@ This doc tracks what's landed and what's left, with enough detail to execute.
 ## Ground rules (apply to every remaining step)
 
 - **No feature/behaviour loss.** If a refactor would change an observable output, stop
-  and flag it. Move method bodies *verbatim*; inject dependencies.
+  and flag it. Move method bodies _verbatim_; inject dependencies.
 - **Keep the runtimes symmetric.** Any shared-behaviour change lands in every facade in
   the same change + a conformance assertion (see `CLAUDE.md`).
 - **One concern per PR.** Each extraction is independently shippable and revertible.
@@ -30,7 +30,8 @@ This doc tracks what's landed and what's left, with enough detail to execute.
   wrangler issue) — see `CLAUDE.md`.
 
 ### Gotchas learned
-- **Changeset cwd drift:** `Write` with a *relative* path resolves against the shell's
+
+- **Changeset cwd drift:** `Write` with a _relative_ path resolves against the shell's
   current dir, which drifts after a `cd` into a package. Always write changesets with the
   **absolute** repo-root path `C:\sources\cat-factory\.changeset\<name>.md`.
 - **Pre-existing typecheck noise:** two `ai`-SDK test files
@@ -39,6 +40,7 @@ This doc tracks what's landed and what's left, with enough detail to execute.
   the build and don't block `test:run`. Filter them out when reading `pnpm typecheck`.
 
 ### The collaborator-extraction pattern (used by Phase 2)
+
 When pulling flow-control out of `ExecutionService`: the collaborator owns its cohesive
 logic; **shared** engine primitives stay on the engine and are injected as constructor
 callbacks (arrow wrappers: `runAgent: (ctx, opts) => this.runAgent(ctx, opts)`). This
@@ -49,12 +51,12 @@ keeps a single home for shared state-machine primitives and avoids circular deps
 
 ## Done (merged / in review)
 
-| PR | Scope | Status |
-|----|-------|--------|
-| #131 | **Phase 0** privileged-App Node/local parity fix + **Phase 1** review-service collapse (`IterativeReviewService` base; `RequirementReviewService`/`ClarityReviewService` thin subclasses) | merged |
-| #133 | **Phase 2.1** extract `AgentContextBuilder` (pure-read per-step context + service-frame resolution) | merged |
-| #134 | **Phase 2.2** extract `MergeResolver` + `CompanionController` + `TesterController` | merged |
-| #135 | **Phase 2.3** extract `ReviewGateController` (requirements + clarity gate handlers, unified by kind) | in review |
+| PR   | Scope                                                                                                                                                                                     | Status    |
+| ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
+| #131 | **Phase 0** privileged-App Node/local parity fix + **Phase 1** review-service collapse (`IterativeReviewService` base; `RequirementReviewService`/`ClarityReviewService` thin subclasses) | merged    |
+| #133 | **Phase 2.1** extract `AgentContextBuilder` (pure-read per-step context + service-frame resolution)                                                                                       | merged    |
+| #134 | **Phase 2.2** extract `MergeResolver` + `CompanionController` + `TesterController`                                                                                                        | merged    |
+| #135 | **Phase 2.3** extract `ReviewGateController` (requirements + clarity gate handlers, unified by kind)                                                                                      | in review |
 
 `ExecutionService` is now **~2,970 lines**, down from ~4,108 at the start.
 
@@ -74,6 +76,7 @@ loop end-to-end is verified by the requirements + clarity conformance fixtures i
 ## Remaining steps (priority order)
 
 ### 1. (DONE — PR #135) Finish Phase 2 — `ReviewGateController`
+
 Extracted: the requirements-review + clarity-review **gate** handlers are now one
 kind-parameterised `ReviewGateController` (see the "Done" note above). The shared engine
 primitives (`parkStepOnDecision`, `assertNotIterativeGate`, `advancePastResolvedGate`,
@@ -88,6 +91,7 @@ dispatch in `stepInstance` / `recordStepResult`, replacing the if-ladders with a
 handler table. Not started; independent of the above.
 
 ### 2. (DONE — branch `refactor/phase3-buildjobbody`) Phase 3 — tame `ContainerAgentExecutor.buildJobBody`
+
 Done: extracted a `ModelRouter` collaborator (`backend/packages/server/src/agents/ModelRouter.ts`)
 owning the routing policy (block pin → workspace default → env + "subscriptions always
 win" for pooled + dual-mode individual GLM); `resolveModel`/`isQuotaBased`/`buildJobBody`
@@ -104,6 +108,7 @@ the subscription overrides). Verified: full workspace `pnpm build` + server `pnp
 integration suite** (real dispatch shapes) to confirm cross-runtime.
 
 ### 3. Phase 4 — frontend structure
+
 1. **(DONE — branch `refactor/phase4-split-useapi`, commit `ae42a74`)** Split
    `frontend/app/app/composables/useApi.ts` (~1,186 lines, 100+ endpoints) into per-domain
    factory modules under `composables/api/*` (auth, fragments, models, accounts,
@@ -115,8 +120,8 @@ integration suite** (real dispatch shapes) to confirm cross-runtime.
    `useApi().someMethod(...)`. Method-name set is byte-identical old vs new (both `comm`
    diff directions empty). The `api/*` files sit two levels deep so Nuxt does NOT
    auto-import the factories. Verified on Windows: `nuxt typecheck` + `oxlint` + `oxfmt`
-   + 43 frontend unit tests green. Changeset `split-useapi-into-domain-modules.md`
-   (`@cat-factory/app` patch). **Open the PR; no CI conformance impact (frontend-only).**
+   - 43 frontend unit tests green. Changeset `split-useapi-into-domain-modules.md`
+     (`@cat-factory/app` patch). **Open the PR; no CI conformance impact (frontend-only).**
 2. **(DONE — branch `refactor/phase4-decompose-agent-step-detail`)** Decomposed
    `frontend/app/app/components/panels/AgentStepDetail.vue` (1,264 → 737 lines). The
    live clock → `useStepTimer`; the prose reader (outline / collapse / scroll-spy +
@@ -128,8 +133,8 @@ integration suite** (real dispatch shapes) to confirm cross-runtime.
    template's DOM relationships (scroll-spy refs + in-document review highlights) are
    byte-identical — only script logic + two display sections were extracted; the parent
    is now orchestration only. Verified on Windows: `nuxt typecheck` + `oxlint` + `oxfmt`
-   + 43 frontend unit tests green. Changeset `decompose-agent-step-detail.md`
-   (`@cat-factory/app` patch). **Open the PR; frontend-only, no CI conformance impact.**
+   - 43 frontend unit tests green. Changeset `decompose-agent-step-detail.md`
+     (`@cat-factory/app` patch). **Open the PR; frontend-only, no CI conformance impact.**
 3. **Refactor `frontend/app/app/stores/ui.ts`** (~413 lines, 13 modal refs) to a single
    overlay registry (`{ active: OverlayId | null, payload }`) + typed open/close helpers;
    update the ~13 call sites.
@@ -146,6 +151,7 @@ integration suite** (real dispatch shapes) to confirm cross-runtime.
      ci → merger.
 
 ### 4. Phase 5 (optional, defer unless churn hurts)
+
 - Lift the genuinely-identical container-builder helpers shared by
   `runtimes/cloudflare/src/infrastructure/container.ts` and `runtimes/node/src/container.ts`
   (model-provider resolver shape, App-registry assembly, GitHub-client/Slack composition)
@@ -157,6 +163,7 @@ integration suite** (real dispatch shapes) to confirm cross-runtime.
 ---
 
 ## Where things live
+
 - Full plan + running progress notes:
   `~/.claude/plans/analyse-code-from-perspective-shimmering-pike.md`.
 - Architecture & runtime-flow orientation: `CLAUDE.md` (read the "Keep the runtimes

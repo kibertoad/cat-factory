@@ -201,25 +201,24 @@ export class ExecutionWorkflow extends WorkflowEntrypoint<Env, ExecutionWorkflow
 
       if (result.kind === 'awaiting_decision') {
         const decisionId = result.decisionId
+        // A parked run waits for a human INDEFINITELY — the old hard "decision timeout"
+        // that failed the run is gone (a run can legitimately sit waiting for input for
+        // as long as it takes; urgency is surfaced by the notification escalating
+        // yellow → red, not by killing the run). Cloudflare's `waitForEvent` still needs
+        // a finite timeout, so we wait in chunks: on expiry we simply re-loop, which
+        // re-advances the run from storage — resuming if the decision was resolved while
+        // we weren't listening (self-healing a missed signal), or re-arming the wait
+        // otherwise. The per-iteration `-${i}` keeps each re-armed wait a distinct step.
         try {
-          await step.waitForEvent(`await-${decisionId}`, {
+          await step.waitForEvent(`await-${decisionId}-${i}`, {
             type: `decision-${decisionId}`,
             timeout: decisionTimeout,
           })
         } catch {
-          // No human resolved the decision in time — expire for later review.
-          await step.do(`expire-${decisionId}`, () =>
-            buildContainer(this.env).executionService.failRun(
-              workspaceId,
-              executionId,
-              'Decision timed out awaiting a human response',
-              'decision_timeout',
-            ),
-          )
-          return
+          // Timed out without a signal — fall through and re-loop (do NOT fail the run).
         }
       }
-      // 'continue' or a resolved decision: loop and advance the next step.
+      // 'continue', a resolved decision, or a re-armed wait: loop and advance again.
     }
   }
 }

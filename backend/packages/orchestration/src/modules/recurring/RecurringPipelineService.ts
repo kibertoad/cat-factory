@@ -140,7 +140,8 @@ export class RecurringPipelineService {
       id: this.idGenerator.next('blk'),
       title: input.name,
       type: 'service',
-      description: TEMPLATE_DESCRIPTIONS[input.template] || '',
+      // The user's own prompt when given, else the canned template seed.
+      description: input.description?.trim() || TEMPLATE_DESCRIPTIONS[input.template] || '',
       position: { x: 24, y: 96 },
       status: 'planned',
       progress: 0,
@@ -148,6 +149,8 @@ export class RecurringPipelineService {
       executionId: null,
       level: 'task',
       parentId: frame.id,
+      // A recurring schedule's reused on-board block is a recurring-type task.
+      taskType: 'recurring',
     }
     await this.blockRepository.insert(workspaceId, block, serviceId)
 

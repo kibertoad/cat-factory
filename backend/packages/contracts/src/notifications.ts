@@ -65,6 +65,17 @@ export const notificationStatusSchema = v.picklist(['open', 'acted', 'dismissed'
 export type NotificationStatus = v.InferOutput<typeof notificationStatusSchema>
 
 /**
+ * How urgently a notification is rendered. A notification starts `normal` (the
+ * inbox's usual per-type color) and is escalated to `urgent` (red) by the periodic
+ * sweep once it has been waiting for a human longer than the workspace's
+ * `waitingEscalationMinutes` threshold. This is the run-timing signal that replaced
+ * the old hard "decision timeout" auto-fail: runs now wait indefinitely, and the
+ * notification colour — not a killed run — conveys that a human is overdue.
+ */
+export const notificationSeveritySchema = v.picklist(['normal', 'urgent'])
+export type NotificationSeverity = v.InferOutput<typeof notificationSeveritySchema>
+
+/**
  * Optional structured detail a notification carries for rendering its card —
  * e.g. a `merge_review` carries the agent's assessment + the PR it concerns. Kept
  * deliberately small and additive so new notification types can attach their own
@@ -99,6 +110,11 @@ export const notificationSchema = v.object({
   id: v.string(),
   type: notificationTypeSchema,
   status: notificationStatusSchema,
+  /**
+   * Render urgency (see {@link notificationSeveritySchema}). Absent ⇒ `normal`. Flipped
+   * to `urgent` by the escalation sweep once it has waited past the workspace threshold.
+   */
+  severity: v.optional(notificationSeveritySchema),
   /** The block (task/frame) the notification is about; null for workspace-wide. */
   blockId: v.nullable(v.string()),
   /** The execution run that raised it, when applicable. */

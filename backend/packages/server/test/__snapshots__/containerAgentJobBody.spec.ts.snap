@@ -326,7 +326,7 @@ exports[`ContainerAgentExecutor.buildJobBody (per-kind body shapes) > read-only 
     "githubApiBase": "https://api.github.com",
     "harness": "pi",
     "jobId": "ex_1-architect",
-    "kind": "architect",
+    "label": "architect",
     "model": "@cf/test/model",
     "proxyBaseUrl": "https://proxy.test/v1",
     "repo": {

@@ -1,4 +1,9 @@
-import type { Workspace, WorkspaceSnapshot } from '~/types/domain'
+import type {
+  UpdateWorkspaceSettingsInput,
+  Workspace,
+  WorkspaceSettings,
+  WorkspaceSnapshot,
+} from '~/types/domain'
 import type { ApiContext } from './context'
 
 /** Workspace CRUD + the full snapshot read. */
@@ -20,5 +25,12 @@ export function workspacesApi({ http, ws }: ApiContext) {
       http<Workspace>(ws(workspaceId), { method: 'PATCH', body: { name } }),
 
     deleteWorkspace: (workspaceId: string) => http(ws(workspaceId), { method: 'DELETE' }),
+
+    // ---- workspace runtime settings (human-wait escalation + per-service task limit) --
+    getWorkspaceSettings: (workspaceId: string) =>
+      http<WorkspaceSettings>(`${ws(workspaceId)}/settings`),
+
+    updateWorkspaceSettings: (workspaceId: string, body: UpdateWorkspaceSettingsInput) =>
+      http<WorkspaceSettings>(`${ws(workspaceId)}/settings`, { method: 'PUT', body }),
   }
 }

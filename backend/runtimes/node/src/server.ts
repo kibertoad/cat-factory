@@ -15,14 +15,11 @@ import { type NodeContainerOptions, buildNodeContainer } from './container.js'
 import { createDbClient } from './db/client.js'
 import { migrate } from './db/migrate.js'
 import { executionRuntime } from './execution/config.js'
-import {
-  startDecisionTimeoutWorker,
-  startExecutionWorker,
-  startStaleRunSweeper,
-} from './execution/pgBossRunner.js'
+import { startExecutionWorker, startStaleRunSweeper } from './execution/pgBossRunner.js'
 import { startBootstrapWorker } from './execution/bootstrapRunner.js'
 import { startEnvironmentSweeper } from './environments.js'
 import { startScheduleSweeper } from './recurring.js'
+import { startNotificationEscalationSweeper } from './notifications.js'
 import { NodeRealtimeHub, attachRealtime } from './realtime.js'
 import { createDrizzleRepositories } from './repositories/drizzle.js'
 import { DrizzleSubscriptionActivationRepository } from './repositories/personalSubscription.js'
@@ -121,12 +118,10 @@ export async function start(
   const container = buildContainer({ db, boss, env, repos, realtimeHub })
 
   const runtime = executionRuntime(container.config, env)
-  // The decision-timeout worker creates its queue first so the advance worker's send to
-  // it (when a run parks on a decision) always has a target.
-  await startDecisionTimeoutWorker(boss, container, logger)
+  // A parked run waits for a human indefinitely (no decision timeout); the escalating
+  // notification — not a killed run — signals that a human is overdue.
   await startExecutionWorker(boss, container, runtime.drive, logger, {
     concurrency: runtime.concurrency,
-    decisionTimeoutSeconds: runtime.decisionTimeoutSeconds,
   })
   // Durably drive bootstrap runs too (the Worker uses a per-run BootstrapWorkflow);
   // a no-op queue when the bootstrap module isn't wired.
@@ -153,6 +148,9 @@ export async function start(
   // Tear down expired ephemeral environments (the Worker uses cron); no-op unless the
   // environments integration is wired.
   const stopEnvironmentSweeper = startEnvironmentSweeper(container, clock, logger)
+  // Escalate long-waiting notifications yellow → red (the Worker uses cron); the
+  // overdue-human signal now that runs never time out waiting for input.
+  const stopNotificationEscalation = startNotificationEscalationSweeper(container, clock, logger)
 
   const app = createApp(container, env)
   const port = Number(env.PORT ?? 8787)
@@ -176,6 +174,7 @@ export async function start(
     stopRetention()
     stopScheduleSweeper()
     stopEnvironmentSweeper()
+    stopNotificationEscalation()
     stopRealtime()
     await new Promise<void>((resolve) => server.close(() => resolve()))
     try {

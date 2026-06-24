@@ -19,6 +19,7 @@ export {
   DEFAULT_MERGE_PRESET,
   DEFAULT_CI_MAX_ATTEMPTS,
   DEFAULT_MAX_REQUIREMENT_ITERATIONS,
+  DEFAULT_WORKSPACE_SETTINGS,
 } from './domain/catalog.js'
 export {
   type SelectableModel,
