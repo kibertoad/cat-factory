@@ -12,7 +12,7 @@ import {
   makeOnboardingProbe,
   makeReadyReviewWithOpenItem,
 } from '@cat-factory/conformance'
-import type { ExecutionInstance, RepoBlueprintRecord, WorkspaceSnapshot } from '@cat-factory/kernel'
+import type { ExecutionInstance, WorkspaceSnapshot } from '@cat-factory/kernel'
 import { NoopBootstrapRunner, NoopWorkRunner } from '@cat-factory/kernel'
 import type { LocalRunner, UpsertLocalModelEndpointInput } from '@cat-factory/contracts'
 import type { CoreDependencies } from '@cat-factory/orchestration'
@@ -21,7 +21,6 @@ import { type DrizzleDb, createDbClient } from '../src/db/client.js'
 import { migrate } from '../src/db/migrate.js'
 import {
   DrizzleClarityReviewRepository,
-  DrizzleRepoBlueprintRepository,
   DrizzleRequirementReviewRepository,
 } from '../src/repositories/drizzle.js'
 import { createApp } from '../src/server.js'
@@ -180,10 +179,6 @@ export function makeConformanceApp(
     )
   }
 
-  function seedBlueprint(record: RepoBlueprintRecord) {
-    return new DrizzleRepoBlueprintRepository(db).upsert(record)
-  }
-
   return {
     call,
     createWorkspace,
@@ -194,7 +189,6 @@ export function makeConformanceApp(
     seedIncorporatedReview,
     seedReadyReview,
     seedIncorporatedClarityReview,
-    seedBlueprint,
     onboarding: () => makeOnboardingProbe(container),
     localModelEndpoints: () => {
       const svc = container.localModelEndpoints

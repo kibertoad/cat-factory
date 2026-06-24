@@ -42,8 +42,6 @@ import type { RunnerPoolConnectionRepository } from '@cat-factory/kernel'
 import type { BootstrapJobRepository, ReferenceArchitectureRepository } from '@cat-factory/kernel'
 import type { RepoBootstrapper } from '@cat-factory/kernel'
 import type { BootstrapRunner } from '@cat-factory/kernel'
-import type { RepoBlueprintRepository } from '@cat-factory/kernel'
-import type { RepoScanner } from '@cat-factory/kernel'
 import type { RequirementReviewRepository } from '@cat-factory/kernel'
 import type { ClarityReviewRepository } from '@cat-factory/kernel'
 import type { SubscriptionActivationRepository } from '@cat-factory/kernel'
@@ -321,15 +319,6 @@ export interface CoreDependencies {
   /** Durably drives a bootstrap run's poll loop; without it, runs aren't auto-driven. */
   bootstrapRunner?: BootstrapRunner
 
-  // ---- Board scan ("scan repository" → blueprint) -------------------------
-  // Blueprint reads assemble whenever the repository is present (the worker wires
-  // it unconditionally). Actually *running* a scan also needs `repoScanner` — the
-  // GitHub + sandbox-container machinery — which the worker wires only when those
-  // prerequisites are met; without it the module still serves the persisted
-  // blueprints but reports the scan path as unavailable.
-  repoBlueprintRepository?: RepoBlueprintRepository
-  repoScanner?: RepoScanner
-
   // ---- Requirements review (stateless reviewer agent) ---------------------
   // The review feature assembles whenever its repository is present (the worker
   // wires it unconditionally). The LLM is optional *within* the module: reads of
@@ -505,11 +494,6 @@ export interface BootstrapModule {
   service: BootstrapService
 }
 
-/** The board-scan feature's service, present only when its repository is wired. */
-export interface BoardScanModule {
-  service: BoardScanService
-}
-
 /** The requirements-review feature's service, present only when its repository is wired. */
 export interface RequirementsModule {
   service: RequirementReviewService
@@ -607,8 +591,6 @@ export interface Core {
   runners?: RunnersModule
   /** Present only when the repo-bootstrap repositories are wired (see CoreDependencies). */
   bootstrap?: BootstrapModule
-  /** Present only when the board-scan repository is wired (see CoreDependencies). */
-  boardScan?: BoardScanModule
   /** Present only when the requirements-review repository is wired (see CoreDependencies). */
   requirements?: RequirementsModule
   /** Present only when the clarity-review repository is wired (see CoreDependencies). */
@@ -915,32 +897,6 @@ function createBootstrapModule(
     bootstrapRunner: deps.bootstrapRunner,
     eventPublisher,
     ...(onBootstrapSucceeded ? { onBootstrapSucceeded } : {}),
-  })
-  return { service }
-}
-
-/**
- * Assemble the board-scan module when its blueprint repository is present (the
- * worker wires it unconditionally). The `repoScanner` is passed through but
- * optional: the service serves the persisted blueprints regardless and only gates
- * the scan path on its presence.
- */
-function createBoardScanModule(
-  deps: CoreDependencies,
-  boardService: BoardService,
-): BoardScanModule | undefined {
-  const { repoBlueprintRepository } = deps
-  if (!repoBlueprintRepository) return undefined
-
-  const service = new BoardScanService({
-    repoBlueprintRepository,
-    workspaceRepository: deps.workspaceRepository,
-    boardService,
-    blockRepository: deps.blockRepository,
-    idGenerator: deps.idGenerator,
-    clock: deps.clock,
-    repoScanner: deps.repoScanner,
-    repoProjectionRepository: deps.repoProjectionRepository,
   })
   return { service }
 }
@@ -1264,9 +1220,13 @@ export function createCore(dependencies: CoreDependencies): Core {
   const environments = createEnvironmentsModule(dependencies)
   const fragmentLibrary = createFragmentLibraryModule(dependencies)
 
-  // Built before the execution engine so a `blueprints` step can reconcile its
-  // decomposition onto the board through it (when the module is configured).
-  const boardScan = createBoardScanModule(dependencies, boardService)
+  // Reconciles a `blueprints` step's decomposition onto the board. Needs only the
+  // board service + block repository (both always present), so it is wired
+  // unconditionally — there is no standalone scan command or persisted blueprint store.
+  const blueprintReconciler = new BoardScanService({
+    boardService,
+    blockRepository: dependencies.blockRepository,
+  })
   // Built before the execution engine so it can raise merge-review / CI-failed /
   // pipeline-complete notifications during a run (when the module is configured).
   const notifications = createNotificationsModule(dependencies)
@@ -1289,7 +1249,7 @@ export function createCore(dependencies: CoreDependencies): Core {
     requirementReviewService: requirements?.service,
     clarityReviewService: clarity?.service,
     environmentProvisioning: environments?.provisioningService,
-    blueprintReconciler: boardScan?.service,
+    blueprintReconciler,
     notificationService: notifications?.service,
     llmObservability,
     ticketTrackerProvider: dependencies.ticketTrackerProvider,
@@ -1335,7 +1295,6 @@ export function createCore(dependencies: CoreDependencies): Core {
     ...(environments ? { environments } : {}),
     ...(runners ? { runners } : {}),
     ...(bootstrap ? { bootstrap } : {}),
-    ...(boardScan ? { boardScan } : {}),
     ...(requirements ? { requirements } : {}),
     ...(clarity ? { clarity } : {}),
     ...(notifications ? { notifications } : {}),
