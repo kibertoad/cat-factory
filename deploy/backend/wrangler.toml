@@ -331,9 +331,10 @@ ENVIRONMENTS_ENABLED = "false"
 # pool can stand in for the EXEC_CONTAINER binding as the mandatory runner backend.
 # Its scheduler secrets are sealed with the shared ENCRYPTION_KEY above.
 RUNNERS_ENABLED = "false"
-# Trusted-operator escape hatch: let the pool scheduler API live on an internal/VPN host
-# (shares one policy with ENVIRONMENTS_ALLOW_*). Leave unset for the strict public-https
-# default. See backend/docs/runner-pool-integration.md §6.
+# Trusted-operator escape hatch: let the pool scheduler API live on an internal/VPN host.
+# Scoped independently of ENVIRONMENTS_ALLOW_* (a host allowed here is NOT reachable by the
+# env provider). Leave unset for the strict public-https default.
+# See backend/docs/runner-pool-integration.md §6.
 # RUNNERS_ALLOW_URL_HOSTS = "pool.corp.internal"
 # RUNNERS_ALLOW_HTTP_URLS = "false"
 

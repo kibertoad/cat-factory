@@ -510,11 +510,12 @@ Concrete tips for each:
   | `RUNNERS_ALLOW_HTTP_URLS`           | `true` to also permit `http` (not just `https`).                       |
 
   Only the listed hosts are exempted; everything else stays strict, and embedded URL
-  credentials remain forbidden. This shares one policy with the
+  credentials remain forbidden. This policy is scoped to the runner pool **only** —
+  it is resolved independently of the
   [environment integration](./environments-integration.md)'s `ENVIRONMENTS_ALLOW_URL_HOSTS`
-  / `ENVIRONMENTS_ALLOW_HTTP_URLS`, so a host allowed for one is allowed for the
-  other — set only what you need. Leave unset (the default) to keep the strict
-  public-https guard.
+  / `ENVIRONMENTS_ALLOW_HTTP_URLS`, so a host you allow here is **not** reachable by the
+  environment provider (and vice versa). Set each integration's allow-list to exactly
+  what it needs. Leave unset (the default) to keep the strict public-https guard.
 
 ---
 

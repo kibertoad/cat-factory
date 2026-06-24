@@ -280,8 +280,10 @@ embedded URL credentials are forbidden regardless. Leave both unset (the default
 keep the strict public-https guard everywhere.
 
 > The runner-pool integration has the matching `RUNNERS_ALLOW_URL_HOSTS` /
-> `RUNNERS_ALLOW_HTTP_URLS` knobs. The two are merged into one policy, so a host
-> allowed for one integration is allowed for the other — set only what you need.
+> `RUNNERS_ALLOW_HTTP_URLS` knobs. The two integrations are scoped **independently** —
+> each resolves its own policy from its own settings, so a host you allow here does
+> **not** become reachable by the runner pool (and vice versa). Set each one's
+> allow-list to exactly what that integration needs.
 
 ## Registering a provider
 
