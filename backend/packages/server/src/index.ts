@@ -149,7 +149,7 @@ export type {
   AgentsConfig,
   AppConfig,
   AuthConfig,
-  DatadogConfig,
+  ReleaseHealthConfig,
   IncidentEnrichmentConfig,
   DocumentsConfig,
   EmailConfig,

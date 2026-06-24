@@ -29,15 +29,7 @@ const AGENT_KINDS: AgentKind[] = [
   'business-documenter',
   'business-reviewer',
 ]
-const BLOCK_TYPES: BlockType[] = [
-  'frontend',
-  'service',
-  'api',
-  'database',
-  'queue',
-  'integration',
-  'external',
-]
+const BLOCK_TYPES: BlockType[] = ['frontend', 'service', 'api', 'database', 'queue', 'integration']
 const BLOCK_STATUSES: BlockStatus[] = [
   'planned',
   'ready',

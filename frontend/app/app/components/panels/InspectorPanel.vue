@@ -6,6 +6,7 @@ import TaskContextIssues from '~/components/tasks/TaskContextIssues.vue'
 import TaskAgentConfig from '~/components/panels/inspector/TaskAgentConfig.vue'
 import ServiceTestConfig from '~/components/panels/inspector/ServiceTestConfig.vue'
 import ServiceFragments from '~/components/panels/inspector/ServiceFragments.vue'
+import ServiceReleaseHealthConfig from '~/components/panels/inspector/ServiceReleaseHealthConfig.vue'
 import ContainerSummary from '~/components/panels/inspector/ContainerSummary.vue'
 import TaskDependencies from '~/components/panels/inspector/TaskDependencies.vue'
 import TaskStructure from '~/components/panels/inspector/TaskStructure.vue'
@@ -412,6 +413,9 @@ const showOriginalDescription = ref(false)
 
       <!-- service (frame): best-practice fragments for code-aware agents -->
       <ServiceFragments v-if="isFrame" :block="block" />
+
+      <!-- service (frame): post-release-health monitor/SLO mapping -->
+      <ServiceReleaseHealthConfig v-if="isFrame" :block="block" />
 
       <!-- task: dependencies, structure, agent config, run settings, execution -->
       <template v-else-if="isTask">

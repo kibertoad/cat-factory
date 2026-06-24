@@ -1,11 +1,10 @@
 <script setup lang="ts">
 // The command bar (⌘K / Ctrl+K) — a searchable launcher for every action that
-// used to live as a button or draggable in the left panel. It is the primary way
-// to create blocks and pipelines now that the draggable palettes are gone, and a
-// fast path to every integration / settings surface. Commands are assembled from
-// the live stores so only available actions (connected integrations, etc.) show.
-import type { BlockType } from '~/types/domain'
-import { BLOCK_TYPE_META } from '~/utils/catalog'
+// used to live as a button or draggable in the left panel. It is a fast path to
+// pipelines, repositories, every integration and the settings surfaces. (Raw
+// block creation is gone — services come from Bootstrap / Add-from-repo and tasks
+// from the add-task flow.) Commands are assembled from the live stores so only
+// available actions (connected integrations, etc.) show.
 
 interface Command {
   id: string
@@ -18,7 +17,6 @@ interface Command {
 }
 
 const ui = useUiStore()
-const board = useBoardStore()
 const github = useGitHubStore()
 const slack = useSlackStore()
 const documents = useDocumentsStore()
@@ -33,19 +31,6 @@ const open = computed({
 const query = ref('')
 const activeIndex = ref(0)
 
-// New top-level blocks are created without a drop position now, so stagger each
-// one slightly off the canvas origin to keep them from stacking exactly.
-let spawnCount = 0
-function spawnPosition() {
-  const offset = (spawnCount++ % 6) * 28
-  return { x: 160 + offset, y: 160 + offset }
-}
-
-async function addBlock(type: BlockType) {
-  const block = await board.addBlock(type, spawnPosition())
-  ui.select(block.id)
-}
-
 const commands = computed<Command[]>(() => {
   const list: Command[] = []
 
@@ -58,17 +43,6 @@ const commands = computed<Command[]>(() => {
     keywords: 'pipeline agents chain',
     run: () => ui.openBuilder(),
   })
-  for (const type of Object.keys(BLOCK_TYPE_META) as BlockType[]) {
-    const meta = BLOCK_TYPE_META[type]
-    list.push({
-      id: `add-block-${type}`,
-      label: `Add ${meta.label} block`,
-      group: 'Create',
-      icon: meta.icon,
-      keywords: 'block frame service create new',
-      run: () => addBlock(type),
-    })
-  }
 
   // ---- Repositories -------------------------------------------------------
   if (github.available) {
@@ -173,7 +147,7 @@ const commands = computed<Command[]>(() => {
     group: 'Workspace',
     icon: 'i-lucide-git-merge',
     keywords: 'merge policy preset auto-merge ci',
-    run: () => ui.openMergeThresholds(),
+    run: () => ui.openWorkspaceSettings('merge'),
   })
   list.push({
     id: 'workspace-settings',
@@ -197,7 +171,7 @@ const commands = computed<Command[]>(() => {
     group: 'Workspace',
     icon: 'i-lucide-book-open-check',
     keywords: 'fragment best practice guideline service default code-aware',
-    run: () => ui.openServiceFragmentDefaults(),
+    run: () => ui.openWorkspaceSettings('fragments'),
   })
   list.push({
     id: 'local-models',

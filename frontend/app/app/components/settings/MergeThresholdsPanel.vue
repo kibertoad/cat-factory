@@ -15,14 +15,8 @@ const CONCERN_LEVELS: { value: RequirementConcernLevel; label: string }[] = [
   { value: 'high', label: 'High (never stop)' },
 ]
 
-const ui = useUiStore()
 const store = useMergePresetsStore()
 const toast = useToast()
-
-const open = computed({
-  get: () => ui.mergeThresholdsOpen,
-  set: (v: boolean) => (v ? ui.openMergeThresholds() : ui.closeMergeThresholds()),
-})
 
 // Local editable copy per preset, kept in sync with the store. Percentages are
 // edited 0..100 and stored 0..1.
@@ -149,230 +143,199 @@ async function create() {
 </script>
 
 <template>
-  <UModal v-model:open="open" title="Merge thresholds" :ui="{ content: 'max-w-2xl' }">
-    <template #body>
-      <div class="space-y-4">
-        <p class="text-xs text-slate-400">
-          Named auto-merge policies a task can choose. After CI passes, the
-          <span class="text-slate-300">merger</span> agent scores the PR on complexity, risk and
-          impact (0–100%); the PR auto-merges only when every score is at or below the preset's
-          ceilings — otherwise a review notification is raised. The default preset governs any task
-          that picks none.
-        </p>
+  <div class="space-y-4">
+    <p class="text-xs text-slate-400">
+      Named auto-merge policies a task can choose. After CI passes, the
+      <span class="text-slate-300">merger</span> agent scores the PR on complexity, risk and impact
+      (0–100%); the PR auto-merges only when every score is at or below the preset's ceilings —
+      otherwise a review notification is raised. The default preset governs any task that picks
+      none.
+    </p>
 
-        <div
-          v-for="p in store.presets"
-          :key="p.id"
-          class="rounded-lg border border-slate-700 bg-slate-800/40 p-3"
+    <div
+      v-for="p in store.presets"
+      :key="p.id"
+      class="rounded-lg border border-slate-700 bg-slate-800/40 p-3"
+    >
+      <div class="mb-3 flex items-center gap-2">
+        <UInput v-model="drafts[p.id]!.name" size="sm" class="flex-1" placeholder="Preset name" />
+        <UBadge v-if="p.isDefault" color="primary" variant="subtle" size="sm">Default</UBadge>
+        <UButton
+          v-else
+          color="neutral"
+          variant="ghost"
+          size="xs"
+          icon="i-lucide-star"
+          :loading="busy === p.id"
+          @click="makeDefault(p)"
         >
-          <div class="mb-3 flex items-center gap-2">
-            <UInput
-              v-model="drafts[p.id]!.name"
-              size="sm"
-              class="flex-1"
-              placeholder="Preset name"
-            />
-            <UBadge v-if="p.isDefault" color="primary" variant="subtle" size="sm">Default</UBadge>
-            <UButton
-              v-else
-              color="neutral"
-              variant="ghost"
-              size="xs"
-              icon="i-lucide-star"
-              :loading="busy === p.id"
-              @click="makeDefault(p)"
-            >
-              Make default
-            </UButton>
-            <UButton
-              color="error"
-              variant="ghost"
-              size="xs"
-              icon="i-lucide-trash-2"
-              :disabled="p.isDefault || busy === p.id"
-              :title="p.isDefault ? 'The default preset cannot be deleted' : 'Delete preset'"
-              @click="remove(p)"
-            />
-          </div>
-
-          <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <label class="block">
-              <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
-                Max complexity %
-              </span>
-              <UInput
-                v-model.number="drafts[p.id]!.maxComplexity"
-                type="number"
-                :min="0"
-                :max="100"
-                size="sm"
-              />
-            </label>
-            <label class="block">
-              <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
-                Max risk %
-              </span>
-              <UInput
-                v-model.number="drafts[p.id]!.maxRisk"
-                type="number"
-                :min="0"
-                :max="100"
-                size="sm"
-              />
-            </label>
-            <label class="block">
-              <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
-                Max impact %
-              </span>
-              <UInput
-                v-model.number="drafts[p.id]!.maxImpact"
-                type="number"
-                :min="0"
-                :max="100"
-                size="sm"
-              />
-            </label>
-            <label class="block">
-              <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
-                CI-fix attempts
-              </span>
-              <UInput
-                v-model.number="drafts[p.id]!.ciMaxAttempts"
-                type="number"
-                :min="0"
-                :max="50"
-                size="sm"
-              />
-            </label>
-            <label class="block">
-              <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
-                Requirement iterations
-              </span>
-              <UInput
-                v-model.number="drafts[p.id]!.maxRequirementIterations"
-                type="number"
-                :min="1"
-                :max="20"
-                size="sm"
-              />
-            </label>
-            <label class="block">
-              <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
-                Auto-pass concerns ≤
-              </span>
-              <USelect
-                v-model="drafts[p.id]!.maxRequirementConcernAllowed"
-                :items="CONCERN_LEVELS"
-                value-key="value"
-                size="sm"
-              />
-            </label>
-          </div>
-
-          <div class="mt-3 flex justify-end">
-            <UButton
-              color="primary"
-              variant="soft"
-              size="xs"
-              icon="i-lucide-save"
-              :loading="busy === p.id"
-              @click="save(p)"
-            >
-              Save
-            </UButton>
-          </div>
-        </div>
-
-        <!-- create -->
-        <div class="rounded-lg border border-dashed border-slate-700 p-3">
-          <p class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-            New preset
-          </p>
-          <div class="flex flex-wrap items-end gap-3">
-            <label class="block min-w-40 flex-1">
-              <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500"
-                >Name</span
-              >
-              <UInput v-model="draft.name" size="sm" placeholder="e.g. Cautious" />
-            </label>
-            <label class="block w-20">
-              <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500"
-                >Cmplx%</span
-              >
-              <UInput
-                v-model.number="draft.maxComplexity"
-                type="number"
-                :min="0"
-                :max="100"
-                size="sm"
-              />
-            </label>
-            <label class="block w-20">
-              <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500"
-                >Risk%</span
-              >
-              <UInput v-model.number="draft.maxRisk" type="number" :min="0" :max="100" size="sm" />
-            </label>
-            <label class="block w-20">
-              <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500"
-                >Impact%</span
-              >
-              <UInput
-                v-model.number="draft.maxImpact"
-                type="number"
-                :min="0"
-                :max="100"
-                size="sm"
-              />
-            </label>
-            <label class="block w-20">
-              <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500"
-                >CI-fix</span
-              >
-              <UInput
-                v-model.number="draft.ciMaxAttempts"
-                type="number"
-                :min="0"
-                :max="50"
-                size="sm"
-              />
-            </label>
-            <label class="block w-20">
-              <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500"
-                >Req iter</span
-              >
-              <UInput
-                v-model.number="draft.maxRequirementIterations"
-                type="number"
-                :min="1"
-                :max="20"
-                size="sm"
-              />
-            </label>
-            <label class="block w-32">
-              <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500"
-                >Auto-pass ≤</span
-              >
-              <USelect
-                v-model="draft.maxRequirementConcernAllowed"
-                :items="CONCERN_LEVELS"
-                value-key="value"
-                size="sm"
-              />
-            </label>
-            <UButton
-              color="primary"
-              size="sm"
-              icon="i-lucide-plus"
-              :loading="creating"
-              :disabled="!draft.name.trim()"
-              @click="create"
-            >
-              Add
-            </UButton>
-          </div>
-        </div>
+          Make default
+        </UButton>
+        <UButton
+          color="error"
+          variant="ghost"
+          size="xs"
+          icon="i-lucide-trash-2"
+          :disabled="p.isDefault || busy === p.id"
+          :title="p.isDefault ? 'The default preset cannot be deleted' : 'Delete preset'"
+          @click="remove(p)"
+        />
       </div>
-    </template>
-  </UModal>
+
+      <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <label class="block">
+          <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
+            Max complexity %
+          </span>
+          <UInput
+            v-model.number="drafts[p.id]!.maxComplexity"
+            type="number"
+            :min="0"
+            :max="100"
+            size="sm"
+          />
+        </label>
+        <label class="block">
+          <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
+            Max risk %
+          </span>
+          <UInput
+            v-model.number="drafts[p.id]!.maxRisk"
+            type="number"
+            :min="0"
+            :max="100"
+            size="sm"
+          />
+        </label>
+        <label class="block">
+          <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
+            Max impact %
+          </span>
+          <UInput
+            v-model.number="drafts[p.id]!.maxImpact"
+            type="number"
+            :min="0"
+            :max="100"
+            size="sm"
+          />
+        </label>
+        <label class="block">
+          <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
+            CI-fix attempts
+          </span>
+          <UInput
+            v-model.number="drafts[p.id]!.ciMaxAttempts"
+            type="number"
+            :min="0"
+            :max="50"
+            size="sm"
+          />
+        </label>
+        <label class="block">
+          <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
+            Requirement iterations
+          </span>
+          <UInput
+            v-model.number="drafts[p.id]!.maxRequirementIterations"
+            type="number"
+            :min="1"
+            :max="20"
+            size="sm"
+          />
+        </label>
+        <label class="block">
+          <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
+            Auto-pass concerns ≤
+          </span>
+          <USelect
+            v-model="drafts[p.id]!.maxRequirementConcernAllowed"
+            :items="CONCERN_LEVELS"
+            value-key="value"
+            size="sm"
+          />
+        </label>
+      </div>
+
+      <div class="mt-3 flex justify-end">
+        <UButton
+          color="primary"
+          variant="soft"
+          size="xs"
+          icon="i-lucide-save"
+          :loading="busy === p.id"
+          @click="save(p)"
+        >
+          Save
+        </UButton>
+      </div>
+    </div>
+
+    <!-- create -->
+    <div class="rounded-lg border border-dashed border-slate-700 p-3">
+      <p class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+        New preset
+      </p>
+      <div class="flex flex-wrap items-end gap-3">
+        <label class="block min-w-40 flex-1">
+          <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">Name</span>
+          <UInput v-model="draft.name" size="sm" placeholder="e.g. Cautious" />
+        </label>
+        <label class="block w-20">
+          <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">Cmplx%</span>
+          <UInput
+            v-model.number="draft.maxComplexity"
+            type="number"
+            :min="0"
+            :max="100"
+            size="sm"
+          />
+        </label>
+        <label class="block w-20">
+          <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">Risk%</span>
+          <UInput v-model.number="draft.maxRisk" type="number" :min="0" :max="100" size="sm" />
+        </label>
+        <label class="block w-20">
+          <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">Impact%</span>
+          <UInput v-model.number="draft.maxImpact" type="number" :min="0" :max="100" size="sm" />
+        </label>
+        <label class="block w-20">
+          <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">CI-fix</span>
+          <UInput v-model.number="draft.ciMaxAttempts" type="number" :min="0" :max="50" size="sm" />
+        </label>
+        <label class="block w-20">
+          <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500"
+            >Req iter</span
+          >
+          <UInput
+            v-model.number="draft.maxRequirementIterations"
+            type="number"
+            :min="1"
+            :max="20"
+            size="sm"
+          />
+        </label>
+        <label class="block w-32">
+          <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500"
+            >Auto-pass ≤</span
+          >
+          <USelect
+            v-model="draft.maxRequirementConcernAllowed"
+            :items="CONCERN_LEVELS"
+            value-key="value"
+            size="sm"
+          />
+        </label>
+        <UButton
+          color="primary"
+          size="sm"
+          icon="i-lucide-plus"
+          :loading="creating"
+          :disabled="!draft.name.trim()"
+          @click="create"
+        >
+          Add
+        </UButton>
+      </div>
+    </div>
+  </div>
 </template>

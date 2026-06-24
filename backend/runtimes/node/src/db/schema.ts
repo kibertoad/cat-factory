@@ -757,14 +757,15 @@ export const mergeThresholdPresets = pgTable(
   ],
 )
 
-// Post-release-health gate (Datadog). One connection per workspace (mirror of D1
-// migration 0003's `datadog_connections`). `api_key`/`app_key` are sealed at rest by
-// the facade's SecretCipher (domain tag 'cat-factory:datadog'); plaintext only in memory.
-export const datadogConnections = pgTable('datadog_connections', {
+// Post-release-health gate (pluggable observability — Datadog today). One connection per
+// workspace (mirror of D1 migration 0007's `observability_connections`). `credentials` is a
+// sealed JSON blob of the provider-specific secret (domain tag 'cat-factory:observability');
+// `summary` is a non-secret display blob. Plaintext credentials only in memory.
+export const observabilityConnections = pgTable('observability_connections', {
   workspace_id: text('workspace_id').primaryKey(),
-  site: text('site').notNull(),
-  api_key: text('api_key').notNull(),
-  app_key: text('app_key').notNull(),
+  provider: text('provider').notNull(),
+  credentials: text('credentials').notNull(),
+  summary: text('summary').notNull().default('{}'),
   created_at: bigint('created_at', { mode: 'number' }).notNull(),
   updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
 })

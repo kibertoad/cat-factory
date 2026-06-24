@@ -396,12 +396,6 @@ export const BLOCK_TYPE_META: Record<BlockType, { label: string; icon: string; a
     icon: 'i-lucide-workflow',
     accent: '#fb923c',
   },
-  external: { label: 'External', icon: 'i-lucide-globe', accent: '#94a3b8' },
-  environment: {
-    label: 'Environment',
-    icon: 'i-lucide-container',
-    accent: '#2dd4bf',
-  },
 }
 
 /** Color + iconography for each block status. */

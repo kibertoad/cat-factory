@@ -218,20 +218,29 @@ export {
   type PoolRotationRecord,
 } from './modules/providers/providers.logic.js'
 
-// Datadog post-release-health: the release-health provider the gate reads + its thin
-// fetch client, plus the optional incident-enrichment providers (PagerDuty / incident.io)
-// that annotate — never re-alert — an incident those systems already opened.
+// Post-release-health: the pluggable observability provider the gate reads (a registry
+// of vendor adapters — Datadog today) + the Datadog adapter / thin fetch client, plus the
+// optional incident-enrichment providers (PagerDuty / incident.io) that annotate — never
+// re-alert — an incident those systems already opened.
 export {
-  DatadogReleaseHealthProvider,
-  type DatadogReleaseHealthProviderDependencies,
-} from './modules/datadog/DatadogReleaseHealthProvider.js'
+  RegistryReleaseHealthProvider,
+  type RegistryReleaseHealthProviderDependencies,
+  type ObservabilityAdapter,
+  type ObservabilityAdapterFactory,
+  type ObservabilityProviderRegistry,
+} from './modules/observability/RegistryReleaseHealthProvider.js'
+export { defaultObservabilityRegistry } from './modules/observability/registry.js'
+export {
+  DatadogObservabilityAdapter,
+  type DatadogCredentialsShape,
+} from './modules/datadog/DatadogObservabilityAdapter.js'
 export {
   DatadogClient,
   type DatadogCredentials,
   type DatadogClientOptions,
 } from './modules/datadog/DatadogClient.js'
 export {
-  DATADOG_CIPHER_INFO,
+  OBSERVABILITY_CIPHER_INFO,
   DatadogApiError,
   normalizeDatadogSite,
   datadogApiBase,

@@ -58,7 +58,7 @@ import type {
   PullRequestMergeabilityProvider,
   ReleaseHealthProvider,
   IncidentEnrichmentProvider,
-  DatadogConnectionRepository,
+  ObservabilityConnectionRepository,
   ReleaseHealthConfigRepository,
   TicketTrackerProvider,
   IssueWritebackProvider,
@@ -422,12 +422,12 @@ export interface CoreDependencies {
   releaseHealthProvider?: ReleaseHealthProvider
   /** Annotates an open PagerDuty/incident.io incident with the on-call investigation. */
   incidentEnrichment?: IncidentEnrichmentProvider
-  /** Stores a workspace's Datadog connection (sealed keys) for the post-release-health gate. */
-  datadogConnectionRepository?: DatadogConnectionRepository
+  /** Stores a workspace's observability connection (provider + sealed credentials). */
+  observabilityConnectionRepository?: ObservabilityConnectionRepository
   /** Stores per-block monitor/SLO mappings the post-release-health gate reads. */
   releaseHealthConfigRepository?: ReleaseHealthConfigRepository
-  /** Seals Datadog credentials at rest (domain tag 'cat-factory:datadog'). */
-  datadogSecretCipher?: SecretCipher
+  /** Seals observability credentials at rest (domain tag 'cat-factory:observability'). */
+  observabilitySecretCipher?: SecretCipher
   /** Resolves a task's merge threshold preset (auto-merge ceilings + CI attempt budget). */
   mergePresetRepository?: MergePresetRepository
   /**
@@ -1151,16 +1151,24 @@ function createWorkspaceSettingsModule(
   return { service }
 }
 
-/** Assemble the release-health (Datadog) module when its repos + cipher are present. */
+/** Assemble the release-health (observability) module when its repos + cipher are present. */
 function createReleaseHealthModule(deps: CoreDependencies): ReleaseHealthModule | undefined {
-  const { datadogConnectionRepository, releaseHealthConfigRepository, datadogSecretCipher } = deps
-  if (!datadogConnectionRepository || !releaseHealthConfigRepository || !datadogSecretCipher) {
+  const {
+    observabilityConnectionRepository,
+    releaseHealthConfigRepository,
+    observabilitySecretCipher,
+  } = deps
+  if (
+    !observabilityConnectionRepository ||
+    !releaseHealthConfigRepository ||
+    !observabilitySecretCipher
+  ) {
     return undefined
   }
   const service = new ReleaseHealthService({
-    datadogConnectionRepository,
+    observabilityConnectionRepository,
     releaseHealthConfigRepository,
-    datadogSecretCipher,
+    observabilitySecretCipher,
     workspaceRepository: deps.workspaceRepository,
     blockRepository: deps.blockRepository,
     clock: deps.clock,

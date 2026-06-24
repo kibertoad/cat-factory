@@ -35,15 +35,7 @@ export type BlockStatus =
   | 'done' // PR merged, implementation complete
 
 /** Kind of architecture building block (drives icon + accent). */
-export type BlockType =
-  | 'frontend'
-  | 'service'
-  | 'api'
-  | 'database'
-  | 'queue'
-  | 'integration'
-  | 'external'
-  | 'environment'
+export type BlockType = 'frontend' | 'service' | 'api' | 'database' | 'queue' | 'integration'
 
 /**
  * Where a block sits in the granularity hierarchy. Both `frame` and `module`

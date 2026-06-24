@@ -23,8 +23,9 @@ import type {
   MembershipRepository,
   MergePresetRepository,
   MergeThresholdPreset,
-  DatadogConnectionRecord,
-  DatadogConnectionRepository,
+  ObservabilityConnectionRecord,
+  ObservabilityConnectionRepository,
+  ObservabilityProviderKind,
   ReleaseHealthConfigRecord,
   ReleaseHealthConfigRepository,
   ModelDefaultsRepository,
@@ -90,7 +91,7 @@ import {
   agentRuns,
   blocks,
   consensusSessions,
-  datadogConnections,
+  observabilityConnections,
   emailConnections,
   llmCallMetrics,
   memberships,
@@ -2180,56 +2181,59 @@ export class DrizzleWorkspaceSettingsRepository implements WorkspaceSettingsRepo
 }
 
 /**
- * A workspace's Datadog connection over Postgres (the Drizzle mirror of the Worker's
- * `D1DatadogConnectionRepository`, migration 0003). One row per workspace; the keys are
- * stored as sealed envelopes (encrypted by the caller).
+ * A workspace's observability connection over Postgres (the Drizzle mirror of the Worker's
+ * `D1ObservabilityConnectionRepository`, migration 0007). One row per workspace; the
+ * provider-specific credentials are stored as a sealed JSON blob (encrypted by the caller),
+ * with a non-secret `summary` blob for display.
  */
-export class DrizzleDatadogConnectionRepository implements DatadogConnectionRepository {
+export class DrizzleObservabilityConnectionRepository implements ObservabilityConnectionRepository {
   constructor(private readonly db: DrizzleDb) {}
 
-  async get(workspaceId: string): Promise<DatadogConnectionRecord | null> {
+  async get(workspaceId: string): Promise<ObservabilityConnectionRecord | null> {
     const rows = await this.db
       .select()
-      .from(datadogConnections)
-      .where(eq(datadogConnections.workspace_id, workspaceId))
+      .from(observabilityConnections)
+      .where(eq(observabilityConnections.workspace_id, workspaceId))
       .limit(1)
     const row = rows[0]
     if (!row) return null
     return {
       workspaceId: row.workspace_id,
-      site: row.site,
-      apiKey: row.api_key,
-      appKey: row.app_key,
+      provider: row.provider as ObservabilityProviderKind,
+      credentials: row.credentials,
+      summary: row.summary,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     }
   }
 
-  async upsert(record: DatadogConnectionRecord): Promise<void> {
+  async upsert(record: ObservabilityConnectionRecord): Promise<void> {
     const values = {
       workspace_id: record.workspaceId,
-      site: record.site,
-      api_key: record.apiKey,
-      app_key: record.appKey,
+      provider: record.provider,
+      credentials: record.credentials,
+      summary: record.summary,
       created_at: record.createdAt,
       updated_at: record.updatedAt,
     }
     await this.db
-      .insert(datadogConnections)
+      .insert(observabilityConnections)
       .values(values)
       .onConflictDoUpdate({
-        target: datadogConnections.workspace_id,
+        target: observabilityConnections.workspace_id,
         set: {
-          site: values.site,
-          api_key: values.api_key,
-          app_key: values.app_key,
+          provider: values.provider,
+          credentials: values.credentials,
+          summary: values.summary,
           updated_at: values.updated_at,
         },
       })
   }
 
   async delete(workspaceId: string): Promise<void> {
-    await this.db.delete(datadogConnections).where(eq(datadogConnections.workspace_id, workspaceId))
+    await this.db
+      .delete(observabilityConnections)
+      .where(eq(observabilityConnections.workspace_id, workspaceId))
   }
 }
 
@@ -2349,7 +2353,7 @@ export interface CoreRepositories {
   clarityReviewRepository: ClarityReviewRepository
   mergePresetRepository: MergePresetRepository
   workspaceSettingsRepository: WorkspaceSettingsRepository
-  datadogConnectionRepository: DatadogConnectionRepository
+  observabilityConnectionRepository: ObservabilityConnectionRepository
   releaseHealthConfigRepository: ReleaseHealthConfigRepository
 }
 
@@ -2379,7 +2383,7 @@ export function createDrizzleRepositories(db: DrizzleDb, clock: Clock): CoreRepo
     clarityReviewRepository: new DrizzleClarityReviewRepository(db),
     mergePresetRepository: new DrizzleMergePresetRepository(db),
     workspaceSettingsRepository: new DrizzleWorkspaceSettingsRepository(db),
-    datadogConnectionRepository: new DrizzleDatadogConnectionRepository(db),
+    observabilityConnectionRepository: new DrizzleObservabilityConnectionRepository(db),
     releaseHealthConfigRepository: new DrizzleReleaseHealthConfigRepository(db),
   }
 }

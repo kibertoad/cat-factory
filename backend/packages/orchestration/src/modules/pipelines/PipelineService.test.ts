@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { ValidationError } from '@cat-factory/kernel'
 import type {
-  DatadogConnectionRecord,
-  DatadogConnectionRepository,
+  ObservabilityConnectionRecord,
+  ObservabilityConnectionRepository,
   IdGenerator,
   Pipeline,
   PipelineRepository,
@@ -36,18 +36,18 @@ let counter = 0
 const idGenerator: IdGenerator = { next: (prefix = 'id') => `${prefix}_${++counter}` }
 
 /** A connection repo that reports either a wired or an unwired workspace. */
-function datadogRepo(connected: boolean): DatadogConnectionRepository {
+function observabilityRepo(connected: boolean): ObservabilityConnectionRepository {
   return {
     get: async (workspaceId) =>
       connected
         ? ({
             workspaceId,
-            site: 'datadoghq.com',
-            apiKey: 'a',
-            appKey: 'b',
+            provider: 'datadog',
+            credentials: 'sealed',
+            summary: JSON.stringify({ site: 'datadoghq.com' }),
             createdAt: 0,
             updatedAt: 0,
-          } as DatadogConnectionRecord)
+          } as ObservabilityConnectionRecord)
         : null,
     upsert: async () => {},
     delete: async () => {},
@@ -60,7 +60,7 @@ describe('PipelineService — post-release-health observability gate', () => {
       workspaceRepository: workspaceRepo(),
       pipelineRepository: pipelineRepo(),
       idGenerator,
-      // datadogConnectionRepository intentionally absent → no integration possible.
+      // observabilityConnectionRepository intentionally absent → no integration possible.
     })
     await expect(
       svc.create(WS, { name: 'Ship + watch', agentKinds: ['coder', 'post-release-health'] }),
@@ -72,7 +72,7 @@ describe('PipelineService — post-release-health observability gate', () => {
       workspaceRepository: workspaceRepo(),
       pipelineRepository: pipelineRepo(),
       idGenerator,
-      datadogConnectionRepository: datadogRepo(false),
+      observabilityConnectionRepository: observabilityRepo(false),
     })
     await expect(
       svc.create(WS, { name: 'Ship + watch', agentKinds: ['coder', 'post-release-health'] }),
@@ -84,7 +84,7 @@ describe('PipelineService — post-release-health observability gate', () => {
       workspaceRepository: workspaceRepo(),
       pipelineRepository: pipelineRepo(),
       idGenerator,
-      datadogConnectionRepository: datadogRepo(true),
+      observabilityConnectionRepository: observabilityRepo(true),
     })
     const p = await svc.create(WS, {
       name: 'Ship + watch',
@@ -98,7 +98,7 @@ describe('PipelineService — post-release-health observability gate', () => {
       workspaceRepository: workspaceRepo(),
       pipelineRepository: pipelineRepo(),
       idGenerator,
-      datadogConnectionRepository: datadogRepo(false),
+      observabilityConnectionRepository: observabilityRepo(false),
     })
     const p = await svc.create(WS, {
       name: 'Ship, watch later',
@@ -114,7 +114,7 @@ describe('PipelineService — post-release-health observability gate', () => {
       workspaceRepository: workspaceRepo(),
       pipelineRepository: pipelineRepo(store),
       idGenerator,
-      datadogConnectionRepository: datadogRepo(false),
+      observabilityConnectionRepository: observabilityRepo(false),
     })
     const created = await svc.create(WS, { name: 'Plain', agentKinds: ['coder'] })
     await expect(

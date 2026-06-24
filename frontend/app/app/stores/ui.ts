@@ -64,18 +64,22 @@ export const useUiStore = defineStore('ui', () => {
   // Command bar (⌘K) — searchable launcher for every navbar action.
   const commandBarOpen = ref(false)
 
-  // Workspace-settings panels: merge-threshold preset library + per-agent-kind
-  // default model overrides.
-  const mergeThresholdsOpen = ref(false)
-  // Workspace-settings panel: the run-timing escalation threshold + per-service task limit.
+  // Integrations hub: a single modal listing every external system the workspace
+  // can enable/link (GitHub, Slack, document + task sources, Datadog, LLM vendors,
+  // local runners, OpenRouter). Replaces the per-integration navbar buttons; each
+  // row inside it opens that integration's own panel via the handlers below.
+  const integrationsOpen = ref(false)
+
+  // Workspace-settings modal: a single tabbed window gathering the workspace-wide
+  // config (workspace / merge thresholds / issue writeback / service best practices).
+  // `workspaceSettingsTab` lets other surfaces deep-link straight to a tab.
   const workspaceSettingsOpen = ref(false)
-  const datadogOpen = ref(false)
-  // Workspace-settings panel: issue-tracker writeback toggles (comment on PR open,
-  // close linked issue on merge).
-  const issueWritebackOpen = ref(false)
+  const workspaceSettingsTab = ref('workspace')
+  // Observability integration: the post-release-health connection panel (Datadog
+  // today, pluggable). NB: distinct from `observabilityInstanceId` below, which is the
+  // LLM per-call observability panel.
+  const observabilityConnectionOpen = ref(false)
   const modelDefaultsOpen = ref(false)
-  // Workspace-settings panel: the default service-fragment selection new services inherit.
-  const serviceFragmentDefaultsOpen = ref(false)
   // LLM-vendor subscription credentials (the token pool powering the Claude Code
   // / Codex harnesses).
   const vendorCredentialsOpen = ref(false)
@@ -280,41 +284,33 @@ export const useUiStore = defineStore('ui', () => {
   function toggleCommandBar() {
     commandBarOpen.value = !commandBarOpen.value
   }
-  function openMergeThresholds() {
-    mergeThresholdsOpen.value = true
+  function openIntegrations() {
+    integrationsOpen.value = true
   }
-  function closeMergeThresholds() {
-    mergeThresholdsOpen.value = false
+  function closeIntegrations() {
+    integrationsOpen.value = false
   }
-  function openWorkspaceSettings() {
+  function openWorkspaceSettings(tab = 'workspace') {
+    workspaceSettingsTab.value = tab
     workspaceSettingsOpen.value = true
   }
   function closeWorkspaceSettings() {
     workspaceSettingsOpen.value = false
   }
-  function openIssueWriteback() {
-    issueWritebackOpen.value = true
+  function setWorkspaceSettingsTab(tab: string) {
+    workspaceSettingsTab.value = tab
   }
-  function closeIssueWriteback() {
-    issueWritebackOpen.value = false
+  function openObservabilityConnection() {
+    observabilityConnectionOpen.value = true
   }
-  function openDatadog() {
-    datadogOpen.value = true
-  }
-  function closeDatadog() {
-    datadogOpen.value = false
+  function closeObservabilityConnection() {
+    observabilityConnectionOpen.value = false
   }
   function openModelDefaults() {
     modelDefaultsOpen.value = true
   }
   function closeModelDefaults() {
     modelDefaultsOpen.value = false
-  }
-  function openServiceFragmentDefaults() {
-    serviceFragmentDefaultsOpen.value = true
-  }
-  function closeServiceFragmentDefaults() {
-    serviceFragmentDefaultsOpen.value = false
   }
   function openVendorCredentials() {
     vendorCredentialsOpen.value = true
@@ -376,12 +372,11 @@ export const useUiStore = defineStore('ui', () => {
     slackOpen,
     fragmentLibraryOpen,
     commandBarOpen,
-    mergeThresholdsOpen,
-    issueWritebackOpen,
+    integrationsOpen,
     workspaceSettingsOpen,
-    datadogOpen,
+    workspaceSettingsTab,
+    observabilityConnectionOpen,
     modelDefaultsOpen,
-    serviceFragmentDefaultsOpen,
     vendorCredentialsOpen,
     localModelsOpen,
     openRouterOpen,
@@ -428,18 +423,15 @@ export const useUiStore = defineStore('ui', () => {
     openCommandBar,
     closeCommandBar,
     toggleCommandBar,
-    openMergeThresholds,
-    closeMergeThresholds,
-    openIssueWriteback,
-    closeIssueWriteback,
+    openIntegrations,
+    closeIntegrations,
     openWorkspaceSettings,
     closeWorkspaceSettings,
-    openDatadog,
-    closeDatadog,
+    setWorkspaceSettingsTab,
+    openObservabilityConnection,
+    closeObservabilityConnection,
     openModelDefaults,
     closeModelDefaults,
-    openServiceFragmentDefaults,
-    closeServiceFragmentDefaults,
     openVendorCredentials,
     closeVendorCredentials,
     openLocalModels,

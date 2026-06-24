@@ -1,23 +1,27 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type {
-  DatadogConnectionView,
+  ObservabilityConnectionView,
   ReleaseHealthConfig,
-  UpsertDatadogConnectionInput,
+  UpsertObservabilityConnectionInput,
   UpsertReleaseHealthConfigInput,
 } from '~/types/releaseHealth'
 import { useWorkspaceStore } from '~/stores/workspace'
 
 /**
- * The workspace's Datadog post-release-health settings: the (single) connection — keys
- * are write-only, never read back — and the per-block monitor/SLO mappings the
- * `post-release-health` gate reads. Loaded on demand (the settings panel), not from the
- * snapshot, since the secrets never leave the server.
+ * The workspace's post-release-health settings: the (single) observability connection —
+ * provider + credentials, write-only, never read back — and the per-block monitor/SLO
+ * mappings the `post-release-health` gate reads. Loaded on demand (the observability panel
+ * + the service inspector), not from the snapshot, since the secrets never leave the server.
  */
 export const useReleaseHealthStore = defineStore('releaseHealth', () => {
   const api = useApi()
 
-  const connection = ref<DatadogConnectionView>({ connected: false, site: null })
+  const connection = ref<ObservabilityConnectionView>({
+    connected: false,
+    provider: null,
+    summary: null,
+  })
   const configs = ref<ReleaseHealthConfig[]>([])
   const loading = ref(false)
 
@@ -26,7 +30,7 @@ export const useReleaseHealthStore = defineStore('releaseHealth', () => {
     loading.value = true
     try {
       const [conn, list] = await Promise.all([
-        api.getDatadogConnection(ws.requireId()),
+        api.getObservabilityConnection(ws.requireId()),
         api.listReleaseHealthConfigs(ws.requireId()),
       ])
       connection.value = conn
@@ -36,15 +40,20 @@ export const useReleaseHealthStore = defineStore('releaseHealth', () => {
     }
   }
 
-  async function saveConnection(input: UpsertDatadogConnectionInput) {
+  async function saveConnection(input: UpsertObservabilityConnectionInput) {
     const ws = useWorkspaceStore()
-    connection.value = await api.setDatadogConnection(ws.requireId(), input)
+    connection.value = await api.setObservabilityConnection(ws.requireId(), input)
   }
 
   async function removeConnection() {
     const ws = useWorkspaceStore()
-    await api.deleteDatadogConnection(ws.requireId())
-    connection.value = { connected: false, site: null }
+    await api.deleteObservabilityConnection(ws.requireId())
+    connection.value = { connected: false, provider: null, summary: null }
+  }
+
+  /** The saved config for a specific block (the service inspector reads this). */
+  function configForBlock(blockId: string): ReleaseHealthConfig | undefined {
+    return configs.value.find((c) => c.blockId === blockId)
   }
 
   async function saveConfig(blockId: string, input: UpsertReleaseHealthConfigInput) {
@@ -69,6 +78,7 @@ export const useReleaseHealthStore = defineStore('releaseHealth', () => {
     load,
     saveConnection,
     removeConnection,
+    configForBlock,
     saveConfig,
     removeConfig,
   }

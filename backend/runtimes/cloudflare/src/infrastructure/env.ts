@@ -347,13 +347,13 @@ export interface Env {
   SLACK_CLIENT_SECRET?: string
   SLACK_REDIRECT_URL?: string
 
-  // ---- Datadog post-release-health (see config/datadog.ts; opt-in) --------
+  // ---- Observability post-release-health (see config/releaseHealth.ts; opt-in) ----
   /**
-   * Enables the Datadog post-release-health gate ('true'). The per-workspace API/app
-   * keys are sealed with the shared `ENCRYPTION_KEY` (datadog-scoped HKDF info). Off →
-   * the `post-release-health` gate is a pass-through.
+   * Enables the observability post-release-health gate ('true'). The per-workspace
+   * provider credentials are sealed with the shared `ENCRYPTION_KEY` (observability-scoped
+   * HKDF info). Off → the `post-release-health` gate is a pass-through.
    */
-  DATADOG_ENABLED?: string
+  OBSERVABILITY_ENABLED?: string
   /**
    * Optional incident-enrichment credentials (deployment-level): on a regression the
    * on-call investigation is posted onto an incident PagerDuty / incident.io ALREADY

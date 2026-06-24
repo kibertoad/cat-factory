@@ -27,8 +27,9 @@ import {
   IssueWritebackService,
   githubIssuesLogic,
   createGitHubIssueViaToken,
-  DATADOG_CIPHER_INFO,
-  DatadogReleaseHealthProvider,
+  OBSERVABILITY_CIPHER_INFO,
+  RegistryReleaseHealthProvider,
+  defaultObservabilityRegistry,
   PagerDutyEnrichmentProvider,
   IncidentIoEnrichmentProvider,
 } from '@cat-factory/integrations'
@@ -1102,23 +1103,24 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
         ? notificationChannels[0]
         : new CompositeNotificationChannel(notificationChannels)
 
-  // Datadog post-release-health: wire the gate + the release-health settings module when
-  // enabled (+ ENCRYPTION_KEY), mirroring the Worker's `selectReleaseHealthDeps`. Off →
+  // Observability post-release-health: wire the gate + the release-health settings module
+  // when enabled (+ ENCRYPTION_KEY), mirroring the Worker's `selectReleaseHealthDeps`. Off →
   // the `post-release-health` gate is a pass-through and the module isn't assembled.
   const releaseHealthDeps: Partial<CoreDependencies> = {}
-  if (config.datadog.enabled && config.datadog.encryptionKey) {
-    const datadogSecretCipher = new WebCryptoSecretCipher({
-      masterKeyBase64: config.datadog.encryptionKey,
-      info: DATADOG_CIPHER_INFO,
+  if (config.releaseHealth.enabled && config.releaseHealth.encryptionKey) {
+    const observabilitySecretCipher = new WebCryptoSecretCipher({
+      masterKeyBase64: config.releaseHealth.encryptionKey,
+      info: OBSERVABILITY_CIPHER_INFO,
     })
-    releaseHealthDeps.datadogConnectionRepository = repos.datadogConnectionRepository
+    releaseHealthDeps.observabilityConnectionRepository = repos.observabilityConnectionRepository
     releaseHealthDeps.releaseHealthConfigRepository = repos.releaseHealthConfigRepository
-    releaseHealthDeps.datadogSecretCipher = datadogSecretCipher
-    releaseHealthDeps.releaseHealthProvider = new DatadogReleaseHealthProvider({
-      datadogConnectionRepository: repos.datadogConnectionRepository,
+    releaseHealthDeps.observabilitySecretCipher = observabilitySecretCipher
+    releaseHealthDeps.releaseHealthProvider = new RegistryReleaseHealthProvider({
+      observabilityConnectionRepository: repos.observabilityConnectionRepository,
       releaseHealthConfigRepository: repos.releaseHealthConfigRepository,
       blockRepository: repos.blockRepository,
-      secretCipher: datadogSecretCipher,
+      secretCipher: observabilitySecretCipher,
+      registry: defaultObservabilityRegistry,
     })
     const enrichers: IncidentEnrichmentProvider[] = []
     if (config.incidentEnrichment.pagerDuty) {

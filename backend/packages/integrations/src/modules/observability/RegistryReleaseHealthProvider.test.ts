@@ -2,13 +2,14 @@ import { describe, expect, it } from 'vitest'
 import type {
   Block,
   BlockRepository,
-  DatadogConnectionRecord,
-  DatadogConnectionRepository,
+  ObservabilityConnectionRecord,
+  ObservabilityConnectionRepository,
   ReleaseHealthConfigRecord,
   ReleaseHealthConfigRepository,
   SecretCipher,
 } from '@cat-factory/kernel'
-import { DatadogReleaseHealthProvider } from './DatadogReleaseHealthProvider.js'
+import { RegistryReleaseHealthProvider } from './RegistryReleaseHealthProvider.js'
+import { defaultObservabilityRegistry } from './registry.js'
 
 // A SecretCipher whose envelope is just the plaintext (the provider only decrypts here).
 const identityCipher: SecretCipher = {
@@ -16,11 +17,12 @@ const identityCipher: SecretCipher = {
   decrypt: async (s) => s,
 }
 
-const connection: DatadogConnectionRecord = {
+// A Datadog connection whose sealed `credentials` blob is just the plaintext JSON.
+const connection: ObservabilityConnectionRecord = {
   workspaceId: 'ws',
-  site: 'datadoghq.com',
-  apiKey: 'k',
-  appKey: 'a',
+  provider: 'datadog',
+  credentials: JSON.stringify({ site: 'datadoghq.com', apiKey: 'k', appKey: 'a' }),
+  summary: JSON.stringify({ site: 'datadoghq.com' }),
   createdAt: 0,
   updatedAt: 0,
 }
@@ -29,8 +31,8 @@ function makeProvider(
   config: ReleaseHealthConfigRecord | null,
   monitorState: string,
   monitorStateModified?: string,
-): DatadogReleaseHealthProvider {
-  const connectionRepo: DatadogConnectionRepository = {
+): RegistryReleaseHealthProvider {
+  const connectionRepo: ObservabilityConnectionRepository = {
     get: async () => connection,
     upsert: async () => {},
     delete: async () => {},
@@ -57,11 +59,12 @@ function makeProvider(
       { status: 200 },
     )) as unknown as typeof fetch
 
-  return new DatadogReleaseHealthProvider({
-    datadogConnectionRepository: connectionRepo,
+  return new RegistryReleaseHealthProvider({
+    observabilityConnectionRepository: connectionRepo,
     releaseHealthConfigRepository: configRepo,
     blockRepository: blockRepo,
     secretCipher: identityCipher,
+    registry: defaultObservabilityRegistry,
     fetchImpl,
   })
 }
@@ -76,7 +79,7 @@ const config: ReleaseHealthConfigRecord = {
   updatedAt: 0,
 }
 
-describe('DatadogReleaseHealthProvider.probe', () => {
+describe('RegistryReleaseHealthProvider.probe (Datadog adapter)', () => {
   it('returns healthy with no signals when the block has no config (gate passes through)', async () => {
     const provider = makeProvider(null, 'OK')
     const report = await provider.probe('ws', 'blk', Date.now())
