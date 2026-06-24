@@ -151,6 +151,18 @@ export const environmentManifestSchema = v.object({
   response: environmentResponseMappingSchema,
   /** Fallback TTL (ms) when the response carries no explicit expiry. */
   defaultTtlMs: v.optional(v.pipe(v.number(), v.minValue(60000))),
+  /**
+   * Opaque, provider-specific configuration for a *native* injected adapter (e.g. a
+   * Kargo project, link-selection key, status map). The generic HttpEnvironmentProvider
+   * ignores it entirely; a native adapter (injected via `buildNodeContainer({
+   * environmentProvider })` / `startLocal({ environmentProvider })`) reads + validates it
+   * off the per-call `manifest`. This is the per-WORKSPACE config carrier for native
+   * adapters — the deployment-wide provider singleton has no other way to receive
+   * per-workspace settings. NOT covered by the manifest URL/SSRF checks (which only guard
+   * `baseUrl`/`tokenUrl`); an adapter that puts a URL here must guard it itself (reuse the
+   * exported `UrlSafetyPolicy`). See `backend/docs/native-environment-adapter.md`.
+   */
+  providerConfig: v.optional(v.record(v.string(), v.unknown())),
 })
 export type EnvironmentManifest = v.InferOutput<typeof environmentManifestSchema>
 

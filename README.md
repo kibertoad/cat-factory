@@ -179,7 +179,9 @@ Each capability has a deeper write-up; start here and follow the link.
 - **Document sources** — link requirements, RFCs and PRDs from Confluence/Notion
   and expand them into structure. [`docs/document-sources.md`](./backend/docs/document-sources.md).
 - **Ephemeral environments** — plug in your own preview-environment tooling via a
-  declarative manifest. [`docs/environments-integration.md`](./backend/docs/environments-integration.md).
+  declarative manifest, or a hand-written native adapter.
+  [`docs/environments-integration.md`](./backend/docs/environments-integration.md) ·
+  [native adapters](./backend/docs/native-environment-adapter.md).
 - **Prompt-fragment library** — tenant-scoped, repo-sourced guidelines selected
   per run. [ADR 0006](./backend/docs/adr/0006-prompt-fragment-library.md).
 - **Self-hosted runner pool** — run coding jobs on your own infra.
@@ -210,7 +212,8 @@ Each capability has a deeper write-up; start here and follow the link.
   [operations runbook](./backend/docs/github-operations.md) ·
   [App Manifest](./backend/docs/github-app-manifest.html)
 - [Document sources](./backend/docs/document-sources.md)
-- [Ephemeral environments](./backend/docs/environments-integration.md)
+- [Ephemeral environments](./backend/docs/environments-integration.md) ·
+  [native adapters](./backend/docs/native-environment-adapter.md)
 - [Self-hosted runner pool](./backend/docs/runner-pool-integration.md)
 
 **Operations**
