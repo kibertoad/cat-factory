@@ -2,6 +2,7 @@ import type {
   ExecutionEventPublisher,
   ExecutionInstance,
   LlmCallActivity,
+  ResolveRunRepoContext,
   WorkspaceSnapshot,
 } from '@cat-factory/kernel'
 import type { FakeAgentOptions } from './FakeAgentExecutor.js'
@@ -179,4 +180,12 @@ export interface ConformanceHarness {
 
 export interface ConformanceAppOptions {
   cloudflareModelsEnabled?: boolean
+  /**
+   * Inject the engine's run-repo resolver so the suite can assert a registered custom
+   * kind's pre/post-op hooks run + commit via a checkout-free {@link RepoFiles} — on EVERY
+   * runtime, without a real GitHub connection. Each facade harness threads it into its
+   * core overrides exactly as a real facade composes it from its GitHub client; the suite
+   * supplies a fake backed by an in-memory commit capture.
+   */
+  resolveRunRepoContext?: ResolveRunRepoContext
 }

@@ -16,6 +16,7 @@ import ClarityReviewWindow from '~/components/clarity/ClarityReviewWindow.vue'
 import TestReportWindow from '~/components/testing/TestReportWindow.vue'
 import GateResultView from '~/components/gates/GateResultView.vue'
 import ConsensusSessionWindow from '~/components/consensus/ConsensusSessionWindow.vue'
+import GenericStructuredResultView from '~/components/panels/GenericStructuredResultView.vue'
 
 const ui = useUiStore()
 
@@ -27,6 +28,9 @@ const STEP_RESULT_VIEWS: Record<string, Component> = {
   gate: GateResultView,
   // Opened for any step that ran the consensus mechanism (routed in `ui.dispatchStepView`).
   'consensus-session': ConsensusSessionWindow,
+  // Default dedicated view for a registered CUSTOM kind's structured (`custom`) output —
+  // a read-only JSON viewer, so a proprietary agent ships a result view with no bespoke code.
+  'generic-structured': GenericStructuredResultView,
 }
 
 const active = computed<Component | null>(() => {

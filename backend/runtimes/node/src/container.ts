@@ -75,6 +75,7 @@ import {
   WebCryptoSecretCipher,
   WebCryptoWebhookVerifier,
   buildResolveRepoTarget,
+  makeResolveRunRepoContext,
   createWebSearchUpstreamFromEnv,
   ensureWorkBranchViaRest,
   logger,
@@ -979,6 +980,10 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
 
   const githubGateDeps: Partial<CoreDependencies> = githubClient
     ? {
+        // The engine binds a registered custom kind's pre/post-op hooks to a run's repo
+        // via this checkout-free RepoFiles resolver, composed from the same client +
+        // repo-target walk the gates/merger use — parity with the Worker.
+        resolveRunRepoContext: makeResolveRunRepoContext(githubClient, resolveRepoTarget),
         ciStatusProvider: new GitHubCiStatusProvider({
           githubClient,
           resolveRepoTarget,

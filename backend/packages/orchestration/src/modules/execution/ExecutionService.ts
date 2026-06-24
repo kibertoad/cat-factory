@@ -31,6 +31,10 @@ import {
   companionFor,
   companionTargets,
   isCompanionKind,
+  registeredAgentStep,
+  registeredPreOps,
+  registeredPostOps,
+  runRepoOps,
   TASK_ESTIMATOR_AGENT_KIND,
 } from '@cat-factory/agents'
 import { coerceTaskEstimate, summarizeEstimate } from '../estimation/estimate.logic.js'
@@ -105,7 +109,13 @@ import type {
 } from '@cat-factory/kernel'
 import type { Clock, IdGenerator } from '@cat-factory/kernel'
 import type { ProvisionContext } from '@cat-factory/kernel'
-import type { AgentExecutor, AgentRunContext, AgentRunResult } from '@cat-factory/kernel'
+import type {
+  AgentExecutor,
+  AgentRunContext,
+  AgentRunResult,
+  AgentStepSpec,
+  ResolveRunRepoContext,
+} from '@cat-factory/kernel'
 import { isAsyncAgentExecutor } from '@cat-factory/kernel'
 import type { WorkRunner } from '@cat-factory/kernel'
 import type { ExecutionEventPublisher } from '@cat-factory/kernel'
@@ -383,6 +393,14 @@ export interface ExecutionServiceDependencies {
    * dispatching a job that can't stand its dependencies up.
    */
   localTestInfraSupported?: boolean
+  /**
+   * Optional: resolve a block's run repo (installation + repo + default branch) bound to
+   * a checkout-free {@link RepoFiles} so a registered custom kind's pre/post-op hooks
+   * read/commit a targeted subset of the repo WITHOUT a checkout. A facade composes it
+   * from its wired `GitHubClient` + `resolveRepoTarget` (`makeResolveRunRepoContext`).
+   * Absent (tests / GitHub not connected) → pre/post-ops are skipped.
+   */
+  resolveRunRepoContext?: ResolveRunRepoContext
 }
 
 /** Reconciles a Blueprinter step's tree onto the board in place (BoardScanService). */
@@ -456,6 +474,12 @@ export class ExecutionService {
   ) => Promise<string | undefined>
   /** Whether the runtime can run the Tester's local DinD infra (false = limited mode). */
   private readonly localTestInfraSupported: boolean
+  /**
+   * Optional: resolve a block's run repo bound to a checkout-free {@link RepoFiles} so a
+   * registered custom kind's pre/post-op hooks read/commit a targeted subset of the repo
+   * without a checkout. Absent (tests / GitHub not connected) → pre/post-ops are skipped.
+   */
+  private readonly resolveRunRepoContext?: ResolveRunRepoContext
   /** Lazily-built polling-gate registry, keyed by `agentKind`. See {@link gateFor}. */
   private gateRegistryCache?: Map<string, GateDefinition>
   /**
@@ -500,6 +524,7 @@ export class ExecutionService {
     resolveWorkspaceModelDefault,
     resolveProviderCapabilities,
     localTestInfraSupported,
+    resolveRunRepoContext,
   }: ExecutionServiceDependencies) {
     this.workspaceRepository = workspaceRepository
     this.blockRepository = blockRepository
@@ -596,6 +621,7 @@ export class ExecutionService {
     this.resolveWorkspaceModelDefault = resolveWorkspaceModelDefault
     this.resolveProviderCapabilities = resolveProviderCapabilities
     this.localTestInfraSupported = localTestInfraSupported ?? true
+    this.resolveRunRepoContext = resolveRunRepoContext
   }
 
   private requireWorkspace(workspaceId: string) {
@@ -1124,6 +1150,13 @@ export class ExecutionService {
       isFinalStep,
       block,
     )
+    // A registered custom kind's PRE-ops run deterministic backend repo work before the
+    // agent dispatches (e.g. read a baseline `spec/` shard into the prompt). Gated on the
+    // step not having dispatched yet so a Workflows replay (jobId already set) doesn't
+    // re-run them; a no-op for built-in kinds and when GitHub isn't wired.
+    if (!step.jobId) {
+      await this.runRegisteredPreOps(workspaceId, block, step, context)
+    }
     const executor = this.agentExecutor
     if (isAsyncAgentExecutor(executor) && executor.runsAsync(context)) {
       if (!step.jobId) {
@@ -1609,6 +1642,10 @@ export class ExecutionService {
 
     // The step completed.
     step.output = result.output ?? ''
+    // Surface a registered custom kind's structured JSON on the step so the SPA's
+    // `generic-structured` result view can render it (a post-op consumes the same value
+    // server-side). Built-in / prose kinds leave it undefined.
+    if (result.custom !== undefined) step.custom = result.custom
     if (result.model) step.model = result.model
     step.progress = 1
     this.finishStep(step)
@@ -1740,6 +1777,13 @@ export class ExecutionService {
       if (resolution?.output !== undefined) step.output = resolution.output
       if (resolution?.ownsTerminalStatus) resolverOwnsTerminalStatus = true
     }
+
+    // A registered custom kind's POST-ops run deterministic backend repo work from the
+    // agent's structured result (coerce its JSON, render artifact files, commit them via
+    // the checkout-free RepoFiles port — the blueprint/spec rendering that used to live in
+    // the harness). Position-independent like the resolver above; a no-op for built-ins
+    // and when GitHub isn't wired. A throwing op propagates to fail the step/run.
+    await this.runRegisteredPostOps(workspaceId, instance, step, isFinalStep, result)
 
     if (isFinalStep) {
       instance.status = 'done'
@@ -1935,6 +1979,95 @@ export class ExecutionService {
   private gateFor(agentKind: string): GateDefinition | undefined {
     if (!this.gateRegistryCache) this.gateRegistryCache = this.buildGateRegistry()
     return this.gateRegistryCache.get(agentKind)
+  }
+
+  /**
+   * Resolve the concrete branch a registered kind's pre/post-op reads or writes, from
+   * its declared clone target — mirroring the container executor's mapping so a backend
+   * op and the container agent operate on the SAME branch:
+   *   - `base` → the repo default branch
+   *   - `pr`   → the block's PR branch (the coder's branch), else base
+   *   - `work` (default) → the per-block work branch once the PR sits on it, else PR/base
+   * The work-branch name (`cat-factory/<blockId>`) is the same convention
+   * {@link ContainerAgentExecutor} uses.
+   */
+  private resolveRepoOpBranch(
+    step: AgentStepSpec | undefined,
+    block: Block,
+    baseBranch: string,
+  ): string {
+    const prBranch = block.pullRequest?.branch
+    const workBranch = `cat-factory/${block.id}`
+    switch (step?.clone?.branch) {
+      case 'base':
+        return baseBranch
+      case 'pr':
+        return prBranch ?? baseBranch
+      default:
+        // 'work' (or unspecified): the work branch once the PR is on it, else the PR
+        // branch (the coder may have pushed it), else base.
+        return prBranch === workBranch ? workBranch : (prBranch ?? baseBranch)
+    }
+  }
+
+  /**
+   * Run a registered kind's PRE-op hooks before its agent step dispatches: deterministic
+   * backend work (read a baseline artifact into the prompt, etc.) over a checkout-free
+   * {@link RepoFiles}. No-op for built-in / unregistered kinds, when the kind declares no
+   * pre-ops, or when GitHub isn't wired (no `resolveRunRepoContext`) — so the engine runs
+   * unchanged without the feature. A throwing op propagates to fail the step.
+   */
+  private async runRegisteredPreOps(
+    workspaceId: string,
+    block: Block,
+    step: PipelineStep,
+    context: AgentRunContext,
+  ): Promise<void> {
+    const ops = registeredPreOps(step.agentKind)
+    if (ops.length === 0 || !this.resolveRunRepoContext) return
+    const runRepo = await this.resolveRunRepoContext(workspaceId, block.id)
+    if (!runRepo) return
+    const branch = this.resolveRepoOpBranch(
+      registeredAgentStep(step.agentKind),
+      block,
+      runRepo.baseBranch,
+    )
+    await runRepoOps(ops, { repo: runRepo.repo, context, branch })
+  }
+
+  /**
+   * Run a registered kind's POST-op hooks after its agent step's result is recorded:
+   * deterministic backend work that consumes the agent's structured output (coerce its
+   * JSON, render artifact files, commit them via {@link RepoFiles}) — the
+   * blueprint/spec rendering that used to live in the harness. Same gating + symmetry as
+   * {@link runRegisteredPreOps}; the agent's {@link AgentRunResult} is threaded through.
+   */
+  private async runRegisteredPostOps(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    step: PipelineStep,
+    isFinalStep: boolean,
+    result: AgentRunResult,
+  ): Promise<void> {
+    const ops = registeredPostOps(step.agentKind)
+    if (ops.length === 0 || !this.resolveRunRepoContext) return
+    const block = await this.blockRepository.get(workspaceId, instance.blockId)
+    if (!block) return
+    const runRepo = await this.resolveRunRepoContext(workspaceId, block.id)
+    if (!runRepo) return
+    const context = await this.contextBuilder.buildContext(
+      workspaceId,
+      instance,
+      step,
+      isFinalStep,
+      block,
+    )
+    const branch = this.resolveRepoOpBranch(
+      registeredAgentStep(step.agentKind),
+      block,
+      runRepo.baseBranch,
+    )
+    await runRepoOps(ops, { repo: runRepo.repo, context, branch, result })
   }
 
   /**

@@ -14,6 +14,7 @@ import { useModelDefaultsStore } from '~/stores/modelDefaults'
 import { useServiceFragmentDefaultsStore } from '~/stores/serviceFragmentDefaults'
 import { useRecurringPipelinesStore } from '~/stores/recurringPipelines'
 import { useServicesStore } from '~/stores/services'
+import { useAgentsStore } from '~/stores/agents'
 import { useTrackerStore } from '~/stores/tracker'
 
 /**
@@ -77,6 +78,9 @@ export const useWorkspaceStore = defineStore(
       useRecurringPipelinesStore().hydrate(snapshot.recurringPipelines ?? [])
       useTrackerStore().hydrate(snapshot.trackerSettings)
       useServicesStore().hydrate(snapshot.mounts ?? [], snapshot.serviceCatalog ?? [])
+      // Merge the deployment's registered custom agent kinds into the palette catalog so a
+      // proprietary kind renders as a first-class block + result view (idempotent on reload).
+      useAgentsStore().registerCustomKinds(snapshot.customAgentKinds ?? [])
     }
 
     /** Resolve accounts + boards, then open the right board for the active account. */

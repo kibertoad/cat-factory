@@ -26,6 +26,7 @@ packages (`backend/internal/*`), and example **deployments** (`deploy/*`):
 | `backend/internal/benchmark-harness` | `@cat-factory/benchmark-harness` | no (internal)                   |
 | `backend/internal/smoketest-harness` | `@cat-factory/smoketest-harness` | no (internal)                   |
 | `backend/internal/conformance`       | `@cat-factory/conformance`       | no (internal test suite)        |
+| `backend/internal/example-custom-agent` | `@cat-factory/example-custom-agent` | no (worked example)          |
 | `deploy/backend`                     | `@cat-factory/deploy-backend`    | no (example deployment)         |
 | `deploy/node`                        | `@cat-factory/deploy-node`       | no (example deployment)         |
 | `deploy/frontend`                    | `@cat-factory/deploy-frontend`   | no (example deployment)         |

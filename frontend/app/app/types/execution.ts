@@ -300,6 +300,12 @@ export interface PipelineStep {
   consensus?: ConsensusStepConfig | null
   /** text the agent produced for this step (when LLM execution is enabled). */
   output?: string
+  /**
+   * Structured JSON a registered CUSTOM kind's agent step returned (the generic
+   * manifest-driven `agent` dispatch). Rendered by the `generic-structured` result view.
+   * Absent for built-in / prose kinds.
+   */
+  custom?: unknown
   /** identifier of the model that produced `output`, for transparency. */
   model?: string
   /** prompt-fragment library ids folded into this step (manual ∪ selector pick). */

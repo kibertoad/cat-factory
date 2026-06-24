@@ -41,6 +41,11 @@ const harness: ConformanceHarness = {
       {
         executionEventPublisher: recorder,
         repoBootstrapper: new FakeRepoBootstrapper(),
+        // Inject the engine's run-repo resolver (a fake in the suite) so a registered
+        // custom kind's pre/post-op hooks run + commit identically to a real GitHub-wired facade.
+        ...(opts?.resolveRunRepoContext
+          ? { resolveRunRepoContext: opts.resolveRunRepoContext }
+          : {}),
         ...fragmentLibraryDeps(),
         // A deterministic task source (fake 'jira') over the real D1 task repos, so the
         // shared suite can assert create-task-from-issue parity against D1 too.

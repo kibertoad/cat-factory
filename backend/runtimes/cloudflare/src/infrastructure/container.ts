@@ -49,6 +49,7 @@ import { type CoreDependencies, createCore } from '@cat-factory/orchestration'
 import { createLangfuseSink } from '@cat-factory/observability-langfuse'
 import {
   buildResolveRepoTarget as buildSharedResolveRepoTarget,
+  makeResolveRunRepoContext,
   ensureWorkBranchViaRest,
   FanOutEventPublisher,
   InAppNotificationChannel,
@@ -1035,6 +1036,10 @@ function selectGitHubDeps(
     : undefined
   return {
     githubClient,
+    // The engine binds a registered custom kind's pre/post-op hooks to a run's repo via
+    // this checkout-free RepoFiles resolver (installation + repo + default branch),
+    // composed from the same client + repo-target walk the container executor uses.
+    resolveRunRepoContext: makeResolveRunRepoContext(githubClient, buildResolveRepoTarget(db)),
     githubInstallationRepository,
     repoProjectionRepository: new D1RepoProjectionRepository({ db }),
     branchProjectionRepository: new D1BranchProjectionRepository({ db }),
