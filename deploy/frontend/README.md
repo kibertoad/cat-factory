@@ -17,7 +17,7 @@ on the published npm version** instead:
 ```jsonc
 // deploy/frontend/package.json
 "dependencies": {
-  "@cat-factory/app": "^0.1.0",   // instead of "workspace:*"
+  "@cat-factory/app": "^0.6.0",   // instead of "workspace:*"
   "nuxt": "^4.4.8"
 }
 ```
