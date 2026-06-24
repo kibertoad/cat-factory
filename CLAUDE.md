@@ -188,11 +188,11 @@ facade so the runtimes can't drift (see "Cross-runtime conformance" below).
   behaviour against any facade; both runtimes' test suites invoke it (see below).
 - `backend/internal/example-custom-agent` — `@cat-factory/example-custom-agent`, a
   private **worked example** of a company-authored agent package: an inline `org-reviewer`
-  + a container `security-auditor` (`container-explore` structured, a post-op rendering
-  `compliance/REPORT.md` via `RepoFiles.commitFiles`, presented through
-  `generic-structured`) + the `pl_org_audit` pipeline, registered purely via the public
-  seams (`registerAgentKind` + `registerPipeline`) and imported for side effect. Proves a
-  brand-new repo-writing agent ships with ZERO harness changes. See **Custom agents** below.
+  - a container `security-auditor` (`container-explore` structured, a post-op rendering
+    `compliance/REPORT.md` via `RepoFiles.commitFiles`, presented through
+    `generic-structured`) + the `pl_org_audit` pipeline, registered purely via the public
+    seams (`registerAgentKind` + `registerPipeline`) and imported for side effect. Proves a
+    brand-new repo-writing agent ships with ZERO harness changes. See **Custom agents** below.
 - `deploy/backend` — example Worker deployment: a one-line `src/index.ts`
   re-exporting `@cat-factory/worker` + the full production `wrangler.toml`
   (`[vars]`, the GHCR runner `image`, `migrations_dir` →
@@ -573,8 +573,8 @@ directly and downstream falls back to the original description.
 ## Custom agents (manifest-driven extension — pre/post-ops over `RepoFiles`)
 
 A deployment can ship its own agent kinds **without forking and without rebuilding the
-executor-harness image**. Governing principle: *zero `switch(agentKind)` in the
-container* — the harness is a generic LLM-over-a-checkout runner, and all
+executor-harness image**. Governing principle: _zero `switch(agentKind)` in the
+container_ — the harness is a generic LLM-over-a-checkout runner, and all
 mechanical/deterministic work is backend TypeScript. Full model + worked example:
 [`backend/docs/custom-agents.md`](./backend/docs/custom-agents.md).
 

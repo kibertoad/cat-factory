@@ -3,7 +3,8 @@
 cat-factory is extensible: a deployment can ship its own agent kinds (a compliance
 auditor, a security scanner, a bespoke reviewer, a custom migrator) **without forking the
 platform and without rebuilding the executor-harness image**. This document is the model
-+ the seams. The worked reference is `backend/internal/example-custom-agent`.
+
+- the seams. The worked reference is `backend/internal/example-custom-agent`.
 
 ## The governing principle
 
@@ -78,15 +79,15 @@ registerPipeline({
 
 ### `AgentKindDefinition` (in `@cat-factory/agents`)
 
-| Field | Purpose |
-|-------|---------|
-| `kind` | The free-form agent-kind id used in pipelines + steps. |
-| `systemPrompt` | Role prompt (string, or a `(kind) => string` for a family). |
-| `userPrompt?` | Custom user-prompt builder; omitted ⇒ the generic block-context prompt. |
-| `agent?` | The LLM step's `AgentStepSpec` (`surface`, `output`, `clone`, `infra`). Omitted ⇒ pure pre/post-op work, no LLM. |
-| `preOps?` / `postOps?` | `RepoOp[]` — deterministic backend hooks over `RepoFiles`. |
-| `presentation?` | Frontend `label`/`icon`/`color`/`category`/`resultView`. |
-| `traits?`, `configContributions?`, `webResearchHint?` | Optional capability traits, task-level config params, web-search nudge. |
+| Field                                                 | Purpose                                                                                                          |
+| ----------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `kind`                                                | The free-form agent-kind id used in pipelines + steps.                                                           |
+| `systemPrompt`                                        | Role prompt (string, or a `(kind) => string` for a family).                                                      |
+| `userPrompt?`                                         | Custom user-prompt builder; omitted ⇒ the generic block-context prompt.                                          |
+| `agent?`                                              | The LLM step's `AgentStepSpec` (`surface`, `output`, `clone`, `infra`). Omitted ⇒ pure pre/post-op work, no LLM. |
+| `preOps?` / `postOps?`                                | `RepoOp[]` — deterministic backend hooks over `RepoFiles`.                                                       |
+| `presentation?`                                       | Frontend `label`/`icon`/`color`/`category`/`resultView`.                                                         |
+| `traits?`, `configContributions?`, `webResearchHint?` | Optional capability traits, task-level config params, web-search nudge.                                          |
 
 A `container-*` surface implies the container requirement automatically
 (`registeredKindRequiresContainer`), so `requiresContainer` need not be set alongside it.
@@ -105,10 +106,10 @@ The `RepoOpContext` a hook receives:
 
 ```ts
 interface RepoOpContext {
-  repo: RepoFiles          // checkout-free repo access, bound to the run's repo
+  repo: RepoFiles // checkout-free repo access, bound to the run's repo
   context: AgentRunContext // run/block/task context (branch, block id, prior outputs)
-  branch: string           // the resolved branch (base/pr/work) the op reads/writes
-  result?: AgentRunResult  // the finished agent's result — present for postOps only
+  branch: string // the resolved branch (base/pr/work) the op reads/writes
+  result?: AgentRunResult // the finished agent's result — present for postOps only
 }
 ```
 

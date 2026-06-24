@@ -81,7 +81,10 @@ const customJson = computed<string | null>(() => {
         <div class="flex min-h-0 flex-1">
           <!-- Main: prose summary + structured JSON -->
           <div class="min-w-0 flex-1 overflow-y-auto px-5 py-4">
-            <p v-if="step?.output" class="mb-4 whitespace-pre-wrap text-[13px] leading-relaxed text-slate-300">
+            <p
+              v-if="step?.output"
+              class="mb-4 whitespace-pre-wrap text-[13px] leading-relaxed text-slate-300"
+            >
               {{ step.output }}
             </p>
 

@@ -80,7 +80,10 @@ export async function setupTestDb(): Promise<DrizzleDb> {
 export function makeConformanceApp(
   db: DrizzleDb,
   agentOptions?: FakeAgentOptions,
-  opts?: { cloudflareModelsEnabled?: boolean },
+  opts?: {
+    cloudflareModelsEnabled?: boolean
+    resolveRunRepoContext?: CoreDependencies['resolveRunRepoContext']
+  },
 ): ConformanceApp {
   const recorder = new RecordingEventPublisher()
   const overrides: Partial<CoreDependencies> = {
@@ -97,6 +100,9 @@ export function makeConformanceApp(
     // task repos stay), so the shared suite asserts create-task-from-issue against
     // Postgres without hitting the network. Override wins over the config providers.
     taskSourceProviders: [new FakeTaskSourceProvider('jira')],
+    // Inject the engine's run-repo resolver (a fake in the suite) so the registered
+    // custom kind's pre/post-op hooks run + commit identically to a real GitHub-wired facade.
+    ...(opts?.resolveRunRepoContext ? { resolveRunRepoContext: opts.resolveRunRepoContext } : {}),
   }
   const container = buildLocalContainer({
     db,
