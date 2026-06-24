@@ -1,4 +1,11 @@
-import type { AgentConfigDescriptor, AgentKind, AgentRunContext } from '@cat-factory/kernel'
+import type {
+  AgentConfigDescriptor,
+  AgentKind,
+  AgentRunContext,
+  AgentStepSpec,
+  RepoOp,
+} from '@cat-factory/kernel'
+import type { AgentPresentation } from '@cat-factory/contracts'
 import type { AgentTrait } from './traits.js'
 
 // Installation-level extension point for custom agent kinds, mirroring the
@@ -57,6 +64,34 @@ export interface AgentKindDefinition {
    * their own traits registered via `registerAgentTrait`. Omitted ⇒ no traits.
    */
   traits?: AgentTrait[]
+  /**
+   * The optional LLM step's execution surface + output/clone spec (inline, or a
+   * container explore/coding run). Present ⇒ the kind runs an agent step; omitted ⇒ the
+   * kind is pure pre/post-op work (no LLM). A container surface implies the kind needs a
+   * checkout — see {@link registeredKindRequiresContainer}, which now also derives the
+   * container requirement from this — so `requiresContainer` need not be set alongside it.
+   */
+  agent?: AgentStepSpec
+  /**
+   * Deterministic backend operations run BEFORE the agent step (over a checkout-free
+   * {@link RepoOp} context): read a baseline artifact into the prompt, etc. Plain TS,
+   * runs on the backend — never in the container. Omitted ⇒ no pre-op.
+   */
+  preOps?: RepoOp[]
+  /**
+   * Deterministic backend operations run AFTER the agent step, consuming its structured
+   * result: render artifact files and commit them via the RepoFiles port (the
+   * blueprint/spec renderers live in `repo-ops/render.ts`). Plain TS — never in the
+   * container. Omitted ⇒ no post-op.
+   */
+  postOps?: RepoOp[]
+  /**
+   * Frontend display metadata (label / icon / colour / category / result view). The
+   * server serialises this into the workspace snapshot so a registered kind becomes a
+   * first-class palette block instead of the generic fallback. Omitted ⇒ the SPA renders
+   * the kind with its generic fallback metadata.
+   */
+  presentation?: AgentPresentation
 }
 
 // Process-wide registry, mirroring the Worker's model-provider registry. Registration
@@ -84,9 +119,17 @@ export function registeredAgentKinds(): AgentKindDefinition[] {
   return [...registry.values()]
 }
 
-/** Whether a registered kind asked to run in a container. False for built-in / unregistered kinds. */
+/**
+ * Whether a registered kind runs in a container — either it set `requiresContainer`
+ * explicitly, or its `agent` step declares a container surface. False for built-in /
+ * unregistered kinds.
+ */
 export function registeredKindRequiresContainer(kind: AgentKind): boolean {
-  return registry.get(kind)?.requiresContainer === true
+  const definition = registry.get(kind)
+  if (!definition) return false
+  if (definition.requiresContainer === true) return true
+  const surface = definition.agent?.surface
+  return surface === 'container-explore' || surface === 'container-coding'
 }
 
 /** Drop all registered kinds. Intended for tests that exercise registration. */
@@ -116,4 +159,24 @@ export function registeredWebResearchHint(kind: AgentKind): string | undefined {
 /** A registered kind's contributed config descriptors, or an empty array when none. */
 export function registeredConfigContributions(kind: AgentKind): AgentConfigDescriptor[] {
   return registry.get(kind)?.configContributions ?? []
+}
+
+/** A registered kind's agent-step spec (surface/output/clone), or undefined when none. */
+export function registeredAgentStep(kind: AgentKind): AgentStepSpec | undefined {
+  return registry.get(kind)?.agent
+}
+
+/** A registered kind's pre-op hooks (run before the agent step), or an empty array. */
+export function registeredPreOps(kind: AgentKind): RepoOp[] {
+  return registry.get(kind)?.preOps ?? []
+}
+
+/** A registered kind's post-op hooks (run after the agent step), or an empty array. */
+export function registeredPostOps(kind: AgentKind): RepoOp[] {
+  return registry.get(kind)?.postOps ?? []
+}
+
+/** A registered kind's frontend presentation metadata, or undefined when not supplied. */
+export function registeredAgentPresentation(kind: AgentKind): AgentPresentation | undefined {
+  return registry.get(kind)?.presentation
 }

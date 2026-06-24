@@ -108,6 +108,15 @@ export type {
   InstallationPermissions,
   ProvisionedRepo,
 } from './github-provisioning.js'
+export type { RepoFiles, ResolveRepoFiles } from './repo-files.js'
+export type {
+  AgentCloneSpec,
+  AgentOutputSpec,
+  AgentStepSpec,
+  AgentSurface,
+  RepoOp,
+  RepoOpContext,
+} from './agent-definition.js'
 export type {
   BranchProjectionRepository,
   CheckRunProjectionRepository,

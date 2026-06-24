@@ -1,0 +1,85 @@
+import type { AgentRunContext, AgentRunResult } from './agent-executor.js'
+import type { RepoFiles } from './repo-files.js'
+
+// ---------------------------------------------------------------------------
+// The execution-surface + pre/post-op vocabulary an agent definition composes.
+//
+// Every agent decomposes into three stages, and the container runs only the middle
+// one (see `backend/docs/custom-agents.md`):
+//   1. preOps  — deterministic backend TypeScript run BEFORE the agent step. Reads a
+//                targeted, known subset of the repo (no checkout) and may commit, via
+//                the {@link RepoFiles} port.
+//   2. agent   — an optional LLM step on one of three surfaces (inline / container
+//                read-only explore / container coding).
+//   3. postOps — deterministic backend TypeScript run AFTER the agent returns. Parses
+//                the structured output, renders artifact files and commits them.
+//
+// preOps/postOps are plain functions (TS hooks), so a custom agent ships its mechanical
+// logic as ordinary backend code — never a container rebuild, never a per-kind branch
+// inside the harness.
+// ---------------------------------------------------------------------------
+
+/** Where an agent's LLM step runs. */
+export type AgentSurface =
+  /** A one-shot inline LLM call over the provided context — no repo, no container. */
+  | 'inline'
+  /** A read-only container run: clone + explore + return prose or structured JSON; no push. */
+  | 'container-explore'
+  /** A container run that edits a working tree and commits + pushes (optionally opens a PR). */
+  | 'container-coding'
+
+/** How an explore agent's reply is consumed. */
+export interface AgentOutputSpec {
+  /** `prose` keeps the reply as text; `structured` parses + (optionally) repairs it to JSON. */
+  kind: 'prose' | 'structured'
+  /**
+   * Compact human description of the expected JSON shape, fed to the harness's one-shot
+   * structured-output repair call when the first parse fails. Structured kind only.
+   */
+  shapeHint?: string
+  /** Whether to attempt the one-shot structured-output repair on a malformed reply. */
+  repair?: boolean
+}
+
+/** What a container agent clones (resolved to a concrete branch by the engine at dispatch). */
+export interface AgentCloneSpec {
+  /** Which branch to check out: the base branch, the block's PR branch, or the work branch. */
+  branch: 'base' | 'pr' | 'work'
+  /** A monorepo subtree to sparse-checkout (storage optimisation); absent ⇒ whole repo. */
+  sparsePaths?: string[]
+  /** Full history (needed to diff against base / merge); absent ⇒ shallow. */
+  full?: boolean
+}
+
+/** The optional LLM step of an agent definition. */
+export interface AgentStepSpec {
+  surface: AgentSurface
+  output?: AgentOutputSpec
+  /** Container surfaces only: what to clone. */
+  clone?: AgentCloneSpec
+  /** Container coding surface only: how to stand dependencies up (tester). */
+  infra?: 'none' | 'compose' | 'ephemeral-url'
+}
+
+/** Context handed to a {@link RepoOp}. */
+export interface RepoOpContext {
+  /** Per-run, checkout-free repo access bound to the run's installation + repo. */
+  repo: RepoFiles
+  /** The run/block/task context (branch, block id, task description, prior outputs). */
+  context: AgentRunContext
+  /** The branch the op reads/writes (the engine resolves base/pr/work to a concrete name). */
+  branch: string
+  /**
+   * The finished agent's structured result. Present for postOps (which consume it —
+   * e.g. render `spec/` from `result.spec`); absent for preOps.
+   */
+  result?: AgentRunResult
+}
+
+/**
+ * Deterministic backend logic run before/after an agent step, over a checkout-free
+ * {@link RepoFiles}. A preOp prepares inputs (read a baseline artifact); a postOp
+ * consumes the agent's structured output (render + commit artifact files). Pure of
+ * container concerns; throwing fails the step.
+ */
+export type RepoOp = (ctx: RepoOpContext) => Promise<void>
