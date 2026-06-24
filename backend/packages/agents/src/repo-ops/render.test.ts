@@ -281,8 +281,14 @@ describe('spec rendering', () => {
         {
           service: 'X',
           modules: [
-            { name: first, groups: [{ name: 'G', requirements: [{ title: 'Create', statement: 'SHALL.' }] }] },
-            { name: second, groups: [{ name: 'G', requirements: [{ title: 'Create', statement: 'SHALL.' }] }] },
+            {
+              name: first,
+              groups: [{ name: 'G', requirements: [{ title: 'Create', statement: 'SHALL.' }] }],
+            },
+            {
+              name: second,
+              groups: [{ name: 'G', requirements: [{ title: 'Create', statement: 'SHALL.' }] }],
+            },
           ],
         },
         'X',

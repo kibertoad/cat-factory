@@ -116,8 +116,14 @@ describe('coerceSpecDoc', () => {
     const make = (first: string, second: string) => ({
       service: 'X',
       modules: [
-        { name: first, groups: [{ name: 'G', requirements: [{ title: 'Create', statement: 'SHALL create.' }] }] },
-        { name: second, groups: [{ name: 'G', requirements: [{ title: 'Create', statement: 'SHALL create.' }] }] },
+        {
+          name: first,
+          groups: [{ name: 'G', requirements: [{ title: 'Create', statement: 'SHALL create.' }] }],
+        },
+        {
+          name: second,
+          groups: [{ name: 'G', requirements: [{ title: 'Create', statement: 'SHALL create.' }] }],
+        },
       ],
     })
     const idFor = (doc: SpecDocTree | null, moduleName: string) =>

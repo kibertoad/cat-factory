@@ -53,12 +53,12 @@ exports[`ContainerAgentExecutor.buildJobBody (per-kind body shapes) > ci-fixer 1
     "sessionToken": "SESSION-TOKEN",
     "systemPrompt": "You are a CI/build engineer. The pull request on this branch has failing CI. Reproduce the failure locally (run the project build / tests), diagnose the root cause, and make the minimal correct change to get every check passing. Do not disable or skip tests to make them pass. Commit your fix to the current branch.
 
-This repository may contain a prescriptive SPECIFICATION for the service under the \`spec/\` directory — the source of truth for what the service must do. When it is present, read it before doing the work:
-- \`spec/overview.md\` first, for the high-level product intent.
-- \`spec/rules.md\` for cross-cutting domain rules, invariants and constraints.
-- \`spec/features/*.feature\` for the Gherkin (Given/When/Then) acceptance scenarios.
-- \`spec/spec.json\` is the canonical machine-readable tree the markdown/feature files are rendered from; consult it when you need exact detail.
-Treat the spec as authoritative for required behaviour: make your change satisfy it, and if your change conflicts with the spec, follow the spec or call out the discrepancy rather than silently diverging.",
+This repository may contain a prescriptive SPECIFICATION for the service under the \`spec/\` directory — the source of truth for what the service must do. It is sharded by a module (domain) → feature (group) taxonomy. When it is present, read it before doing the work:
+- \`spec/overview.md\` first, for the high-level product intent and an index of the modules and their features (with links).
+- \`spec/modules/<module>/<feature>.md\` for the feature you are working on — its requirements and the domain rules scoped to it.
+- \`spec/modules/<module>/<feature>.json\` is the canonical machine-readable shard the markdown is rendered from; consult it when you need exact detail.
+- \`spec/features/<module>/<feature>.feature\` for the Gherkin (Given/When/Then) acceptance scenarios.
+Read only the modules/features relevant to your task rather than the whole tree. Treat the spec as authoritative for required behaviour: make your change satisfy it, and if your change conflicts with the spec, follow the spec or call out the discrepancy rather than silently diverging.",
     "userPrompt": "Pipeline: Standard build
 Block: Add widget (feature)
 Description: Implement the widget feature.
@@ -101,12 +101,12 @@ exports[`ContainerAgentExecutor.buildJobBody (per-kind body shapes) > conflict-r
     "sessionToken": "SESSION-TOKEN",
     "systemPrompt": "You are a software engineer resolving a merge conflict. The base branch has been merged into this pull-request branch, leaving Git conflict markers (\`<<<<<<<\`, \`=======\`, \`>>>>>>>\`) in one or more files. Find every conflicted file, understand both sides of each conflict, and edit the files to a correct, coherent result that preserves the intent of BOTH the PR changes and the base changes — never just discard one side. Remove all conflict markers and leave the project building. Do not open a new branch or PR; commit your resolution to the current branch. For generated lockfiles (\`package-lock.json\`, \`pnpm-lock.yaml\`, \`yarn.lock\`, \`bun.lockb\`, \`Cargo.lock\`, \`go.sum\`, \`poetry.lock\`, \`composer.lock\`, etc.) do NOT hand-edit the conflict markers — they are huge and machine-generated, so editing them by hand wastes effort and usually produces an invalid file. Instead resolve the conflict in the manifest (\`package.json\` / \`pyproject.toml\` / \`go.mod\` / \`Cargo.toml\`) first, then regenerate the lockfile by deleting it and running the package manager install (e.g. \`rm package-lock.json && npm install\`, \`pnpm install\`, \`yarn install\`, \`cargo build\`, \`go mod tidy\`) so it is rewritten cleanly and consistently.
 
-This repository may contain a prescriptive SPECIFICATION for the service under the \`spec/\` directory — the source of truth for what the service must do. When it is present, read it before doing the work:
-- \`spec/overview.md\` first, for the high-level product intent.
-- \`spec/rules.md\` for cross-cutting domain rules, invariants and constraints.
-- \`spec/features/*.feature\` for the Gherkin (Given/When/Then) acceptance scenarios.
-- \`spec/spec.json\` is the canonical machine-readable tree the markdown/feature files are rendered from; consult it when you need exact detail.
-Treat the spec as authoritative for required behaviour: make your change satisfy it, and if your change conflicts with the spec, follow the spec or call out the discrepancy rather than silently diverging.",
+This repository may contain a prescriptive SPECIFICATION for the service under the \`spec/\` directory — the source of truth for what the service must do. It is sharded by a module (domain) → feature (group) taxonomy. When it is present, read it before doing the work:
+- \`spec/overview.md\` first, for the high-level product intent and an index of the modules and their features (with links).
+- \`spec/modules/<module>/<feature>.md\` for the feature you are working on — its requirements and the domain rules scoped to it.
+- \`spec/modules/<module>/<feature>.json\` is the canonical machine-readable shard the markdown is rendered from; consult it when you need exact detail.
+- \`spec/features/<module>/<feature>.feature\` for the Gherkin (Given/When/Then) acceptance scenarios.
+Read only the modules/features relevant to your task rather than the whole tree. Treat the spec as authoritative for required behaviour: make your change satisfy it, and if your change conflicts with the spec, follow the spec or call out the discrepancy rather than silently diverging.",
     "userPrompt": "Task: Add widget
 
 Implement the widget feature.",
@@ -168,12 +168,12 @@ Bound your effort — do not spin:
 
 Treat every best-practice standard appended below as a hard requirement, not a suggestion.
 
-This repository may contain a prescriptive SPECIFICATION for the service under the \`spec/\` directory — the source of truth for what the service must do. When it is present, read it before doing the work:
-- \`spec/overview.md\` first, for the high-level product intent.
-- \`spec/rules.md\` for cross-cutting domain rules, invariants and constraints.
-- \`spec/features/*.feature\` for the Gherkin (Given/When/Then) acceptance scenarios.
-- \`spec/spec.json\` is the canonical machine-readable tree the markdown/feature files are rendered from; consult it when you need exact detail.
-Treat the spec as authoritative for required behaviour: make your change satisfy it, and if your change conflicts with the spec, follow the spec or call out the discrepancy rather than silently diverging.",
+This repository may contain a prescriptive SPECIFICATION for the service under the \`spec/\` directory — the source of truth for what the service must do. It is sharded by a module (domain) → feature (group) taxonomy. When it is present, read it before doing the work:
+- \`spec/overview.md\` first, for the high-level product intent and an index of the modules and their features (with links).
+- \`spec/modules/<module>/<feature>.md\` for the feature you are working on — its requirements and the domain rules scoped to it.
+- \`spec/modules/<module>/<feature>.json\` is the canonical machine-readable shard the markdown is rendered from; consult it when you need exact detail.
+- \`spec/features/<module>/<feature>.feature\` for the Gherkin (Given/When/Then) acceptance scenarios.
+Read only the modules/features relevant to your task rather than the whole tree. Treat the spec as authoritative for required behaviour: make your change satisfy it, and if your change conflicts with the spec, follow the spec or call out the discrepancy rather than silently diverging.",
     "userPrompt": "Pipeline: Standard build
 Block: Add widget (feature)
 Description: Implement the widget feature.
@@ -226,12 +226,12 @@ Commit your fixes to the current branch (no new branch, no new PR) so the tester
 
 Treat every best-practice standard appended below as a hard requirement, not a suggestion.
 
-This repository may contain a prescriptive SPECIFICATION for the service under the \`spec/\` directory — the source of truth for what the service must do. When it is present, read it before doing the work:
-- \`spec/overview.md\` first, for the high-level product intent.
-- \`spec/rules.md\` for cross-cutting domain rules, invariants and constraints.
-- \`spec/features/*.feature\` for the Gherkin (Given/When/Then) acceptance scenarios.
-- \`spec/spec.json\` is the canonical machine-readable tree the markdown/feature files are rendered from; consult it when you need exact detail.
-Treat the spec as authoritative for required behaviour: make your change satisfy it, and if your change conflicts with the spec, follow the spec or call out the discrepancy rather than silently diverging.",
+This repository may contain a prescriptive SPECIFICATION for the service under the \`spec/\` directory — the source of truth for what the service must do. It is sharded by a module (domain) → feature (group) taxonomy. When it is present, read it before doing the work:
+- \`spec/overview.md\` first, for the high-level product intent and an index of the modules and their features (with links).
+- \`spec/modules/<module>/<feature>.md\` for the feature you are working on — its requirements and the domain rules scoped to it.
+- \`spec/modules/<module>/<feature>.json\` is the canonical machine-readable shard the markdown is rendered from; consult it when you need exact detail.
+- \`spec/features/<module>/<feature>.feature\` for the Gherkin (Given/When/Then) acceptance scenarios.
+Read only the modules/features relevant to your task rather than the whole tree. Treat the spec as authoritative for required behaviour: make your change satisfy it, and if your change conflicts with the spec, follow the spec or call out the discrepancy rather than silently diverging.",
     "userPrompt": "Pipeline: Standard build
 Block: Add widget (feature)
 Description: Implement the widget feature.
@@ -352,12 +352,12 @@ Treat every best-practice standard appended below as a hard requirement, not a s
 
 IMPORTANT — this is a READ-ONLY exploration: you may read and inspect any file in the repository, but you MUST NOT modify, create or delete files, run commands that change the repository, commit, or open a pull request. Your written report is the only deliverable; return it as your response.
 
-This repository may contain a prescriptive SPECIFICATION for the service under the \`spec/\` directory — the source of truth for what the service must do. When it is present, read it before doing the work:
-- \`spec/overview.md\` first, for the high-level product intent.
-- \`spec/rules.md\` for cross-cutting domain rules, invariants and constraints.
-- \`spec/features/*.feature\` for the Gherkin (Given/When/Then) acceptance scenarios.
-- \`spec/spec.json\` is the canonical machine-readable tree the markdown/feature files are rendered from; consult it when you need exact detail.
-Treat the spec as authoritative for required behaviour: make your change satisfy it, and if your change conflicts with the spec, follow the spec or call out the discrepancy rather than silently diverging.",
+This repository may contain a prescriptive SPECIFICATION for the service under the \`spec/\` directory — the source of truth for what the service must do. It is sharded by a module (domain) → feature (group) taxonomy. When it is present, read it before doing the work:
+- \`spec/overview.md\` first, for the high-level product intent and an index of the modules and their features (with links).
+- \`spec/modules/<module>/<feature>.md\` for the feature you are working on — its requirements and the domain rules scoped to it.
+- \`spec/modules/<module>/<feature>.json\` is the canonical machine-readable shard the markdown is rendered from; consult it when you need exact detail.
+- \`spec/features/<module>/<feature>.feature\` for the Gherkin (Given/When/Then) acceptance scenarios.
+Read only the modules/features relevant to your task rather than the whole tree. Treat the spec as authoritative for required behaviour: make your change satisfy it, and if your change conflicts with the spec, follow the spec or call out the discrepancy rather than silently diverging.",
     "userPrompt": "Pipeline: Standard build
 Block: Add widget (feature)
 Description: Implement the widget feature.
@@ -399,7 +399,7 @@ exports[`ContainerAgentExecutor.buildJobBody (per-kind body shapes) > spec-write
       "owner": "acme",
     },
     "sessionToken": "SESSION-TOKEN",
-    "systemPrompt": "You maintain the PRESCRIPTIVE specification for a service. You are given the specification already committed to the repository (the baseline) and the requirements of ONE task. Apply that task as an INCREMENT onto the baseline: add requirements for what the task introduces, and adjust existing requirements ONLY where the task changes their expected behaviour. Leave every other part of the baseline spec untouched. Translate ONLY what the task requirements state — do NOT invent requirements, fill gaps, or design beyond them (missing requirements are the requirements step’s job, not yours). Requirements are grouped by capability, each phrased as "The system SHALL …" with a MoSCoW priority (must/should/could) and structured Given/When/Then acceptance criteria, plus cross-cutting domain rules / invariants. Acceptance-scenario coverage is a FIRST-CLASS deliverable: every requirement the task adds or changes MUST carry complete acceptance criteria — the happy path AND the invalid-input / error / edge / boundary cases the requirements imply — since the Gherkin \`.feature\` files and the runnable tests are derived mechanically from them. Preserve the baseline’s existing \`sourceBlockIds\`; tag the requirements this task adds or changes with this task’s block id. Return the COMPLETE updated specification (baseline plus this increment), not a diff. You have NO repository write access and MUST NOT write, edit, or commit any file: the platform persists the specification you return, so returning it IS the whole job. Respond with ONLY a JSON object of shape {"service","summary","groups":[{"name","summary","requirements":[{"id","title","statement","kind","priority","sourceBlockIds":[],"acceptance":[{"id","given","when","outcome"}]}]}],"rules":[{"id","rule","rationale","sourceBlockIds":[]}]} (each acceptance criterion is a Given/When/Then, with the Then clause in \`outcome\`) — no prose, no code fences. Your deliverable is the text of your FINAL reply. Emit the complete answer as the visible content of that reply, NOT inside your private reasoning or thinking. A final reply whose visible content is empty is treated as a failure even when your reasoning contains the answer.",
+    "systemPrompt": "You maintain the PRESCRIPTIVE specification for a service. You are given the specification already committed to the repository (the baseline) and the requirements of ONE task. Apply that task as an INCREMENT onto the baseline: add requirements for what the task introduces, and adjust existing requirements ONLY where the task changes their expected behaviour. Leave every other part of the baseline spec untouched. Translate ONLY what the task requirements state — do NOT invent requirements, fill gaps, or design beyond them (missing requirements are the requirements step’s job, not yours). The spec is a two-level taxonomy: MODULES (domains, e.g. "Auth") each containing GROUPS (features, e.g. "Login"). Every requirement AND every domain rule lives inside a specific feature group: a group carries both its \`requirements\` and the \`rules\` scoped to it. There is NO catch-all — a cross-cutting concern goes in a \`common\` or \`infrastructure\` module that is ITSELF split into specific feature groups. CRUCIALLY, reuse the EXISTING taxonomy: place each new requirement/rule into the closest-fitting existing module and feature, reusing its EXACT name, and create a new module or feature ONLY when nothing fits — never a near-duplicate of an existing one (no "Authentication" beside "Auth", no "User Login" beside "Login"). Each requirement is phrased as "The system SHALL …" with a MoSCoW priority (must/should/could) and structured Given/When/Then acceptance criteria. Acceptance-scenario coverage is a FIRST-CLASS deliverable: every requirement the task adds or changes MUST carry complete acceptance criteria — the happy path AND the invalid-input / error / edge / boundary cases the requirements imply — since the Gherkin \`.feature\` files and the runnable tests are derived mechanically from them. Preserve the baseline’s existing \`sourceBlockIds\`; tag the requirements this task adds or changes with this task’s block id. Return the COMPLETE updated specification (baseline plus this increment), not a diff. You have NO repository write access and MUST NOT write, edit, or commit any file: the platform persists the specification you return, so returning it IS the whole job. Respond with ONLY a JSON object of shape {"service","summary","modules":[{"name","summary","groups":[{"name","summary","requirements":[{"id","title","statement","kind","priority","sourceBlockIds":[],"acceptance":[{"id","given","when","outcome"}]}],"rules":[{"id","rule","rationale","sourceBlockIds":[]}]}]}]} (each acceptance criterion is a Given/When/Then, with the Then clause in \`outcome\`) — no prose, no code fences. Your deliverable is the text of your FINAL reply. Emit the complete answer as the visible content of that reply, NOT inside your private reasoning or thinking. A final reply whose visible content is empty is treated as a failure even when your reasoning contains the answer.",
     "task": {
       "description": "Implement the widget feature.",
       "id": "blk_1",
@@ -465,12 +465,12 @@ Respond with ONLY a JSON object (no prose, no code fences) of this shape:
 
 Your deliverable is the text of your FINAL reply. Emit the complete answer as the visible content of that reply, NOT inside your private reasoning or thinking. A final reply whose visible content is empty is treated as a failure even when your reasoning contains the answer.
 
-This repository may contain a prescriptive SPECIFICATION for the service under the \`spec/\` directory — the source of truth for what the service must do. When it is present, read it before doing the work:
-- \`spec/overview.md\` first, for the high-level product intent.
-- \`spec/rules.md\` for cross-cutting domain rules, invariants and constraints.
-- \`spec/features/*.feature\` for the Gherkin (Given/When/Then) acceptance scenarios.
-- \`spec/spec.json\` is the canonical machine-readable tree the markdown/feature files are rendered from; consult it when you need exact detail.
-Treat the spec as authoritative for required behaviour: make your change satisfy it, and if your change conflicts with the spec, follow the spec or call out the discrepancy rather than silently diverging.",
+This repository may contain a prescriptive SPECIFICATION for the service under the \`spec/\` directory — the source of truth for what the service must do. It is sharded by a module (domain) → feature (group) taxonomy. When it is present, read it before doing the work:
+- \`spec/overview.md\` first, for the high-level product intent and an index of the modules and their features (with links).
+- \`spec/modules/<module>/<feature>.md\` for the feature you are working on — its requirements and the domain rules scoped to it.
+- \`spec/modules/<module>/<feature>.json\` is the canonical machine-readable shard the markdown is rendered from; consult it when you need exact detail.
+- \`spec/features/<module>/<feature>.feature\` for the Gherkin (Given/When/Then) acceptance scenarios.
+Read only the modules/features relevant to your task rather than the whole tree. Treat the spec as authoritative for required behaviour: make your change satisfy it, and if your change conflicts with the spec, follow the spec or call out the discrepancy rather than silently diverging.",
     "test": {
       "environment": "local",
       "noInfraDependencies": false,
