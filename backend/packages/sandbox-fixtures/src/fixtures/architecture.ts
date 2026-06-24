@@ -55,11 +55,13 @@ export const ARCHITECTURE_FIXTURES: SandboxFixtureDefinition[] = [
           detail:
             'Single Redis + hourly persistence makes a cache the durable store; the central design flaw.',
           matchHints: [
-            'lose',
+            'lose counts',
+            'lose up to',
             'data loss',
             'durability',
-            'crash',
+            'redis crash',
             'single instance',
+            'single point of failure',
             'persistence',
           ],
         },
