@@ -22,6 +22,8 @@ import {
   SLACK_CIPHER_INFO,
   SlackNotificationChannel,
   TicketTrackerService,
+  IssueWritebackService,
+  githubIssuesLogic,
   createGitHubIssueViaToken,
   DATADOG_CIPHER_INFO,
   DatadogReleaseHealthProvider,
@@ -883,6 +885,62 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   // is available — kept here, after the client is built, for parity with the Worker.
   const tasks = selectNodeTasksDeps(config, options.db, githubClient, githubInstallationRepository)
 
+  // Issue-tracker writeback (comment-on-PR-open + close-on-merge of a task's linked
+  // issue), gated per workspace + per task inside the provider. GitHub uses the same
+  // per-tenant client + installation lookup as the tracker/CI/merge providers; Jira
+  // reuses the workspace's encrypted connection. Wired whenever the tracker-settings
+  // repo exists (always on Node) so the engine can write back when a tracker is set.
+  const resolveWritebackIssue = githubClient
+    ? async (workspaceId: string, externalId: string) => {
+        const parsed = githubIssuesLogic.parseGitHubIssueExternalId(externalId)
+        if (!parsed) return null
+        const installation = await githubInstallationRepository.getByWorkspace(workspaceId)
+        if (!installation) return null
+        return { installationId: installation.installationId, parsed }
+      }
+    : undefined
+  const issueWritebackProvider = new IssueWritebackService({
+    trackerSettingsRepository: repos.trackerSettingsRepository,
+    taskRepository: new DrizzleTaskRepository(options.db),
+    fetchImpl: fetch,
+    ...(githubClient && resolveWritebackIssue
+      ? {
+          commentOnGitHubIssue: async (workspaceId, externalId, body) => {
+            const target = await resolveWritebackIssue(workspaceId, externalId)
+            if (!target) return
+            await githubClient.comment(
+              target.installationId,
+              { owner: target.parsed.owner, repo: target.parsed.repo },
+              target.parsed.number,
+              body,
+            )
+          },
+          closeGitHubIssue: async (workspaceId, externalId) => {
+            const target = await resolveWritebackIssue(workspaceId, externalId)
+            if (!target) return
+            await githubClient.closeIssue(
+              target.installationId,
+              { owner: target.parsed.owner, repo: target.parsed.repo },
+              target.parsed.number,
+            )
+          },
+        }
+      : {}),
+    ...(tasks.taskConnectionRepository
+      ? {
+          resolveJiraConnection: async (workspaceId: string) => {
+            const connection = await tasks.taskConnectionRepository!.getByWorkspace(
+              workspaceId,
+              'jira',
+            )
+            const { baseUrl, accountEmail, apiToken } = connection?.credentials ?? {}
+            if (!baseUrl || !accountEmail || !apiToken) return null
+            return { baseUrl, accountEmail, apiToken }
+          },
+        }
+      : {}),
+  })
+
   const githubGateDeps: Partial<CoreDependencies> = githubClient
     ? {
         ciStatusProvider: new GitHubCiStatusProvider({
@@ -1119,6 +1177,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
           }
         : {}),
     }),
+    issueWritebackProvider,
     idGenerator,
     clock,
     agentExecutor,

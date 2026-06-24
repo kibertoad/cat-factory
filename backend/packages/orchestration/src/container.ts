@@ -61,6 +61,7 @@ import type {
   DatadogConnectionRepository,
   ReleaseHealthConfigRepository,
   TicketTrackerProvider,
+  IssueWritebackProvider,
   TrackerSettingsRepository,
 } from '@cat-factory/kernel'
 import type {
@@ -465,6 +466,10 @@ export interface CoreDependencies {
   pipelineScheduleRepository?: PipelineScheduleRepository
   trackerSettingsRepository?: TrackerSettingsRepository
   ticketTrackerProvider?: TicketTrackerProvider
+  // Writes back to a task's linked tracker issue(s) as its PR progresses (comment
+  // on PR open; comment + close on merge). Absent → no writeback. Gated per
+  // workspace + per task inside the provider.
+  issueWritebackProvider?: IssueWritebackProvider
 
   // ---- Local-runtime capability (optional; set by the local facade) ---------
   /**
@@ -1310,6 +1315,7 @@ export function createCore(dependencies: CoreDependencies): Core {
     workspaceSettingsService: settings?.service,
     llmObservability,
     ticketTrackerProvider: dependencies.ticketTrackerProvider,
+    issueWriteback: dependencies.issueWritebackProvider,
     // Let the personal-credential gate resolve the workspace per-kind default model the
     // same way dispatch does, so a run whose block has no pin but an individual-usage
     // workspace default is still gated up-front. Reuses the model-defaults repository.

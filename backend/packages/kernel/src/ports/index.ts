@@ -293,6 +293,7 @@ export type { ServiceFragmentDefaultsRepository } from './service-fragment-defau
 export type { DueSchedule, PipelineScheduleRepository } from './recurring-repositories.js'
 export type { TrackerSettingsRepository } from './tracker-settings-repositories.js'
 export type { CreateTicketRequest, CreatedTicket, TicketTrackerProvider } from './ticket-tracker.js'
+export type { IssueWritebackProvider } from './issue-writeback.js'
 export {
   type NotificationChannel,
   CompositeNotificationChannel,

@@ -36,6 +36,8 @@ import {
   SLACK_CIPHER_INFO,
   SlackNotificationChannel,
   TicketTrackerService,
+  IssueWritebackService,
+  githubIssuesLogic,
   DATADOG_CIPHER_INFO,
   DatadogReleaseHealthProvider,
   PagerDutyEnrichmentProvider,
@@ -679,6 +681,13 @@ function selectRecurringDeps(
     // workerd exposes a global fetch; the Jira create call uses it.
     fetchImpl: fetch,
   }
+  // Writeback (comment-on-PR-open + close-on-merge of a task's linked issue) shares
+  // the same GitHub client + Jira connection seams as the filing tracker above.
+  const writebackDeps: ConstructorParameters<typeof IssueWritebackService>[0] = {
+    trackerSettingsRepository: new D1TrackerSettingsRepository({ db }),
+    taskRepository: new D1TaskRepository({ db }),
+    fetchImpl: fetch,
+  }
   // GitHub issues: file through the App-authenticated client against the service's
   // linked repo (resolved from the github_repos projection). Only when the App is configured.
   if (config.github.enabled && env.GITHUB_APP_PRIVATE_KEY) {
@@ -701,6 +710,35 @@ function selectRecurringDeps(
       )
       return { externalId: `${repo.owner}/${repo.name}#${issue.number}`, url: issue.url }
     }
+    // Writeback resolves the workspace's single installation, then comments/closes the
+    // issue named by its `owner/repo#number` external id.
+    const installationRepository = new D1GitHubInstallationRepository({ db })
+    const resolveIssue = async (workspaceId: string, externalId: string) => {
+      const parsed = githubIssuesLogic.parseGitHubIssueExternalId(externalId)
+      if (!parsed) return null
+      const installation = await installationRepository.getByWorkspace(workspaceId)
+      if (!installation) return null
+      return { installationId: installation.installationId, parsed }
+    }
+    writebackDeps.commentOnGitHubIssue = async (workspaceId, externalId, body) => {
+      const target = await resolveIssue(workspaceId, externalId)
+      if (!target) return
+      await githubClient.comment(
+        target.installationId,
+        { owner: target.parsed.owner, repo: target.parsed.repo },
+        target.parsed.number,
+        body,
+      )
+    }
+    writebackDeps.closeGitHubIssue = async (workspaceId, externalId) => {
+      const target = await resolveIssue(workspaceId, externalId)
+      if (!target) return
+      await githubClient.closeIssue(
+        target.installationId,
+        { owner: target.parsed.owner, repo: target.parsed.repo },
+        target.parsed.number,
+      )
+    }
   }
   // Jira: read the workspace's stored connection credentials (when the tasks
   // integration's encryption key is configured).
@@ -712,17 +750,20 @@ function selectRecurringDeps(
         info: 'cat-factory:tasks',
       }),
     })
-    trackerDeps.resolveJiraConnection = async (workspaceId) => {
+    const resolveJiraConnection = async (workspaceId: string) => {
       const connection = await taskConnectionRepository.getByWorkspace(workspaceId, 'jira')
       const { baseUrl, accountEmail, apiToken } = connection?.credentials ?? {}
       if (!baseUrl || !accountEmail || !apiToken) return null
       return { baseUrl, accountEmail, apiToken }
     }
+    trackerDeps.resolveJiraConnection = resolveJiraConnection
+    writebackDeps.resolveJiraConnection = resolveJiraConnection
   }
   return {
     pipelineScheduleRepository: new D1PipelineScheduleRepository({ db }),
     trackerSettingsRepository: new D1TrackerSettingsRepository({ db }),
     ticketTrackerProvider: new TicketTrackerService(trackerDeps),
+    issueWritebackProvider: new IssueWritebackService(writebackDeps),
   }
 }
 

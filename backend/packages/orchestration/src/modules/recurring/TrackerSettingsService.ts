@@ -14,7 +14,12 @@ export interface TrackerSettingsServiceDependencies {
 }
 
 /** The empty/unconfigured tracker settings returned before anything is set. */
-const EMPTY: Omit<TrackerSettings, 'updatedAt'> = { tracker: null, jiraProjectKey: null }
+const EMPTY: Omit<TrackerSettings, 'updatedAt'> = {
+  tracker: null,
+  jiraProjectKey: null,
+  writebackCommentOnPrOpen: false,
+  writebackResolveOnMerge: false,
+}
 
 /** Read/write a workspace's issue-tracker selection (one row per workspace). */
 export class TrackerSettingsService {
@@ -39,6 +44,10 @@ export class TrackerSettingsService {
       tracker: input.tracker,
       // Only keep a Jira project key when Jira is the selected tracker.
       jiraProjectKey: input.tracker === 'jira' ? input.jiraProjectKey?.trim() || null : null,
+      // Writeback applies to a task's linked tracker issue(s) of any source, so it is
+      // kept regardless of the filing tracker selection above. Default off.
+      writebackCommentOnPrOpen: input.writebackCommentOnPrOpen ?? false,
+      writebackResolveOnMerge: input.writebackResolveOnMerge ?? false,
       updatedAt: this.clock.now(),
     }
     await this.repo.put(workspaceId, settings)

@@ -20,7 +20,14 @@ function settingsRepo(
 }
 
 function makeSettings(over: Partial<TrackerSettings>): TrackerSettings {
-  return { tracker: null, jiraProjectKey: null, updatedAt: 0, ...over }
+  return {
+    tracker: null,
+    jiraProjectKey: null,
+    writebackCommentOnPrOpen: false,
+    writebackResolveOnMerge: false,
+    updatedAt: 0,
+    ...over,
+  }
 }
 
 describe('TicketTrackerService', () => {
@@ -47,7 +54,7 @@ describe('TicketTrackerService', () => {
   })
 
   it('files a Jira issue over HTTP Basic with an ADF body', async () => {
-    let captured: { url: string; init: { headers: Record<string, string>; body: string } } | null =
+    let captured: { url: string; init: { headers: Record<string, string>; body?: string } } | null =
       null
     const fetchImpl: FetchLike = async (url, init) => {
       captured = { url, init }
@@ -72,7 +79,7 @@ describe('TicketTrackerService', () => {
     })
     expect(captured!.url).toBe('https://team.atlassian.net/rest/api/3/issue')
     expect(captured!.init.headers.authorization).toBe(`Basic ${btoa('me@co.com:tok')}`)
-    const payload = JSON.parse(captured!.init.body)
+    const payload = JSON.parse(captured!.init.body ?? '')
     expect(payload.fields.project.key).toBe('ENG')
     expect(payload.fields.description.type).toBe('doc')
   })

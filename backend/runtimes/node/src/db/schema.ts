@@ -190,6 +190,10 @@ export const blocks = pgTable(
     task_type: text('task_type'),
     // Task-level: small per-type form fields (bug severity, spike timebox…) as JSON.
     task_type_fields: text('task_type_fields'),
+    // Task-level: per-task issue-tracker writeback overrides ('on'/'off'; null ⇒ inherit
+    // the workspace's writeback_* settings). Comment-on-PR-open and resolve-on-merge.
+    tracker_comment_on_pr_open: text('tracker_comment_on_pr_open'),
+    tracker_resolve_on_merge: text('tracker_resolve_on_merge'),
   },
   (t) => [
     primaryKey({ columns: [t.workspace_id, t.id] }),
@@ -603,6 +607,10 @@ export const trackerSettings = pgTable('tracker_settings', {
   workspace_id: text('workspace_id').primaryKey(),
   tracker: text('tracker'),
   jira_project_key: text('jira_project_key'),
+  // Issue-tracker writeback toggles (0/1): comment on a task's linked issue when its
+  // PR opens, and comment + close as resolved when it merges. Per-task overridable.
+  writeback_comment_on_pr_open: integer('writeback_comment_on_pr_open').notNull().default(0),
+  writeback_resolve_on_merge: integer('writeback_resolve_on_merge').notNull().default(0),
   updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
 })
 

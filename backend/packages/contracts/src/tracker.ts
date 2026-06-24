@@ -18,6 +18,17 @@ export const trackerSettingsSchema = v.object({
   tracker: v.nullable(trackerKindSchema),
   /** Jira project key new tickets are filed under (e.g. "ENG"); null unless Jira. */
   jiraProjectKey: v.nullable(v.string()),
+  /**
+   * Writeback: when a task's PR opens, post a comment on the task's linked tracker
+   * issue(s). Per-task overridable via `Block.trackerCommentOnPrOpen`. Default off.
+   */
+  writebackCommentOnPrOpen: v.boolean(),
+  /**
+   * Writeback: when a task's PR merges, comment + close the linked tracker issue(s)
+   * as resolved (GitHub closes natively; Jira transitions to its Done category).
+   * Per-task overridable via `Block.trackerResolveOnMerge`. Default off.
+   */
+  writebackResolveOnMerge: v.boolean(),
   updatedAt: v.number(),
 })
 export type TrackerSettings = v.InferOutput<typeof trackerSettingsSchema>
@@ -26,5 +37,7 @@ export type TrackerSettings = v.InferOutput<typeof trackerSettingsSchema>
 export const putTrackerSettingsSchema = v.object({
   tracker: v.nullable(trackerKindSchema),
   jiraProjectKey: v.optional(v.nullable(v.pipe(v.string(), v.trim()))),
+  writebackCommentOnPrOpen: v.optional(v.boolean()),
+  writebackResolveOnMerge: v.optional(v.boolean()),
 })
 export type PutTrackerSettingsInput = v.InferOutput<typeof putTrackerSettingsSchema>

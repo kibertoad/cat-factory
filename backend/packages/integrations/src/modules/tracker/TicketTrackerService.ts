@@ -45,10 +45,15 @@ export interface TicketTrackerServiceDependencies {
   fetchImpl?: FetchLike
 }
 
-/** The minimal slice of the Fetch API the Jira create call needs (no DOM lib). */
+/**
+ * The minimal slice of the Fetch API the Jira calls need (no DOM lib). `body` is
+ * optional and must be omitted for GET/HEAD: the real `fetch` (undici + workerd)
+ * throws `TypeError: Request with GET/HEAD method cannot have body` for ANY non-null
+ * body, including an empty string.
+ */
 export type FetchLike = (
   url: string,
-  init: { method: string; headers: Record<string, string>; body: string },
+  init: { method: string; headers: Record<string, string>; body?: string },
 ) => Promise<{ ok: boolean; status: number; text(): Promise<string>; json(): Promise<unknown> }>
 
 const USER_AGENT = 'cat-factory'

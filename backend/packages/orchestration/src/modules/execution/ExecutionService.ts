@@ -18,6 +18,7 @@ import type {
   StepReviewComment,
   SubscriptionActivationRepository,
   TicketTrackerProvider,
+  IssueWritebackProvider,
 } from '@cat-factory/kernel'
 import {
   parseBlueprintService,
@@ -359,6 +360,13 @@ export interface ExecutionServiceDependencies {
    */
   ticketTrackerProvider?: TicketTrackerProvider
   /**
+   * Optional: writes back to a task's linked tracker issue(s) as its PR progresses
+   * (comment on PR open; comment + close as resolved on merge). Gated by the
+   * workspace's writeback settings + the per-task override. Absent → no writeback,
+   * so the engine works unchanged when no tracker writeback is wired.
+   */
+  issueWriteback?: IssueWritebackProvider
+  /**
    * Optional: the LLM observability sink. When wired, each emit rolls the per-run
    * model-call aggregates onto the matching pipeline steps (`step.metrics`) so the
    * board shows tokens / output-limit headroom / transport-vs-execution latency
@@ -435,6 +443,7 @@ export class ExecutionService {
   private readonly prMerger?: PullRequestMerger
   private readonly mergePresetRepository?: MergePresetRepository
   private readonly ticketTrackerProvider?: TicketTrackerProvider
+  private readonly issueWriteback?: IssueWritebackProvider
   private readonly subscriptionActivations?: SubscriptionActivationRepository
   private readonly resolveProviderCapabilities?: (
     workspaceId: string,
@@ -485,6 +494,7 @@ export class ExecutionService {
     pullRequestMerger,
     mergePresetRepository,
     ticketTrackerProvider,
+    issueWriteback,
     subscriptionActivationRepository,
     resolveWorkspaceModelDefault,
     resolveProviderCapabilities,
@@ -580,6 +590,7 @@ export class ExecutionService {
     this.prMerger = pullRequestMerger
     this.mergePresetRepository = mergePresetRepository
     this.ticketTrackerProvider = ticketTrackerProvider
+    this.issueWriteback = issueWriteback
     this.subscriptionActivations = subscriptionActivationRepository
     this.resolveWorkspaceModelDefault = resolveWorkspaceModelDefault
     this.resolveProviderCapabilities = resolveProviderCapabilities
@@ -1590,9 +1601,24 @@ export class ExecutionService {
     // its work. Record it on the block so the board can surface and link to it,
     // regardless of whether this is the final step.
     if (result.pullRequest) {
+      // Read the block before the update so we can tell whether this PR is newly
+      // opened (vs. the same PR re-reported by a re-run/retry of the coder step).
+      const priorBlock = this.issueWriteback
+        ? await this.blockRepository.get(workspaceId, instance.blockId)
+        : null
       await this.blockRepository.update(workspaceId, instance.blockId, {
         pullRequest: result.pullRequest,
       })
+      // Best-effort writeback: comment on the task's linked tracker issue(s) that a
+      // PR opened. Only when the PR is newly recorded — a retry that re-reports the
+      // same PR must not re-comment (the tracker comment is not idempotent). Gated
+      // inside the provider by the workspace setting + per-task override;
+      // fire-and-forget so a tracker outage never fails the run.
+      if (this.issueWriteback && priorBlock && priorBlock.pullRequest?.url !== result.pullRequest.url) {
+        await this.issueWriteback
+          .onPullRequestOpened(workspaceId, priorBlock, result.pullRequest)
+          .catch(() => {})
+      }
     }
 
     // A Blueprinter step produced a fresh service decomposition. Validate it with
@@ -2985,6 +3011,15 @@ export class ExecutionService {
       await this.prMerger.mergeForBlock(workspaceId, blockId)
     }
     await this.blockRepository.update(workspaceId, blockId, { status: 'done', progress: 1 })
+    // Best-effort writeback: comment + close the task's linked tracker issue(s) as
+    // resolved now the PR is merged. Gated inside the provider by the workspace
+    // setting + per-task override; fire-and-forget so a tracker outage never fails
+    // the run (the merge already happened).
+    if (this.issueWriteback && block.pullRequest) {
+      await this.issueWriteback
+        .onPullRequestMerged(workspaceId, block, block.pullRequest)
+        .catch(() => {})
+    }
     if ((block.level ?? 'frame') === 'task') {
       await this.applyModuleAssignment(workspaceId, blockId)
     }

@@ -70,6 +70,9 @@ export const useUiStore = defineStore('ui', () => {
   // Workspace-settings panel: the run-timing escalation threshold + per-service task limit.
   const workspaceSettingsOpen = ref(false)
   const datadogOpen = ref(false)
+  // Workspace-settings panel: issue-tracker writeback toggles (comment on PR open,
+  // close linked issue on merge).
+  const issueWritebackOpen = ref(false)
   const modelDefaultsOpen = ref(false)
   // Workspace-settings panel: the default service-fragment selection new services inherit.
   const serviceFragmentDefaultsOpen = ref(false)
@@ -287,6 +290,12 @@ export const useUiStore = defineStore('ui', () => {
   function closeWorkspaceSettings() {
     workspaceSettingsOpen.value = false
   }
+  function openIssueWriteback() {
+    issueWritebackOpen.value = true
+  }
+  function closeIssueWriteback() {
+    issueWritebackOpen.value = false
+  }
   function openDatadog() {
     datadogOpen.value = true
   }
@@ -360,6 +369,7 @@ export const useUiStore = defineStore('ui', () => {
     fragmentLibraryOpen,
     commandBarOpen,
     mergeThresholdsOpen,
+    issueWritebackOpen,
     workspaceSettingsOpen,
     datadogOpen,
     modelDefaultsOpen,
@@ -411,6 +421,8 @@ export const useUiStore = defineStore('ui', () => {
     toggleCommandBar,
     openMergeThresholds,
     closeMergeThresholds,
+    openIssueWriteback,
+    closeIssueWriteback,
     openWorkspaceSettings,
     closeWorkspaceSettings,
     openDatadog,

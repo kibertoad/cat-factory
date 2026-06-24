@@ -275,4 +275,8 @@ export class FakeGitHubClient implements GitHubClient {
   ): Promise<void> {
     this.writes.push({ method: 'comment', ref, args: { issueOrPrNumber, body } })
   }
+
+  async closeIssue(_installationId: number, ref: GitHubRepoRef, number: number): Promise<void> {
+    this.writes.push({ method: 'closeIssue', ref, args: { number } })
+  }
 }

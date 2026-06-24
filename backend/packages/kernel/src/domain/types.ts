@@ -235,6 +235,7 @@ export type {
   TrackerKind,
   TrackerSettings,
   PutTrackerSettingsInput,
+  WritebackOverride,
   // LLM observability: the compact per-call summary pushed over the event stream.
   LlmCallActivity,
   // Sandbox (parallel prompt/model testing surface) shapes.

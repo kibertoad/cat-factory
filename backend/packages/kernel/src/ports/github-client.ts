@@ -278,6 +278,13 @@ export interface GitHubClient {
     ref: GitHubRepoRef,
     input: { title: string; body: string },
   ): Promise<{ number: number; url: string }>
+  /**
+   * Close an issue as resolved. Used by issue-tracker writeback when a task's PR
+   * merges. PATCHes `/issues/{number}` with `state: 'closed'` and
+   * `state_reason: 'completed'`. Idempotent from the caller's view: closing an
+   * already-closed issue is not an error.
+   */
+  closeIssue(installationId: number, ref: GitHubRepoRef, number: number): Promise<void>
   openPullRequest(
     installationId: number,
     ref: GitHubRepoRef,
