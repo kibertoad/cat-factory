@@ -1,12 +1,12 @@
 ---
-"@cat-factory/contracts": minor
-"@cat-factory/kernel": minor
-"@cat-factory/orchestration": minor
-"@cat-factory/agents": minor
-"@cat-factory/server": minor
-"@cat-factory/worker": minor
-"@cat-factory/node-server": minor
-"@cat-factory/app": minor
+'@cat-factory/contracts': minor
+'@cat-factory/kernel': minor
+'@cat-factory/orchestration': minor
+'@cat-factory/agents': minor
+'@cat-factory/server': minor
+'@cat-factory/worker': minor
+'@cat-factory/node-server': minor
+'@cat-factory/app': minor
 ---
 
 Replace per-agent-kind model defaults with named **model presets**.
@@ -32,7 +32,7 @@ the env routing.
   block's preset into model resolution, the personal-credential gate and the start guard.
 - `@cat-factory/agents`: `StepModelInputs.modelPresetId` + the resolver signature.
 - `@cat-factory/server`: `ModelPresetController` (`GET|POST|PATCH|DELETE
-  /workspaces/:ws/model-presets`, replaces the model-defaults controller); the block mappers
+/workspaces/:ws/model-presets`, replaces the model-defaults controller); the block mappers
   persist `model_preset_id`; the snapshot lists `modelPresets`.
 - `@cat-factory/worker` / `@cat-factory/node-server`: the `model_presets` table (D1 migration
   `0006` ⇄ Drizzle) + `blocks.model_preset_id`, replacing `workspace_model_defaults`.

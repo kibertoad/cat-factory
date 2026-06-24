@@ -1,9 +1,9 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "184b69e5-0f44-4c1f-af3a-c590c65ba380",
+  "id": "ffdc3ddd-6070-49ca-9889-81808ba7a819",
   "prevIds": [
-    "2eec679b-1ce2-4b5e-873e-9e037e0abace"
+    "c115b701-36cd-4a7c-adea-352992323a88"
   ],
   "ddl": [
     {
@@ -201,6 +201,12 @@
     {
       "isRlsEnabled": false,
       "name": "provider_api_keys",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "provider_model_catalog",
       "entityType": "tables",
       "schema": "public"
     },
@@ -5252,6 +5258,71 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "name": "workspace_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "provider_model_catalog"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "provider",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "provider_model_catalog"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "models",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "provider_model_catalog"
+    },
+    {
+      "type": "bigint",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "provider_model_catalog"
+    },
+    {
+      "type": "bigint",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "provider_model_catalog"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
       "name": "id",
       "entityType": "columns",
       "schema": "public",
@@ -9041,6 +9112,17 @@
       "entityType": "pks",
       "schema": "public",
       "table": "prompt_fragments"
+    },
+    {
+      "columns": [
+        "workspace_id",
+        "provider"
+      ],
+      "nameExplicit": false,
+      "name": "provider_model_catalog_pkey",
+      "entityType": "pks",
+      "schema": "public",
+      "table": "provider_model_catalog"
     },
     {
       "columns": [
