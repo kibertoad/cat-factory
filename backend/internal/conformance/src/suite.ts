@@ -115,6 +115,74 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
       })
     })
 
+    describe('task types + per-service running-task limit', () => {
+      it('persists a task type + per-type fields, surfaced on the snapshot identically', async () => {
+        const { call, createWorkspace } = harness.makeApp()
+        const { workspace } = await createWorkspace()
+        const wsId = workspace.id
+
+        const created = await call<Block>('POST', `/workspaces/${wsId}/blocks/blk_auth/tasks`, {
+          title: 'Investigate flaky login',
+          taskType: 'bug',
+          taskTypeFields: { severity: 'high', stepsToReproduce: 'log in repeatedly' },
+        })
+        expect(created.status).toBe(201)
+        expect(created.body.taskType).toBe('bug')
+
+        // The type + its per-type fields round-trip through the store identically (D1 ⇄ Postgres).
+        const snapshot = await call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+        const block = snapshot.body.blocks.find((b) => b.id === created.body.id)!
+        expect(block.taskType).toBe('bug')
+        expect(block.taskTypeFields?.severity).toBe('high')
+      })
+
+      it('enforces a per-service running-task limit and lifts it when the mode is off', async () => {
+        const { call, createWorkspace } = harness.makeApp()
+        const { workspace } = await createWorkspace()
+        const wsId = workspace.id
+
+        const pipeline = await call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Code only',
+          agentKinds: ['coder'],
+        })
+        // Cap the auth service at one concurrently-running task.
+        const settings = await call('PUT', `/workspaces/${wsId}/settings`, {
+          taskLimitMode: 'shared',
+          taskLimitShared: 1,
+        })
+        expect(settings.status).toBe(200)
+
+        // A second task under the same service frame (blk_auth owns task_login).
+        const second = await call<Block>('POST', `/workspaces/${wsId}/blocks/blk_auth/tasks`, {
+          title: 'Second task',
+        })
+        expect(second.status).toBe(201)
+
+        // First run starts and stays running (the suite's no-op runner never drives it).
+        const first = await call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+          pipelineId: pipeline.body.id,
+        })
+        expect(first.status).toBe(201)
+
+        // The service is now at its cap: a second start is refused with a 409 conflict.
+        const blocked = await call(
+          'POST',
+          `/workspaces/${wsId}/blocks/${second.body.id}/executions`,
+          { pipelineId: pipeline.body.id },
+        )
+        expect(blocked.status).toBe(409)
+
+        // Turning the limit off lets the second task start.
+        await call('PUT', `/workspaces/${wsId}/settings`, { taskLimitMode: 'off' })
+        const allowed = await call(
+          'POST',
+          `/workspaces/${wsId}/blocks/${second.body.id}/executions`,
+          { pipelineId: pipeline.body.id },
+        )
+        expect(allowed.status).toBe(201)
+      })
+    })
+
     describe('model defaults', () => {
       it('reads, replaces and surfaces per-agent-kind default models', async () => {
         const { call, createWorkspace } = harness.makeApp()

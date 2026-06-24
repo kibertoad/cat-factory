@@ -280,6 +280,7 @@ export type {
   SlackMemberMappingRepository,
 } from './slack-repositories.js'
 export type { MergePresetRepository } from './merge-preset-repositories.js'
+export type { WorkspaceSettingsRepository } from './workspace-settings-repositories.js'
 export type {
   SandboxPromptVersionRepository,
   SandboxFixtureRepository,

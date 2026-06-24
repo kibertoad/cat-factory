@@ -1,11 +1,17 @@
 import type { NotificationRepository } from '@cat-factory/kernel'
-import type { Notification, NotificationPayload, NotificationType } from '@cat-factory/contracts'
+import type {
+  Notification,
+  NotificationPayload,
+  NotificationSeverity,
+  NotificationType,
+} from '@cat-factory/contracts'
 import type { D1Database } from '@cloudflare/workers-types'
 
 interface NotificationRow {
   id: string
   type: string
   status: string
+  severity: string | null
   block_id: string | null
   execution_id: string | null
   title: string
@@ -28,6 +34,7 @@ function rowToNotification(row: NotificationRow): Notification {
     id: row.id,
     type: row.type as NotificationType,
     status: row.status as Notification['status'],
+    severity: (row.severity as NotificationSeverity | null) ?? 'normal',
     blockId: row.block_id,
     executionId: row.execution_id,
     title: row.title,
@@ -91,12 +98,13 @@ export class D1NotificationRepository implements NotificationRepository {
     await this.db
       .prepare(
         `INSERT INTO notifications
-           (workspace_id, id, type, status, block_id, execution_id, title, body, payload,
+           (workspace_id, id, type, status, severity, block_id, execution_id, title, body, payload,
             created_at, resolved_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (workspace_id, id) DO UPDATE SET
            type = excluded.type,
            status = excluded.status,
+           severity = excluded.severity,
            block_id = excluded.block_id,
            execution_id = excluded.execution_id,
            title = excluded.title,
@@ -109,6 +117,7 @@ export class D1NotificationRepository implements NotificationRepository {
         notification.id,
         notification.type,
         notification.status,
+        notification.severity ?? 'normal',
         notification.blockId,
         notification.executionId,
         notification.title,

@@ -95,6 +95,12 @@ export const createScheduleSchema = v.object({
   name: scheduleNameSchema,
   recurrence: recurrenceSchema,
   enabled: v.optional(v.boolean(), true),
+  /**
+   * The prompt/description for the reused on-board task block — the same free-text a
+   * normal task carries, fed to every agent step. Omitted/empty ⇒ the template's seed
+   * description. This is what lets a `custom` recurring task say what it should do.
+   */
+  description: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(2000))),
 })
 export type CreateScheduleInput = v.InferOutput<typeof createScheduleSchema>
 

@@ -11,6 +11,8 @@
 // needs the block id, so we create the task first, then import-and-link the
 // chosen items to it before closing — the same context the agents see for every
 // step of the run (see the backend's linkedContextSection).
+import type { CreateTaskType, TaskTypeFields } from '~/types/domain'
+
 const ui = useUiStore()
 const board = useBoardStore()
 const documents = useDocumentsStore()
@@ -36,6 +38,54 @@ const container = computed(() =>
 const title = ref('')
 const description = ref('')
 const saving = ref(false)
+
+// The kind of task being created. `recurring` is special: it is created through the
+// recurring-pipeline schedule flow (a schedule on the service frame), so picking it
+// delegates to <RecurringPipelineModal> instead of creating a one-off task here.
+type TaskTypeChoice = CreateTaskType | 'recurring'
+const taskType = ref<TaskTypeChoice>('feature')
+const TASK_TYPES: { value: TaskTypeChoice; label: string; icon: string }[] = [
+  { value: 'feature', label: 'Feature', icon: 'i-lucide-sparkles' },
+  { value: 'bug', label: 'Bug', icon: 'i-lucide-bug' },
+  { value: 'document', label: 'Document', icon: 'i-lucide-file-text' },
+  { value: 'spike', label: 'Spike', icon: 'i-lucide-flask-conical' },
+  { value: 'recurring', label: 'Recurring', icon: 'i-lucide-repeat' },
+]
+const isRecurring = computed(() => taskType.value === 'recurring')
+
+// Per-type fields (only the ones relevant to the chosen type are shown / sent).
+const severity = ref<'low' | 'medium' | 'high' | 'critical' | ''>('')
+const stepsToReproduce = ref('')
+const timeboxHours = ref<number | undefined>(undefined)
+const docKind = ref<'prd' | 'rfc' | 'runbook' | 'reference' | 'other' | ''>('')
+const SEVERITIES = ['low', 'medium', 'high', 'critical'] as const
+const DOC_KINDS = ['prd', 'rfc', 'runbook', 'reference', 'other'] as const
+
+function buildTypeFields(): TaskTypeFields | undefined {
+  if (taskType.value === 'bug') {
+    const f: TaskTypeFields = {}
+    if (severity.value) f.severity = severity.value
+    if (stepsToReproduce.value.trim()) f.stepsToReproduce = stepsToReproduce.value.trim()
+    return Object.keys(f).length ? f : undefined
+  }
+  if (taskType.value === 'spike') {
+    return timeboxHours.value != null && timeboxHours.value >= 0
+      ? { timeboxHours: timeboxHours.value }
+      : undefined
+  }
+  if (taskType.value === 'document') {
+    return docKind.value ? { docKind: docKind.value } : undefined
+  }
+  return undefined
+}
+
+// For a recurring task, the schedule attaches to the service frame: the container itself
+// when it's a frame, else its parent frame (a module's parent).
+const recurringFrameId = computed(() => {
+  const c = container.value
+  if (!c) return null
+  return c.level === 'frame' ? c.id : c.parentId
+})
 
 // Run configuration picked up front. Empty string = use the default (workspace
 // default merge preset / no pinned pipeline).
@@ -112,6 +162,11 @@ watch(open, (isOpen) => {
   title.value = ''
   description.value = ''
   saving.value = false
+  taskType.value = 'feature'
+  severity.value = ''
+  stepsToReproduce.value = ''
+  timeboxHours.value = undefined
+  docKind.value = ''
   mergePresetId.value = ''
   pipelineId.value = ''
   agentConfigValues.value = {}
@@ -120,18 +175,34 @@ watch(open, (isOpen) => {
   tasks.loadTasks().catch(() => {})
 })
 
-const canAdd = computed(() => title.value.trim().length > 0)
+// A recurring task only needs a target frame (its details are filled in the schedule
+// modal); every other type needs a title.
+const canAdd = computed(() =>
+  isRecurring.value ? recurringFrameId.value !== null : title.value.trim().length > 0,
+)
 
 async function add() {
   const containerId = ui.addTaskContainerId
   if (!containerId || !canAdd.value) return
+  // Recurring tasks are created via a schedule on the service frame — hand off to the
+  // existing recurring-pipeline modal (which carries the cadence + prompt).
+  if (isRecurring.value) {
+    const frameId = recurringFrameId.value
+    if (!frameId) return
+    ui.closeAddTask()
+    ui.openAddRecurring(frameId)
+    return
+  }
   saving.value = true
   try {
+    const typeFields = buildTypeFields()
     const block = await board.addTask(
       containerId,
       title.value.trim(),
       description.value.trim() || undefined,
       {
+        taskType: taskType.value as CreateTaskType,
+        ...(typeFields ? { taskTypeFields: typeFields } : {}),
         ...(mergePresetId.value ? { mergePresetId: mergePresetId.value } : {}),
         ...(pipelineId.value ? { pipelineId: pipelineId.value } : {}),
         ...(Object.keys(agentConfigValues.value).length
@@ -171,6 +242,34 @@ async function add() {
           New task in <span class="font-medium text-slate-200">{{ container.title }}</span>
         </p>
 
+        <UFormField label="Type">
+          <div class="flex flex-wrap gap-1">
+            <UButton
+              v-for="t in TASK_TYPES"
+              :key="t.value"
+              :color="taskType === t.value ? 'primary' : 'neutral'"
+              :variant="taskType === t.value ? 'soft' : 'ghost'"
+              :icon="t.icon"
+              size="xs"
+              @click="taskType = t.value"
+            >
+              {{ t.label }}
+            </UButton>
+          </div>
+        </UFormField>
+
+        <!-- Recurring tasks are configured as a schedule on the service frame. -->
+        <div v-if="isRecurring" class="rounded-lg border border-slate-800 p-3 text-[11px] text-slate-400">
+          <template v-if="recurringFrameId">
+            A recurring task runs a pipeline on a cadence. Continue to set the schedule + prompt.
+          </template>
+          <template v-else>
+            A recurring task must live on a service. Add it from a service frame (or a module inside
+            one).
+          </template>
+        </div>
+
+        <template v-if="!isRecurring">
         <UFormField label="Title" required>
           <UInput
             v-model="title"
@@ -189,6 +288,60 @@ async function add() {
             placeholder="Describe the work — context, acceptance criteria, anything the agent should know…"
             class="w-full"
           />
+        </UFormField>
+
+        <!-- Per-type fields. -->
+        <div v-if="taskType === 'bug'" class="grid grid-cols-2 gap-3">
+          <UFormField label="Severity">
+            <div class="flex flex-wrap gap-1">
+              <UButton
+                v-for="s in SEVERITIES"
+                :key="s"
+                :color="severity === s ? 'primary' : 'neutral'"
+                :variant="severity === s ? 'soft' : 'ghost'"
+                size="xs"
+                class="capitalize"
+                @click="severity = severity === s ? '' : s"
+              >
+                {{ s }}
+              </UButton>
+            </div>
+          </UFormField>
+          <UFormField label="Steps to reproduce" class="col-span-2">
+            <UTextarea
+              v-model="stepsToReproduce"
+              :rows="2"
+              autoresize
+              placeholder="Observed vs expected, and how to reproduce…"
+              class="w-full"
+            />
+          </UFormField>
+        </div>
+
+        <UFormField v-else-if="taskType === 'spike'" label="Time-box (hours)">
+          <UInput
+            v-model.number="timeboxHours"
+            type="number"
+            min="0"
+            placeholder="e.g. 8"
+            class="w-full"
+          />
+        </UFormField>
+
+        <UFormField v-else-if="taskType === 'document'" label="Document kind">
+          <div class="flex flex-wrap gap-1">
+            <UButton
+              v-for="k in DOC_KINDS"
+              :key="k"
+              :color="docKind === k ? 'primary' : 'neutral'"
+              :variant="docKind === k ? 'soft' : 'ghost'"
+              size="xs"
+              class="uppercase"
+              @click="docKind = docKind === k ? '' : k"
+            >
+              {{ k }}
+            </UButton>
+          </div>
         </UFormField>
 
         <div class="grid grid-cols-2 gap-3">
@@ -262,6 +415,7 @@ async function add() {
           The task is added in a planned state. It won't run until you start a pipeline on it — you
           can keep editing it until then.
         </p>
+        </template>
       </div>
     </template>
 
@@ -270,12 +424,12 @@ async function add() {
         <UButton color="neutral" variant="ghost" @click="ui.closeAddTask()">Cancel</UButton>
         <UButton
           color="primary"
-          icon="i-lucide-plus"
+          :icon="isRecurring ? 'i-lucide-arrow-right' : 'i-lucide-plus'"
           :loading="saving"
           :disabled="!canAdd"
           @click="add"
         >
-          Add task
+          {{ isRecurring ? 'Continue' : 'Add task' }}
         </UButton>
       </div>
     </template>

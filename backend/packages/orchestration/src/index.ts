@@ -67,6 +67,10 @@ export {
   type MergePresetServiceDependencies,
 } from './modules/merge/MergePresetService.js'
 export {
+  WorkspaceSettingsService,
+  type WorkspaceSettingsServiceDependencies,
+} from './modules/settings/WorkspaceSettingsService.js'
+export {
   ReleaseHealthService,
   type ReleaseHealthServiceDependencies,
 } from './modules/releaseHealth/ReleaseHealthService.js'
@@ -133,6 +137,7 @@ export {
   type ReleaseHealthModule,
   type SlackModule,
   type MergePresetsModule,
+  type WorkspaceSettingsModule,
   type ModelDefaultsModule,
   type ServiceFragmentDefaultsModule,
   type FragmentLibraryModule,

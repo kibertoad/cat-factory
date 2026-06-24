@@ -10,6 +10,10 @@ import type {
   AuthUser,
   Block,
   BlockType,
+  CreateTaskType,
+  TaskTypeFields,
+  WorkspaceSettings,
+  UpdateWorkspaceSettingsInput,
   BootstrapJob,
   BootstrapRepoInput,
   DocumentBoardPlan,
@@ -424,6 +428,8 @@ export function useApi() {
       body: {
         title: string
         description?: string
+        taskType?: CreateTaskType
+        taskTypeFields?: TaskTypeFields
         mergePresetId?: string
         pipelineId?: string
         agentConfig?: Record<string, string>
@@ -874,6 +880,13 @@ export function useApi() {
       http(`${ws(workspaceId)}/merge-presets/${encodeURIComponent(presetId)}`, {
         method: 'DELETE',
       }),
+
+    // ---- workspace runtime settings (human-wait escalation + per-service task limit) --
+    getWorkspaceSettings: (workspaceId: string) =>
+      http<WorkspaceSettings>(`${ws(workspaceId)}/settings`),
+
+    updateWorkspaceSettings: (workspaceId: string, body: UpdateWorkspaceSettingsInput) =>
+      http<WorkspaceSettings>(`${ws(workspaceId)}/settings`, { method: 'PUT', body }),
 
     // ---- Datadog post-release-health settings -----------------------------
     getDatadogConnection: (workspaceId: string) =>
