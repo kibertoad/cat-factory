@@ -24,10 +24,12 @@ import {
   composeBlockSystemPrompt,
   FINAL_ANSWER_IN_REPLY,
   isReadOnlyAgentKind,
+  registeredAgentStep,
   systemPromptFor,
   userPromptFor,
   webResearchGuidanceFor,
 } from '@cat-factory/agents'
+import type { AgentStepSpec } from '@cat-factory/kernel'
 import { ModelRouter } from './ModelRouter.js'
 import {
   CI_FIXER_AGENT_KIND,
@@ -756,6 +758,14 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       context.block,
     )
 
+    // A registered (custom or migrated) kind that declares an `agent` step dispatches
+    // through the generic, manifest-driven `agent` harness kind — no per-kind case here.
+    // Built-in kinds (below) still carry their bespoke bodies until they are migrated.
+    const registeredStep = registeredAgentStep(context.agentKind)
+    if (registeredStep) {
+      return this.buildRegisteredAgentBody(context, parts, registeredStep, roleSystemPrompt)
+    }
+
     switch (context.agentKind) {
       // The Blueprinter step commits the regenerated `blueprints/` folder onto an
       // existing branch (the earlier `coder` step's PR branch when present, else the
@@ -998,6 +1008,90 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       },
     }
   }
+
+  /**
+   * Build the generic `agent` job body for a registered kind from its declarative
+   * {@link AgentStepSpec} — the single dispatch path that replaces the per-kind cases as
+   * built-ins migrate. `container-explore` clones a branch read-only and returns prose
+   * (or, for `output.kind==='structured'`, a parsed `custom` JSON object the kind's
+   * post-op renders from); `container-coding` clones, edits, pushes and (off the work
+   * branch) opens a PR. The clone target maps `base`/`pr`/`work` to a concrete branch
+   * exactly as the built-in bodies do.
+   */
+  private buildRegisteredAgentBody(
+    context: AgentRunContext,
+    parts: {
+      common: Record<string, unknown>
+      webTools: Record<string, unknown>
+      repo: RepoTarget
+      workBranch: string
+      workBranchReady: boolean
+    },
+    step: AgentStepSpec,
+    roleSystemPrompt: string,
+  ): { body: Record<string, unknown>; kind: RunnerDispatchKind } {
+    const { common, webTools, repo, workBranch, workBranchReady } = parts
+    const prBranch = context.block.pullRequest?.branch
+    const onPr = step.clone?.branch === 'pr'
+    const exploreBranch =
+      step.clone?.branch === 'base'
+        ? repo.baseBranch
+        : onPr
+          ? (prBranch ?? repo.baseBranch)
+          : workBranchReady
+            ? workBranch
+            : (prBranch ?? repo.baseBranch)
+
+    if (step.surface === 'container-coding') {
+      // `pr` clone ⇒ work in place on the PR branch and push back (fixer-like, no new PR);
+      // otherwise branch off base onto the work branch, push it and open a PR (coder-like).
+      return {
+        kind: 'agent',
+        body: {
+          ...common,
+          mode: 'coding',
+          systemPrompt: roleSystemPrompt,
+          userPrompt: userPromptFor(context),
+          branch: onPr ? (prBranch ?? repo.baseBranch) : repo.baseBranch,
+          ...(onPr ? {} : { newBranch: workBranch }),
+          pushBranch: onPr ? (prBranch ?? workBranch) : workBranch,
+          ...(onPr
+            ? { noChangesIsError: false }
+            : {
+                pr: {
+                  title: `${context.block.title} (${context.pipelineName})`,
+                  body: prBody(context),
+                },
+              }),
+          ...(step.clone?.full ? { full: true } : {}),
+          ...webTools,
+        },
+      }
+    }
+
+    // container-explore (read-only): prose, or a structured JSON object as `custom`.
+    return {
+      kind: 'agent',
+      body: {
+        ...common,
+        mode: 'explore',
+        systemPrompt: roleSystemPrompt,
+        userPrompt: userPromptFor(context),
+        branch: exploreBranch,
+        ...(step.clone?.full ? { full: true } : {}),
+        ...(step.output?.kind === 'structured'
+          ? {
+              output: {
+                kind: 'structured',
+                ...(step.output.shapeHint ? { shapeHint: step.output.shapeHint } : {}),
+                ...(step.output.repair === false ? { repair: false } : {}),
+              },
+            }
+          : {}),
+        ...webTools,
+      },
+    }
+  }
 }
 
 /** Map a finished runner {@link RunnerJobResult} into the engine's {@link AgentRunResult}. */
@@ -1040,6 +1134,14 @@ function toRunResult(result: RunnerJobResult): AgentRunResult {
     return {
       output: result.summary?.trim() || 'Testing complete.',
       testReport: result.report,
+    }
+  }
+  // A generic, manifest-driven `agent` (explore, structured) job carries its parsed JSON
+  // as `custom`; surface it so the kind's post-op can coerce/validate + render from it.
+  if (result.custom !== undefined) {
+    return {
+      output: result.summary?.trim() || 'Agent run complete.',
+      custom: result.custom,
     }
   }
   // A `ci-fixer` job reports whether it pushed a fix. The engine's CI gate ignores

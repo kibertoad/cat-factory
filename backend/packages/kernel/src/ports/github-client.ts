@@ -181,6 +181,13 @@ export interface GitHubClient {
     etag?: string,
   ): Promise<Paged<GitHubBranch>>
   /**
+   * Resolve a single branch's head commit sha, or null when the branch does not
+   * exist. Unlike {@link listBranches} (a first-page projection for sync), this is an
+   * exact per-branch lookup, so it stays correct on repos with more branches than one
+   * page — the lookup a pre/post-op uses to decide create-vs-commit on a work branch.
+   */
+  branchHeadSha(installationId: number, ref: GitHubRepoRef, branch: string): Promise<string | null>
+  /**
    * List a repository's root-level entries. Returns an empty array for an empty
    * repository (GitHub answers 404 with no default branch there). Used by repo
    * bootstrapping to tell an empty/boilerplate-only target from one with real

@@ -72,6 +72,14 @@ export class FakeGitHubClient implements GitHubClient {
     return { items: this.branches }
   }
 
+  async branchHeadSha(
+    _installationId: number,
+    _ref: GitHubRepoRef,
+    branch: string,
+  ): Promise<string | null> {
+    return this.branches.find((b) => b.name === branch)?.headSha ?? null
+  }
+
   async listRootEntries(): Promise<RepoEntry[]> {
     return this.rootEntries
   }

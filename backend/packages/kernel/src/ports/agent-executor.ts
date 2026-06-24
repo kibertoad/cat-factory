@@ -236,6 +236,15 @@ export interface AgentRunResult {
    */
   onCallAssessment?: unknown
   /**
+   * A generic, manifest-driven `agent` step's structured output (the parsed JSON object
+   * a `container-explore` structured agent returned). Carried as `unknown` so the port
+   * stays free of any schema; the kind's post-op coerces/validates + renders artifact
+   * files from it. The well-known channels above (`blueprintService`/`spec`/…) remain for
+   * the bespoke built-in kinds during migration; `custom` is the channel a custom or
+   * manifest-driven structured agent uses.
+   */
+  custom?: unknown
+  /**
    * Tokens the model consumed for this call. Reported by inline LLM executors so
    * the spend safeguard can meter usage; absent for the container executor (whose
    * proxy meters tokens itself, to avoid double-counting) and test fakes.
