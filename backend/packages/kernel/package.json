@@ -1,12 +1,12 @@
 {
   "name": "@cat-factory/kernel",
   "version": "0.9.0",
+  "description": "Shared vocabulary, pure logic, and port interfaces for the Agent Architecture Board.",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/kibertoad/cat-factory.git",
     "directory": "backend/packages/kernel"
   },
-  "description": "Shared vocabulary, pure logic, and port interfaces for the Agent Architecture Board.",
   "files": [
     "dist"
   ],

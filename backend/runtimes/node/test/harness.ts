@@ -201,5 +201,13 @@ export function makeConformanceApp(
         remove: (userId: string, provider: string) => svc.remove(userId, provider as LocalRunner),
       }
     },
+    openRouterCatalog: () => {
+      const svc = container.openRouterCatalog
+      if (!svc) return undefined
+      return {
+        get: (workspaceId: string) => svc.get(workspaceId),
+        upsert: (workspaceId: string, input) => svc.upsert(workspaceId, input),
+      }
+    },
   }
 }

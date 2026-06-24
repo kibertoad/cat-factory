@@ -81,6 +81,8 @@ export const useUiStore = defineStore('ui', () => {
   const vendorCredentialsOpen = ref(false)
   // Per-user settings panel: the signed-in user's own-machine local model runners.
   const localModelsOpen = ref(false)
+  // Per-workspace settings panel: the OpenRouter dynamic catalog (browse/enable gateway models).
+  const openRouterOpen = ref(false)
 
   // Dedicated result-view overlay: a step whose agent kind declares a bespoke
   // visualization (via the archetype's `resultView`) opens here instead of the generic
@@ -326,6 +328,12 @@ export const useUiStore = defineStore('ui', () => {
   function closeLocalModels() {
     localModelsOpen.value = false
   }
+  function openOpenRouter() {
+    openRouterOpen.value = true
+  }
+  function closeOpenRouter() {
+    openRouterOpen.value = false
+  }
   function openRequirementReview(blockId: string) {
     resultView.value = { view: 'requirements-review', blockId, instanceId: null, stepIndex: null }
   }
@@ -376,6 +384,7 @@ export const useUiStore = defineStore('ui', () => {
     serviceFragmentDefaultsOpen,
     vendorCredentialsOpen,
     localModelsOpen,
+    openRouterOpen,
     resultView,
     closeResultView,
     stepDetail,
@@ -435,6 +444,8 @@ export const useUiStore = defineStore('ui', () => {
     closeVendorCredentials,
     openLocalModels,
     closeLocalModels,
+    openOpenRouter,
+    closeOpenRouter,
     openRequirementReview,
     openClarityReview,
     closeRequirementReview,

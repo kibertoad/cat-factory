@@ -491,7 +491,15 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
       // These run with the Cloudflare-AI opt-in forced OFF on every runtime (the Worker
       // binds `AI` in tests, Node never does), so selectability + the start guard depend
       // purely on the DB-backed key pool — and assert identically across runtimes.
-      type Opt = { id: string; flavor: string; available?: boolean }
+      type Opt = {
+        id: string
+        flavor: string
+        available?: boolean
+        provider?: string
+        model?: string
+        contextTokens?: number
+        cost?: { inputPerMillion: number; outputPerMillion: number; currency: string }
+      }
       const KEY = { provider: 'qwen', label: 'team', key: 'qwen-api-key-secret' }
 
       it('adds, lists (secret-free), and removes workspace-scoped API keys', async () => {
@@ -553,10 +561,10 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         const { workspace } = await createWorkspace()
         const models = `/workspaces/${workspace.id}/models`
 
-        // OpenRouter is a direct-only catalog entry (no Cloudflare fallback): with no key
-        // it is unselectable on both runtimes.
+        // `gemini` is reachable only through the OpenRouter gateway (no Cloudflare/native
+        // direct flavour): with no key it is unselectable on both runtimes.
         const before = await call<Opt[]>('GET', models)
-        expect(before.body.find((m) => m.id === 'openrouter-claude-opus')?.available).toBe(false)
+        expect(before.body.find((m) => m.id === 'gemini')?.available).toBe(false)
 
         // Connect an OpenRouter key (exercises the widened apiKeyProviderSchema end to end).
         const created = await call('POST', `/workspaces/${workspace.id}/api-keys`, {
@@ -566,11 +574,55 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         })
         expect(created.status).toBe(201)
 
-        // The curated entry now resolves to its OpenAI-compatible direct flavour, selectable.
+        // The curated entry now resolves to its OpenRouter gateway flavour, selectable.
         const after = await call<Opt[]>('GET', models)
-        const or = after.body.find((m) => m.id === 'openrouter-claude-opus')!
+        const or = after.body.find((m) => m.id === 'gemini')!
         expect(or.available).toBe(true)
-        expect(or.flavor).toBe('direct')
+        expect(or.flavor).toBe('openrouter')
+      })
+
+      it('surfaces an enabled OpenRouter dynamic-catalog model in the per-workspace catalog — identically per store', async () => {
+        const app = harness.makeApp(undefined, { cloudflareModelsEnabled: false })
+        const probe = app.openRouterCatalog?.()
+        // Facades without the API-key pool (no ENCRYPTION_KEY) don't wire the store.
+        if (!probe) return
+        const { workspace } = await app.createWorkspace()
+        const models = `/workspaces/${workspace.id}/models`
+
+        // Connect an OpenRouter key so the gateway is in `directProviders`.
+        await app.call('POST', `/workspaces/${workspace.id}/api-keys`, {
+          provider: 'openrouter',
+          label: 'team',
+          key: 'sk-or-secret',
+        })
+
+        // Enable one dynamic OpenRouter model with cached context + price.
+        const saved = await probe.upsert(workspace.id, {
+          models: [
+            {
+              id: 'x-ai/grok-4',
+              name: 'Grok 4',
+              contextLength: 256_000,
+              inputPerMillion: 3,
+              outputPerMillion: 15,
+            },
+          ],
+        })
+        expect(saved.models).toHaveLength(1)
+        // The enabled subset round-trips through the store (parity across D1 + Postgres).
+        expect((await probe.get(workspace.id)).models[0]!.id).toBe('x-ai/grok-4')
+
+        // It now appears in the per-workspace catalog as a selectable openrouter-flavour
+        // model, carrying the cached context + the price overlaid onto the spend table.
+        const after = await app.call<Opt[]>('GET', models)
+        const dyn = after.body.find((m) => m.id === 'openrouter:x-ai/grok-4')!
+        expect(dyn.available).toBe(true)
+        expect(dyn.flavor).toBe('openrouter')
+        expect(dyn.provider).toBe('openrouter')
+        expect(dyn.model).toBe('x-ai/grok-4')
+        expect(dyn.contextTokens).toBe(256_000)
+        expect(dyn.cost?.inputPerMillion).toBe(3)
+        expect(dyn.cost?.outputPerMillion).toBe(15)
       })
 
       it('keeps a base-URL-required provider (LiteLLM) unselectable with a key but no base URL', async () => {

@@ -6,12 +6,15 @@ import { resolveIndividualVendors } from './individualVendors.logic.js'
 // lease a personal subscription, and never otherwise. Catalog ids used below:
 //   cloudflare-llama — Cloudflare, non-subscription
 //   glm              — dual-mode (Cloudflare base + individual GLM subscription)
-//   claude-opus      — subscription-only, individual (Claude)
-//   gpt-5.5          — subscription-only, individual (Codex)
+//   claude-opus      — dual-mode (OpenRouter base + individual Claude subscription)
+//   claude-sonnet    — subscription-only, individual (Claude)
+//   gpt-5.5          — dual-mode (OpenRouter base + individual Codex subscription)
+//   gpt-5.4          — subscription-only, individual (Codex)
 //   kimi             — dual-mode, POOLABLE (never a personal credential)
 
 const noSubs = (): boolean => false
 const hasGlm = (v: SubscriptionVendor): boolean => v === 'glm'
+const hasClaude = (v: SubscriptionVendor): boolean => v === 'claude'
 
 describe('resolveIndividualVendors', () => {
   it('returns no vendor for a block pinned to a Cloudflare model', async () => {
@@ -42,14 +45,36 @@ describe('resolveIndividualVendors', () => {
 
   it('gates a subscription-only individual model (Claude) regardless of personal subs', async () => {
     expect(
-      await resolveIndividualVendors('claude-opus', ['coder'], async () => undefined, noSubs),
+      await resolveIndividualVendors('claude-sonnet', ['coder'], async () => undefined, noSubs),
     ).toEqual(['claude'])
   })
 
   it('gates a subscription-only individual model (Codex)', async () => {
     expect(
-      await resolveIndividualVendors('gpt-5.5', ['coder'], async () => undefined, noSubs),
+      await resolveIndividualVendors('gpt-5.4', ['coder'], async () => undefined, noSubs),
     ).toEqual(['codex'])
+  })
+
+  // Claude Opus / GPT-5.5 are now ALSO dual-mode: an OpenRouter pay-as-you-go base behind the
+  // individual subscription. A user WITHOUT the personal subscription runs the OpenRouter route,
+  // so the gate must NOT fire (mirrors resolveEffectiveRef leaving the ref on the base). A user
+  // WITH the subscription runs on it, so it does fire.
+  it('does NOT gate dual-mode Claude Opus (OpenRouter base) for a non-subscriber', async () => {
+    expect(
+      await resolveIndividualVendors('claude-opus', ['coder'], async () => undefined, noSubs),
+    ).toEqual([])
+  })
+
+  it('gates dual-mode Claude Opus when the user has a personal Claude subscription', async () => {
+    expect(
+      await resolveIndividualVendors('claude-opus', ['coder'], async () => undefined, hasClaude),
+    ).toEqual(['claude'])
+  })
+
+  it('does NOT gate dual-mode GPT-5.5 (OpenRouter base) for a non-subscriber', async () => {
+    expect(
+      await resolveIndividualVendors('gpt-5.5', ['coder'], async () => undefined, noSubs),
+    ).toEqual([])
   })
 
   // The headline case: GLM is dual-mode. A user WITHOUT a personal GLM subscription runs
@@ -80,7 +105,7 @@ describe('resolveIndividualVendors', () => {
 
   it('falls through to workspace defaults when there is no pin', async () => {
     expect(
-      await resolveIndividualVendors(undefined, ['coder'], async () => 'claude-opus', noSubs),
+      await resolveIndividualVendors(undefined, ['coder'], async () => 'claude-sonnet', noSubs),
     ).toEqual(['claude'])
   })
 
@@ -98,13 +123,13 @@ describe('resolveIndividualVendors', () => {
 
   it('falls through a stale/unknown pin to the workspace defaults', async () => {
     expect(
-      await resolveIndividualVendors('gone-stale', ['coder'], async () => 'claude-opus', noSubs),
+      await resolveIndividualVendors('gone-stale', ['coder'], async () => 'claude-sonnet', noSubs),
     ).toEqual(['claude'])
   })
 
   it('dedupes vendors across kinds and skips non-credential defaults', async () => {
     const byKind: Record<string, string> = {
-      coder: 'claude-opus',
+      coder: 'claude-sonnet',
       reviewer: 'claude-sonnet',
       mocker: 'cloudflare-llama',
     }

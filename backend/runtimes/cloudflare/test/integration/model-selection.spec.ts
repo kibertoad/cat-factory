@@ -43,16 +43,22 @@ const directModels = MODEL_CATALOG.filter((m) => m.direct)
 // the executor — so a dual-mode base model (GLM/Kimi) still resolves to its base here.
 const cloudflareOnlyModels = MODEL_CATALOG.filter((m) => m.cloudflare && !m.direct)
 const subscriptionOnlyModels = MODEL_CATALOG.filter((m) => !m.cloudflare && !m.direct)
-// Direct-ONLY models (OpenRouter/LiteLLM): a direct variant with no Cloudflare or
-// subscription base. With no key they have no base to fall back to, so the resolver
-// returns their direct ref as a best-effort (selectability is reported separately).
+// Direct-ONLY models (LiteLLM): a direct variant with no Cloudflare or subscription base.
+// With no key they have no base to fall back to, so the resolver returns their direct ref
+// as a best-effort (selectability is reported separately).
 const directOnlyModels = MODEL_CATALOG.filter((m) => m.direct && !m.cloudflare && !m.subscription)
+// Gateway-ONLY models (e.g. Gemini via OpenRouter): an `openrouter` variant with no
+// Cloudflare/direct/subscription base. With no OpenRouter key they likewise have no base, so
+// the resolver returns the gateway ref as a best-effort.
+const openRouterOnlyModels = MODEL_CATALOG.filter(
+  (m) => m.openrouter && !m.cloudflare && !m.direct && !m.subscription,
+)
 
-/** The ref the base resolver lands on with no direct key: the Cloudflare base, else a
- *  subscription-only model's subscription ref, else (a direct-only model) its direct ref
- *  as the best-effort fallback — matching `effectiveVariant`'s direct→cloudflare→sub order. */
+/** The ref the base resolver lands on with no direct/gateway key: the Cloudflare base, else a
+ *  subscription model's subscription ref (its vendor is connected in `noKeys`), else the
+ *  best-effort gateway then direct ref — matching `effectiveVariant`'s precedence. */
 const baseRef = (m: (typeof MODEL_CATALOG)[number]) =>
-  m.cloudflare ?? m.subscription?.ref ?? m.direct?.ref
+  m.cloudflare ?? m.subscription?.ref ?? m.openrouter?.ref ?? m.direct?.ref
 
 describe('per-block model selection', () => {
   describe('catalog resolution', () => {
@@ -102,16 +108,23 @@ describe('per-block model selection', () => {
           // A Cloudflare-having model projects to its Cloudflare flavour when no key is set.
           expect(option.flavor).toBe('cloudflare')
           expect(option.providerLabel).toBe('Cloudflare')
+        } else if (model.subscription) {
+          // A subscription model (its vendor is connected in `noKeys`) projects to its
+          // (flat-rate quota) subscription flavour — it wins over a best-effort gateway route.
+          expect(option.flavor).toBe('subscription')
+          expect(option.quotaBased).toBe(true)
         } else if (model.direct) {
-          // Direct-only (OpenRouter/LiteLLM): no base, so it projects to its best-effort
-          // direct flavour but is NOT selectable until its provider key is configured.
+          // Direct-only (LiteLLM): no base, so it projects to its best-effort direct flavour
+          // but is NOT selectable until its provider key is configured.
           expect(option.flavor).toBe('direct')
           expect(option.providerLabel).toBe(model.direct.providerLabel)
           expect(option.available).toBe(false)
         } else {
-          // Subscription-only: no base, so its flavour IS the (flat-rate quota) subscription.
-          expect(option.flavor).toBe('subscription')
-          expect(option.quotaBased).toBe(true)
+          // Gateway-only (Gemini via OpenRouter): best-effort gateway flavour, NOT selectable
+          // until the OpenRouter key is configured.
+          expect(option.flavor).toBe('openrouter')
+          expect(option.providerLabel).toBe(model.openrouter!.providerLabel)
+          expect(option.available).toBe(false)
         }
       }
 
@@ -128,9 +141,13 @@ describe('per-block model selection', () => {
         } else if (model.cloudflare) {
           // No direct variant → always Cloudflare, even with every key configured.
           expect(option.flavor).toBe('cloudflare')
-        } else {
-          // Subscription-only stays on its subscription flavour regardless of keys.
+        } else if (model.subscription) {
+          // Subscription model stays on its subscription flavour (allKeys carries no
+          // OpenRouter key, so a gateway route doesn't apply).
           expect(option.flavor).toBe('subscription')
+        } else {
+          // Gateway-only (Gemini via OpenRouter): no native key in allKeys, so best-effort gateway.
+          expect(option.flavor).toBe('openrouter')
         }
       }
       // The flavour branches above are only meaningful if the catalog exercises each.
@@ -138,6 +155,7 @@ describe('per-block model selection', () => {
       expect(cloudflareOnlyModels.length).toBeGreaterThan(0)
       expect(subscriptionOnlyModels.length).toBeGreaterThan(0)
       expect(directOnlyModels.length).toBeGreaterThan(0)
+      expect(openRouterOnlyModels.length).toBeGreaterThan(0)
     })
 
     it('returns undefined for unknown/empty ids so the caller falls back', () => {

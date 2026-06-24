@@ -14,5 +14,6 @@ export {
   priceFor,
   modelCostResolver,
   estimateCost,
+  withDynamicPrices,
   startOfMonthUtc,
 } from './pricing.js'

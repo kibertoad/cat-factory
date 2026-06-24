@@ -2,6 +2,7 @@ import type { AgentRunRepository, ConsensusSessionRepository } from '@cat-factor
 import type {
   ApiKeyService,
   LocalModelEndpointService,
+  OpenRouterCatalogService,
   PersonalSubscriptionService,
   ProviderSubscriptionService,
 } from '@cat-factory/integrations'
@@ -68,6 +69,13 @@ export interface ServerContainer extends Core {
    * locally-run model — resolved by the run initiator.
    */
   localModelEndpoints?: LocalModelEndpointService
+  /**
+   * The per-WORKSPACE OpenRouter dynamic-catalog store. Present only when the facade wired
+   * the OpenRouter-catalog repository + the API-key pool (needs ENCRYPTION_KEY). Drives the
+   * OpenRouter catalog controller (browse/enable), the per-workspace model catalog's dynamic
+   * OpenRouter entries, and the spend price overlay for those models.
+   */
+  openRouterCatalog?: OpenRouterCatalogService
 }
 
 /** Hono generics shared by the cross-runtime controllers (Variables only — no Bindings). */

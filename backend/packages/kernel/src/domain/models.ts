@@ -1,6 +1,7 @@
 import {
   type ModelCost,
   type ModelOption,
+  type OpenRouterModelMeta,
   type SubscriptionVendor,
   isLocalRunner,
 } from '@cat-factory/contracts'
@@ -68,12 +69,15 @@ export const SUBSCRIPTION_VENDORS: Record<SubscriptionVendor, SubscriptionVendor
 // persists as a stable `id` on the block (see `Block.modelId`); at run time the
 // executor resolves that id to a concrete {@link ModelRef}.
 //
-// Each model has two flavours: a Cloudflare Workers AI variant that is always
-// available (via the `AI` binding), and — for models that also offer their own
-// API — a `direct` variant. The direct variant transparently replaces the
-// Cloudflare one whenever its API key is configured; with no key, the model
-// stays on (and is shown as) its Cloudflare flavour. This makes "go direct" a
-// zero-config upgrade with an automatic Cloudflare fallback.
+// Each model has up to four flavours: a Cloudflare Workers AI variant that is
+// always available (via the `AI` binding); a `direct` variant for models that
+// offer their own API; an `openrouter` variant reaching the same model through
+// the OpenRouter gateway; and a `subscription` variant. The effective flavour is
+// resolved per workspace by `effectiveVariant` in the precedence
+// direct → openrouter → cloudflare, so connecting an OpenRouter key (with no
+// native direct key) transparently routes the model through OpenRouter while a
+// native direct key still wins. This makes "go direct / go gateway" a zero-config
+// upgrade with an automatic Cloudflare fallback.
 
 export interface ModelVariant {
   ref: ModelRef
@@ -105,6 +109,12 @@ export interface SelectableModel {
   cloudflare?: ModelRef
   /** Optional direct-provider variant, used when its key is configured. */
   direct?: ModelVariant
+  /**
+   * Optional OpenRouter gateway variant: the same logical model reached through
+   * OpenRouter (`provider: 'openrouter'`, model = the OpenRouter `vendor/model`
+   * slug). Used when an OpenRouter key is configured and no native direct key is.
+   */
+  openrouter?: ModelVariant
   /**
    * Optional subscription variant (Claude Code / Codex). For subscription-ONLY
    * models (Opus/Sonnet/GPT) it is the only variant; for dual-mode models
@@ -206,6 +216,11 @@ export const MODEL_CATALOG: SelectableModel[] = [
       keyEnv: 'DEEPSEEK_API_KEY',
       providerLabel: 'DeepSeek',
     },
+    openrouter: {
+      ref: { provider: 'openrouter', model: 'deepseek/deepseek-chat', contextTokens: 64_000 },
+      keyEnv: 'OPENROUTER_API_KEY',
+      providerLabel: 'OpenRouter',
+    },
     // Run via Claude Code against DeepSeek's Anthropic-compatible endpoint on a
     // DeepSeek coding-plan subscription (full context, flat-rate quota).
     subscription: {
@@ -252,7 +267,14 @@ export const MODEL_CATALOG: SelectableModel[] = [
   {
     id: 'claude-opus',
     label: 'Claude Opus 4.8',
-    description: "Anthropic's most capable model, run via Claude Code on your Claude subscription.",
+    description:
+      "Anthropic's most capable model — run via Claude Code on your Claude subscription, " +
+      'or pay-as-you-go through OpenRouter (billed at Anthropic rates).',
+    openrouter: {
+      ref: { provider: 'openrouter', model: 'anthropic/claude-opus-4.8', contextTokens: 1_000_000 },
+      keyEnv: 'OPENROUTER_API_KEY',
+      providerLabel: 'OpenRouter',
+    },
     subscription: {
       ref: { provider: 'anthropic', model: 'claude-opus-4-8', harness: 'claude-code' },
       vendor: 'claude',
@@ -270,7 +292,14 @@ export const MODEL_CATALOG: SelectableModel[] = [
   {
     id: 'gpt-5.5',
     label: 'GPT-5.5',
-    description: "OpenAI's flagship, run via Codex on your ChatGPT subscription.",
+    description:
+      "OpenAI's flagship — run via Codex on your ChatGPT subscription, or pay-as-you-go " +
+      'through OpenRouter (billed at OpenAI rates).',
+    openrouter: {
+      ref: { provider: 'openrouter', model: 'openai/gpt-5.5', contextTokens: 400_000 },
+      keyEnv: 'OPENROUTER_API_KEY',
+      providerLabel: 'OpenRouter',
+    },
     subscription: {
       ref: { provider: 'openai', model: 'gpt-5.5-codex', harness: 'codex' },
       vendor: 'codex',
@@ -285,61 +314,18 @@ export const MODEL_CATALOG: SelectableModel[] = [
       vendor: 'codex',
     },
   },
-  // OpenRouter — a single OpenAI-compatible gateway to 300+ models, billed at provider
-  // rates with no per-token markup. These are curated, direct-only entries (no Cloudflare
-  // fallback): they become selectable once an OpenRouter API key is connected for the
-  // workspace/user. Model slugs follow OpenRouter's `vendor/model` ids (see
-  // openrouter.ai/models); verify them against the live catalog when they change.
+  // Gemini 3 Pro has no Cloudflare/native-direct flavour in this deployment, so it is
+  // reached through the OpenRouter gateway (billed at Google's rates, no markup). It
+  // becomes selectable once an OpenRouter API key is connected for the workspace/user.
+  // Other vendors' OpenRouter routes are folded into their native catalog entries (see
+  // `openrouter` flavour on deepseek/gpt-5.5/claude-opus); any model not curated here is
+  // reachable via the dynamic per-workspace OpenRouter catalog (`openRouterSelectableModels`).
   {
-    id: 'openrouter-claude-opus',
-    label: 'Claude Opus (OpenRouter)',
-    description: "Anthropic's flagship Claude Opus via OpenRouter — billed at Anthropic rates.",
-    direct: {
-      ref: { provider: 'openrouter', model: 'anthropic/claude-opus-4.8', contextTokens: 1_000_000 },
-      keyEnv: 'OPENROUTER_API_KEY',
-      providerLabel: 'OpenRouter',
-    },
-  },
-  {
-    id: 'openrouter-gemini-pro',
-    label: 'Gemini 3 Pro (OpenRouter)',
-    description: "Google's Gemini 3 Pro via OpenRouter — 1M-token context.",
-    direct: {
+    id: 'gemini',
+    label: 'Gemini 3 Pro',
+    description: "Google's Gemini 3 Pro via OpenRouter — 1M-token context, billed at Google rates.",
+    openrouter: {
       ref: { provider: 'openrouter', model: 'google/gemini-3-pro', contextTokens: 1_048_576 },
-      keyEnv: 'OPENROUTER_API_KEY',
-      providerLabel: 'OpenRouter',
-    },
-  },
-  {
-    id: 'openrouter-gpt',
-    label: 'GPT-5.5 (OpenRouter)',
-    description: "OpenAI's flagship GPT-5.5 via OpenRouter — billed at OpenAI rates.",
-    direct: {
-      ref: { provider: 'openrouter', model: 'openai/gpt-5.5', contextTokens: 400_000 },
-      keyEnv: 'OPENROUTER_API_KEY',
-      providerLabel: 'OpenRouter',
-    },
-  },
-  {
-    id: 'openrouter-deepseek',
-    label: 'DeepSeek Chat (OpenRouter)',
-    description: "DeepSeek's flagship chat model via OpenRouter — low-cost, 64K context.",
-    direct: {
-      ref: { provider: 'openrouter', model: 'deepseek/deepseek-chat', contextTokens: 64_000 },
-      keyEnv: 'OPENROUTER_API_KEY',
-      providerLabel: 'OpenRouter',
-    },
-  },
-  {
-    id: 'openrouter-llama',
-    label: 'Llama 3.3 70B (OpenRouter)',
-    description: "Meta's Llama 3.3 70B Instruct via OpenRouter — open-weight, 131K context.",
-    direct: {
-      ref: {
-        provider: 'openrouter',
-        model: 'meta-llama/llama-3.3-70b-instruct',
-        contextTokens: 131_072,
-      },
       keyEnv: 'OPENROUTER_API_KEY',
       providerLabel: 'OpenRouter',
     },
@@ -374,7 +360,12 @@ export function getSelectableModel(id: string | undefined | null): SelectableMod
 const CONTEXT_WINDOW_BY_REF: Map<string, number> = (() => {
   const map = new Map<string, number>()
   for (const model of MODEL_CATALOG) {
-    for (const ref of [model.cloudflare, model.direct?.ref, model.subscription?.ref]) {
+    for (const ref of [
+      model.cloudflare,
+      model.direct?.ref,
+      model.openrouter?.ref,
+      model.subscription?.ref,
+    ]) {
       if (ref?.contextTokens) map.set(`${ref.provider}:${ref.model}`, ref.contextTokens)
     }
   }
@@ -414,6 +405,15 @@ export interface ProviderCapabilities {
    * later un-enabled must NOT pass the start guard).
    */
   localModels?: Set<string>
+  /**
+   * The OpenRouter `vendor/model` slugs the workspace has ENABLED in its dynamic
+   * catalog (e.g. `google/gemini-3-pro`). A dynamic OpenRouter model (`openrouter:<slug>`)
+   * is usable only when the workspace has an OpenRouter key (`openrouter ∈ directProviders`)
+   * AND the slug is enabled here — so a stale pin to a since-disabled model fails the
+   * start guard. Curated catalog entries with an `openrouter` flavour need only the key,
+   * not this set.
+   */
+  openRouterModels?: Set<string>
 }
 
 /** Resolve the informational list cost for a model ref (e.g. from spend pricing). */
@@ -422,7 +422,7 @@ export type ModelCostResolver = (ref: ModelRef) => ModelCost | undefined
 /** The effective variant a catalog model resolves to for a given capability set. */
 interface EffectiveVariant {
   ref: ModelRef
-  flavor: 'cloudflare' | 'direct' | 'subscription'
+  flavor: 'cloudflare' | 'direct' | 'openrouter' | 'subscription'
   providerLabel: string
   vendor?: SubscriptionVendor
 }
@@ -435,6 +435,9 @@ function directUsable(model: SelectableModel, caps: ProviderCapabilities): boole
   // A local-runner model needs no pooled key (the user's endpoint carries the optional
   // key), but it's only usable when THIS specific model is enabled — keyed by its id.
   return isLocalRunner(provider) && (caps.localModels?.has(model.id) ?? false)
+}
+function openRouterUsable(model: SelectableModel, caps: ProviderCapabilities): boolean {
+  return !!model.openrouter && caps.directProviders.has('openrouter')
 }
 function cloudflareUsable(model: SelectableModel, caps: ProviderCapabilities): boolean {
   return !!model.cloudflare && caps.cloudflareEnabled
@@ -454,10 +457,22 @@ export function isModelUsable(id: string | undefined | null, caps: ProviderCapab
     // Dynamic local-runner model: usable when the resolving user has enabled this exact
     // model (`"<provider>:<model>"` is in `localModels`), not merely the runner configured.
     const local = parseLocalModelId(id)
-    return !!local && (caps.localModels?.has(`${local.provider}:${local.model}`) ?? false)
+    if (local) return caps.localModels?.has(`${local.provider}:${local.model}`) ?? false
+    // Dynamic OpenRouter model: usable when the workspace has an OpenRouter key AND has
+    // enabled this exact slug in its catalog.
+    const or = parseOpenRouterModelId(id)
+    if (or) {
+      return (
+        caps.directProviders.has('openrouter') && (caps.openRouterModels?.has(or.model) ?? false)
+      )
+    }
+    return false
   }
   return (
-    directUsable(model, caps) || cloudflareUsable(model, caps) || subscriptionUsable(model, caps)
+    directUsable(model, caps) ||
+    openRouterUsable(model, caps) ||
+    cloudflareUsable(model, caps) ||
+    subscriptionUsable(model, caps)
   )
 }
 
@@ -473,6 +488,11 @@ function effectiveVariant(model: SelectableModel, caps: ProviderCapabilities): E
     flavor: 'direct',
     providerLabel: model.direct!.providerLabel,
   })
+  const openrouter = (): EffectiveVariant => ({
+    ref: model.openrouter!.ref,
+    flavor: 'openrouter',
+    providerLabel: model.openrouter!.providerLabel,
+  })
   const cloudflare = (): EffectiveVariant => ({
     ref: model.cloudflare!,
     flavor: 'cloudflare',
@@ -484,17 +504,19 @@ function effectiveVariant(model: SelectableModel, caps: ProviderCapabilities): E
     providerLabel: SUBSCRIPTION_VENDORS[model.subscription!.vendor].label,
     vendor: model.subscription!.vendor,
   })
-  // Prefer a usable flavour.
+  // Prefer a usable flavour: native direct > OpenRouter gateway > Cloudflare > subscription.
   if (directUsable(model, caps)) return direct()
+  if (openRouterUsable(model, caps)) return openrouter()
   if (cloudflareUsable(model, caps)) return cloudflare()
   if (subscriptionUsable(model, caps)) return subscription()
   // Nothing usable: a best-effort ref so the caller still has something to show/run
   // (the guard / `available` flag gate actual use).
   if (model.direct) return direct()
+  if (model.openrouter) return openrouter()
   if (model.cloudflare) return cloudflare()
   if (model.subscription) return subscription()
   throw new Error(
-    `Model '${model.id}' has no resolvable variant (no cloudflare/direct/subscription)`,
+    `Model '${model.id}' has no resolvable variant (no cloudflare/direct/openrouter/subscription)`,
   )
 }
 
@@ -586,13 +608,16 @@ export function individualVendorForModelId(
  * `ContainerAgentExecutor.resolveEffectiveRef`, so the credential gate prompts for a
  * password exactly when dispatch will use one:
  *
- *  - SUBSCRIPTION-ONLY individual model (Claude / Codex — no Cloudflare/direct base):
+ *  - SUBSCRIPTION-ONLY individual model (no Cloudflare/direct/OpenRouter base):
  *    there is no fallback, so the personal credential is always required.
- *  - DUAL-MODE individual model (e.g. GLM, which also has a Cloudflare base): per-user.
- *    A user WITH their own personal subscription for the vendor runs on it (gated on
- *    their password); a user WITHOUT one falls back to the Cloudflare base and is not
- *    gated. (Individual vendors are never pooled, so there is no shared fallback — only
- *    the user's own subscription or the base.)
+ *  - DUAL-MODE individual model (e.g. GLM with a Cloudflare base, or Claude Opus /
+ *    GPT-5.5 with an OpenRouter pay-as-you-go base): per-user. A user WITH their own
+ *    personal subscription for the vendor runs on it (gated on their password); a user
+ *    WITHOUT one falls back to the non-subscription base (Cloudflare / OpenRouter) and is
+ *    NOT gated. (Individual vendors are never pooled, so the only alternatives are the
+ *    user's own subscription or the base.) NOTE: `openrouter` MUST count as a base here —
+ *    omitting it would gate Claude Opus / GPT-5.5 on a personal credential the OpenRouter
+ *    route never uses, making the pay-as-you-go path unstartable for non-subscribers.
  *  - Poolable / non-subscription models: never need a personal credential.
  */
 export function personalCredentialVendorForModelId(
@@ -602,7 +627,7 @@ export function personalCredentialVendorForModelId(
   const model = getSelectableModel(id)
   const sub = model?.subscription
   if (!sub || !isIndividualVendor(sub.vendor)) return null
-  const hasBase = !!model.cloudflare || !!model.direct
+  const hasBase = !!model.cloudflare || !!model.direct || !!model.openrouter
   if (!hasBase) return sub.vendor
   return hasPersonalSubscription(sub.vendor) ? sub.vendor : null
 }
@@ -669,6 +694,46 @@ export function localSelectableModels(endpoints: LocalEndpointModels[]): Selecta
   return out
 }
 
+/** Stable-id prefix for a dynamic OpenRouter catalog model (`openrouter:<vendor/model>`). */
+const OPENROUTER_ID_PREFIX = 'openrouter:'
+
+/**
+ * Build the dynamic per-workspace catalog entries for a set of enabled OpenRouter models.
+ * Each becomes an `openrouter`-flavour {@link SelectableModel} with a stable id
+ * `"openrouter:<vendor/model>"`; usability is gated by the workspace's OpenRouter key plus
+ * the enabled set (see {@link isModelUsable}). The cached metadata carries the context
+ * window; pricing is surfaced separately via the spend overlay keyed on the ref slug.
+ */
+export function openRouterSelectableModels(models: OpenRouterModelMeta[]): SelectableModel[] {
+  return models.map((m) => ({
+    id: `${OPENROUTER_ID_PREFIX}${m.id}`,
+    label: m.name || m.id,
+    description: `${m.name || m.id} via OpenRouter.`,
+    openrouter: {
+      ref: {
+        provider: 'openrouter',
+        model: m.id,
+        ...(m.contextLength ? { contextTokens: m.contextLength } : {}),
+      },
+      keyEnv: 'OPENROUTER_API_KEY',
+      providerLabel: 'OpenRouter',
+    },
+  }))
+}
+
+/**
+ * Parse a dynamic OpenRouter model id (`"openrouter:<vendor/model>"`) into a {@link ModelRef}.
+ * The slug itself contains slashes (and never the `openrouter:` prefix), so this strips the
+ * prefix rather than splitting on a colon. Returns undefined for non-OpenRouter ids.
+ */
+export function parseOpenRouterModelId(
+  id: string | undefined | null,
+): { provider: string; model: string } | undefined {
+  if (!id || !id.startsWith(OPENROUTER_ID_PREFIX)) return undefined
+  const model = id.slice(OPENROUTER_ID_PREFIX.length)
+  return model ? { provider: 'openrouter', model } : undefined
+}
+
 /**
  * Parse a dynamic local-model id of the form `"<provider>:<model>"` into a {@link ModelRef}.
  * Splits on the FIRST colon so model ids that themselves contain colons (e.g.
@@ -701,7 +766,11 @@ export function resolveModelRef(
   // parse them straight into a ref so a block pinned to a local model resolves even at
   // deployment-config time (when per-user local capabilities aren't known).
   const local = parseLocalModelId(id)
-  return local ? { provider: local.provider, model: local.model } : undefined
+  if (local) return { provider: local.provider, model: local.model }
+  // Dynamic OpenRouter catalog model ids (`openrouter:<vendor/model>`) likewise aren't in
+  // the static catalog; resolve them straight to the gateway ref.
+  const or = parseOpenRouterModelId(id)
+  return or ? { provider: or.provider, model: or.model } : undefined
 }
 
 /** Every subscription vendor (the full set), for building a permissive capability set. */
