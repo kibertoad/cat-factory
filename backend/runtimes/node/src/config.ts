@@ -152,6 +152,15 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
     temperature: num(env.AGENT_DEFAULT_TEMPERATURE) ?? 0.3,
     maxOutputTokens: num(env.AGENT_MAX_OUTPUT_TOKENS) ?? 12000,
   }
+  // The conflict-resolver clones a PR head with merge conflicts and rewrites the
+  // conflicted hunks against the base — a focused, diff-heavy reasoning task. Kimi K2.5
+  // (a 1T-param agentic model native on Workers AI, 256K window) handles it better than
+  // the small default MoE (mirrors the Worker's routing).
+  const conflictResolverDefault: AgentModelConfig = {
+    ref: { provider: 'workers-ai', model: '@cf/moonshotai/kimi-k2.5' },
+    temperature: num(env.AGENT_DEFAULT_TEMPERATURE) ?? 0.3,
+    maxOutputTokens: num(env.AGENT_MAX_OUTPUT_TOKENS) ?? 5000,
+  }
 
   const sessionSecret = env.AUTH_SESSION_SECRET?.trim() ?? ''
   // The GitHub App (private key + app id) backs container-agent runs: it mints the
@@ -221,6 +230,7 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
           reviewer: companionDefault,
           'spec-companion': companionDefault,
           'architect-companion': companionDefault,
+          'conflict-resolver': conflictResolverDefault,
         },
       },
       resolveBlockModel: (modelId) => resolveModelRef(modelId, caps),

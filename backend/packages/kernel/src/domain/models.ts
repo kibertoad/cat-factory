@@ -180,6 +180,17 @@ export const MODEL_CATALOG: SelectableModel[] = [
     },
   },
   {
+    id: 'kimi-k2.5',
+    label: 'Kimi K2.5',
+    description:
+      "Moonshot AI's prior-generation 1T-param agentic model, 256K context (Cloudflare Workers AI).",
+    cloudflare: {
+      provider: 'workers-ai',
+      model: '@cf/moonshotai/kimi-k2.5',
+      contextTokens: 262_144,
+    },
+  },
+  {
     id: 'deepseek',
     label: 'DeepSeek R1',
     description:
