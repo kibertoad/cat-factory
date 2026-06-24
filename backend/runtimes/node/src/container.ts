@@ -48,7 +48,11 @@ import {
   CompositeNotificationChannel,
   CompositeIncidentEnrichmentProvider,
 } from '@cat-factory/kernel'
-import { type CoreDependencies, createCore } from '@cat-factory/orchestration'
+import {
+  type CoreDependencies,
+  createCore,
+  resolvePresetModelForKind,
+} from '@cat-factory/orchestration'
 import { createLangfuseSink } from '@cat-factory/observability-langfuse'
 import {
   type AppConfig,
@@ -455,6 +459,7 @@ function buildNodeContainerExecutor(
   resolveWorkspaceModelDefault: (
     workspaceId: string,
     agentKind: string,
+    modelPresetId?: string,
   ) => Promise<string | undefined>,
   mintInstallationTokenOverride?: (installationId: number) => Promise<string>,
   subscriptions?: ProviderSubscriptionService,
@@ -745,10 +750,14 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   const idGenerator = new CryptoIdGenerator()
   const repos = options.repos ?? createDrizzleRepositories(options.db, clock)
 
-  // Honour the workspace's per-agent-kind defaults at run time (block-pinned >
-  // workspace per-kind default > env routing), uniformly for inline and container kinds.
-  const resolveWorkspaceModelDefault = (workspaceId: string, agentKind: string) =>
-    repos.modelDefaultsRepository.getForKind(workspaceId, agentKind).then((v) => v ?? undefined)
+  // Honour the workspace's model presets at run time (block-pinned > the task's
+  // selected/default model preset > env routing), uniformly for inline and container
+  // kinds. The built-in default preset points every agent kind at Kimi K2.7.
+  const resolveWorkspaceModelDefault = (
+    workspaceId: string,
+    agentKind: string,
+    modelPresetId?: string,
+  ) => resolvePresetModelForKind(repos.modelPresetRepository, workspaceId, agentKind, modelPresetId)
 
   // The direct-provider API-key pool + the per-scope model-provider resolver, shared by
   // the inline executor, the inline modules (planner/reviewer/fragment selector), the
@@ -1125,7 +1134,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // Opt-in Langfuse trace sink (fans every recorded LLM call out as a generation).
     // Built only when configured; otherwise undefined and there is no external emission.
     llmTraceSink: buildLangfuseSink(config),
-    modelDefaultsRepository: repos.modelDefaultsRepository,
+    modelPresetRepository: repos.modelPresetRepository,
     serviceFragmentDefaultsRepository: repos.serviceFragmentDefaultsRepository,
     // Requirements-review feature (stateless reviewer + the requirements-rework
     // step). Wired identically to the Cloudflare facade's `selectRequirementsDeps`

@@ -4,7 +4,7 @@ import {
   type SubscriptionVendor,
 } from '@cat-factory/kernel'
 
-/** Resolve the workspace per-kind default model id (the model-defaults feature). */
+/** Resolve a kind's default model id via the workspace's model presets. */
 export type WorkspaceModelDefaultResolver = (kind: string) => Promise<string | undefined>
 
 /** Whether the run's user has their OWN personal subscription for an individual vendor. */

@@ -2,7 +2,7 @@ import {
   type Block,
   type ExecutionInstance,
   type MergeThresholdPreset,
-  type ModelDefaults,
+  type ModelPreset,
   type Pipeline,
   type PipelineSchedule,
   type ScheduleRun,
@@ -182,42 +182,59 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
       })
     })
 
-    describe('model defaults', () => {
-      it('reads, replaces and surfaces per-agent-kind default models', async () => {
+    describe('model presets', () => {
+      it('seeds the built-ins, CRUDs presets and surfaces them on the snapshot', async () => {
         const { call, createWorkspace } = harness.makeApp()
         const { workspace } = await createWorkspace()
 
-        // A fresh workspace pins nothing.
-        const initial = await call<ModelDefaults>(
+        // A fresh workspace is lazily seeded with the built-in presets: Kimi K2.7
+        // (the default, everything Kimi) and GLM-5.2.
+        const initial = await call<ModelPreset[]>(
           'GET',
-          `/workspaces/${workspace.id}/model-defaults`,
+          `/workspaces/${workspace.id}/model-presets`,
         )
         expect(initial.status).toBe(200)
-        expect(initial.body.defaults).toEqual({})
+        const seeded = initial.body
+        expect(seeded.length).toBeGreaterThanOrEqual(2)
+        const def = seeded.find((p) => p.isDefault)
+        expect(def?.baseModelId).toBe('kimi-k2.7')
+        expect(seeded.some((p) => p.baseModelId === 'glm')).toBe(true)
 
-        // Replace the whole map (any string ids — the catalog isn't validated here).
-        const put = await call<ModelDefaults>('PUT', `/workspaces/${workspace.id}/model-defaults`, {
-          defaults: { architect: 'strong-model', tester: 'cheap-model' },
-        })
-        expect(put.status).toBe(200)
-        expect(put.body.defaults.architect).toBe('strong-model')
-
-        // It persisted.
-        const reread = await call<ModelDefaults>(
-          'GET',
-          `/workspaces/${workspace.id}/model-defaults`,
+        // Create a new preset with a per-agent override and promote it to default.
+        const created = await call<ModelPreset>(
+          'POST',
+          `/workspaces/${workspace.id}/model-presets`,
+          {
+            name: 'Mixed',
+            baseModelId: 'glm',
+            overrides: { architect: 'kimi-k2.7' },
+            isDefault: true,
+          },
         )
-        expect(reread.body.defaults).toEqual({ architect: 'strong-model', tester: 'cheap-model' })
+        expect(created.status).toBe(201)
+        expect(created.body.isDefault).toBe(true)
+        expect(created.body.overrides.architect).toBe('kimi-k2.7')
 
-        // And it rides along on the workspace snapshot.
+        // Promoting it demoted the previous default (single-default invariant).
+        const afterCreate = await call<ModelPreset[]>(
+          'GET',
+          `/workspaces/${workspace.id}/model-presets`,
+        )
+        expect(afterCreate.body.filter((p) => p.isDefault)).toHaveLength(1)
+        expect(afterCreate.body.find((p) => p.isDefault)?.id).toBe(created.body.id)
+
+        // Patch the base model.
+        const patched = await call<ModelPreset>(
+          'PATCH',
+          `/workspaces/${workspace.id}/model-presets/${created.body.id}`,
+          { baseModelId: 'kimi-k2.7' },
+        )
+        expect(patched.status).toBe(200)
+        expect(patched.body.baseModelId).toBe('kimi-k2.7')
+
+        // The library rides along on the workspace snapshot.
         const snapshot = await call<WorkspaceSnapshot>('GET', `/workspaces/${workspace.id}`)
-        expect(snapshot.body.modelDefaults?.defaults.architect).toBe('strong-model')
-
-        // The snapshot also names the deployment's env-routing defaults (so the
-        // settings panel can label the model behind "Deployment default"); both
-        // facades derive it from the shared agents config.
-        expect(typeof snapshot.body.deploymentModelDefaults?.default).toBe('string')
-        expect(snapshot.body.deploymentModelDefaults?.default.length).toBeGreaterThan(0)
+        expect((snapshot.body.modelPresets ?? []).some((p) => p.name === 'Mixed')).toBe(true)
       })
     })
 

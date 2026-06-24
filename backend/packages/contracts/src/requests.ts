@@ -87,6 +87,9 @@ export const addTaskSchema = v.object({
   // The merge threshold preset governing this task's auto-merge; omitted/empty →
   // the workspace default preset.
   mergePresetId: v.optional(v.pipe(v.string(), v.maxLength(120))),
+  // The model preset governing which model each agent step runs on; omitted/empty →
+  // the workspace default preset.
+  modelPresetId: v.optional(v.pipe(v.string(), v.maxLength(120))),
   // The pipeline the task's Run controls default to; omitted/empty → none recorded.
   pipelineId: v.optional(v.pipe(v.string(), v.maxLength(120))),
   // Task-level agent-contributed config values (e.g. the Tester's environment).
@@ -116,6 +119,8 @@ export const updateBlockSchema = v.partial(
     modelId: v.pipe(v.string(), v.maxLength(120)),
     // The merge threshold preset id; an empty string resets to the workspace default.
     mergePresetId: v.pipe(v.string(), v.maxLength(120)),
+    // The model preset id; an empty string resets to the workspace default preset.
+    modelPresetId: v.pipe(v.string(), v.maxLength(120)),
     // The task's default pipeline id; an empty string clears the selection.
     pipelineId: v.pipe(v.string(), v.maxLength(120)),
     // Task-level agent-contributed config values (id→value map; replaces the map).

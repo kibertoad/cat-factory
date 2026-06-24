@@ -39,6 +39,7 @@ export function boardApi({ http, ws }: ApiContext) {
         taskType?: CreateTaskType
         taskTypeFields?: TaskTypeFields
         mergePresetId?: string
+        modelPresetId?: string
         pipelineId?: string
         agentConfig?: Record<string, string>
       },

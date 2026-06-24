@@ -33,12 +33,15 @@ export interface StepModelResolvers {
   /** Resolve a model catalog id to a concrete ref; unknown/absent ids return undefined. */
   resolveBlockModel: (modelId: string | undefined) => ModelRef | undefined
   /**
-   * Resolve a workspace's per-agent-kind default model id, consulted when the block
-   * pins no usable model. Optional: absent → the env routing for the kind is used.
+   * Resolve a workspace's default model id for an agent kind (via the task's selected
+   * or the workspace's default model preset), consulted when the block pins no usable
+   * model. Optional: absent → the env routing for the kind is used. The `modelPresetId`
+   * is the task's selected preset, if any (absent → the workspace default preset).
    */
   resolveWorkspaceModelDefault?: (
     workspaceId: string,
     agentKind: string,
+    modelPresetId?: string,
   ) => Promise<string | undefined>
 }
 
@@ -47,7 +50,9 @@ export interface StepModelInputs {
   agentKind: string
   /** The model catalog id pinned on the block, if any. */
   blockModelId: string | undefined
-  /** The workspace the step runs in; required to consult a per-kind default. */
+  /** The model preset selected on the block, if any (absent → workspace default preset). */
+  modelPresetId?: string
+  /** The workspace the step runs in; required to consult a preset default. */
   workspaceId?: string
 }
 
@@ -70,6 +75,7 @@ export async function resolveStepModelRef(
     const defaultId = await resolvers.resolveWorkspaceModelDefault(
       inputs.workspaceId,
       inputs.agentKind,
+      inputs.modelPresetId,
     )
     const fromDefault = resolvers.resolveBlockModel(defaultId)
     if (fromDefault) return fromDefault

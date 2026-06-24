@@ -73,7 +73,7 @@ export const useUiStore = defineStore('ui', () => {
   // Workspace-settings panel: issue-tracker writeback toggles (comment on PR open,
   // close linked issue on merge).
   const issueWritebackOpen = ref(false)
-  const modelDefaultsOpen = ref(false)
+  const modelConfigOpen = ref(false)
   // Workspace-settings panel: the default service-fragment selection new services inherit.
   const serviceFragmentDefaultsOpen = ref(false)
   // LLM-vendor subscription credentials (the token pool powering the Claude Code
@@ -302,11 +302,11 @@ export const useUiStore = defineStore('ui', () => {
   function closeDatadog() {
     datadogOpen.value = false
   }
-  function openModelDefaults() {
-    modelDefaultsOpen.value = true
+  function openModelConfig() {
+    modelConfigOpen.value = true
   }
-  function closeModelDefaults() {
-    modelDefaultsOpen.value = false
+  function closeModelConfig() {
+    modelConfigOpen.value = false
   }
   function openServiceFragmentDefaults() {
     serviceFragmentDefaultsOpen.value = true
@@ -372,7 +372,7 @@ export const useUiStore = defineStore('ui', () => {
     issueWritebackOpen,
     workspaceSettingsOpen,
     datadogOpen,
-    modelDefaultsOpen,
+    modelConfigOpen,
     serviceFragmentDefaultsOpen,
     vendorCredentialsOpen,
     localModelsOpen,
@@ -427,8 +427,8 @@ export const useUiStore = defineStore('ui', () => {
     closeWorkspaceSettings,
     openDatadog,
     closeDatadog,
-    openModelDefaults,
-    closeModelDefaults,
+    openModelConfig,
+    closeModelConfig,
     openServiceFragmentDefaults,
     closeServiceFragmentDefaults,
     openVendorCredentials,

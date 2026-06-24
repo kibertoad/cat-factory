@@ -140,6 +140,7 @@ export class AgentContextBuilder {
         fragmentIds: block.fragmentIds,
         ...(resolved ? { resolvedFragments: resolved.fragments } : {}),
         modelId: block.modelId,
+        ...(block.modelPresetId ? { modelPresetId: block.modelPresetId } : {}),
         ...(block.agentConfig ? { agentConfig: block.agentConfig } : {}),
         ...(block.pullRequest ? { pullRequest: block.pullRequest } : {}),
         ...(contextDocs.length ? { contextDocs } : {}),

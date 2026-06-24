@@ -21,6 +21,7 @@ import type { RequirementReview } from './requirements'
 import type { ConsensusSession, ConsensusStepConfig, StepGating, TaskEstimate } from './consensus'
 import type { ClarityReview } from './clarity'
 import type { MergeThresholdPreset } from './merge'
+import type { ModelPreset } from './model-presets'
 import type { PipelineSchedule } from './recurring'
 import type { Service, WorkspaceMount } from './services'
 import type { TrackerSettings, WritebackOverride } from './tracker'
@@ -126,6 +127,8 @@ export interface Block {
   pullRequest?: PullRequestRef
   /** task-only: selected merge threshold preset id; absent = workspace default. */
   mergePresetId?: string
+  /** task-only: selected model preset id (which model each agent runs); absent = workspace default. */
+  modelPresetId?: string
   /** task-only: pinned default pipeline id picked at creation; absent = none. */
   pipelineId?: string
   /** task-only: agent-contributed config values (id→value), e.g. the Tester's environment. */
@@ -385,8 +388,8 @@ export interface WorkspaceSnapshot {
   mergePresets?: MergeThresholdPreset[]
   /** Agent config-contribution descriptors (the task-level fields the board renders). */
   agentConfigCatalog?: AgentConfigDescriptor[]
-  /** Per-agent-kind default model overrides for this workspace (agentKind → model id). */
-  modelDefaults?: ModelDefaults
+  /** The workspace's model presets (the Model Configuration library + per-task picker). */
+  modelPresets?: ModelPreset[]
   /**
    * The deployment's env-routing defaults as `provider:model` refs: the model a
    * kind runs on when neither the task nor the workspace pins one. `default` is the
@@ -433,15 +436,6 @@ export interface UpdateWorkspaceSettingsInput {
   taskLimitMode?: TaskLimitMode
   taskLimitShared?: number | null
   taskLimitPerType?: Partial<Record<CreateTaskType, number>> | null
-}
-
-/**
- * A workspace's per-agent-kind default model choice. Keys are agent kinds, values
- * are model catalog ids (`ModelOption.id`). A kind absent from the map falls back
- * to the deployment's env-configured routing. Mirrors `@cat-factory/contracts`.
- */
-export interface ModelDefaults {
-  defaults: Record<string, string>
 }
 
 /**
