@@ -2071,24 +2071,20 @@ export class ExecutionService {
   }
 
   /**
-   * Resolve a block's run-repo context for its pre/post-op hooks, treating an unresolved
-   * repo as "skip the hooks" rather than failing the run. A registered kind's hooks are an
-   * OPTIONAL engine capability, so a block that isn't under a linked service (which makes
-   * `resolveRepoTarget` throw to avoid guessing a repo), or any resolution error, degrades
-   * to a no-op exactly as an unwired resolver does — never writing to a guessed repo and
-   * never aborting an otherwise-valid run. (A container custom kind still fails loudly at
-   * dispatch for the same misconfiguration, where writing to the wrong repo is the danger.)
+   * Resolve a block's run-repo context for its pre/post-op hooks. Returns null only when
+   * the resolver is UNWIRED (tests / GitHub not connected) so a deployment without the
+   * feature simply skips the hooks. When the resolver IS wired, its result — including a
+   * THROW from `resolveRepoTarget` for a block that isn't under a linked service — is
+   * propagated as-is: a registered kind with repo hooks run on a misconfigured block fails
+   * the run loudly rather than silently committing nothing (or guessing a repo), the same
+   * way a container custom kind fails at dispatch.
    */
   private async resolveRunRepo(
     workspaceId: string,
     blockId: string,
   ): Promise<RunRepoContext | null> {
     if (!this.resolveRunRepoContext) return null
-    try {
-      return await this.resolveRunRepoContext(workspaceId, blockId)
-    } catch {
-      return null
-    }
+    return this.resolveRunRepoContext(workspaceId, blockId)
   }
 
   /**
