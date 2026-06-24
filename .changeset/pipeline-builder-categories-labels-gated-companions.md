@@ -28,7 +28,12 @@ Improve the pipeline builder experience:
   complexity/risk/impact ≥ a threshold, OR across axes) via a new per-step
   `gating` array; a gated step is transparently skipped at runtime when the
   estimate falls below the bar. A pipeline with any enabled gating **requires a
-  `task-estimator` earlier in the chain** or it refuses to save/start.
+  `task-estimator` earlier in the chain** or it refuses to save/start. Gating is
+  additionally restricted to **companion steps** (skipping a producer would starve
+  its downstream steps) and **requires at least one axis threshold** (an enabled gate
+  with none would always skip); both are enforced by the shared `validatePipelineShape`
+  at save, clone, and run start. The builder folds an out-of-band non-adjacent companion
+  back into a visible, reorderable row so editing such a pipeline can no longer drop it.
 
 **Breaking (pre-1.0, no migration):** the `Pipeline` wire shape gains optional
 `gating`, `labels`, and `archived` fields, and `PipelineStep` gains `gating` /

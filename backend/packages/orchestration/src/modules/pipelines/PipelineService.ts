@@ -121,6 +121,14 @@ export class PipelineService {
       'Pipeline',
       sourceId,
     )
+    // Validate the source's shape so a clone is rejected at clone time, not deferred to run
+    // start — the same guarantee `create`/`update` give (a built-in can't ship invalid, but
+    // a custom source mutated out of band could).
+    validatePipelineShape({
+      agentKinds: source.agentKinds,
+      enabled: source.enabled,
+      gating: source.gating,
+    })
     const pipeline: Pipeline = {
       id: this.idGenerator.next('pl'),
       name: input.name?.trim() || `${source.name} (copy)`,

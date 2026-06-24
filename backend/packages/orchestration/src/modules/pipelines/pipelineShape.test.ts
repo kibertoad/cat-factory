@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { seedPipelines } from '@cat-factory/kernel'
 import {
-  assertGatingRequiresEstimator,
   assertValidCompanionPlacement,
+  assertValidGating,
   validatePipelineShape,
 } from './pipelineShape.js'
 
@@ -25,13 +25,10 @@ describe('validatePipelineShape', () => {
 
   it('requires an enabled task-estimator before any enabled gated step', () => {
     expect(() =>
-      assertGatingRequiresEstimator(['coder', 'reviewer'], undefined, [
-        null,
-        { enabled: true, minRisk: 0.5 },
-      ]),
+      assertValidGating(['coder', 'reviewer'], undefined, [null, { enabled: true, minRisk: 0.5 }]),
     ).toThrow()
     expect(() =>
-      assertGatingRequiresEstimator(['task-estimator', 'coder', 'reviewer'], undefined, [
+      assertValidGating(['task-estimator', 'coder', 'reviewer'], undefined, [
         null,
         null,
         { enabled: true, minRisk: 0.5 },
@@ -39,11 +36,40 @@ describe('validatePipelineShape', () => {
     ).not.toThrow()
     // A disabled gated step imposes no requirement.
     expect(() =>
-      assertGatingRequiresEstimator(
+      assertValidGating(
         ['coder', 'reviewer'],
         [true, false],
         [null, { enabled: true, minRisk: 0.5 }],
       ),
     ).not.toThrow()
+  })
+
+  it('only allows gating on companion steps (skipping a producer would starve downstream)', () => {
+    // A producer (coder) cannot be estimate-gated even with an estimator before it.
+    expect(() =>
+      assertValidGating(['task-estimator', 'coder', 'tester'], undefined, [
+        null,
+        { enabled: true, minRisk: 0.5 },
+        null,
+      ]),
+    ).toThrow()
+    // The companion in the same chain is fine.
+    expect(() =>
+      assertValidGating(['task-estimator', 'coder', 'reviewer'], undefined, [
+        null,
+        null,
+        { enabled: true, minRisk: 0.5 },
+      ]),
+    ).not.toThrow()
+  })
+
+  it('rejects enabled gating with no axis threshold (it would always skip)', () => {
+    expect(() =>
+      assertValidGating(['task-estimator', 'coder', 'reviewer'], undefined, [
+        null,
+        null,
+        { enabled: true },
+      ]),
+    ).toThrow()
   })
 })

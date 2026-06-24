@@ -17,8 +17,10 @@ import { companionTargets, isCompanionKind, TASK_ESTIMATOR_AGENT_KIND } from '@c
  *    companion reviews the NEAREST preceding target, which may legitimately sit a few steps
  *    back (e.g. `coder → tester → reviewer`), so tightening this to adjacency would reject a
  *    capability the engine supports.
- *  - {@link assertGatingRequiresEstimator}: a step gated on the task estimate needs a
- *    `task-estimator` to have run before it, or the gate has nothing to consult.
+ *  - {@link assertValidGating}: a step gated on the task estimate must be a companion (the
+ *    only kind it is safe to skip — skipping a producer would starve its downstream steps),
+ *    must set at least one axis threshold (or it would always skip), and needs a
+ *    `task-estimator` to have run before it (or the gate has nothing to consult).
  */
 export interface PipelineShape {
   agentKinds: string[]
@@ -28,7 +30,7 @@ export interface PipelineShape {
 
 export function validatePipelineShape(pipeline: PipelineShape): void {
   assertValidCompanionPlacement(pipeline.agentKinds, pipeline.enabled)
-  assertGatingRequiresEstimator(pipeline.agentKinds, pipeline.enabled, pipeline.gating)
+  assertValidGating(pipeline.agentKinds, pipeline.enabled, pipeline.gating)
 }
 
 /**
@@ -55,12 +57,21 @@ export function assertValidCompanionPlacement(agentKinds: string[], enabled?: bo
 }
 
 /**
- * Any ENABLED step with enabled gating requires an enabled `task-estimator` earlier in the
- * chain — without one the gate can never read an estimate to decide on, so the pipeline is
- * rejected (at save and at start). A disabled gated step never runs, so it imposes no
- * requirement.
+ * Validate every ENABLED step that carries enabled estimate gating. A disabled gated step
+ * never runs, so it imposes no requirement; an enabled one must satisfy all three rules:
+ *
+ *  1. The gated step must be a COMPANION kind. Gating means "skip this step when the task is
+ *     light", and skipping is only safe for a dependent companion — skipping a producer
+ *     (coder / spec-writer / architect) would leave its downstream steps (tester, merger,
+ *     …) running against output that was never produced. (The consensus-gating sibling can
+ *     degrade to the standard agent; step-gating removes the step, so it is companion-only.)
+ *  2. It must set at least one axis threshold. With none, the axis loop in
+ *     `shouldRunGatedStep` never matches, so a step with an estimate would ALWAYS skip — the
+ *     opposite of the usual intent — making the toggle a silent footgun.
+ *  3. An enabled `task-estimator` must run earlier in the chain, or the gate has no estimate
+ *     to consult.
  */
-export function assertGatingRequiresEstimator(
+export function assertValidGating(
   agentKinds: string[],
   enabled?: boolean[],
   gating?: (StepGating | null)[],
@@ -68,13 +79,25 @@ export function assertGatingRequiresEstimator(
   if (!gating) return
   const isEnabled = (i: number) => enabled?.[i] !== false
   for (let i = 0; i < agentKinds.length; i++) {
-    if (!gating[i]?.enabled || !isEnabled(i)) continue
+    const g = gating[i]
+    if (!g?.enabled || !isEnabled(i)) continue
+    const kind = agentKinds[i]
+    if (kind === undefined || !isCompanionKind(kind)) {
+      throw new ValidationError(
+        `Step '${kind}' cannot be estimate-gated — only companion steps (reviewer / architect-companion / spec-companion) may be skipped on the estimate.`,
+      )
+    }
+    if (g.minComplexity === undefined && g.minRisk === undefined && g.minImpact === undefined) {
+      throw new ValidationError(
+        `Step '${kind}' is estimate-gated but sets no threshold — set at least one of complexity / risk / impact, or it would always be skipped.`,
+      )
+    }
     const hasEstimator = agentKinds
       .slice(0, i)
       .some((k, j) => k === TASK_ESTIMATOR_AGENT_KIND && isEnabled(j))
     if (!hasEstimator) {
       throw new ValidationError(
-        `Step '${agentKinds[i]}' is gated on the task estimate but no enabled '${TASK_ESTIMATOR_AGENT_KIND}' step runs before it. Add a task-estimator earlier in the pipeline.`,
+        `Step '${kind}' is gated on the task estimate but no enabled '${TASK_ESTIMATOR_AGENT_KIND}' step runs before it. Add a task-estimator earlier in the pipeline.`,
       )
     }
   }

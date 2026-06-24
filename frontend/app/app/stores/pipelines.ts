@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import type { AgentKind, Pipeline } from '~/types/domain'
 import type { ConsensusStepConfig, StepGating } from '~/types/consensus'
-import { companionForProducer, isProducerCompanion, uid } from '~/utils/catalog'
+import { companionForProducer, uid } from '~/utils/catalog'
 import { useWorkspaceStore } from '~/stores/workspace'
 
 /** A sensible default config when a step is first flipped to consensus in the builder. */
@@ -127,17 +127,24 @@ export const usePipelinesStore = defineStore('pipelines', () => {
   }
 
   /**
-   * The draft as a list of "units" for rendering: each non-companion step, with its attached
-   * companion folded in (the companion is hidden from the standalone list and surfaced as a
-   * toggle on its producer). `index`/`companionIndex` are positions in the raw `draft` arrays.
+   * The draft as a list of "units" for rendering: each step is one unit, EXCEPT a companion
+   * that sits immediately after its producer — that companion is folded into the producer's
+   * unit (`companionIndex`) and surfaced as a toggle on it, not a standalone row. A companion
+   * that is NOT immediately after its producer (legacy / API-authored pipelines, which the
+   * backend still accepts) is emitted as its own standalone unit so it stays visible and
+   * removable — and, crucially, so every `draft` index belongs to exactly one unit, which is
+   * what lets {@link moveUnit} reorder by unit boundaries without ever dropping a step.
+   * `index`/`companionIndex` are positions in the raw `draft` arrays.
    */
   const units = computed(() => {
     const out: { index: number; kind: AgentKind; companionIndex: number | null }[] = []
+    let folded = -1 // draft index already consumed as the previous unit's adjacent companion
     for (let i = 0; i < draft.value.length; i++) {
       const kind = draft.value[i]
-      if (kind === undefined || isProducerCompanion(kind)) continue
+      if (kind === undefined || i === folded) continue
       const companion = companionForProducer(kind)
       const companionIndex = companion && draft.value[i + 1] === companion ? i + 1 : null
+      if (companionIndex !== null) folded = companionIndex
       out.push({ index: i, kind, companionIndex })
     }
     return out
