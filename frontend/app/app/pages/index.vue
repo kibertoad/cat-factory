@@ -32,6 +32,7 @@ import DatadogPanel from '~/components/settings/DatadogPanel.vue'
 import ModelDefaultsPanel from '~/components/settings/ModelDefaultsPanel.vue'
 import ServiceFragmentDefaultsPanel from '~/components/settings/ServiceFragmentDefaultsPanel.vue'
 import LocalModelEndpointsPanel from '~/components/settings/LocalModelEndpointsPanel.vue'
+import OpenRouterCatalogPanel from '~/components/settings/OpenRouterCatalogPanel.vue'
 
 const workspace = useWorkspaceStore()
 const github = useGitHubStore()
@@ -122,6 +123,7 @@ watch(
       <ModelDefaultsPanel />
       <ServiceFragmentDefaultsPanel />
       <LocalModelEndpointsPanel />
+      <OpenRouterCatalogPanel />
     </template>
 
     <!-- Backend unreachable / bootstrap failed -->

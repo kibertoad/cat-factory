@@ -1,5 +1,6 @@
 import type { ModelRef } from '@cat-factory/kernel'
 import type { AgentTokenUsage } from '@cat-factory/kernel'
+import type { OpenRouterModelMeta } from '@cat-factory/contracts'
 
 // Pricing for the spend safeguard. Token usage is converted to a monetary cost
 // so a single, human-meaningful budget ("~100 EUR/month") can gate execution
@@ -79,7 +80,6 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
   'openrouter:google/gemini-3-pro': { inputPerMillion: 1.84, outputPerMillion: 11.04 },
   'openrouter:openai/gpt-5.5': { inputPerMillion: 3.68, outputPerMillion: 22.08 },
   'openrouter:deepseek/deepseek-chat': { inputPerMillion: 0.26, outputPerMillion: 1.01 },
-  'openrouter:meta-llama/llama-3.3-70b-instruct': { inputPerMillion: 0.12, outputPerMillion: 0.37 },
   openrouter: { inputPerMillion: 1.84, outputPerMillion: 11.04 },
   // LiteLLM — an operator-hosted gateway whose true cost depends entirely on the backend
   // model it routes to, which we can't know here. Default to the generic fallback rate;
@@ -95,6 +95,29 @@ export const DEFAULT_SPEND_PRICING: SpendPricing = {
   monthlyLimit: DEFAULT_MONTHLY_LIMIT_EUR,
   prices: DEFAULT_MODEL_PRICES,
   defaultPrice: { inputPerMillion: 0.14, outputPerMillion: 0.55 },
+}
+
+/**
+ * Overlay a workspace's dynamic OpenRouter catalog prices onto a base pricing table,
+ * keyed by the `openrouter:<slug>` ref so {@link priceFor} resolves each enabled model
+ * at its real upstream rate (the prices are already in the spend currency — see
+ * `OpenRouterCatalogService`). Used by the per-workspace `/models` cost resolver and the
+ * spend gate so budgets meter dynamic models accurately instead of the bare-`openrouter`
+ * fallback guess. Returns a new {@link SpendPricing}; the input is not mutated.
+ */
+export function withDynamicPrices(
+  pricing: SpendPricing,
+  models: OpenRouterModelMeta[],
+): SpendPricing {
+  if (models.length === 0) return pricing
+  const prices: Record<string, ModelPrice> = { ...pricing.prices }
+  for (const m of models) {
+    prices[`openrouter:${m.id}`] = {
+      inputPerMillion: m.inputPerMillion,
+      outputPerMillion: m.outputPerMillion,
+    }
+  }
+  return { ...pricing, prices }
 }
 
 /** Resolve the price for a model, most-specific entry first. */

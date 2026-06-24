@@ -204,6 +204,11 @@ export {
   type ResolvedLocalEndpoint,
 } from './modules/providers/LocalModelEndpointService.js'
 export { localRunnerUrlError } from './modules/providers/localModelUrl.js'
+export {
+  OpenRouterCatalogService,
+  type OpenRouterCatalogServiceDependencies,
+  OPENROUTER_BASE_URL,
+} from './modules/providers/OpenRouterCatalogService.js'
 export * as providersLogic from './modules/providers/providers.logic.js'
 export {
   DEFAULT_USAGE_WINDOW_MS,

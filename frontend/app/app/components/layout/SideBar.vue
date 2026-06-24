@@ -317,6 +317,17 @@ watch(
         >
           My local runners
         </UButton>
+        <UButton
+          block
+          color="primary"
+          variant="soft"
+          size="sm"
+          icon="i-lucide-waypoints"
+          class="justify-start"
+          @click="ui.openOpenRouter()"
+        >
+          OpenRouter models
+        </UButton>
       </div>
     </section>
 

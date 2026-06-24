@@ -1,15 +1,23 @@
-import type { SpendStatus } from '@cat-factory/contracts'
+import type { OpenRouterModelMeta, SpendStatus } from '@cat-factory/contracts'
 import type { AgentTokenUsage } from '@cat-factory/kernel'
 import type { ModelRef } from '@cat-factory/kernel'
 import type { Clock, IdGenerator } from '@cat-factory/kernel'
 import type { TokenUsageRepository } from '@cat-factory/kernel'
-import { type SpendPricing, estimateCost, startOfMonthUtc } from './pricing.js'
+import { type SpendPricing, estimateCost, startOfMonthUtc, withDynamicPrices } from './pricing.js'
 
 export interface SpendServiceDependencies {
   tokenUsageRepository: TokenUsageRepository
   idGenerator: IdGenerator
   clock: Clock
   pricing: SpendPricing
+  /**
+   * Optional resolver for a workspace's dynamic gateway model prices (the enabled
+   * OpenRouter catalog). When wired, a metered `openrouter:<slug>` call is priced at the
+   * model's real per-1M rate (overlaid onto the base table) instead of the bare-`openrouter`
+   * fallback — so budgets meter dynamic models as accurately as the curated ones. Absent →
+   * the static table is used (the fallback price applies to uncatalogued slugs).
+   */
+  dynamicPricesFor?: (workspaceId: string) => Promise<OpenRouterModelMeta[]>
 }
 
 /** Details of a single metered LLM call, handed in by the execution engine. */
@@ -34,12 +42,20 @@ export class SpendService {
   private readonly idGenerator: IdGenerator
   private readonly clock: Clock
   private readonly pricing: SpendPricing
+  private readonly dynamicPricesFor?: (workspaceId: string) => Promise<OpenRouterModelMeta[]>
 
-  constructor({ tokenUsageRepository, idGenerator, clock, pricing }: SpendServiceDependencies) {
+  constructor({
+    tokenUsageRepository,
+    idGenerator,
+    clock,
+    pricing,
+    dynamicPricesFor,
+  }: SpendServiceDependencies) {
     this.tokenUsageRepository = tokenUsageRepository
     this.idGenerator = idGenerator
     this.clock = clock
     this.pricing = pricing
+    this.dynamicPricesFor = dynamicPricesFor
   }
 
   /** Parse a `provider:model` identifier into a {@link ModelRef}. */
@@ -52,7 +68,13 @@ export class SpendService {
   /** Meter and persist one LLM call; returns its estimated cost. */
   async record(input: RecordUsageInput): Promise<number> {
     const ref = this.parseModel(input.model)
-    const costEstimate = estimateCost(this.pricing, ref, input.usage)
+    // Price a dynamic OpenRouter gateway model at its real per-model rate (overlaid onto
+    // the base table) rather than the bare-`openrouter` fallback, when the resolver is wired.
+    const pricing =
+      ref.provider === 'openrouter' && this.dynamicPricesFor
+        ? withDynamicPrices(this.pricing, await this.dynamicPricesFor(input.workspaceId))
+        : this.pricing
+    const costEstimate = estimateCost(pricing, ref, input.usage)
     await this.tokenUsageRepository.record({
       id: this.idGenerator.next('tok'),
       workspaceId: input.workspaceId,

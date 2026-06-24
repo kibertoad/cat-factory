@@ -14,6 +14,7 @@ import {
   NotionProvider,
   ApiKeyService,
   LocalModelEndpointService,
+  OpenRouterCatalogService,
   PersonalSubscriptionService,
   ProviderSubscriptionService,
   RunnerPoolConnectionService,
@@ -109,6 +110,7 @@ import {
   DrizzleSubscriptionActivationRepository,
 } from './repositories/personalSubscription.js'
 import { DrizzleLocalModelEndpointRepository } from './repositories/localModelEndpoint.js'
+import { DrizzleProviderModelCatalogRepository } from './repositories/providerModelCatalog.js'
 import { createDrizzleRepositories } from './repositories/drizzle.js'
 import {
   DrizzleBootstrapJobRepository,
@@ -657,6 +659,26 @@ function buildNodeLocalModelEndpointService(
   })
 }
 
+/**
+ * The per-WORKSPACE OpenRouter dynamic-catalog service, or undefined when the API-key pool
+ * isn't wired (no ENCRYPTION_KEY) — refresh leases the workspace's pooled OpenRouter key.
+ * Mirror of the Worker's `buildOpenRouterCatalogService`.
+ */
+function buildNodeOpenRouterCatalogService(
+  env: NodeJS.ProcessEnv,
+  db: DrizzleDb,
+  clock: Clock,
+  apiKeys: ApiKeyService | undefined,
+): OpenRouterCatalogService | undefined {
+  if (!apiKeys) return undefined
+  return new OpenRouterCatalogService({
+    providerModelCatalogRepository: new DrizzleProviderModelCatalogRepository(db),
+    apiKeys,
+    clock,
+    baseUrl: baseUrlForNode('openrouter', env),
+  })
+}
+
 function buildNodePersonalSubscriptionService(
   env: NodeJS.ProcessEnv,
   db: DrizzleDb,
@@ -764,6 +786,9 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   // the local-runner controller, the per-user model catalog, the inline model provider,
   // and the LLM proxy.
   const localModelEndpoints = buildNodeLocalModelEndpointService(env, options.db, clock)
+  // The per-workspace OpenRouter dynamic-catalog store — shared by the catalog controller,
+  // the per-workspace model catalog's dynamic OpenRouter entries, and the spend overlay.
+  const openRouterCatalog = buildNodeOpenRouterCatalogService(env, options.db, clock, apiKeys)
   const modelProviderResolver = buildModelProviderResolver(
     env,
     options.db,
@@ -1182,6 +1207,11 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     clock,
     agentExecutor,
     spendPricing: config.spend,
+    // Price metered dynamic OpenRouter models at their real per-model rate (not the
+    // bare-`openrouter` fallback) using this workspace's enabled catalog.
+    dynamicModelPricesFor: openRouterCatalog
+      ? (ws) => openRouterCatalog.capabilitiesFor(ws)
+      : undefined,
     // The runner-pool integration assembles when enabled, so a workspace can
     // register the self-hosted pool its container agents dispatch to.
     ...(config.runners.enabled && config.runners.encryptionKey
@@ -1253,6 +1283,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
           cloudflareModelsEnabled,
           baseUrlFor: (provider) => baseUrlForNode(provider, env),
           localModelEndpoints,
+          openRouterCatalog,
         },
         workspaceId,
         initiatedBy,
@@ -1288,6 +1319,8 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     baseUrlFor: (provider) => baseUrlForNode(provider, env),
     // The per-user locally-run model endpoints store; present when ENCRYPTION_KEY is set.
     localModelEndpoints,
+    // The per-workspace OpenRouter dynamic-catalog store; present when the API-key pool is.
+    openRouterCatalog,
   }
 }
 

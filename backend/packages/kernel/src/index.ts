@@ -39,6 +39,8 @@ export {
   type LocalEndpointModels,
   localSelectableModels,
   parseLocalModelId,
+  openRouterSelectableModels,
+  parseOpenRouterModelId,
   resolveModelRef,
   isModelUsable,
   subscriptionOptionFor,

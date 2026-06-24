@@ -16,6 +16,11 @@ import type {
   TestLocalModelEndpointInput,
   UpsertLocalModelEndpointInput,
 } from '~/types/localModels'
+import type {
+  OpenRouterCatalog,
+  OpenRouterRefreshResult,
+  UpsertOpenRouterCatalogInput,
+} from '~/types/openrouter'
 import type { ApiContext } from './context'
 
 /**
@@ -99,6 +104,19 @@ export function modelsApi({ http, ws }: ApiContext) {
         method: 'POST',
         body,
       }),
+
+    // ---- OpenRouter dynamic catalog (per-workspace gateway models) --------
+    // Browse OpenRouter's live catalog (`refresh`, leasing the workspace's pooled
+    // OpenRouter key server-side) and enable a subset; enabled models then surface
+    // in the per-workspace `/models` catalog with their context + price.
+    getOpenRouterCatalog: (workspaceId: string) =>
+      http<OpenRouterCatalog>(`${ws(workspaceId)}/openrouter/catalog`),
+
+    setOpenRouterCatalog: (workspaceId: string, body: UpsertOpenRouterCatalogInput) =>
+      http<OpenRouterCatalog>(`${ws(workspaceId)}/openrouter/catalog`, { method: 'PUT', body }),
+
+    refreshOpenRouterCatalog: (workspaceId: string) =>
+      http<OpenRouterRefreshResult>(`${ws(workspaceId)}/openrouter/refresh`, { method: 'POST' }),
 
     // ---- per-agent-kind default models (workspace routing overrides) ------
     // The workspace's map of agentKind → model id; a kind absent from the map

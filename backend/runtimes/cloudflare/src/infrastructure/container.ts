@@ -30,6 +30,7 @@ import {
   EMAIL_CIPHER_INFO,
   ApiKeyService,
   LocalModelEndpointService,
+  OpenRouterCatalogService,
   PersonalSubscriptionService,
   ProviderSubscriptionService,
   RunnerPoolConnectionService,
@@ -86,6 +87,7 @@ import {
   D1SubscriptionActivationRepository,
 } from './repositories/D1PersonalSubscriptionRepository'
 import { D1LocalModelEndpointRepository } from './repositories/D1LocalModelEndpointRepository'
+import { D1ProviderModelCatalogRepository } from './repositories/D1ProviderModelCatalogRepository'
 import { ContainerRepoBootstrapper } from './ai/ContainerRepoBootstrapper'
 import { CompositeAgentExecutor } from './ai/CompositeAgentExecutor'
 import { ContainerSessionService } from './containers/ContainerSessionService'
@@ -862,6 +864,27 @@ function buildLocalModelEndpointService(
   })
 }
 
+/**
+ * The per-WORKSPACE OpenRouter dynamic-catalog service (browse/enable gateway models), or
+ * undefined when the API-key pool isn't wired (no ENCRYPTION_KEY) — refresh leases the
+ * workspace's pooled OpenRouter key. Shared by the catalog controller, the per-workspace
+ * model catalog, and the spend price overlay.
+ */
+function buildOpenRouterCatalogService(
+  env: Env,
+  db: D1Database,
+  clock: Clock,
+  apiKeys: ApiKeyService | undefined,
+): OpenRouterCatalogService | undefined {
+  if (!apiKeys) return undefined
+  return new OpenRouterCatalogService({
+    providerModelCatalogRepository: new D1ProviderModelCatalogRepository({ db }),
+    apiKeys,
+    clock,
+    baseUrl: baseUrlFor('openrouter', env) ?? undefined,
+  })
+}
+
 function buildContainerExecutor(
   env: Env,
   config: AppConfig,
@@ -1336,6 +1359,10 @@ export function buildContainer(
   // the local-runner controller, the per-user model catalog, and the LLM proxy.
   const localModelEndpoints = buildLocalModelEndpointService(env, db, clock)
 
+  // The per-workspace OpenRouter dynamic-catalog store — shared by the catalog controller,
+  // the per-workspace model catalog's dynamic OpenRouter entries, and the spend overlay.
+  const openRouterCatalog = buildOpenRouterCatalogService(env, db, clock, apiKeys)
+
   // Cloudflare Workers AI is opt-in: enabled when the `AI` binding is present. A caller
   // (the cross-runtime conformance suite) may force it off to assert key-driven
   // selectability + the provider guard uniformly across runtimes.
@@ -1387,6 +1414,11 @@ export function buildContainer(
     workRunner: selectWorkRunner(env),
     executionEventPublisher: eventPublisher,
     spendPricing: config.spend,
+    // Price metered dynamic OpenRouter models at their real per-model rate (not the
+    // bare-`openrouter` fallback) using this workspace's enabled catalog.
+    dynamicModelPricesFor: openRouterCatalog
+      ? (ws) => openRouterCatalog.capabilitiesFor(ws)
+      : undefined,
     // Repo-bootstrap repositories are wired unconditionally (reference-architecture
     // CRUD is always available); the run path additionally needs the bootstrapper.
     referenceArchitectureRepository: new D1ReferenceArchitectureRepository({ db }),
@@ -1420,6 +1452,7 @@ export function buildContainer(
           cloudflareModelsEnabled,
           baseUrlFor: (provider) => baseUrlFor(provider, env),
           localModelEndpoints,
+          openRouterCatalog,
         },
         workspaceId,
         initiatedBy,
@@ -1450,6 +1483,8 @@ export function buildContainer(
     baseUrlFor: (provider) => baseUrlFor(provider, env),
     // The per-user locally-run model endpoints store; present when ENCRYPTION_KEY is set.
     localModelEndpoints,
+    // The per-workspace OpenRouter dynamic-catalog store; present when the API-key pool is.
+    openRouterCatalog,
     gateways: {
       // Real-time event delivery via the per-workspace WorkspaceEventsHub DO (when
       // the WORKSPACE_EVENTS namespace is bound; absent → the events route 501s).

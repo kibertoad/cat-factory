@@ -1,6 +1,7 @@
 import type {
   ApiKeyService,
   LocalModelEndpointService,
+  OpenRouterCatalogService,
   PersonalSubscriptionService,
   ProviderSubscriptionService,
 } from '@cat-factory/integrations'
@@ -31,6 +32,8 @@ export interface CapabilityServices {
   baseUrlFor?: (provider: string) => string | null | undefined
   /** Per-user locally-run model endpoints (resolved by the requesting/initiating user). */
   localModelEndpoints?: LocalModelEndpointService
+  /** Per-workspace enabled OpenRouter models (the dynamic catalog subset). */
+  openRouterCatalog?: OpenRouterCatalogService
 }
 
 // Direct providers whose AI-SDK resolver works without an explicit base URL (the SDK
@@ -72,10 +75,19 @@ export async function resolveWorkspaceCapabilities(
       for (const model of cap.models) localModels.add(`${cap.provider}:${model}`)
     }
   }
+  // Dynamic OpenRouter catalog (per-workspace): the enabled slugs gate the dynamic
+  // `openrouter:<slug>` models, in addition to the key being in `directProviders`.
+  const openRouterModels = new Set<string>()
+  if (services.openRouterCatalog) {
+    for (const m of await services.openRouterCatalog.capabilitiesFor(workspaceId)) {
+      openRouterModels.add(m.id)
+    }
+  }
   return {
     directProviders,
     subscriptionVendors,
     cloudflareEnabled: services.cloudflareModelsEnabled ?? false,
     localModels,
+    openRouterModels,
   }
 }
