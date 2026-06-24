@@ -1,8 +1,9 @@
 import { defineConfig } from 'vitest/config'
 
-// The local facade's tests run in plain Node. The transport unit test
-// (`LocalDockerRunnerTransport`) is pure (injected docker exec + fetch) and needs no
-// Docker or Postgres. The cross-runtime conformance spec drives the real composition
+// The local facade's tests run in plain Node. The transport + runtime-adapter unit
+// tests (`LocalContainerRunnerTransport`, `runtimes/*`) are pure (injected CLI exec +
+// fetch) and need no daemon or Postgres. The cross-runtime conformance spec drives the
+// real composition
 // root against a real Postgres (`DATABASE_URL`) with a fake agent executor — exactly
 // like the Node/Worker suites — so the local facade can't drift from the others.
 export default defineConfig({

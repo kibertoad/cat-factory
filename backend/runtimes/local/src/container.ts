@@ -10,16 +10,17 @@ import { applyLocalDefaults } from './config.js'
 import { createLocalGitHubClient, fetchPatAccount, githubPatCreationUrl } from './github.js'
 import { AutoProvisioningInstallationRepository, type PatAccount } from './installations.js'
 import {
-  type LocalDockerRunnerTransport,
-  createLocalDockerTransportFromEnv,
-} from './LocalDockerRunnerTransport.js'
+  type LocalContainerRunnerTransport,
+  createLocalContainerTransportFromEnv,
+} from './LocalContainerRunnerTransport.js'
+import { createRuntimeAdapter } from './runtimes/index.js'
 
 // The local-mode composition root. It is intentionally thin: the ENTIRE Drizzle/
 // Postgres persistence, pg-boss durable execution, gateways and model provisioning
 // come from `buildNodeContainer` unchanged. Local mode only swaps the two
 // differentiators behind the seams `buildNodeContainer` exposes:
-//   - the runner backend → a per-job local Docker container (LocalDockerRunnerTransport)
-//     instead of a self-hosted runner pool;
+//   - the runner backend → a per-run local container (LocalContainerRunnerTransport,
+//     Docker/Podman/OrbStack/Colima/Apple `container`) instead of a self-hosted pool;
 //   - the push/clone token → a static GitHub PAT (`GITHUB_PAT`) instead of a GitHub
 //     App installation token.
 // Repo resolution is unchanged: the executor still resolves a block's repo from the
@@ -66,11 +67,19 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
   // service still boots to serve the board (and inline kinds) when LOCAL_HARNESS_IMAGE
   // is unset — only repo-operating kinds then fail, loudly and with a clear message,
   // mirroring how the Node facade treats a missing runner backend.
-  let transport: LocalDockerRunnerTransport | undefined
+  let transport: LocalContainerRunnerTransport | undefined
   const resolveTransport: ResolveRunnerTransport = () => {
-    transport ??= createLocalDockerTransportFromEnv(env)
+    transport ??= createLocalContainerTransportFromEnv(env)
     return Promise.resolve(transport)
   }
+
+  // The selected runtime decides whether the Tester's LOCAL docker-compose infra (run
+  // via Docker-in-Docker) is possible: Docker/Podman/OrbStack/Colima can nest a daemon,
+  // Apple `container` (one VM per container) cannot. Surface that capability to the
+  // engine so it refuses a local-infra Tester run on an incapable runtime ("limited
+  // mode") instead of dispatching a job that can't stand its dependencies up. Building
+  // the adapter is pure (no IO), so this is cheap even though the transport stays lazy.
+  const localTestInfraSupported = createRuntimeAdapter(env).capabilities.localDind
 
   return buildNodeContainer({
     ...options,
@@ -97,6 +106,8 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
       // connection isn't missing workflows: write — report it granted to suppress the
       // advisory banner. (The App-permissions probe this normally uses needs an app JWT.)
       ...(pat ? ({ workflowsGranted: async () => true } satisfies Partial<CoreDependencies>) : {}),
-    },
+      // Gate the Tester's local-infra mode on the runtime's Docker-in-Docker support.
+      localTestInfraSupported,
+    } satisfies Partial<CoreDependencies>,
   })
 }
