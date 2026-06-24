@@ -608,13 +608,16 @@ export function individualVendorForModelId(
  * `ContainerAgentExecutor.resolveEffectiveRef`, so the credential gate prompts for a
  * password exactly when dispatch will use one:
  *
- *  - SUBSCRIPTION-ONLY individual model (Claude / Codex — no Cloudflare/direct base):
+ *  - SUBSCRIPTION-ONLY individual model (no Cloudflare/direct/OpenRouter base):
  *    there is no fallback, so the personal credential is always required.
- *  - DUAL-MODE individual model (e.g. GLM, which also has a Cloudflare base): per-user.
- *    A user WITH their own personal subscription for the vendor runs on it (gated on
- *    their password); a user WITHOUT one falls back to the Cloudflare base and is not
- *    gated. (Individual vendors are never pooled, so there is no shared fallback — only
- *    the user's own subscription or the base.)
+ *  - DUAL-MODE individual model (e.g. GLM with a Cloudflare base, or Claude Opus /
+ *    GPT-5.5 with an OpenRouter pay-as-you-go base): per-user. A user WITH their own
+ *    personal subscription for the vendor runs on it (gated on their password); a user
+ *    WITHOUT one falls back to the non-subscription base (Cloudflare / OpenRouter) and is
+ *    NOT gated. (Individual vendors are never pooled, so the only alternatives are the
+ *    user's own subscription or the base.) NOTE: `openrouter` MUST count as a base here —
+ *    omitting it would gate Claude Opus / GPT-5.5 on a personal credential the OpenRouter
+ *    route never uses, making the pay-as-you-go path unstartable for non-subscribers.
  *  - Poolable / non-subscription models: never need a personal credential.
  */
 export function personalCredentialVendorForModelId(
@@ -624,7 +627,7 @@ export function personalCredentialVendorForModelId(
   const model = getSelectableModel(id)
   const sub = model?.subscription
   if (!sub || !isIndividualVendor(sub.vendor)) return null
-  const hasBase = !!model.cloudflare || !!model.direct
+  const hasBase = !!model.cloudflare || !!model.direct || !!model.openrouter
   if (!hasBase) return sub.vendor
   return hasPersonalSubscription(sub.vendor) ? sub.vendor : null
 }

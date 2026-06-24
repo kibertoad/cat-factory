@@ -35,6 +35,25 @@ const PROVIDER = 'openrouter'
 /** Approximate USD→EUR rate, matching the built-in EUR spend table's assumption. */
 const DEFAULT_USD_TO_CURRENCY = 0.92
 
+/**
+ * The USD→spend-currency rate to convert OpenRouter's USD-denominated prices with, derived
+ * from the deployment's configured spend currency. OpenRouter quotes USD, so a USD deployment
+ * needs no conversion (1.0); EUR uses the same ~0.92 assumption the built-in price table bakes
+ * in. Any other currency falls back to that EUR rate as a best-effort guess (we have no live FX
+ * source) — the resulting budget is approximate, exactly like the static table. Facades pass the
+ * result as `usdToCurrencyRate` so the persisted dynamic prices land in the right currency.
+ */
+export function usdRateForSpendCurrency(currency: string | undefined): number {
+  switch (currency?.toUpperCase()) {
+    case 'USD':
+      return 1
+    case 'EUR':
+      return DEFAULT_USD_TO_CURRENCY
+    default:
+      return DEFAULT_USD_TO_CURRENCY
+  }
+}
+
 export interface OpenRouterCatalogServiceDependencies {
   /** Generic per-workspace gateway-catalog store (shared with other gateways). */
   providerModelCatalogRepository: ProviderModelCatalogRepository

@@ -104,6 +104,11 @@ export const DEFAULT_SPEND_PRICING: SpendPricing = {
  * `OpenRouterCatalogService`). Used by the per-workspace `/models` cost resolver and the
  * spend gate so budgets meter dynamic models accurately instead of the bare-`openrouter`
  * fallback guess. Returns a new {@link SpendPricing}; the input is not mutated.
+ *
+ * A model whose cached price is entirely non-positive (OpenRouter reported no pricing, so
+ * `parseModels` zeroed it) is SKIPPED rather than overlaid as free: a budget safeguard must
+ * never undercount, so such a model keeps the more conservative bare-`openrouter` (or curated)
+ * fallback instead of being metered at zero.
  */
 export function withDynamicPrices(
   pricing: SpendPricing,
@@ -112,6 +117,7 @@ export function withDynamicPrices(
   if (models.length === 0) return pricing
   const prices: Record<string, ModelPrice> = { ...pricing.prices }
   for (const m of models) {
+    if (m.inputPerMillion <= 0 && m.outputPerMillion <= 0) continue
     prices[`openrouter:${m.id}`] = {
       inputPerMillion: m.inputPerMillion,
       outputPerMillion: m.outputPerMillion,

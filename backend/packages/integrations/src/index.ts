@@ -208,6 +208,7 @@ export {
   OpenRouterCatalogService,
   type OpenRouterCatalogServiceDependencies,
   OPENROUTER_BASE_URL,
+  usdRateForSpendCurrency,
 } from './modules/providers/OpenRouterCatalogService.js'
 export * as providersLogic from './modules/providers/providers.logic.js'
 export {

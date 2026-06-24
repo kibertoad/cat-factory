@@ -31,6 +31,7 @@ import {
   ApiKeyService,
   LocalModelEndpointService,
   OpenRouterCatalogService,
+  usdRateForSpendCurrency,
   PersonalSubscriptionService,
   ProviderSubscriptionService,
   RunnerPoolConnectionService,
@@ -875,6 +876,7 @@ function buildOpenRouterCatalogService(
   db: D1Database,
   clock: Clock,
   apiKeys: ApiKeyService | undefined,
+  spendCurrency: string,
 ): OpenRouterCatalogService | undefined {
   if (!apiKeys) return undefined
   return new OpenRouterCatalogService({
@@ -882,6 +884,9 @@ function buildOpenRouterCatalogService(
     apiKeys,
     clock,
     baseUrl: baseUrlFor('openrouter', env) ?? undefined,
+    // OpenRouter quotes USD; convert to the deployment's spend currency so persisted prices
+    // (and the spend overlay) match the rest of the budget table.
+    usdToCurrencyRate: usdRateForSpendCurrency(spendCurrency),
   })
 }
 
@@ -1361,7 +1366,13 @@ export function buildContainer(
 
   // The per-workspace OpenRouter dynamic-catalog store — shared by the catalog controller,
   // the per-workspace model catalog's dynamic OpenRouter entries, and the spend overlay.
-  const openRouterCatalog = buildOpenRouterCatalogService(env, db, clock, apiKeys)
+  const openRouterCatalog = buildOpenRouterCatalogService(
+    env,
+    db,
+    clock,
+    apiKeys,
+    config.spend.currency,
+  )
 
   // Cloudflare Workers AI is opt-in: enabled when the `AI` binding is present. A caller
   // (the cross-runtime conformance suite) may force it off to assert key-driven

@@ -15,6 +15,7 @@ import {
   ApiKeyService,
   LocalModelEndpointService,
   OpenRouterCatalogService,
+  usdRateForSpendCurrency,
   PersonalSubscriptionService,
   ProviderSubscriptionService,
   RunnerPoolConnectionService,
@@ -669,6 +670,7 @@ function buildNodeOpenRouterCatalogService(
   db: DrizzleDb,
   clock: Clock,
   apiKeys: ApiKeyService | undefined,
+  spendCurrency: string,
 ): OpenRouterCatalogService | undefined {
   if (!apiKeys) return undefined
   return new OpenRouterCatalogService({
@@ -676,6 +678,9 @@ function buildNodeOpenRouterCatalogService(
     apiKeys,
     clock,
     baseUrl: baseUrlForNode('openrouter', env),
+    // OpenRouter quotes USD; convert to the deployment's spend currency so persisted prices
+    // (and the spend overlay) match the rest of the budget table.
+    usdToCurrencyRate: usdRateForSpendCurrency(spendCurrency),
   })
 }
 
@@ -788,7 +793,13 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   const localModelEndpoints = buildNodeLocalModelEndpointService(env, options.db, clock)
   // The per-workspace OpenRouter dynamic-catalog store — shared by the catalog controller,
   // the per-workspace model catalog's dynamic OpenRouter entries, and the spend overlay.
-  const openRouterCatalog = buildNodeOpenRouterCatalogService(env, options.db, clock, apiKeys)
+  const openRouterCatalog = buildNodeOpenRouterCatalogService(
+    env,
+    options.db,
+    clock,
+    apiKeys,
+    config.spend.currency,
+  )
   const modelProviderResolver = buildModelProviderResolver(
     env,
     options.db,
