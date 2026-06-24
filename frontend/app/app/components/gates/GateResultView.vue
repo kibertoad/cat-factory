@@ -9,10 +9,10 @@ import { computed } from 'vue'
 import { agentKindMeta } from '~/utils/catalog'
 import type { GateStepState } from '~/types/execution'
 import StepRestartControl from '~/components/panels/StepRestartControl.vue'
+import StepRunMeta from '~/components/panels/StepRunMeta.vue'
 
 const board = useBoardStore()
 const execution = useExecutionStore()
-const ui = useUiStore()
 
 // Synchronous window: it reads its state straight off the execution step, so there's
 // nothing to fetch on open (no `onOpen` loader).
@@ -42,15 +42,6 @@ const attempts = computed(() => [...(gate.value?.attemptLog ?? [])].reverse())
 
 function formatClock(ms?: number | null): string | null {
   return ms ? new Date(ms).toLocaleString() : null
-}
-
-// The run id (execution instance id) this gate belongs to — copyable for support /
-// log lookups, and a jump into the run's observability view.
-async function copyRunId() {
-  if (instanceId.value) await navigator.clipboard?.writeText(instanceId.value)
-}
-function openObservability() {
-  if (instanceId.value) ui.openObservability(instanceId.value)
 }
 
 /**
@@ -312,7 +303,7 @@ const conflictVerdict = computed(() => {
 
           <!-- Sidebar: gate state -->
           <aside
-            class="hidden w-56 shrink-0 flex-col gap-4 border-l border-slate-800 bg-slate-900/50 px-4 py-4 lg:flex"
+            class="hidden w-60 shrink-0 flex-col gap-4 border-l border-slate-800 bg-slate-900/50 px-4 py-4 lg:flex"
           >
             <div v-if="gate">
               <h4 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
@@ -348,32 +339,17 @@ const conflictVerdict = computed(() => {
               <p class="font-mono text-[12px] text-slate-300">{{ shortSha }}</p>
             </div>
 
-            <div v-if="step?.model">
-              <h4 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                Model
-              </h4>
-              <p class="break-all text-[12px] text-slate-300">{{ step.model }}</p>
-            </div>
-
-            <div v-if="instanceId">
-              <h4 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                Run
-              </h4>
-              <p
-                class="cursor-pointer break-all font-mono text-[12px] text-slate-400 hover:text-slate-200"
-                :title="`${instanceId} — click to copy`"
-                @click="copyRunId"
-              >
-                {{ instanceId }}
-              </p>
-              <button
-                class="mt-1 inline-flex items-center gap-1 text-[11px] text-sky-300 hover:text-sky-200"
-                @click="openObservability"
-              >
-                <UIcon name="i-lucide-activity" class="h-3 w-3" />
-                Open observability
-              </button>
-            </div>
+            <!-- Shared run metadata + embedded observability (model, run id, timing,
+                 model-activity rollup) — identical to the agent step detail. -->
+            <StepRunMeta
+              v-if="step"
+              :step="step"
+              :instance-id="instanceId ?? undefined"
+              :step-number="stepIndex === null ? undefined : stepIndex + 1"
+              :total-steps="instance?.steps.length"
+              :run-failed="instance?.status === 'failed'"
+              :failure-at="instance?.failure?.occurredAt"
+            />
 
             <p class="mt-auto text-[10px] leading-relaxed text-slate-600">
               A gate runs a programmatic precheck and only spins up the
