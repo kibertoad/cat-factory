@@ -28,7 +28,7 @@ The work splits cleanly across two teams:
 1. **Runners** that run the standard cat-factory **executor-harness** image and
    speak its fixed HTTP **job protocol** (§1). The harness is the same image
    Cloudflare Containers run — runtime parity is the whole point, so a runner
-   serves *every* job kind with no per-kind work on your side.
+   serves _every_ job kind with no per-kind work on your side.
 2. A small **pool scheduler API** in front of those runners that cat-factory calls
    to **dispatch / poll / release** a job. You describe it as a **manifest** (§3)
    so we need no code for your specific scheduler.
@@ -102,19 +102,19 @@ allow-list, because a pool runs the same harness image as Cloudflare:
 Every kind is dispatched to the **same** harness endpoint, `POST /jobs`, with the
 `kind` carried in the job body:
 
-| `kind`              | What the job does                                   |
-| ------------------- | --------------------------------------------------- |
-| `run`               | Implement a task: branch + commits + open a PR.     |
-| `bootstrap`         | Scaffold/adapt a new repo and force-push it.        |
-| `blueprint`         | Decompose the repo into the service→modules tree.   |
-| `spec`              | Write/extend the in-repo prescriptive spec.         |
-| `explore`           | Read-only architect/analysis; returns prose.        |
-| `ci-fix`            | Fix red CI on the PR branch; push back.             |
-| `resolve-conflicts` | Resolve merge conflicts on the PR branch.           |
-| `merge`             | Score the PR diff; return a JSON assessment.        |
-| `on-call`           | Investigate a post-release regression (JSON).       |
-| `test`              | Run the suite; return a structured report.          |
-| `fix-tests`         | Apply fixes from a test report; push back.          |
+| `kind`              | What the job does                                 |
+| ------------------- | ------------------------------------------------- |
+| `run`               | Implement a task: branch + commits + open a PR.   |
+| `bootstrap`         | Scaffold/adapt a new repo and force-push it.      |
+| `blueprint`         | Decompose the repo into the service→modules tree. |
+| `spec`              | Write/extend the in-repo prescriptive spec.       |
+| `explore`           | Read-only architect/analysis; returns prose.      |
+| `ci-fix`            | Fix red CI on the PR branch; push back.           |
+| `resolve-conflicts` | Resolve merge conflicts on the PR branch.         |
+| `merge`             | Score the PR diff; return a JSON assessment.      |
+| `on-call`           | Investigate a post-release regression (JSON).     |
+| `test`              | Run the suite; return a structured report.        |
+| `fix-tests`         | Apply fixes from a test report; push back.        |
 
 > **The one exception:** the synchronous repo **scan** (the manual board-scan
 > "import this repo") still uses a Cloudflare Container directly and does **not**
@@ -131,7 +131,7 @@ sizing without decoding the job JSON.
 
 ---
 
-## 1. The runner: image + job protocol  *(Platform team)*
+## 1. The runner: image + job protocol _(Platform team)_
 
 ### Get the image
 
@@ -165,11 +165,11 @@ build secret — see the comment block at the top of the Dockerfile.)
 
 ### The job protocol a runner speaks
 
-| Method & path     | Purpose                                                          |
-| ----------------- | ---------------------------------------------------------------- |
-| `GET /health`     | Liveness. `{ "status": "ok" }`.                                  |
-| `POST /jobs`      | Start (or re-attach to) any job; the body's `kind` picks the agent. |
-| `GET /jobs/{id}`  | Poll any job. Returns the **job view** below.                    |
+| Method & path    | Purpose                                                             |
+| ---------------- | ------------------------------------------------------------------- |
+| `GET /health`    | Liveness. `{ "status": "ok" }`.                                     |
+| `POST /jobs`     | Start (or re-attach to) any job; the body's `kind` picks the agent. |
+| `GET /jobs/{id}` | Poll any job. Returns the **job view** below.                       |
 
 `POST /jobs` returns `202 { jobId, state }`. **All kinds are dispatched and polled
 identically** — one endpoint to start (the `kind` field in the body selects the
@@ -178,33 +178,35 @@ product lands in its `result` fields.
 
 **Dispatch body** — the job spec cat-factory sends. Treat it as **opaque and
 forward it verbatim**; do not depend on its exact shape (it grows as agent kinds are
-added). The fields that matter to *you* are `jobId` (route key) and `kind` (which
+added). The fields that matter to _you_ are `jobId` (route key) and `kind` (which
 harness route); the rest is for the harness:
 
 ```jsonc
 {
   "jobId": "<execution-id>-<agentKind>", // route key; re-POST re-attaches (idempotent)
-  "kind": "run",                         // which harness route — maps 1:1 to the path
+  "kind": "run", // which harness route — maps 1:1 to the path
   "model": "qwen3-max",
-  "harness": "pi",                       // "pi" | "claude-code" | "codex"
+  "harness": "pi", // "pi" | "claude-code" | "codex"
   // Pi harness: reaches models ONLY via the proxy with a model-locked session token.
   "proxyBaseUrl": "https://<worker>/v1",
   "sessionToken": "<model-locked proxy session token>",
   // Subscription harness (claude-code/codex) instead carries:
   // "subscriptionToken": "<leased credential>", "subscriptionBaseUrl": "https://…",
   "ghToken": "<short-lived GitHub installation token>",
-  "githubApiBase": "https://api.github.com",        // present for GitHub Enterprise
+  "githubApiBase": "https://api.github.com", // present for GitHub Enterprise
   "repo": {
-    "owner": "...", "name": "...", "baseBranch": "main",
+    "owner": "...",
+    "name": "...",
+    "baseBranch": "main",
     "cloneUrl": "https://github.com/owner/name.git",
-    "serviceDirectory": "packages/api"              // monorepo subdir, when pinned
+    "serviceDirectory": "packages/api", // monorepo subdir, when pinned
   },
   // Per-kind fields (vary by route): systemPrompt, userPrompt | instructions,
   // headBranch | branch, pr {title, body}, task {…}, mode, prNumber, test {…},
   // webToolsGuidance, webSearch, …
   // Provisioning hints (present only when the service pins a size/provider):
   "instanceType": "c7g.xlarge",
-  "cloudProvider": "aws"
+  "cloudProvider": "aws",
 }
 ```
 
@@ -234,18 +236,18 @@ reach the same runner/job.
 
 ### Runner lifecycle knobs (env on the runner, read by the harness)
 
-| Env var               | Default         | Effect                                                       |
-| --------------------- | --------------- | ------------------------------------------------------------ |
-| `PORT`                | `8080`          | HTTP port the harness listens on.                            |
-| `JOB_MAX_DURATION_MS` | `3600000` (60m) | Hard ceiling on a job's wall-clock time; force-fails after.  |
-| `JOB_INACTIVITY_MS`   | `600000` (10m)  | Kills a hung agent that produces no output for this long.    |
+| Env var               | Default         | Effect                                                      |
+| --------------------- | --------------- | ----------------------------------------------------------- |
+| `PORT`                | `8080`          | HTTP port the harness listens on.                           |
+| `JOB_MAX_DURATION_MS` | `3600000` (60m) | Hard ceiling on a job's wall-clock time; force-fails after. |
+| `JOB_INACTIVITY_MS`   | `600000` (10m)  | Kills a hung agent that produces no output for this long.   |
 
 Rely on these watchdogs to reap stuck jobs — cat-factory will not kill a runner for
 you (it only calls your `release`).
 
 ---
 
-## 2. Network requirements  *(Platform team)*
+## 2. Network requirements _(Platform team)_
 
 - **Ingress (cat-factory → your scheduler):** the manifest `baseUrl` (and OAuth
   `tokenUrl`, if any) must be reachable from the cat-factory backend over **public
@@ -260,7 +262,7 @@ you (it only calls your `release`).
 
 ---
 
-## 3. Describe your scheduler as a manifest  *(Application team)*
+## 3. Describe your scheduler as a manifest _(Application team)_
 
 The manifest tells cat-factory how to **dispatch / poll / release**, how to
 authenticate to your scheduler, and how to read your response shape. It is
@@ -271,13 +273,13 @@ Valibot-validated on registration (`backend/packages/contracts/src/runners.ts`).
 Requests support `{{var}}` interpolation over a **bounded** namespace (unknown
 references resolve to empty — a manifest can never reach arbitrary host state):
 
-| Variable                | Value                                                                          |
-| ----------------------- | ------------------------------------------------------------------------------ |
-| `{{input.jobId}}`       | The job id the pool is keyed on (sticky-routing target).                       |
-| `{{input.job}}`         | The **full** harness job spec as a JSON string — embed raw to forward verbatim. |
-| `{{input.kind}}`        | The agent kind the job runs (`run`, `merge`, …). The harness reads this from the job body; use it to route/size on your scheduler side. |
-| `{{input.instanceType}}`| Concrete instance-type id, when the service pins a size (else empty).          |
-| `{{input.cloudProvider}}`| The cloud the service selected, when pinned (else empty).                     |
+| Variable                  | Value                                                                                                                                   |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `{{input.jobId}}`         | The job id the pool is keyed on (sticky-routing target).                                                                                |
+| `{{input.job}}`           | The **full** harness job spec as a JSON string — embed raw to forward verbatim.                                                         |
+| `{{input.kind}}`          | The agent kind the job runs (`run`, `merge`, …). The harness reads this from the job body; use it to route/size on your scheduler side. |
+| `{{input.instanceType}}`  | Concrete instance-type id, when the service pins a size (else empty).                                                                   |
+| `{{input.cloudProvider}}` | The cloud the service selected, when pinned (else empty).                                                                               |
 
 `{{input.kind}}` / `{{input.instanceType}}` / `{{input.cloudProvider}}` are
 convenience projections of fields that also live inside `{{input.job}}`; they exist
@@ -291,32 +293,32 @@ manifest just forwards everything; `{{input.kind}}` selects the path:
 
 ```jsonc
 {
-  "providerId": "acme-pool",                         // [a-z0-9-], ≤64
+  "providerId": "acme-pool", // [a-z0-9-], ≤64
   "label": "Acme Runner Pool",
-  "baseUrl": "https://runners.acme.example/api",     // public https
+  "baseUrl": "https://runners.acme.example/api", // public https
   "auth": { "type": "bearer", "secretRef": { "key": "API_TOKEN" } },
 
   "dispatch": {
     "method": "POST",
-    "pathTemplate": "/dispatch/{{input.kind}}",       // route by kind
-    "bodyTemplate": "{\"id\":\"{{input.jobId}}\",\"job\":{{input.job}}}"
+    "pathTemplate": "/dispatch/{{input.kind}}", // route by kind
+    "bodyTemplate": "{\"id\":\"{{input.jobId}}\",\"job\":{{input.job}}}",
   },
-  "poll":    { "method": "GET",    "pathTemplate": "/jobs/{{input.jobId}}" },
+  "poll": { "method": "GET", "pathTemplate": "/jobs/{{input.jobId}}" },
   "release": { "method": "DELETE", "pathTemplate": "/jobs/{{input.jobId}}" },
 
   "response": {
-    "resultPath": "result",            // forward the WHOLE harness result envelope
+    "resultPath": "result", // forward the WHOLE harness result envelope
     "statusPath": "state",
     "statusMap": [
       { "from": "in_progress", "to": "running" },
-      { "from": "succeeded",   "to": "done" },
-      { "from": "errored",     "to": "failed" }
+      { "from": "succeeded", "to": "done" },
+      { "from": "errored", "to": "failed" },
     ],
     "progressCompletedPath": "progress.completed",
     "progressInProgressPath": "progress.inProgress",
     "progressTotalPath": "progress.total",
-    "errorPath": "error"
-  }
+    "errorPath": "error",
+  },
 }
 ```
 
@@ -330,28 +332,31 @@ status shape. Your sidecar reads `kind` from the embedded job and routes interna
   "providerId": "acme-k8s",
   "label": "Acme k8s jobs",
   "baseUrl": "https://jobs.acme.example",
-  "auth": { "type": "oauth2_client_credentials",
-            "tokenUrl": "https://auth.acme.example/oauth/token",
-            "clientIdSecretRef":     { "key": "CLIENT_ID" },
-            "clientSecretSecretRef": { "key": "CLIENT_SECRET" },
-            "scope": "jobs:write" },
-  "dispatch": {
-    "method": "POST", "pathTemplate": "/v1/jobs",
-    "bodyTemplate": "{\"name\":\"{{input.jobId}}\",\"kind\":\"{{input.kind}}\",\"instanceType\":\"{{input.instanceType}}\",\"spec\":{{input.job}}}"
+  "auth": {
+    "type": "oauth2_client_credentials",
+    "tokenUrl": "https://auth.acme.example/oauth/token",
+    "clientIdSecretRef": { "key": "CLIENT_ID" },
+    "clientSecretSecretRef": { "key": "CLIENT_SECRET" },
+    "scope": "jobs:write",
   },
-  "poll":    { "method": "GET",    "pathTemplate": "/v1/jobs/{{input.jobId}}" },
+  "dispatch": {
+    "method": "POST",
+    "pathTemplate": "/v1/jobs",
+    "bodyTemplate": "{\"name\":\"{{input.jobId}}\",\"kind\":\"{{input.kind}}\",\"instanceType\":\"{{input.instanceType}}\",\"spec\":{{input.job}}}",
+  },
+  "poll": { "method": "GET", "pathTemplate": "/v1/jobs/{{input.jobId}}" },
   "release": { "method": "DELETE", "pathTemplate": "/v1/jobs/{{input.jobId}}" },
   "response": {
     "resultPath": "data.result",
     "statusPath": "data.phase",
     "statusMap": [
-      { "from": "Pending",   "to": "running" },
-      { "from": "Running",   "to": "running" },
+      { "from": "Pending", "to": "running" },
+      { "from": "Running", "to": "running" },
       { "from": "Succeeded", "to": "done" },
-      { "from": "Failed",    "to": "failed" }
+      { "from": "Failed", "to": "failed" },
     ],
-    "errorPath": "data.message"
-  }
+    "errorPath": "data.message",
+  },
 }
 ```
 
@@ -361,14 +366,14 @@ Each references its secret(s) by **logical key**; you supply the values at
 registration (§4) and they are stored encrypted at rest — values never appear in the
 manifest.
 
-| `auth.type`                 | fields                                                                          | effect                                 |
-| --------------------------- | ------------------------------------------------------------------------------- | -------------------------------------- |
-| `none`                      | —                                                                               | no auth header                         |
-| `api_key`                   | `headerName`, `secretRef`, `valuePrefix?`                                       | `headerName: <prefix><secret>`         |
-| `bearer`                    | `secretRef`                                                                     | `Authorization: Bearer <secret>`       |
-| `basic`                     | `usernameSecretRef`, `passwordSecretRef`                                        | `Authorization: Basic base64(u:p)`     |
-| `oauth2_client_credentials` | `tokenUrl`, `clientIdSecretRef`, `clientSecretSecretRef`, `scope?`, `audience?` | POST token (cached) → `Bearer …`       |
-| `custom_headers`            | `headers: [{ name, secretRef }]`                                                | each header set from its secret        |
+| `auth.type`                 | fields                                                                          | effect                             |
+| --------------------------- | ------------------------------------------------------------------------------- | ---------------------------------- |
+| `none`                      | —                                                                               | no auth header                     |
+| `api_key`                   | `headerName`, `secretRef`, `valuePrefix?`                                       | `headerName: <prefix><secret>`     |
+| `bearer`                    | `secretRef`                                                                     | `Authorization: Bearer <secret>`   |
+| `basic`                     | `usernameSecretRef`, `passwordSecretRef`                                        | `Authorization: Basic base64(u:p)` |
+| `oauth2_client_credentials` | `tokenUrl`, `clientIdSecretRef`, `clientSecretSecretRef`, `scope?`, `audience?` | POST token (cached) → `Bearer …`   |
+| `custom_headers`            | `headers: [{ name, secretRef }]`                                                | each header set from its secret    |
 
 ### Response mapping notes
 
@@ -387,7 +392,7 @@ manifest.
 
 ---
 
-## 4. Enable the feature and register a pool  *(Application team + a one-time Platform step)*
+## 4. Enable the feature and register a pool _(Application team + a one-time Platform step)_
 
 **One-time (Platform):** opt in and set the at-rest encryption key on the backend.
 
@@ -416,19 +421,19 @@ curl -X POST "$API/workspaces/$WS/runner-pool/connection" \
   -d '{ "manifest": { ... }, "secrets": { "API_TOKEN": "real-token" } }'
 ```
 
-| Method & path                         | Purpose                                                |
-| ------------------------------------- | ------------------------------------------------------ |
+| Method & path                         | Purpose                                                                |
+| ------------------------------------- | ---------------------------------------------------------------------- |
 | `GET /runner-pool/connection`         | Current binding (safe metadata + which secret keys set; never values). |
-| `POST /runner-pool/connection`        | Register / replace the manifest + secret bundle.       |
-| `PUT /runner-pool/connection/secrets` | Rotate the secret bundle (manifest unchanged).         |
-| `DELETE /runner-pool/connection`      | Unregister the pool (falls back to Cloudflare).        |
+| `POST /runner-pool/connection`        | Register / replace the manifest + secret bundle.                       |
+| `PUT /runner-pool/connection/secrets` | Rotate the secret bundle (manifest unchanged).                         |
+| `DELETE /runner-pool/connection`      | Unregister the pool (falls back to Cloudflare).                        |
 
 All under `/workspaces/:workspaceId`. Once registered, that workspace's agent steps
 run on your pool; unregister to revert.
 
 ---
 
-## 5. Mapping the manifest onto k3s / Nomad / Kubernetes  *(Platform team)*
+## 5. Mapping the manifest onto k3s / Nomad / Kubernetes _(Platform team)_
 
 cat-factory only speaks HTTP to **your scheduler API** — it never talks to your
 orchestrator directly. So you always put a thin API in front, and you have full
@@ -448,7 +453,7 @@ freedom to wrap it however your platform works. Two robust shapes:
 Concrete tips for each:
 
 - **Kubernetes / k3s.** A small operator or web service that maps `dispatch → create
-  Job`, `poll → read Job + harness status`, `release → delete Job`. Use
+Job`, `poll → read Job + harness status`, `release → delete Job`. Use
   `{{input.instanceType}}` to pick a node selector / resource request and
   `{{input.kind}}` to select a Job template. Front it with an Ingress (public HTTPS) —
   that Ingress URL is your manifest `baseUrl`. Sticky routing falls out naturally
@@ -457,7 +462,7 @@ Concrete tips for each:
   on `jobId`, `poll → allocation status + harness status`, `release → deregister`.
   `{{input.instanceType}}` → a constraint/resources block. Front with your gateway
   (Consul/Traefik) on public HTTPS.
-- **Custom wrapper on top.** Because the contract is *only* dispatch/poll/release over
+- **Custom wrapper on top.** Because the contract is _only_ dispatch/poll/release over
   HTTP with a dot-path response mapping, any internal scheduler works the same way:
   expose three endpoints, route by `jobId`, run the harness image, and forward the
   job view. The manifest's templating + `statusMap` + `resultPath` absorb almost any
@@ -504,7 +509,7 @@ Concrete tips for each:
 ## 7. Scaling & operations
 
 - cat-factory dispatches one job per pipeline **step** and polls it on the durable
-  driver's cadence (`JOB_POLL_INTERVAL`, default 15s). A run executes a *sequence* of
+  driver's cadence (`JOB_POLL_INTERVAL`, default 15s). A run executes a _sequence_ of
   steps, each its own pool job (distinct `jobId` = `<executionId>-<agentKind>`), so a
   busy workspace produces many short-lived jobs — size your pool for concurrency, not
   for one job per run.

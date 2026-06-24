@@ -90,9 +90,7 @@ describe('LocalDockerRunnerTransport', () => {
     // Both dispatches POST to /jobs, each carrying the merge kind in the body.
     const posts = fetchImpl.mock.calls.filter(([u]) => String(u).endsWith('/jobs'))
     expect(posts).toHaveLength(2)
-    expect(
-      posts.every(([, init]) => JSON.parse(String(init?.body)).kind === 'merge'),
-    ).toBe(true)
+    expect(posts.every(([, init]) => JSON.parse(String(init?.body)).kind === 'merge')).toBe(true)
   })
 
   it('shares one per-run container across steps, keyed by run id and polled by job id', async () => {
