@@ -2,7 +2,7 @@ import type { Context } from 'hono'
 import { Hono } from 'hono'
 import { cachedTokensFromUsage, promptCacheParams } from '@cat-factory/agents'
 import { isLocalRunner } from '@cat-factory/contracts'
-import type { ApiKeyProvider } from '@cat-factory/kernel'
+import { type ApiKeyProvider, contextWindowFor } from '@cat-factory/kernel'
 import { ContainerSessionService } from '../../containers/ContainerSessionService.js'
 import type { AppEnv } from '../../http/env.js'
 import { logger } from '../../observability/logger.js'
@@ -30,9 +30,49 @@ import type { LlmTokenUsage, ProxyCallObservation } from '../../runtime/gateways
  * `max_tokens`, so `asked` is always ≤ this floor and the floor governs. Raising the
  * harness ceiling alone therefore does nothing; this is the value to change. Keep it in
  * step with the harness `PI_MAX_OUTPUT_TOKENS` (32k). A ceiling, not a target — unused
- * tokens are not billed and Workers AI clamps to the model's real max.
+ * tokens are not billed. It is itself capped per-call against the model's context window
+ * below: a small-window model (e.g. qwen3-30b-a3b-fp8 at 32K total) does NOT clamp a
+ * too-large output request, it rejects the whole call (error 8007 → HTTP 502).
  */
 const PI_MIN_OUTPUT_TOKENS = 32_768
+
+/**
+ * Chars-per-token used to estimate a prompt's input-token cost from its serialized
+ * length when capping the output request against a model's context window. Kept LOW (a
+ * dense-JSON ratio) on purpose so the estimate runs HIGH and the cap stays conservative:
+ * over-reserving input room only trims output a little, while under-reserving risks the
+ * very overflow the cap exists to prevent.
+ */
+const PROMPT_CHARS_PER_TOKEN = 3
+
+/**
+ * Tokens held back from the context window beyond the estimated input — covers role/
+ * formatting overhead the char estimate misses and the model's own generation headroom.
+ */
+const CONTEXT_WINDOW_MARGIN = 512
+
+/**
+ * The output-token ceiling for a workers-ai container call: Pi's asked value floored to
+ * {@link PI_MIN_OUTPUT_TOKENS}, then capped so input + output fits the model's context
+ * window (when the catalog declares one). A small-window model rejects the WHOLE request
+ * (Workers AI error 8007 → HTTP 502) when the output request alone fills the window, so we
+ * reserve room for the prompt: estimate its input-token cost from the serialized
+ * prompt + tool definitions (`inputChars`) and hold that back. The cap only NARROWS the
+ * floor; an unknown window or ample room leaves it untouched. Pure + exported for testing.
+ */
+export function workersAiOutputCeiling(args: {
+  asked: number
+  contextWindow: number | undefined
+  inputChars: number
+}): number {
+  let ceiling = Math.max(args.asked, PI_MIN_OUTPUT_TOKENS)
+  if (args.contextWindow) {
+    const estimatedInputTokens = Math.ceil(args.inputChars / PROMPT_CHARS_PER_TOKEN)
+    const outputRoom = args.contextWindow - estimatedInputTokens - CONTEXT_WINDOW_MARGIN
+    if (outputRoom > 0 && outputRoom < ceiling) ceiling = outputRoom
+  }
+  return ceiling
+}
 
 /** Pull the bearer token from the Authorization header. */
 function bearer(header: string | undefined): string | null {
@@ -247,9 +287,14 @@ export function llmProxyController(): Hono<AppEnv> {
     // to respect their stricter upstream output caps.
     if (session.provider === 'workers-ai') {
       const asked = typeof payload.max_tokens === 'number' ? payload.max_tokens : 0
-      const floored = Math.max(asked, PI_MIN_OUTPUT_TOKENS)
+      const toolsText = Array.isArray(payload.tools) ? JSON.stringify(payload.tools) : ''
+      const floored = workersAiOutputCeiling({
+        asked,
+        contextWindow: contextWindowFor({ provider: session.provider, model: session.model }),
+        inputChars: promptText.length + toolsText.length,
+      })
       payload.max_tokens = floored
-      // Record the floor we actually applied, not the (often absent) asked value.
+      // Record the ceiling we actually applied, not the (often absent) asked value.
       requestMaxTokens = floored
     }
 

@@ -356,6 +356,32 @@ export function getSelectableModel(id: string | undefined | null): SelectableMod
   return id ? BY_ID.get(id) : undefined
 }
 
+// Context window (total input + output tokens) for every concrete ref the catalog
+// declares one for, keyed by `${provider}:${model}` across all flavours. A model can
+// appear under several flavours with DIFFERENT windows (e.g. DeepSeek 80K on Cloudflare
+// vs 64K direct), so each ref is mapped on its own.
+const CONTEXT_WINDOW_BY_REF: Map<string, number> = (() => {
+  const map = new Map<string, number>()
+  for (const model of MODEL_CATALOG) {
+    for (const ref of [model.cloudflare, model.direct?.ref, model.subscription?.ref]) {
+      if (ref?.contextTokens) map.set(`${ref.provider}:${ref.model}`, ref.contextTokens)
+    }
+  }
+  return map
+})()
+
+/**
+ * The total context window (input + output tokens) the catalog declares for a concrete
+ * model ref, matched by provider + model. Returns undefined for a ref the catalog does
+ * not carry or one with no declared window. Used by the LLM proxy to cap a call's
+ * requested output so input + output can't exceed a small-window model's limit — a model
+ * like `@cf/qwen/qwen3-30b-a3b-fp8` (32K total) otherwise rejects the whole request
+ * (Workers AI error 8007 → HTTP 502) when the output floor alone fills the window.
+ */
+export function contextWindowFor(ref: { provider: string; model: string }): number | undefined {
+  return CONTEXT_WINDOW_BY_REF.get(`${ref.provider}:${ref.model}`)
+}
+
 /**
  * What a deployment + workspace actually has configured, used to resolve a catalog
  * model to its usable flavour. Replaces the old env-only `keyEnv` predicate: direct

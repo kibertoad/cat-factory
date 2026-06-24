@@ -31,6 +31,7 @@ export {
   SUBSCRIPTION_VENDORS,
   ALL_SUBSCRIPTION_VENDORS,
   getSelectableModel,
+  contextWindowFor,
   effectiveCatalog,
   effectiveCatalogWith,
   type LocalEndpointModels,
