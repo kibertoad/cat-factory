@@ -33,6 +33,8 @@ import {
   TASK_ESTIMATOR_AGENT_KIND,
 } from '@cat-factory/agents'
 import { coerceTaskEstimate, summarizeEstimate } from '../estimation/estimate.logic.js'
+import { validatePipelineShape } from '../pipelines/pipelineShape.js'
+import { shouldRunGatedStep } from './stepGating.logic.js'
 import { reviewableArtifactOutput } from './artifact-review.logic.js'
 import {
   resolveIndividualVendors,
@@ -711,6 +713,12 @@ export class ExecutionService {
       pipelineId,
     )
 
+    // Reject a structurally-invalid pipeline before any side effects — a misplaced
+    // companion or estimate-gating without a preceding task-estimator. The builder also
+    // rejects these at save, but a pipeline can become invalid out of band, so a run
+    // refuses to START as well (the same shared check).
+    validatePipelineShape(pipeline)
+
     // A pipeline with a Tester that runs locally needs the service's test infra
     // configured (a docker-compose path, or an explicit "no infra dependencies"
     // flag). Block the start with a clear, actionable error otherwise — before any
@@ -763,6 +771,9 @@ export class ExecutionService {
           // A consensus-enabled step runs through the multi-model mechanism (the consensus
           // executor reads this off the context). Copied from the pipeline at run start.
           ...(pipeline.consensus?.[i] ? { consensus: pipeline.consensus[i] } : {}),
+          // Estimate gating: when set+enabled the step is skipped at runtime unless the
+          // block estimate (written by an earlier task-estimator step) meets the threshold.
+          ...(pipeline.gating?.[i] ? { gating: pipeline.gating[i] } : {}),
           // A companion step carries its quality bar + rework budget, seeded from the
           // pipeline's per-step threshold (else the companion's default).
           ...(companionDef
@@ -879,6 +890,15 @@ export class ExecutionService {
     const block = await this.blockRepository.get(workspaceId, instance.blockId)
     if (!block) return { kind: 'noop' }
     const isFinalStep = instance.currentStep === instance.steps.length - 1
+
+    // Estimate gating: a step gated on the task estimate (today a conditional companion)
+    // is transparently SKIPPED when the estimate — written by an earlier task-estimator
+    // step in this same run — falls below the threshold. No agent is spun up; the step
+    // finishes as `skipped` and the run advances. Evaluated here (not at build time)
+    // because the estimate only exists once the estimator step has run.
+    if (step.gating?.enabled && !shouldRunGatedStep(block.estimate, step.gating)) {
+      return this.skipGatedStep(workspaceId, instance, step, isFinalStep)
+    }
 
     // A `deployer` step provisions an ephemeral environment deterministically via
     // the provider — no LLM, no token usage — when the integration is wired.
@@ -1319,6 +1339,42 @@ export class ExecutionService {
     step.state = 'done'
     if (step.finishedAt == null) step.finishedAt = step.pausedAt ?? this.clock.now()
     step.pausedAt = null
+  }
+
+  /**
+   * Finish a gated step that was skipped (its estimate gate was not satisfied) and either
+   * complete the run or advance to the next step — the deterministic finish/advance tail
+   * of {@link recordStepResult}, minus all the agent-result handling (no LLM ran, so there
+   * is no usage / decision / PR / artifact / approval / resolver to process). The step is
+   * marked `skipped` with empty output so the UI renders "skipped (gated)".
+   */
+  private async skipGatedStep(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    step: PipelineStep,
+    isFinalStep: boolean,
+  ): Promise<AdvanceResult> {
+    step.skipped = true
+    step.output = ''
+    step.progress = 1
+    step.subtasks = undefined
+    this.finishStep(step)
+
+    if (isFinalStep) {
+      instance.status = 'done'
+      await this.finalizeBlock(workspaceId, instance, undefined)
+      await this.executionRepository.upsert(workspaceId, instance)
+      await this.emitInstance(workspaceId, instance)
+      await this.stopRunContainer(workspaceId, instance)
+      return { kind: 'done' }
+    }
+    instance.currentStep += 1
+    const next = instance.steps[instance.currentStep]
+    if (next) this.startStep(next)
+    await this.updateBlockProgress(workspaceId, instance, 'in_progress')
+    await this.executionRepository.upsert(workspaceId, instance)
+    await this.emitInstance(workspaceId, instance)
+    return { kind: 'continue' }
   }
 
   /**

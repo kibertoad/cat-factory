@@ -245,6 +245,12 @@ export interface PipelineRow {
   builtin?: number | boolean | null
   /** Nullable JSON array of per-step consensus configs (parallel to agent_kinds). */
   consensus?: string | null
+  /** Nullable JSON array of per-step estimate gating (migration 0003). */
+  gating?: string | null
+  /** Nullable JSON array of organizational labels (migration 0003). */
+  labels?: string | null
+  /** Truthy (1) when the pipeline is archived / hidden from the default view (migration 0003). */
+  archived?: number | boolean | null
 }
 
 export function rowToPipeline(row: PipelineRow): Pipeline {
@@ -256,6 +262,9 @@ export function rowToPipeline(row: PipelineRow): Pipeline {
     ...(row.thresholds ? { thresholds: JSON.parse(row.thresholds) as Pipeline['thresholds'] } : {}),
     ...(row.enabled ? { enabled: JSON.parse(row.enabled) as boolean[] } : {}),
     ...(row.consensus ? { consensus: JSON.parse(row.consensus) as Pipeline['consensus'] } : {}),
+    ...(row.gating ? { gating: JSON.parse(row.gating) as Pipeline['gating'] } : {}),
+    ...(row.labels ? { labels: JSON.parse(row.labels) as string[] } : {}),
+    ...(row.archived ? { archived: true } : {}),
     ...(row.builtin ? { builtin: true } : {}),
   }
 }

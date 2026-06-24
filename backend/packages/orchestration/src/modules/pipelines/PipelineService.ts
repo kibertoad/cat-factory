@@ -1,9 +1,10 @@
 import type {
   ClonePipelineInput,
   CreatePipelineInput,
+  OrganizePipelineInput,
   UpdatePipelineInput,
 } from '@cat-factory/contracts'
-import type { ConsensusStepConfig, Pipeline } from '@cat-factory/kernel'
+import type { ConsensusStepConfig, Pipeline, StepGating } from '@cat-factory/kernel'
 import { assertFound, ValidationError } from '@cat-factory/kernel'
 import type {
   DatadogConnectionRepository,
@@ -12,7 +13,7 @@ import type {
 } from '@cat-factory/kernel'
 import type { IdGenerator } from '@cat-factory/kernel'
 import { requireWorkspace } from '@cat-factory/kernel'
-import { companionTargets, isCompanionKind } from '@cat-factory/agents'
+import { validatePipelineShape } from './pipelineShape.js'
 
 /**
  * The post-release-health gate watches a released PR's observability signals, so it is
@@ -87,7 +88,11 @@ export class PipelineService {
   async create(workspaceId: string, input: CreatePipelineInput): Promise<Pipeline> {
     await this.requireWorkspace(workspaceId)
     assertSomeEnabled(input.agentKinds, input.enabled)
-    assertValidCompanionPlacement(input.agentKinds, input.enabled)
+    validatePipelineShape({
+      agentKinds: input.agentKinds,
+      enabled: input.enabled,
+      gating: input.gating,
+    })
     await this.assertObservabilityGatedStepAllowed(workspaceId, input.agentKinds, input.enabled)
     const pipeline: Pipeline = {
       id: this.idGenerator.next('pl'),
@@ -97,6 +102,8 @@ export class PipelineService {
       ...alignedThresholds(input.agentKinds, input.thresholds),
       ...alignedEnabled(input.agentKinds, input.enabled),
       ...alignedConsensus(input.agentKinds, input.consensus),
+      ...alignedGating(input.agentKinds, input.gating),
+      ...normalizedLabels(input.labels),
     }
     await this.pipelineRepository.insert(workspaceId, pipeline)
     return pipeline
@@ -122,6 +129,9 @@ export class PipelineService {
       ...(source.thresholds ? { thresholds: [...source.thresholds] } : {}),
       ...(source.enabled ? { enabled: [...source.enabled] } : {}),
       ...(source.consensus ? { consensus: [...source.consensus] } : {}),
+      ...(source.gating ? { gating: [...source.gating] } : {}),
+      ...(source.labels ? { labels: [...source.labels] } : {}),
+      // A clone is a fresh, active, editable copy — never `builtin`, never `archived`.
     }
     await this.pipelineRepository.insert(workspaceId, pipeline)
     return pipeline
@@ -145,12 +155,15 @@ export class PipelineService {
     const thresholds = input.thresholds ?? existing.thresholds
     const enabled = input.enabled ?? existing.enabled
     const consensus = input.consensus ?? existing.consensus
+    const gating = input.gating ?? existing.gating
+    const labels = input.labels ?? existing.labels
     assertSomeEnabled(agentKinds, enabled)
-    // Re-validate companion placement against the EFFECTIVE (enabled) chain — disabling
-    // a producer while leaving its companion on would orphan the companion — so validate
-    // whenever the chain OR the enable flags change, not just on a chain replacement.
-    if (input.agentKinds || input.enabled) {
-      assertValidCompanionPlacement(agentKinds, enabled)
+    // Re-validate the shape against the EFFECTIVE (enabled) chain — disabling a producer
+    // while leaving its companion on would orphan the companion, and adding gating without
+    // an estimator is illegal — so validate whenever the chain, enable flags, OR gating
+    // change, not just on a chain replacement.
+    if (input.agentKinds || input.enabled || input.gating) {
+      validatePipelineShape({ agentKinds, enabled, gating })
       await this.assertObservabilityGatedStepAllowed(workspaceId, agentKinds, enabled)
     }
     const pipeline: Pipeline = {
@@ -161,6 +174,10 @@ export class PipelineService {
       ...alignedThresholds(agentKinds, thresholds),
       ...alignedEnabled(agentKinds, enabled),
       ...alignedConsensus(agentKinds, consensus),
+      ...alignedGating(agentKinds, gating),
+      ...normalizedLabels(labels),
+      // `archived` is organization-only state, mutated via `organize` — preserved here.
+      ...(existing.archived ? { archived: true } : {}),
     }
     await this.pipelineRepository.update(workspaceId, pipeline)
     return pipeline
@@ -175,6 +192,28 @@ export class PipelineService {
       throw new ValidationError('Built-in pipelines are read-only and cannot be deleted.')
     }
     await this.pipelineRepository.delete(workspaceId, id)
+  }
+
+  /**
+   * Set a pipeline's organizational metadata (labels and/or archive state). This is the
+   * ONLY mutation allowed on a BUILT-IN pipeline — it touches the library view, not the
+   * pipeline's structure, so a built-in can be tagged or archived while staying read-only
+   * for its steps. Only the supplied fields change.
+   */
+  async organize(workspaceId: string, id: string, input: OrganizePipelineInput): Promise<Pipeline> {
+    await this.requireWorkspace(workspaceId)
+    const existing = assertFound(await this.pipelineRepository.get(workspaceId, id), 'Pipeline', id)
+    // Explicit-undefined check (not `??`): passing `labels: []` clears the labels, while
+    // omitting the field preserves the existing ones.
+    const labels = input.labels !== undefined ? cleanLabels(input.labels) : existing.labels
+    const archived = input.archived !== undefined ? input.archived : existing.archived
+    const pipeline: Pipeline = {
+      ...existing,
+      ...(labels && labels.length ? { labels } : { labels: undefined }),
+      ...(archived ? { archived: true } : { archived: undefined }),
+    }
+    await this.pipelineRepository.update(workspaceId, pipeline)
+    return pipeline
   }
 }
 
@@ -217,38 +256,34 @@ function alignedConsensus(
     : {}
 }
 
+// Keep gating aligned to agentKinds; only persist when at least one step has gating enabled
+// (the default is no array at all → every step always runs).
+function alignedGating(
+  agentKinds: string[],
+  gating: (StepGating | null)[] | undefined,
+): Pick<Pipeline, 'gating'> {
+  return gating?.some((g) => g?.enabled)
+    ? { gating: agentKinds.map((_, i) => gating[i] ?? null) }
+    : {}
+}
+
+// Trim, drop blanks, and dedupe labels; undefined when none remain.
+function cleanLabels(labels: string[] | undefined): string[] | undefined {
+  if (!labels) return undefined
+  const cleaned = [...new Set(labels.map((l) => l.trim()).filter(Boolean))]
+  return cleaned.length ? cleaned : undefined
+}
+
+// Only persist labels when at least one survives cleaning.
+function normalizedLabels(labels: string[] | undefined): Pick<Pipeline, 'labels'> {
+  const cleaned = cleanLabels(labels)
+  return cleaned ? { labels: cleaned } : {}
+}
+
 /** A pipeline with every step disabled would have nothing to run. */
 function assertSomeEnabled(agentKinds: string[], enabled: boolean[] | undefined): void {
   if (!enabled) return
   if (!agentKinds.some((_, i) => enabled[i] ?? true)) {
     throw new ValidationError('A pipeline must keep at least one step enabled.')
-  }
-}
-
-/**
- * A companion step is only valid when some earlier step produces output it is allowed
- * to review (a step whose kind is in the companion's target allow-list). Throws a
- * {@link ValidationError} on a misplaced companion so the builder can't save one that
- * would have nothing to grade at runtime.
- *
- * `enabled` is the (optional) per-step enable mask: only ENABLED steps actually run, so
- * the run is built from them alone. A disabled companion never runs (skipped), and a
- * disabled producer can't be the thing a companion grades — so the check is performed
- * over the enabled subset. This rejects "disable the producer but leave its companion
- * on", which would otherwise leave the companion grading nothing at runtime.
- */
-function assertValidCompanionPlacement(agentKinds: string[], enabled?: boolean[]): void {
-  const isEnabled = (i: number) => enabled?.[i] !== false
-  for (let i = 0; i < agentKinds.length; i++) {
-    const kind = agentKinds[i]
-    if (kind === undefined || !isCompanionKind(kind)) continue
-    if (!isEnabled(i)) continue
-    const targets = companionTargets(kind)
-    const hasProducer = agentKinds.slice(0, i).some((k, j) => targets.includes(k) && isEnabled(j))
-    if (!hasProducer) {
-      throw new ValidationError(
-        `Companion '${kind}' must run after an enabled step it can review (${targets.join(', ')}).`,
-      )
-    }
   }
 }

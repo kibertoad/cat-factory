@@ -18,7 +18,7 @@ import type { ExecutionInstance, LlmCallActivity } from './execution'
 import type { BootstrapJob } from './bootstrap'
 import type { Notification } from './notifications'
 import type { RequirementReview } from './requirements'
-import type { ConsensusSession, ConsensusStepConfig, TaskEstimate } from './consensus'
+import type { ConsensusSession, ConsensusStepConfig, StepGating, TaskEstimate } from './consensus'
 import type { ClarityReview } from './clarity'
 import type { MergeThresholdPreset } from './merge'
 import type { PipelineSchedule } from './recurring'
@@ -239,6 +239,9 @@ export type AgentKind =
   | 'bug-investigator'
 
 /** A draggable agent definition shown in the agent palette. */
+/** Palette grouping for the agent archetypes (collapsible sections in the builder). */
+export type AgentCategory = 'review' | 'design' | 'build' | 'test' | 'docs' | 'gates'
+
 export interface AgentArchetype {
   kind: AgentKind
   label: string
@@ -247,6 +250,8 @@ export interface AgentArchetype {
   /** tailwind-ish accent token used across chips / borders */
   color: string
   description: string
+  /** Palette category this archetype is grouped under. Absent ⇒ ungrouped/system kind. */
+  category?: AgentCategory
   /**
    * Optional id of a DEDICATED result window this agent's step opens instead of the
    * generic prose step-detail panel. Resolved through the result-view registry
@@ -284,6 +289,16 @@ export interface Pipeline {
    * mechanism. `null`/absent ⇒ standard single-actor agent.
    */
   consensus?: (ConsensusStepConfig | null)[]
+  /**
+   * Per-step estimate gating, parallel to `agentKinds`: when set (with `enabled`) the step
+   * is skipped at runtime unless the task estimate meets the threshold. `null`/absent ⇒
+   * always run. Used to make a companion conditional on the task estimate.
+   */
+  gating?: (StepGating | null)[]
+  /** Free-form organizational labels for the library (filter/search). */
+  labels?: string[]
+  /** True when archived: kept but hidden from the default library view. */
+  archived?: boolean
   /**
    * True for the curated built-in catalog pipelines. Built-ins are read-only
    * templates — clone one to make an editable copy. Absent/false on custom pipelines.

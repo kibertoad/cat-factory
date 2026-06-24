@@ -172,6 +172,7 @@ export type {
   ConsensusStrategy,
   ConsensusParticipant,
   ConsensusGating,
+  StepGating,
   ConsensusStepConfig,
   TaskEstimate,
   ConsensusScore,

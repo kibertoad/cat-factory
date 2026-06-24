@@ -122,3 +122,84 @@ describe('PipelineService — post-release-health observability gate', () => {
     ).rejects.toBeInstanceOf(ValidationError)
   })
 })
+
+describe('PipelineService — estimate gating, companion placement, labels & archive', () => {
+  function svc(store = new Map<string, Pipeline>()) {
+    return new PipelineService({
+      workspaceRepository: workspaceRepo(),
+      pipelineRepository: pipelineRepo(store),
+      idGenerator,
+    })
+  }
+
+  it('rejects a companion with no producer it can review', async () => {
+    await expect(
+      svc().create(WS, { name: 'Lone reviewer', agentKinds: ['reviewer'] }),
+    ).rejects.toBeInstanceOf(ValidationError)
+  })
+
+  it('accepts a companion that follows its producer (not necessarily adjacent)', async () => {
+    const p = await svc().create(WS, {
+      name: 'Build + gap companion',
+      agentKinds: ['coder', 'tester', 'reviewer'],
+    })
+    expect(p.agentKinds).toEqual(['coder', 'tester', 'reviewer'])
+  })
+
+  it('rejects gating a step with no task-estimator before it', async () => {
+    await expect(
+      svc().create(WS, {
+        name: 'Gated, no estimator',
+        agentKinds: ['coder', 'reviewer'],
+        gating: [null, { enabled: true, minRisk: 0.6 }],
+      }),
+    ).rejects.toBeInstanceOf(ValidationError)
+  })
+
+  it('accepts gating when a task-estimator runs earlier, persisting it', async () => {
+    const p = await svc().create(WS, {
+      name: 'Gated reviewer',
+      agentKinds: ['task-estimator', 'coder', 'reviewer'],
+      gating: [null, null, { enabled: true, minRisk: 0.6 }],
+    })
+    expect(p.gating?.[2]).toEqual({ enabled: true, minRisk: 0.6 })
+    // Only the gated index is persisted; the rest are aligned-null.
+    expect(p.gating?.[0]).toBeNull()
+  })
+
+  it('organizes a built-in (archive + labels) — the only mutation a built-in accepts', async () => {
+    const store = new Map<string, Pipeline>()
+    store.set('pl_builtin', {
+      id: 'pl_builtin',
+      name: 'Curated',
+      agentKinds: ['coder'],
+      builtin: true,
+    })
+    const service = svc(store)
+    // update is rejected on a built-in...
+    await expect(service.update(WS, 'pl_builtin', { name: 'x' })).rejects.toBeInstanceOf(
+      ValidationError,
+    )
+    // ...but organize (labels/archive) is allowed and preserves builtin.
+    const organized = await service.organize(WS, 'pl_builtin', {
+      archived: true,
+      labels: ['  hot ', 'hot', ''],
+    })
+    expect(organized.builtin).toBe(true)
+    expect(organized.archived).toBe(true)
+    expect(organized.labels).toEqual(['hot']) // trimmed + de-duped + blanks dropped
+  })
+
+  it('clears labels and unarchives via organize', async () => {
+    const store = new Map<string, Pipeline>()
+    const service = svc(store)
+    const created = await service.create(WS, {
+      name: 'Tagged',
+      agentKinds: ['coder'],
+      labels: ['a'],
+    })
+    const cleared = await service.organize(WS, created.id, { labels: [], archived: false })
+    expect(cleared.labels).toBeUndefined()
+    expect(cleared.archived).toBeUndefined()
+  })
+})
