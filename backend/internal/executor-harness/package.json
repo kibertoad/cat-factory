@@ -14,7 +14,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "start": "node dist/server.js",
     "test": "vitest run",
-    "test:acceptance": "vitest run --config vitest.acceptance.config.ts"
+    "test:acceptance": "vitest run --config vitest.acceptance.config.ts",
+    "image:publish": "bash scripts/publish-image.sh"
   },
   "devDependencies": {
     "@cat-factory/server": "workspace:*",

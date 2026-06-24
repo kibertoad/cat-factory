@@ -161,7 +161,9 @@ facade so the runtimes can't drift (see "Cross-runtime conformance" below).
   those rows from PAT-read repo metadata since there is no GitHub-App connect flow.
 - `backend/internal/executor-harness` — the payload that runs **inside** each
   per-run Cloudflare Container (the Pi coding-agent harness). Private (not on npm);
-  its Docker image is published to **GHCR** by `docker-publish.yml`.
+  its multi-arch Docker image is published publicly to **GHCR + Docker Hub** by
+  `docker-publish.yml` (or manually via the package's `image:publish` script /
+  `scripts/publish-image.sh`).
 - `backend/internal/benchmark-harness` — headless agent benchmarking (`cat-bench`);
   private, not published.
 - `backend/internal/conformance` — `@cat-factory/conformance`, the private
@@ -199,8 +201,10 @@ facade so the runtimes can't drift (see "Cross-runtime conformance" below).
   (`pnpm changeset --empty`) for docs/CI/test-only changes. Full rules + file format
   in [`CONTRIBUTING.md`](./CONTRIBUTING.md). CI enforces this (`changeset status`).
 - `.github/workflows/release.yml` runs changesets on push to `main`;
-  `docker-publish.yml` republishes the GHCR runner image, gated on image-affecting
-  paths (incl. the harness `package.json`, so a version bump re-tags the image).
+  `docker-publish.yml` republishes the runner image (multi-arch, GHCR + Docker Hub),
+  gated on image-affecting paths (incl. the harness `package.json`, so a version
+  bump re-tags the image). Docker Hub is gated on the `DOCKERHUB_USERNAME` /
+  `DOCKERHUB_TOKEN` repo secrets; absent them it publishes GHCR only.
 - **Any change that affects the runner image MUST bump the image tag** (the harness
   `src/**`, `Dockerfile`, `tsconfig.json` or the pinned `PI_*` args). Bump
   `@cat-factory/executor-harness`'s `version` AND the matching tag in BOTH
