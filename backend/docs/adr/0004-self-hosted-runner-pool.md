@@ -4,6 +4,17 @@
 - **Date:** 2026-06-16
 - **Context layer:** backend (`@cat-factory/contracts`, `@cat-factory/core`, `@cat-factory/worker`)
 
+> **Update (2026-06-24).** The v1 scope below has since widened. A pool now serves
+> **every** asynchronous agent kind with no allow-list — `run`, `bootstrap`,
+> `blueprint`, `spec`, `explore`, `ci-fix`, `resolve-conflicts`, `merge`, `on-call`,
+> `test`, `fix-tests` — because it runs the same harness image as Cloudflare and
+> runtime parity is the default (the dispatch carries the harness `kind`). Only the
+> synchronous repo **scan** stays Cloudflare-Container-only. The interpolation scope
+> also gained `{{input.kind}}` (route-by-kind) and the provisioning hints
+> `{{input.instanceType}}` / `{{input.cloudProvider}}` (self-provisioning pools). The
+> operator/integrator playbook in `docs/runner-pool-integration.md` is the current
+> source of truth; the rationale below is unchanged.
+
 ## Context
 
 The repo-operating coding steps (`coder`, `mocker`, `playwright`) run the Pi
