@@ -23,7 +23,7 @@ import type { ClarityReview } from './clarity'
 import type { MergeThresholdPreset } from './merge'
 import type { PipelineSchedule } from './recurring'
 import type { Service, WorkspaceMount } from './services'
-import type { TrackerSettings } from './tracker'
+import type { TrackerSettings, WritebackOverride } from './tracker'
 
 /** Lifecycle of an architecture building block. */
 export type BlockStatus =
@@ -145,6 +145,10 @@ export interface Block {
    * with the `product` role, notified when requirement review flags this task.
    */
   responsibleProductUserId?: string | null
+  /** task-only: override "comment on the linked issue when a PR opens"; absent/null = inherit workspace. */
+  trackerCommentOnPrOpen?: WritebackOverride | null
+  /** task-only: override "close the linked issue as resolved on merge"; absent/null = inherit workspace. */
+  trackerResolveOnMerge?: WritebackOverride | null
 }
 
 /**

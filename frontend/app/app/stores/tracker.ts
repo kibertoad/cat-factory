@@ -11,10 +11,22 @@ import { useWorkspaceStore } from '~/stores/workspace'
 export const useTrackerStore = defineStore('tracker', () => {
   const api = useApi()
 
-  const settings = ref<TrackerSettings>({ tracker: null, jiraProjectKey: null, updatedAt: 0 })
+  const settings = ref<TrackerSettings>({
+    tracker: null,
+    jiraProjectKey: null,
+    writebackCommentOnPrOpen: false,
+    writebackResolveOnMerge: false,
+    updatedAt: 0,
+  })
 
   function hydrate(value: TrackerSettings | undefined) {
-    settings.value = value ?? { tracker: null, jiraProjectKey: null, updatedAt: 0 }
+    settings.value = value ?? {
+      tracker: null,
+      jiraProjectKey: null,
+      writebackCommentOnPrOpen: false,
+      writebackResolveOnMerge: false,
+      updatedAt: 0,
+    }
   }
 
   async function save(input: PutTrackerSettingsInput) {

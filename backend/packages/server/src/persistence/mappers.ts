@@ -16,6 +16,7 @@ import type {
   TaskEstimate,
   TaskType,
   TaskTypeFields,
+  WritebackOverride,
   Workspace,
 } from '@cat-factory/contracts'
 
@@ -82,6 +83,9 @@ export interface BlockRow {
   task_type?: string | null
   /** Task-level: small per-type form fields (bug severity, spike timebox…), JSON object. */
   task_type_fields?: string | null
+  /** Task-level: per-task issue-tracker writeback overrides ('on'/'off'); null ⇒ inherit. */
+  tracker_comment_on_pr_open?: string | null
+  tracker_resolve_on_merge?: string | null
 }
 
 export function rowToBlock(row: BlockRow): Block {
@@ -122,6 +126,10 @@ export function rowToBlock(row: BlockRow): Block {
   if (row.task_type != null) block.taskType = row.task_type as TaskType
   if (row.task_type_fields != null)
     block.taskTypeFields = JSON.parse(row.task_type_fields) as TaskTypeFields
+  if (row.tracker_comment_on_pr_open != null)
+    block.trackerCommentOnPrOpen = row.tracker_comment_on_pr_open as WritebackOverride
+  if (row.tracker_resolve_on_merge != null)
+    block.trackerResolveOnMerge = row.tracker_resolve_on_merge as WritebackOverride
   return block
 }
 
@@ -165,6 +173,8 @@ export function blockInsertValues(block: Block): Record<string, unknown> {
     estimate: block.estimate ? JSON.stringify(block.estimate) : null,
     task_type: block.taskType ?? null,
     task_type_fields: block.taskTypeFields ? JSON.stringify(block.taskTypeFields) : null,
+    tracker_comment_on_pr_open: block.trackerCommentOnPrOpen ?? null,
+    tracker_resolve_on_merge: block.trackerResolveOnMerge ?? null,
   }
 }
 
@@ -242,6 +252,16 @@ export function blockPatchToColumns(patch: BlockPatch): Record<string, unknown> 
   if (patch.taskType !== undefined) set.task_type = patch.taskType ?? null
   if (patch.taskTypeFields !== undefined) {
     set.task_type_fields = patch.taskTypeFields ? JSON.stringify(patch.taskTypeFields) : null
+  }
+  // Per-task writeback overrides; an empty string clears it (back to inheriting the
+  // workspace setting).
+  if (patch.trackerCommentOnPrOpen !== undefined) {
+    set.tracker_comment_on_pr_open = patch.trackerCommentOnPrOpen
+      ? patch.trackerCommentOnPrOpen
+      : null
+  }
+  if (patch.trackerResolveOnMerge !== undefined) {
+    set.tracker_resolve_on_merge = patch.trackerResolveOnMerge ? patch.trackerResolveOnMerge : null
   }
   return set
 }

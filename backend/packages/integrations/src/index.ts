@@ -80,6 +80,11 @@ export {
   type FetchLike,
 } from './modules/tracker/TicketTrackerService.js'
 export * as jiraCreateLogic from './modules/tracker/jira.create.logic.js'
+export * as jiraWritebackLogic from './modules/tracker/jira.writeback.logic.js'
+export {
+  IssueWritebackService,
+  type IssueWritebackServiceDependencies,
+} from './modules/writeback/IssueWritebackService.js'
 export {
   createGitHubIssueViaToken,
   type GitHubIssueTokenRequest,

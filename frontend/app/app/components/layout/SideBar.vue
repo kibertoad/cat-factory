@@ -267,6 +267,17 @@ watch(
           color="primary"
           variant="soft"
           size="sm"
+          icon="i-lucide-message-square-reply"
+          class="justify-start"
+          @click="ui.openIssueWriteback()"
+        >
+          Issue tracker writeback
+        </UButton>
+        <UButton
+          block
+          color="primary"
+          variant="soft"
+          size="sm"
           icon="i-lucide-activity"
           class="justify-start"
           @click="ui.openDatadog()"

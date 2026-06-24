@@ -14,6 +14,7 @@ export {
   type CredentialRequiredReason,
 } from './domain/errors.js'
 export { sameSubtasks, sameSubtaskItems } from './domain/subtasks.logic.js'
+export { resolveWritebackFlag } from './domain/writeback.js'
 export {
   BLOCK_TYPE_LABEL,
   DEFAULT_MERGE_PRESET,

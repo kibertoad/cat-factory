@@ -1391,6 +1391,8 @@ class DrizzleTrackerSettingsRepository implements TrackerSettingsRepository {
     return {
       tracker: (row.tracker as TrackerSettings['tracker']) ?? null,
       jiraProjectKey: row.jira_project_key,
+      writebackCommentOnPrOpen: row.writeback_comment_on_pr_open === 1,
+      writebackResolveOnMerge: row.writeback_resolve_on_merge === 1,
       updatedAt: row.updated_at,
     }
   }
@@ -1402,6 +1404,8 @@ class DrizzleTrackerSettingsRepository implements TrackerSettingsRepository {
         workspace_id: workspaceId,
         tracker: settings.tracker,
         jira_project_key: settings.jiraProjectKey,
+        writeback_comment_on_pr_open: settings.writebackCommentOnPrOpen ? 1 : 0,
+        writeback_resolve_on_merge: settings.writebackResolveOnMerge ? 1 : 0,
         updated_at: settings.updatedAt,
       })
       .onConflictDoUpdate({
@@ -1409,6 +1413,8 @@ class DrizzleTrackerSettingsRepository implements TrackerSettingsRepository {
         set: {
           tracker: settings.tracker,
           jira_project_key: settings.jiraProjectKey,
+          writeback_comment_on_pr_open: settings.writebackCommentOnPrOpen ? 1 : 0,
+          writeback_resolve_on_merge: settings.writebackResolveOnMerge ? 1 : 0,
           updated_at: settings.updatedAt,
         },
       })

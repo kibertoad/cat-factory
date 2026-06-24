@@ -623,6 +623,14 @@ export class FetchGitHubClient implements GitHubClient {
     })
   }
 
+  async closeIssue(installationId: number, ref: GitHubRepoRef, number: number): Promise<void> {
+    await this.request(`/repos/${ref.owner}/${ref.repo}/issues/${number}`, {
+      installationId,
+      method: 'PATCH',
+      body: { state: 'closed', state_reason: 'completed' },
+    })
+  }
+
   // ---- internals ----------------------------------------------------------
 
   /** Lazily resolve a repo's numeric id (needed where the payload omits it). */

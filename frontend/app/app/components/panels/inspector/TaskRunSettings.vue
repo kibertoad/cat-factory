@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
 import type { Block } from '~/types/domain'
+import type { WritebackOverride } from '~/types/tracker'
 
 const props = defineProps<{ block: Block }>()
 
@@ -8,6 +9,7 @@ const board = useBoardStore()
 const mergePresets = useMergePresetsStore()
 const pipelines = usePipelinesStore()
 const accounts = useAccountsStore()
+const tracker = useTrackerStore()
 
 // ---- responsible product person --------------------------------------------
 // The account member (a `product` role-holder) accountable for this task; they are
@@ -87,6 +89,41 @@ const pipelineMenu = computed(() => [
 function setPipeline(id: string) {
   board.updateBlock(props.block.id, { pipelineId: id })
 }
+
+// ---- issue-tracker writeback overrides -------------------------------------
+// Per-task overrides for the two workspace writeback toggles (comment on PR open,
+// close linked issue on merge). null override ⇒ inherit the workspace default.
+function setCommentOnPrOpen(value: WritebackOverride | null) {
+  board.updateBlock(props.block.id, { trackerCommentOnPrOpen: value })
+}
+function setResolveOnMerge(value: WritebackOverride | null) {
+  board.updateBlock(props.block.id, { trackerResolveOnMerge: value })
+}
+function writebackMenu(set: (value: WritebackOverride | null) => void) {
+  return [
+    [
+      { label: 'Inherit workspace', icon: 'i-lucide-rotate-ccw', onSelect: () => set(null) },
+      { label: 'On', icon: 'i-lucide-check', onSelect: () => set('on') },
+      { label: 'Off', icon: 'i-lucide-x', onSelect: () => set('off') },
+    ],
+  ]
+}
+
+function writebackLabel(
+  override: WritebackOverride | null | undefined,
+  wsDefault: boolean,
+): string {
+  if (override === 'on') return 'On'
+  if (override === 'off') return 'Off'
+  return `Inherit (${wsDefault ? 'on' : 'off'})`
+}
+
+const commentOnPrOpenLabel = computed(() =>
+  writebackLabel(props.block.trackerCommentOnPrOpen, tracker.settings.writebackCommentOnPrOpen),
+)
+const resolveOnMergeLabel = computed(() =>
+  writebackLabel(props.block.trackerResolveOnMerge, tracker.settings.writebackResolveOnMerge),
+)
 </script>
 
 <template>
@@ -149,6 +186,46 @@ function setPipeline(id: string) {
       </div>
       <div v-else class="text-[11px] text-slate-500">
         No preset configured — the merger raises a review notification for every PR.
+      </div>
+    </div>
+
+    <!-- issue-tracker writeback overrides -->
+    <div>
+      <div class="mb-1 flex items-center justify-between">
+        <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+          Issue writeback
+        </span>
+      </div>
+      <div class="space-y-1.5">
+        <div class="flex items-center justify-between">
+          <span class="text-[11px] text-slate-400">Comment on PR open</span>
+          <UDropdownMenu :items="writebackMenu(setCommentOnPrOpen)">
+            <UButton
+              size="xs"
+              variant="ghost"
+              color="neutral"
+              trailing-icon="i-lucide-chevron-down"
+            >
+              {{ commentOnPrOpenLabel }}
+            </UButton>
+          </UDropdownMenu>
+        </div>
+        <div class="flex items-center justify-between">
+          <span class="text-[11px] text-slate-400">Close on merge</span>
+          <UDropdownMenu :items="writebackMenu(setResolveOnMerge)">
+            <UButton
+              size="xs"
+              variant="ghost"
+              color="neutral"
+              trailing-icon="i-lucide-chevron-down"
+            >
+              {{ resolveOnMergeLabel }}
+            </UButton>
+          </UDropdownMenu>
+        </div>
+      </div>
+      <div class="mt-1 text-[11px] text-slate-500">
+        Writes back to this task's linked tracker issue. Overrides the workspace default.
       </div>
     </div>
 

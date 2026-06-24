@@ -2333,12 +2333,51 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         const put = await app.call<TrackerSettings>('PUT', `/workspaces/${wsId}/tracker-settings`, {
           tracker: 'jira',
           jiraProjectKey: 'ENG',
+          writebackCommentOnPrOpen: true,
+          writebackResolveOnMerge: true,
         })
         expect(put.body.tracker).toBe('jira')
         expect(put.body.jiraProjectKey).toBe('ENG')
+        // Writeback flags round-trip identically across both stores.
+        expect(put.body.writebackCommentOnPrOpen).toBe(true)
+        expect(put.body.writebackResolveOnMerge).toBe(true)
 
         const snapshot = await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
         expect(snapshot.body.trackerSettings?.tracker).toBe('jira')
+        expect(snapshot.body.trackerSettings?.writebackResolveOnMerge).toBe(true)
+      })
+
+      it('round-trips the per-task writeback overrides on a block', async () => {
+        const app = harness.makeApp()
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        const task = await app.call<Block>('POST', `/workspaces/${wsId}/blocks/blk_auth/tasks`, {
+          title: 'Task with writeback overrides',
+        })
+
+        const patched = await app.call<Block>(
+          'PATCH',
+          `/workspaces/${wsId}/blocks/${task.body.id}`,
+          { trackerCommentOnPrOpen: 'on', trackerResolveOnMerge: 'off' },
+        )
+        expect(patched.body.trackerCommentOnPrOpen).toBe('on')
+        expect(patched.body.trackerResolveOnMerge).toBe('off')
+
+        // The overrides survive a snapshot round-trip identically across both stores.
+        const snapshot = await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+        const stored = snapshot.body.blocks.find((b) => b.id === task.body.id)!
+        expect(stored.trackerCommentOnPrOpen).toBe('on')
+        expect(stored.trackerResolveOnMerge).toBe('off')
+
+        // Clearing an override (back to inheriting the workspace setting) drops the field.
+        const cleared = await app.call<Block>(
+          'PATCH',
+          `/workspaces/${wsId}/blocks/${task.body.id}`,
+          { trackerCommentOnPrOpen: null },
+        )
+        expect(cleared.body.trackerCommentOnPrOpen ?? null).toBeNull()
+        expect(cleared.body.trackerResolveOnMerge).toBe('off')
       })
     })
 

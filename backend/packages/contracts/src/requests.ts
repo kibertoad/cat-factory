@@ -1,6 +1,7 @@
 import * as v from 'valibot'
 import { agentConfigValuesSchema } from './agent-config.js'
 import { consensusStepConfigSchema } from './consensus.js'
+import { writebackOverrideSchema } from './entities.js'
 import { cloudProviderSchema, instanceSizeSchema } from './provisioning.js'
 import {
   agentKindSchema,
@@ -128,6 +129,10 @@ export const updateBlockSchema = v.partial(
     cloudProvider: cloudProviderSchema,
     // Service-level (frame): the abstract instance size for this service's jobs.
     instanceSize: instanceSizeSchema,
+    // Per-task issue-tracker writeback overrides; null clears the override (inherit
+    // the workspace setting). 'on'/'off' force the behaviour for this task.
+    trackerCommentOnPrOpen: v.nullable(writebackOverrideSchema),
+    trackerResolveOnMerge: v.nullable(writebackOverrideSchema),
   }),
 )
 export type UpdateBlockInput = v.InferOutput<typeof updateBlockSchema>

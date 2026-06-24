@@ -41,6 +41,14 @@ export const pullRequestRefSchema = v.object({
 })
 export type PullRequestRef = v.InferOutput<typeof pullRequestRefSchema>
 
+/**
+ * Per-task override for an issue-tracker writeback action (see the workspace-level
+ * `writebackCommentOnPrOpen` / `writebackResolveOnMerge` in tracker settings).
+ * `on`/`off` force the behaviour for this task; absent ⇒ inherit the workspace setting.
+ */
+export const writebackOverrideSchema = v.picklist(['on', 'off'])
+export type WritebackOverride = v.InferOutput<typeof writebackOverrideSchema>
+
 export const blockSchema = v.object({
   id: v.string(),
   title: v.string(),
@@ -167,6 +175,18 @@ export const blockSchema = v.object({
    * Absent/null when no responsible product person is assigned.
    */
   responsibleProductUserId: v.optional(v.nullable(v.string())),
+  /**
+   * Per-task override for the "comment on the linked tracker issue when a PR opens"
+   * writeback action. Absent/null ⇒ inherit the workspace's `writebackCommentOnPrOpen`.
+   * Only meaningful on `task`-level blocks that have a linked tracker issue.
+   */
+  trackerCommentOnPrOpen: v.optional(v.nullable(writebackOverrideSchema)),
+  /**
+   * Per-task override for the "close the linked tracker issue as resolved when its PR
+   * merges" writeback action. Absent/null ⇒ inherit the workspace's `writebackResolveOnMerge`.
+   * Only meaningful on `task`-level blocks that have a linked tracker issue.
+   */
+  trackerResolveOnMerge: v.optional(v.nullable(writebackOverrideSchema)),
 })
 export type Block = v.InferOutput<typeof blockSchema>
 
