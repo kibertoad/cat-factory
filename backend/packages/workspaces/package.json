@@ -1,6 +1,11 @@
 {
   "name": "@cat-factory/workspaces",
   "version": "0.7.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kibertoad/cat-factory.git",
+    "directory": "backend/packages/workspaces"
+  },
   "description": "Tenancy base services (workspaces and accounts) for the Agent Architecture Board.",
   "files": [
     "dist"
