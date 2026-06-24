@@ -1071,15 +1071,6 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // limit). Wired unconditionally so the settings API + the limit enforcement + the
     // escalation sweep work identically to the Worker.
     workspaceSettingsRepository: repos.workspaceSettingsRepository,
-    // Board-scan: the persisted repository blueprints (the service → modules map the
-    // blueprint pipeline step reconciles, and the manual scan command writes). Wiring
-    // the repo makes the board-scan module + blueprint read endpoints available, like
-    // the Worker (which wires it unconditionally). Actually *running* a scan also needs
-    // a `repoScanner` — a per-run container that clones + decomposes the repo. The Node
-    // facade has no such synchronous scanner, so `service.canScan` stays false and the
-    // scan endpoint returns its graceful 503 (the blueprint decomposition itself runs as
-    // a normal `blueprints` pipeline step through the runner transport, like the Worker).
-    repoBlueprintRepository: repos.repoBlueprintRepository,
     modelProviderResolver,
     requirementReviewModel: config.agents.routing.default.ref,
     requirementReviewResolveModel: config.agents.resolveBlockModel,

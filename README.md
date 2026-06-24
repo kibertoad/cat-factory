@@ -96,8 +96,8 @@ assertions against both to keep them from drifting.
 
 ## Repository layout
 
-One pnpm workspace, split into reusable **libraries** (published to npm + a GHCR
-runner image) and example **deployments** that depend on them. Other
+One pnpm workspace, split into reusable **libraries** (published to npm + a public
+runner image on GHCR and Docker Hub) and example **deployments** that depend on them. Other
 organizations copy `deploy/*`, point the config at their own resources, and
 deploy both halves on their end.
 
@@ -126,11 +126,11 @@ deploy both halves on their end.
 
 **Internal** (private; not published to npm):
 
-| Path                                                                         | Package                          | Role                                                                                                                                                                                                       |
-| ---------------------------------------------------------------------------- | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`backend/internal/executor-harness`](./backend/internal/executor-harness)   | `@cat-factory/executor-harness`  | The payload that runs **inside** each per-run container (the Pi coding-agent harness). Published as a **Docker image to GHCR** (not npm). See [its README](./backend/internal/executor-harness/README.md). |
-| [`backend/internal/benchmark-harness`](./backend/internal/benchmark-harness) | `@cat-factory/benchmark-harness` | Headless agent benchmarking (`cat-bench`); internal. See [its README](./backend/internal/benchmark-harness/README.md).                                                                                     |
-| [`backend/internal/conformance`](./backend/internal/conformance)             | `@cat-factory/conformance`       | Cross-runtime conformance suite + the canonical deterministic `FakeAgentExecutor`; run by both runtime facades' test suites to mandate feature parity.                                                     |
+| Path                                                                         | Package                          | Role                                                                                                                                                                                                                                      |
+| ---------------------------------------------------------------------------- | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`backend/internal/executor-harness`](./backend/internal/executor-harness)   | `@cat-factory/executor-harness`  | The payload that runs **inside** each per-run container (the Pi coding-agent harness). Published as a public multi-arch **Docker image to GHCR + Docker Hub** (not npm). See [its README](./backend/internal/executor-harness/README.md). |
+| [`backend/internal/benchmark-harness`](./backend/internal/benchmark-harness) | `@cat-factory/benchmark-harness` | Headless agent benchmarking (`cat-bench`); internal. See [its README](./backend/internal/benchmark-harness/README.md).                                                                                                                    |
+| [`backend/internal/conformance`](./backend/internal/conformance)             | `@cat-factory/conformance`       | Cross-runtime conformance suite + the canonical deterministic `FakeAgentExecutor`; run by both runtime facades' test suites to mandate feature parity.                                                                                    |
 
 **Deployments** (examples; copy these to deploy on your own infra):
 
@@ -248,7 +248,7 @@ account (`wrangler whoami` must show `fe0047c6e869c8cb875ca425a9c341af`).
 
 **Deploy the backend first** so any schema the new frontend expects is already
 live, then the frontend. Migrations run **before** the Worker deploy. The runner
-container image is published independently to GHCR (see
+container image is published independently to GHCR + Docker Hub (see
 [`backend/internal/executor-harness`](./backend/internal/executor-harness/README.md)
 and `.github/workflows/docker-publish.yml`); the backend `wrangler.toml`
 references it by tag.

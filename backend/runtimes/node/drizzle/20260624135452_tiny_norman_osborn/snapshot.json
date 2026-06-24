@@ -1,9 +1,9 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "627b99de-2638-48f1-a8f3-e2d01c6feede",
+  "id": "74b9bd0a-38c2-4ab5-aa12-7dedf534d03b",
   "prevIds": [
-    "30f52a43-e9e6-4d31-892f-243a10ddfcaa"
+    "4c68937f-57a6-4f17-8b2e-ae3544140eb0"
   ],
   "ddl": [
     {
@@ -213,12 +213,6 @@
     {
       "isRlsEnabled": false,
       "name": "release_health_configs",
-      "entityType": "tables",
-      "schema": "public"
-    },
-    {
-      "isRlsEnabled": false,
-      "name": "repo_blueprints",
       "entityType": "tables",
       "schema": "public"
     },
@@ -5460,110 +5454,6 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "repo_blueprints"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "workspace_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "repo_blueprints"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "repo_owner",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "repo_blueprints"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "repo_name",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "repo_blueprints"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "source",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "repo_blueprints"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "service_json",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "repo_blueprints"
-    },
-    {
-      "type": "bigint",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "created_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "repo_blueprints"
-    },
-    {
-      "type": "bigint",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "updated_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "repo_blueprints"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
       "name": "workspace_id",
       "entityType": "columns",
       "schema": "public",
@@ -8295,69 +8185,6 @@
           "opclass": null
         },
         {
-          "value": "repo_owner",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "repo_name",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": true,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "idx_repo_blueprints_repo",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "repo_blueprints"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "workspace_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "updated_at",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": false,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "idx_repo_blueprints_workspace",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "repo_blueprints"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "workspace_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
           "value": "block_id",
           "isExpression": false,
           "asc": true,
@@ -9182,16 +9009,6 @@
       "name": "reference_architectures_pkey",
       "schema": "public",
       "table": "reference_architectures",
-      "entityType": "pks"
-    },
-    {
-      "columns": [
-        "id"
-      ],
-      "nameExplicit": false,
-      "name": "repo_blueprints_pkey",
-      "schema": "public",
-      "table": "repo_blueprints",
       "entityType": "pks"
     },
     {

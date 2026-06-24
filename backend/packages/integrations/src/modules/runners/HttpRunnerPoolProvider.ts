@@ -84,19 +84,41 @@ export class HttpRunnerPoolProvider implements RunnerPoolProvider {
   // --- internals ----------------------------------------------------------
 
   /**
-   * The bounded interpolation scope a template sees: `{{input.jobId}}` (the id the
-   * pool is keyed on) and `{{input.job}}` (the full harness job spec as JSON, so a
-   * body template can forward it verbatim). Reuses the environments interpolation
-   * machinery; the second (`provision`) namespace is unused by runner manifests.
+   * The bounded interpolation scope a template sees:
+   *   - `{{input.jobId}}` — the id the pool is keyed on (sticky routing target);
+   *   - `{{input.job}}`   — the full harness job spec as JSON, so a body template can
+   *                         forward it verbatim (`{"payload":{{input.job}}}`);
+   *   - `{{input.kind}}`  — the harness route the job targets (`run` | `blueprint` |
+   *                         `spec` | `explore` | `bootstrap` | `ci-fix` |
+   *                         `resolve-conflicts` | `merge` | `on-call` | `test` |
+   *                         `fix-tests`), so a manifest can dispatch straight to a
+   *                         per-kind endpoint (`/{{input.kind}}`) instead of parsing
+   *                         the embedded job JSON to route;
+   *   - `{{input.instanceType}}` / `{{input.cloudProvider}}` — the provisioning hints
+   *                         the transport stamped on for a self-provisioning pool
+   *                         (present only when the service pins a size/provider), so a
+   *                         manifest can map them to a node selector / resource request
+   *                         / queue without decoding `{{input.job}}`.
+   * Reuses the environments interpolation machinery; the second (`provision`)
+   * namespace is unused by runner manifests.
    */
   private scope(
     jobId: string,
     spec?: Record<string, unknown>,
   ): environmentsLogic.InterpolationScope {
-    return {
-      input: { jobId, job: spec ? JSON.stringify(spec) : '' },
-      provision: {},
+    const input: Record<string, string> = {
+      jobId,
+      job: spec ? JSON.stringify(spec) : '',
     }
+    // Surface the routing/sizing hints the RunnerPoolTransport stamps onto the
+    // dispatch spec as first-class `{{input.*}}` variables. They live inside
+    // `{{input.job}}` too, but a path/query/header template can't reach into that JSON
+    // string — exposing them flat lets a manifest route-by-kind and size declaratively.
+    for (const key of ['kind', 'instanceType', 'cloudProvider'] as const) {
+      const value = spec?.[key]
+      if (typeof value === 'string') input[key] = value
+    }
+    return { input, provision: {} }
   }
 
   private async execute(

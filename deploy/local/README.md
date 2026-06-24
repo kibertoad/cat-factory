@@ -21,9 +21,11 @@ Persistence is a **local Postgres** (the bundled `docker-compose.yml`).
 
 - Docker (or Podman) running locally — used both for Postgres and for the per-job
   agent containers.
-- The executor-harness image available locally. Pull the published GHCR image, or
-  build it from source:
+- The executor-harness image available locally. Pull the published image (GHCR or
+  Docker Hub), or build it from source:
   ```sh
+  docker pull ghcr.io/kibertoad/cat-factory-executor:latest
+  # or build locally:
   docker build -t cat-factory-executor:local ../../backend/internal/executor-harness
   ```
 - A GitHub PAT (fine-grained, scoped to your target repo(s), with contents +

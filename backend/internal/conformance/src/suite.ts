@@ -5,7 +5,6 @@ import {
   type ModelDefaults,
   type Pipeline,
   type PipelineSchedule,
-  type RepoBlueprintRecord,
   type ScheduleRun,
   seedPipelines,
   type SourceTask,
@@ -845,55 +844,6 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         const frame = snap.body.blocks.find((b) => b.id === frameId)
         expect(frame?.level).toBe('frame')
         expect(frame?.status).not.toBe('blocked')
-      })
-    })
-
-    describe('board scan blueprints', () => {
-      it('exposes the module and round-trips persisted repository blueprints', async () => {
-        const app = harness.makeApp()
-        const { workspace } = await app.createWorkspace()
-        const base = `/workspaces/${workspace.id}/board-scan/blueprints`
-
-        // The module is wired on every facade: a fresh workspace lists an empty array
-        // (a 200), not the 503 a missing board-scan module would return.
-        const empty = await app.call<RepoBlueprintRecord[]>('GET', base)
-        expect(empty.status).toBe(200)
-        expect(empty.body).toEqual([])
-
-        // Seed a blueprint straight into the store (what the manual scan + the blueprint
-        // pipeline step persist) and assert the read endpoints return it.
-        const record: RepoBlueprintRecord = {
-          id: 'bp_conformance',
-          workspaceId: workspace.id,
-          repoOwner: 'octo',
-          repoName: 'demo',
-          source: 'llm',
-          service: {
-            type: 'service',
-            name: 'Demo',
-            summary: 'A demo service',
-            references: ['package.json'],
-            modules: [{ name: 'Auth', summary: 'Login', references: ['src/auth'] }],
-          },
-          createdAt: 1,
-          updatedAt: 2,
-        }
-        await app.seedBlueprint(record)
-
-        const listed = await app.call<RepoBlueprintRecord[]>('GET', base)
-        expect(listed.status).toBe(200)
-        expect(listed.body).toHaveLength(1)
-        expect(listed.body[0]!.repoName).toBe('demo')
-        expect(listed.body[0]!.service.modules?.[0]?.name).toBe('Auth')
-
-        const got = await app.call<RepoBlueprintRecord>('GET', `${base}/${record.id}`)
-        expect(got.status).toBe(200)
-        expect(got.body.repoOwner).toBe('octo')
-
-        const del = await app.call('DELETE', `${base}/${record.id}`)
-        expect(del.status).toBe(204)
-        const afterDelete = await app.call<RepoBlueprintRecord[]>('GET', base)
-        expect(afterDelete.body).toEqual([])
       })
     })
 

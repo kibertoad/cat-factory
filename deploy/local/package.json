@@ -1,6 +1,6 @@
 {
   "name": "@cat-factory/deploy-local",
-  "version": "1.0.0",
+  "version": "0.6.0",
   "private": true,
   "description": "Example LOCAL-MODE deployment of @cat-factory/local-server: run the whole product on your own machine — agent jobs as local Docker containers, GitHub via a PAT, a local Postgres. Carries the docker-compose for Postgres + env config + a one-line entry.",
   "type": "module",

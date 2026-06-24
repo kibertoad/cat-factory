@@ -50,7 +50,11 @@ function makeService(now: () => number) {
     workspaceRepository,
     idGenerator,
     clock,
-    channel: { async deliver(_ws, n) { delivered.push(n) } },
+    channel: {
+      async deliver(_ws, n) {
+        delivered.push(n)
+      },
+    },
   })
   return { service, rows, delivered }
 }

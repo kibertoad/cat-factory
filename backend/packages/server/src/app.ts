@@ -4,7 +4,6 @@ import { accountController } from './modules/accounts/AccountController.js'
 import { agentRunController } from './modules/agentRuns/AgentRunController.js'
 import { authController } from './modules/auth/AuthController.js'
 import { boardController } from './modules/board/BoardController.js'
-import { boardScanController } from './modules/boardScan/BoardScanController.js'
 import { bootstrapController } from './modules/bootstrap/BootstrapController.js'
 import { documentSourceController } from './modules/documents/DocumentSourceController.js'
 import { environmentController } from './modules/environments/EnvironmentController.js'
@@ -86,7 +85,6 @@ export function registerCoreControllers<E extends AppEnv>(app: Hono<E>): void {
   app.route('/workspaces/:workspaceId', workspaceApiKeyController())
   app.route('/workspaces/:workspaceId', bootstrapController())
   app.route('/workspaces/:workspaceId', agentRunController())
-  app.route('/workspaces/:workspaceId', boardScanController())
   app.route('/workspaces/:workspaceId', requirementReviewController())
   app.route('/workspaces/:workspaceId', consensusController())
   app.route('/workspaces/:workspaceId', clarityReviewController())

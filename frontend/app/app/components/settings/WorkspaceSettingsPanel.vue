@@ -85,9 +85,9 @@ async function save() {
         <section class="space-y-2">
           <h3 class="text-sm font-semibold text-slate-200">Waiting for a human</h3>
           <p class="text-[11px] text-slate-400">
-            A run parked on a human decision (a review, an approval, a merge) waits as long as
-            it needs — it is never cancelled. After this many minutes its notification turns red
-            and is flagged <span class="text-error-400">Overdue</span> in the inbox.
+            A run parked on a human decision (a review, an approval, a merge) waits as long as it
+            needs — it is never cancelled. After this many minutes its notification turns red and is
+            flagged <span class="text-error-400">Overdue</span> in the inbox.
           </p>
           <label class="block w-48">
             <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
@@ -106,8 +106,8 @@ async function save() {
         <section class="space-y-2">
           <h3 class="text-sm font-semibold text-slate-200">Running tasks per service</h3>
           <p class="text-[11px] text-slate-400">
-            Cap how many tasks may run at once under one service. Starting a task over the limit
-            is refused with a clear message until a running task finishes.
+            Cap how many tasks may run at once under one service. Starting a task over the limit is
+            refused with a clear message until a running task finishes.
           </p>
           <label class="block w-64">
             <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">Mode</span>
@@ -132,13 +132,7 @@ async function save() {
         </section>
 
         <div class="flex justify-end">
-          <UButton
-            color="primary"
-            icon="i-lucide-save"
-            size="sm"
-            :loading="saving"
-            @click="save"
-          >
+          <UButton color="primary" icon="i-lucide-save" size="sm" :loading="saving" @click="save">
             Save
           </UButton>
         </div>

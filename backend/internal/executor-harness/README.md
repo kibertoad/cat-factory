@@ -97,21 +97,47 @@ docker build -f Dockerfile .                              # the container image
 The build context is just this package, so its `tsconfig.json` is intentionally
 self-contained.
 
-## Published image (GHCR)
+## Published image (GHCR + Docker Hub)
 
-This package is not published to npm; instead its **Docker image** is published to
-GHCR by [`.github/workflows/docker-publish.yml`](../../../.github/workflows/docker-publish.yml),
-gated on changes that affect the image (`src/**`, `Dockerfile`, `tsconfig.json`,
-`package.json`). It is tagged with the package `version`, the commit `sha-…`, and
-`latest`:
+This package is not published to npm; instead its **Docker image** is published
+publicly, multi-arch (`linux/amd64` + `linux/arm64`), to **both GHCR and Docker
+Hub** so anyone can pull it without building from source:
 
 ```
 ghcr.io/<owner>/cat-factory-executor:<version>
+docker.io/<org>/cat-factory-executor:<version>
 ```
 
-A backend deployment references it from `wrangler.toml`
+Each is tagged with the package `version`, the commit `sha-…`, and `latest`.
+
+**CI** does this automatically:
+[`.github/workflows/docker-publish.yml`](../../../.github/workflows/docker-publish.yml)
+republishes on every push to `main` that touches image content (`src/**`,
+`Dockerfile`, `tsconfig.json`, `package.json`). Docker Hub is gated on the
+`DOCKERHUB_USERNAME` / `DOCKERHUB_TOKEN` repo secrets; without them it publishes
+to GHCR only.
+
+**Manually** (on demand, or to publish from a fork under your own namespaces):
+
+```sh
+# Log in first (one per registry you target):
+echo "$GHCR_TOKEN" | docker login ghcr.io -u <github-user> --password-stdin
+echo "$DOCKERHUB_TOKEN" | docker login -u <dockerhub-user> --password-stdin
+
+pnpm --filter @cat-factory/executor-harness run image:publish
+```
+
+The script ([`scripts/publish-image.sh`](./scripts/publish-image.sh)) builds the
+multi-arch image once and pushes it to the selected registries. Override defaults
+via env vars (`REGISTRIES`, `GHCR_OWNER`, `DOCKERHUB_ORG`, `TAG`, `PUSH_LATEST`,
+`PLATFORMS`, `EXTRA_CA`) — see the header of the script. Example: GHCR only —
+`REGISTRIES=ghcr pnpm --filter @cat-factory/executor-harness run image:publish`.
+
+A backend deployment references the image from `wrangler.toml`
 (`[[containers]] image = "ghcr.io/<owner>/cat-factory-executor:<version>"` — see
-[`deploy/backend`](../../../deploy/backend)). The worker library's own test/dev
-`wrangler.toml` still references this `Dockerfile` by local path so the acceptance
-suite can build it. Because the version is the image tag, **bump this package via a
-changeset whenever you change image content** (see [`CONTRIBUTING.md`](../../../CONTRIBUTING.md)).
+[`deploy/backend`](../../../deploy/backend)); a self-hosted runner pool pulls the
+same image (see [`docs/runner-pool-integration.md`](../../docs/runner-pool-integration.md)).
+The worker library's own test/dev `wrangler.toml` still references this
+`Dockerfile` by local path so the acceptance suite can build it. Because the
+version is the image tag, **bump this package via a changeset whenever you change
+image content** (see [`CONTRIBUTING.md`](../../../CONTRIBUTING.md)).

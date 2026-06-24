@@ -315,6 +315,26 @@ export async function unmergedPaths(dir: string, signal?: AbortSignal): Promise<
 }
 
 /**
+ * The conflict hunks for the given unmerged `paths`: `git diff` over exactly those
+ * files, which for an unmerged entry renders the combined diff carrying the
+ * `<<<<<<<` / `=======` / `>>>>>>>` markers each side contributed. Handed to the
+ * conflict-resolver agent so it sees the actual conflicts instead of having to
+ * rediscover them. Capped to `maxChars` total (a note is appended on truncation) so a
+ * huge conflict can't blow up the prompt. Returns '' when there are no paths.
+ */
+export async function conflictDiff(
+  dir: string,
+  paths: string[],
+  signal?: AbortSignal,
+  maxChars = 24_000,
+): Promise<string> {
+  if (paths.length === 0) return ''
+  const out = await git(['diff', '--', ...paths], { cwd: dir, signal })
+  if (out.length <= maxChars) return out
+  return `${out.slice(0, maxChars)}\n\n[diff truncated at ${maxChars} characters — open the files directly to see the remaining conflicts]`
+}
+
+/**
  * Merge `origin/<baseBranch>` into the current branch (no fast-forward squash, no
  * editor). Returns `true` for a clean merge (or an already-up-to-date no-op) and
  * `false` when the merge left conflicts in the working tree — the expected case the

@@ -130,7 +130,6 @@ export {
   type EnvironmentsModule,
   type RunnersModule,
   type BootstrapModule,
-  type BoardScanModule,
   type RequirementsModule,
   type ClarityModule,
   type NotificationsModule,

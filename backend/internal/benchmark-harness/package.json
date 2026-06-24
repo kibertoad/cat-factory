@@ -1,6 +1,6 @@
 {
   "name": "@cat-factory/benchmark-harness",
-  "version": "1.0.0",
+  "version": "0.6.0",
   "private": true,
   "description": "Headless harness for benchmarking cat-factory agents (requirement review, implementation, code review) across models and prompt versions, graded by a Claude Arbiter skill.",
   "bin": {

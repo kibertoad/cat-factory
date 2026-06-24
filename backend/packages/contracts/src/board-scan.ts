@@ -2,34 +2,20 @@ import * as v from 'valibot'
 import { blockTypeSchema } from './primitives.js'
 
 // ---------------------------------------------------------------------------
-// Board-scan wire contracts. The "scan repository" command decomposes an existing
-// codebase into one canonical board structure — a single service and the modules
+// Service-blueprint wire contracts. The `blueprints` pipeline step decomposes a
+// repository into one canonical board structure — a single service and the modules
 // inside it — anchored to the codebase by explicit file/directory references on
-// every node. The result is persisted as a reusable "repository blueprint": a
-// durable, LLM-friendly map of the repo that future work is scoped against (and
-// re-scanned to keep current).
+// every node. The agent commits the decomposition into the repo (`blueprints/`)
+// and returns the tree, which the engine reconciles onto the run's service frame.
 //
 // The shape is deliberately shallow and uniform (service → modules), mirroring the
-// board's frame → module levels, so a blueprint spawns directly onto the board and
-// reads the same way an LLM would navigate the code. Individual tasks are authored
-// by people, not derived from the map.
+// board's frame → module levels, so a blueprint reconciles directly onto the board
+// and reads the same way an LLM would navigate the code. Individual tasks are
+// authored by people, not derived from the map.
 // ---------------------------------------------------------------------------
 
-/**
- * A single GitHub owner OR repository segment (the `owner` or the `name` in
- * `owner/name`), validated on its own — never the combined `owner/name`, so a
- * slash is not allowed. The message reflects exactly what the regex accepts.
- */
-const slugField = v.pipe(
-  v.string(),
-  v.trim(),
-  v.regex(/^[A-Za-z0-9_.-]+$/, "Only letters, digits, '.', '_' and '-' are allowed"),
-  v.minLength(1),
-  v.maxLength(100),
-)
 const nameField = v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(120))
 const summaryField = v.pipe(v.string(), v.maxLength(2000))
-const instructionsField = v.pipe(v.string(), v.maxLength(8000))
 /** A single codebase reference: a repo-relative file or directory path. */
 const referenceField = v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(400))
 /** The file/directory paths a node maps to — what to read to work on it. */
@@ -67,52 +53,15 @@ export const blueprintSourceSchema = v.picklist(['llm', 'heuristic'])
 export type BlueprintSource = v.InferOutput<typeof blueprintSourceSchema>
 
 /**
- * A persisted decomposition of one repository: the durable map kept per workspace
- * and re-scanned in place (one blueprint per `owner/name`). The board can be
- * spawned from it, and agents read it to scope work against real files.
+ * Counts of board blocks touched when the `blueprints` pipeline step materialises
+ * (or reconciles) a decomposition onto the board: the service frame and its modules.
  */
-export const repoBlueprintSchema = v.object({
-  id: v.string(),
-  workspaceId: v.string(),
-  /** GitHub owner of the scanned repo. */
-  repoOwner: v.string(),
-  /** GitHub name of the scanned repo. */
-  repoName: v.string(),
-  source: blueprintSourceSchema,
-  service: blueprintServiceSchema,
-  createdAt: v.number(),
-  /** Last (re)scan time (epoch ms). */
-  updatedAt: v.number(),
-})
-export type RepoBlueprint = v.InferOutput<typeof repoBlueprintSchema>
-
-// ---- Request bodies / responses -------------------------------------------
-
-/** Kick off (or refresh) a scan of a repository into a blueprint. */
-export const scanRepoSchema = v.object({
-  repoOwner: slugField,
-  repoName: slugField,
-  /** Extra guidance for the scanner agent (focus areas, naming, granularity). */
-  instructions: v.optional(instructionsField, ''),
-  /** Also materialise the blueprint onto the board as a frame/modules/tasks. */
-  spawn: v.optional(v.boolean(), false),
-})
-export type ScanRepoInput = v.InferOutput<typeof scanRepoSchema>
-
-/** Counts of board blocks created when a scan also spawns the blueprint. */
 export const boardScanSpawnResultSchema = v.object({
-  /** Id of the service frame created for the blueprint. */
+  /** Id of the service frame the blueprint was reconciled onto / spawned as. */
   frameId: v.string(),
   modules: v.number(),
 })
 export type BoardScanSpawnResult = v.InferOutput<typeof boardScanSpawnResultSchema>
-
-/** Result of a scan: the persisted blueprint, plus spawn counts when requested. */
-export const scanRepoResultSchema = v.object({
-  blueprint: repoBlueprintSchema,
-  spawn: v.optional(boardScanSpawnResultSchema),
-})
-export type ScanRepoResult = v.InferOutput<typeof scanRepoResultSchema>
 
 // ---- In-repo blueprint artifact -------------------------------------------
 // The Blueprinter agent persists the decomposition in the repository itself,
@@ -150,10 +99,10 @@ export type BlueprintVersion = v.InferOutput<typeof blueprintVersionSchema>
 /**
  * Strictly parse an arbitrary value (e.g. the JSON read from `blueprint.json`, or
  * a tree returned by the Blueprinter container) into a {@link BlueprintService},
- * enforcing the exact schema shape. Unlike the lenient `coerceService` (which
+ * enforcing the exact schema shape. Unlike the harness's lenient coercion (which
  * silently drops malformed nodes), this **throws** on any shape violation, so a
- * bad payload can never be persisted to `repo_blueprints` or materialised onto the
- * board. Use it at every trust boundary that ingests a blueprint.
+ * bad payload can never be materialised onto the board. Use it at every trust
+ * boundary that ingests a blueprint.
  */
 export function parseBlueprintService(value: unknown): BlueprintService {
   return v.parse(blueprintServiceSchema, value)

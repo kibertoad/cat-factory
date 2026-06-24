@@ -118,13 +118,11 @@ export type {
   BootstrapFailureKind,
   BootstrapJob,
   BootstrapRepoInput,
-  // Board-scan (repository decomposition) shapes.
+  // Service-blueprint (repository decomposition) shapes — produced by the
+  // `blueprints` pipeline step and reconciled onto the board.
   BlueprintModule,
   BlueprintService,
   BlueprintSource,
-  RepoBlueprint,
-  ScanRepoInput,
-  ScanRepoResult,
   BoardScanSpawnResult,
   // Requirements-review (stateless context reviewer agent) shapes.
   ReviewItemCategory,

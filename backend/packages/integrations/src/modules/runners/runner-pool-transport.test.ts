@@ -131,6 +131,35 @@ describe('HttpRunnerPoolProvider', () => {
     expect(seen[0]!.init.body).toBe('{"id":"job-7","job":{"model":"qwen"}}')
   })
 
+  it('exposes kind + provisioning hints as first-class template variables', async () => {
+    const seen: { url: string; init: RequestInit }[] = []
+    vi.stubGlobal('fetch', (url: string, init: RequestInit) => {
+      seen.push({ url, init })
+      return Promise.resolve(new Response('{}', { status: 202 }))
+    })
+    // A manifest that routes straight to a per-kind harness endpoint and forwards the
+    // sizing hints, all without parsing the embedded `{{input.job}}` JSON.
+    const routed: RunnerPoolManifest = {
+      ...manifest,
+      dispatch: {
+        method: 'POST',
+        pathTemplate: '/{{input.kind}}',
+        bodyTemplate: '{"id":"{{input.jobId}}","size":"{{input.instanceType}}"}',
+      },
+    }
+    const provider = new HttpRunnerPoolProvider()
+    await provider.dispatch({
+      manifest: routed,
+      jobId: 'job-7',
+      // The shape RunnerPoolTransport stamps: `kind` always, the hints when pinned.
+      spec: { model: 'qwen', kind: 'merge', instanceType: 'c7g.large', cloudProvider: 'aws' },
+      resolveSecret: (k) => (k === 'API_TOKEN' ? 'secret-token' : undefined),
+    })
+    expect(seen).toHaveLength(1)
+    expect(seen[0]!.url).toBe('https://pool.test/api/merge')
+    expect(seen[0]!.init.body).toBe('{"id":"job-7","size":"c7g.large"}')
+  })
+
   it('maps the scheduler status response onto the canonical job view', async () => {
     vi.stubGlobal('fetch', () =>
       Promise.resolve(

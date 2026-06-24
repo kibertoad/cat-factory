@@ -110,7 +110,9 @@ function revealDecision(n: Notification) {
           :key="n.id"
           class="rounded-lg border p-2.5 mt-1.5"
           :class="
-            isUrgent(n) ? 'border-error-500/60 bg-error-500/10' : 'border-slate-700/60 bg-slate-800/40'
+            isUrgent(n)
+              ? 'border-error-500/60 bg-error-500/10'
+              : 'border-slate-700/60 bg-slate-800/40'
           "
         >
           <div class="flex items-start gap-2">

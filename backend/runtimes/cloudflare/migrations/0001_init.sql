@@ -191,16 +191,6 @@ CREATE TABLE reference_architectures (
   updated_at           INTEGER NOT NULL,
   deleted_at           INTEGER
 );
-CREATE TABLE repo_blueprints (
-  id           TEXT    NOT NULL PRIMARY KEY,
-  workspace_id TEXT    NOT NULL,
-  repo_owner   TEXT    NOT NULL,
-  repo_name    TEXT    NOT NULL,
-  source       TEXT    NOT NULL,
-  service_json TEXT    NOT NULL,
-  created_at   INTEGER NOT NULL,
-  updated_at   INTEGER NOT NULL
-);
 CREATE TABLE document_connections (
   workspace_id  TEXT    NOT NULL,
   source        TEXT    NOT NULL,
@@ -619,10 +609,6 @@ CREATE INDEX idx_environments_expiry
 CREATE INDEX idx_reference_architectures_workspace
   ON reference_architectures (workspace_id)
   WHERE deleted_at IS NULL;
-CREATE UNIQUE INDEX idx_repo_blueprints_repo
-  ON repo_blueprints (workspace_id, repo_owner, repo_name);
-CREATE INDEX idx_repo_blueprints_workspace
-  ON repo_blueprints (workspace_id, updated_at);
 CREATE INDEX idx_documents_block
   ON documents (workspace_id, linked_block_id);
 CREATE UNIQUE INDEX idx_runner_pool_conn_workspace

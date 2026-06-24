@@ -71,7 +71,8 @@ function buildTypeFields(): TaskTypeFields | undefined {
   if (taskType.value === 'spike') {
     // `v-model.number` on a cleared number input yields '' (not undefined), which would
     // serialise as a non-number and 400 the create — so require a finite number here.
-    return typeof timeboxHours.value === 'number' && Number.isFinite(timeboxHours.value) &&
+    return typeof timeboxHours.value === 'number' &&
+      Number.isFinite(timeboxHours.value) &&
       timeboxHours.value >= 0
       ? { timeboxHours: timeboxHours.value }
       : undefined
@@ -262,7 +263,10 @@ async function add() {
         </UFormField>
 
         <!-- Recurring tasks are configured as a schedule on the service frame. -->
-        <div v-if="isRecurring" class="rounded-lg border border-slate-800 p-3 text-[11px] text-slate-400">
+        <div
+          v-if="isRecurring"
+          class="rounded-lg border border-slate-800 p-3 text-[11px] text-slate-400"
+        >
           <template v-if="recurringFrameId">
             A recurring task runs a pipeline on a cadence. Continue to set the schedule + prompt.
           </template>
@@ -273,151 +277,151 @@ async function add() {
         </div>
 
         <template v-if="!isRecurring">
-        <UFormField label="Title" required>
-          <UInput
-            v-model="title"
-            placeholder="What needs to be done?"
-            autofocus
-            class="w-full"
-            @keydown.enter="add"
-          />
-        </UFormField>
-
-        <UFormField label="Description">
-          <UTextarea
-            v-model="description"
-            :rows="4"
-            autoresize
-            placeholder="Describe the work — context, acceptance criteria, anything the agent should know…"
-            class="w-full"
-          />
-        </UFormField>
-
-        <!-- Per-type fields. -->
-        <div v-if="taskType === 'bug'" class="grid grid-cols-2 gap-3">
-          <UFormField label="Severity">
-            <div class="flex flex-wrap gap-1">
-              <UButton
-                v-for="s in SEVERITIES"
-                :key="s"
-                :color="severity === s ? 'primary' : 'neutral'"
-                :variant="severity === s ? 'soft' : 'ghost'"
-                size="xs"
-                class="capitalize"
-                @click="severity = severity === s ? '' : s"
-              >
-                {{ s }}
-              </UButton>
-            </div>
+          <UFormField label="Title" required>
+            <UInput
+              v-model="title"
+              placeholder="What needs to be done?"
+              autofocus
+              class="w-full"
+              @keydown.enter="add"
+            />
           </UFormField>
-          <UFormField label="Steps to reproduce" class="col-span-2">
+
+          <UFormField label="Description">
             <UTextarea
-              v-model="stepsToReproduce"
-              :rows="2"
+              v-model="description"
+              :rows="4"
               autoresize
-              placeholder="Observed vs expected, and how to reproduce…"
+              placeholder="Describe the work — context, acceptance criteria, anything the agent should know…"
               class="w-full"
             />
           </UFormField>
-        </div>
 
-        <UFormField v-else-if="taskType === 'spike'" label="Time-box (hours)">
-          <UInput
-            v-model.number="timeboxHours"
-            type="number"
-            min="0"
-            placeholder="e.g. 8"
-            class="w-full"
-          />
-        </UFormField>
-
-        <UFormField v-else-if="taskType === 'document'" label="Document kind">
-          <div class="flex flex-wrap gap-1">
-            <UButton
-              v-for="k in DOC_KINDS"
-              :key="k"
-              :color="docKind === k ? 'primary' : 'neutral'"
-              :variant="docKind === k ? 'soft' : 'ghost'"
-              size="xs"
-              class="uppercase"
-              @click="docKind = docKind === k ? '' : k"
-            >
-              {{ k }}
-            </UButton>
+          <!-- Per-type fields. -->
+          <div v-if="taskType === 'bug'" class="grid grid-cols-2 gap-3">
+            <UFormField label="Severity">
+              <div class="flex flex-wrap gap-1">
+                <UButton
+                  v-for="s in SEVERITIES"
+                  :key="s"
+                  :color="severity === s ? 'primary' : 'neutral'"
+                  :variant="severity === s ? 'soft' : 'ghost'"
+                  size="xs"
+                  class="capitalize"
+                  @click="severity = severity === s ? '' : s"
+                >
+                  {{ s }}
+                </UButton>
+              </div>
+            </UFormField>
+            <UFormField label="Steps to reproduce" class="col-span-2">
+              <UTextarea
+                v-model="stepsToReproduce"
+                :rows="2"
+                autoresize
+                placeholder="Observed vs expected, and how to reproduce…"
+                class="w-full"
+              />
+            </UFormField>
           </div>
-        </UFormField>
 
-        <div class="grid grid-cols-2 gap-3">
-          <UFormField label="Pipeline">
-            <UDropdownMenu :items="pipelineMenu" class="w-full">
-              <UButton
-                color="neutral"
-                variant="subtle"
-                size="sm"
-                icon="i-lucide-workflow"
-                trailing-icon="i-lucide-chevron-down"
-                class="w-full justify-between"
-              >
-                {{ selectedPipelineLabel }}
-              </UButton>
-            </UDropdownMenu>
+          <UFormField v-else-if="taskType === 'spike'" label="Time-box (hours)">
+            <UInput
+              v-model.number="timeboxHours"
+              type="number"
+              min="0"
+              placeholder="e.g. 8"
+              class="w-full"
+            />
           </UFormField>
 
-          <UFormField label="Merge policy">
-            <UDropdownMenu :items="presetMenu" class="w-full">
-              <UButton
-                color="neutral"
-                variant="subtle"
-                size="sm"
-                icon="i-lucide-git-merge"
-                trailing-icon="i-lucide-chevron-down"
-                class="w-full justify-between"
-              >
-                {{ selectedPresetLabel }}
-              </UButton>
-            </UDropdownMenu>
-          </UFormField>
-        </div>
-
-        <div v-if="configDescriptors.length" class="space-y-3">
-          <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-            Agent configuration
-          </span>
-          <div v-for="d in configDescriptors" :key="d.id" class="space-y-1">
-            <div class="text-[11px] text-slate-400">{{ d.label }}</div>
+          <UFormField v-else-if="taskType === 'document'" label="Document kind">
             <div class="flex flex-wrap gap-1">
               <UButton
-                v-for="opt in d.options"
-                :key="opt.value"
-                :color="configValue(d.id, d.default) === opt.value ? 'primary' : 'neutral'"
-                :variant="configValue(d.id, d.default) === opt.value ? 'soft' : 'ghost'"
+                v-for="k in DOC_KINDS"
+                :key="k"
+                :color="docKind === k ? 'primary' : 'neutral'"
+                :variant="docKind === k ? 'soft' : 'ghost'"
                 size="xs"
-                @click="setConfig(d.id, opt.value)"
+                class="uppercase"
+                @click="docKind = docKind === k ? '' : k"
               >
-                {{ opt.label }}
+                {{ k }}
               </UButton>
             </div>
-            <p class="text-[11px] leading-snug text-slate-500">{{ d.description }}</p>
+          </UFormField>
+
+          <div class="grid grid-cols-2 gap-3">
+            <UFormField label="Pipeline">
+              <UDropdownMenu :items="pipelineMenu" class="w-full">
+                <UButton
+                  color="neutral"
+                  variant="subtle"
+                  size="sm"
+                  icon="i-lucide-workflow"
+                  trailing-icon="i-lucide-chevron-down"
+                  class="w-full justify-between"
+                >
+                  {{ selectedPipelineLabel }}
+                </UButton>
+              </UDropdownMenu>
+            </UFormField>
+
+            <UFormField label="Merge policy">
+              <UDropdownMenu :items="presetMenu" class="w-full">
+                <UButton
+                  color="neutral"
+                  variant="subtle"
+                  size="sm"
+                  icon="i-lucide-git-merge"
+                  trailing-icon="i-lucide-chevron-down"
+                  class="w-full justify-between"
+                >
+                  {{ selectedPresetLabel }}
+                </UButton>
+              </UDropdownMenu>
+            </UFormField>
           </div>
-        </div>
 
-        <div v-if="showContext" class="space-y-2">
-          <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-            Extra context (optional)
-          </span>
+          <div v-if="configDescriptors.length" class="space-y-3">
+            <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+              Agent configuration
+            </span>
+            <div v-for="d in configDescriptors" :key="d.id" class="space-y-1">
+              <div class="text-[11px] text-slate-400">{{ d.label }}</div>
+              <div class="flex flex-wrap gap-1">
+                <UButton
+                  v-for="opt in d.options"
+                  :key="opt.value"
+                  :color="configValue(d.id, d.default) === opt.value ? 'primary' : 'neutral'"
+                  :variant="configValue(d.id, d.default) === opt.value ? 'soft' : 'ghost'"
+                  size="xs"
+                  @click="setConfig(d.id, opt.value)"
+                >
+                  {{ opt.label }}
+                </UButton>
+              </div>
+              <p class="text-[11px] leading-snug text-slate-500">{{ d.description }}</p>
+            </div>
+          </div>
 
-          <ContextPicker v-model="pendingContext" />
+          <div v-if="showContext" class="space-y-2">
+            <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+              Extra context (optional)
+            </span>
+
+            <ContextPicker v-model="pendingContext" />
+
+            <p class="text-[11px] text-slate-500">
+              Search a connected source, paste a page/issue URL, or pick something already imported
+              — it's fed to every agent step as context.
+            </p>
+          </div>
 
           <p class="text-[11px] text-slate-500">
-            Search a connected source, paste a page/issue URL, or pick something already imported —
-            it's fed to every agent step as context.
+            The task is added in a planned state. It won't run until you start a pipeline on it —
+            you can keep editing it until then.
           </p>
-        </div>
-
-        <p class="text-[11px] text-slate-500">
-          The task is added in a planned state. It won't run until you start a pipeline on it — you
-          can keep editing it until then.
-        </p>
         </template>
       </div>
     </template>

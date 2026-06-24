@@ -1,9 +1,14 @@
 name: Docker publish (runner image)
 
-# Publishes the executor-harness (Pi coding-agent) runner image to GHCR so any
-# organization can reference it from their backend deployment's wrangler.toml
-# (`image = "ghcr.io/<owner>/cat-factory-executor:<tag>"`) instead of building
-# the Dockerfile locally.
+# Publishes the executor-harness (Pi coding-agent) runner image to public
+# registries (GHCR + Docker Hub) as a multi-arch (amd64 + arm64) image so anyone
+# can `docker pull` it instead of building the Dockerfile locally, e.g. reference
+# it from a backend deployment's wrangler.toml
+# (`image = "ghcr.io/<owner>/cat-factory-executor:<tag>"`) or a self-hosted runner
+# pool. The manual counterpart is `scripts/publish-image.sh` in the harness package.
+#
+# Docker Hub publishing is gated on the DOCKERHUB_USERNAME / DOCKERHUB_TOKEN repo
+# secrets: when they are absent (e.g. a fork) the image still publishes to GHCR.
 #
 # GATED on changes that affect what is packaged into the image: only fires when a
 # push to main touches the harness sources, the Dockerfile, its tsconfig, or its
@@ -28,8 +33,10 @@ concurrency:
 permissions: {}
 
 env:
-  IMAGE: ghcr.io/${{ github.repository_owner }}/cat-factory-executor
+  GHCR_IMAGE: ghcr.io/${{ github.repository_owner }}/cat-factory-executor
+  DOCKERHUB_IMAGE: docker.io/${{ vars.DOCKERHUB_ORG || github.repository_owner }}/cat-factory-executor
   CONTEXT: backend/internal/executor-harness
+  PLATFORMS: linux/amd64,linux/arm64
 
 jobs:
   publish:
@@ -64,16 +71,40 @@ jobs:
       - name: Container acceptance tests
         run: pnpm --filter @cat-factory/executor-harness run test:acceptance
 
+      # Docker Hub is optional: publish there only when both secrets are present
+      # (the main repo), so a fork without them still publishes to GHCR.
+      - name: Resolve config
+        id: cfg
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          if [ -n "${DOCKERHUB_USERNAME}" ] && [ -n "${DOCKERHUB_TOKEN}" ]; then
+            echo "dockerhub=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "dockerhub=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Resolve image tags
         id: tags
+        env:
+          # Routed through env (not inlined as ${{ }} in the run block) to avoid
+          # template-injection into the shell — zizmor[template-injection].
+          DOCKERHUB_ENABLED: ${{ steps.cfg.outputs.dockerhub }}
         run: |
           version="$(node -p "require('./${CONTEXT}/package.json').version")"
           short_sha="${GITHUB_SHA::7}"
+          emit() {
+            echo "${1}:${version}"
+            echo "${1}:sha-${short_sha}"
+            echo "${1}:latest"
+          }
           {
             echo "tags<<EOF"
-            echo "${IMAGE}:${version}"
-            echo "${IMAGE}:sha-${short_sha}"
-            echo "${IMAGE}:latest"
+            emit "${GHCR_IMAGE}"
+            if [ "${DOCKERHUB_ENABLED}" = "true" ]; then
+              emit "${DOCKERHUB_IMAGE}"
+            fi
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
@@ -83,6 +114,19 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Log in to Docker Hub
+        if: steps.cfg.outputs.dockerhub == 'true'
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # arm64 emulation so the multi-arch build can produce an arm64 layer too.
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@49b3bc8e6bdd4a60e6116a5414239cba5943d3cf # v3
+        with:
+          platforms: arm64
 
       - name: Set up Buildx
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
@@ -95,6 +139,7 @@ jobs:
         with:
           context: ${{ env.CONTEXT }}
           file: ${{ env.CONTEXT }}/Dockerfile
+          platforms: ${{ env.PLATFORMS }}
           push: true
           no-cache: true
           tags: ${{ steps.tags.outputs.tags }}

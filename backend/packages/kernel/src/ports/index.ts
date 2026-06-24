@@ -199,8 +199,6 @@ export type {
   RepoBootstrapper,
 } from './repo-bootstrapper.js'
 export { type BootstrapRunner, NoopBootstrapRunner } from './bootstrap-runner.js'
-export type { RepoBlueprintRecord, RepoBlueprintRepository } from './board-scan-repositories.js'
-export type { RepoScanner, ScanRepoRequest, ScannedBlueprint } from './repo-scanner.js'
 export type {
   RunnerDispatchKind,
   RunnerDispatchOptions,
