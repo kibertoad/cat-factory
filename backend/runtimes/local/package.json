@@ -1,6 +1,6 @@
 {
   "name": "@cat-factory/local-server",
-  "version": "0.7.3",
+  "version": "0.7.6",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/kibertoad/cat-factory.git",

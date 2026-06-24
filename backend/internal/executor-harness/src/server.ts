@@ -11,8 +11,10 @@ import {
   parseExploreJob,
   parseTesterJob,
   parseFixerJob,
+  parseAgentJob,
   parseJob,
 } from './job.js'
+import { handleAgent } from './agent.js'
 import { handleBootstrap } from './bootstrap.js'
 import { handleBlueprint } from './blueprint.js'
 import { handleSpec } from './spec.js'
@@ -94,6 +96,9 @@ function defineKind<TJob extends { jobId: string }, TResult extends JobResultBas
 // own copy because it carries no runtime deps (the image stays lean). A new kind is
 // one entry here, not a new endpoint + registry global + poll-chain line.
 const KINDS: Record<string, KindEntry> = {
+  // The generic, manifest-driven kind: `mode` (explore | coding) in the body selects
+  // the flow. The bespoke kinds below are being migrated onto it (and will be removed).
+  agent: defineKind(parseAgentJob, handleAgent),
   run: defineKind(parseJob, handleRun),
   bootstrap: defineKind(parseBootstrapJob, handleBootstrap),
   blueprint: defineKind(parseBlueprintJob, handleBlueprint),

@@ -53,6 +53,14 @@ export interface RunnerJobResult {
   /** A `tester` job's structured test report (the `/test` endpoint's product). */
   report?: unknown
   /**
+   * A generic `agent` (explore, structured-output) job's parsed JSON result. The
+   * backend's post-op coerces/validates + renders artifact files from it. The
+   * well-known result keys above (`service`/`spec`/`assessment`/…) stay for the bespoke
+   * kinds during migration; `custom` is the channel a manifest-driven structured agent
+   * uses.
+   */
+  custom?: unknown
+  /**
    * Token usage the harness lifted from the agent CLI's own event stream. Reported
    * by the subscription harnesses (Claude Code / Codex), whose traffic bypasses the
    * LLM proxy — so this is the only usage signal for them. The dispatch path folds
@@ -74,6 +82,10 @@ export interface RunnerJobResult {
  * new harness kind reaches it automatically, never silently diverging from Cloudflare.
  */
 export type RunnerDispatchKind =
+  // The generic, manifest-driven kind: the job body's `mode` (explore | coding) selects
+  // the flow. The bespoke kinds below are being migrated onto it; once every built-in
+  // kind dispatches `agent`, they are removed.
+  | 'agent'
   | 'run'
   | 'blueprint'
   | 'spec'

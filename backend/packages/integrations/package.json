@@ -1,6 +1,6 @@
 {
   "name": "@cat-factory/integrations",
-  "version": "0.7.2",
+  "version": "0.7.5",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/kibertoad/cat-factory.git",

@@ -1,6 +1,6 @@
 {
   "name": "@cat-factory/agents",
-  "version": "0.7.2",
+  "version": "0.8.1",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/kibertoad/cat-factory.git",
@@ -26,6 +26,8 @@
   "scripts": {
     "build": "tsc -b tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:run": "vitest run",
     "precompile:templates": "node scripts/precompile-prompts.mjs"
   },
   "dependencies": {
@@ -39,6 +41,7 @@
     "handlebars": "^4.7.9"
   },
   "devDependencies": {
-    "typescript": "7.0.1-rc"
+    "typescript": "7.0.1-rc",
+    "vitest": "^4.1.9"
   }
 }

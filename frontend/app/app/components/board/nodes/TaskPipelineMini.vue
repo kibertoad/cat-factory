@@ -1,7 +1,13 @@
 <script setup lang="ts">
 import type { AgentState } from '~/types/domain'
 import { agentKindMeta } from '~/utils/catalog'
-import { subtaskIconClass, isFailedStep, FAILED_STEP_META } from '~/utils/pipelineRender'
+import {
+  subtaskIconClass,
+  isFailedStep,
+  FAILED_STEP_META,
+  gateCompanionFor,
+  COMPANION_STATE_META,
+} from '~/utils/pipelineRender'
 import { lodAtLeast } from '~/composables/useSemanticZoom'
 
 // Spatial drill-down inside a task card: at the `steps` zoom band the task's
@@ -23,6 +29,13 @@ const steps = computed(() => instance.value?.steps ?? [])
 // A failed run is no longer executing: a step left mid-flight (state still
 // `working`) must stop spinning, matching the failure card the task card shows.
 const runFailed = computed(() => instance.value?.status === 'failed')
+
+// The conditionally-run companion (if any) each step drives — the polling gates'
+// helper (ci → ci-fixer, conflicts → conflict-resolver) or the Tester's fixer — with
+// its possible/running/completed/skipped state. The board drill-down shows it the same
+// way the inspector + focus pipeline do, so a gate working its helper reads as active
+// (spinning "Running") rather than a frozen subtask list.
+const companionByStep = computed(() => steps.value.map((s) => gateCompanionFor(s, runFailed.value)))
 
 // Expand the pipeline list only when zoomed in far enough AND the board driver
 // permits this card — on-screen, and the centre-most of any cards that would
@@ -130,6 +143,29 @@ const ITEM_ICON: Record<string, string> = {
           class="h-full rounded bg-indigo-400 transition-all"
           :style="{ width: `${(s.subtasks.completed / s.subtasks.total) * 100}%` }"
         />
+      </div>
+
+      <!-- conditionally-run companion (the gate's ci-fixer / conflict-resolver, or the
+           Tester's fixer): a compact running/ran/skipped line, so a gate that's working
+           its helper reads as actively fixing rather than a frozen subtask list. -->
+      <div v-if="companionByStep[i]" class="mt-1 flex items-center gap-1 text-[9px]">
+        <UIcon
+          :name="agentKindMeta(companionByStep[i]!.kind).icon"
+          class="h-2.5 w-2.5 shrink-0"
+          :class="[
+            COMPANION_STATE_META[companionByStep[i]!.state].text,
+            companionByStep[i]!.state === 'running' ? 'animate-spin' : '',
+          ]"
+        />
+        <span class="truncate text-slate-400">
+          {{ agentKindMeta(companionByStep[i]!.kind).label }}
+        </span>
+        <span
+          class="ml-auto shrink-0"
+          :class="COMPANION_STATE_META[companionByStep[i]!.state].text"
+        >
+          {{ COMPANION_STATE_META[companionByStep[i]!.state].label }}
+        </span>
       </div>
 
       <!-- deepest band: the actual todo list (done / in-progress / pending) -->

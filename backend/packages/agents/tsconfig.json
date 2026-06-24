@@ -2,7 +2,10 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "rootDir": "src",
-    "outDir": "dist"
+    "outDir": "dist",
+    // DOM libs supply the Web Crypto (`crypto.subtle`) + `TextEncoder` globals used by
+    // the runtime-neutral SHA-256 in repo-ops/render.ts (mirrors @cat-factory/workspaces).
+    "lib": ["ES2022", "DOM", "DOM.Iterable"]
   },
   "include": ["src/**/*.ts"]
 }

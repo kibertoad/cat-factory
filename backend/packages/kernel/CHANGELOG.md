@@ -1,5 +1,71 @@
 # @cat-factory/kernel
 
+## 0.9.0
+
+### Minor Changes
+
+- 5c20968: Add the generic, manifest-driven `agent` harness kind + its backend dispatch.
+
+  - `@cat-factory/executor-harness`: a single generic `agent` job kind (`parseAgentJob` +
+    `handleAgent`) that runs an LLM over an optional checkout in one of two modes —
+    `explore` (read-only; returns prose, or a parsed `custom` JSON object) or `coding`
+    (clone/edit/commit/push, optionally open a PR), built on the existing
+    `runAgentInWorkspace`/`runCodingAgent`/`resolveStructuredOutput` primitives. It holds no
+    per-agent-kind logic; the bespoke kinds remain during migration. **Image bump** (the
+    deploy tag moves to `1.9.0` so the new kind rolls out).
+  - `@cat-factory/kernel`: `RunnerDispatchKind` gains `'agent'`; `RunnerJobResult` and
+    `AgentRunResult` gain a generic `custom` channel for a structured agent's output. The
+    `GitHubClient` port gains `branchHeadSha` — an exact single-ref head lookup that stays
+    correct on repos with more branches than one `listBranches` page (the create-vs-commit
+    signal `RepoFiles.headSha` relies on).
+  - `@cat-factory/server`: `ContainerAgentExecutor` dispatches any registered kind that
+    declares an `agent` step through the generic `agent` kind (`buildRegisteredAgentBody`)
+    and maps `custom` results; built-in kinds are unchanged. New `RepoFiles` implementation
+    (`makeRepoFiles`/`makeResolveRepoFiles`, a checkout-free facade over the `GitHubClient`
+    Git Data API) + a `runRepoOps` helper — the substrate the pre/post-op engine wiring will
+    use next.
+
+## 0.8.0
+
+### Minor Changes
+
+- c70df09: Add the foundations for manifest-driven custom agents (pre/agent/post-op model).
+
+  - `@cat-factory/agents`: new `repo-ops/render.ts` — the deterministic, container-free
+    rendering + lenient coercion of the in-repo `blueprints/`/`spec/` artifacts
+    (`renderBlueprintFiles`/`renderSpecFiles`/`renderSpecFeatureFiles`,
+    `coerceBlueprintService`/`coerceSpecDoc`/`dedupeSpecIds`, the version manifests). This
+    is the logic lifted out of the executor-harness image; the hash uses Web Crypto so it
+    is runtime-neutral (so the hash + version helpers are async). The agent-kind registry
+    (`AgentKindDefinition`) gains `agent` (execution surface), `preOps`/`postOps` (backend
+    repo-op hooks) and `presentation` (frontend palette metadata), with matching accessors;
+    `registeredKindRequiresContainer` now also derives from a container agent surface.
+  - `@cat-factory/kernel`: new `RepoFiles`/`ResolveRepoFiles` ports (a per-run,
+    checkout-free facade over the `GitHubClient` Git Data API) and the agent-definition
+    vocabulary (`AgentSurface`/`AgentStepSpec`/`AgentCloneSpec`/`AgentOutputSpec`,
+    `RepoOp`/`RepoOpContext`).
+  - `@cat-factory/contracts`: new `AgentPresentation`/`AgentCategory`/`CustomAgentKind`
+    wire shapes for the data-driven agent palette.
+
+### Patch Changes
+
+- Updated dependencies [c70df09]
+  - @cat-factory/contracts@0.8.0
+
+## 0.7.3
+
+### Patch Changes
+
+- a0a1bcc: Add Kimi K2.5 (`@cf/moonshotai/kimi-k2.5`) to the model catalog as a Cloudflare-only
+  entry (256K context) with its spend pricing. Cloudflare lists K2.5 at $0.60 in / $3.00
+  out per 1M, below the K2.6/K2.7 rate, so without an explicit price entry it would fall
+  back to the near-free `workers-ai` neuron rate and meter at ~0.
+
+  Default the `conflict-resolver` agent kind to Kimi K2.5 on both runtimes (Worker + Node).
+  The conflict-resolver rewrites conflicted hunks against the base, a focused diff-heavy
+  reasoning task the small default MoE handles poorly. Operators can still override via
+  `AGENT_MODELS`.
+
 ## 0.7.2
 
 ### Patch Changes
