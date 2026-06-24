@@ -1,5 +1,13 @@
 # @cat-factory/observability-langfuse
 
+## 0.7.2
+
+### Patch Changes
+
+- 4fa5ed9: Re-release all publishable packages. The previous release bumped these on `main` but never reached npm (the publish job was never triggered), so npm is a release behind. This changeset re-triggers the release so every package publishes.
+- Updated dependencies [4fa5ed9]
+  - @cat-factory/kernel@0.7.2
+
 ## 0.7.1
 
 ### Patch Changes

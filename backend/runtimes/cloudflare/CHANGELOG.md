@@ -1,5 +1,23 @@
 # @cat-factory/worker
 
+## 0.7.2
+
+### Patch Changes
+
+- 4fa5ed9: Re-release all publishable packages. The previous release bumped these on `main` but never reached npm (the publish job was never triggered), so npm is a release behind. This changeset re-triggers the release so every package publishes.
+- Updated dependencies [4fa5ed9]
+  - @cat-factory/agents@0.7.2
+  - @cat-factory/consensus@0.7.2
+  - @cat-factory/contracts@0.7.2
+  - @cat-factory/integrations@0.7.2
+  - @cat-factory/kernel@0.7.2
+  - @cat-factory/observability-langfuse@0.7.2
+  - @cat-factory/orchestration@0.7.2
+  - @cat-factory/prompt-fragments@0.7.2
+  - @cat-factory/provider-cloudflare@0.7.2
+  - @cat-factory/server@0.7.2
+  - @cat-factory/spend@0.7.2
+
 ## 0.7.1
 
 ### Patch Changes
