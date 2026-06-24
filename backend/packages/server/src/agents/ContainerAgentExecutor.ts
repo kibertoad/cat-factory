@@ -1052,14 +1052,17 @@ function toRunResult(result: RunnerJobResult): AgentRunResult {
     }
   }
   // A `conflict-resolver` job reports whether the branch is now mergeable. The
-  // engine's conflicts gate re-checks mergeability regardless; map to an output.
+  // engine's conflicts gate re-checks mergeability regardless; map to an output. On a
+  // partial resolution prefer `error` (it NAMES the files still conflicting) over the
+  // agent's free-text summary, so the gate can surface which files remain — detail the
+  // conflicts gate otherwise has no source for (GitHub reports mergeability as one bit).
   if (result.resolved !== undefined) {
     return {
-      output:
-        result.summary?.trim() ||
-        (result.resolved
-          ? 'Resolved merge conflicts and pushed to the PR branch.'
-          : 'Could not fully resolve the merge conflicts.'),
+      output: result.resolved
+        ? result.summary?.trim() || 'Resolved merge conflicts and pushed to the PR branch.'
+        : result.error?.trim() ||
+          result.summary?.trim() ||
+          'Could not fully resolve the merge conflicts.',
     }
   }
   const summary = result.summary?.trim() || 'Implementation complete.'

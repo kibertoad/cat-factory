@@ -1,6 +1,7 @@
 import type {
   Block,
   ExecutionInstance,
+  GateAttempt,
   GateStepState,
   MergeThresholdPreset,
   PipelineStep,
@@ -38,7 +39,37 @@ export interface GateProbe {
    * this from the red check runs; the conflicts gate leaves it undefined). Persisted
    * onto `step.gate` so the run-detail UI can list each failing check.
    */
-  failingChecks?: { name: string; conclusion: string | null }[]
+  failingChecks?: { name: string; conclusion: string | null; url?: string | null }[]
+}
+
+/** The relevant outcome of a finished gate-helper job, for recording an attempt. */
+export type GateHelperOutcome =
+  | { state: 'done'; output: string | null }
+  | { state: 'failed'; error: string | null }
+
+/**
+ * Build the record of a just-finished gate-helper attempt (a ci-fixer / conflict-resolver
+ * run) for {@link GateStepState.attemptLog}. The summary is the helper's OWN account — its
+ * output on completion (which the conflict-resolver fills with the files it left
+ * conflicting), or the error on failure — tagged with the current attempt number + the
+ * gated head sha. The gate's next precheck remains the source of truth for pass/fail; this
+ * is purely the per-attempt history the UI shows so a looping gate isn't a black box.
+ */
+export function recordGateAttempt(
+  gate: Pick<GateStepState, 'attempts' | 'headSha'>,
+  outcome: GateHelperOutcome,
+  at: number,
+): GateAttempt {
+  return {
+    attempt: gate.attempts,
+    at,
+    outcome: outcome.state === 'done' ? 'completed' : 'failed',
+    headSha: gate.headSha ?? null,
+    summary:
+      outcome.state === 'done'
+        ? outcome.output
+        : (outcome.error ?? 'The helper agent failed without finishing.'),
+  }
 }
 
 /** Inputs to a gate's exhaustion handler (budget spent / no executor to escalate to). */

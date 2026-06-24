@@ -12,11 +12,13 @@ import StepRestartControl from '~/components/panels/StepRestartControl.vue'
 
 const board = useBoardStore()
 const execution = useExecutionStore()
+const ui = useUiStore()
 
 // Synchronous window: it reads its state straight off the execution step, so there's
 // nothing to fetch on open (no `onOpen` loader).
 const { open, blockId, instanceId, stepIndex, close } = useResultView('gate')
 const block = computed(() => (blockId.value ? board.getBlock(blockId.value) : undefined))
+const prUrl = computed(() => block.value?.pullRequest?.url ?? null)
 
 const instance = computed(() =>
   instanceId.value === null ? null : (execution.getInstance(instanceId.value) ?? null),
@@ -34,6 +36,22 @@ const helperMeta = computed(() => agentKindMeta(helperKind.value))
 
 const failingChecks = computed(() => gate.value?.failingChecks ?? [])
 const shortSha = computed(() => (gate.value?.headSha ? gate.value.headSha.slice(0, 7) : null))
+
+// The helper-agent attempts this gate dispatched, newest first for the timeline.
+const attempts = computed(() => [...(gate.value?.attemptLog ?? [])].reverse())
+
+function formatClock(ms?: number | null): string | null {
+  return ms ? new Date(ms).toLocaleString() : null
+}
+
+// The run id (execution instance id) this gate belongs to — copyable for support /
+// log lookups, and a jump into the run's observability view.
+async function copyRunId() {
+  if (instanceId.value) await navigator.clipboard?.writeText(instanceId.value)
+}
+function openObservability() {
+  if (instanceId.value) ui.openObservability(instanceId.value)
+}
 
 /**
  * The display status — a roll-up of the persisted gate state + the run's status, so the
@@ -189,7 +207,21 @@ const conflictVerdict = computed(() => {
                     class="flex items-center gap-2 rounded-md border border-slate-800 bg-slate-950/40 px-3 py-1.5"
                   >
                     <UIcon name="i-lucide-circle-x" class="h-3.5 w-3.5 shrink-0 text-rose-400" />
-                    <span class="min-w-0 flex-1 truncate text-[13px] text-slate-200">{{
+                    <a
+                      v-if="c.url"
+                      :href="c.url"
+                      target="_blank"
+                      rel="noopener"
+                      class="group min-w-0 flex-1 truncate text-[13px] text-sky-300 hover:text-sky-200 hover:underline"
+                      :title="`Open ${c.name} on GitHub`"
+                    >
+                      {{ c.name }}
+                      <UIcon
+                        name="i-lucide-external-link"
+                        class="ml-0.5 inline h-3 w-3 opacity-60 group-hover:opacity-100"
+                      />
+                    </a>
+                    <span v-else class="min-w-0 flex-1 truncate text-[13px] text-slate-200">{{
                       c.name
                     }}</span>
                     <span class="shrink-0 text-[11px] uppercase text-rose-300">
@@ -202,7 +234,7 @@ const conflictVerdict = computed(() => {
                 </p>
               </template>
 
-              <!-- Conflicts: verdict + note (no file-level detail from GitHub) -->
+              <!-- Conflicts: verdict + the resolver's account of what it left -->
               <template v-else>
                 <h3 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                   Mergeability
@@ -217,11 +249,64 @@ const conflictVerdict = computed(() => {
                   />
                   <span class="text-[13px] text-slate-200">{{ conflictVerdict }}</span>
                 </div>
+                <!-- GitHub's API reports mergeability as a single bit (no file list), but the
+                     conflict resolver discovers the conflicting files in the container and
+                     reports them back — surface that account here. -->
+                <p
+                  v-if="gate.lastFailureSummary"
+                  class="mt-2 whitespace-pre-wrap rounded-md border border-slate-800 bg-slate-950/40 px-3 py-2 text-[12px] leading-relaxed text-slate-300"
+                >
+                  {{ gate.lastFailureSummary }}
+                </p>
                 <p class="mt-2 text-[11px] leading-relaxed text-slate-500">
-                  GitHub reports mergeability as a single verdict, so there's no file-level conflict
-                  list here. The conflict resolver inspects the branch directly.
+                  GitHub's API doesn't expose a file-level conflict list, so the resolver inspects
+                  the branch directly.<template v-if="prUrl">
+                    For the exact conflicting hunks, open the
+                    <a
+                      :href="prUrl"
+                      target="_blank"
+                      rel="noopener"
+                      class="text-sky-300 hover:text-sky-200 hover:underline"
+                      >pull request on GitHub</a
+                    >.</template
+                  >
                 </p>
               </template>
+
+              <!-- Attempt history (both gates): what each helper run did and how it ended. -->
+              <section v-if="attempts.length" class="mt-5">
+                <h3 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                  {{ helperMeta.label }} attempts
+                </h3>
+                <ol class="space-y-2">
+                  <li
+                    v-for="a in attempts"
+                    :key="a.attempt"
+                    class="rounded-md border border-slate-800 bg-slate-950/40 px-3 py-2"
+                  >
+                    <div class="flex items-center gap-2">
+                      <span class="text-[12px] font-semibold text-slate-200"
+                        >Attempt {{ a.attempt }}</span
+                      >
+                      <UBadge
+                        :color="a.outcome === 'failed' ? 'error' : 'neutral'"
+                        variant="subtle"
+                        size="sm"
+                        >{{ a.outcome }}</UBadge
+                      >
+                      <span v-if="formatClock(a.at)" class="ml-auto text-[11px] text-slate-500">{{
+                        formatClock(a.at)
+                      }}</span>
+                    </div>
+                    <p
+                      v-if="a.summary"
+                      class="mt-1 whitespace-pre-wrap text-[12px] leading-relaxed text-slate-400"
+                    >
+                      {{ a.summary }}
+                    </p>
+                  </li>
+                </ol>
+              </section>
             </template>
           </div>
 
@@ -268,6 +353,26 @@ const conflictVerdict = computed(() => {
                 Model
               </h4>
               <p class="break-all text-[12px] text-slate-300">{{ step.model }}</p>
+            </div>
+
+            <div v-if="instanceId">
+              <h4 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                Run
+              </h4>
+              <p
+                class="cursor-pointer break-all font-mono text-[12px] text-slate-400 hover:text-slate-200"
+                :title="`${instanceId} — click to copy`"
+                @click="copyRunId"
+              >
+                {{ instanceId }}
+              </p>
+              <button
+                class="mt-1 inline-flex items-center gap-1 text-[11px] text-sky-300 hover:text-sky-200"
+                @click="openObservability"
+              >
+                <UIcon name="i-lucide-activity" class="h-3 w-3" />
+                Open observability
+              </button>
             </div>
 
             <p class="mt-auto text-[10px] leading-relaxed text-slate-600">

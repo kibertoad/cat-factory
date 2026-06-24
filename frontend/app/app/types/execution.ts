@@ -333,6 +333,22 @@ export interface PipelineStep {
 export interface GateFailingCheck {
   name: string
   conclusion: string | null
+  /** GitHub web URL of the check run, so the UI can link to the failed run's logs */
+  url?: string | null
+}
+
+/** One helper-agent attempt the gate dispatched (mirrors `gateAttemptSchema`). */
+export interface GateAttempt {
+  /** 1-based attempt number */
+  attempt: number
+  /** epoch ms when the helper job finished */
+  at: number
+  /** how the helper job ended */
+  outcome: 'completed' | 'failed'
+  /** the PR head commit the helper worked against, when known */
+  headSha?: string | null
+  /** the helper's own account of what it did / what remains */
+  summary?: string | null
 }
 
 /** Live state of a polling gate step (`ci` / `conflicts`); mirrors `gateStepStateSchema`. */
@@ -350,6 +366,8 @@ export interface GateStepState {
   lastFailureSummary?: string | null
   /** structured failing checks behind the summary (CI gate only; absent for conflicts) */
   failingChecks?: GateFailingCheck[] | null
+  /** history of the helper-agent attempts this gate dispatched, newest last */
+  attemptLog?: GateAttempt[] | null
 }
 
 /** Live state of a `tester` step's Tester→Fixer loop (mirrors `testerStepStateSchema`). */
