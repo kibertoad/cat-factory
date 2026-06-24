@@ -7,6 +7,7 @@ import {
   STATUS_META,
   SYSTEM_AGENT_META,
   agentKindMeta,
+  blockTypeMeta,
   uid,
 } from '~/utils/catalog'
 
@@ -29,7 +30,16 @@ const AGENT_KINDS: AgentKind[] = [
   'business-documenter',
   'business-reviewer',
 ]
-const BLOCK_TYPES: BlockType[] = ['frontend', 'service', 'api', 'database', 'queue', 'integration']
+const BLOCK_TYPES: BlockType[] = [
+  'frontend',
+  'service',
+  'api',
+  'database',
+  'queue',
+  'integration',
+  'external',
+  'environment',
+]
 const BLOCK_STATUSES: BlockStatus[] = [
   'planned',
   'ready',
@@ -84,6 +94,14 @@ describe('catalog', () => {
         accent: expect.any(String),
       })
     }
+  })
+
+  it('blockTypeMeta returns a usable fallback for an unknown block type', () => {
+    expect(blockTypeMeta('totally-made-up' as BlockType)).toMatchObject({
+      label: expect.any(String),
+      icon: expect.any(String),
+      accent: expect.any(String),
+    })
   })
 
   it('provides metadata for every block status', () => {

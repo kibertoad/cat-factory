@@ -19,7 +19,7 @@ const releaseHealth = useReleaseHealthStore()
 watch(
   () => ui.integrationsOpen,
   (isOpen) => {
-    if (isOpen) void releaseHealth.load().catch(() => {})
+    if (isOpen) void releaseHealth.ensureLoaded().catch(() => {})
   },
 )
 
@@ -138,20 +138,25 @@ const groups = computed<IntegrationGroup[]>(() => {
   }
 
   // --- Observability ---------------------------------------------------------
-  out.push({
-    title: 'Observability',
-    items: [
-      {
-        key: 'observability',
-        icon: 'i-lucide-activity',
-        label: 'Post-release health',
-        description: 'Watch monitors and SLOs after a release ships (Datadog).',
-        status: releaseHealth.connection.connected ? 'Connected' : undefined,
-        connected: releaseHealth.connection.connected,
-        onClick: () => go(ui.openObservabilityConnection),
-      },
-    ],
-  })
+  // Gated like every other backend-toggleable system: hidden until a probe confirms
+  // the observability module is enabled (`available === true`), so a disabled backend
+  // doesn't show a dead "Connect" row that only 503s.
+  if (releaseHealth.available) {
+    out.push({
+      title: 'Observability',
+      items: [
+        {
+          key: 'observability',
+          icon: 'i-lucide-activity',
+          label: 'Post-release health',
+          description: 'Watch monitors and SLOs after a release ships (Datadog).',
+          status: releaseHealth.connection.connected ? 'Connected' : undefined,
+          connected: releaseHealth.connection.connected,
+          onClick: () => go(ui.openObservabilityConnection),
+        },
+      ],
+    })
+  }
 
   // --- Models & providers ----------------------------------------------------
   out.push({

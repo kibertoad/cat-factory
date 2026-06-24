@@ -1,1 +1,1 @@
-DROP TABLE "datadog_connections";
+DROP TABLE IF EXISTS "datadog_connections";

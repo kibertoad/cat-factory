@@ -27,7 +27,7 @@ function parseIds(csv: string): string[] {
 
 // Load the connection + configs once, then hydrate the form from this block's saved config.
 onMounted(() => {
-  store.load().catch(() => {})
+  store.ensureLoaded().catch(() => {})
 })
 watch(
   saved,

@@ -124,4 +124,33 @@ describe('RegistryReleaseHealthProvider.probe (Datadog adapter)', () => {
     const report = await provider.probe('ws', 'blk', Date.now())
     expect(report.status).toBe('pending')
   })
+
+  it('rejects a malformed credentials blob at the registry boundary', async () => {
+    const badConnection: ObservabilityConnectionRecord = {
+      ...connection,
+      // A drifted/corrupted blob missing the required keys.
+      credentials: JSON.stringify({ site: 'datadoghq.com' }),
+    }
+    const provider = new RegistryReleaseHealthProvider({
+      observabilityConnectionRepository: {
+        get: async () => badConnection,
+        upsert: async () => {},
+        delete: async () => {},
+      },
+      releaseHealthConfigRepository: {
+        getByBlock: async (_ws, blockId) => (config.blockId === blockId ? config : null),
+        listByWorkspace: async () => [config],
+        upsert: async () => {},
+        delete: async () => {},
+      },
+      blockRepository: {
+        get: async (_ws: string, id: string): Promise<Block | null> =>
+          ({ id, parentId: null }) as Block,
+      } as unknown as BlockRepository,
+      secretCipher: identityCipher,
+      registry: defaultObservabilityRegistry,
+      fetchImpl: (async () => new Response('{}', { status: 200 })) as unknown as typeof fetch,
+    })
+    await expect(provider.probe('ws', 'blk', Date.now())).rejects.toThrow()
+  })
 })

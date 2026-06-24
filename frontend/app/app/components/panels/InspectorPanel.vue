@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { Block, BlockStatus } from '~/types/domain'
-import { BLOCK_TYPE_META, STATUS_META } from '~/utils/catalog'
+import { blockTypeMeta, STATUS_META } from '~/utils/catalog'
 import TaskContextDocs from '~/components/documents/TaskContextDocs.vue'
 import TaskContextIssues from '~/components/tasks/TaskContextIssues.vue'
 import TaskAgentConfig from '~/components/panels/inspector/TaskAgentConfig.vue'
@@ -53,7 +53,7 @@ const isContainer = computed(() => level.value === 'frame' || level.value === 'm
 const isTask = computed(() => level.value === 'task')
 
 const instance = computed(() => execution.getInstance(block.value?.executionId))
-const typeMeta = computed(() => (block.value ? BLOCK_TYPE_META[block.value.type] : null))
+const typeMeta = computed(() => (block.value ? blockTypeMeta(block.value.type) : null))
 
 // Containers show a derived activity status (never "done"); tasks use their own.
 const FRAME_LABEL: Record<BlockStatus, string> = {

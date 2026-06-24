@@ -65,6 +65,17 @@ export const datadogCredentialsSchema = v.object({
   apiKey: v.pipe(v.string(), v.trim(), v.minLength(1)),
   appKey: v.pipe(v.string(), v.trim(), v.minLength(1)),
 })
+export type DatadogCredentials = v.InferOutput<typeof datadogCredentialsSchema>
+
+/**
+ * Validate a decrypted Datadog credentials blob at the read boundary. The provider
+ * registry calls this on the JSON it decrypts so a drifted/corrupted/hand-edited row
+ * fails with a clear schema error here, rather than deep inside the Datadog client
+ * during a live post-release probe.
+ */
+export function parseDatadogCredentials(raw: unknown): DatadogCredentials {
+  return v.parse(datadogCredentialsSchema, raw)
+}
 
 /** Set/replace the workspace's observability connection (credentials write-only). */
 export const upsertObservabilityConnectionSchema = v.object({

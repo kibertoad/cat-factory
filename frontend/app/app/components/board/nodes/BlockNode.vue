@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { Block, BlockStatus } from '~/types/domain'
-import { BLOCK_TYPE_META, STATUS_META } from '~/utils/catalog'
+import { blockTypeMeta, STATUS_META } from '~/utils/catalog'
 import DecisionBadge from './DecisionBadge.vue'
 import DraggableTask from './DraggableTask.vue'
 import ModuleFrame from './ModuleFrame.vue'
@@ -24,7 +24,7 @@ const { lod } = useSemanticZoom()
 const block = computed<Block | undefined>(() => board.getBlock(props.id))
 /** This service frame is mounted on more than one board in the org. */
 const isShared = computed(() => services.isSharedFrame(props.id))
-const typeMeta = computed(() => (block.value ? BLOCK_TYPE_META[block.value.type] : null))
+const typeMeta = computed(() => (block.value ? blockTypeMeta(block.value.type) : null))
 
 // ---- this service's children (tasks + modules) -----------------------------
 const directTasks = computed(() => board.tasksOf(props.id))

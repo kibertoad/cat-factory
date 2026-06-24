@@ -37,7 +37,7 @@ function notifyError(title: string, e: unknown) {
 watch(open, async (isOpen) => {
   if (!isOpen) return
   try {
-    await store.load()
+    await store.ensureLoaded()
     if (store.connection.provider) provider.value = store.connection.provider
     const site = store.connection.summary?.site
     if (site) datadog.site = site

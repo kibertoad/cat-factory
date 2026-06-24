@@ -71,7 +71,7 @@ export class PipelineService {
     const connection = await this.observabilityConnectionRepository?.get(workspaceId)
     if (!connection) {
       throw new ValidationError(
-        `The '${OBSERVABILITY_GATED_KIND}' step needs an observability integration. Connect Datadog for this workspace first.`,
+        `The '${OBSERVABILITY_GATED_KIND}' step needs an observability integration. Connect an observability provider for this workspace first.`,
       )
     }
   }
