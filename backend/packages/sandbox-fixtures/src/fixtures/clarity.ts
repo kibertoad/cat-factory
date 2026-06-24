@@ -34,7 +34,7 @@ export const CLARITY_FIXTURES: SandboxFixtureDefinition[] = [
       exp('quantify', '"Slow" is not quantified — how slow, vs what baseline, and measured how?', {
         impact: 4,
         trickiness: 1,
-        matchHints: ['how slow', 'quantif', 'seconds', 'baseline', 'measure'],
+        matchHints: ['how slow', 'quantif', 'load time', 'response time', 'baseline', 'measured'],
       }),
       exp(
         'regression-window',

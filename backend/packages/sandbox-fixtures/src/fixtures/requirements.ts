@@ -30,6 +30,7 @@ export const REQUIREMENTS_FIXTURES: SandboxFixtureDefinition[] = [
         impact: 4,
         trickiness: 1,
         detail: 'A single on/off toggle is meaningless without knowing what it governs.',
+        matchHints: ['channel', 'email', 'push', 'in-app', 'sms'],
       }),
       exp(
         'default-state',
@@ -37,6 +38,7 @@ export const REQUIREMENTS_FIXTURES: SandboxFixtureDefinition[] = [
         {
           impact: 3,
           trickiness: 2,
+          matchHints: ['default state', 'default value', 'opt-in', 'opt in', 'opt-out', 'opt out'],
         },
       ),
       exp('granularity', 'Global on/off vs per-category preferences — the spec conflates them.', {

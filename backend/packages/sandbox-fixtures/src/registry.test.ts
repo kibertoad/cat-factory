@@ -48,6 +48,18 @@ describe('BUILTIN_SANDBOX_FIXTURES', () => {
     }
   })
 
+  it('gives every expectation explicit matchHints (summaries are full sentences)', () => {
+    // The deterministic scorer falls back to matching the `summary` as a contiguous token
+    // run when `matchHints` is empty. Our summaries are full questions/sentences, which a
+    // candidate never reproduces verbatim — so a hint-less expectation is unmatchable and
+    // is scored "missed" for every answer. Require hints so that can't happen by omission.
+    for (const f of BUILTIN_SANDBOX_FIXTURES) {
+      for (const e of f.expectations) {
+        expect(e.matchHints.length, `${f.id}/${e.id} needs matchHints`).toBeGreaterThan(0)
+      }
+    }
+  })
+
   it('every fixture projects to a valid contract SandboxFixture', () => {
     for (const f of BUILTIN_SANDBOX_FIXTURES) {
       const fixture = toSandboxFixture(f, 1_700_000_000_000)

@@ -175,7 +175,14 @@ export const CODE_REVIEW_FIXTURES: SandboxFixtureDefinition[] = [
         {
           impact: 3,
           trickiness: 3,
-          matchHints: ['string', 'parse', 'not a number', 'validate', 'integer', 'nan'],
+          matchHints: [
+            'positive integer',
+            'not a number',
+            'parsed to a number',
+            'coerce',
+            'cast to a number',
+            'nan',
+          ],
         },
       ),
     ],
