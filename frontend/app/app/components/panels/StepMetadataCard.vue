@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import type { AgentState, PipelineStep, CompanionVerdict } from '~/types/execution'
 import { subtaskIconClass } from '~/utils/pipelineRender'
-import StepMetricsBar from '~/components/observability/StepMetricsBar.vue'
+import StepModelActivity from '~/components/observability/StepModelActivity.vue'
 
 // The step's metadata card body: state/timing/model/run id, the container cold-boot
 // phase, the live subtask breakdown, the LLM observability rollup, the applied
@@ -20,7 +20,6 @@ const props = defineProps<{
   latestVerdict: CompanionVerdict | null
 }>()
 
-const ui = useUiStore()
 const models = useModelsStore()
 
 const STATE_META: Record<AgentState, { label: string; color: string }> = {
@@ -55,10 +54,6 @@ function formatClock(ms?: number | null): string | null {
 async function copyRunId() {
   const id = props.step.runId ?? props.instanceId
   if (id) await navigator.clipboard?.writeText(id)
-}
-
-function openObservability() {
-  if (props.instanceId) ui.openObservability(props.instanceId)
 }
 </script>
 
@@ -170,15 +165,12 @@ function openObservability() {
 
     <!-- LLM observability rollup (tokens, output-limit headroom,
          transport-vs-execution); click to open the full per-call panel -->
-    <div v-if="step.metrics && step.metrics.calls > 0" class="mt-4">
-      <div class="mb-1 flex items-center justify-between">
-        <span class="text-[11px] uppercase tracking-wide text-slate-500"> Model activity </span>
-        <button class="text-[11px] text-sky-400 hover:text-sky-300" @click="openObservability">
-          View all calls →
-        </button>
-      </div>
-      <StepMetricsBar :metrics="step.metrics" clickable @inspect="openObservability" />
-    </div>
+    <StepModelActivity
+      v-if="step.metrics && step.metrics.calls > 0"
+      class="mt-4"
+      :metrics="step.metrics"
+      :instance-id="instanceId"
+    />
 
     <!-- standards (prompt fragments) folded into this step -->
     <div v-if="step.selectedFragmentIds && step.selectedFragmentIds.length" class="mt-4">

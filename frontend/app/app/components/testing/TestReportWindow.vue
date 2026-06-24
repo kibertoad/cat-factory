@@ -12,6 +12,7 @@
 // `spec/features/*.feature` files would need a spec endpoint (a future enhancement).
 import type { TestConcern, TestOutcome, TestReport } from '~/types/domain'
 import StepRestartControl from '~/components/panels/StepRestartControl.vue'
+import StepRunMeta from '~/components/panels/StepRunMeta.vue'
 
 const board = useBoardStore()
 const execution = useExecutionStore()
@@ -21,9 +22,12 @@ const execution = useExecutionStore()
 const { open, blockId, instanceId, stepIndex, close } = useResultView('tester')
 const block = computed(() => (blockId.value ? board.getBlock(blockId.value) : undefined))
 
+const instance = computed(() =>
+  instanceId.value === null ? null : (execution.getInstance(instanceId.value) ?? null),
+)
 const step = computed(() => {
-  if (instanceId.value === null || stepIndex.value === null) return null
-  return execution.getInstance(instanceId.value)?.steps[stepIndex.value] ?? null
+  if (instance.value === null || stepIndex.value === null) return null
+  return instance.value.steps[stepIndex.value] ?? null
 })
 const report = computed<TestReport | null>(() => step.value?.test?.lastReport ?? null)
 const testState = computed(() => step.value?.test ?? null)
@@ -385,12 +389,17 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
               <p class="text-[12px] capitalize text-slate-300">{{ report.environment }}</p>
             </div>
 
-            <div v-if="step?.model">
-              <h4 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                Model
-              </h4>
-              <p class="break-all text-[12px] text-slate-300">{{ step.model }}</p>
-            </div>
+            <!-- Shared run metadata + embedded observability (model, run id, timing,
+                 model-activity rollup) — identical to the gate and agent step detail. -->
+            <StepRunMeta
+              v-if="step"
+              :step="step"
+              :instance-id="instanceId ?? undefined"
+              :step-number="stepIndex === null ? undefined : stepIndex + 1"
+              :total-steps="instance?.steps.length"
+              :run-failed="instance?.status === 'failed'"
+              :failure-at="instance?.failure?.occurredAt"
+            />
 
             <p class="mt-auto text-[10px] leading-relaxed text-slate-600">
               Scenarios are the areas the Tester chose to exercise (its spec acceptance scenarios).
