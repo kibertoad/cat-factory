@@ -10,16 +10,15 @@ import {
   type RequirementKind,
   type RequirementPriority,
   type SpecDoc,
-  type SpecVersion,
+  type SpecModule,
   BLUEPRINT_JSON_PATH,
   BLUEPRINT_MODULES_DIR,
   BLUEPRINT_OVERVIEW_PATH,
   BLUEPRINT_VERSION_PATH,
   SPEC_FEATURES_DIR,
-  SPEC_JSON_PATH,
+  SPEC_MODULES_DIR,
   SPEC_OVERVIEW_PATH,
-  SPEC_RULES_PATH,
-  SPEC_VERSION_PATH,
+  SPEC_SERVICE_PATH,
 } from '@cat-factory/contracts'
 
 // Deterministic rendering + lenient coercion of the in-repo `blueprints/` and
@@ -235,10 +234,11 @@ export function renderBlueprintFiles(service: BlueprintService): RenderedFile[] 
 // Spec (service → groups → requirements → acceptance, + domain rules)
 // ---------------------------------------------------------------------------
 
-const MAX_GROUPS = 40
+const MAX_SPEC_MODULES = 40
+const MAX_GROUPS_PER_MODULE = 40
 const MAX_REQUIREMENTS_PER_GROUP = 60
 const MAX_ACCEPTANCE = 20
-const MAX_RULES = 100
+const MAX_RULES_PER_GROUP = 100
 
 const PRIORITIES: readonly RequirementPriority[] = ['must', 'should', 'could']
 const KINDS: readonly RequirementKind[] = ['functional', 'nonfunctional', 'constraint']
@@ -314,6 +314,22 @@ function coerceRequirement(value: unknown, index: number): RequirementItem | nul
   }
 }
 
+// A fallback rule id is derived from the rule text (`rule-<slug>`), NOT its position,
+// so reordering a group's rules never changes their ids and the group file stays
+// byte-stable. A model-supplied id still wins.
+function coerceRule(value: unknown, index: number): DomainRule | null {
+  if (typeof value !== 'object' || value === null) return null
+  const o = value as Record<string, unknown>
+  const rule = asString(o.rule)
+  if (!rule) return null
+  return {
+    id: asString(o.id) ?? `rule-${slugify(rule.slice(0, 60), `${index + 1}`)}`,
+    rule,
+    rationale: asString(o.rationale) ?? '',
+    sourceBlockIds: coerceStringList(o.sourceBlockIds, 40),
+  }
+}
+
 function coerceGroup(value: unknown): RequirementGroup | null {
   if (typeof value !== 'object' || value === null) return null
   const o = value as Record<string, unknown>
@@ -323,20 +339,23 @@ function coerceGroup(value: unknown): RequirementGroup | null {
     .map((r, i) => coerceRequirement(r, i))
     .filter((r): r is RequirementItem => r !== null)
     .slice(0, MAX_REQUIREMENTS_PER_GROUP)
-  return { name, summary: asString(o.summary) ?? '', requirements }
+  const rules = (Array.isArray(o.rules) ? o.rules : [])
+    .map((r, i) => coerceRule(r, i))
+    .filter((r): r is DomainRule => r !== null)
+    .slice(0, MAX_RULES_PER_GROUP)
+  return { name, summary: asString(o.summary) ?? '', requirements, rules }
 }
 
-function coerceRule(value: unknown, index: number): DomainRule | null {
+function coerceSpecModule(value: unknown): SpecModule | null {
   if (typeof value !== 'object' || value === null) return null
   const o = value as Record<string, unknown>
-  const rule = asString(o.rule)
-  if (!rule) return null
-  return {
-    id: asString(o.id) ?? `rule-${index + 1}`,
-    rule,
-    rationale: asString(o.rationale) ?? '',
-    sourceBlockIds: coerceStringList(o.sourceBlockIds, 40),
-  }
+  const name = asString(o.name)
+  if (!name) return null
+  const groups = (Array.isArray(o.groups) ? o.groups : [])
+    .map(coerceGroup)
+    .filter((g): g is RequirementGroup => g !== null)
+    .slice(0, MAX_GROUPS_PER_MODULE)
+  return { name, summary: asString(o.summary) ?? '', groups }
 }
 
 /** Return `id` if unseen, else the first `id-2` / `id-3` … not already in `used`. */
@@ -360,20 +379,23 @@ function uniqueId(id: string, used: Set<string>): string {
  */
 export function dedupeSpecIds(doc: SpecDoc): void {
   const used = new Set<string>()
-  for (const g of doc.groups ?? []) {
-    for (const r of g.requirements ?? []) {
-      r.id = uniqueId(r.id, used)
-      for (const a of r.acceptance ?? []) a.id = uniqueId(a.id, used)
+  for (const m of doc.modules ?? []) {
+    for (const g of m.groups ?? []) {
+      for (const r of g.requirements ?? []) {
+        r.id = uniqueId(r.id, used)
+        for (const a of r.acceptance ?? []) a.id = uniqueId(a.id, used)
+      }
+      for (const rule of g.rules ?? []) rule.id = uniqueId(rule.id, used)
     }
   }
-  for (const rule of doc.rules ?? []) rule.id = uniqueId(rule.id, used)
 }
 
 /**
  * Coerce an agent's parsed JSON into a well-formed {@link SpecDoc}, dropping anything
  * malformed. Returns null when no usable service name remains. Tolerates either a bare
- * doc object or `{ requirements: {...} }`. The strict `parseSpecDoc` re-validates the
- * returned doc before use.
+ * doc object or `{ requirements: {...} }`, and wraps stray top-level `groups` into one
+ * module (a lenient safety net for a model that ignored the taxonomy — NOT a compat path
+ * for old on-disk specs). The strict `parseSpecDoc` re-validates the returned doc.
  */
 export function coerceSpecDoc(parsed: unknown, fallbackName: string): SpecDoc | null {
   if (typeof parsed !== 'object' || parsed === null) return null
@@ -386,131 +408,185 @@ export function coerceSpecDoc(parsed: unknown, fallbackName: string): SpecDoc | 
       : root
   const service = asString(obj.service) ?? asString(fallbackName)
   if (!service) return null
-  const groups = (Array.isArray(obj.groups) ? obj.groups : [])
-    .map(coerceGroup)
-    .filter((g): g is RequirementGroup => g !== null)
-    .slice(0, MAX_GROUPS)
-  const rules = (Array.isArray(obj.rules) ? obj.rules : [])
-    .map((r, i) => coerceRule(r, i))
-    .filter((r): r is DomainRule => r !== null)
-    .slice(0, MAX_RULES)
-  const doc: SpecDoc = { service, summary: asString(obj.summary) ?? '', groups, rules }
+  let rawModules: unknown[] = Array.isArray(obj.modules) ? obj.modules : []
+  if (rawModules.length === 0 && Array.isArray(obj.groups) && obj.groups.length > 0) {
+    rawModules = [{ name: service, summary: '', groups: obj.groups }]
+  }
+  const modules = rawModules
+    .map(coerceSpecModule)
+    .filter((m): m is SpecModule => m !== null)
+    .slice(0, MAX_SPEC_MODULES)
+  const doc: SpecDoc = { service, summary: asString(obj.summary) ?? '', modules }
   dedupeSpecIds(doc)
   return doc
 }
 
-/** The exact canonical JSON bytes written to `spec.json` (and hashed). */
-export function canonicalSpecJson(doc: SpecDoc): string {
-  return `${JSON.stringify(doc, null, 2)}\n`
-}
-
-/** A stable content hash of the spec doc, used for quick staleness checks. */
-export function hashSpec(doc: SpecDoc): Promise<string> {
-  return sha256Hex(canonicalSpecJson(doc))
-}
-
-function countRequirements(doc: SpecDoc): number {
-  return (doc.groups ?? []).reduce((n, g) => n + (g.requirements ?? []).length, 0)
-}
-
-/** Render the lightweight `version.json` manifest for `doc`. */
-export async function renderSpecVersionFile(
-  doc: SpecDoc,
-  meta: { version: number; generatedAt: string },
-): Promise<RenderedFile> {
-  const manifest: SpecVersion = {
-    version: meta.version,
-    generatedAt: meta.generatedAt,
-    hash: await hashSpec(doc),
-    requirements: countRequirements(doc),
-    rules: (doc.rules ?? []).length,
-  }
-  return { path: SPEC_VERSION_PATH, content: `${JSON.stringify(manifest, null, 2)}\n` }
+/** The exact canonical JSON bytes written to a per-group shard. */
+function canonicalJson(value: unknown): string {
+  return `${JSON.stringify(value, null, 2)}\n`
 }
 
 /**
- * Decide the version manifest for a freshly generated doc: when the content is
- * byte-identical to the previous generation the version + timestamp are kept (so an
- * unchanged doc produces no diff and no commit); otherwise the counter is bumped and
- * the timestamp refreshed. Mirrors {@link nextBlueprintVersion}.
+ * Assign each item a stable, collision-free slug. Items are processed name-sorted so the
+ * collision suffixes (`-2`, …) are deterministic regardless of the order the agent
+ * emitted them — the same set of names always yields the same slugs.
  */
-export async function nextSpecVersion(
-  doc: SpecDoc,
-  previous: SpecVersion | null,
-  now: Date,
-): Promise<{ version: number; generatedAt: string }> {
-  if (previous && previous.hash === (await hashSpec(doc))) {
-    return { version: previous.version, generatedAt: previous.generatedAt }
+function assignSlugs<T>(items: T[], nameOf: (t: T) => string): Map<T, string> {
+  const used = new Set<string>()
+  const out = new Map<T, string>()
+  const sorted = [...items].sort((a, b) => nameOf(a).localeCompare(nameOf(b)))
+  for (const item of sorted) {
+    const base = slugify(nameOf(item), 'item')
+    let slug = base
+    let n = 2
+    while (used.has(slug)) slug = `${base}-${n++}`
+    used.add(slug)
+    out.set(item, slug)
   }
-  return { version: (previous?.version ?? 0) + 1, generatedAt: now.toISOString() }
+  return out
+}
+
+interface SpecGroupRef {
+  module: SpecModule
+  group: RequirementGroup
+  moduleSlug: string
+  groupSlug: string
+}
+
+/** Walk the doc into a flat, name-sorted list of groups with their resolved slugs. */
+function walkSpecGroups(doc: SpecDoc): SpecGroupRef[] {
+  const out: SpecGroupRef[] = []
+  const modulesList = doc.modules ?? []
+  const moduleSlugs = assignSlugs(modulesList, (m) => m.name)
+  const modules = [...modulesList].sort((a, b) => a.name.localeCompare(b.name))
+  for (const module of modules) {
+    const groupsList = module.groups ?? []
+    const groupSlugs = assignSlugs(groupsList, (g) => g.name)
+    const groups = [...groupsList].sort((a, b) => a.name.localeCompare(b.name))
+    for (const group of groups) {
+      out.push({
+        module,
+        group,
+        moduleSlug: moduleSlugs.get(module)!,
+        groupSlug: groupSlugs.get(group)!,
+      })
+    }
+  }
+  return out
+}
+
+/** The human-readable render of one feature group (its requirements + scoped rules). */
+function renderSpecGroupMarkdown(module: SpecModule, group: RequirementGroup): string {
+  const lines: string[] = [`# ${module.name} — ${group.name}`, '']
+  if (group.summary) lines.push(group.summary, '')
+  const requirements = group.requirements ?? []
+  if (requirements.length === 0) {
+    lines.push('_No requirements captured yet._', '')
+  } else {
+    lines.push('## Requirements', '')
+    for (const r of requirements) {
+      lines.push(`- **${r.title}** _(${r.priority}, ${r.kind})_ — ${r.statement}`)
+      for (const a of r.acceptance ?? []) {
+        lines.push(`  - _Given_ ${a.given} _When_ ${a.when} _Then_ ${a.outcome}`)
+      }
+    }
+    lines.push('')
+  }
+  const rules = group.rules ?? []
+  if (rules.length > 0) {
+    lines.push('## Domain rules', '')
+    for (const r of rules) {
+      lines.push(`- **${r.rule}**`)
+      if (r.rationale) lines.push(`  - _Why:_ ${r.rationale}`)
+    }
+    lines.push('')
+  }
+  return `${lines.join('\n').trimEnd()}\n`
 }
 
 /**
- * Deterministically render a spec doc into the in-repo artifact files: the canonical
- * `spec.json`, a high-level `overview.md` (intent + every group's requirements), and a
- * `rules.md` of the cross-cutting domain rules. Pure: same doc → same bytes.
+ * Deterministically SHARD a spec doc into the in-repo artifact files: a tiny
+ * `service.json`, an `overview.md` index (modules → features with links), a
+ * `_module.json` per module, and per feature group a canonical
+ * `modules/<module>/<group>.json` + a human `<group>.md`. Pure: same doc → same bytes,
+ * and a group file's bytes depend only on that group. Mirrors the executor-harness
+ * renderer byte-for-byte.
  */
 export function renderSpecFiles(doc: SpecDoc): RenderedFile[] {
   const files: RenderedFile[] = []
-  const groups = doc.groups ?? []
-  const domainRules = doc.rules ?? []
 
-  files.push({ path: SPEC_JSON_PATH, content: canonicalSpecJson(doc) })
+  files.push({
+    path: SPEC_SERVICE_PATH,
+    content: canonicalJson({ service: doc.service, summary: doc.summary ?? '' }),
+  })
 
-  const overview: string[] = [`# ${doc.service} — Requirements`, '']
-  overview.push('> Generated, prescriptive requirements for this service (what MUST be')
-  overview.push('> true). Read this first. `rules.md` lists cross-cutting invariants;')
-  overview.push('> `features/*.feature` are the acceptance scenarios your work must satisfy.')
+  const refs = walkSpecGroups(doc)
+  const modulesList = doc.modules ?? []
+  const moduleSlugs = assignSlugs(modulesList, (m) => m.name)
+  const modules = [...modulesList].sort((a, b) => a.name.localeCompare(b.name))
+
+  const overview: string[] = [`# ${doc.service} — Specification`, '']
+  overview.push('> Prescriptive spec for this service (what MUST be true). This index lists the')
+  overview.push('> modules and their features; open `modules/<module>/<feature>.md` for detail')
+  overview.push('> and `features/<module>/*.feature` for the acceptance scenarios to satisfy.')
   overview.push('')
   if (doc.summary) overview.push(doc.summary, '')
-  if (groups.length === 0) {
+  if (modules.length === 0) {
     overview.push('_No requirements captured yet._')
   } else {
-    for (const g of groups) {
-      overview.push(`## ${g.name}`)
-      if (g.summary) overview.push('', g.summary)
+    for (const module of modules) {
+      const mSlug = moduleSlugs.get(module)!
+      overview.push(`## ${module.name}`)
+      if (module.summary) overview.push('', module.summary)
       overview.push('')
-      for (const r of g.requirements ?? []) {
-        overview.push(`- **${r.title}** _(${r.priority}, ${r.kind})_ — ${r.statement}`)
-        for (const a of r.acceptance ?? []) {
-          overview.push(`  - _Given_ ${a.given} _When_ ${a.when} _Then_ ${a.outcome}`)
-        }
+      const groupRefs = refs.filter((r) => r.module === module)
+      if (groupRefs.length === 0) {
+        overview.push('_No features captured yet._', '')
+        continue
+      }
+      for (const { group, groupSlug } of groupRefs) {
+        const detail = group.summary ? ` — ${group.summary}` : ''
+        overview.push(`- [${group.name}](modules/${mSlug}/${groupSlug}.md)${detail}`)
       }
       overview.push('')
     }
   }
   files.push({ path: SPEC_OVERVIEW_PATH, content: `${overview.join('\n').trimEnd()}\n` })
 
-  const rules: string[] = [`# ${doc.service} — Domain rules`, '']
-  rules.push('> Cross-cutting invariants and constraints this service must never violate.')
-  rules.push('')
-  if (domainRules.length === 0) {
-    rules.push('_No domain rules captured yet._')
-  } else {
-    for (const r of domainRules) {
-      rules.push(`- **${r.rule}**`)
-      if (r.rationale) rules.push(`  - _Why:_ ${r.rationale}`)
-    }
+  for (const module of modules) {
+    const mSlug = moduleSlugs.get(module)!
+    files.push({
+      path: `${SPEC_MODULES_DIR}/${mSlug}/_module.json`,
+      content: canonicalJson({ name: module.name, summary: module.summary ?? '' }),
+    })
   }
-  files.push({ path: SPEC_RULES_PATH, content: `${rules.join('\n').trimEnd()}\n` })
+
+  for (const { module, group, moduleSlug, groupSlug } of refs) {
+    files.push({
+      path: `${SPEC_MODULES_DIR}/${moduleSlug}/${groupSlug}.json`,
+      content: canonicalJson(group),
+    })
+    files.push({
+      path: `${SPEC_MODULES_DIR}/${moduleSlug}/${groupSlug}.md`,
+      content: renderSpecGroupMarkdown(module, group),
+    })
+  }
 
   return files
 }
 
 /**
- * Pass-1 (mechanical) Gherkin render: one `.feature` file per requirement group, one
- * `Scenario` per acceptance criterion. Deterministic (same doc → same bytes), so the
- * feature files can never silently drift from `spec.json`; a `must` requirement's
- * scenarios are tagged `@must`. The `acceptance` agent later polishes these (pass 2).
- * Groups with no acceptance criteria produce no feature file. The caller seeds these
- * once (writes only when absent) so pass-2 polish survives a re-run.
+ * Pass-1 (mechanical) Gherkin render: one `features/<module>/<group>.feature` per
+ * feature group, one `Scenario` per acceptance criterion. Deterministic; a `must`
+ * requirement's scenarios are tagged `@must`. The `acceptance` agent later polishes
+ * these (pass 2). Groups with no acceptance criteria produce no feature file. The caller
+ * seeds these once (writes only when absent) so pass-2 polish survives a re-run.
  */
 export function renderSpecFeatureFiles(doc: SpecDoc): RenderedFile[] {
   const files: RenderedFile[] = []
-  const used = new Set<string>()
-  for (const g of doc.groups ?? []) {
+  for (const { module, group, moduleSlug, groupSlug } of walkSpecGroups(doc)) {
     const scenarios: string[] = []
-    for (const r of g.requirements ?? []) {
+    for (const r of group.requirements ?? []) {
       const acceptance = r.acceptance ?? []
       for (let i = 0; i < acceptance.length; i++) {
         const a = acceptance[i]!
@@ -524,16 +600,12 @@ export function renderSpecFeatureFiles(doc: SpecDoc): RenderedFile[] {
       }
     }
     if (scenarios.length === 0) continue
-    let slug = slugify(g.name, 'feature')
-    let n = 2
-    while (used.has(slug)) slug = `${slugify(g.name, 'feature')}-${n++}`
-    used.add(slug)
-    const lines: string[] = [`Feature: ${g.name}`]
-    if (g.summary) lines.push(`  ${g.summary}`)
+    const lines: string[] = [`Feature: ${module.name} — ${group.name}`]
+    if (group.summary) lines.push(`  ${group.summary}`)
     lines.push('')
     lines.push(...scenarios)
     files.push({
-      path: `${SPEC_FEATURES_DIR}/${slug}.feature`,
+      path: `${SPEC_FEATURES_DIR}/${moduleSlug}/${groupSlug}.feature`,
       content: `${lines.join('\n').trimEnd()}\n`,
     })
   }

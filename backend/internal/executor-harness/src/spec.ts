@@ -1,6 +1,5 @@
-import { createHash } from 'node:crypto'
-import { access, mkdir, readFile, writeFile } from 'node:fs/promises'
-import { dirname, join } from 'node:path'
+import { access, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises'
+import { dirname, join, sep } from 'node:path'
 import type { SpecJob, SpecResult, SpecTaskContext } from './job.js'
 import {
   cloneExistingBranch,
@@ -29,23 +28,26 @@ import { log } from './logger.js'
 
 /** Compact description of the requirements-document shape, fed to the JSON repair call. */
 const SPEC_SHAPE_HINT =
-  'Expected a requirements document: {"service": string, "summary": string, ' +
-  '"groups": [{"name": string, "summary": string, "requirements": [{"id": string, ' +
-  '"title": string, "statement": string, "kind": string, "priority": string, ' +
-  '"sourceBlockIds": string[], "acceptance": [{"given": string, "when": string, ' +
-  '"outcome": string}]}]}], "rules": [{"id": string, "rule": string, "rationale": ' +
-  'string, "sourceBlockIds": string[]}]}.'
+  'Expected a requirements document with a two-level taxonomy — module (domain) → ' +
+  'group (feature) — where each group carries BOTH its requirements and the domain ' +
+  'rules scoped to it: {"service": string, "summary": string, "modules": [{"name": ' +
+  'string, "summary": string, "groups": [{"name": string, "summary": string, ' +
+  '"requirements": [{"id": string, "title": string, "statement": string, "kind": ' +
+  'string, "priority": string, "sourceBlockIds": string[], "acceptance": [{"given": ' +
+  'string, "when": string, "outcome": string}]}], "rules": [{"id": string, "rule": ' +
+  'string, "rationale": string, "sourceBlockIds": string[]}]}]}]}.'
 
 // Runs one "spec" job end to end. The spec-writer agent gets the implementation
 // branch (created from base when it does not exist yet — this step runs BEFORE the
 // coder, seeding the branch the coder then resumes), reads any existing spec, and
 // (re)generates the unified PRESCRIPTIVE specification document for the service from
-// the combined task context. The harness
-// deterministically renders that document into the in-repo `spec/` folder
-// (a machine-readable `spec.json`, the `overview.md` / `rules.md` markdown,
-// a `version.json` manifest and the Gherkin `features/*.feature` files), then
-// commits the result onto the branch. The document is also returned to the Worker
-// so it can persist + surface it.
+// the combined task context. The harness deterministically SHARDS that document into
+// the in-repo `spec/` folder — a tiny `service.json`, an `overview.md` index, and one
+// canonical `modules/<module>/<group>.json` (+ `<group>.md`) per feature group, plus
+// the Gherkin `features/<module>/<group>.feature` files — then commits the result onto
+// the branch. Sharding is the whole point: a single monolithic `spec.json` made every
+// concurrent task branch conflict on a whole-file rewrite. The document is also
+// returned to the Worker so it can persist + surface it.
 //
 // Mirrors handleBlueprint's secret handling and watchdog wiring: the per-job
 // GitHub + proxy tokens arrive in the request body and live only for the job's
@@ -53,22 +55,20 @@ const SPEC_SHAPE_HINT =
 // progress callback.
 
 // The folder + file layout, kept in lockstep with @cat-factory/contracts
-// (SPEC_DIR / SPEC_JSON_PATH / …). Duplicated here because the harness image is
-// deliberately self-contained (no @cat-factory/contracts dep).
+// (SPEC_DIR / SPEC_SERVICE_PATH / SPEC_MODULES_DIR / …). Duplicated here because the
+// harness image is deliberately self-contained (no @cat-factory/contracts dep).
 const SPEC_DIR = 'spec'
-const SPEC_JSON_PATH = `${SPEC_DIR}/spec.json`
+const SPEC_SERVICE_PATH = `${SPEC_DIR}/service.json`
 const SPEC_OVERVIEW_PATH = `${SPEC_DIR}/overview.md`
-const SPEC_RULES_PATH = `${SPEC_DIR}/rules.md`
-const SPEC_VERSION_PATH = `${SPEC_DIR}/version.json`
+const SPEC_MODULES_DIR = `${SPEC_DIR}/modules`
 const SPEC_FEATURES_DIR = `${SPEC_DIR}/features`
-// Legacy folder name the spec lived under before the rename; relocated on first run.
-const LEGACY_SPEC_DIR = 'requirements'
 
 // Coercion limits so a committed doc can never balloon past what the schema accepts.
-const MAX_GROUPS = 40
+const MAX_MODULES = 40
+const MAX_GROUPS_PER_MODULE = 40
 const MAX_REQUIREMENTS_PER_GROUP = 60
 const MAX_ACCEPTANCE = 20
-const MAX_RULES = 100
+const MAX_RULES_PER_GROUP = 100
 
 const PRIORITIES = ['must', 'should', 'could'] as const
 const KINDS = ['functional', 'nonfunctional', 'constraint'] as const
@@ -89,22 +89,27 @@ export interface RequirementItemTree {
   sourceBlockIds: string[]
   acceptance: AcceptanceCriterionTree[]
 }
-export interface RequirementGroupTree {
-  name: string
-  summary: string
-  requirements: RequirementItemTree[]
-}
 export interface DomainRuleTree {
   id: string
   rule: string
   rationale: string
   sourceBlockIds: string[]
 }
+export interface RequirementGroupTree {
+  name: string
+  summary: string
+  requirements: RequirementItemTree[]
+  rules: DomainRuleTree[]
+}
+export interface SpecModuleTree {
+  name: string
+  summary: string
+  groups: RequirementGroupTree[]
+}
 export interface SpecDocTree {
   service: string
   summary: string
-  groups: RequirementGroupTree[]
-  rules: DomainRuleTree[]
+  modules: SpecModuleTree[]
 }
 
 function asString(value: unknown): string | undefined {
@@ -189,6 +194,22 @@ function coerceRequirement(value: unknown, index: number): RequirementItemTree |
   }
 }
 
+// A fallback rule id is derived from the rule text (`rule-<slug>`), NOT its position,
+// so reordering a group's rules never changes their ids and the group file stays
+// byte-stable. A model-supplied id still wins.
+function coerceRule(value: unknown, index: number): DomainRuleTree | null {
+  if (typeof value !== 'object' || value === null) return null
+  const o = value as Record<string, unknown>
+  const rule = asString(o.rule)
+  if (!rule) return null
+  return {
+    id: asString(o.id) ?? `rule-${slugify(rule.slice(0, 60), `${index + 1}`)}`,
+    rule,
+    rationale: asString(o.rationale) ?? '',
+    sourceBlockIds: coerceStringList(o.sourceBlockIds, 40),
+  }
+}
+
 function coerceGroup(value: unknown): RequirementGroupTree | null {
   if (typeof value !== 'object' || value === null) return null
   const o = value as Record<string, unknown>
@@ -198,20 +219,23 @@ function coerceGroup(value: unknown): RequirementGroupTree | null {
     .map((r, i) => coerceRequirement(r, i))
     .filter((r): r is RequirementItemTree => r !== null)
     .slice(0, MAX_REQUIREMENTS_PER_GROUP)
-  return { name, summary: asString(o.summary) ?? '', requirements }
+  const rules = (Array.isArray(o.rules) ? o.rules : [])
+    .map((r, i) => coerceRule(r, i))
+    .filter((r): r is DomainRuleTree => r !== null)
+    .slice(0, MAX_RULES_PER_GROUP)
+  return { name, summary: asString(o.summary) ?? '', requirements, rules }
 }
 
-function coerceRule(value: unknown, index: number): DomainRuleTree | null {
+function coerceModule(value: unknown): SpecModuleTree | null {
   if (typeof value !== 'object' || value === null) return null
   const o = value as Record<string, unknown>
-  const rule = asString(o.rule)
-  if (!rule) return null
-  return {
-    id: asString(o.id) ?? `rule-${index + 1}`,
-    rule,
-    rationale: asString(o.rationale) ?? '',
-    sourceBlockIds: coerceStringList(o.sourceBlockIds, 40),
-  }
+  const name = asString(o.name)
+  if (!name) return null
+  const groups = (Array.isArray(o.groups) ? o.groups : [])
+    .map(coerceGroup)
+    .filter((g): g is RequirementGroupTree => g !== null)
+    .slice(0, MAX_GROUPS_PER_MODULE)
+  return { name, summary: asString(o.summary) ?? '', groups }
 }
 
 /** Return `id` if unseen, else the first `id-2` / `id-3` … not already in `used`. */
@@ -236,13 +260,15 @@ function uniqueId(id: string, used: Set<string>): string {
  */
 function dedupeIds(doc: SpecDocTree): void {
   const used = new Set<string>()
-  for (const g of doc.groups) {
-    for (const r of g.requirements) {
-      r.id = uniqueId(r.id, used)
-      for (const a of r.acceptance) a.id = uniqueId(a.id, used)
+  for (const m of doc.modules) {
+    for (const g of m.groups) {
+      for (const r of g.requirements) {
+        r.id = uniqueId(r.id, used)
+        for (const a of r.acceptance) a.id = uniqueId(a.id, used)
+      }
+      for (const rule of g.rules) rule.id = uniqueId(rule.id, used)
     }
   }
-  for (const rule of doc.rules) rule.id = uniqueId(rule.id, used)
 }
 
 /**
@@ -262,15 +288,19 @@ export function coerceSpecDoc(parsed: unknown, fallbackName: string): SpecDocTre
       : root
   const service = asString(obj.service) ?? asString(fallbackName)
   if (!service) return null
-  const groups = (Array.isArray(obj.groups) ? obj.groups : [])
-    .map(coerceGroup)
-    .filter((g): g is RequirementGroupTree => g !== null)
-    .slice(0, MAX_GROUPS)
-  const rules = (Array.isArray(obj.rules) ? obj.rules : [])
-    .map((r, i) => coerceRule(r, i))
-    .filter((r): r is DomainRuleTree => r !== null)
-    .slice(0, MAX_RULES)
-  const doc = { service, summary: asString(obj.summary) ?? '', groups, rules }
+  let rawModules: unknown[] = Array.isArray(obj.modules) ? obj.modules : []
+  // Lenient safety net: a model that ignored the taxonomy and returned flat top-level
+  // `groups` is wrapped into one module named after the service so its work is not
+  // dropped. The strict Valibot schema (modules-only) and the steering prompt make this
+  // rare; it is NOT a compat path for old on-disk specs.
+  if (rawModules.length === 0 && Array.isArray(obj.groups) && obj.groups.length > 0) {
+    rawModules = [{ name: service, summary: '', groups: obj.groups }]
+  }
+  const modules = rawModules
+    .map(coerceModule)
+    .filter((m): m is SpecModuleTree => m !== null)
+    .slice(0, MAX_MODULES)
+  const doc = { service, summary: asString(obj.summary) ?? '', modules }
   dedupeIds(doc)
   return doc
 }
@@ -281,163 +311,168 @@ export interface RenderedFile {
   content: string
 }
 
-/** The exact canonical JSON bytes written to `spec.json` (and hashed). */
-export function canonicalSpecJson(doc: SpecDocTree): string {
-  return `${JSON.stringify(doc, null, 2)}\n`
-}
-
-/** A stable content hash of the requirements doc, used for quick staleness checks. */
-export function hashSpec(doc: SpecDocTree): string {
-  return createHash('sha256').update(canonicalSpecJson(doc)).digest('hex')
-}
-
-/** Total requirement count across all groups. */
-function countRequirements(doc: SpecDocTree): number {
-  return doc.groups.reduce((n, g) => n + g.requirements.length, 0)
-}
-
-export interface SpecVersionTree {
-  version: number
-  generatedAt: string
-  hash: string
-  requirements: number
-  rules: number
-}
-
-/** Read the prior version manifest, if any (to bump the counter / detect no-ops). */
-async function readExistingVersion(dir: string): Promise<SpecVersionTree | null> {
-  try {
-    const raw = await readFile(join(dir, SPEC_VERSION_PATH), 'utf8')
-    const parsed = JSON.parse(raw) as Partial<SpecVersionTree>
-    if (typeof parsed.version !== 'number' || typeof parsed.hash !== 'string') return null
-    return {
-      version: parsed.version,
-      generatedAt: typeof parsed.generatedAt === 'string' ? parsed.generatedAt : '',
-      hash: parsed.hash,
-      requirements: typeof parsed.requirements === 'number' ? parsed.requirements : 0,
-      rules: typeof parsed.rules === 'number' ? parsed.rules : 0,
-    }
-  } catch {
-    return null
-  }
-}
-
-/** Read + parse the existing requirements doc, if any (so the agent refines in place). */
-async function readExistingSpec(dir: string, fallbackName: string): Promise<SpecDocTree | null> {
-  try {
-    const raw = await readFile(join(dir, SPEC_JSON_PATH), 'utf8')
-    return coerceSpecDoc(JSON.parse(raw), fallbackName)
-  } catch {
-    // Back-compat: before the rename the spec lived under `requirements/`. If the new
-    // `spec/` file is absent, fall back to the legacy file so an existing repo migrates
-    // cleanly (the regenerated files are written under `spec/`).
-    try {
-      const legacy = await readFile(join(dir, LEGACY_SPEC_DIR, 'requirements.json'), 'utf8')
-      return coerceSpecDoc(JSON.parse(legacy), fallbackName)
-    } catch {
-      return null
-    }
-  }
+/** The exact canonical JSON bytes written to a per-group shard. */
+function canonicalJson(value: unknown): string {
+  return `${JSON.stringify(value, null, 2)}\n`
 }
 
 /**
- * Decide the version manifest for a freshly generated doc: when the content is
- * byte-identical to the previous generation, the version + timestamp are kept (so
- * an unchanged doc produces no diff and no commit); otherwise the counter is bumped
- * and the timestamp refreshed. Mirrors the blueprint's `nextVersion`.
+ * Assign each item a stable, collision-free, filesystem-safe slug. Items are processed
+ * name-sorted so collision suffixes (`-2`, `-3`, …) are deterministic regardless of the
+ * order the agent emitted them — the same set of names always yields the same slugs.
  */
-export function nextSpecVersion(
-  doc: SpecDocTree,
-  previous: SpecVersionTree | null,
-  now: Date,
-): { version: number; generatedAt: string } {
-  if (previous && previous.hash === hashSpec(doc)) {
-    return { version: previous.version, generatedAt: previous.generatedAt }
+function assignSlugs<T>(items: T[], nameOf: (t: T) => string): Map<T, string> {
+  const used = new Set<string>()
+  const out = new Map<T, string>()
+  const sorted = [...items].sort((a, b) => nameOf(a).localeCompare(nameOf(b)))
+  for (const item of sorted) {
+    const base = slugify(nameOf(item), 'item')
+    let slug = base
+    let n = 2
+    while (used.has(slug)) slug = `${base}-${n++}`
+    used.add(slug)
+    out.set(item, slug)
   }
-  return { version: (previous?.version ?? 0) + 1, generatedAt: now.toISOString() }
+  return out
 }
 
-/** Render the lightweight `version.json` manifest for `doc`. */
-export function renderVersionFile(
-  doc: SpecDocTree,
-  meta: { version: number; generatedAt: string },
-): RenderedFile {
-  const manifest: SpecVersionTree = {
-    version: meta.version,
-    generatedAt: meta.generatedAt,
-    hash: hashSpec(doc),
-    requirements: countRequirements(doc),
-    rules: doc.rules.length,
+interface GroupRef {
+  module: SpecModuleTree
+  group: RequirementGroupTree
+  moduleSlug: string
+  groupSlug: string
+}
+
+/** Walk the doc into a flat, name-sorted list of groups with their resolved slugs. */
+function walkGroups(doc: SpecDocTree): GroupRef[] {
+  const out: GroupRef[] = []
+  const moduleSlugs = assignSlugs(doc.modules, (m) => m.name)
+  const modules = [...doc.modules].sort((a, b) => a.name.localeCompare(b.name))
+  for (const module of modules) {
+    const groupSlugs = assignSlugs(module.groups, (g) => g.name)
+    const groups = [...module.groups].sort((a, b) => a.name.localeCompare(b.name))
+    for (const group of groups) {
+      out.push({
+        module,
+        group,
+        moduleSlug: moduleSlugs.get(module)!,
+        groupSlug: groupSlugs.get(group)!,
+      })
+    }
   }
-  return { path: SPEC_VERSION_PATH, content: `${JSON.stringify(manifest, null, 2)}\n` }
+  return out
+}
+
+/** The human-readable render of one feature group (its requirements + scoped rules). */
+function renderGroupMarkdown(module: SpecModuleTree, group: RequirementGroupTree): string {
+  const lines: string[] = [`# ${module.name} — ${group.name}`, '']
+  if (group.summary) lines.push(group.summary, '')
+  if (group.requirements.length === 0) {
+    lines.push('_No requirements captured yet._', '')
+  } else {
+    lines.push('## Requirements', '')
+    for (const r of group.requirements) {
+      lines.push(`- **${r.title}** _(${r.priority}, ${r.kind})_ — ${r.statement}`)
+      for (const a of r.acceptance) {
+        lines.push(`  - _Given_ ${a.given} _When_ ${a.when} _Then_ ${a.outcome}`)
+      }
+    }
+    lines.push('')
+  }
+  if (group.rules.length > 0) {
+    lines.push('## Domain rules', '')
+    for (const r of group.rules) {
+      lines.push(`- **${r.rule}**`)
+      if (r.rationale) lines.push(`  - _Why:_ ${r.rationale}`)
+    }
+    lines.push('')
+  }
+  return `${lines.join('\n').trimEnd()}\n`
 }
 
 /**
- * Deterministically render a requirements doc into the in-repo artifact files: the
- * canonical `spec.json`, a high-level `overview.md` (intent + every group's
- * requirements — what agents read first), and a `rules.md` of the cross-cutting
- * domain rules. Pure: same doc → same bytes.
+ * Deterministically SHARD a spec doc into the in-repo artifact files: a tiny
+ * `service.json`, an `overview.md` index (modules → features with links), and per
+ * feature group a canonical `modules/<module>/<group>.json` + a human `<group>.md`
+ * (plus a `_module.json` per module). Pure: same doc → same bytes, and a group file's
+ * bytes depend only on that group — so two task branches editing different features
+ * never touch the same file.
  */
 export function renderSpecFiles(doc: SpecDocTree): RenderedFile[] {
   const files: RenderedFile[] = []
 
-  files.push({ path: SPEC_JSON_PATH, content: canonicalSpecJson(doc) })
+  files.push({
+    path: SPEC_SERVICE_PATH,
+    content: canonicalJson({ service: doc.service, summary: doc.summary }),
+  })
 
-  // overview.md — the default read.
-  const overview: string[] = [`# ${doc.service} — Requirements`, '']
-  overview.push('> Generated, prescriptive requirements for this service (what MUST be')
-  overview.push('> true). Read this first. `rules.md` lists cross-cutting invariants;')
-  overview.push('> `features/*.feature` are the acceptance scenarios your work must satisfy.')
+  const refs = walkGroups(doc)
+  const moduleSlugs = assignSlugs(doc.modules, (m) => m.name)
+  const modules = [...doc.modules].sort((a, b) => a.name.localeCompare(b.name))
+
+  // overview.md — the index agents read first (names + links only, never the bodies).
+  const overview: string[] = [`# ${doc.service} — Specification`, '']
+  overview.push('> Prescriptive spec for this service (what MUST be true). This index lists the')
+  overview.push('> modules and their features; open `modules/<module>/<feature>.md` for detail')
+  overview.push('> and `features/<module>/*.feature` for the acceptance scenarios to satisfy.')
   overview.push('')
   if (doc.summary) overview.push(doc.summary, '')
-  if (doc.groups.length === 0) {
+  if (modules.length === 0) {
     overview.push('_No requirements captured yet._')
   } else {
-    for (const g of doc.groups) {
-      overview.push(`## ${g.name}`)
-      if (g.summary) overview.push('', g.summary)
+    for (const module of modules) {
+      const mSlug = moduleSlugs.get(module)!
+      overview.push(`## ${module.name}`)
+      if (module.summary) overview.push('', module.summary)
       overview.push('')
-      for (const r of g.requirements) {
-        overview.push(`- **${r.title}** _(${r.priority}, ${r.kind})_ — ${r.statement}`)
-        for (const a of r.acceptance) {
-          overview.push(`  - _Given_ ${a.given} _When_ ${a.when} _Then_ ${a.outcome}`)
-        }
+      const groupRefs = refs.filter((r) => r.module === module)
+      if (groupRefs.length === 0) {
+        overview.push('_No features captured yet._', '')
+        continue
+      }
+      for (const { group, groupSlug } of groupRefs) {
+        const detail = group.summary ? ` — ${group.summary}` : ''
+        overview.push(`- [${group.name}](modules/${mSlug}/${groupSlug}.md)${detail}`)
       }
       overview.push('')
     }
   }
   files.push({ path: SPEC_OVERVIEW_PATH, content: `${overview.join('\n').trimEnd()}\n` })
 
-  // rules.md — domain rules / invariants / constraints.
-  const rules: string[] = [`# ${doc.service} — Domain rules`, '']
-  rules.push('> Cross-cutting invariants and constraints this service must never violate.')
-  rules.push('')
-  if (doc.rules.length === 0) {
-    rules.push('_No domain rules captured yet._')
-  } else {
-    for (const r of doc.rules) {
-      rules.push(`- **${r.rule}**`)
-      if (r.rationale) rules.push(`  - _Why:_ ${r.rationale}`)
-    }
+  for (const module of modules) {
+    const mSlug = moduleSlugs.get(module)!
+    files.push({
+      path: `${SPEC_MODULES_DIR}/${mSlug}/_module.json`,
+      content: canonicalJson({ name: module.name, summary: module.summary }),
+    })
   }
-  files.push({ path: SPEC_RULES_PATH, content: `${rules.join('\n').trimEnd()}\n` })
+
+  for (const { module, group, moduleSlug, groupSlug } of refs) {
+    files.push({
+      path: `${SPEC_MODULES_DIR}/${moduleSlug}/${groupSlug}.json`,
+      content: canonicalJson(group),
+    })
+    files.push({
+      path: `${SPEC_MODULES_DIR}/${moduleSlug}/${groupSlug}.md`,
+      content: renderGroupMarkdown(module, group),
+    })
+  }
 
   return files
 }
 
 /**
- * Pass-1 (mechanical) Gherkin render: one `.feature` file per requirement group,
- * one `Scenario` per acceptance criterion. Deterministic (same doc → same bytes),
- * so the feature files can never silently drift from `spec.json`; a `must`
- * requirement's scenarios are tagged `@must`. The `acceptance` agent later polishes
- * these (pass 2). Groups with no acceptance criteria produce no feature file.
+ * Pass-1 (mechanical) Gherkin render: one `features/<module>/<group>.feature` file per
+ * feature group, one `Scenario` per acceptance criterion. Deterministic (same doc →
+ * same bytes); a `must` requirement's scenarios are tagged `@must`. The `acceptance`
+ * agent later polishes these (pass 2). Groups with no acceptance criteria produce no
+ * feature file.
  */
 export function renderFeatureFiles(doc: SpecDocTree): RenderedFile[] {
   const files: RenderedFile[] = []
-  const used = new Set<string>()
-  for (const g of doc.groups) {
+  for (const { module, group, moduleSlug, groupSlug } of walkGroups(doc)) {
     const scenarios: string[] = []
-    for (const r of g.requirements) {
+    for (const r of group.requirements) {
       for (let i = 0; i < r.acceptance.length; i++) {
         const a = r.acceptance[i]!
         const name = r.acceptance.length > 1 ? `${r.title} (#${i + 1})` : r.title
@@ -450,21 +485,81 @@ export function renderFeatureFiles(doc: SpecDocTree): RenderedFile[] {
       }
     }
     if (scenarios.length === 0) continue
-    // Stable, collision-free file name per group.
-    let slug = slugify(g.name, 'feature')
-    let n = 2
-    while (used.has(slug)) slug = `${slugify(g.name, 'feature')}-${n++}`
-    used.add(slug)
-    const lines: string[] = [`Feature: ${g.name}`]
-    if (g.summary) lines.push(`  ${g.summary}`)
+    const lines: string[] = [`Feature: ${module.name} — ${group.name}`]
+    if (group.summary) lines.push(`  ${group.summary}`)
     lines.push('')
     lines.push(...scenarios)
     files.push({
-      path: `${SPEC_FEATURES_DIR}/${slug}.feature`,
+      path: `${SPEC_FEATURES_DIR}/${moduleSlug}/${groupSlug}.feature`,
       content: `${lines.join('\n').trimEnd()}\n`,
     })
   }
   return files
+}
+
+/**
+ * Reassemble the existing sharded spec from disk (so the agent refines in place). Reads
+ * `service.json` for the service name/summary and every `modules/<m>/<g>.json` shard
+ * (skipping `_module.json`), grouping them back into the module → group tree, then runs
+ * the lenient coercion to normalise. Returns null when no shards are present (fresh repo).
+ */
+export async function readExistingSpec(
+  dir: string,
+  fallbackName: string,
+): Promise<SpecDocTree | null> {
+  let service = fallbackName
+  let summary = ''
+  try {
+    const raw = JSON.parse(await readFile(join(dir, SPEC_SERVICE_PATH), 'utf8')) as Record<
+      string,
+      unknown
+    >
+    if (typeof raw.service === 'string' && raw.service.trim()) service = raw.service
+    if (typeof raw.summary === 'string') summary = raw.summary
+  } catch {
+    // No service.json — fall through; modules may still exist (or this is a fresh repo).
+  }
+
+  const modulesDir = join(dir, SPEC_MODULES_DIR)
+  let moduleNames: string[]
+  try {
+    const entries = await readdir(modulesDir, { withFileTypes: true })
+    moduleNames = entries.filter((e) => e.isDirectory()).map((e) => e.name)
+  } catch {
+    return null
+  }
+  if (moduleNames.length === 0) return null
+
+  const modules: Array<Record<string, unknown>> = []
+  for (const moduleSlug of moduleNames.sort()) {
+    const modulePath = join(modulesDir, moduleSlug)
+    let moduleName = moduleSlug
+    let moduleSummary = ''
+    try {
+      const meta = JSON.parse(await readFile(join(modulePath, '_module.json'), 'utf8')) as Record<
+        string,
+        unknown
+      >
+      if (typeof meta.name === 'string' && meta.name.trim()) moduleName = meta.name
+      if (typeof meta.summary === 'string') moduleSummary = meta.summary
+    } catch {
+      // No `_module.json`; fall back to the slug as the module name.
+    }
+    const groupFiles = (await readdir(modulePath))
+      .filter((f) => f.endsWith('.json') && f !== '_module.json')
+      .sort()
+    const groups: unknown[] = []
+    for (const file of groupFiles) {
+      try {
+        groups.push(JSON.parse(await readFile(join(modulePath, file), 'utf8')))
+      } catch {
+        // Skip an unreadable / malformed shard rather than failing the whole reassembly.
+      }
+    }
+    modules.push({ name: moduleName, summary: moduleSummary, groups })
+  }
+
+  return coerceSpecDoc({ service, summary, modules }, fallbackName)
 }
 
 /** Extract the first JSON object from an agent's final message (tolerating fences/prose). */
@@ -490,6 +585,29 @@ function renderTask(task: SpecTaskContext): string {
   return `${header}\n\n${task.description || '(no description)'}`
 }
 
+/** Render the existing module → feature taxonomy so the agent reuses slots, not duplicates them. */
+function renderTaxonomyInventory(existing: SpecDocTree): string[] {
+  const lines: string[] = [
+    '',
+    'EXISTING taxonomy (modules → features). Map each new requirement/rule into the',
+    'closest-fitting EXISTING module and feature below, reusing its EXACT name. Create a',
+    'new module or feature ONLY when nothing here fits — never a near-duplicate of an',
+    'existing one (e.g. do not add "Authentication" when "Auth" exists, or "User Login"',
+    'when "Login" exists). A cross-cutting concern belongs in a `common`/`infrastructure`',
+    'module, itself split into specific features — never a catch-all bucket.',
+    '',
+  ]
+  if (existing.modules.length === 0) {
+    lines.push('_(none yet — you are starting the taxonomy)_')
+    return lines
+  }
+  for (const module of existing.modules) {
+    lines.push(`- ${module.name}`)
+    for (const group of module.groups) lines.push(`  - ${group.name}`)
+  }
+  return lines
+}
+
 /** Compose the task prompt: the worker's guidance, the baseline spec, and this task. */
 function buildUserPrompt(job: SpecJob, existing: SpecDocTree | null): string {
   const lines = [job.instructions.trim()]
@@ -501,14 +619,17 @@ function buildUserPrompt(job: SpecJob, existing: SpecDocTree | null): string {
       'exactly as-is, preserving its `sourceBlockIds`. Adjust an existing requirement',
       'only where this task changes its expected behaviour. Return the COMPLETE updated',
       'document (baseline plus this task’s increment), not a diff.',
-      '',
-      'Baseline specification:',
-      '```json',
-      JSON.stringify(existing, null, 2),
-      '```',
     )
+    lines.push(...renderTaxonomyInventory(existing))
+    lines.push('', 'Baseline specification:', '```json', JSON.stringify(existing, null, 2), '```')
   } else {
-    lines.push('', 'No specification exists in the repository yet, so this task starts a new one.')
+    lines.push(
+      '',
+      'No specification exists in the repository yet, so this task starts a new one.',
+      'Organise it as a module (domain) → feature (group) taxonomy: place each requirement',
+      'and rule in a specific feature under a specific module; keep cross-cutting concerns',
+      'in a `common`/`infrastructure` module split into specific features (no catch-all).',
+    )
   }
   lines.push(
     '',
@@ -535,23 +656,46 @@ async function fileExists(abs: string): Promise<boolean> {
   }
 }
 
+/** List every canonical shard file currently under `spec/modules/` (repo-relative, `/`-joined). */
+async function listExistingModuleFiles(dir: string): Promise<string[]> {
+  const base = join(dir, SPEC_MODULES_DIR)
+  try {
+    const rels = await readdir(base, { recursive: true })
+    return rels
+      .map((r) => `${SPEC_MODULES_DIR}/${r.split(sep).join('/')}`)
+      .filter((p) => p.endsWith('.json') || p.endsWith('.md'))
+  } catch {
+    return []
+  }
+}
+
 /**
- * Write the rendered files under `dir`. The spec-writer OWNS the canonical artifact
- * (`spec.json`, `overview.md`, `rules.md`, `version.json`) and always rewrites it.
- * The Gherkin `features/*.feature` files are SEEDED from the spec's acceptance
- * criteria: a feature file is written only when it does not already exist — never
- * overwritten or deleted — so any later manual refinement of a scenario survives a
- * re-run (a later `pl_full`, or a standalone `pl_spec`) rather than being clobbered.
- * The trade-off is a removed group's seed file may linger; that is harmless next to
- * the canonical `spec.json`, and far cheaper than destroying hand-edited scenarios.
+ * Write the rendered files under `dir` and reconcile the canonical shards.
+ *
+ * The spec-writer OWNS the canonical artifact (`service.json`, `overview.md`, the
+ * per-group `modules/<m>/<g>.{json,md}`) and always rewrites it. Because these are
+ * canonical (not seed-once), a module/group that the new doc no longer contains is an
+ * ORPHAN that must be DELETED — otherwise the next reassembly would resurrect it. So
+ * after writing we remove any `modules/**` `.json`/`.md` file the render did not emit
+ * (`git add -A` in `commitAll` then stages the deletion).
+ *
+ * The Gherkin `features/<m>/<g>.feature` files are the exception: they are SEEDED
+ * (written only when absent, never overwritten OR deleted) so a later manual refinement
+ * of a scenario survives a re-run. A removed group's seed feature file may linger; that
+ * is harmless and far cheaper than destroying hand-edited scenarios.
  */
 export async function writeRequirementsFiles(dir: string, files: RenderedFile[]): Promise<void> {
+  const desired = new Set(files.map((f) => f.path))
   for (const file of files) {
     const abs = join(dir, file.path)
     const isFeature = file.path.startsWith(`${SPEC_FEATURES_DIR}/`)
     if (isFeature && (await fileExists(abs))) continue // seed-once: don't clobber pass-2 polish.
     await mkdir(dirname(abs), { recursive: true })
     await writeFile(abs, file.content, 'utf8')
+  }
+  // Prune orphaned canonical shards (a removed/renamed module or group).
+  for (const existing of await listExistingModuleFiles(dir)) {
+    if (!desired.has(existing)) await rm(join(dir, existing), { force: true })
   }
 }
 
@@ -591,7 +735,6 @@ export async function handleSpec(job: SpecJob, opts: RunOptions = {}): Promise<S
     await checkoutOrCreateBranch(job, dir, signal)
 
     const existing = await readExistingSpec(dir, job.repo.name)
-    const previousVersion = await readExistingVersion(dir)
 
     log.info('requirements: running agent', { ...trace, task: job.task.id })
     const {
@@ -665,15 +808,12 @@ export async function handleSpec(job: SpecJob, opts: RunOptions = {}): Promise<S
       }
     }
 
-    const version = nextSpecVersion(doc, previousVersion, new Date())
-    await writeRequirementsFiles(dir, [
-      ...renderSpecFiles(doc),
-      ...renderFeatureFiles(doc),
-      renderVersionFile(doc, version),
-    ])
+    await writeRequirementsFiles(dir, [...renderSpecFiles(doc), ...renderFeatureFiles(doc)])
 
-    // Add one commit onto the branch (no history reset, no force). An unchanged doc
-    // produces no commit — we still return the doc so the ingest is idempotent.
+    // Add one commit onto the branch (no history reset, no force). Sharded, deterministic
+    // rendering means an unchanged group's bytes are identical, so `commitAll` finds
+    // nothing staged and makes no commit (no version.json counter to bump) — we still
+    // return the doc so the ingest is idempotent.
     const committed = await commitAll(dir, 'Update service requirements', signal)
     if (committed) {
       log.info('requirements: pushing regenerated requirements', { ...trace, ...stats })

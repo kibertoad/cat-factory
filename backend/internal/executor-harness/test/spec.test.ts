@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -7,11 +7,9 @@ import {
   type SpecDocTree,
   coerceSpecDoc,
   extractJsonObject,
-  hashSpec,
-  nextSpecVersion,
+  readExistingSpec,
   renderFeatureFiles,
   renderSpecFiles,
-  renderVersionFile,
   writeRequirementsFiles,
 } from '../src/spec.js'
 
@@ -67,12 +65,17 @@ describe('coerceSpecDoc', () => {
   it('drops malformed requirements and falls back to the repo name', () => {
     const doc = coerceSpecDoc(
       {
-        groups: [
+        modules: [
           {
-            name: 'Login',
-            requirements: [
-              { title: 'Sign in', statement: 'The system SHALL sign in.' },
-              { nope: true },
+            name: 'Access',
+            groups: [
+              {
+                name: 'Login',
+                requirements: [
+                  { title: 'Sign in', statement: 'The system SHALL sign in.' },
+                  { nope: true },
+                ],
+              },
             ],
           },
         ],
@@ -80,31 +83,50 @@ describe('coerceSpecDoc', () => {
       'widgets',
     )
     expect(doc?.service).toBe('widgets')
-    expect(doc?.groups).toHaveLength(1)
-    expect(doc?.groups[0]?.requirements).toHaveLength(1)
+    const group = doc?.modules[0]?.groups[0]
+    expect(doc?.modules).toHaveLength(1)
+    expect(group?.requirements).toHaveLength(1)
     // Unknown priority/kind default sensibly.
-    expect(doc?.groups[0]?.requirements[0]?.priority).toBe('should')
-    expect(doc?.groups[0]?.requirements[0]?.kind).toBe('functional')
+    expect(group?.requirements[0]?.priority).toBe('should')
+    expect(group?.requirements[0]?.kind).toBe('functional')
   })
 
   it('unwraps a { requirements: {...} } envelope', () => {
     expect(coerceSpecDoc({ requirements: { service: 'API' } }, 'fallback')?.service).toBe('API')
   })
 
+  it('wraps stray top-level groups into one module (lenient safety net)', () => {
+    const doc = coerceSpecDoc(
+      {
+        service: 'API',
+        groups: [{ name: 'Login', requirements: [{ title: 'X', statement: 'SHALL X.' }] }],
+      },
+      'fallback',
+    )
+    expect(doc?.modules).toHaveLength(1)
+    expect(doc?.modules[0]?.name).toBe('API')
+    expect(doc?.modules[0]?.groups[0]?.name).toBe('Login')
+  })
+
   it('drops acceptance criteria with no Then clause', () => {
     const doc = coerceSpecDoc(
       {
         service: 'X',
-        groups: [
+        modules: [
           {
-            name: 'G',
-            requirements: [
+            name: 'M',
+            groups: [
               {
-                title: 'R',
-                statement: 'The system SHALL do X.',
-                acceptance: [
-                  { given: 'a', when: 'b', outcome: 'c' },
-                  { given: 'a', when: 'b' },
+                name: 'G',
+                requirements: [
+                  {
+                    title: 'R',
+                    statement: 'The system SHALL do X.',
+                    acceptance: [
+                      { given: 'a', when: 'b', outcome: 'c' },
+                      { given: 'a', when: 'b' },
+                    ],
+                  },
                 ],
               },
             ],
@@ -113,28 +135,33 @@ describe('coerceSpecDoc', () => {
       },
       'fallback',
     )
-    expect(doc?.groups[0]?.requirements[0]?.acceptance).toHaveLength(1)
+    expect(doc?.modules[0]?.groups[0]?.requirements[0]?.acceptance).toHaveLength(1)
   })
 
   it('returns null when there is no usable service name', () => {
-    expect(coerceSpecDoc({ groups: [] }, '')).toBeNull()
+    expect(coerceSpecDoc({ modules: [] }, '')).toBeNull()
   })
 
   it('assigns deterministic acceptance ids derived from the requirement (no global counter leak)', () => {
     const input = {
       service: 'X',
-      groups: [
+      modules: [
         {
-          name: 'G',
-          requirements: [
+          name: 'M',
+          groups: [
             {
-              id: 'req-a',
-              title: 'A',
-              statement: 'The system SHALL A.',
-              // No acceptance ids supplied → the harness derives them.
-              acceptance: [
-                { given: 'g', when: 'w', outcome: 'o1' },
-                { given: 'g', when: 'w', outcome: 'o2' },
+              name: 'G',
+              requirements: [
+                {
+                  id: 'req-a',
+                  title: 'A',
+                  statement: 'The system SHALL A.',
+                  // No acceptance ids supplied → the harness derives them.
+                  acceptance: [
+                    { given: 'g', when: 'w', outcome: 'o1' },
+                    { given: 'g', when: 'w', outcome: 'o2' },
+                  ],
+                },
               ],
             },
           ],
@@ -142,38 +169,45 @@ describe('coerceSpecDoc', () => {
       ],
     }
     const first = coerceSpecDoc(input, 'X')!
-    expect(first.groups[0]?.requirements[0]?.acceptance.map((a) => a.id)).toEqual([
+    expect(first.modules[0]?.groups[0]?.requirements[0]?.acceptance.map((a) => a.id)).toEqual([
       'req-a-ac-1',
       'req-a-ac-2',
     ])
-    // Coercing again yields the SAME ids — no module-global counter carrying state
-    // across calls (which would force a spurious version bump on an unchanged doc).
+    // Coercing again yields the SAME ids — no module-global counter carrying state across calls.
     const second = coerceSpecDoc(input, 'X')!
     expect(second).toEqual(first)
   })
 
-  it('de-duplicates colliding requirement / acceptance / rule ids', () => {
+  it('de-duplicates colliding requirement / rule ids and derives stable rule ids from text', () => {
     const doc = coerceSpecDoc(
       {
         service: 'X',
-        groups: [
+        modules: [
           {
-            name: 'G',
-            requirements: [
-              { id: 'req-dup', title: 'A', statement: 'SHALL A.' },
-              { id: 'req-dup', title: 'B', statement: 'SHALL B.' },
+            name: 'M',
+            groups: [
+              {
+                name: 'G',
+                requirements: [
+                  { id: 'req-dup', title: 'A', statement: 'SHALL A.' },
+                  { id: 'req-dup', title: 'B', statement: 'SHALL B.' },
+                ],
+                // No rule ids → derived from the rule text (NOT positional), so reordering
+                // a group's rules never churns the file.
+                rules: [{ rule: 'Names are unique.' }, { rule: 'Totals never negative.' }],
+              },
             ],
           },
-        ],
-        rules: [
-          { id: 'rule-dup', rule: 'R1.' },
-          { id: 'rule-dup', rule: 'R2.' },
         ],
       },
       'X',
     )!
-    expect(doc.groups[0]?.requirements.map((r) => r.id)).toEqual(['req-dup', 'req-dup-2'])
-    expect(doc.rules.map((r) => r.id)).toEqual(['rule-dup', 'rule-dup-2'])
+    const group = doc.modules[0]!.groups[0]!
+    expect(group.requirements.map((r) => r.id)).toEqual(['req-dup', 'req-dup-2'])
+    expect(group.rules.map((r) => r.id)).toEqual([
+      'rule-names-are-unique',
+      'rule-totals-never-negative',
+    ])
   })
 })
 
@@ -188,66 +222,122 @@ describe('extractJsonObject', () => {
 const sampleDoc: SpecDocTree = {
   service: 'Widgets',
   summary: 'Manages widgets.',
-  groups: [
+  modules: [
     {
-      name: 'Authentication',
-      summary: 'Sign-in flows.',
-      requirements: [
+      name: 'Access',
+      summary: 'User access.',
+      groups: [
         {
-          id: 'req-login',
-          title: 'Login',
-          statement: 'The system SHALL let a user log in.',
-          kind: 'functional',
-          priority: 'must',
-          sourceBlockIds: ['blk_1'],
-          acceptance: [
+          name: 'Authentication',
+          summary: 'Sign-in flows.',
+          requirements: [
             {
-              id: 'ac-1',
-              given: 'a registered user',
-              when: 'they sign in',
-              outcome: 'a session starts',
+              id: 'req-login',
+              title: 'Login',
+              statement: 'The system SHALL let a user log in.',
+              kind: 'functional',
+              priority: 'must',
+              sourceBlockIds: ['blk_1'],
+              acceptance: [
+                {
+                  id: 'ac-1',
+                  given: 'a registered user',
+                  when: 'they sign in',
+                  outcome: 'a session starts',
+                },
+              ],
+            },
+          ],
+          rules: [
+            {
+              id: 'rule-session-expiry',
+              rule: 'A session SHALL expire after 24h.',
+              rationale: 'Security.',
+              sourceBlockIds: [],
             },
           ],
         },
       ],
     },
   ],
-  rules: [
-    {
-      id: 'rule-1',
-      rule: 'A session SHALL expire after 24h.',
-      rationale: 'Security.',
-      sourceBlockIds: [],
-    },
-  ],
+}
+
+async function exists(path: string): Promise<boolean> {
+  try {
+    await stat(path)
+    return true
+  } catch {
+    return false
+  }
 }
 
 describe('renderSpecFiles', () => {
-  it('renders the canonical JSON, an overview, and a rules file', () => {
+  it('shards into service.json, an overview index, and per-group module files', () => {
     const byPath = Object.fromEntries(renderSpecFiles(sampleDoc).map((f) => [f.path, f.content]))
-    expect(JSON.parse(byPath['spec/spec.json']!)).toEqual(sampleDoc)
 
+    // The service metadata is tiny and content-only (no requirements inline).
+    expect(JSON.parse(byPath['spec/service.json']!)).toEqual({
+      service: 'Widgets',
+      summary: 'Manages widgets.',
+    })
+
+    // The overview is an INDEX (names + links), not the requirement bodies.
     const overview = byPath['spec/overview.md']!
-    expect(overview).toContain('# Widgets — Requirements')
-    expect(overview).toContain('Login')
-    expect(overview).toContain('_(must, functional)_')
+    expect(overview).toContain('# Widgets — Specification')
+    expect(overview).toContain('## Access')
+    expect(overview).toContain('[Authentication](modules/access/authentication.md)')
+    expect(overview).not.toContain('The system SHALL let a user log in.')
 
-    const rules = byPath['spec/rules.md']!
-    expect(rules).toContain('A session SHALL expire after 24h.')
+    // Per-module metadata file.
+    expect(JSON.parse(byPath['spec/modules/access/_module.json']!)).toEqual({
+      name: 'Access',
+      summary: 'User access.',
+    })
+
+    // The canonical per-group shard is exactly that group's content.
+    const group = sampleDoc.modules[0]!.groups[0]!
+    expect(JSON.parse(byPath['spec/modules/access/authentication.json']!)).toEqual(group)
+
+    // The human render of the group carries its requirements AND its scoped rules.
+    const md = byPath['spec/modules/access/authentication.md']!
+    expect(md).toContain('# Access — Authentication')
+    expect(md).toContain('The system SHALL let a user log in.')
+    expect(md).toContain('A session SHALL expire after 24h.')
   })
 
   it('is deterministic (same doc → same bytes)', () => {
     expect(renderSpecFiles(sampleDoc)).toEqual(renderSpecFiles(sampleDoc))
   })
+
+  it("a group's shard bytes depend only on that group (other groups do not affect it)", () => {
+    const twoGroups: SpecDocTree = {
+      ...sampleDoc,
+      modules: [
+        {
+          ...sampleDoc.modules[0]!,
+          groups: [
+            sampleDoc.modules[0]!.groups[0]!,
+            { name: 'Logout', summary: 'Sign-out.', requirements: [], rules: [] },
+          ],
+        },
+      ],
+    }
+    const a = Object.fromEntries(renderSpecFiles(sampleDoc).map((f) => [f.path, f.content]))
+    const b = Object.fromEntries(renderSpecFiles(twoGroups).map((f) => [f.path, f.content]))
+    // Adding a sibling feature must NOT change the existing feature's shard bytes.
+    expect(b['spec/modules/access/authentication.json']).toBe(
+      a['spec/modules/access/authentication.json'],
+    )
+  })
 })
 
 describe('renderFeatureFiles', () => {
-  it('renders one .feature per group with a tagged scenario per criterion', () => {
+  it('renders one nested .feature per group with a tagged scenario per criterion', () => {
     const files = renderFeatureFiles(sampleDoc)
     expect(files).toHaveLength(1)
-    expect(files[0]?.path).toBe('spec/features/authentication.feature')
+    expect(files[0]?.path).toBe('spec/features/access/authentication.feature')
     const content = files[0]!.content
-    expect(content).toContain('Feature: Authentication')
+    expect(content).toContain('Feature: Access — Authentication')
     expect(content).toContain('@must')
     expect(content).toContain('Scenario: Login')
     expect(content).toContain('Given a registered user')
@@ -259,86 +349,131 @@ describe('renderFeatureFiles', () => {
     const doc: SpecDocTree = {
       service: 'X',
       summary: '',
-      groups: [{ name: 'Empty', summary: '', requirements: [] }],
-      rules: [],
+      modules: [
+        {
+          name: 'M',
+          summary: '',
+          groups: [{ name: 'Empty', summary: '', requirements: [], rules: [] }],
+        },
+      ],
     }
     expect(renderFeatureFiles(doc)).toHaveLength(0)
   })
 })
 
 describe('writeRequirementsFiles', () => {
-  it('refreshes the canonical files but seeds feature files only once (preserves pass-2 polish)', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'req-write-'))
+  it('reassembles the sharded spec from disk (round-trip)', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'req-roundtrip-'))
     try {
-      // First generation seeds spec/ including the mechanical feature file.
       await writeRequirementsFiles(dir, [
         ...renderSpecFiles(sampleDoc),
         ...renderFeatureFiles(sampleDoc),
-        renderVersionFile(sampleDoc, { version: 1, generatedAt: 'now' }),
       ])
-      const featurePath = join(dir, 'spec/features/authentication.feature')
-      expect(await readFile(featurePath, 'utf8')).toContain('Scenario: Login')
-
-      // The acceptance agent polishes the feature file in place (pass 2).
-      const { writeFile } = await import('node:fs/promises')
-      await writeFile(featurePath, 'Feature: Authentication\n\n  Scenario: Polished\n', 'utf8')
-
-      // A second requirements-writer run with a changed canonical doc must NOT clobber
-      // the polished feature file, but MUST refresh spec.json.
-      const changed: SpecDocTree = {
-        ...sampleDoc,
-        summary: 'Manages widgets, revised.',
-      }
-      await writeRequirementsFiles(dir, [
-        ...renderSpecFiles(changed),
-        ...renderFeatureFiles(changed),
-        renderVersionFile(changed, { version: 2, generatedAt: 'later' }),
-      ])
-
-      // Polished feature file is preserved.
-      expect(await readFile(featurePath, 'utf8')).toContain('Scenario: Polished')
-      // Canonical files are refreshed.
-      const json = JSON.parse(await readFile(join(dir, 'spec/spec.json'), 'utf8'))
-      expect(json.summary).toBe('Manages widgets, revised.')
+      const back = await readExistingSpec(dir, 'fallback')
+      expect(back).toEqual(sampleDoc)
     } finally {
       await rm(dir, { recursive: true, force: true })
     }
   })
-})
 
-describe('version manifest', () => {
-  const now = new Date('2026-06-20T00:00:00.000Z')
+  it('deletes orphaned canonical shards but never the seed feature files', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'req-orphan-'))
+    try {
+      // Seed two features in the Access module.
+      const twoGroups: SpecDocTree = {
+        ...sampleDoc,
+        modules: [
+          {
+            ...sampleDoc.modules[0]!,
+            groups: [
+              sampleDoc.modules[0]!.groups[0]!,
+              {
+                name: 'Logout',
+                summary: 'Sign-out.',
+                requirements: [
+                  {
+                    id: 'req-logout',
+                    title: 'Logout',
+                    statement: 'The system SHALL log a user out.',
+                    kind: 'functional',
+                    priority: 'must',
+                    sourceBlockIds: [],
+                    acceptance: [
+                      { id: 'lo-1', given: 'a session', when: 'they sign out', outcome: 'it ends' },
+                    ],
+                  },
+                ],
+                rules: [],
+              },
+            ],
+          },
+        ],
+      }
+      await writeRequirementsFiles(dir, [
+        ...renderSpecFiles(twoGroups),
+        ...renderFeatureFiles(twoGroups),
+      ])
+      expect(await exists(join(dir, 'spec/modules/access/logout.json'))).toBe(true)
+      expect(await exists(join(dir, 'spec/features/access/logout.feature'))).toBe(true)
 
-  it('starts at version 1 with no prior manifest', () => {
-    expect(nextSpecVersion(sampleDoc, null, now)).toEqual({
-      version: 1,
-      generatedAt: now.toISOString(),
-    })
-  })
-
-  it('keeps the version + timestamp when the content is unchanged', () => {
-    const prior = {
-      version: 4,
-      generatedAt: '2020-01-01T00:00:00.000Z',
-      hash: hashSpec(sampleDoc),
-      requirements: 1,
-      rules: 1,
+      // A later run drops the Logout feature: its canonical shards are pruned…
+      await writeRequirementsFiles(dir, [
+        ...renderSpecFiles(sampleDoc),
+        ...renderFeatureFiles(sampleDoc),
+      ])
+      expect(await exists(join(dir, 'spec/modules/access/logout.json'))).toBe(false)
+      expect(await exists(join(dir, 'spec/modules/access/logout.md'))).toBe(false)
+      // …but the kept feature's shard and the seed-once .feature both survive.
+      expect(await exists(join(dir, 'spec/modules/access/authentication.json'))).toBe(true)
+      expect(await exists(join(dir, 'spec/features/access/logout.feature'))).toBe(true)
+    } finally {
+      await rm(dir, { recursive: true, force: true })
     }
-    expect(nextSpecVersion(sampleDoc, prior, now)).toEqual({
-      version: 4,
-      generatedAt: '2020-01-01T00:00:00.000Z',
-    })
   })
 
-  it('renders a lightweight manifest with the content hash and counts', () => {
-    const file = renderVersionFile(sampleDoc, { version: 2, generatedAt: now.toISOString() })
-    expect(file.path).toBe('spec/version.json')
-    expect(JSON.parse(file.content)).toEqual({
-      version: 2,
-      generatedAt: now.toISOString(),
-      hash: hashSpec(sampleDoc),
-      requirements: 1,
-      rules: 1,
-    })
+  it('seeds feature files only once (preserves pass-2 polish) but refreshes canonical shards', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'req-write-'))
+    try {
+      await writeRequirementsFiles(dir, [
+        ...renderSpecFiles(sampleDoc),
+        ...renderFeatureFiles(sampleDoc),
+      ])
+      const featurePath = join(dir, 'spec/features/access/authentication.feature')
+      expect(await readFile(featurePath, 'utf8')).toContain('Scenario: Login')
+
+      // The acceptance agent polishes the feature file in place (pass 2).
+      const { writeFile } = await import('node:fs/promises')
+      await writeFile(
+        featurePath,
+        'Feature: Access — Authentication\n\n  Scenario: Polished\n',
+        'utf8',
+      )
+
+      // A second run with a changed group summary must NOT clobber the polished feature
+      // file, but MUST refresh the canonical group shard.
+      const changed: SpecDocTree = {
+        ...sampleDoc,
+        modules: [
+          {
+            ...sampleDoc.modules[0]!,
+            groups: [{ ...sampleDoc.modules[0]!.groups[0]!, summary: 'Sign-in flows, revised.' }],
+          },
+        ],
+      }
+      await writeRequirementsFiles(dir, [
+        ...renderSpecFiles(changed),
+        ...renderFeatureFiles(changed),
+      ])
+
+      // Polished feature file is preserved.
+      expect(await readFile(featurePath, 'utf8')).toContain('Scenario: Polished')
+      // Canonical shard is refreshed.
+      const json = JSON.parse(
+        await readFile(join(dir, 'spec/modules/access/authentication.json'), 'utf8'),
+      )
+      expect(json.summary).toBe('Sign-in flows, revised.')
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
   })
 })

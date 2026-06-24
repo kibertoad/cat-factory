@@ -1,9 +1,4 @@
-import {
-  SPEC_FEATURES_DIR,
-  SPEC_JSON_PATH,
-  SPEC_OVERVIEW_PATH,
-  SPEC_RULES_PATH,
-} from '@cat-factory/contracts'
+import { SPEC_FEATURES_DIR, SPEC_MODULES_DIR, SPEC_OVERVIEW_PATH } from '@cat-factory/contracts'
 import type { AgentKind } from '@cat-factory/kernel'
 import { registeredAgentKind } from './registry.js'
 
@@ -36,12 +31,12 @@ export const SPEC_AWARE_TRAIT: AgentTrait = 'spec-aware'
 
 /** The guidance appended to a spec-aware kind's system prompt — explains the spec format. */
 export const SPEC_AWARE_GUIDANCE = [
-  `This repository may contain a prescriptive SPECIFICATION for the service under the \`spec/\` directory — the source of truth for what the service must do. When it is present, read it before doing the work:`,
-  `- \`${SPEC_OVERVIEW_PATH}\` first, for the high-level product intent.`,
-  `- \`${SPEC_RULES_PATH}\` for cross-cutting domain rules, invariants and constraints.`,
-  `- \`${SPEC_FEATURES_DIR}/*.feature\` for the Gherkin (Given/When/Then) acceptance scenarios.`,
-  `- \`${SPEC_JSON_PATH}\` is the canonical machine-readable tree the markdown/feature files are rendered from; consult it when you need exact detail.`,
-  `Treat the spec as authoritative for required behaviour: make your change satisfy it, and if your change conflicts with the spec, follow the spec or call out the discrepancy rather than silently diverging.`,
+  `This repository may contain a prescriptive SPECIFICATION for the service under the \`spec/\` directory — the source of truth for what the service must do. It is sharded by a module (domain) → feature (group) taxonomy. When it is present, read it before doing the work:`,
+  `- \`${SPEC_OVERVIEW_PATH}\` first, for the high-level product intent and an index of the modules and their features (with links).`,
+  `- \`${SPEC_MODULES_DIR}/<module>/<feature>.md\` for the feature you are working on — its requirements and the domain rules scoped to it.`,
+  `- \`${SPEC_MODULES_DIR}/<module>/<feature>.json\` is the canonical machine-readable shard the markdown is rendered from; consult it when you need exact detail.`,
+  `- \`${SPEC_FEATURES_DIR}/<module>/<feature>.feature\` for the Gherkin (Given/When/Then) acceptance scenarios.`,
+  `Read only the modules/features relevant to your task rather than the whole tree. Treat the spec as authoritative for required behaviour: make your change satisfy it, and if your change conflicts with the spec, follow the spec or call out the discrepancy rather than silently diverging.`,
 ].join('\n')
 
 /**

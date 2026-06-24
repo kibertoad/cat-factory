@@ -1373,29 +1373,35 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         const spec = {
           service: 'Auth',
           summary: 'Authentication service',
-          groups: [
+          modules: [
             {
-              name: 'Login',
-              requirements: [
+              name: 'Access',
+              summary: 'User access',
+              groups: [
                 {
-                  id: 'req-login',
-                  title: 'Login',
-                  statement: 'The system SHALL let a user log in.',
-                  kind: 'functional',
-                  priority: 'must',
-                  acceptance: [
+                  name: 'Login',
+                  requirements: [
                     {
-                      id: 'ac-1',
-                      given: 'a registered user',
-                      when: 'they sign in',
-                      outcome: 'a session starts',
+                      id: 'req-login',
+                      title: 'Login',
+                      statement: 'The system SHALL let a user log in.',
+                      kind: 'functional',
+                      priority: 'must',
+                      acceptance: [
+                        {
+                          id: 'ac-1',
+                          given: 'a registered user',
+                          when: 'they sign in',
+                          outcome: 'a session starts',
+                        },
+                      ],
                     },
                   ],
+                  rules: [],
                 },
               ],
             },
           ],
-          rules: [],
         }
         const app = harness.makeApp({ spec })
         const { workspace } = await app.createWorkspace()
@@ -2087,29 +2093,35 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         const spec = {
           service: 'Auth',
           summary: 'Authentication service',
-          groups: [
+          modules: [
             {
-              name: 'Login',
-              requirements: [
+              name: 'Access',
+              summary: 'User access',
+              groups: [
                 {
-                  id: 'req-login',
-                  title: 'Login',
-                  statement: 'The system SHALL let a user log in.',
-                  kind: 'functional',
-                  priority: 'must',
-                  acceptance: [
+                  name: 'Login',
+                  requirements: [
                     {
-                      id: 'ac-1',
-                      given: 'a registered user',
-                      when: 'they sign in',
-                      outcome: 'a session starts',
+                      id: 'req-login',
+                      title: 'Login',
+                      statement: 'The system SHALL let a user log in.',
+                      kind: 'functional',
+                      priority: 'must',
+                      acceptance: [
+                        {
+                          id: 'ac-1',
+                          given: 'a registered user',
+                          when: 'they sign in',
+                          outcome: 'a session starts',
+                        },
+                      ],
                     },
                   ],
+                  rules: [],
                 },
               ],
             },
           ],
-          rules: [],
         }
         const app = harness.makeApp({ spec, companionRatings: [0.4, 1] })
         const { workspace } = await app.createWorkspace()

@@ -1,19 +1,16 @@
 import { describe, expect, it } from 'vitest'
 import {
   canonicalBlueprintJson,
-  canonicalSpecJson,
   coerceBlueprintService,
   coerceSpecDoc,
   dedupeSpecIds,
   hashBlueprint,
   moduleSlug,
   nextBlueprintVersion,
-  nextSpecVersion,
   renderBlueprintFiles,
   renderBlueprintVersionFile,
   renderSpecFeatureFiles,
   renderSpecFiles,
-  renderSpecVersionFile,
 } from './render.js'
 
 // Golden-file tests locking the deterministic backend rendering of the in-repo
@@ -120,69 +117,88 @@ describe('spec rendering', () => {
     {
       service: 'Widget',
       summary: 'Spec.',
-      groups: [
+      modules: [
         {
-          name: 'Auth',
-          requirements: [
+          name: 'Identity',
+          summary: 'Who can do what.',
+          groups: [
             {
-              title: 'Login',
-              statement: 'User can log in.',
-              priority: 'must',
-              kind: 'functional',
-              acceptance: [
-                // Deliberately a model-emitted `then` to exercise the `then` → `outcome` coercion.
-                // eslint-disable-next-line unicorn/no-thenable
-                { given: 'a user', when: 'they log in', then: 'they get a token' },
-                { given: 'bad creds', when: 'they log in', outcome: 'they are rejected' },
+              name: 'Auth',
+              requirements: [
+                {
+                  title: 'Login',
+                  statement: 'User can log in.',
+                  priority: 'must',
+                  kind: 'functional',
+                  acceptance: [
+                    // Deliberately a model-emitted `then` to exercise the `then` → `outcome` coercion.
+                    // eslint-disable-next-line unicorn/no-thenable
+                    { given: 'a user', when: 'they log in', then: 'they get a token' },
+                    { given: 'bad creds', when: 'they log in', outcome: 'they are rejected' },
+                  ],
+                },
+              ],
+              // Rules scoped to the feature (no top-level catch-all). Ids derived from text.
+              rules: [{ rule: 'No negative totals.', rationale: 'money' }, { rule: 'Idempotent.' }],
+            },
+            {
+              name: 'Auth', // duplicate group name within the module → group slug collision
+              requirements: [
+                {
+                  title: 'Logout',
+                  statement: 'User can log out.',
+                  acceptance: [
+                    { given: 'a session', when: 'they log out', outcome: 'session ends' },
+                  ],
+                },
+                // No Then clause → not testable → acceptance dropped (req itself survives).
+                { title: 'NoThen', statement: 'Edge', acceptance: [{ given: 'x', when: 'y' }] },
               ],
             },
           ],
         },
-        {
-          name: 'Auth', // duplicate group name → feature-file slug collision
-          requirements: [
-            {
-              title: 'Logout',
-              statement: 'User can log out.',
-              acceptance: [{ given: 'a session', when: 'they log out', outcome: 'session ends' }],
-            },
-            // No Then clause → not testable → acceptance dropped (req itself survives).
-            { title: 'NoThen', statement: 'Edge', acceptance: [{ given: 'x', when: 'y' }] },
-          ],
-        },
       ],
-      rules: [{ rule: 'No negative totals.', rationale: 'money' }, { rule: 'Idempotent.' }],
     },
     'fallback',
   )!
 
   it('applies id fallbacks, defaults, then→outcome, and drops untestable acceptance', () => {
-    const login = doc.groups![0]!.requirements![0]!
+    const groups = doc.modules![0]!.groups!
+    const login = groups[0]!.requirements![0]!
     expect(login.id).toBe('req-login')
     expect(login.acceptance?.map((a) => a.id)).toEqual(['req-login-ac-1', 'req-login-ac-2'])
     expect(login.acceptance![0]!.outcome).toBe('they get a token') // then → outcome
+    expect(groups[0]!.rules!.map((r) => r.id)).toEqual([
+      'rule-no-negative-totals',
+      'rule-idempotent',
+    ])
 
-    const logout = doc.groups![1]!.requirements![0]!
+    const logout = groups[1]!.requirements![0]!
     expect(logout.priority).toBe('should') // defaulted
     expect(logout.kind).toBe('functional') // defaulted
 
-    const noThen = doc.groups![1]!.requirements![1]!
+    const noThen = groups[1]!.requirements![1]!
     expect(noThen.acceptance).toEqual([]) // the lone no-outcome criterion was dropped
   })
 
-  it('renders spec.json canonically', () => {
+  it('shards each feature group into its own canonical json file', () => {
     const files = fileMap(renderSpecFiles(doc))
-    expect(files['spec/spec.json']).toBe(canonicalSpecJson(doc))
+    const group = doc.modules![0]!.groups![0]!
+    expect(files['spec/modules/identity/auth.json']).toBe(`${JSON.stringify(group, null, 2)}\n`)
+    // No monolithic spec.json — the overview is a pure index.
+    expect(files['spec/spec.json']).toBeUndefined()
+    expect(files['spec/overview.md']).toContain('## Identity')
+    expect(files['spec/overview.md']).toContain('[Auth](modules/identity/auth.md)')
   })
 
   it('renders Gherkin feature files: @must tags, scenario numbering, slug collision', () => {
     const files = fileMap(renderSpecFeatureFiles(doc))
     expect(Object.keys(files).sort()).toEqual([
-      'spec/features/auth-2.feature',
-      'spec/features/auth.feature',
+      'spec/features/identity/auth-2.feature',
+      'spec/features/identity/auth.feature',
     ])
-    expect(files['spec/features/auth.feature']).toBe(
-      `Feature: Auth
+    expect(files['spec/features/identity/auth.feature']).toBe(
+      `Feature: Identity — Auth
 
   @must
   Scenario: Login (#1)
@@ -197,8 +213,8 @@ describe('spec rendering', () => {
     Then they are rejected
 `,
     )
-    expect(files['spec/features/auth-2.feature']).toBe(
-      `Feature: Auth
+    expect(files['spec/features/identity/auth-2.feature']).toBe(
+      `Feature: Identity — Auth
 
   Scenario: Logout
     Given a session
@@ -208,37 +224,33 @@ describe('spec rendering', () => {
     )
   })
 
-  it('counts requirements and rules in the version manifest', async () => {
-    const now = new Date('2026-01-01T00:00:00.000Z')
-    const version = await nextSpecVersion(doc, null, now)
-    const manifest = JSON.parse((await renderSpecVersionFile(doc, version)).content)
-    expect(manifest.requirements).toBe(3) // Login + Logout + NoThen
-    expect(manifest.rules).toBe(2)
-    expect(manifest.version).toBe(1)
-  })
-
   it('dedupes colliding ids deterministically', () => {
     const collide = coerceSpecDoc(
       {
         service: 'S',
-        groups: [
+        modules: [
           {
-            name: 'A',
-            requirements: [
+            name: 'M',
+            groups: [
               {
-                title: 'Login',
-                statement: 'x',
-                acceptance: [{ given: 'g', when: 'w', outcome: 'o' }],
+                name: 'A',
+                requirements: [
+                  {
+                    title: 'Login',
+                    statement: 'x',
+                    acceptance: [{ given: 'g', when: 'w', outcome: 'o' }],
+                  },
+                ],
               },
-            ],
-          },
-          {
-            name: 'B',
-            requirements: [
               {
-                title: 'Login',
-                statement: 'y',
-                acceptance: [{ given: 'g', when: 'w', outcome: 'o' }],
+                name: 'B',
+                requirements: [
+                  {
+                    title: 'Login',
+                    statement: 'y',
+                    acceptance: [{ given: 'g', when: 'w', outcome: 'o' }],
+                  },
+                ],
               },
             ],
           },
@@ -246,8 +258,10 @@ describe('spec rendering', () => {
       },
       'fallback',
     )!
-    const ids = collide.groups!.flatMap((g) =>
-      g.requirements!.flatMap((r) => [r.id, ...(r.acceptance ?? []).map((a) => a.id)]),
+    const ids = collide.modules!.flatMap((m) =>
+      m.groups!.flatMap((g) =>
+        g.requirements!.flatMap((r) => [r.id, ...(r.acceptance ?? []).map((a) => a.id)]),
+      ),
     )
     // Second "Login" requirement and its acceptance are suffixed; no duplicates remain.
     expect(ids).toEqual(['req-login', 'req-login-ac-1', 'req-login-2', 'req-login-ac-1-2'])
@@ -255,8 +269,8 @@ describe('spec rendering', () => {
   })
 
   it('is idempotent — re-running dedupe on an already-unique doc is a no-op', () => {
-    const before = canonicalSpecJson(doc)
+    const before = JSON.stringify(doc)
     dedupeSpecIds(doc)
-    expect(canonicalSpecJson(doc)).toBe(before)
+    expect(JSON.stringify(doc)).toBe(before)
   })
 })

@@ -6,11 +6,19 @@ import * as v from 'valibot'
 // This is the durable PRESCRIPTIVE spec for a whole service, persisted in the
 // service's own GitHub repo under `spec/` and aggregated across every task. It is
 // the mirror image of the blueprint: a blueprint is DESCRIPTIVE ("what the code
-// is"), this spec is PRESCRIPTIVE ("what must be true"). The canonical,
-// machine-readable file is `spec.json` (a SpecDoc); the markdown files
-// (`overview.md`, `rules.md`) and the Gherkin `features/*.feature` files are
-// deterministic renderings of the same tree. Every agent reads it as context, and
-// its acceptance criteria seed the test scenarios.
+// is"), this spec is PRESCRIPTIVE ("what must be true").
+//
+// The spec is SHARDED on disk into many small files so concurrent task branches
+// touch disjoint files and merge cleanly (a single monolithic `spec.json` produced
+// crippling merge churn). The shape is a two-level taxonomy — MODULE (a domain,
+// e.g. `auth`) → GROUP (a feature / logical group, e.g. `login`) — and each group
+// carries BOTH its requirements and the domain rules scoped to it (there is no
+// catch-all rules file; a cross-cutting concern is just a `common`/`infrastructure`
+// module that is itself split into feature groups). The canonical per-group file is
+// `spec/modules/<module>/<group>.json`; the markdown (`overview.md` index +
+// per-group `<group>.md`) and the Gherkin `features/<module>/<group>.feature` files
+// are deterministic renderings of the same tree. Every agent reads it as context,
+// and its acceptance criteria seed the test scenarios.
 //
 // Naming note: this "spec" family is distinct from the transient, per-block
 // "requirements" CONTEXT review (see `requirements.ts`), which clarifies the
@@ -66,9 +74,10 @@ export const requirementItemSchema = v.object({
 export type RequirementItem = v.InferOutput<typeof requirementItemSchema>
 
 /**
- * A cross-cutting domain rule / invariant / constraint — prescriptive, but not tied
- * to a single capability. Unified into THIS document (not a separate `domain/`
- * artifact) because rules share the spec's lifecycle; rendered to `rules.md`.
+ * A domain rule / invariant / constraint — prescriptive. Each rule is scoped to the
+ * group (feature) it governs and lives inside that group, so there is no catch-all
+ * rules document; a genuinely service-wide invariant is attached to a group under a
+ * `common`/`infrastructure` module. Rendered into the owning group's `<group>.md`.
  */
 export const domainRuleSchema = v.object({
   id: requirementIdField,
@@ -80,64 +89,55 @@ export const domainRuleSchema = v.object({
 })
 export type DomainRule = v.InferOutput<typeof domainRuleSchema>
 
-/** A grouping of related requirements (a capability / feature area ≈ one `.feature` file). */
+/**
+ * A feature / logical group: related requirements plus the domain rules scoped to
+ * them. The leaf shard of the taxonomy — one group renders one canonical
+ * `<group>.json`, one `<group>.md`, and one `.feature` file.
+ */
 export const requirementGroupSchema = v.object({
   name: reqNameField,
   summary: v.optional(reqSummaryField, ''),
   requirements: v.optional(v.array(requirementItemSchema), []),
+  /** Domain rules / invariants scoped to this feature (rendered into its `<group>.md`). */
+  rules: v.optional(v.array(domainRuleSchema), []),
 })
 export type RequirementGroup = v.InferOutput<typeof requirementGroupSchema>
 
-/** The unified, prescriptive specification document for one service (the `spec.json` tree). */
+/** A module (domain, e.g. `auth`) — the top level of the taxonomy, holding feature groups. */
+export const specModuleSchema = v.object({
+  name: reqNameField,
+  summary: v.optional(reqSummaryField, ''),
+  groups: v.optional(v.array(requirementGroupSchema), []),
+})
+export type SpecModule = v.InferOutput<typeof specModuleSchema>
+
+/** The unified, prescriptive specification document for one service (the sharded tree). */
 export const specDocSchema = v.object({
   /** Service / frame name (defaults to the repo name). */
   service: reqNameField,
   /** One-paragraph product intent for the service overall. */
   summary: v.optional(reqSummaryField, ''),
-  /** Requirements grouped by capability; each group renders one `.feature` file. */
-  groups: v.optional(v.array(requirementGroupSchema), []),
-  /** Cross-cutting domain rules / invariants / constraints. */
-  rules: v.optional(v.array(domainRuleSchema), []),
+  /** Modules (domains), each grouping its feature groups; the two-level taxonomy. */
+  modules: v.optional(v.array(specModuleSchema), []),
 })
 export type SpecDoc = v.InferOutput<typeof specDocSchema>
 
-/**
- * The lightweight `version.json` manifest committed alongside the spec. It carries a
- * monotonic version counter, the generation timestamp, a content hash of the
- * canonical tree, and the requirement/rule counts — so staleness checks are a tiny
- * read rather than a full parse of `spec.json`. Mirrors the blueprint's
- * `version.json` manifest field-for-field in spirit.
- */
-export const specVersionSchema = v.object({
-  version: v.pipe(v.number(), v.integer(), v.minValue(0)),
-  generatedAt: v.string(),
-  /** sha256 (hex) of the canonical `spec.json` bytes. */
-  hash: v.string(),
-  requirements: v.pipe(v.number(), v.integer(), v.minValue(0)),
-  rules: v.pipe(v.number(), v.integer(), v.minValue(0)),
-})
-export type SpecVersion = v.InferOutput<typeof specVersionSchema>
-
 // ---- In-repo spec artifact paths ------------------------------------------
-// The folder + file layout, the prescriptive sibling of `blueprints/`. The
-// canonical machine-readable file is `spec.json`; the markdown and feature files
-// are deterministic renderings of the same tree.
+// The sharded folder layout, the prescriptive sibling of `blueprints/`. The
+// canonical machine-readable files are the per-group `modules/<m>/<g>.json` shards;
+// the markdown (`overview.md` index + per-group `<g>.md`) and feature files are
+// deterministic renderings of the same tree. There is NO single `spec.json`.
 
 /** Folder, relative to the repo root, that holds the persisted spec. */
 export const SPEC_DIR = 'spec'
-/** Canonical machine-readable spec file (the SpecDoc tree). */
-export const SPEC_JSON_PATH = `${SPEC_DIR}/spec.json`
-/** High-level overview markdown — the file agents read first. */
+/** Tiny file carrying only the service name + one-paragraph summary. */
+export const SPEC_SERVICE_PATH = `${SPEC_DIR}/service.json`
+/** High-level overview markdown (the module → feature index) — the file agents read first. */
 export const SPEC_OVERVIEW_PATH = `${SPEC_DIR}/overview.md`
-/** Domain rules / invariants / constraints markdown. */
-export const SPEC_RULES_PATH = `${SPEC_DIR}/rules.md`
-/** Tiny manifest read for quick staleness checks without parsing the full tree. */
-export const SPEC_VERSION_PATH = `${SPEC_DIR}/version.json`
-/** Sub-folder holding the generated Gherkin `.feature` files (one per group). */
+/** Sub-folder holding the per-module folders, each with its per-group canonical shards. */
+export const SPEC_MODULES_DIR = `${SPEC_DIR}/modules`
+/** Sub-folder holding the generated Gherkin `.feature` files (`features/<module>/<group>.feature`). */
 export const SPEC_FEATURES_DIR = `${SPEC_DIR}/features`
-
-/** Legacy folder name the spec lived under before the rename; relocated on first run. */
-export const LEGACY_SPEC_DIR = 'requirements'
 
 /**
  * Strictly parse an arbitrary value (e.g. the JSON read from `spec.json`, or a tree
@@ -171,23 +171,29 @@ export function safeParseSpecDoc(value: unknown): SpecDoc | undefined {
 export function renderSpecForReview(spec: SpecDoc): string {
   const lines: string[] = [`# Specification: ${spec.service}`]
   if (spec.summary) lines.push('', spec.summary)
-  for (const group of spec.groups ?? []) {
-    lines.push('', `## ${group.name}`)
-    if (group.summary) lines.push('', group.summary)
-    for (const req of group.requirements ?? []) {
-      lines.push('', `### ${req.title} (${req.id})`, '', `- Kind: ${req.kind}`)
-      lines.push(`- Priority: ${req.priority}`)
-      lines.push(`- Statement: ${req.statement}`)
-      for (const ac of req.acceptance ?? []) {
-        lines.push(`  - Acceptance ${ac.id}: GIVEN ${ac.given} WHEN ${ac.when} THEN ${ac.outcome}`)
+  for (const module of spec.modules ?? []) {
+    lines.push('', `## ${module.name}`)
+    if (module.summary) lines.push('', module.summary)
+    for (const group of module.groups ?? []) {
+      lines.push('', `### ${group.name}`)
+      if (group.summary) lines.push('', group.summary)
+      for (const req of group.requirements ?? []) {
+        lines.push('', `#### ${req.title} (${req.id})`, '', `- Kind: ${req.kind}`)
+        lines.push(`- Priority: ${req.priority}`)
+        lines.push(`- Statement: ${req.statement}`)
+        for (const ac of req.acceptance ?? []) {
+          lines.push(
+            `  - Acceptance ${ac.id}: GIVEN ${ac.given} WHEN ${ac.when} THEN ${ac.outcome}`,
+          )
+        }
       }
-    }
-  }
-  const rules = spec.rules ?? []
-  if (rules.length) {
-    lines.push('', '## Domain rules')
-    for (const rule of rules) {
-      lines.push(`- ${rule.rule}${rule.rationale ? ` (${rule.rationale})` : ''}`)
+      const rules = group.rules ?? []
+      if (rules.length) {
+        lines.push('', `#### Domain rules`)
+        for (const rule of rules) {
+          lines.push(`- ${rule.rule}${rule.rationale ? ` (${rule.rationale})` : ''}`)
+        }
+      }
     }
   }
   return lines.join('\n')
