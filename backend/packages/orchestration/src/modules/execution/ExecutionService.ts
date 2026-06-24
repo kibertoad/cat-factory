@@ -902,8 +902,13 @@ export class ExecutionService {
     // Whenever a run parks waiting for a human, make sure there is an open notification
     // for it — runs no longer time out, so the (escalating) notification is the only
     // signal a human is needed. Best-effort and non-clobbering (see the helper).
+    // Conversely, once the run advances past the decision (the human responded, or it
+    // auto-passed, or the run reached a terminal state) clear that waiting card so the
+    // escalation sweep can't later flip a settled decision red ("Overdue").
     if (result.kind === 'awaiting_decision') {
       await this.ensureWaitingNotification(workspaceId, instance)
+    } else {
+      await this.clearWaitingNotification(workspaceId, instance)
     }
     return result
   }
@@ -2198,6 +2203,21 @@ export class ExecutionService {
       body: 'A pipeline step is parked awaiting a human decision. Open the task to respond.',
       payload: { pipelineName: instance.pipelineName },
     })
+  }
+
+  /**
+   * Clear the auto-raised "waiting for a human decision" card once a run advances past
+   * the decision it was parked on (so the escalation sweep can't flip a settled decision
+   * red). Scoped to the `decision_required` type, so the human-actionable cards a stopped
+   * run leaves behind are untouched. Best-effort: no notification service (tests) is a no-op.
+   */
+  private async clearWaitingNotification(
+    workspaceId: string,
+    instance: ExecutionInstance,
+  ): Promise<void> {
+    const svc = this.notificationService
+    if (!svc) return
+    await svc.clearWaitingDecision(workspaceId, instance.blockId)
   }
 
   /** Raise a `ci_failed` notification when the CI gate exhausts its fixer budget. */

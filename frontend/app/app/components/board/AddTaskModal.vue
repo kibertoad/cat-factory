@@ -69,7 +69,10 @@ function buildTypeFields(): TaskTypeFields | undefined {
     return Object.keys(f).length ? f : undefined
   }
   if (taskType.value === 'spike') {
-    return timeboxHours.value != null && timeboxHours.value >= 0
+    // `v-model.number` on a cleared number input yields '' (not undefined), which would
+    // serialise as a non-number and 400 the create — so require a finite number here.
+    return typeof timeboxHours.value === 'number' && Number.isFinite(timeboxHours.value) &&
+      timeboxHours.value >= 0
       ? { timeboxHours: timeboxHours.value }
       : undefined
   }

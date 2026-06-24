@@ -112,6 +112,31 @@ export class NotificationService {
   }
 
   /**
+   * Resolve the auto-raised "waiting for a human decision" card on a block once its run
+   * has advanced past the decision (the human responded, or it auto-passed). Only the
+   * `decision_required` type is dismissed — the human-actionable cards a stopped run
+   * leaves behind (`merge_review`, `pipeline_complete`, `requirement_review`, …) are
+   * resolved by the human acting on them, not here. Without this the card would linger
+   * open and the escalation sweep would later flip it red ("Overdue") for a decision that
+   * was already made. Idempotent + best-effort: a no-op when no such card is open.
+   */
+  async clearWaitingDecision(workspaceId: string, blockId: string): Promise<void> {
+    const existing = await this.notifications.findOpenByBlock(
+      workspaceId,
+      blockId,
+      'decision_required',
+    )
+    if (!existing) return
+    const resolved: Notification = {
+      ...existing,
+      status: 'dismissed',
+      resolvedAt: this.clock.now(),
+    }
+    await this.notifications.upsert(workspaceId, resolved)
+    await this.deliver(workspaceId, resolved)
+  }
+
+  /**
    * Escalate long-waiting open notifications from `normal` (yellow) to `urgent` (red).
    * Called by the periodic sweep with the workspace's `waitingEscalationMinutes`
    * threshold (as ms). Any open notification older than `thresholdMs` that is still
