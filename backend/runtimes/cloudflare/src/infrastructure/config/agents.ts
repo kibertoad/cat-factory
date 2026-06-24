@@ -92,12 +92,22 @@ export function loadAgentsConfig(env: Env, caps: ProviderCapabilities): AgentsCo
     temperature: num(env.AGENT_DEFAULT_TEMPERATURE) ?? 0.3,
     maxOutputTokens: num(env.AGENT_MAX_OUTPUT_TOKENS) ?? 12000,
   }
+  // The conflict-resolver clones a PR head with merge conflicts and rewrites the
+  // conflicted hunks against the base — a focused, diff-heavy reasoning task over
+  // potentially large files. Kimi K2.5 (a 1T-param agentic model native on Workers AI,
+  // 256K window) handles that better than the small default MoE.
+  const conflictResolverDefault: AgentModelConfig = {
+    ref: { provider: 'workers-ai', model: '@cf/moonshotai/kimi-k2.5' },
+    temperature: num(env.AGENT_DEFAULT_TEMPERATURE) ?? 0.3,
+    maxOutputTokens: num(env.AGENT_MAX_OUTPUT_TOKENS) ?? 5000,
+  }
   const byKind: Partial<Record<AgentKind, AgentModelConfig>> = {
     architect: agenticDefault,
     reviewer: companionDefault,
     'spec-companion': companionDefault,
     'architect-companion': companionDefault,
     coder: coderDefault,
+    'conflict-resolver': conflictResolverDefault,
   }
   // Env overrides win over the built-in agentic defaults.
   Object.assign(byKind, parseModelOverrides(env.AGENT_MODELS))
