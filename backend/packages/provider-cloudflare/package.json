@@ -1,12 +1,12 @@
 {
   "name": "@cat-factory/provider-cloudflare",
   "version": "0.7.5",
+  "description": "Opt-in Cloudflare Workers AI model registry for the Agent Architecture Board's AI provisioning facade. Mix into a CompositeModelProvider to add the `workers-ai` provider (in-process binding on the Worker, OpenAI-compatible REST elsewhere).",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/kibertoad/cat-factory.git",
     "directory": "backend/packages/provider-cloudflare"
   },
-  "description": "Opt-in Cloudflare Workers AI model registry for the Agent Architecture Board's AI provisioning facade. Mix into a CompositeModelProvider to add the `workers-ai` provider (in-process binding on the Worker, OpenAI-compatible REST elsewhere).",
   "files": [
     "dist"
   ],
