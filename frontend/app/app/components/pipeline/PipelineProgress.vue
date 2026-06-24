@@ -18,6 +18,20 @@ const emit = defineEmits<{
 const models = useModelsStore()
 const ui = useUiStore()
 const execution = useExecutionStore()
+const reviews = useReviewStage()
+
+// While an iterative reviewer gate (requirements-review / clarity-review) folds the
+// answers / re-reviews in the background it needs NO human, so its parked approval is
+// replaced by a working indicator — the human is summoned again only if findings remain.
+function reviewStageLabel(agentKind: string | undefined): string | null {
+  if (!reviews.isBackground(agentKind, props.instance.blockId)) return null
+  const stage = reviews.stageForBlock(props.instance.blockId)
+  return stage === 'incorporating'
+    ? 'Incorporating…'
+    : stage === 'reviewing'
+      ? 'Re-reviewing…'
+      : null
+}
 
 // Clicking an agent opens its step-detail overlay — execution metadata (state,
 // timing, model, subtasks) plus the full prose output when the agent produced one.
@@ -395,8 +409,18 @@ const ITEM_ICON: Record<string, string> = {
             </span>
           </div>
 
+          <!-- reviewer gate folding/re-reviewing in the background: a working indicator,
+               NOT a "Review & approve" gate (the human is summoned only if needed) -->
+          <div
+            v-if="reviewStageLabel(s.agentKind)"
+            class="mt-3 inline-flex items-center gap-1 text-[11px] text-indigo-300"
+          >
+            <UIcon name="i-lucide-loader-circle" class="h-3 w-3 animate-spin" />
+            {{ reviewStageLabel(s.agentKind) }}
+          </div>
+
           <!-- approval gate: review (and edit) the proposal before continuing -->
-          <div v-if="s.approval && s.approval.status === 'pending'" class="mt-3">
+          <div v-else-if="s.approval && s.approval.status === 'pending'" class="mt-3">
             <UButton
               color="warning"
               variant="soft"

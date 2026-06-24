@@ -88,6 +88,14 @@ const isRunning = computed(
     step.value?.pausedAt == null &&
     !runFailed.value,
 )
+// The state badge: a step left mid-flight on a failed run keeps `state: 'working'`,
+// so report it as "Failed" rather than the misleading "Working".
+const stateMeta = computed(() => {
+  const s = step.value
+  if (!s) return STATE_META.pending
+  if (runFailed.value && s.state === 'working') return { label: 'Failed', color: '#ef4444' }
+  return STATE_META[s.state]
+})
 /** Elapsed/total execution time in ms — null until the step has started. */
 const durationMs = computed(() => {
   const s = step.value
@@ -530,9 +538,9 @@ watch(
                     <dd class="mt-0.5 flex items-center gap-1.5 text-slate-200">
                       <span
                         class="h-2 w-2 rounded-full"
-                        :style="{ backgroundColor: STATE_META[step.state].color }"
+                        :style="{ backgroundColor: stateMeta.color }"
                       />
-                      {{ STATE_META[step.state].label }}
+                      {{ stateMeta.label }}
                     </dd>
                   </div>
                   <div>

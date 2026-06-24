@@ -14,6 +14,7 @@ const props = defineProps<{ taskId: string }>()
 const execution = useExecutionStore()
 const ui = useUiStore()
 const expansion = useTaskExpansionStore()
+const reviews = useReviewStage()
 const { lod } = useSemanticZoom()
 
 const instance = computed(() => execution.getByBlock(props.taskId))
@@ -97,9 +98,15 @@ const ITEM_ICON: Record<string, string> = {
         />
       </div>
 
-      <!-- pending approval gate: jump straight to the conclusions reader -->
+      <!-- pending approval gate: jump straight to the conclusions reader. Suppressed
+           while a reviewer gate is folding/re-reviewing in the background (no human needed). -->
       <button
-        v-if="s.approval && s.approval.status === 'pending' && instance"
+        v-if="
+          s.approval &&
+          s.approval.status === 'pending' &&
+          instance &&
+          !reviews.isBackground(s.agentKind, props.taskId)
+        "
         type="button"
         class="mt-1 flex w-full items-center justify-center gap-1 rounded bg-amber-500 px-1.5 py-0.5 text-[9px] font-semibold text-amber-950 transition hover:bg-amber-400"
         @click.stop="ui.openApprovalDetail(instance.id, s.approval.id)"
