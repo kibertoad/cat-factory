@@ -1,6 +1,6 @@
 {
   "name": "@cat-factory/observability-langfuse",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/kibertoad/cat-factory.git",

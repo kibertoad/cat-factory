@@ -1,5 +1,11 @@
 # @cat-factory/app
 
+## 0.7.1
+
+### Patch Changes
+
+- 7463cf2: Add `repository` metadata (url + monorepo `directory`) to every published package.json. npm provenance attestation rejected the previous release because `repository.url` was empty and could not be matched against the source repo; declaring it lets the publish (and provenance) succeed, and re-triggers publishing of all packages from the failed release.
+
 ## 0.7.0
 
 ### Minor Changes
