@@ -22,11 +22,13 @@ features never touch the same file.
   domain `rules` scoped to it. The top-level `SpecDoc.groups`/`SpecDoc.rules`,
   the `SpecVersion`/`version.json` manifest, and the `SPEC_JSON_PATH`/`SPEC_RULES_PATH`/
   `SPEC_VERSION_PATH` path constants are removed; `SPEC_SERVICE_PATH`/`SPEC_MODULES_DIR`
-  are added. `renderSpecForReview` walks the new shape. Existing repos' monolithic
-  `spec.json` is simply re-created on the next spec run.
+  are added. `renderSpecForReview` walks the new shape. An existing repo's monolithic
+  `spec.json` / `rules.md` / `version.json` (and any old flat `features/*.feature` files)
+  are DELETED on the next spec run — the sharded layout is written fresh; no migration.
 - `@cat-factory/executor-harness`: sharded deterministic render + on-disk reassembly
   read-back + orphan-shard pruning (a removed/renamed module or group is deleted, not
-  resurrected); `version.json` dropped (no-op detection is now per-file via the commit).
+  resurrected) + a one-time prune of the pre-sharding monolithic/flat artifacts;
+  `version.json` dropped (no-op detection is now per-file via the commit).
   Content-derived (not positional) rule ids keep a group file byte-stable. The spec-writer
   prompt + reassembled-baseline now carry an EXISTING-taxonomy inventory and steer the
   agent to slot new requirements/rules into the closest existing module + feature (reusing

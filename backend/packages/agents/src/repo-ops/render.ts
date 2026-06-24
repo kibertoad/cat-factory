@@ -379,8 +379,15 @@ function uniqueId(id: string, used: Set<string>): string {
  */
 export function dedupeSpecIds(doc: SpecDoc): void {
   const used = new Set<string>()
-  for (const m of doc.modules ?? []) {
-    for (const g of m.groups ?? []) {
+  // Traverse in the SAME name-sorted order the renderer shards in, so a cross-group id
+  // collision's `-N` suffix lands on a deterministic group regardless of the order the
+  // agent happened to emit modules/groups in — otherwise a reordered-but-identical doc
+  // would bake a different suffix into the affected group shards and reintroduce the merge
+  // churn sharding exists to kill.
+  const modules = [...(doc.modules ?? [])].sort((a, b) => a.name.localeCompare(b.name))
+  for (const m of modules) {
+    const groups = [...(m.groups ?? [])].sort((a, b) => a.name.localeCompare(b.name))
+    for (const g of groups) {
       for (const r of g.requirements ?? []) {
         r.id = uniqueId(r.id, used)
         for (const a of r.acceptance ?? []) a.id = uniqueId(a.id, used)
@@ -408,14 +415,18 @@ export function coerceSpecDoc(parsed: unknown, fallbackName: string): SpecDoc | 
       : root
   const service = asString(obj.service) ?? asString(fallbackName)
   if (!service) return null
-  let rawModules: unknown[] = Array.isArray(obj.modules) ? obj.modules : []
-  if (rawModules.length === 0 && Array.isArray(obj.groups) && obj.groups.length > 0) {
-    rawModules = [{ name: service, summary: '', groups: obj.groups }]
-  }
-  const modules = rawModules
+  const modules = (Array.isArray(obj.modules) ? obj.modules : [])
     .map(coerceSpecModule)
     .filter((m): m is SpecModule => m !== null)
     .slice(0, MAX_SPEC_MODULES)
+  // Lenient safety net keyed on the COERCED result (not the raw array length): a model
+  // that returned flat top-level `groups`, or whose `modules` were all malformed so
+  // nothing survived, gets those groups wrapped into one module named after the service
+  // so its work is not dropped. NOT a compat path for old on-disk specs.
+  if (modules.length === 0 && Array.isArray(obj.groups) && obj.groups.length > 0) {
+    const wrapped = coerceSpecModule({ name: service, summary: '', groups: obj.groups })
+    if (wrapped) modules.push(wrapped)
+  }
   const doc: SpecDoc = { service, summary: asString(obj.summary) ?? '', modules }
   dedupeSpecIds(doc)
   return doc
@@ -453,23 +464,37 @@ interface SpecGroupRef {
   groupSlug: string
 }
 
-/** Walk the doc into a flat, name-sorted list of groups with their resolved slugs. */
-function walkSpecGroups(doc: SpecDoc): SpecGroupRef[] {
-  const out: SpecGroupRef[] = []
+interface SpecModuleRef {
+  module: SpecModule
+  moduleSlug: string
+  groups: Array<{ group: RequirementGroup; groupSlug: string }>
+}
+
+/**
+ * Walk the doc into name-sorted modules with their resolved slugs and their name-sorted
+ * groups. The single source of slug/sort truth for every renderer — computed once here
+ * rather than re-derived (and re-filtered per module) at each call site.
+ */
+function walkSpecModules(doc: SpecDoc): SpecModuleRef[] {
   const modulesList = doc.modules ?? []
   const moduleSlugs = assignSlugs(modulesList, (m) => m.name)
   const modules = [...modulesList].sort((a, b) => a.name.localeCompare(b.name))
-  for (const module of modules) {
+  return modules.map((module) => {
     const groupsList = module.groups ?? []
     const groupSlugs = assignSlugs(groupsList, (g) => g.name)
-    const groups = [...groupsList].sort((a, b) => a.name.localeCompare(b.name))
-    for (const group of groups) {
-      out.push({
-        module,
-        group,
-        moduleSlug: moduleSlugs.get(module)!,
-        groupSlug: groupSlugs.get(group)!,
-      })
+    const groups = [...groupsList]
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map((group) => ({ group, groupSlug: groupSlugs.get(group)! }))
+    return { module, moduleSlug: moduleSlugs.get(module)!, groups }
+  })
+}
+
+/** Flatten {@link walkSpecModules} into one ref per group (for the feature-file render). */
+function walkSpecGroups(doc: SpecDoc): SpecGroupRef[] {
+  const out: SpecGroupRef[] = []
+  for (const { module, moduleSlug, groups } of walkSpecModules(doc)) {
+    for (const { group, groupSlug } of groups) {
+      out.push({ module, group, moduleSlug, groupSlug })
     }
   }
   return out
@@ -520,10 +545,7 @@ export function renderSpecFiles(doc: SpecDoc): RenderedFile[] {
     content: canonicalJson({ service: doc.service, summary: doc.summary ?? '' }),
   })
 
-  const refs = walkSpecGroups(doc)
-  const modulesList = doc.modules ?? []
-  const moduleSlugs = assignSlugs(modulesList, (m) => m.name)
-  const modules = [...modulesList].sort((a, b) => a.name.localeCompare(b.name))
+  const moduleRefs = walkSpecModules(doc)
 
   const overview: string[] = [`# ${doc.service} — Specification`, '']
   overview.push('> Prescriptive spec for this service (what MUST be true). This index lists the')
@@ -531,45 +553,44 @@ export function renderSpecFiles(doc: SpecDoc): RenderedFile[] {
   overview.push('> and `features/<module>/*.feature` for the acceptance scenarios to satisfy.')
   overview.push('')
   if (doc.summary) overview.push(doc.summary, '')
-  if (modules.length === 0) {
+  if (moduleRefs.length === 0) {
     overview.push('_No requirements captured yet._')
   } else {
-    for (const module of modules) {
-      const mSlug = moduleSlugs.get(module)!
+    for (const { module, moduleSlug, groups } of moduleRefs) {
       overview.push(`## ${module.name}`)
       if (module.summary) overview.push('', module.summary)
       overview.push('')
-      const groupRefs = refs.filter((r) => r.module === module)
-      if (groupRefs.length === 0) {
+      if (groups.length === 0) {
         overview.push('_No features captured yet._', '')
         continue
       }
-      for (const { group, groupSlug } of groupRefs) {
+      for (const { group, groupSlug } of groups) {
         const detail = group.summary ? ` — ${group.summary}` : ''
-        overview.push(`- [${group.name}](modules/${mSlug}/${groupSlug}.md)${detail}`)
+        overview.push(`- [${group.name}](modules/${moduleSlug}/${groupSlug}.md)${detail}`)
       }
       overview.push('')
     }
   }
   files.push({ path: SPEC_OVERVIEW_PATH, content: `${overview.join('\n').trimEnd()}\n` })
 
-  for (const module of modules) {
-    const mSlug = moduleSlugs.get(module)!
+  for (const { module, moduleSlug } of moduleRefs) {
     files.push({
-      path: `${SPEC_MODULES_DIR}/${mSlug}/_module.json`,
+      path: `${SPEC_MODULES_DIR}/${moduleSlug}/_module.json`,
       content: canonicalJson({ name: module.name, summary: module.summary ?? '' }),
     })
   }
 
-  for (const { module, group, moduleSlug, groupSlug } of refs) {
-    files.push({
-      path: `${SPEC_MODULES_DIR}/${moduleSlug}/${groupSlug}.json`,
-      content: canonicalJson(group),
-    })
-    files.push({
-      path: `${SPEC_MODULES_DIR}/${moduleSlug}/${groupSlug}.md`,
-      content: renderSpecGroupMarkdown(module, group),
-    })
+  for (const { module, moduleSlug, groups } of moduleRefs) {
+    for (const { group, groupSlug } of groups) {
+      files.push({
+        path: `${SPEC_MODULES_DIR}/${moduleSlug}/${groupSlug}.json`,
+        content: canonicalJson(group),
+      })
+      files.push({
+        path: `${SPEC_MODULES_DIR}/${moduleSlug}/${groupSlug}.md`,
+        content: renderSpecGroupMarkdown(module, group),
+      })
+    }
   }
 
   return files

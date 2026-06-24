@@ -108,6 +108,46 @@ describe('coerceSpecDoc', () => {
     expect(doc?.modules[0]?.groups[0]?.name).toBe('Login')
   })
 
+  it('assigns cross-group id-collision suffixes by name-sorted order, not the agent emit order', () => {
+    // Two modules each carry a requirement whose fallback id slugs to `req-create`. The
+    // `-2` suffix must always land on the same (name-sorted-second) module so a
+    // reordered-but-identical doc renders byte-identical shards — otherwise the suffix
+    // would flip between branches and reintroduce merge churn.
+    const make = (first: string, second: string) => ({
+      service: 'X',
+      modules: [
+        { name: first, groups: [{ name: 'G', requirements: [{ title: 'Create', statement: 'SHALL create.' }] }] },
+        { name: second, groups: [{ name: 'G', requirements: [{ title: 'Create', statement: 'SHALL create.' }] }] },
+      ],
+    })
+    const idFor = (doc: SpecDocTree | null, moduleName: string) =>
+      doc?.modules.find((m) => m.name === moduleName)?.groups[0]?.requirements[0]?.id
+    const ab = coerceSpecDoc(make('Alpha', 'Beta'), 'X')
+    const ba = coerceSpecDoc(make('Beta', 'Alpha'), 'X')
+    // Alpha sorts first → keeps the bare id in BOTH emit orders; Beta always gets `-2`.
+    expect(idFor(ab, 'Alpha')).toBe('req-create')
+    expect(idFor(ab, 'Beta')).toBe('req-create-2')
+    expect(idFor(ba, 'Alpha')).toBe('req-create')
+    expect(idFor(ba, 'Beta')).toBe('req-create-2')
+  })
+
+  it('rescues stray top-level groups even when a non-empty modules array is all malformed', () => {
+    // A model returns BOTH a junk `modules` (no usable names → coerces to nothing) AND the
+    // real work under flat top-level `groups`. The safety net keys on the COERCED result,
+    // so the groups are still rescued rather than silently dropped.
+    const doc = coerceSpecDoc(
+      {
+        service: 'API',
+        modules: [{ summary: 'no name, dropped' }],
+        groups: [{ name: 'Login', requirements: [{ title: 'X', statement: 'SHALL X.' }] }],
+      },
+      'fallback',
+    )
+    expect(doc?.modules).toHaveLength(1)
+    expect(doc?.modules[0]?.name).toBe('API')
+    expect(doc?.modules[0]?.groups[0]?.name).toBe('Login')
+  })
+
   it('drops acceptance criteria with no Then clause', () => {
     const doc = coerceSpecDoc(
       {
@@ -371,6 +411,36 @@ describe('writeRequirementsFiles', () => {
       ])
       const back = await readExistingSpec(dir, 'fallback')
       expect(back).toEqual(sampleDoc)
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('prunes pre-sharding monolithic artifacts and old flat feature files', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'req-legacy-'))
+    try {
+      const { mkdir, writeFile } = await import('node:fs/promises')
+      // Simulate a repo created before sharding: a monolithic spec + a flat feature file.
+      await mkdir(join(dir, 'spec/features'), { recursive: true })
+      await writeFile(join(dir, 'spec/spec.json'), '{"service":"old"}\n', 'utf8')
+      await writeFile(join(dir, 'spec/rules.md'), '# old rules\n', 'utf8')
+      await writeFile(join(dir, 'spec/version.json'), '{"version":7}\n', 'utf8')
+      await writeFile(join(dir, 'spec/features/login.feature'), 'Feature: old\n', 'utf8')
+
+      await writeRequirementsFiles(dir, [
+        ...renderSpecFiles(sampleDoc),
+        ...renderFeatureFiles(sampleDoc),
+      ])
+
+      // The stale monolithic + flat-layout files are gone…
+      expect(await exists(join(dir, 'spec/spec.json'))).toBe(false)
+      expect(await exists(join(dir, 'spec/rules.md'))).toBe(false)
+      expect(await exists(join(dir, 'spec/version.json'))).toBe(false)
+      expect(await exists(join(dir, 'spec/features/login.feature'))).toBe(false)
+      // …and the freshly sharded layout is written.
+      expect(await exists(join(dir, 'spec/service.json'))).toBe(true)
+      expect(await exists(join(dir, 'spec/modules/access/authentication.json'))).toBe(true)
+      expect(await exists(join(dir, 'spec/features/access/authentication.feature'))).toBe(true)
     } finally {
       await rm(dir, { recursive: true, force: true })
     }

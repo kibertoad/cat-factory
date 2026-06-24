@@ -62,6 +62,16 @@ const SPEC_SERVICE_PATH = `${SPEC_DIR}/service.json`
 const SPEC_OVERVIEW_PATH = `${SPEC_DIR}/overview.md`
 const SPEC_MODULES_DIR = `${SPEC_DIR}/modules`
 const SPEC_FEATURES_DIR = `${SPEC_DIR}/features`
+// Monolithic-layout files from before the spec was sharded. They are never written any
+// more, so a migrated repo would otherwise carry a stale, never-updated spec.json /
+// rules.md / version.json forever. Deleted on every write (pre-1.0 no-compat policy:
+// break old shapes, don't migrate them). The old FLAT `features/*.feature` files are
+// pruned separately — see listLegacyFeatureFiles.
+const LEGACY_SPEC_FILES = [
+  `${SPEC_DIR}/spec.json`,
+  `${SPEC_DIR}/rules.md`,
+  `${SPEC_DIR}/version.json`,
+]
 
 // Coercion limits so a committed doc can never balloon past what the schema accepts.
 const MAX_MODULES = 40
@@ -260,8 +270,15 @@ function uniqueId(id: string, used: Set<string>): string {
  */
 function dedupeIds(doc: SpecDocTree): void {
   const used = new Set<string>()
-  for (const m of doc.modules) {
-    for (const g of m.groups) {
+  // Traverse in the SAME name-sorted order the renderer shards in, so a cross-group id
+  // collision's `-N` suffix lands on a deterministic group regardless of the order the
+  // agent happened to emit modules/groups in. Iterating the raw arrays would let a
+  // reordered-but-identical doc bake a different suffix into the affected group shards,
+  // reintroducing exactly the merge churn sharding exists to kill.
+  const modules = [...doc.modules].sort((a, b) => a.name.localeCompare(b.name))
+  for (const m of modules) {
+    const groups = [...m.groups].sort((a, b) => a.name.localeCompare(b.name))
+    for (const g of groups) {
       for (const r of g.requirements) {
         r.id = uniqueId(r.id, used)
         for (const a of r.acceptance) a.id = uniqueId(a.id, used)
@@ -288,18 +305,21 @@ export function coerceSpecDoc(parsed: unknown, fallbackName: string): SpecDocTre
       : root
   const service = asString(obj.service) ?? asString(fallbackName)
   if (!service) return null
-  let rawModules: unknown[] = Array.isArray(obj.modules) ? obj.modules : []
-  // Lenient safety net: a model that ignored the taxonomy and returned flat top-level
-  // `groups` is wrapped into one module named after the service so its work is not
-  // dropped. The strict Valibot schema (modules-only) and the steering prompt make this
-  // rare; it is NOT a compat path for old on-disk specs.
-  if (rawModules.length === 0 && Array.isArray(obj.groups) && obj.groups.length > 0) {
-    rawModules = [{ name: service, summary: '', groups: obj.groups }]
-  }
-  const modules = rawModules
+  const modules = (Array.isArray(obj.modules) ? obj.modules : [])
     .map(coerceModule)
     .filter((m): m is SpecModuleTree => m !== null)
     .slice(0, MAX_MODULES)
+  // Lenient safety net: a model that ignored the taxonomy and returned flat top-level
+  // `groups` (or whose `modules` were all malformed, so nothing survived coercion) gets
+  // those groups wrapped into one module named after the service, so its work is not
+  // dropped. Keyed on the COERCED result, not the raw array length, so a non-empty but
+  // junk `modules` alongside real `groups` still rescues the groups. The strict Valibot
+  // schema (modules-only) and the steering prompt make this rare; it is NOT a compat path
+  // for old on-disk specs.
+  if (modules.length === 0 && Array.isArray(obj.groups) && obj.groups.length > 0) {
+    const wrapped = coerceModule({ name: service, summary: '', groups: obj.groups })
+    if (wrapped) modules.push(wrapped)
+  }
   const doc = { service, summary: asString(obj.summary) ?? '', modules }
   dedupeIds(doc)
   return doc
@@ -343,21 +363,35 @@ interface GroupRef {
   groupSlug: string
 }
 
-/** Walk the doc into a flat, name-sorted list of groups with their resolved slugs. */
-function walkGroups(doc: SpecDocTree): GroupRef[] {
-  const out: GroupRef[] = []
+interface ModuleRef {
+  module: SpecModuleTree
+  moduleSlug: string
+  groups: Array<{ group: RequirementGroupTree; groupSlug: string }>
+}
+
+/**
+ * Walk the doc into name-sorted modules with their resolved slugs and their name-sorted
+ * groups. The single source of slug/sort truth for every renderer — computed once here
+ * rather than re-derived (and re-filtered per module) at each call site.
+ */
+function walkModules(doc: SpecDocTree): ModuleRef[] {
   const moduleSlugs = assignSlugs(doc.modules, (m) => m.name)
   const modules = [...doc.modules].sort((a, b) => a.name.localeCompare(b.name))
-  for (const module of modules) {
+  return modules.map((module) => {
     const groupSlugs = assignSlugs(module.groups, (g) => g.name)
-    const groups = [...module.groups].sort((a, b) => a.name.localeCompare(b.name))
-    for (const group of groups) {
-      out.push({
-        module,
-        group,
-        moduleSlug: moduleSlugs.get(module)!,
-        groupSlug: groupSlugs.get(group)!,
-      })
+    const groups = [...module.groups]
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map((group) => ({ group, groupSlug: groupSlugs.get(group)! }))
+    return { module, moduleSlug: moduleSlugs.get(module)!, groups }
+  })
+}
+
+/** Flatten {@link walkModules} into one ref per group (for the feature-file render). */
+function walkGroups(doc: SpecDocTree): GroupRef[] {
+  const out: GroupRef[] = []
+  for (const { module, moduleSlug, groups } of walkModules(doc)) {
+    for (const { group, groupSlug } of groups) {
+      out.push({ module, group, moduleSlug, groupSlug })
     }
   }
   return out
@@ -406,9 +440,7 @@ export function renderSpecFiles(doc: SpecDocTree): RenderedFile[] {
     content: canonicalJson({ service: doc.service, summary: doc.summary }),
   })
 
-  const refs = walkGroups(doc)
-  const moduleSlugs = assignSlugs(doc.modules, (m) => m.name)
-  const modules = [...doc.modules].sort((a, b) => a.name.localeCompare(b.name))
+  const moduleRefs = walkModules(doc)
 
   // overview.md — the index agents read first (names + links only, never the bodies).
   const overview: string[] = [`# ${doc.service} — Specification`, '']
@@ -417,45 +449,44 @@ export function renderSpecFiles(doc: SpecDocTree): RenderedFile[] {
   overview.push('> and `features/<module>/*.feature` for the acceptance scenarios to satisfy.')
   overview.push('')
   if (doc.summary) overview.push(doc.summary, '')
-  if (modules.length === 0) {
+  if (moduleRefs.length === 0) {
     overview.push('_No requirements captured yet._')
   } else {
-    for (const module of modules) {
-      const mSlug = moduleSlugs.get(module)!
+    for (const { module, moduleSlug, groups } of moduleRefs) {
       overview.push(`## ${module.name}`)
       if (module.summary) overview.push('', module.summary)
       overview.push('')
-      const groupRefs = refs.filter((r) => r.module === module)
-      if (groupRefs.length === 0) {
+      if (groups.length === 0) {
         overview.push('_No features captured yet._', '')
         continue
       }
-      for (const { group, groupSlug } of groupRefs) {
+      for (const { group, groupSlug } of groups) {
         const detail = group.summary ? ` — ${group.summary}` : ''
-        overview.push(`- [${group.name}](modules/${mSlug}/${groupSlug}.md)${detail}`)
+        overview.push(`- [${group.name}](modules/${moduleSlug}/${groupSlug}.md)${detail}`)
       }
       overview.push('')
     }
   }
   files.push({ path: SPEC_OVERVIEW_PATH, content: `${overview.join('\n').trimEnd()}\n` })
 
-  for (const module of modules) {
-    const mSlug = moduleSlugs.get(module)!
+  for (const { module, moduleSlug } of moduleRefs) {
     files.push({
-      path: `${SPEC_MODULES_DIR}/${mSlug}/_module.json`,
+      path: `${SPEC_MODULES_DIR}/${moduleSlug}/_module.json`,
       content: canonicalJson({ name: module.name, summary: module.summary }),
     })
   }
 
-  for (const { module, group, moduleSlug, groupSlug } of refs) {
-    files.push({
-      path: `${SPEC_MODULES_DIR}/${moduleSlug}/${groupSlug}.json`,
-      content: canonicalJson(group),
-    })
-    files.push({
-      path: `${SPEC_MODULES_DIR}/${moduleSlug}/${groupSlug}.md`,
-      content: renderGroupMarkdown(module, group),
-    })
+  for (const { module, moduleSlug, groups } of moduleRefs) {
+    for (const { group, groupSlug } of groups) {
+      files.push({
+        path: `${SPEC_MODULES_DIR}/${moduleSlug}/${groupSlug}.json`,
+        content: canonicalJson(group),
+      })
+      files.push({
+        path: `${SPEC_MODULES_DIR}/${moduleSlug}/${groupSlug}.md`,
+        content: renderGroupMarkdown(module, group),
+      })
+    }
   }
 
   return files
@@ -670,6 +701,23 @@ async function listExistingModuleFiles(dir: string): Promise<string[]> {
 }
 
 /**
+ * Old FLAT-layout Gherkin files written directly under `spec/features/` before features
+ * were nested under `features/<module>/`. The sharded renderer never targets a top-level
+ * `.feature`, so any such file is a stale orphan that would otherwise feed spec-aware
+ * agents acceptance scenarios with no live requirements behind them — prune them.
+ */
+async function listLegacyFeatureFiles(dir: string): Promise<string[]> {
+  try {
+    const entries = await readdir(join(dir, SPEC_FEATURES_DIR), { withFileTypes: true })
+    return entries
+      .filter((e) => e.isFile() && e.name.endsWith('.feature'))
+      .map((e) => `${SPEC_FEATURES_DIR}/${e.name}`)
+  } catch {
+    return []
+  }
+}
+
+/**
  * Write the rendered files under `dir` and reconcile the canonical shards.
  *
  * The spec-writer OWNS the canonical artifact (`service.json`, `overview.md`, the
@@ -683,6 +731,10 @@ async function listExistingModuleFiles(dir: string): Promise<string[]> {
  * (written only when absent, never overwritten OR deleted) so a later manual refinement
  * of a scenario survives a re-run. A removed group's seed feature file may linger; that
  * is harmless and far cheaper than destroying hand-edited scenarios.
+ *
+ * Finally, the pre-sharding monolithic artifacts (`spec.json` / `rules.md` /
+ * `version.json` and the old FLAT `features/*.feature` files) are deleted on sight so a
+ * migrated repo never carries a stale, never-updated spec alongside the shards.
  */
 export async function writeRequirementsFiles(dir: string, files: RenderedFile[]): Promise<void> {
   const desired = new Set(files.map((f) => f.path))
@@ -696,6 +748,10 @@ export async function writeRequirementsFiles(dir: string, files: RenderedFile[])
   // Prune orphaned canonical shards (a removed/renamed module or group).
   for (const existing of await listExistingModuleFiles(dir)) {
     if (!desired.has(existing)) await rm(join(dir, existing), { force: true })
+  }
+  // Drop stale monolithic-layout artifacts left by a pre-sharding repo.
+  for (const legacy of [...LEGACY_SPEC_FILES, ...(await listLegacyFeatureFiles(dir))]) {
+    await rm(join(dir, legacy), { force: true })
   }
 }
 

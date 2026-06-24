@@ -1,3 +1,4 @@
+import type { SpecDoc } from '@cat-factory/contracts'
 import { describe, expect, it } from 'vitest'
 import {
   canonicalBlueprintJson,
@@ -272,5 +273,27 @@ describe('spec rendering', () => {
     const before = JSON.stringify(doc)
     dedupeSpecIds(doc)
     expect(JSON.stringify(doc)).toBe(before)
+  })
+
+  it('assigns cross-group id-collision suffixes by name-sorted order, not the emit order', () => {
+    const make = (first: string, second: string) =>
+      coerceSpecDoc(
+        {
+          service: 'X',
+          modules: [
+            { name: first, groups: [{ name: 'G', requirements: [{ title: 'Create', statement: 'SHALL.' }] }] },
+            { name: second, groups: [{ name: 'G', requirements: [{ title: 'Create', statement: 'SHALL.' }] }] },
+          ],
+        },
+        'X',
+      )!
+    const idFor = (d: SpecDoc, name: string) =>
+      d.modules!.find((m) => m.name === name)!.groups![0]!.requirements![0]!.id
+    for (const d of [make('Alpha', 'Beta'), make('Beta', 'Alpha')]) {
+      // Alpha sorts first → bare id; Beta always gets `-2`, independent of emit order, so
+      // the per-group shards stay byte-stable across branches.
+      expect(idFor(d, 'Alpha')).toBe('req-create')
+      expect(idFor(d, 'Beta')).toBe('req-create-2')
+    }
   })
 })
