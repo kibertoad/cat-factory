@@ -29,6 +29,10 @@ export {
   registeredAgentKinds,
   registeredKindRequiresContainer,
   registeredConfigContributions,
+  registeredAgentStep,
+  registeredPreOps,
+  registeredPostOps,
+  registeredAgentPresentation,
   clearRegisteredAgentKinds,
 } from './agents/kinds/registry.js'
 // Agent capability traits (standard + custom). `code-aware` gates the engine's folding
@@ -123,6 +127,29 @@ export {
 } from './agents/prompts/business-logic.js'
 export { PLATFORM_DELIVERY_CONTRACT } from './agents/prompts/delivery-contract.js'
 export { FINAL_ANSWER_IN_REPLY, STANDARDS_FOOTER } from './agents/prompts/shared.js'
+
+// Deterministic, container-free rendering + lenient coercion of the in-repo
+// `blueprints/`/`spec/` artifacts (lifted out of the executor-harness image). Invoked
+// from an agent's post-op: coerce the model's JSON, render the files, commit via the
+// RepoFiles port. Pure functions — same input → same bytes.
+export {
+  type RenderedFile,
+  coerceBlueprintService,
+  moduleSlug,
+  canonicalBlueprintJson,
+  hashBlueprint,
+  renderBlueprintFiles,
+  renderBlueprintVersionFile,
+  nextBlueprintVersion,
+  coerceSpecDoc,
+  dedupeSpecIds,
+  canonicalSpecJson,
+  hashSpec,
+  renderSpecFiles,
+  renderSpecFeatureFiles,
+  renderSpecVersionFile,
+  nextSpecVersion,
+} from './repo-ops/render.js'
 
 // The generic AI provisioning facade: a mixable provider registry + the base,
 // runtime-neutral resolvers. Optional/heavier backends ship as their own packages
