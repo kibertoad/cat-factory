@@ -32,6 +32,13 @@ jobs:
           # changesets/action needs push credentials to create/update the Release
           # PR branch; this is the one job that legitimately persists them.
           persist-credentials: true # zizmor: ignore[artipacked]
+          # Use a PAT, not the default GITHUB_TOKEN: pushes/merges made with the
+          # default token do NOT trigger further workflow runs (GitHub's
+          # anti-recursion rule), so merging the Release PR with GITHUB_TOKEN
+          # left the publish job un-triggered. A PAT-attributed merge re-runs
+          # this workflow, which then publishes (no pending changesets => publish
+          # mode). Falls back to GITHUB_TOKEN if the secret is unset.
+          token: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
 
       - name: Install pnpm
         uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6.0.8
@@ -55,7 +62,9 @@ jobs:
           title: 'Release Packages'
           commit: 'chore: release packages'
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # PAT so the Release PR it creates is authored by a real identity whose
+          # later merge re-triggers this workflow's publish job (see checkout above).
+          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
           # No NPM_TOKEN: publishing authenticates via npm OIDC trusted
           # publishing (the `id-token: write` permission above). Configure each
           # package's trusted publisher on npmjs.com to point at this workflow.
@@ -69,5 +78,8 @@ jobs:
         if: steps.changesets.outputs.pullRequestNumber != ''
         run: gh pr merge --auto --squash "$PR_NUMBER"
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # PAT here too: the auto-merge must be attributed to the PAT identity so
+          # the merge push triggers the publish run. With GITHUB_TOKEN it merges
+          # but the merge is a no-op for Actions and nothing publishes.
+          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ steps.changesets.outputs.pullRequestNumber }}
