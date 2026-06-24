@@ -33,6 +33,8 @@ import ModelDefaultsPanel from '~/components/settings/ModelDefaultsPanel.vue'
 import ServiceFragmentDefaultsPanel from '~/components/settings/ServiceFragmentDefaultsPanel.vue'
 import LocalModelEndpointsPanel from '~/components/settings/LocalModelEndpointsPanel.vue'
 import OpenRouterCatalogPanel from '~/components/settings/OpenRouterCatalogPanel.vue'
+import VendorCredentialsModal from '~/components/providers/VendorCredentialsModal.vue'
+import PersonalCredentialModal from '~/components/providers/PersonalCredentialModal.vue'
 
 const workspace = useWorkspaceStore()
 const github = useGitHubStore()
@@ -124,6 +126,8 @@ watch(
       <ServiceFragmentDefaultsPanel />
       <LocalModelEndpointsPanel />
       <OpenRouterCatalogPanel />
+      <VendorCredentialsModal />
+      <PersonalCredentialModal />
     </template>
 
     <!-- Backend unreachable / bootstrap failed -->

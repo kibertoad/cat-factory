@@ -311,6 +311,18 @@ watch(
           color="primary"
           variant="soft"
           size="sm"
+          icon="i-lucide-key-round"
+          class="justify-start"
+          title="Connect LLM vendor subscriptions + provider API keys"
+          @click="ui.openVendorCredentials()"
+        >
+          Vendors &amp; keys
+        </UButton>
+        <UButton
+          block
+          color="primary"
+          variant="soft"
+          size="sm"
           icon="i-lucide-server"
           class="justify-start"
           @click="ui.openLocalModels()"
