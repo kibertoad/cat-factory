@@ -462,7 +462,9 @@ export function isModelUsable(id: string | undefined | null, caps: ProviderCapab
     // enabled this exact slug in its catalog.
     const or = parseOpenRouterModelId(id)
     if (or) {
-      return caps.directProviders.has('openrouter') && (caps.openRouterModels?.has(or.model) ?? false)
+      return (
+        caps.directProviders.has('openrouter') && (caps.openRouterModels?.has(or.model) ?? false)
+      )
     }
     return false
   }

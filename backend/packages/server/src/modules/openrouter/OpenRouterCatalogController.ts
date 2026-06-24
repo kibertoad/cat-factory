@@ -12,7 +12,10 @@ import { jsonBody } from '../../http/validation.js'
 // feed the spend budget. Mounted under a workspace; requires a signed-in user.
 
 const signInRequired = (c: Context<AppEnv>) =>
-  c.json({ error: { code: 'unauthorized', message: 'Sign in to manage the OpenRouter catalog' } }, 401)
+  c.json(
+    { error: { code: 'unauthorized', message: 'Sign in to manage the OpenRouter catalog' } },
+    401,
+  )
 
 const unavailable = (c: Context<AppEnv>) =>
   c.json(

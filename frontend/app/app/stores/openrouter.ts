@@ -1,9 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import type {
-  OpenRouterModelMeta,
-  OpenRouterRefreshResult,
-} from '~/types/openrouter'
+import type { OpenRouterModelMeta, OpenRouterRefreshResult } from '~/types/openrouter'
 
 // The workspace's OpenRouter dynamic catalog: the enabled subset of OpenRouter's 300+
 // gateway models. `enabled` is what's persisted (and surfaced in the model picker);

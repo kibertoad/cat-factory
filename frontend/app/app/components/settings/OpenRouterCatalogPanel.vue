@@ -80,7 +80,9 @@ async function save() {
   try {
     // Persist the ticked models, carrying the metadata from whichever list they came from.
     const byId = new Map(source.value.map((m) => [m.id, m]))
-    const models = [...selected.value].map((id) => byId.get(id)).filter((m): m is OpenRouterModelMeta => !!m)
+    const models = [...selected.value]
+      .map((id) => byId.get(id))
+      .filter((m): m is OpenRouterModelMeta => !!m)
     await store.save(workspace.workspaceId, models)
     toast.add({ title: 'OpenRouter catalog saved', icon: 'i-lucide-check', color: 'success' })
   } catch (e) {
@@ -151,8 +153,8 @@ async function save() {
           </label>
         </div>
         <p v-else class="text-xs text-slate-500">
-          No models yet — hit <span class="text-slate-300">Refresh catalog</span> to load OpenRouter's
-          live list.
+          No models yet — hit <span class="text-slate-300">Refresh catalog</span> to load
+          OpenRouter's live list.
         </p>
 
         <div class="flex items-center justify-between">
