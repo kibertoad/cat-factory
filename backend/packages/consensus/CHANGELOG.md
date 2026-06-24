@@ -1,0 +1,136 @@
+# @cat-factory/consensus
+
+## 0.7.0
+
+### Minor Changes
+
+- 385bd93: Add an optional consensus-orchestration framework + a core Task Estimator.
+
+  A new opt-in `@cat-factory/consensus` package lets an eligible agent step run through
+  a multi-model **consensus** process — a specialist panel, a debate, or ranked
+  voting/scoring — to produce a higher-quality result of the same shape the single-actor
+  agent would have (a polished document, an aggregate of observations, an estimate). It
+  integrates via the `AgentExecutor` seam: a `ConsensusAgentExecutor` wraps the standard
+  composite and delegates to it when a step isn't consensus-enabled or gating marks the
+  task ineligible. Eligibility is surfaced through a new group of assignable capability
+  traits (`specialist-panel-capable` / `debate-capable` / `ranked-voting-capable`); the
+  pipeline builder shows an "Enable Consensus" toggle (strategy, participants + models,
+  optional risk/impact gating) on eligible steps. Each session persists a full transcript
+  (`consensus_sessions`, both runtimes) rendered in a dedicated Consensus Session window
+  and streamed live via a new `consensus` workspace event; every sub-call flows to
+  `llm_call_metrics`. Wired per facade behind `CONSENSUS_ENABLED` (off ⇒ unchanged).
+
+  A new **core** `task-estimator` agent rates a task's Complexity/Risk/Impact (0..1) after
+  requirements are clarified; the engine persists it on `block.estimate` (new column on
+  both stores) and the inspector shows the ratings. It gates the expensive consensus step
+  and is useful standalone for triage.
+
+  BREAKING (pre-1.0, no migration): `Block` gains `estimate`, the pipeline + pipeline-step
+  shapes gain `consensus`, `AgentRunContext` gains `consensus` + `block.estimate`, and the
+  `WorkspaceEvent` union + `ExecutionEventPublisher` gain a consensus variant. Stale rows /
+  shapes simply re-create.
+
+### Patch Changes
+
+- Updated dependencies [fe53445]
+- Updated dependencies [d94e75c]
+- Updated dependencies [6406c8c]
+- Updated dependencies [3d9a9d8]
+- Updated dependencies [db77061]
+- Updated dependencies [a48c620]
+- Updated dependencies [3bc8c79]
+- Updated dependencies [9d3a956]
+- Updated dependencies [8d11833]
+- Updated dependencies [ad9ba9e]
+- Updated dependencies [3e0d753]
+- Updated dependencies [f83ffd7]
+- Updated dependencies [8065fed]
+- Updated dependencies [385bd93]
+- Updated dependencies [e50e78a]
+- Updated dependencies [0972696]
+- Updated dependencies [b48c455]
+- Updated dependencies [e9b9356]
+- Updated dependencies [e8005ba]
+- Updated dependencies [3a12f15]
+- Updated dependencies [3a12f15]
+- Updated dependencies [b40da13]
+- Updated dependencies [3a12f15]
+- Updated dependencies [8eed38c]
+- Updated dependencies [084bf43]
+- Updated dependencies [268c15d]
+- Updated dependencies [8eed38c]
+- Updated dependencies [157cd02]
+- Updated dependencies [7c37653]
+- Updated dependencies [db77061]
+- Updated dependencies [f49fa30]
+- Updated dependencies [6406c8c]
+- Updated dependencies [57d70fa]
+- Updated dependencies [6406c8c]
+- Updated dependencies [918764f]
+- Updated dependencies [918764f]
+- Updated dependencies [88b3170]
+- Updated dependencies [fe0b7f8]
+- Updated dependencies [f73652c]
+- Updated dependencies [db336b1]
+- Updated dependencies [8807f5c]
+- Updated dependencies [9be11e1]
+- Updated dependencies [5ec0d25]
+- Updated dependencies [197264e]
+- Updated dependencies [a691853]
+- Updated dependencies [f066c59]
+- Updated dependencies [7d5e060]
+- Updated dependencies [4a08935]
+- Updated dependencies [70e8ef0]
+- Updated dependencies [70e8ef0]
+- Updated dependencies [70e8ef0]
+- Updated dependencies [70e8ef0]
+- Updated dependencies [70e8ef0]
+- Updated dependencies [70e8ef0]
+- Updated dependencies [70e8ef0]
+- Updated dependencies [b287996]
+- Updated dependencies [b156b4b]
+- Updated dependencies [5c8ca33]
+- Updated dependencies [b156b4b]
+- Updated dependencies [7cf2a2d]
+- Updated dependencies [2d66d34]
+- Updated dependencies [197264e]
+- Updated dependencies [3a12f15]
+- Updated dependencies [37baa7f]
+- Updated dependencies [c664fe6]
+- Updated dependencies [553a67d]
+- Updated dependencies [b80d657]
+- Updated dependencies [4026793]
+- Updated dependencies [311a110]
+- Updated dependencies [f16ae62]
+- Updated dependencies [36018cb]
+- Updated dependencies [799be66]
+- Updated dependencies [d65c979]
+- Updated dependencies [75a0441]
+- Updated dependencies [7157fd7]
+- Updated dependencies [21ca647]
+- Updated dependencies [c4ef995]
+- Updated dependencies [8eed95b]
+- Updated dependencies [0b38aa6]
+- Updated dependencies [a97e485]
+- Updated dependencies [de5a9d7]
+- Updated dependencies [f647733]
+- Updated dependencies [d5e9141]
+- Updated dependencies [2dd7e56]
+- Updated dependencies [2d66d34]
+- Updated dependencies [86a5843]
+- Updated dependencies [a54ada2]
+- Updated dependencies [2dd7e56]
+- Updated dependencies [5ca8086]
+- Updated dependencies [d0697d1]
+- Updated dependencies [0090313]
+- Updated dependencies [7dc8e57]
+- Updated dependencies [cc8d96a]
+- Updated dependencies [7c37653]
+- Updated dependencies [43f2443]
+- Updated dependencies [acac735]
+- Updated dependencies [3841315]
+- Updated dependencies [48d2f0d]
+- Updated dependencies [3e6a844]
+  - @cat-factory/contracts@0.7.0
+  - @cat-factory/kernel@0.7.0
+  - @cat-factory/agents@0.7.0
