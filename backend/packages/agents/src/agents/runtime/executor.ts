@@ -41,6 +41,7 @@ export interface AiAgentExecutorDependencies {
   resolveWorkspaceModelDefault?: (
     workspaceId: string,
     agentKind: string,
+    modelPresetId?: string,
   ) => Promise<string | undefined>
   /**
    * Opt-in provider-hosted web search for the design/research inline kinds. When
@@ -66,6 +67,7 @@ export class AiAgentExecutor implements AgentExecutor {
   private readonly resolveWorkspaceModelDefault?: (
     workspaceId: string,
     agentKind: string,
+    modelPresetId?: string,
   ) => Promise<string | undefined>
   private readonly webSearch?: InlineWebSearchOptions
 
@@ -124,6 +126,7 @@ export class AiAgentExecutor implements AgentExecutor {
       {
         agentKind: context.agentKind,
         blockModelId: context.block.modelId,
+        modelPresetId: context.block.modelPresetId,
         workspaceId: context.workspaceId,
       },
     )

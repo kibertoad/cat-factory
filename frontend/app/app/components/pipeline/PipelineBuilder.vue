@@ -234,8 +234,8 @@ async function clone(p: Pipeline) {
               variant="soft"
               size="xs"
               icon="i-lucide-cpu"
-              title="Pick which model each agent kind runs on"
-              @click="ui.openModelDefaults()"
+              title="Manage model presets (which model each agent runs on)"
+              @click="ui.openModelConfig()"
             >
               Configure models
             </UButton>

@@ -197,9 +197,10 @@ export type {
   CloudProvider,
   InstanceSize,
   UpdateAccountInput,
-  // Per-workspace, per-agent-kind default model selection.
-  ModelDefaults,
-  SetModelDefaultsInput,
+  // Per-workspace model presets (named model→agent mappings; a task picks one).
+  ModelPreset,
+  CreateModelPresetInput,
+  UpdateModelPresetInput,
   // Per-workspace default service-fragment selection (new services inherit it).
   ServiceFragmentDefaults,
   SetServiceFragmentDefaultsInput,

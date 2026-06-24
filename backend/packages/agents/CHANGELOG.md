@@ -1,5 +1,105 @@
 # @cat-factory/agents
 
+## 0.10.0
+
+### Minor Changes
+
+- 1e31cbc: Replace per-agent-kind model defaults with named **model presets**.
+
+  A workspace now keeps a library of model presets instead of a single per-agent-kind
+  default map. A preset is one `baseModelId` applied to every agent kind plus optional
+  per-kind `overrides`, so "everything Kimi K2.7" is a base with no overrides. Two
+  built-ins are seeded for every workspace: **Kimi K2.7** (the default — every agent runs
+  on Kimi K2.7) and **GLM-5.2**. A task selects a preset via the new `Block.modelPresetId`
+  (the inspector's "Model preset" picker + the new-task form); changing it affects only
+  steps that haven't started yet. Resolution precedence is unchanged in spirit: a block's
+  pinned model wins, else the task's selected/default preset's mapping for the kind, else
+  the env routing.
+
+  - `@cat-factory/contracts`: new `model-presets.ts` (`ModelPreset`, create/update schemas);
+    `Block.modelPresetId`; `addTask`/`updateBlock` accept `modelPresetId`; the snapshot
+    carries `modelPresets` instead of `modelDefaults`. The `model-defaults` contract is removed.
+  - `@cat-factory/kernel`: new `ModelPresetRepository` port (replaces `ModelDefaultsRepository`),
+    `DEFAULT_MODEL_PRESETS` seed + `modelForKindFromPreset` helper; `resolveWorkspaceModelDefault`
+    resolvers gain an optional `modelPresetId` argument throughout.
+  - `@cat-factory/orchestration`: `ModelPresetService` (CRUD + lazy seeding, replaces
+    `ModelDefaultsService`) and `resolvePresetModelForKind`; the execution engine threads the
+    block's preset into model resolution, the personal-credential gate and the start guard.
+  - `@cat-factory/agents`: `StepModelInputs.modelPresetId` + the resolver signature.
+  - `@cat-factory/server`: `ModelPresetController` (`GET|POST|PATCH|DELETE
+/workspaces/:ws/model-presets`, replaces the model-defaults controller); the block mappers
+    persist `model_preset_id`; the snapshot lists `modelPresets`.
+  - `@cat-factory/worker` / `@cat-factory/node-server`: the `model_presets` table (D1 migration
+    `0006` ⇄ Drizzle) + `blocks.model_preset_id`, replacing `workspace_model_defaults`.
+
+  BREAKING (pre-1.0, no migration): the `workspace_model_defaults` table, the
+  `/model-defaults` endpoint, and the snapshot's `modelDefaults` field are removed. Existing
+  per-agent-kind default maps are dropped; workspaces fall back to the seeded built-in presets.
+
+### Patch Changes
+
+- Updated dependencies [1e31cbc]
+  - @cat-factory/contracts@0.11.0
+  - @cat-factory/kernel@0.11.0
+  - @cat-factory/prompt-fragments@0.7.6
+
+## 0.9.0
+
+### Minor Changes
+
+- d0081e1: Shard the in-repo `spec/` artifact by a module → feature taxonomy to kill merge churn.
+
+  The spec-writer no longer commits a single monolithic `spec/spec.json` (+ `overview.md`
+  / `rules.md` / `version.json`); every spec run rewrote those whole files, so two task
+  branches that both touched the spec conflicted hard on merge. The spec is now SHARDED:
+  a tiny `spec/service.json`, an `spec/overview.md` index, and one canonical
+  `spec/modules/<module>/<group>.json` (+ a human `<group>.md`) per feature group, with
+  the Gherkin `spec/features/<module>/<group>.feature` files nested to match. A group's
+  file bytes depend only on that group, so concurrent branches editing different
+  features never touch the same file.
+
+  **Breaking (acceptable per pre-1.0 policy — no migration):**
+
+  - `@cat-factory/contracts`: `SpecDoc` gains a two-level taxonomy — `modules: SpecModule[]`
+    where each module holds `groups`, and each group carries BOTH its `requirements` and the
+    domain `rules` scoped to it. The top-level `SpecDoc.groups`/`SpecDoc.rules`,
+    the `SpecVersion`/`version.json` manifest, and the `SPEC_JSON_PATH`/`SPEC_RULES_PATH`/
+    `SPEC_VERSION_PATH` path constants are removed; `SPEC_SERVICE_PATH`/`SPEC_MODULES_DIR`
+    are added. `renderSpecForReview` walks the new shape. An existing repo's monolithic
+    `spec.json` / `rules.md` / `version.json` (and any old flat `features/*.feature` files)
+    are DELETED on the next spec run — the sharded layout is written fresh; no migration.
+  - `@cat-factory/executor-harness`: sharded deterministic render + on-disk reassembly
+    read-back + orphan-shard pruning (a removed/renamed module or group is deleted, not
+    resurrected) + a one-time prune of the pre-sharding monolithic/flat artifacts;
+    `version.json` dropped (no-op detection is now per-file via the commit).
+    Content-derived (not positional) rule ids keep a group file byte-stable. The spec-writer
+    prompt + reassembled-baseline now carry an EXISTING-taxonomy inventory and steer the
+    agent to slot new requirements/rules into the closest existing module + feature (reusing
+    exact names) rather than spawning near-duplicate domains/groups. Ships in the **1.9.0**
+    runner image already pinned in `deploy/backend` (no further tag move needed).
+  - `@cat-factory/agents`: the runtime-neutral `repo-ops/render.ts` mirror is reworked to
+    the same sharded layout (`renderSpecVersionFile`/`nextSpecVersion`/`canonicalSpecJson`/
+    `hashSpec` for the spec removed); `SPEC_AWARE_GUIDANCE` points readers at
+    `spec/modules/<module>/<feature>.{md,json}`.
+  - `@cat-factory/server`: `SPEC_WRITER_SYSTEM_PROMPT` describes the module → feature →
+    {requirements, rules} structure, the no-catch-all rule, and the taxonomy-reuse rule.
+
+### Patch Changes
+
+- Updated dependencies [d0081e1]
+  - @cat-factory/contracts@0.10.0
+  - @cat-factory/kernel@0.10.1
+  - @cat-factory/prompt-fragments@0.7.5
+
+## 0.8.2
+
+### Patch Changes
+
+- Updated dependencies [ae29687]
+  - @cat-factory/contracts@0.9.0
+  - @cat-factory/kernel@0.10.0
+  - @cat-factory/prompt-fragments@0.7.4
+
 ## 0.8.1
 
 ### Patch Changes

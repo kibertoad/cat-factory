@@ -71,6 +71,12 @@ export interface AgentRunContext {
     /** Id of the model picked for this block (overrides the agent routing), if any. */
     modelId?: string
     /**
+     * Id of the model preset selected for this task, if any. When the block pins no
+     * model directly, the step's model is resolved from this preset (`overrides[kind]
+     * ?? baseModelId`); absent → the workspace default preset.
+     */
+    modelPresetId?: string
+    /**
      * Requirements/RFC/PRD pages linked to this block from Confluence, supplied
      * as extra context. Present only when the Confluence integration is wired and
      * the block has linked documents.

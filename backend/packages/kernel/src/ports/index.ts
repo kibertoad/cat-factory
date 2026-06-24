@@ -306,7 +306,7 @@ export type {
   SandboxRunRepository,
   SandboxGradeRepository,
 } from './sandbox-repositories.js'
-export type { ModelDefaultsRepository } from './model-default-repositories.js'
+export type { ModelPresetRepository } from './model-preset-repositories.js'
 export type { ServiceFragmentDefaultsRepository } from './service-fragment-default-repositories.js'
 export type { DueSchedule, PipelineScheduleRepository } from './recurring-repositories.js'
 export type { TrackerSettingsRepository } from './tracker-settings-repositories.js'

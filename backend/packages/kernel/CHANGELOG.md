@@ -1,5 +1,87 @@
 # @cat-factory/kernel
 
+## 0.11.0
+
+### Minor Changes
+
+- 1e31cbc: Replace per-agent-kind model defaults with named **model presets**.
+
+  A workspace now keeps a library of model presets instead of a single per-agent-kind
+  default map. A preset is one `baseModelId` applied to every agent kind plus optional
+  per-kind `overrides`, so "everything Kimi K2.7" is a base with no overrides. Two
+  built-ins are seeded for every workspace: **Kimi K2.7** (the default — every agent runs
+  on Kimi K2.7) and **GLM-5.2**. A task selects a preset via the new `Block.modelPresetId`
+  (the inspector's "Model preset" picker + the new-task form); changing it affects only
+  steps that haven't started yet. Resolution precedence is unchanged in spirit: a block's
+  pinned model wins, else the task's selected/default preset's mapping for the kind, else
+  the env routing.
+
+  - `@cat-factory/contracts`: new `model-presets.ts` (`ModelPreset`, create/update schemas);
+    `Block.modelPresetId`; `addTask`/`updateBlock` accept `modelPresetId`; the snapshot
+    carries `modelPresets` instead of `modelDefaults`. The `model-defaults` contract is removed.
+  - `@cat-factory/kernel`: new `ModelPresetRepository` port (replaces `ModelDefaultsRepository`),
+    `DEFAULT_MODEL_PRESETS` seed + `modelForKindFromPreset` helper; `resolveWorkspaceModelDefault`
+    resolvers gain an optional `modelPresetId` argument throughout.
+  - `@cat-factory/orchestration`: `ModelPresetService` (CRUD + lazy seeding, replaces
+    `ModelDefaultsService`) and `resolvePresetModelForKind`; the execution engine threads the
+    block's preset into model resolution, the personal-credential gate and the start guard.
+  - `@cat-factory/agents`: `StepModelInputs.modelPresetId` + the resolver signature.
+  - `@cat-factory/server`: `ModelPresetController` (`GET|POST|PATCH|DELETE
+/workspaces/:ws/model-presets`, replaces the model-defaults controller); the block mappers
+    persist `model_preset_id`; the snapshot lists `modelPresets`.
+  - `@cat-factory/worker` / `@cat-factory/node-server`: the `model_presets` table (D1 migration
+    `0006` ⇄ Drizzle) + `blocks.model_preset_id`, replacing `workspace_model_defaults`.
+
+  BREAKING (pre-1.0, no migration): the `workspace_model_defaults` table, the
+  `/model-defaults` endpoint, and the snapshot's `modelDefaults` field are removed. Existing
+  per-agent-kind default maps are dropped; workspaces fall back to the seeded built-in presets.
+
+### Patch Changes
+
+- Updated dependencies [1e31cbc]
+  - @cat-factory/contracts@0.11.0
+
+## 0.10.1
+
+### Patch Changes
+
+- Updated dependencies [d0081e1]
+  - @cat-factory/contracts@0.10.0
+
+## 0.10.0
+
+### Minor Changes
+
+- ae29687: OpenRouter: dynamic multi-tenant catalog + flavour unification.
+
+  **Flavour unification.** A catalog model can now carry an `openrouter` flavour alongside
+  `cloudflare`/`direct`/`subscription`. `effectiveVariant` resolves in the precedence
+  direct → openrouter → cloudflare (the subscription override still wins in `ModelRouter`),
+  so the SAME logical model routes through OpenRouter when only an OpenRouter key is
+  configured, and through its native vendor when that key is present. The standalone
+  `openrouter-*` catalog entries are folded into their native twins: `deepseek`, `gpt-5.5`
+  and `claude-opus` gain an `openrouter` route; Gemini 3 Pro becomes a curated `gemini`
+  entry. **Breaking (pre-1.0, acceptable):** the catalog ids `openrouter-claude-opus`,
+  `openrouter-gpt`, `openrouter-deepseek`, `openrouter-gemini-pro` and `openrouter-llama`
+  are removed — a block pinned to one falls through to default routing.
+
+  **Dynamic catalog.** A workspace can now browse OpenRouter's live `/models` and enable a
+  subset in the UI (the new "OpenRouter models" panel), rather than a hardcoded handful.
+  Enabled models surface in the per-workspace picker as `openrouter:<slug>` entries with
+  their live context window and price (overlaid onto the spend table, so budgets meter
+  accurately). Persisted in a new generic per-workspace `provider_model_catalog` table
+  (D1 ⇄ Drizzle, keyed by `(workspace_id, provider)` so future gateways like LiteLLM reuse
+  it), behind the new kernel `ProviderModelCatalogRepository` port and the
+  `OpenRouterCatalogService` (refresh leases the workspace's pooled OpenRouter key). New
+  routes: `GET|PUT /workspaces/:ws/openrouter/catalog`, `POST /workspaces/:ws/openrouter/refresh`.
+  Cross-runtime conformance asserts the enabled-subset round-trip + catalog surfacing on
+  both D1 and Postgres.
+
+### Patch Changes
+
+- Updated dependencies [ae29687]
+  - @cat-factory/contracts@0.9.0
+
 ## 0.9.0
 
 ### Minor Changes

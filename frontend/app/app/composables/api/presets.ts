@@ -3,9 +3,14 @@ import type {
   MergeThresholdPreset,
   UpdateMergePresetInput,
 } from '~/types/merge'
+import type {
+  CreateModelPresetInput,
+  ModelPreset,
+  UpdateModelPresetInput,
+} from '~/types/model-presets'
 import type { ApiContext } from './context'
 
-/** The per-workspace merge-threshold preset library (per-task auto-merge policy). */
+/** The per-workspace preset libraries: merge-threshold policy + model->agent mapping. */
 export function presetsApi({ http, ws }: ApiContext) {
   return {
     // ---- merge threshold presets (per-task auto-merge policy library) -----
@@ -23,6 +28,24 @@ export function presetsApi({ http, ws }: ApiContext) {
 
     deleteMergePreset: (workspaceId: string, presetId: string) =>
       http(`${ws(workspaceId)}/merge-presets/${encodeURIComponent(presetId)}`, {
+        method: 'DELETE',
+      }),
+
+    // ---- model presets (per-task model->agent mapping library) ------------
+    listModelPresets: (workspaceId: string) =>
+      http<ModelPreset[]>(`${ws(workspaceId)}/model-presets`),
+
+    createModelPreset: (workspaceId: string, body: CreateModelPresetInput) =>
+      http<ModelPreset>(`${ws(workspaceId)}/model-presets`, { method: 'POST', body }),
+
+    updateModelPreset: (workspaceId: string, presetId: string, body: UpdateModelPresetInput) =>
+      http<ModelPreset>(`${ws(workspaceId)}/model-presets/${encodeURIComponent(presetId)}`, {
+        method: 'PATCH',
+        body,
+      }),
+
+    deleteModelPreset: (workspaceId: string, presetId: string) =>
+      http(`${ws(workspaceId)}/model-presets/${encodeURIComponent(presetId)}`, {
         method: 'DELETE',
       }),
   }

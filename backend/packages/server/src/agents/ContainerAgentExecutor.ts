@@ -163,6 +163,7 @@ export interface ContainerAgentExecutorDependencies {
   resolveWorkspaceModelDefault?: (
     workspaceId: string,
     agentKind: string,
+    modelPresetId?: string,
   ) => Promise<string | undefined>
   /** Resolve which repo (and installation) a run targets. */
   resolveRepoTarget: ResolveRepoTarget

@@ -81,6 +81,7 @@ export interface IterativeReviewDeps {
   resolveWorkspaceModelDefault?: (
     workspaceId: string,
     agentKind: string,
+    modelPresetId?: string,
   ) => Promise<string | undefined>
   /** Raises a notification when a review yields findings. Optional. */
   notificationService?: NotificationService
@@ -420,6 +421,7 @@ export abstract class IterativeReviewService<
     const defaultId = await this.deps.resolveWorkspaceModelDefault?.(
       workspaceId,
       this.reviewAgentKind,
+      block.modelPresetId,
     )
     const fromDefault = this.deps.resolveBlockModel?.(defaultId)
     if (fromDefault) return resolve(fromDefault)

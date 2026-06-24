@@ -16,7 +16,7 @@ import { llmProxyController } from './modules/llmProxy/LlmProxyController.js'
 import { mergePresetController } from './modules/merge/MergePresetController.js'
 import { workspaceSettingsController } from './modules/settings/WorkspaceSettingsController.js'
 import { releaseHealthController } from './modules/releaseHealth/ReleaseHealthController.js'
-import { modelDefaultsController } from './modules/modelDefaults/ModelDefaultsController.js'
+import { modelPresetController } from './modules/modelPresets/ModelPresetController.js'
 import { serviceFragmentDefaultsController } from './modules/serviceFragmentDefaults/ServiceFragmentDefaultsController.js'
 import { modelController } from './modules/models/ModelController.js'
 import { notificationController } from './modules/notifications/NotificationController.js'
@@ -94,7 +94,7 @@ export function registerCoreControllers<E extends AppEnv>(app: Hono<E>): void {
   app.route('/workspaces/:workspaceId', mergePresetController())
   app.route('/workspaces/:workspaceId', workspaceSettingsController())
   app.route('/workspaces/:workspaceId', releaseHealthController())
-  app.route('/workspaces/:workspaceId', modelDefaultsController())
+  app.route('/workspaces/:workspaceId', modelPresetController())
   app.route('/workspaces/:workspaceId', serviceFragmentDefaultsController())
   app.route('/workspaces/:workspaceId', recurringPipelineController())
   app.route('/workspaces/:workspaceId', trackerSettingsController())

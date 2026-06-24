@@ -1,4 +1,4 @@
-import type { BlockType, WorkspaceSettings } from './types.js'
+import type { BlockType, ModelPreset, WorkspaceSettings } from './types.js'
 
 // Static catalogs and constants used across the domain.
 
@@ -47,6 +47,47 @@ export const DEFAULT_CI_MAX_ATTEMPTS = DEFAULT_MERGE_PRESET.ciMaxAttempts
  * preset resolves. One reviewer pass = one iteration; the initial review is iteration 1.
  */
 export const DEFAULT_MAX_REQUIREMENT_ITERATIONS = DEFAULT_MERGE_PRESET.maxRequirementIterations
+
+/**
+ * A model preset template (no id/createdAt yet) used to seed a fresh workspace's
+ * preset library. {@link DEFAULT_MODEL_PRESETS} lists the built-ins; the service
+ * stamps each with an id + createdAt on first use.
+ */
+export interface ModelPresetSeed {
+  name: string
+  baseModelId: string
+  overrides: Record<string, string>
+  isDefault: boolean
+}
+
+/**
+ * The model presets seeded for every workspace. The default points every agent kind
+ * at Kimi K2.7; a second built-in points everything at GLM-5.2. Both use the catalog
+ * ids from {@link MODEL_CATALOG} (`kimi-k2.7`, `glm`). A workspace always keeps at
+ * least these until the operator edits the library.
+ */
+export const DEFAULT_MODEL_PRESETS: ModelPresetSeed[] = [
+  { name: 'Kimi K2.7', baseModelId: 'kimi-k2.7', overrides: {}, isDefault: true },
+  { name: 'GLM-5.2', baseModelId: 'glm', overrides: {}, isDefault: false },
+]
+
+/** The built-in default preset (everything Kimi K2.7), used as the resolution fallback. */
+export const DEFAULT_MODEL_PRESET: ModelPresetSeed =
+  DEFAULT_MODEL_PRESETS.find((p) => p.isDefault) ?? DEFAULT_MODEL_PRESETS[0]!
+
+/**
+ * The model id a preset assigns to an agent kind: its per-kind override, else the
+ * preset's base model. When no preset is resolved (a workspace not yet seeded), falls
+ * back to the built-in {@link DEFAULT_MODEL_PRESET} (everything Kimi K2.7) — so the
+ * "everything Kimi" default holds even before the preset library is materialised.
+ */
+export function modelForKindFromPreset(
+  preset: ModelPreset | ModelPresetSeed | null | undefined,
+  agentKind: string,
+): string {
+  const p = preset ?? DEFAULT_MODEL_PRESET
+  return p.overrides[agentKind] ?? p.baseModelId
+}
 
 /** Human-facing label per block type, used when titling freshly dropped frames. */
 export const BLOCK_TYPE_LABEL: Record<BlockType, string> = {

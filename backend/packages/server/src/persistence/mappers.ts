@@ -64,6 +64,7 @@ export interface BlockRow {
   model_id: string | null
   pull_request: string | null
   merge_preset_id: string | null
+  model_preset_id: string | null
   pipeline_id: string | null
   /** Task-level agent-contributed config values, JSON id→value map. */
   agent_config: string | null
@@ -111,6 +112,7 @@ export function rowToBlock(row: BlockRow): Block {
   if (row.model_id !== null) block.modelId = row.model_id
   if (row.pull_request !== null) block.pullRequest = JSON.parse(row.pull_request) as PullRequestRef
   if (row.merge_preset_id !== null) block.mergePresetId = row.merge_preset_id
+  if (row.model_preset_id !== null) block.modelPresetId = row.model_preset_id
   if (row.pipeline_id !== null) block.pipelineId = row.pipeline_id
   if (row.agent_config !== null)
     block.agentConfig = JSON.parse(row.agent_config) as AgentConfigValues
@@ -159,6 +161,7 @@ export function blockInsertValues(block: Block): Record<string, unknown> {
     model_id: block.modelId ?? null,
     pull_request: block.pullRequest ? JSON.stringify(block.pullRequest) : null,
     merge_preset_id: block.mergePresetId ?? null,
+    model_preset_id: block.modelPresetId ?? null,
     pipeline_id: block.pipelineId ?? null,
     agent_config:
       block.agentConfig && Object.keys(block.agentConfig).length
@@ -224,6 +227,10 @@ export function blockPatchToColumns(patch: BlockPatch): Record<string, unknown> 
   // An empty string clears the selection (back to the workspace default preset).
   if (patch.mergePresetId !== undefined) {
     set.merge_preset_id = patch.mergePresetId ? patch.mergePresetId : null
+  }
+  // An empty string clears the selection (back to the workspace default model preset).
+  if (patch.modelPresetId !== undefined) {
+    set.model_preset_id = patch.modelPresetId ? patch.modelPresetId : null
   }
   // An empty string clears the pinned pipeline selection.
   if (patch.pipelineId !== undefined) {

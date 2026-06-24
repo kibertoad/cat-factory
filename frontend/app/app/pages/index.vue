@@ -29,7 +29,7 @@ import MergeThresholdsPanel from '~/components/settings/MergeThresholdsPanel.vue
 import IssueTrackerWritebackPanel from '~/components/settings/IssueTrackerWritebackPanel.vue'
 import WorkspaceSettingsPanel from '~/components/settings/WorkspaceSettingsPanel.vue'
 import DatadogPanel from '~/components/settings/DatadogPanel.vue'
-import ModelDefaultsPanel from '~/components/settings/ModelDefaultsPanel.vue'
+import ModelConfigurationPanel from '~/components/settings/ModelConfigurationPanel.vue'
 import ServiceFragmentDefaultsPanel from '~/components/settings/ServiceFragmentDefaultsPanel.vue'
 import LocalModelEndpointsPanel from '~/components/settings/LocalModelEndpointsPanel.vue'
 import OpenRouterCatalogPanel from '~/components/settings/OpenRouterCatalogPanel.vue'
@@ -122,7 +122,7 @@ watch(
       <IssueTrackerWritebackPanel />
       <WorkspaceSettingsPanel />
       <DatadogPanel />
-      <ModelDefaultsPanel />
+      <ModelConfigurationPanel />
       <ServiceFragmentDefaultsPanel />
       <LocalModelEndpointsPanel />
       <OpenRouterCatalogPanel />
