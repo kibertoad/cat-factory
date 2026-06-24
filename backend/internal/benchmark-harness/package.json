@@ -16,7 +16,7 @@
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.85",
-    "@ai-sdk/openai": "^3.0.73",
+    "@ai-sdk/openai": "^3.0.74",
     "@ai-sdk/openai-compatible": "^2.0.51",
     "@cat-factory/agents": "workspace:*",
     "@cat-factory/contracts": "workspace:*",
@@ -24,13 +24,13 @@
     "@cat-factory/kernel": "workspace:*",
     "@cat-factory/orchestration": "workspace:*",
     "@cat-factory/spend": "workspace:*",
-    "ai": "^6.0.208",
+    "ai": "^6.0.209",
     "valibot": "^1.4.1",
     "workers-ai-provider": "^3.2.0"
   },
   "devDependencies": {
-    "@types/node": "^22.19.21",
-    "typescript": "^5.9.3",
+    "@types/node": "^26.0.0",
+    "typescript": "^6.0.3",
     "vitest": "^4.1.9"
   }
 }

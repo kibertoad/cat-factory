@@ -37,7 +37,7 @@
     "@cat-factory/prompt-fragments": "workspace:*",
     "@cat-factory/spend": "workspace:*",
     "@cat-factory/workspaces": "workspace:*",
-    "ai": "^6.0.208"
+    "ai": "^6.0.209"
   },
   "devDependencies": {
     "typescript": "7.0.1-rc",
