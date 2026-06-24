@@ -7,8 +7,9 @@ import {
 // Unit coverage for the local container transport with the CLI + fetch injected, so it
 // runs anywhere (no daemon, no Postgres). With no adapter supplied it defaults to the
 // Docker-CLI adapter, so these assert the docker-family lifecycle (run → port → health →
-// dispatch), idempotent re-attach by label, the kind→route mapping, and the eviction
-// mapping a vanished container produces. The Apple adapter is covered separately.
+// dispatch), idempotent re-attach by label, that every dispatch posts to /jobs with the
+// kind in the body, and the eviction mapping a vanished container produces. The Apple
+// adapter is covered separately.
 
 /** A scripted docker CLI: records calls and returns canned stdout per subcommand. */
 function fakeDocker(overrides: Partial<Record<string, string>> = {}) {
@@ -40,12 +41,12 @@ function jsonResponse(body: unknown, status = 200): Response {
 afterEach(() => vi.restoreAllMocks())
 
 describe('LocalContainerRunnerTransport', () => {
-  it('starts a labelled container, waits for health, then POSTs the job to the kind route', async () => {
+  it('starts a labelled container, waits for health, then POSTs the job to /jobs', async () => {
     const { exec, calls } = fakeDocker()
     const fetchImpl = vi.fn(async (input: string | URL | Request, _init?: RequestInit) => {
       const url = String(input)
       if (url.endsWith('/health')) return new Response('ok', { status: 200 })
-      if (url.endsWith('/run')) return jsonResponse({ jobId: 'job-1', state: 'running' }, 202)
+      if (url.endsWith('/jobs')) return jsonResponse({ jobId: 'job-1', state: 'running' }, 202)
       throw new Error(`unexpected fetch ${url}`)
     })
     const transport = new LocalContainerRunnerTransport({
@@ -64,18 +65,19 @@ describe('LocalContainerRunnerTransport', () => {
     expect(runCall.join(' ')).toContain('HARNESS_SHARED_SECRET=sek')
     expect(runCall).toContain('harness:test')
 
-    const post = fetchImpl.mock.calls.find(([u]) => String(u).endsWith('/run'))!
-    expect(String(post[0])).toBe('http://127.0.0.1:49170/run')
+    const post = fetchImpl.mock.calls.find(([u]) => String(u).endsWith('/jobs'))!
+    expect(String(post[0])).toBe('http://127.0.0.1:49170/jobs')
     const init = post[1] as RequestInit
     expect(init.method).toBe('POST')
     expect((init.headers as Record<string, string>)['x-harness-secret']).toBe('sek')
-    expect(init.body).toBe('{"hello":"world"}')
+    // The kind travels in the body alongside the job spec.
+    expect(init.body).toBe('{"hello":"world","kind":"run"}')
   })
 
   it('re-attaches to an existing container (idempotent dispatch) without a second docker run', async () => {
     // First dispatch starts the container; the second resolves it from the cache.
     const { exec, calls } = fakeDocker()
-    const fetchImpl = vi.fn(async (input: string | URL | Request) => {
+    const fetchImpl = vi.fn(async (input: string | URL | Request, _init?: RequestInit) => {
       if (String(input).endsWith('/health')) return new Response('ok', { status: 200 })
       return jsonResponse({ state: 'running' }, 202)
     })
@@ -89,8 +91,10 @@ describe('LocalContainerRunnerTransport', () => {
     await transport.dispatch({ runId: 'job-1', jobId: 'job-1' }, {}, 'merge')
 
     expect(calls.filter((c) => c[0] === 'run')).toHaveLength(1)
-    // The merge kind maps to the /merge route.
-    expect(fetchImpl.mock.calls.filter(([u]) => String(u).endsWith('/merge'))).toHaveLength(2)
+    // Both dispatches POST to /jobs, each carrying the merge kind in the body.
+    const posts = fetchImpl.mock.calls.filter(([u]) => String(u).endsWith('/jobs'))
+    expect(posts).toHaveLength(2)
+    expect(posts.every(([, init]) => JSON.parse(String(init?.body)).kind === 'merge')).toBe(true)
   })
 
   it('shares one per-run container across steps, keyed by run id and polled by job id', async () => {
@@ -125,13 +129,16 @@ describe('LocalContainerRunnerTransport', () => {
     expect(jobPaths).toContain('/jobs/run-1-architect')
   })
 
-  it('maps each dispatch kind to its harness route', async () => {
+  it('sends every dispatch kind to /jobs with the kind in the body', async () => {
     const { exec } = fakeDocker()
-    const routes: string[] = []
-    const fetchImpl = vi.fn(async (input: string | URL | Request) => {
+    const posted: { path: string; kind: unknown }[] = []
+    const fetchImpl = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       const url = String(input)
       if (url.endsWith('/health')) return new Response('ok', { status: 200 })
-      routes.push(new URL(url).pathname)
+      posted.push({
+        path: new URL(url).pathname,
+        kind: JSON.parse(String(init?.body)).kind,
+      })
       return jsonResponse({ state: 'running' }, 202)
     })
     const transport = new LocalContainerRunnerTransport({
@@ -142,7 +149,11 @@ describe('LocalContainerRunnerTransport', () => {
     await transport.dispatch({ runId: 'a', jobId: 'a' }, {}, 'blueprint')
     await transport.dispatch({ runId: 'b', jobId: 'b' }, {}, 'ci-fix')
     await transport.dispatch({ runId: 'c', jobId: 'c' }, {}, 'resolve-conflicts')
-    expect(routes).toEqual(['/blueprint', '/ci-fix', '/resolve-conflicts'])
+    expect(posted).toEqual([
+      { path: '/jobs', kind: 'blueprint' },
+      { path: '/jobs', kind: 'ci-fix' },
+      { path: '/jobs', kind: 'resolve-conflicts' },
+    ])
   })
 
   it('runs the tester job privileged (Docker-in-Docker) but no other kind', async () => {

@@ -27,11 +27,11 @@ export async function handleExplore(
 ): Promise<ExploreResult> {
   const trace = {
     jobId: job.jobId,
-    kind: job.kind ?? 'explore',
+    kind: job.label ?? 'explore',
     repo: `${job.repo.owner}/${job.repo.name}`,
     branch: job.branch,
   }
-  return withWorkspace(job.kind ?? 'explore', async (dir) => {
+  return withWorkspace(job.label ?? 'explore', async (dir) => {
     log.info('explore: cloning', trace)
     await cloneRepo({
       repo: { ...job.repo, baseBranch: job.branch },

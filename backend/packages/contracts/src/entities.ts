@@ -2,7 +2,7 @@ import * as v from 'valibot'
 import { subscriptionVendorSchema } from './vendor-credentials.js'
 import { agentConfigValuesSchema } from './agent-config.js'
 import { testReportSchema } from './testing.js'
-import { consensusStepConfigSchema, taskEstimateSchema } from './consensus.js'
+import { consensusStepConfigSchema, stepGatingSchema, taskEstimateSchema } from './consensus.js'
 import { cloudProviderSchema, instanceSizeSchema } from './provisioning.js'
 import { releaseSignalSchema } from './release.js'
 import {
@@ -13,6 +13,8 @@ import {
   blockTypeSchema,
   positionSchema,
   sizeSchema,
+  taskTypeFieldsSchema,
+  taskTypeSchema,
 } from './primitives.js'
 
 // ---------------------------------------------------------------------------
@@ -67,6 +69,19 @@ export const blockSchema = v.object({
    */
   estimate: v.optional(v.nullable(taskEstimateSchema)),
   moduleName: v.optional(v.string()),
+  /**
+   * The kind of work this task represents (feature / bug / document / spike / recurring),
+   * chosen by the human at creation. Drives the card's icon/badge, the per-type creation
+   * fields, and the per-service running-task limit's optional per-type bucketing. Only
+   * meaningful on `task`-level blocks; absent ⇒ treated as `feature`.
+   */
+  taskType: v.optional(taskTypeSchema),
+  /**
+   * Small per-type fields collected on the create-task form (see {@link taskTypeFieldsSchema}),
+   * e.g. a bug's severity / repro steps, a spike's time-box. Only meaningful on `task`-level
+   * blocks; absent ⇒ none collected.
+   */
+  taskTypeFields: v.optional(v.nullable(taskTypeFieldsSchema)),
   /**
    * Ids of curated best-practice prompt fragments selected for this block. Their
    * bodies are composed into the agent system prompt at run time. The catalog
@@ -325,6 +340,26 @@ export const pipelineSchema = v.object({
    */
   consensus: v.optional(v.array(v.nullable(consensusStepConfigSchema))),
   /**
+   * Per-step gating, parallel to {@link agentKinds}: when `gating[i]` is set and its
+   * `enabled` is true, step `i` runs only if the task estimate meets the threshold
+   * (OR across the supplied axes); otherwise it is transparently SKIPPED at runtime.
+   * `null`/absent means "always run" (the default). Copied onto the run's step at
+   * start, like {@link gates}. A pipeline with any enabled gating requires a
+   * `task-estimator` step earlier in the chain. See {@link stepGatingSchema}.
+   */
+  gating: v.optional(v.array(v.nullable(stepGatingSchema))),
+  /**
+   * Free-form organizational labels for the saved-pipeline library (filter/search).
+   * Absent ⇒ no labels. Applies to built-in and custom pipelines alike.
+   */
+  labels: v.optional(v.array(v.string())),
+  /**
+   * When true the pipeline is archived: kept but hidden from the default library view
+   * (a "show archived" toggle reveals it). Organizational only — an archived built-in
+   * is still read-only for structure. Absent / false ⇒ active.
+   */
+  archived: v.optional(v.boolean()),
+  /**
    * True for the curated built-in catalog pipelines (`seedPipelines()`). Built-ins
    * are read-only templates: they can be cloned (into an editable copy) but not
    * edited in place. Absent / false on user-created and cloned pipelines.
@@ -468,7 +503,6 @@ export type AgentRunKind = v.InferOutput<typeof agentRunKindSchema>
  *   - `timeout`          — a container watchdog fired (inactivity or max-duration).
  *   - `agent`            — the agent / git push reported a failure.
  *   - `job_failed`       — an async container job came back failed. [execution]
- *   - `decision_timeout` — a human decision was not answered in time. [execution]
  *   - `rejected`         — a human rejected a gated proposal, stopping the run. [execution]
  *   - `cancelled`        — the user (or an orphan sweep) explicitly stopped the run.
  *   - `unknown`          — anything not otherwise classified.
@@ -480,7 +514,6 @@ export const agentFailureKindSchema = v.picklist([
   'timeout',
   'agent',
   'job_failed',
-  'decision_timeout',
   'rejected',
   // A companion agent could not return a parseable quality assessment (truncated /
   // malformed) even after a repair retry, so the run was failed for human attention.
@@ -759,6 +792,19 @@ export const pipelineStepSchema = v.object({
    * See {@link consensusStepConfigSchema}.
    */
   consensus: v.optional(v.nullable(consensusStepConfigSchema)),
+  /**
+   * Estimate-based gating for this step, copied from the pipeline's `gating` array at
+   * run start. When present (with `enabled: true`) the step is skipped at runtime unless
+   * the block's task estimate meets the threshold. Absent ⇒ always run. See
+   * {@link stepGatingSchema}.
+   */
+  gating: v.optional(v.nullable(stepGatingSchema)),
+  /**
+   * True when this step was skipped at runtime because its `gating` was not satisfied
+   * (the task estimate fell below the threshold). The step's `state` is `done` with no
+   * output; the UI renders it as "skipped (gated)". Absent ⇒ the step ran normally.
+   */
+  skipped: v.optional(v.boolean()),
   /** Text the agent produced for this step (when LLM execution is enabled). */
   output: v.optional(v.string()),
   /** Identifier of the model that produced `output`, for transparency. */

@@ -35,21 +35,6 @@ const execFileAsync = promisify(execFile)
 // reap it. The harness reaches this service's LLM proxy at the runtime's host alias and
 // clones/pushes to github.com directly with the per-job token in the request body.
 
-/** Maps a dispatch kind to the harness HTTP route that starts that job. */
-const KIND_ROUTE: Record<RunnerDispatchKind, string> = {
-  run: '/run',
-  blueprint: '/blueprint',
-  spec: '/spec',
-  explore: '/explore',
-  bootstrap: '/bootstrap',
-  'ci-fix': '/ci-fix',
-  'resolve-conflicts': '/resolve-conflicts',
-  merge: '/merge',
-  'on-call': '/on-call',
-  test: '/test',
-  'fix-tests': '/fix-tests',
-}
-
 // The failed-poll error the engine classifies as a container eviction (matched by
 // orchestration `isContainerEvictionError`, also used by the bootstrap flow). A
 // vanished/exited local container maps to it so the run stops and the stale-run
@@ -178,12 +163,13 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
       await this.waitForHealth(endpoint)
     }
 
-    // POST the job to the kind's route. Idempotent: re-attaching to an already-running
-    // container re-POSTs, which the harness's per-id registry treats as a re-attach.
-    const res = await this.fetchImpl(this.url(resolved, KIND_ROUTE[kind]), {
+    // POST the job to the single harness endpoint, with the kind in the body. Idempotent:
+    // re-attaching to an already-running container re-POSTs, which the harness's per-id
+    // registry treats as a re-attach.
+    const res = await this.fetchImpl(this.url(resolved, '/jobs'), {
       method: 'POST',
       headers: { 'content-type': 'application/json', [SECRET_HEADER]: this.sharedSecret },
-      body: JSON.stringify(spec),
+      body: JSON.stringify({ ...spec, kind }),
       signal: AbortSignal.timeout(this.requestTimeoutMs),
     })
     if (!res.ok) {

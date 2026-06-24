@@ -30,8 +30,8 @@ function fakeContainer(
   respond: () => { error?: string } & Record<string, unknown>,
   capture: (d: Dispatched) => void,
 ): ResolveRunnerTransport {
-  // Speaks the async harness protocol: POST /run starts a job (returns its id),
-  // GET /jobs/{id} reports it as already finished with `respond()` as the result.
+  // Speaks the async harness protocol: POST /jobs starts a job (kind in the body,
+  // returns its id), GET /jobs/{id} reports it as already finished with `respond()`.
   const stub = {
     fetch(url: string, init?: { method?: string; body?: string }) {
       if (init?.method === 'GET' || url.includes('/jobs/')) {
@@ -112,6 +112,9 @@ describe('ContainerAgentExecutor', () => {
     })
 
     const body = dispatched!.body
+    // The dispatch discriminator travels in the body: the coder maps to the `run` kind.
+    expect(dispatched!.url).toBe('http://container/jobs')
+    expect(body.kind).toBe('run')
     expect(body.model).toBe('qwen3-max')
     expect(body.proxyBaseUrl).toBe('https://worker.example/v1')
     expect((body.repo as Record<string, unknown>).cloneUrl).toBe('https://github.com/octo/app.git')

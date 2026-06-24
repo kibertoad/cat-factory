@@ -12,6 +12,7 @@ import { D1TokenUsageRepository } from './infrastructure/repositories/D1TokenUsa
 import { D1LlmCallMetricRepository } from './infrastructure/repositories/D1LlmCallMetricRepository'
 import { D1PipelineScheduleRepository } from './infrastructure/repositories/D1PipelineScheduleRepository'
 import { buildContainer } from './infrastructure/container'
+import { escalateStaleNotifications } from '@cat-factory/server'
 import { CryptoIdGenerator, SystemClock } from './infrastructure/runtime'
 import { WorkflowsWorkRunner } from './infrastructure/workflows/WorkflowsWorkRunner'
 import { WorkflowsBootstrapRunner } from './infrastructure/workflows/WorkflowsBootstrapRunner'
@@ -226,6 +227,23 @@ export default {
           ),
       )
     }
+
+    // Escalate long-waiting notifications yellow → red (every 2 min). Runs no longer
+    // time out waiting for a human, so the escalating notification — past each
+    // workspace's `waitingEscalationMinutes` threshold — is the overdue-human signal.
+    ctx.waitUntil(
+      escalateStaleNotifications(buildContainer(env), clock.now())
+        .then((escalated) => {
+          if (escalated > 0)
+            logger.info({ cron: 'notification-escalation', escalated }, 'escalated notifications')
+        })
+        .catch((error) =>
+          logger.error(
+            { cron: 'notification-escalation', err: errInfo(error) },
+            'notification escalation failed',
+          ),
+        ),
+    )
 
     // Fire any due recurring pipelines (every 2 min; the actual cadence is hours).
     // Each due schedule starts its pipeline against its reused block, skipping any

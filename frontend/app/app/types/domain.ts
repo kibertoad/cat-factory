@@ -18,7 +18,7 @@ import type { ExecutionInstance, LlmCallActivity } from './execution'
 import type { BootstrapJob } from './bootstrap'
 import type { Notification } from './notifications'
 import type { RequirementReview } from './requirements'
-import type { ConsensusSession, ConsensusStepConfig, TaskEstimate } from './consensus'
+import type { ConsensusSession, ConsensusStepConfig, StepGating, TaskEstimate } from './consensus'
 import type { ClarityReview } from './clarity'
 import type { MergeThresholdPreset } from './merge'
 import type { PipelineSchedule } from './recurring'
@@ -55,6 +55,28 @@ export type BlockType =
  */
 export type BlockLevel = 'frame' | 'module' | 'task'
 
+/**
+ * The kind of work a task represents, chosen at creation. Drives the card's badge/icon
+ * and the optional per-service running-task limit's bucketing. `recurring` tasks are
+ * created via a recurring-pipeline schedule, not the add-task form.
+ */
+export type TaskType = 'feature' | 'bug' | 'document' | 'spike' | 'recurring'
+
+/** The task types selectable in the add-task form (recurring is created via a schedule). */
+export type CreateTaskType = 'feature' | 'bug' | 'document' | 'spike'
+
+/** Small, optional per-type fields collected on the add-task form. */
+export interface TaskTypeFields {
+  /** bug: defect severity. */
+  severity?: 'low' | 'medium' | 'high' | 'critical'
+  /** bug: reproduction steps / observed-vs-expected. */
+  stepsToReproduce?: string
+  /** spike: the investigation time-box, in hours. */
+  timeboxHours?: number
+  /** document: what kind of document this task produces. */
+  docKind?: 'prd' | 'rfc' | 'runbook' | 'reference' | 'other'
+}
+
 /** A building block dropped on the board. */
 export interface Block {
   id: string
@@ -86,6 +108,10 @@ export interface Block {
   estimate?: TaskEstimate | null
   /** task-only: the module this task belongs to (created on implement if absent). */
   moduleName?: string
+  /** task-only: the kind of work (feature/bug/document/spike/recurring); absent = feature. */
+  taskType?: TaskType
+  /** task-only: small per-type form fields (bug severity, spike timebox, …). */
+  taskTypeFields?: TaskTypeFields | null
   /** ids of best-practice prompt fragments folded into this block's agent prompts. */
   fragmentIds?: string[]
   /**
@@ -239,6 +265,9 @@ export type AgentKind =
   | 'bug-investigator'
 
 /** A draggable agent definition shown in the agent palette. */
+/** Palette grouping for the agent archetypes (collapsible sections in the builder). */
+export type AgentCategory = 'review' | 'design' | 'build' | 'test' | 'docs' | 'gates'
+
 export interface AgentArchetype {
   kind: AgentKind
   label: string
@@ -247,6 +276,8 @@ export interface AgentArchetype {
   /** tailwind-ish accent token used across chips / borders */
   color: string
   description: string
+  /** Palette category this archetype is grouped under. Absent ⇒ ungrouped/system kind. */
+  category?: AgentCategory
   /**
    * Optional id of a DEDICATED result window this agent's step opens instead of the
    * generic prose step-detail panel. Resolved through the result-view registry
@@ -284,6 +315,16 @@ export interface Pipeline {
    * mechanism. `null`/absent ⇒ standard single-actor agent.
    */
   consensus?: (ConsensusStepConfig | null)[]
+  /**
+   * Per-step estimate gating, parallel to `agentKinds`: when set (with `enabled`) the step
+   * is skipped at runtime unless the task estimate meets the threshold. `null`/absent ⇒
+   * always run. Used to make a companion conditional on the task estimate.
+   */
+  gating?: (StepGating | null)[]
+  /** Free-form organizational labels for the library (filter/search). */
+  labels?: string[]
+  /** True when archived: kept but hidden from the default library view. */
+  archived?: boolean
   /**
    * True for the curated built-in catalog pipelines. Built-ins are read-only
    * templates — clone one to make an editable copy. Absent/false on custom pipelines.
@@ -359,6 +400,35 @@ export interface WorkspaceSnapshot {
   mounts?: WorkspaceMount[]
   /** In-org sharing: the org's services this board can mount from (with mount counts). */
   serviceCatalog?: Service[]
+  /** The workspace's runtime settings (human-wait escalation threshold + task limit). */
+  settings?: WorkspaceSettings
+}
+
+/** How the per-service running-task limit is bucketed. Mirrors `@cat-factory/contracts`. */
+export type TaskLimitMode = 'off' | 'shared' | 'per_type'
+
+/**
+ * A workspace's runtime settings: how long a run may wait for a human before its
+ * notification escalates yellow → red, and whether/how the number of tasks running
+ * concurrently under one service is capped. Mirrors `@cat-factory/contracts`.
+ */
+export interface WorkspaceSettings {
+  /** Minutes a run may wait for human input before its notification turns red. */
+  waitingEscalationMinutes: number
+  /** Whether/how the per-service running-task limit is enforced. */
+  taskLimitMode: TaskLimitMode
+  /** The shared cap, when `taskLimitMode` is `shared`. */
+  taskLimitShared: number | null
+  /** The per-type caps, when `taskLimitMode` is `per_type` (type → cap). */
+  taskLimitPerType: Partial<Record<CreateTaskType, number>> | null
+}
+
+/** Patch a workspace's settings (only the supplied fields change). */
+export interface UpdateWorkspaceSettingsInput {
+  waitingEscalationMinutes?: number
+  taskLimitMode?: TaskLimitMode
+  taskLimitShared?: number | null
+  taskLimitPerType?: Partial<Record<CreateTaskType, number>> | null
 }
 
 /**

@@ -1,26 +1,6 @@
 import { timingSafeEqual } from 'node:crypto'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import {
-  type BlueprintJob,
-  type BlueprintResult,
-  type BootstrapJob,
-  type BootstrapResult,
-  type CiFixerJob,
-  type CiFixerResult,
-  type ConflictResolverJob,
-  type ConflictResolverResult,
-  type MergerJob,
-  type MergerResult,
-  type OnCallJob,
-  type OnCallResult,
-  type SpecJob,
-  type SpecResult,
-  type ExploreJob,
-  type ExploreResult,
-  type TesterJob,
-  type TesterResult,
-  type FixerJob,
-  type FixerResult,
   parseBlueprintJob,
   parseBootstrapJob,
   parseCiFixerJob,
@@ -32,7 +12,6 @@ import {
   parseTesterJob,
   parseFixerJob,
   parseJob,
-  type RunResult,
 } from './job.js'
 import { handleBootstrap } from './bootstrap.js'
 import { handleBlueprint } from './blueprint.js'
@@ -45,16 +24,22 @@ import { handleOnCall } from './on-call.js'
 import { handleTester } from './tester.js'
 import { handleFixer } from './fixer.js'
 import { redactSecrets } from './git.js'
-import { JobRegistry, loadRunnerLimits } from './runner.js'
-import { handleRun } from './runner.js'
+import {
+  JobRegistry,
+  loadRunnerLimits,
+  handleRun,
+  type JobResultBase,
+  type RunOptions,
+} from './runner.js'
 import { log } from './logger.js'
 
 // The container's HTTP entry point. The Worker addresses one instance per run and
-// POSTs a job to /run; the harness starts that job in the background (bounded by
-// an inactivity + max-duration watchdog) and returns a job id, which the Worker
-// then polls via GET /jobs/{id}. Nothing here holds long-lived secrets — the
-// per-job GitHub + proxy tokens arrive in the request body and live only for the
-// duration of the job in an ephemeral workspace.
+// POSTs a job to /jobs (the body's `kind` selects which agent runs); the harness
+// starts that job in the background (bounded by an inactivity + max-duration
+// watchdog) and returns a job id, which the Worker then polls via GET /jobs/{id}.
+// Nothing here holds long-lived secrets: the per-job GitHub + proxy tokens arrive
+// in the request body and live only for the duration of the job in an ephemeral
+// workspace.
 
 const PORT = Number(process.env.PORT ?? 8080)
 
@@ -63,8 +48,8 @@ const PORT = Number(process.env.PORT ?? 8080)
 // compared). When it is unset the harness behaves as before (open), so local/dev
 // and the existing acceptance flow keep working without configuration.
 // TODO(worker): when a secret is configured, CloudflareContainerTransport should
-// send the same `x-harness-secret` header on its /run and /jobs fetches. Left to
-// the worker-side change to avoid conflicting with parallel work on that package.
+// send the same `x-harness-secret` header on its /jobs fetches. Left to the
+// worker-side change to avoid conflicting with parallel work on that package.
 const SHARED_SECRET = process.env.HARNESS_SHARED_SECRET
 
 const HEADER = 'x-harness-secret'
@@ -79,27 +64,48 @@ function authorized(req: IncomingMessage): boolean {
   return got.length === want.length && timingSafeEqual(got, want)
 }
 
-// One registry per container process. Each run addresses its own container
-// instance (one Durable Object id per execution / bootstrap job), so these track
-// that instance's single job. Implementation (`/run`) and bootstrap
-// (`/bootstrap`) jobs share the same watchdog/lifecycle but produce different
-// results, so they get their own registries; `GET /jobs/{id}` checks both (job
-// ids never collide across them).
+// One registry per kind per container process. A run addresses its own container
+// instance (one Durable Object id per execution / bootstrap job) and dispatches its
+// sequence of step jobs to it; every kind shares the same watchdog/lifecycle but
+// produces a different result, so each gets its own registry keyed by the job id.
 const limits = loadRunnerLimits()
-const jobs = new JobRegistry(limits)
-const bootstrapJobs = new JobRegistry<BootstrapJob, BootstrapResult>(limits, handleBootstrap)
-const blueprintJobs = new JobRegistry<BlueprintJob, BlueprintResult>(limits, handleBlueprint)
-const specJobs = new JobRegistry<SpecJob, SpecResult>(limits, handleSpec)
-const exploreJobs = new JobRegistry<ExploreJob, ExploreResult>(limits, handleExplore)
-const ciFixerJobs = new JobRegistry<CiFixerJob, CiFixerResult>(limits, handleCiFixer)
-const conflictResolverJobs = new JobRegistry<ConflictResolverJob, ConflictResolverResult>(
-  limits,
-  handleConflictResolver,
-)
-const mergerJobs = new JobRegistry<MergerJob, MergerResult>(limits, handleMerger)
-const onCallJobs = new JobRegistry<OnCallJob, OnCallResult>(limits, handleOnCall)
-const testerJobs = new JobRegistry<TesterJob, TesterResult>(limits, handleTester)
-const fixerJobs = new JobRegistry<FixerJob, FixerResult>(limits, handleFixer)
+
+/** A dispatchable kind: how to validate its body and the registry that runs it. */
+interface KindEntry {
+  parse: (input: unknown) => { jobId: string }
+  registry: JobRegistry<never, JobResultBase>
+}
+
+/** Pair a body validator with a registry running its handler under the shared limits. */
+function defineKind<TJob extends { jobId: string }, TResult extends JobResultBase>(
+  parse: (input: unknown) => TJob,
+  handler: (job: TJob, opts: RunOptions) => Promise<TResult>,
+): KindEntry {
+  return {
+    parse,
+    registry: new JobRegistry<TJob, TResult>(limits, handler),
+  } as unknown as KindEntry
+}
+
+// The dispatch table: one entry per harness job kind. A `POST /jobs` reads the
+// body's `kind` to pick the entry; `GET /jobs/{id}` checks every registry (job ids
+// never collide across kinds). The keys mirror kernel's `RunnerDispatchKind`
+// (backend/packages/kernel/src/ports/runner-transport.ts) — the harness keeps its
+// own copy because it carries no runtime deps (the image stays lean). A new kind is
+// one entry here, not a new endpoint + registry global + poll-chain line.
+const KINDS: Record<string, KindEntry> = {
+  run: defineKind(parseJob, handleRun),
+  bootstrap: defineKind(parseBootstrapJob, handleBootstrap),
+  blueprint: defineKind(parseBlueprintJob, handleBlueprint),
+  spec: defineKind(parseSpecJob, handleSpec),
+  explore: defineKind(parseExploreJob, handleExplore),
+  'ci-fix': defineKind(parseCiFixerJob, handleCiFixer),
+  'resolve-conflicts': defineKind(parseConflictResolverJob, handleConflictResolver),
+  merge: defineKind(parseMergerJob, handleMerger),
+  'on-call': defineKind(parseOnCallJob, handleOnCall),
+  test: defineKind(parseTesterJob, handleTester),
+  'fix-tests': defineKind(parseFixerJob, handleFixer),
+}
 
 // Re-exported so the acceptance suite (and any direct caller) can run a job
 // synchronously without going through the async job API.
@@ -126,175 +132,42 @@ const server = createServer((req, res) => {
     if (!authorized(req)) {
       return send(res, 401, { error: 'unauthorized' })
     }
-    // Start (or re-attach to) a bootstrap job: POST /bootstrap. Like /run it
-    // returns immediately with the job id; the Worker polls GET /jobs/{id} for
-    // live subtask progress and the final result.
-    if (req.method === 'POST' && req.url === '/bootstrap') {
+    // Poll a running/finished job: GET /jobs/{id}. Job ids are unique per kind, so
+    // check each registry in turn; the first hit wins.
+    if (req.method === 'GET' && req.url?.startsWith('/jobs/')) {
+      const id = decodeURIComponent(req.url.slice('/jobs/'.length))
+      for (const { registry } of Object.values(KINDS)) {
+        const view = registry.get(id)
+        if (view) return send(res, 200, view)
+      }
+      return send(res, 404, { error: 'job not found' })
+    }
+    // Start (or re-attach to) a job: POST /jobs with the kind in the body. The body's
+    // `kind` selects the validator + registry; the rest is that kind's job spec.
+    // Returns immediately with the job id; the caller polls GET /jobs/{id} for live
+    // subtask progress and the final result. Idempotent: a re-dispatched POST
+    // (a durable-driver replay) re-attaches to the job already running for the id
+    // rather than starting a duplicate.
+    if (req.method === 'POST' && req.url === '/jobs') {
+      let kind: unknown
       try {
-        const job = parseBootstrapJob(JSON.parse(await readBody(req)))
-        const view = bootstrapJobs.start(job.jobId, job)
+        const raw = JSON.parse(await readBody(req)) as Record<string, unknown>
+        kind = raw.kind
+        const entry = typeof kind === 'string' ? KINDS[kind] : undefined
+        if (!entry) {
+          return send(res, 404, { error: `unknown job kind '${String(kind)}'` })
+        }
+        const job = entry.parse(raw)
+        const view = entry.registry.start(job.jobId, job as never)
         return send(res, 202, { jobId: view.id, state: view.state })
       } catch (error) {
         // Parse failures (incl. host-allowlist rejection) are client errors → 400.
         const message = redactSecrets(error instanceof Error ? error.message : String(error))
-        log.error('failed to start bootstrap', { error: message })
-        return send(res, 400, { error: message } satisfies BootstrapResult)
-      }
-    }
-    // Start (or re-attach to) a blueprint job: POST /blueprint. Like /bootstrap it
-    // returns immediately with the job id; the Worker polls GET /jobs/{id} for live
-    // subtask progress and the final decomposition tree.
-    if (req.method === 'POST' && req.url === '/blueprint') {
-      try {
-        const job = parseBlueprintJob(JSON.parse(await readBody(req)))
-        const view = blueprintJobs.start(job.jobId, job)
-        return send(res, 202, { jobId: view.id, state: view.state })
-      } catch (error) {
-        const message = redactSecrets(error instanceof Error ? error.message : String(error))
-        log.error('failed to start blueprint', { error: message })
-        return send(res, 400, { error: message } satisfies BlueprintResult)
-      }
-    }
-    // Start (or re-attach to) a spec job: POST /spec. Clones (or creates) the
-    // implementation branch, (re)generates the unified specification document and
-    // commits the `spec/` folder onto the branch.
-    if (req.method === 'POST' && req.url === '/spec') {
-      try {
-        const job = parseSpecJob(JSON.parse(await readBody(req)))
-        const view = specJobs.start(job.jobId, job)
-        return send(res, 202, { jobId: view.id, state: view.state })
-      } catch (error) {
-        const message = redactSecrets(error instanceof Error ? error.message : String(error))
-        log.error('failed to start spec', { error: message })
-        return send(res, 400, { error: message } satisfies SpecResult)
-      }
-    }
-    // Start (or re-attach to) a read-only exploration job: POST /explore. Clones the
-    // branch, explores it read-only (architect / analysis) and returns prose — no
-    // branch, no commit, no PR; an edit-free run is success.
-    if (req.method === 'POST' && req.url === '/explore') {
-      try {
-        const job = parseExploreJob(JSON.parse(await readBody(req)))
-        const view = exploreJobs.start(job.jobId, job)
-        return send(res, 202, { jobId: view.id, state: view.state })
-      } catch (error) {
-        const message = redactSecrets(error instanceof Error ? error.message : String(error))
-        log.error('failed to start explore', { error: message })
-        return send(res, 400, { error: message } satisfies ExploreResult)
-      }
-    }
-    // Start (or re-attach to) a CI-fixer job: POST /ci-fix. Clones the PR branch,
-    // fixes failing CI and pushes back onto the same branch.
-    if (req.method === 'POST' && req.url === '/ci-fix') {
-      try {
-        const job = parseCiFixerJob(JSON.parse(await readBody(req)))
-        const view = ciFixerJobs.start(job.jobId, job)
-        return send(res, 202, { jobId: view.id, state: view.state })
-      } catch (error) {
-        const message = redactSecrets(error instanceof Error ? error.message : String(error))
-        log.error('failed to start ci-fix', { error: message })
-        return send(res, 400, { error: message } satisfies CiFixerResult)
-      }
-    }
-    // Start (or re-attach to) a conflict-resolver job: POST /resolve-conflicts.
-    // Clones the PR branch, merges the base in, resolves the conflicts and pushes
-    // back onto the same branch so the PR becomes mergeable.
-    if (req.method === 'POST' && req.url === '/resolve-conflicts') {
-      try {
-        const job = parseConflictResolverJob(JSON.parse(await readBody(req)))
-        const view = conflictResolverJobs.start(job.jobId, job)
-        return send(res, 202, { jobId: view.id, state: view.state })
-      } catch (error) {
-        const message = redactSecrets(error instanceof Error ? error.message : String(error))
-        log.error('failed to start conflict-resolve', { error: message })
-        return send(res, 400, { error: message } satisfies ConflictResolverResult)
-      }
-    }
-    // Start (or re-attach to) a merger job: POST /merge. Clones the PR branch and
-    // returns a JSON assessment (no commits).
-    if (req.method === 'POST' && req.url === '/merge') {
-      try {
-        const job = parseMergerJob(JSON.parse(await readBody(req)))
-        const view = mergerJobs.start(job.jobId, job)
-        return send(res, 202, { jobId: view.id, state: view.state })
-      } catch (error) {
-        const message = redactSecrets(error instanceof Error ? error.message : String(error))
-        log.error('failed to start merge', { error: message })
-        return send(res, 400, { error: message } satisfies MergerResult)
-      }
-    }
-    // Start (or re-attach to) an on-call job: POST /on-call. Clones the released PR
-    // branch and returns a JSON regression assessment (no commits).
-    if (req.method === 'POST' && req.url === '/on-call') {
-      try {
-        const job = parseOnCallJob(JSON.parse(await readBody(req)))
-        const view = onCallJobs.start(job.jobId, job)
-        return send(res, 202, { jobId: view.id, state: view.state })
-      } catch (error) {
-        const message = redactSecrets(error instanceof Error ? error.message : String(error))
-        log.error('failed to start on-call', { error: message })
-        return send(res, 400, { error: message } satisfies OnCallResult)
-      }
-    }
-    // Start (or re-attach to) a tester job: POST /test. Clones the PR branch, stands
-    // up infra, runs the suite and returns a JSON report (no commits).
-    if (req.method === 'POST' && req.url === '/test') {
-      try {
-        const job = parseTesterJob(JSON.parse(await readBody(req)))
-        const view = testerJobs.start(job.jobId, job)
-        return send(res, 202, { jobId: view.id, state: view.state })
-      } catch (error) {
-        const message = redactSecrets(error instanceof Error ? error.message : String(error))
-        log.error('failed to start test', { error: message })
-        return send(res, 400, { error: message } satisfies TesterResult)
-      }
-    }
-    // Start (or re-attach to) a fixer job: POST /fix-tests. Clones the PR branch,
-    // applies fixes from the tester's report and pushes back onto the same branch.
-    if (req.method === 'POST' && req.url === '/fix-tests') {
-      try {
-        const job = parseFixerJob(JSON.parse(await readBody(req)))
-        const view = fixerJobs.start(job.jobId, job)
-        return send(res, 202, { jobId: view.id, state: view.state })
-      } catch (error) {
-        const message = redactSecrets(error instanceof Error ? error.message : String(error))
-        log.error('failed to start fix-tests', { error: message })
-        return send(res, 400, { error: message } satisfies FixerResult)
-      }
-    }
-    // Poll a running/finished job: GET /jobs/{id}. Job ids are unique per kind, so
-    // check each registry in turn (implementation, bootstrap, blueprint, ci-fix,
-    // resolve-conflicts, merge, test, fix-tests).
-    if (req.method === 'GET' && req.url?.startsWith('/jobs/')) {
-      const id = decodeURIComponent(req.url.slice('/jobs/'.length))
-      const view =
-        jobs.get(id) ??
-        bootstrapJobs.get(id) ??
-        blueprintJobs.get(id) ??
-        specJobs.get(id) ??
-        exploreJobs.get(id) ??
-        ciFixerJobs.get(id) ??
-        conflictResolverJobs.get(id) ??
-        mergerJobs.get(id) ??
-        onCallJobs.get(id) ??
-        testerJobs.get(id) ??
-        fixerJobs.get(id)
-      if (!view) return send(res, 404, { error: 'job not found' })
-      return send(res, 200, view)
-    }
-    // Start (or re-attach to) an implementation job: POST /run. Returns
-    // immediately with the job id; the Worker polls GET /jobs/{id} for the result.
-    if (req.method === 'POST' && req.url === '/run') {
-      try {
-        const job = parseJob(JSON.parse(await readBody(req)))
-        // Idempotent: a re-dispatched /run (Workflows replay) re-attaches to the
-        // job already running for this id rather than starting a duplicate.
-        const view = jobs.start(job.jobId, job)
-        return send(res, 202, { jobId: view.id, state: view.state })
-      } catch (error) {
-        const message = redactSecrets(error instanceof Error ? error.message : String(error))
-        log.error('failed to start run', { error: message })
-        return send(res, 400, { error: message } satisfies RunResult)
+        log.error('failed to start job', {
+          kind: typeof kind === 'string' ? kind : undefined,
+          error: message,
+        })
+        return send(res, 400, { error: message })
       }
     }
     return send(res, 404, { error: 'not found' })

@@ -67,6 +67,8 @@ export const useUiStore = defineStore('ui', () => {
   // Workspace-settings panels: merge-threshold preset library + per-agent-kind
   // default model overrides.
   const mergeThresholdsOpen = ref(false)
+  // Workspace-settings panel: the run-timing escalation threshold + per-service task limit.
+  const workspaceSettingsOpen = ref(false)
   const datadogOpen = ref(false)
   const modelDefaultsOpen = ref(false)
   // Workspace-settings panel: the default service-fragment selection new services inherit.
@@ -279,6 +281,12 @@ export const useUiStore = defineStore('ui', () => {
   function closeMergeThresholds() {
     mergeThresholdsOpen.value = false
   }
+  function openWorkspaceSettings() {
+    workspaceSettingsOpen.value = true
+  }
+  function closeWorkspaceSettings() {
+    workspaceSettingsOpen.value = false
+  }
   function openDatadog() {
     datadogOpen.value = true
   }
@@ -352,6 +360,7 @@ export const useUiStore = defineStore('ui', () => {
     fragmentLibraryOpen,
     commandBarOpen,
     mergeThresholdsOpen,
+    workspaceSettingsOpen,
     datadogOpen,
     modelDefaultsOpen,
     serviceFragmentDefaultsOpen,
@@ -402,6 +411,8 @@ export const useUiStore = defineStore('ui', () => {
     toggleCommandBar,
     openMergeThresholds,
     closeMergeThresholds,
+    openWorkspaceSettings,
+    closeWorkspaceSettings,
     openDatadog,
     closeDatadog,
     openModelDefaults,

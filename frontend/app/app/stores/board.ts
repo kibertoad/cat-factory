@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import type { Block, BlockType } from '~/types/domain'
+import type { Block, BlockType, CreateTaskType, TaskTypeFields } from '~/types/domain'
 import { useServicesStore } from '~/stores/services'
 import { useWorkspaceStore } from '~/stores/workspace'
 import { useBlockQueries } from '~/composables/useBlockQueries'
@@ -74,6 +74,8 @@ export const useBoardStore = defineStore('board', () => {
     title: string,
     description?: string,
     options?: {
+      taskType?: CreateTaskType
+      taskTypeFields?: TaskTypeFields
       mergePresetId?: string
       pipelineId?: string
       agentConfig?: Record<string, string>
@@ -83,6 +85,8 @@ export const useBoardStore = defineStore('board', () => {
     const block = await api.addTask(useWorkspaceStore().requireId(), containerId, {
       title,
       description,
+      ...(options?.taskType ? { taskType: options.taskType } : {}),
+      ...(options?.taskTypeFields ? { taskTypeFields: options.taskTypeFields } : {}),
       ...(options?.mergePresetId ? { mergePresetId: options.mergePresetId } : {}),
       ...(options?.pipelineId ? { pipelineId: options.pipelineId } : {}),
       ...(options?.agentConfig ? { agentConfig: options.agentConfig } : {}),

@@ -33,7 +33,7 @@ export class D1PipelineRepository implements PipelineRepository {
   async insert(workspaceId: string, pipeline: Pipeline): Promise<void> {
     await this.db
       .prepare(
-        'INSERT INTO pipelines (workspace_id, id, name, agent_kinds, gates, thresholds, enabled, consensus, builtin) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO pipelines (workspace_id, id, name, agent_kinds, gates, thresholds, enabled, consensus, gating, labels, archived, builtin) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       )
       .bind(
         workspaceId,
@@ -44,6 +44,9 @@ export class D1PipelineRepository implements PipelineRepository {
         pipeline.thresholds ? JSON.stringify(pipeline.thresholds) : null,
         pipeline.enabled ? JSON.stringify(pipeline.enabled) : null,
         pipeline.consensus ? JSON.stringify(pipeline.consensus) : null,
+        pipeline.gating ? JSON.stringify(pipeline.gating) : null,
+        pipeline.labels ? JSON.stringify(pipeline.labels) : null,
+        pipeline.archived ? 1 : null,
         pipeline.builtin ? 1 : null,
       )
       .run()
@@ -54,7 +57,7 @@ export class D1PipelineRepository implements PipelineRepository {
     // its place in the catalog order. `builtin` is immutable, so it is not rewritten.
     await this.db
       .prepare(
-        'UPDATE pipelines SET name = ?, agent_kinds = ?, gates = ?, thresholds = ?, enabled = ?, consensus = ? WHERE workspace_id = ? AND id = ?',
+        'UPDATE pipelines SET name = ?, agent_kinds = ?, gates = ?, thresholds = ?, enabled = ?, consensus = ?, gating = ?, labels = ?, archived = ? WHERE workspace_id = ? AND id = ?',
       )
       .bind(
         pipeline.name,
@@ -63,6 +66,9 @@ export class D1PipelineRepository implements PipelineRepository {
         pipeline.thresholds ? JSON.stringify(pipeline.thresholds) : null,
         pipeline.enabled ? JSON.stringify(pipeline.enabled) : null,
         pipeline.consensus ? JSON.stringify(pipeline.consensus) : null,
+        pipeline.gating ? JSON.stringify(pipeline.gating) : null,
+        pipeline.labels ? JSON.stringify(pipeline.labels) : null,
+        pipeline.archived ? 1 : null,
         workspaceId,
         pipeline.id,
       )

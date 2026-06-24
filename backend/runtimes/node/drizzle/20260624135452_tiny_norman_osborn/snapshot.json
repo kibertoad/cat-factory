@@ -1,9 +1,9 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "4c68937f-57a6-4f17-8b2e-ae3544140eb0",
+  "id": "74b9bd0a-38c2-4ab5-aa12-7dedf534d03b",
   "prevIds": [
-    "30f52a43-e9e6-4d31-892f-243a10ddfcaa"
+    "4c68937f-57a6-4f17-8b2e-ae3544140eb0"
   ],
   "ddl": [
     {
@@ -309,6 +309,12 @@
     {
       "isRlsEnabled": false,
       "name": "workspace_services",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "workspace_settings",
       "entityType": "tables",
       "schema": "public"
     },
@@ -1107,6 +1113,32 @@
       "generated": null,
       "identity": null,
       "name": "estimate",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "blocks"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "task_type",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "blocks"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "task_type_fields",
       "entityType": "columns",
       "schema": "public",
       "table": "blocks"
@@ -4037,6 +4069,19 @@
       "table": "notifications"
     },
     {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "severity",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "notifications"
+    },
+    {
       "type": "bigint",
       "typeSchema": null,
       "notNull": true,
@@ -6839,6 +6884,71 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "name": "workspace_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "workspace_settings"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "120",
+      "generated": null,
+      "identity": null,
+      "name": "waiting_escalation_minutes",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "workspace_settings"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'off'",
+      "generated": null,
+      "identity": null,
+      "name": "task_limit_mode",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "workspace_settings"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "task_limit_shared",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "workspace_settings"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "task_limit_per_type",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "workspace_settings"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
       "name": "id",
       "entityType": "columns",
       "schema": "public",
@@ -8989,6 +9099,16 @@
       "name": "workspace_fragment_defaults_pkey",
       "schema": "public",
       "table": "workspace_fragment_defaults",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "workspace_id"
+      ],
+      "nameExplicit": false,
+      "name": "workspace_settings_pkey",
+      "schema": "public",
+      "table": "workspace_settings",
       "entityType": "pks"
     },
     {

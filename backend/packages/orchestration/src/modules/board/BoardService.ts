@@ -344,6 +344,12 @@ export class BoardService {
       executionId: null,
       level: 'task',
       parentId: containerId,
+      // The kind of work, chosen on the create form; defaults to a feature task.
+      taskType: input.taskType ?? 'feature',
+    }
+    // Small per-type form fields (bug severity / repro, spike timebox, …), when given.
+    if (input.taskTypeFields && Object.keys(input.taskTypeFields).length) {
+      block.taskTypeFields = input.taskTypeFields
     }
     // The signed-in user who created the task, for "notify the task creator"
     // notification routing. Null with auth disabled (local/dev).

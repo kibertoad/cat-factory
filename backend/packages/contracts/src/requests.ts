@@ -1,8 +1,15 @@
 import * as v from 'valibot'
 import { agentConfigValuesSchema } from './agent-config.js'
-import { consensusStepConfigSchema } from './consensus.js'
+import { consensusStepConfigSchema, stepGatingSchema } from './consensus.js'
 import { cloudProviderSchema, instanceSizeSchema } from './provisioning.js'
-import { agentKindSchema, blockTypeSchema, positionSchema, sizeSchema } from './primitives.js'
+import {
+  agentKindSchema,
+  blockTypeSchema,
+  createTaskTypeSchema,
+  positionSchema,
+  sizeSchema,
+  taskTypeFieldsSchema,
+} from './primitives.js'
 
 // Request body schemas. The Hono facade validates inbound JSON against these via
 // @hono/valibot-validator; the frontend API client can import the inferred input
@@ -71,6 +78,11 @@ export const addTaskSchema = v.object({
   // The user always names the task — no auto-generated placeholder titles.
   title: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200)),
   description: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(2000))),
+  // The kind of work this task represents; omitted → 'feature'. `recurring` is NOT
+  // allowed here (recurring tasks are created via a recurring-pipeline schedule).
+  taskType: v.optional(createTaskTypeSchema),
+  // Small per-type fields collected on the form (e.g. a bug's severity / repro).
+  taskTypeFields: v.optional(taskTypeFieldsSchema),
   // The merge threshold preset governing this task's auto-merge; omitted/empty →
   // the workspace default preset.
   mergePresetId: v.optional(v.pipe(v.string(), v.maxLength(120))),
@@ -159,6 +171,15 @@ export const createPipelineSchema = v.object({
    * `null`/omitted ⇒ the standard single-actor agent. Optional.
    */
   consensus: v.optional(v.array(v.nullable(consensusStepConfigSchema))),
+  /**
+   * Per-step estimate gating, parallel to {@link agentKinds}: an enabled entry makes the
+   * step run only when the task estimate meets the threshold. `null`/omitted ⇒ always run.
+   * A pipeline with any enabled gating requires a `task-estimator` step earlier in the
+   * chain or it is rejected. Optional.
+   */
+  gating: v.optional(v.array(v.nullable(stepGatingSchema))),
+  /** Free-form organizational labels for the library. Optional. */
+  labels: v.optional(v.array(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(40)))),
 })
 export type CreatePipelineInput = v.InferOutput<typeof createPipelineSchema>
 
@@ -174,6 +195,8 @@ export const updatePipelineSchema = v.object({
   thresholds: v.optional(v.array(v.nullable(v.pipe(v.number(), v.minValue(0), v.maxValue(1))))),
   enabled: v.optional(v.array(v.boolean())),
   consensus: v.optional(v.array(v.nullable(consensusStepConfigSchema))),
+  gating: v.optional(v.array(v.nullable(stepGatingSchema))),
+  labels: v.optional(v.array(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(40)))),
 })
 export type UpdatePipelineInput = v.InferOutput<typeof updatePipelineSchema>
 
@@ -183,6 +206,18 @@ export const clonePipelineSchema = v.object({
   name: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(120))),
 })
 export type ClonePipelineInput = v.InferOutput<typeof clonePipelineSchema>
+
+/**
+ * Organize a pipeline in the library: set labels and/or archive state. The ONLY
+ * mutation allowed on a built-in pipeline (it touches view/organization metadata,
+ * not structure), so built-ins can be tagged/archived while staying read-only for
+ * their steps. Every field optional — only the supplied fields change.
+ */
+export const organizePipelineSchema = v.object({
+  labels: v.optional(v.array(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(40)))),
+  archived: v.optional(v.boolean()),
+})
+export type OrganizePipelineInput = v.InferOutput<typeof organizePipelineSchema>
 
 export const startExecutionSchema = v.object({
   pipelineId: v.pipe(v.string(), v.minLength(1)),

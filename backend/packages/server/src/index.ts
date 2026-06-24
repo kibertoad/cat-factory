@@ -23,6 +23,7 @@ export {
   createWebSearchUpstreamFromEnv,
   DEFAULT_WEB_SEARCH_COUNT,
 } from './modules/webSearch/upstreams.js'
+export { escalateStaleNotifications } from './runtime/escalateNotifications.js'
 export { StateSigner, type InstallState } from './github/state.js'
 export {
   GitHubOAuth,

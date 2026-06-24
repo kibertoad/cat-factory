@@ -186,6 +186,10 @@ export const blocks = pgTable(
     // Task-level: the task-estimator's triage (complexity/risk/impact + rationale) as
     // JSON; persisted on the block for gating consensus steps + UI ratings.
     estimate: text('estimate'),
+    // Task-level: the kind of work (feature/bug/document/spike/recurring); absent ⇒ feature.
+    task_type: text('task_type'),
+    // Task-level: small per-type form fields (bug severity, spike timebox…) as JSON.
+    task_type_fields: text('task_type_fields'),
   },
   (t) => [
     primaryKey({ columns: [t.workspace_id, t.id] }),
@@ -259,6 +263,13 @@ export const pipelines = pgTable(
     // Nullable JSON array of per-step consensus configs, parallel to agent_kinds (set in
     // the pipeline builder for steps whose kind carries a consensus capability trait).
     consensus: text('consensus'),
+    // Nullable JSON array of per-step StepGating, parallel to agent_kinds: an enabled entry
+    // makes the step run only when the task estimate meets the threshold (mirror of D1 0003).
+    gating: text('gating'),
+    // Nullable JSON array of free-form organizational labels; `archived` (truthy) hides the
+    // pipeline from the default library view (mirror of D1 0003).
+    labels: text('labels'),
+    archived: integer('archived'),
     // Monotonic insert sequence (Postgres has no SQLite rowid): a workspace's pipelines
     // are read back in the order they were seeded — the curated `seedPipelines()` order
     // — so the catalog order (and the UI's default `pipelines[0]`) is deterministic and
@@ -681,6 +692,8 @@ export const notifications = pgTable(
     title: text('title').notNull(),
     body: text('body').notNull(),
     payload: text('payload'),
+    // Render severity: 'normal' (yellow) or 'urgent' (red, escalated by the sweep). NULL = normal.
+    severity: text('severity'),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
     resolved_at: bigint('resolved_at', { mode: 'number' }),
   },
@@ -690,6 +703,20 @@ export const notifications = pgTable(
     index('idx_notifications_block').on(t.workspace_id, t.block_id, t.type, t.status),
   ],
 )
+
+// Per-workspace runtime settings (mirror of D1 migration 0004's `workspace_settings`):
+// the human-wait escalation threshold + the per-service running-task limit policy. One
+// row per workspace; the service lazily seeds DEFAULT_WORKSPACE_SETTINGS on first read.
+export const workspaceSettings = pgTable('workspace_settings', {
+  workspace_id: text('workspace_id').notNull().primaryKey(),
+  waiting_escalation_minutes: integer('waiting_escalation_minutes').notNull().default(120),
+  // 'off' | 'shared' | 'per_type'
+  task_limit_mode: text('task_limit_mode').notNull().default('off'),
+  // The shared cap when task_limit_mode = 'shared'; null otherwise.
+  task_limit_shared: integer('task_limit_shared'),
+  // JSON object of per-type caps when task_limit_mode = 'per_type'; null otherwise.
+  task_limit_per_type: text('task_limit_per_type'),
+})
 
 // Per-workspace merge threshold presets (mirror of D1 migration 0024's
 // `merge_threshold_presets`). A task selects one via `blocks.merge_preset_id`; none →

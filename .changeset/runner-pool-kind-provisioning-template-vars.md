@@ -13,7 +13,7 @@ manifest's request templates, alongside the existing `{{input.jobId}}` /
   `explore`, `bootstrap`, `ci-fix`, `resolve-conflicts`, `merge`, `on-call`, `test`,
   `fix-tests`). The values map 1:1 to the harness route names, so a transparent
   proxy can route straight to a per-kind endpoint with `pathTemplate:
-  "/{{input.kind}}"` instead of parsing the embedded `{{input.job}}` JSON.
+"/{{input.kind}}"` instead of parsing the embedded `{{input.job}}` JSON.
 - `{{input.instanceType}}` / `{{input.cloudProvider}}` — the provisioning hints the
   transport stamps on when the service pins a size/provider, so a self-provisioning
   pool (k8s/Nomad) can map them to a node selector / resource request / queue

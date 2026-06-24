@@ -29,6 +29,37 @@ export type BlockStatus = v.InferOutput<typeof blockStatusSchema>
 export const blockLevelSchema = v.picklist(['frame', 'module', 'task'])
 export type BlockLevel = v.InferOutput<typeof blockLevelSchema>
 
+/**
+ * The kind of work a task represents, chosen by the human at creation. Drives the
+ * task card's icon/badge, per-type creation fields, and (optionally) the per-service
+ * running-task limit's bucketing. `recurring` is special: such tasks are NOT created
+ * through `addTask` — they are the reused on-board block of a recurring-pipeline
+ * schedule, stamped with this type so the board renders them consistently.
+ */
+export const taskTypeSchema = v.picklist(['feature', 'bug', 'document', 'spike', 'recurring'])
+export type TaskType = v.InferOutput<typeof taskTypeSchema>
+
+/** The task types a human can pick in the create-task form (recurring is created via a schedule). */
+export const createTaskTypeSchema = v.picklist(['feature', 'bug', 'document', 'spike'])
+export type CreateTaskType = v.InferOutput<typeof createTaskTypeSchema>
+
+/**
+ * Small, additive, per-type fields collected on the create-task form. All optional;
+ * which ones are shown depends on the chosen {@link TaskType}. Stored verbatim on the
+ * block as a sparse object so adding a field never needs a schema migration.
+ */
+export const taskTypeFieldsSchema = v.object({
+  /** Bug: how severe the defect is. */
+  severity: v.optional(v.picklist(['low', 'medium', 'high', 'critical'])),
+  /** Bug: reproduction steps / observed-vs-expected. */
+  stepsToReproduce: v.optional(v.pipe(v.string(), v.maxLength(4000))),
+  /** Spike: the investigation time-box, in hours. */
+  timeboxHours: v.optional(v.pipe(v.number(), v.minValue(0), v.maxValue(1000))),
+  /** Document: what kind of document this task produces. */
+  docKind: v.optional(v.picklist(['prd', 'rfc', 'runbook', 'reference', 'other'])),
+})
+export type TaskTypeFields = v.InferOutput<typeof taskTypeFieldsSchema>
+
 export const agentStateSchema = v.picklist(['pending', 'working', 'waiting_decision', 'done'])
 export type AgentState = v.InferOutput<typeof agentStateSchema>
 

@@ -68,6 +68,8 @@ import type {
   Workspace,
   WorkspaceRepository,
   WorkspaceVisibility,
+  WorkspaceSettings,
+  WorkspaceSettingsRepository,
 } from '@cat-factory/kernel'
 import { LLM_WARNING_FINISH_REASONS } from '@cat-factory/kernel'
 import {
@@ -107,6 +109,7 @@ import {
   workspaceFragmentDefaults,
   workspaceModelDefaults,
   workspaceServices,
+  workspaceSettings,
   workspaces,
 } from '../db/schema.js'
 
@@ -307,6 +310,9 @@ class DrizzlePipelineRepository implements PipelineRepository {
       thresholds: pipeline.thresholds ? JSON.stringify(pipeline.thresholds) : null,
       enabled: pipeline.enabled ? JSON.stringify(pipeline.enabled) : null,
       consensus: pipeline.consensus ? JSON.stringify(pipeline.consensus) : null,
+      gating: pipeline.gating ? JSON.stringify(pipeline.gating) : null,
+      labels: pipeline.labels ? JSON.stringify(pipeline.labels) : null,
+      archived: pipeline.archived ? 1 : null,
       builtin: pipeline.builtin ? 1 : null,
     })
   }
@@ -323,6 +329,9 @@ class DrizzlePipelineRepository implements PipelineRepository {
         thresholds: pipeline.thresholds ? JSON.stringify(pipeline.thresholds) : null,
         enabled: pipeline.enabled ? JSON.stringify(pipeline.enabled) : null,
         consensus: pipeline.consensus ? JSON.stringify(pipeline.consensus) : null,
+        gating: pipeline.gating ? JSON.stringify(pipeline.gating) : null,
+        labels: pipeline.labels ? JSON.stringify(pipeline.labels) : null,
+        archived: pipeline.archived ? 1 : null,
       })
       .where(and(eq(pipelines.workspace_id, workspaceId), eq(pipelines.id, pipeline.id)))
   }
@@ -2107,6 +2116,64 @@ export class DrizzleMergePresetRepository implements MergePresetRepository {
 }
 
 /**
+ * Per-workspace runtime settings over Postgres (the Drizzle mirror of the Worker's
+ * `D1WorkspaceSettingsRepository`, migration 0004). One row per workspace; the service
+ * lazily seeds the default, so an absent row reads as null. Per-type task limits are a
+ * JSON column.
+ */
+export class DrizzleWorkspaceSettingsRepository implements WorkspaceSettingsRepository {
+  constructor(private readonly db: DrizzleDb) {}
+
+  async get(workspaceId: string): Promise<WorkspaceSettings | null> {
+    const rows = await this.db
+      .select()
+      .from(workspaceSettings)
+      .where(eq(workspaceSettings.workspace_id, workspaceId))
+      .limit(1)
+    const row = rows[0]
+    if (!row) return null
+    let perType: WorkspaceSettings['taskLimitPerType'] = null
+    if (row.task_limit_per_type) {
+      try {
+        perType = JSON.parse(row.task_limit_per_type) as WorkspaceSettings['taskLimitPerType']
+      } catch {
+        perType = null
+      }
+    }
+    return {
+      waitingEscalationMinutes: row.waiting_escalation_minutes,
+      taskLimitMode: row.task_limit_mode as WorkspaceSettings['taskLimitMode'],
+      taskLimitShared: row.task_limit_shared,
+      taskLimitPerType: perType,
+    }
+  }
+
+  async upsert(workspaceId: string, settings: WorkspaceSettings): Promise<void> {
+    const values = {
+      workspace_id: workspaceId,
+      waiting_escalation_minutes: settings.waitingEscalationMinutes,
+      task_limit_mode: settings.taskLimitMode,
+      task_limit_shared: settings.taskLimitShared,
+      task_limit_per_type: settings.taskLimitPerType
+        ? JSON.stringify(settings.taskLimitPerType)
+        : null,
+    }
+    await this.db
+      .insert(workspaceSettings)
+      .values(values)
+      .onConflictDoUpdate({
+        target: [workspaceSettings.workspace_id],
+        set: {
+          waiting_escalation_minutes: values.waiting_escalation_minutes,
+          task_limit_mode: values.task_limit_mode,
+          task_limit_shared: values.task_limit_shared,
+          task_limit_per_type: values.task_limit_per_type,
+        },
+      })
+  }
+}
+
+/**
  * A workspace's Datadog connection over Postgres (the Drizzle mirror of the Worker's
  * `D1DatadogConnectionRepository`, migration 0003). One row per workspace; the keys are
  * stored as sealed envelopes (encrypted by the caller).
@@ -2275,6 +2342,7 @@ export interface CoreRepositories {
   consensusSessionRepository: ConsensusSessionRepository
   clarityReviewRepository: ClarityReviewRepository
   mergePresetRepository: MergePresetRepository
+  workspaceSettingsRepository: WorkspaceSettingsRepository
   datadogConnectionRepository: DatadogConnectionRepository
   releaseHealthConfigRepository: ReleaseHealthConfigRepository
 }
@@ -2304,6 +2372,7 @@ export function createDrizzleRepositories(db: DrizzleDb, clock: Clock): CoreRepo
     consensusSessionRepository: new DrizzleConsensusSessionRepository(db),
     clarityReviewRepository: new DrizzleClarityReviewRepository(db),
     mergePresetRepository: new DrizzleMergePresetRepository(db),
+    workspaceSettingsRepository: new DrizzleWorkspaceSettingsRepository(db),
     datadogConnectionRepository: new DrizzleDatadogConnectionRepository(db),
     releaseHealthConfigRepository: new DrizzleReleaseHealthConfigRepository(db),
   }

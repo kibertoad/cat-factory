@@ -1,5 +1,21 @@
-import type { Block, BlockType, Pipeline } from '~/types/domain'
+import type { Block, BlockType, CreateTaskType, Pipeline, TaskTypeFields } from '~/types/domain'
+import type { ConsensusStepConfig, StepGating } from '~/types/consensus'
 import type { ApiContext, Position } from './context'
+
+/**
+ * Create/update body for a pipeline. `name`+`agentKinds` required on create, all optional on
+ * update; the parallel arrays are aligned to `agentKinds` and persisted only when non-default.
+ */
+interface PipelineWriteBody {
+  name?: string
+  agentKinds?: string[]
+  gates?: boolean[]
+  thresholds?: (number | null)[]
+  enabled?: boolean[]
+  consensus?: (ConsensusStepConfig | null)[]
+  gating?: (StepGating | null)[]
+  labels?: string[]
+}
 
 /** Board structure: block (frame/module/task) mutations + the pipeline library. */
 export function boardApi({ http, ws }: ApiContext) {
@@ -20,6 +36,8 @@ export function boardApi({ http, ws }: ApiContext) {
       body: {
         title: string
         description?: string
+        taskType?: CreateTaskType
+        taskTypeFields?: TaskTypeFields
         mergePresetId?: string
         pipelineId?: string
         agentConfig?: Record<string, string>
@@ -53,32 +71,27 @@ export function boardApi({ http, ws }: ApiContext) {
     // ---- pipelines --------------------------------------------------------
     listPipelines: (workspaceId: string) => http<Pipeline[]>(`${ws(workspaceId)}/pipelines`),
 
-    createPipeline: (
-      workspaceId: string,
-      body: {
-        name: string
-        agentKinds: string[]
-        gates?: boolean[]
-        thresholds?: (number | null)[]
-        enabled?: boolean[]
-      },
-    ) => http<Pipeline>(`${ws(workspaceId)}/pipelines`, { method: 'POST', body }),
+    createPipeline: (workspaceId: string, body: PipelineWriteBody) =>
+      http<Pipeline>(`${ws(workspaceId)}/pipelines`, { method: 'POST', body }),
 
-    updatePipeline: (
-      workspaceId: string,
-      pipelineId: string,
-      body: {
-        name?: string
-        agentKinds?: string[]
-        gates?: boolean[]
-        thresholds?: (number | null)[]
-        enabled?: boolean[]
-      },
-    ) => http<Pipeline>(`${ws(workspaceId)}/pipelines/${pipelineId}`, { method: 'PATCH', body }),
+    updatePipeline: (workspaceId: string, pipelineId: string, body: PipelineWriteBody) =>
+      http<Pipeline>(`${ws(workspaceId)}/pipelines/${pipelineId}`, { method: 'PATCH', body }),
 
     clonePipeline: (workspaceId: string, pipelineId: string, body: { name?: string } = {}) =>
       http<Pipeline>(`${ws(workspaceId)}/pipelines/${pipelineId}/clone`, {
         method: 'POST',
+        body,
+      }),
+
+    // Organize a pipeline in the library (labels / archive). The only mutation a built-in
+    // accepts — it touches view metadata, not structure.
+    organizePipeline: (
+      workspaceId: string,
+      pipelineId: string,
+      body: { labels?: string[]; archived?: boolean },
+    ) =>
+      http<Pipeline>(`${ws(workspaceId)}/pipelines/${pipelineId}/organize`, {
+        method: 'PATCH',
         body,
       }),
 

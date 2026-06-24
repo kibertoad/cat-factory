@@ -15,6 +15,7 @@ import { serviceFragmentDefaultsSchema } from './service-fragment-defaults.js'
 import { pipelineScheduleSchema } from './recurring.js'
 import { serviceSchema, workspaceMountSchema } from './services.js'
 import { trackerSettingsSchema } from './tracker.js'
+import { workspaceSettingsSchema } from './workspace-settings.js'
 
 // The full board snapshot returned by GET /workspaces/:id (and POST /workspaces).
 // It lives in its own module because it references both ./entities and
@@ -103,5 +104,11 @@ export const workspaceSnapshotSchema = v.object({
    */
   mounts: v.optional(v.array(workspaceMountSchema)),
   serviceCatalog: v.optional(v.array(serviceSchema)),
+  /**
+   * The workspace's runtime settings (the human-wait escalation threshold + the
+   * per-service running-task limit policy). Lazily seeded from the defaults; attached
+   * by the facade, so optional on the wire.
+   */
+  settings: v.optional(workspaceSettingsSchema),
 })
 export type WorkspaceSnapshot = v.InferOutput<typeof workspaceSnapshotSchema>

@@ -1,6 +1,19 @@
-import type { BlockType } from './types.js'
+import type { BlockType, WorkspaceSettings } from './types.js'
 
 // Static catalogs and constants used across the domain.
+
+/**
+ * The runtime settings every workspace starts with (lazily seeded on first read).
+ * `waitingEscalationMinutes` is how long a run may wait for human input before its
+ * notification turns red (runs are never auto-failed for waiting); the task limit is
+ * off by default so existing boards keep their unbounded concurrency.
+ */
+export const DEFAULT_WORKSPACE_SETTINGS: WorkspaceSettings = {
+  waitingEscalationMinutes: 120,
+  taskLimitMode: 'off',
+  taskLimitShared: null,
+  taskLimitPerType: null,
+}
 
 /**
  * The built-in merge threshold preset seeded for every workspace, used by any

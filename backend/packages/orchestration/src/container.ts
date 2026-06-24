@@ -48,6 +48,7 @@ import type { SubscriptionActivationRepository } from '@cat-factory/kernel'
 import type {
   CiStatusProvider,
   MergePresetRepository,
+  WorkspaceSettingsRepository,
   ModelDefaultsRepository,
   ServiceFragmentDefaultsRepository,
   NotificationChannel,
@@ -119,6 +120,7 @@ import { RequirementReviewService } from './modules/requirements/RequirementRevi
 import { ClarityReviewService } from './modules/clarity/ClarityReviewService.js'
 import { NotificationService } from './modules/notifications/NotificationService.js'
 import { MergePresetService } from './modules/merge/MergePresetService.js'
+import { WorkspaceSettingsService } from './modules/settings/WorkspaceSettingsService.js'
 import { ReleaseHealthService } from './modules/releaseHealth/ReleaseHealthService.js'
 import { ModelDefaultsService } from './modules/modelDefaults/ModelDefaultsService.js'
 import { ServiceFragmentDefaultsService } from './modules/serviceFragmentDefaults/ServiceFragmentDefaultsService.js'
@@ -410,6 +412,13 @@ export interface CoreDependencies {
   /** Resolves a task's merge threshold preset (auto-merge ceilings + CI attempt budget). */
   mergePresetRepository?: MergePresetRepository
   /**
+   * Stores a workspace's runtime settings (the human-wait escalation threshold + the
+   * per-service running-task limit policy). Optional and default-off: absent → the
+   * `settings` module isn't assembled, the limit is never enforced, and the escalation
+   * sweep falls back to the built-in default threshold.
+   */
+  workspaceSettingsRepository?: WorkspaceSettingsRepository
+  /**
    * Stores a workspace's per-agent-kind default models (the model each agent kind
    * defaults to, overriding the env routing for that workspace). Optional and
    * default-off: absent → the `modelDefaults` module isn't assembled and the env
@@ -537,6 +546,11 @@ export interface MergePresetsModule {
   service: MergePresetService
 }
 
+/** The workspace-settings feature's service, present only when its repository is wired. */
+export interface WorkspaceSettingsModule {
+  service: WorkspaceSettingsService
+}
+
 /** The per-kind default-model feature's service, present only when its repository is wired. */
 export interface ModelDefaultsModule {
   service: ModelDefaultsService
@@ -614,6 +628,8 @@ export interface Core {
   slack?: SlackModule
   /** Present only when the merge-preset repository is wired (see CoreDependencies). */
   mergePresets?: MergePresetsModule
+  /** Present only when the workspace-settings repository is wired (see CoreDependencies). */
+  settings?: WorkspaceSettingsModule
   /** Present only when the model-defaults repository is wired (see CoreDependencies). */
   modelDefaults?: ModelDefaultsModule
   /** Present only when the service-fragment-defaults repository is wired (see CoreDependencies). */
@@ -1096,6 +1112,19 @@ function createMergePresetsModule(deps: CoreDependencies): MergePresetsModule | 
   return { service }
 }
 
+/** Assemble the workspace-settings module when its repository is present. */
+function createWorkspaceSettingsModule(
+  deps: CoreDependencies,
+): WorkspaceSettingsModule | undefined {
+  const { workspaceSettingsRepository } = deps
+  if (!workspaceSettingsRepository) return undefined
+  const service = new WorkspaceSettingsService({
+    workspaceSettingsRepository,
+    workspaceRepository: deps.workspaceRepository,
+  })
+  return { service }
+}
+
 /** Assemble the release-health (Datadog) module when its repos + cipher are present. */
 function createReleaseHealthModule(deps: CoreDependencies): ReleaseHealthModule | undefined {
   const { datadogConnectionRepository, releaseHealthConfigRepository, datadogSecretCipher } = deps
@@ -1243,6 +1272,9 @@ export function createCore(dependencies: CoreDependencies): Core {
   const notifications = createNotificationsModule(dependencies)
   const slack = createSlackModule(dependencies)
   const mergePresets = createMergePresetsModule(dependencies)
+  // Built before the execution engine so the per-service running-task limit can be
+  // enforced at start() (and the escalation sweep can read the waiting threshold).
+  const settings = createWorkspaceSettingsModule(dependencies)
   const releaseHealth = createReleaseHealthModule(dependencies)
   const modelDefaults = createModelDefaultsModule(dependencies)
   const serviceFragmentDefaults = createServiceFragmentDefaultsModule(dependencies)
@@ -1262,6 +1294,7 @@ export function createCore(dependencies: CoreDependencies): Core {
     environmentProvisioning: environments?.provisioningService,
     blueprintReconciler,
     notificationService: notifications?.service,
+    workspaceSettingsService: settings?.service,
     llmObservability,
     ticketTrackerProvider: dependencies.ticketTrackerProvider,
     // Let the personal-credential gate resolve the workspace per-kind default model the
@@ -1311,6 +1344,7 @@ export function createCore(dependencies: CoreDependencies): Core {
     ...(notifications ? { notifications } : {}),
     ...(slack ? { slack } : {}),
     ...(mergePresets ? { mergePresets } : {}),
+    ...(settings ? { settings } : {}),
     ...(releaseHealth ? { releaseHealth } : {}),
     ...(modelDefaults ? { modelDefaults } : {}),
     ...(serviceFragmentDefaults ? { serviceFragmentDefaults } : {}),

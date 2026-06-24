@@ -11,9 +11,9 @@ import {
 // By default the repo-operating coding jobs run in per-run Cloudflare Containers.
 // An organization can instead point cat-factory at its OWN container/runner pool
 // (k8s, Nomad, an internal scheduler) running the standard executor-harness
-// image. The harness job protocol is fixed (`POST /run` → `GET /jobs/{id}`); what
-// is org-specific is the *scheduler in front of the pool* — how a job is assigned
-// to a runner and how its status is read back.
+// image. The harness job protocol is fixed (`POST /jobs` with the kind in the body
+// → `GET /jobs/{id}`); what is org-specific is the *scheduler in front of the pool*
+// — how a job is assigned to a runner and how its status is read back.
 //
 // So, exactly like the ephemeral-environment provider (ADR 0003), an org
 // describes its pool scheduler declaratively: a manifest of HTTP request

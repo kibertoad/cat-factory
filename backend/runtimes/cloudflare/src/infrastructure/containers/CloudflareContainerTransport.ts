@@ -26,8 +26,9 @@ const ROLLOUT_EVICTION_ERROR = `${EVICTION_ERROR} (${TRANSIENT_EVICTION_MARKER})
 // before the transport seam was introduced — preserved here, including the idempotent
 // re-attach (a replayed dispatch for the same ref re-attaches to the running job) and
 // the eviction→failed mapping on a 404 poll. Every dispatch kind (`run` | `blueprint`
-// | `bootstrap` | …) hits the matching harness endpoint identically; the bootstrapper
-// rides this transport rather than hand-rolling its own EXEC_CONTAINER plumbing.
+// | `bootstrap` | …) hits the same harness endpoint (`POST /jobs`, with the kind in
+// the body) identically; the bootstrapper rides this transport rather than
+// hand-rolling its own EXEC_CONTAINER plumbing.
 //
 // It also folds in instance-level reaping: when a ContainerInstanceRegistry is
 // wired, dispatch records the container in the live inventory and release clears it
@@ -35,9 +36,9 @@ const ROLLOUT_EVICTION_ERROR = `${EVICTION_ERROR} (${TRANSIENT_EVICTION_MARKER})
 // that outlived its lifetime — covering run/blueprint/bootstrap with no per-flow
 // wiring.
 
-// The harness `/run`, `/blueprint`, `/bootstrap` and `/jobs/{id}` calls are quick
-// (start a background job / read its state), so they get a short timeout. The long
-// work is bounded container-side by the job's inactivity + max-duration watchdogs.
+// The harness `POST /jobs` and `GET /jobs/{id}` calls are quick (start a background
+// job / read its state), so they get a short timeout. The long work is bounded
+// container-side by the job's inactivity + max-duration watchdogs.
 const DISPATCH_TIMEOUT_MS = 30_000
 const POLL_TIMEOUT_MS = 30_000
 
@@ -63,10 +64,12 @@ export class CloudflareContainerTransport implements RunnerTransport {
     // dispatches to the same instance; the harness keys the job by `ref.jobId` (in the
     // spec body), unique per step, so siblings never collide in its registries.
     const stub = this.namespace.get(this.namespace.idFromName(ref.runId))
-    const res = await stub.fetch(`http://container/${kind}`, {
+    // One harness endpoint for every kind: POST /jobs with the kind in the body. The
+    // harness reads `kind` to pick the validator + registry; the rest is the job spec.
+    const res = await stub.fetch('http://container/jobs', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(spec),
+      body: JSON.stringify({ ...spec, kind }),
       signal: AbortSignal.timeout(DISPATCH_TIMEOUT_MS),
     })
     if (!res.ok) {

@@ -114,6 +114,74 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
       })
     })
 
+    describe('task types + per-service running-task limit', () => {
+      it('persists a task type + per-type fields, surfaced on the snapshot identically', async () => {
+        const { call, createWorkspace } = harness.makeApp()
+        const { workspace } = await createWorkspace()
+        const wsId = workspace.id
+
+        const created = await call<Block>('POST', `/workspaces/${wsId}/blocks/blk_auth/tasks`, {
+          title: 'Investigate flaky login',
+          taskType: 'bug',
+          taskTypeFields: { severity: 'high', stepsToReproduce: 'log in repeatedly' },
+        })
+        expect(created.status).toBe(201)
+        expect(created.body.taskType).toBe('bug')
+
+        // The type + its per-type fields round-trip through the store identically (D1 ⇄ Postgres).
+        const snapshot = await call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+        const block = snapshot.body.blocks.find((b) => b.id === created.body.id)!
+        expect(block.taskType).toBe('bug')
+        expect(block.taskTypeFields?.severity).toBe('high')
+      })
+
+      it('enforces a per-service running-task limit and lifts it when the mode is off', async () => {
+        const { call, createWorkspace } = harness.makeApp()
+        const { workspace } = await createWorkspace()
+        const wsId = workspace.id
+
+        const pipeline = await call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Code only',
+          agentKinds: ['coder'],
+        })
+        // Cap the auth service at one concurrently-running task.
+        const settings = await call('PUT', `/workspaces/${wsId}/settings`, {
+          taskLimitMode: 'shared',
+          taskLimitShared: 1,
+        })
+        expect(settings.status).toBe(200)
+
+        // A second task under the same service frame (blk_auth owns task_login).
+        const second = await call<Block>('POST', `/workspaces/${wsId}/blocks/blk_auth/tasks`, {
+          title: 'Second task',
+        })
+        expect(second.status).toBe(201)
+
+        // First run starts and stays running (the suite's no-op runner never drives it).
+        const first = await call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+          pipelineId: pipeline.body.id,
+        })
+        expect(first.status).toBe(201)
+
+        // The service is now at its cap: a second start is refused with a 409 conflict.
+        const blocked = await call(
+          'POST',
+          `/workspaces/${wsId}/blocks/${second.body.id}/executions`,
+          { pipelineId: pipeline.body.id },
+        )
+        expect(blocked.status).toBe(409)
+
+        // Turning the limit off lets the second task start.
+        await call('PUT', `/workspaces/${wsId}/settings`, { taskLimitMode: 'off' })
+        const allowed = await call(
+          'POST',
+          `/workspaces/${wsId}/blocks/${second.body.id}/executions`,
+          { pipelineId: pipeline.body.id },
+        )
+        expect(allowed.status).toBe(201)
+      })
+    })
+
     describe('model defaults', () => {
       it('reads, replaces and surfaces per-agent-kind default models', async () => {
         const { call, createWorkspace } = harness.makeApp()
@@ -1861,36 +1929,129 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         expect(snap.executions.some((e) => e.blockId === 'task_login')).toBe(false)
       })
 
-      it('reworks an earlier producer through an intermediate step, then recovers', async () => {
-        // The companion reviews the NEAREST target producer, which may sit several
-        // steps back: ['coder','tester','reviewer'] has `tester` between the coder and
-        // its `reviewer` companion. A first failing grade loops the coder back; the
-        // coder AND the intermediate `tester` re-run, then the re-grade passes and the
-        // run completes — exercising the multi-step rework reset (every step from the
-        // producer up to the companion is reset and re-run, not just the producer).
-        const app = harness.makeApp({ confidence: 1, companionRatings: [0.4, 1] })
+      it('rejects a companion separated from its producer by another step (strict adjacency)', async () => {
+        // A companion must run IMMEDIATELY after a producer it can review — the builder
+        // surfaces companions as toggles attached to their producer, and the validation
+        // enforces that adjacency on EVERY facade. ['coder','tester','reviewer'] slips
+        // `tester` between the coder and its `reviewer` companion, so the pipeline save is
+        // rejected (a `validation` domain error → 422) before any run is created.
+        const app = harness.makeApp({ confidence: 1 })
         const { workspace } = await app.createWorkspace()
         const wsId = workspace.id
-        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+        const res = await app.call('POST', `/workspaces/${wsId}/pipelines`, {
           name: 'Build + gap companion',
           agentKinds: ['coder', 'tester', 'reviewer'],
         })
-        const start = await app.call<ExecutionInstance>(
+        expect(res.status).toBe(422)
+      })
+
+      it('skips an estimate-gated companion below threshold, runs it above', async () => {
+        // A companion can be GATED on the task estimate: it runs only when the estimate
+        // clears a threshold (OR across axes), else it is transparently skipped at runtime.
+        // The estimate is produced by an earlier `task-estimator` step in the SAME run. A
+        // LOW estimate skips the reviewer; the run still completes.
+        const gating = [null, null, { enabled: true, minRisk: 0.6, minImpact: 0.6 }]
+        const low = harness.makeApp({
+          confidence: 1,
+          taskEstimate: { complexity: 0.1, risk: 0.1, impact: 0.1, rationale: 'low' },
+        })
+        const { workspace } = await low.createWorkspace()
+        const lowPipe = await low.call<Pipeline>('POST', `/workspaces/${workspace.id}/pipelines`, {
+          name: 'Estimator-gated reviewer (low)',
+          agentKinds: ['task-estimator', 'coder', 'reviewer'],
+          gating,
+        })
+        expect(lowPipe.status).toBe(201)
+        const lowStart = await low.call<ExecutionInstance>(
           'POST',
-          `/workspaces/${wsId}/blocks/task_login/executions`,
-          { pipelineId: pipeline.body.id },
+          `/workspaces/${workspace.id}/blocks/task_login/executions`,
+          { pipelineId: lowPipe.body.id },
         )
-        expect(start.status).toBe(201)
-        const ticked = await app.drive(wsId)
-        const exec = ticked.find((e) => e.blockId === 'task_login')!
-        expect(exec.status).toBe('done')
-        // The intermediate tester re-ran after the rework and finished cleanly.
-        expect(exec.steps.find((s) => s.agentKind === 'tester')!.state).toBe('done')
-        // The companion recorded both cycles: the rejected first grade then the pass.
-        const companionStep = exec.steps.find((s) => s.agentKind === 'reviewer')!
-        expect(companionStep.companion?.verdicts.map((v) => v.passed)).toEqual([false, true])
-        // Exactly one automatic rework was consumed from the budget.
-        expect(companionStep.companion?.attempts).toBe(1)
+        expect(lowStart.status).toBe(201)
+        const lowExec = (await low.drive(workspace.id)).find((e) => e.blockId === 'task_login')!
+        expect(lowExec.status).toBe('done')
+        const skipped = lowExec.steps.find((s) => s.agentKind === 'reviewer')!
+        expect(skipped.skipped).toBe(true)
+        expect(skipped.companion?.verdicts ?? []).toEqual([])
+
+        // A HIGH estimate clears the gate, so the reviewer runs and grades the coder.
+        const high = harness.makeApp({
+          confidence: 1,
+          taskEstimate: { complexity: 0.9, risk: 0.9, impact: 0.9, rationale: 'high' },
+        })
+        const { workspace: ws2 } = await high.createWorkspace()
+        const hiPipe = await high.call<Pipeline>('POST', `/workspaces/${ws2.id}/pipelines`, {
+          name: 'Estimator-gated reviewer (high)',
+          agentKinds: ['task-estimator', 'coder', 'reviewer'],
+          gating,
+        })
+        const hiStart = await high.call<ExecutionInstance>(
+          'POST',
+          `/workspaces/${ws2.id}/blocks/task_login/executions`,
+          { pipelineId: hiPipe.body.id },
+        )
+        expect(hiStart.status).toBe(201)
+        const hiExec = (await high.drive(ws2.id)).find((e) => e.blockId === 'task_login')!
+        expect(hiExec.status).toBe('done')
+        const ran = hiExec.steps.find((s) => s.agentKind === 'reviewer')!
+        expect(ran.skipped ?? false).toBe(false)
+        expect((ran.companion?.verdicts.length ?? 0) > 0).toBe(true)
+      })
+
+      it('rejects a pipeline that gates a step with no task-estimator before it', async () => {
+        // Estimate gating is meaningless without an estimate to consult, so a pipeline with
+        // any enabled gating but no preceding `task-estimator` is rejected at save (and at
+        // start) — a `validation` domain error → 422, identically on both facades.
+        const app = harness.makeApp()
+        const { workspace } = await app.createWorkspace()
+        const res = await app.call('POST', `/workspaces/${workspace.id}/pipelines`, {
+          name: 'Gated without estimator',
+          agentKinds: ['coder', 'reviewer'],
+          gating: [null, { enabled: true, minRisk: 0.6 }],
+        })
+        expect(res.status).toBe(422)
+      })
+
+      it('round-trips pipeline labels + archive state through create and organize', async () => {
+        // Labels + archive are organizational metadata that persist on BOTH stores. Archive
+        // is the only mutation a built-in accepts (it touches the view, not the structure).
+        const app = harness.makeApp()
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+        const created = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Labelled',
+          agentKinds: ['coder'],
+          labels: ['experiment', 'wip'],
+        })
+        expect(created.status).toBe(201)
+        expect([...(created.body.labels ?? [])].sort()).toEqual(['experiment', 'wip'])
+        expect(created.body.archived ?? false).toBe(false)
+
+        const organized = await app.call<Pipeline>(
+          'PATCH',
+          `/workspaces/${wsId}/pipelines/${created.body.id}/organize`,
+          { archived: true, labels: ['shelved'] },
+        )
+        expect(organized.status).toBe(200)
+        expect(organized.body.archived).toBe(true)
+        expect(organized.body.labels).toEqual(['shelved'])
+
+        // The list reflects the persisted change (re-read from the store).
+        const list = await app.call<Pipeline[]>('GET', `/workspaces/${wsId}/pipelines`)
+        const reread = list.body.find((p) => p.id === created.body.id)!
+        expect(reread.archived).toBe(true)
+        expect(reread.labels).toEqual(['shelved'])
+
+        // A built-in accepts organize (archive) while staying read-only/builtin.
+        const builtin = list.body.find((p) => p.builtin)!
+        const archivedBuiltin = await app.call<Pipeline>(
+          'PATCH',
+          `/workspaces/${wsId}/pipelines/${builtin.id}/organize`,
+          { archived: true },
+        )
+        expect(archivedBuiltin.status).toBe(200)
+        expect(archivedBuiltin.body.archived).toBe(true)
+        expect(archivedBuiltin.body.builtin).toBe(true)
       })
 
       it('reviews the spec-writer with its companion and reworks it without a human gate', async () => {
