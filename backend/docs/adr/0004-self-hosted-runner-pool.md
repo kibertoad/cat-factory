@@ -137,10 +137,12 @@ length-capped and header-free.
   OAuth token URL) is SSRF-guarded (https-only, no embedded creds, no
   internal/RFC1918 hosts), reusing the environment guard.
 - **Scope (v1):** only the async coding jobs (`/run` + poll) route to a pool. The
-  synchronous repo **bootstrap** and **scan** flows still use Cloudflare Containers
-  (`ContainerRepoBootstrapper` / `ContainerRepoScanner` are unchanged); a pure-BYO
-  deployment with no `EXEC_CONTAINER` binding therefore cannot bootstrap/scan yet.
-  Extending the manifest with optional bootstrap/scan templates is a follow-up.
+  synchronous repo **bootstrap** flow still uses Cloudflare Containers
+  (`ContainerRepoBootstrapper` is unchanged); a pure-BYO deployment with no
+  `EXEC_CONTAINER` binding therefore cannot bootstrap yet. Extending the manifest
+  with an optional bootstrap template is a follow-up. (Repository decomposition is
+  not in this list: it is the `blueprints` pipeline agent, which already dispatches
+  through the shared runner transport and so works on a pool like any other kind.)
 - A self-hosted pool must be reachable from the Worker (public or via a tunnel),
   and the runner must reach back out to the Worker's LLM proxy and to GitHub. The
   network requirements are documented in `docs/runner-pool-integration.md`.

@@ -1,51 +1,25 @@
-import type {
-  BlueprintService,
-  BoardScanSpawnResult,
-  RepoBlueprint,
-  ScanRepoInput,
-  ScanRepoResult,
-} from '@cat-factory/kernel'
-import type { Clock, IdGenerator } from '@cat-factory/kernel'
-import type { BlockRepository, WorkspaceRepository } from '@cat-factory/kernel'
-import type { RepoBlueprintRecord, RepoBlueprintRepository } from '@cat-factory/kernel'
-import type { RepoProjectionRepository } from '@cat-factory/kernel'
-import type { RepoScanner } from '@cat-factory/kernel'
-import { assertFound } from '@cat-factory/kernel'
-import { requireWorkspace } from '@cat-factory/kernel'
+import type { BlueprintService, BoardScanSpawnResult } from '@cat-factory/kernel'
+import type { BlockRepository } from '@cat-factory/kernel'
 import type { BoardService } from '../board/BoardService.js'
 import { countModules, describeNode } from './board-scan.logic.js'
 
 // ---------------------------------------------------------------------------
-// BoardScanService: owns the "scan repository" command and the persisted
-// blueprints it produces. Reading the blueprints always works; running a scan
-// additionally needs the RepoScanner port (the GitHub + sandbox-container
-// machinery) to be wired — when it is absent, `canScan` is false and the
-// controller surfaces "unavailable" rather than attempting a run.
+// BoardScanService: reconciles a service blueprint onto the board. It is the
+// `BlueprintReconciler` the execution engine drives when a `blueprints` pipeline
+// step returns a decomposition tree (see ExecutionService.ingestBlueprint) — there
+// is no longer a standalone "scan repository" command or a persisted blueprint
+// store; the in-repo `blueprints/` files are the source of truth and the board is
+// the projection.
 //
-// A scan decomposes one repository into the canonical service → modules tree
-// (anchored to codebase paths), persists it as the single current blueprint for
-// that repo, and optionally materialises it onto the board so the structure is
-// visible and future work can be scoped against it. Tasks are authored by people,
-// not derived from the map.
+// Reconciling maps the tree (one service → its modules, anchored to codebase paths)
+// onto an existing service frame in place, never deleting human-authored work, and
+// spawns a fresh frame only when the target frame can't be found.
 // ---------------------------------------------------------------------------
 
 export interface BoardScanServiceDependencies {
-  repoBlueprintRepository: RepoBlueprintRepository
-  workspaceRepository: WorkspaceRepository
   boardService: BoardService
   /** Read board blocks directly, to reconcile a blueprint onto an existing frame. */
   blockRepository: BlockRepository
-  idGenerator: IdGenerator
-  clock: Clock
-  /** Performs the side-effecting repo read + decomposition; optional. */
-  repoScanner?: RepoScanner
-  /**
-   * Links a freshly-spawned service frame to its backing repo projection, so the
-   * scanned service is repo-addressable out of the box (execution resolves the
-   * repo by walking up to the linked frame). Optional — when absent the frame is
-   * still created, just unlinked.
-   */
-  repoProjectionRepository?: RepoProjectionRepository
 }
 
 /** Case-insensitive, whitespace-tolerant name match used to pair board ↔ blueprint nodes. */
@@ -53,107 +27,19 @@ function sameName(a: string, b: string): boolean {
   return a.trim().toLowerCase() === b.trim().toLowerCase()
 }
 
-function toRepoBlueprint(record: RepoBlueprintRecord): RepoBlueprint {
-  return {
-    id: record.id,
-    workspaceId: record.workspaceId,
-    repoOwner: record.repoOwner,
-    repoName: record.repoName,
-    source: record.source,
-    service: record.service,
-    createdAt: record.createdAt,
-    updatedAt: record.updatedAt,
-  }
-}
-
 export class BoardScanService {
   constructor(private readonly deps: BoardScanServiceDependencies) {}
-
-  /** True when a scan can actually be performed (the scanner is wired). */
-  get canScan(): boolean {
-    return this.deps.repoScanner !== undefined
-  }
-
-  // ---- blueprint reads ----------------------------------------------------
-
-  async listBlueprints(workspaceId: string): Promise<RepoBlueprint[]> {
-    await requireWorkspace(this.deps.workspaceRepository, workspaceId)
-    const records = await this.deps.repoBlueprintRepository.listByWorkspace(workspaceId)
-    return records.map(toRepoBlueprint)
-  }
-
-  async getBlueprint(workspaceId: string, id: string): Promise<RepoBlueprint> {
-    return toRepoBlueprint(
-      assertFound(await this.deps.repoBlueprintRepository.get(workspaceId, id), 'Blueprint', id),
-    )
-  }
-
-  async deleteBlueprint(workspaceId: string, id: string): Promise<void> {
-    assertFound(await this.deps.repoBlueprintRepository.get(workspaceId, id), 'Blueprint', id)
-    await this.deps.repoBlueprintRepository.delete(workspaceId, id)
-  }
-
-  // ---- scanning -----------------------------------------------------------
-
-  /**
-   * Scan a repository into a blueprint and persist it as the single current
-   * decomposition for that `owner/name` (a re-scan replaces it in place, keeping
-   * its id and original `createdAt`). When `input.spawn` is set the blueprint is
-   * also materialised onto the board. Requires {@link canScan}.
-   */
-  async scan(workspaceId: string, input: ScanRepoInput): Promise<ScanRepoResult> {
-    await requireWorkspace(this.deps.workspaceRepository, workspaceId)
-    const scanner = this.deps.repoScanner
-    if (!scanner) {
-      throw new Error('Repository scanning is not configured')
-    }
-
-    const scanned = await scanner.scan({
-      workspaceId,
-      repo: { owner: input.repoOwner, name: input.repoName },
-      instructions: input.instructions,
-    })
-
-    const now = this.deps.clock.now()
-    const existing = await this.deps.repoBlueprintRepository.getByRepo(
-      workspaceId,
-      input.repoOwner,
-      input.repoName,
-    )
-    const record: RepoBlueprintRecord = {
-      id: existing?.id ?? this.deps.idGenerator.next('blueprint'),
-      workspaceId,
-      repoOwner: input.repoOwner,
-      repoName: input.repoName,
-      source: scanned.source,
-      service: scanned.service,
-      createdAt: existing?.createdAt ?? now,
-      updatedAt: now,
-    }
-    await this.deps.repoBlueprintRepository.upsert(record)
-
-    const blueprint = toRepoBlueprint(record)
-    if (!input.spawn) return { blueprint }
-    const spawn = await this.spawnBlueprint(workspaceId, blueprint.service, {
-      owner: input.repoOwner,
-      name: input.repoName,
-    })
-    return { blueprint, spawn }
-  }
 
   /**
    * Materialise a blueprint onto the board: one service frame and a module per
    * blueprint module — each carrying the node's summary and codebase references in
    * its description, so the board mirrors the map. Tasks are authored by people, so
-   * the spawn never creates them.
-   *
-   * When `repo` is given the new frame is linked to that repo's projection, so
-   * tasks added under it resolve to the right repository instead of unaddressable.
+   * the spawn never creates them. Used as the fallback when a reconcile target frame
+   * can't be resolved.
    */
   private async spawnBlueprint(
     workspaceId: string,
     service: BlueprintService,
-    repo?: { owner: string; name: string },
   ): Promise<BoardScanSpawnResult> {
     const frame = await this.deps.boardService.addFrame(workspaceId, {
       type: service.type,
@@ -163,7 +49,6 @@ export class BoardScanService {
       title: service.name,
       description: describeNode(service.summary, service.references),
     })
-    if (repo) await this.linkRepoToFrame(workspaceId, repo, frame.id)
 
     let modules = 0
     for (const planModule of service.modules ?? []) {
@@ -229,23 +114,6 @@ export class BoardScanService {
       }
     }
     return { frameId: frame.id, modules }
-  }
-
-  /**
-   * Link a spawned frame to its backing repo projection (by `owner/name`), so
-   * execution resolves the repo by walking up to this frame. Best-effort: a no-op
-   * when the projection port is unwired or the repo isn't projected yet.
-   */
-  private async linkRepoToFrame(
-    workspaceId: string,
-    repo: { owner: string; name: string },
-    frameId: string,
-  ): Promise<void> {
-    const projection = this.deps.repoProjectionRepository
-    if (!projection) return
-    const repos = await projection.list(workspaceId)
-    const match = repos.find((r) => sameName(r.owner, repo.owner) && sameName(r.name, repo.name))
-    if (match) await projection.linkBlock(workspaceId, match.githubId, frameId)
   }
 
   /** Convenience for callers/tests: the module count a blueprint implies. */

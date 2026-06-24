@@ -340,9 +340,11 @@ derived from the blueprint (there is no longer a "feature" granularity level).
   `BootstrapService.pollBootstrapJob` success starts the blueprint-only
   `pl_blueprint` pipeline against the new frame (best-effort) to create the initial
   map. A mapping-only run leaves a frame `ready` (not `done`).
-- Not persisted to `repo_blueprints` on the pipeline path (the in-repo files are the
-  source of truth and the board is the projection); the manual board-scan `scan`
-  command still populates that table.
+- Nothing is persisted to a blueprint table: the in-repo `blueprints/` files are the
+  source of truth and the board is the projection. There is **no** standalone "scan
+  repository" command — repository decomposition is always the `blueprints` pipeline
+  agent (which runs through the runner transport, so it works on every backend);
+  `BoardScanService` is purely the reconciler the engine drives with its result.
 
 ## Requirements review flow (iterative gate step + dedicated window)
 
@@ -581,10 +583,11 @@ blockId)` (worker `infrastructure/container.ts`): find the `github_repos` row
   bootstrapped repo a board service that tasks target correctly, the repo
   projection row must be linked to the new frame's block id.
 - A workspace has exactly **one** GitHub installation but may have **many** repos.
-- `BoardScanService.spawnBlueprint()` (orchestration `src/modules/boardScan/BoardScanService.ts`)
-  materialises a scanned repo as frame→modules→tasks and links the repo to the new
-  frame (`linkRepoToFrame` → `repoProjectionRepository.linkBlock`) when the repo
-  projection is wired and a matching row exists.
+- `BoardScanService.reconcileBlueprint()` (orchestration `src/modules/boardScan/BoardScanService.ts`)
+  is the engine's blueprint reconciler: it maps a `blueprints` step's decomposition
+  tree onto the run's existing service frame in place (match modules by name, add
+  missing, refresh descriptions, never delete), falling back to spawning a fresh
+  frame + modules only when the target frame can't be resolved.
 - Drag-drop: `useBlockDrag.ts` (`reparentAt()`) → `POST /blocks/:id/reparent` →
   `BoardService.reparent()`. Tasks can move into frames or modules; modules into
   frames; frames cannot nest (`canReparent` in `board.logic.ts`).
@@ -718,7 +721,7 @@ drives a run to completion through the real pg-boss runner.
   (orchestration/integrations) → ports (kernel); infra adapters live in each runtime
   facade and implement the ports + the `gateways` seam, wired in that facade's
   `container.ts` via constructor injection of a single `dependencies` object. Opt-in
-  integrations (GitHub / environments / board-scan / bootstrap) wire only when configured.
+  integrations (GitHub / environments / bootstrap) wire only when configured.
 - **Dedicated result-view seam (frontend):** an agent step opens the generic prose panel
   (`AgentStepDetail.vue`) UNLESS its archetype declares a `resultView` id (`app/utils/catalog.ts`).
   The `ui` store's step dispatch (`dispatchStepView`, used by both `openStepDetail` and

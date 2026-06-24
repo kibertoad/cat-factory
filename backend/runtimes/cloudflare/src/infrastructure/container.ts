@@ -84,7 +84,6 @@ import {
 } from './repositories/D1PersonalSubscriptionRepository'
 import { D1LocalModelEndpointRepository } from './repositories/D1LocalModelEndpointRepository'
 import { ContainerRepoBootstrapper } from './ai/ContainerRepoBootstrapper'
-import { ContainerRepoScanner } from './ai/ContainerRepoScanner'
 import { CompositeAgentExecutor } from './ai/CompositeAgentExecutor'
 import { ContainerSessionService } from './containers/ContainerSessionService'
 import { DurableObjectEventPublisher } from './events/DurableObjectEventPublisher'
@@ -123,7 +122,6 @@ import { D1EnvironmentRegistryRepository } from './repositories/D1EnvironmentReg
 import { D1ReferenceArchitectureRepository } from './repositories/D1ReferenceArchitectureRepository'
 import { D1BootstrapJobRepository } from './repositories/D1BootstrapJobRepository'
 import { D1AgentRunRepository } from './repositories/D1AgentRunRepository'
-import { D1RepoBlueprintRepository } from './repositories/D1RepoBlueprintRepository'
 import { D1RequirementReviewRepository } from './repositories/D1RequirementReviewRepository'
 import { D1ConsensusSessionRepository } from './repositories/D1ConsensusSessionRepository'
 import { ConsensusAgentExecutor, registerConsensusTraits } from '@cat-factory/consensus'
@@ -1213,44 +1211,6 @@ function selectRepoBootstrapper(
 }
 
 /**
- * Build the container-backed repo scanner for the "scan repository" command,
- * gated on the same prerequisites as the implementation container (the binding, a
- * configured GitHub App, the proxy's public URL and signing secret). Returns
- * undefined otherwise, leaving blueprint reads available while the scan path
- * reports itself unavailable.
- */
-function selectRepoScanner(
-  env: Env,
-  config: AppConfig,
-  db: D1Database,
-  clock: Clock,
-): ContainerRepoScanner | undefined {
-  if (
-    !env.EXEC_CONTAINER ||
-    !config.github.enabled ||
-    !env.GITHUB_APP_PRIVATE_KEY ||
-    !env.WORKER_PUBLIC_URL ||
-    !env.AUTH_SESSION_SECRET
-  ) {
-    return undefined
-  }
-
-  const installationRepository = new D1GitHubInstallationRepository({ db })
-  const registry = buildAppRegistry(env, config, db, clock)
-
-  return new ContainerRepoScanner({
-    container: env.EXEC_CONTAINER,
-    installationRepository,
-    mintInstallationToken: (id) => registry.installationToken(id),
-    sessionService: new ContainerSessionService({ secret: env.AUTH_SESSION_SECRET }),
-    // Repo scanning is also an `architect`-kind run — follow that kind's routing.
-    model: resolveAgentConfig(config.agents.routing, 'architect').ref,
-    proxyBaseUrl: `${env.WORKER_PUBLIC_URL.replace(/\/+$/, '')}/v1`,
-    githubApiBase: config.github.apiBase,
-  })
-}
-
-/**
  * Build the prompt-fragment library's concrete ports when opted in (ADR 0006):
  * the two D1 repositories, the relevance selector (LLM when configured, else the
  * core deterministic matcher via `fragmentSelector: undefined`), and the
@@ -1385,10 +1345,6 @@ export function buildContainer(
     bootstrapRunner: env.BOOTSTRAP_WORKFLOW
       ? new WorkflowsBootstrapRunner(env.BOOTSTRAP_WORKFLOW)
       : undefined,
-    // Board-scan: the blueprint repository is wired unconditionally (reads are
-    // always available); the scan path additionally needs the container scanner.
-    repoBlueprintRepository: new D1RepoBlueprintRepository({ db }),
-    repoScanner: selectRepoScanner(env, config, db, clock),
     ...selectGitHubDeps(env, config, db, clock, idGenerator),
     ...selectMergeLifecycleDeps(env, config, db, clock, idGenerator),
     ...selectReleaseHealthDeps(env, config, db),
