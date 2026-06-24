@@ -15,12 +15,18 @@ describe('validatePipelineShape', () => {
     }
   })
 
-  it('rejects a companion with no producer to review, over the enabled subset', () => {
+  it('requires a companion to run immediately after a producer it can review', () => {
     expect(() => assertValidCompanionPlacement(['reviewer'])).toThrow()
     // A disabled producer leaves its companion orphaned → rejected.
     expect(() => assertValidCompanionPlacement(['coder', 'reviewer'], [false, true])).toThrow()
-    // A producer several steps back is fine (engine reviews the nearest preceding target).
-    expect(() => assertValidCompanionPlacement(['coder', 'tester', 'reviewer'])).not.toThrow()
+    // Adjacent producer → companion is valid.
+    expect(() => assertValidCompanionPlacement(['coder', 'reviewer'])).not.toThrow()
+    // A step slipped between the producer and its companion → rejected (strict adjacency).
+    expect(() => assertValidCompanionPlacement(['coder', 'tester', 'reviewer'])).toThrow()
+    // Adjacency is over the ENABLED subset: a disabled step between them doesn't break it.
+    expect(() =>
+      assertValidCompanionPlacement(['coder', 'tester', 'reviewer'], [true, false, true]),
+    ).not.toThrow()
   })
 
   it('requires an enabled task-estimator before any enabled gated step', () => {

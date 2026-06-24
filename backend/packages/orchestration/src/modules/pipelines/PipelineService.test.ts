@@ -138,12 +138,21 @@ describe('PipelineService — estimate gating, companion placement, labels & arc
     ).rejects.toBeInstanceOf(ValidationError)
   })
 
-  it('accepts a companion that follows its producer (not necessarily adjacent)', async () => {
+  it('accepts a companion placed immediately after its producer', async () => {
     const p = await svc().create(WS, {
-      name: 'Build + gap companion',
-      agentKinds: ['coder', 'tester', 'reviewer'],
+      name: 'Build + adjacent companion',
+      agentKinds: ['coder', 'reviewer'],
     })
-    expect(p.agentKinds).toEqual(['coder', 'tester', 'reviewer'])
+    expect(p.agentKinds).toEqual(['coder', 'reviewer'])
+  })
+
+  it('rejects a companion separated from its producer by another step', async () => {
+    await expect(
+      svc().create(WS, {
+        name: 'Build + gap companion',
+        agentKinds: ['coder', 'tester', 'reviewer'],
+      }),
+    ).rejects.toBeInstanceOf(ValidationError)
   })
 
   it('rejects gating a step with no task-estimator before it', async () => {

@@ -129,11 +129,14 @@ export const usePipelinesStore = defineStore('pipelines', () => {
   /**
    * The draft as a list of "units" for rendering: each step is one unit, EXCEPT a companion
    * that sits immediately after its producer — that companion is folded into the producer's
-   * unit (`companionIndex`) and surfaced as a toggle on it, not a standalone row. A companion
-   * that is NOT immediately after its producer (legacy / API-authored pipelines, which the
-   * backend still accepts) is emitted as its own standalone unit so it stays visible and
-   * removable — and, crucially, so every `draft` index belongs to exactly one unit, which is
-   * what lets {@link moveUnit} reorder by unit boundaries without ever dropping a step.
+   * unit (`companionIndex`) and surfaced as a toggle on it, not a standalone row. The backend
+   * now REJECTS a companion that is not immediately after its producer (strict adjacency in
+   * `validatePipelineShape`), so a saved pipeline never has one — but a stray companion that
+   * still shows up in the draft (e.g. a pre-existing pipeline saved before adjacency was
+   * enforced) is emitted as its own standalone unit so it stays visible and removable/
+   * reorderable into a valid shape rather than being silently dropped — and, crucially, so
+   * every `draft` index belongs to exactly one unit, which is what lets {@link moveUnit}
+   * reorder by unit boundaries without ever dropping a step.
    * `index`/`companionIndex` are positions in the raw `draft` arrays.
    */
   const units = computed(() => {

@@ -32,8 +32,11 @@ Improve the pipeline builder experience:
   additionally restricted to **companion steps** (skipping a producer would starve
   its downstream steps) and **requires at least one axis threshold** (an enabled gate
   with none would always skip); both are enforced by the shared `validatePipelineShape`
-  at save, clone, and run start. The builder folds an out-of-band non-adjacent companion
-  back into a visible, reorderable row so editing such a pipeline can no longer drop it.
+  at save, clone, and run start. A companion must now run **immediately after** an
+  enabled producer it can review — `validatePipelineShape` enforces strict adjacency
+  (over the enabled subset) on every facade, matching the builder, which surfaces
+  companions as toggles attached to their producer. A pipeline that slips another step
+  between a producer and its companion is rejected at save / clone / run start.
 
 **Breaking (pre-1.0, no migration):** the `Pipeline` wire shape gains optional
 `gating`, `labels`, and `archived` fields, and `PipelineStep` gains `gating` /

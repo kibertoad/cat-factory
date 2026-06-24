@@ -1929,36 +1929,20 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         expect(snap.executions.some((e) => e.blockId === 'task_login')).toBe(false)
       })
 
-      it('reworks an earlier producer through an intermediate step, then recovers', async () => {
-        // The companion reviews the NEAREST target producer, which may sit several
-        // steps back: ['coder','tester','reviewer'] has `tester` between the coder and
-        // its `reviewer` companion. A first failing grade loops the coder back; the
-        // coder AND the intermediate `tester` re-run, then the re-grade passes and the
-        // run completes — exercising the multi-step rework reset (every step from the
-        // producer up to the companion is reset and re-run, not just the producer).
-        const app = harness.makeApp({ confidence: 1, companionRatings: [0.4, 1] })
+      it('rejects a companion separated from its producer by another step (strict adjacency)', async () => {
+        // A companion must run IMMEDIATELY after a producer it can review — the builder
+        // surfaces companions as toggles attached to their producer, and the validation
+        // enforces that adjacency on EVERY facade. ['coder','tester','reviewer'] slips
+        // `tester` between the coder and its `reviewer` companion, so the pipeline save is
+        // rejected (a `validation` domain error → 422) before any run is created.
+        const app = harness.makeApp({ confidence: 1 })
         const { workspace } = await app.createWorkspace()
         const wsId = workspace.id
-        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+        const res = await app.call('POST', `/workspaces/${wsId}/pipelines`, {
           name: 'Build + gap companion',
           agentKinds: ['coder', 'tester', 'reviewer'],
         })
-        const start = await app.call<ExecutionInstance>(
-          'POST',
-          `/workspaces/${wsId}/blocks/task_login/executions`,
-          { pipelineId: pipeline.body.id },
-        )
-        expect(start.status).toBe(201)
-        const ticked = await app.drive(wsId)
-        const exec = ticked.find((e) => e.blockId === 'task_login')!
-        expect(exec.status).toBe('done')
-        // The intermediate tester re-ran after the rework and finished cleanly.
-        expect(exec.steps.find((s) => s.agentKind === 'tester')!.state).toBe('done')
-        // The companion recorded both cycles: the rejected first grade then the pass.
-        const companionStep = exec.steps.find((s) => s.agentKind === 'reviewer')!
-        expect(companionStep.companion?.verdicts.map((v) => v.passed)).toEqual([false, true])
-        // Exactly one automatic rework was consumed from the budget.
-        expect(companionStep.companion?.attempts).toBe(1)
+        expect(res.status).toBe(422)
       })
 
       it('skips an estimate-gated companion below threshold, runs it above', async () => {

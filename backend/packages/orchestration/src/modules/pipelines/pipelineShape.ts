@@ -10,13 +10,12 @@ import { companionTargets, isCompanionKind, TASK_ESTIMATOR_AGENT_KIND } from '@c
  * reason over the enabled subset:
  *
  *  - {@link assertValidCompanionPlacement}: a companion (reviewer / architect-companion /
- *    spec-companion) must have some earlier ENABLED step it can review. Companions are
+ *    spec-companion) must run IMMEDIATELY after an ENABLED step it can review. Companions are
  *    dependent agents — they make no sense without their producer — so the builder surfaces
- *    them as toggles attached to the producer (inserting them immediately after). The
- *    validation only requires a preceding producer, NOT strict adjacency: the engine's
- *    companion reviews the NEAREST preceding target, which may legitimately sit a few steps
- *    back (e.g. `coder → tester → reviewer`), so tightening this to adjacency would reject a
- *    capability the engine supports.
+ *    them as toggles attached to the producer (inserting them immediately after), and the
+ *    validation enforces exactly that adjacency: a companion's nearest preceding enabled step
+ *    must be one of its targets. (The engine still reviews the nearest preceding target, but
+ *    that target is now guaranteed to be the immediate predecessor.)
  *  - {@link assertValidGating}: a step gated on the task estimate must be a companion (the
  *    only kind it is safe to skip — skipping a producer would starve its downstream steps),
  *    must set at least one axis threshold (or it would always skip), and needs a
@@ -34,12 +33,13 @@ export function validatePipelineShape(pipeline: PipelineShape): void {
 }
 
 /**
- * A companion step is only valid when some EARLIER ENABLED step produces output it is
- * allowed to review (a step whose kind is in the companion's target allow-list). Validated
- * over the enabled subset — that is exactly the chain the run executes — so it also rejects
- * "disable the producer but leave its companion on", which would leave the companion grading
- * nothing at runtime. Not strict adjacency: the engine's companion reviews the NEAREST
- * preceding target, which may sit a few steps back.
+ * A companion step is only valid when the step IMMEDIATELY before it (over the enabled
+ * subset) produces output it is allowed to review (a step whose kind is in the companion's
+ * target allow-list). Validated over the enabled subset — that is exactly the chain the run
+ * executes — so it also rejects "disable the producer but leave its companion on" (which
+ * would leave the companion grading nothing at runtime) AND "slip another step between the
+ * producer and its companion". Companions are surfaced in the builder as toggles attached to
+ * their producer and run immediately after it, so adjacency is required.
  */
 export function assertValidCompanionPlacement(agentKinds: string[], enabled?: boolean[]): void {
   const isEnabled = (i: number) => enabled?.[i] !== false
@@ -47,10 +47,17 @@ export function assertValidCompanionPlacement(agentKinds: string[], enabled?: bo
     const kind = agentKinds[i]
     if (kind === undefined || !isCompanionKind(kind) || !isEnabled(i)) continue
     const targets = companionTargets(kind)
-    const hasProducer = agentKinds.slice(0, i).some((k, j) => targets.includes(k) && isEnabled(j))
-    if (!hasProducer) {
+    // The nearest preceding ENABLED step must be a producer this companion can review.
+    let predecessor: string | undefined
+    for (let j = i - 1; j >= 0; j--) {
+      if (isEnabled(j)) {
+        predecessor = agentKinds[j]
+        break
+      }
+    }
+    if (predecessor === undefined || !targets.includes(predecessor)) {
       throw new ValidationError(
-        `Companion '${kind}' must run after an enabled step it can review (${targets.join(', ')}).`,
+        `Companion '${kind}' must run immediately after an enabled step it can review (${targets.join(', ')}).`,
       )
     }
   }
