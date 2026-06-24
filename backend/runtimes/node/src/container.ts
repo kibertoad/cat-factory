@@ -415,7 +415,7 @@ function buildNodeResolveTransport(
     }),
     clock,
   })
-  const urlPolicy = resolveUrlSafetyPolicy(config)
+  const urlPolicy = resolveUrlSafetyPolicy(config.runners)
   const poolProvider = new HttpRunnerPoolProvider(urlPolicy ? { urlPolicy } : {})
   return async (workspaceId) => {
     if (workspaceId) {
@@ -1038,6 +1038,10 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     }
   }
 
+  // Runner-pool URL/host guard, scoped to its own config (independent of the environment
+  // allow-list); absent => strict public-https.
+  const runnerUrlPolicy = resolveUrlSafetyPolicy(config.runners)
+
   const dependencies: CoreDependencies = {
     ...releaseHealthDeps,
     workspaceRepository: repos.workspaceRepository,
@@ -1128,6 +1132,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
             masterKeyBase64: config.runners.encryptionKey,
             info: RUNNERS_CIPHER_INFO,
           }),
+          ...(runnerUrlPolicy ? { runnerUrlSafetyPolicy: runnerUrlPolicy } : {}),
         }
       : {}),
     ...(options.boss
@@ -1159,12 +1164,9 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // Ephemeral environments (opt-in): a workspace registers its own environment
     // management API; the tester provisions/destroys per-run environments from it. A
     // trusted in-house adapter can replace the default HTTP provider via the seam.
+    // The environment integration scopes its own URL/host policy from
+    // `config.environments` inside this selector (separate from the runner pool's).
     ...selectNodeEnvironmentsDeps(config, options.db, options.environmentProvider),
-    // One shared URL/host safety policy for the env + runner-pool integrations (the
-    // connection registration + the returned env URL); absent => strict public-https.
-    ...(resolveUrlSafetyPolicy(config)
-      ? { urlSafetyPolicy: resolveUrlSafetyPolicy(config)! }
-      : {}),
     // Prompt-fragment library (ADR 0006; opt-in): the managed tenant-scoped catalog
     // of best-practice fragments feeding every agent run, wired exactly like the
     // Worker's selectFragmentLibraryDeps (repos + installation resolver + selector).
@@ -1328,7 +1330,7 @@ function selectNodeEnvironmentsDeps(
   override?: EnvironmentProvider,
 ): Partial<CoreDependencies> {
   if (!config.environments.enabled || !config.environments.encryptionKey) return {}
-  const urlPolicy = resolveUrlSafetyPolicy(config)
+  const urlPolicy = resolveUrlSafetyPolicy(config.environments)
   return {
     environmentProvider: override ?? new HttpEnvironmentProvider(urlPolicy ? { urlPolicy } : {}),
     environmentConnectionRepository: new DrizzleEnvironmentConnectionRepository(db),
@@ -1336,6 +1338,7 @@ function selectNodeEnvironmentsDeps(
     secretCipher: new WebCryptoSecretCipher({
       masterKeyBase64: config.environments.encryptionKey,
     }),
+    ...(urlPolicy ? { environmentUrlSafetyPolicy: urlPolicy } : {}),
   }
 }
 

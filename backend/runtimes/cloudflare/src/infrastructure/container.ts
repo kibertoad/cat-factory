@@ -365,7 +365,7 @@ function buildResolveTransport(
       }),
       clock,
     })
-    const urlPolicy = resolveUrlSafetyPolicy(config)
+    const urlPolicy = resolveUrlSafetyPolicy(config.runners)
     poolProvider = new HttpRunnerPoolProvider(urlPolicy ? { urlPolicy } : {})
   }
 
@@ -1138,7 +1138,7 @@ function selectEnvironmentsDeps(
   // The default manifest-driven provider; a trusted in-house adapter (implementing the
   // EnvironmentProvider port) is injected by replacing `environmentProvider` via the
   // `overrides` argument to `buildContainer` (spread last), the same seam tests use.
-  const urlPolicy = resolveUrlSafetyPolicy(config)
+  const urlPolicy = resolveUrlSafetyPolicy(config.environments)
   return {
     environmentProvider: new HttpEnvironmentProvider(urlPolicy ? { urlPolicy } : {}),
     environmentConnectionRepository: new D1EnvironmentConnectionRepository({ db }),
@@ -1146,7 +1146,7 @@ function selectEnvironmentsDeps(
     secretCipher: new WebCryptoSecretCipher({
       masterKeyBase64: config.environments.encryptionKey!,
     }),
-    ...(urlPolicy ? { urlSafetyPolicy: urlPolicy } : {}),
+    ...(urlPolicy ? { environmentUrlSafetyPolicy: urlPolicy } : {}),
   }
 }
 
@@ -1159,14 +1159,14 @@ function selectEnvironmentsDeps(
  */
 function selectRunnersDeps(env: Env, config: AppConfig, db: D1Database): Partial<CoreDependencies> {
   if (!config.runners.enabled) return {}
-  const urlPolicy = resolveUrlSafetyPolicy(config)
+  const urlPolicy = resolveUrlSafetyPolicy(config.runners)
   return {
     runnerPoolConnectionRepository: new D1RunnerPoolConnectionRepository({ db }),
     runnerSecretCipher: new WebCryptoSecretCipher({
       masterKeyBase64: config.runners.encryptionKey!,
       info: 'cat-factory:runners',
     }),
-    ...(urlPolicy ? { urlSafetyPolicy: urlPolicy } : {}),
+    ...(urlPolicy ? { runnerUrlSafetyPolicy: urlPolicy } : {}),
   }
 }
 

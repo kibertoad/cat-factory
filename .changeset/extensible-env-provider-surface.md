@@ -18,7 +18,9 @@ into a stock facade build, without forking the facades.
 - New `UrlSafetyPolicy` (kernel) + `resolveUrlSafetyPolicy` (server): the env + runner-pool
   URL/host guard is now policy-driven. The default stays strict (https-only, no
   private/internal hosts); a TRUSTED operator can widen it per facade to reach an internal
-  platform on a private/VPN host. Config: `ENVIRONMENTS_ALLOW_URL_HOSTS` /
+  platform on a private/VPN host. The two integrations are scoped **independently** — each
+  resolves its own policy from its own config slice, so widening one (`ENVIRONMENTS_*`) does
+  not widen the other's (`RUNNERS_*`) SSRF guard. Config: `ENVIRONMENTS_ALLOW_URL_HOSTS` /
   `ENVIRONMENTS_ALLOW_HTTP_URLS` and `RUNNERS_ALLOW_URL_HOSTS` / `RUNNERS_ALLOW_HTTP_URLS`
   (Node env vars + the matching Worker `[vars]`).
 - The Node facade's `buildNodeContainer` gains a documented `environmentProvider` seam (the
