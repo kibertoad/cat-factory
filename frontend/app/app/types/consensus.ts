@@ -18,6 +18,21 @@ export interface ConsensusGating {
   onMissingEstimate?: 'consensus' | 'standard'
 }
 
+/**
+ * Estimate-based gating of whether a pipeline STEP runs at all (the same three axes as
+ * {@link ConsensusGating}). When enabled the step runs only if ANY supplied axis is met or
+ * exceeded; otherwise it is skipped at runtime. Used to make a companion conditional on how
+ * heavy the task is. A step with enabled gating requires a `task-estimator` earlier in the
+ * pipeline.
+ */
+export interface StepGating {
+  enabled: boolean
+  minComplexity?: number
+  minRisk?: number
+  minImpact?: number
+  onMissingEstimate?: 'run' | 'skip'
+}
+
 export interface ConsensusStepConfig {
   enabled: boolean
   strategy: ConsensusStrategy

@@ -1,17 +1,37 @@
-import type { AgentArchetype, AgentKind, BlockStatus, BlockType } from '~/types/domain'
+import type {
+  AgentArchetype,
+  AgentCategory,
+  AgentKind,
+  BlockStatus,
+  BlockType,
+} from '~/types/domain'
 
 /** Simple unique id helper (fine for a client-only prototype). */
 export function uid(prefix = 'id'): string {
   return `${prefix}_${Math.random().toString(36).slice(2, 9)}`
 }
 
-/** The agent palette — the building blocks of a development pipeline. */
+/**
+ * Ordered palette categories — the collapsible sections the pipeline builder groups the
+ * agent archetypes under. The order here is the order they render.
+ */
+export const AGENT_CATEGORIES: { id: AgentCategory; label: string }[] = [
+  { id: 'review', label: 'Review & triage' },
+  { id: 'design', label: 'Design & research' },
+  { id: 'build', label: 'Implementation' },
+  { id: 'test', label: 'Testing' },
+  { id: 'docs', label: 'Documentation' },
+  { id: 'gates', label: 'Gates & observability' },
+]
+
+/** The agent palette — the building blocks of a development pipeline, grouped by category. */
 export const AGENT_ARCHETYPES: AgentArchetype[] = [
   {
     kind: 'requirements-review',
     label: 'Requirements Reviewer',
     icon: 'i-lucide-clipboard-check',
     color: '#f59e0b',
+    category: 'review',
     description:
       'Reviews the collected context (description + linked PRDs/RFCs) for gaps, ambiguities, assumptions and risks before the architect starts.',
     // Opens the dedicated structured review window (answer/dismiss findings → incorporate
@@ -23,6 +43,7 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
     label: 'Clarity Reviewer',
     icon: 'i-lucide-bug',
     color: '#f59e0b',
+    category: 'review',
     description:
       'Triages a bug report for fixability — raising questions, gaps and assumptions about the report before anyone starts fixing it.',
     // Opens the dedicated structured review window (answer/dismiss findings → incorporate
@@ -37,14 +58,25 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
     label: 'Bug Investigator',
     icon: 'i-lucide-search-code',
     color: '#38bdf8',
+    category: 'review',
     description:
       'Read-only codebase investigation that traces the bug to its root cause and produces an enriched report (no code changes).',
+  },
+  {
+    kind: 'task-estimator',
+    label: 'Task Estimator',
+    icon: 'i-lucide-gauge',
+    color: '#eab308',
+    category: 'review',
+    description:
+      'Triages the task after requirements are clarified — rates Complexity, Risk and Impact (0..1). Used to gate consensus and conditional companion steps, and shown as ratings on the task.',
   },
   {
     kind: 'architect',
     label: 'Architect',
     icon: 'i-lucide-drafting-compass',
     color: '#a78bfa',
+    category: 'design',
     description: 'Designs the shape of the solution and breaks down the work.',
   },
   {
@@ -52,6 +84,7 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
     label: 'Researcher',
     icon: 'i-lucide-telescope',
     color: '#38bdf8',
+    category: 'design',
     description: 'Investigates prior art, libraries and constraints.',
   },
   {
@@ -59,18 +92,84 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
     label: 'Coder',
     icon: 'i-lucide-code-xml',
     color: '#34d399',
+    category: 'build',
     description: 'Implements the block according to the design.',
+  },
+  {
+    kind: 'integrator',
+    label: 'Integrator',
+    icon: 'i-lucide-plug-zap',
+    color: '#fb923c',
+    category: 'build',
+    description: 'Wires the block into the surrounding system.',
+  },
+  {
+    kind: 'mocker',
+    label: 'Mock Builder',
+    icon: 'i-lucide-server-cog',
+    color: '#fb7185',
+    category: 'build',
+    description: 'Builds WireMock mocks for external services and wires them into local/CI runs.',
   },
   {
     kind: 'tester',
     label: 'Tester',
     icon: 'i-lucide-flask-conical',
     color: '#fbbf24',
+    category: 'test',
     description: 'Exercises the change against the mocks + spec scenarios and reports outcomes.',
     // Opens the dedicated structured test-report window (scenarios → outcomes →
     // concerns tree) instead of the generic prose step-detail panel.
     resultView: 'tester',
   },
+  {
+    kind: 'playwright',
+    label: 'Acceptance Test Author',
+    icon: 'i-lucide-theater',
+    color: '#e879f9',
+    category: 'test',
+    description:
+      "Turns scenarios into runnable tests — Playwright for frontend, the project's own framework for backend; adds only new ones.",
+  },
+  {
+    kind: 'documenter',
+    label: 'Documenter',
+    icon: 'i-lucide-book-open-text',
+    color: '#818cf8',
+    category: 'docs',
+    description: 'Produces docs and usage examples.',
+  },
+  {
+    kind: 'business-documenter',
+    label: 'Domain Rules Documenter',
+    icon: 'i-lucide-scroll-text',
+    color: '#84cc16',
+    category: 'docs',
+    description:
+      'Reads the implementation and writes/updates business-logic & domain-rule docs in the repo, weaving in linked context documents.',
+  },
+  {
+    kind: 'business-reviewer',
+    label: 'Domain Rules Reviewer',
+    icon: 'i-lucide-shield-alert',
+    color: '#ef4444',
+    category: 'docs',
+    description:
+      'Reviews a change against the documented domain rules and reports violations, undocumented changes and unexpected drift.',
+  },
+]
+
+/**
+ * Companion archetypes — dependent agents that review a specific producer and loop it back
+ * for rework. They are NOT free palette blocks: the builder surfaces them as a toggle on
+ * their producer step (a reviewer right after the coder it reviews), because a companion
+ * makes no sense without its producer or anywhere else in the chain. They still need display
+ * metadata (icons / labels) for the run timeline + saved-pipeline rendering, and their model
+ * is pinnable, so they live here and are folded into {@link AGENT_BY_KIND}. See
+ * {@link companionForProducer} for the producer→companion mapping (mirrors the backend
+ * `COMPANIONS` registry).
+ */
+export const COMPANION_ARCHETYPES: AgentArchetype[] = [
   {
     kind: 'reviewer',
     label: 'Reviewer (companion)',
@@ -78,20 +177,6 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
     color: '#f472b6',
     description:
       "Coder's companion: rates the change for quality/correctness and loops it back for automatic rework below the threshold.",
-  },
-  {
-    kind: 'documenter',
-    label: 'Documenter',
-    icon: 'i-lucide-book-open-text',
-    color: '#818cf8',
-    description: 'Produces docs and usage examples.',
-  },
-  {
-    kind: 'integrator',
-    label: 'Integrator',
-    icon: 'i-lucide-plug-zap',
-    color: '#fb923c',
-    description: 'Wires the block into the surrounding system.',
   },
   {
     kind: 'architect-companion',
@@ -109,49 +194,37 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
     description:
       'Reviews the spec — especially acceptance-scenario coverage — rating it and looping the Spec Writer back for automatic rework below the threshold, instead of requiring a human review.',
   },
-  {
-    kind: 'playwright',
-    label: 'Acceptance Test Author',
-    icon: 'i-lucide-theater',
-    color: '#e879f9',
-    description:
-      "Turns scenarios into runnable tests — Playwright for frontend, the project's own framework for backend; adds only new ones.",
-  },
-  {
-    kind: 'mocker',
-    label: 'Mock Builder',
-    icon: 'i-lucide-server-cog',
-    color: '#fb7185',
-    description: 'Builds WireMock mocks for external services and wires them into local/CI runs.',
-  },
-  {
-    kind: 'business-documenter',
-    label: 'Domain Rules Documenter',
-    icon: 'i-lucide-scroll-text',
-    color: '#84cc16',
-    description:
-      'Reads the implementation and writes/updates business-logic & domain-rule docs in the repo, weaving in linked context documents.',
-  },
-  {
-    kind: 'business-reviewer',
-    label: 'Domain Rules Reviewer',
-    icon: 'i-lucide-shield-alert',
-    color: '#ef4444',
-    description:
-      'Reviews a change against the documented domain rules and reports violations, undocumented changes and unexpected drift.',
-  },
-  {
-    kind: 'task-estimator',
-    label: 'Task Estimator',
-    icon: 'i-lucide-gauge',
-    color: '#eab308',
-    description:
-      'Triages the task after requirements are clarified — rates Complexity, Risk and Impact (0..1). Used to gate the expensive consensus mechanism and shown as ratings on the task.',
-  },
 ]
 
+/**
+ * Producer agent kind → its companion agent kind. Mirrors the backend `COMPANIONS` registry
+ * (`@cat-factory/agents`). The builder shows an "add companion" toggle on a producer step
+ * found here, and inserts/removes the companion immediately after it.
+ */
+export const COMPANION_FOR_PRODUCER: Record<string, AgentKind> = {
+  coder: 'reviewer',
+  architect: 'architect-companion',
+  'spec-writer': 'spec-companion',
+}
+
+const COMPANION_KINDS: ReadonlySet<string> = new Set(COMPANION_ARCHETYPES.map((a) => a.kind))
+
+/** The companion kind that depends on a producer kind, or undefined if it has none. */
+export function companionForProducer(kind: string): AgentKind | undefined {
+  return COMPANION_FOR_PRODUCER[kind]
+}
+
+/**
+ * Whether a kind is a dependent producer-companion (reviewer / architect-companion /
+ * spec-companion) — rendered as a toggle on its producer, not a standalone palette block.
+ * Distinct from `pipelineRender`'s `isCompanionKind`, which also counts the Tester's `fixer`.
+ */
+export function isProducerCompanion(kind: string): boolean {
+  return COMPANION_KINDS.has(kind)
+}
+
 export const AGENT_BY_KIND: Record<AgentKind, AgentArchetype> = Object.fromEntries(
-  AGENT_ARCHETYPES.map((a) => [a.kind, a]),
+  [...AGENT_ARCHETYPES, ...COMPANION_ARCHETYPES].map((a) => [a.kind, a]),
 ) as Record<AgentKind, AgentArchetype>
 
 /**
@@ -255,6 +328,7 @@ export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
     label: 'Post-Release Health',
     icon: 'i-lucide-activity',
     color: '#f43f5e',
+    category: 'gates',
     description:
       'Watches the released PR’s Datadog monitors/SLOs after merge and escalates to the on-call agent on a regression.',
     // Opens the dedicated gate window (verdict, attempts, watch window) like the other gates.
@@ -279,13 +353,13 @@ export const OBSERVABILITY_GATE_ARCHETYPE: AgentArchetype =
  * default model would do nothing for them.
  */
 export const MODEL_CONFIGURABLE_SYSTEM_KINDS: AgentArchetype[] = [
-  'spec-writer',
-  'blueprints',
-  'conflict-resolver',
-  'ci-fixer',
-  'fixer',
-  'merger',
-].map((kind) => SYSTEM_AGENT_META[kind]!)
+  ...['spec-writer', 'blueprints', 'conflict-resolver', 'ci-fixer', 'fixer', 'merger'].map(
+    (kind) => SYSTEM_AGENT_META[kind]!,
+  ),
+  // Companions run LLMs but aren't palette-addable (they're producer toggles), so include
+  // them here to keep their per-workspace default model pinnable in the Model Defaults panel.
+  ...COMPANION_ARCHETYPES,
+]
 
 /** Fallback metadata for any kind with no archetype or system entry (unknown/custom). */
 const FALLBACK_AGENT_META: Omit<AgentArchetype, 'kind'> = {

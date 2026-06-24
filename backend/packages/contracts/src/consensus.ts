@@ -58,6 +58,27 @@ export const consensusGatingSchema = v.object({
 export type ConsensusGating = v.InferOutput<typeof consensusGatingSchema>
 
 /**
+ * Optional gating of whether a pipeline STEP runs at all, on the task's estimate
+ * (the same three axes as {@link consensusGatingSchema}, produced by the core
+ * `task-estimator` agent). When `enabled`, the step runs only if ANY supplied axis
+ * is met or exceeded (risk ≥ minRisk OR impact ≥ minImpact OR complexity ≥
+ * minComplexity); otherwise it is transparently SKIPPED at runtime. `onMissingEstimate`
+ * decides what to do when no estimate is available (default `run`, i.e. fail-safe to
+ * thoroughness). A step carrying enabled gating requires a `task-estimator` earlier in
+ * the pipeline — the builder/engine reject a pipeline that gates without one. Used today
+ * to make a companion (reviewer / architect-companion / spec-companion) conditional on
+ * how heavy the task is.
+ */
+export const stepGatingSchema = v.object({
+  enabled: v.boolean(),
+  minComplexity: v.optional(scoreSchema),
+  minRisk: v.optional(scoreSchema),
+  minImpact: v.optional(scoreSchema),
+  onMissingEstimate: v.optional(v.picklist(['run', 'skip']), 'run'),
+})
+export type StepGating = v.InferOutput<typeof stepGatingSchema>
+
+/**
  * The consensus configuration stored on a pipeline step (set in the builder for
  * a step whose agent kind carries a consensus trait). When `enabled` is false
  * the step runs as the standard agent.

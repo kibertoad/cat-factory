@@ -1,6 +1,7 @@
 import {
   clonePipelineSchema,
   createPipelineSchema,
+  organizePipelineSchema,
   updatePipelineSchema,
 } from '@cat-factory/contracts'
 import { Hono } from 'hono'
@@ -36,6 +37,20 @@ export function pipelineController(): Hono<AppEnv> {
     const pipeline = await c
       .get('container')
       .pipelineService.update(param(c, 'workspaceId'), param(c, 'pipelineId'), c.req.valid('json'))
+    return c.json(pipeline)
+  })
+
+  // Organize a pipeline in the library: set labels / archive state. The only mutation
+  // allowed on a built-in pipeline (view metadata, not structure), so built-ins reject
+  // `update`/`delete` but accept this.
+  app.patch('/pipelines/:pipelineId/organize', jsonBody(organizePipelineSchema), async (c) => {
+    const pipeline = await c
+      .get('container')
+      .pipelineService.organize(
+        param(c, 'workspaceId'),
+        param(c, 'pipelineId'),
+        c.req.valid('json'),
+      )
     return c.json(pipeline)
   })
 

@@ -310,6 +310,9 @@ class DrizzlePipelineRepository implements PipelineRepository {
       thresholds: pipeline.thresholds ? JSON.stringify(pipeline.thresholds) : null,
       enabled: pipeline.enabled ? JSON.stringify(pipeline.enabled) : null,
       consensus: pipeline.consensus ? JSON.stringify(pipeline.consensus) : null,
+      gating: pipeline.gating ? JSON.stringify(pipeline.gating) : null,
+      labels: pipeline.labels ? JSON.stringify(pipeline.labels) : null,
+      archived: pipeline.archived ? 1 : null,
       builtin: pipeline.builtin ? 1 : null,
     })
   }
@@ -326,6 +329,9 @@ class DrizzlePipelineRepository implements PipelineRepository {
         thresholds: pipeline.thresholds ? JSON.stringify(pipeline.thresholds) : null,
         enabled: pipeline.enabled ? JSON.stringify(pipeline.enabled) : null,
         consensus: pipeline.consensus ? JSON.stringify(pipeline.consensus) : null,
+        gating: pipeline.gating ? JSON.stringify(pipeline.gating) : null,
+        labels: pipeline.labels ? JSON.stringify(pipeline.labels) : null,
+        archived: pipeline.archived ? 1 : null,
       })
       .where(and(eq(pipelines.workspace_id, workspaceId), eq(pipelines.id, pipeline.id)))
   }
