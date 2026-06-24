@@ -14,7 +14,9 @@ way: a **Platform/Infra team** stands up the management API in front of your
 environment tooling (k8s namespaces, a Vercel-style service, an internal provisioner);
 an **Application team** writes the manifest and registers it per workspace.
 
-See also [ADR 0003](./adr/0003-ephemeral-environment-provider.md).
+See also [ADR 0003](./adr/0003-ephemeral-environment-provider.md). When your tooling is too
+bespoke to describe declaratively, you can instead inject a hand-written **native adapter** —
+see [Native environment adapters](./native-environment-adapter.md).
 
 ## How it works (the sequence of actions)
 

@@ -1,6 +1,7 @@
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { start } from '@cat-factory/node-server'
+import type { EnvironmentProvider } from '@cat-factory/kernel'
 import { logger } from '@cat-factory/server'
 import { applyLocalDefaults } from './config.js'
 import { buildLocalContainer } from './container.js'
@@ -17,8 +18,20 @@ const execFileAsync = promisify(execFile)
 // DATABASE_URL (point it at the local Postgres); set LOCAL_HARNESS_IMAGE to run
 // repo-operating agent jobs (without it the board still serves and only container
 // kinds fail, loudly).
+//
+// `environmentProvider` injects a NATIVE ephemeral-environment adapter (e.g. Kargo)
+// in place of the generic HttpEnvironmentProvider — this is the supported seam for a
+// local deployment to wire its own provider while keeping local mode's preflight
+// (orphan reaping, PAT/auth warnings) and differentiators (local container transport,
+// PAT-backed GitHub client). It threads straight through to `buildNodeContainer`'s
+// `environmentProvider` option. `buildContainer` is intentionally NOT exposed: overriding
+// it would discard local mode's differentiators.
 export async function startLocal(
-  options: { env?: NodeJS.ProcessEnv } = {},
+  options: {
+    env?: NodeJS.ProcessEnv
+    environmentProvider?: EnvironmentProvider
+    host?: string
+  } = {},
 ): Promise<Awaited<ReturnType<typeof start>>> {
   const env = options.env ?? process.env
 
@@ -69,7 +82,12 @@ export async function startLocal(
     )
   }
 
-  return start({ env, buildContainer: buildLocalContainer })
+  return start({
+    env,
+    host: options.host,
+    buildContainer: (o) =>
+      buildLocalContainer({ ...o, environmentProvider: options.environmentProvider }),
+  })
 }
 
 /**
