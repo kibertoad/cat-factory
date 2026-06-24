@@ -1,5 +1,13 @@
 # @cat-factory/workspaces
 
+## 0.7.6
+
+### Patch Changes
+
+- Updated dependencies [ae29687]
+  - @cat-factory/contracts@0.9.0
+  - @cat-factory/kernel@0.10.0
+
 ## 0.7.5
 
 ### Patch Changes
