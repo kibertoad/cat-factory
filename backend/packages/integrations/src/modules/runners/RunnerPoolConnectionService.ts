@@ -4,9 +4,9 @@ import type {
   RunnerPoolConnectionRepository,
 } from '@cat-factory/kernel'
 import type { SecretCipher } from '@cat-factory/kernel'
-import type { SecretResolver } from '@cat-factory/kernel'
+import type { SecretResolver, UrlSafetyPolicy } from '@cat-factory/kernel'
 import type { RunnerPoolConnection, RunnerPoolManifest } from '@cat-factory/kernel'
-import { ConflictError, ValidationError } from '@cat-factory/kernel'
+import { ConflictError, STRICT_URL_SAFETY_POLICY, ValidationError } from '@cat-factory/kernel'
 import { requireWorkspace } from '@cat-factory/kernel'
 import type { WorkspaceRepository } from '@cat-factory/kernel'
 import { assertManifestUrlsSafe, referencedSecretKeys } from './runners.logic.js'
@@ -22,6 +22,8 @@ export interface RunnerPoolConnectionServiceDependencies {
   workspaceRepository: WorkspaceRepository
   secretCipher: SecretCipher
   clock: Clock
+  /** URL/host safety policy applied to a registered manifest. Defaults to strict. */
+  urlPolicy?: UrlSafetyPolicy
 }
 
 export interface ResolvedRunnerPool {
@@ -39,7 +41,7 @@ export class RunnerPoolConnectionService {
   ): Promise<RunnerPoolConnection> {
     await requireWorkspace(this.deps.workspaceRepository, workspaceId)
     const manifest = input.manifest
-    assertManifestUrlsSafe(manifest)
+    assertManifestUrlsSafe(manifest, this.deps.urlPolicy ?? STRICT_URL_SAFETY_POLICY)
 
     const missing = referencedSecretKeys(manifest).filter((key) => !(key in input.secrets))
     if (missing.length) {

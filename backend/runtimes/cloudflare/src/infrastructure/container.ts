@@ -53,6 +53,7 @@ import {
   createWebSearchUpstreamFromEnv,
   logger,
   createScopedModelProviderResolver,
+  resolveUrlSafetyPolicy,
   resolveWorkspaceCapabilities,
   type ServerContainer,
 } from '@cat-factory/server'
@@ -364,7 +365,8 @@ function buildResolveTransport(
       }),
       clock,
     })
-    poolProvider = new HttpRunnerPoolProvider()
+    const urlPolicy = resolveUrlSafetyPolicy(config.runners)
+    poolProvider = new HttpRunnerPoolProvider(urlPolicy ? { urlPolicy } : {})
   }
 
   if (!cloudflare && !runnerService) return null
@@ -1133,13 +1135,18 @@ function selectEnvironmentsDeps(
   db: D1Database,
 ): Partial<CoreDependencies> {
   if (!config.environments.enabled) return {}
+  // The default manifest-driven provider; a trusted in-house adapter (implementing the
+  // EnvironmentProvider port) is injected by replacing `environmentProvider` via the
+  // `overrides` argument to `buildContainer` (spread last), the same seam tests use.
+  const urlPolicy = resolveUrlSafetyPolicy(config.environments)
   return {
-    environmentProvider: new HttpEnvironmentProvider(),
+    environmentProvider: new HttpEnvironmentProvider(urlPolicy ? { urlPolicy } : {}),
     environmentConnectionRepository: new D1EnvironmentConnectionRepository({ db }),
     environmentRegistryRepository: new D1EnvironmentRegistryRepository({ db }),
     secretCipher: new WebCryptoSecretCipher({
       masterKeyBase64: config.environments.encryptionKey!,
     }),
+    ...(urlPolicy ? { environmentUrlSafetyPolicy: urlPolicy } : {}),
   }
 }
 
@@ -1152,12 +1159,14 @@ function selectEnvironmentsDeps(
  */
 function selectRunnersDeps(env: Env, config: AppConfig, db: D1Database): Partial<CoreDependencies> {
   if (!config.runners.enabled) return {}
+  const urlPolicy = resolveUrlSafetyPolicy(config.runners)
   return {
     runnerPoolConnectionRepository: new D1RunnerPoolConnectionRepository({ db }),
     runnerSecretCipher: new WebCryptoSecretCipher({
       masterKeyBase64: config.runners.encryptionKey!,
       info: 'cat-factory:runners',
     }),
+    ...(urlPolicy ? { runnerUrlSafetyPolicy: urlPolicy } : {}),
   }
 }
 

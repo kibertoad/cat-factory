@@ -4,9 +4,9 @@ import type {
   EnvironmentConnectionRepository,
 } from '@cat-factory/kernel'
 import type { SecretCipher } from '@cat-factory/kernel'
-import type { SecretResolver } from '@cat-factory/kernel'
+import type { SecretResolver, UrlSafetyPolicy } from '@cat-factory/kernel'
 import type { EnvironmentConnection, EnvironmentManifest } from '@cat-factory/kernel'
-import { ConflictError, ValidationError } from '@cat-factory/kernel'
+import { ConflictError, STRICT_URL_SAFETY_POLICY, ValidationError } from '@cat-factory/kernel'
 import { requireWorkspace } from '@cat-factory/kernel'
 import type { WorkspaceRepository } from '@cat-factory/kernel'
 import { assertSafeEnvironmentUrl } from './environments.logic.js'
@@ -21,6 +21,8 @@ export interface EnvironmentConnectionServiceDependencies {
   workspaceRepository: WorkspaceRepository
   secretCipher: SecretCipher
   clock: Clock
+  /** URL/host safety policy applied to a registered manifest. Defaults to strict. */
+  urlPolicy?: UrlSafetyPolicy
 }
 
 /** Collect every secret key a manifest's auth scheme references. */
@@ -42,10 +44,10 @@ export function referencedSecretKeys(manifest: EnvironmentManifest): string[] {
 }
 
 /** Validate every URL a manifest will fetch (defence against SSRF). */
-function assertManifestUrlsSafe(manifest: EnvironmentManifest): void {
-  assertSafeEnvironmentUrl(manifest.baseUrl, 'base URL')
+function assertManifestUrlsSafe(manifest: EnvironmentManifest, policy: UrlSafetyPolicy): void {
+  assertSafeEnvironmentUrl(manifest.baseUrl, 'base URL', policy)
   if (manifest.auth.type === 'oauth2_client_credentials') {
-    assertSafeEnvironmentUrl(manifest.auth.tokenUrl, 'OAuth token URL')
+    assertSafeEnvironmentUrl(manifest.auth.tokenUrl, 'OAuth token URL', policy)
   }
 }
 
@@ -66,7 +68,7 @@ export class EnvironmentConnectionService {
     // The manifest is validated against the Valibot schema at the controller
     // (jsonBody); here we enforce the additional SSRF + secret-completeness rules.
     const manifest = input.manifest
-    assertManifestUrlsSafe(manifest)
+    assertManifestUrlsSafe(manifest, this.deps.urlPolicy ?? STRICT_URL_SAFETY_POLICY)
 
     // Every secret the manifest references must be supplied.
     const missing = referencedSecretKeys(manifest).filter((key) => !(key in input.secrets))

@@ -301,10 +301,22 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
     // ENCRYPTION_KEY (credentials are encrypted at rest), mirroring the Worker.
     environments:
       env.ENVIRONMENTS_ENABLED === 'true' && env.ENCRYPTION_KEY?.trim()
-        ? { enabled: true, encryptionKey: env.ENCRYPTION_KEY.trim() }
+        ? {
+            enabled: true,
+            encryptionKey: env.ENCRYPTION_KEY.trim(),
+            // Trusted-adapter escape hatch: permit an in-house env platform on an
+            // internal/VPN host (otherwise the strict public-https guard rejects it).
+            allowUrlHosts: csv(env.ENVIRONMENTS_ALLOW_URL_HOSTS),
+            allowHttpUrls: env.ENVIRONMENTS_ALLOW_HTTP_URLS === 'true',
+          }
         : { enabled: false },
     runners: runnersEncryptionKey
-      ? { enabled: true, encryptionKey: runnersEncryptionKey }
+      ? {
+          enabled: true,
+          encryptionKey: runnersEncryptionKey,
+          allowUrlHosts: csv(env.RUNNERS_ALLOW_URL_HOSTS),
+          allowHttpUrls: env.RUNNERS_ALLOW_HTTP_URLS === 'true',
+        }
       : { enabled: false },
     slack:
       slackEnabled && slackEncryptionKey

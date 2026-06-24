@@ -253,7 +253,9 @@ you (it only calls your `release`).
   `tokenUrl`, if any) must be reachable from the cat-factory backend over **public
   HTTPS** (a tunnel / reverse proxy is fine). The SSRF guard rejects `http://`,
   embedded credentials, and internal / RFC1918 / loopback / link-local hosts — so an
-  internal cluster API must be fronted by a public ingress.
+  internal cluster API must be fronted by a public ingress. **Or:** a trusted
+  operator can widen the guard per facade so the scheduler can live on an
+  internal/VPN host directly — see §6.
 - **Egress (runner → out):** each runner must reach
   - the Worker LLM proxy at `${WORKER_PUBLIC_URL}/v1` (all Pi model calls go through
     it — no provider keys live on the runner), and for subscription harnesses the
@@ -503,6 +505,22 @@ Job`, `poll → read Job + harness status`, `release → delete Job`. Use
 - Every manifest URL is SSRF-guarded before it is fetched; secrets are placed only in
   outgoing request headers — never logged, never echoed in (length-capped,
   header-free) error bodies, never returned by the read API.
+- **Internal-host escape hatch (trusted operator).** When your scheduler must live on
+  an internal/VPN host rather than behind a public ingress, widen the guard per
+  facade:
+
+  | Setting (env var / Worker `[vars]`) | Effect                                                                 |
+  | ----------------------------------- | ---------------------------------------------------------------------- |
+  | `RUNNERS_ALLOW_URL_HOSTS`           | Comma-separated hostnames exempt from the private/internal-host block. Each matches the URL host exactly (`pool.corp`, `10.1.2.3`) or as a dot suffix when it starts with `.` (`.internal`). |
+  | `RUNNERS_ALLOW_HTTP_URLS`           | `true` to also permit `http` (not just `https`).                       |
+
+  Only the listed hosts are exempted; everything else stays strict, and embedded URL
+  credentials remain forbidden. This policy is scoped to the runner pool **only** —
+  it is resolved independently of the
+  [environment integration](./environments-integration.md)'s `ENVIRONMENTS_ALLOW_URL_HOSTS`
+  / `ENVIRONMENTS_ALLOW_HTTP_URLS`, so a host you allow here is **not** reachable by the
+  environment provider (and vice versa). Set each integration's allow-list to exactly
+  what it needs. Leave unset (the default) to keep the strict public-https guard.
 
 ---
 

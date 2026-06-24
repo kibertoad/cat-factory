@@ -8,7 +8,9 @@ import type {
   RunnerPoolProvider,
   RunnerPoolRequestTemplate,
   SecretResolver,
+  UrlSafetyPolicy,
 } from '@cat-factory/kernel'
+import { STRICT_URL_SAFETY_POLICY } from '@cat-factory/kernel'
 import * as environmentsLogic from '../environments/environments.logic.js'
 import * as runnersLogic from './runners.logic.js'
 
@@ -46,15 +48,19 @@ export class RunnerPoolApiError extends Error {
 
 export interface HttpRunnerPoolProviderOptions {
   defaultTimeoutMs?: number
+  /** URL/host safety policy; defaults to strict (https-only, no private hosts). */
+  urlPolicy?: UrlSafetyPolicy
 }
 
 export class HttpRunnerPoolProvider implements RunnerPoolProvider {
   private readonly defaultTimeoutMs: number
+  private readonly urlPolicy: UrlSafetyPolicy
   /** Per-isolate OAuth token cache, keyed by token URL + client id. */
   private readonly oauthCache = new Map<string, { token: string; expiresAt: number }>()
 
   constructor(options: HttpRunnerPoolProviderOptions = {}) {
     this.defaultTimeoutMs = options.defaultTimeoutMs ?? DEFAULT_TIMEOUT_MS
+    this.urlPolicy = options.urlPolicy ?? STRICT_URL_SAFETY_POLICY
   }
 
   async dispatch(req: RunnerDispatchRequest): Promise<void> {
@@ -130,7 +136,7 @@ export class HttpRunnerPoolProvider implements RunnerPoolProvider {
     resolveSecret: SecretResolver,
   ): Promise<unknown> {
     const url = this.buildUrl(manifest.baseUrl, template, scope)
-    environmentsLogic.assertSafeEnvironmentUrl(url, 'request URL')
+    environmentsLogic.assertSafeEnvironmentUrl(url, 'request URL', this.urlPolicy)
 
     const headers: Record<string, string> = {
       accept: 'application/json',
@@ -233,7 +239,7 @@ export class HttpRunnerPoolProvider implements RunnerPoolProvider {
     const cached = this.oauthCache.get(cacheKey)
     if (cached && cached.expiresAt > Date.now() + 5_000) return cached.token
 
-    environmentsLogic.assertSafeEnvironmentUrl(auth.tokenUrl, 'OAuth token URL')
+    environmentsLogic.assertSafeEnvironmentUrl(auth.tokenUrl, 'OAuth token URL', this.urlPolicy)
     const form = new URLSearchParams({
       grant_type: 'client_credentials',
       client_id: clientId,

@@ -33,7 +33,7 @@ import type { DocumentSourceProvider } from '@cat-factory/kernel'
 import type { DocumentConnectionRepository, DocumentRepository } from '@cat-factory/kernel'
 import type { TaskSourceProvider } from '@cat-factory/kernel'
 import type { TaskConnectionRepository, TaskRepository } from '@cat-factory/kernel'
-import type { EnvironmentProvider } from '@cat-factory/kernel'
+import type { EnvironmentProvider, UrlSafetyPolicy } from '@cat-factory/kernel'
 import type {
   EnvironmentConnectionRepository,
   EnvironmentRegistryRepository,
@@ -297,6 +297,12 @@ export interface CoreDependencies {
   environmentConnectionRepository?: EnvironmentConnectionRepository
   environmentRegistryRepository?: EnvironmentRegistryRepository
   secretCipher?: SecretCipher
+  // Operator-configured URL/host safety policy for the ENVIRONMENT-provisioning
+  // integration (the manifest baseUrl + the returned env URL). Absent => strict
+  // (https-only, no private/internal hosts). A trusted facade widens it so an in-house
+  // adapter can reach an internal platform on a private/VPN host. Scoped independently of
+  // the runner pool: widening one integration must not widen the other's SSRF guard.
+  environmentUrlSafetyPolicy?: UrlSafetyPolicy
 
   // ---- Self-hosted runner pool ("bring your own infra"; opt-in) ------------
   // Lets a workspace route its repo-operating coding jobs to its own container
@@ -308,6 +314,10 @@ export interface CoreDependencies {
   // domain, independent of the environment module's `secretCipher`).
   runnerPoolConnectionRepository?: RunnerPoolConnectionRepository
   runnerSecretCipher?: SecretCipher
+  // URL/host safety policy for the RUNNER-POOL integration (the scheduler baseUrl).
+  // Absent => strict. Scoped independently of `environmentUrlSafetyPolicy` so an
+  // operator widening the env allow-list does not silently widen the pool's SSRF guard.
+  runnerUrlSafetyPolicy?: UrlSafetyPolicy
 
   // ---- Repo bootstrap (reference architectures + "bootstrap repo" task) ----
   // Reference-architecture CRUD assembles whenever both repositories are present
@@ -859,6 +869,7 @@ function createEnvironmentsModule(deps: CoreDependencies): EnvironmentsModule | 
     workspaceRepository: deps.workspaceRepository,
     secretCipher,
     clock: deps.clock,
+    ...(deps.environmentUrlSafetyPolicy ? { urlPolicy: deps.environmentUrlSafetyPolicy } : {}),
   })
   const provisioningService = new EnvironmentProvisioningService({
     connectionService,
@@ -867,6 +878,7 @@ function createEnvironmentsModule(deps: CoreDependencies): EnvironmentsModule | 
     secretCipher,
     idGenerator: deps.idGenerator,
     clock: deps.clock,
+    ...(deps.environmentUrlSafetyPolicy ? { urlPolicy: deps.environmentUrlSafetyPolicy } : {}),
   })
   const teardownService = new EnvironmentTeardownService({
     connectionService,
@@ -892,6 +904,7 @@ function createRunnersModule(deps: CoreDependencies): RunnersModule | undefined 
     workspaceRepository: deps.workspaceRepository,
     secretCipher: runnerSecretCipher,
     clock: deps.clock,
+    ...(deps.runnerUrlSafetyPolicy ? { urlPolicy: deps.runnerUrlSafetyPolicy } : {}),
   })
   return { connectionService }
 }

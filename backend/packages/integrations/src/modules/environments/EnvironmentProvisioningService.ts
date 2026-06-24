@@ -1,9 +1,14 @@
 import type { Clock, IdGenerator } from '@cat-factory/kernel'
 import type { EnvironmentRecord, EnvironmentRegistryRepository } from '@cat-factory/kernel'
-import type { EnvironmentProvider, ProvisionedEnvironment } from '@cat-factory/kernel'
+import type {
+  EnvironmentProvider,
+  ProvisionContext,
+  ProvisionedEnvironment,
+  UrlSafetyPolicy,
+} from '@cat-factory/kernel'
 import type { SecretCipher } from '@cat-factory/kernel'
 import type { EnvironmentAccessHandle, EnvironmentHandle } from '@cat-factory/kernel'
-import { assertFound } from '@cat-factory/kernel'
+import { assertFound, STRICT_URL_SAFETY_POLICY } from '@cat-factory/kernel'
 import type { EnvironmentConnectionService } from './EnvironmentConnectionService.js'
 import { assertSafeEnvironmentUrl, recordToHandle } from './environments.logic.js'
 
@@ -19,6 +24,8 @@ export interface EnvironmentProvisioningServiceDependencies {
   secretCipher: SecretCipher
   idGenerator: IdGenerator
   clock: Clock
+  /** URL/host safety policy applied to the URL a provider returns. Defaults to strict. */
+  urlPolicy?: UrlSafetyPolicy
 }
 
 export interface ProvisionArgs {
@@ -26,6 +33,18 @@ export interface ProvisionArgs {
   blockId?: string | null
   executionId?: string | null
   inputs?: Record<string, string>
+  /** Typed git/PR/repo context; passed to the provider and flattened into `inputs`. */
+  context?: ProvisionContext
+}
+
+/** Flatten a typed provision context into `{{input.*}}` string vars (skips empties). */
+function contextInputs(context: ProvisionContext | undefined): Record<string, string> {
+  if (!context) return {}
+  const out: Record<string, string> = {}
+  for (const [key, value] of Object.entries(context)) {
+    if (value !== undefined && value !== null && value !== '') out[key] = String(value)
+  }
+  return out
 }
 
 /** The compact env view injected into a downstream agent's run context. */
@@ -39,6 +58,10 @@ export interface ResolvedEnvironment {
 export class EnvironmentProvisioningService {
   constructor(private readonly deps: EnvironmentProvisioningServiceDependencies) {}
 
+  private get urlPolicy(): UrlSafetyPolicy {
+    return this.deps.urlPolicy ?? STRICT_URL_SAFETY_POLICY
+  }
+
   /** Provision an environment, persisting an encrypted record keyed by block/run. */
   async provision(args: ProvisionArgs): Promise<EnvironmentHandle> {
     const { workspaceId } = args
@@ -46,17 +69,22 @@ export class EnvironmentProvisioningService {
     const resolveSecret = await this.deps.connectionService.resolveSecrets(workspaceId)
 
     // Expose the block id as `{{input.blockId}}` even on a manual provision, so a
-    // manifest can template against it without the caller having to repeat it.
-    // Explicit inputs win over the derived block id.
+    // manifest can template against it without the caller having to repeat it. The
+    // typed git/PR/repo context is flattened into the same namespace for the manifest
+    // path. Explicit inputs win over the derived block id + context.
     const inputs: Record<string, string> = {}
     if (args.blockId) inputs.blockId = args.blockId
+    Object.assign(inputs, contextInputs(args.context))
     Object.assign(inputs, args.inputs)
     const provisioned = await this.deps.environmentProvider.provision({
       manifest,
       inputs,
+      ...(args.context ? { provisionContext: args.context } : {}),
       resolveSecret,
     })
-    if (provisioned.url) assertSafeEnvironmentUrl(provisioned.url, 'environment URL')
+    if (provisioned.url) {
+      assertSafeEnvironmentUrl(provisioned.url, 'environment URL', this.urlPolicy)
+    }
 
     // A block holds at most one live environment: supersede any prior one.
     if (args.blockId) {
@@ -113,7 +141,9 @@ export class EnvironmentProvisioningService {
       provisionFields,
       resolveSecret,
     })
-    if (provisioned.url) assertSafeEnvironmentUrl(provisioned.url, 'environment URL')
+    if (provisioned.url) {
+      assertSafeEnvironmentUrl(provisioned.url, 'environment URL', this.urlPolicy)
+    }
 
     const patch = {
       status: provisioned.status,
