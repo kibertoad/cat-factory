@@ -1,5 +1,21 @@
 # @cat-factory/local-server
 
+## 0.8.3
+
+### Patch Changes
+
+- f8a24e0: Refresh dependencies to latest. Notable major bumps: TypeScript 5→6 (tooling
+  packages), vitest 3→4, pino 9→10, `@hono/node-server` 1→2, `@hono/valibot-validator`
+  0.5→0.6, happy-dom 15→20, and `@types/node` →26. Patch/minor refreshes for `ai`,
+  `hono`, `wrangler`, `pg-boss`, `ws`, `@ai-sdk/*`, `oxlint`, and the Cloudflare
+  workers tooling.
+- Updated dependencies [f8a24e0]
+  - @cat-factory/agents@0.10.1
+  - @cat-factory/kernel@0.11.1
+  - @cat-factory/orchestration@0.8.1
+  - @cat-factory/server@0.11.1
+  - @cat-factory/node-server@0.9.1
+
 ## 0.8.2
 
 ### Patch Changes
