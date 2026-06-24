@@ -1,7 +1,6 @@
 import type {
   AddApiKeyInput,
   ApiKey,
-  ModelDefaults,
   ModelOption,
   PersonalSubscriptionStatus,
   ServiceFragmentDefaults,
@@ -117,19 +116,6 @@ export function modelsApi({ http, ws }: ApiContext) {
 
     refreshOpenRouterCatalog: (workspaceId: string) =>
       http<OpenRouterRefreshResult>(`${ws(workspaceId)}/openrouter/refresh`, { method: 'POST' }),
-
-    // ---- per-agent-kind default models (workspace routing overrides) ------
-    // The workspace's map of agentKind → model id; a kind absent from the map
-    // falls back to the deployment's env routing. `setModelDefaults` replaces the
-    // whole map (the settings panel sends the full set on every change).
-    getModelDefaults: (workspaceId: string) =>
-      http<ModelDefaults>(`${ws(workspaceId)}/model-defaults`),
-
-    setModelDefaults: (workspaceId: string, defaults: Record<string, string>) =>
-      http<ModelDefaults>(`${ws(workspaceId)}/model-defaults`, {
-        method: 'PUT',
-        body: { defaults },
-      }),
 
     // The workspace's default service-fragment selection (the fragment ids new
     // services inherit). `setServiceFragmentDefaults` replaces the whole list.

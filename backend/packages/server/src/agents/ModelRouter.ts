@@ -15,6 +15,7 @@ export interface ModelRouterDependencies {
   resolveWorkspaceModelDefault?: (
     workspaceId: string,
     agentKind: string,
+    modelPresetId?: string,
   ) => Promise<string | undefined>
   /**
    * Whether the workspace has a pooled token for a vendor. Drives "subscriptions
@@ -58,6 +59,7 @@ export class ModelRouter {
       {
         agentKind: context.agentKind,
         blockModelId: context.block.modelId,
+        modelPresetId: context.block.modelPresetId,
         workspaceId: context.workspaceId,
       },
     )
@@ -73,8 +75,11 @@ export class ModelRouter {
     if (context.block.modelId) return context.block.modelId
     if (this.deps.resolveWorkspaceModelDefault && context.workspaceId) {
       return (
-        (await this.deps.resolveWorkspaceModelDefault(context.workspaceId, context.agentKind)) ??
-        undefined
+        (await this.deps.resolveWorkspaceModelDefault(
+          context.workspaceId,
+          context.agentKind,
+          context.block.modelPresetId,
+        )) ?? undefined
       )
     }
     return undefined

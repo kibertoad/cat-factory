@@ -7,6 +7,7 @@ const props = defineProps<{ block: Block }>()
 
 const board = useBoardStore()
 const mergePresets = useMergePresetsStore()
+const modelPresets = useModelPresetsStore()
 const pipelines = usePipelinesStore()
 const accounts = useAccountsStore()
 const tracker = useTrackerStore()
@@ -64,6 +65,32 @@ const presetMenu = computed(() => [
 ])
 function setPreset(id: string) {
   board.updateBlock(props.block.id, { mergePresetId: id })
+}
+
+// ---- model preset ----------------------------------------------------------
+// Which model preset decides the model each agent step runs on. None selected → the
+// workspace default preset. Changing it affects only steps that haven't started yet
+// (a running step keeps the model it was dispatched with). A model pinned directly on
+// the task still overrides the preset.
+const selectedModelPreset = computed(() => modelPresets.resolve(props.block.modelPresetId))
+const modelPresetMenu = computed(() => [
+  [
+    {
+      label: modelPresets.defaultPreset
+        ? `Default (${modelPresets.defaultPreset.name})`
+        : 'Workspace default',
+      icon: 'i-lucide-rotate-ccw',
+      onSelect: () => setModelPreset(''),
+    },
+    ...modelPresets.presets.map((p) => ({
+      label: p.name,
+      icon: 'i-lucide-cpu',
+      onSelect: () => setModelPreset(p.id),
+    })),
+  ],
+])
+function setModelPreset(id: string) {
+  board.updateBlock(props.block.id, { modelPresetId: id })
 }
 
 // ---- pipeline --------------------------------------------------------------
@@ -187,6 +214,38 @@ const resolveOnMergeLabel = computed(() =>
       <div v-else class="text-[11px] text-slate-500">
         No preset configured — the merger raises a review notification for every PR.
       </div>
+    </div>
+
+    <!-- model preset -->
+    <div>
+      <div class="mb-1 flex items-center justify-between">
+        <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+          Model preset
+        </span>
+        <UDropdownMenu :items="modelPresetMenu">
+          <UButton
+            size="xs"
+            variant="ghost"
+            color="neutral"
+            icon="i-lucide-cpu"
+            trailing-icon="i-lucide-chevron-down"
+          />
+        </UDropdownMenu>
+      </div>
+      <div v-if="selectedModelPreset" class="text-[11px] text-slate-400">
+        <span class="text-slate-300">{{ selectedModelPreset.name }}</span>
+        — base {{ selectedModelPreset.baseModelId
+        }}<span v-if="Object.keys(selectedModelPreset.overrides).length">
+          , {{ Object.keys(selectedModelPreset.overrides).length }} override(s)</span
+        >.
+        <span v-if="!block.modelPresetId" class="text-slate-500">(workspace default)</span>
+      </div>
+      <div v-else class="text-[11px] text-slate-500">
+        No preset configured — agents run on the deployment's default routing.
+      </div>
+      <p class="mt-1 text-[11px] text-slate-500">
+        Changing this affects only steps that haven't started yet.
+      </p>
     </div>
 
     <!-- issue-tracker writeback overrides -->

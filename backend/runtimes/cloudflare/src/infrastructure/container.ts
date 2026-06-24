@@ -45,7 +45,11 @@ import {
   PagerDutyEnrichmentProvider,
   IncidentIoEnrichmentProvider,
 } from '@cat-factory/integrations'
-import { type CoreDependencies, createCore } from '@cat-factory/orchestration'
+import {
+  type CoreDependencies,
+  createCore,
+  resolvePresetModelForKind,
+} from '@cat-factory/orchestration'
 import { createLangfuseSink } from '@cat-factory/observability-langfuse'
 import {
   buildResolveRepoTarget as buildSharedResolveRepoTarget,
@@ -139,7 +143,7 @@ import { D1DatadogConnectionRepository } from './repositories/D1DatadogConnectio
 import { D1ReleaseHealthConfigRepository } from './repositories/D1ReleaseHealthConfigRepository'
 import { D1PipelineScheduleRepository } from './repositories/D1PipelineScheduleRepository'
 import { D1TrackerSettingsRepository } from './repositories/D1TrackerSettingsRepository'
-import { D1ModelDefaultsRepository } from './repositories/D1ModelDefaultsRepository'
+import { D1ModelPresetRepository } from './repositories/D1ModelPresetRepository'
 import { D1ServiceFragmentDefaultsRepository } from './repositories/D1ServiceFragmentDefaultsRepository'
 import { GitHubCiStatusProvider } from './github/GitHubCiStatusProvider'
 import { GitHubMergeabilityProvider } from './github/GitHubMergeabilityProvider'
@@ -220,17 +224,19 @@ function buildModelProviderResolver(env: Env, db: D1Database): ModelProviderReso
 }
 
 /**
- * The resolver every executor consults for a workspace's per-agent-kind default
- * model (block-pinned > workspace per-kind default > env routing > env default).
- * Backed by the D1 model-defaults repo; shared by the inline LLM executor and the
- * container executor so both honour the workspace defaults identically.
+ * The resolver every executor consults for a step's default model (block-pinned >
+ * the task's selected/default model preset > env routing). Backed by the D1
+ * model-preset repo; shared by the inline LLM executor and the container executor so
+ * both honour the workspace presets identically. The built-in default preset points
+ * every agent kind at Kimi K2.7, so an unpinned step resolves to it even before the
+ * preset library is materialised.
  */
 function buildResolveWorkspaceModelDefault(
   db: D1Database,
-): (workspaceId: string, agentKind: string) => Promise<string | undefined> {
-  const repo = new D1ModelDefaultsRepository({ db })
-  return (workspaceId, agentKind) =>
-    repo.getForKind(workspaceId, agentKind).then((v) => v ?? undefined)
+): (workspaceId: string, agentKind: string, modelPresetId?: string) => Promise<string | undefined> {
+  const repo = new D1ModelPresetRepository({ db })
+  return (workspaceId, agentKind, modelPresetId) =>
+    resolvePresetModelForKind(repo, workspaceId, agentKind, modelPresetId)
 }
 
 /**
@@ -471,7 +477,7 @@ function selectMergeLifecycleDeps(
     notificationRepository: new D1NotificationRepository({ db }),
     mergePresetRepository: new D1MergePresetRepository({ db }),
     workspaceSettingsRepository: new D1WorkspaceSettingsRepository({ db }),
-    modelDefaultsRepository: new D1ModelDefaultsRepository({ db }),
+    modelPresetRepository: new D1ModelPresetRepository({ db }),
     serviceFragmentDefaultsRepository: new D1ServiceFragmentDefaultsRepository({ db }),
   }
   // Compose the delivery channels: in-app push (when the events binding is present)

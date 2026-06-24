@@ -10,7 +10,7 @@ import { bootstrapJobSchema } from './bootstrap.js'
 import { notificationSchema } from './notifications.js'
 import { mergeThresholdPresetSchema } from './merge.js'
 import { agentConfigCatalogSchema } from './agent-config.js'
-import { modelDefaultsSchema } from './model-defaults.js'
+import { modelPresetSchema } from './model-presets.js'
 import { serviceFragmentDefaultsSchema } from './service-fragment-defaults.js'
 import { pipelineScheduleSchema } from './recurring.js'
 import { serviceSchema, workspaceMountSchema } from './services.js'
@@ -60,11 +60,12 @@ export const workspaceSnapshotSchema = v.object({
    */
   agentConfigCatalog: v.optional(agentConfigCatalogSchema),
   /**
-   * The workspace's per-agent-kind default models (the model each agent kind
-   * defaults to, overriding the env routing for this workspace). Attached by the
-   * worker, so optional on the wire.
+   * The workspace's model presets — the library a task picks its model→agent
+   * mapping from (each preset is a base model applied to every agent kind plus
+   * per-kind overrides). One is the workspace default. Attached by the facade, so
+   * optional on the wire.
    */
-  modelDefaults: v.optional(modelDefaultsSchema),
+  modelPresets: v.optional(v.array(modelPresetSchema)),
   /**
    * The deployment's env-routing defaults as `provider:model` refs: the model an
    * agent kind runs on when neither the task nor the workspace pins one. `default`

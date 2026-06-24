@@ -49,7 +49,7 @@ import type {
   CiStatusProvider,
   MergePresetRepository,
   WorkspaceSettingsRepository,
-  ModelDefaultsRepository,
+  ModelPresetRepository,
   ServiceFragmentDefaultsRepository,
   NotificationChannel,
   NotificationRepository,
@@ -124,7 +124,10 @@ import { NotificationService } from './modules/notifications/NotificationService
 import { MergePresetService } from './modules/merge/MergePresetService.js'
 import { WorkspaceSettingsService } from './modules/settings/WorkspaceSettingsService.js'
 import { ReleaseHealthService } from './modules/releaseHealth/ReleaseHealthService.js'
-import { ModelDefaultsService } from './modules/modelDefaults/ModelDefaultsService.js'
+import {
+  ModelPresetService,
+  resolvePresetModelForKind,
+} from './modules/modelPresets/ModelPresetService.js'
 import { ServiceFragmentDefaultsService } from './modules/serviceFragmentDefaults/ServiceFragmentDefaultsService.js'
 import { RecurringPipelineService } from './modules/recurring/RecurringPipelineService.js'
 import { TrackerSettingsService } from './modules/recurring/TrackerSettingsService.js'
@@ -438,12 +441,13 @@ export interface CoreDependencies {
    */
   workspaceSettingsRepository?: WorkspaceSettingsRepository
   /**
-   * Stores a workspace's per-agent-kind default models (the model each agent kind
-   * defaults to, overriding the env routing for that workspace). Optional and
-   * default-off: absent → the `modelDefaults` module isn't assembled and the env
-   * routing is used everywhere.
+   * Stores a workspace's model presets (the named model→agent mappings a task picks
+   * from; each is a base model applied to every agent kind plus per-kind overrides).
+   * Optional and default-off: absent → the `modelPresets` module isn't assembled and
+   * the env routing is used everywhere. When wired, an unpinned step resolves to the
+   * task's selected/default preset (the built-in default points everything at Kimi K2.7).
    */
-  modelDefaultsRepository?: ModelDefaultsRepository
+  modelPresetRepository?: ModelPresetRepository
   /**
    * Resolve the provider capabilities (configured direct API keys + subscription
    * vendors + whether Cloudflare AI is enabled) for a workspace and the run initiator.
@@ -574,9 +578,9 @@ export interface WorkspaceSettingsModule {
   service: WorkspaceSettingsService
 }
 
-/** The per-kind default-model feature's service, present only when its repository is wired. */
-export interface ModelDefaultsModule {
-  service: ModelDefaultsService
+/** The model-preset feature's service, present only when its repository is wired. */
+export interface ModelPresetsModule {
+  service: ModelPresetService
 }
 
 /** The default service-fragment feature's service, present only when its repository is wired. */
@@ -653,8 +657,8 @@ export interface Core {
   mergePresets?: MergePresetsModule
   /** Present only when the workspace-settings repository is wired (see CoreDependencies). */
   settings?: WorkspaceSettingsModule
-  /** Present only when the model-defaults repository is wired (see CoreDependencies). */
-  modelDefaults?: ModelDefaultsModule
+  /** Present only when the model-preset repository is wired (see CoreDependencies). */
+  modelPresets?: ModelPresetsModule
   /** Present only when the service-fragment-defaults repository is wired (see CoreDependencies). */
   serviceFragmentDefaults?: ServiceFragmentDefaultsModule
   /** Present only when the prompt-fragment library is configured (see CoreDependencies). */
@@ -982,14 +986,18 @@ function createRequirementsModule(
     modelRef: deps.requirementReviewModel ?? deps.documentPlannerModel,
     // Honour a block's pinned model with the direct/Cloudflare fallback, like the executor.
     resolveBlockModel: deps.requirementReviewResolveModel,
-    // Honour the workspace's per-kind default for the `requirements` kind too, so the
+    // Honour the workspace's model presets for the `requirements` kind too, so the
     // reviewer resolves its model exactly like a pipeline step. Reuses the already
-    // wired model-defaults repository; absent → only block-pin + routing default.
-    resolveWorkspaceModelDefault: deps.modelDefaultsRepository
-      ? (workspaceId, agentKind) =>
-          deps
-            .modelDefaultsRepository!.getForKind(workspaceId, agentKind)
-            .then((v) => v ?? undefined)
+    // wired model-preset repository (the workspace default preset); absent → only
+    // block-pin + routing default.
+    resolveWorkspaceModelDefault: deps.modelPresetRepository
+      ? (workspaceId, agentKind, modelPresetId) =>
+          resolvePresetModelForKind(
+            deps.modelPresetRepository!,
+            workspaceId,
+            agentKind,
+            modelPresetId,
+          )
       : undefined,
     documentRepository: deps.documentRepository,
     taskRepository: deps.taskRepository,
@@ -1020,11 +1028,14 @@ function createClarityModule(
     modelProvider: deps.modelProvider,
     modelRef: deps.requirementReviewModel ?? deps.documentPlannerModel,
     resolveBlockModel: deps.requirementReviewResolveModel,
-    resolveWorkspaceModelDefault: deps.modelDefaultsRepository
-      ? (workspaceId, agentKind) =>
-          deps
-            .modelDefaultsRepository!.getForKind(workspaceId, agentKind)
-            .then((v) => v ?? undefined)
+    resolveWorkspaceModelDefault: deps.modelPresetRepository
+      ? (workspaceId, agentKind, modelPresetId) =>
+          resolvePresetModelForKind(
+            deps.modelPresetRepository!,
+            workspaceId,
+            agentKind,
+            modelPresetId,
+          )
       : undefined,
   })
   return { service }
@@ -1168,13 +1179,15 @@ function createReleaseHealthModule(deps: CoreDependencies): ReleaseHealthModule 
   return { service }
 }
 
-/** Assemble the model-defaults module when its repository is present. */
-function createModelDefaultsModule(deps: CoreDependencies): ModelDefaultsModule | undefined {
-  const { modelDefaultsRepository } = deps
-  if (!modelDefaultsRepository) return undefined
-  const service = new ModelDefaultsService({
-    modelDefaultsRepository,
+/** Assemble the model-presets module when its repository is present. */
+function createModelPresetsModule(deps: CoreDependencies): ModelPresetsModule | undefined {
+  const { modelPresetRepository } = deps
+  if (!modelPresetRepository) return undefined
+  const service = new ModelPresetService({
+    modelPresetRepository,
     workspaceRepository: deps.workspaceRepository,
+    idGenerator: deps.idGenerator,
+    clock: deps.clock,
   })
   return { service }
 }
@@ -1303,7 +1316,7 @@ export function createCore(dependencies: CoreDependencies): Core {
   // enforced at start() (and the escalation sweep can read the waiting threshold).
   const settings = createWorkspaceSettingsModule(dependencies)
   const releaseHealth = createReleaseHealthModule(dependencies)
-  const modelDefaults = createModelDefaultsModule(dependencies)
+  const modelPresets = createModelPresetsModule(dependencies)
   const serviceFragmentDefaults = createServiceFragmentDefaultsModule(dependencies)
   // Built before the execution engine so the special `requirements-review` gate step can
   // drive the inline reviewer + the iterative answer → incorporate → re-review loop.
@@ -1325,14 +1338,17 @@ export function createCore(dependencies: CoreDependencies): Core {
     llmObservability,
     ticketTrackerProvider: dependencies.ticketTrackerProvider,
     issueWriteback: dependencies.issueWritebackProvider,
-    // Let the personal-credential gate resolve the workspace per-kind default model the
-    // same way dispatch does, so a run whose block has no pin but an individual-usage
-    // workspace default is still gated up-front. Reuses the model-defaults repository.
-    resolveWorkspaceModelDefault: dependencies.modelDefaultsRepository
-      ? (workspaceId, agentKind) =>
-          dependencies
-            .modelDefaultsRepository!.getForKind(workspaceId, agentKind)
-            .then((v) => v ?? undefined)
+    // Let the personal-credential gate + start guard resolve the model the same way
+    // dispatch does, so a run whose block has no pin but resolves (via its preset) to an
+    // individual-usage model is still gated up-front. Reuses the model-preset repository.
+    resolveWorkspaceModelDefault: dependencies.modelPresetRepository
+      ? (workspaceId, agentKind, modelPresetId) =>
+          resolvePresetModelForKind(
+            dependencies.modelPresetRepository!,
+            workspaceId,
+            agentKind,
+            modelPresetId,
+          )
       : undefined,
   })
 
@@ -1374,7 +1390,7 @@ export function createCore(dependencies: CoreDependencies): Core {
     ...(mergePresets ? { mergePresets } : {}),
     ...(settings ? { settings } : {}),
     ...(releaseHealth ? { releaseHealth } : {}),
-    ...(modelDefaults ? { modelDefaults } : {}),
+    ...(modelPresets ? { modelPresets } : {}),
     ...(serviceFragmentDefaults ? { serviceFragmentDefaults } : {}),
     ...(fragmentLibrary ? { fragmentLibrary } : {}),
     ...(recurring ? { recurring } : {}),

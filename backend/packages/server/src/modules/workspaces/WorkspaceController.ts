@@ -112,10 +112,12 @@ export function workspaceController(): Hono<AppEnv> {
     const mergePresets = container.mergePresets
       ? await container.mergePresets.service.list(workspaceId)
       : undefined
-    // The workspace's per-agent-kind default models, so the board renders the
-    // model-defaults settings on load. No-op when the module isn't configured.
-    const modelDefaults = container.modelDefaults
-      ? await container.modelDefaults.service.get(workspaceId)
+    // The workspace's model presets (the model→agent mapping library a task picks
+    // from), so the board renders the Model Configuration settings + the per-task
+    // preset picker on load. No-op when the module isn't configured. `list` seeds the
+    // built-in presets (Kimi K2.7 default + GLM-5.2) on first read.
+    const modelPresets = container.modelPresets
+      ? await container.modelPresets.service.list(workspaceId)
       : undefined
     // The workspace's default service-fragment selection, so the board renders the
     // defaults settings on load. No-op when the module isn't configured.
@@ -154,7 +156,7 @@ export function workspaceController(): Hono<AppEnv> {
       ...(bootstrapJobs ? { bootstrapJobs } : {}),
       ...(notifications ? { notifications } : {}),
       ...(mergePresets ? { mergePresets } : {}),
-      ...(modelDefaults ? { modelDefaults } : {}),
+      ...(modelPresets ? { modelPresets } : {}),
       ...(serviceFragmentDefaults ? { serviceFragmentDefaults } : {}),
       ...(recurringPipelines ? { recurringPipelines } : {}),
       ...(trackerSettings ? { trackerSettings } : {}),

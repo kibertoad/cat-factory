@@ -75,9 +75,10 @@ export {
   type ReleaseHealthServiceDependencies,
 } from './modules/releaseHealth/ReleaseHealthService.js'
 export {
-  ModelDefaultsService,
-  type ModelDefaultsServiceDependencies,
-} from './modules/modelDefaults/ModelDefaultsService.js'
+  ModelPresetService,
+  type ModelPresetServiceDependencies,
+  resolvePresetModelForKind,
+} from './modules/modelPresets/ModelPresetService.js'
 export {
   ServiceFragmentDefaultsService,
   type ServiceFragmentDefaultsServiceDependencies,
@@ -137,7 +138,7 @@ export {
   type SlackModule,
   type MergePresetsModule,
   type WorkspaceSettingsModule,
-  type ModelDefaultsModule,
+  type ModelPresetsModule,
   type ServiceFragmentDefaultsModule,
   type FragmentLibraryModule,
   type RecurringModule,

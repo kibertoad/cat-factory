@@ -54,6 +54,10 @@ describe.skipIf(!databaseUrl)('node durable execution (pg-boss)', () => {
           asyncPolls: 2,
         }),
       },
+      // The default model preset routes every agent kind to `kimi-k2.7` (a Cloudflare
+      // model); enable Cloudflare models so the execution start guard sees a configured
+      // provider, matching the Worker's always-bound `AI`.
+      cloudflareModelsEnabled: true,
     })
     await startExecutionWorker(
       boss,

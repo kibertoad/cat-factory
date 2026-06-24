@@ -157,6 +157,14 @@ export const blockSchema = v.object({
    */
   mergePresetId: v.optional(v.string()),
   /**
+   * Id of the model preset selected for this task (see {@link modelPresetSchema}).
+   * Drives which model each agent step runs on (the preset's `overrides[kind] ??
+   * baseModelId`) unless the block pins a model directly via {@link modelId}. Absent
+   * means "use the workspace's default preset". Editable at any time; a change takes
+   * effect on the task's NEXT step (steps already dispatched keep their model).
+   */
+  modelPresetId: v.optional(v.string()),
+  /**
    * Id of the pipeline chosen for this task at creation (see {@link pipelineSchema}).
    * The task's "Start"/"Run" controls default to it; absent means the user picks a
    * pipeline at run time (the board falls back to the first defined pipeline).
