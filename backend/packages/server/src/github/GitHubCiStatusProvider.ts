@@ -46,6 +46,7 @@ export class GitHubCiStatusProvider implements CiStatusProvider {
         name: c.name,
         status: c.status,
         conclusion: c.conclusion,
+        url: c.htmlUrl ?? null,
       })),
     }
   }

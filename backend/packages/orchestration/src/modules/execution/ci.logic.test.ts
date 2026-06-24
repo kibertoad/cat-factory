@@ -2,10 +2,16 @@ import { describe, expect, it } from 'vitest'
 import type { CiCheck } from '@cat-factory/kernel'
 import { aggregateCi, describeFailingChecks, isCiGreen, listFailingChecks } from './ci.logic.js'
 
-const check = (status: string, conclusion: string | null, name = 'build'): CiCheck => ({
+const check = (
+  status: string,
+  conclusion: string | null,
+  name = 'build',
+  url: string | null = null,
+): CiCheck => ({
   name,
   status,
   conclusion,
+  url,
 })
 
 describe('aggregateCi', () => {
@@ -56,16 +62,16 @@ describe('describeFailingChecks', () => {
 })
 
 describe('listFailingChecks', () => {
-  it('returns the completed, non-passing checks as name + conclusion (for the UI)', () => {
+  it('returns the completed, non-passing checks as name + conclusion + url (for the UI)', () => {
     const failing = listFailingChecks([
       check('completed', 'success', 'lint'),
-      check('completed', 'failure', 'unit'),
+      check('completed', 'failure', 'unit', 'https://github.com/o/r/runs/1'),
       check('completed', 'timed_out', 'e2e'),
       check('in_progress', null, 'slow'),
     ])
     expect(failing).toEqual([
-      { name: 'unit', conclusion: 'failure' },
-      { name: 'e2e', conclusion: 'timed_out' },
+      { name: 'unit', conclusion: 'failure', url: 'https://github.com/o/r/runs/1' },
+      { name: 'e2e', conclusion: 'timed_out', url: null },
     ])
   })
 

@@ -163,6 +163,8 @@ export type {
   CompanionVerdict,
   // Gate (ci/conflicts) / merge-policy shapes.
   GateStepState,
+  GateFailingCheck,
+  GateAttempt,
   MergeAssessment,
   MergeThresholdPreset,
   RequirementConcernLevel,

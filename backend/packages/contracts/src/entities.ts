@@ -583,8 +583,38 @@ export const gateFailingCheckSchema = v.object({
   name: v.string(),
   /** GitHub conclusion (e.g. `failure`, `timed_out`), or null when not reported. */
   conclusion: v.nullable(v.string()),
+  /**
+   * The check run's GitHub web URL (`html_url`), so the UI can link straight to the
+   * failed run's logs. Null when GitHub didn't report one.
+   */
+  url: v.optional(v.nullable(v.string())),
 })
 export type GateFailingCheck = v.InferOutput<typeof gateFailingCheckSchema>
+
+/**
+ * One helper-agent attempt the gate dispatched (a ci-fixer / conflict-resolver run),
+ * recorded when the job finishes so the UI can show what each attempt tried and how it
+ * ended — detail that used to be discarded the moment the gate re-probed.
+ */
+export const gateAttemptSchema = v.object({
+  /** 1-based attempt number (matches `attempts` at the time the helper was dispatched). */
+  attempt: v.number(),
+  /** Epoch ms when the helper job finished. */
+  at: v.number(),
+  /**
+   * How the helper job ended:
+   *   - `completed` — the container finished (it may or may not have fully fixed the
+   *     issue; the gate's next precheck is the source of truth, and `summary` carries
+   *     the agent's own account, e.g. which files it left conflicting).
+   *   - `failed`    — the job errored / was evicted without finishing.
+   */
+  outcome: v.picklist(['completed', 'failed']),
+  /** The PR head commit the helper worked against, when known. */
+  headSha: v.optional(v.nullable(v.string())),
+  /** The helper's own summary (or the failure reason), naming what it did / what remains. */
+  summary: v.optional(v.nullable(v.string())),
+})
+export type GateAttempt = v.InferOutput<typeof gateAttemptSchema>
 
 export const gateStepStateSchema = v.object({
   phase: v.picklist(['checking', 'working']),
@@ -635,6 +665,13 @@ export const gateStepStateSchema = v.object({
    * what the agent saw if the window moved). Absent for the CI/conflicts gates.
    */
   regressedSignals: v.optional(v.nullable(v.array(releaseSignalSchema))),
+  /**
+   * Append-only history of the helper-agent attempts this gate dispatched (ci-fixer /
+   * conflict-resolver runs), each recorded when its job finished. Lets the UI show what
+   * every attempt tried and how it ended, instead of only a bare `attempts` count.
+   * Absent for the post-release-health gate (its on-call helper is resolved specially).
+   */
+  attemptLog: v.optional(v.nullable(v.array(gateAttemptSchema))),
 })
 export type GateStepState = v.InferOutput<typeof gateStepStateSchema>
 
