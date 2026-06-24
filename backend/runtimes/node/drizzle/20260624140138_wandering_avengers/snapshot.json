@@ -1,9 +1,9 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "4c68937f-57a6-4f17-8b2e-ae3544140eb0",
+  "id": "6e8ab9e7-ad52-4480-9cb4-903d9d0124f6",
   "prevIds": [
-    "30f52a43-e9e6-4d31-892f-243a10ddfcaa"
+    "63169f9e-7a28-4f1d-894f-bfc09e587148"
   ],
   "ddl": [
     {
@@ -4630,6 +4630,45 @@
       "generated": null,
       "identity": null,
       "name": "consensus",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "pipelines"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "gating",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "pipelines"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "labels",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "pipelines"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "archived",
       "entityType": "columns",
       "schema": "public",
       "table": "pipelines"
