@@ -44,7 +44,7 @@
   },
   "devDependencies": {
     "@cat-factory/conformance": "workspace:*",
-    "@types/node": "^24.13.2",
+    "@types/node": "^26.0.0",
     "typescript": "7.0.1-rc",
     "vitest": "^4.1.9"
   }
