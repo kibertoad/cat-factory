@@ -98,7 +98,12 @@ export function makeConformanceApp(
     db,
     env: TEST_ENV,
     overrides,
-    cloudflareModelsEnabled: opts?.cloudflareModelsEnabled,
+    // Default Cloudflare models ON for parity with the Worker test harness, which
+    // always binds `AI`. The built-in default model preset points every agent kind at
+    // `kimi-k2.7` (a Cloudflare-served model), so the execution start guard needs that
+    // provider available to start a run — exactly as the Worker does. The suite still
+    // forces this OFF for the provider-key assertions that exercise the unconfigured path.
+    cloudflareModelsEnabled: opts?.cloudflareModelsEnabled ?? true,
   })
   const app = createApp(container, TEST_ENV)
 
