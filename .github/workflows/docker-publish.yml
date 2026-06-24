@@ -65,6 +65,14 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # The acceptance suite imports built workspace packages (@cat-factory/spend,
+      # @cat-factory/server) whose package.json exports point at ./dist, which is
+      # gitignored. `pnpm install` only symlinks the workspace; it never builds, so
+      # without this step vite fails to resolve those entries. The root build is the
+      # tsc -b project-reference graph that produces every package's dist.
+      - name: Build workspace packages
+        run: pnpm build
+
       # Validate the image end-to-end BEFORE publishing: builds the executor
       # image and drives a full clone → Pi → commit → push → PR against a dummy
       # streaming LLM proxy and a stub GitHub API (no real provider/GitHub).
