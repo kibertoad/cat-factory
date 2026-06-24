@@ -930,6 +930,137 @@ export interface FixerResult {
   usage?: { inputTokens: number; outputTokens: number }
 }
 
+// ---- Generic agent job (POST /jobs, kind=agent) ---------------------------
+//
+// The single, manifest-driven kind that subsumes the bespoke per-kind handlers. The
+// backend decides WHAT the agent does (read-only explore vs edit-and-push coding) and
+// passes it as data; the harness stays a generic LLM-over-a-checkout runner with no
+// per-agent-kind code. Mechanical work (rendering artifact files, opening structured
+// results onto the board) is the backend's job — done before/after this run via the
+// RepoFiles port — never here.
+
+/** How the generic agent runs: read-only exploration, or edit-and-push coding. */
+export type AgentMode = 'explore' | 'coding'
+
+/** How an explore agent's reply is consumed. */
+export interface AgentOutputSpec {
+  /** `prose` keeps the reply text; `structured` parses (and optionally repairs) it to JSON. */
+  kind: 'prose' | 'structured'
+  /** Compact shape description fed to the one-shot structured-output repair call. */
+  shapeHint?: string
+  /** Whether to attempt the one-shot repair on a malformed reply (structured only). */
+  repair?: boolean
+}
+
+/**
+ * The generic agent job. `mode` selects the flow; the remaining fields are the union
+ * the two flows need. Explore: clone `branch`, run read-only, return prose (or a parsed
+ * `custom` JSON object when `output.kind==='structured'`). Coding: clone `branch` (or
+ * resume `newBranch`), run, commit + push to `pushBranch`, and open `pr` when one is set
+ * and the run produced changes.
+ */
+export interface AgentJob extends HarnessAuthFields {
+  jobId: string
+  mode: AgentMode
+  systemPrompt: string
+  userPrompt: string
+  model: string
+  ghToken: string
+  repo: RepoSpec
+  /** The branch to clone (the backend resolves base/pr/work to a concrete name). */
+  branch: string
+  githubApiBase?: string
+  webToolsGuidance?: string
+  webSearch?: boolean
+  /** Full-history clone (needed to diff against / merge the base). Default shallow. */
+  full?: boolean
+  /** Explore mode: how to consume the reply. Absent ⇒ prose. */
+  output?: AgentOutputSpec
+  /** Coding mode: a fresh branch to create off the clone before running (else work on `branch`). */
+  newBranch?: string
+  /** Coding mode: branch the produced change is pushed to (defaults to `newBranch ?? branch`). */
+  pushBranch?: string
+  /** Coding mode: commit message for any work the agent left uncommitted. */
+  commitMessage?: string
+  /** Coding mode: open this PR when the run pushed changes. Absent ⇒ push only, no PR. */
+  pr?: PrSpec
+  /**
+   * Coding mode: whether a no-op run (nothing changed) is a failure. The implementer
+   * fails on a no-op; the in-place fixers (ci-fix / fix-tests) treat it as a non-fatal
+   * no-op. Default true.
+   */
+  noChangesIsError?: boolean
+}
+
+/** The generic agent response. `custom` carries a structured explore result. */
+export interface AgentResult {
+  summary?: string
+  stats?: PiRunStats
+  /** Structured explore output (the parsed JSON object) when `output.kind==='structured'`. */
+  custom?: unknown
+  /** Coding mode: whether a change was pushed. */
+  pushed?: boolean
+  prUrl?: string
+  branch?: string
+  error?: string
+  usage?: { inputTokens: number; outputTokens: number }
+}
+
+/** Validate + narrow an untrusted body into an {@link AgentJob}, throwing on bad input. */
+export function parseAgentJob(input: unknown): AgentJob {
+  if (typeof input !== 'object' || input === null) {
+    throw new Error('Invalid job: body must be an object')
+  }
+  const o = input as Record<string, unknown>
+  const mode = o.mode === 'coding' ? 'coding' : o.mode === 'explore' ? 'explore' : undefined
+  if (!mode) throw new Error("Invalid job: 'mode' must be 'explore' or 'coding'")
+  const repo = (o.repo ?? {}) as Record<string, unknown>
+  const output =
+    typeof o.output === 'object' && o.output !== null
+      ? (() => {
+          const so = o.output as Record<string, unknown>
+          const kind = so.kind === 'structured' ? 'structured' : 'prose'
+          const spec: AgentOutputSpec = { kind }
+          if (typeof so.shapeHint === 'string') spec.shapeHint = so.shapeHint
+          if (so.repair === true) spec.repair = true
+          return spec
+        })()
+      : undefined
+  const pr =
+    typeof o.pr === 'object' && o.pr !== null
+      ? (() => {
+          const p = o.pr as Record<string, unknown>
+          return { title: str(p.title, 'pr.title'), body: typeof p.body === 'string' ? p.body : '' }
+        })()
+      : undefined
+  const job: AgentJob = {
+    jobId: str(o.jobId, 'jobId'),
+    mode,
+    systemPrompt: str(o.systemPrompt, 'systemPrompt'),
+    userPrompt: str(o.userPrompt, 'userPrompt'),
+    model: str(o.model, 'model'),
+    ...parseHarnessAuth(o),
+    ghToken: str(o.ghToken, 'ghToken'),
+    repo: parseRepoSpec(repo),
+    branch: str(o.branch, 'branch'),
+    ...(typeof o.githubApiBase === 'string' ? { githubApiBase: o.githubApiBase } : {}),
+    ...(typeof o.webToolsGuidance === 'string' ? { webToolsGuidance: o.webToolsGuidance } : {}),
+    ...(o.webSearch === true ? { webSearch: true } : {}),
+    ...(o.full === true ? { full: true } : {}),
+    ...(output ? { output } : {}),
+    ...(typeof o.newBranch === 'string' && o.newBranch ? { newBranch: o.newBranch } : {}),
+    ...(typeof o.pushBranch === 'string' && o.pushBranch ? { pushBranch: o.pushBranch } : {}),
+    ...(typeof o.commitMessage === 'string' && o.commitMessage
+      ? { commitMessage: o.commitMessage }
+      : {}),
+    ...(pr ? { pr } : {}),
+    ...(o.noChangesIsError === false ? { noChangesIsError: false } : {}),
+  }
+  assertAllowedHost(job.repo.cloneUrl, 'repo.cloneUrl')
+  if (job.githubApiBase) assertAllowedHost(job.githubApiBase, 'githubApiBase')
+  return job
+}
+
 /** Validate + narrow an untrusted body into a {@link FixerJob}, throwing on bad input. */
 export function parseFixerJob(input: unknown): FixerJob {
   if (typeof input !== 'object' || input === null) {
