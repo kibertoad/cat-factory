@@ -1,4 +1,5 @@
-import type { RunnerJobState, RunnerPoolManifest } from '@cat-factory/kernel'
+import type { RunnerJobState, RunnerPoolManifest, UrlSafetyPolicy } from '@cat-factory/kernel'
+import { STRICT_URL_SAFETY_POLICY } from '@cat-factory/kernel'
 import { assertSafeEnvironmentUrl } from '../environments/environments.logic.js'
 
 // Pure helpers for the self-hosted runner-pool integration. The generic URL
@@ -27,10 +28,13 @@ export function referencedSecretKeys(manifest: RunnerPoolManifest): string[] {
 }
 
 /** Validate every URL a manifest will fetch (defence against SSRF). */
-export function assertManifestUrlsSafe(manifest: RunnerPoolManifest): void {
-  assertSafeEnvironmentUrl(manifest.baseUrl, 'base URL')
+export function assertManifestUrlsSafe(
+  manifest: RunnerPoolManifest,
+  policy: UrlSafetyPolicy = STRICT_URL_SAFETY_POLICY,
+): void {
+  assertSafeEnvironmentUrl(manifest.baseUrl, 'base URL', policy)
   if (manifest.auth.type === 'oauth2_client_credentials') {
-    assertSafeEnvironmentUrl(manifest.auth.tokenUrl, 'OAuth token URL')
+    assertSafeEnvironmentUrl(manifest.auth.tokenUrl, 'OAuth token URL', policy)
   }
 }
 

@@ -17,10 +17,36 @@ export type SecretResolver = (key: string) => string | undefined
 /** Fields extracted from an earlier provision response, for status/teardown. */
 export type ProvisionFields = Record<string, string>
 
+/**
+ * Typed build context for a provision call, derived from the block under deployment.
+ * A PR-environment provider needs the git ref + repo identity to target the right
+ * environment; the same values are also flattened into `inputs` as `{{input.*}}`
+ * strings for the manifest path. Every field is optional — a manual provision or a
+ * non-PR block may carry none.
+ */
+export interface ProvisionContext {
+  blockId?: string
+  /** The head branch the agent pushed its work to, when known. */
+  branch?: string
+  /** The pull request number within the repo, when known. */
+  pullNumber?: number
+  /** The pull request web URL, when known. */
+  pullUrl?: string
+  /** The repo owner (org/user login), when resolvable. */
+  repoOwner?: string
+  /** The repo name, when resolvable. */
+  repoName?: string
+}
+
 export interface ProvisionEnvironmentRequest {
   manifest: EnvironmentManifest
   /** Provision inputs (`{{input.*}}` in templates). */
   inputs: Record<string, string>
+  /**
+   * Typed git/PR/repo context for a code adapter. The same values are also present
+   * in `inputs` as strings, so the manifest-HTTP path needs nothing extra.
+   */
+  provisionContext?: ProvisionContext
   resolveSecret: SecretResolver
 }
 

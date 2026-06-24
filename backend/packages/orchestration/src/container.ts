@@ -33,7 +33,7 @@ import type { DocumentSourceProvider } from '@cat-factory/kernel'
 import type { DocumentConnectionRepository, DocumentRepository } from '@cat-factory/kernel'
 import type { TaskSourceProvider } from '@cat-factory/kernel'
 import type { TaskConnectionRepository, TaskRepository } from '@cat-factory/kernel'
-import type { EnvironmentProvider } from '@cat-factory/kernel'
+import type { EnvironmentProvider, UrlSafetyPolicy } from '@cat-factory/kernel'
 import type {
   EnvironmentConnectionRepository,
   EnvironmentRegistryRepository,
@@ -297,6 +297,11 @@ export interface CoreDependencies {
   environmentConnectionRepository?: EnvironmentConnectionRepository
   environmentRegistryRepository?: EnvironmentRegistryRepository
   secretCipher?: SecretCipher
+  // Operator-configured URL/host safety policy shared by the environment + runner-pool
+  // integrations (the manifest baseUrl + the returned env URL + the pool scheduler URL).
+  // Absent => strict (https-only, no private/internal hosts). A trusted facade widens it
+  // so an in-house adapter can reach an internal platform on a private/VPN host.
+  urlSafetyPolicy?: UrlSafetyPolicy
 
   // ---- Self-hosted runner pool ("bring your own infra"; opt-in) ------------
   // Lets a workspace route its repo-operating coding jobs to its own container
@@ -848,6 +853,7 @@ function createEnvironmentsModule(deps: CoreDependencies): EnvironmentsModule | 
     workspaceRepository: deps.workspaceRepository,
     secretCipher,
     clock: deps.clock,
+    ...(deps.urlSafetyPolicy ? { urlPolicy: deps.urlSafetyPolicy } : {}),
   })
   const provisioningService = new EnvironmentProvisioningService({
     connectionService,
@@ -856,6 +862,7 @@ function createEnvironmentsModule(deps: CoreDependencies): EnvironmentsModule | 
     secretCipher,
     idGenerator: deps.idGenerator,
     clock: deps.clock,
+    ...(deps.urlSafetyPolicy ? { urlPolicy: deps.urlSafetyPolicy } : {}),
   })
   const teardownService = new EnvironmentTeardownService({
     connectionService,
@@ -881,6 +888,7 @@ function createRunnersModule(deps: CoreDependencies): RunnersModule | undefined 
     workspaceRepository: deps.workspaceRepository,
     secretCipher: runnerSecretCipher,
     clock: deps.clock,
+    ...(deps.urlSafetyPolicy ? { urlPolicy: deps.urlSafetyPolicy } : {}),
   })
   return { connectionService }
 }

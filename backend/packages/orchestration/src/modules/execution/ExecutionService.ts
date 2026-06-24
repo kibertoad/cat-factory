@@ -100,6 +100,7 @@ import type {
   WorkspaceRepository,
 } from '@cat-factory/kernel'
 import type { Clock, IdGenerator } from '@cat-factory/kernel'
+import type { ProvisionContext } from '@cat-factory/kernel'
 import type { AgentExecutor, AgentRunContext, AgentRunResult } from '@cat-factory/kernel'
 import { isAsyncAgentExecutor } from '@cat-factory/kernel'
 import type { WorkRunner } from '@cat-factory/kernel'
@@ -157,6 +158,17 @@ const EXECUTION_FAILURE_HINTS: Partial<Record<AgentFailureKind, string>> = {
 /** Format a 0..1 score as a rounded percentage for notification copy. */
 function pct(score: number): string {
   return `${Math.round(score * 100)}%`
+}
+
+/**
+ * Parse `owner`/`repo` from a GitHub pull-request URL (`https://github.com/o/r/pull/42`).
+ * Returns undefined for any URL that doesn't carry both segments. Host-agnostic on
+ * purpose (GitHub Enterprise hosts work too); only the `/owner/repo/...` shape matters.
+ */
+function parseRepoFromPullUrl(url: string): { owner: string; repo: string } | undefined {
+  const match = /^https?:\/\/[^/]+\/([^/]+)\/([^/]+)\//.exec(url)
+  if (!match) return undefined
+  return { owner: match[1]!, repo: match[2]! }
 }
 
 /**
@@ -1726,6 +1738,7 @@ export class ExecutionService {
         blockId: block.id,
         executionId: instance.id,
         inputs: this.deployInputs(block),
+        context: this.deployContext(block),
       })
       const lines = [
         `Provisioned ephemeral environment via '${handle.providerId}'.`,
@@ -2267,6 +2280,29 @@ export class ExecutionService {
       description: block.description,
     }
     return inputs
+  }
+
+  /**
+   * Typed git/PR/repo context for the deployer, derived from the block's PR ref. A
+   * PR-environment provider (e.g. an in-house adapter) needs the branch/repo to target
+   * the right environment; the same values are also flattened into `{{input.*}}` for
+   * the manifest path. `owner`/`repo` are parsed from the PR url when present.
+   */
+  private deployContext(block: Block): ProvisionContext {
+    const context: ProvisionContext = { blockId: block.id }
+    const pr = block.pullRequest
+    if (!pr) return context
+    if (pr.branch) context.branch = pr.branch
+    if (pr.number !== undefined) context.pullNumber = pr.number
+    if (pr.url) {
+      context.pullUrl = pr.url
+      const repo = parseRepoFromPullUrl(pr.url)
+      if (repo) {
+        context.repoOwner = repo.owner
+        context.repoName = repo.repo
+      }
+    }
+    return context
   }
 
   /**

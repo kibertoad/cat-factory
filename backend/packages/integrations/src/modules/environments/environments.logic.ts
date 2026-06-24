@@ -3,8 +3,8 @@ import type {
   EnvironmentHandle,
   EnvironmentStatus,
 } from '@cat-factory/kernel'
-import type { EnvironmentRecord } from '@cat-factory/kernel'
-import { ValidationError } from '@cat-factory/kernel'
+import type { EnvironmentRecord, UrlSafetyPolicy } from '@cat-factory/kernel'
+import { STRICT_URL_SAFETY_POLICY, ValidationError } from '@cat-factory/kernel'
 
 // Pure helpers for the ephemeral-environment integration: SSRF validation of the
 // URLs we fetch/expose, `{{var}}` interpolation over a bounded scope, dot-path
@@ -115,17 +115,38 @@ function isBlockedHost(hostname: string): boolean {
 }
 
 /**
- * Validate a URL before it is stored, fetched, or exposed: requires `https`,
- * forbids embedded credentials, and rejects internal/private hosts. Parsed by
- * hand (no `URL` global) so this stays in the platform-agnostic core.
+ * Whether `host` is exempt from the private/internal-host block under `policy`.
+ * An allow-list entry matches the hostname case-insensitively, either exactly or as a
+ * dot suffix when it begins with `.` (`.internal` matches `a.b.internal`).
  */
-export function assertSafeEnvironmentUrl(url: string, label = 'URL'): void {
+function hostExempt(host: string, policy: UrlSafetyPolicy): boolean {
+  const h = host.toLowerCase().replace(/^\[|\]$/g, '')
+  return policy.allowHosts.some((entry) => {
+    const e = entry.toLowerCase()
+    return e.startsWith('.') ? h === e.slice(1) || h.endsWith(e) : h === e
+  })
+}
+
+/**
+ * Validate a URL before it is stored, fetched, or exposed. The default policy
+ * (STRICT_URL_SAFETY_POLICY) requires `https` and rejects internal/private hosts; a
+ * trusted operator-installed adapter can pass a widened policy to permit specific
+ * schemes/hosts (e.g. an internal env platform on a private/VPN host). Embedded
+ * credentials are forbidden regardless of policy. Parsed by hand (no `URL` global) so
+ * this stays in the platform-agnostic core.
+ */
+export function assertSafeEnvironmentUrl(
+  url: string,
+  label = 'URL',
+  policy: UrlSafetyPolicy = STRICT_URL_SAFETY_POLICY,
+): void {
   const invalid = () => new ValidationError(`Environment ${label} is not a valid URL: '${url}'`)
   const match = url.match(/^([a-zA-Z][a-zA-Z0-9+.-]*):\/\/([^/?#]*)/)
   if (!match) throw invalid()
 
-  if (match[1]!.toLowerCase() !== 'https') {
-    throw new ValidationError(`Environment ${label} must use https`)
+  if (!policy.schemes.includes(match[1]!.toLowerCase())) {
+    const allowed = policy.schemes.join('/') || '(none)'
+    throw new ValidationError(`Environment ${label} must use ${allowed}`)
   }
   const authority = match[2]!
   if (authority.includes('@')) {
@@ -140,7 +161,7 @@ export function assertSafeEnvironmentUrl(url: string, label = 'URL'): void {
     host = authority.split(':')[0]!
   }
   if (host === '') throw invalid()
-  if (isBlockedHost(host)) {
+  if (!hostExempt(host, policy) && isBlockedHost(host)) {
     throw new ValidationError(`Environment ${label} must be a public host`)
   }
 }

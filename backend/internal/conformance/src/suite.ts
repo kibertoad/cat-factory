@@ -1019,6 +1019,31 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         const afterDelete = await call<{ connection: unknown }>('GET', `${base}/connection`)
         expect(afterDelete.body.connection).toBeNull()
       })
+
+      it('rejects an internal management-API host under the strict URL policy', async () => {
+        // The default (strict) URL/host safety policy forbids private/internal hosts at
+        // registration on every runtime — so a trusted-internal deployment (e.g. an
+        // in-house adapter on a `.internal` host) MUST opt in via the operator allow-list
+        // rather than the host slipping through. The conformance env config sets no
+        // allow-list, so the strict default applies identically on D1 and Postgres.
+        const { call, createWorkspace } = harness.makeApp()
+        const { workspace } = await createWorkspace()
+        const manifest = {
+          providerId: 'internal-envs',
+          label: 'Internal Envs',
+          baseUrl: 'https://kargo.internal/api',
+          auth: { type: 'bearer', secretRef: { key: 'API_TOKEN' } },
+          provision: { method: 'POST', pathTemplate: '/environments' },
+          response: { urlPath: 'url', statusPath: 'state', externalIdPath: 'id' },
+        }
+        const res = await call(
+          'POST',
+          `/workspaces/${workspace.id}/environments/connection`,
+          { manifest, secrets: { API_TOKEN: 't' } },
+        )
+        // A validation failure (the SSRF/internal-host guard), not a 201.
+        expect(res.status).toBeGreaterThanOrEqual(400)
+      })
     })
 
     describe('board', () => {
