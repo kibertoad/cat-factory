@@ -1,7 +1,7 @@
 {
-  "name": "@cat-factory/sandbox",
+  "name": "@cat-factory/sandbox-fixtures",
   "version": "0.6.0",
-  "description": "Parallel prompt/model testing surface: versioned prompt candidates, experiment matrices, judge + objective grading. Isolated from the core product so it can be extracted.",
+  "description": "Hand-authored, standardized, graded no-repo fixtures for the Sandbox: inline agent inputs (requirements/clarity/code-review/architecture-proposal review) with expectations rated by trickiness and impact.",
   "files": [
     "dist"
   ],
@@ -25,12 +25,12 @@
     "test:run": "vitest run"
   },
   "dependencies": {
-    "@cat-factory/agents": "workspace:*",
     "@cat-factory/contracts": "workspace:*",
-    "@cat-factory/kernel": "workspace:*",
-    "@cat-factory/sandbox-fixtures": "workspace:*"
+    "valibot": "^1.4.1"
   },
   "devDependencies": {
+    "@cat-factory/kernel": "workspace:*",
+    "@cat-factory/orchestration": "workspace:*",
     "typescript": "7.0.1-rc",
     "vitest": "^4.1.9"
   }

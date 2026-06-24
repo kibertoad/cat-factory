@@ -1,5 +1,17 @@
+import type { SandboxExpectation } from '@cat-factory/contracts'
 import { describe, expect, it } from 'vitest'
-import { rubricFor, scoreExpectedFindings, weightedTotal } from './rubrics.js'
+import { renderExpectationBrief, rubricFor, scoreExpectations, weightedTotal } from './rubrics.js'
+
+const expectation = (
+  over: Partial<SandboxExpectation> & Pick<SandboxExpectation, 'id'>,
+): SandboxExpectation => ({
+  summary: over.id,
+  detail: '',
+  trickiness: 1,
+  impact: 1,
+  matchHints: [],
+  ...over,
+})
 
 describe('rubricFor', () => {
   it('returns the dimension set for each task', () => {
@@ -34,31 +46,79 @@ describe('weightedTotal', () => {
   })
 })
 
-describe('scoreExpectedFindings', () => {
-  it('counts case- and whitespace-insensitive substring matches', () => {
-    const out = scoreExpectedFindings(
-      ['missing reset logic', 'off-by-one error'],
-      'The token bucket has a MISSING   reset logic bug, but counting is fine.',
+describe('scoreExpectations', () => {
+  it('matches an expectation via its summary, token-sequence (not substring)', () => {
+    const out = scoreExpectations(
+      [expectation({ id: 'a', summary: 'missing reset logic' })],
+      'The token bucket has a MISSING   reset logic bug.',
     )
-    expect(out.matched).toBe(1)
-    expect(out.total).toBe(2)
-    expect(out.recall).toBe(0.5)
-    expect(out.missing).toEqual(['off-by-one error'])
+    expect(out.caught.map((e) => e.id)).toEqual(['a'])
+    // `reset logic` must NOT match inside `preset logic`.
+    const noMatch = scoreExpectations(
+      [expectation({ id: 'a', summary: 'reset logic' })],
+      'The preset logic is fine.',
+    )
+    expect(noMatch.missed.map((e) => e.id)).toEqual(['a'])
   })
 
-  it('treats an empty expected set as full recall', () => {
-    expect(scoreExpectedFindings([], 'anything')).toMatchObject({ matched: 0, total: 0, recall: 1 })
+  it('prefers matchHints over summary when present', () => {
+    const out = scoreExpectations(
+      [
+        expectation({
+          id: 'a',
+          summary: 'unbounded memory growth',
+          matchHints: ['Map', 'never evicted'],
+        }),
+      ],
+      'The buckets are never evicted from the table.',
+    )
+    expect(out.caught.map((e) => e.id)).toEqual(['a'])
   })
 
-  it('matches whole word tokens, not substrings of larger words', () => {
-    // `reset logic` must NOT match inside `preset logic`, and `off by one` must NOT
-    // match inside `offset by one` — raw substring matching would over-count both.
-    const out = scoreExpectedFindings(
-      ['reset logic', 'off by one'],
-      'The preset logic is fine and the index is offset by one deliberately.',
-    )
-    expect(out.matched).toBe(0)
-    expect(out.recall).toBe(0)
-    expect(out.missing).toEqual(['reset logic', 'off by one'])
+  it('weights the miss penalty by impact (missing high-impact hurts most)', () => {
+    const exps = [expectation({ id: 'low', impact: 1 }), expectation({ id: 'high', impact: 5 })]
+    // Catch only the low-impact one → impactRecall = 1 - 5/6 ≈ 0.17, and the
+    // high-impact miss is flagged.
+    const out = scoreExpectations(exps, 'low')
+    expect(out.impactRecall).toBe(0.17)
+    expect(out.missedHighImpact).toEqual(['high'])
+  })
+
+  it('awards the wow bonus only for catching tricky items, never penalizes missing them', () => {
+    const exps = [
+      expectation({ id: 'tricky-caught', trickiness: 5, summary: 'tricky-caught' }),
+      expectation({ id: 'tricky-missed', trickiness: 4, summary: 'tricky-missed' }),
+      expectation({ id: 'easy', trickiness: 1, summary: 'easy' }),
+    ]
+    const out = scoreExpectations(exps, 'tricky-caught and easy are here')
+    // wowBonus = 5 / (5 + 4) ≈ 0.56; the easy item does not dilute it.
+    expect(out.wowBonus).toBe(0.56)
+  })
+
+  it('treats an empty expectation set as full recall and no wow on offer', () => {
+    expect(scoreExpectations([], 'anything')).toMatchObject({ impactRecall: 1, wowBonus: 1 })
+  })
+
+  it('reports wowBonus 1 when nothing is tricky', () => {
+    const out = scoreExpectations([expectation({ id: 'a', trickiness: 2, summary: 'a' })], 'a')
+    expect(out.wowBonus).toBe(1)
+  })
+})
+
+describe('renderExpectationBrief', () => {
+  it('renders impact/trickiness and is empty for no expectations', () => {
+    expect(renderExpectationBrief([])).toBe('')
+    const brief = renderExpectationBrief([
+      expectation({
+        id: 'a',
+        summary: 'no time-window reset',
+        detail: 'lifetime cap, not a rate limit',
+        impact: 5,
+        trickiness: 3,
+      }),
+    ])
+    expect(brief).toContain('no time-window reset')
+    expect(brief).toContain('impact 5, trickiness 3')
+    expect(brief).toContain('lifetime cap, not a rate limit')
   })
 })

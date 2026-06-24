@@ -8,9 +8,13 @@ export {
   type SandboxTaskType,
   type Rubric,
   type RubricDimension,
+  type ExpectationScore,
+  HIGH_IMPACT_THRESHOLD,
+  TRICKY_THRESHOLD,
   rubricFor,
   weightedTotal,
-  scoreExpectedFindings,
+  scoreExpectations,
+  renderExpectationBrief,
 } from './rubrics.js'
 
 export {
@@ -31,3 +35,16 @@ export {
 } from './promptVersions.logic.js'
 
 export { type ExpandDeps, cellCount, expandMatrix, isRunnableMatrix } from './matrix.logic.js'
+
+export {
+  type SuggestExperimentInput,
+  type SandboxFixtureDefinition,
+  type SandboxFixtureDifficulty,
+  BUILTIN_SANDBOX_FIXTURES,
+  builtinFixturesFor,
+  builtinFixture,
+  toSandboxFixture,
+  listBuiltinFixtures,
+  baselineVersionId,
+  suggestExperiment,
+} from './fixtures.js'
