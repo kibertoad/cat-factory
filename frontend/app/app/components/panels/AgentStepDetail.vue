@@ -536,7 +536,14 @@ watch(
                   <div>
                     <dt class="text-[11px] uppercase tracking-wide text-slate-500">State</dt>
                     <dd class="mt-0.5 flex items-center gap-1.5 text-slate-200">
+                      <UIcon
+                        v-if="runFailed && step.state === 'working'"
+                        name="i-lucide-circle-x"
+                        class="h-3.5 w-3.5 shrink-0"
+                        :style="{ color: stateMeta.color }"
+                      />
                       <span
+                        v-else
                         class="h-2 w-2 rounded-full"
                         :style="{ backgroundColor: stateMeta.color }"
                       />

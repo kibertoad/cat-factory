@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { AgentState } from '~/types/domain'
 import { agentKindMeta } from '~/utils/catalog'
-import { subtaskIconClass } from '~/utils/pipelineRender'
+import { subtaskIconClass, isFailedStep, FAILED_STEP_META } from '~/utils/pipelineRender'
 import { lodAtLeast } from '~/composables/useSemanticZoom'
 
 // Spatial drill-down inside a task card: at the `steps` zoom band the task's
@@ -91,10 +91,10 @@ const ITEM_ICON: Record<string, string> = {
         </span>
         <UIcon
           v-else
-          :name="STATE_META[s.state].icon"
+          :name="isFailedStep(s.state, runFailed) ? FAILED_STEP_META.icon : STATE_META[s.state].icon"
           class="ml-auto h-2.5 w-2.5 shrink-0"
           :class="s.state === 'working' && !runFailed ? 'animate-spin' : ''"
-          :style="{ color: STATE_META[s.state].color }"
+          :style="{ color: isFailedStep(s.state, runFailed) ? FAILED_STEP_META.color : STATE_META[s.state].color }"
         />
       </div>
 

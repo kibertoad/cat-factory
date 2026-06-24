@@ -6,6 +6,8 @@ import {
   gateCompanionFor,
   COMPANION_STATE_META,
   isCompanionKind,
+  isFailedStep,
+  FAILED_STEP_META,
 } from '~/utils/pipelineRender'
 import StepMetricsBar from '~/components/observability/StepMetricsBar.vue'
 
@@ -84,7 +86,7 @@ const total = computed(() => steps.value.length)
 // The conditionally-run companion (e.g. the Tester's `fixer`) each step drives, with
 // its possible/running/completed/skipped state — rendered as a distinct sub-node so a
 // human can see at a glance whether the fixer ran or was skipped.
-const companionByStep = computed(() => steps.value.map((s) => gateCompanionFor(s)))
+const companionByStep = computed(() => steps.value.map((s) => gateCompanionFor(s, runFailed.value)))
 
 // A failed run is no longer executing: a step left mid-flight (state still
 // `working`, `startingContainer` still set) must stop looking live — no spinner,
@@ -93,6 +95,13 @@ const runFailed = computed(() => props.instance.status === 'failed')
 /** A step that is genuinely, currently working (not a stale mid-flight step). */
 function liveWorking(state: AgentState) {
   return state === 'working' && !runFailed.value
+}
+/**
+ * The state visual (label/color/icon) for a step: a step left `working` when the run
+ * failed reads as "Failed" with a red cross, not a frozen "Working" loader.
+ */
+function stepVisual(state: AgentState) {
+  return isFailedStep(state, runFailed.value) ? FAILED_STEP_META : STATE_META[state]
 }
 
 /** A step counts as fully complete only once its state is `done`. */
@@ -187,13 +196,13 @@ const ITEM_ICON: Record<string, string> = {
         <span
           class="relative z-10 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 bg-slate-950"
           :class="liveWorking(s.state) ? 'step-active' : ''"
-          :style="{ borderColor: STATE_META[s.state].color }"
+          :style="{ borderColor: stepVisual(s.state).color }"
         >
           <UIcon
-            :name="STATE_META[s.state].icon"
+            :name="stepVisual(s.state).icon"
             class="h-4 w-4"
             :class="liveWorking(s.state) ? 'animate-spin' : ''"
-            :style="{ color: STATE_META[s.state].color }"
+            :style="{ color: stepVisual(s.state).color }"
           />
         </span>
 
@@ -241,9 +250,9 @@ const ITEM_ICON: Record<string, string> = {
             </div>
             <span
               class="ml-auto shrink-0 text-[11px] font-medium"
-              :style="{ color: STATE_META[s.state].color }"
+              :style="{ color: stepVisual(s.state).color }"
             >
-              {{ STATE_META[s.state].label }}
+              {{ stepVisual(s.state).label }}
             </span>
 
             <!-- restart-from-here: revealed on row hover, arms a two-click confirm

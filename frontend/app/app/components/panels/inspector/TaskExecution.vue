@@ -52,6 +52,11 @@ const stepLabel: Record<string, string> = {
   done: 'Done',
 }
 
+/** A step left mid-flight (`working`) on a failed run gave up — not still working. */
+function stepFailed(s: { state: string }) {
+  return runFailed.value && s.state === 'working'
+}
+
 /** A gated step parked for approval reads "Needs approval", not "Needs decision". */
 function labelForStep(s: {
   state: string
@@ -60,6 +65,8 @@ function labelForStep(s: {
   companion?: { exceeded?: boolean } | null
   startingContainer?: boolean
 }) {
+  // A step left mid-flight on a failed run reads "Failed", not the misleading "Working".
+  if (stepFailed(s)) return 'Failed'
   // A reviewer gate mid-cycle reads its working stage, not "Needs approval".
   if (reviews.isBackground(s.agentKind, props.block.id) && reviewStageLabel.value)
     return reviewStageLabel.value
@@ -196,7 +203,11 @@ async function resetRun() {
             >
               {{ s.subtasks.completed }}/{{ s.subtasks.total }}
             </span>
-            <span class="text-[10px] text-slate-400" :class="{ 'ml-auto': !s.subtasks }">
+            <span
+              class="inline-flex items-center gap-1 text-[10px]"
+              :class="[stepFailed(s) ? 'text-rose-400' : 'text-slate-400', { 'ml-auto': !s.subtasks }]"
+            >
+              <UIcon v-if="stepFailed(s)" name="i-lucide-circle-x" class="h-3 w-3 shrink-0" />
               {{ labelForStep(s) }}
             </span>
             <UButton
@@ -275,20 +286,26 @@ async function resetRun() {
           </div>
           <!-- Conditionally-run companion (the Tester's fixer): possible/running/
                completed/skipped, so it's clear whether a fix pass ran. -->
-          <div v-if="gateCompanionFor(s)" class="mt-0.5 flex items-center gap-1.5 pl-6 text-[10px]">
+          <div
+            v-if="gateCompanionFor(s, runFailed)"
+            class="mt-0.5 flex items-center gap-1.5 pl-6 text-[10px]"
+          >
             <UIcon
-              :name="agentKindMeta(gateCompanionFor(s)!.kind).icon"
+              :name="agentKindMeta(gateCompanionFor(s, runFailed)!.kind).icon"
               class="h-3 w-3 shrink-0"
               :class="[
-                COMPANION_STATE_META[gateCompanionFor(s)!.state].text,
-                gateCompanionFor(s)!.state === 'running' && !runFailed ? 'animate-spin' : '',
+                COMPANION_STATE_META[gateCompanionFor(s, runFailed)!.state].text,
+                gateCompanionFor(s, runFailed)!.state === 'running' ? 'animate-spin' : '',
               ]"
             />
             <span class="text-slate-400">
-              {{ agentKindMeta(gateCompanionFor(s)!.kind).label }} (companion)
+              {{ agentKindMeta(gateCompanionFor(s, runFailed)!.kind).label }} (companion)
             </span>
-            <span class="ml-auto" :class="COMPANION_STATE_META[gateCompanionFor(s)!.state].text">
-              {{ COMPANION_STATE_META[gateCompanionFor(s)!.state].label }}
+            <span
+              class="ml-auto"
+              :class="COMPANION_STATE_META[gateCompanionFor(s, runFailed)!.state].text"
+            >
+              {{ COMPANION_STATE_META[gateCompanionFor(s, runFailed)!.state].label }}
             </span>
           </div>
         </li>
