@@ -123,6 +123,15 @@ import {
 } from './job.logic.js'
 
 /**
+ * Max `conflict-resolver` escalations before the conflicts gate gives up. Deliberately
+ * far below CI's budget (`ciMaxAttempts`, default 10): a conflict retry re-merges the
+ * SAME base with no new signal, so extra attempts just burn containers re-attempting an
+ * identical conflict. Three gives the (now conflict-aware) resolver a couple of shots at
+ * model variance, then fails fast to a manual-resolution notification.
+ */
+const CONFLICT_RESOLVER_MAX_ATTEMPTS = 3
+
+/**
  * "What to do next" guidance per failure kind a pipeline run can produce, shown
  * under the failure banner on the board (mirrors bootstrap's FAILURE_HINTS). Only
  * the execution-relevant subset of {@link AgentFailureKind} is keyed.
@@ -1764,6 +1773,13 @@ export class ExecutionService {
         helperKind: CONFLICT_RESOLVER_AGENT_KIND,
         wired: () => !!this.mergeabilityProvider,
         unwiredOutput: 'Conflict gate skipped (no mergeability provider configured).',
+        // Unlike CI (where each fixer round gets fresh red-check output to act on), a
+        // conflict retry re-merges the SAME base and gets no new signal, so a large
+        // budget just burns containers re-attempting the same conflict (observed in
+        // prod: 10 attempts, head SHA never moved, run failed). Cap it low and fail
+        // fast to a manual-resolution notification instead of churning to CI's default
+        // of 10.
+        attemptBudget: () => CONFLICT_RESOLVER_MAX_ATTEMPTS,
         probe: async (workspaceId, blockId): Promise<GateProbe> => {
           const report = await this.mergeabilityProvider!.getMergeability(workspaceId, blockId)
           // No PR resolved, or it merges cleanly → nothing to do; advance.

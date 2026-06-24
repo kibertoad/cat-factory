@@ -107,11 +107,9 @@ This repository may contain a prescriptive SPECIFICATION for the service under t
 - \`spec/features/*.feature\` for the Gherkin (Given/When/Then) acceptance scenarios.
 - \`spec/spec.json\` is the canonical machine-readable tree the markdown/feature files are rendered from; consult it when you need exact detail.
 Treat the spec as authoritative for required behaviour: make your change satisfy it, and if your change conflicts with the spec, follow the spec or call out the discrepancy rather than silently diverging.",
-    "userPrompt": "Pipeline: Standard build
-Block: Add widget (feature)
-Description: Implement the widget feature.
+    "userPrompt": "Task: Add widget
 
-Produce your contribution. Be concise and concrete.",
+Implement the widget feature.",
   },
 }
 `;

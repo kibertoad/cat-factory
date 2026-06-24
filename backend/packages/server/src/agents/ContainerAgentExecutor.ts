@@ -825,22 +825,32 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
 
       // The conflict-resolver clones the PR head branch, merges the base in, resolves
       // the conflicts and pushes back to the SAME branch (no new branch / PR) so the
-      // PR becomes mergeable and CI re-runs. Mirrors the CI-fixer's body.
-      case CONFLICT_RESOLVER_AGENT_KIND:
+      // PR becomes mergeable and CI re-runs.
+      //
+      // Unlike the CI-fixer it is deliberately NOT given `userPromptFor(context)`: that
+      // renders the full task brief + every prior agent's output (the spec-writer's whole
+      // spec, etc.), which buries the one-line "resolve a conflict" role and drifts the
+      // model onto re-implementing the feature (observed in prod: a resolver that returned
+      // a "test report is ready" answer and never touched the markers). The harness
+      // discovers the conflicted files in the container and leads the prompt with the
+      // actual hunks; the backend supplies only a compact task reference for intent.
+      case CONFLICT_RESOLVER_AGENT_KIND: {
         if (!prBranch) {
           throw new Error(
             'Conflict-resolver needs the implementation PR branch to resolve conflicts on',
           )
         }
+        const description = context.block.description?.trim()
         return {
           kind: 'resolve-conflicts',
           body: {
             ...common,
             systemPrompt: roleSystemPrompt,
-            userPrompt: userPromptFor(context),
+            userPrompt: `Task: ${context.block.title}${description ? `\n\n${description}` : ''}`,
             branch: prBranch,
           },
         }
+      }
 
       // The merger clones the PR head branch to assess the diff vs base; it makes no
       // commits (the engine performs the real merge through the GitHub API on its
