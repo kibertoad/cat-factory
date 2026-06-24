@@ -26,6 +26,13 @@ import {
 const NAME_PREFIX = 'cf-'
 const LABEL_MANAGED = 'cat-factory.managed=apple'
 
+/**
+ * Statuses we treat as terminal — i.e. safe to reap. A container whose status we can't
+ * recognise (empty/unknown — the `container list` JSON shape is not contractual) is left
+ * ALONE rather than risk force-deleting one that is still running.
+ */
+const TERMINAL_STATUSES = new Set(['stopped', 'exited', 'dead'])
+
 /** The deterministic container name (== id) for a run. */
 function runName(runId: string): string {
   // Container names allow [a-zA-Z0-9][a-zA-Z0-9_.-]*; run ids are already in that set,
@@ -35,10 +42,17 @@ function runName(runId: string): string {
 
 interface ListEntry {
   id: string
+  /** The assigned `--name`, when the CLI reports it separately from `id`. */
+  name?: string
   status: string
 }
 
-/** Parse `container list --format json` into a normalised {id,status} list, tolerantly. */
+/** Whether a listed container is one we manage (matched on either the id or the name). */
+function isManaged(row: ListEntry): boolean {
+  return row.id.startsWith(NAME_PREFIX) || (row.name?.startsWith(NAME_PREFIX) ?? false)
+}
+
+/** Parse `container list --format json` into a normalised {id,name,status} list, tolerantly. */
 function parseList(stdout: string): ListEntry[] {
   const trimmed = stdout.trim()
   if (!trimmed) return []
@@ -54,9 +68,10 @@ function parseList(stdout: string): ListEntry[] {
     if (typeof row !== 'object' || row === null) continue
     const obj = row as Record<string, unknown>
     const config = (obj.configuration ?? obj.config) as Record<string, unknown> | undefined
-    const id = asString(obj.id) ?? asString(config?.id) ?? asString(obj.name)
+    const name = asString(obj.name) ?? asString(config?.name)
+    const id = asString(obj.id) ?? asString(config?.id) ?? name
     const status = (asString(obj.status) ?? asString(obj.state) ?? '').toLowerCase()
-    if (id) out.push({ id, status })
+    if (id) out.push({ id, name, status })
   }
   return out
 }
@@ -148,7 +163,11 @@ export class AppleContainerRuntimeAdapter implements ContainerRuntimeAdapter {
   async find(exec: ContainerExec, runId: string): Promise<string | undefined> {
     const name = runName(runId)
     const rows = parseList((await exec(['list', '--all', '--format', 'json'])).stdout)
-    return rows.find((r) => r.id === name)?.id
+    // The deterministic name is the addressable handle (inspect/delete accept it). Match it
+    // against either the `id` or the `name` field, since `container list`'s `id` may be a
+    // content hash rather than the assigned name depending on the CLI version.
+    const hit = rows.find((r) => r.id === name || r.name === name)
+    return hit ? name : undefined
   }
 
   async endpoint(exec: ContainerExec, containerId: string): Promise<ContainerEndpoint | undefined> {
@@ -174,11 +193,15 @@ export class AppleContainerRuntimeAdapter implements ContainerRuntimeAdapter {
   }
 
   async reapExited(exec: ContainerExec): Promise<number> {
+    // Reap only managed containers in a recognised TERMINAL state — never one whose status
+    // we can't parse, which could still be running (mirrors the Docker adapter's precise
+    // `status=exited` filter). Address by the assigned name when present (always a valid
+    // handle), else the id.
     const rows = parseList((await exec(['list', '--all', '--format', 'json'])).stdout).filter(
-      (r) => r.id.startsWith(NAME_PREFIX) && r.status !== 'running',
+      (r) => isManaged(r) && TERMINAL_STATUSES.has(r.status),
     )
     if (rows.length) {
-      await exec(['delete', '--force', ...rows.map((r) => r.id)]).catch(() => undefined)
+      await exec(['delete', '--force', ...rows.map((r) => r.name ?? r.id)]).catch(() => undefined)
     }
     return rows.length
   }

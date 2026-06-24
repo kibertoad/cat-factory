@@ -179,4 +179,32 @@ describe('AppleContainerRuntimeAdapter', () => {
     const del = calls.find((c) => c[0] === 'delete')!
     expect(del).toEqual(['delete', '--force', 'cf-a', 'cf-c'])
   })
+
+  it('never reaps a managed container with an unrecognised/empty status (could be running)', async () => {
+    const list = JSON.stringify([
+      { id: 'cf-a', status: 'stopped' }, // terminal → reaped
+      { id: 'cf-b', status: 'starting' }, // not terminal → left alone
+      { id: 'cf-c' }, // no status at all → left alone
+      { id: 'cf-d', status: 'EXITED' }, // case-insensitive terminal → reaped
+    ])
+    const { exec, calls } = fakeExec({ list })
+    expect(await adapter.reapExited(exec)).toBe(2)
+    const del = calls.find((c) => c[0] === 'delete')!
+    expect(del).toEqual(['delete', '--force', 'cf-a', 'cf-d'])
+  })
+
+  it('finds and reaps by the `name` field when `id` is a content hash', async () => {
+    // Some CLI versions report a hash `id` plus the assigned `--name` separately.
+    const list = JSON.stringify([
+      { id: 'sha256:deadbeef', name: 'cf-run_42', status: 'running' },
+      { id: 'sha256:c0ffee', name: 'cf-old', status: 'stopped' },
+    ])
+    const { exec, calls } = fakeExec({ list })
+    // find matches on `name` and returns the addressable deterministic handle.
+    expect(await adapter.find(exec, 'run_42')).toBe('cf-run_42')
+    // reap detects the managed container via its name and deletes by that handle.
+    expect(await adapter.reapExited(exec)).toBe(1)
+    const del = calls.find((c) => c[0] === 'delete')!
+    expect(del).toEqual(['delete', '--force', 'cf-old'])
+  })
 })
