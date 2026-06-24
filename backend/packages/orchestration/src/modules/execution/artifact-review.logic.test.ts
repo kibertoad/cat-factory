@@ -9,30 +9,36 @@ describe('reviewableArtifactOutput', () => {
       spec: {
         service: 'main-service',
         summary: 'A CRUD service.',
-        groups: [
+        modules: [
           {
-            name: 'Buildings',
-            summary: 'Manage buildings.',
-            requirements: [
+            name: 'Estate',
+            summary: 'Estate management.',
+            groups: [
               {
-                id: 'req-create-building',
-                title: 'Create building',
-                statement: 'The system SHALL create a building.',
-                kind: 'functional',
-                priority: 'must',
-                acceptance: [
+                name: 'Buildings',
+                summary: 'Manage buildings.',
+                requirements: [
                   {
-                    id: 'ac-1',
-                    given: 'a valid payload',
-                    when: 'POST /buildings',
-                    outcome: '201 returned',
+                    id: 'req-create-building',
+                    title: 'Create building',
+                    statement: 'The system SHALL create a building.',
+                    kind: 'functional',
+                    priority: 'must',
+                    acceptance: [
+                      {
+                        id: 'ac-1',
+                        given: 'a valid payload',
+                        when: 'POST /buildings',
+                        outcome: '201 returned',
+                      },
+                    ],
                   },
                 ],
+                rules: [{ id: 'rule-1', rule: 'Names are unique.', rationale: 'avoid clashes' }],
               },
             ],
           },
         ],
-        rules: [{ id: 'rule-1', rule: 'Names are unique.', rationale: 'avoid clashes' }],
       },
     }
     const out = reviewableArtifactOutput(result)

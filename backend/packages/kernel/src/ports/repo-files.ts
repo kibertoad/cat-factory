@@ -25,8 +25,8 @@ export interface RepoFiles {
   /**
    * Read a file's decoded UTF-8 content + blob sha on `gitRef` (a branch, tag or sha;
    * defaults to the repo's default branch), or null when the path is absent. Used by a
-   * pre-op to read a baseline artifact (e.g. `spec/spec.json`) into the agent's prompt,
-   * and by a post-op to read the prior `version.json` for the staleness counter.
+   * pre-op to read a baseline artifact (e.g. a `spec/modules/<m>/<g>.json` shard) into
+   * the agent's prompt, and by a post-op to read a prior artifact for change detection.
    */
   getFile(path: string, gitRef?: string): Promise<RepoFileContent | null>
   /**
