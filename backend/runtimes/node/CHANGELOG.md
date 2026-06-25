@@ -1,5 +1,21 @@
 # @cat-factory/node-server
 
+## 0.13.1
+
+### Patch Changes
+
+- Updated dependencies [494fb34]
+  - @cat-factory/server@0.16.1
+  - @cat-factory/kernel@0.15.1
+  - @cat-factory/integrations@0.12.1
+  - @cat-factory/agents@0.11.10
+  - @cat-factory/consensus@0.7.20
+  - @cat-factory/observability-langfuse@0.7.18
+  - @cat-factory/orchestration@0.10.8
+  - @cat-factory/provider-bedrock@0.7.20
+  - @cat-factory/provider-cloudflare@0.7.20
+  - @cat-factory/spend@0.8.12
+
 ## 0.13.0
 
 ### Minor Changes
