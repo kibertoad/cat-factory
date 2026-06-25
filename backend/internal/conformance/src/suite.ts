@@ -358,6 +358,7 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
           prompts: SandboxPromptVersion[]
           fixtures: SandboxFixture[]
           experiments: SandboxExperiment[]
+          maxCells: number
         }>('GET', `${base}/overview`)
         expect(overview.status).toBe(200)
         expect(overview.body.agentKinds.some((k) => k.agentKind === 'requirements-review')).toBe(
@@ -365,6 +366,8 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         )
         expect(overview.body.prompts.some((p) => p.origin === 'baseline')).toBe(true)
         expect(overview.body.fixtures.length).toBeGreaterThan(0)
+        // The cell cap is surfaced so the UI gates on the SAME limit instead of re-encoding it.
+        expect(overview.body.maxCells).toBeGreaterThan(0)
         const fixture = overview.body.fixtures.find((f) => f.kind === 'requirements')!
         expect(fixture).toBeTruthy()
 
@@ -493,6 +496,21 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         )
         expect(relaunched.status).toBe(200)
         expect(relaunched.body.runs).toHaveLength(2)
+
+        // Two CONCURRENT launches must not duplicate the grid: the experiment's atomic claim
+        // (`claimForRun`) lets exactly one win the run at a time, so whichever interleaving the
+        // real store produces, the grid still settles to exactly 2 cells (never 4) — and at
+        // least one launch succeeds rather than both 409-ing.
+        const [first, second] = await Promise.all([
+          call('POST', `${base}/experiments/${created.body.id}/launch`),
+          call('POST', `${base}/experiments/${created.body.id}/launch`),
+        ])
+        expect([first.status, second.status].some((s) => s === 200)).toBe(true)
+        const afterRace = await call<{ runs: unknown[] }>(
+          'GET',
+          `${base}/experiments/${created.body.id}`,
+        )
+        expect(afterRace.body.runs).toHaveLength(2)
       })
     })
 

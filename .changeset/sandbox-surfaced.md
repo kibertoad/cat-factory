@@ -64,7 +64,13 @@ agents, and the provider-for-scope resolution the Sandbox shares with the review
 one `resolveScopedModelProvider` kernel helper instead of two copies. The Sandbox window now surfaces a
 non-503 load failure (with a retry) instead of rendering an empty, healthy-looking panel.
 The fixture↔kind mapping the UI filters by now lives on the `@cat-factory/sandbox` catalog
-(`SandboxAgentKindMeta.fixtureKinds`) instead of a parallel frontend switch. NOTE: the
-run-driver still executes the matrix inline in the launch request (bounded by the cell cap
-+ token budget); a durable fan-out (Workflows / pg-boss) for large matrices remains a
-follow-up.
+(`SandboxAgentKindMeta.fixtureKinds`) instead of a parallel frontend switch. Concurrent
+launches of the same experiment are now serialised by an atomic
+`SandboxExperimentRepository.claimForRun` (a conditional transition to `running`, mirrored on
+D1 + Drizzle): only the winner clears + re-expands the result grid, so two simultaneous
+launches can't duplicate the grid or race the grid-clearing deletes, and the grid setup runs
+inside the terminal-status `finally` so a failure there can't strand the experiment
+`running`. The matrix cell cap is surfaced on the overview (`maxCells`) so the builder gates
+on the SAME limit instead of re-encoding the literal. NOTE: the run-driver still executes the
+matrix inline in the launch request (bounded by the cell cap + token budget); a durable
+fan-out (Workflows / pg-boss) for large matrices remains a follow-up.

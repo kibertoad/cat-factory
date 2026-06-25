@@ -235,6 +235,20 @@ export class D1SandboxExperimentRepository implements SandboxExperimentRepositor
       .bind(status, workspaceId, id)
       .run()
   }
+
+  async claimForRun(workspaceId: string, id: string): Promise<boolean> {
+    // Conditional update: only flips a non-running experiment to `running`. The affected-row
+    // count tells the caller whether it won the claim (false ⇒ already running). Atomic, so
+    // concurrent launches can't both clear + re-expand the grid (see the port doc).
+    const result = await this.db
+      .prepare(
+        `UPDATE experiments SET status = 'running'
+           WHERE workspace_id = ? AND id = ? AND status != 'running'`,
+      )
+      .bind(workspaceId, id)
+      .run()
+    return (result.meta?.changes ?? 0) > 0
+  }
 }
 
 // ---- runs -------------------------------------------------------------------

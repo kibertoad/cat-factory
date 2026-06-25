@@ -110,36 +110,49 @@ export class SandboxRunService {
     const fixtures = await this.resolveFixtures(workspaceId, experiment)
     const rubric = rubricFor(meta.rubric)
 
-    // A relaunch re-runs from scratch: drop the prior result grid (grades before runs, so
-    // the grade scoping subquery still resolves the cells) so cells don't accumulate.
-    await this.deps.sandboxGradeRepository.removeByExperiment(workspaceId, experimentId)
-    await this.deps.sandboxRunRepository.removeByExperiment(workspaceId, experimentId)
+    // Atomically claim the run BEFORE touching the grid: the conditional transition to
+    // `running` lets exactly one concurrent launch win, so two simultaneous launches can't
+    // both clear + re-expand the grid (duplicating cells) or race the grid-clearing deletes.
+    // The fast-path read above is just a friendly early error; THIS is the authoritative gate.
+    // Validation/resolution runs first, so a bad request never mutates state or strands the
+    // experiment `running`. The `finally` below settles the terminal status from here on.
+    if (!(await this.deps.sandboxExperimentRepository.claimForRun(workspaceId, experimentId))) {
+      throw new ConflictError('This experiment is already running.')
+    }
 
-    // Persist the queued grid first, then drive each cell.
-    const now = this.deps.clock.now()
-    const runs = expandMatrix(experiment, {
-      makeId: () => this.deps.idGenerator.next('sbr'),
-      labelFor: (id) => prompts.get(id)?.label ?? id,
-      now,
-    })
-    for (const run of runs) await this.deps.sandboxRunRepository.upsert(workspaceId, run)
-    await this.deps.sandboxExperimentRepository.setStatus(workspaceId, experimentId, 'running')
-
-    // Drive every cell synchronously to completion. The terminal status is derived from
-    // the cell outcomes and ALWAYS settled in `finally` — a thrown error (or every cell
-    // failing) leaves the experiment `failed`, never stuck `running`. NOTE: this runs the
-    // whole matrix inline in the request; the cell cap + token budget bound it, but a true
-    // durable fan-out (Workflows / pg-boss, like execution+bootstrap) is the proper home
-    // for large matrices and the tracked follow-up.
-    const budget = experiment.budgetTokens
-    let spent = 0
     // The experiment is a SCORED comparison: a cell only counts toward a successful
     // experiment once it is actually graded. A cell that produced candidate output but
     // whose grading failed is kept inspectable (status `done` + an error), but it does
     // NOT make the experiment look healthy — an experiment whose every grade failed
     // settles `failed`, not `done` with a grid of unscored `—` cells.
     let graded = 0
+    // Everything that mutates the grid runs INSIDE this try, so the `finally` settles the
+    // terminal status no matter where it throws — the claim above already set `running`, so
+    // a failure anywhere below can never strand the experiment in `running`.
     try {
+      // A relaunch re-runs from scratch: drop the prior result grid (grades before runs, so
+      // the grade scoping subquery still resolves the cells) so cells don't accumulate.
+      await this.deps.sandboxGradeRepository.removeByExperiment(workspaceId, experimentId)
+      await this.deps.sandboxRunRepository.removeByExperiment(workspaceId, experimentId)
+
+      // Persist the queued grid first, then drive each cell. (The claim above already set
+      // the experiment `running`.)
+      const now = this.deps.clock.now()
+      const runs = expandMatrix(experiment, {
+        makeId: () => this.deps.idGenerator.next('sbr'),
+        labelFor: (id) => prompts.get(id)?.label ?? id,
+        now,
+      })
+      for (const run of runs) await this.deps.sandboxRunRepository.upsert(workspaceId, run)
+
+      // Drive every cell synchronously to completion. The terminal status is derived from
+      // the cell outcomes and ALWAYS settled in `finally` — a thrown error (or every cell
+      // failing) leaves the experiment `failed`, never stuck `running`. NOTE: this runs the
+      // whole matrix inline in the request; the cell cap + token budget bound it, but a true
+      // durable fan-out (Workflows / pg-boss, like execution+bootstrap) is the proper home
+      // for large matrices and the tracked follow-up.
+      const budget = experiment.budgetTokens
+      let spent = 0
       for (const run of runs) {
         if (budget !== null && spent >= budget) {
           await this.failRun(workspaceId, run, 'Token budget exhausted before this cell ran.')

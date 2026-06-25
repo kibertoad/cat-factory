@@ -80,6 +80,12 @@ export interface SandboxOverview {
   prompts: SandboxPromptVersion[]
   fixtures: SandboxFixture[]
   experiments: SandboxExperiment[]
+  /**
+   * The matrix cell cap (the cost guard {@link MAX_SANDBOX_CELLS} enforced at create). Surfaced
+   * so the UI gates the builder on the SAME limit instead of re-encoding the literal, which
+   * would silently disagree if the cap ever changes.
+   */
+  maxCells: number
 }
 
 export interface SandboxServiceDependencies {
@@ -113,7 +119,13 @@ export class SandboxService {
       this.listFixtures(workspaceId),
       this.deps.sandboxExperimentRepository.list(workspaceId),
     ])
-    return { agentKinds: SANDBOX_AGENT_KINDS, prompts, fixtures, experiments }
+    return {
+      agentKinds: SANDBOX_AGENT_KINDS,
+      prompts,
+      fixtures,
+      experiments,
+      maxCells: MAX_SANDBOX_CELLS,
+    }
   }
 
   // ---- prompt versions ------------------------------------------------------

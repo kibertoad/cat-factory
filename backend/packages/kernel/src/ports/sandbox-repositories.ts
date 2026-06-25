@@ -38,6 +38,14 @@ export interface SandboxExperimentRepository {
   list(workspaceId: string): Promise<SandboxExperiment[]>
   upsert(workspaceId: string, experiment: SandboxExperiment): Promise<void>
   setStatus(workspaceId: string, id: string, status: SandboxExperimentStatus): Promise<void>
+  /**
+   * Atomically transition a NON-running experiment to `running`, returning whether THIS
+   * caller won the claim (a conditional `UPDATE … WHERE status != 'running'`). The run-driver
+   * uses it to serialise concurrent launches: only the winner clears + re-expands the result
+   * grid, so two simultaneous launches can't duplicate the grid or race the grid-clearing
+   * deletes. Returns false (a no-op) when the experiment is already running.
+   */
+  claimForRun(workspaceId: string, id: string): Promise<boolean>
 }
 
 export interface SandboxRunRepository {

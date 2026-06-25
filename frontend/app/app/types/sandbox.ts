@@ -147,6 +147,8 @@ export interface SandboxOverview {
   prompts: SandboxPromptVersion[]
   fixtures: SandboxFixture[]
   experiments: SandboxExperiment[]
+  /** The matrix cell cap (the backend cost guard), so the builder gates on the same limit. */
+  maxCells: number
 }
 
 /** An experiment with its result grid (`GET /sandbox/experiments/:id`, also from launch). */

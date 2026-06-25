@@ -31,6 +31,8 @@ export const useSandboxStore = defineStore('sandbox', () => {
   const fixtures = ref<SandboxFixture[]>([])
   const experiments = ref<SandboxExperiment[]>([])
   const models = ref<ModelOption[]>([])
+  /** The matrix cell cap (from the backend overview, so the builder gates on the same limit). */
+  const maxCells = ref(100)
 
   /** The currently-opened experiment's full detail (result grid), if any. */
   const detail = ref<SandboxExperimentDetail | null>(null)
@@ -41,6 +43,7 @@ export const useSandboxStore = defineStore('sandbox', () => {
     prompts.value = overview.prompts
     fixtures.value = overview.fixtures
     experiments.value = [...overview.experiments].sort((a, b) => b.createdAt - a.createdAt)
+    maxCells.value = overview.maxCells
   }
 
   /** Patch one experiment into the list in place (newest-first), without a full reload. */
@@ -154,6 +157,7 @@ export const useSandboxStore = defineStore('sandbox', () => {
     fixtures,
     experiments,
     models,
+    maxCells,
     selectableModels,
     detail,
     launching,

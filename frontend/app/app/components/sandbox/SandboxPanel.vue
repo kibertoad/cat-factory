@@ -62,7 +62,7 @@ const cellCount = computed(
     selectedFixtureIds.value.length,
 )
 
-const canRun = computed(() => cellCount.value > 0 && cellCount.value <= 100)
+const canRun = computed(() => cellCount.value > 0 && cellCount.value <= store.maxCells)
 
 function toggle(which: 'prompt' | 'model' | 'fixture', id: string, on: boolean) {
   const list =
@@ -309,7 +309,9 @@ const fixtureName = (id: string) => store.fixtures.find((f) => f.id === id)?.nam
             <div class="flex items-center justify-between">
               <span class="text-xs text-slate-500">
                 {{ cellCount }} cell{{ cellCount === 1 ? '' : 's' }}
-                <span v-if="cellCount > 100" class="text-rose-400"> (max 100)</span>
+                <span v-if="cellCount > store.maxCells" class="text-rose-400">
+                  (max {{ store.maxCells }})
+                </span>
               </span>
               <UButton
                 color="primary"

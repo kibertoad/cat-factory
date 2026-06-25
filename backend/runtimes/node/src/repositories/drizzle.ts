@@ -107,7 +107,7 @@ import {
   rowToSandboxRun,
   rowToWorkspace,
 } from '@cat-factory/server'
-import { and, desc, eq, gte, inArray, isNull, lt, or, sql } from 'drizzle-orm'
+import { and, desc, eq, gte, inArray, isNull, lt, ne, or, sql } from 'drizzle-orm'
 import type { DrizzleDb } from '../db/client.js'
 import {
   accountInvitations,
@@ -2416,6 +2416,24 @@ export class DrizzleSandboxExperimentRepository implements SandboxExperimentRepo
       .update(sandboxExperiments)
       .set({ status })
       .where(and(eq(sandboxExperiments.workspace_id, workspaceId), eq(sandboxExperiments.id, id)))
+  }
+
+  async claimForRun(workspaceId: string, id: string): Promise<boolean> {
+    // Conditional update: only flips a non-running experiment to `running`. `.returning()`
+    // reports whether this caller won the claim (empty ⇒ already running). Atomic, so
+    // concurrent launches can't both clear + re-expand the grid (see the port doc).
+    const rows = await this.db
+      .update(sandboxExperiments)
+      .set({ status: 'running' })
+      .where(
+        and(
+          eq(sandboxExperiments.workspace_id, workspaceId),
+          eq(sandboxExperiments.id, id),
+          ne(sandboxExperiments.status, 'running'),
+        ),
+      )
+      .returning({ id: sandboxExperiments.id })
+    return rows.length > 0
   }
 }
 
