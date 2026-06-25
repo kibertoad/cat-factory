@@ -1,5 +1,13 @@
 # @cat-factory/app
 
+## 0.26.1
+
+### Patch Changes
+
+- f4f954b: Drop an unnecessary empty-object fallback in a spread in `ProviderConnectionPanel`
+  (`...(x ?? {})` → `...x`); spreading a falsy value is already a no-op, so this is a
+  behaviour-neutral lint fix (oxlint `no-useless-fallback-in-spread`).
+
 ## 0.26.0
 
 ### Minor Changes
