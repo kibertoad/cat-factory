@@ -1,9 +1,15 @@
 <script setup lang="ts">
-// Direct-provider API keys: connect a vendor API key (OpenAI/Anthropic/Qwen/DeepSeek/
-// Moonshot) so agent steps and inline calls run on that provider. Keys are stored
-// encrypted in the DB, pooled and rotated by usage — replacing deployment env vars.
+// Provider API keys: connect a vendor API key so agent steps and inline calls run on
+// that provider. Keys are stored encrypted in the DB, pooled and rotated by usage —
+// replacing deployment env vars.
 //
-// Two modes:
+// `category` splits the providers into two kinds:
+//  - 'direct' (default): you reach the vendor directly (OpenAI/Anthropic/Qwen/DeepSeek/
+//    Moonshot).
+//  - 'proxy': an intermediary gateway that fronts many vendors behind one key
+//    (OpenRouter, LiteLLM). These are NOT direct vendors, so they get their own section.
+//
+// Two scopes:
 //  - Default (no `accountId`): manage WORKSPACE keys (shared by the team) and YOUR own
 //    keys (your personal pool, usable in any workspace), toggled by the Scope select.
 //  - With `accountId`: manage ACCOUNT-wide keys (shared by every workspace in the
@@ -11,7 +17,9 @@
 import { computed, ref, watch } from 'vue'
 import type { ApiKey, ApiKeyProvider } from '~/types/domain'
 
-const props = defineProps<{ accountId?: string }>()
+const props = withDefaults(defineProps<{ accountId?: string; category?: 'direct' | 'proxy' }>(), {
+  category: 'direct',
+})
 
 const workspace = useWorkspaceStore()
 const keys = useApiKeysStore()
@@ -21,13 +29,15 @@ const toast = useToast()
 /** Account-wide mode (single account scope) vs the default workspace/user toggle. */
 const isAccount = computed(() => !!props.accountId)
 
-/** Where to obtain each provider's API key + a short note. */
-const PROVIDERS: {
+interface ProviderMeta {
   value: ApiKeyProvider
   label: string
   url: string
   steps: string[]
-}[] = [
+}
+
+/** Direct vendors: the key reaches that one vendor's own endpoint. */
+const DIRECT_PROVIDERS: ProviderMeta[] = [
   {
     value: 'openai',
     label: 'OpenAI',
@@ -73,6 +83,10 @@ const PROVIDERS: {
       'Copy the key; it authenticates the OpenAI-compatible Moonshot endpoint.',
     ],
   },
+]
+
+/** Proxies / gateways: one key fronts many vendors. These are intermediaries, not vendors. */
+const PROXY_PROVIDERS: ProviderMeta[] = [
   {
     value: 'openrouter',
     label: 'OpenRouter',
@@ -93,8 +107,12 @@ const PROVIDERS: {
   },
 ]
 
+/** Providers for the requested category; labels everywhere fall back to the full set. */
+const PROVIDERS = computed(() => (props.category === 'proxy' ? PROXY_PROVIDERS : DIRECT_PROVIDERS))
+const ALL_PROVIDERS = [...DIRECT_PROVIDERS, ...PROXY_PROVIDERS]
+
 const scope = ref<'workspace' | 'user'>('workspace')
-const provider = ref<ApiKeyProvider>('openai')
+const provider = ref<ApiKeyProvider>(props.category === 'proxy' ? 'openrouter' : 'openai')
 const label = ref('')
 const key = ref('')
 const busy = ref(false)
@@ -115,17 +133,23 @@ watch(
   { immediate: true },
 )
 
-const selected = computed(() => PROVIDERS.find((p) => p.value === provider.value)!)
-const connected = computed<ApiKey[]>(() =>
-  isAccount.value
+const selected = computed(
+  () => PROVIDERS.value.find((p) => p.value === provider.value) ?? PROVIDERS.value[0]!,
+)
+
+/** Keys for the active scope, narrowed to this section's category (direct vs proxy). */
+const categoryProviders = computed(() => new Set(PROVIDERS.value.map((p) => p.value)))
+const connected = computed<ApiKey[]>(() => {
+  const all = isAccount.value
     ? keys.accountKeys
     : scope.value === 'workspace'
       ? keys.workspaceKeys
-      : keys.userKeys,
-)
+      : keys.userKeys
+  return all.filter((k) => categoryProviders.value.has(k.provider))
+})
 
 function providerLabel(p: ApiKeyProvider): string {
-  return PROVIDERS.find((x) => x.value === p)?.label ?? p
+  return ALL_PROVIDERS.find((x) => x.value === p)?.label ?? p
 }
 
 async function add() {
@@ -176,17 +200,34 @@ async function remove(k: ApiKey) {
   <div class="space-y-4">
     <div>
       <h4 class="text-xs font-semibold uppercase tracking-wide text-slate-500">
-        Direct provider API keys
+        {{ category === 'proxy' ? 'Proxy / gateway API keys' : 'Direct provider API keys' }}
       </h4>
-      <p v-if="isAccount" class="mt-1 text-sm text-slate-400">
-        Connect a vendor API key shared by <strong>every workspace</strong> in this account. Keys
-        are stored encrypted, pooled, and rotated by usage. Account keys are admin-managed.
-      </p>
-      <p v-else class="mt-1 text-sm text-slate-400">
-        Connect a vendor API key so models run directly on that provider. Keys are stored encrypted,
-        pooled, and rotated by usage. Scope a key to this <strong>workspace</strong> (shared with
-        the team) or to <strong>you</strong> (your own pool, usable anywhere).
-      </p>
+      <template v-if="category === 'proxy'">
+        <p v-if="isAccount" class="mt-1 text-sm text-slate-400">
+          Connect a <strong>proxy</strong> key (OpenRouter, LiteLLM) shared by
+          <strong>every workspace</strong> in this account. A proxy is an intermediary that fronts
+          many vendors behind a single key. Keys are stored encrypted, pooled, and rotated by usage.
+        </p>
+        <p v-else class="mt-1 text-sm text-slate-400">
+          Connect a <strong>proxy</strong> key (OpenRouter, LiteLLM). A proxy is an intermediary
+          that reaches many vendors' models through a single gateway, rather than one vendor
+          directly. Keys are stored encrypted, pooled, and rotated by usage. Scope a key to this
+          <strong>workspace</strong> (shared with the team) or to <strong>you</strong> (your own
+          pool, usable anywhere).
+        </p>
+      </template>
+      <template v-else>
+        <p v-if="isAccount" class="mt-1 text-sm text-slate-400">
+          Connect a vendor API key shared by <strong>every workspace</strong> in this account. Keys
+          are stored encrypted, pooled, and rotated by usage. Account keys are admin-managed.
+        </p>
+        <p v-else class="mt-1 text-sm text-slate-400">
+          Connect a vendor API key so models run directly on that provider. Keys are stored
+          encrypted, pooled, and rotated by usage. Scope a key to this
+          <strong>workspace</strong> (shared with the team) or to <strong>you</strong> (your own
+          pool, usable anywhere).
+        </p>
+      </template>
     </div>
 
     <!-- scope + provider -->
@@ -201,7 +242,7 @@ async function remove(k: ApiKey) {
           class="w-48"
         />
       </UFormField>
-      <UFormField label="Provider">
+      <UFormField :label="category === 'proxy' ? 'Proxy' : 'Provider'">
         <USelect
           v-model="provider"
           :items="PROVIDERS.map((p) => ({ label: p.label, value: p.value }))"

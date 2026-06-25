@@ -228,10 +228,13 @@ async function disconnectEmail() {
       </template>
     </section>
 
-    <!-- account-wide provider API keys (admin-only) -->
-    <section v-if="isAdmin">
+    <!-- account-wide provider API keys (admin-only): direct vendors + proxy gateways -->
+    <section v-if="isAdmin" class="space-y-6">
       <h3 class="mb-2 font-semibold text-white">Account API keys</h3>
-      <ProvidersApiKeysSection :account-id="accountId" />
+      <ProvidersApiKeysSection :account-id="accountId" category="direct" />
+      <div class="border-t border-slate-800 pt-6">
+        <ProvidersApiKeysSection :account-id="accountId" category="proxy" />
+      </div>
     </section>
   </div>
 </template>
