@@ -22,6 +22,7 @@ import { isLocalRunner, resolveInstanceTypeId } from '@cat-factory/contracts'
 import {
   type AgentRouting,
   coerceBlueprintService,
+  coerceSpecDoc,
   composeBlockSystemPrompt,
   FINAL_ANSWER_IN_REPLY,
   isReadOnlyAgentKind,
@@ -264,8 +265,11 @@ const BLUEPRINT_SYSTEM_PROMPT =
 
 /** Role prompt the spec-writer step runs under (returns the spec doc as JSON). */
 const SPEC_WRITER_SYSTEM_PROMPT =
-  'You maintain the PRESCRIPTIVE specification for a service. You are given the ' +
-  'specification already committed to the repository (the baseline) and the ' +
+  'You maintain the PRESCRIPTIVE specification for a service. READ the specification ' +
+  'already committed to the repository under `spec/` (the baseline): start with ' +
+  '`spec/overview.md` for the module → feature index, then open the relevant ' +
+  '`spec/modules/<module>/<feature>.json` shards for the detail you need. You are also ' +
+  'given the ' +
   'requirements of ONE task. Apply that task as an INCREMENT onto the baseline: add ' +
   'requirements for what the task introduces, and adjust existing requirements ONLY ' +
   'where the task changes their expected behaviour. Leave every other part of the ' +
@@ -315,6 +319,17 @@ const BLUEPRINT_SHAPE_HINT =
   'Expected a service tree: {"type": string, "name": string, "summary": string, ' +
   '"references": string[], "modules": [{"name": string, "summary": string, ' +
   '"references": string[]}]}.'
+
+/** Compact shape hint fed to the structured-output repair call for the spec doc. */
+const SPEC_SHAPE_HINT =
+  'Expected a requirements document with a two-level taxonomy — module (domain) → ' +
+  'group (feature) — where each group carries BOTH its requirements and the domain ' +
+  'rules scoped to it: {"service": string, "summary": string, "modules": [{"name": ' +
+  'string, "summary": string, "groups": [{"name": string, "summary": string, ' +
+  '"requirements": [{"id": string, "title": string, "statement": string, "kind": ' +
+  'string, "priority": string, "sourceBlockIds": string[], "acceptance": [{"given": ' +
+  'string, "when": string, "outcome": string}]}], "rules": [{"id": string, "rule": ' +
+  'string, "rationale": string, "sourceBlockIds": string[]}]}]}]}.'
 
 /** Compact shape hint fed to the structured-output repair call for the merger assessment. */
 const MERGE_ASSESSMENT_SHAPE_HINT =
@@ -779,8 +794,9 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       workBranchReady: boolean
     },
   ): { body: Record<string, unknown>; kind: RunnerDispatchKind } {
-    // `workBranchReady` is consumed by `buildRegisteredAgentBody` (via `parts`), not here.
-    const { common, webTools, repo, workBranch } = parts
+    // `workBranch`/`workBranchReady` are consumed by `buildRegisteredAgentBody` (via `parts`),
+    // not here — the remaining bespoke cases (conflict-resolver, tester) use the PR branch.
+    const { common, webTools, repo } = parts
     const prBranch = context.block.pullRequest?.branch
     const roleSystemPrompt = composeBlockSystemPrompt(
       systemPromptFor(context.agentKind),
@@ -808,37 +824,6 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     if (migrated) return migrated
 
     switch (context.agentKind) {
-      // The spec-writer commits the regenerated `spec/` folder onto the implementation
-      // branch — the earlier `coder` step's PR branch when present, else the
-      // deterministic `cat-factory/<blockId>` the coder WILL resume (created from base if
-      // absent). It NEVER targets the base branch: the spec is a prescriptive document
-      // for not-yet-landed work, so — like the feature-time blueprint — it must merge
-      // together WITH the feature, never reach `main` ahead of it. Its body carries ONLY
-      // this task's requirements (the block description already IS the task's reworked /
-      // incorporated requirements): the writer reads the baseline spec committed on the
-      // branch and applies this task as an increment, so an unmerged sibling task's work
-      // never bleeds in. Targets the harness `/spec` endpoint.
-      case SPEC_WRITER_AGENT_KIND:
-        return {
-          kind: 'spec',
-          body: {
-            ...common,
-            systemPrompt: SPEC_WRITER_SYSTEM_PROMPT,
-            instructions:
-              'Apply this task as an increment onto the specification already committed to ' +
-              'the repository: add requirements for what it introduces, adjust existing ' +
-              'ones only where it changes their behaviour, and leave the rest untouched. ' +
-              'Every requirement you add or change must carry COMPLETE acceptance-scenario ' +
-              'coverage. Return the complete updated specification.',
-            branch: workBranch,
-            task: {
-              id: context.block.id,
-              title: context.block.title,
-              description: context.block.description,
-            },
-          },
-        }
-
       // The conflict-resolver clones the PR head branch, merges the base in, resolves
       // the conflicts and pushes back to the SAME branch (no new branch / PR) so the
       // PR becomes mergeable and CI re-runs.
@@ -1026,6 +1011,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
                 kind: 'structured',
                 ...(step.output.shapeHint ? { shapeHint: step.output.shapeHint } : {}),
                 ...(step.output.repair === false ? { repair: false } : {}),
+                ...(step.output.failOnUnusableFinal ? { failOnUnusableFinal: true } : {}),
               },
             }
           : {}),
@@ -1079,6 +1065,34 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
           },
           BLUEPRINT_SYSTEM_PROMPT,
           blueprintUserPrompt(),
+        )
+      // The spec-writer maintains the prescriptive `spec/` document. It now runs as a
+      // read-only structured explore on the per-block WORK branch (clone `work` — the
+      // deterministic `cat-factory/<blockId>` the coder resumes, created from base when
+      // absent; it runs BEFORE the coder, so it SEEDS that branch). The agent READS the
+      // baseline spec from its own checkout (`spec/`), applies this ONE task as an increment,
+      // and returns the COMPLETE tree as JSON; the deterministic SHARD + commit of the
+      // `spec/` artifact that used to live in the harness `/spec` handler is the backend
+      // `specPostOp` (run from ExecutionService), and `toRunResult` coerces the JSON into the
+      // `spec` channel the engine strict-validates + that post-op renders/commits from. It
+      // NEVER targets base: the spec is prescriptive for not-yet-landed work, so it merges
+      // WITH the feature, never reaching `main` ahead of it.
+      case SPEC_WRITER_AGENT_KIND:
+        return this.buildRegisteredAgentBody(
+          context,
+          parts,
+          {
+            surface: 'container-explore',
+            clone: { branch: 'work' },
+            // The spec doc is handed onward to be sharded + committed by `specPostOp`, so a
+            // final answer cut off at the output ceiling must FAIL LOUDLY (the bespoke `/spec`
+            // handler's `unusableFinalAnswerCause` gate) rather than be laundered into a
+            // half-baked spec by the structured repair — exactly what drove the old
+            // spec-writer ⇄ companion rework loop.
+            output: { kind: 'structured', shapeHint: SPEC_SHAPE_HINT, failOnUnusableFinal: true },
+          },
+          SPEC_WRITER_SYSTEM_PROMPT,
+          specWriterUserPrompt(context),
         )
       // In-place fixers: clone the PR head branch, push fixes back onto it (no new PR);
       // a no-op run is a clean non-event (the gate/loop re-checks the real signal).
@@ -1192,6 +1206,19 @@ function toRunResult(result: RunnerJobResult, agentKind?: string): AgentRunResul
       return {
         output: result.summary?.trim() || 'Service blueprint updated.',
         ...(service ? { blueprintService: service } : {}),
+      }
+    }
+    // The migrated spec-writer returns its complete spec doc as `custom`; coerce it into the
+    // `spec` channel the engine strict-validates + the `specPostOp` shards/commits from. The
+    // doc must carry its OWN `service` name (the system prompt mandates it) — unlike the
+    // harness's `/spec` handler, which rescued a nameless reply with the repo name, the
+    // backend has no repo name in scope here and (backwards-compat being a non-goal) does
+    // NOT rescue: a nameless/garbage doc coerces to null ⇒ left unset (no ingest, no commit).
+    if (agentKind === SPEC_WRITER_AGENT_KIND) {
+      const spec = coerceSpecDoc(result.custom, '')
+      return {
+        output: result.summary?.trim() || 'Service specification updated.',
+        ...(spec ? { spec } : {}),
       }
     }
     if (agentKind === MERGER_AGENT_KIND) {
@@ -1361,6 +1388,42 @@ function blueprintUserPrompt(): string {
       'scratch. Return the COMPLETE tree (not a diff).',
     '',
     'Respond with ONLY the JSON object for the service tree — no prose, no code fences.',
+  ].join('\n')
+}
+
+/**
+ * The spec-writer's task prompt — the instructions + baseline-read + taxonomy-reuse guidance
+ * the bespoke harness `/spec` handler used to build (`buildUserPrompt`/`renderTaxonomyInventory`,
+ * which used to inject the baseline doc + its module→feature inventory). The agent now reads
+ * the baseline from its own read-only checkout under `spec/`, so the prompt tells it to read +
+ * reuse the existing taxonomy rather than pre-injecting it. Carries ONLY this task's
+ * requirements (the block description IS the task's reworked/incorporated requirements), so an
+ * unmerged sibling task's work never bleeds in. The backend `specPostOp` shards + commits the
+ * returned tree.
+ */
+function specWriterUserPrompt(context: AgentRunContext): string {
+  const block = context.block
+  const header = `### ${block.title || '(untitled task)'}${block.id ? ` (block ${block.id})` : ''}`
+  return [
+    'Apply this ONE task as an INCREMENT onto the service specification.',
+    '',
+    'First READ the specification already committed to the repository under `spec/` (the ' +
+      'baseline as merged before this task): open `spec/overview.md` for the module → feature ' +
+      'index, then the relevant `spec/modules/<module>/<feature>.json` shards. Keep every part ' +
+      'of the baseline this task does not touch exactly as-is, preserving its `sourceBlockIds`; ' +
+      'adjust an existing requirement only where this task changes its behaviour. Map each new ' +
+      'requirement/rule into the closest-fitting EXISTING module and feature, reusing its EXACT ' +
+      'name — create a new module or feature ONLY when nothing fits (never a near-duplicate). ' +
+      'If no spec exists yet, start one as a module (domain) → feature (group) taxonomy.',
+    '',
+    'Requirements for the ONE task to apply (its clarified description). Translate ONLY what ' +
+      'these state into prescriptive requirements with COMPLETE acceptance-scenario coverage — ' +
+      'do NOT invent requirements or fill gaps they leave:',
+    '',
+    `${header}\n\n${block.description?.trim() || '(no description)'}`,
+    '',
+    'Return the COMPLETE updated document (baseline plus this task’s increment), not a diff. ' +
+      'Respond with ONLY the JSON object for the requirements document — no prose, no code fences.',
   ].join('\n')
 }
 

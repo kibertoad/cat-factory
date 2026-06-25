@@ -950,6 +950,12 @@ export interface AgentOutputSpec {
   shapeHint?: string
   /** Whether to attempt the one-shot repair on a malformed reply (structured only). */
   repair?: boolean
+  /**
+   * Fail the run LOUDLY when the FINAL answer is unusable (cut off at the output ceiling,
+   * or empty) instead of repairing it — opt-in for kinds whose JSON deliverable is handed
+   * onward to be parsed/committed (e.g. the spec-writer). Absent ⇒ off.
+   */
+  failOnUnusableFinal?: boolean
 }
 
 /**
@@ -1026,6 +1032,9 @@ export function parseAgentJob(input: unknown): AgentJob {
           // when absent, so dropping `false` would silently re-enable the repair call for a
           // kind that opted out (it keys off `output.repair === false`).
           if (typeof so.repair === 'boolean') spec.repair = so.repair
+          // Carry the opt-in truncation gate through (document producers set it); dropping
+          // it would silently re-enable laundering a cut-off reply into a half-baked doc.
+          if (so.failOnUnusableFinal === true) spec.failOnUnusableFinal = true
           return spec
         })()
       : undefined

@@ -9,6 +9,7 @@ import {
   agentOutputTail,
   NEVER_ACTED_CAUSE,
   runAgentInWorkspace,
+  unusableFinalAnswerCause,
   withWorkspace,
 } from './pi-workspace.js'
 import {
@@ -77,7 +78,13 @@ async function runExploreMode(job: AgentJob, opts: RunOptions): Promise<AgentRes
     if (serviceDirectory) await mkdir(workDir, { recursive: true })
 
     log.info('agent(explore): running agent', { ...trace, serviceDirectory })
-    const { summary, stats, stderrTail, usage } = await runAgentInWorkspace(
+    const {
+      summary,
+      stats,
+      stderrTail,
+      usage,
+      diagnostics: runDiag,
+    } = await runAgentInWorkspace(
       {
         dir: workDir,
         systemPrompt: job.systemPrompt,
@@ -104,6 +111,22 @@ async function runExploreMode(job: AgentJob, opts: RunOptions): Promise<AgentRes
         stats,
         error: noOutputReason(stats, stderrTail),
         ...(usage ? { usage } : {}),
+      }
+    }
+
+    // Opt-in (document producers): a final answer cut off at the output ceiling — or empty —
+    // must FAIL LOUDLY here, BEFORE the structured repair below could launder a truncated
+    // reply into a half-baked doc the backend then shards/commits + hands onward. Mirrors the
+    // bespoke `/spec` handler's `unusableFinalAnswerCause` gate (which drove the old loop).
+    if (job.output?.kind === 'structured' && job.output.failOnUnusableFinal) {
+      const unusable = unusableFinalAnswerCause(runDiag)
+      if (unusable) {
+        return {
+          summary,
+          stats,
+          error: `the agent did not return a usable result: ${unusable}.${agentOutputTail(stderrTail, summary)}`,
+          ...(usage ? { usage } : {}),
+        }
       }
     }
 

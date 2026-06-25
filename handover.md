@@ -107,26 +107,31 @@ section + `backend/docs/custom-agents.md` are the current source of truth for th
    `migrate-blueprints-generic-kind.md`. **The `FakeGitHubClient.commitFiles` impls capture
    the whole input so `deletions` passes through transparently — no fake change needed.**
 
-4b. ⬜ **spec-writer** — NEXT. Same shape as blueprints but harder: `container-explore`
-   structured, clone `work` (always `cat-factory/<blockId>`; `resolveRepoOpBranch` default
-   already matches dispatch, so reuse the generic registered-kind branch path OR add to the
-   built-in map with clone `work`). `toRunResult` maps `custom`→`spec` (`coerceSpecDoc`).
-   The post-op (`specPostOp`, add to `repo-ops/builtin.ts` + the built-in map) SHARDS via
-   `renderSpecFiles`/`renderSpecFeatureFiles` + commits. Reproduce the harness `spec.ts`
-   reconcile: (a) ORPHAN-PRUNE removed canonical `modules/**` `.json`/`.md` shards (list via
-   `RepoFiles.listDirectory` recursively, delete those not in the desired set — the deletions
-   channel exists now); (b) SEED-ONCE Gherkin — only commit a `features/<m>/<g>.feature` that
-   is ABSENT (`getFile`/`listDirectory` check), never overwrite pass-2 polish; (c) drop the
-   legacy monolithic files (`spec/spec.json`/`rules.md`/`version.json` + flat
-   `features/*.feature`) on sight. Idempotency: spec has no version.json — compare each
-   rendered shard's bytes to the branch via `getFile` and skip the commit when ALL match and
-   there are no deletions (replay-safe). **Prompt redesign (needs a smoketest on a real
-   model — the designed gate, not a Windows step):** the explore agent must READ the baseline
-   from its own checkout (`spec/overview.md` + the `modules/**` shards) since the harness no
-   longer pre-injects it. Update `SPEC_WRITER_SYSTEM_PROMPT` ("READ the specification already
-   committed under `spec/`…") and add a `specWriterUserPrompt(context)` (mergerUserPrompt-style)
-   carrying the task increment + the read-the-baseline + reuse-the-taxonomy guidance that
-   `spec.ts` `buildUserPrompt`/`renderTaxonomyInventory` used to inject. No image bump.
+4b. ✅ **spec-writer** — DONE this branch (`migrate-spec-writer-generic-kind`, PR #196).
+   `spec-writer` dispatches `kind:'agent'` `mode:'explore'` structured, clone `work` (the
+   per-block `cat-factory/<blockId>`) via `buildMigratedBuiltInBody`; `toRunResult` coerces
+   `custom`→`spec` (`coerceSpecDoc`). The SHARD+commit is a BUILT-IN backend post-op
+   `specPostOp` (`@cat-factory/agents` `repo-ops/builtin.ts`) over `RepoFiles`, keyed by the
+   engine's built-in map (`builtInPostOps`). It reproduces the harness `spec.ts` reconcile:
+   (a) ORPHAN-PRUNE removed canonical `modules/**` shards (recursive `listDirectory` →
+   deletions channel); (b) SEED-ONCE Gherkin (only commit a `features/<m>/<g>.feature` that
+   is ABSENT, never overwrite); (c) drop the legacy monolithic files (`spec/spec.json`/
+   `rules.md`/`version.json` + flat `features/*.feature`) on sight. Idempotent: no
+   version.json, so it byte-compares each rendered shard via `getFile` and skips the commit
+   when ALL match + nothing to seed/prune (replay-safe). Branch resolution: `builtInRepoOpBranch`
+   is now kind-aware/async — spec-writer reuses `resolveRepoOpBranch({clone:'work'})` (ensure
+   work branch, matching dispatch); blueprints keeps `prBranch ?? baseBranch`. **Prompt
+   redesign (still wants a real-model smoketest as the rollout gate):** the explore agent now
+   READS the baseline from its own checkout — `SPEC_WRITER_SYSTEM_PROMPT` updated to point at
+   `spec/overview.md` + the `spec/modules/**` shards, and a new `specWriterUserPrompt(context)`
+   carries the task increment + read-the-baseline + reuse-the-taxonomy guidance the harness
+   `buildUserPrompt`/`renderTaxonomyInventory` used to inject. NO image bump (handleAgent
+   explore-structured already serves it). Tests: `containerAgentJobBody.spec.ts` snapshot +
+   spec pollJob coercion; `agents` `repo-ops/builtin.test.ts` (shard/seed-once/prune/legacy/
+   idempotency); conformance assertion (post-op shards+commits onto the work branch, both
+   runtimes). Changeset `migrate-spec-writer-generic-kind.md`. The dead `/spec` harness handler
+   is deleted in the harness-cleanup step (§8, image bump); `result.spec` in `toRunResult` is
+   now dead (removed when the kernel `RunnerJobResult.spec` is slimmed, §9).
 5. ⬜ **tester** — `container-explore` structured + INFRA stand-up. Grow the harness AgentJob
    with `infra?: {environment, noInfraDependencies?, composePath?, environmentUrl?}` and have
    `runExploreMode` run `standUpInfra`/`tearDownInfra` (lift from `tester.ts`) + fold the

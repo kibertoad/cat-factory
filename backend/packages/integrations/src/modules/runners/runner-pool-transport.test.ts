@@ -215,4 +215,34 @@ describe('HttpRunnerPoolProvider', () => {
     expect(view.result?.usage).toEqual({ inputTokens: 10, outputTokens: 5 })
     expect(view.result?.summary).toBe('tested')
   })
+
+  it('forwards the generic `custom` structured channel (migrated agent kinds)', async () => {
+    // The migrated, manifest-driven `agent` kinds (blueprints / spec-writer / merger /
+    // on-call) return their structured doc on `result.custom`; `toRunResult` coerces it
+    // backend-side. The Cloudflare/local transports return the harness view verbatim, so
+    // the pool provider MUST pass `custom` through too — dropping it silently lost the
+    // doc on a runner-pool backend (a facade-parity divergence).
+    const custom = { service: 'Widgets', summary: 'A widget service.', modules: [] }
+    vi.stubGlobal('fetch', () =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({ state: 'succeeded', result: { custom, summary: 'wrote the spec' } }),
+          { status: 200 },
+        ),
+      ),
+    )
+    const provider = new HttpRunnerPoolProvider()
+    const withResult: RunnerPoolManifest = {
+      ...manifest,
+      response: { ...manifest.response, resultPath: 'result' },
+    }
+    const view = await provider.poll({
+      manifest: withResult,
+      jobId: 'job-8',
+      resolveSecret: () => 't',
+    })
+    expect(view.state).toBe('done')
+    expect(view.result?.custom).toEqual(custom)
+    expect(view.result?.summary).toBe('wrote the spec')
+  })
 })

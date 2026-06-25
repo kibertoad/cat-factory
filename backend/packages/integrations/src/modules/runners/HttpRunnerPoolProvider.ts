@@ -344,9 +344,16 @@ export class HttpRunnerPoolProvider implements RunnerPoolProvider {
 /**
  * Coerce a scheduler's `result` envelope into the canonical {@link RunnerJobResult},
  * picking only the known fields by type. The structured products (`service` /
- * `spec` / `assessment` / `report`) are passed through verbatim for the engine to
- * strictly validate; the scalars/booleans are type-guarded. Anything unexpected is
- * dropped, so a malformed envelope can never inject junk into the run result.
+ * `spec` / `assessment` / `report` and the generic `custom`) are passed through
+ * verbatim for the engine to strictly validate; the scalars/booleans are type-guarded.
+ * Anything unexpected is dropped, so a malformed envelope can never inject junk into
+ * the run result.
+ *
+ * `custom` is the channel the migrated, manifest-driven `agent` kinds return their
+ * structured doc on (blueprints / spec-writer / merger / on-call); `toRunResult`
+ * coerces it backend-side. Dropping it here would silently lose those products on a
+ * runner-pool backend while the Cloudflare/local transports (which return the harness
+ * view verbatim) keep them — a facade-parity divergence.
  */
 function coerceRunnerResult(raw: unknown): Partial<RunnerJobResult> {
   if (typeof raw !== 'object' || raw === null) return {}
@@ -359,7 +366,9 @@ function coerceRunnerResult(raw: unknown): Partial<RunnerJobResult> {
   if (typeof o.pushed === 'boolean') out.pushed = o.pushed
   if (typeof o.resolved === 'boolean') out.resolved = o.resolved
   // Structured work products (carried as `unknown` on the port — the engine validates).
-  for (const k of ['service', 'spec', 'assessment', 'report'] as const) {
+  // `custom` is the generic `agent`-kind structured channel (blueprints/spec-writer/
+  // merger/on-call); it MUST pass through or the engine never coerces the doc.
+  for (const k of ['service', 'spec', 'assessment', 'report', 'custom'] as const) {
     if (o[k] !== undefined) out[k] = o[k]
   }
   const usage = o.usage
