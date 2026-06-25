@@ -124,9 +124,27 @@ export function createWebSearchUpstreamFromEnv(env: {
   WEB_SEARCH_SEARXNG_URL?: string
   WEB_SEARCH_SEARXNG_API_KEY?: string
 }): WebSearchUpstream | undefined {
-  const brave = env.WEB_SEARCH_BRAVE_API_KEY?.trim()
+  return createWebSearchUpstream({
+    braveApiKey: env.WEB_SEARCH_BRAVE_API_KEY,
+    searxngUrl: env.WEB_SEARCH_SEARXNG_URL,
+    searxngApiKey: env.WEB_SEARCH_SEARXNG_API_KEY,
+  })
+}
+
+/**
+ * Build the container web-search upstream from a resolved key config (the per-account
+ * settings store), or undefined when none is configured. Brave wins when its key is set,
+ * else a self-hosted SearXNG. The pure builder behind {@link createWebSearchUpstreamFromEnv}
+ * — used by the proxy to resolve the run's account upstream dynamically.
+ */
+export function createWebSearchUpstream(cfg: {
+  braveApiKey?: string
+  searxngUrl?: string
+  searxngApiKey?: string
+}): WebSearchUpstream | undefined {
+  const brave = cfg.braveApiKey?.trim()
   if (brave) return new BraveWebSearchUpstream(brave)
-  const searxng = env.WEB_SEARCH_SEARXNG_URL?.trim()
-  if (searxng) return new SearxngWebSearchUpstream(searxng, env.WEB_SEARCH_SEARXNG_API_KEY?.trim())
+  const searxng = cfg.searxngUrl?.trim()
+  if (searxng) return new SearxngWebSearchUpstream(searxng, cfg.searxngApiKey?.trim())
   return undefined
 }

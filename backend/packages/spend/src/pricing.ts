@@ -1,6 +1,6 @@
 import type { ModelRef } from '@cat-factory/kernel'
 import type { AgentTokenUsage } from '@cat-factory/kernel'
-import type { OpenRouterModelMeta } from '@cat-factory/contracts'
+import type { OpenRouterModelMeta, WorkspaceSettings } from '@cat-factory/contracts'
 
 // Pricing for the spend safeguard. Token usage is converted to a monetary cost
 // so a single, human-meaningful budget ("~100 EUR/month") can gate execution
@@ -124,6 +124,33 @@ export function withDynamicPrices(
     }
   }
   return { ...pricing, prices }
+}
+
+/**
+ * Resolve a workspace's effective pricing from the base table + its per-workspace
+ * budget overrides (currency / monthly limit / per-model price overrides). A null
+ * override falls back to the base value, so an unconfigured workspace gets the
+ * built-in defaults unchanged. Per-model overrides are overlaid onto the base table
+ * (most-specific-first resolution in {@link priceFor} is preserved). Returns a new
+ * {@link SpendPricing}; the input is not mutated.
+ */
+export function mergeSpendPricing(
+  base: SpendPricing,
+  overrides: Pick<
+    WorkspaceSettings,
+    'spendCurrency' | 'spendMonthlyLimit' | 'spendModelPrices'
+  > | null,
+): SpendPricing {
+  if (!overrides) return base
+  const prices = overrides.spendModelPrices
+    ? { ...base.prices, ...overrides.spendModelPrices }
+    : base.prices
+  return {
+    currency: overrides.spendCurrency ?? base.currency,
+    monthlyLimit: overrides.spendMonthlyLimit ?? base.monthlyLimit,
+    prices,
+    defaultPrice: base.defaultPrice,
+  }
 }
 
 /** Resolve the price for a model, most-specific entry first. */

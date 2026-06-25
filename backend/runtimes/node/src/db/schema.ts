@@ -119,6 +119,19 @@ export const emailConnections = pgTable('email_connections', {
   deleted_at: bigint('deleted_at', { mode: 'number' }),
 })
 
+// Per-account (deployment-wide) settings, moved out of env (mirror of D1 migration 0014's
+// `account_settings`). `config` is non-secret tuning JSON; `secrets_cipher` is ONE sealed
+// blob grouping every integration credential (domain tag 'cat-factory:account-settings');
+// `summary` is non-secret presence JSON. A missing row means all defaults.
+export const accountSettings = pgTable('account_settings', {
+  account_id: text('account_id').primaryKey(),
+  config: text('config').notNull(),
+  secrets_cipher: text('secrets_cipher'),
+  summary: text('summary').notNull().default('{}'),
+  created_at: bigint('created_at', { mode: 'number' }).notNull(),
+  updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
+})
+
 // Email invitations into an org account. Only the token's hash is stored.
 export const accountInvitations = pgTable(
   'account_invitations',
@@ -766,6 +779,11 @@ export const workspaceSettings = pgTable('workspace_settings', {
   task_limit_shared: integer('task_limit_shared'),
   // JSON object of per-type caps when task_limit_mode = 'per_type'; null otherwise.
   task_limit_per_type: text('task_limit_per_type'),
+  // Per-workspace spend budget (moved out of env). All nullable; null ⇒ the built-in
+  // DEFAULT_SPEND_PRICING base table. spend_model_prices is a JSON object of overrides.
+  spend_currency: text('spend_currency'),
+  spend_monthly_limit: doublePrecision('spend_monthly_limit'),
+  spend_model_prices: text('spend_model_prices'),
 })
 
 // Per-workspace merge threshold presets (mirror of D1 migration 0024's
@@ -806,6 +824,18 @@ export const mergeThresholdPresets = pgTable(
 export const observabilityConnections = pgTable('observability_connections', {
   workspace_id: text('workspace_id').primaryKey(),
   provider: text('provider').notNull(),
+  credentials: text('credentials').notNull(),
+  summary: text('summary').notNull().default('{}'),
+  created_at: bigint('created_at', { mode: 'number' }).notNull(),
+  updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
+})
+
+// Per-workspace incident-enrichment connection (PagerDuty + incident.io), moved out of
+// env onto a sealed row (mirror of D1 migration 0013's `incident_enrichment_connections`).
+// `credentials` is ONE sealed JSON blob { pagerDuty?, incidentIo? } (domain tag
+// 'cat-factory:incident-enrichment'); `summary` is a non-secret presence blob.
+export const incidentEnrichmentConnections = pgTable('incident_enrichment_connections', {
+  workspace_id: text('workspace_id').primaryKey(),
   credentials: text('credentials').notNull(),
   summary: text('summary').notNull().default('{}'),
   created_at: bigint('created_at', { mode: 'number' }).notNull(),

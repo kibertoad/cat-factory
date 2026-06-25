@@ -269,6 +269,17 @@ export {
   IncidentIoEnrichmentProvider,
   type IncidentIoEnrichmentProviderOptions,
 } from './modules/incidentio/IncidentIoEnrichmentProvider.js'
+export {
+  WorkspaceIncidentEnrichmentProvider,
+  INCIDENT_ENRICHMENT_CIPHER_INFO,
+  type WorkspaceIncidentEnrichmentProviderDependencies,
+} from './modules/incidentEnrichment/WorkspaceIncidentEnrichmentProvider.js'
+export {
+  AccountSettingsService,
+  ACCOUNT_SETTINGS_CIPHER_INFO,
+  type AccountSettingsServiceDependencies,
+  type ResolvedAccountSettings,
+} from './modules/accountSettings/AccountSettingsService.js'
 
 export {
   SendGridEmailSender,

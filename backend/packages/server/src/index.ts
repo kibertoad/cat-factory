@@ -164,7 +164,6 @@ export type {
   AppConfig,
   AuthConfig,
   ReleaseHealthConfig,
-  IncidentEnrichmentConfig,
   DocumentsConfig,
   EmailConfig,
   EnvironmentsConfig,

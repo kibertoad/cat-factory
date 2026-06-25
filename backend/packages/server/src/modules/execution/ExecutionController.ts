@@ -73,7 +73,7 @@ export function executionController(): Hono<AppEnv> {
 
   // Current spend-safeguard status (token usage vs budget for this period).
   app.get('/spend', async (c) => {
-    return c.json(await c.get('container').spendService.status())
+    return c.json(await c.get('container').spendService.status(param(c, 'workspaceId')))
   })
 
   // LLM observability for a run: the full per-call detail (prompts, responses,

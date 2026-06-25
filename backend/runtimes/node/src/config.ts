@@ -168,13 +168,8 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
   // bot-token onboarding works without them); when set they enable "Add to Slack".
   const slackEnabled = env.SLACK_ENABLED?.trim() === 'true'
   const slackEncryptionKey = env.ENCRYPTION_KEY?.trim() ?? ''
-  const slackClientId = env.SLACK_CLIENT_ID?.trim() ?? ''
-  const slackClientSecret = env.SLACK_CLIENT_SECRET?.trim() ?? ''
-  const slackRedirectUrl = env.SLACK_REDIRECT_URL?.trim() ?? ''
-  const slackOAuth =
-    slackClientId && slackClientSecret && slackRedirectUrl
-      ? { clientId: slackClientId, clientSecret: slackClientSecret, redirectUrl: slackRedirectUrl }
-      : undefined
+  // Slack app OAuth credentials moved out of env into per-account settings (sealed),
+  // resolved dynamically at connect time — see AccountSettingsService.
   const clientId = env.GITHUB_OAUTH_CLIENT_ID?.trim() ?? ''
   const clientSecret = env.GITHUB_OAUTH_CLIENT_SECRET?.trim() ?? ''
   const googleClientId = env.GOOGLE_OAUTH_CLIENT_ID?.trim() ?? ''
@@ -204,11 +199,10 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
     )
   }
 
-  const spend = {
-    ...DEFAULT_SPEND_PRICING,
-    currency: env.SPEND_CURRENCY?.trim() || DEFAULT_SPEND_PRICING.currency,
-    monthlyLimit: num(env.SPEND_MONTHLY_LIMIT) ?? DEFAULT_SPEND_PRICING.monthlyLimit,
-  }
+  // The deployment-level BASE pricing (built-in table + the fallback currency/monthly-limit
+  // a workspace inherits when it sets no budget of its own). The per-workspace budget moved
+  // out of env (`SPEND_*`) onto the workspace settings row; the spend service overlays it.
+  const spend = DEFAULT_SPEND_PRICING
 
   return {
     agents: {
@@ -320,33 +314,16 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
       : { enabled: false },
     slack:
       slackEnabled && slackEncryptionKey
-        ? {
-            enabled: true,
-            encryptionKey: slackEncryptionKey,
-            ...(slackOAuth ? { oauth: slackOAuth } : {}),
-          }
+        ? { enabled: true, encryptionKey: slackEncryptionKey }
         : { enabled: false },
     // Observability post-release-health: opt-in (`OBSERVABILITY_ENABLED=true`) + the
     // shared ENCRYPTION_KEY (the per-workspace provider credentials are sealed at rest).
-    // Mirrors the Worker.
+    // Mirrors the Worker. Incident-enrichment credentials (PagerDuty / incident.io) moved
+    // out of env into a per-workspace sealed row.
     releaseHealth:
       env.OBSERVABILITY_ENABLED === 'true' && env.ENCRYPTION_KEY?.trim()
         ? { enabled: true, encryptionKey: env.ENCRYPTION_KEY.trim() }
         : { enabled: false },
-    // Optional incident enrichment (annotate, never re-alert): deployment-level creds.
-    incidentEnrichment: {
-      ...(env.PAGERDUTY_API_TOKEN?.trim() && env.PAGERDUTY_FROM_EMAIL?.trim()
-        ? {
-            pagerDuty: {
-              apiToken: env.PAGERDUTY_API_TOKEN.trim(),
-              fromEmail: env.PAGERDUTY_FROM_EMAIL.trim(),
-            },
-          }
-        : {}),
-      ...(env.INCIDENTIO_API_KEY?.trim()
-        ? { incidentIo: { apiKey: env.INCIDENTIO_API_KEY.trim() } }
-        : {}),
-    },
     retention: {
       tokenUsageMs: (num(env.TOKEN_USAGE_RETENTION_DAYS) ?? 395) * 24 * 60 * 60 * 1000,
       rateLimitMs: (num(env.GITHUB_RATE_LIMIT_RETENTION_DAYS) ?? 7) * 24 * 60 * 60 * 1000,

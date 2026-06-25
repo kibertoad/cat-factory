@@ -31,8 +31,10 @@ import {
   OBSERVABILITY_CIPHER_INFO,
   RegistryReleaseHealthProvider,
   defaultObservabilityRegistry,
-  PagerDutyEnrichmentProvider,
-  IncidentIoEnrichmentProvider,
+  WorkspaceIncidentEnrichmentProvider,
+  INCIDENT_ENRICHMENT_CIPHER_INFO,
+  AccountSettingsService,
+  ACCOUNT_SETTINGS_CIPHER_INFO,
 } from '@cat-factory/integrations'
 import {
   type AgentExecutor,
@@ -51,7 +53,6 @@ import {
   type TaskConnectionRepository,
   type TaskSourceProvider,
   CompositeNotificationChannel,
-  CompositeIncidentEnrichmentProvider,
 } from '@cat-factory/kernel'
 import {
   type CoreDependencies,
@@ -87,7 +88,6 @@ import {
   WebCryptoWebhookVerifier,
   buildResolveRepoTarget,
   makeResolveRunRepoContext,
-  createWebSearchUpstreamFromEnv,
   ensureWorkBranchViaRest,
   logger,
   resolveUrlSafetyPolicy,
@@ -251,7 +251,6 @@ function selectNodeSlackDeps(
     slackSettingsRepository,
     slackMemberMappingRepository,
     slackSecretCipher: secretCipher,
-    ...(config.slack.oauth ? { slackOAuth: config.slack.oauth } : {}),
   }
 }
 
@@ -554,9 +553,10 @@ function buildNodeContainerExecutor(
         }
       : {}),
     proxyBaseUrl: `${publicUrl.replace(/\/+$/, '')}/v1`,
-    // Point container agents' web search at the backend search proxy (no provider key
-    // in the sandbox) whenever an upstream is configured for this deployment.
-    webSearchProxyEnabled: Boolean(createWebSearchUpstreamFromEnv(env)),
+    // Point container agents' web search at the backend search proxy (no provider key in
+    // the sandbox). Keys are per-account now (resolved per run by the proxy), so the tool
+    // is offered whenever the settings store is wired; the proxy 503s without account keys.
+    webSearchProxyEnabled: Boolean(env.ENCRYPTION_KEY?.trim()),
     githubApiBase: config.github.apiBase,
     // Forward container tool spans to Langfuse (when configured) as child spans under
     // the run trace — the same sink the LLM proxy fans generations out to.
@@ -1197,17 +1197,39 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
       secretCipher: observabilitySecretCipher,
       registry: defaultObservabilityRegistry,
     })
-    const enrichers: IncidentEnrichmentProvider[] = []
-    if (config.incidentEnrichment.pagerDuty) {
-      enrichers.push(new PagerDutyEnrichmentProvider(config.incidentEnrichment.pagerDuty))
-    }
-    if (config.incidentEnrichment.incidentIo) {
-      enrichers.push(new IncidentIoEnrichmentProvider(config.incidentEnrichment.incidentIo))
-    }
-    if (enrichers.length > 0) {
-      releaseHealthDeps.incidentEnrichment = new CompositeIncidentEnrichmentProvider(enrichers)
-    }
   }
+
+  // Per-workspace incident-enrichment (PagerDuty + incident.io): credentials moved out of
+  // env into a sealed per-workspace row, resolved + decrypted at enrichment time. Wired
+  // whenever the shared ENCRYPTION_KEY is present (independent of the release-health gate).
+  const encryptionKey = env.ENCRYPTION_KEY?.trim()
+  const incidentEnrichmentDeps: Partial<CoreDependencies> = {}
+  if (encryptionKey) {
+    const incidentEnrichmentSecretCipher = new WebCryptoSecretCipher({
+      masterKeyBase64: encryptionKey,
+      info: INCIDENT_ENRICHMENT_CIPHER_INFO,
+    })
+    incidentEnrichmentDeps.incidentEnrichmentConnectionRepository =
+      repos.incidentEnrichmentConnectionRepository
+    incidentEnrichmentDeps.incidentEnrichmentSecretCipher = incidentEnrichmentSecretCipher
+    incidentEnrichmentDeps.incidentEnrichment = new WorkspaceIncidentEnrichmentProvider({
+      incidentEnrichmentConnectionRepository: repos.incidentEnrichmentConnectionRepository,
+      secretCipher: incidentEnrichmentSecretCipher,
+    })
+  }
+
+  // Per-account deployment settings (Slack OAuth + web-search keys), built once so the
+  // service's short-TTL cache spans requests; the Slack OAuth resolver derives from it.
+  const accountSettings = encryptionKey
+    ? new AccountSettingsService({
+        accountSettingsRepository: repos.accountSettingsRepository,
+        secretCipher: new WebCryptoSecretCipher({
+          masterKeyBase64: encryptionKey,
+          info: ACCOUNT_SETTINGS_CIPHER_INFO,
+        }),
+        clock,
+      })
+    : undefined
 
   // Runner-pool URL/host guard, scoped to its own config (independent of the environment
   // allow-list); absent => strict public-https.
@@ -1215,6 +1237,8 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
 
   const dependencies: CoreDependencies = {
     ...releaseHealthDeps,
+    ...incidentEnrichmentDeps,
+    ...(accountSettings ? { accountSettings } : {}),
     workspaceRepository: repos.workspaceRepository,
     accountRepository: repos.accountRepository,
     membershipRepository: repos.membershipRepository,

@@ -1185,7 +1185,7 @@ export class ExecutionService {
     // runs on a flat-rate subscription (quota) model — Claude Code / Codex on a pooled
     // token — incurs no metered monetary cost and never contributes to the budget, so
     // it must not be held hostage by a budget other (metered) models exhausted.
-    if (await this.spend.isOverBudget()) {
+    if (await this.spend.isOverBudget(workspaceId)) {
       if (!(await this.currentStepIsQuotaBased(workspaceId, instance, step))) {
         if (instance.status !== 'paused') {
           instance.status = 'paused'

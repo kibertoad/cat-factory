@@ -31,7 +31,11 @@ export function workspaceSettingsController(): Hono<AppEnv> {
   app.put('/settings', jsonBody(updateWorkspaceSettingsSchema), async (c) => {
     const settings = requireSettings(c)
     if (!settings) return unavailable(c)
-    const updated = await settings.service.update(param(c, 'workspaceId'), c.req.valid('json'))
+    const workspaceId = param(c, 'workspaceId')
+    const updated = await settings.service.update(workspaceId, c.req.valid('json'))
+    // A budget edit must take effect immediately, not after the spend service's
+    // short pricing cache TTL — drop the workspace's cached pricing now.
+    c.get('container').spendService.invalidatePricing(workspaceId)
     return c.json(updated)
   })
 

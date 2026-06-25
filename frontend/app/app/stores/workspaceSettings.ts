@@ -9,6 +9,9 @@ const DEFAULTS: WorkspaceSettings = {
   taskLimitMode: 'off',
   taskLimitShared: null,
   taskLimitPerType: null,
+  spendCurrency: null,
+  spendMonthlyLimit: null,
+  spendModelPrices: null,
 }
 
 /**

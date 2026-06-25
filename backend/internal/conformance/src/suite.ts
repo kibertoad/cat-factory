@@ -212,6 +212,75 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
       })
     })
 
+    describe('per-workspace budget + incident-enrichment secrets', () => {
+      it('resolves a per-workspace budget set in settings, reflected in /spend (D1 ⇄ Postgres)', async () => {
+        const { call, createWorkspace } = harness.makeApp()
+        const { workspace } = await createWorkspace()
+        const wsId = workspace.id
+
+        // No override ⇒ the built-in deployment default budget.
+        const before = await call<{ costLimit: number; currency: string }>(
+          'GET',
+          `/workspaces/${wsId}/spend`,
+        )
+        expect(before.status).toBe(200)
+        expect(before.body.costLimit).toBe(100)
+        expect(before.body.currency).toBe('EUR')
+
+        // Setting a per-workspace budget must take effect immediately (the spend service's
+        // pricing cache is invalidated on the settings write) and round-trip through the
+        // new workspace_settings columns identically on both stores.
+        const put = await call('PUT', `/workspaces/${wsId}/settings`, {
+          spendMonthlyLimit: 250,
+          spendCurrency: 'USD',
+        })
+        expect(put.status).toBe(200)
+
+        const after = await call<{ costLimit: number; currency: string }>(
+          'GET',
+          `/workspaces/${wsId}/spend`,
+        )
+        expect(after.body.costLimit).toBe(250)
+        expect(after.body.currency).toBe('USD')
+      })
+
+      it('round-trips incident-enrichment credentials, redacted + sealed (D1 ⇄ Postgres)', async () => {
+        const { call, createWorkspace } = harness.makeApp()
+        const { workspace } = await createWorkspace()
+        const wsId = workspace.id
+
+        type View = {
+          connected: boolean
+          summary: { pagerDuty: boolean; incidentIo: boolean } | null
+        }
+        const initial = await call<View>('GET', `/workspaces/${wsId}/incident-enrichment`)
+        // Wired only when the facade has the shared encryption key; skip otherwise.
+        if (initial.status === 503) return
+        expect(initial.status).toBe(200)
+        expect(initial.body).toMatchObject({ connected: false, summary: null })
+
+        const put = await call<View>('PUT', `/workspaces/${wsId}/incident-enrichment`, {
+          pagerDuty: { apiToken: 'pd-secret-token', fromEmail: 'oncall@example.com' },
+        })
+        expect(put.status).toBe(200)
+        expect(put.body.summary).toEqual({ pagerDuty: true, incidentIo: false })
+        // The sealed token is NEVER surfaced on any read path.
+        expect(JSON.stringify(put.body)).not.toContain('pd-secret-token')
+
+        const view = await call<View>('GET', `/workspaces/${wsId}/incident-enrichment`)
+        expect(view.body).toMatchObject({
+          connected: true,
+          summary: { pagerDuty: true, incidentIo: false },
+        })
+        expect(JSON.stringify(view.body)).not.toContain('pd-secret-token')
+
+        const del = await call('DELETE', `/workspaces/${wsId}/incident-enrichment`)
+        expect(del.status).toBe(204)
+        const gone = await call<View>('GET', `/workspaces/${wsId}/incident-enrichment`)
+        expect(gone.body).toMatchObject({ connected: false, summary: null })
+      })
+    })
+
     describe('epics + dependency graph', () => {
       it('round-trips an epic node + a task’s epic membership identically on every store', async () => {
         const { call, createWorkspace } = harness.makeApp()

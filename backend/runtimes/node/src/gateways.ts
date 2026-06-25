@@ -12,7 +12,6 @@ import {
   type LlmUpstreamEndpoint,
   type RealtimeGateway,
   type RuntimeGateways,
-  createWebSearchUpstreamFromEnv,
 } from '@cat-factory/server'
 
 // Node implementations of the runtime gateway seams. Async GitHub ingest still falls
@@ -103,8 +102,8 @@ export function createNodeGateways(env: NodeJS.ProcessEnv): RuntimeGateways {
     githubBackfill: new InlineGitHubBackfillScheduler(),
     githubWebhook: new InlineGitHubWebhookIngest(),
     llmUpstream: new HttpLlmUpstream(env),
-    // Container web-search proxy upstream (Brave / self-hosted SearXNG from env);
-    // absent ⇒ the `/v1/web-search` route 503s and container web search stays off.
-    webSearch: createWebSearchUpstreamFromEnv(env),
+    // Container web-search upstream is resolved per-account by the proxy controller
+    // (keys moved out of env into the per-account settings store), so no boot-time
+    // gateway upstream is wired here.
   }
 }
