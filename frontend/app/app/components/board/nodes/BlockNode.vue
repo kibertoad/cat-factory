@@ -8,7 +8,6 @@ import AgentFailureCard from '~/components/board/AgentFailureCard.vue'
 import AgentStopButton from '~/components/board/AgentStopButton.vue'
 import { useBlockDrag } from '~/composables/useBlockDrag'
 import { useFrameResize } from '~/composables/useFrameResize'
-import { useTaskDisplacement } from '~/composables/useTaskDisplacement'
 
 // Vue Flow passes the node's `id` and `data` as props to custom node components.
 // Only frames are rendered as board nodes; their tasks live inside the card.
@@ -32,9 +31,6 @@ const typeMeta = computed(() => (block.value ? blockTypeMeta(block.value.type) :
 const directTasks = computed(() => board.tasksOf(props.id))
 const modules = computed(() => board.modulesOf(props.id))
 const allTasks = computed(() => board.allTasksUnder(props.id))
-// Compressed space inside this service's drop zone: an expanded task pushes the
-// sibling cards below it down so their pipeline lists don't pile up.
-const { dyOf: taskDy } = useTaskDisplacement(directTasks)
 const taskIds = computed(() => new Set(allTasks.value.map((t) => t.id)))
 const taskCount = computed(() => allTasks.value.length)
 const hasTasks = computed(() => taskCount.value > 0 || modules.value.length > 0)
@@ -57,9 +53,11 @@ const FRAME_LABEL: Record<BlockStatus, string> = {
 const statusLabel = computed(() => FRAME_LABEL[frameStatus.value])
 
 const selected = computed(() => ui.selectedBlockId === props.id)
-const expanded = computed(() => ui.isFrameExpanded(props.id))
-// At far zoom we only ever show the chip; otherwise an expanded frame shows tasks.
-const showExpanded = computed(() => expanded.value && lod.value !== 'far')
+// Services are always expanded to their task canvas, at every zoom level: there is no
+// chip/compact collapse, so panning is a fixed layout and zooming has no expand/collapse
+// transition to snap on. The far-chip and compact-summary branches in the template are
+// kept (gated off) so the prior behaviour is one edit away if we want chips back.
+const showExpanded = computed(() => true)
 
 // Surface a pending decision from this frame OR any of its tasks.
 const blockDecisions = computed(() =>
@@ -183,8 +181,10 @@ const ITEM_ICON: Record<string, string> = {
     </div>
 
     <!-- ===================== FAR: glanceable chip ===================== -->
+    <!-- Inert while services are always expanded (showExpanded is always true); the
+         compact branch below is reached via v-else-if and is likewise inert. -->
     <div
-      v-if="lod === 'far'"
+      v-if="!showExpanded && lod === 'far'"
       class="flex w-44 items-center gap-2 rounded-xl border-2 px-3 py-3 shadow-lg backdrop-blur"
       :class="[selected ? 'border-white' : '', pulseClass]"
       :style="{ borderColor: accent, backgroundColor: accent + '26' }"
@@ -418,7 +418,7 @@ const ITEM_ICON: Record<string, string> = {
           :style="{ width: canvas.w + 'px', height: canvas.h + 'px' }"
         >
           <ModuleFrame v-for="m in modules" :key="m.id" :module-id="m.id" />
-          <DraggableTask v-for="t in directTasks" :key="t.id" :task-id="t.id" :dy="taskDy(t.id)" />
+          <DraggableTask v-for="t in directTasks" :key="t.id" :task-id="t.id" />
           <button
             v-if="!hasTasks"
             type="button"

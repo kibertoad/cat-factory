@@ -3,7 +3,6 @@ import DraggableTask from './DraggableTask.vue'
 import { MODULE_META } from '~/utils/catalog'
 import { useBlockDrag } from '~/composables/useBlockDrag'
 import { useFrameResize } from '~/composables/useFrameResize'
-import { useTaskDisplacement } from '~/composables/useTaskDisplacement'
 
 const props = defineProps<{ moduleId: string }>()
 const board = useBoardStore()
@@ -11,8 +10,6 @@ const ui = useUiStore()
 
 const mod = computed(() => board.getBlock(props.moduleId))
 const tasks = computed(() => board.tasksOf(props.moduleId))
-// Compressed space: an expanded task pushes the sibling cards below it down.
-const { dyOf: taskDy } = useTaskDisplacement(tasks)
 const size = computed(() => board.containerSize(props.moduleId))
 const selected = computed(() => ui.selectedBlockId === props.moduleId)
 
@@ -73,7 +70,7 @@ function onResize(e: PointerEvent, edge: 'e' | 's' | 'se') {
 
     <!-- drop zone for this module's tasks -->
     <div :data-drop-zone="mod.id" class="relative" :style="{ height: size.h - 30 + 'px' }">
-      <DraggableTask v-for="t in tasks" :key="t.id" :task-id="t.id" :dy="taskDy(t.id)" />
+      <DraggableTask v-for="t in tasks" :key="t.id" :task-id="t.id" />
     </div>
 
     <!-- resize handles (drag the borders to resize the module, Miro-style) -->

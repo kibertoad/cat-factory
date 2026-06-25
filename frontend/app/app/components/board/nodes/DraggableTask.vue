@@ -2,9 +2,7 @@
 import TaskCard from './TaskCard.vue'
 import { useBlockDrag } from '~/composables/useBlockDrag'
 
-// `dy` is the compressed-space offset: an expanded sibling card above this one pushes
-// it down (see useTaskDisplacement), so its pipeline list doesn't overlap this card.
-const props = withDefaults(defineProps<{ taskId: string; dy?: number }>(), { dy: 0 })
+const props = defineProps<{ taskId: string }>()
 const board = useBoardStore()
 const task = computed(() => board.getBlock(props.taskId))
 const { draggingId, startDrag } = useBlockDrag()
@@ -27,7 +25,7 @@ function onHandle(e: PointerEvent) {
       class="absolute w-[180px]"
       :style="{
         left: task.position.x + 'px',
-        top: task.position.y + props.dy + 'px',
+        top: task.position.y + 'px',
         zIndex: draggingId === taskId ? 60 : 10,
         // While this task is being dragged it must not capture hit-tests, so the
         // drop-zone (service or module) beneath the cursor can be resolved on

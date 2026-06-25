@@ -11,9 +11,7 @@ import { STATUS_META } from '~/utils/catalog'
 import { readDndPayload, blockIdFromEvent } from '~/utils/dnd'
 import { BOARD_FLOW_ID } from '~/composables/useBoardFlow'
 import { useTaskExpansion } from '~/composables/useTaskExpansion'
-import { useFrameExpansion } from '~/composables/useFrameExpansion'
-import { computeDisplacement, type Offset } from '~/utils/boardDisplacement'
-import { lodAtLeast } from '~/composables/useSemanticZoom'
+import { computeDisplacement } from '~/utils/boardDisplacement'
 
 const board = useBoardStore()
 const pipelines = usePipelinesStore()
@@ -22,47 +20,30 @@ const ui = useUiStore()
 const github = useGitHubStore()
 const toast = useToast()
 
-const { onNodeDragStop, onViewportChange, screenToFlowCoordinate, viewport, setViewport } =
-  useVueFlow(BOARD_FLOW_ID)
+const { onNodeDragStop, onViewportChange, screenToFlowCoordinate } = useVueFlow(BOARD_FLOW_ID)
 
-// Gate which task cards expand their pipeline list on deep zoom (on-screen cards
-// only — see useTaskExpansion). The frame-level gate is the same idea one level up:
-// which service frames may auto-expand to their task canvas (see useFrameExpansion).
+// Gate which task cards expand their pipeline list on deep zoom: on-screen, and the
+// centre-most of any that would overlap (see useTaskExpansion). Service frames have no
+// such gate — they are always expanded to their task canvas (see frameOffsets below).
 const boardEl = ref<HTMLElement | null>(null)
 useTaskExpansion(boardEl)
-useFrameExpansion(boardEl)
-
-// Last cursor position over the board (client coords), or null when the pointer is
-// off the board. Compensation anchors on the service under the cursor so zooming in
-// keeps you on the service you were hovering, not whichever one is nearest centre.
-let lastPointer: { x: number; y: number } | null = null
-function onPointerMove(e: PointerEvent) {
-  lastPointer = { x: e.clientX, y: e.clientY }
-}
-function onPointerLeave() {
-  lastPointer = null
-}
 
 // Only frames are board nodes. Dependencies live on tasks (rendered inside the
 // frames), so there are no frame-to-frame edges on the canvas.
 //
 // Vue Flow tags every *draggable* node with the `nopan` class, which makes the
-// pane refuse to pan while the pointer is over it. An expanded frame fills much
-// of the viewport, so leaving it draggable turns the whole canvas into a dead
-// zone once tasks appear. We therefore make expanded frames non-draggable (the
-// pane pans straight through them) and move them via their header handle
-// instead — collapsed chips stay node-draggable since they're small.
-function frameExpanded(id: string) {
-  return ui.isFrameExpanded(id) && ui.lod !== 'far'
-}
+// pane refuse to pan while the pointer is over it. Service frames are always expanded
+// and fill much of the viewport, so leaving them draggable would turn the whole canvas
+// into a dead zone. We therefore make every frame non-draggable (the pane pans straight
+// through it) and move it via its header handle instead.
 
-// Compressed space: an expanded frame grows rightward / downward from its stored
-// top-left and would overlap its neighbours. Rather than collapsing one to resolve
-// the clash (the old behaviour, which made a service "snap out" as you scrolled
-// across it), we push the neighbours away by the growth so the expanded footprint
-// never overlaps a neighbour it wasn't already overlapping. This is a render-only
-// offset added to each node's position; stored block positions are never mutated.
-const FRAME_COLLAPSED_W = 224 // the compact `w-56` card
+// Services are always expanded to their full task canvas. An expanded card grows
+// rightward / downward from its stored (chip-sized) top-left and would overlap its
+// neighbours, so compressed space pushes the neighbours away by that growth: the
+// footprint never overlaps a neighbour it wasn't already overlapping. Because the
+// expanded set never changes, the layout is fixed — panning never shifts it and there
+// is no expand/collapse transition to snap on. Render-only; stored positions untouched.
+const FRAME_COLLAPSED_W = 224 // the stored chip footprint (`w-56`) the layout reserves
 const FRAME_COLLAPSED_H = 150
 const FRAME_CHROME_W = 40 // border + padding around the inner task canvas
 const FRAME_CHROME_H = 120 // top bar + header row + paddings above the canvas
@@ -70,21 +51,15 @@ const FRAME_CHROME_H = 120 // top bar + header row + paddings above the canvas
 const frameOffsets = computed(() => {
   const boxes = [
     ...board.frames.map((b) => {
-      let growX = 0
-      let growY = 0
-      if (frameExpanded(b.id)) {
-        const c = board.containerSize(b.id)
-        growX = Math.max(0, c.w + FRAME_CHROME_W - FRAME_COLLAPSED_W)
-        growY = Math.max(0, c.h + FRAME_CHROME_H - FRAME_COLLAPSED_H)
-      }
+      const c = board.containerSize(b.id)
       return {
         id: b.id,
         x: b.position.x,
         y: b.position.y,
         w: FRAME_COLLAPSED_W,
         h: FRAME_COLLAPSED_H,
-        growX,
-        growY,
+        growX: Math.max(0, c.w + FRAME_CHROME_W - FRAME_COLLAPSED_W),
+        growY: Math.max(0, c.h + FRAME_CHROME_H - FRAME_COLLAPSED_H),
       }
     }),
     // Epics never expand, but they're pushed aside like any other box so an expanded
@@ -106,169 +81,6 @@ function offsetOf(id: string) {
   return frameOffsets.value.get(id) ?? { dx: 0, dy: 0 }
 }
 
-// The rendered (displaced) rect of every frame, in flow units — top-left plus the
-// size it's actually drawn at (expanded card vs collapsed chip). Used to find the
-// service the camera is over when the zoom band flips.
-type Rect = { x: number; y: number; w: number; h: number }
-const frameRects = computed(() => {
-  const map = new Map<string, Rect>()
-  for (const b of board.frames) {
-    const o = offsetOf(b.id)
-    let w = FRAME_COLLAPSED_W
-    let h = FRAME_COLLAPSED_H
-    if (frameExpanded(b.id)) {
-      const c = board.containerSize(b.id)
-      w = c.w + FRAME_CHROME_W
-      h = c.h + FRAME_CHROME_H
-    }
-    map.set(b.id, { x: b.position.x + o.dx, y: b.position.y + o.dy, w, h })
-  }
-  return map
-})
-
-// Zooming out past the `close` band collapses every frame back to its stored
-// position, so all the room compressed space had reserved vanishes at once. If the
-// user had scrolled to the far end of an expanded service, the camera would be left
-// parked in the empty space where that displaced end used to be. We keep the last
-// expanded layout and, on the way out, recentre the camera on whichever service it
-// was over so it stays with the service instead of stranding in the void.
-let expandedSnapshot = new Map<string, Rect>()
-watch(frameRects, (rects) => {
-  if (lodAtLeast(ui.lod, 'close')) expandedSnapshot = rects
-})
-
-function recentreOnZoomOut() {
-  const el = boardEl.value
-  const vp = viewport.value
-  if (!el || !vp || !board.frames.length) return
-  const { width, height } = el.getBoundingClientRect()
-  // Viewport centre, in the (displaced) flow space that was on screen.
-  const cx = (width / 2 - vp.x) / vp.zoom
-  const cy = (height / 2 - vp.y) / vp.zoom
-  // The service under the camera: the expanded rect containing the centre, else the
-  // one whose centre is nearest it.
-  let anchorId: string | null = null
-  let best = Infinity
-  for (const b of board.frames) {
-    const r = expandedSnapshot.get(b.id)
-    if (!r) continue
-    if (cx >= r.x && cx <= r.x + r.w && cy >= r.y && cy <= r.y + r.h) {
-      anchorId = b.id
-      break
-    }
-    const d = (r.x + r.w / 2 - cx) ** 2 + (r.y + r.h / 2 - cy) ** 2
-    if (d < best) {
-      best = d
-      anchorId = b.id
-    }
-  }
-  const anchor = anchorId ? board.getBlock(anchorId) : undefined
-  if (!anchor) return
-  // Pan (keeping the new zoom) so the now-collapsed service sits at the screen centre.
-  const tx = anchor.position.x + FRAME_COLLAPSED_W / 2
-  const ty = anchor.position.y + FRAME_COLLAPSED_H / 2
-  void setViewport({ x: width / 2 - tx * vp.zoom, y: height / 2 - ty * vp.zoom, zoom: vp.zoom })
-}
-
-// Compensation state: the last layout we reconciled the camera against, and whether
-// we were in the expand band on the previous tick. Declared before the watches that
-// use them (the lod watch arms the baseline on band entry; see below).
-let prevOffsets = new Map<string, Offset>()
-let prevWasClose = false
-
-watch(
-  () => lodAtLeast(ui.lod, 'close'),
-  (isClose, wasClose) => {
-    if (isClose && !wasClose) {
-      // Entering the expand band: frames haven't expanded yet (the raf driver grants
-      // expansion a frame later), so capture the still-zero layout as the baseline and
-      // arm compensation NOW. The expansion that follows then pans against this zero
-      // baseline, keeping the service under the cursor put as you zoom in. Without
-      // this, the first frameOffsets change (the expansion itself) would be swallowed
-      // as the baseline and the zoom-in shift would never be compensated.
-      prevOffsets = frameOffsets.value
-      prevWasClose = true
-    }
-    if (wasClose && !isClose) {
-      prevWasClose = false
-      recentreOnZoomOut()
-    }
-  },
-)
-
-// The on-screen point compensation should hold steady, in flow units: the cursor
-// when it's over the board (so zoom-to-cursor keeps you on the hovered service),
-// else the viewport centre.
-function anchorFlowPoint(rect: DOMRect, vp: { x: number; y: number; zoom: number }) {
-  const rx = lastPointer ? lastPointer.x - rect.left : rect.width / 2
-  const ry = lastPointer ? lastPointer.y - rect.top : rect.height / 2
-  return { x: (rx - vp.x) / vp.zoom, y: (ry - vp.y) / vp.zoom }
-}
-
-// The frame nearest the anchor point, in the displaced layout described by `offsets`
-// (the rect containing the point, else the closest by centre distance).
-function frameAnchorId(offsets: Map<string, Offset>, cx: number, cy: number): string | null {
-  let anchorId: string | null = null
-  let best = Infinity
-  for (const b of board.frames) {
-    const o = offsets.get(b.id) ?? { dx: 0, dy: 0 }
-    const x = b.position.x + o.dx
-    const y = b.position.y + o.dy
-    let w = FRAME_COLLAPSED_W
-    let h = FRAME_COLLAPSED_H
-    if (frameExpanded(b.id)) {
-      const c = board.containerSize(b.id)
-      w = c.w + FRAME_CHROME_W
-      h = c.h + FRAME_CHROME_H
-    }
-    if (cx >= x && cx <= x + w && cy >= y && cy <= y + h) return b.id
-    const d = (x + w / 2 - cx) ** 2 + (y + h / 2 - cy) ** 2
-    if (d < best) {
-      best = d
-      anchorId = b.id
-    }
-  }
-  return anchorId
-}
-
-// Keep the service under the camera visually put when compressed space shifts it.
-// Sticky expansion (see useFrameExpansion) already stops the scroll-RIGHT snap: a
-// frame you've passed never collapses, so the room reserved to a navigated frame's
-// left can't vanish. This handles the mirror case (scrolling LEFT, a frame entering
-// from the left edge expands rightward and shoves the on-screen content right): we pan
-// the camera by the same displacement delta at the frame under the viewport centre,
-// so it stays put and the band shows zero on-screen snap. Sticky grants make this
-// oscillation-free: the compensating pan can only reveal frames further out (which
-// push their own right neighbours off-screen, never the anchor), never collapse one.
-watch(frameOffsets, (offsets) => {
-  const isClose = lodAtLeast(ui.lod, 'close')
-  // Only compensate while in the expand band and already armed. The band-entry
-  // baseline is captured by the lod watch above; the band-exit collapse is handled by
-  // the zoom-out recentre. Both are skipped here.
-  if (!isClose || !prevWasClose) {
-    prevOffsets = offsets
-    prevWasClose = isClose
-    return
-  }
-  const el = boardEl.value
-  const vp = viewport.value
-  if (el && vp && board.frames.length && prevOffsets.size) {
-    const { x: cx, y: cy } = anchorFlowPoint(el.getBoundingClientRect(), vp)
-    const anchorId = frameAnchorId(prevOffsets, cx, cy)
-    if (anchorId) {
-      const prev = prevOffsets.get(anchorId) ?? { dx: 0, dy: 0 }
-      const next = offsets.get(anchorId) ?? { dx: 0, dy: 0 }
-      const ddx = next.dx - prev.dx
-      const ddy = next.dy - prev.dy
-      if (ddx !== 0 || ddy !== 0) {
-        void setViewport({ x: vp.x - ddx * vp.zoom, y: vp.y - ddy * vp.zoom, zoom: vp.zoom })
-      }
-    }
-  }
-  prevOffsets = offsets
-  prevWasClose = isClose
-})
-
 const nodes = computed(() => [
   ...board.frames.map((b) => {
     const o = offsetOf(b.id)
@@ -276,7 +88,9 @@ const nodes = computed(() => [
       id: b.id,
       type: 'block',
       position: { x: b.position.x + o.dx, y: b.position.y + o.dy },
-      draggable: !frameExpanded(b.id),
+      // Always-expanded frames fill the viewport; keep them non-draggable so the pane
+      // pans through them (they move via their header handle, see BlockNode).
+      draggable: false,
       data: {},
     }
   }),
@@ -295,8 +109,8 @@ const nodes = computed(() => [
 ])
 
 onNodeDragStop(({ node }) => {
-  // node.position carries the render offset (a dragged collapsed frame can be one a
-  // neighbour pushed aside); subtract it so we persist the un-displaced position.
+  // node.position carries the render offset (compressed space can have pushed this node
+  // aside); subtract it so we persist the un-displaced position.
   const o = offsetOf(node.id)
   board.moveBlock(node.id, { x: node.position.x - o.dx, y: node.position.y - o.dy })
 })
@@ -374,14 +188,7 @@ async function onDrop(event: DragEvent) {
 </script>
 
 <template>
-  <div
-    ref="boardEl"
-    class="relative h-full w-full"
-    @drop="onDrop"
-    @dragover="onDragOver"
-    @pointermove="onPointerMove"
-    @pointerleave="onPointerLeave"
-  >
+  <div ref="boardEl" class="relative h-full w-full" @drop="onDrop" @dragover="onDragOver">
     <VueFlow
       :id="BOARD_FLOW_ID"
       :nodes="nodes"
