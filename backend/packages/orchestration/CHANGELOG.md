@@ -1,5 +1,17 @@
 # @cat-factory/orchestration
 
+## 0.19.2
+
+### Patch Changes
+
+- a62044d: Tag 409 conflicts with a distinct, machine-readable `reason` (kernel `ConflictReason`, surfaced under `error.details`) so the SPA can tell run-control conflicts apart. The "no configured provider" start refusal now shows an actionable toast naming the model(s) with a "Configure AI" jump (same remedy as the no-AI startup banner); the other run/bootstrap conflicts get worded toasts. The toast handling is centralised in the execution/agentRuns stores, so every start/restart/retry/merge surface (including the fire-and-forget board menus) gets it.
+- Updated dependencies [a62044d]
+  - @cat-factory/kernel@0.26.1
+  - @cat-factory/agents@0.14.5
+  - @cat-factory/integrations@0.18.3
+  - @cat-factory/spend@0.8.26
+  - @cat-factory/workspaces@0.7.32
+
 ## 0.19.1
 
 ### Patch Changes
