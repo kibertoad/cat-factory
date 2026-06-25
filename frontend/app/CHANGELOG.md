@@ -1,5 +1,63 @@
 # @cat-factory/app
 
+## 0.20.0
+
+### Minor Changes
+
+- 1a1d1af: Make OpenRouter a first-class provider in the UI.
+
+  - The "Models & providers" group now sits at the top of the Integrations hub, with **OpenRouter** as its lead item (showing a "Key connected" badge once a key exists), ahead of "Vendors & keys" and "My local runners".
+  - The OpenRouter panel is now a self-contained one-stop setup: connect your OpenRouter key inline (no detour through Vendors & keys), the live catalog auto-refreshes the moment a key exists, and a one-click "Enable recommended" ticks the popular gateway models. Saving the enabled set refreshes the model picker immediately. The Vendors & keys → Proxies tab remains a valid secondary entry point for the key.
+
+## 0.19.0
+
+### Minor Changes
+
+- 25efe48: Add UI-configurable provider config + per-user GitHub PAT, with provider self-describe and connection-test.
+
+  - Providers self-describe the config they expect (`describeConfig`) and can be connection-tested (`testConnection`) before saving — added as optional methods on the `EnvironmentProvider` and `RunnerPoolProvider` kernel ports, implemented by the generic HTTP adapters (secret-key fields from the manifest + an authed probe), and surfaced via new `GET …/environments/provider`, `POST …/environments/connection/test`, `GET …/runner-pool/provider`, `POST …/runner-pool/connection/test` endpoints. The SPA renders the descriptor fields generically.
+  - New generic, `kind`-discriminated per-user secret store (`user_secrets`, mirrored D1 ⇄ Drizzle) with `UserSecretService` + a kind registry (first kind: `github_pat`). User-scoped `GET/POST/DELETE /user-secrets` + `…/test`; a "My GitHub token" entry under Integrations → Source control.
+  - A run you initiate now prefers YOUR stored GitHub PAT over the deployment's GitHub App / env token for the container push token AND the engine CI-gate + merge reads (resolved by the run initiator via an ambient `RunInitiatorScope`), falling back to the existing source when you have none. Wired symmetrically across the Cloudflare, Node and local facades.
+
+  Breaking: none for existing data. The local-mode `GITHUB_PAT` env var still works as a fallback.
+
+## 0.18.1
+
+### Patch Changes
+
+- c7b8012: Improve the requirements-review experience.
+
+  **Auto-save answers (no button).** The requirements-review window no longer has a "Save
+  answer" button: an answer is seeded into its textarea from the recorded reply and persisted
+  on blur (and flushed before incorporate/proceed), so a value just needs to be typed.
+
+  **"Recommend something" + the Requirement Writer.** A finding can now be marked for a
+  grounded recommendation instead of being answered or dismissed. A new second companion of
+  the requirements reviewer — the **Requirement Writer** (an inline LLM call, `WRITER_SYSTEM_PROMPT`
+  `requirement-writer@v1`) — produces a suggested answer per finding, grounded in this
+  precedence order: the block's **best-practice fragments** (team/org standards — checked
+  FIRST; a match is flagged as the "current standard" and surfaced with a badge), then the
+  in-repo `spec/` + `tech-spec/` (via the checkout-free `RepoFiles` port), then web search
+  (provider-hosted on Anthropic/OpenAI models; gateway-RAG wiring lands separately).
+  Recommendations are NOT AI-reviewed — the human accepts (it becomes the finding's answer,
+  folded into the next incorporation), rejects, or re-requests with a "do it differently"
+  note. Recommendations are a first-class collection on the review that survives the re-review
+  item churn.
+
+  - Contracts: `recommend_requested` item status, `RequirementRecommendation` +
+    `recommendations[]` on `RequirementReview`, and the request schemas.
+  - Persistence (both runtimes): a `recommendations` JSON column on `requirement_reviews`
+    (new D1 migration `0009` ⇄ Drizzle column + generated migration).
+  - Service: `RequirementReviewService.recommend` / `acceptRecommendation` /
+    `rejectRecommendation` / `reRequestRecommendation`, with optional `resolveRunRepoContext`
+    - best-practice-fragment resolver deps (degrade gracefully when unwired).
+  - Controller: `POST /blocks/:blockId/requirement-review/recommend` and the
+    `…/recommendations/:recId/{accept,reject,re-request}` routes.
+
+  **Board progress for the review companions.** While the review is incorporating, re-reviewing
+  or recommending, the board task card / mini-pipeline / inspector now show a spinning stage
+  label (`Recommending…` added alongside the existing `Incorporating…` / `Re-reviewing…`).
+
 ## 0.18.0
 
 ### Minor Changes

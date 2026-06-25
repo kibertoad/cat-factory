@@ -138,3 +138,15 @@ export const updateRunnerPoolSecretsSchema = v.object({
   secrets: v.record(v.string(), v.string()),
 })
 export type UpdateRunnerPoolSecretsInput = v.InferOutput<typeof updateRunnerPoolSecretsSchema>
+
+/**
+ * Test (probe) a pool connection before saving. A manifest-driven pool supplies
+ * the candidate `manifest` + `secrets`; a native pool provider supplies its
+ * `config` + `secrets`. Nothing is persisted by a test.
+ */
+export const testRunnerPoolConnectionSchema = v.object({
+  manifest: v.optional(runnerPoolManifestSchema),
+  config: v.optional(v.record(v.string(), v.string())),
+  secrets: v.optional(v.record(v.string(), v.string())),
+})
+export type TestRunnerPoolConnectionInput = v.InferOutput<typeof testRunnerPoolConnectionSchema>

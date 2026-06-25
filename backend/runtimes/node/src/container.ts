@@ -17,6 +17,7 @@ import {
   OpenRouterCatalogService,
   usdRateForSpendCurrency,
   PersonalSubscriptionService,
+  UserSecretService,
   ProviderSubscriptionService,
   RunnerPoolConnectionService,
   RunnerPoolTransport,
@@ -46,6 +47,7 @@ import {
   type NotificationChannel,
   type RateLimitRepository,
   type RateLimitSnapshot,
+  type ResolveUserGitHubToken,
   type TaskConnectionRepository,
   type TaskSourceProvider,
   CompositeNotificationChannel,
@@ -59,6 +61,7 @@ import {
 import { createLangfuseSink } from '@cat-factory/observability-langfuse'
 import {
   type AppConfig,
+  type MintInstallationToken,
   type ResolveRepoTarget,
   type ResolveRunnerTransport,
   type ServerContainer,
@@ -76,6 +79,8 @@ import {
   GitHubBranchUpdater,
   GitHubPullRequestMerger,
   InAppNotificationChannel,
+  PatPreferringAppRegistry,
+  runWithInitiator,
   WebCryptoPasswordHasher,
   WebCryptoPersonalSecretCipher,
   WebCryptoSecretCipher,
@@ -118,6 +123,7 @@ import {
   DrizzleSubscriptionActivationRepository,
 } from './repositories/personalSubscription.js'
 import { DrizzleLocalModelEndpointRepository } from './repositories/localModelEndpoint.js'
+import { DrizzleUserSecretRepository } from './repositories/userSecret.js'
 import { DrizzleProviderModelCatalogRepository } from './repositories/providerModelCatalog.js'
 import { createDrizzleRepositories } from './repositories/drizzle.js'
 import {
@@ -475,6 +481,7 @@ function buildNodeContainerExecutor(
   subscriptions?: ProviderSubscriptionService,
   personalSubscriptions?: PersonalSubscriptionService,
   resolveAccountId?: (workspaceId: string) => Promise<string | null | undefined>,
+  resolveUserGitHubToken?: ResolveUserGitHubToken,
 ): AgentExecutor | null {
   // The harness reaches models only through this service's LLM proxy; `PUBLIC_URL`
   // is this service's externally reachable base (the runner pool / local container
@@ -486,10 +493,19 @@ function buildNodeContainerExecutor(
 
   // Token source: an explicit override (e.g. a static PAT in local mode) wins; else
   // the GitHub App registry mints a per-installation token (when the App is configured).
-  const mintInstallationToken =
+  const baseMint =
     mintInstallationTokenOverride ??
     (appRegistry ? (id: number) => appRegistry.installationToken(id) : undefined)
-  if (!mintInstallationToken) return null
+  if (!baseMint) return null
+  // Prefer the run initiator's per-user PAT (when stored) over the App/env token, so
+  // pushes/PRs are attributed to them. Falls back to the base mint otherwise.
+  const mintInstallationToken: MintInstallationToken = async (installationId, ctx) => {
+    if (resolveUserGitHubToken && ctx?.initiatedBy) {
+      const pat = await resolveUserGitHubToken(ctx.initiatedBy)
+      if (pat) return pat
+    }
+    return baseMint(installationId)
+  }
 
   return new ContainerAgentExecutor({
     resolveTransport,
@@ -673,6 +689,25 @@ function buildNodeLocalModelEndpointService(
 }
 
 /**
+ * Build the per-USER generic secret service (a GitHub PAT today), or undefined when the
+ * shared ENCRYPTION_KEY is absent. Single system-cipher (no password layer); also backs
+ * `ResolveUserGitHubToken`. Mirror of the Worker's `buildUserSecretService`.
+ */
+function buildNodeUserSecretService(
+  env: NodeJS.ProcessEnv,
+  db: DrizzleDb,
+  clock: Clock,
+): UserSecretService | undefined {
+  const masterKeyBase64 = env.ENCRYPTION_KEY?.trim()
+  if (!masterKeyBase64) return undefined
+  return new UserSecretService({
+    userSecretRepository: new DrizzleUserSecretRepository(db),
+    secretCipher: new WebCryptoSecretCipher({ masterKeyBase64, info: 'cat-factory:user-secret' }),
+    clock,
+  })
+}
+
+/**
  * The per-WORKSPACE OpenRouter dynamic-catalog service, or undefined when the API-key pool
  * isn't wired (no ENCRYPTION_KEY) — refresh leases the workspace's pooled OpenRouter key.
  * Mirror of the Worker's `buildOpenRouterCatalogService`.
@@ -807,6 +842,14 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   // the local-runner controller, the per-user model catalog, the inline model provider,
   // and the LLM proxy.
   const localModelEndpoints = buildNodeLocalModelEndpointService(env, options.db, clock)
+  // The per-user generic secret store (a GitHub PAT today), shared by the user-secret
+  // controller and the run-initiator PAT resolver below.
+  const userSecrets = buildNodeUserSecretService(env, options.db, clock)
+  // Resolve the run initiator's stored GitHub PAT (when set) — preferred over the
+  // App/env token by the container push-token mint + the engine GitHub client.
+  const resolveUserGitHubToken: ResolveUserGitHubToken | undefined = userSecrets
+    ? (userId) => userSecrets.resolve(userId, 'github_pat')
+    : undefined
   // The per-workspace OpenRouter dynamic-catalog store — shared by the catalog controller,
   // the per-workspace model catalog's dynamic OpenRouter entries, and the spend overlay.
   const openRouterCatalog = buildNodeOpenRouterCatalogService(
@@ -900,6 +943,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     subscriptions,
     personalSubscriptions,
     (workspaceId) => repos.workspaceRepository.accountOf(workspaceId),
+    resolveUserGitHubToken,
   )
 
   // Always a composite: inline kinds run as one-shot LLM calls; repo-operating kinds
@@ -918,11 +962,18 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   // is configured — one minted from the shared App registry, so a stock Node deployment
   // with an App ALSO gates on real GitHub Actions CI and merges the PR for real (parity
   // with the Worker). Undefined → these stay unwired and the gates pass through.
+  // Prefer the run initiator's per-user PAT (when stored) over the App token for the
+  // engine's CI gate + merge reads, so those are attributed to them too. The engine
+  // sets the initiator in ambient context around the gate-probe / merge boundaries.
+  const engineRegistry =
+    appRegistry && resolveUserGitHubToken
+      ? new PatPreferringAppRegistry(appRegistry, resolveUserGitHubToken)
+      : appRegistry
   const githubClient: GitHubClient | undefined =
     options.githubClient ??
-    (appRegistry
+    (engineRegistry
       ? new FetchGitHubClient({
-          registry: appRegistry,
+          registry: engineRegistry,
           rateLimitRepository: new NoopRateLimitRepository(),
           idGenerator,
           clock,
@@ -1258,6 +1309,13 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
             masterKeyBase64: config.runners.encryptionKey,
             info: RUNNERS_CIPHER_INFO,
           }),
+          // The generic pool provider instance backs the connection service's
+          // describeProvider + testConnection (the manifest editor's secret-key form + a
+          // pre-save probe). Same SSRF policy as the dispatch transport.
+          runnerPoolProvider: new HttpRunnerPoolProvider(
+            runnerUrlPolicy ? { urlPolicy: runnerUrlPolicy } : {},
+          ),
+          runnerProviderKind: 'manifest',
           ...(runnerUrlPolicy ? { runnerUrlSafetyPolicy: runnerUrlPolicy } : {}),
         }
       : {}),
@@ -1330,6 +1388,9 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // Slack channel `slackDeps` set; both are absent (no override) when nothing is wired.
     ...(executionEventPublisher ? { executionEventPublisher } : {}),
     ...(notificationChannel ? { notificationChannel } : {}),
+    // Run the engine's gate-probe / merge GitHub reads under the run initiator's ambient
+    // context, so a per-user PAT (when set) is preferred over the App/env token.
+    runInitiatorScope: runWithInitiator,
     ...options.overrides,
   }
 
@@ -1362,6 +1423,8 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     baseUrlFor: (provider) => baseUrlForNode(provider, env),
     // The per-user locally-run model endpoints store; present when ENCRYPTION_KEY is set.
     localModelEndpoints,
+    // The per-user generic secret store (GitHub PAT, …); present when ENCRYPTION_KEY is set.
+    userSecrets,
     // The per-workspace OpenRouter dynamic-catalog store; present when the API-key pool is.
     openRouterCatalog,
   }
@@ -1470,6 +1533,9 @@ function selectNodeEnvironmentsDeps(
   const urlPolicy = resolveUrlSafetyPolicy(config.environments)
   return {
     environmentProvider: override ?? new HttpEnvironmentProvider(urlPolicy ? { urlPolicy } : {}),
+    // An injected adapter has its own auth (native, fully self-described); the default is
+    // the generic manifest provider whose descriptor reflects the manifest's secret keys.
+    environmentProviderKind: override ? 'native' : 'manifest',
     environmentConnectionRepository: new DrizzleEnvironmentConnectionRepository(db),
     environmentRegistryRepository: new DrizzleEnvironmentRegistryRepository(db),
     secretCipher: new WebCryptoSecretCipher({

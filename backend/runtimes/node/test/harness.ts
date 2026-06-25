@@ -14,7 +14,11 @@ import {
 } from '@cat-factory/conformance'
 import type { ExecutionInstance, WorkspaceSnapshot } from '@cat-factory/kernel'
 import { NoopBootstrapRunner, NoopWorkRunner } from '@cat-factory/kernel'
-import type { LocalRunner, UpsertLocalModelEndpointInput } from '@cat-factory/contracts'
+import type {
+  LocalRunner,
+  UpsertLocalModelEndpointInput,
+  UserSecretKind,
+} from '@cat-factory/contracts'
 import type { CoreDependencies } from '@cat-factory/orchestration'
 import { buildNodeContainer } from '../src/container.js'
 import { type DrizzleDb, createDbClient } from '../src/db/client.js'
@@ -218,6 +222,16 @@ export function makeConformanceApp(
       return {
         get: (workspaceId: string) => svc.get(workspaceId),
         upsert: (workspaceId: string, input) => svc.upsert(workspaceId, input),
+      }
+    },
+    userSecrets: () => {
+      const svc = container.userSecrets
+      if (!svc) return undefined
+      return {
+        store: (userId, kind, input) =>
+          svc.store(userId, kind as UserSecretKind, input),
+        resolve: (userId, kind) => svc.resolve(userId, kind as UserSecretKind),
+        describe: (kind) => svc.describe(kind as UserSecretKind),
       }
     },
   }

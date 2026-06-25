@@ -9,6 +9,7 @@ import {
   type GitHubIssue,
   type GitHubIssueDetail,
   type GitHubIssueSearchHit,
+  type GitHubSubIssue,
   type GitHubPullRequest,
   type GitHubRepo,
   type GitHubRepoRef,
@@ -91,6 +92,16 @@ interface GhIssueDetailPayload {
   user?: { login?: string } | null
   assignee?: { login?: string } | null
   labels?: Array<string | { name?: string } | null>
+  /** The parent issue, present when this is a sub-issue (GitHub sub-issues). */
+  parent?: { html_url?: string } | null
+}
+
+/** The slice of a `/sub_issues` item `listSubIssues` reads. */
+interface GhSubIssueItem {
+  number?: number
+  html_url?: string
+  title?: string
+  state?: string
 }
 
 /** The slice of the issue-comment REST payload `getIssue` reads. */
@@ -395,7 +406,43 @@ export class FetchGitHubClient implements GitHubClient {
         createdAt: c.created_at ?? '',
         body: c.body ?? '',
       })),
+      parentRef: issue.parent?.html_url
+        ? (() => {
+            const p = parseIssueHtmlUrl(issue.parent.html_url ?? '')
+            return p ? `${p.owner}/${p.repo}#${p.number}` : null
+          })()
+        : null,
     }
+  }
+
+  async listSubIssues(
+    installationId: number,
+    ref: GitHubRepoRef,
+    issueNumber: number,
+  ): Promise<GitHubSubIssue[]> {
+    // Follow `Link` pagination so an epic with >100 sub-issues imports its full child set
+    // (a single page would silently truncate the spawned board graph).
+    return this.paginate<GitHubSubIssue>(
+      `/repos/${ref.owner}/${ref.repo}/issues/${issueNumber}/sub_issues?per_page=${PER_PAGE}`,
+      { installationId },
+      (json) => {
+        const items = (Array.isArray(json) ? json : []) as GhSubIssueItem[]
+        const out: GitHubSubIssue[] = []
+        for (const item of items) {
+          const parts = parseIssueHtmlUrl(item.html_url ?? '')
+          if (!parts) continue
+          out.push({
+            owner: parts.owner,
+            repo: parts.repo,
+            number: item.number ?? parts.number,
+            title: item.title ?? '(untitled)',
+            state: item.state ?? '',
+            url: item.html_url ?? '',
+          })
+        }
+        return out
+      },
+    )
   }
 
   async searchIssues(

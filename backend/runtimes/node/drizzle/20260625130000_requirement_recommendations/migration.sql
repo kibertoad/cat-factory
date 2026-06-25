@@ -1,0 +1,1 @@
+ALTER TABLE "requirement_reviews" ADD COLUMN "recommendations" text DEFAULT '[]' NOT NULL;

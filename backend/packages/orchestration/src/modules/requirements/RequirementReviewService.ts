@@ -1,7 +1,21 @@
-import type { Block, RequirementReview, RequirementReviewItem } from '@cat-factory/kernel'
+import type {
+  Block,
+  RequirementRecommendation,
+  RequirementReview,
+  RequirementReviewItem,
+  ResolveRunRepoContext,
+} from '@cat-factory/kernel'
 import type { DocumentRepository, TaskRepository } from '@cat-factory/kernel'
 import type { RequirementReviewRepository } from '@cat-factory/kernel'
-import { REVIEW_SYSTEM_PROMPT, REWORK_SYSTEM_PROMPT } from '@cat-factory/agents'
+import { assertFound, ValidationError } from '@cat-factory/kernel'
+import { generateText } from 'ai'
+import {
+  catFactoryObservability,
+  providerWebSearchTools,
+  REVIEW_SYSTEM_PROMPT,
+  REWORK_SYSTEM_PROMPT,
+  WRITER_SYSTEM_PROMPT,
+} from '@cat-factory/agents'
 import {
   type IterativeReviewDeps,
   IterativeReviewService,
@@ -9,9 +23,15 @@ import {
   type ReviewRepository,
 } from '../review/IterativeReviewService.js'
 import {
+  type GroundingFragment,
+  type GroundingWebResult,
+  type RecommendationGrounding,
   type RequirementsContext,
+  buildRecommendationPrompt,
   buildReviewPrompt,
   buildReworkPrompt,
+  coerceRecommendations,
+  extractJson,
 } from './requirements.logic.js'
 
 export interface RequirementReviewServiceDependencies extends IterativeReviewDeps {
@@ -20,6 +40,23 @@ export interface RequirementReviewServiceDependencies extends IterativeReviewDep
   documentRepository?: DocumentRepository
   /** Linked tracker issues (optional; only when the task-source integration is on). */
   taskRepository?: TaskRepository
+  /**
+   * Resolve the run's repo (checkout-free {@link RepoFiles}) so the Requirement Writer can
+   * read `spec/` + `tech-spec/` to ground recommendations. Optional — unwired (tests / no
+   * GitHub) ⇒ the Writer grounds on fragments + web only.
+   */
+  resolveRunRepoContext?: ResolveRunRepoContext
+  /**
+   * Resolve a block's applicable best-practice fragments (block + inherited service
+   * standards) as {id,title,body}. The Requirement Writer checks these FIRST. Optional.
+   */
+  resolveBlockFragments?: (workspaceId: string, blockId: string) => Promise<GroundingFragment[]>
+  /**
+   * Gateway-RAG web search (Brave/SearXNG) for what the project material leaves open —
+   * model-agnostic grounding. Optional; provider-hosted web search is attached separately
+   * when the resolved model supports it.
+   */
+  webSearch?: (workspaceId: string, query: string) => Promise<GroundingWebResult[]>
 }
 
 /**
@@ -36,12 +73,21 @@ export class RequirementReviewService extends IterativeReviewService<
   protected readonly repository: ReviewRepository<RequirementReview>
   private readonly documentRepository?: DocumentRepository
   private readonly taskRepository?: TaskRepository
+  private readonly resolveRunRepoContext?: ResolveRunRepoContext
+  private readonly resolveBlockFragments?: (
+    workspaceId: string,
+    blockId: string,
+  ) => Promise<GroundingFragment[]>
+  private readonly webSearch?: (workspaceId: string, query: string) => Promise<GroundingWebResult[]>
 
   constructor(deps: RequirementReviewServiceDependencies) {
     super(deps)
     this.repository = deps.requirementReviewRepository
     this.documentRepository = deps.documentRepository
     this.taskRepository = deps.taskRepository
+    this.resolveRunRepoContext = deps.resolveRunRepoContext
+    this.resolveBlockFragments = deps.resolveBlockFragments
+    this.webSearch = deps.webSearch
   }
 
   protected readonly entityName = 'Requirement review'
@@ -88,7 +134,310 @@ export class RequirementReviewService extends IterativeReviewService<
   }
 
   protected newReview(common: ReviewCommon): RequirementReview {
-    return { ...common, incorporatedRequirements: null }
+    return { ...common, incorporatedRequirements: null, recommendations: [] }
+  }
+
+  // ---- Requirement Writer (the second companion: grounded recommendations) -----------
+
+  /** Whether the Writer can run (same model gate as the reviewer). */
+  get writerEnabled(): boolean {
+    return this.enabled
+  }
+
+  /**
+   * Recommend grounded answers for a batch of findings the human marked "recommend something".
+   * Marks those items `recommend_requested`, then runs the Requirement Writer LLM — grounded on
+   * the block's best-practice fragments (FIRST), the in-repo `spec/`/`tech-spec/`, and web search
+   * — and appends one `ready` recommendation per finding. NOT AI-reviewed; the human decides.
+   * Runs in parallel with incorporation (the driver awaits both). Best-effort: a Writer failure
+   * still leaves the items `recommend_requested` so the human can answer manually.
+   */
+  async recommend(
+    workspaceId: string,
+    reviewId: string,
+    itemIds: string[],
+    note?: string,
+  ): Promise<RequirementReview> {
+    const targetIds = new Set(itemIds)
+    // Mark the targeted findings `recommend_requested` up front in a fresh read-modify-write, so
+    // the marks are durable even if the Writer LLM then fails (the human can still answer manually).
+    const marked = await this.markRecommendRequested(workspaceId, reviewId, targetIds)
+    const block = assertFound(
+      await this.deps.blockRepository.get(workspaceId, marked.blockId),
+      'Block',
+      marked.blockId,
+    )
+    const findings = marked.items.filter(
+      (i) => targetIds.has(i.id) && i.status === 'recommend_requested',
+    )
+    if (findings.length === 0) return marked
+
+    const { modelProvider, ref } = await this.resolveModel(workspaceId, block)
+    const context = await this.gatherContext(workspaceId, block)
+    const fragments = (await this.resolveBlockFragments?.(workspaceId, block.id)) ?? []
+    const grounding = await this.gatherGrounding(workspaceId, block, findings, fragments)
+
+    let suggestions: Map<string, { recommendation: string; fromStandard: string | null }>
+    try {
+      const model = modelProvider.resolve(ref)
+      const result = await generateText({
+        model,
+        system: WRITER_SYSTEM_PROMPT,
+        prompt: buildRecommendationPrompt(context, findings, grounding, note),
+        temperature: 0.2,
+        maxOutputTokens: 6000,
+        // Provider-hosted web search when the model supports it (Anthropic/OpenAI); the
+        // gateway-RAG `webResults` already folded into the prompt cover other providers.
+        ...(providerWebSearchTools(ref.provider)
+          ? { tools: providerWebSearchTools(ref.provider) }
+          : {}),
+        providerOptions: catFactoryObservability({ agentKind: 'requirements-writer', workspaceId }),
+      })
+      suggestions = coerceRecommendations(extractJson(result.text))
+    } catch (e) {
+      throw new ValidationError(
+        `The requirement writer (${ref.provider}:${ref.model}) failed: ${
+          e instanceof Error ? e.message : String(e)
+        }`,
+      )
+    }
+
+    // Re-read fresh: the Writer call above can take several seconds, during which the human may
+    // have answered/dismissed other findings. Append our recommendations onto the LATEST review
+    // rather than upserting the pre-LLM snapshot (which would clobber those concurrent edits).
+    const review = assertFound(
+      await this.repository.get(workspaceId, reviewId),
+      this.entityName,
+      reviewId,
+    )
+    const now = this.deps.clock.now()
+    const fragmentById = new Map(fragments.map((f) => [f.id, f]))
+    const recommendations = [...review.recommendations]
+    for (const finding of findings) {
+      const suggestion = suggestions.get(finding.id)
+      if (!suggestion) continue
+      const standard = suggestion.fromStandard
+        ? fragmentById.get(suggestion.fromStandard)
+        : undefined
+      recommendations.push({
+        id: this.deps.idGenerator.next('rec'),
+        sourceFinding: { title: finding.title, detail: finding.detail },
+        recommendedText: suggestion.recommendation,
+        status: 'ready',
+        note: note?.trim() || null,
+        groundedInFragment: standard ? { id: standard.id, title: standard.title } : null,
+        createdAt: now,
+        updatedAt: now,
+      })
+    }
+    const updated: RequirementReview = { ...review, recommendations, updatedAt: now }
+    await this.repository.upsert(workspaceId, updated)
+    return updated
+  }
+
+  /**
+   * Mark the targeted, non-dismissed findings `recommend_requested` in a fresh read-modify-write.
+   * A standalone durable write (not folded into {@link recommend}'s trailing upsert) so the marks
+   * survive a subsequent Writer-LLM failure.
+   */
+  private async markRecommendRequested(
+    workspaceId: string,
+    reviewId: string,
+    targetIds: Set<string>,
+  ): Promise<RequirementReview> {
+    const review = assertFound(
+      await this.repository.get(workspaceId, reviewId),
+      this.entityName,
+      reviewId,
+    )
+    const now = this.deps.clock.now()
+    let changed = false
+    for (const item of review.items) {
+      if (
+        targetIds.has(item.id) &&
+        item.status !== 'dismissed' &&
+        item.status !== 'recommend_requested'
+      ) {
+        item.status = 'recommend_requested'
+        item.updatedAt = now
+        changed = true
+      }
+    }
+    if (changed) {
+      review.updatedAt = now
+      await this.repository.upsert(workspaceId, review)
+    }
+    return review
+  }
+
+  /**
+   * Accept a recommendation: it becomes the source finding's answer (the matching item flips
+   * to `answered`) so the NEXT incorporation folds it in. Match by the snapshotted finding
+   * title/detail since item ids churn across re-reviews.
+   */
+  async acceptRecommendation(
+    workspaceId: string,
+    reviewId: string,
+    recId: string,
+  ): Promise<RequirementReview> {
+    return this.mutateRecommendation(workspaceId, reviewId, recId, (rec, review, now) => {
+      rec.status = 'accepted'
+      const item = review.items.find(
+        (i) => i.title === rec.sourceFinding.title && i.detail === rec.sourceFinding.detail,
+      )
+      if (item) {
+        item.reply = rec.recommendedText
+        item.status = 'answered'
+        item.updatedAt = now
+      }
+    })
+  }
+
+  /** Reject a recommendation (the human will dismiss / answer manually / re-request). */
+  async rejectRecommendation(
+    workspaceId: string,
+    reviewId: string,
+    recId: string,
+  ): Promise<RequirementReview> {
+    return this.mutateRecommendation(workspaceId, reviewId, recId, (rec) => {
+      rec.status = 'rejected'
+    })
+  }
+
+  /**
+   * Re-request a single recommendation with a "do it differently" note: re-runs the Writer for
+   * just that finding and replaces the suggestion text (back to `ready`).
+   */
+  async reRequestRecommendation(
+    workspaceId: string,
+    reviewId: string,
+    recId: string,
+    note: string,
+  ): Promise<RequirementReview> {
+    const initial = assertFound(
+      await this.repository.get(workspaceId, reviewId),
+      this.entityName,
+      reviewId,
+    )
+    const rec0 = initial.recommendations.find((r) => r.id === recId)
+    if (!rec0) throw new ValidationError(`Recommendation '${recId}' not found`)
+    const item = initial.items.find(
+      (i) => i.title === rec0.sourceFinding.title && i.detail === rec0.sourceFinding.detail,
+    )
+    if (!item) throw new ValidationError('The finding this recommendation answers no longer exists')
+
+    const block = assertFound(
+      await this.deps.blockRepository.get(workspaceId, initial.blockId),
+      'Block',
+      initial.blockId,
+    )
+    const { modelProvider, ref } = await this.resolveModel(workspaceId, block)
+    const context = await this.gatherContext(workspaceId, block)
+    const fragments = (await this.resolveBlockFragments?.(workspaceId, block.id)) ?? []
+    const grounding = await this.gatherGrounding(workspaceId, block, [item], fragments)
+    let suggestions: Map<string, { recommendation: string; fromStandard: string | null }>
+    try {
+      const model = modelProvider.resolve(ref)
+      const result = await generateText({
+        model,
+        system: WRITER_SYSTEM_PROMPT,
+        prompt: buildRecommendationPrompt(context, [item], grounding, note),
+        temperature: 0.2,
+        maxOutputTokens: 6000,
+        ...(providerWebSearchTools(ref.provider)
+          ? { tools: providerWebSearchTools(ref.provider) }
+          : {}),
+        providerOptions: catFactoryObservability({ agentKind: 'requirements-writer', workspaceId }),
+      })
+      suggestions = coerceRecommendations(extractJson(result.text))
+    } catch (e) {
+      throw new ValidationError(
+        `The requirement writer (${ref.provider}:${ref.model}) failed: ${
+          e instanceof Error ? e.message : String(e)
+        }`,
+      )
+    }
+    const suggestion = suggestions.get(item.id)
+    // Re-read fresh so concurrent answer/dismiss edits made during the (multi-second) Writer call
+    // aren't clobbered — mutate only this recommendation on the LATEST review.
+    const review = assertFound(
+      await this.repository.get(workspaceId, reviewId),
+      this.entityName,
+      reviewId,
+    )
+    const rec = review.recommendations.find((r) => r.id === recId)
+    if (!rec) throw new ValidationError(`Recommendation '${recId}' not found`)
+    const now = this.deps.clock.now()
+    if (suggestion) {
+      const fragmentById = new Map(fragments.map((f) => [f.id, f]))
+      const standard = suggestion.fromStandard
+        ? fragmentById.get(suggestion.fromStandard)
+        : undefined
+      rec.recommendedText = suggestion.recommendation
+      rec.groundedInFragment = standard ? { id: standard.id, title: standard.title } : null
+    }
+    rec.status = 'ready'
+    rec.note = note.trim() || null
+    rec.updatedAt = now
+    review.updatedAt = now
+    await this.repository.upsert(workspaceId, review)
+    return review
+  }
+
+  private async mutateRecommendation(
+    workspaceId: string,
+    reviewId: string,
+    recId: string,
+    mutate: (rec: RequirementRecommendation, review: RequirementReview, now: number) => void,
+  ): Promise<RequirementReview> {
+    const review = assertFound(
+      await this.repository.get(workspaceId, reviewId),
+      this.entityName,
+      reviewId,
+    )
+    const rec = review.recommendations.find((r) => r.id === recId)
+    if (!rec) throw new ValidationError(`Recommendation '${recId}' not found`)
+    const now = this.deps.clock.now()
+    mutate(rec, review, now)
+    rec.updatedAt = now
+    review.updatedAt = now
+    await this.repository.upsert(workspaceId, review)
+    return review
+  }
+
+  /**
+   * Gather the Writer's grounding material: best-practice fragments (passed in), in-repo
+   * `spec/`/`tech-spec/` overviews (via RepoFiles when wired), and gateway-RAG web snippets
+   * (when wired). All best-effort — any source that errors or is unwired is simply omitted.
+   */
+  private async gatherGrounding(
+    workspaceId: string,
+    block: Block,
+    findings: RequirementReviewItem[],
+    fragments: GroundingFragment[],
+  ): Promise<RecommendationGrounding> {
+    const specExcerpts: string[] = []
+    try {
+      const ctx = await this.resolveRunRepoContext?.(workspaceId, block.id)
+      if (ctx) {
+        for (const path of ['spec/overview.md', 'tech-spec/overview.md']) {
+          const file = await ctx.repo.getFile(path, ctx.baseBranch)
+          if (file?.content) specExcerpts.push(`#### ${path}\n${file.content}`)
+        }
+      }
+    } catch {
+      // best-effort grounding
+    }
+    let webResults: GroundingWebResult[] = []
+    if (this.webSearch) {
+      try {
+        const query = findings.map((f) => f.title).join('; ')
+        webResults = await this.webSearch(workspaceId, query)
+      } catch {
+        webResults = []
+      }
+    }
+    return { fragments, specExcerpts, webResults }
   }
 
   /** Assemble the block's collected requirements + any linked docs/issues. */

@@ -47,3 +47,32 @@ export const REWORK_SYSTEM_PROMPT =
   'Respond with ONLY the revised requirements in Markdown — no preamble, no ' +
   'commentary, no code fences. ' +
   FINAL_ANSWER_IN_REPLY
+
+/**
+ * The "Requirement Writer" — the SECOND companion of the requirements reviewer. Where the
+ * reviewer raises findings and the rework editor folds human answers in, the Writer is asked
+ * to RECOMMEND an answer for a finding the human doesn't know how to answer. It grounds each
+ * recommendation in reality, in this priority order:
+ *   1. the project's best-practice fragments (team/org standards) — if one already answers the
+ *      finding, that IS the recommendation and it is flagged as the current standard;
+ *   2. the in-repo `spec/` (business) + `tech-spec/` (architecture / tech-stack) documents;
+ *   3. web search, for anything the above leave open (current, real-world practice).
+ * Recommendations are suggestions for a human to accept/reject — they are NOT auto-applied and
+ * are NOT AI-reviewed. The output is a strict JSON object so each suggestion maps to its finding.
+ */
+export const WRITER_SYSTEM_PROMPT =
+  'You are a senior engineer acting as a Requirement Writer: for each requirements-review ' +
+  'finding you are given, recommend a concrete, defensible answer the product owner could ' +
+  'adopt. Ground every recommendation in reality, in THIS order of precedence: (1) the ' +
+  "project's best-practice standards provided to you — if a standard already settles the " +
+  'finding, recommend exactly that and set "fromStandard" to its id; (2) the in-repo `spec/` ' +
+  '(business requirements) and `tech-spec/` (architecture, tech-stack, cross-cutting patterns ' +
+  'like pagination / transport) excerpts provided; (3) web search, for anything the project ' +
+  'material leaves open — prefer current, widely-adopted practice and cite what you relied on ' +
+  'inside the recommendation text. Be specific and actionable; do NOT hedge with "it depends" ' +
+  'without giving a concrete default. Respond with ONLY a JSON object of this exact shape — no ' +
+  'prose, no code fences:\n' +
+  '{ "recommendations": [ { "itemId": "<the finding id>", "recommendation": "<the suggested ' +
+  'answer, in prose>", "fromStandard": "<best-practice fragment id if the answer came straight ' +
+  'from one, else null>" } ] }\n' +
+  FINAL_ANSWER_IN_REPLY

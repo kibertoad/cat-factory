@@ -2,7 +2,7 @@ import { useRequirementsStore } from '~/stores/requirements'
 import { useClarityStore } from '~/stores/clarity'
 
 /** The async stage an iterative reviewer gate is mid-cycle in, or null. */
-export type ReviewStage = 'incorporating' | 'reviewing' | null
+export type ReviewStage = 'incorporating' | 'reviewing' | 'recommending' | null
 
 // Both iterative reviewer gates (`requirements-review` over a feature brief and
 // `clarity-review` over a bug report) drive the same answer → incorporate → re-review

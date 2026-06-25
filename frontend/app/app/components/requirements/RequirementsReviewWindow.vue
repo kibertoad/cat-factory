@@ -10,6 +10,7 @@
 import { parseOutputOutline } from '~/utils/agentOutput'
 import StepRestartControl from '~/components/panels/StepRestartControl.vue'
 import type {
+  RequirementRecommendation,
   RequirementReview,
   RequirementReviewItem,
   ReviewItemCategory,
@@ -23,6 +24,15 @@ const toast = useToast()
 
 // Draft replies, keyed by item id, so editing one item doesn't disturb others.
 const drafts = ref<Record<string, string>>({})
+// The server-side reply each draft was last seeded/synced to, so the seeding watch can refresh
+// a draft when the recorded reply changes server-side (e.g. accepting a recommendation sets the
+// finding's answer) WITHOUT clobbering a reply the human is actively editing.
+const seededReply = ref<Record<string, string>>({})
+// Findings the human marked for a Requirement-Writer recommendation, batched until they
+// click "Request recommendations" (so the Writer runs once over the whole batch).
+const markedForRecommend = ref<Set<string>>(new Set())
+// Re-request "do it differently" notes, keyed by recommendation id.
+const reRequestNotes = ref<Record<string, string>>({})
 // Freeform "do it differently" comment when redoing a merge the human was unhappy with.
 const redoComment = ref('')
 const showRedo = ref(false)
@@ -35,6 +45,9 @@ const showRedo = ref(false)
 const { open, blockId, instanceId, stepIndex, close } = useResultView('requirements-review', {
   onOpen: (id) => {
     drafts.value = {}
+    seededReply.value = {}
+    markedForRecommend.value = new Set()
+    reRequestNotes.value = {}
     redoComment.value = ''
     showRedo.value = false
     void requirements.load(id)
@@ -109,6 +122,7 @@ const STATUS_COLOR = {
   answered: 'info',
   resolved: 'success',
   dismissed: 'neutral',
+  recommend_requested: 'primary',
 } as const satisfies Record<ReviewItemStatus, string>
 
 function notifyError(title: string, e: unknown) {
@@ -120,17 +134,72 @@ function notifyError(title: string, e: unknown) {
   })
 }
 
-async function submitReply(item: RequirementReviewItem) {
-  if (!review.value) return
+// Answers auto-save: there is no explicit "save" button. The textarea is pre-seeded with
+// the recorded reply (see the watch below); editing and blurring persists it. Persist only
+// when the trimmed draft actually differs from what's already recorded, so blurring an
+// untouched field is a no-op.
+async function persistDraft(item: RequirementReviewItem) {
+  if (!review.value || frozen.value) return
   const text = (drafts.value[item.id] ?? '').trim()
-  if (!text) return
+  if (!text || text === (item.reply ?? '').trim()) return
   try {
     await requirements.reply(review.value, item.id, text)
-    drafts.value = { ...drafts.value, [item.id]: '' }
   } catch (e) {
     notifyError('Could not save the answer', e)
   }
 }
+
+// Persist every dirty draft before an action that consumes the answers, so a value the
+// user typed but never blurred out of isn't lost.
+async function flushDrafts() {
+  if (!review.value) return
+  for (const item of review.value.items) {
+    if (item.status === 'open' || item.status === 'answered') await persistDraft(item)
+  }
+}
+
+// Seed a draft for each finding from its recorded reply so the textarea shows the current
+// answer (editing in place). New findings from a re-review get seeded; and when the recorded
+// reply changes server-side (e.g. accepting a recommendation writes the finding's answer) a
+// draft the user hasn't diverged from is refreshed to match. Drafts the user is actively
+// editing are left untouched.
+watch(
+  review,
+  (r) => {
+    if (!r) return
+    const nextDrafts = { ...drafts.value }
+    const nextSeeded = { ...seededReply.value }
+    let changed = false
+    for (const item of r.items) {
+      const reply = item.reply ?? ''
+      if (!(item.id in nextDrafts)) {
+        nextDrafts[item.id] = reply
+        nextSeeded[item.id] = reply
+        changed = true
+        continue
+      }
+      const draft = nextDrafts[item.id] ?? ''
+      const seeded = nextSeeded[item.id] ?? ''
+      if (draft === seeded && draft !== reply) {
+        // The user hasn't diverged from the last seeded value but the server reply changed —
+        // refresh the textarea to the new answer (e.g. an accepted recommendation).
+        nextDrafts[item.id] = reply
+        nextSeeded[item.id] = reply
+        changed = true
+      } else if (draft === reply && seeded !== reply) {
+        // The draft already matches the server (e.g. the user's answer was just persisted) —
+        // record it so a later server-side change can be detected.
+        nextSeeded[item.id] = reply
+        changed = true
+      }
+    }
+    if (changed) {
+      drafts.value = nextDrafts
+      seededReply.value = nextSeeded
+    }
+  },
+  { immediate: true },
+)
 
 async function setStatus(item: RequirementReviewItem, itemStatus: ReviewItemStatus) {
   if (!review.value) return
@@ -141,9 +210,75 @@ async function setStatus(item: RequirementReviewItem, itemStatus: ReviewItemStat
   }
 }
 
+// --- Requirement Writer recommendations -----------------------------------
+const recommending = computed(() =>
+  blockId.value ? requirements.isRecommending(blockId.value) : false,
+)
+// Recommendations still awaiting a human decision (the ones to surface for review).
+const pendingRecommendations = computed<RequirementRecommendation[]>(() =>
+  (review.value?.recommendations ?? []).filter((r) => r.status === 'ready'),
+)
+function isMarkedForRecommend(item: RequirementReviewItem): boolean {
+  return markedForRecommend.value.has(item.id)
+}
+function toggleRecommend(item: RequirementReviewItem) {
+  const next = new Set(markedForRecommend.value)
+  if (next.has(item.id)) next.delete(item.id)
+  else next.add(item.id)
+  markedForRecommend.value = next
+}
+
+// Fire the Writer over the whole marked batch at once (grounded on the project's
+// best-practice standards, specs/tech-specs and web search).
+async function requestRecommendations() {
+  if (!blockId.value || markedForRecommend.value.size === 0) return
+  const ids = [...markedForRecommend.value]
+  try {
+    await requirements.requestRecommendations(blockId.value, ids)
+    markedForRecommend.value = new Set()
+    toast.add({
+      title: `Requesting ${ids.length} recommendation${ids.length === 1 ? '' : 's'}…`,
+      icon: 'i-lucide-sparkles',
+    })
+  } catch (e) {
+    notifyError('Could not request recommendations', e)
+  }
+}
+
+async function acceptRecommendation(rec: RequirementRecommendation) {
+  if (!review.value) return
+  try {
+    await requirements.acceptRecommendation(review.value, rec.id)
+  } catch (e) {
+    notifyError('Could not accept the recommendation', e)
+  }
+}
+
+async function rejectRecommendation(rec: RequirementRecommendation) {
+  if (!review.value) return
+  try {
+    await requirements.rejectRecommendation(review.value, rec.id)
+  } catch (e) {
+    notifyError('Could not reject the recommendation', e)
+  }
+}
+
+async function reRequestRecommendation(rec: RequirementRecommendation) {
+  if (!review.value) return
+  const note = (reRequestNotes.value[rec.id] ?? '').trim()
+  if (!note) return
+  try {
+    await requirements.reRequestRecommendation(review.value, rec.id, note)
+    reRequestNotes.value = { ...reRequestNotes.value, [rec.id]: '' }
+  } catch (e) {
+    notifyError('Could not re-request the recommendation', e)
+  }
+}
+
 async function incorporate(feedback?: string) {
   if (!review.value || !blockId.value) return
   try {
+    await flushDrafts()
     await requirements.incorporate(review.value, feedback)
   } catch (e) {
     notifyError('Could not incorporate the answers', e)
@@ -183,6 +318,7 @@ async function proceed() {
   if (!blockId.value) return
   acting.value = true
   try {
+    await flushDrafts()
     await requirements.proceed(blockId.value)
     toast.add({ title: 'Proceeding to the next phase', icon: 'i-lucide-arrow-right' })
   } catch (e) {
@@ -350,9 +486,10 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                         {{ item.detail }}
                       </p>
 
-                      <!-- recorded answer -->
+                      <!-- recorded answer (only for non-editable findings — for editable
+                           ones the answer lives in the textarea below, seeded from the reply) -->
                       <div
-                        v-if="item.reply"
+                        v-if="item.reply && item.status !== 'open' && item.status !== 'answered'"
                         class="mt-2 rounded-md border-l-2 border-slate-700 bg-slate-950/40 px-3 py-1.5 text-sm text-slate-300"
                       >
                         <span class="text-[10px] uppercase tracking-wide text-slate-500">
@@ -361,7 +498,8 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                         <p class="whitespace-pre-line">{{ item.reply }}</p>
                       </div>
 
-                      <!-- react: answer (relevant) or dismiss (irrelevant). Disabled once the
+                      <!-- react: answer (relevant) or dismiss (irrelevant). The answer
+                           auto-saves on blur — no explicit save button. Disabled once the
                            requirements are settled / awaiting a higher-level decision. -->
                       <template v-if="item.status === 'open' || item.status === 'answered'">
                         <UTextarea
@@ -370,20 +508,11 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                           autoresize
                           size="sm"
                           class="mt-2 w-full"
-                          :placeholder="item.reply ? 'Refine your answer…' : 'Answer this finding…'"
+                          placeholder="Answer this finding…"
                           :disabled="frozen"
+                          @blur="persistDraft(item)"
                         />
                         <div class="mt-2 flex flex-wrap items-center gap-2">
-                          <UButton
-                            color="primary"
-                            variant="soft"
-                            size="xs"
-                            icon="i-lucide-corner-down-left"
-                            :disabled="!(drafts[item.id] ?? '').trim() || frozen"
-                            @click="submitReply(item)"
-                          >
-                            Save answer
-                          </UButton>
                           <UButton
                             color="neutral"
                             variant="ghost"
@@ -394,8 +523,31 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                           >
                             Dismiss as irrelevant
                           </UButton>
+                          <UButton
+                            :color="isMarkedForRecommend(item) ? 'primary' : 'neutral'"
+                            :variant="isMarkedForRecommend(item) ? 'soft' : 'ghost'"
+                            size="xs"
+                            icon="i-lucide-wand-2"
+                            :disabled="frozen"
+                            @click="toggleRecommend(item)"
+                          >
+                            {{
+                              isMarkedForRecommend(item)
+                                ? 'Marked for recommendation'
+                                : 'Recommend something'
+                            }}
+                          </UButton>
                         </div>
                       </template>
+
+                      <!-- finding awaiting a recommendation batch -->
+                      <div
+                        v-else-if="item.status === 'recommend_requested'"
+                        class="mt-2 flex items-center gap-1.5 text-xs text-indigo-300"
+                      >
+                        <UIcon name="i-lucide-wand-2" class="h-3.5 w-3.5" />
+                        Recommendation requested — review the suggestion below.
+                      </div>
 
                       <!-- reopen a dismissed finding -->
                       <div v-else-if="item.status === 'dismissed'" class="mt-2">
@@ -414,6 +566,87 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                   </div>
                 </div>
               </div>
+
+              <!-- Requirement-Writer recommendations awaiting a human decision -->
+              <section
+                v-if="pendingRecommendations.length"
+                class="mt-6 border-t border-slate-800 pt-5"
+              >
+                <div class="mb-3 flex items-center gap-1.5 text-[11px] text-indigo-300">
+                  <UIcon name="i-lucide-wand-2" class="h-3.5 w-3.5" />
+                  <span class="font-semibold uppercase tracking-wide">Recommended answers</span>
+                </div>
+                <div class="flex flex-col gap-3">
+                  <div
+                    v-for="rec in pendingRecommendations"
+                    :key="rec.id"
+                    class="rounded-lg border border-indigo-900/50 bg-indigo-950/20 p-3"
+                  >
+                    <div class="flex flex-wrap items-center gap-1.5">
+                      <span class="text-sm font-medium text-white">{{
+                        rec.sourceFinding.title
+                      }}</span>
+                      <UBadge
+                        v-if="rec.groundedInFragment"
+                        size="xs"
+                        variant="subtle"
+                        color="success"
+                        icon="i-lucide-badge-check"
+                      >
+                        Current standard: {{ rec.groundedInFragment.title }}
+                      </UBadge>
+                    </div>
+                    <p class="mt-2 whitespace-pre-line text-sm text-slate-300">
+                      {{ rec.recommendedText }}
+                    </p>
+                    <div class="mt-2 flex flex-wrap items-center gap-2">
+                      <UButton
+                        color="primary"
+                        variant="soft"
+                        size="xs"
+                        icon="i-lucide-check"
+                        :disabled="frozen"
+                        @click="acceptRecommendation(rec)"
+                      >
+                        Accept
+                      </UButton>
+                      <UButton
+                        color="neutral"
+                        variant="ghost"
+                        size="xs"
+                        icon="i-lucide-x"
+                        :disabled="frozen"
+                        @click="rejectRecommendation(rec)"
+                      >
+                        Reject
+                      </UButton>
+                    </div>
+                    <!-- re-request with a note (an alternative to rejecting outright) -->
+                    <div class="mt-2 flex items-start gap-2">
+                      <UTextarea
+                        v-model="reRequestNotes[rec.id]"
+                        :rows="1"
+                        autoresize
+                        size="sm"
+                        class="flex-1"
+                        placeholder="Ask for a different recommendation…"
+                        :disabled="frozen || recommending"
+                      />
+                      <UButton
+                        color="neutral"
+                        variant="soft"
+                        size="xs"
+                        icon="i-lucide-rotate-cw"
+                        :loading="recommending"
+                        :disabled="!(reRequestNotes[rec.id] ?? '').trim() || frozen"
+                        @click="reRequestRecommendation(rec)"
+                      >
+                        Re-request
+                      </UButton>
+                    </div>
+                  </div>
+                </div>
+              </section>
 
               <!-- incorporated document: the standard-format requirements -->
               <section v-if="outline" class="mt-6 border-t border-slate-800 pt-5">
@@ -499,6 +732,20 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                   @click="incorporate()"
                 >
                   Incorporate answers
+                </UButton>
+                <UButton
+                  v-if="markedForRecommend.size > 0"
+                  color="primary"
+                  variant="soft"
+                  size="sm"
+                  block
+                  icon="i-lucide-wand-2"
+                  :loading="recommending"
+                  @click="requestRecommendations"
+                >
+                  Request {{ markedForRecommend.size }} recommendation{{
+                    markedForRecommend.size === 1 ? '' : 's'
+                  }}
                 </UButton>
                 <p class="text-[11px] leading-relaxed text-slate-500">
                   <template v-if="canProceed">

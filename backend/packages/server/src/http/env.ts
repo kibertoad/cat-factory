@@ -9,6 +9,7 @@ import type {
   OpenRouterCatalogService,
   PersonalSubscriptionService,
   ProviderSubscriptionService,
+  UserSecretService,
 } from '@cat-factory/integrations'
 import type { Core } from '@cat-factory/orchestration'
 import type { ResolveRepoTarget } from '../agents/ContainerAgentExecutor.js'
@@ -91,6 +92,12 @@ export interface ServerContainer extends Core {
    * locally-run model — resolved by the run initiator.
    */
   localModelEndpoints?: LocalModelEndpointService
+  /**
+   * The per-USER generic secret store (a GitHub PAT today; future repository/provider
+   * tokens as new kinds). Present only when the facade wired the user-secret repository
+   * (needs ENCRYPTION_KEY). Drives the user-secret controller and `ResolveUserGitHubToken`.
+   */
+  userSecrets?: UserSecretService
   /**
    * The per-WORKSPACE OpenRouter dynamic-catalog store. Present only when the facade wired
    * the OpenRouter-catalog repository + the API-key pool (needs ENCRYPTION_KEY). Drives the

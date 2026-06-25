@@ -228,6 +228,18 @@ export const updateEnvironmentSecretsSchema = v.object({
 })
 export type UpdateEnvironmentSecretsInput = v.InferOutput<typeof updateEnvironmentSecretsSchema>
 
+/**
+ * Test (probe) a provider connection before saving. A manifest-driven provider
+ * supplies the candidate `manifest` + `secrets`; a native provider supplies its
+ * `config` (non-secret fields) + `secrets`. Nothing is persisted by a test.
+ */
+export const testEnvironmentConnectionSchema = v.object({
+  manifest: v.optional(environmentManifestSchema),
+  config: v.optional(v.record(v.string(), v.string())),
+  secrets: v.optional(v.record(v.string(), v.string())),
+})
+export type TestEnvironmentConnectionInput = v.InferOutput<typeof testEnvironmentConnectionSchema>
+
 /** Manually provision an environment (outside a pipeline run). */
 export const provisionEnvironmentSchema = v.object({
   blockId: v.optional(v.pipe(v.string(), v.minLength(1))),

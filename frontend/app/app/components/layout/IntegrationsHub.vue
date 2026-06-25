@@ -14,6 +14,9 @@ const documents = useDocumentsStore()
 const tasks = useTasksStore()
 const tracker = useTrackerStore()
 const releaseHealth = useReleaseHealthStore()
+const userSecrets = useUserSecretsStore()
+const apiKeys = useApiKeysStore()
+const workspace = useWorkspaceStore()
 
 // The selected filing tracker, as a badge label ("GitHub Issues" / "Jira").
 const trackerLabel = computed(() => {
@@ -27,7 +30,12 @@ const trackerLabel = computed(() => {
 watch(
   () => ui.integrationsOpen,
   (isOpen) => {
-    if (isOpen) void releaseHealth.ensureLoaded().catch(() => {})
+    if (isOpen) {
+      void releaseHealth.ensureLoaded().catch(() => {})
+      void userSecrets.load().catch(() => {})
+      // Drives the OpenRouter row's "Key connected" badge.
+      if (workspace.workspaceId) void apiKeys.load(workspace.workspaceId).catch(() => {})
+    }
   },
 )
 
@@ -62,6 +70,38 @@ function go(fn: () => void) {
 const groups = computed<IntegrationGroup[]>(() => {
   const out: IntegrationGroup[] = []
 
+  // --- Models & providers ----------------------------------------------------
+  // Top of the hub: an OpenRouter key is the fastest path to 300+ models, so it leads.
+  const openRouterKeyConnected = apiKeys.configuredProviders.has('openrouter')
+  out.push({
+    title: 'Models & providers',
+    items: [
+      {
+        key: 'openrouter',
+        icon: 'i-lucide-waypoints',
+        label: 'OpenRouter',
+        description: 'One gateway to 300+ models — add your key and enable models in one place.',
+        status: openRouterKeyConnected ? 'Key connected' : undefined,
+        connected: openRouterKeyConnected,
+        onClick: () => go(ui.openOpenRouter),
+      },
+      {
+        key: 'vendors',
+        icon: 'i-lucide-key-round',
+        label: 'Vendors & keys',
+        description: 'LLM vendor subscriptions and provider API keys.',
+        onClick: () => go(ui.openVendorCredentials),
+      },
+      {
+        key: 'local-runners',
+        icon: 'i-lucide-server',
+        label: 'My local runners',
+        description: 'Your own-machine model runners (Ollama, LM Studio, vLLM…).',
+        onClick: () => go(ui.openLocalModels),
+      },
+    ],
+  })
+
   // --- Source control --------------------------------------------------------
   const code: IntegrationItem[] = []
   if (github.available) {
@@ -73,6 +113,20 @@ const groups = computed<IntegrationGroup[]>(() => {
       status: github.connected ? github.connection?.accountLogin : undefined,
       connected: github.connected,
       onClick: () => go(ui.openGitHub),
+    })
+  }
+  // Per-user GitHub PAT — works on every runtime (used for runs you initiate). Always
+  // offered; the badge reflects whether the signed-in user has stored one.
+  {
+    const pat = userSecrets.statusFor('github_pat')
+    code.push({
+      key: 'github-pat',
+      icon: 'i-lucide-key-round',
+      label: 'My GitHub token',
+      description: 'A personal access token used for runs you start (pushes, PRs, CI, merge).',
+      status: pat ? 'Connected' : undefined,
+      connected: !!pat,
+      onClick: () => go(ui.openUserSecrets),
     })
   }
   if (code.length) out.push({ title: 'Source control', items: code })
@@ -169,34 +223,6 @@ const groups = computed<IntegrationGroup[]>(() => {
       ],
     })
   }
-
-  // --- Models & providers ----------------------------------------------------
-  out.push({
-    title: 'Models & providers',
-    items: [
-      {
-        key: 'vendors',
-        icon: 'i-lucide-key-round',
-        label: 'Vendors & keys',
-        description: 'LLM vendor subscriptions and provider API keys.',
-        onClick: () => go(ui.openVendorCredentials),
-      },
-      {
-        key: 'local-runners',
-        icon: 'i-lucide-server',
-        label: 'My local runners',
-        description: 'Your own-machine model runners (Ollama, LM Studio, vLLM…).',
-        onClick: () => go(ui.openLocalModels),
-      },
-      {
-        key: 'openrouter',
-        icon: 'i-lucide-waypoints',
-        label: 'OpenRouter models',
-        description: 'Browse and enable models from the OpenRouter gateway.',
-        onClick: () => go(ui.openOpenRouter),
-      },
-    ],
-  })
 
   return out
 })

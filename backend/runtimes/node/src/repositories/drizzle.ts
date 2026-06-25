@@ -45,6 +45,7 @@ import type {
   ConsensusSessionRepository,
   RequirementReview,
   RequirementReviewItem,
+  RequirementRecommendation,
   RequirementReviewRepository,
   ClarityReview,
   ClarityReviewItem,
@@ -1731,22 +1732,16 @@ class DrizzleWorkspaceMountRepository implements WorkspaceMountRepository {
 type RequirementReviewRow = typeof requirementReviews.$inferSelect
 
 function rowToRequirementReview(row: RequirementReviewRow): RequirementReview {
-  let items: RequirementReviewItem[] = []
-  try {
-    const parsed = JSON.parse(row.items)
-    if (Array.isArray(parsed)) items = parsed as RequirementReviewItem[]
-  } catch {
-    items = []
-  }
   return {
     id: row.id,
     blockId: row.block_id,
     status: row.status as RequirementReview['status'],
-    items,
+    items: parseJsonArray<RequirementReviewItem>(row.items),
     model: row.model,
     incorporatedRequirements: row.incorporated_requirements,
     iteration: row.iteration,
     maxIterations: row.max_iterations,
+    recommendations: parseJsonArray<RequirementRecommendation>(row.recommendations ?? '[]'),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -1798,6 +1793,7 @@ export class DrizzleRequirementReviewRepository implements RequirementReviewRepo
       incorporated_requirements: review.incorporatedRequirements,
       iteration: review.iteration ?? 1,
       max_iterations: review.maxIterations ?? 1,
+      recommendations: JSON.stringify(review.recommendations ?? []),
       created_at: review.createdAt,
       updated_at: review.updatedAt,
     }
@@ -1814,6 +1810,7 @@ export class DrizzleRequirementReviewRepository implements RequirementReviewRepo
           incorporated_requirements: values.incorporated_requirements,
           iteration: values.iteration,
           max_iterations: values.max_iterations,
+          recommendations: values.recommendations,
           updated_at: values.updated_at,
         },
       })

@@ -1,4 +1,5 @@
 import type {
+  AddEpicInput,
   AddFrameInput,
   AddModuleInput,
   AddServiceFromRepoInput,
@@ -21,7 +22,14 @@ import type {
 } from '@cat-factory/kernel'
 import type { IdGenerator } from '@cat-factory/kernel'
 import { registerServiceForFrame, requireWorkspace } from '@cat-factory/kernel'
-import { canReparent, descendantIds, gridSlot, serviceOf, tasksOf } from './board.logic.js'
+import {
+  canReparent,
+  descendantIds,
+  gridSlot,
+  serviceOf,
+  tasksOf,
+  wouldCreateCycle,
+} from './board.logic.js'
 
 export interface BoardServiceDependencies {
   workspaceRepository: WorkspaceRepository
@@ -351,6 +359,9 @@ export class BoardService {
     if (input.taskTypeFields && Object.keys(input.taskTypeFields).length) {
       block.taskTypeFields = input.taskTypeFields
     }
+    // Optional epic membership at creation (the epic-import spawn path passes this so
+    // every child task joins the epic it was imported under).
+    if (input.epicId) block.epicId = input.epicId
     // The signed-in user who created the task, for "notify the task creator"
     // notification routing. Null with auth disabled (local/dev).
     if (createdBy != null) block.createdBy = createdBy
@@ -402,6 +413,63 @@ export class BoardService {
       await this.serviceForContainer(blocks, service),
     )
     return block
+  }
+
+  /**
+   * Add an `epic`-level grouping node. An epic is NOT a structural container — tasks
+   * join it via their `epicId`, not by reparenting — so it is a plain board block that
+   * is never registered as an account-owned service. `parentId` is an optional placement
+   * under a service/module (validated reparent-legal); omitted ⇒ a top-level node.
+   */
+  async addEpic(workspaceId: string, input: AddEpicInput): Promise<Block> {
+    await this.requireWorkspace(workspaceId)
+    let parentId: string | null = null
+    if (input.parentId) {
+      const { block: parent } = await this.resolveBlock(workspaceId, input.parentId)
+      if (!canReparent('epic', parent)) {
+        throw new ValidationError(`An epic cannot be placed inside a ${parent.level}`)
+      }
+      parentId = input.parentId
+    }
+    const block: Block = {
+      id: this.idGenerator.next('epic'),
+      title: input.title.trim(),
+      // An epic has no architectural type of its own; tag it as an integration-ish
+      // grouping. Only its `level` drives rendering/behaviour.
+      type: 'service',
+      description: input.description?.trim() ?? '',
+      position: input.position,
+      status: 'planned',
+      progress: 0,
+      dependsOn: [],
+      executionId: null,
+      level: 'epic',
+      parentId,
+    }
+    await this.blockRepository.insert(workspaceId, block)
+    return block
+  }
+
+  /**
+   * Assign a task to an epic, or detach it (`epicId === null`). Membership is recorded on
+   * the task's `epicId` and is independent of its structural `parentId`, so a task keeps
+   * its place under a module/service while joining an epic that groups tasks across the
+   * board. Validates the epic is visible and actually `epic`-level.
+   */
+  async assignToEpic(workspaceId: string, taskId: string, epicId: string | null): Promise<Block> {
+    await this.requireWorkspace(workspaceId)
+    const { homeWorkspaceId, block: task } = await this.resolveBlock(workspaceId, taskId)
+    if (task.level !== 'task') {
+      throw new ValidationError('Only tasks can belong to an epic')
+    }
+    if (epicId) {
+      const { block: epic } = await this.resolveBlock(workspaceId, epicId)
+      if (epic.level !== 'epic') {
+        throw new ValidationError('A task can only be assigned to an epic-level block')
+      }
+    }
+    await this.blockRepository.update(homeWorkspaceId, taskId, { epicId })
+    return assertFound(await this.blockRepository.get(homeWorkspaceId, taskId), 'Block', taskId)
   }
 
   async moveBlock(workspaceId: string, id: string, position: Position): Promise<Block> {
@@ -493,16 +561,33 @@ export class BoardService {
       }
     }
     await this.blockRepository.deleteMany(blockHome, ids)
-    // Drop dependency edges in the source workspace that now dangle to the moved subtree.
-    const moved = new Set(ids)
-    for (const b of srcBlocks) {
-      if (moved.has(b.id)) continue
-      const next = b.dependsOn.filter((d) => !moved.has(d))
-      if (next.length !== b.dependsOn.length) {
-        await this.blockRepository.update(blockHome, b.id, { dependsOn: next })
+    // Drop dependency + epic edges in the source workspace that now dangle to the moved subtree.
+    await this.pruneDanglingEdges(blockHome, srcBlocks, new Set(ids))
+    return assertFound(await this.blockRepository.get(parentHome, id), 'Block', id)
+  }
+
+  /**
+   * After a set of blocks leaves `homeWorkspaceId` (deleted, or moved to another workspace),
+   * drop the now-dangling references on the surviving blocks in one pass: dependency edges
+   * pointing into `removed`, and epic membership whose epic was removed (the member task itself
+   * survives — epic grouping is non-structural, never cascaded). Shared by the delete and the
+   * reparent/detach paths so they can't drift.
+   */
+  private async pruneDanglingEdges(
+    homeWorkspaceId: string,
+    survivors: Block[],
+    removed: Set<string>,
+  ): Promise<void> {
+    for (const b of survivors) {
+      if (removed.has(b.id)) continue
+      const patch: { dependsOn?: string[]; epicId?: string | null } = {}
+      const next = b.dependsOn.filter((d) => !removed.has(d))
+      if (next.length !== b.dependsOn.length) patch.dependsOn = next
+      if (b.epicId && removed.has(b.epicId)) patch.epicId = null
+      if (Object.keys(patch).length) {
+        await this.blockRepository.update(homeWorkspaceId, b.id, patch)
       }
     }
-    return assertFound(await this.blockRepository.get(parentHome, id), 'Block', id)
   }
 
   /** Delete a block and all its descendants, dropping dangling dependencies. */
@@ -557,13 +642,7 @@ export class BoardService {
     }
     await this.blockRepository.deleteMany(homeWorkspaceId, [...doomed])
 
-    for (const b of blocks) {
-      if (doomed.has(b.id)) continue
-      const next = b.dependsOn.filter((d) => !doomed.has(d))
-      if (next.length !== b.dependsOn.length) {
-        await this.blockRepository.update(homeWorkspaceId, b.id, { dependsOn: next })
-      }
-    }
+    await this.pruneDanglingEdges(homeWorkspaceId, blocks, doomed)
   }
 
   /** Toggle a dependency edge: target dependsOn source. */
@@ -575,11 +654,35 @@ export class BoardService {
     const { homeWorkspaceId, block: target } = await this.resolveBlock(workspaceId, targetId)
     // The source need only be visible to this board (it may be homed elsewhere); the edge is
     // stored as an id on the target, which lives at `homeWorkspaceId`.
-    await this.resolveBlock(workspaceId, sourceId)
+    const { block: source } = await this.resolveBlock(workspaceId, sourceId)
     const i = target.dependsOn.indexOf(sourceId)
+    if (i < 0) {
+      // Adding a NEW edge. Both endpoints must be tasks: only a task ever reaches `done`, so an
+      // edge onto a frame/module/epic (which never executes) would wedge the engine's start gate
+      // forever (`dependenciesMet` requires the blocker to be `done`). Reject it up front.
+      if (target.level !== 'task' || source.level !== 'task') {
+        throw new ValidationError('Only tasks can have dependency edges')
+      }
+      // Reject it if it would close a cycle, so the engine's dependency gate + auto-start can
+      // never deadlock on a circular graph. Checked against the home workspace's blocks.
+      const blocks = await this.blockRepository.listByWorkspace(homeWorkspaceId)
+      if (wouldCreateCycle(blocks, targetId, sourceId)) {
+        throw new ValidationError('That dependency would create a cycle')
+      }
+    }
     const next =
       i >= 0 ? target.dependsOn.filter((d) => d !== sourceId) : [...target.dependsOn, sourceId]
     await this.blockRepository.update(homeWorkspaceId, targetId, { dependsOn: next })
+    // The cycle check above is read-then-write, so two concurrent adds could each pass against a
+    // pre-edge snapshot and together close a loop. Re-verify against the now-written graph and
+    // roll the edge back if a cycle slipped in — cheap and the only point where edges are added.
+    if (i < 0) {
+      const after = await this.blockRepository.listByWorkspace(homeWorkspaceId)
+      if (wouldCreateCycle(after, targetId, sourceId)) {
+        await this.blockRepository.update(homeWorkspaceId, targetId, { dependsOn: target.dependsOn })
+        throw new ValidationError('That dependency would create a cycle')
+      }
+    }
     return assertFound(await this.blockRepository.get(homeWorkspaceId, targetId), 'Block', targetId)
   }
 }

@@ -39,7 +39,7 @@ import {
   specPostOp,
   TASK_ESTIMATOR_AGENT_KIND,
 } from '@cat-factory/agents'
-import type { RepoOp } from '@cat-factory/kernel'
+import type { RepoOp, RunInitiatorScope } from '@cat-factory/kernel'
 import { coerceTaskEstimate, summarizeEstimate } from '../estimation/estimate.logic.js'
 import { validatePipelineShape } from '../pipelines/pipelineShape.js'
 import { shouldRunGatedStep } from './stepGating.logic.js'
@@ -138,7 +138,12 @@ import type {
 } from '@cat-factory/integrations'
 import { isDeployStep } from '@cat-factory/integrations'
 import type { BranchUpdater } from '@cat-factory/kernel'
-import { descendantIds, serviceOf } from '../board/board.logic.js'
+import {
+  dependenciesMet,
+  descendantIds,
+  serviceOf,
+  unmetDependencies,
+} from '../board/board.logic.js'
 import type { BoardService } from '../board/BoardService.js'
 import type { SpendService } from '@cat-factory/spend'
 import { requireWorkspace } from '@cat-factory/kernel'
@@ -396,6 +401,13 @@ export interface ExecutionServiceDependencies {
    */
   mergePresetRepository?: MergePresetRepository
   /**
+   * Optional: runs the gate-probe / merge GitHub reads under the run initiator's
+   * ambient context, so a per-user PAT (when set) is preferred over the deployment's
+   * App/env token (see `PatPreferringAppRegistry`). Absent → a pass-through
+   * (`(_, fn) => fn()`), so tests/conformance run unchanged.
+   */
+  runInitiatorScope?: RunInitiatorScope
+  /**
    * Optional: files a GitHub issue / Jira ticket for the `tracker` step (the
    * tech-debt recurring pipeline). Absent → the `tracker` step passes through
    * without filing anything, so the engine works unchanged when no tracker is wired.
@@ -453,6 +465,7 @@ export interface BlueprintReconciler {
  * deterministic fake and no timing/delays.
  */
 export class ExecutionService {
+  private readonly runInitiatorScope: RunInitiatorScope
   private readonly workspaceRepository: WorkspaceRepository
   private readonly blockRepository: BlockRepository
   private readonly pipelineRepository: PipelineRepository
@@ -563,7 +576,9 @@ export class ExecutionService {
     resolveProviderCapabilities,
     localTestInfraSupported,
     resolveRunRepoContext,
+    runInitiatorScope,
   }: ExecutionServiceDependencies) {
+    this.runInitiatorScope = runInitiatorScope ?? ((_initiatedBy, fn) => fn())
     this.workspaceRepository = workspaceRepository
     this.blockRepository = blockRepository
     this.pipelineRepository = pipelineRepository
@@ -899,6 +914,12 @@ export class ExecutionService {
     // actionable error before any side effects, so the human knows why the start was refused.
     await this.assertWithinTaskLimit(workspaceId, block)
 
+    // Hard dependency gate: a task cannot start while any block it `dependsOn` is unfinished
+    // (not yet `done`/merged). Enforced server-side so it holds for manual starts, recurring
+    // fires, auto-start propagation and direct API calls alike — the frontend's runnable
+    // check is only a hint. Before any side effects so nothing is torn down on a refusal.
+    await this.assertDependenciesMet(workspaceId, block)
+
     // Mint the activation next: if the credential can't be unlocked, fail before
     // tearing down the block's prior run or creating a new one.
     const executionId = this.idGenerator.next('exec')
@@ -992,6 +1013,47 @@ export class ExecutionService {
    * shown as a toast) when the cap is reached. The starting block is excluded from the
    * count (its prior run is about to be replaced).
    */
+  /**
+   * Refuse a task start while any of its dependencies is unfinished. A task may only run
+   * once every block it `dependsOn` has reached `done` (its PR merged). No-ops for
+   * non-task blocks and for tasks with no dependencies. Throws a {@link ConflictError}
+   * (→ 409, shown as a toast) naming the unfinished blockers so the human knows why.
+   */
+  private async assertDependenciesMet(workspaceId: string, block: Block): Promise<void> {
+    if (block.level !== 'task' || block.dependsOn.length === 0) return
+    const blocks = await this.augmentWithCrossWorkspaceDeps(
+      await this.blockRepository.listByWorkspace(workspaceId),
+      block.dependsOn,
+    )
+    if (dependenciesMet(blocks, block.id)) return
+    const blockers = unmetDependencies(blocks, block.id)
+    const names = blockers.map((b) => `"${b.title}"`).join(', ')
+    throw new ConflictError(
+      `This task is blocked by ${blockers.length} unfinished dependenc${
+        blockers.length === 1 ? 'y' : 'ies'
+      }${names ? ` (${names})` : ''}. Finish them before starting this task.`,
+    )
+  }
+
+  /**
+   * Augment a workspace's block list (in place) with any dependency blocks referenced by
+   * `depIds` that aren't already present — a `dependsOn` edge can point at a task homed in a
+   * DIFFERENT workspace (a shared/mounted service). Resolved via the cross-workspace
+   * {@link BlockRepository.findById}, so a shared-service blocker is evaluated by its real
+   * status instead of being silently treated as satisfied (missing ⇒ done). Returns the same
+   * (now-augmented) array for chaining.
+   */
+  private async augmentWithCrossWorkspaceDeps(blocks: Block[], depIds: string[]): Promise<Block[]> {
+    const have = new Set(blocks.map((b) => b.id))
+    for (const id of depIds) {
+      if (have.has(id)) continue
+      have.add(id)
+      const found = await this.blockRepository.findById(id)
+      if (found) blocks.push(found.block)
+    }
+    return blocks
+  }
+
   private async assertWithinTaskLimit(workspaceId: string, block: Block): Promise<void> {
     const settingsService = this.workspaceSettingsService
     if (!settingsService || block.level !== 'task') return
@@ -2337,7 +2399,11 @@ export class ExecutionService {
         kind: MERGER_AGENT_KIND,
         applies: (result) => result.mergeAssessment !== undefined,
         resolve: async ({ workspaceId, instance, result }) => {
-          await this.mergeResolver.resolveMergerStep(workspaceId, instance, result.mergeAssessment)
+          // The real merge runs the engine GitHub client under the run initiator's
+          // ambient context, so a per-user PAT (when set) authors the merge.
+          await this.runInitiatorScope(instance.initiatedBy, () =>
+            this.mergeResolver.resolveMergerStep(workspaceId, instance, result.mergeAssessment),
+          )
           return { ownsTerminalStatus: true }
         },
       },
@@ -2573,7 +2639,13 @@ export class ExecutionService {
     // the CI/conflicts gates, which ignore it.
     if (step.gate.watchSince == null) step.gate.watchSince = this.clock.now()
 
-    const probe = await gate.probe(workspaceId, block.id, step.gate)
+    // Resolve the gate's GitHub reads (CI checks / mergeability) under the run
+    // initiator's ambient context, so a per-user PAT (when set) is preferred over the
+    // deployment's App/env token — see PatPreferringAppRegistry.
+    const gateState = step.gate
+    const probe = await this.runInitiatorScope(instance.initiatedBy, () =>
+      gate.probe(workspaceId, block.id, gateState),
+    )
     step.gate.headSha = probe.headSha
     // Persist the precheck outcome so the run-detail UI can surface why the gate is
     // looping (the failing checks / conflict reason) — detail that was previously fed
@@ -3465,7 +3537,62 @@ export class ExecutionService {
     }
     if ((block.level ?? 'frame') === 'task') {
       await this.applyModuleAssignment(workspaceId, blockId)
+      // Propagate to dependents: if this task opted into auto-start, launch every task
+      // that depends on it whose other dependencies are now also done. Best-effort — the
+      // merge already happened, so a dependent that fails to start must never roll it back.
+      if (block.autoStartDependents) {
+        await this.autoStartDependents(workspaceId, blockId).catch(() => {})
+      }
     }
+  }
+
+  /**
+   * After a task with `autoStartDependents` merges, start every task that `dependsOn` it
+   * and whose remaining dependencies are all now `done`. System-initiated (no human
+   * present), so a dependent on an individual-usage model — which needs its owner to
+   * unlock a personal credential per run — is SKIPPED rather than started (it would fault
+   * at dispatch); the human starts it manually. Each dependent is started independently so
+   * one failure (already running, no provider, …) never blocks the rest.
+   */
+  private async autoStartDependents(workspaceId: string, mergedBlockId: string): Promise<void> {
+    const blocks = await this.blockRepository.listByWorkspace(workspaceId)
+    const dependents = blocks.filter(
+      (b) => b.level === 'task' && b.dependsOn.includes(mergedBlockId),
+    )
+    // A dependent's OTHER blockers may live in another workspace (a shared service); resolve
+    // them so `dependenciesMet` doesn't treat a cross-workspace blocker as missing-⇒-satisfied.
+    await this.augmentWithCrossWorkspaceDeps(blocks, dependents.flatMap((d) => d.dependsOn))
+    for (const dependent of dependents) {
+      // All of the dependent's blockers must now be satisfied (not just the one that merged).
+      if (!dependenciesMet(blocks, dependent.id)) continue
+      // Only auto-start a fresh task — never replace a run already in flight or a finished one.
+      if (dependent.status !== 'planned' && dependent.status !== 'ready') continue
+      const pipelineId = await this.resolveDefaultPipelineId(workspaceId, dependent)
+      if (!pipelineId) continue
+      // Skip dependents that would lease an individual-usage credential (can't unlock unattended).
+      const individual = await this.individualVendorsForBlock(workspaceId, dependent.id, pipelineId)
+      if (individual.length > 0) continue
+      try {
+        await this.start(workspaceId, dependent.id, pipelineId, null)
+      } catch {
+        // Already running, no usable provider, still-unmet dep racing, etc. — leave this
+        // dependent for a manual start; the others still get their chance.
+      }
+    }
+  }
+
+  /**
+   * The pipeline id a dependent task should auto-start with: its pinned `pipelineId` when
+   * set, else the workspace's first pipeline (mirrors the board's "Run" default). Null
+   * when no pipeline exists at all.
+   */
+  private async resolveDefaultPipelineId(
+    workspaceId: string,
+    block: Block,
+  ): Promise<string | null> {
+    if (block.pipelineId) return block.pipelineId
+    const pipelines = await this.pipelineRepository.listByWorkspace(workspaceId)
+    return pipelines[0]?.id ?? null
   }
 
   /**

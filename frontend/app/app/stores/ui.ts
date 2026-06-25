@@ -102,6 +102,7 @@ export const useUiStore = defineStore('ui', () => {
   const vendorCredentialsOpen = ref(false)
   // Per-user settings panel: the signed-in user's own-machine local model runners.
   const localModelsOpen = ref(false)
+  const userSecretsOpen = ref(false)
   // Per-workspace settings panel: the OpenRouter dynamic catalog (browse/enable gateway models).
   const openRouterOpen = ref(false)
 
@@ -358,6 +359,12 @@ export const useUiStore = defineStore('ui', () => {
   function closeLocalModels() {
     localModelsOpen.value = false
   }
+  function openUserSecrets() {
+    userSecretsOpen.value = true
+  }
+  function closeUserSecrets() {
+    userSecretsOpen.value = false
+  }
   function openOpenRouter() {
     openRouterOpen.value = true
   }
@@ -451,6 +458,7 @@ export const useUiStore = defineStore('ui', () => {
     modelConfigOpen,
     vendorCredentialsOpen,
     localModelsOpen,
+    userSecretsOpen,
     openRouterOpen,
     aiProviderSetupOpen,
     aiPresetMismatchOpen,
@@ -512,6 +520,8 @@ export const useUiStore = defineStore('ui', () => {
     closeVendorCredentials,
     openLocalModels,
     closeLocalModels,
+    openUserSecrets,
+    closeUserSecrets,
     openOpenRouter,
     closeOpenRouter,
     openAiProviderSetup,

@@ -1,10 +1,12 @@
 import type {
+  ConnectionTestResult,
   EnvironmentAccessHandle,
   EnvironmentHandle,
   EnvironmentStatus,
+  ProviderConfigField,
 } from '@cat-factory/kernel'
 import type { EnvironmentRecord, UrlSafetyPolicy } from '@cat-factory/kernel'
-import { STRICT_URL_SAFETY_POLICY, ValidationError } from '@cat-factory/kernel'
+import { getErrorMessage, STRICT_URL_SAFETY_POLICY, ValidationError } from '@cat-factory/kernel'
 
 // Pure helpers for the ephemeral-environment integration: SSRF validation of the
 // URLs we fetch/expose, `{{var}}` interpolation over a bounded scope, dot-path
@@ -163,6 +165,47 @@ export function assertSafeEnvironmentUrl(
   if (host === '') throw invalid()
   if (!hostExempt(host, policy) && isBlockedHost(host)) {
     throw new ValidationError(`Environment ${label} must be a public host`)
+  }
+}
+
+/**
+ * Render a manifest's referenced secret keys as password config fields, so the
+ * manifest editor can show which secrets a connection still needs. Shared by the
+ * generic environment + runner-pool providers' `describeConfig`.
+ */
+export function configFieldsFromSecretKeys(keys: string[]): ProviderConfigField[] {
+  return keys.map((key) => ({ key, label: key, secret: true, required: true }))
+}
+
+/**
+ * A minimal, side-effect-free connection probe: an authed GET against the pool/env
+ * management `baseUrl`. Any HTTP response means the host is reachable; a 401/403
+ * means the credentials were rejected. Never throws — a network failure is reported
+ * as `{ ok:false }`. Shared by the generic providers' `testConnection`.
+ */
+export async function probeConnection(
+  baseUrl: string,
+  headers: Record<string, string>,
+  policy: UrlSafetyPolicy = STRICT_URL_SAFETY_POLICY,
+  timeoutMs = 10_000,
+): Promise<ConnectionTestResult> {
+  try {
+    assertSafeEnvironmentUrl(baseUrl, 'base URL', policy)
+  } catch (err) {
+    return { ok: false, message: getErrorMessage(err) }
+  }
+  try {
+    const res = await fetch(baseUrl, {
+      method: 'GET',
+      headers: { accept: 'application/json', ...headers },
+      signal: AbortSignal.timeout(timeoutMs),
+    })
+    if (res.status === 401 || res.status === 403) {
+      return { ok: false, message: `Credentials rejected (HTTP ${res.status})` }
+    }
+    return { ok: true, message: `Reachable (HTTP ${res.status})` }
+  } catch (err) {
+    return { ok: false, message: getErrorMessage(err) }
   }
 }
 

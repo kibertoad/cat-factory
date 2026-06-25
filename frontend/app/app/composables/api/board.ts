@@ -51,6 +51,16 @@ export function boardApi({ http, ws }: ApiContext) {
       body: { name: string; position?: Position },
     ) => http<Block>(`${ws(workspaceId)}/blocks/${blockId}/modules`, { method: 'POST', body }),
 
+    // Create an epic grouping node (optionally placed under a service/module).
+    addEpic: (
+      workspaceId: string,
+      body: { title: string; description?: string; position: Position; parentId?: string },
+    ) => http<Block>(`${ws(workspaceId)}/epics`, { method: 'POST', body }),
+
+    // Assign a task to an epic, or detach it (epicId: null).
+    assignToEpic: (workspaceId: string, blockId: string, body: { epicId: string | null }) =>
+      http<Block>(`${ws(workspaceId)}/blocks/${blockId}/epic`, { method: 'POST', body }),
+
     updateBlock: (workspaceId: string, blockId: string, body: Partial<Block>) =>
       http<Block>(`${ws(workspaceId)}/blocks/${blockId}`, { method: 'PATCH', body }),
 

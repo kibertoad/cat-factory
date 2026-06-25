@@ -119,6 +119,13 @@ export interface ConformanceApp {
    */
   localModelEndpoints?(): LocalModelEndpointsProbe | undefined
   /**
+   * The facade's per-user generic secret service (a GitHub PAT today) over its real store,
+   * so the suite can assert repository/service parity (store → system-encrypted resolve +
+   * the kind descriptor) across D1 and Postgres. User-scoped like local model endpoints, so
+   * exercised through the service directly. Undefined when the facade didn't wire the store.
+   */
+  userSecrets?(): UserSecretsProbe | undefined
+  /**
    * The facade's per-workspace OpenRouter dynamic-catalog service over its real store, so the
    * suite can assert repository/service parity (enabled-subset round-trip) across D1 and
    * Postgres. The HTTP routes need a signed-in user the dev-open `call` path lacks, so the
@@ -160,6 +167,17 @@ export interface LocalModelEndpointsProbe {
     provider: string,
   ): Promise<{ baseUrl: string; apiKey: string | null } | null>
   remove(userId: string, provider: string): Promise<void>
+}
+
+/** The subset of the user-secret service the conformance suite drives. */
+export interface UserSecretsProbe {
+  store(
+    userId: string,
+    kind: string,
+    input: { secret: string; metadata?: Record<string, string>; label?: string },
+  ): Promise<{ kind: string; hasSecret: boolean; metadata?: Record<string, string> }>
+  resolve(userId: string, kind: string): Promise<string | null>
+  describe(kind: string): { kind: string; supportsTest: boolean; configFields: { key: string; secret?: boolean }[] } | null
 }
 
 export interface ConformanceHarness {

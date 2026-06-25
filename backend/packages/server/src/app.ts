@@ -34,6 +34,7 @@ import { slackController, slackOAuthController } from './modules/slack/SlackCont
 import { vendorCredentialController } from './modules/providers/VendorCredentialController.js'
 import { personalSubscriptionController } from './modules/providers/PersonalSubscriptionController.js'
 import { localModelEndpointController } from './modules/localModels/LocalModelEndpointController.js'
+import { userSecretController } from './modules/providers/UserSecretController.js'
 import { openRouterCatalogController } from './modules/openrouter/OpenRouterCatalogController.js'
 import {
   userApiKeyController,
@@ -69,6 +70,7 @@ export function registerCoreControllers<E extends AppEnv>(app: Hono<E>): void {
   app.route('/', accountController())
   app.route('/', personalSubscriptionController())
   app.route('/', localModelEndpointController())
+  app.route('/', userSecretController())
   app.route('/', openRouterCatalogController())
   app.route('/', userApiKeyController())
   app.route('/accounts/:accountId', fragmentLibraryController('account'))

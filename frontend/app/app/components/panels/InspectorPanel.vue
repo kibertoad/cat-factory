@@ -12,6 +12,7 @@ import TaskDependencies from '~/components/panels/inspector/TaskDependencies.vue
 import TaskStructure from '~/components/panels/inspector/TaskStructure.vue'
 import TaskRunSettings from '~/components/panels/inspector/TaskRunSettings.vue'
 import TaskExecution from '~/components/panels/inspector/TaskExecution.vue'
+import EpicChildren from '~/components/panels/inspector/EpicChildren.vue'
 import RecurringScheduleSettings from '~/components/panels/inspector/RecurringScheduleSettings.vue'
 import AgentFailureCard from '~/components/board/AgentFailureCard.vue'
 import AgentStopButton from '~/components/board/AgentStopButton.vue'
@@ -51,6 +52,7 @@ const level = computed(() => block.value?.level ?? 'frame')
 const isFrame = computed(() => level.value === 'frame')
 const isContainer = computed(() => level.value === 'frame' || level.value === 'module')
 const isTask = computed(() => level.value === 'task')
+const isEpic = computed(() => level.value === 'epic')
 
 const instance = computed(() => execution.getInstance(block.value?.executionId))
 const typeMeta = computed(() => (block.value ? blockTypeMeta(block.value.type) : null))
@@ -441,6 +443,9 @@ const showOriginalDescription = ref(false)
         <TaskRunSettings :block="block" />
         <TaskExecution :block="block" />
       </template>
+
+      <!-- epic: the full tree of member tasks, grouped by service → module -->
+      <EpicChildren v-else-if="isEpic" :block="block" />
 
       <!-- actions -->
       <div class="flex items-center gap-2">

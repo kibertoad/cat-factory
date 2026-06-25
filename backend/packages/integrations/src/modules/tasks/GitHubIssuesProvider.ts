@@ -60,11 +60,22 @@ export class GitHubIssuesProvider implements TaskSourceProvider {
       throw new ValidationError(`"${externalId}" is not a valid GitHub issue reference`)
     }
     const installationId = await this.resolveInstallationId(id.owner)
-    const detail = await this.deps.githubClient.getIssue(
-      installationId,
-      { owner: id.owner, repo: id.repo },
-      id.number,
-    )
+    const ref = { owner: id.owner, repo: id.repo }
+    const detail = await this.deps.githubClient.getIssue(installationId, ref, id.number)
+    // Sub-issues (the GitHub-native parent→child relationship) are the epic-import's
+    // children. Best-effort: a client/runtime without the sub-issues API, or an issue
+    // with none, yields no children — the issue then imports as a flat task.
+    let childExternalIds: string[] = []
+    if (this.deps.githubClient.listSubIssues) {
+      const subs = await this.deps.githubClient
+        .listSubIssues(installationId, ref, id.number)
+        .catch(() => [])
+      childExternalIds = subs.map((s) =>
+        githubIssuesLogic.githubIssueExternalId({ owner: s.owner, repo: s.repo, number: s.number }),
+      )
+    }
+    // GitHub has no dependency field, so "blocked by"/"depends on" are parsed from the body.
+    const links = githubIssuesLogic.parseIssueDependencyLinks(detail.body, id.owner, id.repo)
     return {
       externalId,
       url: detail.url || githubIssuesLogic.githubIssueUrl(id),
@@ -79,6 +90,10 @@ export class GitHubIssuesProvider implements TaskSourceProvider {
       labels: detail.labels,
       description: detail.body,
       comments: detail.comments,
+      isEpic: childExternalIds.length > 0,
+      parentExternalId: detail.parentRef ?? null,
+      childExternalIds,
+      links,
     }
   }
 

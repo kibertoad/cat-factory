@@ -110,6 +110,8 @@ export {
   type RegisteredApp,
   type AppTokenSource,
 } from './github/GitHubAppRegistry.js'
+export { PatPreferringAppRegistry } from './github/PatPreferringAppRegistry.js'
+export { runWithInitiator, currentInitiator } from './github/runInitiatorContext.js'
 // The runtime-neutral fetch-based GitHub client + the CI / merge / mergeability
 // providers (shared by every facade so a facade can gate on real CI and merge for
 // real). The client authenticates via the App registry or any AppTokenSource (e.g. a

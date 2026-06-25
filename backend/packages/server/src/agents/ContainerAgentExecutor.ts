@@ -67,7 +67,16 @@ export interface RepoTarget {
 
 export type ResolveRepoTarget = (workspaceId: string, blockId: string) => Promise<RepoTarget | null>
 
-export type MintInstallationToken = (installationId: number) => Promise<string>
+/**
+ * Mint a GitHub token for repo work. The optional run context lets a facade prefer
+ * the run initiator's personal access token over the App/env default (see
+ * `ResolveUserGitHubToken`). Optional ⇒ callers that don't know the run (the
+ * bootstrapper, tests) call `mint(installationId)` unchanged.
+ */
+export type MintInstallationToken = (
+  installationId: number,
+  ctx?: { executionId: string; initiatedBy?: string },
+) => Promise<string>
 
 /**
  * Ensure the per-task work branch exists on the remote, so every agent in the pipeline
@@ -623,7 +632,10 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       throw new Error(`No connected GitHub repository found for workspace '${workspaceId}'`)
     }
 
-    const ghToken = await this.deps.mintInstallationToken(repo.installationId)
+    const ghToken = await this.deps.mintInstallationToken(repo.installationId, {
+      executionId,
+      initiatedBy: context.initiatedByUserId,
+    })
 
     // The shared per-task work branch every agent in this pipeline operates on. Its name
     // is deterministic from the block id (so a retry/replay/sweeper re-drive always targets

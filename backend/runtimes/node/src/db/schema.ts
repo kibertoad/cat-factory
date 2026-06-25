@@ -158,6 +158,12 @@ export const blocks = pgTable(
     execution_id: text('execution_id'),
     level: text('level').notNull().default('frame'),
     parent_id: text('parent_id'),
+    // Task-level: membership link to an `epic`-level block, independent of parent_id
+    // (the structural container). Deleting an epic clears this, never the member tasks.
+    epic_id: text('epic_id'),
+    // Task-level: preceding-task auto-start toggle (0/1); null ⇒ off. When set, merging
+    // this task auto-starts every dependent whose other dependencies are also done.
+    auto_start_dependents: integer('auto_start_dependents'),
     confidence: doublePrecision('confidence'),
     module_name: text('module_name'),
     fragment_ids: text('fragment_ids'),
@@ -202,6 +208,7 @@ export const blocks = pgTable(
   (t) => [
     primaryKey({ columns: [t.workspace_id, t.id] }),
     index('idx_blocks_parent').on(t.workspace_id, t.parent_id),
+    index('idx_blocks_epic').on(t.workspace_id, t.epic_id),
     index('idx_blocks_service').on(t.service_id),
     // findById looks a block up by id alone (no workspace_id), so it can't use the
     // (workspace_id, id) PK — index id directly to avoid scanning the largest table.
@@ -549,6 +556,8 @@ export const requirementReviews = pgTable(
     // review is iteration 1; an "extra round" choice bumps max_iterations).
     iteration: integer('iteration').notNull().default(1),
     max_iterations: integer('max_iterations').notNull().default(1),
+    // Requirement-Writer recommendations as a JSON array (text), mirror of D1 migration 0009.
+    recommendations: text('recommendations').notNull().default('[]'),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
     updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
   },
@@ -1062,6 +1071,24 @@ export const localModelEndpoints = pgTable(
     updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
   },
   (t) => [primaryKey({ columns: [t.user_id, t.provider] })],
+)
+
+// Generic per-USER secrets — token-style credentials keyed by (user_id, kind) (a GitHub
+// PAT today; future repository/provider tokens as new kinds). Mirror of D1 migration 0009
+// / D1UserSecretRepository. The secret is single-system-key ciphertext; non-secret fields
+// ride in metadata_json.
+export const userSecrets = pgTable(
+  'user_secrets',
+  {
+    user_id: text('user_id').notNull(),
+    kind: text('kind').notNull(),
+    label: text('label').notNull(),
+    secret_cipher: text('secret_cipher').notNull(),
+    metadata_json: text('metadata_json'),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+    updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.user_id, t.kind] })],
 )
 
 // Per-WORKSPACE enabled GATEWAY models (the dynamic catalog subset) — OpenRouter today,

@@ -9,6 +9,7 @@ import type {
   TaskSourceState,
 } from '~/types/domain'
 import { useWorkspaceStore } from '~/stores/workspace'
+import { useBoardStore } from '~/stores/board'
 
 /**
  * Task-source integration state: the trackers the backend offers (and their
@@ -210,6 +211,29 @@ export const useTasksStore = defineStore('tasks', () => {
     return result
   }
 
+  /**
+   * Spawn an epic and its children onto the board: an epic node + a task per child issue
+   * (joined to the epic), with dependency edges seeded from the issues' links. Upserts the
+   * created blocks so the board reflects them immediately (the stream also re-broadcasts).
+   */
+  async function spawnEpic(
+    source: TaskSourceKind,
+    ref: string,
+    containerId: string,
+    position?: { x: number; y: number },
+  ) {
+    const board = useBoardStore()
+    const result = await api.spawnEpic(workspace.requireId(), source, {
+      ref,
+      containerId,
+      ...(position ? { position } : {}),
+    })
+    board.upsert(result.epic)
+    for (const t of result.tasks) board.upsert(t)
+    await loadTasks().catch(() => {})
+    return result
+  }
+
   return {
     available,
     probeError,
@@ -237,5 +261,6 @@ export const useTasksStore = defineStore('tasks', () => {
     search,
     linkToBlock,
     createTaskFromIssue,
+    spawnEpic,
   }
 })

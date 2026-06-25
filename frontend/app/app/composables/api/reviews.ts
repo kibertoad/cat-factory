@@ -82,6 +82,39 @@ export function reviewsApi({ http, ws }: ApiContext) {
         { method: 'POST', body: { choice } },
       ),
 
+    // Ask the Requirement Writer to recommend grounded answers for a batch of findings (by
+    // item id). Returns the review with `ready` recommendations for the human to act on.
+    requestRecommendations: (workspaceId: string, blockId: string, itemIds: string[]) =>
+      http<RequirementReview | null>(
+        `${ws(workspaceId)}/blocks/${encodeURIComponent(blockId)}/requirement-review/recommend`,
+        { method: 'POST', body: { itemIds } },
+      ),
+
+    // Accept a recommendation (becomes the finding's answer), reject it, or re-request it
+    // with a "do it differently" note.
+    acceptRecommendation: (workspaceId: string, reviewId: string, recId: string) =>
+      http<RequirementReview>(
+        `${ws(workspaceId)}/requirement-reviews/${encodeURIComponent(reviewId)}/recommendations/${encodeURIComponent(recId)}/accept`,
+        { method: 'POST' },
+      ),
+
+    rejectRecommendation: (workspaceId: string, reviewId: string, recId: string) =>
+      http<RequirementReview>(
+        `${ws(workspaceId)}/requirement-reviews/${encodeURIComponent(reviewId)}/recommendations/${encodeURIComponent(recId)}/reject`,
+        { method: 'POST' },
+      ),
+
+    reRequestRecommendation: (
+      workspaceId: string,
+      reviewId: string,
+      recId: string,
+      note: string,
+    ) =>
+      http<RequirementReview>(
+        `${ws(workspaceId)}/requirement-reviews/${encodeURIComponent(reviewId)}/recommendations/${encodeURIComponent(recId)}/re-request`,
+        { method: 'POST', body: { note } },
+      ),
+
     // ---- clarity review (bug-report triage reviewer agent) ---------------
     // The current review for a block (null when none has been run). A 503 means
     // the feature is unconfigured (the panel hides on any error here).

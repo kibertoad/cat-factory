@@ -6,6 +6,7 @@ import {
   linkTaskSchema,
   searchTasksSchema,
   setTaskSourceEnabledSchema,
+  spawnEpicSchema,
   type TaskSourceKind,
 } from '@cat-factory/contracts'
 import * as v from 'valibot'
@@ -208,6 +209,24 @@ export function taskSourceController(): Hono<AppEnv> {
       source,
       externalId,
       c.get('user')?.id ?? null,
+    )
+    return c.json(result, 201)
+  })
+
+  // Spawn an epic + its children: create an epic node, materialise each child issue as a
+  // board task inside the container (joined to the epic), and seed dependsOn edges from
+  // the issues' blocked-by/depends-on links. Returns the epic node + the created tasks.
+  app.post('/task-sources/:source/epics/spawn', jsonBody(spawnEpicSchema), async (c) => {
+    const tasks = requireTasks(c)
+    if (!tasks) return unavailable(c)
+    const { ref, containerId, position } = c.req.valid('json')
+    const result = await tasks.linkService.spawnEpic(
+      param(c, 'workspaceId'),
+      sourceParam(c),
+      ref,
+      containerId,
+      c.get('user')?.id ?? null,
+      position,
     )
     return c.json(result, 201)
   })

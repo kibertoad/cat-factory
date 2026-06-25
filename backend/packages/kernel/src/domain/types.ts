@@ -70,6 +70,17 @@ export type {
   LinkReposInput,
   OpenPullRequestInput,
   MergePullRequestInput,
+  // Shared provider self-description + connection-test shapes.
+  ProviderConfigFieldType,
+  ProviderConfigField,
+  ProviderDescriptor,
+  ConnectionTestResult,
+  // Per-user secret (generic, kind-discriminated) shapes.
+  UserSecretKind,
+  UserSecretStatus,
+  StoreUserSecretInput,
+  TestUserSecretInput,
+  UserSecretDescriptor,
   // Document-source integration projections + planning shapes.
   DocumentSourceKind,
   DocumentSourceDescriptor,
@@ -89,6 +100,7 @@ export type {
   TaskSourceDiagnosticStatus,
   TaskConnection,
   TaskComment,
+  TaskDependencyLink,
   SourceTask,
   TaskSearchResult,
   // Ephemeral environment provider shapes.
@@ -104,6 +116,7 @@ export type {
   EnvironmentAccessHandle,
   EnvironmentHandle,
   EnvironmentConnection,
+  TestEnvironmentConnectionInput,
   // Self-hosted runner-pool ("bring your own infra") shapes.
   RunnerPoolSecretRef,
   RunnerPoolAuthScheme,
@@ -112,6 +125,7 @@ export type {
   RunnerPoolResponseMapping,
   RunnerPoolManifest,
   RunnerPoolConnection,
+  TestRunnerPoolConnectionInput,
   // Repo-bootstrap shapes.
   ReferenceArchitecture,
   CreateReferenceArchitectureInput,
@@ -134,9 +148,13 @@ export type {
   RequirementReviewItem,
   RequirementReviewStatus,
   RequirementReview,
+  RecommendationStatus,
+  RequirementRecommendation,
   ReplyReviewItemInput,
   UpdateReviewItemStatusInput,
   IncorporateRequirementsInput,
+  RequestRecommendationsInput,
+  ReRequestRecommendationInput,
   ResolveRequirementsExceededInput,
   ResolveRequirementsExceededChoice,
   // Clarity-review (bug-report triage reviewer agent) shapes — reuse the requirements
