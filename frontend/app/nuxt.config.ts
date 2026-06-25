@@ -15,6 +15,15 @@ export default defineNuxtConfig({
   // Render as a pure client-side SPA that talks to the cat-factory backend.
   ssr: false,
 
+  // The board is a single dark-themed surface (neutral is mapped to `slate` and
+  // every component is hand-styled in slate). Pin Nuxt UI's color mode to dark so
+  // its own chrome (modals, inputs, selects, dropdowns) matches instead of
+  // following the visitor's system preference and rendering light/white overlays.
+  colorMode: {
+    preference: 'dark',
+    fallback: 'dark',
+  },
+
   runtimeConfig: {
     public: {
       // Base URL of the cat-factory worker API. Defaults to the local wrangler
