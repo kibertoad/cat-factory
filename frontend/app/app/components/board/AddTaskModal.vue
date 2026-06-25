@@ -5,13 +5,14 @@
 // pipeline on it explicitly (and can keep editing it until they do).
 //
 // The form also shows ungated "Context documents" / "Context issues" sections
-// (mirroring the task inspector): pick already-imported docs/issues — or open the
-// import flow — to attach as agent context. When the relevant integration isn't
-// connected the Attach button is disabled with a hint. Linking needs the block id,
+// (mirroring the task inspector): an inline search picker (ContextDocumentPicker /
+// ContextIssuePicker) finds already-imported items, search hits, or a pasted ref to
+// attach as agent context. When the relevant integration isn't connected the Attach
+// button is disabled with a hint. Linking needs the block id,
 // so chosen items are staged locally and import-and-linked once the task is created
 // (see useContextLinking) — the same context the agents see for every step of the run.
-import type { DropdownMenuItem } from '@nuxt/ui'
 import type { CreateTaskType, TaskTypeFields } from '~/types/domain'
+import ContextDocumentPicker from '~/components/documents/ContextDocumentPicker.vue'
 import ContextIssuePicker from '~/components/tasks/ContextIssuePicker.vue'
 
 const ui = useUiStore()
@@ -200,41 +201,13 @@ function removePending(item: PendingContext) {
   pendingContext.value = pendingContext.value.filter((c) => contextKey(c) !== contextKey(item))
 }
 
-// Attach menus: already-imported items not yet chosen, plus the import entry — the
-// same affordances the inspector offers. Picking one stages it locally (it links
-// after the task is created).
-const docAttachMenu = computed<DropdownMenuItem[][]>(() => {
-  const chosen = new Set(pendingContext.value.map(contextKey))
-  const items: DropdownMenuItem[] = documents.documents
-    .filter(
-      (d) =>
-        !chosen.has(contextKey({ kind: 'document', source: d.source, externalId: d.externalId })),
-    )
-    .map((d) => ({
-      label: d.title,
-      icon: documents.descriptorFor(d.source)?.icon ?? 'i-lucide-file-text',
-      onSelect: () =>
-        addPending({
-          kind: 'document',
-          source: d.source,
-          externalId: d.externalId,
-          title: d.title,
-          icon: documents.descriptorFor(d.source)?.icon ?? 'i-lucide-file-text',
-          needsImport: false,
-        }),
-    }))
-  items.push({
-    label: 'Import a page…',
-    icon: 'i-lucide-file-down',
-    onSelect: () => ui.openDocumentImport(null),
-  })
-  return [items]
-})
-
-// Context issues are picked through an inline search picker (ContextIssuePicker)
-// rather than a dropdown that opens a second modal — stacked page-level modals
-// don't interact here, which is why the old "Import an issue…" path appeared to
-// do nothing. The "Attach" button toggles the picker open.
+// Context documents and issues are both picked through an inline search picker
+// (ContextDocumentPicker / ContextIssuePicker) rather than a dropdown that opens a
+// second modal — stacked page-level modals don't interact here, which is why the
+// old "Import a page…" / "Import an issue…" entries appeared to open something but
+// nothing was clickable. The "Attach" button toggles the relevant picker open.
+const showDocPicker = ref(false)
+const chosenDocKeys = computed(() => pendingDocs.value.map(contextKey))
 const showIssuePicker = ref(false)
 const chosenIssueKeys = computed(() => pendingIssues.value.map(contextKey))
 
@@ -255,6 +228,7 @@ watch(open, (isOpen) => {
   pipelineId.value = ''
   agentConfigValues.value = {}
   pendingContext.value = []
+  showDocPicker.value = false
   showIssuePicker.value = false
   documents.loadDocuments().catch(() => {})
   tasks.loadTasks().catch(() => {})
@@ -508,15 +482,16 @@ async function add() {
               <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
                 Context documents
               </span>
-              <UDropdownMenu
+              <UButton
                 v-if="docsConnected"
-                :items="docAttachMenu"
-                :content="{ side: 'bottom', align: 'end' }"
+                color="neutral"
+                variant="soft"
+                size="xs"
+                :icon="showDocPicker ? 'i-lucide-x' : 'i-lucide-plus'"
+                @click="showDocPicker = !showDocPicker"
               >
-                <UButton color="neutral" variant="soft" size="xs" icon="i-lucide-plus">
-                  Attach
-                </UButton>
-              </UDropdownMenu>
+                {{ showDocPicker ? 'Done' : 'Attach' }}
+              </UButton>
               <UButton
                 v-else
                 color="neutral"
@@ -533,6 +508,11 @@ async function add() {
                 Attach
               </UButton>
             </div>
+            <ContextDocumentPicker
+              v-if="showDocPicker && docsConnected"
+              :chosen-keys="chosenDocKeys"
+              @pick="addPending"
+            />
             <div v-if="pendingDocs.length" class="space-y-1">
               <div
                 v-for="item in pendingDocs"
