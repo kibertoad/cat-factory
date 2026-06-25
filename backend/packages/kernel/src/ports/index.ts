@@ -153,6 +153,7 @@ export type {
 export type {
   TaskCredentials,
   TaskContent,
+  TaskSearchRepoScope,
   NormalizedTaskConnection,
   TaskSourceProvider,
   TaskSourceRegistry,

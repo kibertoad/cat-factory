@@ -11,6 +11,12 @@ import type { TaskSearchResult, TaskSourceKind } from '~/types/domain'
 const props = defineProps<{
   /** contextKeys already staged by the caller, so they're filtered out / not re-offered. */
   chosenKeys?: string[]
+  /**
+   * The block the picker is attaching context to (a service frame or a task/module
+   * under one). Scopes a GitHub search to that service's linked repo, so hits stay
+   * in-repo and a pasted URL / bare issue number resolves to the exact issue.
+   */
+  scopeBlockId?: string
 }>()
 const emit = defineEmits<{ pick: [item: PendingContext] }>()
 
@@ -50,7 +56,7 @@ async function runSearch() {
   searching.value = true
   searchError.value = null
   try {
-    results.value = await tasks.search(source.value, q)
+    results.value = await tasks.search(source.value, q, props.scopeBlockId)
   } catch (e) {
     results.value = []
     searchError.value = e instanceof Error ? e.message : String(e)

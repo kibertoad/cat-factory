@@ -11,6 +11,7 @@ import type {
   ProviderSubscriptionService,
 } from '@cat-factory/integrations'
 import type { Core } from '@cat-factory/orchestration'
+import type { ResolveRepoTarget } from '../agents/ContainerAgentExecutor.js'
 import type { SessionPayload } from '../auth/signing.js'
 import type { AppConfig } from '../config/types.js'
 import type { RuntimeGateways } from '../runtime/gateways.js'
@@ -42,6 +43,14 @@ export interface ServerContainer extends Core {
    * spec endpoint returns an empty view.
    */
   resolveRunRepoContext?: ResolveRunRepoContext
+  /**
+   * Resolve the repo (installation + owner/name + default branch) linked to a
+   * block's enclosing service frame — the same ancestry walk the container executor
+   * and the CI/merge gates use. The task-search controller uses it to scope a
+   * GitHub-issue search to the service's repo (and to refuse the search when the
+   * service isn't linked to a repo). Present only when GitHub is wired.
+   */
+  resolveRepoTarget?: ResolveRepoTarget
   /**
    * The workspace subscription-token pool (Claude Code / Codex credentials).
    * Present only when the facade wired the provider-subscription repository.

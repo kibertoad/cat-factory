@@ -1,8 +1,9 @@
-import type {
-  BlockRepository,
-  GitHubInstallationRepository,
-  RepoProjectionRepository,
-  ServiceRepository,
+import {
+  ValidationError,
+  type BlockRepository,
+  type GitHubInstallationRepository,
+  type RepoProjectionRepository,
+  type ServiceRepository,
 } from '@cat-factory/kernel'
 import type { ResolveRepoTarget } from './ContainerAgentExecutor.js'
 
@@ -88,7 +89,11 @@ export function buildResolveRepoTarget(deps: ResolveRepoTargetDependencies): Res
     }
 
     if (!resolved) {
-      throw new Error(
+      // A typed domain error (not a bare Error) so callers can tell this DELIBERATE
+      // "block isn't under a repo-linked service" outcome apart from an unexpected
+      // repo/DB failure — the task-search controller maps it to a clean 4xx, while an
+      // unexpected failure still propagates as a 500 instead of masquerading as one.
+      throw new ValidationError(
         `Block '${blockId}' is not under a service linked to a GitHub repository ` +
           `(workspace '${workspaceId}'). Link the service frame to its repo so execution ` +
           `targets the right repository instead of guessing one.`,

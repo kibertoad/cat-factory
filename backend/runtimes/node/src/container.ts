@@ -1333,6 +1333,9 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // The same checkout-free repo resolver the engine binds pre/post-ops with, surfaced so
     // the shared service-spec read controller can read the `spec/` artifact off main.
     resolveRunRepoContext: dependencies.resolveRunRepoContext,
+    // The block→service→repo resolver, surfaced so the task-search controller can scope a
+    // GitHub-issue search to the originating service's repo (and refuse it when unlinked).
+    resolveRepoTarget,
     agentRunRepository: repos.agentRunRepository,
     // The consensus transcript store, for the read endpoint (window load / reload).
     consensusSessionRepository: repos.consensusSessionRepository,

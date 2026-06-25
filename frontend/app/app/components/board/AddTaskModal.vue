@@ -230,6 +230,15 @@ watch(open, (isOpen) => {
   pendingContext.value = []
   showDocPicker.value = false
   showIssuePicker.value = false
+  // Seed from a prefill when opened from another surface (e.g. "create task from
+  // issue" sets the title + stages the issue as linked context). Pipeline / preset
+  // are intentionally left at their defaults so the user confirms them here.
+  const prefill = ui.addTaskPrefill
+  if (prefill) {
+    if (prefill.title) title.value = prefill.title
+    if (prefill.description) description.value = prefill.description
+    if (prefill.context?.length) pendingContext.value = [...prefill.context]
+  }
   documents.loadDocuments().catch(() => {})
   tasks.loadTasks().catch(() => {})
 })
@@ -582,6 +591,7 @@ async function add() {
             <ContextIssuePicker
               v-if="showIssuePicker && issuesConnected"
               :chosen-keys="chosenIssueKeys"
+              :scope-block-id="ui.addTaskContainerId ?? undefined"
               @pick="addPending"
             />
             <div v-if="pendingIssues.length" class="space-y-1">

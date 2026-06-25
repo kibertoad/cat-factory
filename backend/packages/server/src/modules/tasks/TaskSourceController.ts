@@ -11,7 +11,7 @@ import {
 import * as v from 'valibot'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
-import { ValidationError } from '@cat-factory/kernel'
+import { ValidationError, type TaskSearchRepoScope } from '@cat-factory/kernel'
 import type { TasksModule } from '@cat-factory/orchestration'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
@@ -35,6 +35,41 @@ function sourceParam(c: Context<AppEnv>): TaskSourceKind {
     throw new ValidationError(`Unknown task source '${source}'`)
   }
   return source
+}
+
+/**
+ * Resolve the repo a GitHub-issue search runs against from its originating block
+ * (a service frame or a task/module under one). A service is always created from
+ * (or with) a repo, so a GitHub search scoped to a block REQUIRES the link — if it
+ * can't be resolved we refuse the search rather than silently widening it to the
+ * whole installation (the task couldn't run against an unlinked service anyway).
+ * Repo-less sources (Jira) and the unscoped "import an issue" surface (no blockId)
+ * skip this entirely.
+ */
+async function resolveSearchScope(
+  c: Context<AppEnv>,
+  source: TaskSourceKind,
+  blockId: string | undefined,
+): Promise<TaskSearchRepoScope | undefined> {
+  if (!blockId || source !== 'github') return undefined
+  const resolve = c.get('container').resolveRepoTarget
+  let target: Awaited<ReturnType<NonNullable<typeof resolve>>> = null
+  try {
+    target = resolve ? await resolve(param(c, 'workspaceId'), blockId) : null
+  } catch (err) {
+    // `resolveRepoTarget` throws a ValidationError precisely when the block isn't under a
+    // repo-linked service — the case this endpoint refuses below. Anything else (an
+    // unexpected repo/DB failure) is NOT a "link a repo" problem, so let it propagate
+    // rather than mislabel it; only the documented not-linked outcome falls through.
+    if (!(err instanceof ValidationError)) throw err
+    target = null
+  }
+  if (!target) {
+    throw new ValidationError(
+      'This service is not linked to a GitHub repository. Link it to a repo before creating tasks from issues.',
+    )
+  }
+  return { owner: target.owner, repo: target.name }
 }
 
 /**
@@ -138,11 +173,10 @@ export function taskSourceController(): Hono<AppEnv> {
   app.post('/task-sources/:source/search', jsonBody(searchTasksSchema), async (c) => {
     const tasks = requireTasks(c)
     if (!tasks) return unavailable(c)
-    const results = await tasks.importService.search(
-      param(c, 'workspaceId'),
-      sourceParam(c),
-      c.req.valid('json').query,
-    )
+    const source = sourceParam(c)
+    const { query, blockId } = c.req.valid('json')
+    const scope = await resolveSearchScope(c, source, blockId)
+    const results = await tasks.importService.search(param(c, 'workspaceId'), source, query, scope)
     return c.json({ results })
   })
 

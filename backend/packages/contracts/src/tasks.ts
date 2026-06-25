@@ -209,6 +209,15 @@ export type ImportTaskInput = v.InferOutput<typeof importTaskSchema>
 /** Search a tracker's issues by free text (title/content). */
 export const searchTasksSchema = v.object({
   query: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200)),
+  /**
+   * The board block the search runs from (a service frame or one of its
+   * tasks/modules). For a repo-backed source (GitHub Issues) this scopes the
+   * search to that service's linked repository — so hits never leak in from
+   * sibling repos, a pasted issue URL resolves to that exact issue, and a bare
+   * issue number resolves against the service's repo. Omitted for an unscoped
+   * workspace-wide search (the standalone "import an issue" surface).
+   */
+  blockId: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1))),
 })
 export type SearchTasksInput = v.InferOutput<typeof searchTasksSchema>
 

@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
+  buildGitHubIssueSearchQuery,
+  detectExactGitHubIssueRef,
   githubIssueUrl,
   parseGitHubIssueExternalId,
   parseGitHubIssueRef,
@@ -58,5 +60,50 @@ describe('githubIssueUrl', () => {
     expect(githubIssueUrl({ owner: 'octo', repo: 'my-repo', number: 9 })).toBe(
       'https://github.com/octo/my-repo/issues/9',
     )
+  })
+})
+
+describe('buildGitHubIssueSearchQuery', () => {
+  const scope = { owner: 'kibertoad', repo: 'simple-service' }
+
+  it('returns the bare query when there is no repo scope', () => {
+    expect(buildGitHubIssueSearchQuery('login bug')).toBe('login bug')
+  })
+
+  it('prefixes a repo: qualifier when scoped, keeping hits in-repo', () => {
+    expect(buildGitHubIssueSearchQuery('login bug', scope)).toBe(
+      'repo:kibertoad/simple-service login bug',
+    )
+  })
+
+  it('yields just the repo qualifier for an empty (number-only) query', () => {
+    // The number is handled as an exact ref; the text search degenerates to the repo.
+    expect(buildGitHubIssueSearchQuery('', scope)).toBe('repo:kibertoad/simple-service')
+  })
+})
+
+describe('detectExactGitHubIssueRef', () => {
+  const scope = { owner: 'kibertoad', repo: 'simple-service' }
+
+  it('resolves a pasted issue URL to its own repo (scope does not override it)', () => {
+    expect(
+      detectExactGitHubIssueRef('https://github.com/kibertoad/simple-service/issues/11', scope),
+    ).toBe('kibertoad/simple-service#11')
+    expect(detectExactGitHubIssueRef('https://github.com/octo/other/issues/3', scope)).toBe(
+      'octo/other#3',
+    )
+  })
+
+  it('resolves a bare issue number against the scoped repo', () => {
+    expect(detectExactGitHubIssueRef('11', scope)).toBe('kibertoad/simple-service#11')
+    expect(detectExactGitHubIssueRef('  42 ', scope)).toBe('kibertoad/simple-service#42')
+  })
+
+  it('does not treat a bare number as an exact ref without a scope', () => {
+    expect(detectExactGitHubIssueRef('11')).toBeNull()
+  })
+
+  it('returns null for free-text search phrases', () => {
+    expect(detectExactGitHubIssueRef('login bug', scope)).toBeNull()
   })
 })
