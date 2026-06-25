@@ -118,10 +118,13 @@ watch(open, (isOpen) => {
 
 // Selecting an issue hands off to the add-task form, prefilled with the issue title
 // and the issue staged as linked context (so agents see its description + comments).
-// The user still confirms pipeline / preset there before the task is created — we do
-// NOT dump the issue body into the description; the link is enough.
+// The user still confirms pipeline / preset there before the task is created. The
+// issue body is carried when already in hand (imported issues); for a search hit it's
+// resolved in the add-task form (by importing). Either way the form shows it read-only
+// and folds it into the new task's description, so the original description is visible
+// and included — the user adds their own notes on top.
 function selectIssue(
-  issue: { externalId: string; title: string; status?: string },
+  issue: { externalId: string; title: string; status?: string; description?: string },
   needsImport: boolean,
 ) {
   if (!source.value || !containerId.value) return
@@ -135,6 +138,7 @@ function selectIssue(
         title: `${issue.externalId} · ${issue.title}`,
         subtitle: issue.status || undefined,
         icon: descriptor.value?.icon,
+        description: issue.description || undefined,
         needsImport,
       },
     ],
