@@ -132,7 +132,7 @@ section + `backend/docs/custom-agents.md` are the current source of truth for th
    runtimes). Changeset `migrate-spec-writer-generic-kind.md`. The dead `/spec` harness handler
    is deleted in the harness-cleanup step (§8, image bump); `result.spec` in `toRunResult` is
    now dead (removed when the kernel `RunnerJobResult.spec` is slimmed, §9).
-5. ✅ **tester** — DONE this branch (`migrate-tester-generic-kind`, PR pending). `tester`
+5. ✅ **tester** — DONE this branch (`migrate-tester-generic-kind`, PR #200). `tester`
    dispatches `kind:'agent'` `mode:'explore'` structured (clone `pr`) via
    `buildMigratedBuiltInBody`; `toRunResult` coerces `custom`→`testReport`
    (`coerceTestReport`: the harness `/test` handler's conservative defaults + the
