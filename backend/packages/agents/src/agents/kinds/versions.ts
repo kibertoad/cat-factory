@@ -1,5 +1,9 @@
 import { standardSystemPrompt } from '../prompts/standard.js'
-import { REVIEW_SYSTEM_PROMPT, REWORK_SYSTEM_PROMPT } from '../prompts/requirements.js'
+import {
+  REVIEW_SYSTEM_PROMPT,
+  REWORK_SYSTEM_PROMPT,
+  WRITER_SYSTEM_PROMPT,
+} from '../prompts/requirements.js'
 import { CLARITY_REVIEW_SYSTEM_PROMPT, CLARITY_REWORK_SYSTEM_PROMPT } from '../prompts/clarity.js'
 
 // Versioned registry of the built-in agent system prompts. The goal is simple
@@ -24,6 +28,7 @@ export interface VersionedPrompt {
 export const PROMPT_VERSIONS = {
   'requirement-review': { id: 'requirement-review', version: 2, text: REVIEW_SYSTEM_PROMPT },
   'requirement-rework': { id: 'requirement-rework', version: 2, text: REWORK_SYSTEM_PROMPT },
+  'requirement-writer': { id: 'requirement-writer', version: 1, text: WRITER_SYSTEM_PROMPT },
   'clarity-review': { id: 'clarity-review', version: 1, text: CLARITY_REVIEW_SYSTEM_PROMPT },
   'clarity-rework': { id: 'clarity-rework', version: 1, text: CLARITY_REWORK_SYSTEM_PROMPT },
   build: { id: 'build', version: 2, text: standardSystemPrompt('build') },

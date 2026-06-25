@@ -10,7 +10,12 @@ export type ReviewItemCategory = 'gap' | 'clarification' | 'assumption' | 'risk'
 
 export type ReviewItemSeverity = 'low' | 'medium' | 'high'
 
-export type ReviewItemStatus = 'open' | 'answered' | 'resolved' | 'dismissed'
+export type ReviewItemStatus =
+  | 'open'
+  | 'answered'
+  | 'resolved'
+  | 'dismissed'
+  | 'recommend_requested'
 
 export interface RequirementReviewItem {
   id: string
@@ -45,6 +50,25 @@ export type RequirementReviewStatus =
 /** How a human resolves a review that hit its iteration cap. */
 export type ResolveRequirementsExceededChoice = 'extra-round' | 'proceed' | 'stop-reset'
 
+/** Lifecycle of a Requirement-Writer recommendation. */
+export type RecommendationStatus = 'ready' | 'accepted' | 'rejected'
+
+/**
+ * A Requirement-Writer suggestion for one finding. First-class on the review (survives the
+ * re-review item churn); the source finding is snapshotted by title/detail. `groundedInFragment`
+ * marks a suggestion taken straight from a best-practice fragment (the "current standard").
+ */
+export interface RequirementRecommendation {
+  id: string
+  sourceFinding: { title: string; detail: string }
+  recommendedText: string
+  status: RecommendationStatus
+  note: string | null
+  groundedInFragment: { id: string; title: string } | null
+  createdAt: number
+  updatedAt: number
+}
+
 export interface RequirementReview {
   id: string
   blockId: string
@@ -56,6 +80,8 @@ export interface RequirementReview {
   iteration: number
   /** The reviewer-pass budget (from the task's merge preset; an extra round bumps it). */
   maxIterations: number
+  /** Requirement-Writer suggestions awaiting (or settled by) human accept/reject. */
+  recommendations: RequirementRecommendation[]
   createdAt: number
   updatedAt: number
 }

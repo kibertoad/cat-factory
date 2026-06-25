@@ -69,7 +69,11 @@ export {
   testerEnvironmentSection,
 } from './agents/prompts/testing.js'
 // Requirements-review prompt text + its versioned-prompt registry.
-export { REVIEW_SYSTEM_PROMPT, REWORK_SYSTEM_PROMPT } from './agents/prompts/requirements.js'
+export {
+  REVIEW_SYSTEM_PROMPT,
+  REWORK_SYSTEM_PROMPT,
+  WRITER_SYSTEM_PROMPT,
+} from './agents/prompts/requirements.js'
 // Clarity-review (bug-report triage) prompt text.
 export {
   CLARITY_REVIEW_SYSTEM_PROMPT,

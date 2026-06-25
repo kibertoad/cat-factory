@@ -134,9 +134,13 @@ export type {
   RequirementReviewItem,
   RequirementReviewStatus,
   RequirementReview,
+  RecommendationStatus,
+  RequirementRecommendation,
   ReplyReviewItemInput,
   UpdateReviewItemStatusInput,
   IncorporateRequirementsInput,
+  RequestRecommendationsInput,
+  ReRequestRecommendationInput,
   ResolveRequirementsExceededInput,
   ResolveRequirementsExceededChoice,
   // Clarity-review (bug-report triage reviewer agent) shapes — reuse the requirements

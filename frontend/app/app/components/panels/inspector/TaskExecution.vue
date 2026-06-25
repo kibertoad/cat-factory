@@ -22,7 +22,9 @@ const reviewStageLabel = computed(() =>
     ? 'Incorporating…'
     : reviewStage.value === 'reviewing'
       ? 'Re-reviewing…'
-      : null,
+      : reviewStage.value === 'recommending'
+        ? 'Recommending…'
+        : null,
 )
 
 const instance = computed(() => execution.getInstance(props.block.executionId))

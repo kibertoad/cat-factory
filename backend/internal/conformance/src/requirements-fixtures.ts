@@ -20,6 +20,7 @@ export function makeIncorporatedReview(blockId: string, requirements: string): R
     incorporatedRequirements: requirements,
     iteration: 1,
     maxIterations: 3,
+    recommendations: [],
     createdAt: 1,
     updatedAt: 2,
   }
@@ -53,6 +54,7 @@ export function makeReadyReviewWithOpenItem(blockId: string): RequirementReview 
     incorporatedRequirements: null,
     iteration: 1,
     maxIterations: 3,
+    recommendations: [],
     createdAt: 1,
     updatedAt: 2,
   }
