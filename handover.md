@@ -132,12 +132,24 @@ section + `backend/docs/custom-agents.md` are the current source of truth for th
    runtimes). Changeset `migrate-spec-writer-generic-kind.md`. The dead `/spec` harness handler
    is deleted in the harness-cleanup step (§8, image bump); `result.spec` in `toRunResult` is
    now dead (removed when the kernel `RunnerJobResult.spec` is slimmed, §9).
-5. ⬜ **tester** — `container-explore` structured + INFRA stand-up. Grow the harness AgentJob
-   with `infra?: {environment, noInfraDependencies?, composePath?, environmentUrl?}` and have
-   `runExploreMode` run `standUpInfra`/`tearDownInfra` (lift from `tester.ts`) + fold the
-   run-mode guidance into the prompt. Executor: route via `buildRegisteredAgentBody` with the
-   infra spec; `toRunResult` `custom`→`testReport` (move `coerceReport`'s conservative
-   greenlight/blocking logic backend-side — TesterController re-applies it anyway). Image bump.
+5. ✅ **tester** — DONE this branch (`migrate-tester-generic-kind`, PR pending). `tester`
+   dispatches `kind:'agent'` `mode:'explore'` structured (clone `pr`) via
+   `buildMigratedBuiltInBody`; `toRunResult` coerces `custom`→`testReport`
+   (`coerceTestReport`: the harness `/test` handler's conservative defaults + the
+   greenlight-only-when-no-blocker rule, which `TesterController` re-applies). The harness
+   `AgentJob` grew `infra?: {environment, noInfraDependencies?, composePath?, environmentUrl?}`
+   and `runExploreMode` now stands the docker-compose infra up before the agent + tears it
+   down in a `finally` (lifted `standUpInfra`/`tearDownInfra` into `agent.ts`), folding a
+   stand-up-failure note into the prompt. The run-mode/ephemeral-URL guidance was NOT
+   re-added in the harness — it already rides in the backend `roleSystemPrompt` (TESTER role)
+   + `userPromptFor` (`testerEnvironmentSection` + `environmentSection`), so the migrated body
+   keeps the same prompts; only `kind` (test→agent), `mode`, `output`, and `test`→`infra`
+   changed in the snapshot. **Image bump 1.12.x → 1.13.0** (harness `src/**` changed: new
+   `infra` field + explore-mode infra lifecycle) — deploy tag + `wrangler.toml` set to 1.13.0.
+   Tests: `containerAgentJobBody.spec.ts` snapshot + tester pollJob coercion (2 cases);
+   harness `agent.test.ts` infra-parse (2 cases). Changeset `migrate-tester-generic-kind.md`.
+   The dead `/test` harness handler is deleted in the harness-cleanup step (§8); `result.report`
+   in `toRunResult` is now dead (removed when kernel `RunnerJobResult.report` is slimmed, §9).
 6. ⬜ **conflict-resolver** — `container-coding` + `mergeBase`. Grow AgentJob with
    `mergeBase?: string`; `runCodingMode` does full clone + `mergeBranch(base)` + surface
    conflict hunks into the prompt (lift `buildConflictPrompt`/`unmergedPaths`/`conflictDiff`

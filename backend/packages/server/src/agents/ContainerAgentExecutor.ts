@@ -341,6 +341,12 @@ const ON_CALL_ASSESSMENT_SHAPE_HINT =
   'Expected an on-call assessment: {"culpritConfidence": number 0..1, "recommendation": ' +
   '"revert"|"hold"|"monitor", "rationale": string, "evidence": string[]}.'
 
+/** Compact shape hint fed to the structured-output repair call for the tester report. */
+const TEST_REPORT_SHAPE_HINT =
+  'Expected a test report: {"greenlight": boolean, "summary": string, "tested": string[], ' +
+  '"outcomes": [{"name": string, "status": "passed"|"failed"|"skipped", "detail"?: string}], ' +
+  '"concerns": [{"title": string, "detail": string, "severity": "low"|"medium"|"high"|"critical"}]}.'
+
 const ON_CALL_SYSTEM_PROMPT =
   'You are an on-call engineer investigating a possible post-release regression. A ' +
   'recently merged pull request shipped, and the evidence below (alerting Datadog ' +
@@ -795,8 +801,8 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     },
   ): { body: Record<string, unknown>; kind: RunnerDispatchKind } {
     // `workBranch`/`workBranchReady` are consumed by `buildRegisteredAgentBody` (via `parts`),
-    // not here — the remaining bespoke cases (conflict-resolver, tester) use the PR branch.
-    const { common, webTools, repo } = parts
+    // not here — the one remaining bespoke case (conflict-resolver) uses the PR branch.
+    const { common } = parts
     const prBranch = context.block.pullRequest?.branch
     const roleSystemPrompt = composeBlockSystemPrompt(
       systemPromptFor(context.agentKind),
@@ -814,12 +820,13 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     // Built-in container kinds migrated onto the generic, manifest-driven `agent` harness
     // kind (they dispatch `kind:'agent'` through `buildRegisteredAgentBody`, exactly like a
     // registered custom kind, with NO bespoke per-kind harness handler) — the Task-5
-    // strangler. Today: the in-place fixers (`ci-fixer` / `fixer`, coding-on-PR) and the
-    // JSON-assessment producers (`merger` / `on-call`, read-only structured explore whose
-    // assessment is coerced backend-side in `toRunResult`). The remaining built-ins
-    // (coder/blueprints/spec-writer/tester/conflict-resolver) keep their bespoke bodies
-    // below until they migrate, since they need harness changes (branch-resume, render
-    // post-ops, infra stand-up, merge-base).
+    // strangler. Today: blueprints/spec-writer (structured explore + render post-op), the
+    // in-place fixers (`ci-fixer` / `fixer`, coding-on-PR), the JSON-assessment producers
+    // (`merger` / `on-call`, read-only structured explore whose assessment is coerced
+    // backend-side in `toRunResult`), and the `tester` (read-only structured explore with
+    // docker-compose infra stand-up). The only remaining bespoke body is conflict-resolver
+    // (needs the merge-base harness change), below; the default coder dispatches the generic
+    // coding agent at the end of this method.
     const migrated = this.buildMigratedBuiltInBody(context, parts, roleSystemPrompt)
     if (migrated) return migrated
 
@@ -849,40 +856,6 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
             systemPrompt: roleSystemPrompt,
             userPrompt: `Task: ${context.block.title}${description ? `\n\n${description}` : ''}`,
             branch: prBranch,
-          },
-        }
-      }
-
-      // The tester clones the PR head branch, stands up its dependencies (locally via
-      // the service's docker-compose, or against the provisioned ephemeral env — the
-      // task's `tester.environment` config picks which), runs the suite and returns a
-      // structured report. It makes NO commits (the engine loops the `fixer` on a
-      // withheld greenlight). Targets the harness `/test` endpoint; mapped to `testReport`.
-      case TESTER_AGENT_KIND: {
-        const env =
-          context.block.agentConfig?.['tester.environment'] === 'local' ? 'local' : 'ephemeral'
-        const service = context.service
-        return {
-          kind: 'test',
-          body: {
-            ...common,
-            systemPrompt: roleSystemPrompt,
-            userPrompt: userPromptFor(context),
-            branch: prBranch ?? repo.baseBranch,
-            // How the Tester stands up its dependencies for this run.
-            test: {
-              environment: env,
-              ...(env === 'local'
-                ? {
-                    noInfraDependencies: service?.noInfraDependencies === true,
-                    ...(service?.testComposePath ? { composePath: service.testComposePath } : {}),
-                  }
-                : {}),
-              ...(env === 'ephemeral' && context.environment?.url
-                ? { environmentUrl: context.environment.url }
-                : {}),
-            },
-            ...webTools,
           },
         }
       }
@@ -1141,6 +1114,29 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
           ON_CALL_SYSTEM_PROMPT,
           onCallUserPrompt(context, repo),
         )
+      // The tester clones the PR head branch (read-only — it makes NO commits), stands up
+      // its dependencies (locally via the service's docker-compose, or against the
+      // provisioned ephemeral env — the task's `tester.environment` config picks which) and
+      // returns ONLY a structured JSON report. It runs as a generic structured explore with
+      // an `infra` spec the harness uses to stand the docker-compose dependencies up for the
+      // run; `toRunResult` coerces the JSON into `testReport` (the conservative greenlight /
+      // blocking-concern rule the harness applied now runs backend-side, and the engine's
+      // TesterController re-applies it). The role prompt + the run-mode/ephemeral-URL guidance
+      // come from the standard `roleSystemPrompt` + `userPromptFor` (which already carry them),
+      // so the harness adds none. The engine loops the `fixer` on a withheld greenlight.
+      case TESTER_AGENT_KIND: {
+        const built = this.buildRegisteredAgentBody(
+          context,
+          parts,
+          {
+            surface: 'container-explore',
+            clone: { branch: 'pr' },
+            output: { kind: 'structured', shapeHint: TEST_REPORT_SHAPE_HINT },
+          },
+          roleSystemPrompt,
+        )
+        return { kind: built.kind, body: { ...built.body, infra: testerInfraSpec(context) } }
+      }
     }
     return undefined
   }
@@ -1231,6 +1227,16 @@ function toRunResult(result: RunnerJobResult, agentKind?: string): AgentRunResul
       return {
         output: result.summary?.trim() || 'Release regression investigated.',
         onCallAssessment: coerceOnCallAssessment(result.custom, result.summary),
+      }
+    }
+    // The migrated tester returns its structured report as `custom`; coerce it into the
+    // `testReport` channel the engine's TesterController greenlights-or-loops the fixer on
+    // (the conservative greenlight/blocking rule the harness `/test` handler applied now
+    // runs in `coerceTestReport`, and TesterController re-applies it defensively).
+    if (agentKind === TESTER_AGENT_KIND) {
+      return {
+        output: result.summary?.trim() || 'Testing complete.',
+        testReport: coerceTestReport(result.custom, result.summary),
       }
     }
     return {
@@ -1371,6 +1377,53 @@ function coerceOnCallAssessment(raw: unknown, summary: string | undefined): unkn
   }
 }
 
+const TEST_SEVERITIES = new Set(['low', 'medium', 'high', 'critical'])
+const TEST_STATUSES = new Set(['passed', 'failed', 'skipped'])
+
+/**
+ * Coerce a migrated `tester` agent's structured JSON into the engine's {@link TestReport} —
+ * the conservative coercion the harness `/test` handler used to do, defaulting every field
+ * safely so a malformed reply still parses (the engine strict-validates it). Crucially a
+ * greenlight is honoured ONLY when no BLOCKING (high/critical) concern is open, so a model
+ * that greenlights with an open blocker can't auto-pass; low/medium concerns are advisory.
+ * The engine's TesterController re-applies this rule defensively.
+ */
+function coerceTestReport(raw: unknown, summary: string | undefined): unknown {
+  const o = (typeof raw === 'object' && raw !== null ? raw : {}) as Record<string, unknown>
+  const outcomes = Array.isArray(o.outcomes)
+    ? (o.outcomes as unknown[])
+        .filter((x): x is Record<string, unknown> => typeof x === 'object' && x !== null)
+        .map((x) => ({
+          name: typeof x.name === 'string' ? x.name : '(unnamed)',
+          status: TEST_STATUSES.has(x.status as string) ? (x.status as string) : 'skipped',
+          ...(typeof x.detail === 'string' && x.detail ? { detail: x.detail } : {}),
+        }))
+    : []
+  const concerns = Array.isArray(o.concerns)
+    ? (o.concerns as unknown[])
+        .filter((x): x is Record<string, unknown> => typeof x === 'object' && x !== null)
+        .map((x) => ({
+          title: typeof x.title === 'string' ? x.title : '(concern)',
+          detail: typeof x.detail === 'string' ? x.detail : '',
+          severity: TEST_SEVERITIES.has(x.severity as string) ? (x.severity as string) : 'medium',
+        }))
+    : []
+  const blocking = concerns.some((c) => c.severity === 'high' || c.severity === 'critical')
+  const environment =
+    o.environment === 'local' || o.environment === 'ephemeral' ? o.environment : undefined
+  return {
+    greenlight: o.greenlight === true && !blocking,
+    summary:
+      typeof o.summary === 'string' && o.summary ? o.summary : (summary?.slice(0, 2000) ?? ''),
+    tested: Array.isArray(o.tested)
+      ? (o.tested as unknown[]).filter((t): t is string => typeof t === 'string')
+      : [],
+    outcomes,
+    concerns,
+    ...(environment ? { environment } : {}),
+  }
+}
+
 /**
  * The Blueprinter's task prompt. The agent now reads any existing blueprint from its own
  * read-only checkout (the harness no longer pre-injects the baseline tree), so the prompt
@@ -1476,6 +1529,31 @@ function onCallUserPrompt(context: AgentRunContext, repo: RepoTarget): string {
     '',
     'Respond with ONLY a JSON object {"culpritConfidence":0.0,"recommendation":"revert"|"hold"|"monitor","rationale":"…","evidence":["…"]}.',
   ].join('\n')
+}
+
+/**
+ * The tester's infra stand-up spec for the generic agent job, from the block's
+ * `tester.environment` config + the resolved service: a `local` run carries the
+ * docker-compose path (or the explicit no-infra flag) for the harness to stand the
+ * dependencies up + tear them down around the run; an `ephemeral` run carries the
+ * provisioned environment URL. Byte-identical to the old bespoke `/test` body's `test`
+ * object — only the field name changed (`test` → `infra`).
+ */
+function testerInfraSpec(context: AgentRunContext): Record<string, unknown> {
+  const env = context.block.agentConfig?.['tester.environment'] === 'local' ? 'local' : 'ephemeral'
+  const service = context.service
+  return {
+    environment: env,
+    ...(env === 'local'
+      ? {
+          noInfraDependencies: service?.noInfraDependencies === true,
+          ...(service?.testComposePath ? { composePath: service.testComposePath } : {}),
+        }
+      : {}),
+    ...(env === 'ephemeral' && context.environment?.url
+      ? { environmentUrl: context.environment.url }
+      : {}),
+  }
 }
 
 function prBody(context: AgentRunContext): string {

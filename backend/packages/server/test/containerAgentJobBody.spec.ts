@@ -268,6 +268,60 @@ describe('ContainerAgentExecutor.pollJob (kind-aware result coercion)', () => {
     })
   })
 
+  it('maps a tester custom result into a coerced testReport (greenlight withheld on a blocker)', async () => {
+    const executor = makeExecutorReturning({
+      summary: 'Ran the suite.',
+      custom: {
+        // greenlight:true with an open high-severity concern must NOT auto-pass.
+        greenlight: true,
+        summary: 'Two flows broke.',
+        tested: ['login', 42],
+        outcomes: [
+          { name: 'login', status: 'failed', detail: '500 on submit' },
+          { name: 'mystery', status: 'banana' },
+        ],
+        concerns: [{ title: 'Login 500', detail: 'crashes', severity: 'high' }],
+        environment: 'local',
+      },
+    })
+    const update = await executor.pollJob(handle('tester'))
+    expect(update).toEqual({
+      state: 'done',
+      result: {
+        output: 'Ran the suite.',
+        testReport: {
+          greenlight: false,
+          summary: 'Two flows broke.',
+          tested: ['login'],
+          outcomes: [
+            { name: 'login', status: 'failed', detail: '500 on submit' },
+            { name: 'mystery', status: 'skipped' },
+          ],
+          concerns: [{ title: 'Login 500', detail: 'crashes', severity: 'high' }],
+          environment: 'local',
+        },
+      },
+    })
+  })
+
+  it('garbage tester JSON coerces to a safe, no-greenlight report', async () => {
+    const executor = makeExecutorReturning({ summary: 'nothing usable', custom: { junk: true } })
+    const update = await executor.pollJob(handle('tester'))
+    expect(update).toEqual({
+      state: 'done',
+      result: {
+        output: 'nothing usable',
+        testReport: {
+          greenlight: false,
+          summary: 'nothing usable',
+          tested: [],
+          outcomes: [],
+          concerns: [],
+        },
+      },
+    })
+  })
+
   it('maps a blueprints custom result into a coerced blueprintService', async () => {
     const executor = makeExecutorReturning({
       summary: 'Mapped the service.',
