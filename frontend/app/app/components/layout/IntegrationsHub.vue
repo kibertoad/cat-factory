@@ -14,6 +14,7 @@ const documents = useDocumentsStore()
 const tasks = useTasksStore()
 const tracker = useTrackerStore()
 const releaseHealth = useReleaseHealthStore()
+const userSecrets = useUserSecretsStore()
 
 // The selected filing tracker, as a badge label ("GitHub Issues" / "Jira").
 const trackerLabel = computed(() => {
@@ -27,7 +28,10 @@ const trackerLabel = computed(() => {
 watch(
   () => ui.integrationsOpen,
   (isOpen) => {
-    if (isOpen) void releaseHealth.ensureLoaded().catch(() => {})
+    if (isOpen) {
+      void releaseHealth.ensureLoaded().catch(() => {})
+      void userSecrets.load().catch(() => {})
+    }
   },
 )
 
@@ -73,6 +77,20 @@ const groups = computed<IntegrationGroup[]>(() => {
       status: github.connected ? github.connection?.accountLogin : undefined,
       connected: github.connected,
       onClick: () => go(ui.openGitHub),
+    })
+  }
+  // Per-user GitHub PAT — works on every runtime (used for runs you initiate). Always
+  // offered; the badge reflects whether the signed-in user has stored one.
+  {
+    const pat = userSecrets.statusFor('github_pat')
+    code.push({
+      key: 'github-pat',
+      icon: 'i-lucide-key-round',
+      label: 'My GitHub token',
+      description: 'A personal access token used for runs you start (pushes, PRs, CI, merge).',
+      status: pat ? 'Connected' : undefined,
+      connected: !!pat,
+      onClick: () => go(ui.openUserSecrets),
     })
   }
   if (code.length) out.push({ title: 'Source control', items: code })

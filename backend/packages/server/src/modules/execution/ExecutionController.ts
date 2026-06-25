@@ -8,6 +8,7 @@ import {
   startExecutionSchema,
 } from '@cat-factory/contracts'
 import { Hono } from 'hono'
+import { runWithInitiator } from '../../github/runInitiatorContext.js'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
 import { jsonBody } from '../../http/validation.js'
@@ -62,9 +63,11 @@ export function executionController(): Hono<AppEnv> {
   })
 
   app.post('/blocks/:blockId/merge', async (c) => {
-    const block = await c
-      .get('container')
-      .executionService.mergePr(param(c, 'workspaceId'), param(c, 'blockId'))
+    // Manual confirm-merge runs the engine GitHub client under the acting user's
+    // ambient context, so their per-user PAT (when set) authors the merge.
+    const block = await runWithInitiator(c.get('user')?.id, () =>
+      c.get('container').executionService.mergePr(param(c, 'workspaceId'), param(c, 'blockId')),
+    )
     return c.json(block)
   })
 

@@ -1,6 +1,7 @@
 import {
   provisionEnvironmentSchema,
   registerEnvironmentProviderSchema,
+  testEnvironmentConnectionSchema,
   updateEnvironmentSecretsSchema,
 } from '@cat-factory/contracts'
 import { Hono } from 'hono'
@@ -72,6 +73,21 @@ export function environmentController(): Hono<AppEnv> {
     if (!env) return unavailable(c)
     await env.connectionService.unregister(param(c, 'workspaceId'))
     return c.body(null, 204)
+  })
+
+  // What the provider needs configured (native fields or the manifest's secret keys),
+  // so the UI can render a connect form generically.
+  app.get('/environments/provider', async (c) => {
+    const env = requireEnvironments(c)
+    if (!env) return unavailable(c)
+    return c.json(await env.connectionService.describeProvider(param(c, 'workspaceId')))
+  })
+
+  // Probe a candidate connection before saving (nothing persisted).
+  app.post('/environments/connection/test', jsonBody(testEnvironmentConnectionSchema), async (c) => {
+    const env = requireEnvironments(c)
+    if (!env) return unavailable(c)
+    return c.json(await env.connectionService.testConnection(param(c, 'workspaceId'), c.req.valid('json')))
   })
 
   // ---- environment registry ----------------------------------------------

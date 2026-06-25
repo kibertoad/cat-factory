@@ -5,7 +5,14 @@ import type {
 } from '@cat-factory/kernel'
 import type { SecretCipher } from '@cat-factory/kernel'
 import type { SecretResolver, UrlSafetyPolicy } from '@cat-factory/kernel'
-import type { EnvironmentConnection, EnvironmentManifest } from '@cat-factory/kernel'
+import type {
+  ConnectionTestResult,
+  EnvironmentConnection,
+  EnvironmentManifest,
+  EnvironmentProvider,
+  ProviderDescriptor,
+  TestEnvironmentConnectionInput,
+} from '@cat-factory/kernel'
 import { ConflictError, STRICT_URL_SAFETY_POLICY, ValidationError } from '@cat-factory/kernel'
 import { requireWorkspace } from '@cat-factory/kernel'
 import type { WorkspaceRepository } from '@cat-factory/kernel'
@@ -23,6 +30,22 @@ export interface EnvironmentConnectionServiceDependencies {
   clock: Clock
   /** URL/host safety policy applied to a registered manifest. Defaults to strict. */
   urlPolicy?: UrlSafetyPolicy
+  /**
+   * The injected provider, so the service can surface its `describeConfig` /
+   * `testConnection` to the UI. Optional — absent ⇒ no descriptor/test (the SPA
+   * falls back to the manifest editor with no test button).
+   */
+  environmentProvider?: EnvironmentProvider
+  /**
+   * What the injected provider is: a `native` adapter (its own auth, fully
+   * described by `describeConfig`) or the generic `manifest` HTTP provider.
+   * The facade that wires the provider knows which it injected. Defaults to
+   * `manifest`. `providerId`/`providerLabel` override the descriptor identity
+   * for a native provider (else the manifest's own values are used).
+   */
+  providerKind?: 'native' | 'manifest'
+  providerId?: string
+  providerLabel?: string
 }
 
 /** Collect every secret key a manifest's auth scheme references. */
@@ -106,6 +129,50 @@ export class EnvironmentConnectionService {
     const updated: EnvironmentConnectionRecord = { ...record, secretsCipher }
     await this.deps.environmentConnectionRepository.upsert(updated)
     return this.toConnection(updated, Object.keys(secrets))
+  }
+
+  /**
+   * Describe the provider's config fields for the UI (what to render and whether a
+   * connection test is available). For a manifest provider the fields reflect the
+   * secret keys the current manifest references; for a native provider they come
+   * from the provider's own `describeConfig`.
+   */
+  async describeProvider(workspaceId: string): Promise<ProviderDescriptor> {
+    const provider = this.deps.environmentProvider
+    const record = await this.deps.environmentConnectionRepository.getByWorkspace(workspaceId)
+    const manifest = record ? (JSON.parse(record.manifestJson) as EnvironmentManifest) : undefined
+    return {
+      providerId: this.deps.providerId ?? manifest?.providerId ?? 'http',
+      label: this.deps.providerLabel ?? manifest?.label ?? 'Custom HTTP provider',
+      kind: this.deps.providerKind ?? 'manifest',
+      configFields: provider?.describeConfig?.(manifest) ?? [],
+      supportsTest: typeof provider?.testConnection === 'function',
+    }
+  }
+
+  /**
+   * Probe a candidate connection before saving (nothing is persisted). Builds a
+   * secret resolver over the supplied (unsaved) secret values and delegates to the
+   * provider's `testConnection`; a provider without one reports "nothing to test".
+   */
+  async testConnection(
+    workspaceId: string,
+    input: TestEnvironmentConnectionInput,
+  ): Promise<ConnectionTestResult> {
+    await requireWorkspace(this.deps.workspaceRepository, workspaceId)
+    const provider = this.deps.environmentProvider
+    if (!provider?.testConnection) {
+      return { ok: true, message: 'This provider has no connection test.' }
+    }
+    if (input.manifest) {
+      assertManifestUrlsSafe(input.manifest, this.deps.urlPolicy ?? STRICT_URL_SAFETY_POLICY)
+    }
+    const secrets = input.secrets ?? {}
+    return provider.testConnection({
+      manifest: input.manifest,
+      config: input.config ?? {},
+      resolveSecret: (key) => secrets[key],
+    })
   }
 
   /** The workspace's current connection (safe metadata), or null. */

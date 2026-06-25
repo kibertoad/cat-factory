@@ -1061,6 +1061,24 @@ export const localModelEndpoints = pgTable(
   (t) => [primaryKey({ columns: [t.user_id, t.provider] })],
 )
 
+// Generic per-USER secrets — token-style credentials keyed by (user_id, kind) (a GitHub
+// PAT today; future repository/provider tokens as new kinds). Mirror of D1 migration 0009
+// / D1UserSecretRepository. The secret is single-system-key ciphertext; non-secret fields
+// ride in metadata_json.
+export const userSecrets = pgTable(
+  'user_secrets',
+  {
+    user_id: text('user_id').notNull(),
+    kind: text('kind').notNull(),
+    label: text('label').notNull(),
+    secret_cipher: text('secret_cipher').notNull(),
+    metadata_json: text('metadata_json'),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+    updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.user_id, t.kind] })],
+)
+
 // Per-WORKSPACE enabled GATEWAY models (the dynamic catalog subset) — OpenRouter today,
 // LiteLLM and others later. `models` is a JSON array of { id, name, contextLength?,
 // inputPerMillion, outputPerMillion } — the enabled subset with cached context + price

@@ -1,13 +1,16 @@
 import {
+  type ConnectionTestResult,
   type EnvironmentAccessHandle,
   type EnvironmentAccessMapping,
   type EnvironmentAuthScheme,
+  type EnvironmentConnectionTestRequest,
   type EnvironmentManifest,
   type EnvironmentProvider,
   type EnvironmentRequestTemplate,
   type EnvironmentStatusRequest,
   type EnvironmentTeardownRequest,
   type EnvironmentStatus,
+  type ProviderConfigField,
   type ProvisionEnvironmentRequest,
   type ProvisionFields,
   type ProvisionedEnvironment,
@@ -15,6 +18,7 @@ import {
   type UrlSafetyPolicy,
   STRICT_URL_SAFETY_POLICY,
 } from '@cat-factory/kernel'
+import { referencedSecretKeys } from './EnvironmentConnectionService.js'
 import * as environmentsLogic from './environments.logic.js'
 
 // The single generic adapter that interprets ANY environment manifest. There are
@@ -200,6 +204,24 @@ export class HttpEnvironmentProvider implements EnvironmentProvider {
       )
     }
     return { status: 'torn_down' }
+  }
+
+  /** A manifest-driven provider: the config IS the manifest, so describe its secret keys. */
+  describeConfig(manifest?: EnvironmentManifest): ProviderConfigField[] {
+    if (!manifest) return []
+    return environmentsLogic.configFieldsFromSecretKeys(referencedSecretKeys(manifest))
+  }
+
+  /** Probe the management API with the candidate manifest's auth (nothing provisioned). */
+  async testConnection(req: EnvironmentConnectionTestRequest): Promise<ConnectionTestResult> {
+    if (!req.manifest) return { ok: false, message: 'No manifest supplied to test.' }
+    let headers: Record<string, string>
+    try {
+      headers = await this.authHeaders(req.manifest.auth, req.resolveSecret)
+    } catch (err) {
+      return { ok: false, message: err instanceof Error ? err.message : String(err) }
+    }
+    return environmentsLogic.probeConnection(req.manifest.baseUrl, headers, this.urlPolicy)
   }
 
   // --- internals ----------------------------------------------------------
