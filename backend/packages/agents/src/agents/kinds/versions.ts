@@ -31,7 +31,7 @@ export const PROMPT_VERSIONS = {
   'requirement-writer': { id: 'requirement-writer', version: 1, text: WRITER_SYSTEM_PROMPT },
   'clarity-review': { id: 'clarity-review', version: 1, text: CLARITY_REVIEW_SYSTEM_PROMPT },
   'clarity-rework': { id: 'clarity-rework', version: 1, text: CLARITY_REWORK_SYSTEM_PROMPT },
-  build: { id: 'build', version: 2, text: standardSystemPrompt('build') },
+  build: { id: 'build', version: 3, text: standardSystemPrompt('build') },
   review: { id: 'review', version: 2, text: standardSystemPrompt('review') },
 } as const satisfies Record<string, VersionedPrompt>
 

@@ -80,6 +80,22 @@ export interface CompanionControllerDeps {
     companionIndex: number,
     rework: NonNullable<PipelineStep['rework']>,
   ) => void
+  /**
+   * Infer + persist the block's `technical` label from the spec phase when the
+   * spec-companion converges. Both signals are read off the persisted steps — the
+   * spec-writer's `noBusinessSpecs` on the producer step and the companion's
+   * `technicalCorroborated` on `companionStep` (recorded by this controller before the
+   * call) — so the SAME inference also runs on a human "proceed" past the iteration cap,
+   * where only the steps survive. A no-op for non-spec companions and when a human has
+   * already set the label. Optional — unwired in tests / facades that don't pass it, so the
+   * companion loop is unchanged.
+   */
+  inferTechnicalLabel?: (
+    workspaceId: string,
+    block: Block,
+    producerStep: PipelineStep,
+    companionStep: PipelineStep,
+  ) => Promise<void>
 }
 
 /**
@@ -197,11 +213,32 @@ export class CompanionController {
     })
     step.companion = companion
     step.output = feedback || result.output || ''
+    // Record the spec-companion's business-vs-technical corroboration on the step (even
+    // below threshold) so the engine can infer the block's `technical` label both on the
+    // PASS branch below AND on a later human "proceed" past the cap, where only the
+    // persisted step survives. `undefined` ⇒ the companion gave no opinion.
+    if (step.agentKind === 'spec-companion' && assessment) {
+      step.technicalCorroborated = assessment.technicalCorroborated
+    }
 
     // PASS: the producer cleared the bar (and was not force-looped on its first batch).
     if (passed) {
       this.deps.finishStep(step)
       step.progress = 1
+      // The spec-companion just corroborated the spec-writer's business-vs-technical
+      // determination: infer the block's `technical` label from the writer's
+      // `noBusinessSpecs` (recorded on the producer step) + this verdict's
+      // `technicalCorroborated`. Honours human authority (never overrides a set value).
+      // `assessment` is guaranteed present here when there is a producer to grade (an
+      // unparseable verdict against a real producer already returned above).
+      if (step.agentKind === 'spec-companion' && producerIndex >= 0 && assessment) {
+        await this.deps.inferTechnicalLabel?.(
+          workspaceId,
+          block,
+          instance.steps[producerIndex]!,
+          step,
+        )
+      }
       // A gated companion now raises the HUMAN approval gate on the producer's output
       // (the human reviews what the companion just cleared). Never on the final step.
       if (step.requiresApproval && !isFinalStep && step.approval?.status !== 'approved') {

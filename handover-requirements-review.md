@@ -95,7 +95,49 @@ passes. Changeset: `.changeset/requirements-review-recommendations.md`.
 
 ---
 
-## ⛔ Not started (items 4, 5 + supporting C, E) — follow-up PRs
+## ✅ Done and verified (items 4, 5) — branch `feat/business-only-specs-technical-label`
+
+Workstream F is implemented + verified (backend `pnpm -r --filter './backend/**' build` green;
+`@cat-factory/app` typecheck green; orchestration `test:run` 221 green incl. new
+`technical.logic.test.ts`; Node conformance `test:run conformance` 96 green incl. 4 new
+technical-label inference assertions, run against a throwaway `postgres:18-alpine`). Changeset:
+`.changeset/business-only-specs-technical-label.md` (minor; no executor-harness image bump —
+the spec-writer prompt lives in `@cat-factory/server`, not the harness). Not yet committed.
+
+### Item 4 — business-only specs + "no new specs" outcome
+- New `AgentRunResult.noBusinessSpecs` channel (`kernel/ports/agent-executor.ts`). `toRunResult`
+  (`server/.../ContainerAgentExecutor.ts`) reads `{"noBusinessSpecs":true}` off the spec-writer's
+  structured JSON, sets the flag, and skips the `spec` channel; `specPostOp`
+  (`agents/repo-ops/builtin.ts`) no-ops when it's set. `SPEC_WRITER_SYSTEM_PROMPT` +
+  `specWriterUserPrompt` + `SPEC_SHAPE_HINT` updated (business-only; "no specs" valid for
+  technical tasks). Spec-writer prompt is NOT version-controlled, so no version bump.
+- `companionAssessmentSchema` gains optional `technicalCorroborated` (`contracts/companion.ts`);
+  the spec-companion prompt (`agents/prompts/companion.ts`) instructs it to corroborate/dispute
+  the writer's determination and emit the flag.
+
+### Item 5 — explicit `technical` label
+- `Block.technical?: boolean | null` (`contracts/entities.ts` + frontend `types/domain.ts`);
+  persisted on both runtimes (D1 `0010_block_technical.sql` + Drizzle column + hand-authored
+  `drizzle/20260625140000_block_technical/` — a MERGED-head snapshot unioning the three branched
+  `20260625130000_*` siblings; shared block mapper in `server/persistence/mappers.ts`). Patch +
+  create schemas (`contracts/requests.ts`) + `BoardService.addTask`.
+- Engine inference: `spec-writer` step records `step.noBusinessSpecs` (new `pipelineStepSchema`
+  field); on spec-companion convergence `CompanionController` calls the engine's
+  `inferBlockTechnical`, which uses the pure `inferTechnicalLabel` (`execution/technical.logic.ts`)
+  — a human-set value is NEVER overridden.
+- Implementer awareness: `AgentRunContext.block.technical` threaded by `AgentContextBuilder`;
+  build SYSTEM prompt gains the rule (**`build` bumped v2→v3**) + a per-task
+  `technicalContextSection` in the user prompt (`agents/prompts/standard.ts`).
+- Frontend: creation checkbox (`AddTaskModal.vue`) + tri-state inspector toggle
+  (`TaskRunSettings.vue`, unset/technical/business).
+
+**drizzle-kit `db:generate` still needs a TTY this env lacks** — the Node migration folder was
+hand-authored (runtime migrator only reads each folder's `migration.sql`, sorted by name; the
+`snapshot.json` is solely for a future real-terminal `db:generate`). Same as the prior session.
+
+---
+
+## ⛔ Not started (supporting C, E) — follow-up PRs
 
 Each is a multi-file, two-runtime effort. Keep parity (D1 ⇄ Drizzle + generated migration),
 bump prompt versions on any prompt edit, add a changeset, and add cross-runtime conformance

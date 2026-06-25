@@ -376,6 +376,9 @@ export class BoardService {
     if (input.agentConfig && Object.keys(input.agentConfig).length) {
       block.agentConfig = input.agentConfig
     }
+    // A human-set TECHNICAL flag from the create form (authoritative; the engine never
+    // overrides it). Omitted ⇒ left undetermined for the spec phase to infer.
+    if (input.technical !== undefined) block.technical = input.technical
     await this.blockRepository.insert(
       homeWorkspaceId,
       block,

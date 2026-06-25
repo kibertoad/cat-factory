@@ -92,6 +92,7 @@ const SYSTEM_PROMPTS: Record<StandardPhase, string> = {
     '- Handle errors and edge cases explicitly; validate input at the boundary.',
     '- Keep the implementation cohesive and minimal — no speculative abstraction.',
     '- Note any follow-ups or assumptions you had to make.',
+    '- If the task context flags it as TECHNICAL (a refactor / non-functional / internal change), the task definition and any incorporated requirements are the PRIMARY source of truth: implement to them, and treat the committed `spec/` only as a regression-spotting reference (do not invent behaviour to match a spec the task did not ask to change). Otherwise the specification leads as usual.',
     '',
     BUILD_DELIVERY_GATE,
     '',
@@ -286,6 +287,26 @@ function clampToTokens(text: string, maxTokens: number): string {
   return text.length > maxChars ? `${text.slice(0, maxChars).trimEnd()}\n…(truncated)` : text
 }
 
+/**
+ * Render the "this task is TECHNICAL" marker when the block carries the resolved
+ * technical label, or an empty string otherwise. The static rule for how to act on it
+ * lives in the BUILD system prompt; this is the per-task signal that activates it (so the
+ * implementer knows to treat the task definition as primary and the spec as a reference).
+ * Only the build user prompt appends it (see {@link renderStandardUserPrompt}) — the
+ * architect/reviewer phases have no matching system rule, so they keep their normal,
+ * spec-led behaviour.
+ */
+export function technicalContextSection(context: AgentRunContext): string {
+  if (!context.block.technical) return ''
+  return [
+    '',
+    'This task is flagged TECHNICAL (a refactor / non-functional / internal change). Treat',
+    'the task definition and any incorporated requirements above as the PRIMARY source of',
+    'truth, and the committed `spec/` only as a regression-spotting reference — do not',
+    'invent behaviour to satisfy a spec this task did not set out to change.',
+  ].join('\n')
+}
+
 /** Render the built-out user prompt for a standard phase from the run context. */
 export function renderStandardUserPrompt(
   phase: StandardPhase,
@@ -295,7 +316,10 @@ export function renderStandardUserPrompt(
   const rendered =
     USER_TEMPLATES[phase](toView(context)) +
     linkedContextSection(context, opts) +
-    environmentSection(context)
+    environmentSection(context) +
+    // Only the implementer (build) acts on the TECHNICAL marker — its system prompt carries
+    // the matching rule. The architect/reviewer have no such rule, so don't change their prompt.
+    (phase === 'build' ? technicalContextSection(context) : '')
   // Collapse the blank lines that conditionals leave behind, then trim.
   return rendered.replace(/\n{3,}/g, '\n\n').trim()
 }

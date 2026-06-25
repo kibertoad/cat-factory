@@ -47,6 +47,18 @@ export function companionSystemPrompt(kind: AgentKind): string | undefined {
           'Do NOT penalise the spec for requirements that were not part of its input or for',
           'resources / behaviour the task did not ask for. Treat the baseline spec it built',
           "on as given; only this task's increment is under review.",
+          '',
+          'BUSINESS vs TECHNICAL: the spec captures ONLY business requirements. For a purely',
+          'technical task (a refactor, dependency bump, internal restructuring, build/infra or',
+          'other non-functional change that does NOT alter externally-observable behaviour),',
+          '"NO NEW SPECS" is the CORRECT outcome — the writer signals this with',
+          '{"noBusinessSpecs": true} and leaves the baseline untouched. Do NOT fault an',
+          'unchanged spec or demand invented requirements for such a task. Make an explicit',
+          'determination and report it in `technicalCorroborated`: set it `true` when you agree',
+          'the task is purely technical and rightly produced no business specs, and `false`',
+          'when business requirements were warranted (whether or not the writer produced them).',
+          'If you DISPUTE a "no new specs" claim for a task that does have business behaviour,',
+          'rate it below the bar with a summary saying so, so the writer is looped back.',
         ]
       : []),
     '',
@@ -54,8 +66,11 @@ export function companionSystemPrompt(kind: AgentKind): string | undefined {
     '{"rating":0.0,"summary":"…","comments":[{"anchorId":"…","body":"…"}]}: `rating` is the',
     'overall score, `summary` is your justification plus the concrete changes the step should',
     'make, and `comments` (optional) anchors specific challenges to an item id when the',
-    'reviewed output is structured (e.g. a spec requirement / acceptance-criterion id). No',
-    'prose outside the JSON, no code fences.',
+    'reviewed output is structured (e.g. a spec requirement / acceptance-criterion id).',
+    ...(kind === 'spec-companion'
+      ? ['Include `technicalCorroborated` (true/false) as described above.']
+      : []),
+    'No prose outside the JSON, no code fences.',
     '',
     FINAL_ANSWER_IN_REPLY,
   ].join('\n')

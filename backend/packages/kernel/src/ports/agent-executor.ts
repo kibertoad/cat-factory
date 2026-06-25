@@ -68,6 +68,17 @@ export interface AgentRunContext {
      * static resolution. Absent when the library module is not configured.
      */
     resolvedFragments?: { id: string; body: string }[]
+    /**
+     * The task's resolved BUSINESS-vs-TECHNICAL label, when determined. `true` ⇒ purely
+     * TECHNICAL (a refactor / non-functional / internal change): the implementer treats the
+     * task definition / incorporated requirements as the PRIMARY source of truth and the
+     * committed specs as a regression-spotting reference, and the spec-writer may produce no
+     * business specs. `false` ⇒ explicitly BUSINESS: the spec-writer MUST produce specs (it
+     * is told not to claim "no business specs"). Set by the engine from the block's resolved
+     * `technical` label (human-set or inferred from the spec phase); absent ⇒ not yet
+     * determined (the normal spec-led behaviour).
+     */
+    technical?: boolean
     /** Id of the model picked for this block (overrides the agent routing), if any. */
     modelId?: string
     /**
@@ -233,6 +244,15 @@ export interface AgentRunResult {
    * the engine parses it before use.
    */
   spec?: unknown
+  /**
+   * Set by a `spec-writer` step when the task is purely TECHNICAL (a refactor /
+   * non-functional / internal change that introduces no externally-observable
+   * behaviour) so there are NO business requirements to specify. "No new specs" is a
+   * valid outcome: the writer leaves the baseline spec untouched (no `spec` channel,
+   * so `specPostOp` commits nothing) and the engine reads this flag — together with
+   * the spec-companion's corroboration — to infer the block's `technical` label.
+   */
+  noBusinessSpecs?: boolean
   /**
    * A `merger` step's structured PR assessment (complexity / risk / impact +
    * rationale). The engine validates it, compares the scores against the task's

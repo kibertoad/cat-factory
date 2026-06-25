@@ -173,6 +173,31 @@ const commentOnPrOpenLabel = computed(() =>
 const resolveOnMergeLabel = computed(() =>
   writebackLabel(props.block.trackerResolveOnMerge, tracker.settings.writebackResolveOnMerge),
 )
+
+// ---- technical label (tri-state) -------------------------------------------
+// Whether this is a purely technical task (the implementer then treats the task
+// definition as primary and the spec as a regression reference). Tri-state: Unset lets
+// the engine infer it from the spec phase; Technical / Business are authoritative human
+// choices the engine never overrides. `null` clears back to Unset.
+function setTechnical(value: boolean | null) {
+  board.updateBlock(props.block.id, { technical: value })
+}
+const technicalMenu = [
+  [
+    {
+      label: 'Unset (auto-detect)',
+      icon: 'i-lucide-rotate-ccw',
+      onSelect: () => setTechnical(null),
+    },
+    { label: 'Technical', icon: 'i-lucide-wrench', onSelect: () => setTechnical(true) },
+    { label: 'Business', icon: 'i-lucide-briefcase', onSelect: () => setTechnical(false) },
+  ],
+]
+const technicalLabel = computed(() => {
+  if (props.block.technical === true) return 'Technical'
+  if (props.block.technical === false) return 'Business'
+  return 'Unset (auto-detect)'
+})
 </script>
 
 <template>
@@ -300,6 +325,38 @@ const resolveOnMergeLabel = computed(() =>
       <p class="mt-1 text-[11px] text-slate-500">
         Changing this affects only steps that haven't started yet.
       </p>
+    </div>
+
+    <!-- technical label (tri-state) -->
+    <div>
+      <div class="mb-1 flex items-center justify-between">
+        <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+          Task kind
+        </span>
+        <UDropdownMenu :items="technicalMenu">
+          <UButton
+            size="xs"
+            variant="ghost"
+            color="neutral"
+            icon="i-lucide-wrench"
+            trailing-icon="i-lucide-chevron-down"
+          >
+            {{ technicalLabel }}
+          </UButton>
+        </UDropdownMenu>
+      </div>
+      <div class="text-[11px] text-slate-500">
+        <template v-if="block.technical === true">
+          Technical — the implementer treats the task definition as primary and the spec as a
+          regression reference; the spec-writer may produce no business specs.
+        </template>
+        <template v-else-if="block.technical === false">
+          Business — the specification leads, as usual.
+        </template>
+        <template v-else>
+          Auto-detect — inferred from the spec phase. Set it explicitly to override.
+        </template>
+      </div>
     </div>
 
     <!-- issue-tracker writeback overrides -->

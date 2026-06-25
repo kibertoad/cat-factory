@@ -88,6 +88,7 @@ import {
 } from './release.logic.js'
 import { AgentContextBuilder } from './AgentContextBuilder.js'
 import { CompanionController } from './CompanionController.js'
+import { inferTechnicalLabel } from './technical.logic.js'
 import { MergeResolver } from './MergeResolver.js'
 import { ReviewGateController, type ReviewKind } from './ReviewGateController.js'
 import { TesterController } from './TesterController.js'
@@ -629,6 +630,8 @@ export class ExecutionService {
       parkStepOnDecision: (ws, i, s, p) => this.parkStepOnDecision(ws, i, s, p),
       raiseDecisionRequired: (ws, i) => this.raiseDecisionRequired(ws, i),
       loopCompanionProducer: (i, ci, rw) => this.loopCompanionProducer(i, ci, rw),
+      inferTechnicalLabel: (ws, block, producer, companionStep) =>
+        this.inferBlockTechnical(ws, block, producer, companionStep),
     })
     this.testerController = new TesterController({
       blockRepository,
@@ -1783,6 +1786,32 @@ export class ExecutionService {
   }
 
   /**
+   * Infer + persist the block's `technical` label from the settled spec phase (item 5):
+   * combine the spec-writer's `noBusinessSpecs` determination (recorded on the producer
+   * step) with the spec-companion's `technicalCorroborated` verdict (recorded on the
+   * companion step). Driven both on the companion's automatic convergence and on a human
+   * "proceed" past the iteration cap, since both signals live on the persisted steps. An
+   * already-determined value is authoritative and is NEVER re-inferred (the pure
+   * {@link inferTechnicalLabel} returns `undefined` then). Best-effort: the label is a
+   * convenience (re-inferable, and human-overridable), so a persistence hiccup must NOT
+   * wedge the run — a failed write is swallowed.
+   */
+  private async inferBlockTechnical(
+    workspaceId: string,
+    block: Block,
+    producerStep: PipelineStep,
+    companionStep: PipelineStep,
+  ): Promise<void> {
+    const technical = inferTechnicalLabel(
+      block.technical,
+      producerStep.noBusinessSpecs === true,
+      companionStep.technicalCorroborated,
+    )
+    if (technical === undefined) return
+    await this.blockRepository.update(workspaceId, block.id, { technical }).catch(() => {})
+  }
+
+  /**
    * Record a completed agent step's result and report what the driver should do
    * next: meter token usage, park on a raised decision, or persist the output
    * (and any opened PR) and either finish the run or advance to the next step.
@@ -1894,6 +1923,15 @@ export class ExecutionService {
     // must never be trusted), then nudge clients to refresh.
     if (result.spec !== undefined) {
       await this.ingestSpec(workspaceId, result.spec)
+    }
+
+    // Record the spec-writer's BUSINESS-vs-TECHNICAL determination on the step. "No
+    // business specs" (a purely technical task) is a valid outcome; the spec-companion's
+    // convergence — the one point both signals coexist — combines this with the
+    // companion's `technicalCorroborated` verdict to infer the block's `technical` label
+    // (see CompanionController). Recorded even when false so a re-run reflects the latest.
+    if (step.agentKind === SPEC_WRITER_AGENT_KIND) {
+      step.noBusinessSpecs = result.noBusinessSpecs === true
     }
 
     // A `task-estimator` step emits a JSON triage (complexity/risk/impact). Parse it
@@ -3219,6 +3257,15 @@ export class ExecutionService {
       proceed: async () => {
         step.companion!.exceeded = undefined
         step.approval!.status = 'approved'
+        // The spec-companion never reached its automatic PASS branch, but both signals are
+        // persisted (the producer's `noBusinessSpecs` + this step's `technicalCorroborated`),
+        // so infer the block's `technical` label here too — best-effort, human-authority
+        // preserved — before advancing.
+        if (step.agentKind === 'spec-companion') {
+          const producer = instance.steps[this.companionProducerIndex(instance, stepIndex)]
+          const block = await this.blockRepository.get(workspaceId, instance.blockId)
+          if (producer && block) await this.inferBlockTechnical(workspaceId, block, producer, step)
+        }
         await this.advancePastResolvedGate(workspaceId, instance, stepIndex)
       },
     })
