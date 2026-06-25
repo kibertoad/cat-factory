@@ -24,8 +24,8 @@ import { clearRegisteredAgentKinds, registerAgentKind } from '@cat-factory/agent
 // The built-in gate suite lives in its own package and registers via the public seam (the
 // dogfood). The suite imports it so the runtime-neutral assertions run with the SAME gates a
 // real deployment ships, and so a test that clears the registry can restore them.
-import { clearGateProviders, registerBuiltinGates, wireCiStatusProvider } from '@cat-factory/gates'
-import type { GateProbe, RepoFiles } from '@cat-factory/kernel'
+import { clearGateProviders, registerBuiltinGates } from '@cat-factory/gates'
+import type { CiStatusProvider, GateProbe, RepoFiles } from '@cat-factory/kernel'
 import {
   clearRegisteredGates,
   clearRegisteredStepResolvers,
@@ -716,9 +716,13 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
 
       // A fake CI provider whose check verdict is supplied per-probe (a queue; the last entry
       // repeats), so a test can drive green / red→green like the registered-gate test does.
-      const wireFakeCi = (greens: boolean[]): void => {
+      // It is injected THROUGH `makeApp` (`gateProviders`), not wired directly: a facade build
+      // resets the deployment-global gate providers up-front and the Worker rebuilds the
+      // container per request, so a directly-wired provider would be cleared before the gate
+      // probes. Threading it into the build re-wires it on every rebuild, on every runtime.
+      const makeFakeCi = (greens: boolean[]): CiStatusProvider => {
         let i = 0
-        wireCiStatusProvider({
+        return {
           getStatus: async () => {
             const green = greens[Math.min(i, greens.length - 1)] ?? true
             i += 1
@@ -734,12 +738,14 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
               ],
             }
           },
-        })
+        }
       }
 
       it('passes through on green CI without spinning up ci-fixer', async () => {
-        wireFakeCi([true])
-        const app = harness.makeApp({ asyncKinds: ['coder', 'ci-fixer'] })
+        const app = harness.makeApp(
+          { asyncKinds: ['coder', 'ci-fixer'] },
+          { gateProviders: { ciStatus: makeFakeCi([true]) } },
+        )
         const { workspace } = await app.createWorkspace()
         const wsId = workspace.id
 
@@ -761,11 +767,14 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
       })
 
       it('escalates to ci-fixer on red CI, then advances when it re-probes green', async () => {
-        wireFakeCi([false, true]) // red first, green after the fixer ran
-        const app = harness.makeApp({
-          asyncKinds: ['coder', 'ci-fixer'],
-          pullRequest: { url: 'https://github.com/o/r/pull/1', number: 1, branch: 'feat/login' },
-        })
+        const app = harness.makeApp(
+          {
+            asyncKinds: ['coder', 'ci-fixer'],
+            pullRequest: { url: 'https://github.com/o/r/pull/1', number: 1, branch: 'feat/login' },
+          },
+          // red first, green after the fixer ran
+          { gateProviders: { ciStatus: makeFakeCi([false, true]) } },
+        )
         const { workspace } = await app.createWorkspace()
         const wsId = workspace.id
 

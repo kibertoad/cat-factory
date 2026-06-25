@@ -84,11 +84,17 @@ export function environmentController(): Hono<AppEnv> {
   })
 
   // Probe a candidate connection before saving (nothing persisted).
-  app.post('/environments/connection/test', jsonBody(testEnvironmentConnectionSchema), async (c) => {
-    const env = requireEnvironments(c)
-    if (!env) return unavailable(c)
-    return c.json(await env.connectionService.testConnection(param(c, 'workspaceId'), c.req.valid('json')))
-  })
+  app.post(
+    '/environments/connection/test',
+    jsonBody(testEnvironmentConnectionSchema),
+    async (c) => {
+      const env = requireEnvironments(c)
+      if (!env) return unavailable(c)
+      return c.json(
+        await env.connectionService.testConnection(param(c, 'workspaceId'), c.req.valid('json')),
+      )
+    },
+  )
 
   // ---- environment registry ----------------------------------------------
 

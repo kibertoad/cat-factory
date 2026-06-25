@@ -18,7 +18,10 @@ const done = computed(() => members.value.filter((m) => m.status === 'done').len
 const groups = computed(() => {
   const byService = new Map<
     string,
-    { service: Block | undefined; modules: Map<string, { module: Block | undefined; tasks: Block[] }> }
+    {
+      service: Block | undefined
+      modules: Map<string, { module: Block | undefined; tasks: Block[] }>
+    }
   >()
   for (const task of members.value) {
     const service = board.serviceOf(task)
@@ -29,7 +32,10 @@ const groups = computed(() => {
     const parent = task.parentId ? board.getBlock(task.parentId) : undefined
     const moduleKey = parent && parent.level === 'module' ? parent.id : '—'
     if (!group.modules.has(moduleKey)) {
-      group.modules.set(moduleKey, { module: parent?.level === 'module' ? parent : undefined, tasks: [] })
+      group.modules.set(moduleKey, {
+        module: parent?.level === 'module' ? parent : undefined,
+        tasks: [],
+      })
     }
     group.modules.get(moduleKey)!.tasks.push(task)
   }
@@ -51,7 +57,11 @@ const groups = computed(() => {
     </div>
 
     <div v-else class="space-y-2">
-      <div v-for="(group, gi) in groups" :key="gi" class="rounded-md border border-slate-700/60 p-2">
+      <div
+        v-for="(group, gi) in groups"
+        :key="gi"
+        class="rounded-md border border-slate-700/60 p-2"
+      >
         <div class="mb-1 flex items-center gap-1 text-[11px] font-medium text-slate-300">
           <UIcon name="i-lucide-box" class="h-3 w-3 text-slate-500" />
           {{ group.service?.title ?? 'Unassigned' }}

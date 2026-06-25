@@ -1,10 +1,10 @@
 ---
-"@cat-factory/gates": minor
-"@cat-factory/kernel": minor
-"@cat-factory/orchestration": minor
-"@cat-factory/worker": patch
-"@cat-factory/node-server": patch
-"@cat-factory/conformance": patch
+'@cat-factory/gates': minor
+'@cat-factory/kernel': minor
+'@cat-factory/orchestration': minor
+'@cat-factory/worker': patch
+'@cat-factory/node-server': patch
+'@cat-factory/conformance': patch
 ---
 
 Dogfood the extensible-gates seam: the built-in polling-gate suite (`ci`, `conflicts`,
@@ -24,7 +24,12 @@ gate suite via the exported `wireCiStatusProvider` / `wireMergeabilityProvider` 
 
 - **gates (new)**: the three gate factories + the four provider wire-handles +
   `registerBuiltinGates()`, registered as an import side effect. Each gate is a
-  pass-through until its provider is wired, so a bare import is always safe.
+  pass-through until its provider is wired, so a bare import is always safe. Also exports
+  `applyGateProviders(overrides)` + the `GateProviderOverrides` bag: a facade build resets
+  the deployment-global providers up-front then re-wires from config, and this is the seam
+  that re-applies explicit/faked providers AFTER that wiring (so they survive the Worker's
+  per-request rebuild and override a config-wired provider) — used by the cross-runtime
+  conformance suite to drive the externalized `ci` gate over a controlled verdict.
 - **kernel**: the pure gate logic (`aggregateCi`/`classifyReleaseHealth`/… +
   `renderReleaseEvidence`) and the gate/helper agent-kind constants move into
   `domain/gate-logic.ts` so a gate package can author a gate without depending on the

@@ -96,6 +96,8 @@ import {
 // The built-in polling-gate suite (ci / conflicts / post-release-health + on-call). Importing
 // it registers the gates via the public seam; the facade wires each gate's provider below.
 import {
+  type GateProviderOverrides,
+  applyGateProviders,
   clearGateProviders,
   wireCiStatusProvider,
   wireMergeabilityProvider,
@@ -402,6 +404,13 @@ export interface NodeContainerOptions {
    * off for parity). Undefined → derived from the REST credentials being present.
    */
   cloudflareModelsEnabled?: boolean
+  /**
+   * Explicit built-in gate providers, re-wired AFTER the build's `clearGateProviders()`
+   * reset. The cross-runtime conformance suite uses this to drive the externalized
+   * `@cat-factory/gates` CI gate over a faked verdict; production leaves it undefined and
+   * the config branches below wire the real providers.
+   */
+  gateProviders?: GateProviderOverrides
   /**
    * The real-time subscriber registry. When provided, the container wires a
    * {@link NodeEventPublisher} (so the engine pushes execution/board/notification events
@@ -834,7 +843,10 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   // below runs only inside its `enabled`/`githubClient` branches and never clears, so without this
   // reset a provider wired by an earlier (configured) build in the same process would leak into a
   // later (unconfigured) build and make its gate probe a stale handle instead of passing through.
-  // Mirrors the Worker facade (keep the runtimes symmetric).
+  // Mirrors the Worker facade (keep the runtimes symmetric). Any test-injected gate providers
+  // (`options.gateProviders`) are applied at the END of this build so they OVERRIDE the config
+  // wiring below (local mode wires a PAT-backed CI provider here that would otherwise clobber a
+  // faked one) — gates read their provider lazily at probe time, so the last write wins.
   clearGateProviders()
 
   // Honour the workspace's model presets at run time (block-pinned > the task's
@@ -1243,6 +1255,12 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   // Runner-pool URL/host guard, scoped to its own config (independent of the environment
   // allow-list); absent => strict public-https.
   const runnerUrlPolicy = resolveUrlSafetyPolicy(config.runners)
+
+  // Apply any test-injected gate providers LAST, so they override the config wiring above (the
+  // cross-runtime conformance suite drives the externalized CI gate over a faked verdict; in
+  // local mode a PAT-backed CI provider is wired above and would otherwise win). Production
+  // leaves `gateProviders` undefined, so this is a no-op outside tests.
+  applyGateProviders(options.gateProviders)
 
   const dependencies: CoreDependencies = {
     ...releaseHealthDeps,

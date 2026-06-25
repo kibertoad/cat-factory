@@ -58,3 +58,26 @@ export function clearGateProviders(): void {
   releaseHealthProvider = undefined
   incidentEnrichment = undefined
 }
+
+/** The built-in gates' providers as one optional bag, for wiring through a build step. */
+export interface GateProviderOverrides {
+  ciStatus?: CiStatusProvider
+  mergeability?: PullRequestMergeabilityProvider
+  releaseHealth?: ReleaseHealthProvider
+  incidentEnrichment?: IncidentEnrichmentProvider
+}
+
+/**
+ * Wire any provided gate providers (leaving the rest untouched). A facade build runs
+ * `clearGateProviders()` then re-wires from its config; this is the seam by which a test
+ * (or an embedder) injects fake/explicit providers through that same per-build wiring, so
+ * they survive a per-request container rebuild instead of being cleared. Only keys present
+ * are wired — absent keys are left as the build's config wired them.
+ */
+export function applyGateProviders(overrides: GateProviderOverrides | undefined): void {
+  if (!overrides) return
+  if (overrides.ciStatus) wireCiStatusProvider(overrides.ciStatus)
+  if (overrides.mergeability) wireMergeabilityProvider(overrides.mergeability)
+  if (overrides.releaseHealth) wireReleaseHealthProvider(overrides.releaseHealth)
+  if (overrides.incidentEnrichment) wireIncidentEnrichment(overrides.incidentEnrichment)
+}

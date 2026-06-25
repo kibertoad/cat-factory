@@ -117,7 +117,8 @@ async function toggleEnabled(enabled: boolean) {
             credentials to enter.
           </p>
           <p v-if="!available" class="text-[11px] text-amber-400">
-            Install the workspace's GitHub App (connect GitHub repos) to offer {{ descriptor.label }}.
+            Install the workspace's GitHub App (connect GitHub repos) to offer
+            {{ descriptor.label }}.
           </p>
         </template>
 

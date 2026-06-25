@@ -156,6 +156,8 @@ import { D1ServiceFragmentDefaultsRepository } from './repositories/D1ServiceFra
 // The built-in polling-gate suite (ci / conflicts / post-release-health + on-call). Importing
 // it registers the gates via the public seam; the facade wires each gate's provider below.
 import {
+  type GateProviderOverrides,
+  applyGateProviders,
   clearGateProviders,
   wireCiStatusProvider,
   wireMergeabilityProvider,
@@ -1429,7 +1431,7 @@ function selectFragmentLibraryDeps(
 export function buildContainer(
   env: Env,
   overrides: Partial<CoreDependencies> = {},
-  opts: { cloudflareModelsEnabled?: boolean } = {},
+  opts: { cloudflareModelsEnabled?: boolean; gateProviders?: GateProviderOverrides } = {},
 ): Container {
   const config = loadConfig(env)
   const db = env.DB
@@ -1442,6 +1444,10 @@ export function buildContainer(
   // `selectReleaseHealthDeps` wire their providers only inside their `enabled` branches and never
   // clear, so without this reset a provider wired by an earlier (configured) build would leak into
   // a later (unconfigured) build and make its gate probe a stale handle instead of passing through.
+  // Any test-injected gate providers (`opts.gateProviders`) are applied at the END of this build
+  // (after the config wiring below) so they OVERRIDE it — the only way an externally-supplied
+  // provider survives the per-request rebuild, and so a deployment that ALSO wires a real provider
+  // can't clobber the test's. Gates read their provider lazily at probe time, so the last write wins.
   clearGateProviders()
 
   // The runner-backend factory is shared by every container-backed flow (the
@@ -1580,6 +1586,11 @@ export function buildContainer(
     runInitiatorScope: runWithInitiator,
     ...overrides,
   }
+
+  // Apply any test-injected gate providers LAST, so they override the config wiring done by the
+  // `select*Deps` spreads above (the conformance suite drives the externalized CI gate over a
+  // faked verdict). Production leaves `gateProviders` undefined, so this is a no-op outside tests.
+  applyGateProviders(opts.gateProviders)
 
   return {
     ...createCore(dependencies),

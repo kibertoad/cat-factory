@@ -1,5 +1,5 @@
 ---
-"@cat-factory/app": patch
+'@cat-factory/app': patch
 ---
 
 Drop an unnecessary empty-object fallback in a spread in `ProviderConnectionPanel`

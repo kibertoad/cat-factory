@@ -51,11 +51,7 @@ function fakeBoard() {
       blocks.set(b.id, b)
       return b
     },
-    async addTask(
-      _ws: string,
-      containerId: string,
-      input: { title: string; epicId?: string },
-    ) {
+    async addTask(_ws: string, containerId: string, input: { title: string; epicId?: string }) {
       const b = block(`task_${++n}`, {
         level: 'task',
         title: input.title,

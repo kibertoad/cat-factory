@@ -32,6 +32,8 @@ export {
   wireReleaseHealthProvider,
   wireIncidentEnrichment,
   clearGateProviders,
+  applyGateProviders,
+  type GateProviderOverrides,
 } from './providers.js'
 export { ciGate, conflictsGate, postReleaseHealthGate } from './gates.js'
 
