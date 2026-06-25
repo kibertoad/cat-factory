@@ -100,6 +100,19 @@ export interface EnvironmentProvider {
    * the SPA falls back to the manifest editor.
    */
   describeConfig?(manifest?: EnvironmentManifest): ProviderConfigField[]
+  /**
+   * The base manifest a NATIVE adapter is configured through, so the SPA can render the
+   * flat `describeConfig` form yet still persist a full manifest (the single storage
+   * path — see `backend/docs/native-environment-adapter.md`). The SPA overlays each
+   * field value onto this scaffold: a `secret` field goes into the secret bundle (the
+   * scaffold's `auth` already references its key), a non-secret field into
+   * `providerConfig[key]` (a `baseUrl` field onto `baseUrl`). The scaffold supplies the
+   * parts no flat field carries — `auth` scheme, the `provision`/`status`/`teardown`
+   * request templates (which a native adapter ignores at run time but the schema
+   * requires), and `response`. Absent ⇒ a manifest-authored provider; the SPA edits the
+   * manifest directly. Carries NO secret values — only the shape + secret-ref keys.
+   */
+  describeManifestTemplate?(): EnvironmentManifest
   /** Probe the connection without persisting. Optional — absent ⇒ "nothing to test". */
   testConnection?(req: EnvironmentConnectionTestRequest): Promise<ConnectionTestResult>
 }

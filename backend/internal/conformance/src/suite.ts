@@ -1842,6 +1842,51 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         expect(afterDelete.body.connection).toBeNull()
       })
 
+      it('describes the provider config + missingRequired identically on every facade', async () => {
+        // `GET /provider` self-describes the connect form (configFields) and reports which
+        // required-without-default fields the workspace still owes (`missingRequired`, the
+        // unconfigured-provider banner signal). The describe pipeline runs against the real
+        // store + cipher — describeConfig over the saved manifest, plus the decrypted secret
+        // bundle / manifest providerConfig as the "already supplied" set — so a repo that
+        // dropped the manifest or failed to decrypt the bundle would diverge here.
+        const { call, createWorkspace } = harness.makeApp()
+        const { workspace } = await createWorkspace()
+        const base = `/workspaces/${workspace.id}/environments`
+
+        // No connection yet: the generic manifest provider has no manifest to read, so it
+        // declares no fields and owes nothing.
+        const before = await call<{ missingRequired: string[]; configFields: unknown[] }>(
+          'GET',
+          `${base}/provider`,
+        )
+        expect(before.status).toBe(200)
+        expect(before.body.missingRequired).toEqual([])
+
+        // After registering a manifest whose bearer auth references API_TOKEN — and
+        // supplying it — the field is described AND counts as satisfied, so nothing is
+        // missing (the secret bundle round-tripped through the store + cipher).
+        const manifest = {
+          providerId: 'acme-envs',
+          label: 'Acme Ephemeral Envs',
+          baseUrl: 'https://envs.test/api',
+          auth: { type: 'bearer', secretRef: { key: 'API_TOKEN' } },
+          provision: { method: 'POST', pathTemplate: '/environments' },
+          response: { urlPath: 'url', statusPath: 'state', externalIdPath: 'id' },
+        }
+        await call('POST', `${base}/connection`, {
+          manifest,
+          secrets: { API_TOKEN: 'super-secret-env-token' },
+        })
+
+        const after = await call<{
+          missingRequired: string[]
+          configFields: { key: string }[]
+        }>('GET', `${base}/provider`)
+        expect(after.body.configFields.map((f) => f.key)).toContain('API_TOKEN')
+        expect(after.body.missingRequired).toEqual([])
+        expect(JSON.stringify(after.body)).not.toContain('super-secret-env-token')
+      })
+
       it('rejects an internal management-API host under the strict URL policy', async () => {
         // The default (strict) URL/host safety policy forbids private/internal hosts at
         // registration on every runtime — so a trusted-internal deployment (e.g. an

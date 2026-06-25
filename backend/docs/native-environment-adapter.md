@@ -26,6 +26,32 @@ interface EnvironmentProvider {
 There is intentionally **no `reboot`** (YAGNI — nothing in the engine drives one). If a
 provider supports rebooting, that is an out-of-band operation; the port stays minimal.
 
+A native adapter MAY additionally implement three optional methods so the SPA can render
+a first-class **connect form** instead of making operators hand-author a manifest:
+
+```ts
+describeConfig?(manifest?: EnvironmentManifest): ProviderConfigField[]
+describeManifestTemplate?(): EnvironmentManifest
+testConnection?(req: EnvironmentConnectionTestRequest): Promise<ConnectionTestResult>
+```
+
+- **`describeConfig`** declares the flat fields the org fills in — `key`, `label`, `help`,
+  `secret`, `required`, and an optional **`default`**. A `required` field with no `default`
+  and no stored value is what lights up the unconfigured-provider banner
+  (`ProviderDescriptor.missingRequired`); a field with a `default` is optional (the UI
+  shows it blank with a "defaulted to …" hint and falls back to the default).
+- **`describeManifestTemplate`** returns the base manifest the SPA overlays those field
+  values onto, so the form is flat but storage stays a single full manifest (no divergent
+  no-manifest path). A `secret` field is written to the secret bundle (your template's
+  `auth` already references its key); a non-secret field to `providerConfig[key]`; a field
+  named `baseUrl` to `baseUrl`. The template supplies the parts no flat field carries — the
+  `auth` scheme, the `provision`/`status`/`teardown` request templates (ignored at run time
+  but required by the schema), and `response`. It carries **no secret values** — only the
+  shape + secret-ref keys.
+
+Omit them and the adapter still works; the SPA just falls back to editing the manifest
+directly. Implement them to get the typed/defaulted connect form + the banner.
+
 Every call receives the per-workspace `manifest` plus a `resolveSecret(key)` callback. A
 `provision` call additionally gets `inputs` (`{{input.*}}` template vars) and a typed
 `provisionContext` (`branch` / `pullNumber` / `pullUrl` / `repoOwner` / `repoName` /

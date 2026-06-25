@@ -16,6 +16,7 @@ import type {
 import { ConflictError, STRICT_URL_SAFETY_POLICY, ValidationError } from '@cat-factory/kernel'
 import { requireWorkspace } from '@cat-factory/kernel'
 import type { WorkspaceRepository } from '@cat-factory/kernel'
+import { missingRequiredConfigKeys } from '../environments/environments.logic.js'
 import { assertManifestUrlsSafe, referencedSecretKeys } from './runners.logic.js'
 
 // RunnerPoolConnectionService: owns the binding between a workspace and a
@@ -95,15 +96,29 @@ export class RunnerPoolConnectionService {
 
   /** Describe the pool provider's config fields + test availability for the UI. */
   async describeProvider(workspaceId: string): Promise<ProviderDescriptor> {
-    const provider = this.deps.runnerPoolConnectionRepository
-    const record = await provider.getByWorkspace(workspaceId)
+    const record = await this.deps.runnerPoolConnectionRepository.getByWorkspace(workspaceId)
     const manifest = record ? (JSON.parse(record.manifestJson) as RunnerPoolManifest) : undefined
+    const configFields = this.deps.runnerPoolProvider?.describeConfig?.(manifest) ?? []
+    // A runner-pool manifest has no `providerConfig` bag, so the stored values are the secret
+    // bundle keys plus `baseUrl` when the manifest carries one. The latter mirrors the connect
+    // form's write path (a `baseUrl` field lands on the manifest's `baseUrl`, not the secret
+    // bundle) — without it a `required` baseUrl field would never clear `missingRequired`.
+    const storedKeys = record ? Object.keys(await this.decryptSecrets(record)) : []
+    if (manifest?.baseUrl) storedKeys.push('baseUrl')
+    const provider = this.deps.runnerPoolProvider
     return {
       providerId: this.deps.providerId ?? manifest?.providerId ?? 'http',
       label: this.deps.providerLabel ?? manifest?.label ?? 'Custom HTTP pool',
       kind: this.deps.providerKind ?? 'manifest',
-      configFields: this.deps.runnerPoolProvider?.describeConfig?.(manifest) ?? [],
-      supportsTest: typeof this.deps.runnerPoolProvider?.testConnection === 'function',
+      configFields,
+      supportsTest: typeof provider?.testConnection === 'function',
+      missingRequired: missingRequiredConfigKeys(configFields, storedKeys),
+      // The current saved manifest (non-secret), so the native connect form overlays edits
+      // onto the real stored manifest instead of the bare scaffold (mirrors the env service).
+      ...(manifest ? { savedManifest: manifest as unknown as Record<string, unknown> } : {}),
+      ...(provider?.describeManifestTemplate
+        ? { manifestTemplate: provider.describeManifestTemplate() as Record<string, unknown> }
+        : {}),
     }
   }
 
