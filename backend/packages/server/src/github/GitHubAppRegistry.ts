@@ -38,8 +38,13 @@ export interface AppTokenSource {
   apps(): readonly { appId: string }[]
   /** The auth (app-JWT signer) for an appId. */
   authForApp(appId: string | null | undefined): { appJwt(): Promise<string> }
-  /** An installation token (the repo-call credential). */
-  installationToken(installationId: number): Promise<string>
+  /**
+   * An installation token (the repo-call credential). `forceRefresh` bypasses any
+   * cached token and mints a fresh one — used to defeat the in-memory token cache
+   * after a permission/repo-access change on GitHub, since a token keeps its
+   * grant-at-mint scopes and a stale one misreports a just-granted access.
+   */
+  installationToken(installationId: number, opts?: { forceRefresh?: boolean }): Promise<string>
 }
 
 export interface GitHubAppRegistryDependencies {
@@ -77,8 +82,11 @@ export class GitHubAppRegistry {
   }
 
   /** An installation token, minted by the App that owns the installation. */
-  async installationToken(installationId: number): Promise<string> {
-    return (await this.ownerAuth(installationId)).installationToken(installationId)
+  async installationToken(
+    installationId: number,
+    opts?: { forceRefresh?: boolean },
+  ): Promise<string> {
+    return (await this.ownerAuth(installationId)).installationToken(installationId, opts)
   }
 
   /** The installation's granted permissions, via its owning App. */

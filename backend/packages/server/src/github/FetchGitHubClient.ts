@@ -70,6 +70,12 @@ interface RequestOptions {
   appId?: string
   etag?: string
   body?: unknown
+  /**
+   * Mint a fresh installation token for this call instead of reusing the cached
+   * one. Used to recheck a permission after the user changed the App's access on
+   * GitHub (a cached token keeps its grant-at-mint scopes). Ignored for `auth: 'app'`.
+   */
+  forceRefreshToken?: boolean
 }
 
 interface GitHubResponse {
@@ -212,8 +218,28 @@ export class FetchGitHubClient implements GitHubClient {
     // selected repos, or the App lacks contents:write) comes back with push:false —
     // exactly the case that 403s on the bootstrap container's push. A 404 (the repo
     // is private + not granted at all) means no access either; surface that as false.
+    if (await this.probePush(installationId, ref, false)) return true
+    // A negative answer may just be stale. Installation tokens bake in their repo
+    // set + permission scopes at mint time and we cache them in-memory for ~1h, so a
+    // token minted before the user granted the App access keeps reporting the old
+    // (no-write) grant — which is exactly the "I just added the App, why does retry
+    // still say no?" case. Mint a fresh token and probe once more before concluding
+    // there's genuinely no write access. The fresh mint also replaces the cached
+    // entry the bootstrap push token reads, so a real grant fixes the push too.
+    return this.probePush(installationId, ref, true)
+  }
+
+  /** One `permissions.push` read; `forceRefreshToken` mints a fresh token for it. */
+  private async probePush(
+    installationId: number,
+    ref: GitHubRepoRef,
+    forceRefreshToken: boolean,
+  ): Promise<boolean> {
     try {
-      const { json } = await this.request(`/repos/${ref.owner}/${ref.repo}`, { installationId })
+      const { json } = await this.request(`/repos/${ref.owner}/${ref.repo}`, {
+        installationId,
+        forceRefreshToken,
+      })
       return (json as { permissions?: { push?: boolean } }).permissions?.push === true
     } catch (err) {
       if (err instanceof GitHubApiError && (err.status === 404 || err.status === 403)) return false
@@ -775,7 +801,9 @@ export class FetchGitHubClient implements GitHubClient {
         ? await this.deps.registry
             .authForApp(opts.appId ?? this.deps.registry.defaultAppId)
             .appJwt()
-        : await this.deps.registry.installationToken(opts.installationId)
+        : await this.deps.registry.installationToken(opts.installationId, {
+            forceRefresh: opts.forceRefreshToken === true,
+          })
 
     const headers: Record<string, string> = {
       authorization: `Bearer ${token}`,

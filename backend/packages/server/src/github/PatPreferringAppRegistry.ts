@@ -30,12 +30,17 @@ export class PatPreferringAppRegistry implements AppTokenSource {
     return this.inner.authForApp(appId)
   }
 
-  async installationToken(installationId: number): Promise<string> {
+  async installationToken(
+    installationId: number,
+    opts?: { forceRefresh?: boolean },
+  ): Promise<string> {
     const initiatedBy = currentInitiator()
     if (initiatedBy) {
+      // A user PAT is fetched fresh each call (not cached here), so `forceRefresh`
+      // is moot for it; it only matters for the wrapped App-token cache below.
       const pat = await this.resolveUserGitHubToken(initiatedBy)
       if (pat) return pat
     }
-    return this.inner.installationToken(installationId)
+    return this.inner.installationToken(installationId, opts)
   }
 }
