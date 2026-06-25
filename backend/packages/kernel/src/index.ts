@@ -71,6 +71,35 @@ export {
   clearRegisteredPipelines,
 } from './domain/pipeline-registry.js'
 
+// Installation-level extension point for custom polling gates + step-completion
+// resolvers (mirrors the agent-kind / pipeline registry seams): a deployment registers
+// its own gate / resolver at startup and the ExecutionService merges them with the
+// built-ins. See `domain/gate-registry.ts` / `domain/step-resolver-registry.ts`.
+export {
+  type GateProbe,
+  type GateHelperOutcome,
+  type GateExhaustedArgs,
+  type GateDefinition,
+  type GateContext,
+  type GateFactory,
+  recordGateAttempt,
+  registerGate,
+  registeredGateFactories,
+  clearRegisteredGates,
+  stubGateContext,
+} from './domain/gate-registry.js'
+export {
+  type StepResolverContext,
+  type StepResolution,
+  type StepCompletionResolver,
+  type ResolverContext,
+  type StepResolverFactory,
+  registerStepResolver,
+  registeredStepResolverFactories,
+  clearRegisteredStepResolvers,
+  stubResolverContext,
+} from './domain/step-resolver-registry.js'
+
 export * from './ports/index.js'
 
 export {

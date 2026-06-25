@@ -93,9 +93,18 @@ import { MergeResolver } from './MergeResolver.js'
 import { ReviewGateController, type ReviewKind } from './ReviewGateController.js'
 import { TesterController } from './TesterController.js'
 import { HumanTestController } from './HumanTestController.js'
-import type { GateDefinition, GateProbe } from './gates.js'
-import { recordGateAttempt } from './gates.js'
-import type { StepCompletionResolver } from './stepResolvers.js'
+import type {
+  GateContext,
+  GateDefinition,
+  GateProbe,
+  ResolverContext,
+  StepCompletionResolver,
+} from '@cat-factory/kernel'
+import {
+  recordGateAttempt,
+  registeredGateFactories,
+  registeredStepResolverFactories,
+} from '@cat-factory/kernel'
 import type { NotificationService } from '../notifications/NotificationService.js'
 import type { WorkspaceSettingsService } from '../settings/WorkspaceSettingsService.js'
 import type { RequirementReviewService } from '../requirements/RequirementReviewService.js'
@@ -2220,8 +2229,11 @@ export class ExecutionService {
    * The polling-gate registry, keyed by `agentKind`. A gate runs a programmatic
    * precheck against a provider and only escalates to a helper container agent on a
    * negative verdict. Built lazily (the closures capture `this`, so the providers /
-   * merge preset / notification helpers resolve at call time). Returns undefined for a
-   * non-gate kind. See {@link GateDefinition} and {@link evaluateGate}.
+   * merge preset / notification helpers resolve at call time) and cached per instance.
+   * The registry merges deployment-registered gates ({@link registeredGateFactories}),
+   * which are a STARTUP import side effect — a gate registered after this cache is first
+   * built is invisible to this instance, so register at startup, before serving. Returns
+   * undefined for a non-gate kind. See {@link GateDefinition} and {@link evaluateGate}.
    */
   private gateFor(agentKind: string): GateDefinition | undefined {
     if (!this.gateRegistryCache) this.gateRegistryCache = this.buildGateRegistry()
@@ -2428,7 +2440,10 @@ export class ExecutionService {
    * The post-completion resolver for an agent kind, or undefined when the kind has none.
    * A resolver runs DETERMINISTIC backend follow-up once the step's agent finishes — e.g.
    * the merger performs the real GitHub merge — independent of the step's position in the
-   * pipeline. Built lazily (closures capture `this`). See {@link StepCompletionResolver}.
+   * pipeline. Built lazily (closures capture `this`) and cached per instance; the registry
+   * merges deployment-registered resolvers ({@link registeredStepResolverFactories}), a
+   * startup import side effect (see {@link gateFor} for the same caching caveat). See
+   * {@link StepCompletionResolver}.
    */
   private stepResolverFor(agentKind: string): StepCompletionResolver | undefined {
     if (!this.stepResolverCache) this.stepResolverCache = this.buildStepResolverRegistry()
@@ -2455,7 +2470,17 @@ export class ExecutionService {
         },
       },
     ]
-    return new Map(resolvers.map((r) => [r.kind, r]))
+    const map = new Map(resolvers.map((r) => [r.kind, r]))
+    // Merge deployment-registered resolvers, mirroring the gate registry below. A
+    // registered resolver of the same kind replaces the built-in (last registration wins).
+    const ctx = this.makeResolverContext()
+    for (const { kind, factory } of registeredStepResolverFactories()) map.set(kind, factory(ctx))
+    return map
+  }
+
+  /** The shared engine seams handed to a deployment-registered step resolver's factory. */
+  private makeResolverContext(): ResolverContext {
+    return { runInitiatorScope: this.runInitiatorScope }
   }
 
   private buildGateRegistry(): Map<string, GateDefinition> {
@@ -2635,7 +2660,27 @@ export class ExecutionService {
         },
       },
     ]
-    return new Map(gates.map((gate) => [gate.kind, gate]))
+    const map = new Map(gates.map((gate) => [gate.kind, gate]))
+    // Merge deployment-registered gates. The built-ins above stay inline (their closures
+    // capture `this` for the engine-held providers + the typed `raiseCiFailed` /
+    // `raiseReleaseRegression` notifications a generic context can't reproduce); a
+    // registered gate instead receives a minimal {@link GateContext}. A registered gate of
+    // the same kind replaces the built-in (last registration wins, like registerAgentKind).
+    const ctx = this.makeGateContext()
+    for (const { kind, factory } of registeredGateFactories()) map.set(kind, factory(ctx))
+    return map
+  }
+
+  /** The shared engine seams handed to a deployment-registered gate's factory. */
+  private makeGateContext(): GateContext {
+    return {
+      clock: this.clock,
+      getBlock: (workspaceId, blockId) => this.blockRepository.get(workspaceId, blockId),
+      runInitiatorScope: this.runInitiatorScope,
+      raiseNotification: async (workspaceId, input) => {
+        await this.notificationService?.raise(workspaceId, input)
+      },
+    }
   }
 
   /**

@@ -1,4 +1,20 @@
-import type { Notification } from '../domain/types.js'
+import type { Notification, NotificationPayload, NotificationType } from '../domain/types.js'
+
+/**
+ * The input to raise (or re-raise) a notification. The canonical shape the engine and
+ * the gate/resolver extension seams use to surface a human-actionable notification; the
+ * NotificationService maps it onto a persisted `Notification` row + a delivery. Lives in
+ * kernel (not orchestration) so runtime-neutral extension points — e.g. a custom gate's
+ * `onExhausted` via {@link GateContext} — can build one without depending on orchestration.
+ */
+export interface RaiseNotificationInput {
+  type: NotificationType
+  blockId: string | null
+  executionId: string | null
+  title: string
+  body: string
+  payload?: NotificationPayload | null
+}
 
 // Port for *delivering* a notification to humans. The NotificationService owns
 // the canonical persistence + lifecycle (raise / list / resolve); a channel is

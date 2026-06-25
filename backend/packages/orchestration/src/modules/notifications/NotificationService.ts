@@ -3,9 +3,8 @@ import type {
   IdGenerator,
   Notification,
   NotificationChannel,
-  NotificationPayload,
   NotificationRepository,
-  NotificationType,
+  RaiseNotificationInput,
   ResolveNotificationAction,
 } from '@cat-factory/kernel'
 import { assertFound, requireWorkspace } from '@cat-factory/kernel'
@@ -23,16 +22,6 @@ export interface NotificationServiceDependencies {
    * can omit it (the repository remains the canonical store either way).
    */
   channel?: NotificationChannel
-}
-
-/** What a caller (the execution engine) supplies to raise a notification. */
-export interface RaiseNotificationInput {
-  type: NotificationType
-  blockId: string | null
-  executionId: string | null
-  title: string
-  body: string
-  payload?: NotificationPayload | null
 }
 
 /**

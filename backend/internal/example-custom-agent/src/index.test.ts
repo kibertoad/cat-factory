@@ -7,26 +7,44 @@ import {
   registeredPostOps,
 } from '@cat-factory/agents'
 import type { RepoFiles } from '@cat-factory/kernel'
-import { clearRegisteredPipelines, seedPipelines } from '@cat-factory/kernel'
+import {
+  clearRegisteredGates,
+  clearRegisteredPipelines,
+  clearRegisteredStepResolvers,
+  registeredGateFactories,
+  registeredStepResolverFactories,
+  seedPipelines,
+  stubGateContext,
+  stubResolverContext,
+} from '@cat-factory/kernel'
 import {
   EXAMPLE_AGENT_KINDS,
+  LICENSE_CHECK_KIND,
+  LICENSE_FIXER_KIND,
   ORG_AUDIT_PIPELINE_ID,
   ORG_REVIEWER_KIND,
   SECURITY_AUDITOR_KIND,
   registerExampleCustomAgents,
   renderComplianceReport,
+  wireLicenseProvider,
 } from './index.js'
 
-// The package self-registers on import (side effect), but tests clear the global registry
+// The package self-registers on import (side effect), but tests clear the global registries
 // for isolation — so register fresh before each test and clean up after.
 beforeEach(() => {
   clearRegisteredAgentKinds()
   clearRegisteredPipelines()
+  clearRegisteredGates()
+  clearRegisteredStepResolvers()
   registerExampleCustomAgents()
 })
 afterEach(() => {
   clearRegisteredAgentKinds()
   clearRegisteredPipelines()
+  clearRegisteredGates()
+  clearRegisteredStepResolvers()
+  // The license provider is a module-level handle; clear it so a wired test can't leak.
+  wireLicenseProvider(undefined)
 })
 
 describe('example custom agents', () => {
@@ -42,14 +60,73 @@ describe('example custom agents', () => {
   })
 
   it('exposes presentation so the kinds become first-class palette blocks', () => {
+    const validCategories = new Set(['review', 'design', 'build', 'test', 'docs', 'gates'])
     for (const def of EXAMPLE_AGENT_KINDS) {
       expect(def.presentation?.label).toBeTruthy()
-      expect(def.presentation?.category).toBe('review')
+      expect(validCategories.has(def.presentation?.category ?? '')).toBe(true)
     }
+    // The two reviewers are review blocks; the license-fixer helper is a build block.
+    expect(registeredAgentKind(ORG_REVIEWER_KIND)?.presentation?.category).toBe('review')
+    expect(registeredAgentKind(SECURITY_AUDITOR_KIND)?.presentation?.category).toBe('review')
+    expect(registeredAgentKind(LICENSE_FIXER_KIND)?.presentation?.category).toBe('build')
     // The auditor opens the shared generic structured viewer.
     expect(registeredAgentKind(SECURITY_AUDITOR_KIND)?.presentation?.resultView).toBe(
       'generic-structured',
     )
+  })
+
+  it('registers the license-check gate, escalating to the license-fixer helper kind', () => {
+    const registered = registeredGateFactories()
+    expect(registered.map((g) => g.kind)).toContain(LICENSE_CHECK_KIND)
+    // The helper is itself a registered agent kind (a container-coding fixer).
+    expect(registeredAgentStep(LICENSE_FIXER_KIND)?.surface).toBe('container-coding')
+
+    // Build the gate with a throwaway context; without a wired provider it passes through.
+    const gate = registered.find((g) => g.kind === LICENSE_CHECK_KIND)!.factory(stubGateContext())
+    expect(gate.helperKind).toBe(LICENSE_FIXER_KIND)
+    // Unwired ⇒ a harmless pass-through, so a bare import is always safe.
+    expect(gate.wired()).toBe(false)
+  })
+
+  it('arms the gate via wireLicenseProvider: probe maps a clean/dirty report to pass/fail', async () => {
+    // Exercise the example's REAL wired()/probe() path (the licenseProvider deref) — the
+    // engine-drive conformance tests inject verdicts through a test-local factory, so this
+    // is the only coverage of the seam a deployment actually copies.
+    const check = vi.fn(async () => ({ clean: true, headSha: 'sha-1', summary: 'all good' }))
+    wireLicenseProvider({ check })
+    const gate = registeredGateFactories()
+      .find((g) => g.kind === LICENSE_CHECK_KIND)!
+      .factory(stubGateContext())
+
+    // Wired now ⇒ the gate runs its probe instead of passing through.
+    expect(gate.wired()).toBe(true)
+    const pass = await gate.probe('ws', 'blk_1')
+    expect(check).toHaveBeenCalledWith('ws', 'blk_1')
+    expect(pass.status).toBe('pass')
+    expect(pass.headSha).toBe('sha-1')
+
+    // A dirty report ⇒ a fail verdict the engine escalates to the license-fixer.
+    check.mockResolvedValueOnce({ clean: false, headSha: 'sha-2', summary: 'src/a.ts missing' })
+    const fail = await gate.probe('ws', 'blk_1')
+    expect(fail.status).toBe('fail')
+    expect(fail.failureSummary).toContain('missing')
+  })
+
+  it('registers a step resolver that summarises the security auditor’s output', async () => {
+    const registered = registeredStepResolverFactories()
+    expect(registered.map((r) => r.kind)).toContain(SECURITY_AUDITOR_KIND)
+    const resolver = registered
+      .find((r) => r.kind === SECURITY_AUDITOR_KIND)!
+      .factory(stubResolverContext())
+    const resolution = await resolver.resolve({
+      workspaceId: 'ws',
+      instance: { id: 'exec' } as never,
+      step: {} as never,
+      result: { output: 'done', custom: { risk: 0.2, findings: [{ title: 'a' }, { title: 'b' }] } },
+      isFinalStep: true,
+    })
+    expect(resolution?.output).toContain('2 finding(s)')
+    expect(resolution?.output).toContain('20%')
   })
 
   it('appends the pl_org_audit pipeline chaining the two kinds', () => {

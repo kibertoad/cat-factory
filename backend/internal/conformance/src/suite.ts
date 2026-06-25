@@ -21,7 +21,13 @@ import {
   registerPromptFragment,
 } from '@cat-factory/prompt-fragments'
 import { clearRegisteredAgentKinds, registerAgentKind } from '@cat-factory/agents'
-import type { RepoFiles } from '@cat-factory/kernel'
+import type { GateProbe, RepoFiles } from '@cat-factory/kernel'
+import {
+  clearRegisteredGates,
+  clearRegisteredStepResolvers,
+  registerGate,
+  registerStepResolver,
+} from '@cat-factory/kernel'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { ConformanceHarness } from './harness.js'
 
@@ -549,6 +555,146 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         expect(commits[0]?.branch).toBe('cat-factory/task_login')
         expect(commits[0]?.files[0]?.path).toBe('compliance/REPORT.md')
         expect(commits[0]?.files[0]?.content).toContain('all clear')
+      })
+    })
+
+    describe('registered custom gate + step resolver', () => {
+      afterEach(() => {
+        clearRegisteredGates()
+        clearRegisteredStepResolvers()
+        clearRegisteredAgentKinds()
+      })
+
+      // A deployment-registered polling gate is the OTHER half of the extension story
+      // (alongside custom agent kinds): a deterministic precheck that passes through when
+      // clean and only escalates to a registered helper agent on a red verdict. The engine
+      // merges it into the (otherwise built-in) gate registry and drives it through the SAME
+      // generic gate machine — so a facade that forgot to wire the registry merge, or one
+      // whose gate state machine drifts, fails here rather than shipping. Mirrors the
+      // built-in `ci`→`ci-fixer` gate, with the provider faked in-test (no real GitHub).
+
+      // The custom gate's helper is just a registered agent kind — no new dispatch path.
+      const registerLicenseFixer = (): void =>
+        registerAgentKind({
+          kind: 'license-fixer',
+          systemPrompt: 'You add missing license headers and push.',
+          agent: { surface: 'container-coding', clone: { branch: 'pr' } },
+        })
+
+      // Register the `license-check` gate over a fake provider whose verdict is supplied
+      // per-probe (a queue; the last entry repeats) so a test can drive pass / escalate.
+      const registerLicenseGate = (verdicts: boolean[]): void => {
+        let i = 0
+        registerGate('license-check', (ctx) => ({
+          kind: 'license-check',
+          helperKind: 'license-fixer',
+          wired: () => true,
+          unwiredOutput: 'license gate skipped',
+          probe: async (): Promise<GateProbe> => {
+            const clean = verdicts[Math.min(i, verdicts.length - 1)] ?? true
+            i += 1
+            return clean
+              ? { status: 'pass', headSha: 'sha', passOutput: 'license gate passed' }
+              : { status: 'fail', headSha: 'sha', failureSummary: 'missing headers' }
+          },
+          onExhausted: async ({ workspaceId, block, instance }) => {
+            await ctx.raiseNotification(workspaceId, {
+              type: 'decision_required',
+              blockId: block.id,
+              executionId: instance.id,
+              title: 'License headers still missing',
+              body: 'spent',
+            })
+            return { error: 'license headers still missing' }
+          },
+        }))
+      }
+
+      it('passes through on a clean precheck without spinning up the helper', async () => {
+        registerLicenseFixer()
+        registerLicenseGate([true]) // clean on first probe
+        const app = harness.makeApp({ asyncKinds: ['coder', 'license-fixer'] })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Build + license check',
+          agentKinds: ['coder', 'license-check'],
+        })
+        const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+          pipelineId: pipeline.body.id,
+        })
+        expect(start.status).toBe(201)
+
+        const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+        expect(exec.status).toBe('done')
+        const step = exec.steps.find((s) => s.agentKind === 'license-check')!
+        expect(step.state).toBe('done')
+        // Clean precheck ⇒ the helper was NEVER dispatched (no attempts spent).
+        expect(step.gate?.attempts ?? 0).toBe(0)
+        expect(step.output).toContain('license gate passed')
+      })
+
+      it('escalates to the helper on a red precheck, then advances when it re-probes clean', async () => {
+        registerLicenseFixer()
+        registerLicenseGate([false, true]) // red first, clean after the fixer ran
+        const app = harness.makeApp({
+          asyncKinds: ['coder', 'license-fixer'],
+          pullRequest: { url: 'https://github.com/o/r/pull/1', number: 1, branch: 'feat/login' },
+        })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Build + license check',
+          agentKinds: ['coder', 'license-check'],
+        })
+        const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+          pipelineId: pipeline.body.id,
+        })
+        expect(start.status).toBe(201)
+
+        const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+        expect(exec.status).toBe('done')
+        const step = exec.steps.find((s) => s.agentKind === 'license-check')!
+        expect(step.state).toBe('done')
+        // One escalation: the helper was dispatched once, then the re-probe passed.
+        expect(step.gate?.attempts).toBe(1)
+        expect(step.gate?.attemptLog?.[0]?.outcome).toBe('completed')
+      })
+
+      // A registered step resolver runs deterministic backend follow-up keyed on the
+      // finished step's agentKind — here it rewrites a custom kind's step output. Asserts
+      // the engine merges registered resolvers into the (built-in merger) resolver registry
+      // and runs them in recordStepResult, identically on every runtime.
+      it('runs a registered step resolver after its agent step completes', async () => {
+        registerAgentKind({
+          kind: 'conformance-auditor',
+          systemPrompt: 'You audit.',
+          agent: { surface: 'container-explore', output: { kind: 'structured' } },
+        })
+        registerStepResolver('conformance-auditor', () => ({
+          kind: 'conformance-auditor',
+          applies: (result) => result.custom !== undefined,
+          resolve: async () => ({ output: 'resolver-rewrote-this' }),
+        }))
+        const app = harness.makeApp({ customResult: { ok: true } })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Audit',
+          agentKinds: ['conformance-auditor'],
+        })
+        const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+          pipelineId: pipeline.body.id,
+        })
+        expect(start.status).toBe(201)
+
+        const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+        expect(exec.status).toBe('done')
+        const step = exec.steps.find((s) => s.agentKind === 'conformance-auditor')!
+        expect(step.output).toBe('resolver-rewrote-this')
       })
     })
 

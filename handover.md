@@ -187,8 +187,11 @@ section + `backend/docs/custom-agents.md` are the current source of truth for th
     `RunnerDispatchKind`/`RunnerJobResult` collapse is noted; pre-1.0, no compat).
 
 **The full strangler is complete: every built-in agent now dispatches the single
-manifest-driven `agent` kind, and the harness serves one `POST /jobs` kind.** Committed on
-branch `migrate-conflict-bootstrap-generic-kind` (commit `d8a17ae`); not yet pushed.
+manifest-driven `agent` kind, and the harness serves one `POST /jobs` kind.** Merged to
+`main` as **PR #209** (`feat: migrate conflict-resolver + bootstrap onto the generic agent
+kind (finish the strangler)`); the release bot bumped `@cat-factory/executor-harness` to
+**1.14.1** (PR #215), and `deploy/backend` (`package.json` + `wrangler.toml`) is pinned to
+that tag.
 
 **Verification:** `pnpm --filter @cat-factory/server build`, `pnpm --filter @cat-factory/orchestration test:run`, `pnpm --filter @cat-factory/agents test:run`, harness `pnpm test` (Windows-safe except 4 pre-existing `writeAgentsContext` failures), `pnpm build` (full graph). workerd/Postgres conformance + container behaviour (infra/merge-base/bootstrap force-push/render byte-parity) verify on Linux CI + the `smoketest` skill — that is the designed image-rollout gate, not a Windows step.
 
@@ -447,4 +450,39 @@ pnpm test:run
 - Branch off `main` (don't commit to `main`). Commit trailer: `Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>`. PR body trailer: `🤖 Generated with [Claude Code](https://claude.com/claude-code)`.
 - Keep PRs additive + reviewable; the strangler sequence (Task 5) means many small parity-gated PRs.
 - The `extension-registries.test.ts` (orchestration) is the canonical place to assert new
-  registration seams (`registerAgentKind`/`registerPipeline`/future `registerGate`/`registerStepResolver`).
+  registration seams (`registerAgentKind`/`registerPipeline`/`registerGate`/`registerStepResolver`).
+
+## 9. Gate + step-resolver extensibility (DONE — mirrors the agent seam)
+
+The polling **Gate** mechanism and the **StepCompletionResolver** mechanism are now as
+externally extensible as custom agent kinds: a deployment package registers its own
+full-blown gate (deterministic probe + helper/companion agent + exhaustion handling) or
+step resolver purely via an import side effect — no fork, no engine patch.
+
+- **Registries live in `@cat-factory/kernel`** (alongside `registerPipeline`, so an example
+  package keeps depending only on agents + kernel): `domain/gate-registry.ts`
+  (`registerGate(kind, factory)`, `GateDefinition`, `GateContext`, `GateProbe`, …) and
+  `domain/step-resolver-registry.ts` (`registerStepResolver(kind, factory)`,
+  `StepCompletionResolver`, `ResolverContext`). The old orchestration `gates.ts`/
+  `stepResolvers.ts` were moved here; `RaiseNotificationInput` moved to kernel
+  (`ports/notification-channel.ts`) so a runtime-neutral `GateContext` can build one.
+- **Factory, not static object:** a registered gate/resolver is a `(ctx) => Definition`
+  factory the engine invokes once at registry-build time, handing it a minimal
+  `GateContext`/`ResolverContext` (clock, getBlock, runInitiatorScope, raiseNotification).
+  This solves the `this`-capture problem — the built-in gates capture `ExecutionService`
+  internals (typed `raiseCiFailed`/`raiseReleaseRegression` notifications, the engine
+  providers) and so stay INLINE and unchanged; only registered gates go through the context.
+  A registrant reaches its OWN provider by closing over a module-level handle its facade
+  wires at startup (see `wireLicenseProvider` in the example) — like a custom model provider.
+- **Engine merge:** `ExecutionService.buildGateRegistry()` / `buildStepResolverRegistry()`
+  build the built-ins then `map.set` the registered factories (registered replaces built-in
+  of the same kind, last-wins). The lazily-built per-instance cache means registration must
+  be a startup side effect (documented on `gateFor`/`stepResolverFor`).
+- **Helper agents need no new machinery:** a gate's `helperKind` is dispatched through the
+  same generic agent body, so a custom helper is just a registered agent kind.
+- **Worked example + tests:** `@cat-factory/example-custom-agent` registers a `license-check`
+  gate (escalating to a `license-fixer` agent kind) + an auditor step resolver +
+  `wireLicenseProvider`. Pure-registry cases in `extension-registries.test.ts`; cross-runtime
+  drive (pass-through / escalate-then-pass / resolver-rewrites-output) in the conformance
+  suite (`registered custom gate + step resolver`).
+- Additive, non-breaking; pure backend TS — **no executor-harness image change**.

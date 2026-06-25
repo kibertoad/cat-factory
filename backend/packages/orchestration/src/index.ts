@@ -13,6 +13,31 @@ export {
   type ExecutionServiceDependencies,
 } from './modules/execution/ExecutionService.js'
 export type { AdvanceOptions, AdvanceResult } from './modules/execution/advance.js'
+// The gate / step-resolver extension seams live in @cat-factory/kernel (so a deployment
+// package can register one without depending on this package); re-exported here for
+// discovery alongside the engine they extend.
+export {
+  type GateProbe,
+  type GateHelperOutcome,
+  type GateExhaustedArgs,
+  type GateDefinition,
+  type GateContext,
+  type GateFactory,
+  recordGateAttempt,
+  registerGate,
+  registeredGateFactories,
+  clearRegisteredGates,
+  stubGateContext,
+  type StepResolverContext,
+  type StepResolution,
+  type StepCompletionResolver,
+  type ResolverContext,
+  type StepResolverFactory,
+  registerStepResolver,
+  registeredStepResolverFactories,
+  clearRegisteredStepResolvers,
+  stubResolverContext,
+} from '@cat-factory/kernel'
 export {
   driveExecution,
   type DriveConfig,
@@ -61,8 +86,11 @@ export * as scheduleLogic from './modules/recurring/schedule.logic.js'
 export {
   NotificationService,
   type NotificationServiceDependencies,
-  type RaiseNotificationInput,
 } from './modules/notifications/NotificationService.js'
+// `RaiseNotificationInput` lives in @cat-factory/kernel (so runtime-neutral extension
+// seams — e.g. a custom gate's `onExhausted` — can build one without depending on this
+// package); surfaced here for discovery alongside the NotificationService that consumes it.
+export type { RaiseNotificationInput } from '@cat-factory/kernel'
 export {
   MergePresetService,
   type MergePresetServiceDependencies,
