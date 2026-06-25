@@ -203,12 +203,17 @@ async function clone(p: Pipeline) {
 </script>
 
 <template>
-  <USlideover v-model:open="open" title="Pipeline builder" side="left">
+  <USlideover
+    v-model:open="open"
+    title="Pipeline builder"
+    side="left"
+    :ui="{ content: 'max-w-[90vw] sm:max-w-2xl lg:max-w-5xl xl:max-w-6xl' }"
+  >
     <template #body>
-      <div class="grid h-full grid-cols-2 gap-4">
+      <div class="grid h-full grid-cols-1 gap-4 lg:grid-cols-3">
         <!-- agent palette -->
-        <div class="overflow-y-auto pr-1">
-          <div class="mb-2 flex items-center justify-between gap-2">
+        <div class="flex min-h-0 flex-col overflow-hidden">
+          <div class="mb-2 flex shrink-0 items-center justify-between gap-2">
             <h3 class="text-xs font-semibold uppercase tracking-wide text-slate-400">
               Agent palette
             </h3>
@@ -222,11 +227,13 @@ async function clone(p: Pipeline) {
               Add agent
             </UButton>
           </div>
-          <AgentPalette @add="add" />
+          <div class="min-h-0 flex-1 overflow-y-auto pr-1">
+            <AgentPalette @add="add" />
+          </div>
         </div>
 
         <!-- draft chain -->
-        <div class="flex flex-col">
+        <div class="flex min-h-0 flex-col overflow-hidden">
           <div class="mb-2 flex items-center justify-between gap-2">
             <h3 class="text-xs font-semibold uppercase tracking-wide text-slate-400">Pipeline</h3>
             <UButton
@@ -286,7 +293,7 @@ async function clone(p: Pipeline) {
             Click agents on the left to assemble a linear pipeline.
           </div>
 
-          <ol v-else class="flex-1 space-y-2 overflow-y-auto">
+          <ol v-else class="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
             <li
               v-for="(unit, vi) in pipelines.units"
               :key="unit.index"
@@ -576,160 +583,160 @@ async function clone(p: Pipeline) {
               </div>
             </li>
           </ol>
+        </div>
 
-          <!-- Saved pipelines: review the library + delete (the run affordance
-               moved to the task card / inspector when the palettes were removed). -->
-          <div v-if="pipelines.pipelines.length" class="mt-4 border-t border-slate-800 pt-3">
-            <div class="mb-2 flex items-center justify-between gap-2">
-              <h3 class="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                Saved pipelines
-              </h3>
-              <UButton
-                v-if="archivedCount"
-                :icon="showArchived ? 'i-lucide-archive-restore' : 'i-lucide-archive'"
-                :color="showArchived ? 'primary' : 'neutral'"
-                variant="ghost"
-                size="xs"
-                @click="showArchived = !showArchived"
-              >
-                {{ showArchived ? 'Hide archived' : `Archived (${archivedCount})` }}
-              </UButton>
-            </div>
-
-            <!-- Label filter chips. -->
-            <div v-if="allLabels.length" class="mb-2 flex flex-wrap items-center gap-1">
-              <UBadge
-                :color="labelFilter === null ? 'primary' : 'neutral'"
-                variant="soft"
-                size="xs"
-                class="cursor-pointer"
-                @click="labelFilter = null"
-              >
-                All
-              </UBadge>
-              <UBadge
-                v-for="l in allLabels"
-                :key="l"
-                :color="labelFilter === l ? 'primary' : 'neutral'"
-                variant="soft"
-                size="xs"
-                class="cursor-pointer"
-                @click="labelFilter = labelFilter === l ? null : l"
-              >
-                {{ l }}
-              </UBadge>
-            </div>
-
-            <ul class="space-y-1.5">
-              <li
-                v-for="p in visiblePipelines"
-                :key="p.id"
-                class="group rounded-lg border border-slate-700 bg-slate-800/40"
-                :class="{ 'opacity-60': p.archived }"
-              >
-                <div class="flex items-center gap-2 px-2 py-1.5">
-                  <button
-                    type="button"
-                    class="flex min-w-0 flex-1 items-center gap-2 text-left"
-                    @click="toggleSaved(p.id)"
-                  >
-                    <UIcon
-                      :name="
-                        expandedSaved.has(p.id) ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'
-                      "
-                      class="h-3.5 w-3.5 shrink-0 text-slate-500"
-                    />
-                    <span class="min-w-0 flex-1 truncate text-xs text-slate-200">{{ p.name }}</span>
-                    <UBadge
-                      v-for="l in p.labels ?? []"
-                      :key="l"
-                      color="info"
-                      variant="soft"
-                      size="xs"
-                      class="shrink-0"
-                    >
-                      {{ l }}
-                    </UBadge>
-                    <UBadge
-                      v-if="p.builtin"
-                      color="neutral"
-                      variant="soft"
-                      size="xs"
-                      class="shrink-0"
-                    >
-                      default
-                    </UBadge>
-                    <span class="shrink-0 text-[10px] text-slate-500">
-                      {{ p.agentKinds.length }} {{ p.agentKinds.length === 1 ? 'step' : 'steps' }}
-                    </span>
-                  </button>
-                  <div
-                    class="flex shrink-0 items-center opacity-0 transition group-hover:opacity-100"
-                  >
-                    <!-- Archive/unarchive: organize the library without deleting. Works on
-                         built-ins too (view metadata, not structure). -->
-                    <UButton
-                      :icon="p.archived ? 'i-lucide-archive-restore' : 'i-lucide-archive'"
-                      color="neutral"
-                      variant="ghost"
-                      size="xs"
-                      :title="p.archived ? 'Unarchive' : 'Archive (hide from the default view)'"
-                      @click="toggleArchive(p)"
-                    />
-                    <!-- Clone is available on every pipeline — it's how a read-only
-                         built-in template becomes an editable copy. -->
-                    <UButton
-                      icon="i-lucide-copy"
-                      color="neutral"
-                      variant="ghost"
-                      size="xs"
-                      :title="p.builtin ? 'Clone this default into an editable copy' : 'Clone'"
-                      @click="clone(p)"
-                    />
-                    <!-- Built-in templates are read-only; only custom pipelines edit in place. -->
-                    <UButton
-                      v-if="!p.builtin"
-                      icon="i-lucide-pencil"
-                      color="neutral"
-                      variant="ghost"
-                      size="xs"
-                      title="Edit this pipeline"
-                      @click="edit(p)"
-                    />
-                    <!-- Built-in templates are read-only — they can be cloned but not
-                         deleted (the backend rejects it too); only custom ones delete. -->
-                    <UButton
-                      v-if="!p.builtin"
-                      icon="i-lucide-trash-2"
-                      color="neutral"
-                      variant="ghost"
-                      size="xs"
-                      @click="pipelines.removePipeline(p.id)"
-                    />
-                  </div>
-                </div>
-
-                <!-- Full ordered step list, revealed on click. -->
-                <ol
-                  v-if="expandedSaved.has(p.id)"
-                  class="space-y-1 border-t border-slate-800 px-2 py-2 pl-7"
-                >
-                  <li
-                    v-for="(k, i) in p.agentKinds"
-                    :key="i"
-                    class="flex items-center gap-2"
-                    :class="{ 'opacity-50 line-through': p.enabled?.[i] === false }"
-                    :title="p.enabled?.[i] === false ? 'Disabled — skipped at run' : undefined"
-                  >
-                    <span class="w-4 shrink-0 text-center text-[10px] text-slate-500">{{
-                      i + 1
-                    }}</span>
-                    <AgentKindIcon :kind="k" show-label />
-                  </li>
-                </ol>
-              </li>
-            </ul>
+        <!-- Saved pipelines: review the library + delete (the run affordance
+             moved to the task card / inspector when the palettes were removed). -->
+        <div v-if="pipelines.pipelines.length" class="flex min-h-0 flex-col overflow-hidden">
+          <div class="mb-2 flex shrink-0 items-center justify-between gap-2">
+            <h3 class="text-xs font-semibold uppercase tracking-wide text-slate-400">
+              Saved pipelines
+            </h3>
+            <UButton
+              v-if="archivedCount"
+              :icon="showArchived ? 'i-lucide-archive-restore' : 'i-lucide-archive'"
+              :color="showArchived ? 'primary' : 'neutral'"
+              variant="ghost"
+              size="xs"
+              @click="showArchived = !showArchived"
+            >
+              {{ showArchived ? 'Hide archived' : `Archived (${archivedCount})` }}
+            </UButton>
           </div>
+
+          <!-- Label filter chips. -->
+          <div v-if="allLabels.length" class="mb-2 flex shrink-0 flex-wrap items-center gap-1">
+            <UBadge
+              :color="labelFilter === null ? 'primary' : 'neutral'"
+              variant="soft"
+              size="xs"
+              class="cursor-pointer"
+              @click="labelFilter = null"
+            >
+              All
+            </UBadge>
+            <UBadge
+              v-for="l in allLabels"
+              :key="l"
+              :color="labelFilter === l ? 'primary' : 'neutral'"
+              variant="soft"
+              size="xs"
+              class="cursor-pointer"
+              @click="labelFilter = labelFilter === l ? null : l"
+            >
+              {{ l }}
+            </UBadge>
+          </div>
+
+          <ul class="min-h-0 flex-1 space-y-1.5 overflow-y-auto pr-1">
+            <li
+              v-for="p in visiblePipelines"
+              :key="p.id"
+              class="group rounded-lg border border-slate-700 bg-slate-800/40"
+              :class="{ 'opacity-60': p.archived }"
+            >
+              <div class="flex items-center gap-2 px-2 py-1.5">
+                <button
+                  type="button"
+                  class="flex min-w-0 flex-1 items-center gap-2 text-left"
+                  @click="toggleSaved(p.id)"
+                >
+                  <UIcon
+                    :name="
+                      expandedSaved.has(p.id) ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'
+                    "
+                    class="h-3.5 w-3.5 shrink-0 text-slate-500"
+                  />
+                  <span class="min-w-0 flex-1 truncate text-xs text-slate-200">{{ p.name }}</span>
+                  <UBadge
+                    v-for="l in p.labels ?? []"
+                    :key="l"
+                    color="info"
+                    variant="soft"
+                    size="xs"
+                    class="shrink-0"
+                  >
+                    {{ l }}
+                  </UBadge>
+                  <UBadge
+                    v-if="p.builtin"
+                    color="neutral"
+                    variant="soft"
+                    size="xs"
+                    class="shrink-0"
+                  >
+                    default
+                  </UBadge>
+                  <span class="shrink-0 text-[10px] text-slate-500">
+                    {{ p.agentKinds.length }} {{ p.agentKinds.length === 1 ? 'step' : 'steps' }}
+                  </span>
+                </button>
+                <div
+                  class="flex shrink-0 items-center opacity-0 transition group-hover:opacity-100"
+                >
+                  <!-- Archive/unarchive: organize the library without deleting. Works on
+                         built-ins too (view metadata, not structure). -->
+                  <UButton
+                    :icon="p.archived ? 'i-lucide-archive-restore' : 'i-lucide-archive'"
+                    color="neutral"
+                    variant="ghost"
+                    size="xs"
+                    :title="p.archived ? 'Unarchive' : 'Archive (hide from the default view)'"
+                    @click="toggleArchive(p)"
+                  />
+                  <!-- Clone is available on every pipeline — it's how a read-only
+                         built-in template becomes an editable copy. -->
+                  <UButton
+                    icon="i-lucide-copy"
+                    color="neutral"
+                    variant="ghost"
+                    size="xs"
+                    :title="p.builtin ? 'Clone this default into an editable copy' : 'Clone'"
+                    @click="clone(p)"
+                  />
+                  <!-- Built-in templates are read-only; only custom pipelines edit in place. -->
+                  <UButton
+                    v-if="!p.builtin"
+                    icon="i-lucide-pencil"
+                    color="neutral"
+                    variant="ghost"
+                    size="xs"
+                    title="Edit this pipeline"
+                    @click="edit(p)"
+                  />
+                  <!-- Built-in templates are read-only — they can be cloned but not
+                         deleted (the backend rejects it too); only custom ones delete. -->
+                  <UButton
+                    v-if="!p.builtin"
+                    icon="i-lucide-trash-2"
+                    color="neutral"
+                    variant="ghost"
+                    size="xs"
+                    @click="pipelines.removePipeline(p.id)"
+                  />
+                </div>
+              </div>
+
+              <!-- Full ordered step list, revealed on click. -->
+              <ol
+                v-if="expandedSaved.has(p.id)"
+                class="space-y-1 border-t border-slate-800 px-2 py-2 pl-7"
+              >
+                <li
+                  v-for="(k, i) in p.agentKinds"
+                  :key="i"
+                  class="flex items-center gap-2"
+                  :class="{ 'opacity-50 line-through': p.enabled?.[i] === false }"
+                  :title="p.enabled?.[i] === false ? 'Disabled — skipped at run' : undefined"
+                >
+                  <span class="w-4 shrink-0 text-center text-[10px] text-slate-500">{{
+                    i + 1
+                  }}</span>
+                  <AgentKindIcon :kind="k" show-label />
+                </li>
+              </ol>
+            </li>
+          </ul>
         </div>
       </div>
     </template>
