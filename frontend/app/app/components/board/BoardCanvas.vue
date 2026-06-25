@@ -13,6 +13,7 @@ import { BOARD_FLOW_ID } from '~/composables/useBoardFlow'
 import { useTaskExpansion } from '~/composables/useTaskExpansion'
 import { useFrameExpansion } from '~/composables/useFrameExpansion'
 import { computeDisplacement } from '~/utils/boardDisplacement'
+import { lodAtLeast } from '~/composables/useSemanticZoom'
 
 const board = useBoardStore()
 const pipelines = usePipelinesStore()
@@ -21,12 +22,12 @@ const ui = useUiStore()
 const github = useGitHubStore()
 const toast = useToast()
 
-const { onNodeDragStop, onViewportChange, screenToFlowCoordinate } = useVueFlow(BOARD_FLOW_ID)
+const { onNodeDragStop, onViewportChange, screenToFlowCoordinate, viewport, setViewport } =
+  useVueFlow(BOARD_FLOW_ID)
 
-// Gate which task cards expand their pipeline list on deep zoom: only on-screen
-// cards, and only the centre-most of any that would overlap (see useTaskExpansion).
-// The frame-level gate is the same idea one level up: which service frames may
-// auto-expand to their task canvas once zoomed in (see useFrameExpansion).
+// Gate which task cards expand their pipeline list on deep zoom (on-screen cards
+// only — see useTaskExpansion). The frame-level gate is the same idea one level up:
+// which service frames may auto-expand to their task canvas (see useFrameExpansion).
 const boardEl = ref<HTMLElement | null>(null)
 useTaskExpansion(boardEl)
 useFrameExpansion(boardEl)
@@ -93,6 +94,77 @@ const frameOffsets = computed(() => {
 function offsetOf(id: string) {
   return frameOffsets.value.get(id) ?? { dx: 0, dy: 0 }
 }
+
+// The rendered (displaced) rect of every frame, in flow units — top-left plus the
+// size it's actually drawn at (expanded card vs collapsed chip). Used to find the
+// service the camera is over when the zoom band flips.
+type Rect = { x: number; y: number; w: number; h: number }
+const frameRects = computed(() => {
+  const map = new Map<string, Rect>()
+  for (const b of board.frames) {
+    const o = offsetOf(b.id)
+    let w = FRAME_COLLAPSED_W
+    let h = FRAME_COLLAPSED_H
+    if (frameExpanded(b.id)) {
+      const c = board.containerSize(b.id)
+      w = c.w + FRAME_CHROME_W
+      h = c.h + FRAME_CHROME_H
+    }
+    map.set(b.id, { x: b.position.x + o.dx, y: b.position.y + o.dy, w, h })
+  }
+  return map
+})
+
+// Zooming out past the `close` band collapses every frame back to its stored
+// position, so all the room compressed space had reserved vanishes at once. If the
+// user had scrolled to the far end of an expanded service, the camera would be left
+// parked in the empty space where that displaced end used to be. We keep the last
+// expanded layout and, on the way out, recentre the camera on whichever service it
+// was over so it stays with the service instead of stranding in the void.
+let expandedSnapshot = new Map<string, Rect>()
+watch(frameRects, (rects) => {
+  if (lodAtLeast(ui.lod, 'close')) expandedSnapshot = rects
+})
+
+function recentreOnZoomOut() {
+  const el = boardEl.value
+  const vp = viewport.value
+  if (!el || !vp || !board.frames.length) return
+  const { width, height } = el.getBoundingClientRect()
+  // Viewport centre, in the (displaced) flow space that was on screen.
+  const cx = (width / 2 - vp.x) / vp.zoom
+  const cy = (height / 2 - vp.y) / vp.zoom
+  // The service under the camera: the expanded rect containing the centre, else the
+  // one whose centre is nearest it.
+  let anchorId: string | null = null
+  let best = Infinity
+  for (const b of board.frames) {
+    const r = expandedSnapshot.get(b.id)
+    if (!r) continue
+    if (cx >= r.x && cx <= r.x + r.w && cy >= r.y && cy <= r.y + r.h) {
+      anchorId = b.id
+      break
+    }
+    const d = (r.x + r.w / 2 - cx) ** 2 + (r.y + r.h / 2 - cy) ** 2
+    if (d < best) {
+      best = d
+      anchorId = b.id
+    }
+  }
+  const anchor = anchorId ? board.getBlock(anchorId) : undefined
+  if (!anchor) return
+  // Pan (keeping the new zoom) so the now-collapsed service sits at the screen centre.
+  const tx = anchor.position.x + FRAME_COLLAPSED_W / 2
+  const ty = anchor.position.y + FRAME_COLLAPSED_H / 2
+  void setViewport({ x: width / 2 - tx * vp.zoom, y: height / 2 - ty * vp.zoom, zoom: vp.zoom })
+}
+
+watch(
+  () => lodAtLeast(ui.lod, 'close'),
+  (isClose, wasClose) => {
+    if (wasClose && !isClose) recentreOnZoomOut()
+  },
+)
 
 const nodes = computed(() => [
   ...board.frames.map((b) => {
