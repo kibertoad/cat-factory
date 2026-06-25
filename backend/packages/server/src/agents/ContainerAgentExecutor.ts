@@ -936,29 +936,22 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       )
     }
 
-    // The default coder (and any other write-and-PR kind): the build-phase role plus
-    // the block's selected best-practice fragments, exactly as the inline executor
-    // composes (engine-resolved tenant catalog when present, else the manual ids).
-    // `headBranch` is deterministic per task (block), NOT per dispatch: a retry mints a
-    // fresh executionId but keeps the blockId, and a sweeper re-drive keeps both — so a
-    // stable name means every re-dispatch of this task targets the SAME branch. The
-    // harness checkpoints commits to it during the run and RESUMES on it if it already
-    // exists, so an evicted/failed run's work survives and a retry continues on top of
-    // it rather than starting over.
-    return {
-      kind: 'run',
-      body: {
-        ...common,
-        systemPrompt: roleSystemPrompt,
-        userPrompt: userPromptFor(context),
-        headBranch: workBranch,
-        pr: {
-          title: `${context.block.title} (${context.pipelineName})`,
-          body: prBody(context),
-        },
-        ...webTools,
-      },
-    }
+    // The default coder (and any other write-and-PR kind): the build-phase role plus the
+    // block's selected best-practice fragments. Dispatches the generic `container-coding`
+    // agent onto the deterministic per-task work branch (`clone: 'work'` ⇒ branch off base,
+    // push the work branch, open a PR). The work-branch name is deterministic per task
+    // (block), NOT per dispatch — a retry mints a fresh executionId but keeps the blockId —
+    // so every re-dispatch targets the SAME branch; `runCodingAgent` checkpoints commits to
+    // it and RESUMES on it if it already exists, so an evicted/failed run's work survives.
+    // This is behaviour-equivalent to the old bespoke `/run` body (handleAgent coding mode
+    // is built on the same `runCodingAgent` primitive); the dead `/run` handler is removed
+    // in the harness-cleanup step.
+    return this.buildRegisteredAgentBody(
+      context,
+      parts,
+      { surface: 'container-coding', clone: { branch: 'work' } },
+      roleSystemPrompt,
+    )
   }
 
   /**

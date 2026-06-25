@@ -84,11 +84,10 @@ section + `backend/docs/custom-agents.md` are the current source of truth for th
    NO image bump yet (handleAgent 1.9.0 already serves explore-structured + coding-on-PR).
    **TODO before PR:** update `containerAgentJobBody.spec.ts` snapshot + the
    `container-agent-executor.spec.ts` for the new `kind:'agent'` bodies of these 4 kinds.
-3. ⬜ **coder** — reroute the default case to `buildRegisteredAgentBody` `container-coding`
+3. ✅ **coder** — default case now dispatches `buildRegisteredAgentBody` `container-coding`
    clone-`work` (opens PR). `runCodingAgent` ALREADY does branch-resume + checkpoint, so the
-   generic coding path is behaviour-equivalent to `/run`. No image bump needed for the
-   reroute itself (handleAgent coding == handleRun), but `/run`/`handleRun` is deleted in the
-   harness-cleanup step (→ image bump).
+   generic coding path is behaviour-equivalent to `/run` (server builds clean). `/run`/
+   `handleRun` is deleted in the harness-cleanup step (→ image bump).
 4. ⬜ **blueprints / spec-writer** — `container-explore` structured (NO harness commit). The
    render+commit moves to a BACKEND post-op using `@cat-factory/agents` `repo-ops/render.ts`
    (`coerceBlueprintService`/`renderBlueprintFiles`/`renderBlueprintVersionFile`/
