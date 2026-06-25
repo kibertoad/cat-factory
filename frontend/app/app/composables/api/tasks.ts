@@ -57,10 +57,15 @@ export function tasksApi({ http, ws }: ApiContext) {
         body,
       }),
 
-    searchTaskSource: (workspaceId: string, source: TaskSourceKind, query: string) =>
+    searchTaskSource: (
+      workspaceId: string,
+      source: TaskSourceKind,
+      query: string,
+      blockId?: string,
+    ) =>
       http<{ results: TaskSearchResult[] }>(`${ws(workspaceId)}/task-sources/${source}/search`, {
         method: 'POST',
-        body: { query },
+        body: { query, ...(blockId ? { blockId } : {}) },
       }),
 
     linkTask: (

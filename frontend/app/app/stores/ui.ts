@@ -33,7 +33,10 @@ export const useUiStore = defineStore('ui', () => {
   // the modal pick a connected one (there is no spawn target — issues are linked
   // to a block for context, not expanded into structure).
   const taskConnect = ref<{ source: TaskSourceKind } | null>(null)
-  const taskImport = ref<{ source: TaskSourceKind | null } | null>(null)
+  // `containerId` (a service frame) scopes the modal: it preselects that frame as
+  // the create-in target AND scopes the issue search to the frame's linked repo.
+  // Null → the unscoped "import an issue" surface (workspace-wide search).
+  const taskImport = ref<{ source: TaskSourceKind | null; containerId: string | null } | null>(null)
 
   // Add-task modal: the container (service frame or module) a new task is being
   // added to, or null when closed. The user types the title + description; nothing
@@ -227,8 +230,8 @@ export const useUiStore = defineStore('ui', () => {
   function closeTaskConnect() {
     taskConnect.value = null
   }
-  function openTaskImport(source: TaskSourceKind | null = null) {
-    taskImport.value = { source }
+  function openTaskImport(source: TaskSourceKind | null = null, containerId: string | null = null) {
+    taskImport.value = { source, containerId }
   }
   function closeTaskImport() {
     taskImport.value = null

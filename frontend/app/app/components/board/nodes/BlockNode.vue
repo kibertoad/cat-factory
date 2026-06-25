@@ -16,6 +16,7 @@ const props = defineProps<{ id: string }>()
 const board = useBoardStore()
 const execution = useExecutionStore()
 const ui = useUiStore()
+const tasks = useTasksStore()
 const agentRuns = useAgentRunsStore()
 const services = useServicesStore()
 const reviews = useReviewStage()
@@ -106,6 +107,13 @@ function onResize(e: PointerEvent, edge: 'e' | 's' | 'se') {
 function addTask() {
   ui.expandFrame(props.id)
   ui.openAddTask(props.id)
+}
+
+// Open the tracker-issue modal scoped to THIS service: the create-in target and the
+// repo-scoped issue search are both pinned to this frame (see TaskImportModal).
+function createTaskFromIssue() {
+  ui.expandFrame(props.id)
+  ui.openTaskImport(null, props.id)
 }
 
 function addRecurring() {
@@ -359,6 +367,16 @@ const ITEM_ICON: Record<string, string> = {
               icon="i-lucide-plus"
               title="Add task"
               @click.stop="addTask"
+            />
+            <UButton
+              v-if="tasks.anyOffered"
+              class="nodrag"
+              size="xs"
+              variant="ghost"
+              color="neutral"
+              icon="i-lucide-ticket"
+              title="Create task from issue"
+              @click.stop="createTaskFromIssue"
             />
             <UButton
               class="nodrag"

@@ -582,6 +582,7 @@ async function add() {
             <ContextIssuePicker
               v-if="showIssuePicker && issuesConnected"
               :chosen-keys="chosenIssueKeys"
+              :scope-block-id="ui.addTaskContainerId ?? undefined"
               @pick="addPending"
             />
             <div v-if="pendingIssues.length" class="space-y-1">

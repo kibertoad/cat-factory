@@ -23,11 +23,21 @@ const source = ref<TaskSourceKind | undefined>(undefined)
 const ref_ = ref('')
 const importing = ref(false)
 
+// When opened from a service frame the modal is the "create a task from an issue"
+// surface; opened standalone it's the general tracker-issue browser/importer.
+const title = computed(() =>
+  ui.taskImport?.containerId ? 'Create task from issue' : 'Tracker issues',
+)
+
 const sourceItems = computed(() =>
   tasks.offeredSources.map((s) => ({ label: s.label, value: s.source })),
 )
 const descriptor = computed(() => (source.value ? tasks.descriptorFor(source.value) : undefined))
 const searchable = computed(() => descriptor.value?.searchable ?? false)
+
+// The container (service frame or module) a new task is created in. Also the repo
+// scope for the issue search — declared up here so the search watch can read it.
+const containerId = ref<string | undefined>(undefined)
 
 // Browse the tracker by free text so an issue can be turned into a task without
 // knowing its key. Debounced; a created/imported hit also lands in the list below.
@@ -37,7 +47,9 @@ const searching = ref(false)
 const searchError = ref<string | null>(null)
 
 let searchTimer: ReturnType<typeof setTimeout> | undefined
-watch([searchQuery, source], () => {
+// Re-run when the chosen container changes too: a GitHub search is scoped to the
+// selected service's repo, so switching containers re-scopes the results.
+watch([searchQuery, source, () => containerId.value], () => {
   if (searchTimer) clearTimeout(searchTimer)
   searchResults.value = []
   searchError.value = null
@@ -52,7 +64,9 @@ async function runSearch() {
   searching.value = true
   searchError.value = null
   try {
-    searchResults.value = await tasks.search(source.value, q)
+    // Scope to the selected container's repo so hits stay in-repo and a pasted
+    // URL / bare issue number resolves to the exact issue.
+    searchResults.value = await tasks.search(source.value, q, containerId.value)
   } catch (e) {
     searchResults.value = []
     searchError.value = e instanceof Error ? e.message : String(e)
@@ -75,7 +89,6 @@ const sourceTasks = computed(() =>
 
 // Containers a new task can be created in: every service frame and module on the
 // board. Modules are labelled with their parent frame so the choice is unambiguous.
-const containerId = ref<string | undefined>(undefined)
 const containerItems = computed(() =>
   board.blocks
     .filter((b) => b.level === 'frame' || b.level === 'module')
@@ -97,7 +110,9 @@ watch(open, (isOpen) => {
     searchResults.value = []
     searchError.value = null
     source.value = ui.taskImport?.source ?? tasks.offeredSources[0]?.source ?? undefined
-    containerId.value = containerItems.value[0]?.value
+    // Opened from a service frame → preselect it as the create-in target (and the
+    // search's repo scope); otherwise fall back to the first container on the board.
+    containerId.value = ui.taskImport?.containerId ?? containerItems.value[0]?.value
     creatingId.value = null
     tasks.loadTasks().catch(() => {})
   }
@@ -148,7 +163,7 @@ async function doImport() {
 </script>
 
 <template>
-  <UModal v-model:open="open" title="Tracker issues">
+  <UModal v-model:open="open" :title="title">
     <template #body>
       <!-- Empty state: no source offered (none connected/installed, or all disabled) -->
       <div v-if="!tasks.anyOffered" class="space-y-3 text-center">
@@ -201,7 +216,7 @@ async function doImport() {
             v-model="searchQuery"
             :icon="searching ? 'i-lucide-loader-circle' : 'i-lucide-search'"
             :ui="{ leadingIcon: searching ? 'animate-spin' : '' }"
-            placeholder="Search by title…"
+            placeholder="Search by title, paste an issue URL, or type an issue number…"
             class="w-full"
           />
         </UFormField>

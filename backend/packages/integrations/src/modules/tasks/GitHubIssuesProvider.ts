@@ -5,6 +5,7 @@ import {
   type GitHubInstallationRepository,
   type TaskContent,
   type TaskCredentials,
+  type TaskSearchRepoScope,
   type TaskSearchResult,
   type TaskSourceDiagnostic,
   type TaskSourceProvider,
@@ -86,19 +87,42 @@ export class GitHubIssuesProvider implements TaskSourceProvider {
    * workspace's installation keeps results from leaking across tenants — a
    * deployment may host many installations, but a workspace owns exactly one.
    * Credentials are unused (the App authenticates), matching `fetchTask`.
+   *
+   * When a `scope` is supplied (the search runs from a service linked to a repo)
+   * the query is narrowed to `repo:owner/name` so hits never leak in from sibling
+   * repos, AND input that names one specific issue — a pasted issue URL or a bare
+   * issue number against the scoped repo — is resolved to that exact issue and
+   * surfaced FIRST, rather than fuzzy-matched. A miss on the exact lookup (e.g. a
+   * number with no such issue) falls through to the text search instead of failing.
    */
   async search(
     _credentials: TaskCredentials,
     query: string,
     workspaceId: string,
+    scope?: TaskSearchRepoScope,
   ): Promise<TaskSearchResult[]> {
     const installation = await this.deps.installations.getByWorkspace(workspaceId)
     if (!installation) return []
-    const hits = await this.deps.githubClient
-      .searchIssues(installation.installationId, query, 20)
-      .catch(() => [])
     const out: TaskSearchResult[] = []
     const seen = new Set<string>()
+
+    // Exact match first: a pasted URL/shorthand or a bare number resolves to one
+    // issue, which the picker offers as the top option ("point at it, don't search").
+    const exactId = githubIssuesLogic.detectExactGitHubIssueRef(query, scope)
+    if (exactId) {
+      const hit = await this.fetchExact(exactId).catch(() => null)
+      if (hit) {
+        seen.add(exactId)
+        out.push(hit)
+      }
+    }
+
+    const searchText = githubIssuesLogic.buildGitHubIssueSearchQuery(query, scope)
+    const hits = searchText
+      ? await this.deps.githubClient
+          .searchIssues(installation.installationId, searchText, 20)
+          .catch(() => [])
+      : []
     for (const hit of hits) {
       const externalId = githubIssuesLogic.githubIssueExternalId(hit)
       if (seen.has(externalId)) continue
@@ -113,6 +137,26 @@ export class GitHubIssuesProvider implements TaskSourceProvider {
       })
     }
     return out.slice(0, 20)
+  }
+
+  /** Fetch one issue by its canonical external id and project it as a lean search hit. */
+  private async fetchExact(externalId: string): Promise<TaskSearchResult | null> {
+    const id = githubIssuesLogic.parseGitHubIssueExternalId(externalId)
+    if (!id) return null
+    const installationId = await this.resolveInstallationId(id.owner)
+    const detail = await this.deps.githubClient.getIssue(
+      installationId,
+      { owner: id.owner, repo: id.repo },
+      id.number,
+    )
+    return {
+      source: 'github',
+      externalId,
+      title: detail.title,
+      url: detail.url || githubIssuesLogic.githubIssueUrl(id),
+      status: detail.state,
+      excerpt: '',
+    }
   }
 
   /**
