@@ -3,19 +3,20 @@ import type { AgentKind } from '@cat-factory/kernel'
 // Read-only container agents. Some agent kinds need a real checkout to do their
 // work but only ever READ it: they clone the repo, explore it, and return a prose
 // report/proposal — making no edits, no commits and opening no pull request. They
-// run through the harness `/explore` endpoint (not `/run`), where an edit-free run
-// is the expected, correct outcome rather than an "implementation produced no
-// changes" failure, and where no work branch or PR is created.
+// dispatch through the generic, manifest-driven `agent` kind in `explore` mode (the
+// SAME path a registered `container-explore` kind takes), where an edit-free run is
+// the expected, correct outcome rather than an "implementation produced no changes"
+// failure, and where no work branch or PR is created.
 //
 // Today that is the `architect` (proposes a design after reading the existing code,
 // whose prose proposal feeds the human gate / architect-companion) and the tech-debt
 // `analysis` agent (audits the repo and emits a prioritized report). Both share the
-// single reusable read-only execution path (see ContainerAgentExecutor's explore
-// body + the harness `handleExplore`).
+// single reusable read-only dispatch (see ContainerAgentExecutor's
+// `buildRegisteredAgentBody` explore path + the harness `handleAgent`).
 
-// The `bug-investigator` joins this set: it clones the repo, reads the codebase from a
-// raw bug report and returns a prose enriched report (+ an optional, confidence-gated
-// hypothesis), making no edits — the same read-only `/explore` path as architect/analysis.
+// The `bug-investigator` joins this set: it reads the codebase from a raw bug report and
+// returns a prose enriched report (+ an optional, confidence-gated hypothesis), making no
+// edits — the same read-only contract as architect/analysis.
 /** Container agent kinds that operate read-only (explore + report; no edits/commits/PR). */
 export const READ_ONLY_AGENT_KINDS = new Set<string>(['architect', 'analysis', 'bug-investigator'])
 

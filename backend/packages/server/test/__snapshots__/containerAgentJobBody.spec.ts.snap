@@ -315,7 +315,7 @@ Produce your contribution. Be concise and concrete.",
 
 exports[`ContainerAgentExecutor.buildJobBody (per-kind body shapes) > read-only (architect) 1`] = `
 {
-  "kind": "explore",
+  "kind": "agent",
   "ref": {
     "jobId": "ex_1-architect",
     "runId": "ex_1",
@@ -326,7 +326,7 @@ exports[`ContainerAgentExecutor.buildJobBody (per-kind body shapes) > read-only 
     "githubApiBase": "https://api.github.com",
     "harness": "pi",
     "jobId": "ex_1-architect",
-    "label": "architect",
+    "mode": "explore",
     "model": "@cf/test/model",
     "proxyBaseUrl": "https://proxy.test/v1",
     "repo": {

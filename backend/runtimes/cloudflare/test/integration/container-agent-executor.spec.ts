@@ -127,6 +127,42 @@ describe('ContainerAgentExecutor', () => {
     expect(session).toMatchObject({ provider: 'qwen', model: 'qwen3-max', executionId: 'ex-1' })
   })
 
+  it('dispatches read-only built-ins through the generic agent kind in explore mode', async () => {
+    // architect/analysis are migrated onto the manifest-driven `agent` surface: they
+    // dispatch `kind:'agent'` with `mode:'explore'` (not the bespoke `explore` dispatch
+    // kind / `label`), clone the base branch read-only, request no structured output, and
+    // map their prose straight to `output` with no PR — byte-parity with the old `/explore`
+    // body bar the harness-internal temp-dir label.
+    for (const agentKind of ['architect', 'analysis'] as const) {
+      let dispatched: Dispatched | undefined
+      const executor = new ContainerAgentExecutor({
+        resolveTransport: fakeContainer(
+          () => ({ summary: 'A design proposal.' }),
+          (d) => (dispatched = d),
+        ),
+        agentRouting: routing('qwen', 'qwen3-max'),
+        resolveBlockModel: () => undefined,
+        resolveRepoTarget: () => Promise.resolve(repo),
+        mintInstallationToken: () => Promise.resolve('gh-token'),
+        sessionService: new ContainerSessionService({ secret: 'secret' }),
+        proxyBaseUrl: 'https://worker.example/v1',
+      })
+
+      const result = await executor.run({ ...context(), agentKind })
+
+      const body = dispatched!.body
+      expect(body.kind).toBe('agent')
+      expect(body.mode).toBe('explore')
+      expect(body.label).toBeUndefined()
+      expect(body.output).toBeUndefined() // prose, no structured JSON
+      expect(body.pr).toBeUndefined()
+      // No work/PR branch ⇒ clone the base, exactly like the old read-only body.
+      expect(body.branch).toBe('main')
+      expect(result.output).toContain('A design proposal.')
+      expect(result.pullRequest).toBeUndefined()
+    }
+  })
+
   it('keys each step by a per-step job id while sharing the one per-run container', async () => {
     // Two steps of the SAME run (executionId 'ex-1') but different kinds must dispatch
     // with DISTINCT harness job ids — otherwise the harness reads one step's finished
