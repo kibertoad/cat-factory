@@ -89,12 +89,22 @@ import type {
 import { LLM_WARNING_FINISH_REASONS } from '@cat-factory/kernel'
 import {
   type ExecutionRow,
+  type SandboxExperimentRow,
+  type SandboxFixtureRow,
+  type SandboxGradeRow,
+  type SandboxPromptVersionRow,
+  type SandboxRunRow,
   blockInsertValues,
   blockPatchToColumns,
   rowToBlock,
   rowToExecution,
   executionToDetail,
   rowToPipeline,
+  rowToSandboxExperiment,
+  rowToSandboxFixture,
+  rowToSandboxGrade,
+  rowToSandboxPromptVersion,
+  rowToSandboxRun,
   rowToWorkspace,
 } from '@cat-factory/server'
 import { and, desc, eq, gte, inArray, isNull, lt, or, sql } from 'drizzle-orm'
@@ -2201,35 +2211,6 @@ export class DrizzleMergePresetRepository implements MergePresetRepository {
 // fields are stored as text JSON, parsed defensively; behaviourally identical to the D1
 // repos so the cross-runtime conformance suite asserts the same Sandbox behaviour.
 
-function parseSandboxJson<T>(raw: string | null | undefined, fallback: T): T {
-  if (!raw) return fallback
-  try {
-    return JSON.parse(raw) as T
-  } catch {
-    return fallback
-  }
-}
-
-type SandboxPromptRow = typeof sandboxPromptVersions.$inferSelect
-
-function rowToSandboxPrompt(row: SandboxPromptRow): SandboxPromptVersion {
-  return {
-    id: row.id,
-    lineageId: row.lineage_id,
-    agentKind: row.agent_kind,
-    name: row.name,
-    origin: row.origin as SandboxPromptVersion['origin'],
-    systemText: row.system_text,
-    basePromptId: row.base_prompt_id,
-    version: row.version,
-    parentId: row.parent_id,
-    labels: parseSandboxJson<string[]>(row.labels, []),
-    createdAt: row.created_at,
-    createdBy: row.created_by,
-    archivedAt: row.archived_at,
-  }
-}
-
 export class DrizzleSandboxPromptVersionRepository implements SandboxPromptVersionRepository {
   constructor(private readonly db: DrizzleDb) {}
 
@@ -2241,7 +2222,7 @@ export class DrizzleSandboxPromptVersionRepository implements SandboxPromptVersi
         and(eq(sandboxPromptVersions.workspace_id, workspaceId), eq(sandboxPromptVersions.id, id)),
       )
       .limit(1)
-    return rows[0] ? rowToSandboxPrompt(rows[0]) : null
+    return rows[0] ? rowToSandboxPromptVersion(rows[0] as SandboxPromptVersionRow) : null
   }
 
   async list(workspaceId: string): Promise<SandboxPromptVersion[]> {
@@ -2255,7 +2236,7 @@ export class DrizzleSandboxPromptVersionRepository implements SandboxPromptVersi
         ),
       )
       .orderBy(desc(sandboxPromptVersions.created_at))
-    return rows.map(rowToSandboxPrompt)
+    return rows.map((r) => rowToSandboxPromptVersion(r as SandboxPromptVersionRow))
   }
 
   async listByKind(workspaceId: string, agentKind: string): Promise<SandboxPromptVersion[]> {
@@ -2270,7 +2251,7 @@ export class DrizzleSandboxPromptVersionRepository implements SandboxPromptVersi
         ),
       )
       .orderBy(desc(sandboxPromptVersions.created_at))
-    return rows.map(rowToSandboxPrompt)
+    return rows.map((r) => rowToSandboxPromptVersion(r as SandboxPromptVersionRow))
   }
 
   async upsert(workspaceId: string, version: SandboxPromptVersion): Promise<void> {
@@ -2321,21 +2302,6 @@ export class DrizzleSandboxPromptVersionRepository implements SandboxPromptVersi
   }
 }
 
-type SandboxFixtureRow = typeof sandboxFixtures.$inferSelect
-
-function rowToSandboxFixture(row: SandboxFixtureRow): SandboxFixture {
-  return {
-    id: row.id,
-    kind: row.kind as SandboxFixture['kind'],
-    name: row.name,
-    payload: parseSandboxJson<Record<string, unknown> | null>(row.payload, null),
-    repoRef: parseSandboxJson<SandboxFixture['repoRef']>(row.repo_ref, null),
-    objective: parseSandboxJson<SandboxFixture['objective']>(row.objective, null),
-    origin: row.origin as SandboxFixture['origin'],
-    createdAt: row.created_at,
-  } as SandboxFixture
-}
-
 export class DrizzleSandboxFixtureRepository implements SandboxFixtureRepository {
   constructor(private readonly db: DrizzleDb) {}
 
@@ -2345,7 +2311,7 @@ export class DrizzleSandboxFixtureRepository implements SandboxFixtureRepository
       .from(sandboxFixtures)
       .where(and(eq(sandboxFixtures.workspace_id, workspaceId), eq(sandboxFixtures.id, id)))
       .limit(1)
-    return rows[0] ? rowToSandboxFixture(rows[0]) : null
+    return rows[0] ? rowToSandboxFixture(rows[0] as SandboxFixtureRow) : null
   }
 
   async list(workspaceId: string): Promise<SandboxFixture[]> {
@@ -2354,7 +2320,7 @@ export class DrizzleSandboxFixtureRepository implements SandboxFixtureRepository
       .from(sandboxFixtures)
       .where(eq(sandboxFixtures.workspace_id, workspaceId))
       .orderBy(sandboxFixtures.created_at)
-    return rows.map(rowToSandboxFixture)
+    return rows.map((r) => rowToSandboxFixture(r as SandboxFixtureRow))
   }
 
   async upsert(workspaceId: string, fixture: SandboxFixture): Promise<void> {
@@ -2392,27 +2358,6 @@ export class DrizzleSandboxFixtureRepository implements SandboxFixtureRepository
   }
 }
 
-type SandboxExperimentRow = typeof sandboxExperiments.$inferSelect
-
-function rowToSandboxExperiment(row: SandboxExperimentRow): SandboxExperiment {
-  return {
-    id: row.id,
-    name: row.name,
-    agentKind: row.agent_kind,
-    judgeModel: row.judge_model,
-    repeats: row.repeats,
-    status: row.status as SandboxExperimentStatus,
-    matrix: parseSandboxJson<SandboxExperiment['matrix']>(row.matrix, {
-      promptVersionIds: [],
-      models: [],
-      fixtureIds: [],
-    }),
-    budgetTokens: row.budget_tokens,
-    createdAt: row.created_at,
-    createdBy: row.created_by,
-  }
-}
-
 export class DrizzleSandboxExperimentRepository implements SandboxExperimentRepository {
   constructor(private readonly db: DrizzleDb) {}
 
@@ -2422,7 +2367,7 @@ export class DrizzleSandboxExperimentRepository implements SandboxExperimentRepo
       .from(sandboxExperiments)
       .where(and(eq(sandboxExperiments.workspace_id, workspaceId), eq(sandboxExperiments.id, id)))
       .limit(1)
-    return rows[0] ? rowToSandboxExperiment(rows[0]) : null
+    return rows[0] ? rowToSandboxExperiment(rows[0] as SandboxExperimentRow) : null
   }
 
   async list(workspaceId: string): Promise<SandboxExperiment[]> {
@@ -2431,7 +2376,7 @@ export class DrizzleSandboxExperimentRepository implements SandboxExperimentRepo
       .from(sandboxExperiments)
       .where(eq(sandboxExperiments.workspace_id, workspaceId))
       .orderBy(desc(sandboxExperiments.created_at))
-    return rows.map(rowToSandboxExperiment)
+    return rows.map((r) => rowToSandboxExperiment(r as SandboxExperimentRow))
   }
 
   async upsert(workspaceId: string, experiment: SandboxExperiment): Promise<void> {
@@ -2474,31 +2419,6 @@ export class DrizzleSandboxExperimentRepository implements SandboxExperimentRepo
   }
 }
 
-type SandboxRunRow = typeof sandboxRuns.$inferSelect
-
-function rowToSandboxRun(row: SandboxRunRow): SandboxRun {
-  return {
-    id: row.id,
-    experimentId: row.experiment_id,
-    promptVersionId: row.prompt_version_id,
-    model: row.model,
-    fixtureId: row.fixture_id,
-    repeatIndex: row.repeat_index,
-    status: row.status as SandboxRunStatus,
-    outputText: row.output_text,
-    usage: parseSandboxJson<SandboxRun['usage']>(row.usage, null),
-    latencyMs: row.latency_ms,
-    branch: row.branch,
-    prUrl: row.pr_url,
-    diff: row.diff,
-    error: row.error,
-    seedSha: row.seed_sha,
-    promptLabel: row.prompt_label,
-    startedAt: row.started_at,
-    finishedAt: row.finished_at,
-  }
-}
-
 export class DrizzleSandboxRunRepository implements SandboxRunRepository {
   constructor(private readonly db: DrizzleDb) {}
 
@@ -2508,7 +2428,7 @@ export class DrizzleSandboxRunRepository implements SandboxRunRepository {
       .from(sandboxRuns)
       .where(and(eq(sandboxRuns.workspace_id, workspaceId), eq(sandboxRuns.id, id)))
       .limit(1)
-    return rows[0] ? rowToSandboxRun(rows[0]) : null
+    return rows[0] ? rowToSandboxRun(rows[0] as SandboxRunRow) : null
   }
 
   async listByExperiment(workspaceId: string, experimentId: string): Promise<SandboxRun[]> {
@@ -2524,7 +2444,7 @@ export class DrizzleSandboxRunRepository implements SandboxRunRepository {
         sandboxRuns.fixture_id,
         sandboxRuns.repeat_index,
       )
-    return rows.map(rowToSandboxRun)
+    return rows.map((r) => rowToSandboxRun(r as SandboxRunRow))
   }
 
   async listQueued(workspaceId: string, experimentId: string): Promise<SandboxRun[]> {
@@ -2539,7 +2459,7 @@ export class DrizzleSandboxRunRepository implements SandboxRunRepository {
         ),
       )
       .orderBy(sandboxRuns.started_at, sandboxRuns.id)
-    return rows.map(rowToSandboxRun)
+    return rows.map((r) => rowToSandboxRun(r as SandboxRunRow))
   }
 
   async upsert(workspaceId: string, run: SandboxRun): Promise<void> {
@@ -2607,20 +2527,6 @@ export class DrizzleSandboxRunRepository implements SandboxRunRepository {
   }
 }
 
-type SandboxGradeRow = typeof sandboxGrades.$inferSelect
-
-function rowToSandboxGrade(row: SandboxGradeRow): SandboxGrade {
-  return {
-    id: row.id,
-    runId: row.run_id,
-    judgeModel: row.judge_model,
-    scores: parseSandboxJson<SandboxGrade['scores']>(row.scores, []),
-    weightedTotal: row.weighted_total,
-    objective: parseSandboxJson<SandboxGrade['objective']>(row.objective, null),
-    createdAt: row.created_at,
-  }
-}
-
 export class DrizzleSandboxGradeRepository implements SandboxGradeRepository {
   constructor(private readonly db: DrizzleDb) {}
 
@@ -2631,7 +2537,7 @@ export class DrizzleSandboxGradeRepository implements SandboxGradeRepository {
       .where(and(eq(sandboxGrades.workspace_id, workspaceId), eq(sandboxGrades.run_id, runId)))
       .orderBy(desc(sandboxGrades.created_at))
       .limit(1)
-    return rows[0] ? rowToSandboxGrade(rows[0]) : null
+    return rows[0] ? rowToSandboxGrade(rows[0] as SandboxGradeRow) : null
   }
 
   async listByExperiment(workspaceId: string, experimentId: string): Promise<SandboxGrade[]> {
@@ -2652,7 +2558,7 @@ export class DrizzleSandboxGradeRepository implements SandboxGradeRepository {
         ),
       )
       .orderBy(sandboxGrades.created_at)
-    return rows.map((r) => rowToSandboxGrade(r.grade))
+    return rows.map((r) => rowToSandboxGrade(r.grade as SandboxGradeRow))
   }
 
   async upsert(workspaceId: string, grade: SandboxGrade): Promise<void> {

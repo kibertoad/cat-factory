@@ -138,13 +138,24 @@ export class SandboxRunService {
           await this.failRun(workspaceId, run, 'Token budget exhausted before this cell ran.')
           continue
         }
-        try {
-          const prompt = prompts.get(run.promptVersionId)
-          const fixture = fixtures.get(run.fixtureId)
-          if (!prompt) throw new ValidationError(`Unknown prompt version "${run.promptVersionId}"`)
-          if (!fixture) throw new ValidationError(`Unknown fixture "${run.fixtureId}"`)
+        const prompt = prompts.get(run.promptVersionId)
+        const fixture = fixtures.get(run.fixtureId)
+        if (!prompt || !fixture) {
+          await this.failRun(
+            workspaceId,
+            run,
+            prompt
+              ? `Unknown fixture "${run.fixtureId}"`
+              : `Unknown prompt version "${run.promptVersionId}"`,
+          )
+          continue
+        }
+        const taskInput = renderFixtureInput(fixture)
 
-          const taskInput = renderFixtureInput(fixture)
+        // Phase 1 — run the candidate. A failure here means the cell produced nothing,
+        // so the whole cell is `failed`.
+        let done: SandboxRun
+        try {
           const candidateRef = this.refFor(run.model)
           const started = this.deps.clock.now()
           const candidate = await generateText({
@@ -164,8 +175,7 @@ export class SandboxRunService {
             outputTokens: candidate.usage.outputTokens ?? 0,
           }
           spent += usage.inputTokens + usage.outputTokens
-
-          const done: SandboxRun = {
+          done = {
             ...run,
             status: 'done',
             outputText: candidate.text,
@@ -175,13 +185,27 @@ export class SandboxRunService {
             finishedAt: this.deps.clock.now(),
           }
           await this.deps.sandboxRunRepository.upsert(workspaceId, done)
+        } catch (e) {
+          await this.failRun(workspaceId, run, e instanceof Error ? e.message : String(e))
+          continue
+        }
+        // The candidate produced output: this cell is a real result even if grading fails.
+        succeeded++
 
-          // Grade the cell (rubric + objective) and persist it.
+        // Phase 2 — grade the cell (rubric + objective). A grading failure must NOT
+        // discard the candidate output: keep the `done` run and record the grading error
+        // on it so the produced output stays inspectable.
+        try {
           const judgeRef = this.refFor(experiment.judgeModel)
           const judged = await generateText({
             model: provider.resolve(judgeRef),
             system: JUDGE_SYSTEM_PROMPT,
-            prompt: buildJudgePrompt(rubric, taskInput, candidate.text, expectationsOf(fixture)),
+            prompt: buildJudgePrompt(
+              rubric,
+              taskInput,
+              done.outputText ?? '',
+              expectationsOf(fixture),
+            ),
             temperature: 0,
             maxOutputTokens: 2000,
             providerOptions: catFactoryObservability({ agentKind: 'sandbox:judge', workspaceId }),
@@ -194,13 +218,15 @@ export class SandboxRunService {
             judgeModel: experiment.judgeModel,
             scores,
             weightedTotal: weightedTotal(meta.rubric, scores),
-            objective: objectiveFor(fixture, candidate.text),
+            objective: objectiveFor(fixture, done.outputText ?? ''),
             createdAt: this.deps.clock.now(),
           }
           await this.deps.sandboxGradeRepository.upsert(workspaceId, grade)
-          succeeded++
         } catch (e) {
-          await this.failRun(workspaceId, run, e instanceof Error ? e.message : String(e))
+          await this.deps.sandboxRunRepository.upsert(workspaceId, {
+            ...done,
+            error: `Grading failed: ${e instanceof Error ? e.message : String(e)}`,
+          })
         }
       }
     } finally {

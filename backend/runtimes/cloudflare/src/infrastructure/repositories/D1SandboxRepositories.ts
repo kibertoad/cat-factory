@@ -13,57 +13,28 @@ import type {
   SandboxRunStatus,
 } from '@cat-factory/kernel'
 import type { D1Database } from '@cloudflare/workers-types'
+import {
+  type SandboxExperimentRow,
+  type SandboxFixtureRow,
+  type SandboxGradeRow,
+  type SandboxPromptVersionRow,
+  type SandboxRunRow,
+  rowToSandboxExperiment,
+  rowToSandboxFixture,
+  rowToSandboxGrade,
+  rowToSandboxPromptVersion,
+  rowToSandboxRun,
+} from './mappers'
 
 // D1 persistence for the Sandbox. These target a DEDICATED D1 database (the SANDBOX_DB
 // binding, sandbox-migrations/), so the tables are unprefixed (`prompt_versions`,
 // `fixtures`, `experiments`, `runs`, `grades`) — the database IS the namespace. The Node
 // facade mirrors these over a Postgres `sandbox` schema (Drizzle); the cross-runtime
 // conformance suite asserts they behave identically. JSON-shaped fields are TEXT JSON.
-
-function parseJson<T>(raw: string | null | undefined, fallback: T): T {
-  if (!raw) return fallback
-  try {
-    return JSON.parse(raw) as T
-  } catch {
-    return fallback
-  }
-}
+// The row -> domain mappers are shared with the Drizzle repos (`@cat-factory/server`);
+// only the dialect-specific SQL write path lives here.
 
 // ---- prompt versions --------------------------------------------------------
-
-interface PromptVersionRow {
-  id: string
-  lineage_id: string
-  agent_kind: string
-  name: string
-  origin: string
-  system_text: string
-  base_prompt_id: string | null
-  version: number
-  parent_id: string | null
-  labels: string
-  created_at: number
-  created_by: string | null
-  archived_at: number | null
-}
-
-function rowToPromptVersion(row: PromptVersionRow): SandboxPromptVersion {
-  return {
-    id: row.id,
-    lineageId: row.lineage_id,
-    agentKind: row.agent_kind,
-    name: row.name,
-    origin: row.origin as SandboxPromptVersion['origin'],
-    systemText: row.system_text,
-    basePromptId: row.base_prompt_id,
-    version: row.version,
-    parentId: row.parent_id,
-    labels: parseJson<string[]>(row.labels, []),
-    createdAt: row.created_at,
-    createdBy: row.created_by,
-    archivedAt: row.archived_at,
-  }
-}
 
 export class D1SandboxPromptVersionRepository implements SandboxPromptVersionRepository {
   constructor(private readonly db: D1Database) {}
@@ -72,8 +43,8 @@ export class D1SandboxPromptVersionRepository implements SandboxPromptVersionRep
     const row = await this.db
       .prepare(`SELECT * FROM prompt_versions WHERE workspace_id = ? AND id = ?`)
       .bind(workspaceId, id)
-      .first<PromptVersionRow>()
-    return row ? rowToPromptVersion(row) : null
+      .first<SandboxPromptVersionRow>()
+    return row ? rowToSandboxPromptVersion(row) : null
   }
 
   async list(workspaceId: string): Promise<SandboxPromptVersion[]> {
@@ -84,8 +55,8 @@ export class D1SandboxPromptVersionRepository implements SandboxPromptVersionRep
            ORDER BY created_at DESC`,
       )
       .bind(workspaceId)
-      .all<PromptVersionRow>()
-    return results.map(rowToPromptVersion)
+      .all<SandboxPromptVersionRow>()
+    return results.map(rowToSandboxPromptVersion)
   }
 
   async listByKind(workspaceId: string, agentKind: string): Promise<SandboxPromptVersion[]> {
@@ -96,8 +67,8 @@ export class D1SandboxPromptVersionRepository implements SandboxPromptVersionRep
            ORDER BY created_at DESC`,
       )
       .bind(workspaceId, agentKind)
-      .all<PromptVersionRow>()
-    return results.map(rowToPromptVersion)
+      .all<SandboxPromptVersionRow>()
+    return results.map(rowToSandboxPromptVersion)
   }
 
   async upsert(workspaceId: string, version: SandboxPromptVersion): Promise<void> {
@@ -149,30 +120,6 @@ export class D1SandboxPromptVersionRepository implements SandboxPromptVersionRep
 
 // ---- fixtures ---------------------------------------------------------------
 
-interface FixtureRow {
-  id: string
-  kind: string
-  name: string
-  payload: string | null
-  repo_ref: string | null
-  objective: string | null
-  origin: string
-  created_at: number
-}
-
-function rowToFixture(row: FixtureRow): SandboxFixture {
-  return {
-    id: row.id,
-    kind: row.kind as SandboxFixture['kind'],
-    name: row.name,
-    payload: parseJson<Record<string, unknown> | null>(row.payload, null),
-    repoRef: parseJson<SandboxFixture['repoRef']>(row.repo_ref, null),
-    objective: parseJson<SandboxFixture['objective']>(row.objective, null),
-    origin: row.origin as SandboxFixture['origin'],
-    createdAt: row.created_at,
-  } as SandboxFixture
-}
-
 export class D1SandboxFixtureRepository implements SandboxFixtureRepository {
   constructor(private readonly db: D1Database) {}
 
@@ -180,16 +127,16 @@ export class D1SandboxFixtureRepository implements SandboxFixtureRepository {
     const row = await this.db
       .prepare(`SELECT * FROM fixtures WHERE workspace_id = ? AND id = ?`)
       .bind(workspaceId, id)
-      .first<FixtureRow>()
-    return row ? rowToFixture(row) : null
+      .first<SandboxFixtureRow>()
+    return row ? rowToSandboxFixture(row) : null
   }
 
   async list(workspaceId: string): Promise<SandboxFixture[]> {
     const { results } = await this.db
       .prepare(`SELECT * FROM fixtures WHERE workspace_id = ? ORDER BY created_at ASC`)
       .bind(workspaceId)
-      .all<FixtureRow>()
-    return results.map(rowToFixture)
+      .all<SandboxFixtureRow>()
+    return results.map(rowToSandboxFixture)
   }
 
   async upsert(workspaceId: string, fixture: SandboxFixture): Promise<void> {
@@ -230,38 +177,6 @@ export class D1SandboxFixtureRepository implements SandboxFixtureRepository {
 
 // ---- experiments ------------------------------------------------------------
 
-interface ExperimentRow {
-  id: string
-  name: string
-  agent_kind: string
-  judge_model: string
-  repeats: number
-  status: string
-  matrix: string
-  budget_tokens: number | null
-  created_at: number
-  created_by: string | null
-}
-
-function rowToExperiment(row: ExperimentRow): SandboxExperiment {
-  return {
-    id: row.id,
-    name: row.name,
-    agentKind: row.agent_kind,
-    judgeModel: row.judge_model,
-    repeats: row.repeats,
-    status: row.status as SandboxExperimentStatus,
-    matrix: parseJson<SandboxExperiment['matrix']>(row.matrix, {
-      promptVersionIds: [],
-      models: [],
-      fixtureIds: [],
-    }),
-    budgetTokens: row.budget_tokens,
-    createdAt: row.created_at,
-    createdBy: row.created_by,
-  }
-}
-
 export class D1SandboxExperimentRepository implements SandboxExperimentRepository {
   constructor(private readonly db: D1Database) {}
 
@@ -269,16 +184,16 @@ export class D1SandboxExperimentRepository implements SandboxExperimentRepositor
     const row = await this.db
       .prepare(`SELECT * FROM experiments WHERE workspace_id = ? AND id = ?`)
       .bind(workspaceId, id)
-      .first<ExperimentRow>()
-    return row ? rowToExperiment(row) : null
+      .first<SandboxExperimentRow>()
+    return row ? rowToSandboxExperiment(row) : null
   }
 
   async list(workspaceId: string): Promise<SandboxExperiment[]> {
     const { results } = await this.db
       .prepare(`SELECT * FROM experiments WHERE workspace_id = ? ORDER BY created_at DESC`)
       .bind(workspaceId)
-      .all<ExperimentRow>()
-    return results.map(rowToExperiment)
+      .all<SandboxExperimentRow>()
+    return results.map(rowToSandboxExperiment)
   }
 
   async upsert(workspaceId: string, experiment: SandboxExperiment): Promise<void> {
@@ -324,50 +239,6 @@ export class D1SandboxExperimentRepository implements SandboxExperimentRepositor
 
 // ---- runs -------------------------------------------------------------------
 
-interface RunRow {
-  id: string
-  experiment_id: string
-  prompt_version_id: string
-  model: string
-  fixture_id: string
-  repeat_index: number
-  status: string
-  output_text: string | null
-  usage: string | null
-  latency_ms: number | null
-  branch: string | null
-  pr_url: string | null
-  diff: string | null
-  error: string | null
-  seed_sha: string | null
-  prompt_label: string
-  started_at: number | null
-  finished_at: number | null
-}
-
-function rowToRun(row: RunRow): SandboxRun {
-  return {
-    id: row.id,
-    experimentId: row.experiment_id,
-    promptVersionId: row.prompt_version_id,
-    model: row.model,
-    fixtureId: row.fixture_id,
-    repeatIndex: row.repeat_index,
-    status: row.status as SandboxRunStatus,
-    outputText: row.output_text,
-    usage: parseJson<SandboxRun['usage']>(row.usage, null),
-    latencyMs: row.latency_ms,
-    branch: row.branch,
-    prUrl: row.pr_url,
-    diff: row.diff,
-    error: row.error,
-    seedSha: row.seed_sha,
-    promptLabel: row.prompt_label,
-    startedAt: row.started_at,
-    finishedAt: row.finished_at,
-  }
-}
-
 export class D1SandboxRunRepository implements SandboxRunRepository {
   constructor(private readonly db: D1Database) {}
 
@@ -375,8 +246,8 @@ export class D1SandboxRunRepository implements SandboxRunRepository {
     const row = await this.db
       .prepare(`SELECT * FROM runs WHERE workspace_id = ? AND id = ?`)
       .bind(workspaceId, id)
-      .first<RunRow>()
-    return row ? rowToRun(row) : null
+      .first<SandboxRunRow>()
+    return row ? rowToSandboxRun(row) : null
   }
 
   async listByExperiment(workspaceId: string, experimentId: string): Promise<SandboxRun[]> {
@@ -387,8 +258,8 @@ export class D1SandboxRunRepository implements SandboxRunRepository {
            ORDER BY prompt_version_id, model, fixture_id, repeat_index`,
       )
       .bind(workspaceId, experimentId)
-      .all<RunRow>()
-    return results.map(rowToRun)
+      .all<SandboxRunRow>()
+    return results.map(rowToSandboxRun)
   }
 
   async listQueued(workspaceId: string, experimentId: string): Promise<SandboxRun[]> {
@@ -399,8 +270,8 @@ export class D1SandboxRunRepository implements SandboxRunRepository {
            ORDER BY started_at ASC, id ASC`,
       )
       .bind(workspaceId, experimentId)
-      .all<RunRow>()
-    return results.map(rowToRun)
+      .all<SandboxRunRow>()
+    return results.map(rowToSandboxRun)
   }
 
   async upsert(workspaceId: string, run: SandboxRun): Promise<void> {
@@ -471,28 +342,6 @@ export class D1SandboxRunRepository implements SandboxRunRepository {
 
 // ---- grades -----------------------------------------------------------------
 
-interface GradeRow {
-  id: string
-  run_id: string
-  judge_model: string
-  scores: string
-  weighted_total: number
-  objective: string | null
-  created_at: number
-}
-
-function rowToGrade(row: GradeRow): SandboxGrade {
-  return {
-    id: row.id,
-    runId: row.run_id,
-    judgeModel: row.judge_model,
-    scores: parseJson<SandboxGrade['scores']>(row.scores, []),
-    weightedTotal: row.weighted_total,
-    objective: parseJson<SandboxGrade['objective']>(row.objective, null),
-    createdAt: row.created_at,
-  }
-}
-
 export class D1SandboxGradeRepository implements SandboxGradeRepository {
   constructor(private readonly db: D1Database) {}
 
@@ -503,8 +352,8 @@ export class D1SandboxGradeRepository implements SandboxGradeRepository {
            ORDER BY created_at DESC LIMIT 1`,
       )
       .bind(workspaceId, runId)
-      .first<GradeRow>()
-    return row ? rowToGrade(row) : null
+      .first<SandboxGradeRow>()
+    return row ? rowToSandboxGrade(row) : null
   }
 
   async listByExperiment(workspaceId: string, experimentId: string): Promise<SandboxGrade[]> {
@@ -516,8 +365,8 @@ export class D1SandboxGradeRepository implements SandboxGradeRepository {
            ORDER BY g.created_at ASC`,
       )
       .bind(workspaceId, experimentId)
-      .all<GradeRow>()
-    return results.map(rowToGrade)
+      .all<SandboxGradeRow>()
+    return results.map(rowToSandboxGrade)
   }
 
   async upsert(workspaceId: string, grade: SandboxGrade): Promise<void> {

@@ -370,7 +370,7 @@ const fixtureName = (id: string) => store.fixtures.find((f) => f.id === id)?.nam
                 </p>
                 <p v-if="selectedRun.error" class="text-xs text-rose-400">{{ selectedRun.error }}</p>
                 <pre
-                  v-else
+                  v-if="selectedRun.outputText"
                   class="max-h-48 overflow-auto whitespace-pre-wrap rounded bg-slate-950/60 p-2 text-[11px] text-slate-300"
                   >{{ selectedRun.outputText }}</pre
                 >

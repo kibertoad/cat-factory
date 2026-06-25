@@ -255,8 +255,17 @@ export class SandboxService {
     input: CreateSandboxExperimentInput,
   ): Promise<SandboxExperiment> {
     await requireWorkspace(this.deps.workspaceRepository, workspaceId)
-    if (!sandboxKindMeta(input.agentKind)) {
+    const meta = sandboxKindMeta(input.agentKind)
+    if (!meta) {
       throw new ValidationError(`"${input.agentKind}" is not a Sandbox-testable agent kind`)
+    }
+    // Refuse container kinds up front: the in-product run driver only runs inline cells,
+    // so a container experiment could be persisted but never launched. Reject at create
+    // time rather than leaving an un-launchable draft in the workspace.
+    if (meta.bucket === 'container') {
+      throw new ValidationError(
+        `The "${input.agentKind}" agent runs in a container; container experiments are not yet supported in the Sandbox.`,
+      )
     }
     if (!isRunnableMatrix(input.matrix)) {
       throw new ValidationError(
