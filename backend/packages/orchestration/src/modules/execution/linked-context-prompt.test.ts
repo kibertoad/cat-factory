@@ -20,7 +20,13 @@ function contextFor(agentKind: AgentKind): AgentRunContext {
       type: 'service',
       description: 'Let users export their data as CSV.',
       contextDocs: [
-        { title: 'Export PRD', url: 'https://docs/export-prd', excerpt: 'Export must be UTF-8.' },
+        {
+          title: 'Export PRD',
+          url: 'https://docs/export-prd',
+          excerpt: 'Export must be UTF-8.',
+          summary: 'Export must be UTF-8.',
+          body: '# Export PRD\n\nExport must be UTF-8.',
+        },
       ],
       contextTasks: [
         {
@@ -34,6 +40,7 @@ function contextFor(agentKind: AgentKind): AgentRunContext {
           labels: ['export'],
           description: 'Several enterprise customers requested CSV export.',
           comments: [{ author: 'Bob', createdAt: '2026-01-02T00:00:00Z', body: 'UTF-8 please.' }],
+          summary: 'Several enterprise customers requested CSV export.',
         },
       ],
     },
@@ -72,5 +79,15 @@ describe('linked context in agent prompts', () => {
     const prompt = userPromptFor(ctx)
     expect(prompt).not.toContain('Linked context documents')
     expect(prompt).not.toContain('Linked tracker issues')
+  })
+
+  // Container kinds get a summary index pointing at the on-disk files, NOT the bodies.
+  it('renders a summary index pointing at .cat-context when materialized', () => {
+    const prompt = userPromptFor(contextFor('coder' as AgentKind), { materialized: true })
+    expect(prompt).toContain('.cat-context/')
+    expect(prompt).toContain('Export PRD')
+    expect(prompt).toContain('[PROJ-42]')
+    // The full body is NOT inlined in the materialized prompt (it lives on disk).
+    expect(prompt).not.toContain('# Export PRD\n\nExport must be UTF-8.')
   })
 })

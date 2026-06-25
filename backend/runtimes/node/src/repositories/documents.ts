@@ -6,7 +6,8 @@ import type {
   DocumentSourceKind,
   SecretCipher,
 } from '@cat-factory/kernel'
-import { and, desc, eq, isNull } from 'drizzle-orm'
+import { urlMatchCandidates } from '@cat-factory/kernel'
+import { and, desc, eq, inArray, isNull } from 'drizzle-orm'
 import type { DrizzleDb } from '../db/client.js'
 import { documentConnections, documents } from '../db/schema.js'
 
@@ -144,6 +145,7 @@ function rowToDocument(row: DocumentRow): DocumentRecord {
     url: row.url,
     excerpt: row.excerpt,
     body: row.body,
+    contentHash: row.content_hash,
     linkedBlockId: row.linked_block_id,
     syncedAt: row.synced_at,
     deletedAt: row.deleted_at,
@@ -163,6 +165,7 @@ export class DrizzleDocumentRepository implements DocumentRepository {
       url: record.url,
       excerpt: record.excerpt,
       body: record.body,
+      content_hash: record.contentHash,
       linked_block_id: record.linkedBlockId,
       synced_at: record.syncedAt,
       deleted_at: null,
@@ -177,6 +180,7 @@ export class DrizzleDocumentRepository implements DocumentRepository {
           url: values.url,
           excerpt: values.excerpt,
           body: values.body,
+          content_hash: values.content_hash,
           linked_block_id: values.linked_block_id,
           synced_at: values.synced_at,
           deleted_at: null,
@@ -226,6 +230,22 @@ export class DrizzleDocumentRepository implements DocumentRepository {
       )
       .orderBy(desc(documents.synced_at))
     return rows.map(rowToDocument)
+  }
+
+  async getByUrl(workspaceId: string, url: string): Promise<DocumentRecord | null> {
+    const rows = await this.db
+      .select()
+      .from(documents)
+      .where(
+        and(
+          eq(documents.workspace_id, workspaceId),
+          inArray(documents.url, urlMatchCandidates(url)),
+          isNull(documents.deleted_at),
+        ),
+      )
+      .orderBy(desc(documents.synced_at))
+      .limit(1)
+    return rows[0] ? rowToDocument(rows[0]) : null
   }
 
   async linkBlock(

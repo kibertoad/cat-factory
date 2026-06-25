@@ -49,6 +49,26 @@ export const DEFAULT_CI_MAX_ATTEMPTS = DEFAULT_MERGE_PRESET.ciMaxAttempts
 export const DEFAULT_MAX_REQUIREMENT_ITERATIONS = DEFAULT_MERGE_PRESET.maxRequirementIterations
 
 /**
+ * Budgets for the linked-context the engine assembles for an agent step. Container
+ * kinds get a cheap in-prompt summary index (capped by `maxItems`/`summaryChars`)
+ * plus the full bodies materialised as files in the run workspace (capped overall by
+ * `maxContextFileBytes` so the job body can't bloat). Inline kinds — which have no
+ * checkout to explore — instead get the full body injected into the prompt, trimmed
+ * to `inlineBodyTokens` (see {@link estimateTokens}). Tunable; deliberately generous
+ * on the file budget (the agent only reads what it needs) and tight on the prompt.
+ */
+export const CONTEXT_BUDGET = {
+  /** Max linked items listed in the in-prompt summary index. */
+  maxItems: 20,
+  /** Length of each item's one-line summary in the index. */
+  summaryChars: 160,
+  /** Token budget for body injected into an inline (no-checkout) kind's prompt. */
+  inlineBodyTokens: 2500,
+  /** Total bytes cap across all materialised context files in a job body (~256 KB). */
+  maxContextFileBytes: 262_144,
+} as const
+
+/**
  * A model preset template (no id/createdAt yet) used to seed a fresh workspace's
  * preset library. {@link DEFAULT_MODEL_PRESETS} lists the built-ins; the service
  * stamps each with an id + createdAt on first use.

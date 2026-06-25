@@ -92,7 +92,16 @@ export interface AgentRunContext {
      * as extra context. Present only when the Confluence integration is wired and
      * the block has linked documents.
      */
-    contextDocs?: { title: string; url: string; excerpt: string }[]
+    contextDocs?: {
+      title: string
+      url: string
+      /** Short plain-text excerpt for list/preview rendering. */
+      excerpt: string
+      /** One-line summary rendered into the in-prompt summary index. */
+      summary: string
+      /** Full normalized-Markdown body, materialised as a file for the agent to explore. */
+      body: string
+    }[]
     /**
      * Tracker issues (Jira, …) linked to this block, supplied as extra context.
      * Present only when the task-source integration is wired and the block has
@@ -110,6 +119,8 @@ export interface AgentRunContext {
       labels: string[]
       description: string
       comments: { author: string; createdAt: string; body: string }[]
+      /** One-line summary rendered into the in-prompt summary index. */
+      summary: string
     }[]
     /**
      * Task-level configuration values contributed by the agents in this task's

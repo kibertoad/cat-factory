@@ -183,6 +183,7 @@ async function runExploreMode(job: AgentJob, opts: RunOptions): Promise<AgentRes
           expectsEdits: false,
           webToolsGuidance: job.webToolsGuidance,
           webSearchProxy: job.webSearch,
+          contextFiles: job.contextFiles,
         },
         opts,
       )
@@ -423,6 +424,7 @@ async function runConflictResolution(job: AgentJob, opts: RunOptions): Promise<A
         subscriptionBaseUrl: job.subscriptionBaseUrl,
         proxyBaseUrl: job.proxyBaseUrl,
         sessionToken: job.sessionToken,
+        contextFiles: job.contextFiles,
       },
       opts,
     )
