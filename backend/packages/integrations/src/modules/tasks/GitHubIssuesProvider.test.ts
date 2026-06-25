@@ -15,18 +15,20 @@ function fakeClient(opts: {
   issues?: Record<string, GitHubIssueDetail>
 }) {
   const searchCalls: string[] = []
+  const issueCalls: string[] = []
   const client = {
     async searchIssues(_installationId: number, query: string) {
       searchCalls.push(query)
       return opts.hits ?? []
     },
     async getIssue(_installationId: number, ref: { owner: string; repo: string }, n: number) {
+      issueCalls.push(`${ref.owner}/${ref.repo}#${n}`)
       const found = opts.issues?.[`${ref.owner}/${ref.repo}#${n}`]
       if (!found) throw new Error('not found')
       return found
     },
   } as unknown as GitHubClient
-  return { client, searchCalls }
+  return { client, searchCalls, issueCalls }
 }
 
 const installations = {
@@ -133,5 +135,24 @@ describe('GitHubIssuesProvider.search', () => {
 
     // #999 does not exist → getIssue throws → no exact hit, search still runs cleanly.
     await expect(provider.search({}, '999', 'ws1', scope)).resolves.toEqual([])
+  })
+
+  it('never reaches across tenants: a pasted URL to another account is not fetched', async () => {
+    // The workspace's installation is on `kibertoad`; a URL naming a DIFFERENT account
+    // must NOT be resolved against that account's issues (cross-tenant leak). The exact
+    // lookup is skipped (getIssue is never called) and it falls through to the
+    // repo-scoped text search, which finds nothing.
+    const { client, issueCalls } = fakeClient({ hits: [] })
+    const provider = new GitHubIssuesProvider({ githubClient: client, installations })
+
+    const results = await provider.search(
+      {},
+      'https://github.com/other-org/secret/issues/3',
+      'ws1',
+      scope,
+    )
+
+    expect(issueCalls).toEqual([])
+    expect(results).toEqual([])
   })
 })

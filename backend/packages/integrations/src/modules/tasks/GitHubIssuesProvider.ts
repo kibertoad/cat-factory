@@ -2,6 +2,7 @@ import {
   ConflictError,
   ValidationError,
   type GitHubClient,
+  type GitHubInstallation,
   type GitHubInstallationRepository,
   type TaskContent,
   type TaskCredentials,
@@ -110,7 +111,7 @@ export class GitHubIssuesProvider implements TaskSourceProvider {
     // issue, which the picker offers as the top option ("point at it, don't search").
     const exactId = githubIssuesLogic.detectExactGitHubIssueRef(query, scope)
     if (exactId) {
-      const hit = await this.fetchExact(exactId).catch(() => null)
+      const hit = await this.fetchExact(exactId, installation).catch(() => null)
       if (hit) {
         seen.add(exactId)
         out.push(hit)
@@ -139,13 +140,24 @@ export class GitHubIssuesProvider implements TaskSourceProvider {
     return out.slice(0, 20)
   }
 
-  /** Fetch one issue by its canonical external id and project it as a lean search hit. */
-  private async fetchExact(externalId: string): Promise<TaskSearchResult | null> {
+  /**
+   * Fetch one issue by its canonical external id and project it as a lean search hit,
+   * constrained to the SEARCHING workspace's own installation. A pasted issue URL can
+   * name any `owner/repo`, but the search must never reach across tenants to a different
+   * account's installation to read its issues — that would leak the title/url/state of a
+   * repo this workspace has no relationship to (see `search`'s isolation note). An exact
+   * ref outside this installation's account returns null and falls through to the
+   * repo-scoped text search (which finds nothing in the wrong repo), exactly as a miss.
+   */
+  private async fetchExact(
+    externalId: string,
+    installation: GitHubInstallation,
+  ): Promise<TaskSearchResult | null> {
     const id = githubIssuesLogic.parseGitHubIssueExternalId(externalId)
     if (!id) return null
-    const installationId = await this.resolveInstallationId(id.owner)
+    if (id.owner.toLowerCase() !== installation.accountLogin.toLowerCase()) return null
     const detail = await this.deps.githubClient.getIssue(
-      installationId,
+      installation.installationId,
       { owner: id.owner, repo: id.repo },
       id.number,
     )

@@ -56,7 +56,12 @@ async function resolveSearchScope(
   let target: Awaited<ReturnType<NonNullable<typeof resolve>>> = null
   try {
     target = resolve ? await resolve(param(c, 'workspaceId'), blockId) : null
-  } catch {
+  } catch (err) {
+    // `resolveRepoTarget` throws a ValidationError precisely when the block isn't under a
+    // repo-linked service — the case this endpoint refuses below. Anything else (an
+    // unexpected repo/DB failure) is NOT a "link a repo" problem, so let it propagate
+    // rather than mislabel it; only the documented not-linked outcome falls through.
+    if (!(err instanceof ValidationError)) throw err
     target = null
   }
   if (!target) {

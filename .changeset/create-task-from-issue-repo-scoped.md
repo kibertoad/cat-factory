@@ -20,7 +20,9 @@ attach-an-issue-as-context picker in the add-task form.
 Within a scoped GitHub search:
 
 - a pasted issue URL (or `owner/repo#n` / `owner/repo/issues/n`) resolves to that exact
-  issue and is offered first instead of being fuzzy-matched;
+  issue and is offered first instead of being fuzzy-matched — but only within the
+  searching workspace's own GitHub App installation, so a URL naming another account is
+  never fetched across tenants;
 - a bare issue number (`11`) resolves against the service's repo and is offered first;
 - free-text hits are restricted to the service's repo (`repo:owner/name`).
 
