@@ -1,5 +1,32 @@
 # @cat-factory/app
 
+## 0.13.0
+
+### Minor Changes
+
+- 82d771e: Add a "View Requirements" button to a selected service in the inspector that opens a
+  structured navigation window over the service's prescriptive spec tree (modules → feature
+  groups → requirements + Given/When/Then acceptance criteria + domain rules). When the spec
+  is present on the service repo's default branch, a toggle switches to the rendered Gherkin
+  scenarios.
+
+  A new read-only endpoint `GET /workspaces/:ws/blocks/:blockId/spec` reassembles the sharded
+  `spec/` artifact off the repo default branch via the existing checkout-free `RepoFiles`
+  resolver (`resolveRunRepoContext`), now surfaced on the `ServerContainer` and wired
+  symmetrically on both runtime facades. It returns `{ present: false }` when GitHub is not
+  connected or no spec exists yet, so the window shows an empty state rather than erroring.
+
+### Patch Changes
+
+- 82d771e: Pin the SPA to dark mode so Nuxt UI's own chrome matches the board. The app is a
+  single dark-themed surface (neutral mapped to `slate`, everything hand-styled in
+  slate), but color mode was unpinned and followed the visitor's system preference,
+  so every Nuxt UI overlay and form control (modals, inputs, selects, dropdowns)
+  rendered light/white with washed-out text. Color mode is now pinned to dark, and
+  overlays (`UModal`/`USlideover`) get a shared layered dark palette via `app.config`
+  (a deep slate-950 surface with slate-800 chrome) matching the agent-run-details
+  reader.
+
 ## 0.12.0
 
 ### Minor Changes
