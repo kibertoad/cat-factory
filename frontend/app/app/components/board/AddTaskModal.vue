@@ -11,7 +11,7 @@
 // button is disabled with a hint. Linking needs the block id,
 // so chosen items are staged locally and import-and-linked once the task is created
 // (see useContextLinking) — the same context the agents see for every step of the run.
-import type { CreateTaskType, TaskTypeFields } from '~/types/domain'
+import type { CreateTaskType, TaskSourceKind, TaskTypeFields } from '~/types/domain'
 import ContextDocumentPicker from '~/components/documents/ContextDocumentPicker.vue'
 import ContextIssuePicker from '~/components/tasks/ContextIssuePicker.vue'
 
@@ -196,6 +196,61 @@ const issuesConnected = computed(() => tasks.available && tasks.anyOffered)
 const pendingDocs = computed(() => pendingContext.value.filter((c) => c.kind === 'document'))
 const pendingIssues = computed(() => pendingContext.value.filter((c) => c.kind === 'task'))
 
+// Linked issues whose body is in hand, surfaced read-only above the description so the
+// user SEES the original issue description is included in the task (and can add notes on
+// top). The bodies are folded into the saved description on submit (see `add`).
+const linkedIssueBodies = computed(() =>
+  pendingIssues.value
+    .filter((i) => (i.description ?? '').trim().length > 0)
+    .map((i) => ({ key: contextKey(i), title: i.title, body: (i.description ?? '').trim() })),
+)
+const hasLinkedIssueBody = computed(() => linkedIssueBodies.value.length > 0)
+// True while we're fetching a search-hit issue's body so the read-only preview can show
+// a placeholder instead of silently appearing late.
+const resolvingIssueBodies = ref(false)
+
+// A staged issue picked from search results carries no body yet (`needsImport`, and the
+// search result has no description). Resolve it once the form opens — from the local cache
+// when already imported, else by importing it (idempotent; we'd import on add anyway) — so
+// its description can be shown read-only and folded into the task. Best-effort: a failure
+// just leaves that issue without a preview, still linked on add.
+async function resolvePendingIssueBodies() {
+  const unresolved = pendingContext.value.filter(
+    (c) => c.kind === 'task' && !(c.description ?? '').trim(),
+  )
+  if (!unresolved.length) return
+  resolvingIssueBodies.value = true
+  try {
+    const resolved: Record<string, string> = {}
+    for (const item of unresolved) {
+      const source = item.source as TaskSourceKind
+      const cached = tasks.tasks.find(
+        (t) => t.source === source && t.externalId === item.externalId,
+      )
+      if ((cached?.description ?? '').trim()) {
+        resolved[contextKey(item)] = cached!.description
+        continue
+      }
+      if (!item.needsImport) continue
+      try {
+        const imported = await tasks.importTask(source, item.externalId)
+        if ((imported.description ?? '').trim()) resolved[contextKey(item)] = imported.description
+      } catch {
+        // Unreadable/forbidden issue — skip the preview; it still links on add.
+      }
+    }
+    if (Object.keys(resolved).length) {
+      // The issue is now imported, so it links directly on add (needsImport → false).
+      pendingContext.value = pendingContext.value.map((c) => {
+        const body = resolved[contextKey(c)]
+        return body ? { ...c, description: body, needsImport: false } : c
+      })
+    }
+  } finally {
+    resolvingIssueBodies.value = false
+  }
+}
+
 function addPending(item: PendingContext) {
   if (pendingContext.value.some((c) => contextKey(c) === contextKey(item))) return
   pendingContext.value = [...pendingContext.value, item]
@@ -245,6 +300,8 @@ watch(open, (isOpen) => {
   }
   documents.loadDocuments().catch(() => {})
   tasks.loadTasks().catch(() => {})
+  // Fetch any staged search-hit issue's body so its description shows read-only below.
+  resolvePendingIssueBodies().catch(() => {})
 })
 
 // A recurring task only needs a target frame (its details are filled in the schedule
@@ -268,22 +325,24 @@ async function add() {
   saving.value = true
   try {
     const typeFields = buildTypeFields()
-    const block = await board.addTask(
-      containerId,
-      title.value.trim(),
-      description.value.trim() || undefined,
-      {
-        taskType: taskType.value as CreateTaskType,
-        ...(typeFields ? { taskTypeFields: typeFields } : {}),
-        ...(mergePresetId.value ? { mergePresetId: mergePresetId.value } : {}),
-        ...(modelPresetId.value ? { modelPresetId: modelPresetId.value } : {}),
-        ...(pipelineId.value ? { pipelineId: pipelineId.value } : {}),
-        ...(Object.keys(agentConfigValues.value).length
-          ? { agentConfig: agentConfigValues.value }
-          : {}),
-        ...(technical.value ? { technical: true } : {}),
-      },
-    )
+    // The saved description includes each linked issue's body (shown read-only above)
+    // followed by the user's own notes, so the original issue description is part of the
+    // task — not only reachable via the context link.
+    const notes = description.value.trim()
+    const fullDescription =
+      [...linkedIssueBodies.value.map((b) => b.body), notes].filter(Boolean).join('\n\n') ||
+      undefined
+    const block = await board.addTask(containerId, title.value.trim(), fullDescription, {
+      taskType: taskType.value as CreateTaskType,
+      ...(typeFields ? { taskTypeFields: typeFields } : {}),
+      ...(mergePresetId.value ? { mergePresetId: mergePresetId.value } : {}),
+      ...(modelPresetId.value ? { modelPresetId: modelPresetId.value } : {}),
+      ...(pipelineId.value ? { pipelineId: pipelineId.value } : {}),
+      ...(Object.keys(agentConfigValues.value).length
+        ? { agentConfig: agentConfigValues.value }
+        : {}),
+      ...(technical.value ? { technical: true } : {}),
+    })
     if (block) {
       const failed = await linkPending(block.id, pendingContext.value)
       if (failed > 0) {
@@ -357,12 +416,37 @@ async function add() {
             />
           </UFormField>
 
-          <UFormField label="Description">
+          <!-- Linked issue description(s), read-only: shown so the user sees the original
+               issue description is included in the task. It's folded into the saved
+               description (before their notes) on add. -->
+          <UFormField
+            v-for="issue in linkedIssueBodies"
+            :key="issue.key"
+            :label="`${issue.title} (from issue, included)`"
+          >
+            <UTextarea
+              :model-value="issue.body"
+              :rows="4"
+              autoresize
+              readonly
+              class="w-full"
+              :ui="{ base: 'cursor-default text-slate-300' }"
+            />
+          </UFormField>
+          <p v-if="resolvingIssueBodies" class="text-[11px] text-slate-500">
+            Loading the linked issue's description…
+          </p>
+
+          <UFormField :label="hasLinkedIssueBody ? 'Additional notes' : 'Description'">
             <UTextarea
               v-model="description"
               :rows="4"
               autoresize
-              placeholder="Describe the work — context, acceptance criteria, anything the agent should know…"
+              :placeholder="
+                hasLinkedIssueBody
+                  ? 'Add anything else the agent should know — appended to the issue description above…'
+                  : 'Describe the work — context, acceptance criteria, anything the agent should know…'
+              "
               class="w-full"
             />
           </UFormField>

@@ -45,6 +45,13 @@ function setResponsible(userId: string) {
   board.updateBlock(props.block.id, { responsibleProductUserId: userId })
 }
 
+// ---- auto-start dependents -------------------------------------------------
+// Preceding-task toggle: when this task merges, the engine auto-starts the tasks that
+// depend on it (skipping any on an individual-usage model, which can't unlock unattended).
+function setAutoStartDependents(value: boolean) {
+  board.updateBlock(props.block.id, { autoStartDependents: value })
+}
+
 // ---- merge policy preset ---------------------------------------------------
 // Which merge threshold preset governs this task's auto-merge decision + CI-fixer
 // budget. None selected → the workspace default preset. (The old confidence-based
@@ -420,6 +427,24 @@ const technicalLabel = computed(() => {
       </div>
       <div v-else class="text-[11px] text-slate-500">
         Unassigned — set a product owner to notify them when requirement review flags this task.
+      </div>
+    </div>
+
+    <!-- auto-start dependents: when this task merges, start the tasks that depend on it -->
+    <div>
+      <div class="flex items-center justify-between gap-2">
+        <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+          Auto-start dependents
+        </span>
+        <USwitch
+          size="sm"
+          :model-value="block.autoStartDependents ?? false"
+          @update:model-value="setAutoStartDependents"
+        />
+      </div>
+      <div class="mt-1 text-[11px] text-slate-500">
+        When this task merges, automatically start the tasks that depend on it (once their
+        other dependencies are also done).
       </div>
     </div>
   </div>

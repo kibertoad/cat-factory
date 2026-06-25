@@ -1,4 +1,8 @@
-import type { TaskSearchResult, TaskSourceDescriptor } from '@cat-factory/kernel'
+import type {
+  TaskDependencyLink,
+  TaskSearchResult,
+  TaskSourceDescriptor,
+} from '@cat-factory/kernel'
 
 // Jira-specific pure logic, kept out of the worker so it is unit-testable
 // without a live site: parsing an issue key out of user input and converting an
@@ -90,6 +94,84 @@ export function parseJiraRef(input: string): string | null {
   const issues = trimmed.match(new RegExp(`/issues/(${KEY.source})`))
   if (issues) return issues[1]!.toUpperCase()
   return null
+}
+
+/** Build the JQL that lists an epic's / parent's direct children, newest first. */
+export function buildJiraChildrenJql(key: string): string {
+  // `parent = KEY` matches both next-gen epic children and classic sub-tasks; the legacy
+  // `"Epic Link" = KEY` covers classic-project epic children that don't use `parent`.
+  const k = escapeJql(key.trim())
+  return `(parent = "${k}" OR "Epic Link" = "${k}") ORDER BY created ASC`
+}
+
+/** Whether a Jira issue type name denotes an epic (case-insensitive). */
+export function isJiraEpicType(issueTypeName: string | undefined): boolean {
+  return !!issueTypeName && /epic/i.test(issueTypeName)
+}
+
+/** One entry of a Jira issue's `issuelinks` field (the shape we read). */
+export interface JiraIssueLink {
+  type?: { name?: string; inward?: string; outward?: string }
+  inwardIssue?: { key?: string }
+  outwardIssue?: { key?: string }
+}
+
+/**
+ * Map a Jira issue's `issuelinks` onto normalized {@link TaskDependencyLink}s. Jira link
+ * types are phrased from the perspective of the OTHER issue: an `inwardIssue` reached via
+ * the type's `inward` phrase, an `outwardIssue` via the `outward` phrase. We classify by
+ * the phrase text:
+ *   - inward "is blocked by"      → this issue is `blockedBy` the inward issue
+ *   - inward "is depended on by"  → the inward issue depends on this → this `blocks` it
+ *   - outward "blocks"            → this issue `blocks` the outward issue
+ *   - outward "depends on"        → this issue is `blockedBy` the outward issue
+ * Anything we don't recognise as a blocking relation is recorded as `relates` (the
+ * importer skips those for sequencing). Lenient: malformed entries are dropped.
+ */
+export function mapJiraIssueLinks(links: unknown): TaskDependencyLink[] {
+  if (!Array.isArray(links)) return []
+  const out: TaskDependencyLink[] = []
+  const seen = new Set<string>()
+  for (const raw of links as JiraIssueLink[]) {
+    const inwardKey = raw?.inwardIssue?.key
+    const outwardKey = raw?.outwardIssue?.key
+    const inwardPhrase = (raw?.type?.inward ?? '').toLowerCase()
+    const outwardPhrase = (raw?.type?.outward ?? '').toLowerCase()
+    // The inward issue is reached via the inward phrase ("is blocked by" / "is depended on by").
+    // "is blocked by X" → this is blockedBy X; "is depended on by X" → X depends on this, so
+    // this BLOCKS X (NOT `dependsOn` — that direction is the exact reverse).
+    if (inwardKey) {
+      const type: TaskDependencyLink['type'] = /block/.test(inwardPhrase)
+        ? 'blockedBy'
+        : /depend/.test(inwardPhrase)
+          ? 'blocks'
+          : 'relates'
+      pushLink(out, seen, type, inwardKey)
+    }
+    // The outward issue is reached via the outward phrase ("blocks" / "depends on").
+    if (outwardKey) {
+      const type: TaskDependencyLink['type'] = /block/.test(outwardPhrase)
+        ? 'blocks'
+        : /depend/.test(outwardPhrase)
+          ? // "this depends on outward" → this is blocked by the outward issue.
+            'blockedBy'
+          : 'relates'
+      pushLink(out, seen, type, outwardKey)
+    }
+  }
+  return out
+}
+
+function pushLink(
+  out: TaskDependencyLink[],
+  seen: Set<string>,
+  type: TaskDependencyLink['type'],
+  externalId: string,
+): void {
+  const key = `${type}:${externalId}`
+  if (seen.has(key)) return
+  seen.add(key)
+  out.push({ type, externalId })
 }
 
 /**

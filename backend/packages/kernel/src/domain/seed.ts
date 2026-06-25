@@ -322,6 +322,17 @@ export function seedPipelines(): Pipeline[] {
       name: 'Integrate & ship',
       agentKinds: ['integrator', 'mocker', 'tester', 'documenter'],
     },
+    // A human-in-the-loop build: implement → review, then a `human-test` gate that spins up an
+    // ephemeral environment and PARKS for a person to validate the change in a live URL before
+    // the standard mergeability / CI / merge tail. From the gate the human can request a fix
+    // (the Tester's `fixer`), pull main into the branch (the `conflict-resolver` on a conflict),
+    // or destroy/recreate the env. Opt-in — it requires a human present and (ideally) an
+    // ephemeral-environment provider, so it is NOT folded into the always-on default pipelines.
+    {
+      id: 'pl_human_review',
+      name: 'Build & human-test',
+      agentKinds: ['coder', 'reviewer', 'human-test', 'conflicts', 'ci', 'merger'],
+    },
     // Recurring-pipeline presets. "Dependency updates" is a plain implement →
     // review → merge run; "Tech debt" first runs a read-only `analysis` agent and
     // a special `tracker` step (files a GitHub issue / Jira ticket from the

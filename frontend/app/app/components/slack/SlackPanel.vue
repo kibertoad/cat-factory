@@ -25,6 +25,7 @@ const ROUTABLE: { type: NotificationType; label: string }[] = [
   { type: 'requirement_review', label: 'Requirement review' },
   { type: 'clarity_review', label: 'Clarity review' },
   { type: 'release_regression', label: 'Release regression' },
+  { type: 'human_test_ready', label: 'Ready for human testing' },
 ]
 
 /** Notification-role options for a mapped member (drives who gets @-mentioned). */
@@ -41,6 +42,7 @@ const routes = reactive<Record<NotificationType, SlackRoute>>({
   release_regression: { enabled: false, channel: '' },
   // In-app only (not in ROUTABLE), but the map is exhaustive over the type.
   decision_required: { enabled: false, channel: '' },
+  human_test_ready: { enabled: false, channel: '' },
 })
 const mentionsEnabled = ref(false)
 const mapping = ref<SlackMemberMappingEntry[]>([])

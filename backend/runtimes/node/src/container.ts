@@ -76,6 +76,7 @@ import {
   GitHubAppRegistry,
   GitHubCiStatusProvider,
   GitHubMergeabilityProvider,
+  GitHubBranchUpdater,
   GitHubPullRequestMerger,
   InAppNotificationChannel,
   PatPreferringAppRegistry,
@@ -1055,6 +1056,11 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
           blockRepository: repos.blockRepository,
         }),
         mergeabilityProvider: new GitHubMergeabilityProvider({
+          githubClient,
+          resolveRepoTarget,
+          blockRepository: repos.blockRepository,
+        }),
+        branchUpdater: new GitHubBranchUpdater({
           githubClient,
           resolveRepoTarget,
           blockRepository: repos.blockRepository,

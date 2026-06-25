@@ -96,6 +96,16 @@ export const ANALYSIS_AGENT_KIND = 'analysis'
 export const TRACKER_AGENT_KIND = 'tracker'
 
 /**
+ * The agent kind of the special `human-test` gate: a non-LLM engine step that spins up an
+ * ephemeral environment, PARKS for a human to validate the change in the live URL, and on
+ * demand dispatches the Tester's `fixer` (from the human's findings) or the
+ * `conflict-resolver` (when a "pull latest main" hits a conflict). Confirming tears the env
+ * down and advances. Handled by the {@link HumanTestController}; passes through to a manual
+ * (no-env) mode when no ephemeral-environment provider is wired.
+ */
+export const HUMAN_TEST_AGENT_KIND = 'human-test'
+
+/**
  * The aggregate CI verdict for a PR head commit, derived from its check runs:
  *  - `none`    — no checks reported (nothing to gate; treated as green).
  *  - `pending` — at least one check is still queued/in-progress and none failed.

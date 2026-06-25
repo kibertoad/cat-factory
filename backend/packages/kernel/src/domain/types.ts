@@ -100,6 +100,7 @@ export type {
   TaskSourceDiagnosticStatus,
   TaskConnection,
   TaskComment,
+  TaskDependencyLink,
   SourceTask,
   TaskSearchResult,
   // Ephemeral environment provider shapes.
@@ -185,6 +186,11 @@ export type {
   GateStepState,
   GateFailingCheck,
   GateAttempt,
+  // Human-testing gate shapes (ephemeral env + human validation loop).
+  HumanTestStepState,
+  HumanTestEnvironment,
+  HumanTestRound,
+  RequestHumanTestFixInput,
   MergeAssessment,
   MergeThresholdPreset,
   RequirementConcernLevel,

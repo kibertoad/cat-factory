@@ -1,8 +1,10 @@
 import {
+  addEpicSchema,
   addFrameSchema,
   addModuleSchema,
   addServiceFromRepoSchema,
   addTaskSchema,
+  assignEpicSchema,
   moveBlockSchema,
   reparentSchema,
   toggleDependencySchema,
@@ -72,6 +74,26 @@ export function boardController(): Hono<AppEnv> {
       .get('container')
       .boardService.addModule(param(c, 'workspaceId'), param(c, 'blockId'), c.req.valid('json'))
     return c.json(block, 201)
+  })
+
+  // Add an epic grouping node (optionally placed under a service/module via parentId).
+  app.post('/epics', jsonBody(addEpicSchema), async (c) => {
+    const block = await c
+      .get('container')
+      .boardService.addEpic(param(c, 'workspaceId'), c.req.valid('json'))
+    return c.json(block, 201)
+  })
+
+  // Assign a task to an epic, or detach it (epicId: null).
+  app.post('/blocks/:blockId/epic', jsonBody(assignEpicSchema), async (c) => {
+    const block = await c
+      .get('container')
+      .boardService.assignToEpic(
+        param(c, 'workspaceId'),
+        param(c, 'blockId'),
+        c.req.valid('json').epicId,
+      )
+    return c.json(block)
   })
 
   app.patch('/blocks/:blockId', jsonBody(updateBlockSchema), async (c) => {

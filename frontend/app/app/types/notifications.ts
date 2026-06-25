@@ -14,6 +14,7 @@ export type NotificationType =
   | 'clarity_review'
   | 'release_regression'
   | 'decision_required'
+  | 'human_test_ready'
 export type NotificationStatus = 'open' | 'acted' | 'dismissed'
 
 /** The on-call agent's recommendation on a `release_regression`. */

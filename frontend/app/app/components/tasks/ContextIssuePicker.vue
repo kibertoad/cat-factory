@@ -6,7 +6,7 @@
 // It only *stages* a choice: the caller collects PendingContext items and links
 // them once the block exists (see useContextLinking). A search hit / pasted ref
 // carries `needsImport: true` so it's fetched + persisted before linking.
-import type { TaskSearchResult, TaskSourceKind } from '~/types/domain'
+import type { SourceTask, TaskSearchResult, TaskSourceKind } from '~/types/domain'
 
 const props = defineProps<{
   /** contextKeys already staged by the caller, so they're filtered out / not re-offered. */
@@ -120,15 +120,18 @@ const empty = computed(
     refRow.value === null,
 )
 
-function pickImported(externalId: string, title: string, status: string) {
+function pickImported(task: SourceTask) {
   if (!source.value) return
   emit('pick', {
     kind: 'task',
     source: source.value,
-    externalId,
-    title: `${externalId} · ${title}`,
-    subtitle: status || undefined,
+    externalId: task.externalId,
+    title: `${task.externalId} · ${task.title}`,
+    subtitle: task.status || undefined,
     icon: icon.value,
+    // Already imported, so its body is in hand — carry it so the add-task form can
+    // show it read-only and fold it into the new task's description.
+    description: task.description || undefined,
     needsImport: false,
   })
 }
@@ -200,7 +203,7 @@ onMounted(() => {
         :key="`imp:${t.externalId}`"
         type="button"
         class="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-xs text-slate-300 hover:bg-slate-800/70"
-        @click="pickImported(t.externalId, t.title, t.status)"
+        @click="pickImported(t)"
       >
         <UIcon :name="icon" class="h-3.5 w-3.5 shrink-0 text-indigo-400" />
         <span class="truncate">{{ t.externalId }} · {{ t.title }}</span>

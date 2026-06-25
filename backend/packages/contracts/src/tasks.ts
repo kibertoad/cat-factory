@@ -127,6 +127,20 @@ export const taskCommentSchema = v.object({
 })
 export type TaskComment = v.InferOutput<typeof taskCommentSchema>
 
+/**
+ * A dependency relationship an issue declares to another issue, normalized across
+ * sources (Jira issue links / GitHub body references). Direction matters: `blockedBy`
+ * / `dependsOn` mean THIS issue waits on the linked one (→ a `dependsOn` board edge);
+ * `blocks` is the inverse (the linked issue waits on this one); `relates` is a
+ * non-blocking association the importer ignores for sequencing.
+ */
+export const taskDependencyLinkSchema = v.object({
+  type: v.picklist(['blockedBy', 'dependsOn', 'blocks', 'relates']),
+  /** The canonical external id of the linked issue (same id space as `externalId`). */
+  externalId: v.string(),
+})
+export type TaskDependencyLink = v.InferOutput<typeof taskDependencyLinkSchema>
+
 /** An issue imported from a source, projected locally as a structured record. */
 export const sourceTaskSchema = v.object({
   source: taskSourceKindSchema,
@@ -242,3 +256,18 @@ export const createTaskFromIssueSchema = v.object({
   containerId: v.pipe(v.string(), v.trim(), v.minLength(1)),
 })
 export type CreateTaskFromIssueInput = v.InferOutput<typeof createTaskFromIssueSchema>
+
+/**
+ * Spawn an epic and its children onto the board: create an `epic`-level grouping node
+ * from the referenced issue, materialise each child issue as a board task inside the
+ * chosen container (all joined to the epic via `epicId`), and seed `dependsOn` edges from
+ * the issues' "blocked by"/"depends on" links. `ref` is the epic issue (URL or key);
+ * `containerId` is the service frame / module the child tasks land in.
+ */
+export const spawnEpicSchema = v.object({
+  ref: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(500)),
+  containerId: v.pipe(v.string(), v.trim(), v.minLength(1)),
+  /** Where to place the epic node on the board; defaults applied server-side when absent. */
+  position: v.optional(v.object({ x: v.number(), y: v.number() })),
+})
+export type SpawnEpicInput = v.InferOutput<typeof spawnEpicSchema>

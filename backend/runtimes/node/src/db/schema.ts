@@ -158,6 +158,12 @@ export const blocks = pgTable(
     execution_id: text('execution_id'),
     level: text('level').notNull().default('frame'),
     parent_id: text('parent_id'),
+    // Task-level: membership link to an `epic`-level block, independent of parent_id
+    // (the structural container). Deleting an epic clears this, never the member tasks.
+    epic_id: text('epic_id'),
+    // Task-level: preceding-task auto-start toggle (0/1); null ⇒ off. When set, merging
+    // this task auto-starts every dependent whose other dependencies are also done.
+    auto_start_dependents: integer('auto_start_dependents'),
     confidence: doublePrecision('confidence'),
     module_name: text('module_name'),
     fragment_ids: text('fragment_ids'),
@@ -205,6 +211,7 @@ export const blocks = pgTable(
   (t) => [
     primaryKey({ columns: [t.workspace_id, t.id] }),
     index('idx_blocks_parent').on(t.workspace_id, t.parent_id),
+    index('idx_blocks_epic').on(t.workspace_id, t.epic_id),
     index('idx_blocks_service').on(t.service_id),
     // findById looks a block up by id alone (no workspace_id), so it can't use the
     // (workspace_id, id) PK — index id directly to avoid scanning the largest table.

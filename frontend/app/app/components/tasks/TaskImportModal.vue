@@ -118,10 +118,13 @@ watch(open, (isOpen) => {
 
 // Selecting an issue hands off to the add-task form, prefilled with the issue title
 // and the issue staged as linked context (so agents see its description + comments).
-// The user still confirms pipeline / preset there before the task is created — we do
-// NOT dump the issue body into the description; the link is enough.
+// The user still confirms pipeline / preset there before the task is created. The
+// issue body is carried when already in hand (imported issues); for a search hit it's
+// resolved in the add-task form (by importing). Either way the form shows it read-only
+// and folds it into the new task's description, so the original description is visible
+// and included — the user adds their own notes on top.
 function selectIssue(
-  issue: { externalId: string; title: string; status?: string },
+  issue: { externalId: string; title: string; status?: string; description?: string },
   needsImport: boolean,
 ) {
   if (!source.value || !containerId.value) return
@@ -135,6 +138,7 @@ function selectIssue(
         title: `${issue.externalId} · ${issue.title}`,
         subtitle: issue.status || undefined,
         icon: descriptor.value?.icon,
+        description: issue.description || undefined,
         needsImport,
       },
     ],
@@ -154,6 +158,35 @@ async function doImport() {
   } catch (e) {
     toast.add({
       title: 'Import failed',
+      description: e instanceof Error ? e.message : String(e),
+      icon: 'i-lucide-triangle-alert',
+      color: 'error',
+    })
+  } finally {
+    importing.value = false
+  }
+}
+
+// Spawn the referenced issue as an EPIC: an epic node + a task per child issue (into the
+// chosen container), with dependency edges seeded from the issues' blocked-by/depends-on
+// links. Needs a container for the child tasks.
+async function doSpawnEpic() {
+  const value = ref_.value.trim()
+  if (!value || !source.value || !containerId.value) return
+  importing.value = true
+  try {
+    const { epic, tasks: spawned } = await tasks.spawnEpic(source.value, value, containerId.value)
+    ref_.value = ''
+    ui.closeTaskImport()
+    ui.select(epic.id)
+    toast.add({
+      title: `Spawned epic "${epic.title}"`,
+      description: `${spawned.length} child task(s) created`,
+      icon: 'i-lucide-layers',
+    })
+  } catch (e) {
+    toast.add({
+      title: 'Could not spawn epic',
       description: e instanceof Error ? e.message : String(e),
       icon: 'i-lucide-triangle-alert',
       color: 'error',
@@ -209,7 +242,37 @@ async function doImport() {
           >
             Import
           </UButton>
+          <UButton
+            color="primary"
+            variant="soft"
+            icon="i-lucide-layers"
+            :loading="importing"
+            :disabled="!ref_.trim() || !containerId"
+            :title="
+              containerId
+                ? 'Spawn this epic + its children as a linked task group'
+                : 'Pick a container for the child tasks first'
+            "
+            @click="doSpawnEpic"
+          >
+            As epic
+          </UButton>
         </div>
+
+        <!-- Container for epic children when spawning from a pasted ref (the shared
+             "Create tasks in" selector below covers the search-results case). -->
+        <UFormField
+          v-if="containerItems.length && !freshHits.length && !sourceTasks.length"
+          label="Epic children container"
+          class="w-72"
+        >
+          <USelect
+            v-model="containerId"
+            :items="containerItems"
+            placeholder="Pick a frame or module"
+            class="w-full"
+          />
+        </UFormField>
 
         <!-- Browse: search the tracker by title so an issue can be turned into a
              task without knowing its key. -->

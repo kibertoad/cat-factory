@@ -56,6 +56,10 @@ export interface BlockRow {
   execution_id: string | null
   level: string
   parent_id: string | null
+  /** Task-level: membership link to an `epic`-level block (independent of parent_id). */
+  epic_id?: string | null
+  /** Task-level: preceding-task auto-start toggle (0/1); null ⇒ off. */
+  auto_start_dependents?: number | null
   confidence: number | null
   module_name: string | null
   fragment_ids: string | null
@@ -108,6 +112,9 @@ export function rowToBlock(row: BlockRow): Block {
     parentId: row.parent_id,
   }
   if (row.width !== null && row.height !== null) block.size = { w: row.width, h: row.height }
+  if (row.epic_id != null) block.epicId = row.epic_id
+  if (row.auto_start_dependents != null)
+    block.autoStartDependents = row.auto_start_dependents === 1
   if (row.confidence !== null) block.confidence = row.confidence
   if (row.module_name !== null) block.moduleName = row.module_name
   if (row.fragment_ids !== null) block.fragmentIds = JSON.parse(row.fragment_ids) as string[]
@@ -159,6 +166,8 @@ export function blockInsertValues(block: Block): Record<string, unknown> {
     execution_id: block.executionId,
     level: block.level,
     parent_id: block.parentId,
+    epic_id: block.epicId ?? null,
+    auto_start_dependents: block.autoStartDependents ? 1 : null,
     confidence: block.confidence ?? null,
     module_name: block.moduleName ?? null,
     fragment_ids: block.fragmentIds ? JSON.stringify(block.fragmentIds) : null,
@@ -210,6 +219,11 @@ export function blockPatchToColumns(patch: BlockPatch): Record<string, unknown> 
   if (patch.executionId !== undefined) set.execution_id = patch.executionId
   if (patch.level !== undefined) set.level = patch.level
   if (patch.parentId !== undefined) set.parent_id = patch.parentId
+  // Epic membership; an empty string / null detaches the task from its epic.
+  if (patch.epicId !== undefined) set.epic_id = patch.epicId ? patch.epicId : null
+  if (patch.autoStartDependents !== undefined) {
+    set.auto_start_dependents = patch.autoStartDependents ? 1 : null
+  }
   if (patch.confidence !== undefined) set.confidence = patch.confidence
   if (patch.moduleName !== undefined) set.module_name = patch.moduleName
   if (patch.fragmentIds !== undefined) {

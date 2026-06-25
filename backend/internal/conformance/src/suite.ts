@@ -206,6 +206,80 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
       })
     })
 
+    describe('epics + dependency graph', () => {
+      it('round-trips an epic node + a task’s epic membership identically on every store', async () => {
+        const { call, createWorkspace } = harness.makeApp()
+        const { workspace } = await createWorkspace()
+        const wsId = workspace.id
+
+        const epic = await call<Block>('POST', `/workspaces/${wsId}/epics`, {
+          title: 'Checkout revamp',
+          position: { x: 10, y: 20 },
+        })
+        expect(epic.status).toBe(201)
+        expect(epic.body.level).toBe('epic')
+
+        const task = await call<Block>('POST', `/workspaces/${wsId}/blocks/blk_auth/tasks`, {
+          title: 'Part of the epic',
+        })
+        const assigned = await call<Block>(
+          'POST',
+          `/workspaces/${wsId}/blocks/${task.body.id}/epic`,
+          { epicId: epic.body.id },
+        )
+        expect(assigned.status).toBe(200)
+        expect(assigned.body.epicId).toBe(epic.body.id)
+
+        // Both the epic level and the membership link survive the store round-trip.
+        const snap = await call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+        expect(snap.body.blocks.find((b) => b.id === epic.body.id)?.level).toBe('epic')
+        expect(snap.body.blocks.find((b) => b.id === task.body.id)?.epicId).toBe(epic.body.id)
+      })
+
+      it('rejects a dependency edge that would create a cycle', async () => {
+        const { call, createWorkspace } = harness.makeApp()
+        const { workspace } = await createWorkspace()
+        const wsId = workspace.id
+        const a = await call<Block>('POST', `/workspaces/${wsId}/blocks/blk_auth/tasks`, {
+          title: 'A',
+        })
+        const b = await call<Block>('POST', `/workspaces/${wsId}/blocks/blk_auth/tasks`, {
+          title: 'B',
+        })
+        // A dependsOn B — fine.
+        const first = await call('POST', `/workspaces/${wsId}/blocks/${a.body.id}/dependencies`, {
+          sourceId: b.body.id,
+        })
+        expect(first.status).toBe(200)
+        // B dependsOn A — would close a cycle, rejected (ValidationError → 422).
+        const cyclic = await call('POST', `/workspaces/${wsId}/blocks/${b.body.id}/dependencies`, {
+          sourceId: a.body.id,
+        })
+        expect(cyclic.status).toBe(422)
+      })
+
+      it('refuses to start a task while a dependency is unfinished', async () => {
+        const { call, createWorkspace } = harness.makeApp()
+        const { workspace } = await createWorkspace()
+        const wsId = workspace.id
+        const pipeline = await call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Code only',
+          agentKinds: ['coder'],
+        })
+        const blocker = await call<Block>('POST', `/workspaces/${wsId}/blocks/blk_auth/tasks`, {
+          title: 'Blocker',
+        })
+        // task_login dependsOn the (planned) blocker.
+        await call('POST', `/workspaces/${wsId}/blocks/task_login/dependencies`, {
+          sourceId: blocker.body.id,
+        })
+        const blocked = await call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+          pipelineId: pipeline.body.id,
+        })
+        expect(blocked.status).toBe(409)
+      })
+    })
+
     describe('model presets', () => {
       it('seeds the built-ins, CRUDs presets and surfaces them on the snapshot', async () => {
         const { call, createWorkspace } = harness.makeApp()
@@ -699,6 +773,78 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         expect(reloaded.consensus?.[0]?.strategy).toBe('debate')
         expect(reloaded.consensus?.[0]?.participants).toHaveLength(2)
         expect(reloaded.consensus?.[1] ?? null).toBeNull()
+      })
+    })
+
+    describe('human-testing gate', () => {
+      // The gate is a runtime-neutral engine step: it parks for a human, dispatches the
+      // Tester's `fixer` from findings, and advances on confirm — identically on every
+      // facade. The ephemeral-environment provider is NOT wired in the conformance harness,
+      // so the gate runs in its degraded (manual) mode — which still exercises all the
+      // engine wiring (routing, park, the pendingAction re-entry + signal, helper dispatch
+      // via the shared async executor, the recordStepResult helper-completion hook, advance).
+      it('parks for a human, dispatches the fixer on request-fix, and advances on confirm', async () => {
+        const app = harness.makeApp({
+          asyncKinds: ['coder', 'fixer'],
+          // The coder opens a PR so the gate's fixer has a branch to push to.
+          pullRequest: {
+            url: 'https://github.com/o/r/pull/1',
+            number: 1,
+            branch: 'feat/login',
+          },
+        })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Build + human test',
+          agentKinds: ['coder', 'human-test'],
+        })
+        const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+          pipelineId: pipeline.body.id,
+        })
+        expect(start.status).toBe(201)
+
+        // Drive: the coder runs (async), then the human-test gate parks awaiting the human.
+        // With no env provider wired the gate is in degraded (manual) mode — no live env.
+        let execs = await app.drive(wsId)
+        let exec = execs.find((e) => e.blockId === 'task_login')!
+        expect(exec.status).toBe('blocked')
+        let step = exec.steps.find((s) => s.agentKind === 'human-test')!
+        expect(step.state).toBe('waiting_decision')
+        expect(step.humanTest?.phase).toBe('awaiting_human')
+        expect(step.humanTest?.environment ?? null).toBeNull()
+        expect(step.humanTest?.degradedReason).toBeTruthy()
+
+        // Request a fix from findings: the gate dispatches the Tester's `fixer` against the
+        // PR branch; on its completion the gate re-parks (degraded again, no env to rebuild).
+        const fix = await app.call(
+          'POST',
+          `/workspaces/${wsId}/blocks/task_login/human-test/request-fix`,
+          { findings: 'The login button does nothing.' },
+        )
+        expect(fix.status).toBe(200)
+        execs = await app.drive(wsId)
+        exec = execs.find((e) => e.blockId === 'task_login')!
+        step = exec.steps.find((s) => s.agentKind === 'human-test')!
+        expect(step.state).toBe('waiting_decision')
+        expect(step.humanTest?.attempts).toBe(1)
+        expect(step.humanTest?.rounds?.[0]?.kind).toBe('fix')
+        expect(step.humanTest?.rounds?.[0]?.helperKind).toBe('fixer')
+        expect(step.humanTest?.rounds?.[0]?.outcome).toBe('completed')
+
+        // Confirm: the gate (the last step) finishes and the run completes.
+        const confirm = await app.call(
+          'POST',
+          `/workspaces/${wsId}/blocks/task_login/human-test/confirm`,
+        )
+        expect(confirm.status).toBe(200)
+        execs = await app.drive(wsId)
+        exec = execs.find((e) => e.blockId === 'task_login')!
+        expect(exec.status).toBe('done')
+        const done = exec.steps.find((s) => s.agentKind === 'human-test')!
+        expect(done.state).toBe('done')
+        expect(done.humanTest?.phase).toBe('passed')
       })
     })
 

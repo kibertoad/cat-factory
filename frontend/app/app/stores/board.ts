@@ -15,8 +15,8 @@ import { useBlockQueries } from '~/composables/useBlockQueries'
 interface RemovalSnapshot {
   /** The removed block + all its descendants, in their original order. */
   removed: Block[]
-  /** Survivors whose `dependsOn` lost an edge to a removed block (originals to restore). */
-  edges: { id: string; dependsOn: string[] }[]
+  /** Survivors whose `dependsOn`/`epicId` lost an edge to a removed block (originals to restore). */
+  edges: { id: string; dependsOn: string[]; epicId: string | null }[]
 }
 
 export const useBoardStore = defineStore('board', () => {
@@ -99,6 +99,44 @@ export const useBoardStore = defineStore('board', () => {
     return block
   }
 
+  /**
+   * Add an epic grouping node. Epics are non-structural: they group tasks via the tasks'
+   * `epicId`, so this just drops a new `epic`-level block on the board.
+   */
+  async function addEpic(
+    title: string,
+    position: { x: number; y: number },
+    options?: { description?: string; parentId?: string },
+  ): Promise<Block> {
+    const block = await api.addEpic(useWorkspaceStore().requireId(), {
+      title,
+      position,
+      ...(options?.description ? { description: options.description } : {}),
+      ...(options?.parentId ? { parentId: options.parentId } : {}),
+    })
+    upsert(block)
+    return block
+  }
+
+  /** Assign a task to an epic, or detach it (epicId: null). */
+  async function assignToEpic(taskId: string, epicId: string | null) {
+    const t = getBlock(taskId)
+    if (!t) return
+    const prev = t.epicId ?? null
+    t.epicId = epicId // optimistic
+    try {
+      upsert(await api.assignToEpic(useWorkspaceStore().requireId(), taskId, { epicId }))
+    } catch (e) {
+      t.epicId = prev
+      toast.add({
+        title: 'Could not change epic',
+        description: e instanceof Error ? e.message : String(e),
+        icon: 'i-lucide-triangle-alert',
+        color: 'error',
+      })
+    }
+  }
+
   /** Add a module (sub-frame) inside a service. */
   async function addModule(
     serviceId: string,
@@ -173,15 +211,22 @@ export const useBoardStore = defineStore('board', () => {
       }
     }
     const removed = blocks.value.filter((b) => doomed.has(b.id))
-    // Survivors that pointed at a doomed block lose that edge — snapshot the originals.
+    // Survivors that pointed at a doomed block (dependency edge or epic membership) lose
+    // that link — snapshot the originals so a failed delete restores them faithfully.
     const edges = blocks.value
-      .filter((b) => !doomed.has(b.id) && b.dependsOn.some((d) => doomed.has(d)))
-      .map((b) => ({ id: b.id, dependsOn: [...b.dependsOn] }))
+      .filter(
+        (b) =>
+          !doomed.has(b.id) &&
+          (b.dependsOn.some((d) => doomed.has(d)) || (b.epicId != null && doomed.has(b.epicId))),
+      )
+      .map((b) => ({ id: b.id, dependsOn: [...b.dependsOn], epicId: b.epicId ?? null }))
     blocks.value = blocks.value.filter((b) => !doomed.has(b.id))
     for (const b of blocks.value) {
       if (b.dependsOn.some((d) => doomed.has(d))) {
         b.dependsOn = b.dependsOn.filter((d) => !doomed.has(d))
       }
+      // A member of a deleted epic loses its membership (the task itself survives).
+      if (b.epicId != null && doomed.has(b.epicId)) b.epicId = null
     }
     return { removed, edges }
   }
@@ -191,7 +236,10 @@ export const useBoardStore = defineStore('board', () => {
     for (const b of snap.removed) if (!getBlock(b.id)) blocks.value.push(b)
     for (const e of snap.edges) {
       const b = getBlock(e.id)
-      if (b) b.dependsOn = e.dependsOn
+      if (b) {
+        b.dependsOn = e.dependsOn
+        b.epicId = e.epicId
+      }
     }
   }
 
@@ -254,10 +302,23 @@ export const useBoardStore = defineStore('board', () => {
     upsert(await api.updateBlock(useWorkspaceStore().requireId(), id, patch))
   }
 
-  /** Toggle a dependency edge target -> source (target dependsOn source). */
+  /**
+   * Toggle a dependency edge target -> source (target dependsOn source). The backend
+   * rejects an edge that would close a cycle (422) — surface that as a toast rather than
+   * letting it throw unhandled out of a board gesture.
+   */
   async function toggleDependency(targetId: string, sourceId: string) {
     if (targetId === sourceId || !getBlock(targetId)) return
-    upsert(await api.toggleDependency(useWorkspaceStore().requireId(), targetId, { sourceId }))
+    try {
+      upsert(await api.toggleDependency(useWorkspaceStore().requireId(), targetId, { sourceId }))
+    } catch (e) {
+      toast.add({
+        title: 'Could not link tasks',
+        description: e instanceof Error ? e.message : String(e),
+        icon: 'i-lucide-triangle-alert',
+        color: 'error',
+      })
+    }
   }
 
   /** Remove a dependency edge target -> source if it exists. */
@@ -277,6 +338,8 @@ export const useBoardStore = defineStore('board', () => {
     addServiceFromRepo,
     addTask,
     addModule,
+    addEpic,
+    assignToEpic,
     reparentBlock,
     detach,
     reattach,

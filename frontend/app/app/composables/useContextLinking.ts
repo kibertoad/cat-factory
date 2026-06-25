@@ -19,6 +19,13 @@ export interface PendingContext {
   subtitle?: string
   /** Lucide icon for the row. */
   icon?: string
+  /**
+   * The item's body/description (Markdown), when known. Populated for an
+   * already-imported issue at pick time and resolved (by importing) for a search
+   * hit when the add-task form opens, so the form can surface it read-only and
+   * fold it into the new task's description. Absent until resolved.
+   */
+  description?: string
   /** True when the item must be imported before it can be linked. */
   needsImport: boolean
 }

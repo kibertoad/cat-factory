@@ -333,6 +333,12 @@ export interface PipelineStep {
    * on non-gate steps. Mirrors `gateStepStateSchema`.
    */
   gate?: GateStepState | null
+  /**
+   * Live state of a `human-test` gate (ephemeral env + human validation loop): the phase,
+   * the live environment, the fix/pull-main round history, and any degraded-mode reason.
+   * Absent on non-human-test steps. Mirrors `humanTestStepStateSchema`.
+   */
+  humanTest?: HumanTestStepState | null
 }
 
 /** One failing CI check the gate's precheck saw (mirrors `gateFailingCheckSchema`). */
@@ -385,6 +391,53 @@ export interface TesterStepState {
   maxAttempts: number
   /** the most recent Tester report (what was tested, outcomes, concerns, greenlight) */
   lastReport?: TestReport | null
+}
+
+/** The lifecycle status of an ephemeral environment (mirrors `environmentStatusSchema`). */
+export type HumanTestEnvironmentStatus =
+  | 'provisioning'
+  | 'ready'
+  | 'failed'
+  | 'expired'
+  | 'tearing_down'
+  | 'torn_down'
+
+/** The compact env view a `human-test` gate carries (mirrors `humanTestEnvironmentSchema`). */
+export interface HumanTestEnvironment {
+  id: string
+  url: string | null
+  status: HumanTestEnvironmentStatus
+  expiresAt?: number | null
+}
+
+/** One fix / pull-main round on a `human-test` gate (mirrors `humanTestRoundSchema`). */
+export interface HumanTestRound {
+  kind: 'fix' | 'pull-main'
+  /** The human's findings (fix), or a one-line note (pull-main). */
+  findings: string
+  /** The helper container kind this round dispatched (`fixer` / `conflict-resolver`). */
+  helperKind: string
+  jobId?: string | null
+  /** How the helper ended once its job settled; absent while in flight. */
+  outcome?: 'completed' | 'failed' | null
+  /** epoch ms the round opened */
+  at: number
+}
+
+/** Live state of a `human-test` gate (mirrors `humanTestStepStateSchema`). */
+export interface HumanTestStepState {
+  phase: 'provisioning' | 'awaiting_human' | 'fixing' | 'resolving_conflicts' | 'passed'
+  /** the live ephemeral environment (null in degraded manual mode / after destroy) */
+  environment?: HumanTestEnvironment | null
+  /** why no env was auto-provisioned (degraded manual mode), for the window to explain */
+  degradedReason?: string | null
+  /** how many helper (fixer / conflict-resolver) attempts have been dispatched so far */
+  attempts: number
+  /** ceiling on helper attempts (from the task's merge preset) */
+  maxAttempts: number
+  headSha?: string | null
+  /** append-only history of fix / pull-main rounds */
+  rounds?: HumanTestRound[]
 }
 
 /** A pipeline instance running against one block. */

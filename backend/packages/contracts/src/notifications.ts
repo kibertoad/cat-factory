@@ -53,6 +53,7 @@ export const notificationTypeSchema = v.picklist([
   'clarity_review',
   'release_regression',
   'decision_required',
+  'human_test_ready',
 ])
 export type NotificationType = v.InferOutput<typeof notificationTypeSchema>
 

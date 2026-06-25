@@ -92,6 +92,7 @@ export type {
   GitHubIssueComment,
   GitHubIssueDetail,
   GitHubIssueSearchHit,
+  GitHubSubIssue,
   GitHubRepoRef,
   InstallationMeta,
   InstallationSummary,
@@ -301,6 +302,7 @@ export type {
   MergeabilityReport,
   PullRequestMergeabilityProvider,
 } from './pr-mergeability.js'
+export type { BranchUpdateOutcome, BranchUpdater } from './branch-updater.js'
 export type { NotificationRepository } from './notification-repositories.js'
 export type {
   SlackConnectionRecord,

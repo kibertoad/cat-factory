@@ -76,6 +76,7 @@ import {
   TRACKER_AGENT_KIND,
   ANALYSIS_AGENT_KIND,
   TESTER_AGENT_KIND,
+  HUMAN_TEST_AGENT_KIND,
   BLUEPRINTS_AGENT_KIND,
   SPEC_WRITER_AGENT_KIND,
 } from './ci.logic.js'
@@ -91,6 +92,7 @@ import { inferTechnicalLabel } from './technical.logic.js'
 import { MergeResolver } from './MergeResolver.js'
 import { ReviewGateController, type ReviewKind } from './ReviewGateController.js'
 import { TesterController } from './TesterController.js'
+import { HumanTestController } from './HumanTestController.js'
 import type { GateDefinition, GateProbe } from './gates.js'
 import { recordGateAttempt } from './gates.js'
 import type { StepCompletionResolver } from './stepResolvers.js'
@@ -131,9 +133,18 @@ import type { DocumentRepository } from '@cat-factory/kernel'
 import type { TaskRepository } from '@cat-factory/kernel'
 import type { RequirementReviewRepository } from '@cat-factory/kernel'
 import type { ClarityReviewRepository } from '@cat-factory/kernel'
-import type { EnvironmentProvisioningService } from '@cat-factory/integrations'
+import type {
+  EnvironmentProvisioningService,
+  EnvironmentTeardownService,
+} from '@cat-factory/integrations'
 import { isDeployStep } from '@cat-factory/integrations'
-import { descendantIds, serviceOf } from '../board/board.logic.js'
+import type { BranchUpdater } from '@cat-factory/kernel'
+import {
+  dependenciesMet,
+  descendantIds,
+  serviceOf,
+  unmetDependencies,
+} from '../board/board.logic.js'
 import type { BoardService } from '../board/BoardService.js'
 import type { SpendService } from '@cat-factory/spend'
 import { requireWorkspace } from '@cat-factory/kernel'
@@ -323,6 +334,19 @@ export interface ExecutionServiceDependencies {
    */
   environmentProvisioning?: EnvironmentProvisioningService
   /**
+   * Optional: tears down ephemeral environments. Wired alongside
+   * {@link environmentProvisioning}; the `human-test` gate uses it to destroy an env on
+   * confirm / recreate / on-demand. Absent → the gate's destroy/recreate is a no-op.
+   */
+  environmentTeardown?: EnvironmentTeardownService
+  /**
+   * Optional: merges the repo default branch into a block's PR branch server-side. Wired
+   * when GitHub is configured; the `human-test` gate's "pull latest main" action uses it
+   * (a clean merge rebuilds the env; a conflict escalates to the conflict-resolver). Absent
+   * → pulling main is unavailable on the gate.
+   */
+  branchUpdater?: BranchUpdater
+  /**
    * Optional: when the board-scan module is configured, a `blueprints` step's
    * decomposition tree is reconciled onto the board through this (BoardScanService).
    * Absent → a blueprint step still runs and commits its in-repo files, but the
@@ -458,6 +482,8 @@ export class ExecutionService {
   private readonly requirementReviewService?: RequirementReviewService
   private readonly clarityReviewService?: ClarityReviewService
   private readonly environmentProvisioning?: EnvironmentProvisioningService
+  private readonly environmentTeardown?: EnvironmentTeardownService
+  private readonly branchUpdater?: BranchUpdater
   /** Assembles the per-step agent context (requirements, docs, env, service frame, fragments). */
   private readonly contextBuilder: AgentContextBuilder
   /** Resolves a `merger` step's assessment into an auto-merge or a `merge_review` notification. */
@@ -466,6 +492,8 @@ export class ExecutionService {
   private readonly companionController: CompanionController
   /** Drives the Tester gate's fix loop: report → greenlight / dispatch fixer / fail. */
   private readonly testerController: TesterController
+  /** Drives the human-testing gate: provision env → park → confirm / fix / pull-main / recreate. */
+  private readonly humanTestController: HumanTestController
   /** Drives both iterative review gates (requirements + clarity); kind-parameterised. */
   private readonly reviewGate: ReviewGateController
   /** The requirements subject for {@link reviewGate}. */
@@ -530,6 +558,8 @@ export class ExecutionService {
     clarityReviewRepository,
     clarityReviewService,
     environmentProvisioning,
+    environmentTeardown,
+    branchUpdater,
     blueprintReconciler,
     notificationService,
     workspaceSettingsService,
@@ -565,6 +595,8 @@ export class ExecutionService {
     this.requirementReviewService = requirementReviewService
     this.clarityReviewService = clarityReviewService
     this.environmentProvisioning = environmentProvisioning
+    this.environmentTeardown = environmentTeardown
+    this.branchUpdater = branchUpdater
     this.contextBuilder = new AgentContextBuilder({
       workspaceRepository,
       blockRepository,
@@ -610,6 +642,48 @@ export class ExecutionService {
       stopRunContainer: (ws, i) => this.stopRunContainer(ws, i),
       persistInstance: (ws, i) => this.executionRepository.upsert(ws, i),
       emitInstance: (ws, i) => this.emitInstance(ws, i),
+    })
+    this.humanTestController = new HumanTestController({
+      blockRepository,
+      executionRepository,
+      workRunner,
+      agentExecutor,
+      contextBuilder: this.contextBuilder,
+      notificationService,
+      // Wrap the env services with the deployer's input/context derivation so the gate's
+      // provisioning matches a `deployer` step's. Left undefined when no provider is wired
+      // (the gate degrades to manual mode).
+      ...(environmentProvisioning
+        ? {
+            provisionEnvironment: (ws, block, executionId) =>
+              environmentProvisioning.provision({
+                workspaceId: ws,
+                blockId: block.id,
+                executionId,
+                inputs: this.deployInputs(block),
+                context: this.deployContext(block),
+              }),
+            refreshEnvironment: (ws, id) => environmentProvisioning.refreshStatus(ws, id),
+          }
+        : {}),
+      ...(environmentTeardown
+        ? {
+            teardownEnvironment: async (ws, id) => {
+              await environmentTeardown.teardown(ws, id)
+            },
+          }
+        : {}),
+      ...(branchUpdater ? { branchUpdater } : {}),
+      resolveMergePreset: (ws, block) => this.resolveMergePreset(ws, block),
+      parkStepOnDecision: (ws, i, s, p) => this.parkStepOnDecision(ws, i, s, p),
+      finishStep: (s) => this.finishStep(s),
+      startStep: (s) => this.startStep(s),
+      updateBlockProgress: (ws, i, st) => this.updateBlockProgress(ws, i, st),
+      finalizeBlock: (ws, i, c) => this.finalizeBlock(ws, i, c),
+      stopRunContainer: (ws, i) => this.stopRunContainer(ws, i),
+      persistInstance: (ws, i) => this.executionRepository.upsert(ws, i),
+      emitInstance: (ws, i) => this.emitInstance(ws, i),
+      clockNow: () => this.clock.now(),
     })
     this.reviewGate = new ReviewGateController({
       blockRepository,
@@ -843,6 +917,12 @@ export class ExecutionService {
     // actionable error before any side effects, so the human knows why the start was refused.
     await this.assertWithinTaskLimit(workspaceId, block)
 
+    // Hard dependency gate: a task cannot start while any block it `dependsOn` is unfinished
+    // (not yet `done`/merged). Enforced server-side so it holds for manual starts, recurring
+    // fires, auto-start propagation and direct API calls alike — the frontend's runnable
+    // check is only a hint. Before any side effects so nothing is torn down on a refusal.
+    await this.assertDependenciesMet(workspaceId, block)
+
     // Mint the activation next: if the credential can't be unlocked, fail before
     // tearing down the block's prior run or creating a new one.
     const executionId = this.idGenerator.next('exec')
@@ -936,6 +1016,47 @@ export class ExecutionService {
    * shown as a toast) when the cap is reached. The starting block is excluded from the
    * count (its prior run is about to be replaced).
    */
+  /**
+   * Refuse a task start while any of its dependencies is unfinished. A task may only run
+   * once every block it `dependsOn` has reached `done` (its PR merged). No-ops for
+   * non-task blocks and for tasks with no dependencies. Throws a {@link ConflictError}
+   * (→ 409, shown as a toast) naming the unfinished blockers so the human knows why.
+   */
+  private async assertDependenciesMet(workspaceId: string, block: Block): Promise<void> {
+    if (block.level !== 'task' || block.dependsOn.length === 0) return
+    const blocks = await this.augmentWithCrossWorkspaceDeps(
+      await this.blockRepository.listByWorkspace(workspaceId),
+      block.dependsOn,
+    )
+    if (dependenciesMet(blocks, block.id)) return
+    const blockers = unmetDependencies(blocks, block.id)
+    const names = blockers.map((b) => `"${b.title}"`).join(', ')
+    throw new ConflictError(
+      `This task is blocked by ${blockers.length} unfinished dependenc${
+        blockers.length === 1 ? 'y' : 'ies'
+      }${names ? ` (${names})` : ''}. Finish them before starting this task.`,
+    )
+  }
+
+  /**
+   * Augment a workspace's block list (in place) with any dependency blocks referenced by
+   * `depIds` that aren't already present — a `dependsOn` edge can point at a task homed in a
+   * DIFFERENT workspace (a shared/mounted service). Resolved via the cross-workspace
+   * {@link BlockRepository.findById}, so a shared-service blocker is evaluated by its real
+   * status instead of being silently treated as satisfied (missing ⇒ done). Returns the same
+   * (now-augmented) array for chaining.
+   */
+  private async augmentWithCrossWorkspaceDeps(blocks: Block[], depIds: string[]): Promise<Block[]> {
+    const have = new Set(blocks.map((b) => b.id))
+    for (const id of depIds) {
+      if (have.has(id)) continue
+      have.add(id)
+      const found = await this.blockRepository.findById(id)
+      if (found) blocks.push(found.block)
+    }
+    return blocks
+  }
+
   private async assertWithinTaskLimit(workspaceId: string, block: Block): Promise<void> {
     const settingsService = this.workspaceSettingsService
     if (!settingsService || block.level !== 'task') return
@@ -1069,7 +1190,13 @@ export class ExecutionService {
         (step.agentKind === REQUIREMENTS_REVIEW_AGENT_KIND ||
           step.agentKind === CLARITY_REVIEW_AGENT_KIND) &&
         !!step.pendingIncorporation
-      if (!reentrantRequirements) {
+      // The human-testing gate is likewise re-entrant: a human action (confirm / request a
+      // fix / pull main / recreate) records a `pendingAction` on the parked step and wakes
+      // the driver. Fall through so the gate re-evaluates and acts on it (dispatch a helper,
+      // rebuild the env, or advance) instead of immediately re-parking.
+      const reentrantHumanTest =
+        step.agentKind === HUMAN_TEST_AGENT_KIND && !!step.humanTest?.pendingAction
+      if (!reentrantRequirements && !reentrantHumanTest) {
         // Parked on either an agent-raised decision or a human approval gate; both
         // are addressed by the same durable event id.
         const pendingId = step.decision?.id ?? step.approval?.id
@@ -1142,6 +1269,16 @@ export class ExecutionService {
         block,
         isFinalStep,
       )
+    }
+
+    // A `human-test` gate spins up an ephemeral environment and PARKS for a human to
+    // validate the change in a live URL before the run continues — NOT a container/prose
+    // agent and NOT a programmatic polling gate (the human is the verdict). It also drives
+    // the same helpers the other gates use on demand: the Tester's `fixer` (from findings)
+    // and the `conflict-resolver` (after a conflicting pull-main). Degrades to a manual
+    // (no-env) mode when no ephemeral-environment provider is wired. See {@link HumanTestController}.
+    if (step.agentKind === HUMAN_TEST_AGENT_KIND) {
+      return this.humanTestController.evaluate(workspaceId, instance, step, block, isFinalStep)
     }
 
     // A polling gate step (`ci` / `conflicts`) runs a programmatic precheck and only
@@ -1423,6 +1560,20 @@ export class ExecutionService {
       return this.testerController.dispatchTester(workspaceId, instance, step, block)
     }
 
+    // A `human-test` gate in its `fixing` / `resolving_conflicts` phase has a helper job
+    // (fixer / conflict-resolver) in flight, NOT the step's own work: when it settles —
+    // done OR failed — record the round's outcome, rebuild the environment against the
+    // (now-updated) branch and re-park the human. We never fail the run here; the human is
+    // in control. Mirrors the Tester→Fixer loop.
+    if (
+      step.agentKind === HUMAN_TEST_AGENT_KIND &&
+      (step.humanTest?.phase === 'fixing' || step.humanTest?.phase === 'resolving_conflicts')
+    ) {
+      return this.humanTestController.onHelperComplete(workspaceId, instance, step, {
+        state: update.state === 'failed' ? 'failed' : 'done',
+      })
+    }
+
     if (update.state === 'failed') {
       // A container eviction (the per-run container vanished, its in-memory job is
       // gone) is usually transient. Recover it by dropping the dead handle and
@@ -1485,6 +1636,12 @@ export class ExecutionService {
       return { kind: 'noop' }
     }
     const step = instance.steps[instance.currentStep]
+    // The human-testing gate rides the same `awaiting_gate` poll loop while its ephemeral
+    // environment provisions — re-poll the env status (ready → park the human; still
+    // provisioning → keep polling; failed → degrade to manual mode).
+    if (step?.agentKind === HUMAN_TEST_AGENT_KIND) {
+      return this.humanTestController.pollEnvironment(workspaceId, instance)
+    }
     const gate = step ? this.gateFor(step.agentKind) : undefined
     if (!step || !gate) return { kind: 'continue' }
     // A helper job is in flight — the driver should be polling it, not the gate; let
@@ -1517,6 +1674,11 @@ export class ExecutionService {
       return { kind: 'noop' }
     }
     const step = instance.steps[instance.currentStep]
+    // The human-testing gate never times the RUN out while provisioning: instead of failing,
+    // park the human in degraded mode so they can wait, recreate, or test by hand.
+    if (step?.agentKind === HUMAN_TEST_AGENT_KIND) {
+      return this.humanTestController.onProvisionTimeout(workspaceId, instance)
+    }
     const gate = step ? this.gateFor(step.agentKind) : undefined
     const timeoutError = 'Gate precheck did not settle within its polling budget'
     if (!step || !gate || gate.pollExhaustion !== 'pass') {
@@ -2883,6 +3045,11 @@ export class ExecutionService {
         'Resolve the clarity review through its review window, not the approval gate',
       )
     }
+    if (step.agentKind === HUMAN_TEST_AGENT_KIND) {
+      throw new ConflictError(
+        'Resolve the human-testing gate through its window (confirm / request a fix), not the approval gate',
+      )
+    }
     if (step.companion?.exceeded) {
       throw new ConflictError(
         'Resolve this companion review through its iteration-cap prompt, not the approval gate',
@@ -3203,6 +3370,39 @@ export class ExecutionService {
     return this.reviewGate.resolveExceeded(this.clarityKind, workspaceId, blockId, choice)
   }
 
+  // ---- human-testing gate actions (driven from the dedicated window) -------
+  // Each mutates the parked gate step and wakes the durable driver, which re-enters the gate
+  // and performs the (env / helper) work; see {@link HumanTestController}.
+
+  /** Confirm the change works: tear the ephemeral env down and advance the run. */
+  confirmHumanTest(workspaceId: string, blockId: string): Promise<ExecutionInstance> {
+    return this.humanTestController.confirm(workspaceId, blockId)
+  }
+
+  /** Submit findings and request a fix: dispatch the Tester's `fixer`, then rebuild the env. */
+  requestHumanTestFix(
+    workspaceId: string,
+    blockId: string,
+    findings: string,
+  ): Promise<ExecutionInstance> {
+    return this.humanTestController.requestFix(workspaceId, blockId, findings)
+  }
+
+  /** Pull the repo default branch into the PR branch + redeploy (conflict → conflict-resolver). */
+  pullMainHumanTest(workspaceId: string, blockId: string): Promise<ExecutionInstance> {
+    return this.humanTestController.pullMain(workspaceId, blockId)
+  }
+
+  /** Rebuild the ephemeral environment on demand. */
+  recreateHumanTestEnv(workspaceId: string, blockId: string): Promise<ExecutionInstance> {
+    return this.humanTestController.recreateEnvironment(workspaceId, blockId)
+  }
+
+  /** Destroy the ephemeral environment on demand (the run stays parked). */
+  destroyHumanTestEnv(workspaceId: string, blockId: string): Promise<ExecutionInstance> {
+    return this.humanTestController.destroyEnvironment(workspaceId, blockId)
+  }
+
   /**
    * Push the run's latest state to subscribed clients, alongside its rolled-up
    * block so the board updates without a refetch. Best-effort: the publisher
@@ -3384,7 +3584,62 @@ export class ExecutionService {
     }
     if ((block.level ?? 'frame') === 'task') {
       await this.applyModuleAssignment(workspaceId, blockId)
+      // Propagate to dependents: if this task opted into auto-start, launch every task
+      // that depends on it whose other dependencies are now also done. Best-effort — the
+      // merge already happened, so a dependent that fails to start must never roll it back.
+      if (block.autoStartDependents) {
+        await this.autoStartDependents(workspaceId, blockId).catch(() => {})
+      }
     }
+  }
+
+  /**
+   * After a task with `autoStartDependents` merges, start every task that `dependsOn` it
+   * and whose remaining dependencies are all now `done`. System-initiated (no human
+   * present), so a dependent on an individual-usage model — which needs its owner to
+   * unlock a personal credential per run — is SKIPPED rather than started (it would fault
+   * at dispatch); the human starts it manually. Each dependent is started independently so
+   * one failure (already running, no provider, …) never blocks the rest.
+   */
+  private async autoStartDependents(workspaceId: string, mergedBlockId: string): Promise<void> {
+    const blocks = await this.blockRepository.listByWorkspace(workspaceId)
+    const dependents = blocks.filter(
+      (b) => b.level === 'task' && b.dependsOn.includes(mergedBlockId),
+    )
+    // A dependent's OTHER blockers may live in another workspace (a shared service); resolve
+    // them so `dependenciesMet` doesn't treat a cross-workspace blocker as missing-⇒-satisfied.
+    await this.augmentWithCrossWorkspaceDeps(blocks, dependents.flatMap((d) => d.dependsOn))
+    for (const dependent of dependents) {
+      // All of the dependent's blockers must now be satisfied (not just the one that merged).
+      if (!dependenciesMet(blocks, dependent.id)) continue
+      // Only auto-start a fresh task — never replace a run already in flight or a finished one.
+      if (dependent.status !== 'planned' && dependent.status !== 'ready') continue
+      const pipelineId = await this.resolveDefaultPipelineId(workspaceId, dependent)
+      if (!pipelineId) continue
+      // Skip dependents that would lease an individual-usage credential (can't unlock unattended).
+      const individual = await this.individualVendorsForBlock(workspaceId, dependent.id, pipelineId)
+      if (individual.length > 0) continue
+      try {
+        await this.start(workspaceId, dependent.id, pipelineId, null)
+      } catch {
+        // Already running, no usable provider, still-unmet dep racing, etc. — leave this
+        // dependent for a manual start; the others still get their chance.
+      }
+    }
+  }
+
+  /**
+   * The pipeline id a dependent task should auto-start with: its pinned `pipelineId` when
+   * set, else the workspace's first pipeline (mirrors the board's "Run" default). Null
+   * when no pipeline exists at all.
+   */
+  private async resolveDefaultPipelineId(
+    workspaceId: string,
+    block: Block,
+  ): Promise<string | null> {
+    if (block.pipelineId) return block.pipelineId
+    const pipelines = await this.pipelineRepository.listByWorkspace(workspaceId)
+    return pipelines[0]?.id ?? null
   }
 
   /**
