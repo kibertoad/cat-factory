@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import type { Block, BlockStatus } from '~/types/domain'
-import { BLOCK_TYPE_META, STATUS_META } from '~/utils/catalog'
+import { blockTypeMeta, STATUS_META } from '~/utils/catalog'
 import TaskContextDocs from '~/components/documents/TaskContextDocs.vue'
 import TaskContextIssues from '~/components/tasks/TaskContextIssues.vue'
 import TaskAgentConfig from '~/components/panels/inspector/TaskAgentConfig.vue'
 import ServiceTestConfig from '~/components/panels/inspector/ServiceTestConfig.vue'
 import ServiceFragments from '~/components/panels/inspector/ServiceFragments.vue'
+import ServiceReleaseHealthConfig from '~/components/panels/inspector/ServiceReleaseHealthConfig.vue'
 import ContainerSummary from '~/components/panels/inspector/ContainerSummary.vue'
 import TaskDependencies from '~/components/panels/inspector/TaskDependencies.vue'
 import TaskStructure from '~/components/panels/inspector/TaskStructure.vue'
@@ -52,7 +53,7 @@ const isContainer = computed(() => level.value === 'frame' || level.value === 'm
 const isTask = computed(() => level.value === 'task')
 
 const instance = computed(() => execution.getInstance(block.value?.executionId))
-const typeMeta = computed(() => (block.value ? BLOCK_TYPE_META[block.value.type] : null))
+const typeMeta = computed(() => (block.value ? blockTypeMeta(block.value.type) : null))
 
 // Containers show a derived activity status (never "done"); tasks use their own.
 const FRAME_LABEL: Record<BlockStatus, string> = {
@@ -412,6 +413,9 @@ const showOriginalDescription = ref(false)
 
       <!-- service (frame): best-practice fragments for code-aware agents -->
       <ServiceFragments v-if="isFrame" :block="block" />
+
+      <!-- service (frame): post-release-health monitor/SLO mapping -->
+      <ServiceReleaseHealthConfig v-if="isFrame" :block="block" />
 
       <!-- task: dependencies, structure, agent config, run settings, execution -->
       <template v-else-if="isTask">

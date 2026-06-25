@@ -46,25 +46,68 @@ export function parseOnCallAssessment(value: unknown): OnCallAssessment {
   return v.parse(onCallAssessmentSchema, value)
 }
 
-// ---- Datadog connection (per-workspace) -----------------------------------
+// ---- Observability connection (per-workspace) -----------------------------
+// The post-release-health gate reads a pluggable observability provider. Datadog is
+// the only adapter today; the connection is keyed by `provider` so a second vendor is
+// just a new adapter + credential shape (switch `credentials` to a discriminated
+// variant then). Keys are write-only — never read back.
+
+/** Observability vendors a workspace can connect (extensible). */
+export const observabilityProviderKindSchema = v.picklist(['datadog'])
+export type ObservabilityProviderKind = v.InferOutput<typeof observabilityProviderKindSchema>
 
 /** Datadog site host the connection points at. */
 const datadogSiteSchema = v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(120))
 
-/** Set/replace the workspace's Datadog connection (keys write-only, never read back). */
-export const upsertDatadogConnectionSchema = v.object({
+/** Provider-specific credentials. Today only Datadog (`site` + API/app keys). */
+export const datadogCredentialsSchema = v.object({
   site: datadogSiteSchema,
   apiKey: v.pipe(v.string(), v.trim(), v.minLength(1)),
   appKey: v.pipe(v.string(), v.trim(), v.minLength(1)),
 })
-export type UpsertDatadogConnectionInput = v.InferOutput<typeof upsertDatadogConnectionSchema>
+export type DatadogCredentials = v.InferOutput<typeof datadogCredentialsSchema>
 
-/** What `GET /datadog/connection` returns — never the secret keys. */
-export const datadogConnectionViewSchema = v.object({
-  connected: v.boolean(),
-  site: v.nullable(v.string()),
+/**
+ * Validate a decrypted Datadog credentials blob at the read boundary. The provider
+ * registry calls this on the JSON it decrypts so a drifted/corrupted/hand-edited row
+ * fails with a clear schema error here, rather than deep inside the Datadog client
+ * during a live post-release probe.
+ */
+export function parseDatadogCredentials(raw: unknown): DatadogCredentials {
+  return v.parse(datadogCredentialsSchema, raw)
+}
+
+/** Set/replace the workspace's observability connection (credentials write-only). */
+export const upsertObservabilityConnectionSchema = v.object({
+  provider: observabilityProviderKindSchema,
+  credentials: datadogCredentialsSchema,
 })
-export type DatadogConnectionView = v.InferOutput<typeof datadogConnectionViewSchema>
+export type UpsertObservabilityConnectionInput = v.InferOutput<
+  typeof upsertObservabilityConnectionSchema
+>
+
+/** What `GET /observability/connection` returns — never the secret keys. */
+export const observabilityConnectionViewSchema = v.object({
+  connected: v.boolean(),
+  provider: v.nullable(observabilityProviderKindSchema),
+  /** Non-secret display fields, e.g. `{ site }` for Datadog. */
+  summary: v.nullable(v.record(v.string(), v.string())),
+})
+export type ObservabilityConnectionView = v.InferOutput<typeof observabilityConnectionViewSchema>
+
+/**
+ * The non-secret display summary persisted alongside the sealed credentials, so the
+ * connection view can show provider context without ever decrypting the secret.
+ */
+export function observabilityConnectionSummary(
+  provider: ObservabilityProviderKind,
+  credentials: UpsertObservabilityConnectionInput['credentials'],
+): Record<string, string> {
+  switch (provider) {
+    case 'datadog':
+      return { site: credentials.site }
+  }
+}
 
 // ---- Release-health config (per repo/service block) -----------------------
 

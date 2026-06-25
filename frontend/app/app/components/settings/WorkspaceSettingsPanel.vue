@@ -1,12 +1,17 @@
 <script setup lang="ts">
-// Workspace settings: the run-timing escalation threshold and the per-service
-// running-task limit policy.
-//   - waitingEscalationMinutes — runs never time out waiting for a human; after this
-//     long their notification escalates yellow → red ("Overdue") in the inbox.
-//   - task limit — cap how many tasks may run concurrently under one service, either
-//     as a single shared bucket across all types or one bucket per task type.
+// Workspace settings — a single tabbed modal that gathers the workspace-wide
+// configuration that used to live in separate windows:
+//   - Workspace: the run-timing escalation threshold + per-service running-task limit.
+//   - Merge thresholds: the auto-merge preset library.
+//   - Issue writeback: the tracker writeback toggles.
+//   - Service best practices: the default fragments new services inherit.
+// The latter three are body-only section components rendered in tabs here (no longer
+// standalone modals).
 import { reactive, ref, watch } from 'vue'
 import type { CreateTaskType, TaskLimitMode } from '~/types/domain'
+import MergeThresholdsPanel from '~/components/settings/MergeThresholdsPanel.vue'
+import IssueTrackerWritebackPanel from '~/components/settings/IssueTrackerWritebackPanel.vue'
+import ServiceFragmentDefaultsPanel from '~/components/settings/ServiceFragmentDefaultsPanel.vue'
 
 const ui = useUiStore()
 const store = useWorkspaceSettingsStore()
@@ -16,6 +21,35 @@ const open = computed({
   get: () => ui.workspaceSettingsOpen,
   set: (v: boolean) => (v ? ui.openWorkspaceSettings() : ui.closeWorkspaceSettings()),
 })
+
+// Which tab is shown — driven by the ui store so other surfaces (command bar,
+// integrations) can deep-link straight to a tab.
+const activeTab = computed({
+  get: () => ui.workspaceSettingsTab,
+  set: (v: string) => ui.setWorkspaceSettingsTab(v),
+})
+
+const tabs = [
+  {
+    value: 'workspace',
+    label: 'Workspace',
+    icon: 'i-lucide-sliders-horizontal',
+    slot: 'workspace',
+  },
+  { value: 'merge', label: 'Merge thresholds', icon: 'i-lucide-git-merge', slot: 'merge' },
+  {
+    value: 'writeback',
+    label: 'Issue writeback',
+    icon: 'i-lucide-message-square-reply',
+    slot: 'writeback',
+  },
+  {
+    value: 'fragments',
+    label: 'Service best practices',
+    icon: 'i-lucide-book-open-check',
+    slot: 'fragments',
+  },
+]
 
 const TASK_TYPES: CreateTaskType[] = ['feature', 'bug', 'document', 'spike']
 const MODES: { value: TaskLimitMode; label: string }[] = [
@@ -78,65 +112,104 @@ async function save() {
 </script>
 
 <template>
-  <UModal v-model:open="open" title="Workspace settings" :ui="{ content: 'max-w-xl' }">
+  <UModal v-model:open="open" title="Workspace settings" :ui="{ content: 'max-w-3xl' }">
     <template #body>
-      <div class="space-y-6">
-        <!-- Run-timing escalation -->
-        <section class="space-y-2">
-          <h3 class="text-sm font-semibold text-slate-200">Waiting for a human</h3>
-          <p class="text-[11px] text-slate-400">
-            A run parked on a human decision (a review, an approval, a merge) waits as long as it
-            needs — it is never cancelled. After this many minutes its notification turns red and is
-            flagged <span class="text-error-400">Overdue</span> in the inbox.
-          </p>
-          <label class="block w-48">
-            <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
-              Escalate after (minutes)
-            </span>
-            <UInput
-              v-model.number="draft.waitingEscalationMinutes"
-              type="number"
-              :min="1"
-              size="sm"
-            />
-          </label>
-        </section>
+      <UTabs
+        v-model="activeTab"
+        :items="tabs"
+        variant="link"
+        :ui="{ root: 'gap-4', list: 'overflow-x-auto' }"
+      >
+        <!-- Workspace -->
+        <template #workspace>
+          <div class="space-y-6">
+            <!-- Run-timing escalation -->
+            <section class="space-y-2">
+              <h3 class="text-sm font-semibold text-slate-200">Waiting for a human</h3>
+              <p class="text-[11px] text-slate-400">
+                A run parked on a human decision (a review, an approval, a merge) waits as long as
+                it needs — it is never cancelled. After this many minutes its notification turns red
+                and is flagged <span class="text-error-400">Overdue</span> in the inbox.
+              </p>
+              <label class="block w-48">
+                <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
+                  Escalate after (minutes)
+                </span>
+                <UInput
+                  v-model.number="draft.waitingEscalationMinutes"
+                  type="number"
+                  :min="1"
+                  size="sm"
+                />
+              </label>
+            </section>
 
-        <!-- Per-service running-task limit -->
-        <section class="space-y-2">
-          <h3 class="text-sm font-semibold text-slate-200">Running tasks per service</h3>
-          <p class="text-[11px] text-slate-400">
-            Cap how many tasks may run at once under one service. Starting a task over the limit is
-            refused with a clear message until a running task finishes.
-          </p>
-          <label class="block w-64">
-            <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">Mode</span>
-            <USelect v-model="draft.taskLimitMode" :items="MODES" value-key="value" size="sm" />
-          </label>
+            <!-- Per-service running-task limit -->
+            <section class="space-y-2">
+              <h3 class="text-sm font-semibold text-slate-200">Running tasks per service</h3>
+              <p class="text-[11px] text-slate-400">
+                Cap how many tasks may run at once under one service. Starting a task over the limit
+                is refused with a clear message until a running task finishes.
+              </p>
+              <label class="block w-64">
+                <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500"
+                  >Mode</span
+                >
+                <USelect
+                  v-model="draft.taskLimitMode"
+                  :items="MODES"
+                  value-key="value"
+                  size="sm"
+                  class="w-full"
+                />
+              </label>
 
-          <label v-if="draft.taskLimitMode === 'shared'" class="block w-48">
-            <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
-              Max running tasks
-            </span>
-            <UInput v-model.number="draft.taskLimitShared" type="number" :min="1" size="sm" />
-          </label>
+              <label v-if="draft.taskLimitMode === 'shared'" class="block w-48">
+                <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
+                  Max running tasks
+                </span>
+                <UInput v-model.number="draft.taskLimitShared" type="number" :min="1" size="sm" />
+              </label>
 
-          <div v-else-if="draft.taskLimitMode === 'per_type'" class="grid grid-cols-2 gap-3">
-            <label v-for="t in TASK_TYPES" :key="t" class="block">
-              <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
-                Max {{ t }} tasks
-              </span>
-              <UInput v-model.number="draft.perType[t]" type="number" :min="1" size="sm" />
-            </label>
+              <div v-else-if="draft.taskLimitMode === 'per_type'" class="grid grid-cols-2 gap-3">
+                <label v-for="t in TASK_TYPES" :key="t" class="block">
+                  <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
+                    Max {{ t }} tasks
+                  </span>
+                  <UInput v-model.number="draft.perType[t]" type="number" :min="1" size="sm" />
+                </label>
+              </div>
+            </section>
+
+            <div class="flex justify-end">
+              <UButton
+                color="primary"
+                icon="i-lucide-save"
+                size="sm"
+                :loading="saving"
+                @click="save"
+              >
+                Save
+              </UButton>
+            </div>
           </div>
-        </section>
+        </template>
 
-        <div class="flex justify-end">
-          <UButton color="primary" icon="i-lucide-save" size="sm" :loading="saving" @click="save">
-            Save
-          </UButton>
-        </div>
-      </div>
+        <!-- Merge thresholds -->
+        <template #merge>
+          <MergeThresholdsPanel />
+        </template>
+
+        <!-- Issue writeback -->
+        <template #writeback>
+          <IssueTrackerWritebackPanel />
+        </template>
+
+        <!-- Service best practices -->
+        <template #fragments>
+          <ServiceFragmentDefaultsPanel />
+        </template>
+      </UTabs>
     </template>
   </UModal>
 </template>

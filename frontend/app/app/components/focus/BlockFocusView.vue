@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onKeyStroke } from '@vueuse/core'
 import type { Block } from '~/types/domain'
-import { BLOCK_TYPE_META, STATUS_META } from '~/utils/catalog'
+import { blockTypeMeta, STATUS_META } from '~/utils/catalog'
 import PipelineProgress from '~/components/pipeline/PipelineProgress.vue'
 
 const board = useBoardStore()
@@ -18,7 +18,7 @@ const block = computed<Block | undefined>(() =>
 )
 const instance = computed(() => execution.getInstance(block.value?.executionId))
 const statusMeta = computed(() => (block.value ? STATUS_META[block.value.status] : null))
-const typeMeta = computed(() => (block.value ? BLOCK_TYPE_META[block.value.type] : null))
+const typeMeta = computed(() => (block.value ? blockTypeMeta(block.value.type) : null))
 
 const deps = computed(() =>
   (block.value?.dependsOn ?? []).map((id) => board.getBlock(id)).filter((b): b is Block => !!b),

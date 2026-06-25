@@ -346,4 +346,4 @@ RUNNERS_ENABLED = "false"
 # (PagerDuty / incident.io) is set via the PAGERDUTY_* / INCIDENTIO_API_KEY secrets:
 # the on-call investigation is posted onto an incident those systems ALREADY opened
 # from the same monitors/SLOs (annotate, never re-alert).
-DATADOG_ENABLED = "false"
+OBSERVABILITY_ENABLED = "false"

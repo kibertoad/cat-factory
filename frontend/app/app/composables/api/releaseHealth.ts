@@ -1,27 +1,28 @@
 import type {
-  DatadogConnectionView,
+  ObservabilityConnectionView,
   ReleaseHealthConfig,
-  UpsertDatadogConnectionInput,
+  UpsertObservabilityConnectionInput,
   UpsertReleaseHealthConfigInput,
 } from '~/types/releaseHealth'
 import type { ApiContext } from './context'
 
-/** Datadog post-release-health: the connection + per-block monitor/SLO mapping. */
+/** Post-release-health: the observability connection + per-block monitor/SLO mapping. */
 export function releaseHealthApi({ http, ws }: ApiContext) {
   return {
-    // ---- Datadog post-release-health settings -----------------------------
-    getDatadogConnection: (workspaceId: string) =>
-      http<DatadogConnectionView>(`${ws(workspaceId)}/datadog/connection`),
+    // ---- Observability connection ------------------------------------------
+    getObservabilityConnection: (workspaceId: string) =>
+      http<ObservabilityConnectionView>(`${ws(workspaceId)}/observability/connection`),
 
-    setDatadogConnection: (workspaceId: string, body: UpsertDatadogConnectionInput) =>
-      http<DatadogConnectionView>(`${ws(workspaceId)}/datadog/connection`, {
+    setObservabilityConnection: (workspaceId: string, body: UpsertObservabilityConnectionInput) =>
+      http<ObservabilityConnectionView>(`${ws(workspaceId)}/observability/connection`, {
         method: 'PUT',
         body,
       }),
 
-    deleteDatadogConnection: (workspaceId: string) =>
-      http(`${ws(workspaceId)}/datadog/connection`, { method: 'DELETE' }),
+    deleteObservabilityConnection: (workspaceId: string) =>
+      http(`${ws(workspaceId)}/observability/connection`, { method: 'DELETE' }),
 
+    // ---- Per-block monitor/SLO config --------------------------------------
     listReleaseHealthConfigs: (workspaceId: string) =>
       http<ReleaseHealthConfig[]>(`${ws(workspaceId)}/release-health-configs`),
 

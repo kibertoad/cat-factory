@@ -1,15 +1,15 @@
-import type { DatadogConfig, IncidentEnrichmentConfig } from '@cat-factory/server'
+import type { ReleaseHealthConfig, IncidentEnrichmentConfig } from '@cat-factory/server'
 import type { Env } from '../env'
 
-export type { DatadogConfig, IncidentEnrichmentConfig }
+export type { ReleaseHealthConfig, IncidentEnrichmentConfig }
 
-export function loadDatadogConfig(env: Env): DatadogConfig {
-  // Opt-in via the enable flag; the per-workspace API/app keys are sealed with the shared
-  // ENCRYPTION_KEY (under a datadog-scoped HKDF info). Off → the post-release-health gate
-  // is a pass-through.
+export function loadReleaseHealthConfig(env: Env): ReleaseHealthConfig {
+  // Opt-in via the enable flag; the per-workspace provider credentials are sealed with the
+  // shared ENCRYPTION_KEY (under an observability-scoped HKDF info). Off → the
+  // post-release-health gate is a pass-through.
   const encryptionKey = env.ENCRYPTION_KEY?.trim()
   return {
-    enabled: env.DATADOG_ENABLED === 'true' && !!encryptionKey,
+    enabled: env.OBSERVABILITY_ENABLED === 'true' && !!encryptionKey,
     encryptionKey,
   }
 }

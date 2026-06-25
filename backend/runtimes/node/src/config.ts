@@ -336,10 +336,11 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
             ...(slackOAuth ? { oauth: slackOAuth } : {}),
           }
         : { enabled: false },
-    // Datadog post-release-health: opt-in (`DATADOG_ENABLED=true`) + the shared
-    // ENCRYPTION_KEY (the per-workspace API/app keys are sealed at rest). Mirrors the Worker.
-    datadog:
-      env.DATADOG_ENABLED === 'true' && env.ENCRYPTION_KEY?.trim()
+    // Observability post-release-health: opt-in (`OBSERVABILITY_ENABLED=true`) + the
+    // shared ENCRYPTION_KEY (the per-workspace provider credentials are sealed at rest).
+    // Mirrors the Worker.
+    releaseHealth:
+      env.OBSERVABILITY_ENABLED === 'true' && env.ENCRYPTION_KEY?.trim()
         ? { enabled: true, encryptionKey: env.ENCRYPTION_KEY.trim() }
         : { enabled: false },
     // Optional incident enrichment (annotate, never re-alert): deployment-level creds.

@@ -7,7 +7,7 @@ import type {
 import type { ConsensusStepConfig, Pipeline, StepGating } from '@cat-factory/kernel'
 import { assertFound, ValidationError } from '@cat-factory/kernel'
 import type {
-  DatadogConnectionRepository,
+  ObservabilityConnectionRepository,
   PipelineRepository,
   WorkspaceRepository,
 } from '@cat-factory/kernel'
@@ -31,7 +31,7 @@ export interface PipelineServiceDependencies {
    * Datadog connection). When absent (no observability persistence wired at all), the
    * observability-gated step can never be added.
    */
-  datadogConnectionRepository?: DatadogConnectionRepository
+  observabilityConnectionRepository?: ObservabilityConnectionRepository
 }
 
 /** Saved, reusable pipelines (the pipeline palette). */
@@ -39,18 +39,18 @@ export class PipelineService {
   private readonly workspaceRepository: WorkspaceRepository
   private readonly pipelineRepository: PipelineRepository
   private readonly idGenerator: IdGenerator
-  private readonly datadogConnectionRepository?: DatadogConnectionRepository
+  private readonly observabilityConnectionRepository?: ObservabilityConnectionRepository
 
   constructor({
     workspaceRepository,
     pipelineRepository,
     idGenerator,
-    datadogConnectionRepository,
+    observabilityConnectionRepository,
   }: PipelineServiceDependencies) {
     this.workspaceRepository = workspaceRepository
     this.pipelineRepository = pipelineRepository
     this.idGenerator = idGenerator
-    this.datadogConnectionRepository = datadogConnectionRepository
+    this.observabilityConnectionRepository = observabilityConnectionRepository
   }
 
   /**
@@ -68,10 +68,10 @@ export class PipelineService {
       (kind, i) => kind === OBSERVABILITY_GATED_KIND && enabled?.[i] !== false,
     )
     if (!present) return
-    const connection = await this.datadogConnectionRepository?.get(workspaceId)
+    const connection = await this.observabilityConnectionRepository?.get(workspaceId)
     if (!connection) {
       throw new ValidationError(
-        `The '${OBSERVABILITY_GATED_KIND}' step needs an observability integration. Connect Datadog for this workspace first.`,
+        `The '${OBSERVABILITY_GATED_KIND}' step needs an observability integration. Connect an observability provider for this workspace first.`,
       )
     }
   }

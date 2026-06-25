@@ -1,5 +1,5 @@
 import {
-  upsertDatadogConnectionSchema,
+  upsertObservabilityConnectionSchema,
   upsertReleaseHealthConfigSchema,
 } from '@cat-factory/contracts'
 import { Hono } from 'hono'
@@ -16,31 +16,31 @@ function requireReleaseHealth(c: Context<AppEnv>): ReleaseHealthModule | null {
 
 const unavailable = (c: Context<AppEnv>) =>
   c.json(
-    { error: { code: 'unavailable', message: 'The Datadog integration is not configured' } },
+    { error: { code: 'unavailable', message: 'The observability integration is not configured' } },
     503,
   )
 
 /**
- * Per-workspace settings for the post-release-health gate: the (single) Datadog
- * connection (keys write-only, never read back) and the per-block monitor/SLO
- * mappings the gate reads. Mounted under `/workspaces/:workspaceId`.
+ * Per-workspace settings for the post-release-health gate: the (single) observability
+ * connection (provider + credentials, write-only, never read back) and the per-block
+ * monitor/SLO mappings the gate reads. Mounted under `/workspaces/:workspaceId`.
  */
 export function releaseHealthController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
 
-  app.get('/datadog/connection', async (c) => {
+  app.get('/observability/connection', async (c) => {
     const rh = requireReleaseHealth(c)
     if (!rh) return unavailable(c)
     return c.json(await rh.service.getConnection(param(c, 'workspaceId')))
   })
 
-  app.put('/datadog/connection', jsonBody(upsertDatadogConnectionSchema), async (c) => {
+  app.put('/observability/connection', jsonBody(upsertObservabilityConnectionSchema), async (c) => {
     const rh = requireReleaseHealth(c)
     if (!rh) return unavailable(c)
     return c.json(await rh.service.setConnection(param(c, 'workspaceId'), c.req.valid('json')))
   })
 
-  app.delete('/datadog/connection', async (c) => {
+  app.delete('/observability/connection', async (c) => {
     const rh = requireReleaseHealth(c)
     if (!rh) return unavailable(c)
     await rh.service.deleteConnection(param(c, 'workspaceId'))

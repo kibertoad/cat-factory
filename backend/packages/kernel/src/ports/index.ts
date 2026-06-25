@@ -279,8 +279,9 @@ export type {
 } from './incident-enrichment.js'
 export { CompositeIncidentEnrichmentProvider } from './incident-enrichment.js'
 export type {
-  DatadogConnectionRecord,
-  DatadogConnectionRepository,
+  ObservabilityProviderKind,
+  ObservabilityConnectionRecord,
+  ObservabilityConnectionRepository,
   ReleaseHealthConfigRecord,
   ReleaseHealthConfigRepository,
 } from './release-health-repositories.js'

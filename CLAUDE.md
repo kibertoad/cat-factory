@@ -519,14 +519,21 @@ regression, spawns an **`on-call`** agent to investigate — it never auto-rever
   pass through immediately), `pending` (keep polling), `fail` (a monitor alerts / SLO
   breached). `attemptBudget` = the merge preset's `releaseMaxAttempts` (default 1);
   the window is `releaseWatchWindowMinutes` (default 30).
-- **Provider**: `DatadogReleaseHealthProvider` (`integrations/modules/datadog`) reads
-  monitor state + SLO SLI-vs-target and (for the on-call bundle) recent error logs, behind
-  the kernel `ReleaseHealthProvider` port. Datadog creds live on the backend
-  (`datadog_connections`, sealed `cat-factory:datadog`) — never in containers. Per-block
-  monitor/SLO mapping is `release_health_configs` (resolved up the frame chain). Both
-  tables mirror D1 ⇄ Drizzle; managed via `ReleaseHealthService` + the
-  `GET|PUT|DELETE /workspaces/:ws/datadog/connection` + `…/release-health-configs/:blockId`
-  controller and the SPA `DatadogPanel.vue` (`stores/releaseHealth.ts`).
+- **Provider**: the kernel `ReleaseHealthProvider` port is vendor-neutral and served by the
+  pluggable `RegistryReleaseHealthProvider` (`integrations/modules/observability`) — a registry
+  of per-vendor adapters (today only `DatadogObservabilityAdapter`, `integrations/modules/datadog`,
+  which reads monitor state + SLO SLI-vs-target and recent error logs). The composite owns
+  connection loading + decryption, config resolution up the frame chain, and the verdict
+  reduction; an adapter is just the vendor reads, so a second provider is a new registry entry.
+  Observability creds live on the backend (`observability_connections`: a `provider` discriminator
+  + one sealed `credentials` JSON blob + a non-secret `summary`, sealed `cat-factory:observability`)
+  — never in containers. Per-block monitor/SLO mapping is `release_health_configs` (resolved up the
+  frame chain). Both tables mirror D1 ⇄ Drizzle; managed via `ReleaseHealthService` + the
+  `GET|PUT|DELETE /workspaces/:ws/observability/connection` + `…/release-health-configs/:blockId`
+  controller. The SPA splits this: the connection is an **Integrations** entry
+  (`ObservabilityConnectionPanel.vue`), while the per-service monitor/SLO mapping lives in the
+  **service inspector** (`ServiceReleaseHealthConfig.vue`, keyed by the selected frame's block id —
+  no manual entry, disabled with a hint until a connection exists). Both use `stores/releaseHealth.ts`.
 - **On-call agent** (`on-call` container kind, `executor-harness/src/on-call.ts`, `/on-call`):
   the gate escalates via `gatherHelperPriorOutputs` (renders the evidence bundle into the
   agent's prompt). The agent clones the released PR head, correlates the diff with the

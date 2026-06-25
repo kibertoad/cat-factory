@@ -4,8 +4,8 @@ import type { ReleaseSignalState } from '@cat-factory/kernel'
 // (anti-SSRF — only real Datadog hosts), base-URL construction, and mapping Datadog's
 // monitor/SLO shapes onto the runtime-neutral `ReleaseSignalState`.
 
-/** The domain tag used to seal Datadog credentials at rest (HKDF info). */
-export const DATADOG_CIPHER_INFO = 'cat-factory:datadog'
+/** The domain tag used to seal observability credentials at rest (HKDF info). */
+export const OBSERVABILITY_CIPHER_INFO = 'cat-factory:observability'
 
 /** Datadog site host suffixes we allow a connection to point at (anti-SSRF). */
 const ALLOWED_SITE_SUFFIXES = [

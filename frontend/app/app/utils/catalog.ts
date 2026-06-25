@@ -384,8 +384,10 @@ export function agentKindMeta(kind: string): AgentArchetype {
   )
 }
 
+type BlockTypeMeta = { label: string; icon: string; accent: string }
+
 /** Visual metadata for each architecture block type. */
-export const BLOCK_TYPE_META: Record<BlockType, { label: string; icon: string; accent: string }> = {
+export const BLOCK_TYPE_META: Record<BlockType, BlockTypeMeta> = {
   frontend: { label: 'Frontend', icon: 'i-lucide-monitor', accent: '#60a5fa' },
   service: { label: 'Service', icon: 'i-lucide-server', accent: '#a78bfa' },
   api: { label: 'API', icon: 'i-lucide-route', accent: '#22d3ee' },
@@ -396,12 +398,24 @@ export const BLOCK_TYPE_META: Record<BlockType, { label: string; icon: string; a
     icon: 'i-lucide-workflow',
     accent: '#fb923c',
   },
+  // Not user-creatable, but still emitted by the backend (the seeded third-party
+  // service and the environments integration), so they need display metadata.
   external: { label: 'External', icon: 'i-lucide-globe', accent: '#94a3b8' },
-  environment: {
-    label: 'Environment',
-    icon: 'i-lucide-container',
-    accent: '#2dd4bf',
-  },
+  environment: { label: 'Environment', icon: 'i-lucide-box', accent: '#2dd4bf' },
+}
+
+const FALLBACK_BLOCK_TYPE_META: BlockTypeMeta = {
+  label: 'Block',
+  icon: 'i-lucide-box',
+  accent: '#94a3b8',
+}
+
+/**
+ * Visual metadata for a block type, with a safe fallback for any unknown/legacy
+ * type so the board never crashes on a type the backend introduces ahead of the SPA.
+ */
+export function blockTypeMeta(type: BlockType): BlockTypeMeta {
+  return BLOCK_TYPE_META[type] ?? FALLBACK_BLOCK_TYPE_META
 }
 
 /** Color + iconography for each block status. */

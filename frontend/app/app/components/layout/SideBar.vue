@@ -68,17 +68,6 @@ watch(
         >
           Build a pipeline
         </UButton>
-        <UButton
-          block
-          color="primary"
-          variant="soft"
-          size="sm"
-          icon="i-lucide-plus"
-          class="justify-start"
-          @click="ui.openCommandBar()"
-        >
-          Add a block
-        </UButton>
       </div>
     </section>
 
@@ -122,95 +111,20 @@ watch(
         Integrations
       </h2>
       <div class="space-y-1.5">
+        <!-- Every external system the workspace can enable/link now lives behind
+             this single button — the hub modal lists them grouped (source control,
+             communication, documents, trackers, observability, model providers). -->
         <UButton
-          v-if="github.available"
           block
           color="primary"
           variant="soft"
           size="sm"
-          icon="i-lucide-github"
+          icon="i-lucide-blocks"
           class="justify-start"
-          @click="ui.openGitHub()"
+          @click="ui.openIntegrations()"
         >
-          <span class="truncate">
-            {{ github.connected ? github.connection?.accountLogin : 'Connect GitHub' }}
-          </span>
+          Integrations
         </UButton>
-
-        <UButton
-          v-if="slack.available"
-          block
-          color="primary"
-          variant="soft"
-          size="sm"
-          icon="i-lucide-slack"
-          class="justify-start"
-          @click="ui.openSlack()"
-        >
-          <span class="truncate">
-            {{ slack.connected ? slack.connection?.teamName : 'Connect Slack' }}
-          </span>
-        </UButton>
-
-        <template v-if="documents.available">
-          <UButton
-            v-for="src in documents.sources"
-            :key="src.source"
-            block
-            color="neutral"
-            variant="soft"
-            size="sm"
-            :icon="src.icon"
-            class="justify-start"
-            @click="ui.openDocumentConnect(src.source)"
-          >
-            <span class="truncate">
-              {{ documents.isConnected(src.source) ? src.label : `Connect ${src.label}` }}
-            </span>
-          </UButton>
-          <UButton
-            v-if="documents.anyConnected"
-            block
-            color="neutral"
-            variant="soft"
-            size="sm"
-            icon="i-lucide-file-down"
-            class="justify-start"
-            @click="ui.openDocumentImport(null)"
-          >
-            Import &amp; spawn
-          </UButton>
-        </template>
-
-        <template v-if="tasks.available">
-          <UButton
-            v-for="src in tasks.sources"
-            :key="src.source"
-            block
-            color="neutral"
-            variant="soft"
-            size="sm"
-            :icon="src.icon"
-            class="justify-start"
-            @click="ui.openTaskConnect(src.source)"
-          >
-            <span class="truncate">
-              {{ tasks.isConnected(src.source) ? src.label : `Connect ${src.label}` }}
-            </span>
-          </UButton>
-          <UButton
-            v-if="tasks.anyConnected"
-            block
-            color="neutral"
-            variant="soft"
-            size="sm"
-            icon="i-lucide-file-down"
-            class="justify-start"
-            @click="ui.openTaskImport(null)"
-          >
-            Import issues
-          </UButton>
-        </template>
       </div>
     </section>
 
@@ -240,17 +154,8 @@ watch(
         Configuration
       </h2>
       <div class="space-y-1.5">
-        <UButton
-          block
-          color="primary"
-          variant="soft"
-          size="sm"
-          icon="i-lucide-git-merge"
-          class="justify-start"
-          @click="ui.openMergeThresholds()"
-        >
-          Merge thresholds
-        </UButton>
+        <!-- Merge thresholds, issue writeback and default service best practices are
+             now tabs inside Workspace settings. -->
         <UButton
           block
           color="primary"
@@ -267,78 +172,11 @@ watch(
           color="primary"
           variant="soft"
           size="sm"
-          icon="i-lucide-message-square-reply"
-          class="justify-start"
-          @click="ui.openIssueWriteback()"
-        >
-          Issue tracker writeback
-        </UButton>
-        <UButton
-          block
-          color="primary"
-          variant="soft"
-          size="sm"
-          icon="i-lucide-activity"
-          class="justify-start"
-          @click="ui.openDatadog()"
-        >
-          Post-release health
-        </UButton>
-        <UButton
-          block
-          color="primary"
-          variant="soft"
-          size="sm"
           icon="i-lucide-cpu"
           class="justify-start"
           @click="ui.openModelConfig()"
         >
           Model Configuration
-        </UButton>
-        <UButton
-          block
-          color="primary"
-          variant="soft"
-          size="sm"
-          icon="i-lucide-book-open-check"
-          class="justify-start"
-          @click="ui.openServiceFragmentDefaults()"
-        >
-          Default service best practices
-        </UButton>
-        <UButton
-          block
-          color="primary"
-          variant="soft"
-          size="sm"
-          icon="i-lucide-key-round"
-          class="justify-start"
-          title="Connect LLM vendor subscriptions + provider API keys"
-          @click="ui.openVendorCredentials()"
-        >
-          Vendors &amp; keys
-        </UButton>
-        <UButton
-          block
-          color="primary"
-          variant="soft"
-          size="sm"
-          icon="i-lucide-server"
-          class="justify-start"
-          @click="ui.openLocalModels()"
-        >
-          My local runners
-        </UButton>
-        <UButton
-          block
-          color="primary"
-          variant="soft"
-          size="sm"
-          icon="i-lucide-waypoints"
-          class="justify-start"
-          @click="ui.openOpenRouter()"
-        >
-          OpenRouter models
         </UButton>
       </div>
     </section>

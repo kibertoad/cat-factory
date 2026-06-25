@@ -35,7 +35,13 @@ export type BlockStatus =
   | 'pr_ready' // pipeline finished — a PR is open and awaiting merge
   | 'done' // PR merged, implementation complete
 
-/** Kind of architecture building block (drives icon + accent). */
+/**
+ * Kind of architecture building block (drives icon + accent). `external` and
+ * `environment` are no longer user-creatable, but the backend still emits them
+ * (the seed's third-party `external` service, and the environments integration's
+ * `environment` blocks), so they remain part of the union for display parity with
+ * the contracts `blockTypeSchema`.
+ */
 export type BlockType =
   | 'frontend'
   | 'service'

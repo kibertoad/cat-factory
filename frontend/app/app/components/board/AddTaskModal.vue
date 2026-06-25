@@ -4,13 +4,13 @@
 // task lands in `planned` state; it is never launched here. The user starts a
 // pipeline on it explicitly (and can keep editing it until they do).
 //
-// When the document/task integrations are available, the user can also attach
-// external context up front via <ContextPicker>: search a connected source
-// (Confluence / Notion / GitHub repo docs / Jira / GitHub issues) by title or
-// content, paste a page/issue URL, or pick something already imported. Linking
-// needs the block id, so we create the task first, then import-and-link the
-// chosen items to it before closing — the same context the agents see for every
-// step of the run (see the backend's linkedContextSection).
+// The form also shows ungated "Context documents" / "Context issues" sections
+// (mirroring the task inspector): pick already-imported docs/issues — or open the
+// import flow — to attach as agent context. When the relevant integration isn't
+// connected the Attach button is disabled with a hint. Linking needs the block id,
+// so chosen items are staged locally and import-and-linked once the task is created
+// (see useContextLinking) — the same context the agents see for every step of the run.
+import type { DropdownMenuItem } from '@nuxt/ui'
 import type { CreateTaskType, TaskTypeFields } from '~/types/domain'
 
 const ui = useUiStore()
@@ -179,13 +179,83 @@ function setConfig(id: string, value: string) {
   agentConfigValues.value = { ...agentConfigValues.value, [id]: value }
 }
 
-// Context the user chose to attach to the new task (search hits, pasted URLs,
-// already-imported items), collected by <ContextPicker> and committed on add.
+// Context the user chose to attach to the new task (already-imported items + the
+// import flow), committed once the block exists (see add() → linkPending).
 const pendingContext = ref<PendingContext[]>([])
 
-// The picker is offered whenever either integration is configured (even with
-// nothing imported yet — you can search/paste a URL to attach the first item).
-const showContext = computed(() => documents.available || tasks.available)
+// The Context documents / Context issues sections mirror the task inspector but are
+// always shown (ungated): when the relevant integration isn't connected the Attach
+// button is disabled with a tooltip rather than the section being hidden.
+const docsConnected = computed(() => documents.available && documents.anyConnected)
+const issuesConnected = computed(() => tasks.available && tasks.anyConnected)
+const pendingDocs = computed(() => pendingContext.value.filter((c) => c.kind === 'document'))
+const pendingIssues = computed(() => pendingContext.value.filter((c) => c.kind === 'task'))
+
+function addPending(item: PendingContext) {
+  if (pendingContext.value.some((c) => contextKey(c) === contextKey(item))) return
+  pendingContext.value = [...pendingContext.value, item]
+}
+function removePending(item: PendingContext) {
+  pendingContext.value = pendingContext.value.filter((c) => contextKey(c) !== contextKey(item))
+}
+
+// Attach menus: already-imported items not yet chosen, plus the import entry — the
+// same affordances the inspector offers. Picking one stages it locally (it links
+// after the task is created).
+const docAttachMenu = computed<DropdownMenuItem[][]>(() => {
+  const chosen = new Set(pendingContext.value.map(contextKey))
+  const items: DropdownMenuItem[] = documents.documents
+    .filter(
+      (d) =>
+        !chosen.has(contextKey({ kind: 'document', source: d.source, externalId: d.externalId })),
+    )
+    .map((d) => ({
+      label: d.title,
+      icon: documents.descriptorFor(d.source)?.icon ?? 'i-lucide-file-text',
+      onSelect: () =>
+        addPending({
+          kind: 'document',
+          source: d.source,
+          externalId: d.externalId,
+          title: d.title,
+          icon: documents.descriptorFor(d.source)?.icon ?? 'i-lucide-file-text',
+          needsImport: false,
+        }),
+    }))
+  items.push({
+    label: 'Import a page…',
+    icon: 'i-lucide-file-down',
+    onSelect: () => ui.openDocumentImport(null),
+  })
+  return [items]
+})
+
+const issueAttachMenu = computed<DropdownMenuItem[][]>(() => {
+  const chosen = new Set(pendingContext.value.map(contextKey))
+  const items: DropdownMenuItem[] = tasks.tasks
+    .filter(
+      (t) => !chosen.has(contextKey({ kind: 'task', source: t.source, externalId: t.externalId })),
+    )
+    .map((t) => ({
+      label: `${t.externalId} · ${t.title}`,
+      icon: tasks.descriptorFor(t.source)?.icon ?? 'i-lucide-square-check',
+      onSelect: () =>
+        addPending({
+          kind: 'task',
+          source: t.source,
+          externalId: t.externalId,
+          title: `${t.externalId} · ${t.title}`,
+          icon: tasks.descriptorFor(t.source)?.icon ?? 'i-lucide-square-check',
+          needsImport: false,
+        }),
+    }))
+  items.push({
+    label: 'Import an issue…',
+    icon: 'i-lucide-file-down',
+    onSelect: () => ui.openTaskImport(),
+  })
+  return [items]
+})
 
 // Reset the form whenever the modal opens for a (new) container, and refresh the
 // imported docs/issues so the quick-pick list is current.
@@ -450,16 +520,134 @@ async function add() {
             </div>
           </div>
 
-          <div v-if="showContext" class="space-y-2">
-            <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-              Extra context (optional)
-            </span>
+          <!-- Context documents (ungated; Attach disabled until a source is connected). -->
+          <div class="space-y-2">
+            <div class="flex items-center justify-between">
+              <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                Context documents
+              </span>
+              <UDropdownMenu
+                v-if="docsConnected"
+                :items="docAttachMenu"
+                :content="{ side: 'bottom', align: 'end' }"
+              >
+                <UButton color="neutral" variant="soft" size="xs" icon="i-lucide-plus">
+                  Attach
+                </UButton>
+              </UDropdownMenu>
+              <UButton
+                v-else
+                color="neutral"
+                variant="soft"
+                size="xs"
+                icon="i-lucide-plus"
+                disabled
+                :title="
+                  documents.available
+                    ? 'Connect a document source first (Integrations)'
+                    : 'Enable the documents integration first'
+                "
+              >
+                Attach
+              </UButton>
+            </div>
+            <div v-if="pendingDocs.length" class="space-y-1">
+              <div
+                v-for="item in pendingDocs"
+                :key="contextKey(item)"
+                class="flex items-center gap-1.5 rounded-md border border-slate-800 bg-slate-900/60 px-2 py-1.5 text-xs text-slate-300"
+              >
+                <UIcon
+                  :name="item.icon ?? 'i-lucide-file-text'"
+                  class="h-3.5 w-3.5 shrink-0 text-indigo-400"
+                />
+                <span class="truncate">{{ item.title }}</span>
+                <UBadge
+                  v-if="item.needsImport"
+                  color="neutral"
+                  variant="soft"
+                  size="xs"
+                  class="ml-1 shrink-0"
+                >
+                  imports on add
+                </UBadge>
+                <button
+                  type="button"
+                  class="ml-auto shrink-0 text-slate-400 hover:text-slate-200"
+                  @click="removePending(item)"
+                >
+                  <UIcon name="i-lucide-x" class="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </div>
+            <p v-else class="text-[11px] text-slate-500">
+              Attach a requirement, RFC or PRD so agents see it while implementing this task.
+            </p>
+          </div>
 
-            <ContextPicker v-model="pendingContext" />
-
-            <p class="text-[11px] text-slate-500">
-              Search a connected source, paste a page/issue URL, or pick something already imported
-              — it's fed to every agent step as context.
+          <!-- Context issues (ungated; Attach disabled until a tracker is connected). -->
+          <div class="space-y-2">
+            <div class="flex items-center justify-between">
+              <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                Context issues
+              </span>
+              <UDropdownMenu
+                v-if="issuesConnected"
+                :items="issueAttachMenu"
+                :content="{ side: 'bottom', align: 'end' }"
+              >
+                <UButton color="neutral" variant="soft" size="xs" icon="i-lucide-plus">
+                  Attach
+                </UButton>
+              </UDropdownMenu>
+              <UButton
+                v-else
+                color="neutral"
+                variant="soft"
+                size="xs"
+                icon="i-lucide-plus"
+                disabled
+                :title="
+                  tasks.available
+                    ? 'Connect an issue tracker first (Integrations)'
+                    : 'Enable the issue-tracker integration first'
+                "
+              >
+                Attach
+              </UButton>
+            </div>
+            <div v-if="pendingIssues.length" class="space-y-1">
+              <div
+                v-for="item in pendingIssues"
+                :key="contextKey(item)"
+                class="flex items-center gap-1.5 rounded-md border border-slate-800 bg-slate-900/60 px-2 py-1.5 text-xs text-slate-300"
+              >
+                <UIcon
+                  :name="item.icon ?? 'i-lucide-square-check'"
+                  class="h-3.5 w-3.5 shrink-0 text-indigo-400"
+                />
+                <span class="truncate">{{ item.title }}</span>
+                <UBadge
+                  v-if="item.needsImport"
+                  color="neutral"
+                  variant="soft"
+                  size="xs"
+                  class="ml-1 shrink-0"
+                >
+                  imports on add
+                </UBadge>
+                <button
+                  type="button"
+                  class="ml-auto shrink-0 text-slate-400 hover:text-slate-200"
+                  @click="removePending(item)"
+                >
+                  <UIcon name="i-lucide-x" class="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </div>
+            <p v-else class="text-[11px] text-slate-500">
+              Attach a tracker issue so agents see its description and comments while implementing
+              this task.
             </p>
           </div>
 

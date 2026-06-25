@@ -25,12 +25,10 @@ import SlackPanel from '~/components/slack/SlackPanel.vue'
 import GitHubOnboarding from '~/components/github/GitHubOnboarding.vue'
 import FragmentLibraryPanel from '~/components/fragments/FragmentLibraryPanel.vue'
 import CommandBar from '~/components/layout/CommandBar.vue'
-import MergeThresholdsPanel from '~/components/settings/MergeThresholdsPanel.vue'
-import IssueTrackerWritebackPanel from '~/components/settings/IssueTrackerWritebackPanel.vue'
+import IntegrationsHub from '~/components/layout/IntegrationsHub.vue'
 import WorkspaceSettingsPanel from '~/components/settings/WorkspaceSettingsPanel.vue'
-import DatadogPanel from '~/components/settings/DatadogPanel.vue'
+import ObservabilityConnectionPanel from '~/components/settings/ObservabilityConnectionPanel.vue'
 import ModelConfigurationPanel from '~/components/settings/ModelConfigurationPanel.vue'
-import ServiceFragmentDefaultsPanel from '~/components/settings/ServiceFragmentDefaultsPanel.vue'
 import LocalModelEndpointsPanel from '~/components/settings/LocalModelEndpointsPanel.vue'
 import OpenRouterCatalogPanel from '~/components/settings/OpenRouterCatalogPanel.vue'
 import VendorCredentialsModal from '~/components/providers/VendorCredentialsModal.vue'
@@ -118,12 +116,10 @@ watch(
       <SlackPanel />
       <FragmentLibraryPanel />
       <CommandBar />
-      <MergeThresholdsPanel />
-      <IssueTrackerWritebackPanel />
+      <IntegrationsHub />
       <WorkspaceSettingsPanel />
-      <DatadogPanel />
+      <ObservabilityConnectionPanel />
       <ModelConfigurationPanel />
-      <ServiceFragmentDefaultsPanel />
       <LocalModelEndpointsPanel />
       <OpenRouterCatalogPanel />
       <VendorCredentialsModal />

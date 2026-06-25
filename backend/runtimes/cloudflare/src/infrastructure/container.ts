@@ -40,8 +40,9 @@ import {
   TicketTrackerService,
   IssueWritebackService,
   githubIssuesLogic,
-  DATADOG_CIPHER_INFO,
-  DatadogReleaseHealthProvider,
+  OBSERVABILITY_CIPHER_INFO,
+  RegistryReleaseHealthProvider,
+  defaultObservabilityRegistry,
   PagerDutyEnrichmentProvider,
   IncidentIoEnrichmentProvider,
 } from '@cat-factory/integrations'
@@ -140,7 +141,7 @@ import { D1ClarityReviewRepository } from './repositories/D1ClarityReviewReposit
 import { D1NotificationRepository } from './repositories/D1NotificationRepository'
 import { D1MergePresetRepository } from './repositories/D1MergePresetRepository'
 import { D1WorkspaceSettingsRepository } from './repositories/D1WorkspaceSettingsRepository'
-import { D1DatadogConnectionRepository } from './repositories/D1DatadogConnectionRepository'
+import { D1ObservabilityConnectionRepository } from './repositories/D1ObservabilityConnectionRepository'
 import { D1ReleaseHealthConfigRepository } from './repositories/D1ReleaseHealthConfigRepository'
 import { D1PipelineScheduleRepository } from './repositories/D1PipelineScheduleRepository'
 import { D1TrackerSettingsRepository } from './repositories/D1TrackerSettingsRepository'
@@ -525,32 +526,34 @@ function selectMergeLifecycleDeps(
 }
 
 /**
- * Wire the Datadog post-release-health gate when enabled (+ ENCRYPTION_KEY): the
- * connection + per-block config repos, the cipher that seals the keys, the release-health
- * provider the gate probes, and (optionally) the PagerDuty / incident.io enrichment
- * providers. Off → the gate is a pass-through and the release-health module isn't built.
+ * Wire the observability post-release-health gate when enabled (+ ENCRYPTION_KEY): the
+ * connection + per-block config repos, the cipher that seals the credentials, the pluggable
+ * release-health provider the gate probes (a registry of vendor adapters — Datadog today),
+ * and (optionally) the PagerDuty / incident.io enrichment providers. Off → the gate is a
+ * pass-through and the release-health module isn't built.
  */
 function selectReleaseHealthDeps(
   env: Env,
   config: AppConfig,
   db: D1Database,
 ): Partial<CoreDependencies> {
-  if (!config.datadog.enabled || !config.datadog.encryptionKey) return {}
-  const datadogConnectionRepository = new D1DatadogConnectionRepository({ db })
+  if (!config.releaseHealth.enabled || !config.releaseHealth.encryptionKey) return {}
+  const observabilityConnectionRepository = new D1ObservabilityConnectionRepository({ db })
   const releaseHealthConfigRepository = new D1ReleaseHealthConfigRepository({ db })
-  const datadogSecretCipher = new WebCryptoSecretCipher({
-    masterKeyBase64: config.datadog.encryptionKey,
-    info: DATADOG_CIPHER_INFO,
+  const observabilitySecretCipher = new WebCryptoSecretCipher({
+    masterKeyBase64: config.releaseHealth.encryptionKey,
+    info: OBSERVABILITY_CIPHER_INFO,
   })
   const deps: Partial<CoreDependencies> = {
-    datadogConnectionRepository,
+    observabilityConnectionRepository,
     releaseHealthConfigRepository,
-    datadogSecretCipher,
-    releaseHealthProvider: new DatadogReleaseHealthProvider({
-      datadogConnectionRepository,
+    observabilitySecretCipher,
+    releaseHealthProvider: new RegistryReleaseHealthProvider({
+      observabilityConnectionRepository,
       releaseHealthConfigRepository,
       blockRepository: new D1BlockRepository({ db }),
-      secretCipher: datadogSecretCipher,
+      secretCipher: observabilitySecretCipher,
+      registry: defaultObservabilityRegistry,
     }),
   }
   const enrichers: IncidentEnrichmentProvider[] = []

@@ -1,24 +1,25 @@
 import type {
   BlockRepository,
   Clock,
-  DatadogConnectionRepository,
+  ObservabilityConnectionRepository,
   ReleaseHealthConfigRepository,
   SecretCipher,
   WorkspaceRepository,
 } from '@cat-factory/kernel'
 import { assertFound, requireWorkspace } from '@cat-factory/kernel'
 import type {
-  DatadogConnectionView,
+  ObservabilityConnectionView,
   ReleaseHealthConfigWire,
-  UpsertDatadogConnectionInput,
+  UpsertObservabilityConnectionInput,
   UpsertReleaseHealthConfigInput,
 } from '@cat-factory/contracts'
+import { observabilityConnectionSummary } from '@cat-factory/contracts'
 
 export interface ReleaseHealthServiceDependencies {
-  datadogConnectionRepository: DatadogConnectionRepository
+  observabilityConnectionRepository: ObservabilityConnectionRepository
   releaseHealthConfigRepository: ReleaseHealthConfigRepository
-  /** Seals the Datadog API/app keys at rest (domain tag 'cat-factory:datadog'). */
-  datadogSecretCipher: SecretCipher
+  /** Seals the observability credentials at rest (domain tag 'cat-factory:observability'). */
+  observabilitySecretCipher: SecretCipher
   workspaceRepository: WorkspaceRepository
   /** Validates a per-block config targets a block that exists in the workspace. */
   blockRepository: BlockRepository
@@ -27,12 +28,13 @@ export interface ReleaseHealthServiceDependencies {
 
 /**
  * Manages the post-release-health integration's settings for a workspace: the (single)
- * Datadog connection — credentials sealed at rest, never read back — and the per-block
- * monitor/SLO mappings the gate reads. Read paths return redacted views; the secrets
- * only leave the cipher inside the `DatadogReleaseHealthProvider` at probe time.
+ * observability connection — provider-keyed, credentials sealed at rest as one JSON blob
+ * and never read back — and the per-block monitor/SLO mappings the gate reads. Read paths
+ * return redacted views (provider + a non-secret summary); the secrets only leave the
+ * cipher inside the provider adapter at probe time.
  */
 export class ReleaseHealthService {
-  private readonly connections: DatadogConnectionRepository
+  private readonly connections: ObservabilityConnectionRepository
   private readonly configs: ReleaseHealthConfigRepository
   private readonly cipher: SecretCipher
   private readonly workspaceRepository: WorkspaceRepository
@@ -40,44 +42,45 @@ export class ReleaseHealthService {
   private readonly clock: Clock
 
   constructor(deps: ReleaseHealthServiceDependencies) {
-    this.connections = deps.datadogConnectionRepository
+    this.connections = deps.observabilityConnectionRepository
     this.configs = deps.releaseHealthConfigRepository
-    this.cipher = deps.datadogSecretCipher
+    this.cipher = deps.observabilitySecretCipher
     this.workspaceRepository = deps.workspaceRepository
     this.blocks = deps.blockRepository
     this.clock = deps.clock
   }
 
-  /** The workspace's Datadog connection, redacted (never returns the secret keys). */
-  async getConnection(workspaceId: string): Promise<DatadogConnectionView> {
+  /** The workspace's observability connection, redacted (never returns the secret keys). */
+  async getConnection(workspaceId: string): Promise<ObservabilityConnectionView> {
     await requireWorkspace(this.workspaceRepository, workspaceId)
     const connection = await this.connections.get(workspaceId)
-    return connection
-      ? { connected: true, site: connection.site }
-      : { connected: false, site: null }
+    if (!connection) return { connected: false, provider: null, summary: null }
+    return {
+      connected: true,
+      provider: connection.provider,
+      summary: parseSummary(connection.summary),
+    }
   }
 
-  /** Set/replace the workspace's Datadog connection, sealing the keys at rest. */
+  /** Set/replace the workspace's observability connection, sealing the credentials at rest. */
   async setConnection(
     workspaceId: string,
-    input: UpsertDatadogConnectionInput,
-  ): Promise<DatadogConnectionView> {
+    input: UpsertObservabilityConnectionInput,
+  ): Promise<ObservabilityConnectionView> {
     await requireWorkspace(this.workspaceRepository, workspaceId)
     const now = this.clock.now()
-    const [apiKey, appKey] = await Promise.all([
-      this.cipher.encrypt(input.apiKey),
-      this.cipher.encrypt(input.appKey),
-    ])
+    const summary = observabilityConnectionSummary(input.provider, input.credentials)
+    const credentials = await this.cipher.encrypt(JSON.stringify(input.credentials))
     const existing = await this.connections.get(workspaceId)
     await this.connections.upsert({
       workspaceId,
-      site: input.site,
-      apiKey,
-      appKey,
+      provider: input.provider,
+      credentials,
+      summary: JSON.stringify(summary),
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
     })
-    return { connected: true, site: input.site }
+    return { connected: true, provider: input.provider, summary }
   }
 
   async deleteConnection(workspaceId: string): Promise<void> {
@@ -131,5 +134,15 @@ export class ReleaseHealthService {
     await requireWorkspace(this.workspaceRepository, workspaceId)
     assertFound(await this.blocks.get(workspaceId, blockId), 'Block', blockId)
     await this.configs.delete(workspaceId, blockId)
+  }
+}
+
+/** Parse the stored non-secret summary JSON, tolerating a malformed/empty value. */
+function parseSummary(raw: string): Record<string, string> | null {
+  try {
+    const parsed: unknown = JSON.parse(raw)
+    return parsed && typeof parsed === 'object' ? (parsed as Record<string, string>) : null
+  } catch {
+    return null
   }
 }
