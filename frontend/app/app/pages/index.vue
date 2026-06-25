@@ -4,6 +4,7 @@ import SideBar from '~/components/layout/SideBar.vue'
 import BoardToolbar from '~/components/layout/BoardToolbar.vue'
 import SpendWarningBanner from '~/components/layout/SpendWarningBanner.vue'
 import GitHubPatBanner from '~/components/layout/GitHubPatBanner.vue'
+import AiProvidersBanner from '~/components/layout/AiProvidersBanner.vue'
 import PipelineBuilder from '~/components/pipeline/PipelineBuilder.vue'
 import InspectorPanel from '~/components/panels/InspectorPanel.vue'
 import DecisionModal from '~/components/panels/DecisionModal.vue'
@@ -33,12 +34,71 @@ import LocalModelEndpointsPanel from '~/components/settings/LocalModelEndpointsP
 import OpenRouterCatalogPanel from '~/components/settings/OpenRouterCatalogPanel.vue'
 import VendorCredentialsModal from '~/components/providers/VendorCredentialsModal.vue'
 import PersonalCredentialModal from '~/components/providers/PersonalCredentialModal.vue'
+import AiProviderOnboardingModal from '~/components/providers/AiProviderOnboardingModal.vue'
+import AiPresetMismatchDialog from '~/components/providers/AiPresetMismatchDialog.vue'
 
 const workspace = useWorkspaceStore()
 const github = useGitHubStore()
+const models = useModelsStore()
+const ui = useUiStore()
+const aiReadiness = useAiReadiness()
 
 // Load the board from the backend before rendering it.
 onMounted(() => workspace.init())
+
+// Per-session guards so each AI-onboarding dialog auto-opens at most once (later opens are
+// user-driven from the banner). Reset on workspace switch by the catalog watcher below.
+const autoOpenedSetup = ref(false)
+const autoOpenedPreset = ref(false)
+
+// Load the per-workspace model catalog as soon as a board is active (re-loaded per board —
+// availability reflects that workspace's keys/subscriptions). This populates the AI-readiness
+// signals regardless of which lazy picker happens to mount, so the onboarding prompts below
+// can fire. Credential edits re-fetch via `models.refresh()` in the provider panels.
+watch(
+  () => workspace.workspaceId,
+  (id, prev) => {
+    if (id) void models.ensureLoaded(id)
+    // Switching workspaces resets the per-session AI-onboarding state: dismissals and the
+    // auto-open guards are scoped to one workspace, so a prompt dismissed in workspace A must
+    // not suppress the (independent) prompt for workspace B that also lacks a usable source.
+    if (prev !== undefined && id !== prev) {
+      autoOpenedSetup.value = false
+      autoOpenedPreset.value = false
+      ui.resetAiOnboarding()
+    }
+  },
+  { immediate: true },
+)
+
+// Auto-open the right AI-onboarding dialog once per session: the no-source prompt takes
+// precedence over the preset-mismatch prompt. Honour the per-session dismissed flags so a
+// user who closed the banner isn't re-interrupted, and only auto-open once each (later opens
+// are user-driven from the banner). The prompts clear themselves once the gap is closed.
+watch(
+  () => [
+    aiReadiness.ready.value,
+    aiReadiness.hasUsableModel.value,
+    aiReadiness.defaultPresetBroken.value,
+  ],
+  () => {
+    if (!aiReadiness.ready.value) return
+    if (!aiReadiness.hasUsableModel.value) {
+      if (!autoOpenedSetup.value && !ui.aiSetupDismissed) {
+        autoOpenedSetup.value = true
+        ui.openAiProviderSetup()
+      }
+      return
+    }
+    if (aiReadiness.defaultPresetBroken.value) {
+      if (!autoOpenedPreset.value && !ui.aiPresetDismissed) {
+        autoOpenedPreset.value = true
+        ui.openAiPresetMismatch()
+      }
+    }
+  },
+  { immediate: true },
+)
 
 // Probe the GitHub integration as soon as a board is active (re-probe per board —
 // connections are per workspace). The result drives the onboarding gate below
@@ -75,6 +135,8 @@ watch(
   <div class="flex h-screen w-screen overflow-hidden bg-slate-950 text-slate-100">
     <!-- Local-mode setup prompt (missing GitHub PAT); floats over whatever is shown below. -->
     <GitHubPatBanner />
+    <!-- AI-readiness prompt (no usable model source, or default preset uses unavailable models). -->
+    <AiProvidersBanner v-if="workspace.ready && !needsGitHubInstall && !githubProbePending" />
 
     <!-- Resolving whether the GitHub App is installed, before we decide what to show. -->
     <div
@@ -124,6 +186,8 @@ watch(
       <OpenRouterCatalogPanel />
       <VendorCredentialsModal />
       <PersonalCredentialModal />
+      <AiProviderOnboardingModal />
+      <AiPresetMismatchDialog />
     </template>
 
     <!-- Backend unreachable / bootstrap failed -->
