@@ -1,6 +1,6 @@
 import type { AgentRouting } from '@cat-factory/agents'
 import type { ModelOption } from '@cat-factory/contracts'
-import type { DocumentSourceKind, ModelRef, TaskSourceKind } from '@cat-factory/kernel'
+import type { DocumentSourceKind, ModelRef } from '@cat-factory/kernel'
 import type { SpendPricing } from '@cat-factory/spend'
 
 // The resolved application configuration shape, shared by every facade. The values
@@ -136,8 +136,6 @@ export interface TasksConfig {
    * encryption key is mandatory (config load fails loudly without it).
    */
   enabled: boolean
-  /** Which source providers to register (default: all). */
-  sources: TaskSourceKind[]
   /** Service-level master key (base64) backing source-credential encryption at rest. */
   encryptionKey?: string
 }

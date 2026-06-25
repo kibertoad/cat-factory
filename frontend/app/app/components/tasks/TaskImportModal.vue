@@ -24,7 +24,7 @@ const ref_ = ref('')
 const importing = ref(false)
 
 const sourceItems = computed(() =>
-  tasks.connectedSources.map((s) => ({ label: s.label, value: s.source })),
+  tasks.offeredSources.map((s) => ({ label: s.label, value: s.source })),
 )
 const descriptor = computed(() => (source.value ? tasks.descriptorFor(source.value) : undefined))
 
@@ -52,7 +52,7 @@ const creatingId = ref<string | null>(null)
 watch(open, (isOpen) => {
   if (isOpen) {
     ref_.value = ''
-    source.value = ui.taskImport?.source ?? tasks.connectedSources[0]?.source ?? undefined
+    source.value = ui.taskImport?.source ?? tasks.offeredSources[0]?.source ?? undefined
     containerId.value = containerItems.value[0]?.value
     creatingId.value = null
     tasks.loadTasks().catch(() => {})
@@ -102,10 +102,10 @@ async function doImport() {
 <template>
   <UModal v-model:open="open" title="Import from a task source">
     <template #body>
-      <!-- Empty state: no connections -->
-      <div v-if="!tasks.anyConnected" class="space-y-3 text-center">
+      <!-- Empty state: no source offered (none connected/installed, or all disabled) -->
+      <div v-if="!tasks.anyOffered" class="space-y-3 text-center">
         <UIcon name="i-lucide-plug" class="mx-auto h-8 w-8 text-slate-500" />
-        <p class="text-sm text-slate-400">Connect a task source first.</p>
+        <p class="text-sm text-slate-400">Connect or enable a task source first.</p>
         <div class="flex justify-center gap-2">
           <UButton
             v-for="s in tasks.sources"
@@ -115,7 +115,7 @@ async function doImport() {
             :icon="s.icon"
             @click="ui.openTaskConnect(s.source)"
           >
-            Connect {{ s.label }}
+            {{ s.available ? `Enable ${s.label}` : `Connect ${s.label}` }}
           </UButton>
         </div>
       </div>

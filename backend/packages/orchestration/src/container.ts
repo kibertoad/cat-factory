@@ -33,7 +33,11 @@ import type {
 import type { DocumentSourceProvider } from '@cat-factory/kernel'
 import type { DocumentConnectionRepository, DocumentRepository } from '@cat-factory/kernel'
 import type { TaskSourceProvider } from '@cat-factory/kernel'
-import type { TaskConnectionRepository, TaskRepository } from '@cat-factory/kernel'
+import type {
+  TaskConnectionRepository,
+  TaskRepository,
+  TaskSourceSettingsRepository,
+} from '@cat-factory/kernel'
 import type { EnvironmentProvider, UrlSafetyPolicy } from '@cat-factory/kernel'
 import type {
   EnvironmentConnectionRepository,
@@ -308,6 +312,8 @@ export interface CoreDependencies {
   // execution engine to feed issues linked to a block to agents as context.
   taskSourceProviders?: TaskSourceProvider[]
   taskConnectionRepository?: TaskConnectionRepository
+  /** Per-workspace on/off toggle for each task source (absent row ⇒ enabled). */
+  taskSourceSettingsRepository?: TaskSourceSettingsRepository
   taskRepository?: TaskRepository
 
   // ---- Ephemeral environment integration (optional; wired when configured) -
@@ -837,11 +843,17 @@ function createTasksModule(
   deps: CoreDependencies,
   boardService: BoardService,
 ): TasksModule | undefined {
-  const { taskSourceProviders, taskConnectionRepository, taskRepository } = deps
+  const {
+    taskSourceProviders,
+    taskConnectionRepository,
+    taskSourceSettingsRepository,
+    taskRepository,
+  } = deps
   if (
     !taskSourceProviders ||
     taskSourceProviders.length === 0 ||
     !taskConnectionRepository ||
+    !taskSourceSettingsRepository ||
     !taskRepository
   ) {
     return undefined
@@ -850,9 +862,15 @@ function createTasksModule(
   const registry = new MapTaskSourceRegistry(taskSourceProviders)
   const connectionService = new TaskConnectionService({
     taskConnectionRepository,
+    taskSourceSettingsRepository,
     registry,
     workspaceRepository: deps.workspaceRepository,
     clock: deps.clock,
+    // GitHub Issues' availability is the installed GitHub App's presence; absent when
+    // the GitHub integration isn't wired (the provider then isn't registered anyway).
+    ...(deps.githubInstallationRepository
+      ? { installations: deps.githubInstallationRepository }
+      : {}),
   })
   const importService = new TaskImportService({
     registry,

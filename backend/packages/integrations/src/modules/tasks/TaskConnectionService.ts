@@ -1,7 +1,9 @@
 import type { Clock } from '@cat-factory/kernel'
 import type { TaskConnectionRecord, TaskConnectionRepository } from '@cat-factory/kernel'
-import type { TaskSourceRegistry } from '@cat-factory/kernel'
-import type { TaskConnection, TaskSourceDescriptor, TaskSourceKind } from '@cat-factory/kernel'
+import type { TaskSourceSettingsRepository } from '@cat-factory/kernel'
+import type { GitHubInstallationRepository } from '@cat-factory/kernel'
+import type { TaskSourceProvider, TaskSourceRegistry } from '@cat-factory/kernel'
+import type { TaskConnection, TaskSourceKind, TaskSourceState } from '@cat-factory/kernel'
 import { ConflictError, ValidationError } from '@cat-factory/kernel'
 import { requireWorkspace } from '@cat-factory/kernel'
 import type { WorkspaceRepository } from '@cat-factory/kernel'
@@ -14,9 +16,39 @@ import type { WorkspaceRepository } from '@cat-factory/kernel'
 
 export interface TaskConnectionServiceDependencies {
   taskConnectionRepository: TaskConnectionRepository
+  /** Per-workspace on/off toggle for each source (absent row ⇒ enabled). */
+  taskSourceSettingsRepository: TaskSourceSettingsRepository
   registry: TaskSourceRegistry
   workspaceRepository: WorkspaceRepository
   clock: Clock
+  /**
+   * Resolves the workspace's installed GitHub App, used to decide whether the
+   * credentialless GitHub Issues source is available (it rides that App). Absent
+   * when the GitHub integration isn't wired, in which case GitHub Issues — if its
+   * provider is even registered — is reported unavailable.
+   */
+  installations?: GitHubInstallationRepository
+}
+
+/**
+ * A credentialless provider carries no connection to make: there are no credential
+ * fields to fill in. Today the only such provider is GitHub Issues, which rides the
+ * workspace's installed GitHub App. `connect()` and the import credential resolver
+ * use this to skip the connection lookup; it does NOT by itself decide availability
+ * (see `isAvailable`, where the App-presence check is keyed on the GitHub source).
+ */
+function isCredentialless(provider: TaskSourceProvider): boolean {
+  return provider.descriptor.credentialFields.length === 0
+}
+
+/**
+ * The credentialless source whose availability is the installed GitHub App's
+ * presence. Keyed on the source kind (not just "is credentialless") so a future
+ * credentialless source with a different out-of-band auth path is forced to add its
+ * own availability branch rather than silently inheriting the App check.
+ */
+function ridesGitHubApp(provider: TaskSourceProvider): boolean {
+  return provider.kind === 'github' && isCredentialless(provider)
 }
 
 function toConnection(record: TaskConnectionRecord): TaskConnection {
@@ -30,9 +62,51 @@ function toConnection(record: TaskConnectionRecord): TaskConnection {
 export class TaskConnectionService {
   constructor(private readonly deps: TaskConnectionServiceDependencies) {}
 
-  /** The descriptors of every configured source (drives the connect UI). */
-  listSources(): TaskSourceDescriptor[] {
-    return this.deps.registry.list().map((p) => p.descriptor)
+  /**
+   * Every configured source with the workspace's live state for it (drives the
+   * settings + import UI): each source's descriptor plus whether it is available
+   * now and whether the workspace has it enabled. Availability is connection
+   * presence for credentialed sources, and the installed GitHub App for the
+   * credentialless GitHub Issues source.
+   */
+  async listSourceStates(workspaceId: string): Promise<TaskSourceState[]> {
+    const settings = await this.deps.taskSourceSettingsRepository.getByWorkspace(workspaceId)
+    const enabledBySource = new Map(settings.map((s) => [s.source, s.enabled]))
+    const states: TaskSourceState[] = []
+    for (const provider of this.deps.registry.list()) {
+      states.push({
+        ...provider.descriptor,
+        available: await this.isAvailable(workspaceId, provider),
+        // No row ⇒ default enabled, so a source is offered as soon as it's available.
+        enabled: enabledBySource.get(provider.kind) ?? true,
+      })
+    }
+    return states
+  }
+
+  /** Whether a source can be used right now (drives the import gate + the UI toggle's enablement). */
+  private async isAvailable(workspaceId: string, provider: TaskSourceProvider): Promise<boolean> {
+    if (ridesGitHubApp(provider)) {
+      // GitHub Issues rides the workspace's installed GitHub App: available once installed.
+      if (!this.deps.installations) return false
+      return (await this.deps.installations.getByWorkspace(workspaceId)) !== null
+    }
+    return (
+      (await this.deps.taskConnectionRepository.getByWorkspace(workspaceId, provider.kind)) !== null
+    )
+  }
+
+  /** The workspace's toggle for a source (defaults to enabled when no row exists). */
+  async isEnabled(workspaceId: string, source: TaskSourceKind): Promise<boolean> {
+    const row = await this.deps.taskSourceSettingsRepository.get(workspaceId, source)
+    return row?.enabled ?? true
+  }
+
+  /** Enable or disable a source for the workspace (the per-workspace toggle). */
+  async setEnabled(workspaceId: string, source: TaskSourceKind, enabled: boolean): Promise<void> {
+    await requireWorkspace(this.deps.workspaceRepository, workspaceId)
+    this.requireProvider(source)
+    await this.deps.taskSourceSettingsRepository.upsert({ workspaceId, source, enabled })
   }
 
   /** Resolve a provider for a source or throw if that source isn't configured. */
@@ -50,6 +124,13 @@ export class TaskConnectionService {
   ): Promise<TaskConnection> {
     await requireWorkspace(this.deps.workspaceRepository, workspaceId)
     const provider = this.requireProvider(source)
+    if (isCredentialless(provider)) {
+      // A credentialless source has no connection to make: it rides the workspace's
+      // installed GitHub App and is toggled via setEnabled, not connected.
+      throw new ValidationError(
+        `The ${source} source has no connection to configure; it uses the workspace's installed GitHub App. Enable or disable it instead.`,
+      )
+    }
     const normalized = provider.normalizeConnection(credentials)
     const existing = await this.deps.taskConnectionRepository.getByWorkspace(workspaceId, source)
     const record: TaskConnectionRecord = {

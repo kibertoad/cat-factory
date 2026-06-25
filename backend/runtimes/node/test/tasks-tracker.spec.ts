@@ -21,8 +21,10 @@ const TASKS_ENV: NodeJS.ProcessEnv = {
   ENVIRONMENT: 'test',
   // The task-source integration is always on; the only requirement is the shared
   // ENCRYPTION_KEY (32 zero bytes, base64 — a valid master key for the test cipher).
+  // Jira is always registered; GitHub Issues only when a GitHub client is wired (off here),
+  // so this app exposes Jira alone. Which sources a workspace offers is a per-workspace
+  // toggle, not an env allow-list.
   ENCRYPTION_KEY: Buffer.alloc(32).toString('base64'),
-  TASK_SOURCES: 'jira',
 }
 
 if (databaseUrl) {
@@ -52,12 +54,17 @@ if (databaseUrl) {
   }
 
   describe('[node] per-tenant Jira + tracker', () => {
-    it('assembles the tasks module (always on) when the encryption key is set', () => {
-      const { container } = app()
+    it('assembles the tasks module (always on) when the encryption key is set', async () => {
+      const { container, app: a } = app()
       expect(container.tasks).toBeTruthy()
-      expect(container.tasks!.connectionService.listSources().map((s) => s.source)).toContain(
-        'jira',
-      )
+      const ws = (await call<WorkspaceSnapshot>(a, 'POST', '/workspaces', { seed: false })).body
+        .workspace.id
+      const states = await container.tasks!.connectionService.listSourceStates(ws)
+      expect(states.map((s) => s.source)).toContain('jira')
+      // Jira starts not-yet-available (unconnected) but enabled by default.
+      const jira = states.find((s) => s.source === 'jira')!
+      expect(jira.available).toBe(false)
+      expect(jira.enabled).toBe(true)
     })
 
     it('stores a tenant Jira connection encrypted and round-trips the credentials', async () => {

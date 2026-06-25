@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import type { SourceTask, TaskConnection, TaskSourceDescriptor } from '~/types/domain'
+import type { SourceTask, TaskConnection, TaskSourceState } from '~/types/domain'
 import { useTasksStore } from '~/stores/tasks'
 
 /** Minimal SourceTask factory — only the fields the read getters care about. */
@@ -23,13 +23,15 @@ function sourceTask(externalId: string, over: Partial<SourceTask> = {}): SourceT
   }
 }
 
-const jiraDescriptor: TaskSourceDescriptor = {
+const jiraDescriptor: TaskSourceState = {
   source: 'jira',
   label: 'Jira',
   icon: 'i-lucide-square-check',
   credentialFields: [],
   refLabel: 'Issue key or URL',
   refPlaceholder: 'PROJ-123',
+  available: true,
+  enabled: true,
 }
 
 const jiraConnection: TaskConnection = { source: 'jira', label: 'acme', connectedAt: 0 }

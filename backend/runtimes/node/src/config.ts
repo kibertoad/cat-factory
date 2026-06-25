@@ -5,7 +5,7 @@ import {
   effectiveCatalog,
   resolveModelRef,
 } from '@cat-factory/kernel'
-import type { DocumentSourceKind, TaskSourceKind } from '@cat-factory/kernel'
+import type { DocumentSourceKind } from '@cat-factory/kernel'
 import type {
   AppConfig,
   DocumentsConfig,
@@ -44,11 +44,6 @@ function loadPrivilegedApp(env: NodeJS.ProcessEnv): PrivilegedAppConfig | undefi
   if (appId === '' || !env.GITHUB_PRIVILEGED_APP_PRIVATE_KEY?.trim()) return undefined
   return { appId }
 }
-
-// The task sources the Node facade can serve, mirroring the Worker's `ALL_SOURCES`.
-// GitHub issues reuse the workspace's installed GitHub App (wired in the container
-// only when a GitHub client is available); Jira carries its own per-workspace creds.
-const NODE_TASK_SOURCES: readonly TaskSourceKind[] = ['jira', 'github']
 
 const ALL_DOCUMENT_SOURCES: readonly DocumentSourceKind[] = ['confluence', 'notion', 'github']
 
@@ -89,7 +84,8 @@ function loadDocumentsConfig(env: NodeJS.ProcessEnv): DocumentsConfig {
  * (tenants connect their own trackers through the UI, so there is no enable flag), with
  * a mandatory encryption key so credentials are never stored in plaintext. The key is
  * missing → fail loudly at config load rather than silently disabling the feature.
- * `TASK_SOURCES` narrows the registered providers (defaults to all Node-supported ones).
+ * Jira is always registered; GitHub Issues registers when a GitHub client is wired.
+ * Which sources a workspace OFFERS is the per-workspace toggle (task_source_settings).
  */
 function loadTasksConfig(env: NodeJS.ProcessEnv): TasksConfig {
   // The shared ENCRYPTION_KEY backs every integration (the cipher domain-separates per
@@ -102,14 +98,8 @@ function loadTasksConfig(env: NodeJS.ProcessEnv): TasksConfig {
         'least 32 bytes.',
     )
   }
-  const requested = csv(env.TASK_SOURCES).map((s) => s.toLowerCase())
-  const sources =
-    requested.length > 0
-      ? NODE_TASK_SOURCES.filter((s) => requested.includes(s))
-      : [...NODE_TASK_SOURCES]
   return {
     enabled: true,
-    sources: sources.length > 0 ? sources : [...NODE_TASK_SOURCES],
     encryptionKey,
   }
 }
