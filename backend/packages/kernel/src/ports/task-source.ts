@@ -1,6 +1,7 @@
 import type {
   TaskSourceKind,
   TaskSourceDescriptor,
+  TaskSourceDiagnostic,
   TaskComment,
   TaskSearchResult,
 } from '../domain/types.js'
@@ -85,6 +86,22 @@ export interface TaskSourceProvider {
     query: string,
     workspaceId: string,
   ): Promise<TaskSearchResult[]>
+  /**
+   * Live "check setup" probe: actually authenticate against the source and read a
+   * minimal slice of its issues API, classifying any failure (App not installed,
+   * missing Issues permission, bad/expired credentials, host unreachable) so the
+   * UI can guide setup — distinct from the passive `available` flag.
+   *
+   * `credentials` is the resolved connection bag for a credentialed source, or
+   * `null` for a credentialless one (GitHub rides the workspace's App, so it
+   * authenticates out-of-band from `workspaceId`). Optional: a provider without it
+   * gets a static verdict from {@link TaskConnectionService} based on availability.
+   * Implementations MUST resolve (never reject) — classify into the result.
+   */
+  diagnose?(input: {
+    workspaceId: string
+    credentials: TaskCredentials | null
+  }): Promise<TaskSourceDiagnostic>
 }
 
 /** A lookup of the providers wired for this deployment, keyed by source. */

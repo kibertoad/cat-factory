@@ -23,3 +23,17 @@ export function buildTaskExcerpt(content: TaskContent | TaskRecord, max = 280): 
   const lead = description ? `${content.title} — ${description}` : content.title
   return buildExcerpt(lead, max)
 }
+
+/**
+ * Read a numeric HTTP status off a thrown error, if it carries one. Both the
+ * GitHub (`GitHubApiError`) and Jira (`JiraApiError`) clients expose a `status`
+ * field; the setup-check probes duck-type it (rather than importing those classes
+ * across the layer boundary) to classify auth/permission/transport failures.
+ */
+export function httpStatusOf(err: unknown): number | null {
+  if (err && typeof err === 'object' && 'status' in err) {
+    const status = (err as { status: unknown }).status
+    if (typeof status === 'number') return status
+  }
+  return null
+}

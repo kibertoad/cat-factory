@@ -64,6 +64,46 @@ export const taskSourceStateSchema = v.object({
 })
 export type TaskSourceState = v.InferOutput<typeof taskSourceStateSchema>
 
+// ---- Live setup diagnostics ------------------------------------------------
+
+/**
+ * The verdict of a live "check setup" probe against a source. Distinct from the
+ * passive `available` flag (which only says a connection/installation row
+ * exists): this is the result of actually authenticating and reading, so it can
+ * tell a configured-but-broken source from a working one.
+ *   - `ready`         — authenticated and the issues API answered.
+ *   - `not_installed` — GitHub Issues' App isn't installed on the workspace.
+ *   - `not_connected` — a credentialed source (Jira) has no connection.
+ *   - `auth_failed`   — credentials/App key were rejected (HTTP 401).
+ *   - `forbidden`     — authenticated but lacking the needed scope, e.g. the
+ *                       GitHub App has no Issues permission (HTTP 403).
+ *   - `unreachable`   — the source host could not be reached (network / DNS).
+ *   - `error`         — anything else (unexpected status or body).
+ */
+export const taskSourceDiagnosticStatusSchema = v.picklist([
+  'ready',
+  'not_installed',
+  'not_connected',
+  'auth_failed',
+  'forbidden',
+  'unreachable',
+  'error',
+])
+export type TaskSourceDiagnosticStatus = v.InferOutput<typeof taskSourceDiagnosticStatusSchema>
+
+/** A source's live setup-check result: a status + a human-readable, actionable message. */
+export const taskSourceDiagnosticSchema = v.object({
+  source: taskSourceKindSchema,
+  /** Convenience: `status === 'ready'`. */
+  ok: v.boolean(),
+  status: taskSourceDiagnosticStatusSchema,
+  /** A one-line explanation the panel shows verbatim (what's wrong + how to fix). */
+  message: v.string(),
+  /** Optional extra context, e.g. the resolved account login or repo count. */
+  detail: v.optional(v.nullable(v.string())),
+})
+export type TaskSourceDiagnostic = v.InferOutput<typeof taskSourceDiagnosticSchema>
+
 // ---- Connection + task projections ----------------------------------------
 
 /** A workspace's connection to a task source, as exposed to clients (never the credentials). */

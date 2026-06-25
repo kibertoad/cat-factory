@@ -15,7 +15,7 @@
 // directly; linking is the source toggle), so both are shown explicitly to undo
 // the common confusion that "I have the GitHub App, why is nothing surfaced?".
 import { computed, onMounted, ref, watch } from 'vue'
-import type { TaskSourceKind, TrackerKind } from '~/types/domain'
+import type { TaskSourceDiagnosticStatus, TaskSourceKind, TrackerKind } from '~/types/domain'
 
 const tracker = useTrackerStore()
 const tasks = useTasksStore()
@@ -99,10 +99,64 @@ async function toggleSource(source: TaskSourceKind, enabled: boolean) {
     togglingSource.value = null
   }
 }
+
+// --- live "check setup" -------------------------------------------------------
+// The probe failed entirely (not a per-source state): the whole integration is
+// off or the backend errored, so the panel can't show real source state. We
+// translate the captured status into a plain explanation + next step.
+const probeFailureHint = computed(() => {
+  const err = tasks.probeError
+  if (tasks.available !== false || !err) return null
+  if (err.status === 503) {
+    return 'The task-source integration is turned off on this deployment (its encryption key is not configured). Set ENCRYPTION_KEY on the backend to enable issue tracking.'
+  }
+  if (err.status && err.status >= 500) {
+    return `The issue-tracker service returned an error (HTTP ${err.status}): ${err.message}. This usually means the backend isn't fully migrated/configured.`
+  }
+  return `Couldn't load issue-tracker settings${err.status ? ` (HTTP ${err.status})` : ''}: ${err.message}`
+})
+
+async function checkSetup(source: TaskSourceKind) {
+  try {
+    await tasks.checkSetup(source)
+  } catch (e) {
+    toast.add({
+      title: 'Check failed',
+      description: e instanceof Error ? e.message : String(e),
+      icon: 'i-lucide-triangle-alert',
+      color: 'error',
+    })
+  }
+}
+
+// Status → presentation for a setup-check verdict.
+const STATUS_UI: Record<
+  TaskSourceDiagnosticStatus,
+  { color: 'success' | 'warning' | 'error' | 'neutral'; icon: string }
+> = {
+  ready: { color: 'success', icon: 'i-lucide-circle-check' },
+  not_installed: { color: 'warning', icon: 'i-lucide-download' },
+  not_connected: { color: 'warning', icon: 'i-lucide-plug' },
+  auth_failed: { color: 'error', icon: 'i-lucide-key-round' },
+  forbidden: { color: 'error', icon: 'i-lucide-shield-x' },
+  unreachable: { color: 'error', icon: 'i-lucide-wifi-off' },
+  error: { color: 'error', icon: 'i-lucide-triangle-alert' },
+}
 </script>
 
 <template>
   <div class="space-y-7">
+    <!-- Whole-integration failure: explain WHY nothing is surfaced, instead of the
+         passive per-source "install first" hints (which would be misleading here). -->
+    <UAlert
+      v-if="probeFailureHint"
+      color="error"
+      variant="subtle"
+      icon="i-lucide-triangle-alert"
+      title="Issue tracking isn't available"
+      :description="probeFailureHint"
+    />
+
     <!-- 1. Filing tracker ----------------------------------------------------->
     <section class="space-y-3">
       <div>
@@ -175,69 +229,118 @@ async function toggleSource(source: TaskSourceKind, enabled: boolean) {
       </div>
 
       <!-- GitHub Issues source -->
-      <div
-        class="flex items-center justify-between gap-2 rounded-lg border border-slate-800 bg-slate-800/40 px-3 py-2.5"
-      >
-        <div class="flex min-w-0 items-center gap-2.5">
-          <UIcon name="i-lucide-github" class="h-5 w-5 shrink-0 text-slate-300" />
-          <div class="min-w-0">
-            <div class="text-sm font-medium text-slate-200">GitHub Issues</div>
-            <div class="text-[11px] text-slate-500">
-              {{
-                githubAvailable
-                  ? 'Rides your installed GitHub App — no credentials needed.'
-                  : 'Install the GitHub App (Integrations → GitHub) to offer this source.'
-              }}
+      <div class="rounded-lg border border-slate-800 bg-slate-800/40 px-3 py-2.5">
+        <div class="flex items-center justify-between gap-2">
+          <div class="flex min-w-0 items-center gap-2.5">
+            <UIcon name="i-lucide-github" class="h-5 w-5 shrink-0 text-slate-300" />
+            <div class="min-w-0">
+              <div class="text-sm font-medium text-slate-200">GitHub Issues</div>
+              <div class="text-[11px] text-slate-500">
+                {{
+                  githubAvailable
+                    ? 'Rides your installed GitHub App — no credentials needed.'
+                    : 'Install the GitHub App (Integrations → GitHub) to offer this source.'
+                }}
+              </div>
             </div>
           </div>
+          <div class="flex shrink-0 items-center gap-2">
+            <UButton
+              size="xs"
+              color="neutral"
+              variant="ghost"
+              icon="i-lucide-stethoscope"
+              :loading="tasks.checking === 'github'"
+              @click="checkSetup('github')"
+            >
+              Check setup
+            </UButton>
+            <USwitch
+              v-if="githubAvailable"
+              :model-value="github?.enabled ?? false"
+              :loading="togglingSource === 'github'"
+              @update:model-value="(v: boolean) => toggleSource('github', v)"
+            />
+            <UButton
+              v-else
+              size="xs"
+              color="neutral"
+              variant="soft"
+              icon="i-lucide-github"
+              @click="ui.openGitHub()"
+            >
+              Install
+            </UButton>
+          </div>
         </div>
-        <USwitch
-          v-if="githubAvailable"
-          :model-value="github?.enabled ?? false"
-          :loading="togglingSource === 'github'"
-          @update:model-value="(v: boolean) => toggleSource('github', v)"
+        <UAlert
+          v-if="tasks.diagnostics.github"
+          class="mt-2.5"
+          :color="STATUS_UI[tasks.diagnostics.github.status].color"
+          variant="subtle"
+          :icon="STATUS_UI[tasks.diagnostics.github.status].icon"
+          :description="
+            tasks.diagnostics.github.message +
+            (tasks.diagnostics.github.detail ? ` ${tasks.diagnostics.github.detail}` : '')
+          "
+          :ui="{ description: 'text-[11px]' }"
         />
-        <UButton
-          v-else
-          size="xs"
-          color="neutral"
-          variant="soft"
-          icon="i-lucide-github"
-          @click="ui.openGitHub()"
-        >
-          Install
-        </UButton>
       </div>
 
       <!-- Jira source -->
-      <div
-        class="flex items-center justify-between gap-2 rounded-lg border border-slate-800 bg-slate-800/40 px-3 py-2.5"
-      >
-        <div class="flex min-w-0 items-center gap-2.5">
-          <UIcon name="i-lucide-trello" class="h-5 w-5 shrink-0 text-slate-300" />
-          <div class="min-w-0">
-            <div class="text-sm font-medium text-slate-200">Jira</div>
-            <div class="text-[11px] text-slate-500">
-              {{ jiraConnected ? 'Connected.' : 'Connect with a Jira account and API token.' }}
+      <div class="rounded-lg border border-slate-800 bg-slate-800/40 px-3 py-2.5">
+        <div class="flex items-center justify-between gap-2">
+          <div class="flex min-w-0 items-center gap-2.5">
+            <UIcon name="i-lucide-trello" class="h-5 w-5 shrink-0 text-slate-300" />
+            <div class="min-w-0">
+              <div class="text-sm font-medium text-slate-200">Jira</div>
+              <div class="text-[11px] text-slate-500">
+                {{ jiraConnected ? 'Connected.' : 'Connect with a Jira account and API token.' }}
+              </div>
             </div>
           </div>
+          <div class="flex shrink-0 items-center gap-2">
+            <UButton
+              v-if="jiraConnected"
+              size="xs"
+              color="neutral"
+              variant="ghost"
+              icon="i-lucide-stethoscope"
+              :loading="tasks.checking === 'jira'"
+              @click="checkSetup('jira')"
+            >
+              Check setup
+            </UButton>
+            <USwitch
+              v-if="jira?.available"
+              :model-value="jira?.enabled ?? false"
+              :loading="togglingSource === 'jira'"
+              @update:model-value="(v: boolean) => toggleSource('jira', v)"
+            />
+            <UButton
+              v-else
+              size="xs"
+              color="neutral"
+              variant="soft"
+              icon="i-lucide-plug"
+              @click="ui.openTaskConnect('jira')"
+            >
+              Connect
+            </UButton>
+          </div>
         </div>
-        <USwitch
-          v-if="jira?.available"
-          :model-value="jira?.enabled ?? false"
-          :loading="togglingSource === 'jira'"
-          @update:model-value="(v: boolean) => toggleSource('jira', v)"
+        <UAlert
+          v-if="tasks.diagnostics.jira"
+          class="mt-2.5"
+          :color="STATUS_UI[tasks.diagnostics.jira.status].color"
+          variant="subtle"
+          :icon="STATUS_UI[tasks.diagnostics.jira.status].icon"
+          :description="
+            tasks.diagnostics.jira.message +
+            (tasks.diagnostics.jira.detail ? ` ${tasks.diagnostics.jira.detail}` : '')
+          "
+          :ui="{ description: 'text-[11px]' }"
         />
-        <UButton
-          v-else
-          size="xs"
-          color="neutral"
-          variant="soft"
-          icon="i-lucide-plug"
-          @click="ui.openTaskConnect('jira')"
-        >
-          Connect
-        </UButton>
       </div>
     </section>
 

@@ -4,6 +4,7 @@ import type {
   SourceTask,
   TaskConnection,
   TaskSearchResult,
+  TaskSourceDiagnostic,
   TaskSourceKind,
   TaskSourceState,
 } from '~/types/domain'
@@ -27,11 +28,21 @@ export const useTasksStore = defineStore('tasks', () => {
 
   /** null = unknown (not probed yet), true/false = integration on/off. */
   const available = ref<boolean | null>(null)
+  /**
+   * Why the last probe failed, when it did — captured (rather than swallowed) so
+   * the settings panel can explain *why* nothing is surfaced (integration disabled
+   * vs a server/backend error) instead of a blanket "install integration first".
+   */
+  const probeError = ref<{ status: number | null; message: string } | null>(null)
   /** The configured sources, each with its descriptor + per-workspace state (available + enabled). */
   const sources = ref<TaskSourceState[]>([])
   /** Live connections, one per connected (credentialed) source. */
   const connections = ref<TaskConnection[]>([])
   const tasks = ref<SourceTask[]>([])
+  /** The last live setup-check verdict per source (from `checkSetup`). */
+  const diagnostics = ref<Partial<Record<TaskSourceKind, TaskSourceDiagnostic>>>({})
+  /** The source currently running a setup check, if any. */
+  const checking = ref<TaskSourceKind | null>(null)
   const loading = ref(false)
 
   /** Sources the workspace currently has a live connection to. */
@@ -85,13 +96,40 @@ export const useTasksStore = defineStore('tasks', () => {
         api.listTaskConnections(workspace.requireId()),
       ])
       available.value = true
+      probeError.value = null
       sources.value = srcs
       connections.value = conns
-    } catch {
-      // 503 (integration disabled) or any error → hide the UI entry points.
+    } catch (e) {
+      // 503 (integration disabled) or any error → hide the UI entry points, but keep
+      // the reason so the settings panel can explain it (a 503 is "turned off on this
+      // deployment"; a 500 is "the backend errored — e.g. a migration isn't applied").
       available.value = false
+      const err = e as { statusCode?: number; data?: { error?: { message?: string } } }
+      const serverMessage = err?.data?.error?.message
+      probeError.value = {
+        status: err?.statusCode ?? null,
+        message: serverMessage || (e instanceof Error ? e.message : String(e)),
+      }
       sources.value = []
       connections.value = []
+    }
+  }
+
+  /**
+   * Run a live setup check for a source (authenticate + read), caching the verdict
+   * so the panel can show exactly what's wrong (missing App / wrong token / lacking
+   * the Issues permission) and how to fix it. Re-probes on success so a
+   * just-fixed source flips `available`/`enabled` without a manual reload.
+   */
+  async function checkSetup(source: TaskSourceKind): Promise<TaskSourceDiagnostic> {
+    checking.value = source
+    try {
+      const result = await api.checkTaskSource(workspace.requireId(), source)
+      diagnostics.value = { ...diagnostics.value, [source]: result }
+      if (result.ok) await probe()
+      return result
+    } finally {
+      checking.value = null
     }
   }
 
@@ -165,9 +203,12 @@ export const useTasksStore = defineStore('tasks', () => {
 
   return {
     available,
+    probeError,
     sources,
     connections,
     tasks,
+    diagnostics,
+    checking,
     loading,
     connectedSources,
     anyConnected,
@@ -178,6 +219,7 @@ export const useTasksStore = defineStore('tasks', () => {
     isConnected,
     tasksForBlock,
     probe,
+    checkSetup,
     connect,
     disconnect,
     setEnabled,

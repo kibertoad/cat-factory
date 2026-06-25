@@ -37,6 +37,31 @@ export interface TaskSourceState extends TaskSourceDescriptor {
   enabled: boolean
 }
 
+/**
+ * The verdict of a live "check setup" probe against a source (mirrors
+ * `@cat-factory/contracts`). Unlike `available` (a passive row-exists flag) this
+ * is the result of actually authenticating + reading, so it distinguishes a
+ * configured-but-broken source from a working one.
+ */
+export type TaskSourceDiagnosticStatus =
+  | 'ready'
+  | 'not_installed'
+  | 'not_connected'
+  | 'auth_failed'
+  | 'forbidden'
+  | 'unreachable'
+  | 'error'
+
+export interface TaskSourceDiagnostic {
+  source: TaskSourceKind
+  ok: boolean
+  status: TaskSourceDiagnosticStatus
+  /** A one-line, actionable explanation shown verbatim in the panel. */
+  message: string
+  /** Optional extra context (account login, repo count, signed-in user). */
+  detail?: string | null
+}
+
 /** A workspace's connection to a task source (never carries credentials). */
 export interface TaskConnection {
   source: TaskSourceKind
