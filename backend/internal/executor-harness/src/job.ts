@@ -211,10 +211,6 @@ export interface AgentInfraSpec {
 export interface AgentBootstrapSpec {
   /** The new repository the bootstrapped contents are pushed to (the push target). */
   target: BootstrapTargetSpec
-  /** Reset history to a single commit before pushing (bootstrap always sets this). */
-  reinit?: boolean
-  /** Force-push (the fresh history shares no ancestor with the target's boilerplate). */
-  forcePush?: boolean
   /** Scaffold from an empty directory instead of cloning `job.repo` (no reference). */
   fromScratch?: boolean
 }
@@ -327,8 +323,6 @@ function parseAgentBootstrapSpec(value: unknown): AgentBootstrapSpec | undefined
   }
   return {
     target,
-    ...(o.reinit === true ? { reinit: true } : {}),
-    ...(o.forcePush === true ? { forcePush: true } : {}),
     ...(o.fromScratch === true ? { fromScratch: true } : {}),
   }
 }

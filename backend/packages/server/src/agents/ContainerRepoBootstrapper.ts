@@ -212,10 +212,11 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
       ghToken,
       repo: repoSpec,
       branch: repoSpec.baseBranch,
+      // Bootstrap always resets history to a single commit and force-pushes (the fresh
+      // history shares no ancestor with the target repo's boilerplate); that is implicit
+      // in the bootstrap flow, so no per-job flags are needed.
       bootstrap: {
         target: targetSpec,
-        reinit: true,
-        forcePush: true,
         ...(reference ? {} : { fromScratch: true }),
       },
       ...(this.deps.githubApiBase ? { githubApiBase: this.deps.githubApiBase } : {}),

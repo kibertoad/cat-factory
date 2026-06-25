@@ -60,7 +60,8 @@ describe.skipIf(!docker)('executor container acceptance', () => {
     await waitForHealth(hostPort)
 
     const job = {
-      kind: 'run',
+      kind: 'agent',
+      mode: 'coding',
       jobId: 'acc-1',
       systemPrompt: 'You are a builder. Create exactly the file the user asks for.',
       userPrompt: 'Create IMPLEMENTED.md containing "hello from pi".',
@@ -69,7 +70,8 @@ describe.skipIf(!docker)('executor container acceptance', () => {
       sessionToken: 'dummy-session-token',
       ghToken: 'dummy-gh-token',
       repo: { owner: 'octo', name: 'app', baseBranch: 'main', cloneUrl: 'file:///srv/repo' },
-      headBranch: 'cat-factory/acc-1',
+      branch: 'main',
+      newBranch: 'cat-factory/acc-1',
       pr: { title: 'Add IMPLEMENTED.md', body: 'Automated by acceptance test' },
       githubApiBase: `http://host.docker.internal:${ghPort}`,
     }
@@ -157,7 +159,8 @@ describe.skipIf(!docker)('executor container acceptance', () => {
     await waitForHealth(hostPort)
 
     const job = {
-      kind: 'run',
+      kind: 'agent',
+      mode: 'coding',
       jobId: 'acc-todo',
       systemPrompt: 'You are a builder. Plan with the todo tool, then create the file.',
       userPrompt: 'Create IMPLEMENTED.md containing "hello from pi".',
@@ -166,7 +169,8 @@ describe.skipIf(!docker)('executor container acceptance', () => {
       sessionToken: 'dummy-session-token',
       ghToken: 'dummy-gh-token',
       repo: { owner: 'octo', name: 'app', baseBranch: 'main', cloneUrl: 'file:///srv/repo' },
-      headBranch: 'cat-factory/acc-todo',
+      branch: 'main',
+      newBranch: 'cat-factory/acc-todo',
       pr: { title: 'Add IMPLEMENTED.md', body: 'Automated by acceptance test' },
       githubApiBase: `http://host.docker.internal:${ghPort}`,
     }

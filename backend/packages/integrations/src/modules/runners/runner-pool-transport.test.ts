@@ -63,7 +63,7 @@ describe('RunnerPoolTransport', () => {
     const transport = new RunnerPoolTransport(provider, manifest, (k) =>
       k === 'API_TOKEN' ? 't' : undefined,
     )
-    await transport.dispatch({ runId: 'run-1', jobId: 'run-1-coder' }, { hello: 'world' }, 'run')
+    await transport.dispatch({ runId: 'run-1', jobId: 'run-1-coder' }, { hello: 'world' }, 'agent')
     await transport.poll({ runId: 'run-1', jobId: 'run-1-coder' })
     await transport.release({ runId: 'run-1', jobId: 'run-1-coder' })
     expect(calls.dispatch).toHaveLength(1)
@@ -76,34 +76,24 @@ describe('RunnerPoolTransport', () => {
     expect((calls.release[0] as { jobId: string }).jobId).toBe('run-1-coder')
   })
 
-  it('serves repo bootstrap (the harness /bootstrap route needs no Cloudflare primitive)', async () => {
+  it('stamps the dispatch spec with the single generic agent kind', async () => {
     const { provider, calls } = fakeProvider()
     const transport = new RunnerPoolTransport(provider, manifest, () => 't')
-    await transport.dispatch({ runId: 'job-1', jobId: 'job-1' }, { repoName: 'svc' }, 'bootstrap')
+    await transport.dispatch({ runId: 'job-1', jobId: 'job-1' }, { repoName: 'svc' }, 'agent')
     expect(calls.dispatch).toHaveLength(1)
     const req = calls.dispatch[0] as { spec: Record<string, unknown> }
-    expect(req.spec.kind).toBe('bootstrap')
+    expect(req.spec.kind).toBe('agent')
   })
 
-  // Runtime parity is the default: a pool runs the same harness image, so it serves
-  // every kind with no opt-in allow-list — none are gated or rejected.
-  it('serves every harness route (blueprint/spec/merge/… run on the same image)', async () => {
+  // The harness is a generic LLM-over-a-checkout runner with ONE route: WHAT each agent
+  // does (bootstrap, conflict resolution, blueprint, merge, …) is carried as job data, not
+  // a separate dispatch kind. A pool runs the same image, so dispatch defaults to `agent`.
+  it('defaults the dispatch kind to the generic agent route', async () => {
     const { provider, calls } = fakeProvider()
     const transport = new RunnerPoolTransport(provider, manifest, () => 't')
-    for (const kind of [
-      'blueprint',
-      'spec',
-      'explore',
-      'ci-fix',
-      'resolve-conflicts',
-      'merge',
-      'test',
-      'fix-tests',
-    ] as const) {
-      await transport.dispatch({ runId: 'job-1', jobId: 'job-1' }, {}, kind)
-    }
-    expect(calls.dispatch).toHaveLength(8)
-    expect((calls.dispatch.at(-1) as { spec: Record<string, unknown> }).spec.kind).toBe('fix-tests')
+    await transport.dispatch({ runId: 'job-1', jobId: 'job-1' }, {})
+    expect(calls.dispatch).toHaveLength(1)
+    expect((calls.dispatch[0] as { spec: Record<string, unknown> }).spec.kind).toBe('agent')
   })
 })
 

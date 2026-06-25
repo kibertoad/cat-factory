@@ -136,8 +136,6 @@ describe('parseAgentJob', () => {
           cloneUrl: 'https://github.com/acme/new-svc.git',
           defaultBranch: 'main',
         },
-        reinit: true,
-        forcePush: true,
       },
     })
     // The handler keys off `bootstrap` to force-push a fresh history to the target repo.
@@ -148,8 +146,6 @@ describe('parseAgentJob', () => {
         cloneUrl: 'https://github.com/acme/new-svc.git',
         defaultBranch: 'main',
       },
-      reinit: true,
-      forcePush: true,
     })
   })
 
@@ -164,8 +160,6 @@ describe('parseAgentJob', () => {
           cloneUrl: 'https://github.com/acme/new-svc.git',
           defaultBranch: 'main',
         },
-        reinit: true,
-        forcePush: true,
         fromScratch: true,
       },
     })

@@ -1,5 +1,5 @@
 import { join } from 'node:path'
-import { mkdir, readdir } from 'node:fs/promises'
+import { mkdir, opendir } from 'node:fs/promises'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import type { AgentInfraSpec, AgentJob, AgentResult } from './job.js'
@@ -35,10 +35,19 @@ import { log } from './logger.js'
 
 // The single generic agent handler — the manifest-driven replacement for the bespoke
 // per-kind handlers. It runs an LLM over an optional checkout and returns text/JSON
-// (`explore`) or commits + pushes its edits and optionally opens a PR (`coding`). It
-// holds NO per-agent-kind logic: WHAT the agent does is decided by the backend and
-// passed as job data, and all mechanical work (rendering artifact files from the
-// structured output, board ingest) happens on the backend before/after this run.
+// (`explore`) or commits + pushes its edits and optionally opens a PR (`coding`). WHAT
+// the agent does is decided by the backend and passed as job DATA (never an agent-kind
+// string), and all mechanical work that CAN run without a checkout (rendering artifact
+// files from the structured output, board ingest) lives on the backend before/after this
+// run via the RepoFiles port.
+//
+// Two coding flows still carry working-tree Git mechanics that a contents-API-only
+// RepoFiles cannot perform, so they are keyed off job data here (NOT off a kind string):
+// `mergeBase` ⇒ surface real merge conflicts via a working-tree base→branch merge
+// (conflict resolution); `bootstrap` ⇒ reinitialise history and force-push to a separate
+// target repo. These are the deliberate, documented exceptions — do NOT grow this into a
+// general `if (job.someFlag)` dispatch; anything that doesn't need a checkout belongs in
+// backend pre/post-ops. See backend/docs/custom-agents.md.
 
 const exec = promisify(execFile)
 
@@ -587,8 +596,27 @@ export async function producedRepoContent(
   signal?: AbortSignal,
 ): Promise<boolean> {
   if (hasReference) return hasAgentChanges(dir, signal)
-  const entries = await readdir(dir, { recursive: true, withFileTypes: true })
-  return entries.some((entry) => entry.isFile())
+  return containsAnyFile(dir)
+}
+
+/**
+ * Whether `dir` contains at least one regular file anywhere in its tree, walking
+ * depth-first and stopping at the FIRST file found — so the cost is bounded by how
+ * quickly a file turns up (a scaffold almost always writes a root-level file), not by
+ * the size of the produced tree (a full recursive `readdir` would materialise every
+ * entry before the check).
+ */
+async function containsAnyFile(dir: string): Promise<boolean> {
+  const handle = await opendir(dir)
+  try {
+    for await (const entry of handle) {
+      if (entry.isFile()) return true
+      if (entry.isDirectory() && (await containsAnyFile(join(dir, entry.name)))) return true
+    }
+  } catch {
+    // A directory that vanished mid-walk has nothing to contribute.
+  }
+  return false
 }
 
 /** Human-readable bootstrap no-op reason, embedding what the agent did so the cause is visible. */
