@@ -1640,6 +1640,47 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         expect(ok.status).toBe(201)
       })
 
+      it('a task inherits the service frame default test environment, and a per-task override wins', async () => {
+        const app = harness.makeApp()
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Code + test',
+          agentKinds: ['coder', 'tester'],
+        })
+
+        // Default the SERVICE frame to LOCAL testing without touching the task's own
+        // agent-config. `task_login` sits directly under its service frame.
+        const blocks = (await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)).body.blocks
+        const serviceFrameId = blocks.find((b) => b.id === 'task_login')!.parentId!
+        await app.call('PATCH', `/workspaces/${wsId}/blocks/${serviceFrameId}`, {
+          defaultTestEnvironment: 'local',
+        })
+
+        // The task INHERITS `local`, so the start guard blocks until the service infra is
+        // configured — proving the frame default (not the built-in `ephemeral`) reached the
+        // engine's resolution on this runtime.
+        const inheritedBlocked = await app.call(
+          'POST',
+          `/workspaces/${wsId}/blocks/task_login/executions`,
+          { pipelineId: pipeline.body.id },
+        )
+        expect(inheritedBlocked.status).toBeGreaterThanOrEqual(400)
+
+        // A per-task override to `ephemeral` WINS over the service default → the run starts
+        // with no infra configured.
+        await app.call('PATCH', `/workspaces/${wsId}/blocks/task_login`, {
+          agentConfig: { 'tester.environment': 'ephemeral' },
+        })
+        const overridden = await app.call<ExecutionInstance>(
+          'POST',
+          `/workspaces/${wsId}/blocks/task_login/executions`,
+          { pipelineId: pipeline.body.id },
+        )
+        expect(overridden.status).toBe(201)
+      })
+
       it('loops the fixer until the tester greenlights, then completes', async () => {
         // Drive the Tester→Fixer loop on BOTH runtimes: the first report withholds its
         // greenlight (the engine dispatches the fixer and re-tests), the second greenlights.

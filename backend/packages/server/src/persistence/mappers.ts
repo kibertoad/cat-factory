@@ -72,6 +72,8 @@ export interface BlockRow {
   test_compose_path: string | null
   /** Service-level: whether the service has no infra dependencies (0/1). */
   no_infra_dependencies: number | null
+  /** Service-level: default test environment for tasks ('local' | 'ephemeral'). */
+  default_test_environment?: string | null
   /** Service-level: cloud provider the service's jobs run on. */
   cloud_provider: string | null
   /** Service-level: abstract instance size for the service's jobs. */
@@ -119,6 +121,8 @@ export function rowToBlock(row: BlockRow): Block {
   if (row.test_compose_path !== null) block.testComposePath = row.test_compose_path
   if (row.no_infra_dependencies !== null)
     block.noInfraDependencies = row.no_infra_dependencies === 1
+  if (row.default_test_environment != null)
+    block.defaultTestEnvironment = row.default_test_environment as 'local' | 'ephemeral'
   if (row.cloud_provider !== null) block.cloudProvider = row.cloud_provider as CloudProvider
   if (row.instance_size !== null) block.instanceSize = row.instance_size as InstanceSize
   if (row.created_by !== null) block.createdBy = row.created_by
@@ -169,6 +173,7 @@ export function blockInsertValues(block: Block): Record<string, unknown> {
         : null,
     test_compose_path: block.testComposePath ?? null,
     no_infra_dependencies: block.noInfraDependencies ? 1 : null,
+    default_test_environment: block.defaultTestEnvironment ?? null,
     cloud_provider: block.cloudProvider ?? null,
     instance_size: block.instanceSize ?? null,
     created_by: block.createdBy ?? null,
@@ -249,6 +254,9 @@ export function blockPatchToColumns(patch: BlockPatch): Record<string, unknown> 
   }
   if (patch.noInfraDependencies !== undefined) {
     set.no_infra_dependencies = patch.noInfraDependencies ? 1 : null
+  }
+  if (patch.defaultTestEnvironment !== undefined) {
+    set.default_test_environment = patch.defaultTestEnvironment ?? null
   }
   if (patch.cloudProvider !== undefined) set.cloud_provider = patch.cloudProvider ?? null
   if (patch.instanceSize !== undefined) set.instance_size = patch.instanceSize ?? null

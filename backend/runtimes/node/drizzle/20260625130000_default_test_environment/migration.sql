@@ -1,0 +1,1 @@
+ALTER TABLE "blocks" ADD COLUMN "default_test_environment" text;

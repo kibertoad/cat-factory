@@ -110,6 +110,15 @@ export class AgentContextBuilder {
     const contextTasks = reworked ? [] : await this.resolveContextTasks(workspaceId, block.id)
     const environment = await this.resolveEnvironment(workspaceId, block.id)
     const service = await this.resolveServiceConfig(workspaceId, block)
+    // A task inherits its service frame's default test environment unless it pins its
+    // own `tester.environment`. Materialise the resolved choice onto the run's
+    // agentConfig so the Tester job body, the prompt fragment and the start-time infra
+    // gate all read the same value — the stored block is left untouched (the per-task
+    // override stays explicit).
+    const agentConfig =
+      service?.defaultTestEnvironment && !block.agentConfig?.['tester.environment']
+        ? { ...block.agentConfig, 'tester.environment': service.defaultTestEnvironment }
+        : block.agentConfig
     const priorOutputs = instance.steps
       .slice(0, instance.currentStep)
       .filter((s) => s.output)
@@ -141,7 +150,7 @@ export class AgentContextBuilder {
         ...(resolved ? { resolvedFragments: resolved.fragments } : {}),
         modelId: block.modelId,
         ...(block.modelPresetId ? { modelPresetId: block.modelPresetId } : {}),
-        ...(block.agentConfig ? { agentConfig: block.agentConfig } : {}),
+        ...(agentConfig ? { agentConfig } : {}),
         ...(block.pullRequest ? { pullRequest: block.pullRequest } : {}),
         ...(contextDocs.length ? { contextDocs } : {}),
         ...(contextTasks.length ? { contextTasks } : {}),
@@ -202,6 +211,7 @@ export class AgentContextBuilder {
     const service: NonNullable<AgentRunContext['service']> = {}
     if (frame.testComposePath) service.testComposePath = frame.testComposePath
     if (frame.noInfraDependencies) service.noInfraDependencies = frame.noInfraDependencies
+    if (frame.defaultTestEnvironment) service.defaultTestEnvironment = frame.defaultTestEnvironment
     if (frame.cloudProvider) service.cloudProvider = frame.cloudProvider
     else {
       // No per-service override: fall back to the owning account's default provider

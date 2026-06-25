@@ -150,6 +150,12 @@ export interface AgentRunContext {
   service?: {
     testComposePath?: string
     noInfraDependencies?: boolean
+    /**
+     * The service's default test environment (`local` vs `ephemeral`). A task
+     * inherits this when it doesn't pin its own `tester.environment`; the engine
+     * materialises the resolved choice onto the run's `block.agentConfig`.
+     */
+    defaultTestEnvironment?: 'local' | 'ephemeral'
     cloudProvider?: CloudProvider
     instanceSize?: InstanceSize
   }

@@ -24,6 +24,30 @@ const services = useServicesStore()
 const composePath = computed(() => props.block.testComposePath ?? '')
 const noInfra = computed(() => props.block.noInfraDependencies === true)
 
+// The default test environment a task under this service is spawned with. `local`
+// stands the dependencies up via docker-compose (or "no infra"); `ephemeral` runs
+// against a provisioned environment. A task can override it per-task in its agent
+// settings. Absent ⇒ the built-in `ephemeral`.
+type TestEnvironment = 'local' | 'ephemeral'
+const TEST_ENVIRONMENTS: { value: TestEnvironment; label: string; hint: string }[] = [
+  {
+    value: 'ephemeral',
+    label: 'Ephemeral environment',
+    hint: 'tests run against a provisioned env',
+  },
+  { value: 'local', label: 'Local (docker-compose)', hint: 'the Tester stands deps up locally' },
+]
+const effectiveTestEnv = computed<TestEnvironment>(
+  () => props.block.defaultTestEnvironment ?? 'ephemeral',
+)
+function setDefaultTestEnv(value: TestEnvironment) {
+  board.updateBlock(props.block.id, { defaultTestEnvironment: value })
+}
+
+// The provisioning hints (cloud provider + instance size) are advisory inputs to the
+// ephemeral-environment provisioner, not commonly tuned — keep them collapsed by default.
+const showProvisioning = ref(false)
+
 // The repo + service subdirectory backing this frame, for the compose-file browser.
 // A monorepo service isn't on the `github_repos` blockId link (that stays null), so
 // fall back to the service catalog mapping, which carries the repo + directory.
@@ -91,6 +115,27 @@ const missingInfra = computed(() => !noInfra.value && composePath.value.trim() =
   <div class="space-y-3">
     <div class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
       Test infrastructure
+    </div>
+
+    <div class="space-y-1">
+      <span class="text-[11px] text-slate-400">Default test environment</span>
+      <div class="flex flex-wrap gap-1">
+        <UButton
+          v-for="e in TEST_ENVIRONMENTS"
+          :key="e.value"
+          :color="effectiveTestEnv === e.value ? 'primary' : 'neutral'"
+          :variant="effectiveTestEnv === e.value ? 'soft' : 'ghost'"
+          size="xs"
+          :title="e.hint"
+          @click="setDefaultTestEnv(e.value)"
+        >
+          {{ e.label }}
+        </UButton>
+      </div>
+      <p class="text-[11px] leading-snug text-slate-500">
+        The default tasks under this service are spawned with — each task can override it in its
+        agent settings.
+      </p>
     </div>
 
     <div class="space-y-1">
@@ -163,35 +208,59 @@ const missingInfra = computed(() => !noInfra.value && composePath.value.trim() =
       Tester won't start.
     </p>
 
-    <div class="space-y-1">
-      <span class="text-[11px] text-slate-400">Cloud provider</span>
-      <div class="flex flex-wrap gap-1">
-        <UButton
-          v-for="p in PROVIDERS"
-          :key="p.value"
-          :color="effectiveProvider === p.value ? 'primary' : 'neutral'"
-          :variant="effectiveProvider === p.value ? 'soft' : 'ghost'"
-          size="xs"
-          @click="setProvider(p.value)"
-        >
-          {{ p.label }}
-        </UButton>
-      </div>
-    </div>
+    <!-- Provisioning hints: advisory inputs to the ephemeral-environment provisioner.
+         Collapsed by default — most services never tune them. -->
+    <div class="border-t border-slate-800 pt-2">
+      <button
+        type="button"
+        class="flex w-full items-center gap-1.5 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500 hover:text-slate-300"
+        @click="showProvisioning = !showProvisioning"
+      >
+        <UIcon
+          :name="showProvisioning ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
+          class="h-3.5 w-3.5"
+        />
+        Ephemeral environment provisioning
+      </button>
 
-    <div class="space-y-1">
-      <span class="text-[11px] text-slate-400">Instance size</span>
-      <div class="flex flex-wrap gap-1">
-        <UButton
-          v-for="s in SIZES"
-          :key="s.value"
-          :color="(block.instanceSize ?? 'medium') === s.value ? 'primary' : 'neutral'"
-          :variant="(block.instanceSize ?? 'medium') === s.value ? 'soft' : 'ghost'"
-          size="xs"
-          @click="setSize(s.value)"
-        >
-          {{ s.label }}
-        </UButton>
+      <div v-if="showProvisioning" class="mt-2 space-y-3">
+        <p class="text-[11px] leading-snug text-slate-500">
+          A hint for provisioning this service's ephemeral test environment — which cloud provider
+          to deploy to and how large an instance to request. Ignored for local (docker-compose)
+          testing.
+        </p>
+
+        <div class="space-y-1">
+          <span class="text-[11px] text-slate-400">Cloud provider</span>
+          <div class="flex flex-wrap gap-1">
+            <UButton
+              v-for="p in PROVIDERS"
+              :key="p.value"
+              :color="effectiveProvider === p.value ? 'primary' : 'neutral'"
+              :variant="effectiveProvider === p.value ? 'soft' : 'ghost'"
+              size="xs"
+              @click="setProvider(p.value)"
+            >
+              {{ p.label }}
+            </UButton>
+          </div>
+        </div>
+
+        <div class="space-y-1">
+          <span class="text-[11px] text-slate-400">Instance size</span>
+          <div class="flex flex-wrap gap-1">
+            <UButton
+              v-for="s in SIZES"
+              :key="s.value"
+              :color="(block.instanceSize ?? 'medium') === s.value ? 'primary' : 'neutral'"
+              :variant="(block.instanceSize ?? 'medium') === s.value ? 'soft' : 'ghost'"
+              size="xs"
+              @click="setSize(s.value)"
+            >
+              {{ s.label }}
+            </UButton>
+          </div>
+        </div>
       </div>
     </div>
   </div>
