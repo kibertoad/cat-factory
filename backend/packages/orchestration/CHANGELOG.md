@@ -1,5 +1,12 @@
 # @cat-factory/orchestration
 
+## 0.9.1
+
+### Patch Changes
+
+- Updated dependencies [22d7fff]
+  - @cat-factory/agents@0.11.1
+
 ## 0.9.0
 
 ### Minor Changes
