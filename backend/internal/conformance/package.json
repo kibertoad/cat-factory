@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@cat-factory/agents": "workspace:*",
+    "@cat-factory/gates": "workspace:*",
     "@cat-factory/integrations": "workspace:*",
     "@cat-factory/kernel": "workspace:*",
     "@cat-factory/orchestration": "workspace:*",

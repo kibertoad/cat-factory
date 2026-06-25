@@ -93,6 +93,14 @@ import {
   resolveUrlSafetyPolicy,
   resolveWorkspaceCapabilities,
 } from '@cat-factory/server'
+// The built-in polling-gate suite (ci / conflicts / post-release-health + on-call). Importing
+// it registers the gates via the public seam; the facade wires each gate's provider below.
+import {
+  wireCiStatusProvider,
+  wireMergeabilityProvider,
+  wireReleaseHealthProvider,
+  wireIncidentEnrichment,
+} from '@cat-factory/gates'
 import type { PgBoss } from 'pg-boss'
 import { loadNodeConfig } from './config.js'
 import type { DrizzleDb } from './db/client.js'
@@ -1044,34 +1052,42 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
       : {}),
   })
 
-  const githubGateDeps: Partial<CoreDependencies> = githubClient
-    ? {
-        // The engine binds a registered custom kind's pre/post-op hooks to a run's repo
-        // via this checkout-free RepoFiles resolver, composed from the same client +
-        // repo-target walk the gates/merger use — parity with the Worker.
-        resolveRunRepoContext: makeResolveRunRepoContext(githubClient, resolveRepoTarget),
-        ciStatusProvider: new GitHubCiStatusProvider({
-          githubClient,
-          resolveRepoTarget,
-          blockRepository: repos.blockRepository,
-        }),
-        mergeabilityProvider: new GitHubMergeabilityProvider({
-          githubClient,
-          resolveRepoTarget,
-          blockRepository: repos.blockRepository,
-        }),
-        branchUpdater: new GitHubBranchUpdater({
-          githubClient,
-          resolveRepoTarget,
-          blockRepository: repos.blockRepository,
-        }),
-        pullRequestMerger: new GitHubPullRequestMerger({
-          githubClient,
-          resolveRepoTarget,
-          blockRepository: repos.blockRepository,
-        }),
-      }
-    : {}
+  let githubGateDeps: Partial<CoreDependencies> = {}
+  if (githubClient) {
+    // The `ci` / `conflicts` gates now live in `@cat-factory/gates`; wire their providers into
+    // the gate suite instead of onto the engine's CoreDependencies (single-process startup, so
+    // the deployment-global handles are set once here). Parity with the Worker's selectGitHubDeps.
+    wireCiStatusProvider(
+      new GitHubCiStatusProvider({
+        githubClient,
+        resolveRepoTarget,
+        blockRepository: repos.blockRepository,
+      }),
+    )
+    wireMergeabilityProvider(
+      new GitHubMergeabilityProvider({
+        githubClient,
+        resolveRepoTarget,
+        blockRepository: repos.blockRepository,
+      }),
+    )
+    githubGateDeps = {
+      // The engine binds a registered custom kind's pre/post-op hooks to a run's repo
+      // via this checkout-free RepoFiles resolver, composed from the same client +
+      // repo-target walk the gates/merger use — parity with the Worker.
+      resolveRunRepoContext: makeResolveRunRepoContext(githubClient, resolveRepoTarget),
+      branchUpdater: new GitHubBranchUpdater({
+        githubClient,
+        resolveRepoTarget,
+        blockRepository: repos.blockRepository,
+      }),
+      pullRequestMerger: new GitHubPullRequestMerger({
+        githubClient,
+        resolveRepoTarget,
+        blockRepository: repos.blockRepository,
+      }),
+    }
+  }
 
   // GitHub installation + projections + sync/webhook module: wired when the App is
   // configured (a real githubClient), mirroring the Worker's selectGitHubDeps. This
@@ -1190,13 +1206,18 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     releaseHealthDeps.observabilityConnectionRepository = repos.observabilityConnectionRepository
     releaseHealthDeps.releaseHealthConfigRepository = repos.releaseHealthConfigRepository
     releaseHealthDeps.observabilitySecretCipher = observabilitySecretCipher
-    releaseHealthDeps.releaseHealthProvider = new RegistryReleaseHealthProvider({
-      observabilityConnectionRepository: repos.observabilityConnectionRepository,
-      releaseHealthConfigRepository: repos.releaseHealthConfigRepository,
-      blockRepository: repos.blockRepository,
-      secretCipher: observabilitySecretCipher,
-      registry: defaultObservabilityRegistry,
-    })
+    // The post-release-health gate + on-call escalation now live in `@cat-factory/gates`; wire
+    // their providers into the gate suite. The observability repos/cipher above stay on
+    // CoreDependencies — they power the management API (ReleaseHealthService), not the gate.
+    wireReleaseHealthProvider(
+      new RegistryReleaseHealthProvider({
+        observabilityConnectionRepository: repos.observabilityConnectionRepository,
+        releaseHealthConfigRepository: repos.releaseHealthConfigRepository,
+        blockRepository: repos.blockRepository,
+        secretCipher: observabilitySecretCipher,
+        registry: defaultObservabilityRegistry,
+      }),
+    )
     const enrichers: IncidentEnrichmentProvider[] = []
     if (config.incidentEnrichment.pagerDuty) {
       enrichers.push(new PagerDutyEnrichmentProvider(config.incidentEnrichment.pagerDuty))
@@ -1205,7 +1226,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
       enrichers.push(new IncidentIoEnrichmentProvider(config.incidentEnrichment.incidentIo))
     }
     if (enrichers.length > 0) {
-      releaseHealthDeps.incidentEnrichment = new CompositeIncidentEnrichmentProvider(enrichers)
+      wireIncidentEnrichment(new CompositeIncidentEnrichmentProvider(enrichers))
     }
   }
 

@@ -153,6 +153,14 @@ import { D1PipelineScheduleRepository } from './repositories/D1PipelineScheduleR
 import { D1TrackerSettingsRepository } from './repositories/D1TrackerSettingsRepository'
 import { D1ModelPresetRepository } from './repositories/D1ModelPresetRepository'
 import { D1ServiceFragmentDefaultsRepository } from './repositories/D1ServiceFragmentDefaultsRepository'
+// The built-in polling-gate suite (ci / conflicts / post-release-health + on-call). Importing
+// it registers the gates via the public seam; the facade wires each gate's provider below.
+import {
+  wireCiStatusProvider,
+  wireMergeabilityProvider,
+  wireReleaseHealthProvider,
+  wireIncidentEnrichment,
+} from '@cat-factory/gates'
 import { GitHubCiStatusProvider } from './github/GitHubCiStatusProvider'
 import { GitHubMergeabilityProvider } from './github/GitHubMergeabilityProvider'
 import { GitHubBranchUpdater } from './github/GitHubBranchUpdater'
@@ -521,16 +529,14 @@ function selectMergeLifecycleDeps(
     })
     const resolveRepoTarget = buildResolveRepoTarget(db)
     const blockRepository = new D1BlockRepository({ db })
-    deps.ciStatusProvider = new GitHubCiStatusProvider({
-      githubClient,
-      resolveRepoTarget,
-      blockRepository,
-    })
-    deps.mergeabilityProvider = new GitHubMergeabilityProvider({
-      githubClient,
-      resolveRepoTarget,
-      blockRepository,
-    })
+    // The `ci` / `conflicts` gates now live in `@cat-factory/gates`; wire their providers into
+    // the gate suite (deployment-global handles) instead of onto the engine's CoreDependencies.
+    wireCiStatusProvider(
+      new GitHubCiStatusProvider({ githubClient, resolveRepoTarget, blockRepository }),
+    )
+    wireMergeabilityProvider(
+      new GitHubMergeabilityProvider({ githubClient, resolveRepoTarget, blockRepository }),
+    )
     deps.branchUpdater = new GitHubBranchUpdater({
       githubClient,
       resolveRepoTarget,
@@ -564,18 +570,19 @@ function selectReleaseHealthDeps(
     masterKeyBase64: config.releaseHealth.encryptionKey,
     info: OBSERVABILITY_CIPHER_INFO,
   })
-  const deps: Partial<CoreDependencies> = {
-    observabilityConnectionRepository,
-    releaseHealthConfigRepository,
-    observabilitySecretCipher,
-    releaseHealthProvider: new RegistryReleaseHealthProvider({
+  // The post-release-health gate + its on-call escalation now live in `@cat-factory/gates`;
+  // wire their providers into the gate suite (deployment-global handles). The observability
+  // connection/config repos + cipher stay on CoreDependencies — they power the management API
+  // (ReleaseHealthService), not the gate.
+  wireReleaseHealthProvider(
+    new RegistryReleaseHealthProvider({
       observabilityConnectionRepository,
       releaseHealthConfigRepository,
       blockRepository: new D1BlockRepository({ db }),
       secretCipher: observabilitySecretCipher,
       registry: defaultObservabilityRegistry,
     }),
-  }
+  )
   const enrichers: IncidentEnrichmentProvider[] = []
   if (config.incidentEnrichment.pagerDuty) {
     enrichers.push(new PagerDutyEnrichmentProvider(config.incidentEnrichment.pagerDuty))
@@ -584,9 +591,13 @@ function selectReleaseHealthDeps(
     enrichers.push(new IncidentIoEnrichmentProvider(config.incidentEnrichment.incidentIo))
   }
   if (enrichers.length > 0) {
-    deps.incidentEnrichment = new CompositeIncidentEnrichmentProvider(enrichers)
+    wireIncidentEnrichment(new CompositeIncidentEnrichmentProvider(enrichers))
   }
-  return deps
+  return {
+    observabilityConnectionRepository,
+    releaseHealthConfigRepository,
+    observabilitySecretCipher,
+  }
 }
 
 /**
