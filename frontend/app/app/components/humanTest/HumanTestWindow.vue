@@ -81,6 +81,16 @@ async function destroy() {
 
 /** Env actions need a provider (an env is/was present, or it's provisioning) — disabled in degraded mode. */
 const envActionsEnabled = computed(() => env.value !== null && env.value !== undefined)
+
+// The env-management actions are only valid in specific phases; mirror the backend's preconditions
+// so the UI never dispatches an action that would 409 ("No human-test gate is currently awaiting
+// input"). Recreate / pull-main route through `findParked` (parked awaiting the human); destroy
+// routes through `findActive`, which also tolerates an in-flight `provisioning` env so a human can
+// cancel a slow/stuck provision.
+const canManageEnv = computed(() => awaitingHuman.value)
+const canDestroy = computed(
+  () => envActionsEnabled.value && (awaitingHuman.value || phase.value === 'provisioning'),
+)
 </script>
 
 <template>
@@ -160,7 +170,7 @@ const envActionsEnabled = computed(() => env.value !== null && env.value !== und
 
               <!-- Env management -->
               <div class="mt-3 flex flex-wrap gap-2">
-                <UButton size="xs" variant="soft" color="neutral" icon="i-lucide-refresh-cw" :loading="busy" :disabled="busy" @click="recreate">
+                <UButton size="xs" variant="soft" color="neutral" icon="i-lucide-refresh-cw" :loading="busy" :disabled="busy || !canManageEnv" @click="recreate">
                   Recreate
                 </UButton>
                 <UButton
@@ -168,12 +178,12 @@ const envActionsEnabled = computed(() => env.value !== null && env.value !== und
                   variant="soft"
                   color="neutral"
                   icon="i-lucide-trash-2"
-                  :disabled="busy || !envActionsEnabled"
+                  :disabled="busy || !canDestroy"
                   @click="destroy"
                 >
                   Destroy
                 </UButton>
-                <UButton size="xs" variant="soft" color="neutral" icon="i-lucide-git-merge" :loading="busy" :disabled="busy" @click="pullMain">
+                <UButton size="xs" variant="soft" color="neutral" icon="i-lucide-git-merge" :loading="busy" :disabled="busy || !canManageEnv" @click="pullMain">
                   Pull main + redeploy
                 </UButton>
               </div>
