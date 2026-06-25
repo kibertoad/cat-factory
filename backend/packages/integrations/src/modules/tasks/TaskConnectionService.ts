@@ -31,12 +31,24 @@ export interface TaskConnectionServiceDependencies {
 }
 
 /**
- * A credentialless provider (today only GitHub Issues) carries no connection: it
- * authenticates out-of-band via the workspace's installed GitHub App. Such a
- * source is never "connected"; its availability is the App's presence instead.
+ * A credentialless provider carries no connection to make: there are no credential
+ * fields to fill in. Today the only such provider is GitHub Issues, which rides the
+ * workspace's installed GitHub App. `connect()` and the import credential resolver
+ * use this to skip the connection lookup; it does NOT by itself decide availability
+ * (see `isAvailable`, where the App-presence check is keyed on the GitHub source).
  */
 function isCredentialless(provider: TaskSourceProvider): boolean {
   return provider.descriptor.credentialFields.length === 0
+}
+
+/**
+ * The credentialless source whose availability is the installed GitHub App's
+ * presence. Keyed on the source kind (not just "is credentialless") so a future
+ * credentialless source with a different out-of-band auth path is forced to add its
+ * own availability branch rather than silently inheriting the App check.
+ */
+function ridesGitHubApp(provider: TaskSourceProvider): boolean {
+  return provider.kind === 'github' && isCredentialless(provider)
 }
 
 function toConnection(record: TaskConnectionRecord): TaskConnection {
@@ -74,7 +86,7 @@ export class TaskConnectionService {
 
   /** Whether a source can be used right now (drives the import gate + the UI toggle's enablement). */
   private async isAvailable(workspaceId: string, provider: TaskSourceProvider): Promise<boolean> {
-    if (isCredentialless(provider)) {
+    if (ridesGitHubApp(provider)) {
       // GitHub Issues rides the workspace's installed GitHub App: available once installed.
       if (!this.deps.installations) return false
       return (await this.deps.installations.getByWorkspace(workspaceId)) !== null

@@ -48,16 +48,6 @@ export const useTasksStore = defineStore('tasks', () => {
     return sources.value.find((s) => s.source === source)
   }
 
-  /** Whether a source is usable right now (connected, or GitHub App installed). */
-  function isAvailable(source: TaskSourceKind): boolean {
-    return descriptorFor(source)?.available ?? false
-  }
-
-  /** Whether the workspace has the source enabled (the per-workspace toggle; default true). */
-  function isEnabled(source: TaskSourceKind): boolean {
-    return descriptorFor(source)?.enabled ?? true
-  }
-
   function connectionFor(source: TaskSourceKind): TaskConnection | undefined {
     return connections.value.find((c) => c.source === source)
   }
@@ -186,8 +176,6 @@ export const useTasksStore = defineStore('tasks', () => {
     descriptorFor,
     connectionFor,
     isConnected,
-    isAvailable,
-    isEnabled,
     tasksForBlock,
     probe,
     connect,
