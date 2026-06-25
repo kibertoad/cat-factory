@@ -5,15 +5,19 @@ import type {
   BlockRepository,
   ClarityReviewRepository,
   CloudProvider,
+  DocumentRecord,
   DocumentRepository,
   ExecutionInstance,
   PipelineStep,
   RequirementReviewRepository,
+  TaskRecord,
   TaskRepository,
   WorkspaceRepository,
 } from '@cat-factory/kernel'
+import { buildExcerpt, CONTEXT_BUDGET } from '@cat-factory/kernel'
 import { CODE_AWARE_TRAIT, hasTrait } from '@cat-factory/agents'
 import { getFragment } from '@cat-factory/prompt-fragments'
+import { extractReferences } from '@cat-factory/integrations'
 import type { EnvironmentProvisioningService } from '@cat-factory/integrations'
 
 /**
@@ -106,8 +110,17 @@ export class AgentContextBuilder {
           (await this.resolveClarifiedBrief(workspaceId, block.id)))
         : null
     const description = reworked ?? block.description
-    const contextDocs = reworked ? [] : await this.resolveContextDocs(workspaceId, block.id)
-    const contextTasks = reworked ? [] : await this.resolveContextTasks(workspaceId, block.id)
+    // High-confidence external context = the docs/tasks a human attached to the block
+    // (skipped when `reworked`, since the incorporated doc already folds them in) UNION
+    // any items the effective description names explicitly (a Jira key, a URL), resolved
+    // against the already-imported corpus. Explicitly-named refs are included even in
+    // reworked mode — the human may name an issue in the doc that was never attached.
+    const { docs: contextDocs, tasks: contextTasks } = await this.resolveLinkedContext(
+      workspaceId,
+      block.id,
+      description,
+      { includeLinked: !reworked },
+    )
     const environment = await this.resolveEnvironment(workspaceId, block.id)
     const service = await this.resolveServiceConfig(workspaceId, block)
     // A task inherits its service frame's default test environment unless it pins its
@@ -328,41 +341,67 @@ export class AgentContextBuilder {
   }
 
   /**
-   * Resolve documents (from any source) linked to the running block into compact
-   * agent context. A no-op unless the document-source integration is wired (the
-   * repository is an optional dependency), so the engine stays unchanged when it
-   * is off.
+   * Resolve the high-confidence external context for a block: the docs/tasks a human
+   * attached to it (only when `includeLinked` — skipped in reworked mode, where the
+   * incorporated requirements doc already folds them in) UNIONed with any items the
+   * `description` names explicitly (a Jira key, a URL), resolved against the corpus
+   * already imported for the workspace. Each source repo is optional, so this is a
+   * no-op for sources that aren't wired. Deduped by (source, externalId). The full
+   * body travels to the container as a materialised file; the prompt carries only the
+   * one-line `summary` (see the executor + `linkedContextSection`).
    */
-  private async resolveContextDocs(
+  private async resolveLinkedContext(
     workspaceId: string,
     blockId: string,
-  ): Promise<{ title: string; url: string; excerpt: string }[]> {
-    if (!this.deps.documents) return []
-    const docs = await this.deps.documents.listByBlock(workspaceId, blockId)
-    return docs.map((d) => ({ title: d.title, url: d.url, excerpt: d.excerpt }))
-  }
+    description: string,
+    opts: { includeLinked: boolean },
+  ): Promise<{
+    docs: NonNullable<AgentRunContext['block']['contextDocs']>
+    tasks: NonNullable<AgentRunContext['block']['contextTasks']>
+  }> {
+    const docs = new Map<string, DocumentRecord>()
+    const tasks = new Map<string, TaskRecord>()
+    const docKey = (d: DocumentRecord) => `${d.source}:${d.externalId}`
+    const taskKey = (t: TaskRecord) => `${t.source}:${t.externalId}`
 
-  /**
-   * Resolve tracker issues (from any source) linked to the running block into
-   * structured agent context. A no-op unless the task-source integration is
-   * wired (the repository is an optional dependency), so the engine stays
-   * unchanged when it is off.
-   */
-  private async resolveContextTasks(workspaceId: string, blockId: string) {
-    if (!this.deps.tasks) return []
-    const tasks = await this.deps.tasks.listByBlock(workspaceId, blockId)
-    return tasks.map((t) => ({
-      key: t.externalId,
-      url: t.url,
-      title: t.title,
-      status: t.status,
-      type: t.type,
-      assignee: t.assignee,
-      priority: t.priority,
-      labels: t.labels,
-      description: t.description,
-      comments: t.comments,
-    }))
+    if (opts.includeLinked) {
+      if (this.deps.documents)
+        for (const d of await this.deps.documents.listByBlock(workspaceId, blockId))
+          docs.set(docKey(d), d)
+      if (this.deps.tasks)
+        for (const t of await this.deps.tasks.listByBlock(workspaceId, blockId))
+          tasks.set(taskKey(t), t)
+    }
+
+    // Resolve explicitly-named references against the imported corpus. Only items that
+    // actually exist are added (the resolution discards noise, e.g. a `UTF-8` that
+    // happens to match the Jira key shape); nothing is fetched live.
+    const refs = extractReferences(description ?? '')
+    if (refs.jiraKeys.length || refs.githubRefs.length || refs.urls.length) {
+      const urls = new Set(refs.urls.map(normalizeUrl))
+      const jira = new Set(refs.jiraKeys)
+      const gh = new Set(refs.githubRefs)
+      if (this.deps.documents) {
+        for (const d of await this.deps.documents.listByWorkspace(workspaceId)) {
+          if (docs.has(docKey(d))) continue
+          if (urls.has(normalizeUrl(d.url))) docs.set(docKey(d), d)
+        }
+      }
+      if (this.deps.tasks) {
+        for (const t of await this.deps.tasks.listByWorkspace(workspaceId)) {
+          if (tasks.has(taskKey(t))) continue
+          const byUrl = urls.has(normalizeUrl(t.url))
+          const byJira = t.source === 'jira' && jira.has(t.externalId)
+          const byGithub = t.source === 'github' && gh.has(t.externalId)
+          if (byUrl || byJira || byGithub) tasks.set(taskKey(t), t)
+        }
+      }
+    }
+
+    return {
+      docs: [...docs.values()].map((d) => toContextDoc(d)),
+      tasks: [...tasks.values()].map((t) => toContextTask(t)),
+    }
   }
 
   /**
@@ -374,5 +413,42 @@ export class AgentContextBuilder {
   private async resolveEnvironment(workspaceId: string, blockId: string) {
     if (!this.deps.environmentProvisioning) return null
     return this.deps.environmentProvisioning.resolveForBlock(workspaceId, blockId)
+  }
+}
+
+/** Canonicalise a URL for equality (drop trailing slashes + lowercase host/scheme). */
+function normalizeUrl(url: string): string {
+  return url.trim().replace(/\/+$/, '').toLowerCase()
+}
+
+/** Map a document record to the agent-context doc shape (summary index + materialisable body). */
+function toContextDoc(
+  d: DocumentRecord,
+): NonNullable<AgentRunContext['block']['contextDocs']>[number] {
+  return {
+    title: d.title,
+    url: d.url,
+    excerpt: d.excerpt,
+    summary: buildExcerpt(d.body || d.excerpt, CONTEXT_BUDGET.summaryChars),
+    body: d.body,
+  }
+}
+
+/** Map a task record to the agent-context task shape (adds the index `summary`). */
+function toContextTask(
+  t: TaskRecord,
+): NonNullable<AgentRunContext['block']['contextTasks']>[number] {
+  return {
+    key: t.externalId,
+    url: t.url,
+    title: t.title,
+    status: t.status,
+    type: t.type,
+    assignee: t.assignee,
+    priority: t.priority,
+    labels: t.labels,
+    description: t.description,
+    comments: t.comments,
+    summary: buildExcerpt(t.description || t.title, CONTEXT_BUDGET.summaryChars),
   }
 }

@@ -14,7 +14,9 @@ import {
   type SubscriptionVendor,
 } from '@cat-factory/kernel'
 import {
+  CONTEXT_BUDGET,
   CredentialRequiredError,
+  renderTaskContext,
   SUBSCRIPTION_VENDORS,
   isIndividualVendor,
 } from '@cat-factory/kernel'
@@ -159,6 +161,49 @@ function buildRepoSpec(repo: RepoTarget) {
     cloneUrl: `https://github.com/${repo.owner}/${repo.name}.git`,
     ...(repo.serviceDirectory ? { serviceDirectory: repo.serviceDirectory } : {}),
   }
+}
+
+/** A safe, collision-free `<base>.md` filename for a materialised context file. */
+function contextFileName(base: string, used: Set<string>): string {
+  const slug =
+    base
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 60) || 'context'
+  let name = `${slug}.md`
+  for (let i = 2; used.has(name); i++) name = `${slug}-${i}.md`
+  used.add(name)
+  return name
+}
+
+/**
+ * Materialise the block's linked context (docs + tracker issues) into files the harness
+ * writes under CONTEXT_DIR in the checkout, so a container agent reads them on demand.
+ * Each file is prefixed with its title + source URL (the zero-cost slice of Anthropic's
+ * contextual-retrieval). Bounded by {@link CONTEXT_BUDGET.maxContextFileBytes} so a large
+ * corpus can't bloat the job body; items past the cap are dropped (the summary index in
+ * the prompt still names them, and the agent simply won't find a file for those).
+ */
+function buildContextFiles(
+  context: AgentRunContext,
+): { path: string; title: string; url: string; content: string }[] {
+  const { contextDocs, contextTasks } = context.block
+  if (!contextDocs?.length && !contextTasks?.length) return []
+  const files: { path: string; title: string; url: string; content: string }[] = []
+  const used = new Set<string>()
+  let bytes = 0
+  const add = (title: string, url: string, baseName: string, raw: string) => {
+    const content = `# ${title}\nSource: ${url}\n\n${raw}`
+    const size = new TextEncoder().encode(content).length
+    if (bytes + size > CONTEXT_BUDGET.maxContextFileBytes) return
+    bytes += size
+    files.push({ path: contextFileName(baseName, used), title, url, content })
+  }
+  for (const doc of contextDocs ?? []) add(doc.title, doc.url, doc.title, doc.body || doc.excerpt)
+  for (const task of contextTasks ?? [])
+    add(`[${task.key}] ${task.title}`, task.url, task.key, renderTaskContext(task))
+  return files
 }
 
 export interface ContainerAgentExecutorDependencies {
@@ -669,6 +714,10 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
 
     // The fields EVERY harness job body carries, built once so the per-kind bodies
     // can't drift on which jobId/model/auth/repo/proxy fields they forward.
+    // Linked-context bodies are materialised into the checkout (under CONTEXT_DIR) so a
+    // container agent can read what it needs on demand; the prompt only lists them. The
+    // harness can't reach Jira/GitHub itself, so everything is prepared here, up front.
+    const contextFiles = buildContextFiles(context)
     const common = {
       jobId,
       model: ref.model,
@@ -676,6 +725,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       ghToken,
       repo: buildRepoSpec(repo),
       ...(this.deps.githubApiBase ? { githubApiBase: this.deps.githubApiBase } : {}),
+      ...(contextFiles.length ? { contextFiles } : {}),
     }
     // The proxy-backed web-tools nudge + switch, shared by the kinds that allow web
     // access (coder/mocker/ci-fixer/fixer/tester/read-only). The harness surfaces the
@@ -905,7 +955,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
      * (merger / on-call) overrides it with its bespoke, JSON-instructing prompt so its
      * body matches the old per-kind handler's.
      */
-    userPrompt: string = userPromptFor(context),
+    userPrompt: string = userPromptFor(context, { materialized: true }),
   ): { body: Record<string, unknown>; kind: RunnerDispatchKind } {
     const { common, webTools, repo, workBranch, workBranchReady } = parts
     const prBranch = context.block.pullRequest?.branch
@@ -1477,7 +1527,7 @@ function onCallUserPrompt(context: AgentRunContext, repo: RepoTarget): string {
       : `Find the most recent merge/feature commit with \`git log --oneline -n 50\` and inspect ` +
         `it with \`git show <sha>\`.`
   return [
-    userPromptFor(context),
+    userPromptFor(context, { materialized: true }),
     '',
     `You are on the base branch \`${repo.baseBranch}\`, which already contains the released ` +
       `pull request ${pr}. ${locate} Correlate that change with the regression evidence above. ` +

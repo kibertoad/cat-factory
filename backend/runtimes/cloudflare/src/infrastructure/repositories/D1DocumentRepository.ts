@@ -9,6 +9,7 @@ interface DocumentRow {
   url: string
   excerpt: string
   body: string
+  content_hash: string | null
   linked_block_id: string | null
   synced_at: number
   deleted_at: number | null
@@ -23,6 +24,7 @@ function rowToRecord(row: DocumentRow): DocumentRecord {
     url: row.url,
     excerpt: row.excerpt,
     body: row.body,
+    contentHash: row.content_hash ?? '',
     linkedBlockId: row.linked_block_id,
     syncedAt: row.synced_at,
     deletedAt: row.deleted_at,
@@ -42,13 +44,14 @@ export class D1DocumentRepository implements DocumentRepository {
       .prepare(
         `INSERT INTO documents
           (workspace_id, source, external_id, title, url, excerpt, body,
-           linked_block_id, synced_at, deleted_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
+           content_hash, linked_block_id, synced_at, deleted_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
          ON CONFLICT (workspace_id, source, external_id) DO UPDATE SET
            title = excluded.title,
            url = excluded.url,
            excerpt = excluded.excerpt,
            body = excluded.body,
+           content_hash = excluded.content_hash,
            linked_block_id = excluded.linked_block_id,
            synced_at = excluded.synced_at,
            deleted_at = NULL`,
@@ -61,6 +64,7 @@ export class D1DocumentRepository implements DocumentRepository {
         record.url,
         record.excerpt,
         record.body,
+        record.contentHash,
         record.linkedBlockId,
         record.syncedAt,
       )

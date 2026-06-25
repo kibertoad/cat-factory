@@ -49,6 +49,8 @@ export interface DocumentRecord {
   url: string
   excerpt: string
   body: string
+  /** FNV-1a digest of `body`, for cheap change detection across re-imports. */
+  contentHash: string
   linkedBlockId: string | null
   syncedAt: number
   deletedAt: number | null

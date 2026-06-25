@@ -2,7 +2,7 @@ import type { Clock } from '@cat-factory/kernel'
 import type { DocumentSourceRegistry } from '@cat-factory/kernel'
 import type { DocumentRecord, DocumentRepository } from '@cat-factory/kernel'
 import type { SourceDocument, DocumentSearchResult, DocumentSourceKind } from '@cat-factory/kernel'
-import { ValidationError } from '@cat-factory/kernel'
+import { contentHash, ValidationError } from '@cat-factory/kernel'
 import { requireWorkspace } from '@cat-factory/kernel'
 import type { WorkspaceRepository } from '@cat-factory/kernel'
 import type { DocumentConnectionService } from './DocumentConnectionService.js'
@@ -61,6 +61,13 @@ export class DocumentImportService {
 
     // Preserve any existing block link across a re-import.
     const existing = await this.deps.documentRepository.get(workspaceId, source, content.externalId)
+    const hash = contentHash(content.body)
+    // Idempotent re-import: when the body is byte-for-byte unchanged (and the row is
+    // live), keep the existing projection — no needless write, and the block link and
+    // synced time are preserved exactly.
+    if (existing && existing.deletedAt === null && existing.contentHash === hash) {
+      return toSourceDocument(existing)
+    }
     const record: DocumentRecord = {
       workspaceId,
       source,
@@ -69,6 +76,7 @@ export class DocumentImportService {
       url: content.url,
       excerpt: buildExcerpt(content.body),
       body: content.body,
+      contentHash: hash,
       linkedBlockId: existing?.linkedBlockId ?? null,
       syncedAt: this.deps.clock.now(),
       deletedAt: null,
