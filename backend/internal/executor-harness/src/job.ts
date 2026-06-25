@@ -215,6 +215,19 @@ export interface AgentBootstrapSpec {
   fromScratch?: boolean
 }
 
+/**
+ * A linked-context file the backend prepared (requirements / RFC / PRD / tracker issue)
+ * for the harness to materialise under CONTEXT_DIR in the checkout, so the agent can read
+ * it on demand. The harness can't reach Jira/GitHub itself, so all such context is fetched
+ * and shipped here up front. `path` is sanitised to a safe basename on parse.
+ */
+export interface ContextFileSpec {
+  path: string
+  title: string
+  url: string
+  content: string
+}
+
 /** How an explore agent's reply is consumed. */
 export interface AgentOutputSpec {
   /** `prose` keeps the reply text; `structured` parses (and optionally repairs) it to JSON. */
@@ -268,6 +281,11 @@ export interface AgentJob extends HarnessAuthFields {
   bootstrap?: AgentBootstrapSpec
   /** Explore mode: how to consume the reply. Absent ⇒ prose. */
   output?: AgentOutputSpec
+  /**
+   * Linked-context files to materialise under CONTEXT_DIR before the run (both modes).
+   * The agent reads them on demand; they are kept out of any commit. Absent ⇒ none.
+   */
+  contextFiles?: ContextFileSpec[]
   /**
    * Explore mode: stand the service's dependencies up before the agent runs (the
    * tester). Brings the docker-compose infra up on localhost for the duration of the
@@ -327,6 +345,41 @@ function parseAgentBootstrapSpec(value: unknown): AgentBootstrapSpec | undefined
   }
 }
 
+/**
+ * Sanitise a body-supplied context filename to a safe basename within CONTEXT_DIR:
+ * strip any directory part, allow only `[A-Za-z0-9._-]`, and reject empties / dotfiles
+ * / `..` so a hostile value can't escape the directory or clobber repo files.
+ */
+function sanitizeContextFileName(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined
+  const base = value.replace(/\\/g, '/').split('/').pop() ?? ''
+  const cleaned = base.replace(/[^A-Za-z0-9._-]/g, '')
+  if (!cleaned || cleaned === '.' || cleaned === '..' || cleaned.startsWith('.')) return undefined
+  return cleaned
+}
+
+/** Parse the linked-context files, dropping any malformed/unsafe entry. */
+function parseContextFiles(value: unknown): ContextFileSpec[] {
+  if (!Array.isArray(value)) return []
+  const files: ContextFileSpec[] = []
+  const used = new Set<string>()
+  for (const entry of value) {
+    if (typeof entry !== 'object' || entry === null) continue
+    const e = entry as Record<string, unknown>
+    const path = sanitizeContextFileName(e.path)
+    if (!path || used.has(path)) continue
+    if (typeof e.content !== 'string') continue
+    used.add(path)
+    files.push({
+      path,
+      title: typeof e.title === 'string' ? e.title : path,
+      url: typeof e.url === 'string' ? e.url : '',
+      content: e.content,
+    })
+  }
+  return files
+}
+
 /** Parse the explore-mode infra stand-up spec, or undefined when absent/unrecognised. */
 function parseAgentInfraSpec(value: unknown): AgentInfraSpec | undefined {
   if (typeof value !== 'object' || value === null) return undefined
@@ -379,6 +432,7 @@ export function parseAgentJob(input: unknown): AgentJob {
       : undefined
   const infra = parseAgentInfraSpec(o.infra)
   const bootstrap = parseAgentBootstrapSpec(o.bootstrap)
+  const contextFiles = parseContextFiles(o.contextFiles)
   const job: AgentJob = {
     jobId: str(o.jobId, 'jobId'),
     mode,
@@ -396,6 +450,7 @@ export function parseAgentJob(input: unknown): AgentJob {
     ...(typeof o.mergeBase === 'string' && o.mergeBase ? { mergeBase: o.mergeBase } : {}),
     ...(bootstrap ? { bootstrap } : {}),
     ...(output ? { output } : {}),
+    ...(contextFiles.length ? { contextFiles } : {}),
     ...(infra ? { infra } : {}),
     ...(typeof o.newBranch === 'string' && o.newBranch ? { newBranch: o.newBranch } : {}),
     ...(typeof o.pushBranch === 'string' && o.pushBranch ? { pushBranch: o.pushBranch } : {}),

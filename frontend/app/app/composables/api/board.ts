@@ -42,6 +42,7 @@ export function boardApi({ http, ws }: ApiContext) {
         modelPresetId?: string
         pipelineId?: string
         agentConfig?: Record<string, string>
+        technical?: boolean
       },
     ) => http<Block>(`${ws(workspaceId)}/blocks/${blockId}/tasks`, { method: 'POST', body }),
 

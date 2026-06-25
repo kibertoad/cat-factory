@@ -1,5 +1,20 @@
 # @cat-factory/spend
 
+## 0.8.20
+
+### Patch Changes
+
+- Updated dependencies [04befe8]
+  - @cat-factory/contracts@0.21.0
+  - @cat-factory/kernel@0.21.0
+
+## 0.8.19
+
+### Patch Changes
+
+- Updated dependencies [be182e8]
+  - @cat-factory/kernel@0.20.0
+
 ## 0.8.18
 
 ### Patch Changes

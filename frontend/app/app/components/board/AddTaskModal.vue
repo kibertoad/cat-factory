@@ -14,6 +14,7 @@
 import type { CreateTaskType, TaskSourceKind, TaskTypeFields } from '~/types/domain'
 import ContextDocumentPicker from '~/components/documents/ContextDocumentPicker.vue'
 import ContextIssuePicker from '~/components/tasks/ContextIssuePicker.vue'
+import { mergePresetOptionLabel, mergePresetThresholds } from '~/utils/mergePreset'
 
 const ui = useUiStore()
 const board = useBoardStore()
@@ -41,6 +42,9 @@ const container = computed(() =>
 const title = ref('')
 const description = ref('')
 const saving = ref(false)
+// Whether the user marks this as a purely technical task up front (a refactor /
+// non-functional change). Left off ⇒ the engine infers it from the spec phase.
+const technical = ref(false)
 
 // The kind of task being created. `recurring` is special: it is created through the
 // recurring-pipeline schedule flow (a schedule on the service frame), so picking it
@@ -104,13 +108,13 @@ const presetMenu = computed(() => [
   [
     {
       label: mergePresets.defaultPreset
-        ? `Default (${mergePresets.defaultPreset.name})`
+        ? `Default (${mergePresets.defaultPreset.name}) — ${mergePresetThresholds(mergePresets.defaultPreset)}`
         : 'Workspace default',
       icon: 'i-lucide-rotate-ccw',
       onSelect: () => (mergePresetId.value = ''),
     },
     ...mergePresets.presets.map((p) => ({
-      label: p.name,
+      label: mergePresetOptionLabel(p),
       icon: 'i-lucide-git-merge',
       onSelect: () => (mergePresetId.value = p.id),
     })),
@@ -119,10 +123,11 @@ const presetMenu = computed(() => [
 const selectedPresetLabel = computed(() => {
   if (!mergePresetId.value) {
     return mergePresets.defaultPreset
-      ? `Default (${mergePresets.defaultPreset.name})`
+      ? `Default (${mergePresets.defaultPreset.name}) — ${mergePresetThresholds(mergePresets.defaultPreset)}`
       : 'Workspace default'
   }
-  return mergePresets.presets.find((p) => p.id === mergePresetId.value)?.name ?? 'Workspace default'
+  const picked = mergePresets.presets.find((p) => p.id === mergePresetId.value)
+  return picked ? mergePresetOptionLabel(picked) : 'Workspace default'
 })
 
 // Model preset: which model each agent runs on. Empty = workspace default preset.
@@ -274,6 +279,7 @@ watch(open, (isOpen) => {
   description.value = ''
   saving.value = false
   taskType.value = 'feature'
+  technical.value = false
   severity.value = ''
   stepsToReproduce.value = ''
   timeboxHours.value = undefined
@@ -337,6 +343,7 @@ async function add() {
       ...(Object.keys(agentConfigValues.value).length
         ? { agentConfig: agentConfigValues.value }
         : {}),
+      ...(technical.value ? { technical: true } : {}),
     })
     if (block) {
       const failed = await linkPending(block.id, pendingContext.value)
@@ -445,6 +452,19 @@ async function add() {
               class="w-full"
             />
           </UFormField>
+
+          <UCheckbox v-model="technical" name="technical">
+            <template #label>
+              <span class="text-sm text-slate-200">Technical task</span>
+            </template>
+            <template #description>
+              <span class="text-[11px] text-slate-500">
+                A refactor / non-functional / internal change. The implementer treats the task
+                definition as primary and the spec as a regression reference; leave off to let the
+                spec phase decide.
+              </span>
+            </template>
+          </UCheckbox>
 
           <!-- Per-type fields. -->
           <div v-if="taskType === 'bug'" class="grid grid-cols-2 gap-3">

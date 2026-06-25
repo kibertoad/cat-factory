@@ -5,7 +5,7 @@
 import HandlebarsRuntime from 'handlebars/runtime.js'
 import type { AgentKind } from '@cat-factory/kernel'
 import type { AgentRunContext } from '@cat-factory/kernel'
-import { renderTaskContext } from '@cat-factory/kernel'
+import { CONTEXT_BUDGET, estimateTokens, renderTaskContext } from '@cat-factory/kernel'
 import { PLATFORM_DELIVERY_CONTRACT } from './delivery-contract.js'
 import { FINAL_ANSWER_IN_REPLY, STANDARDS_FOOTER } from './shared.js'
 import * as templateSpecs from './standard-templates.generated.js'
@@ -92,6 +92,7 @@ const SYSTEM_PROMPTS: Record<StandardPhase, string> = {
     '- Handle errors and edge cases explicitly; validate input at the boundary.',
     '- Keep the implementation cohesive and minimal — no speculative abstraction.',
     '- Note any follow-ups or assumptions you had to make.',
+    '- If the task context flags it as TECHNICAL (a refactor / non-functional / internal change), the task definition and any incorporated requirements are the PRIMARY source of truth: implement to them, and treat the committed `spec/` only as a regression-spotting reference (do not invent behaviour to match a spec the task did not ask to change). Otherwise the specification leads as usual.',
     '',
     BUILD_DELIVERY_GATE,
     '',
@@ -214,20 +215,64 @@ export function environmentSection(context: AgentRunContext): string {
 }
 
 /**
+ * Directory in the agent's checkout where the harness materialises the full text of
+ * each linked-context item (requirements / RFCs / PRDs / tracker issues), so a
+ * container agent can read what it needs on demand rather than carrying every body in
+ * its prompt. Kept in sync with the harness's own constant (executor-harness has no
+ * dependency on this package).
+ */
+export const CONTEXT_DIR = '.cat-context'
+
+/**
  * Render the linked extra-context section — documents (requirements / RFCs /
  * PRDs) and tracker issues attached to the block — or an empty string when none
  * are linked. Shared by every agent kind (standard phases and the generic roles
  * alike) so the same context the engine resolves for a step (see
- * `ExecutionService.buildAgentContext`) reaches whichever agent runs it. The
- * leading blank lines separate it from the preceding prompt content;
- * `renderStandardUserPrompt` collapses any runs of blank lines it produces.
+ * `ExecutionService.buildAgentContext`) reaches whichever agent runs it.
+ *
+ * `opts.materialized` (container kinds) renders a cheap summary index pointing at
+ * {@link CONTEXT_DIR}; otherwise (inline kinds, which have no checkout) it injects the
+ * bodies directly, trimmed to {@link CONTEXT_BUDGET}. The leading blank lines separate
+ * it from the preceding prompt content; `renderStandardUserPrompt` collapses runs.
  */
-export function linkedContextSection(context: AgentRunContext): string {
+export function linkedContextSection(
+  context: AgentRunContext,
+  opts: { materialized?: boolean } = {},
+): string {
   const { contextDocs, contextTasks } = context.block
+  if (!contextDocs?.length && !contextTasks?.length) return ''
+
+  // Container kinds run with a checkout: list the linked items cheaply and point the
+  // agent at the full text materialised under CONTEXT_DIR, so it reads only what it
+  // needs instead of paying for every body in the prompt.
+  if (opts.materialized) {
+    const items: string[] = []
+    for (const doc of contextDocs ?? []) items.push(`- ${doc.title} — ${doc.summary} (${doc.url})`)
+    for (const task of contextTasks ?? [])
+      items.push(`- [${task.key}] ${task.title} (${task.status}) — ${task.summary} (${task.url})`)
+    const capped = items.slice(0, CONTEXT_BUDGET.maxItems)
+    return `\n${[
+      '',
+      'Linked context (requirements / RFCs / PRDs / tracker issues). The full text of each',
+      `is in the \`${CONTEXT_DIR}/\` directory of your checkout — open a file when it is`,
+      'relevant. Do not try to reach external systems; everything available is already on disk.',
+      ...capped,
+    ].join('\n')}`
+  }
+
+  // Inline kinds have no checkout to explore, so inject the bodies directly, trimmed to
+  // the shared budget (largest-first is not worth it for the handful of linked items).
   const lines: string[] = []
+  let spent = 0
   if (contextDocs?.length) {
     lines.push('', 'Linked context documents (requirements / RFCs / PRDs):')
-    for (const doc of contextDocs) lines.push(`### ${doc.title} (${doc.url})`, doc.excerpt)
+    for (const doc of contextDocs) {
+      const remaining = CONTEXT_BUDGET.inlineBodyTokens - spent
+      if (remaining <= 0) break
+      const slice = clampToTokens(doc.body || doc.excerpt, remaining)
+      spent += estimateTokens(slice)
+      lines.push(`### ${doc.title} (${doc.url})`, slice)
+    }
   }
   if (contextTasks?.length) {
     lines.push('', 'Linked tracker issues (extra context):')
@@ -236,12 +281,45 @@ export function linkedContextSection(context: AgentRunContext): string {
   return lines.length ? `\n${lines.join('\n')}` : ''
 }
 
+/** Truncate text to roughly `maxTokens`, marking the cut so the reader knows it's partial. */
+function clampToTokens(text: string, maxTokens: number): string {
+  const maxChars = maxTokens * 4
+  return text.length > maxChars ? `${text.slice(0, maxChars).trimEnd()}\n…(truncated)` : text
+}
+
+/**
+ * Render the "this task is TECHNICAL" marker when the block carries the resolved
+ * technical label, or an empty string otherwise. The static rule for how to act on it
+ * lives in the BUILD system prompt; this is the per-task signal that activates it (so the
+ * implementer knows to treat the task definition as primary and the spec as a reference).
+ * Only the build user prompt appends it (see {@link renderStandardUserPrompt}) — the
+ * architect/reviewer phases have no matching system rule, so they keep their normal,
+ * spec-led behaviour.
+ */
+export function technicalContextSection(context: AgentRunContext): string {
+  if (!context.block.technical) return ''
+  return [
+    '',
+    'This task is flagged TECHNICAL (a refactor / non-functional / internal change). Treat',
+    'the task definition and any incorporated requirements above as the PRIMARY source of',
+    'truth, and the committed `spec/` only as a regression-spotting reference — do not',
+    'invent behaviour to satisfy a spec this task did not set out to change.',
+  ].join('\n')
+}
+
 /** Render the built-out user prompt for a standard phase from the run context. */
-export function renderStandardUserPrompt(phase: StandardPhase, context: AgentRunContext): string {
+export function renderStandardUserPrompt(
+  phase: StandardPhase,
+  context: AgentRunContext,
+  opts: { materialized?: boolean } = {},
+): string {
   const rendered =
     USER_TEMPLATES[phase](toView(context)) +
-    linkedContextSection(context) +
-    environmentSection(context)
+    linkedContextSection(context, opts) +
+    environmentSection(context) +
+    // Only the implementer (build) acts on the TECHNICAL marker — its system prompt carries
+    // the matching rule. The architect/reviewer have no such rule, so don't change their prompt.
+    (phase === 'build' ? technicalContextSection(context) : '')
   // Collapse the blank lines that conditionals leave behind, then trim.
   return rendered.replace(/\n{3,}/g, '\n\n').trim()
 }

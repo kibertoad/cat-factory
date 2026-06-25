@@ -1,5 +1,83 @@
 # @cat-factory/agents
 
+## 0.13.0
+
+### Minor Changes
+
+- 04befe8: Business-only specs + an explicit `technical` task label.
+
+  **Business-only spec-writer + "no new specs" outcome.** The spec-writer now captures
+  ONLY business requirements. For a purely technical task (a refactor / non-functional /
+  internal change with no externally-observable behaviour) "no new specs" is a valid
+  outcome: the writer returns `{"noBusinessSpecs": true}`, the baseline spec is left
+  untouched (`specPostOp` commits nothing), and the new `AgentRunResult.noBusinessSpecs`
+  channel carries the determination. The spec-companion corroborates or disputes it via a
+  new optional `technicalCorroborated` verdict on `companionAssessmentSchema` (a disputed
+  "no specs" claim loops the writer back as before). The spec-writer prompts are updated
+  accordingly (no version bump — they are not under prompt-version control).
+
+  **Explicit `technical` label on a task.** Blocks gain an optional `technical` field
+  (`true`/`false`/unset), persisted on both runtimes (D1 column ⇄ Drizzle column + generated
+  migration; shared block mapper). A human sets it at creation (a "Technical task" checkbox)
+  or via a tri-state inspector toggle (unset / technical / business). An explicit `false`
+  (business) is forwarded to the spec-writer, which is then required to produce specs (it is
+  told not to claim "no business specs"); `true` tells it the empty outcome is expected.
+  Left unset, the engine infers the label from the settled spec phase — `noBusinessSpecs`
+  (writer) combined with `technicalCorroborated` (companion) — both when the spec-companion
+  converges automatically AND when a human proceeds past its iteration cap. Once a concrete
+  label is recorded it is authoritative and not re-inferred (whether set by a human or a
+  prior inference); a human re-opens it to inference by clearing it to "unset". When a task
+  is technical the implementer treats the task definition / incorporated requirements as the
+  primary source of truth and the committed specs as a regression-spotting reference; the
+  `build` prompt is bumped to v3 and carries the per-task signal (only the implementer — not
+  the architect/reviewer — acts on it).
+
+  Breaking: none for existing data (the new columns default to "not determined").
+
+### Patch Changes
+
+- Updated dependencies [04befe8]
+  - @cat-factory/contracts@0.21.0
+  - @cat-factory/kernel@0.21.0
+  - @cat-factory/prompt-fragments@0.7.18
+
+## 0.12.0
+
+### Minor Changes
+
+- be182e8: Hybrid linked-context delivery to agents, and deterministic reference resolution.
+
+  Linked documents and tracker issues now reach a container agent as a cheap in-prompt
+  summary index plus their full bodies materialised into a `.cat-context/` directory in the
+  checkout (kept out of the agent's commits via a local git exclude), so the agent reads only
+  what it needs on demand — replacing the previous 280-char document excerpt. Inline (no-
+  checkout) agent kinds instead get the budgeted full body injected into the prompt.
+
+  The engine also resolves references named explicitly in a block's description or its
+  incorporated requirements (Jira keys like `PROJ-123`, fully-qualified GitHub `owner/repo#123`,
+  and URLs) against the already-imported corpus, folding those high-confidence items into the
+  context set. Each reference is resolved by a **point lookup** (a keyed `get`, or a new
+  `getByUrl` repository method) rather than scanning the whole workspace corpus per step. Bare
+  `#123` refs are intentionally not resolved: a workspace can hold many repos, so a bare number
+  is ambiguous — name the issue as `owner/repo#123` (or by URL) to pull it in. There is no
+  speculative relationship graph and no live fetching: everything is prepared backend-side,
+  which is required because the container harness cannot reach Jira/Confluence/GitHub itself.
+
+  Documents gain a `content_hash` column (D1 + Drizzle) so a re-import whose body AND title/url
+  are unchanged is a no-op, preserving the existing projection and block link; a renamed/moved
+  page still re-projects.
+
+  Breaking (pre-1.0): `AgentRunContext.block.contextDocs` items now carry `summary` + `body`,
+  `contextTasks` items carry `summary`, and `DocumentRecord` carries `contentHash`. The
+  `DocumentRepository`/`TaskRepository` ports gain a `getByUrl` method (implemented on both the
+  D1 and Drizzle stores). The executor-harness image gains an optional `contextFiles` job field;
+  bump the runner image tag.
+
+### Patch Changes
+
+- Updated dependencies [be182e8]
+  - @cat-factory/kernel@0.20.0
+
 ## 0.11.16
 
 ### Patch Changes

@@ -14,7 +14,9 @@ import {
   type SubscriptionVendor,
 } from '@cat-factory/kernel'
 import {
+  CONTEXT_BUDGET,
   CredentialRequiredError,
+  renderTaskContext,
   SUBSCRIPTION_VENDORS,
   isIndividualVendor,
 } from '@cat-factory/kernel'
@@ -161,6 +163,65 @@ function buildRepoSpec(repo: RepoTarget) {
   }
 }
 
+/** A safe, collision-free `<base>.md` filename for a materialised context file. */
+function contextFileName(base: string, used: Set<string>): string {
+  const slug =
+    base
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 60) || 'context'
+  let name = `${slug}.md`
+  for (let i = 2; used.has(name); i++) name = `${slug}-${i}.md`
+  used.add(name)
+  return name
+}
+
+type ContextDoc = NonNullable<AgentRunContext['block']['contextDocs']>[number]
+type ContextTask = NonNullable<AgentRunContext['block']['contextTasks']>[number]
+
+/**
+ * Materialise the block's linked context (docs + tracker issues) into files the harness
+ * writes under CONTEXT_DIR in the checkout, so a container agent reads them on demand.
+ * Each file is prefixed with its title + source URL (the zero-cost slice of Anthropic's
+ * contextual-retrieval). Bounded by {@link CONTEXT_BUDGET.maxContextFileBytes} so a large
+ * corpus can't bloat the job body; items past the cap are dropped.
+ *
+ * Returns both the files AND the docs/tasks that actually fit (`contextDocs`/`contextTasks`),
+ * so the caller can render the prompt's summary index from exactly the materialised set —
+ * the prompt never names a file the agent won't find on disk.
+ */
+function buildContextFiles(context: AgentRunContext): {
+  files: { path: string; title: string; url: string; content: string }[]
+  contextDocs: ContextDoc[]
+  contextTasks: ContextTask[]
+} {
+  const { contextDocs, contextTasks } = context.block
+  const files: { path: string; title: string; url: string; content: string }[] = []
+  const keptDocs: ContextDoc[] = []
+  const keptTasks: ContextTask[] = []
+  if (!contextDocs?.length && !contextTasks?.length)
+    return { files, contextDocs: keptDocs, contextTasks: keptTasks }
+  const used = new Set<string>()
+  let bytes = 0
+  // Write the file when it fits the byte budget; report back whether it was kept so the
+  // caller can keep the prompt index in lock-step with what's on disk.
+  const fit = (title: string, url: string, baseName: string, raw: string): boolean => {
+    const content = `# ${title}\nSource: ${url}\n\n${raw}`
+    const size = new TextEncoder().encode(content).length
+    if (bytes + size > CONTEXT_BUDGET.maxContextFileBytes) return false
+    bytes += size
+    files.push({ path: contextFileName(baseName, used), title, url, content })
+    return true
+  }
+  for (const doc of contextDocs ?? [])
+    if (fit(doc.title, doc.url, doc.title, doc.body || doc.excerpt)) keptDocs.push(doc)
+  for (const task of contextTasks ?? [])
+    if (fit(`[${task.key}] ${task.title}`, task.url, task.key, renderTaskContext(task)))
+      keptTasks.push(task)
+  return { files, contextDocs: keptDocs, contextTasks: keptTasks }
+}
+
 export interface ContainerAgentExecutorDependencies {
   /** Resolve which runner backend (Cloudflare container or self-hosted pool) a job runs on. */
   resolveTransport: ResolveRunnerTransport
@@ -284,7 +345,17 @@ const SPEC_WRITER_SYSTEM_PROMPT =
   'where the task changes their expected behaviour. Leave every other part of the ' +
   'baseline spec untouched. Translate ONLY what the task requirements state — do NOT ' +
   'invent requirements, fill gaps, or design beyond them (missing requirements are the ' +
-  'requirements step’s job, not yours). The spec is a two-level taxonomy: MODULES ' +
+  'requirements step’s job, not yours). ' +
+  'The spec captures ONLY BUSINESS requirements — externally-observable behaviour, ' +
+  'product rules and acceptance criteria. PURELY TECHNICAL work (a refactor, a ' +
+  'dependency bump, internal restructuring, build/infra or other non-functional change ' +
+  'that does NOT alter what the system does for its users) introduces no business ' +
+  'requirements, and "NO NEW SPECS" is a valid, correct outcome for it: do NOT invent ' +
+  'requirements to justify a change, and do NOT re-document technical/architecture ' +
+  'detail here. When this task is purely technical, leave the baseline spec untouched ' +
+  'and respond with ONLY {"noBusinessSpecs": true} (no other fields, no prose, no code ' +
+  'fences). Otherwise return the full document as below. ' +
+  'The spec is a two-level taxonomy: MODULES ' +
   '(domains, e.g. "Auth") each containing GROUPS (features, e.g. "Login"). Every ' +
   'requirement AND every domain rule lives inside a specific feature group: a group ' +
   'carries both its `requirements` and the `rules` scoped to it. There is NO catch-all — ' +
@@ -338,7 +409,9 @@ const SPEC_SHAPE_HINT =
   '"requirements": [{"id": string, "title": string, "statement": string, "kind": ' +
   'string, "priority": string, "sourceBlockIds": string[], "acceptance": [{"given": ' +
   'string, "when": string, "outcome": string}]}], "rules": [{"id": string, "rule": ' +
-  'string, "rationale": string, "sourceBlockIds": string[]}]}]}]}.'
+  'string, "rationale": string, "sourceBlockIds": string[]}]}]}]}. For a purely ' +
+  'technical task with no business requirements, the document is instead just ' +
+  '{"noBusinessSpecs": true}.'
 
 /** Compact shape hint fed to the structured-output repair call for the merger assessment. */
 const MERGE_ASSESSMENT_SHAPE_HINT =
@@ -669,6 +742,14 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
 
     // The fields EVERY harness job body carries, built once so the per-kind bodies
     // can't drift on which jobId/model/auth/repo/proxy fields they forward.
+    // Linked-context bodies are materialised into the checkout (under CONTEXT_DIR) so a
+    // container agent can read what it needs on demand; the prompt only lists them. The
+    // harness can't reach Jira/GitHub itself, so everything is prepared here, up front.
+    const {
+      files: contextFiles,
+      contextDocs: keptDocs,
+      contextTasks: keptTasks,
+    } = buildContextFiles(context)
     const common = {
       jobId,
       model: ref.model,
@@ -676,7 +757,14 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       ghToken,
       repo: buildRepoSpec(repo),
       ...(this.deps.githubApiBase ? { githubApiBase: this.deps.githubApiBase } : {}),
+      ...(contextFiles.length ? { contextFiles } : {}),
     }
+    // Render the prompt's linked-context summary index from exactly the items that were
+    // materialised (some may have been dropped at the byte cap), so the agent is never
+    // pointed at a `.cat-context/` file that doesn't exist.
+    const promptContext: AgentRunContext = contextFiles.length
+      ? { ...context, block: { ...context.block, contextDocs: keptDocs, contextTasks: keptTasks } }
+      : context
     // The proxy-backed web-tools nudge + switch, shared by the kinds that allow web
     // access (coder/mocker/ci-fixer/fixer/tester/read-only). The harness surfaces the
     // tools only when web search is configured in the container env. Per-kind hint
@@ -686,7 +774,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       ...(this.deps.webSearchProxyEnabled ? { webSearch: true } : {}),
     }
 
-    const { body, kind } = this.buildKindBody(context, {
+    const { body, kind } = this.buildKindBody(promptContext, {
       common,
       webTools,
       repo,
@@ -905,7 +993,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
      * (merger / on-call) overrides it with its bespoke, JSON-instructing prompt so its
      * body matches the old per-kind handler's.
      */
-    userPrompt: string = userPromptFor(context),
+    userPrompt: string = userPromptFor(context, { materialized: true }),
   ): { body: Record<string, unknown>; kind: RunnerDispatchKind } {
     const { common, webTools, repo, workBranch, workBranchReady } = parts
     const prBranch = context.block.pullRequest?.branch
@@ -1181,6 +1269,20 @@ function toRunResult(result: RunnerJobResult, agentKind?: string): AgentRunResul
     // The doc must carry its OWN `service` name (no repo-name rescue — backwards-compat is a
     // non-goal); a nameless/garbage doc coerces to null ⇒ left unset (no ingest, no commit).
     if (agentKind === SPEC_WRITER_AGENT_KIND) {
+      // A purely TECHNICAL task has no business requirements to specify: the writer signals
+      // `noBusinessSpecs` and we leave the baseline spec untouched (NO `spec` channel, so
+      // `specPostOp` commits nothing). The engine reads the flag to infer the block's
+      // `technical` label (with the spec-companion's corroboration). Checked first so a
+      // model that returned both the flag and a stray baseline echo never commits over it.
+      const custom = result.custom as Record<string, unknown> | null
+      if (custom && typeof custom === 'object' && custom.noBusinessSpecs === true) {
+        return {
+          output:
+            result.summary?.trim() ||
+            'No business requirements to specify — this is a technical task.',
+          noBusinessSpecs: true,
+        }
+      }
       const spec = coerceSpecDoc(result.custom, '')
       return {
         output: result.summary?.trim() || 'Service specification updated.',
@@ -1413,6 +1515,22 @@ function blueprintUserPrompt(): string {
 function specWriterUserPrompt(context: AgentRunContext): string {
   const block = context.block
   const header = `### ${block.title || '(untitled task)'}${block.id ? ` (block ${block.id})` : ''}`
+  // Honour an explicit human-set BUSINESS/TECHNICAL label: a task pinned business HAS
+  // business requirements, so the "no new specs" escape hatch is withdrawn; a task pinned
+  // technical is told the empty outcome is expected. Left unset, the writer self-determines.
+  const technicalGuidance =
+    block.technical === false
+      ? 'This task is explicitly flagged BUSINESS: it HAS business requirements, so you MUST ' +
+        'return the full updated specification. Do NOT respond with {"noBusinessSpecs": true}.'
+      : block.technical === true
+        ? 'This task is explicitly flagged TECHNICAL (a refactor / dependency bump / internal ' +
+          'or non-functional change with NO new externally-observable behaviour): "no business ' +
+          'requirements" is the expected outcome — respond with ONLY {"noBusinessSpecs": true} ' +
+          'and change nothing, unless you find genuine externally-observable behaviour to spec.'
+        : 'If this task is purely TECHNICAL (a refactor / dependency bump / internal or ' +
+          'non-functional change that introduces NO new externally-observable behaviour), it ' +
+          'has no business requirements: respond with ONLY {"noBusinessSpecs": true} and ' +
+          'change nothing.'
   return [
     'Apply this ONE task as an INCREMENT onto the service specification.',
     '',
@@ -1426,13 +1544,15 @@ function specWriterUserPrompt(context: AgentRunContext): string {
       'If no spec exists yet, start one as a module (domain) → feature (group) taxonomy.',
     '',
     'Requirements for the ONE task to apply (its clarified description). Translate ONLY what ' +
-      'these state into prescriptive requirements with COMPLETE acceptance-scenario coverage — ' +
-      'do NOT invent requirements or fill gaps they leave:',
+      'these state into BUSINESS requirements (externally-observable behaviour, product rules, ' +
+      'acceptance criteria) with COMPLETE acceptance-scenario coverage — do NOT invent ' +
+      'requirements or fill gaps they leave:',
     '',
     `${header}\n\n${block.description?.trim() || '(no description)'}`,
     '',
-    'Return the COMPLETE updated document (baseline plus this task’s increment), not a diff. ' +
-      'Respond with ONLY the JSON object for the requirements document — no prose, no code fences.',
+    technicalGuidance +
+      ' Otherwise return the COMPLETE updated document (baseline plus this task’s ' +
+      'increment), not a diff. Respond with ONLY the JSON object — no prose, no code fences.',
   ].join('\n')
 }
 
@@ -1477,7 +1597,7 @@ function onCallUserPrompt(context: AgentRunContext, repo: RepoTarget): string {
       : `Find the most recent merge/feature commit with \`git log --oneline -n 50\` and inspect ` +
         `it with \`git show <sha>\`.`
   return [
-    userPromptFor(context),
+    userPromptFor(context, { materialized: true }),
     '',
     `You are on the base branch \`${repo.baseBranch}\`, which already contains the released ` +
       `pull request ${pr}. ${locate} Correlate that change with the regression evidence above. ` +

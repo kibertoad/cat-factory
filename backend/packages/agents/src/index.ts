@@ -98,6 +98,7 @@ export {
   phaseForKind,
   standardSystemPrompt,
   renderStandardUserPrompt,
+  CONTEXT_DIR,
 } from './agents/prompts/standard.js'
 export {
   type AcceptanceAgentKind,

@@ -34,6 +34,15 @@ export const companionAssessmentSchema = v.object({
   summary: v.string(),
   /** Optional per-item / per-block challenges (shared shape with human reviews). */
   comments: v.optional(v.array(stepReviewCommentSchema)),
+  /**
+   * The spec-companion's corroboration of the spec-writer's BUSINESS-vs-TECHNICAL
+   * determination: `true` when it agrees the task is purely technical and correctly
+   * produced no business specs, `false` when business specs were the right call.
+   * Absent ⇒ no opinion (the engine then infers nothing). Only the spec-companion sets
+   * it; other companions omit it. Read by the engine — together with the writer's
+   * `noBusinessSpecs` signal — to infer the block's `technical` label.
+   */
+  technicalCorroborated: v.optional(v.boolean()),
 })
 export type CompanionAssessment = v.InferOutput<typeof companionAssessmentSchema>
 

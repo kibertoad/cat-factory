@@ -2,9 +2,12 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
+  type ContextFileInfo,
   type PiRunOutcome,
   type PiRunStats,
   type RunDiagnostics,
+  CONTEXT_DIR,
+  materializeContextFiles,
   runPi,
   webSearchConfigFromEnv,
   webSearchProxyEnv,
@@ -86,6 +89,12 @@ export interface AgentRunSpec {
    */
   webToolsGuidance?: string
   /**
+   * Linked-context files the backend prepared (requirements / RFCs / PRDs / tracker
+   * issues). Materialised into CONTEXT_DIR in the checkout before the run and pointed at
+   * from AGENTS.md, so the agent reads them on demand. Absent ⇒ none.
+   */
+  contextFiles?: ContextFileInfo[]
+  /**
    * Enable proxy-backed web search: point the rpiv-web-tools SearXNG provider at the
    * backend's search proxy (`${proxyBaseUrl}/web-search`) with the session token as
    * the bearer — so the search runs server-side under the deployment's key and no
@@ -105,6 +114,12 @@ export async function runAgentInWorkspace(
   spec: AgentRunSpec,
   opts: RunOptions = {},
 ): Promise<PiRunOutcome> {
+  // Materialise any backend-prepared linked context into the checkout up front, so the
+  // agent (which can't reach Jira/GitHub) reads it on demand from disk. Shared by both
+  // harness paths; kept out of the agent's commits via a local git exclude entry.
+  const contextFiles = spec.contextFiles ?? []
+  await materializeContextFiles(spec.dir, contextFiles)
+
   // Subscription harnesses (Claude Code / Codex) authenticate with the leased
   // token and talk direct to the vendor — no proxy config, no AGENTS.md. The
   // system prompt is passed straight to the CLI; everything around this (clone,
@@ -116,7 +131,7 @@ export async function runAgentInWorkspace(
     return runSubscriptionHarness(spec.harness, {
       cwd: spec.dir,
       model: spec.model,
-      systemPrompt: spec.systemPrompt,
+      systemPrompt: subscriptionSystemPrompt(spec.systemPrompt, contextFiles),
       userPrompt: spec.userPrompt,
       subscriptionToken: spec.subscriptionToken,
       subscriptionBaseUrl: spec.subscriptionBaseUrl,
@@ -148,6 +163,7 @@ export async function runAgentInWorkspace(
     webSearch: Boolean(webSearch),
     guidance: spec.webToolsGuidance,
     serviceDirectory: spec.serviceDirectory,
+    contextFiles,
   })
   await writePiModelsConfig({ model: spec.model, proxyBaseUrl })
   const { signal, onActivity, onProgress, onSpan } = opts
@@ -163,6 +179,23 @@ export async function runAgentInWorkspace(
     expectsEdits: spec.expectsEdits ?? true,
     extraEnv,
   })
+}
+
+/**
+ * Append a pointer to the materialised linked context onto a subscription harness's
+ * system prompt. The Pi harness surfaces this via AGENTS.md, but Claude Code / Codex
+ * take the system prompt straight, so the note has to ride along here. '' files ⇒ the
+ * prompt is returned unchanged.
+ */
+function subscriptionSystemPrompt(systemPrompt: string, files: ContextFileInfo[]): string {
+  if (!files.length) return systemPrompt
+  const list = files.map((f) => `- ${CONTEXT_DIR}/${f.path} — ${f.title}`).join('\n')
+  return `${systemPrompt}
+
+Linked context (requirements / RFCs / PRDs / tracker issues) for this task is in the
+${CONTEXT_DIR}/ directory of your checkout — read a file when relevant. Do NOT try to reach
+external systems; everything available is already on disk:
+${list}`
 }
 
 /**

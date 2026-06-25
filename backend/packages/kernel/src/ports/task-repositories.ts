@@ -83,6 +83,12 @@ export interface TaskRepository {
   get(workspaceId: string, source: TaskSourceKind, externalId: string): Promise<TaskRecord | null>
   /** Every live issue imported into the workspace, across sources. */
   listByWorkspace(workspaceId: string): Promise<TaskRecord[]>
+  /**
+   * Resolve a single live issue by its canonical `url` (trailing-slash tolerant),
+   * across sources. Used to resolve a URL named explicitly in a block's description
+   * against the imported corpus without scanning every issue.
+   */
+  getByUrl(workspaceId: string, url: string): Promise<TaskRecord | null>
   /** Live issues attached to a board block (resolved during execution). */
   listByBlock(workspaceId: string, blockId: string): Promise<TaskRecord[]>
   /** Attach an issue to a board block (or detach with null). */

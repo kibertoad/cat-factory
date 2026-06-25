@@ -177,6 +177,10 @@ async function listLegacyFeatureFiles(repo: RepoFiles, branch: string): Promise<
  * exactly as the harness's `commitAll` found nothing staged.
  */
 export const specPostOp: RepoOp = async (ctx) => {
+  // A purely TECHNICAL task produces NO business specs: the writer signalled
+  // `noBusinessSpecs`, leaving the baseline spec as-is. Commit nothing (and skip the
+  // expensive read/render) — "no new specs" is a valid, intended outcome.
+  if (ctx.result?.noBusinessSpecs) return
   // The engine coerced the agent's structured output into `spec`; re-coerce to a typed doc
   // (idempotent on an already-coerced doc) so a nameless/garbage payload commits nothing.
   // The doc must carry its own `service` name (no repo-name rescue — see `toRunResult`); an

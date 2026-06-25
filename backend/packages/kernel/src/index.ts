@@ -20,6 +20,7 @@ export {
   DEFAULT_MERGE_PRESET,
   DEFAULT_CI_MAX_ATTEMPTS,
   DEFAULT_MAX_REQUIREMENT_ITERATIONS,
+  CONTEXT_BUDGET,
   DEFAULT_WORKSPACE_SETTINGS,
   DEFAULT_MODEL_PRESETS,
   DEFAULT_MODEL_PRESET,
@@ -108,8 +109,14 @@ export {
 
 export { MapSourceRegistry } from './shared/source-registry.logic.js'
 export * as atlassianLogic from './shared/atlassian.logic.js'
-export { markdownToText, buildExcerpt } from './shared/markdown.logic.js'
+export {
+  markdownToText,
+  buildExcerpt,
+  estimateTokens,
+  contentHash,
+} from './shared/markdown.logic.js'
 export { normalizeAtlassianBaseUrl, assertSafeAtlassianBaseUrl } from './shared/atlassian.logic.js'
+export { normalizeUrl, urlMatchCandidates } from './shared/url.logic.js'
 
 export { requireWorkspace } from './workspace-guard.js'
 
