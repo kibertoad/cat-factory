@@ -59,3 +59,24 @@ export interface RepoFiles {
  * installation id + repo ref for a run and hands the bound facade to pre/post-ops.
  */
 export type ResolveRepoFiles = (installationId: number, ref: GitHubRepoRef) => RepoFiles
+
+/** The repo a block's run targets, resolved + bound for its pre/post-op hooks. */
+export interface RunRepoContext {
+  /** Checkout-free repo access bound to the run's installation + repo. */
+  repo: RepoFiles
+  /** The repo's default branch — the `base` clone target a repo-op resolves against. */
+  baseBranch: string
+}
+
+/**
+ * Resolve the {@link RunRepoContext} for a block's run: the run's installation + repo
+ * (the same linkage the container executor's `resolveRepoTarget` walks) bound to a
+ * {@link RepoFiles}, plus the repo's default branch. The engine calls this to run a
+ * registered kind's pre/post-ops against the right repo. Returns null when GitHub isn't
+ * connected (no installation / no repos / no client wired) so an unconfigured workspace —
+ * or a test without GitHub — simply skips the ops instead of failing.
+ */
+export type ResolveRunRepoContext = (
+  workspaceId: string,
+  blockId: string,
+) => Promise<RunRepoContext | null>

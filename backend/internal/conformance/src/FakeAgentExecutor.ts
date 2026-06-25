@@ -9,7 +9,7 @@ import type {
   TestReport,
 } from '@cat-factory/kernel'
 import type { AgentExecutor } from '@cat-factory/kernel'
-import { isCompanionKind } from '@cat-factory/agents'
+import { isCompanionKind, registeredAgentStep } from '@cat-factory/agents'
 
 export interface FakeAgentOptions {
   /** Confidence reported on the final step (drives auto-merge vs PR). Default 1. */
@@ -91,6 +91,13 @@ export interface FakeAgentOptions {
    * then a greenlit one. When omitted the Tester greenlights immediately.
    */
   testReports?: TestReport[]
+  /**
+   * The structured JSON a registered CUSTOM kind (one with a `container-explore`
+   * structured agent step) returns as `result.custom`, so the engine's generic post-op
+   * (coerce → render → commit via the checkout-free RepoFiles port) can be exercised
+   * without a real container. Omitted ⇒ a deterministic `{ ok: true }`.
+   */
+  customResult?: unknown
 }
 
 /**
@@ -219,6 +226,18 @@ export class FakeAgentExecutor implements AgentExecutor {
         rationale: 'fake estimate',
       }
       return { output: JSON.stringify(estimate), model: 'fake' }
+    }
+
+    // A registered CUSTOM kind whose agent step declares a structured output returns its
+    // parsed JSON as `custom` — exactly what the generic manifest-driven `agent` dispatch
+    // surfaces — so the engine's registered post-op (render + commit via RepoFiles) runs
+    // without a container. Detected from the registry, so the shared fake needs no per-kind id.
+    if (registeredAgentStep(context.agentKind)?.output?.kind === 'structured') {
+      return {
+        output: `[${context.agentKind}] produced structured output for "${context.block.title}"`,
+        model: 'fake',
+        custom: this.options.customResult ?? { ok: true },
+      }
     }
 
     const confidence = this.options.confidence ?? 1

@@ -294,6 +294,26 @@ export interface AgentArchetype {
   resultView?: string
 }
 
+/**
+ * A registered CUSTOM agent kind carried in the workspace snapshot: its id + display
+ * metadata + whether it runs in a container. The SPA merges these into its palette
+ * catalog (`registerCustomKinds`) so a deployment's proprietary kind becomes a
+ * first-class palette block + result view. Mirrors `CustomAgentKind` in
+ * `@cat-factory/contracts`.
+ */
+export interface CustomAgentKind {
+  kind: AgentKind
+  presentation: {
+    label: string
+    icon: string
+    color: string
+    description: string
+    category?: AgentCategory
+    resultView?: string
+  }
+  container: boolean
+}
+
 /** A reusable, linear sequence of agents. */
 export interface Pipeline {
   id: string
@@ -409,6 +429,12 @@ export interface WorkspaceSnapshot {
   serviceCatalog?: Service[]
   /** The workspace's runtime settings (human-wait escalation threshold + task limit). */
   settings?: WorkspaceSettings
+  /**
+   * Registered custom agent kinds (kind + presentation + container flag) a deployment
+   * mixed in. The SPA merges these into its palette catalog so a proprietary kind becomes
+   * a first-class palette block + result view. Absent when none are registered.
+   */
+  customAgentKinds?: CustomAgentKind[]
 }
 
 /** How the per-service running-task limit is bucketed. Mirrors `@cat-factory/contracts`. */

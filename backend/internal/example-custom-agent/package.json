@@ -1,0 +1,30 @@
+{
+  "name": "@cat-factory/example-custom-agent",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Worked example of a company-authored agent package: a brand-new repo-writing agent that ships with ZERO harness changes — registered via the public extension seams (registerAgentKind + registerPipeline) and rendering its artifact from a backend post-op over the checkout-free RepoFiles port. Imported for side effect, like a deployment's proprietary org package.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "tsc -b tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest",
+    "test:run": "vitest run"
+  },
+  "dependencies": {
+    "@cat-factory/agents": "workspace:*",
+    "@cat-factory/kernel": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "7.0.1-rc",
+    "vitest": "^4.1.9"
+  }
+}

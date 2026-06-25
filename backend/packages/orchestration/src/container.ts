@@ -2,6 +2,7 @@ import type {
   BlockRepository,
   ExecutionRepository,
   PipelineRepository,
+  ResolveRunRepoContext,
   WorkspaceRepository,
 } from '@cat-factory/kernel'
 import type { AccountRepository, MembershipRepository } from '@cat-factory/kernel'
@@ -178,6 +179,15 @@ export interface CoreDependencies {
    * tests.
    */
   agentExecutor: AgentExecutor
+  /**
+   * Optional: resolve a block's run repo (installation + repo + default branch) bound to
+   * a checkout-free {@link RepoFiles}, so a registered custom kind's pre/post-op hooks
+   * read a targeted subset of the repo and commit rendered artifacts WITHOUT a checkout.
+   * A facade composes it from its wired `GitHubClient` + `resolveRepoTarget`
+   * (`makeResolveRunRepoContext`). Absent (tests / GitHub not connected) → the engine
+   * skips every kind's pre/post-ops, exactly as a built-in kind has none.
+   */
+  resolveRunRepoContext?: ResolveRunRepoContext
   /** Ledger backing the spend safeguard (per-call token usage). */
   tokenUsageRepository: TokenUsageRepository
   /**

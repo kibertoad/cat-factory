@@ -18,7 +18,9 @@ import {
   clearRegisteredPromptFragments,
   registerPromptFragment,
 } from '@cat-factory/prompt-fragments'
-import { describe, expect, it } from 'vitest'
+import { clearRegisteredAgentKinds, registerAgentKind } from '@cat-factory/agents'
+import type { RepoFiles } from '@cat-factory/kernel'
+import { afterEach, describe, expect, it } from 'vitest'
 import type { ConformanceHarness } from './harness.js'
 
 // The cross-runtime conformance suite: the KEY backend behaviour every deployment
@@ -319,6 +321,101 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         } finally {
           clearRegisteredPromptFragments()
         }
+      })
+    })
+
+    describe('registered custom kind pre/post-ops', () => {
+      afterEach(() => clearRegisteredAgentKinds())
+
+      // A registered custom agent kind decomposes into preOps → agent → postOps, with the
+      // deterministic repo work (read a baseline artifact, render + commit files) running
+      // as BACKEND TypeScript over the checkout-free RepoFiles port — never in a container.
+      // This asserts the engine actually RUNS those hooks (and binds them to the run's repo)
+      // identically on every runtime, so a facade that forgot to wire `resolveRunRepoContext`
+      // fails here rather than silently skipping a custom kind's render.
+      it('runs a kind’s pre-op + post-op, committing rendered files via the checkout-free RepoFiles', async () => {
+        // An in-memory RepoFiles capturing what the hooks read + commit (the suite's stand-in
+        // for a facade's GitHubClient-backed RepoFiles), so the assertion needs no real GitHub.
+        const reads: string[] = []
+        const commits: { branch: string; files: { path: string; content: string }[] }[] = []
+        const repo: RepoFiles = {
+          getFile: async (path) => {
+            reads.push(path)
+            return null
+          },
+          listDirectory: async () => [],
+          headSha: async () => 'base-sha',
+          createBranch: async () => {},
+          commitFiles: async (input) => {
+            commits.push({ branch: input.branch, files: input.files })
+            return { sha: 'commit-sha' }
+          },
+          openPullRequest: async () => {
+            throw new Error('not exercised by this test')
+          },
+        }
+
+        registerAgentKind({
+          kind: 'conformance-auditor',
+          systemPrompt: 'You audit the service for compliance.',
+          // A read-only container-explore step returning structured JSON (surfaced as
+          // `result.custom`) — exactly the generic manifest-driven `agent` dispatch.
+          agent: { surface: 'container-explore', output: { kind: 'structured' } },
+          // PRE-op: read a baseline artifact (no checkout). Proves pre-ops run + are bound
+          // to the resolved branch.
+          preOps: [
+            async (ctx) => {
+              await ctx.repo.getFile('compliance/POLICY.md', ctx.branch)
+            },
+          ],
+          // POST-op: render a file from the agent's structured output + commit it. The
+          // backend-side rendering that used to live in the harness.
+          postOps: [
+            async (ctx) => {
+              const custom = ctx.result?.custom as { findings?: string } | undefined
+              await ctx.repo.commitFiles({
+                branch: ctx.branch,
+                message: 'chore: compliance report',
+                files: [
+                  {
+                    path: 'compliance/REPORT.md',
+                    content: `# Compliance report\n\n${custom?.findings ?? '(none)'}\n`,
+                  },
+                ],
+              })
+            },
+          ],
+        })
+
+        const app = harness.makeApp(
+          { customResult: { findings: 'all clear' } },
+          { resolveRunRepoContext: async () => ({ repo, baseBranch: 'main' }) },
+        )
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Compliance audit',
+          agentKinds: ['conformance-auditor'],
+        })
+        const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+          pipelineId: pipeline.body.id,
+        })
+        expect(start.status).toBe(201)
+        const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+        expect(exec.status).toBe('done')
+
+        // The pre-op read the baseline artifact on the resolved branch…
+        expect(reads).toContain('compliance/POLICY.md')
+        // …and the post-op committed the rendered file from the agent's `custom` output —
+        // via the checkout-free RepoFiles port, identically on D1 and Postgres. The kind
+        // declares no clone target, so it resolves to the per-block work branch
+        // `cat-factory/<blockId>` the container agent would use — NOT the default branch,
+        // so a committing post-op never silently lands on `main`.
+        expect(commits).toHaveLength(1)
+        expect(commits[0]?.branch).toBe('cat-factory/task_login')
+        expect(commits[0]?.files[0]?.path).toBe('compliance/REPORT.md')
+        expect(commits[0]?.files[0]?.content).toContain('all clear')
       })
     })
 

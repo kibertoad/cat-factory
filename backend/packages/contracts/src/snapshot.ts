@@ -16,6 +16,7 @@ import { pipelineScheduleSchema } from './recurring.js'
 import { serviceSchema, workspaceMountSchema } from './services.js'
 import { trackerSettingsSchema } from './tracker.js'
 import { workspaceSettingsSchema } from './workspace-settings.js'
+import { customAgentKindSchema } from './agent-presentation.js'
 
 // The full board snapshot returned by GET /workspaces/:id (and POST /workspaces).
 // It lives in its own module because it references both ./entities and
@@ -111,5 +112,13 @@ export const workspaceSnapshotSchema = v.object({
    * by the facade, so optional on the wire.
    */
   settings: v.optional(workspaceSettingsSchema),
+  /**
+   * Registered CUSTOM agent kinds (kind + presentation + container flag) a deployment
+   * mixed in via `registerAgentKind`. The SPA merges these into its palette catalog so a
+   * proprietary kind becomes a first-class palette block + result view instead of the
+   * generic fallback. Static (process-global registry), workspace-independent; attached
+   * by the facade, so optional on the wire and omitted when no custom kind is registered.
+   */
+  customAgentKinds: v.optional(v.array(customAgentKindSchema)),
 })
 export type WorkspaceSnapshot = v.InferOutput<typeof workspaceSnapshotSchema>

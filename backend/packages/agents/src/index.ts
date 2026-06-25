@@ -146,6 +146,10 @@ export {
   renderSpecFiles,
   renderSpecFeatureFiles,
 } from './repo-ops/render.js'
+// Driver for a registered kind's pre/post-op hooks (plain TS over the checkout-free
+// RepoFiles port). Here, not in @cat-factory/server, so the orchestration engine can
+// run the ops without importing the HTTP layer.
+export { runRepoOps } from './repo-ops/run.js'
 
 // The generic AI provisioning facade: a mixable provider registry + the base,
 // runtime-neutral resolvers. Optional/heavier backends ship as their own packages

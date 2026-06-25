@@ -186,6 +186,13 @@ facade so the runtimes can't drift (see "Cross-runtime conformance" below).
   **cross-runtime conformance suite** + the single canonical deterministic
   `FakeAgentExecutor`. `defineConformanceSuite(harness)` runs the key backend
   behaviour against any facade; both runtimes' test suites invoke it (see below).
+- `backend/internal/example-custom-agent` — `@cat-factory/example-custom-agent`, a
+  private **worked example** of a company-authored agent package: an inline `org-reviewer`
+  - a container `security-auditor` (`container-explore` structured, a post-op rendering
+    `compliance/REPORT.md` via `RepoFiles.commitFiles`, presented through
+    `generic-structured`) + the `pl_org_audit` pipeline, registered purely via the public
+    seams (`registerAgentKind` + `registerPipeline`) and imported for side effect. Proves a
+    brand-new repo-writing agent ships with ZERO harness changes. See **Custom agents** below.
 - `deploy/backend` — example Worker deployment: a one-line `src/index.ts`
   re-exporting `@cat-factory/worker` + the full production `wrangler.toml`
   (`[vars]`, the GHCR runner `image`, `migrations_dir` →
@@ -562,6 +569,49 @@ the inline requirements-incorporation companion: `hasNotesToIncorporate`
 re-review LLM calls are skipped when the human left nothing to fold in (every finding
 dismissed, no answered replies, no redo feedback) — the review settles `incorporated`
 directly and downstream falls back to the original description.
+
+## Custom agents (manifest-driven extension — pre/post-ops over `RepoFiles`)
+
+A deployment can ship its own agent kinds **without forking and without rebuilding the
+executor-harness image**. Governing principle: _zero `switch(agentKind)` in the
+container_ — the harness is a generic LLM-over-a-checkout runner, and all
+mechanical/deterministic work is backend TypeScript. Full model + worked example:
+[`backend/docs/custom-agents.md`](./backend/docs/custom-agents.md).
+
+- **Three stages** (the container runs only the middle one): `preOps` (deterministic
+  backend TS, reads/commits a targeted subset of the repo with NO checkout, via the
+  `RepoFiles` kernel port) → `agent` (optional LLM step: `inline` / `container-explore`
+  [prose or structured JSON → `result.custom`] / `container-coding`) → `postOps`
+  (deterministic backend TS: parse `result.custom`, render artifact files, commit via
+  `RepoFiles`). `preOps`/`postOps` are plain `RepoOp` functions.
+- **Registration** (an import side effect, mirroring the model-provider seam):
+  `registerAgentKind({ kind, systemPrompt, agent, preOps, postOps, presentation })`
+  (`@cat-factory/agents`) + `registerPipeline(...)` (`@cat-factory/kernel`). A
+  `container-*` surface implies the container requirement.
+- **Live execution wiring**: `ExecutionService` runs a registered kind's `preOps` before
+  dispatch and `postOps` after `recordStepResult`, over a per-run `RepoFiles` bound to the
+  run's repo. The binding is the facade-wired `resolveRunRepoContext`
+  (`ExecutionServiceDependencies` / `CoreDependencies`), composed from the GitHub client +
+  the executor's `resolveRepoTarget` via `makeResolveRunRepoContext` (`@cat-factory/server`)
+  — wired in ALL THREE facades (Worker `selectGitHubDeps`, Node `githubGateDeps`, local
+  inherits via `buildNodeContainer`). Unwired (tests / no GitHub) ⇒ hooks skip, engine
+  unchanged. `runRepoOps` lives in `@cat-factory/agents` (so orchestration drives it
+  without importing the server layer). The cross-runtime conformance suite asserts a
+  registered kind's pre-op read + post-op commit on both runtimes.
+- **`RepoFiles`** (`@cat-factory/kernel` `ports/repo-files.ts`): a per-run, checkout-free
+  facade over the GitHub Git Data + contents API (`getFile`/`listDirectory`/`headSha`/
+  `createBranch`/`commitFiles`/`openPullRequest`) — pure HTTP, so runtime-symmetric across
+  Worker/Node/local (the Worker's lack of a filesystem stops mattering).
+- **Frontend**: the workspace snapshot carries `customAgentKinds` (kind + presentation +
+  container flag; assembled in `WorkspaceController`), which the SPA merges into its palette
+  catalog (`useAgentsStore().registerCustomKinds`) so a registered kind is a first-class
+  palette block + result view. A structured kind's `result.custom` is recorded on the step
+  (`step.custom`) and rendered by the shared `generic-structured` result view
+  (`StepResultViewHost.vue` → `GenericStructuredResultView.vue`) — no bespoke UI.
+- **NOT yet done**: the built-in agents (blueprints/spec-writer/coder/merger/…) are not
+  yet migrated to this model — their rendering still lives in the harness. Converting them
+  one at a time (parity-gated, image-bumped per conversion) then deleting the bespoke
+  harness handlers is the remaining strangler work.
 
 ## Unified agent runs (failure + retry surface)
 

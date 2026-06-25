@@ -1,7 +1,11 @@
 import { createWorkspaceSchema, renameWorkspaceSchema } from '@cat-factory/contracts'
-import { configContributionCatalog } from '@cat-factory/agents'
+import {
+  configContributionCatalog,
+  registeredAgentKinds,
+  registeredKindRequiresContainer,
+} from '@cat-factory/agents'
 import { Hono } from 'hono'
-import type { WorkspaceSnapshot } from '@cat-factory/contracts'
+import type { CustomAgentKind, WorkspaceSnapshot } from '@cat-factory/contracts'
 import type { AgentRouting } from '@cat-factory/agents'
 import type { ModelRef } from '@cat-factory/kernel'
 
@@ -22,6 +26,24 @@ function snapshotAgentConfigCatalog(snapshot: WorkspaceSnapshot) {
  * model-defaults panel can name the model behind "Deployment default" per kind.
  * Derived from the shared agents config, so identical across facades.
  */
+/**
+ * The registered CUSTOM agent kinds carrying frontend presentation metadata, mapped to
+ * the wire shape the SPA merges into its palette catalog. Only kinds that declared a
+ * `presentation` become first-class palette blocks; the rest stay engine-internal. Static
+ * (process-global registry), so identical for every workspace and every facade. Returns
+ * undefined when none are registered, so the field is simply absent on the stock product.
+ */
+function snapshotCustomAgentKinds(): CustomAgentKind[] | undefined {
+  const kinds = registeredAgentKinds()
+    .filter((def) => def.presentation)
+    .map((def) => ({
+      kind: def.kind,
+      presentation: def.presentation!,
+      container: registeredKindRequiresContainer(def.kind),
+    }))
+  return kinds.length > 0 ? kinds : undefined
+}
+
 function deploymentModelDefaults(routing: AgentRouting) {
   const ref = (r: ModelRef) => `${r.provider}:${r.model}`
   return {
@@ -82,12 +104,14 @@ export function workspaceController(): Hono<AppEnv> {
 
     const snapshot = await container.workspaceService.create(body, user?.id ?? null, accountId)
     const spend = await container.spendService.status()
+    const customAgentKinds = snapshotCustomAgentKinds()
     return c.json(
       {
         ...snapshot,
         spend,
         agentConfigCatalog: snapshotAgentConfigCatalog(snapshot),
         deploymentModelDefaults: deploymentModelDefaults(container.config.agents.routing),
+        ...(customAgentKinds ? { customAgentKinds } : {}),
       },
       201,
     )
@@ -150,6 +174,7 @@ export function workspaceController(): Hono<AppEnv> {
       container.services && accountId !== undefined
         ? await container.services.service.listForAccount(accountId)
         : undefined
+    const customAgentKinds = snapshotCustomAgentKinds()
     return c.json({
       ...snapshot,
       spend,
@@ -165,6 +190,7 @@ export function workspaceController(): Hono<AppEnv> {
       ...(serviceCatalog ? { serviceCatalog } : {}),
       agentConfigCatalog: snapshotAgentConfigCatalog(snapshot),
       deploymentModelDefaults: deploymentModelDefaults(container.config.agents.routing),
+      ...(customAgentKinds ? { customAgentKinds } : {}),
     })
   })
 

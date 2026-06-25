@@ -873,6 +873,13 @@ export const pipelineStepSchema = v.object({
   skipped: v.optional(v.boolean()),
   /** Text the agent produced for this step (when LLM execution is enabled). */
   output: v.optional(v.string()),
+  /**
+   * The structured JSON a registered CUSTOM kind's agent step returned (the generic
+   * manifest-driven `agent` dispatch's `custom` channel). Recorded so the SPA can render
+   * it in the `generic-structured` result view (and a post-op already consumed it
+   * server-side). Absent for built-in / prose kinds.
+   */
+  custom: v.optional(v.unknown()),
   /** Identifier of the model that produced `output`, for transparency. */
   model: v.optional(v.string()),
   /**

@@ -74,6 +74,14 @@ export {
   buildResolveRepoTarget,
   type ResolveRepoTargetDependencies,
 } from './agents/resolveRepoTarget.js'
+// The checkout-free RepoFiles facade over the wired GitHubClient + the engine-facing
+// run-repo resolver each facade threads into the core for a registered kind's pre/post-ops.
+export {
+  makeRepoFiles,
+  makeResolveRepoFiles,
+  makeResolveRunRepoContext,
+  runRepoOps,
+} from './agents/repoFiles.js'
 export { bearerToken, requireAuth, verifySession } from './auth/middleware.js'
 export { registerCoreControllers } from './app.js'
 export {

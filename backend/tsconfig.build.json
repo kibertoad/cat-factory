@@ -21,6 +21,7 @@
     { "path": "packages/orchestration/tsconfig.build.json" },
     { "path": "packages/server/tsconfig.build.json" },
     { "path": "internal/conformance/tsconfig.build.json" },
+    { "path": "internal/example-custom-agent/tsconfig.build.json" },
     { "path": "runtimes/cloudflare/tsconfig.build.json" },
     { "path": "runtimes/node/tsconfig.build.json" },
     { "path": "runtimes/local/tsconfig.build.json" }
