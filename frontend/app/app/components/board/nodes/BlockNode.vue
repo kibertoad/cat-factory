@@ -53,9 +53,11 @@ const FRAME_LABEL: Record<BlockStatus, string> = {
 const statusLabel = computed(() => FRAME_LABEL[frameStatus.value])
 
 const selected = computed(() => ui.selectedBlockId === props.id)
-const expanded = computed(() => ui.isFrameExpanded(props.id))
-// At far zoom we only ever show the chip; otherwise an expanded frame shows tasks.
-const showExpanded = computed(() => expanded.value && lod.value !== 'far')
+// Services are always expanded to their task canvas, at every zoom level: there is no
+// chip/compact collapse, so panning is a fixed layout and zooming has no expand/collapse
+// transition to snap on. The far-chip and compact-summary branches in the template are
+// kept (gated off) so the prior behaviour is one edit away if we want chips back.
+const showExpanded = computed(() => true)
 
 // Surface a pending decision from this frame OR any of its tasks.
 const blockDecisions = computed(() =>
@@ -179,8 +181,10 @@ const ITEM_ICON: Record<string, string> = {
     </div>
 
     <!-- ===================== FAR: glanceable chip ===================== -->
+    <!-- Inert while services are always expanded (showExpanded is always true); the
+         compact branch below is reached via v-else-if and is likewise inert. -->
     <div
-      v-if="lod === 'far'"
+      v-if="!showExpanded && lod === 'far'"
       class="flex w-44 items-center gap-2 rounded-xl border-2 px-3 py-3 shadow-lg backdrop-blur"
       :class="[selected ? 'border-white' : '', pulseClass]"
       :style="{ borderColor: accent, backgroundColor: accent + '26' }"
