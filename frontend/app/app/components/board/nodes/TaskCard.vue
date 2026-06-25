@@ -18,6 +18,10 @@ const task = computed<Block | undefined>(() => board.getBlock(props.taskId))
 const statusMeta = computed(() => (task.value ? STATUS_META[task.value.status] : null))
 const selected = computed(() => ui.selectedBlockId === props.taskId)
 
+// Drag-to-connect: dragging from this card's handle onto another task makes THAT task
+// depend on this one (this is the prerequisite). The composable tracks the gesture.
+const { start: startConnect } = useDependencyConnect()
+
 // ---- dependencies (gate execution order; may point across frames) ----------
 const deps = computed(() =>
   (task.value?.dependsOn ?? []).map((id) => board.getBlock(id)).filter((b): b is Block => !!b),
@@ -196,6 +200,16 @@ function selectTask() {
         :title="schedule.enabled ? 'Recurring pipeline' : 'Recurring pipeline (paused)'"
       />
       <span class="truncate text-[11px] font-semibold text-slate-100">{{ task.title }}</span>
+      <!-- drag-to-connect handle: drag onto another task to make it depend on this one -->
+      <button
+        type="button"
+        class="nodrag ml-1 shrink-0 cursor-crosshair rounded-full p-0.5 text-slate-500 hover:bg-slate-800 hover:text-amber-400"
+        title="Drag onto another task to make it depend on this one"
+        @pointerdown.stop="startConnect(task.id, $event)"
+        @click.stop
+      >
+        <UIcon name="i-lucide-spline" class="h-3 w-3" />
+      </button>
       <span
         class="ml-auto shrink-0 text-[9px] uppercase tracking-wide"
         :class="

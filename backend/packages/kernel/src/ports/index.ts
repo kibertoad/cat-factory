@@ -92,6 +92,7 @@ export type {
   GitHubIssueComment,
   GitHubIssueDetail,
   GitHubIssueSearchHit,
+  GitHubSubIssue,
   GitHubRepoRef,
   InstallationMeta,
   InstallationSummary,

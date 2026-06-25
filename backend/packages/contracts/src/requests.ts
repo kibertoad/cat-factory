@@ -76,10 +76,33 @@ export const addServiceFromRepoSchema = v.object({
 })
 export type AddServiceFromRepoInput = v.InferOutput<typeof addServiceFromRepoSchema>
 
+/**
+ * Add an `epic`-level grouping node to the board. An epic is not a structural
+ * container (tasks join it via their `epicId`, not by reparenting), so it carries
+ * only a title/description/position; `parentId` is optional placement under a
+ * service/module (null ⇒ a top-level board node).
+ */
+export const addEpicSchema = v.object({
+  title: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200)),
+  description: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(2000))),
+  position: positionSchema,
+  // Optional placement under a service frame or module; omitted ⇒ top-level node.
+  parentId: v.optional(v.pipe(v.string(), v.minLength(1))),
+})
+export type AddEpicInput = v.InferOutput<typeof addEpicSchema>
+
+/** Assign a task to an epic (or detach with `null`). */
+export const assignEpicSchema = v.object({
+  epicId: v.nullable(v.pipe(v.string(), v.minLength(1))),
+})
+export type AssignEpicInput = v.InferOutput<typeof assignEpicSchema>
+
 export const addTaskSchema = v.object({
   // The user always names the task — no auto-generated placeholder titles.
   title: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200)),
   description: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(2000))),
+  // Optional epic membership at creation (used by the epic-import spawn path).
+  epicId: v.optional(v.pipe(v.string(), v.minLength(1))),
   // The kind of work this task represents; omitted → 'feature'. `recurring` is NOT
   // allowed here (recurring tasks are created via a recurring-pipeline schedule).
   taskType: v.optional(createTaskTypeSchema),
@@ -142,6 +165,10 @@ export const updateBlockSchema = v.partial(
     // the workspace setting). 'on'/'off' force the behaviour for this task.
     trackerCommentOnPrOpen: v.nullable(writebackOverrideSchema),
     trackerResolveOnMerge: v.nullable(writebackOverrideSchema),
+    // Epic membership; an empty string detaches the task from its epic.
+    epicId: v.string(),
+    // Preceding-task auto-start toggle: when this task merges, start its dependents.
+    autoStartDependents: v.boolean(),
   }),
 )
 export type UpdateBlockInput = v.InferOutput<typeof updateBlockSchema>

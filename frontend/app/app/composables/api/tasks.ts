@@ -82,6 +82,18 @@ export function tasksApi({ http, ws }: ApiContext) {
         body,
       }),
 
+    // Spawn an epic + its children as an epic node + child tasks, with dependency edges
+    // seeded from the issues' blocked-by/depends-on links.
+    spawnEpic: (
+      workspaceId: string,
+      source: TaskSourceKind,
+      body: { ref: string; containerId: string; position?: { x: number; y: number } },
+    ) =>
+      http<{ epic: Block; tasks: Block[] }>(
+        `${ws(workspaceId)}/task-sources/${source}/epics/spawn`,
+        { method: 'POST', body },
+      ),
+
     // ---- issue-tracker selection (workspace-level) ------------------------
     getTrackerSettings: (workspaceId: string) =>
       http<TrackerSettings>(`${ws(workspaceId)}/tracker-settings`),

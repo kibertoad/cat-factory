@@ -3,6 +3,7 @@ import type {
   TaskSourceDescriptor,
   TaskSourceDiagnostic,
   TaskComment,
+  TaskDependencyLink,
   TaskSearchResult,
 } from '../domain/types.js'
 
@@ -46,6 +47,18 @@ export interface TaskContent {
   description: string
   /** Recent comments (oldest→newest), bodies normalized to Markdown. */
   comments: TaskComment[]
+  // ---- Hierarchy + dependency links (transient: consumed by the epic-spawn import to
+  // build the board graph; NOT persisted on the TaskRecord — the board's epicId/dependsOn
+  // become the source of truth once spawned). All optional; a source/issue without them
+  // simply imports as a flat task. ----
+  /** Whether this issue is an epic / parent (Jira epic issue type, or has sub-issues). */
+  isEpic?: boolean
+  /** The canonical external id of this issue's parent/epic, if any. */
+  parentExternalId?: string | null
+  /** Canonical external ids of this issue's children (epic children / sub-issues). */
+  childExternalIds?: string[]
+  /** Dependency relationships this issue declares to other issues. */
+  links?: TaskDependencyLink[]
 }
 
 /**

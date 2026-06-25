@@ -56,6 +56,19 @@ export function useBlockQueries(blocks: Ref<Block[]>) {
   /** All tasks across every service (used for the dependency picker). */
   const allTasks = computed(() => blocks.value.filter((b) => b.level === 'task'))
 
+  /** Epic grouping nodes (non-structural; group tasks via their `epicId`). */
+  const epics = computed(() => blocks.value.filter((b) => b.level === 'epic'))
+
+  /** The tasks that belong to an epic (anywhere on the board) via their `epicId`. */
+  function epicMembers(epicId: string): Block[] {
+    return blocks.value.filter((b) => b.epicId === epicId)
+  }
+
+  /** The epic a task belongs to, if any. */
+  function epicOf(task: Block): Block | undefined {
+    return task.epicId ? getBlock(task.epicId) : undefined
+  }
+
   /** A task's dependencies that are not yet merged (i.e. block it from running). */
   function unmetDeps(taskId: string) {
     const t = getBlock(taskId)
@@ -139,6 +152,9 @@ export function useBlockQueries(blocks: Ref<Block[]>) {
     getBlock,
     frames,
     allTasks,
+    epics,
+    epicMembers,
+    epicOf,
     childrenOf,
     tasksOf,
     modulesOf,

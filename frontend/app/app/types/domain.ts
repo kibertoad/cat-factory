@@ -59,8 +59,11 @@ export type BlockType =
  *  - `module`  a sub-frame inside a service; created when a task assigned to a
  *              not-yet-existing module is implemented (tasks can also be dragged in)
  *  - `task`    a draggable unit of work living inside a service or a module
+ *  - `epic`    a NON-structural grouping node: it groups tasks (which keep their own
+ *              service/module parent) via their `epicId`, and is drawn linked to them.
+ *              Never a container — nothing is reparented into an epic.
  */
-export type BlockLevel = 'frame' | 'module' | 'task'
+export type BlockLevel = 'frame' | 'module' | 'task' | 'epic'
 
 /**
  * The kind of work a task represents, chosen at creation. Drives the card's badge/icon
@@ -109,6 +112,16 @@ export interface Block {
   level: BlockLevel
   /** parent container: service or module for a task, service for a module. */
   parentId: string | null
+  /**
+   * task-only: membership link to an `epic`-level block, independent of `parentId`.
+   * Set when the task belongs to an epic (drawn linked to it); absent/null otherwise.
+   */
+  epicId?: string | null
+  /**
+   * task-only: when this task merges, automatically start the tasks that depend on it
+   * (and whose other dependencies are also done). Off/absent ⇒ dependents wait.
+   */
+  autoStartDependents?: boolean
   /** task-only: 0..1 confidence produced when the pipeline finishes. */
   confidence?: number
   /** task-only: the task-estimator's triage (complexity/risk/impact); absent until it runs. */

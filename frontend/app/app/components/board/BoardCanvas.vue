@@ -4,7 +4,9 @@ import { Background } from '@vue-flow/background'
 import { Controls } from '@vue-flow/controls'
 import { MiniMap } from '@vue-flow/minimap'
 import BlockNode from './nodes/BlockNode.vue'
+import EpicNode from './nodes/EpicNode.vue'
 import TaskDependencyEdges from './TaskDependencyEdges.vue'
+import DependencyConnectOverlay from './DependencyConnectOverlay.vue'
 import { STATUS_META } from '~/utils/catalog'
 import { readDndPayload, blockIdFromEvent } from '~/utils/dnd'
 import { BOARD_FLOW_ID } from '~/composables/useBoardFlow'
@@ -41,15 +43,24 @@ function frameExpanded(id: string) {
   return ui.isFrameExpanded(id) && ui.lod !== 'far'
 }
 
-const nodes = computed(() =>
-  board.frames.map((b) => ({
+const nodes = computed(() => [
+  ...board.frames.map((b) => ({
     id: b.id,
     type: 'block',
     position: b.position,
     draggable: !frameExpanded(b.id),
     data: {},
   })),
-)
+  // Epics are top-level grouping nodes (non-structural), drawn alongside frames and
+  // linked to their member tasks by the dependency-edge overlay.
+  ...board.epics.map((b) => ({
+    id: b.id,
+    type: 'epic',
+    position: b.position,
+    draggable: true,
+    data: {},
+  })),
+])
 
 onNodeDragStop(({ node }) => {
   board.moveBlock(node.id, { x: node.position.x, y: node.position.y })
@@ -149,6 +160,10 @@ async function onDrop(event: DragEvent) {
       <template #node-block="props">
         <BlockNode :id="props.id" />
       </template>
+
+      <template #node-epic="props">
+        <EpicNode :id="props.id" />
+      </template>
     </VueFlow>
 
     <!-- An empty board reads as broken; invite the user to add a service. The
@@ -183,5 +198,8 @@ async function onDrop(event: DragEvent) {
 
     <!-- task dependency arrows, overlaid in screen space -->
     <TaskDependencyEdges />
+
+    <!-- live preview line while drag-to-connecting a dependency -->
+    <DependencyConnectOverlay />
   </div>
 </template>

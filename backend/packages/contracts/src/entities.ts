@@ -68,6 +68,21 @@ export const blockSchema = v.object({
   executionId: v.nullable(v.string()),
   level: blockLevelSchema,
   parentId: v.nullable(v.string()),
+  /**
+   * Membership link to an `epic`-level block, INDEPENDENT of `parentId` (which
+   * stays the structural container). A task carries its epic id here so an epic
+   * can group tasks living under different modules/services; the epic is drawn
+   * linked to all such members and its inspector lists them. Absent/null ⇒ not in
+   * an epic. Only meaningful on `task`-level blocks.
+   */
+  epicId: v.optional(v.nullable(v.string())),
+  /**
+   * Preceding-task toggle: when this task's PR merges (it reaches `done`), the
+   * engine automatically starts every task that `dependsOn` it and whose other
+   * dependencies are also done. Off/absent ⇒ dependents wait for a manual start.
+   * Only meaningful on `task`-level blocks.
+   */
+  autoStartDependents: v.optional(v.boolean()),
   confidence: v.optional(v.number()),
   /**
    * The `task-estimator` agent's triage of this task (complexity / risk / impact,

@@ -907,6 +907,7 @@ function createTasksModule(
     boardService,
     blockRepository: deps.blockRepository,
     taskRepository,
+    importService,
   })
   return { connectionService, importService, linkService }
 }

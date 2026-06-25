@@ -100,6 +100,7 @@ export type {
   TaskSourceDiagnosticStatus,
   TaskConnection,
   TaskComment,
+  TaskDependencyLink,
   SourceTask,
   TaskSearchResult,
   // Ephemeral environment provider shapes.
