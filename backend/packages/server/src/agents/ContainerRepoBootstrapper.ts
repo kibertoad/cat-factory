@@ -130,6 +130,22 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
           `or license is fine), make sure the App is installed on it, then run bootstrap again.`,
       )
     }
+
+    // The repo being *readable* is not enough: bootstrapping ends in a force-push, so
+    // the installation must have write access. A public repo the App can read but is
+    // not granted (not in the App's selected-repos list, or the App lacks
+    // contents:write) reads fine above but 403s on the container's push — pre-flight
+    // it here so that case fails fast with an actionable message instead of failing
+    // deep inside the run after a board frame has been created.
+    if (!(await this.deps.githubClient.canPush(installation.installationId, ref))) {
+      throw new Error(
+        `The GitHub App can see ${owner}/${repoName} but does not have write access to it, so the ` +
+          `bootstrapped commit cannot be pushed. Grant the App write access to this repository ` +
+          `(GitHub → Settings → Applications → the cat-factory App → Configure → Repository access — ` +
+          `add "${repoName}" or allow all repositories), or, in local mode, use a GitHub PAT that ` +
+          `can push to it. Then run bootstrap again.`,
+      )
+    }
     // The run replaces the repo's contents with a fresh single-commit history, so
     // the target must be empty — except that GitHub's create-repo page often
     // prepopulates a README, .gitignore and/or license. Those are throwaway

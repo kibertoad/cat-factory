@@ -68,6 +68,13 @@ export class FakeGitHubClient implements GitHubClient {
     return found
   }
 
+  /** Push (write) access per `owner/repo`; defaults to true unless overridden. */
+  pushable: Record<string, boolean> = {}
+
+  async canPush(_installationId: number, ref: GitHubRepoRef): Promise<boolean> {
+    return this.pushable[`${ref.owner}/${ref.repo}`] ?? true
+  }
+
   async listBranches(): Promise<Paged<GitHubBranch>> {
     return { items: this.branches }
   }
