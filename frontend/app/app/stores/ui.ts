@@ -88,6 +88,16 @@ export const useUiStore = defineStore('ui', () => {
   // Per-workspace settings panel: the OpenRouter dynamic catalog (browse/enable gateway models).
   const openRouterOpen = ref(false)
 
+  // AI-onboarding surfaces (driven by `useAiReadiness`). `aiProviderSetupOpen` is the
+  // "no usable AI source" dialog; `aiPresetMismatchOpen` is the "default preset points at
+  // unavailable models" dialog. The `*Dismissed` flags are per-session: they suppress the
+  // auto-open (and let the banner be dismissed) without permanently hiding the prompt — it
+  // re-evaluates on the next load. Both clear themselves once the underlying gap is closed.
+  const aiProviderSetupOpen = ref(false)
+  const aiPresetMismatchOpen = ref(false)
+  const aiSetupDismissed = ref(false)
+  const aiPresetDismissed = ref(false)
+
   // Dedicated result-view overlay: a step whose agent kind declares a bespoke
   // visualization (via the archetype's `resultView`) opens here instead of the generic
   // prose step-detail panel. `view` is the registry id (e.g. 'requirements-review');
@@ -330,6 +340,29 @@ export const useUiStore = defineStore('ui', () => {
   function closeOpenRouter() {
     openRouterOpen.value = false
   }
+  function openAiProviderSetup() {
+    aiProviderSetupOpen.value = true
+  }
+  function closeAiProviderSetup() {
+    aiProviderSetupOpen.value = false
+  }
+  function openAiPresetMismatch() {
+    aiPresetMismatchOpen.value = true
+  }
+  function closeAiPresetMismatch() {
+    aiPresetMismatchOpen.value = false
+  }
+  // Banner dismissal is distinct from closing the dialog: closing the dialog leaves the
+  // banner so the user can reopen it; dismissing the banner hides the whole prompt for
+  // the session (it re-evaluates on the next load).
+  function dismissAiSetup() {
+    aiProviderSetupOpen.value = false
+    aiSetupDismissed.value = true
+  }
+  function dismissAiPresetMismatch() {
+    aiPresetMismatchOpen.value = false
+    aiPresetDismissed.value = true
+  }
   function openRequirementReview(blockId: string) {
     resultView.value = { view: 'requirements-review', blockId, instanceId: null, stepIndex: null }
   }
@@ -384,6 +417,10 @@ export const useUiStore = defineStore('ui', () => {
     vendorCredentialsOpen,
     localModelsOpen,
     openRouterOpen,
+    aiProviderSetupOpen,
+    aiPresetMismatchOpen,
+    aiSetupDismissed,
+    aiPresetDismissed,
     resultView,
     closeResultView,
     stepDetail,
@@ -442,6 +479,12 @@ export const useUiStore = defineStore('ui', () => {
     closeLocalModels,
     openOpenRouter,
     closeOpenRouter,
+    openAiProviderSetup,
+    closeAiProviderSetup,
+    openAiPresetMismatch,
+    closeAiPresetMismatch,
+    dismissAiSetup,
+    dismissAiPresetMismatch,
     openRequirementReview,
     openClarityReview,
     openServiceSpec,

@@ -8,9 +8,12 @@ const props = defineProps<{ block: Block }>()
 const board = useBoardStore()
 const mergePresets = useMergePresetsStore()
 const modelPresets = useModelPresetsStore()
+const models = useModelsStore()
 const pipelines = usePipelinesStore()
 const accounts = useAccountsStore()
 const tracker = useTrackerStore()
+const ui = useUiStore()
+const { unavailableInPreset } = useAiReadiness()
 
 // ---- responsible product person --------------------------------------------
 // The account member (a `product` role-holder) accountable for this task; they are
@@ -73,6 +76,12 @@ function setPreset(id: string) {
 // (a running step keeps the model it was dispatched with). A model pinned directly on
 // the task still overrides the preset.
 const selectedModelPreset = computed(() => modelPresets.resolve(props.block.modelPresetId))
+
+// Model ids in the chosen preset that aren't usable under the current configuration — the
+// task would fail when a step dispatches onto one. Labelled for the inline warning below.
+const unavailablePresetModels = computed(() =>
+  unavailableInPreset(selectedModelPreset.value).map((id) => models.getModel(id)?.label ?? id),
+)
 const modelPresetMenu = computed(() => [
   [
     {
@@ -242,6 +251,38 @@ const resolveOnMergeLabel = computed(() =>
       </div>
       <div v-else class="text-[11px] text-slate-500">
         No preset configured — agents run on the deployment's default routing.
+      </div>
+      <div
+        v-if="unavailablePresetModels.length"
+        class="mt-2 rounded-md border border-amber-500/40 bg-amber-950/40 p-2 text-[11px] text-amber-200/90"
+      >
+        <div class="flex items-start gap-1.5">
+          <UIcon
+            name="i-lucide-triangle-alert"
+            class="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-400"
+          />
+          <div class="min-w-0">
+            <p>
+              Not available under the current configuration:
+              <span class="text-amber-100">{{ unavailablePresetModels.join(', ') }}</span
+              >. This task would fail on those steps.
+            </p>
+            <div class="mt-1.5 flex flex-wrap gap-2">
+              <button
+                class="font-medium text-amber-100 underline-offset-2 hover:underline"
+                @click="ui.openModelConfig()"
+              >
+                Edit presets
+              </button>
+              <button
+                class="font-medium text-amber-100 underline-offset-2 hover:underline"
+                @click="ui.openVendorCredentials()"
+              >
+                Configure vendors
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
       <p class="mt-1 text-[11px] text-slate-500">
         Changing this affects only steps that haven't started yet.
