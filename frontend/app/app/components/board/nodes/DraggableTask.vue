@@ -34,9 +34,9 @@ function onHandle(e: PointerEvent) {
         pointerEvents: draggingId === taskId ? 'none' : undefined,
       }"
     >
-      <!-- drag handle -->
+      <!-- drag handle (`nopan` so the pane doesn't pan on a left-drag from here) -->
       <div
-        class="nodrag flex cursor-grab items-center justify-center rounded-t-lg border border-b-0 border-slate-700 bg-slate-800/80 py-px active:cursor-grabbing"
+        class="nodrag nopan flex cursor-grab items-center justify-center rounded-t-lg border border-b-0 border-slate-700 bg-slate-800/80 py-px active:cursor-grabbing"
         title="Drag task"
         @pointerdown="onHandle"
       >
