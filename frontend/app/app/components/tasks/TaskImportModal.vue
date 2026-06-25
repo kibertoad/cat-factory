@@ -1,11 +1,11 @@
 <script setup lang="ts">
-// Import an issue from a connected task source (by key or URL) and review the
-// issues already imported into the workspace. An imported issue can be attached
-// to an existing task for context from the inspector (see TaskContextIssues.vue),
-// or turned into a new board task here: pick a container (service frame or module),
-// then click an issue to open the prefilled add-task form (title seeded, issue
-// staged as linked context) where the user confirms the pipeline / presets before
-// creating it. A separate icon button on each row opens the issue on GitHub.
+// Import an issue from a connected task source (by key or URL). An imported issue
+// can be attached to an existing task for context from the inspector (see
+// TaskContextIssues.vue), or turned into a new board task here: pick a container
+// (service frame or module), then click a search hit to open the prefilled
+// add-task form (title seeded, issue staged as linked context) where the user
+// confirms the pipeline / presets before creating it. A separate icon button on
+// each row opens the issue on GitHub.
 import type { TaskSearchResult, TaskSourceKind } from '~/types/domain'
 import type { AddTaskPrefill } from '~/stores/ui'
 
@@ -83,10 +83,6 @@ const importedIds = computed(
 )
 const freshHits = computed(() =>
   searchResults.value.filter((r) => !importedIds.value.has(r.externalId)),
-)
-
-const sourceTasks = computed(() =>
-  source.value ? tasks.tasks.filter((t) => t.source === source.value) : [],
 )
 
 // Containers a new task can be created in: every service frame and module on the
@@ -262,7 +258,7 @@ async function doSpawnEpic() {
         <!-- Container for epic children when spawning from a pasted ref (the shared
              "Create tasks in" selector below covers the search-results case). -->
         <UFormField
-          v-if="containerItems.length && !freshHits.length && !sourceTasks.length"
+          v-if="containerItems.length && !freshHits.length"
           label="Epic children container"
           class="w-72"
         >
@@ -288,7 +284,7 @@ async function doSpawnEpic() {
 
         <!-- Shared target container for every "Create task" action below. -->
         <UFormField
-          v-if="containerItems.length && (freshHits.length || sourceTasks.length)"
+          v-if="containerItems.length && freshHits.length"
           label="Create tasks in"
           class="w-72"
         >
@@ -300,7 +296,7 @@ async function doSpawnEpic() {
           />
         </UFormField>
         <p
-          v-else-if="!containerItems.length && (freshHits.length || sourceTasks.length)"
+          v-else-if="!containerItems.length && freshHits.length"
           class="text-[11px] text-slate-500"
         >
           Add a service frame to the board first to create tasks from issues.
@@ -352,52 +348,11 @@ async function doSpawnEpic() {
           </div>
         </div>
 
-        <!-- List of already-imported issues -->
-        <div v-if="sourceTasks.length" class="space-y-2">
-          <h3 class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-            Imported issues
-          </h3>
-          <div
-            v-for="task in sourceTasks"
-            :key="`${task.source}:${task.externalId}`"
-            class="flex items-start justify-between gap-2 rounded-lg border border-slate-800 bg-slate-900/60 p-3 transition-colors hover:border-primary-500/60 hover:bg-slate-900"
-          >
-            <button
-              type="button"
-              class="min-w-0 flex-1 text-left disabled:cursor-not-allowed disabled:opacity-60"
-              :disabled="!containerId"
-              :title="containerId ? 'Create a task from this issue' : 'Pick a container first'"
-              @click="selectIssue(task, false)"
-            >
-              <span class="block truncate text-sm font-medium text-white">
-                {{ task.externalId }} · {{ task.title }}
-              </span>
-              <span class="mt-0.5 line-clamp-2 block text-xs text-slate-500">{{
-                task.excerpt
-              }}</span>
-            </button>
-            <div class="flex shrink-0 items-center gap-2">
-              <UBadge color="neutral" variant="soft" size="xs">
-                {{ task.status }}
-              </UBadge>
-              <UButton
-                color="neutral"
-                variant="ghost"
-                size="xs"
-                icon="i-lucide-external-link"
-                :to="task.url"
-                target="_blank"
-                rel="noopener"
-                :aria-label="`View ${task.externalId} on GitHub`"
-              />
-            </div>
-          </div>
-        </div>
         <p
-          v-else-if="!freshHits.length && !searchQuery.trim()"
+          v-if="!freshHits.length && !searchQuery.trim()"
           class="text-center text-xs text-slate-500"
         >
-          No issues imported yet. Search above, or paste an issue URL/key to import one.
+          Search above, or paste an issue URL/key to create a task from it.
         </p>
       </div>
     </template>
