@@ -38,12 +38,16 @@ const modules = computed<SpecModule[]>(() => spec.value?.modules ?? [])
 const present = computed(() => !!view.value?.present && !!spec.value)
 const hasGherkin = computed(() => (view.value?.features.length ?? 0) > 0)
 
-// Auto-select the first group once a present spec loads, so the main pane isn't empty.
-// `immediate` so a re-open of a block whose view is already cached (present already true on
-// the first tick) auto-selects too — not just the first, uncached open where present flips.
+// Auto-select the first non-empty group once a present spec is shown, so the main pane isn't
+// empty. Depends on `blockId` as well as `present`: switching directly to ANOTHER already-cached
+// present block (via the inspector, without closing) changes `blockId` while `present` stays
+// true, so a watch on `present` alone would never re-fire and the second block would open on
+// the empty Overview pane. `immediate` covers the first, uncached open (present flips false→true
+// after the load). `onOpen` resets `selected` to null first (it runs before this watch, since
+// `useResultView` registers its blockId watch earlier), so a stale selection never leaks across.
 watch(
-  present,
-  (is) => {
+  [present, blockId],
+  ([is]) => {
     if (is && !selected.value) {
       const m = modules.value.findIndex((mod) => (mod.groups?.length ?? 0) > 0)
       if (m >= 0) selected.value = { m, g: 0 }

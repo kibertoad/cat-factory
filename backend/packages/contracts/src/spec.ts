@@ -215,6 +215,26 @@ export function safeParseRequirementGroup(value: unknown): RequirementGroup | un
 }
 
 /**
+ * Non-throwing parse of a single requirement item. Lets a reader salvage a group shard one
+ * requirement at a time — so ONE over-long/malformed requirement (e.g. a title past the
+ * schema cap that the lenient writer never enforced) drops only that requirement, not the
+ * whole group with its valid siblings, acceptance criteria and rules.
+ */
+export function safeParseRequirementItem(value: unknown): RequirementItem | undefined {
+  const result = v.safeParse(requirementItemSchema, value)
+  return result.success ? result.output : undefined
+}
+
+/**
+ * Non-throwing parse of a single domain rule. The rule-level counterpart of
+ * {@link safeParseRequirementItem}, so one malformed rule drops only itself.
+ */
+export function safeParseDomainRule(value: unknown): DomainRule | undefined {
+  const result = v.safeParse(domainRuleSchema, value)
+  return result.success ? result.output : undefined
+}
+
+/**
  * Render a {@link SpecDoc} as readable markdown for HUMAN + COMPANION review.
  *
  * The spec-writer is a container agent: it emits the spec as JSON, renders the

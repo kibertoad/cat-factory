@@ -3,7 +3,9 @@ import {
   SPEC_FEATURES_DIR,
   SPEC_MODULES_DIR,
   SPEC_SERVICE_PATH,
+  safeParseDomainRule,
   safeParseRequirementGroup,
+  safeParseRequirementItem,
   safeParseSpecModule,
   type RequirementGroup,
   type ServiceSpecView,
@@ -26,8 +28,10 @@ import type { RepoContentEntry, RepoFiles } from '@cat-factory/kernel'
 //   1. Every repo read is total — a non-404 GitHub error (rate limit, 5xx, network) is
 //      treated as "missing" rather than thrown, so a flaky read degrades to a partial view
 //      instead of erroring the controller.
-//   2. The tree is validated PER NODE — a single malformed module/group shard is dropped,
-//      not the whole document, so one bad shard can't blank an otherwise-readable spec.
+//   2. The tree is validated PER NODE, down to the individual requirement/rule — a malformed
+//      module shard is dropped without the rest of the tree, and a group shard is salvaged one
+//      requirement/rule at a time (so ONE field past a schema cap the lenient writer never
+//      enforced drops only that requirement, not the whole group with its valid siblings).
 
 const EMPTY = EMPTY_SERVICE_SPEC_VIEW
 
@@ -42,6 +46,35 @@ function parseJson(content: string): unknown {
   } catch {
     return undefined
   }
+}
+
+/** A trimmed non-empty string, else undefined — so a blank value falls back like a missing one. */
+function nonEmptyString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined
+}
+
+/**
+ * Parse one group shard, salvaging it PER REQUIREMENT/RULE. A strict whole-shard parse is
+ * tried first (the happy path). On failure — typically ONE field past a schema cap the
+ * lenient writer never enforces (e.g. a >120-char requirement title) — the group is rebuilt
+ * from its individually-validated requirements/rules, so one bad item drops only itself, not
+ * the whole group with its valid siblings. Returns undefined only when even the group's own
+ * identity (its name) is unrecoverable.
+ */
+function coerceGroupShard(value: unknown): RequirementGroup | undefined {
+  const strict = safeParseRequirementGroup(value)
+  if (strict) return strict
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
+  const raw = value as { requirements?: unknown; rules?: unknown }
+  const requirements = (Array.isArray(raw.requirements) ? raw.requirements : [])
+    .map(safeParseRequirementItem)
+    .filter((r): r is NonNullable<typeof r> => r !== undefined)
+  const rules = (Array.isArray(raw.rules) ? raw.rules : [])
+    .map(safeParseDomainRule)
+    .filter((r): r is NonNullable<typeof r> => r !== undefined)
+  // Re-validate the rebuilt group: this enforces the group-level fields (name/summary) while
+  // the requirements/rules are already valid. A bad group name is unrecoverable ⇒ undefined.
+  return safeParseRequirementGroup({ ...raw, requirements, rules })
 }
 
 /** Read a file, treating ANY error (incl. non-404) as "missing" so the reader never throws. */
@@ -108,7 +141,10 @@ export async function readServiceSpec(repo: RepoFiles, ref: string): Promise<Ser
     const metaObj = (meta ? parseJson(meta.content) : undefined) as
       | { name?: string; summary?: string }
       | undefined
-    const moduleName = metaObj?.name ?? slug
+    // Fall back to the slug for a blank name too (not only a missing one): `??` keeps `""`,
+    // which then fails the module schema and would silently drop the whole module + its
+    // valid groups. A corrupt/half-written `_module.json` should degrade to the slug instead.
+    const moduleName = nonEmptyString(metaObj?.name) ?? slug
     moduleSlugToName.set(slug, moduleName)
     // Every `*.json` except `_module.json` is one canonical group shard.
     const shards = entries.filter(
@@ -132,7 +168,7 @@ export async function readServiceSpec(repo: RepoFiles, ref: string): Promise<Ser
   }))
   const groupsByModule = new Map<string, RequirementGroup[]>()
   for (const { ref: s, file } of shardContents) {
-    const group = file ? safeParseRequirementGroup(parseJson(file.content)) : undefined
+    const group = file ? coerceGroupShard(parseJson(file.content)) : undefined
     if (!group) continue
     groupSlugToName.set(`${s.moduleSlug}/${s.groupSlug}`, group.name)
     const list = groupsByModule.get(s.moduleSlug) ?? []

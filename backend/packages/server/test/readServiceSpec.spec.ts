@@ -119,20 +119,59 @@ describe('readServiceSpec', () => {
     expect(view.spec?.modules?.[0]?.groups?.[0]?.name).toBe('Login')
   })
 
-  it('drops only a malformed module, keeping its valid siblings', async () => {
+  it('degrades a blank _module.json name to the slug instead of dropping the module', async () => {
     const repo = fakeRepo({
       'spec/service.json': JSON.stringify({ service: 'S' }),
-      // A module whose name fails validation (empty) is dropped entirely…
-      'spec/modules/bad/_module.json': JSON.stringify({ name: '' }),
-      'spec/modules/bad/g.json': JSON.stringify({ name: 'G', requirements: [] }),
-      // …while a valid sibling survives.
+      // A present-but-empty module name must fall back to the slug (`blank`), NOT drop the
+      // whole module + its valid groups — a corrupt/half-written `_module.json` shouldn't be
+      // worse than a missing one (which already falls back to the slug).
+      'spec/modules/blank/_module.json': JSON.stringify({ name: '' }),
+      'spec/modules/blank/g.json': JSON.stringify({ name: 'G', requirements: [] }),
       'spec/modules/good/_module.json': JSON.stringify({ name: 'Good' }),
       'spec/modules/good/g.json': JSON.stringify({ name: 'G', requirements: [] }),
     })
 
     const view = await readServiceSpec(repo, 'main')
     expect(view.present).toBe(true)
-    expect(view.spec?.modules?.map((m) => m.name)).toEqual(['Good'])
+    expect(view.spec?.modules?.map((m) => m.name)?.sort()).toEqual(['Good', 'blank'])
+  })
+
+  it('salvages a group per requirement — one over-long title drops only that requirement', async () => {
+    const repo = fakeRepo({
+      'spec/service.json': JSON.stringify({ service: 'S' }),
+      'spec/modules/m/_module.json': JSON.stringify({ name: 'M' }),
+      // The lenient writer never caps `title`/`statement`, but the reader's schema does
+      // (title maxLength 120). The over-long requirement must drop ALONE — its valid sibling,
+      // the group, and the group's rules all survive.
+      'spec/modules/m/g.json': JSON.stringify({
+        name: 'Group',
+        requirements: [
+          {
+            id: 'req-toolong',
+            title: 'x'.repeat(200),
+            statement: 'The system SHALL do the thing.',
+            kind: 'functional',
+            priority: 'must',
+          },
+          {
+            id: 'req-ok',
+            title: 'Valid',
+            statement: 'The system SHALL also do this.',
+            kind: 'functional',
+            priority: 'should',
+          },
+        ],
+        rules: [{ id: 'rule-1', rule: 'An invariant holds.' }],
+      }),
+    })
+
+    const view = await readServiceSpec(repo, 'main')
+    expect(view.present).toBe(true)
+    const group = view.spec?.modules?.[0]?.groups?.[0]
+    expect(group?.name).toBe('Group')
+    // The over-long requirement is gone; the valid sibling + the rule remain.
+    expect(group?.requirements?.map((r) => r.id)).toEqual(['req-ok'])
+    expect(group?.rules?.map((r) => r.id)).toEqual(['rule-1'])
   })
 
   it('never throws when a repo read fails — degrades to an empty view', async () => {
