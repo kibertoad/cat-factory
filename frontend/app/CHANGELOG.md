@@ -1,5 +1,42 @@
 # @cat-factory/app
 
+## 0.17.0
+
+### Minor Changes
+
+- 0ac64b8: Selecting an issue now opens the prefilled task form instead of creating the task immediately.
+
+  In the "Create task from issue" modal, clicking an issue row selects it as the task source:
+  it opens the add-task form with the title prefilled and the issue staged as linked context,
+  so the user still confirms the pipeline and presets before the task is created. The issue
+  itself is only linked (its body is not copied into the description). Viewing the issue on
+  GitHub moved to a dedicated external-link button on each row, and long issue titles now
+  truncate instead of overflowing under the status badge.
+
+- 0ac64b8: Add a "Create task from issue" button on service frames, and scope issue search to
+  the service's repo.
+
+  A service frame header now carries a ticket button (shown when a tracker is offered)
+  that opens the tracker-issue modal pinned to that service: the new task is created in
+  that frame, and the issue search is scoped to the service's linked GitHub repository
+  instead of the whole installation. The same repo scoping applies to the
+  attach-an-issue-as-context picker in the add-task form.
+
+  Within a scoped GitHub search:
+
+  - a pasted issue URL (or `owner/repo#n` / `owner/repo/issues/n`) resolves to that exact
+    issue and is offered first instead of being fuzzy-matched — but only within the
+    searching workspace's own GitHub App installation, so a URL naming another account is
+    never fetched across tenants;
+  - a bare issue number (`11`) resolves against the service's repo and is offered first;
+  - free-text hits are restricted to the service's repo (`repo:owner/name`).
+
+  A service is always created from (or with) a repo, so a GitHub search scoped to a block
+  now REQUIRES that link: if the service isn't linked to a repo the search is refused with
+  a clear error rather than silently widening to the whole installation. The
+  block→service→repo resolver (`resolveRepoTarget`) is surfaced on the request container in
+  both runtime facades so the shared task-search controller can resolve the scope.
+
 ## 0.16.1
 
 ### Patch Changes
