@@ -21,7 +21,7 @@ the container runs only the middle one:
 3. **`postOps`** — deterministic backend TypeScript. Parses the agent's structured output, runs
    the mechanical transforms (Gherkin/dedupe/render), commits files via `RepoFiles`, ingests.
 
-**Governing principle (do not violate):** *zero `switch(agentKind)` in the container.* The harness
+**Governing principle (do not violate):** _zero `switch(agentKind)` in the container._ The harness
 is a generic LLM-over-a-checkout runner. All mechanical/deterministic work is backend TypeScript.
 Closing a gap = adding a backend repo-op function (plain TS, reusable), **never** per-agent
 container code, **never** an image rebuild for a new agent.
@@ -40,15 +40,15 @@ each kind is migrated.
 
 ## 2. Status of the 7 tasks
 
-| # | Task | Status |
-|---|------|--------|
-| 1 | Backend transform library + `RepoFiles` port | ✅ DONE — merged in **PR #166** |
-| 2 | `AgentDefinition` + pre/post-op model | ✅ DONE — merged in **PR #166** |
-| 3 | Harness: generic `agent` kind (explore/coding) | ✅ DONE — merged in **PR #169** |
-| 4 | Backend engine: pre/post-op hooks + dispatch (live wiring) | ✅ DONE — merged in **PR #177** |
-| 5 | Convert each built-in agent, parity-gated (strangler) | ◐ IN PROGRESS — read-only kinds rerouted (see below) |
-| 6 | Frontend data-driven palette + generic result view | ✅ DONE — merged in **PR #177** |
-| 7 | Example package + docs + conformance + changesets | ✅ DONE — merged in **PR #177** |
+| #   | Task                                                       | Status                                               |
+| --- | ---------------------------------------------------------- | ---------------------------------------------------- |
+| 1   | Backend transform library + `RepoFiles` port               | ✅ DONE — merged in **PR #166**                      |
+| 2   | `AgentDefinition` + pre/post-op model                      | ✅ DONE — merged in **PR #166**                      |
+| 3   | Harness: generic `agent` kind (explore/coding)             | ✅ DONE — merged in **PR #169**                      |
+| 4   | Backend engine: pre/post-op hooks + dispatch (live wiring) | ✅ DONE — merged in **PR #177**                      |
+| 5   | Convert each built-in agent, parity-gated (strangler)      | ◐ IN PROGRESS — read-only kinds rerouted (see below) |
+| 6   | Frontend data-driven palette + generic result view         | ✅ DONE — merged in **PR #177**                      |
+| 7   | Example package + docs + conformance + changesets          | ✅ DONE — merged in **PR #177**                      |
 
 - PR #166: `custom-agent-foundations` (merged, released).
 - PR #169: generic manifest-driven `agent` harness kind + backend dispatch (merged).
@@ -70,6 +70,7 @@ section + `backend/docs/custom-agents.md` are the current source of truth for th
 > image bump). The list below is the authoritative checklist — keep it updated as you go.
 
 **Sweep checklist (ordered):**
+
 1. ✅ **read-only** (`architect`/`analysis`/`bug-investigator`) — merged in PR #187 (no image bump).
 2. ✅ **merger / on-call / ci-fixer / fixer** — rerouted onto the generic `agent` kind in
    `ContainerAgentExecutor` (this branch, **server package builds clean**). `merger`/`on-call`
@@ -167,7 +168,8 @@ automatic: `architect` resolves its prompt via the `design` phase track and `ana
 `CONTAINER_KINDS`, so it actually runs INLINE today — a pre-existing inconsistency, out of
 scope here; the reroute only affects `architect`/`analysis` at runtime.) Files: `server`
 `ContainerAgentExecutor.ts`, `agents` `read-only.ts` (comment), the worker integration spec
-+ the server snapshot, changeset `read-only-agents-generic-kind.md`.
+
+- the server snapshot, changeset `read-only-agents-generic-kind.md`.
 
 **Step 2 — delete the dead `/explore` handler (NEXT, image bump):** nothing dispatches
 `kind:'explore'` any more, so once Step 1's reroute is confirmed on CI + a smoketest,
@@ -212,7 +214,7 @@ kinds (`coder`/`ci-fixer`/`fixer`/`conflict-resolver`), then `bootstrap`.
 
 - **`@cat-factory/contracts` `src/agent-presentation.ts`** — `AgentPresentation`, `AgentCategory`
   (`review`|`design`|`build`|`test`|`docs`|`gates`), `CustomAgentKind` (`{ kind, presentation,
-  container }`) — the wire shapes for the data-driven palette (Task 6).
+container }`) — the wire shapes for the data-driven palette (Task 6).
 
 ### From PR #169 (open)
 
@@ -250,8 +252,8 @@ kinds (`coder`/`ci-fixer`/`fixer`/`conflict-resolver`), then `bootstrap`.
 > The **active** next step is Task 5 (§2 "Task 5 progress" + §5).
 
 This was the deliberately-deferred half of PR #169. It's the part that makes a registered kind's
-`preOps`/`postOps` actually RUN. It was deferred because it needs the engine's run *context* +
-*result* and per-facade wiring, and is only verifiable on Linux CI (workerd / Postgres), not Windows.
+`preOps`/`postOps` actually RUN. It was deferred because it needs the engine's run _context_ +
+_result_ and per-facade wiring, and is only verifiable on Linux CI (workerd / Postgres), not Windows.
 
 **Where it goes (decided):** `ExecutionService` (`@cat-factory/orchestration`), NOT the executor.
 The harness `pollJob` site has only a job handle (no block/task/result-with-context), so post-ops

@@ -112,9 +112,10 @@ describe('ContainerAgentExecutor', () => {
     })
 
     const body = dispatched!.body
-    // The dispatch discriminator travels in the body: the coder maps to the `run` kind.
+    // The dispatch discriminator travels in the body: the coder is migrated onto the
+    // generic manifest-driven `agent` kind (coding mode), so it dispatches `kind:'agent'`.
     expect(dispatched!.url).toBe('http://container/jobs')
-    expect(body.kind).toBe('run')
+    expect(body.kind).toBe('agent')
     expect(body.model).toBe('qwen3-max')
     expect(body.proxyBaseUrl).toBe('https://worker.example/v1')
     expect((body.repo as Record<string, unknown>).cloneUrl).toBe('https://github.com/octo/app.git')

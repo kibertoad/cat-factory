@@ -526,14 +526,14 @@ regression, spawns an **`on-call`** agent to investigate — it never auto-rever
   connection loading + decryption, config resolution up the frame chain, and the verdict
   reduction; an adapter is just the vendor reads, so a second provider is a new registry entry.
   Observability creds live on the backend (`observability_connections`: a `provider` discriminator
-  + one sealed `credentials` JSON blob + a non-secret `summary`, sealed `cat-factory:observability`)
-  — never in containers. Per-block monitor/SLO mapping is `release_health_configs` (resolved up the
-  frame chain). Both tables mirror D1 ⇄ Drizzle; managed via `ReleaseHealthService` + the
-  `GET|PUT|DELETE /workspaces/:ws/observability/connection` + `…/release-health-configs/:blockId`
-  controller. The SPA splits this: the connection is an **Integrations** entry
-  (`ObservabilityConnectionPanel.vue`), while the per-service monitor/SLO mapping lives in the
-  **service inspector** (`ServiceReleaseHealthConfig.vue`, keyed by the selected frame's block id —
-  no manual entry, disabled with a hint until a connection exists). Both use `stores/releaseHealth.ts`.
+  - one sealed `credentials` JSON blob + a non-secret `summary`, sealed `cat-factory:observability`)
+    — never in containers. Per-block monitor/SLO mapping is `release_health_configs` (resolved up the
+    frame chain). Both tables mirror D1 ⇄ Drizzle; managed via `ReleaseHealthService` + the
+    `GET|PUT|DELETE /workspaces/:ws/observability/connection` + `…/release-health-configs/:blockId`
+    controller. The SPA splits this: the connection is an **Integrations** entry
+    (`ObservabilityConnectionPanel.vue`), while the per-service monitor/SLO mapping lives in the
+    **service inspector** (`ServiceReleaseHealthConfig.vue`, keyed by the selected frame's block id —
+    no manual entry, disabled with a hint until a connection exists). Both use `stores/releaseHealth.ts`.
 - **On-call agent** (`on-call` container kind, `executor-harness/src/on-call.ts`, `/on-call`):
   the gate escalates via `gatherHelperPriorOutputs` (renders the evidence bundle into the
   agent's prompt). The agent clones the released PR head, correlates the diff with the

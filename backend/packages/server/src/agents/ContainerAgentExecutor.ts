@@ -911,7 +911,6 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
           },
         }
       }
-
     }
 
     // Read-only agents (architect, analysis) explore a real checkout but never edit it:
@@ -1075,7 +1074,8 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       // In-place fixers: clone the PR head branch, push fixes back onto it (no new PR);
       // a no-op run is a clean non-event (the gate/loop re-checks the real signal).
       case CI_FIXER_AGENT_KIND:
-        if (!prBranch) throw new Error('CI-fixer needs the implementation PR branch to push fixes to')
+        if (!prBranch)
+          throw new Error('CI-fixer needs the implementation PR branch to push fixes to')
         return this.buildRegisteredAgentBody(
           context,
           parts,
