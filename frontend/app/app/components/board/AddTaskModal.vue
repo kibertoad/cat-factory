@@ -14,6 +14,7 @@
 import type { CreateTaskType, TaskSourceKind, TaskTypeFields } from '~/types/domain'
 import ContextDocumentPicker from '~/components/documents/ContextDocumentPicker.vue'
 import ContextIssuePicker from '~/components/tasks/ContextIssuePicker.vue'
+import { mergePresetOptionLabel, mergePresetThresholds } from '~/utils/mergePreset'
 
 const ui = useUiStore()
 const board = useBoardStore()
@@ -104,13 +105,13 @@ const presetMenu = computed(() => [
   [
     {
       label: mergePresets.defaultPreset
-        ? `Default (${mergePresets.defaultPreset.name})`
+        ? `Default (${mergePresets.defaultPreset.name}) — ${mergePresetThresholds(mergePresets.defaultPreset)}`
         : 'Workspace default',
       icon: 'i-lucide-rotate-ccw',
       onSelect: () => (mergePresetId.value = ''),
     },
     ...mergePresets.presets.map((p) => ({
-      label: p.name,
+      label: mergePresetOptionLabel(p),
       icon: 'i-lucide-git-merge',
       onSelect: () => (mergePresetId.value = p.id),
     })),
@@ -119,10 +120,11 @@ const presetMenu = computed(() => [
 const selectedPresetLabel = computed(() => {
   if (!mergePresetId.value) {
     return mergePresets.defaultPreset
-      ? `Default (${mergePresets.defaultPreset.name})`
+      ? `Default (${mergePresets.defaultPreset.name}) — ${mergePresetThresholds(mergePresets.defaultPreset)}`
       : 'Workspace default'
   }
-  return mergePresets.presets.find((p) => p.id === mergePresetId.value)?.name ?? 'Workspace default'
+  const picked = mergePresets.presets.find((p) => p.id === mergePresetId.value)
+  return picked ? mergePresetOptionLabel(picked) : 'Workspace default'
 })
 
 // Model preset: which model each agent runs on. Empty = workspace default preset.
