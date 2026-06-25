@@ -71,9 +71,19 @@ export class GitHubAppAuth {
     return `${signingInput}.${base64url(signature)}`
   }
 
-  /** A valid installation access token, minting + caching one if needed. */
-  async installationToken(installationId: number): Promise<string> {
-    return (await this.cachedToken(installationId)).token
+  /**
+   * A valid installation access token, minting + caching one if needed. Pass
+   * `forceRefresh` to bypass the in-memory cache and mint a fresh token: a token
+   * bakes in its repo set + permission scopes at mint time, so one minted before
+   * the user granted the App access keeps reporting the old (no-write) grant for up
+   * to ~1h. The fresh mint replaces the cached entry, so subsequent calls (and the
+   * bootstrap push token, which reads the same cache) pick up the new grant too.
+   */
+  async installationToken(
+    installationId: number,
+    opts?: { forceRefresh?: boolean },
+  ): Promise<string> {
+    return (await this.cachedToken(installationId, opts?.forceRefresh)).token
   }
 
   /**
@@ -89,10 +99,13 @@ export class GitHubAppAuth {
 
   private async cachedToken(
     installationId: number,
+    forceRefresh = false,
   ): Promise<{ token: string; permissions: InstallationPermissions }> {
-    const cached = tokenCache.get(installationId)
-    if (cached && cached.expiresAt - TOKEN_SKEW_MS > this.deps.clock.now()) {
-      return cached
+    if (!forceRefresh) {
+      const cached = tokenCache.get(installationId)
+      if (cached && cached.expiresAt - TOKEN_SKEW_MS > this.deps.clock.now()) {
+        return cached
+      }
     }
     return this.mintInstallationToken(installationId)
   }

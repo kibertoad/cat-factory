@@ -48,9 +48,9 @@ function onResize(e: PointerEvent, edge: 'e' | 's' | 'se') {
       zIndex: draggingId === moduleId ? 50 : 5,
     }"
   >
-    <!-- module header / drag handle -->
+    <!-- module header / drag handle (`nopan` so a left-drag moves it, not the pane) -->
     <div
-      class="nodrag flex h-[30px] cursor-grab items-center gap-1 rounded-t-xl bg-violet-500/15 px-2 active:cursor-grabbing"
+      class="nodrag nopan flex h-[30px] cursor-grab items-center gap-1 rounded-t-xl bg-violet-500/15 px-2 active:cursor-grabbing"
       @pointerdown="onHandle"
       @click.stop="ui.select(moduleId)"
     >
@@ -73,19 +73,20 @@ function onResize(e: PointerEvent, edge: 'e' | 's' | 'se') {
       <DraggableTask v-for="t in tasks" :key="t.id" :task-id="t.id" />
     </div>
 
-    <!-- resize handles (drag the borders to resize the module, Miro-style) -->
+    <!-- resize handles (drag the borders to resize the module, Miro-style).
+         `nopan` (with `nodrag`) so resizing doesn't pan the pane. -->
     <div
-      class="nodrag absolute right-0 top-0 h-full w-2 cursor-ew-resize hover:bg-violet-400/20"
+      class="nodrag nopan absolute right-0 top-0 h-full w-2 cursor-ew-resize hover:bg-violet-400/20"
       title="Drag to resize"
       @pointerdown="onResize($event, 'e')"
     />
     <div
-      class="nodrag absolute bottom-0 left-0 h-2 w-full cursor-ns-resize hover:bg-violet-400/20"
+      class="nodrag nopan absolute bottom-0 left-0 h-2 w-full cursor-ns-resize hover:bg-violet-400/20"
       title="Drag to resize"
       @pointerdown="onResize($event, 's')"
     />
     <div
-      class="nodrag absolute bottom-0 right-0 h-4 w-4 cursor-nwse-resize"
+      class="nodrag nopan absolute bottom-0 right-0 h-4 w-4 cursor-nwse-resize"
       title="Drag to resize"
       @pointerdown="onResize($event, 'se')"
     >

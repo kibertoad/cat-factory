@@ -343,8 +343,11 @@ const ITEM_ICON: Record<string, string> = {
       <div class="space-y-3 p-4">
         <!-- frame header (doubles as the drag handle for the expanded frame) -->
         <div class="flex items-start justify-between gap-2">
+          <!-- `nopan` stops Vue Flow's pane from panning on a left-drag that starts on
+               this handle (it pans via d3-zoom's mousedown, which our pointerdown
+               stopPropagation can't intercept), so the grab drives the frame move. -->
           <div
-            class="flex cursor-grab items-center gap-2 active:cursor-grabbing"
+            class="nopan flex cursor-grab items-center gap-2 active:cursor-grabbing"
             title="Drag service"
             @pointerdown="onFrameHandle"
           >
@@ -428,19 +431,21 @@ const ITEM_ICON: Record<string, string> = {
             <UIcon name="i-lucide-plus" class="h-3.5 w-3.5" /> Add the first task
           </button>
 
-          <!-- resize handles (drag the borders to resize the service, Miro-style) -->
+          <!-- resize handles (drag the borders to resize the service, Miro-style).
+               `nopan` (alongside `nodrag`) so the pane doesn't pan while resizing —
+               same reason as the header handle above. -->
           <div
-            class="nodrag absolute right-0 top-0 h-full w-2 cursor-ew-resize hover:bg-sky-400/20"
+            class="nodrag nopan absolute right-0 top-0 h-full w-2 cursor-ew-resize hover:bg-sky-400/20"
             title="Drag to resize"
             @pointerdown="onResize($event, 'e')"
           />
           <div
-            class="nodrag absolute bottom-0 left-0 h-2 w-full cursor-ns-resize hover:bg-sky-400/20"
+            class="nodrag nopan absolute bottom-0 left-0 h-2 w-full cursor-ns-resize hover:bg-sky-400/20"
             title="Drag to resize"
             @pointerdown="onResize($event, 's')"
           />
           <div
-            class="nodrag absolute bottom-0 right-0 h-4 w-4 cursor-nwse-resize"
+            class="nodrag nopan absolute bottom-0 right-0 h-4 w-4 cursor-nwse-resize"
             title="Drag to resize"
             @pointerdown="onResize($event, 'se')"
           >
