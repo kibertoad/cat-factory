@@ -193,7 +193,16 @@ const groups = computed<IntegrationGroup[]>(() => {
 </script>
 
 <template>
-  <UModal v-model:open="open" title="Integrations" :ui="{ content: 'max-w-xl' }">
+  <UModal
+    v-model:open="open"
+    title="Integrations"
+    :ui="{
+      content: 'max-w-xl bg-slate-950 ring-slate-800 divide-slate-800',
+      header: 'border-b border-slate-800',
+      title: 'text-white',
+      close: 'text-slate-400 hover:text-slate-200 hover:bg-slate-800',
+    }"
+  >
     <template #body>
       <div class="space-y-5">
         <p class="text-xs text-slate-400">
@@ -209,7 +218,7 @@ const groups = computed<IntegrationGroup[]>(() => {
               v-for="item in group.items"
               :key="item.key"
               type="button"
-              class="flex w-full items-center gap-3 rounded-lg border border-slate-700 bg-slate-800/40 px-3 py-2.5 text-left transition hover:border-slate-500 hover:bg-slate-800"
+              class="flex w-full items-center gap-3 rounded-lg border border-slate-800 bg-slate-900/50 px-3 py-2.5 text-left transition hover:border-slate-700 hover:bg-slate-900"
               @click="item.onClick()"
             >
               <UIcon :name="item.icon" class="h-5 w-5 shrink-0 text-slate-300" />
