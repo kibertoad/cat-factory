@@ -761,7 +761,8 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       workBranchReady: boolean
     },
   ): { body: Record<string, unknown>; kind: RunnerDispatchKind } {
-    const { common, webTools, repo, workBranch, workBranchReady } = parts
+    // `workBranchReady` is consumed by `buildRegisteredAgentBody` (via `parts`), not here.
+    const { common, webTools, repo, workBranch } = parts
     const prBranch = context.block.pullRequest?.branch
     const roleSystemPrompt = composeBlockSystemPrompt(
       systemPromptFor(context.agentKind),
@@ -970,28 +971,26 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
         }
     }
 
-    // Read-only agents (architect, analysis) explore a real checkout but never edit
-    // it: they clone a branch, produce a prose report/proposal and return it as
-    // `output`. They target the harness `/explore` endpoint — which opens no branch,
-    // makes no commit, opens no PR, and (unlike `/run`) does NOT treat an edit-free
-    // run as a failure. One shared body for every read-only kind. They explore the
-    // shared work branch when it exists (so e.g. the architect reads the spec-writer's
-    // committed `spec/` and any in-progress implementation), falling back to base when
-    // it could not be ensured (no GitHub wired) and no PR branch exists yet.
+    // Read-only agents (architect, analysis) explore a real checkout but never edit it:
+    // they clone a branch, produce a prose report/proposal and return it as `output`,
+    // making no commit and opening no PR (and — unlike a coding run — an edit-free run is
+    // the expected, correct outcome, not a failure). They dispatch through the generic,
+    // manifest-driven `agent` kind in `explore` mode — the SAME path a registered
+    // `container-explore` kind takes — instead of a bespoke per-kind harness handler. A
+    // synthesized read-only step (no clone target ⇒ the shared work-branch fallback, so
+    // e.g. the architect reads the spec-writer's committed `spec/` and any in-progress
+    // implementation, falling back to base when no work/PR branch exists) yields a body
+    // byte-identical to the old `/explore` job, minus only the harness-internal temp-dir
+    // label. This is the first built-in migrated onto the generic agent surface (the
+    // Task-5 strangler); the now-dead `/explore` harness handler is deleted in a
+    // follow-up once parity is confirmed on CI.
     if (isReadOnlyAgentKind(context.agentKind)) {
-      return {
-        kind: 'explore',
-        body: {
-          ...common,
-          // The harness explore job's temp-dir/log label. Named `label`, not `kind`:
-          // `kind` is the dispatch discriminator the transport stamps onto the body.
-          label: context.agentKind,
-          systemPrompt: roleSystemPrompt,
-          userPrompt: userPromptFor(context),
-          branch: workBranchReady ? workBranch : (prBranch ?? repo.baseBranch),
-          ...webTools,
-        },
-      }
+      return this.buildRegisteredAgentBody(
+        context,
+        parts,
+        { surface: 'container-explore' },
+        roleSystemPrompt,
+      )
     }
 
     // The default coder (and any other write-and-PR kind): the build-phase role plus
