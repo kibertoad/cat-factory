@@ -38,8 +38,8 @@ const runFailed = computed(() => instance.value?.status === 'failed')
 const companionByStep = computed(() => steps.value.map((s) => gateCompanionFor(s, runFailed.value)))
 
 // Expand the pipeline list only when zoomed in far enough AND the board driver
-// permits this card — on-screen, and the centre-most of any cards that would
-// otherwise overlap (see useTaskExpansion) — so deep-zoom expansions don't pile up.
+// permits this card (on-screen — see useTaskExpansion). The cards below it are
+// pushed down to make room (useTaskDisplacement), so expansions don't pile up.
 const showSteps = computed(
   () =>
     lodAtLeast(lod.value, 'steps') && steps.value.length > 0 && expansion.canExpand(props.taskId),

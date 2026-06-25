@@ -8,6 +8,7 @@ import AgentFailureCard from '~/components/board/AgentFailureCard.vue'
 import AgentStopButton from '~/components/board/AgentStopButton.vue'
 import { useBlockDrag } from '~/composables/useBlockDrag'
 import { useFrameResize } from '~/composables/useFrameResize'
+import { useTaskDisplacement } from '~/composables/useTaskDisplacement'
 
 // Vue Flow passes the node's `id` and `data` as props to custom node components.
 // Only frames are rendered as board nodes; their tasks live inside the card.
@@ -31,6 +32,9 @@ const typeMeta = computed(() => (block.value ? blockTypeMeta(block.value.type) :
 const directTasks = computed(() => board.tasksOf(props.id))
 const modules = computed(() => board.modulesOf(props.id))
 const allTasks = computed(() => board.allTasksUnder(props.id))
+// Compressed space inside this service's drop zone: an expanded task pushes the
+// sibling cards below it down so their pipeline lists don't pile up.
+const { dyOf: taskDy } = useTaskDisplacement(directTasks)
 const taskIds = computed(() => new Set(allTasks.value.map((t) => t.id)))
 const taskCount = computed(() => allTasks.value.length)
 const hasTasks = computed(() => taskCount.value > 0 || modules.value.length > 0)
@@ -414,7 +418,7 @@ const ITEM_ICON: Record<string, string> = {
           :style="{ width: canvas.w + 'px', height: canvas.h + 'px' }"
         >
           <ModuleFrame v-for="m in modules" :key="m.id" :module-id="m.id" />
-          <DraggableTask v-for="t in directTasks" :key="t.id" :task-id="t.id" />
+          <DraggableTask v-for="t in directTasks" :key="t.id" :task-id="t.id" :dy="taskDy(t.id)" />
           <button
             v-if="!hasTasks"
             type="button"

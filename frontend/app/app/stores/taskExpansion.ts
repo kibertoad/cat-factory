@@ -6,10 +6,11 @@ import { ref } from 'vue'
  *
  * Deep-zoom (`steps`/`subtasks`) grows a task card downward, and cards are
  * absolutely positioned in their frame, so several expanded cards stacked
- * vertically pile on top of each other. The board driver (`useTaskExpansion`)
- * recomputes a permitted set every frame — only on-screen cards, and only the
- * one closest to the screen centre when two would overlap — and writes it here.
- * `TaskPipelineMini` reads `canExpand` to decide whether to expand or stay compact.
+ * vertically would pile on top of each other. The board driver (`useTaskExpansion`)
+ * recomputes a permitted set every frame — every on-screen card with steps to show —
+ * and writes it here; `TaskPipelineMini` reads `canExpand` to decide whether to
+ * expand or stay compact. An expanded card pushes the sibling cards below it down
+ * (compressed space — see `useTaskDisplacement`), so the lists never overlap.
  *
  * `driverActive` lets the gate degrade gracefully: with no board driver mounted
  * (e.g. a card rendered in isolation) `canExpand` falls back to "allowed", so the

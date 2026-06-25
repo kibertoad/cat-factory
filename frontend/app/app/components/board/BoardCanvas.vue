@@ -12,6 +12,7 @@ import { readDndPayload, blockIdFromEvent } from '~/utils/dnd'
 import { BOARD_FLOW_ID } from '~/composables/useBoardFlow'
 import { useTaskExpansion } from '~/composables/useTaskExpansion'
 import { useFrameExpansion } from '~/composables/useFrameExpansion'
+import { computeDisplacement } from '~/utils/boardDisplacement'
 
 const board = useBoardStore()
 const pipelines = usePipelinesStore()
@@ -43,27 +44,86 @@ function frameExpanded(id: string) {
   return ui.isFrameExpanded(id) && ui.lod !== 'far'
 }
 
+// Compressed space: an expanded frame grows rightward / downward from its stored
+// top-left and would overlap its neighbours. Rather than collapsing one to resolve
+// the clash (the old behaviour, which made a service "snap out" as you scrolled
+// across it), we push the neighbours away by the growth so the expanded footprint
+// never overlaps a neighbour it wasn't already overlapping. This is a render-only
+// offset added to each node's position; stored block positions are never mutated.
+const FRAME_COLLAPSED_W = 224 // the compact `w-56` card
+const FRAME_COLLAPSED_H = 150
+const FRAME_CHROME_W = 40 // border + padding around the inner task canvas
+const FRAME_CHROME_H = 120 // top bar + header row + paddings above the canvas
+
+const frameOffsets = computed(() => {
+  const boxes = [
+    ...board.frames.map((b) => {
+      let growX = 0
+      let growY = 0
+      if (frameExpanded(b.id)) {
+        const c = board.containerSize(b.id)
+        growX = Math.max(0, c.w + FRAME_CHROME_W - FRAME_COLLAPSED_W)
+        growY = Math.max(0, c.h + FRAME_CHROME_H - FRAME_COLLAPSED_H)
+      }
+      return {
+        id: b.id,
+        x: b.position.x,
+        y: b.position.y,
+        w: FRAME_COLLAPSED_W,
+        h: FRAME_COLLAPSED_H,
+        growX,
+        growY,
+      }
+    }),
+    // Epics never expand, but they're pushed aside like any other box so an expanded
+    // frame doesn't end up rendered on top of one.
+    ...board.epics.map((b) => ({
+      id: b.id,
+      x: b.position.x,
+      y: b.position.y,
+      w: FRAME_COLLAPSED_W,
+      h: FRAME_COLLAPSED_H,
+      growX: 0,
+      growY: 0,
+    })),
+  ]
+  return computeDisplacement(boxes)
+})
+
+function offsetOf(id: string) {
+  return frameOffsets.value.get(id) ?? { dx: 0, dy: 0 }
+}
+
 const nodes = computed(() => [
-  ...board.frames.map((b) => ({
-    id: b.id,
-    type: 'block',
-    position: b.position,
-    draggable: !frameExpanded(b.id),
-    data: {},
-  })),
+  ...board.frames.map((b) => {
+    const o = offsetOf(b.id)
+    return {
+      id: b.id,
+      type: 'block',
+      position: { x: b.position.x + o.dx, y: b.position.y + o.dy },
+      draggable: !frameExpanded(b.id),
+      data: {},
+    }
+  }),
   // Epics are top-level grouping nodes (non-structural), drawn alongside frames and
   // linked to their member tasks by the dependency-edge overlay.
-  ...board.epics.map((b) => ({
-    id: b.id,
-    type: 'epic',
-    position: b.position,
-    draggable: true,
-    data: {},
-  })),
+  ...board.epics.map((b) => {
+    const o = offsetOf(b.id)
+    return {
+      id: b.id,
+      type: 'epic',
+      position: { x: b.position.x + o.dx, y: b.position.y + o.dy },
+      draggable: true,
+      data: {},
+    }
+  }),
 ])
 
 onNodeDragStop(({ node }) => {
-  board.moveBlock(node.id, { x: node.position.x, y: node.position.y })
+  // node.position carries the render offset (a dragged collapsed frame can be one a
+  // neighbour pushed aside); subtract it so we persist the un-displaced position.
+  const o = offsetOf(node.id)
+  board.moveBlock(node.id, { x: node.position.x - o.dx, y: node.position.y - o.dy })
 })
 
 onViewportChange((vp) => {
