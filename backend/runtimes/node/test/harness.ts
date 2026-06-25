@@ -12,6 +12,7 @@ import {
   makeOnboardingProbe,
   makeReadyReviewWithOpenItem,
 } from '@cat-factory/conformance'
+import type { GateProviderOverrides } from '@cat-factory/gates'
 import type { ExecutionInstance, WorkspaceSnapshot } from '@cat-factory/kernel'
 import { NoopBootstrapRunner, NoopWorkRunner } from '@cat-factory/kernel'
 import type {
@@ -81,6 +82,7 @@ export function makeConformanceApp(
   opts?: {
     cloudflareModelsEnabled?: boolean
     resolveRunRepoContext?: CoreDependencies['resolveRunRepoContext']
+    gateProviders?: GateProviderOverrides
   },
 ): ConformanceApp {
   // Record emitted run snapshots so the suite can assert intermediate transitions
@@ -114,6 +116,8 @@ export function makeConformanceApp(
     // provider available to start a run — exactly as the Worker does. The suite still
     // forces this OFF for the provider-key assertions that exercise the unconfigured path.
     cloudflareModelsEnabled: opts?.cloudflareModelsEnabled ?? true,
+    // Re-wire any faked gate providers after the build's reset (the suite drives the CI gate).
+    gateProviders: opts?.gateProviders,
   })
   const app = createApp(container, TEST_ENV)
 
@@ -228,8 +232,7 @@ export function makeConformanceApp(
       const svc = container.userSecrets
       if (!svc) return undefined
       return {
-        store: (userId, kind, input) =>
-          svc.store(userId, kind as UserSecretKind, input),
+        store: (userId, kind, input) => svc.store(userId, kind as UserSecretKind, input),
         resolve: (userId, kind) => svc.resolve(userId, kind as UserSecretKind),
         describe: (kind) => svc.describe(kind as UserSecretKind),
       }

@@ -92,6 +92,17 @@ import {
   resolveUrlSafetyPolicy,
   resolveWorkspaceCapabilities,
 } from '@cat-factory/server'
+// The built-in polling-gate suite (ci / conflicts / post-release-health + on-call). Importing
+// it registers the gates via the public seam; the facade wires each gate's provider below.
+import {
+  type GateProviderOverrides,
+  applyGateProviders,
+  clearGateProviders,
+  wireCiStatusProvider,
+  wireMergeabilityProvider,
+  wireReleaseHealthProvider,
+  wireIncidentEnrichment,
+} from '@cat-factory/gates'
 import type { PgBoss } from 'pg-boss'
 import { loadNodeConfig } from './config.js'
 import type { DrizzleDb } from './db/client.js'
@@ -391,6 +402,13 @@ export interface NodeContainerOptions {
    * off for parity). Undefined → derived from the REST credentials being present.
    */
   cloudflareModelsEnabled?: boolean
+  /**
+   * Explicit built-in gate providers, re-wired AFTER the build's `clearGateProviders()`
+   * reset. The cross-runtime conformance suite uses this to drive the externalized
+   * `@cat-factory/gates` CI gate over a faked verdict; production leaves it undefined and
+   * the config branches below wire the real providers.
+   */
+  gateProviders?: GateProviderOverrides
   /**
    * The real-time subscriber registry. When provided, the container wires a
    * {@link NodeEventPublisher} (so the engine pushes execution/board/notification events
@@ -819,6 +837,18 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   const idGenerator = new CryptoIdGenerator()
   const repos = options.repos ?? createDrizzleRepositories(options.db, clock)
 
+  // The built-in gates' providers are deployment-global module handles (in `@cat-factory/gates`),
+  // not per-container DI. Reset them up-front so each build re-wires from a clean slate and only
+  // the gates this deployment actually configures stay wired: the GitHub + release-health wiring
+  // below runs only inside its `enabled`/`githubClient` branches and never clears, so without this
+  // reset a provider wired by an earlier (configured) build in the same process would leak into a
+  // later (unconfigured) build and make its gate probe a stale handle instead of passing through.
+  // Mirrors the Worker facade (keep the runtimes symmetric). Any test-injected gate providers
+  // (`options.gateProviders`) are applied at the END of this build so they OVERRIDE the config
+  // wiring below (local mode wires a PAT-backed CI provider here that would otherwise clobber a
+  // faked one) — gates read their provider lazily at probe time, so the last write wins.
+  clearGateProviders()
+
   // Honour the workspace's model presets at run time (block-pinned > the task's
   // selected/default model preset > env routing), uniformly for inline and container
   // kinds. The built-in default preset points every agent kind at Kimi K2.7.
@@ -1066,34 +1096,42 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
       : {}),
   })
 
-  const githubGateDeps: Partial<CoreDependencies> = githubClient
-    ? {
-        // The engine binds a registered custom kind's pre/post-op hooks to a run's repo
-        // via this checkout-free RepoFiles resolver, composed from the same client +
-        // repo-target walk the gates/merger use — parity with the Worker.
-        resolveRunRepoContext: makeResolveRunRepoContext(githubClient, resolveRepoTarget),
-        ciStatusProvider: new GitHubCiStatusProvider({
-          githubClient,
-          resolveRepoTarget,
-          blockRepository: repos.blockRepository,
-        }),
-        mergeabilityProvider: new GitHubMergeabilityProvider({
-          githubClient,
-          resolveRepoTarget,
-          blockRepository: repos.blockRepository,
-        }),
-        branchUpdater: new GitHubBranchUpdater({
-          githubClient,
-          resolveRepoTarget,
-          blockRepository: repos.blockRepository,
-        }),
-        pullRequestMerger: new GitHubPullRequestMerger({
-          githubClient,
-          resolveRepoTarget,
-          blockRepository: repos.blockRepository,
-        }),
-      }
-    : {}
+  let githubGateDeps: Partial<CoreDependencies> = {}
+  if (githubClient) {
+    // The `ci` / `conflicts` gates now live in `@cat-factory/gates`; wire their providers into
+    // the gate suite instead of onto the engine's CoreDependencies (single-process startup, so
+    // the deployment-global handles are set once here). Parity with the Worker's selectGitHubDeps.
+    wireCiStatusProvider(
+      new GitHubCiStatusProvider({
+        githubClient,
+        resolveRepoTarget,
+        blockRepository: repos.blockRepository,
+      }),
+    )
+    wireMergeabilityProvider(
+      new GitHubMergeabilityProvider({
+        githubClient,
+        resolveRepoTarget,
+        blockRepository: repos.blockRepository,
+      }),
+    )
+    githubGateDeps = {
+      // The engine binds a registered custom kind's pre/post-op hooks to a run's repo
+      // via this checkout-free RepoFiles resolver, composed from the same client +
+      // repo-target walk the gates/merger use — parity with the Worker.
+      resolveRunRepoContext: makeResolveRunRepoContext(githubClient, resolveRepoTarget),
+      branchUpdater: new GitHubBranchUpdater({
+        githubClient,
+        resolveRepoTarget,
+        blockRepository: repos.blockRepository,
+      }),
+      pullRequestMerger: new GitHubPullRequestMerger({
+        githubClient,
+        resolveRepoTarget,
+        blockRepository: repos.blockRepository,
+      }),
+    }
+  }
 
   // GitHub installation + projections + sync/webhook module: wired when the App is
   // configured (a real githubClient), mirroring the Worker's selectGitHubDeps. This
@@ -1212,13 +1250,18 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     releaseHealthDeps.observabilityConnectionRepository = repos.observabilityConnectionRepository
     releaseHealthDeps.releaseHealthConfigRepository = repos.releaseHealthConfigRepository
     releaseHealthDeps.observabilitySecretCipher = observabilitySecretCipher
-    releaseHealthDeps.releaseHealthProvider = new RegistryReleaseHealthProvider({
-      observabilityConnectionRepository: repos.observabilityConnectionRepository,
-      releaseHealthConfigRepository: repos.releaseHealthConfigRepository,
-      blockRepository: repos.blockRepository,
-      secretCipher: observabilitySecretCipher,
-      registry: defaultObservabilityRegistry,
-    })
+    // The post-release-health gate + on-call escalation now live in `@cat-factory/gates`; wire
+    // their providers into the gate suite. The observability repos/cipher above stay on
+    // CoreDependencies — they power the management API (ReleaseHealthService), not the gate.
+    wireReleaseHealthProvider(
+      new RegistryReleaseHealthProvider({
+        observabilityConnectionRepository: repos.observabilityConnectionRepository,
+        releaseHealthConfigRepository: repos.releaseHealthConfigRepository,
+        blockRepository: repos.blockRepository,
+        secretCipher: observabilitySecretCipher,
+        registry: defaultObservabilityRegistry,
+      }),
+    )
   }
 
   // Per-workspace incident-enrichment (PagerDuty + incident.io): credentials moved out of
@@ -1234,10 +1277,15 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     incidentEnrichmentDeps.incidentEnrichmentConnectionRepository =
       repos.incidentEnrichmentConnectionRepository
     incidentEnrichmentDeps.incidentEnrichmentSecretCipher = incidentEnrichmentSecretCipher
-    incidentEnrichmentDeps.incidentEnrichment = new WorkspaceIncidentEnrichmentProvider({
-      incidentEnrichmentConnectionRepository: repos.incidentEnrichmentConnectionRepository,
-      secretCipher: incidentEnrichmentSecretCipher,
-    })
+    // The on-call enrichment provider now lives in `@cat-factory/gates`; wire the
+    // workspace-backed provider into the gate suite. The connection repo + cipher above
+    // stay on CoreDependencies to power the management API.
+    wireIncidentEnrichment(
+      new WorkspaceIncidentEnrichmentProvider({
+        incidentEnrichmentConnectionRepository: repos.incidentEnrichmentConnectionRepository,
+        secretCipher: incidentEnrichmentSecretCipher,
+      }),
+    )
   }
 
   // Per-account deployment settings (Slack OAuth + web-search keys), built once so the
@@ -1256,6 +1304,12 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   // Runner-pool URL/host guard, scoped to its own config (independent of the environment
   // allow-list); absent => strict public-https.
   const runnerUrlPolicy = resolveUrlSafetyPolicy(config.runners)
+
+  // Apply any test-injected gate providers LAST, so they override the config wiring above (the
+  // cross-runtime conformance suite drives the externalized CI gate over a faked verdict; in
+  // local mode a PAT-backed CI provider is wired above and would otherwise win). Production
+  // leaves `gateProviders` undefined, so this is a no-op outside tests.
+  applyGateProviders(options.gateProviders)
 
   const dependencies: CoreDependencies = {
     ...releaseHealthDeps,

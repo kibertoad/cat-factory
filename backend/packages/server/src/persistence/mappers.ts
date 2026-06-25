@@ -113,8 +113,7 @@ export function rowToBlock(row: BlockRow): Block {
   }
   if (row.width !== null && row.height !== null) block.size = { w: row.width, h: row.height }
   if (row.epic_id != null) block.epicId = row.epic_id
-  if (row.auto_start_dependents != null)
-    block.autoStartDependents = row.auto_start_dependents === 1
+  if (row.auto_start_dependents != null) block.autoStartDependents = row.auto_start_dependents === 1
   if (row.confidence !== null) block.confidence = row.confidence
   if (row.module_name !== null) block.moduleName = row.module_name
   if (row.fragment_ids !== null) block.fragmentIds = JSON.parse(row.fragment_ids) as string[]

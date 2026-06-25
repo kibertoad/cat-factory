@@ -53,7 +53,12 @@ const harness: ConformanceHarness = {
       },
       // The Worker binds `AI` in tests; let the suite force the opt-in flag off so the
       // provider-key assertions behave identically to Node (which has no binding).
-      { cloudflareModelsEnabled: opts?.cloudflareModelsEnabled },
+      // `gateProviders` is re-wired on every per-request container rebuild, so a faked CI
+      // status provider survives the build's `clearGateProviders()` reset.
+      {
+        cloudflareModelsEnabled: opts?.cloudflareModelsEnabled,
+        gateProviders: opts?.gateProviders,
+      },
     )
     return {
       ...app,

@@ -1,3 +1,4 @@
+import type { GateProviderOverrides } from '@cat-factory/gates'
 import type {
   ExecutionEventPublisher,
   ExecutionInstance,
@@ -177,7 +178,11 @@ export interface UserSecretsProbe {
     input: { secret: string; metadata?: Record<string, string>; label?: string },
   ): Promise<{ kind: string; hasSecret: boolean; metadata?: Record<string, string> }>
   resolve(userId: string, kind: string): Promise<string | null>
-  describe(kind: string): { kind: string; supportsTest: boolean; configFields: { key: string; secret?: boolean }[] } | null
+  describe(kind: string): {
+    kind: string
+    supportsTest: boolean
+    configFields: { key: string; secret?: boolean }[]
+  } | null
 }
 
 export interface ConformanceHarness {
@@ -206,4 +211,12 @@ export interface ConformanceAppOptions {
    * supplies a fake backed by an in-memory commit capture.
    */
   resolveRunRepoContext?: ResolveRunRepoContext
+  /**
+   * Inject explicit built-in gate providers (e.g. a faked `CiStatusProvider`). A facade
+   * build resets the deployment-global gate providers up-front then re-wires from config;
+   * each harness threads these into that per-build wiring so a faked provider survives a
+   * per-request container rebuild — the seam by which the suite drives the externalized
+   * `@cat-factory/gates` CI gate over a controlled verdict on every runtime.
+   */
+  gateProviders?: GateProviderOverrides
 }

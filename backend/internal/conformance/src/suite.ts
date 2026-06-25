@@ -21,7 +21,11 @@ import {
   registerPromptFragment,
 } from '@cat-factory/prompt-fragments'
 import { clearRegisteredAgentKinds, registerAgentKind } from '@cat-factory/agents'
-import type { GateProbe, RepoFiles } from '@cat-factory/kernel'
+// The built-in gate suite lives in its own package and registers via the public seam (the
+// dogfood). The suite imports it so the runtime-neutral assertions run with the SAME gates a
+// real deployment ships, and so a test that clears the registry can restore them.
+import { clearGateProviders, registerBuiltinGates } from '@cat-factory/gates'
+import type { CiStatusProvider, GateProbe, RepoFiles } from '@cat-factory/kernel'
 import {
   clearRegisteredGates,
   clearRegisteredStepResolvers,
@@ -632,6 +636,10 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         clearRegisteredGates()
         clearRegisteredStepResolvers()
         clearRegisteredAgentKinds()
+        // The built-in gates (ci / conflicts / post-release-health) live in the SAME registry
+        // as the test's `license-check` gate, so clearing wipes them too — restore them so
+        // later assertions (and a real harness build) still see the platform's own gates.
+        registerBuiltinGates()
       })
 
       // A deployment-registered polling gate is the OTHER half of the extension story
@@ -764,6 +772,96 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
         expect(exec.status).toBe('done')
         const step = exec.steps.find((s) => s.agentKind === 'conformance-auditor')!
         expect(step.output).toBe('resolver-rewrote-this')
+      })
+    })
+
+    describe('built-in ci gate (externalized to @cat-factory/gates)', () => {
+      // The platform's OWN `ci` gate is now authored as an external package through the public
+      // `registerGate` seam — no longer inline in the engine. Driving it here over a faked
+      // CiStatusProvider proves the externalized built-in still passes-through on green CI and
+      // escalates to `ci-fixer` on red, identically on every runtime: if the gate package, the
+      // wire-handle, or a facade's import drifted, this fails instead of shipping.
+      afterEach(() => clearGateProviders())
+
+      // A fake CI provider whose check verdict is supplied per-probe (a queue; the last entry
+      // repeats), so a test can drive green / red→green like the registered-gate test does.
+      // It is injected THROUGH `makeApp` (`gateProviders`), not wired directly: a facade build
+      // resets the deployment-global gate providers up-front and the Worker rebuilds the
+      // container per request, so a directly-wired provider would be cleared before the gate
+      // probes. Threading it into the build re-wires it on every rebuild, on every runtime.
+      const makeFakeCi = (greens: boolean[]): CiStatusProvider => {
+        let i = 0
+        return {
+          getStatus: async () => {
+            const green = greens[Math.min(i, greens.length - 1)] ?? true
+            i += 1
+            return {
+              headSha: 'sha',
+              checks: [
+                {
+                  name: 'build',
+                  status: 'completed',
+                  conclusion: green ? 'success' : 'failure',
+                  url: null,
+                },
+              ],
+            }
+          },
+        }
+      }
+
+      it('passes through on green CI without spinning up ci-fixer', async () => {
+        const app = harness.makeApp(
+          { asyncKinds: ['coder', 'ci-fixer'] },
+          { gateProviders: { ciStatus: makeFakeCi([true]) } },
+        )
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Build + CI',
+          agentKinds: ['coder', 'ci'],
+        })
+        const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+          pipelineId: pipeline.body.id,
+        })
+        expect(start.status).toBe(201)
+
+        const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+        expect(exec.status).toBe('done')
+        const step = exec.steps.find((s) => s.agentKind === 'ci')!
+        expect(step.state).toBe('done')
+        expect(step.gate?.attempts ?? 0).toBe(0)
+        expect(step.output).toContain('CI gate passed')
+      })
+
+      it('escalates to ci-fixer on red CI, then advances when it re-probes green', async () => {
+        const app = harness.makeApp(
+          {
+            asyncKinds: ['coder', 'ci-fixer'],
+            pullRequest: { url: 'https://github.com/o/r/pull/1', number: 1, branch: 'feat/login' },
+          },
+          // red first, green after the fixer ran
+          { gateProviders: { ciStatus: makeFakeCi([false, true]) } },
+        )
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Build + CI',
+          agentKinds: ['coder', 'ci'],
+        })
+        const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+          pipelineId: pipeline.body.id,
+        })
+        expect(start.status).toBe(201)
+
+        const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+        expect(exec.status).toBe('done')
+        const step = exec.steps.find((s) => s.agentKind === 'ci')!
+        expect(step.state).toBe('done')
+        expect(step.gate?.attempts).toBe(1)
+        expect(step.gate?.attemptLog?.[0]?.outcome).toBe('completed')
       })
     })
 

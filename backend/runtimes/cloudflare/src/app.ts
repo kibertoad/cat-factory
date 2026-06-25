@@ -1,3 +1,4 @@
+import type { GateProviderOverrides } from '@cat-factory/gates'
 import { mountAuthGate, registerCoreControllers } from '@cat-factory/server'
 import type { CoreDependencies } from '@cat-factory/orchestration'
 import { Hono } from 'hono'
@@ -12,6 +13,8 @@ export interface CreateAppOptions {
   overrides?: Partial<CoreDependencies>
   /** Force the Cloudflare-AI-enabled flag (conformance forces it off for parity). */
   cloudflareModelsEnabled?: boolean
+  /** Explicit gate providers wired on every per-request build — used by tests. */
+  gateProviders?: GateProviderOverrides
 }
 
 /**
@@ -47,6 +50,7 @@ export function createApp(options: CreateAppOptions = {}): Hono<AppEnv> {
       'container',
       buildContainer(c.env, options.overrides, {
         cloudflareModelsEnabled: options.cloudflareModelsEnabled,
+        gateProviders: options.gateProviders,
       }),
     )
     await next()

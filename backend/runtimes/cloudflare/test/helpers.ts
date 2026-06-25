@@ -10,6 +10,7 @@ import type {
 } from '@cat-factory/kernel'
 import { NoopBootstrapRunner, NoopWorkRunner } from '@cat-factory/kernel'
 import { driveWorkspace } from '@cat-factory/conformance'
+import type { GateProviderOverrides } from '@cat-factory/gates'
 import type { CoreDependencies } from '@cat-factory/orchestration'
 import { env } from 'cloudflare:test'
 import { createApp } from '../src/app'
@@ -70,7 +71,7 @@ export interface TestApp {
 export function makeApp(
   agentExecutor: AgentExecutor = new FakeAgentExecutor(),
   overrides: Partial<CoreDependencies> = {},
-  appOptions: { cloudflareModelsEnabled?: boolean } = {},
+  appOptions: { cloudflareModelsEnabled?: boolean; gateProviders?: GateProviderOverrides } = {},
 ): TestApp {
   // Default to a no-op work runner so starting a run doesn't spawn a real
   // Cloudflare Workflows instance in the test pool (the wrangler.toml binding is
@@ -110,7 +111,7 @@ export function makeApp(
   // container's services — dev-open has no signed-in user, so the HTTP account flow
   // (which requires one) can't be used to set up an org-scoped workspace.
   async function createOrgWorkspace(options: { name?: string } = {}): Promise<WorkspaceSnapshot> {
-    const c = buildContainer(env, coreOverrides)
+    const c = buildContainer(env, coreOverrides, { gateProviders: appOptions.gateProviders })
     const user = { id: 'usr_org-owner', login: 'org-owner', name: 'Org Owner' }
     const name = options.name ?? 'Org board'
     const org = await c.accountService.createOrg(user, { name: `${name} org` })
@@ -123,7 +124,7 @@ export function makeApp(
   // local D1) means the suite exercises the production driving logic — including the
   // single `failRun` funnel — rather than a hand-rolled copy that can diverge from it.
   async function drive(workspaceId: string, maxRounds = 50): Promise<ExecutionInstance[]> {
-    const c = buildContainer(env, coreOverrides)
+    const c = buildContainer(env, coreOverrides, { gateProviders: appOptions.gateProviders })
     return driveWorkspace(
       c.executionService,
       workspaceId,
@@ -137,7 +138,7 @@ export function makeApp(
     jobId: string,
     maxPolls = 50,
   ): Promise<number> {
-    const c = buildContainer(env, coreOverrides)
+    const c = buildContainer(env, coreOverrides, { gateProviders: appOptions.gateProviders })
     if (!c.bootstrap) throw new Error('bootstrap module is not configured in this app')
     for (let p = 0; p < maxPolls; p++) {
       const result = await c.bootstrap.service.pollBootstrapJob(workspaceId, jobId)
