@@ -1,5 +1,32 @@
 # @cat-factory/server
 
+## 0.14.0
+
+### Minor Changes
+
+- 82d771e: Add a "View Requirements" button to a selected service in the inspector that opens a
+  structured navigation window over the service's prescriptive spec tree (modules → feature
+  groups → requirements + Given/When/Then acceptance criteria + domain rules). When the spec
+  is present on the service repo's default branch, a toggle switches to the rendered Gherkin
+  scenarios.
+
+  A new read-only endpoint `GET /workspaces/:ws/blocks/:blockId/spec` reassembles the sharded
+  `spec/` artifact off the repo default branch via the existing checkout-free `RepoFiles`
+  resolver (`resolveRunRepoContext`), now surfaced on the `ServerContainer` and wired
+  symmetrically on both runtime facades. It returns `{ present: false }` when GitHub is not
+  connected or no spec exists yet, so the window shows an empty state rather than erroring.
+
+### Patch Changes
+
+- Updated dependencies [82d771e]
+  - @cat-factory/contracts@0.14.0
+  - @cat-factory/agents@0.11.5
+  - @cat-factory/integrations@0.10.3
+  - @cat-factory/kernel@0.13.3
+  - @cat-factory/orchestration@0.10.3
+  - @cat-factory/prompt-fragments@0.7.10
+  - @cat-factory/spend@0.8.8
+
 ## 0.13.2
 
 ### Patch Changes
