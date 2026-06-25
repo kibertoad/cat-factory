@@ -111,17 +111,8 @@ export function buildReviewPrompt(ctx: RequirementsContext): string {
   ].join('\n')
 }
 
-/** Pull the first JSON object out of a model response (tolerates code fences). */
-export function extractJson(text: string): unknown {
-  const start = text.indexOf('{')
-  const end = text.lastIndexOf('}')
-  if (start === -1 || end <= start) return null
-  try {
-    return JSON.parse(text.slice(start, end + 1))
-  } catch {
-    return null
-  }
-}
+/** Pull the first JSON value out of a model response (tolerates code fences). */
+export { extractJson } from '@cat-factory/kernel'
 
 function asString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
@@ -287,7 +278,8 @@ export function buildRecommendationPrompt(
         'finding, recommend exactly that and return its id as "fromStandard"):',
       '',
     )
-    for (const fr of grounding.fragments) lines.push(`### standard ${fr.id}: ${fr.title}`, fr.body, '')
+    for (const fr of grounding.fragments)
+      lines.push(`### standard ${fr.id}: ${fr.title}`, fr.body, '')
   }
   if (grounding.specExcerpts.length) {
     lines.push('', 'IN-REPO SPECIFICATIONS (business `spec/` + technical `tech-spec/`):', '')

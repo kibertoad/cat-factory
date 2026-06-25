@@ -34,11 +34,12 @@ import {
   weightedTotal,
 } from '@cat-factory/sandbox'
 import { generateText } from 'ai'
-import type { SandboxExperimentDetail } from './SandboxService.js'
+import { composeExperimentDetail, type SandboxExperimentDetail } from './SandboxService.js'
 import {
   buildJudgePrompt,
   coerceJudgeScores,
   extractJson,
+  gradedDimensionCount,
   JUDGE_SYSTEM_PROMPT,
   objectiveFor,
   parseModelCatalogId,
@@ -211,7 +212,18 @@ export class SandboxRunService {
             providerOptions: catFactoryObservability({ agentKind: 'sandbox:judge', workspaceId }),
           })
           spent += (judged.usage.inputTokens ?? 0) + (judged.usage.outputTokens ?? 0)
-          const scores = coerceJudgeScores(rubric, extractJson(judged.text))
+          // Treat an unparseable / empty / reasoning-only judge reply as a grading
+          // FAILURE rather than recording a confident weightedTotal ≈ 1.0: if the judge
+          // scored not a single rubric dimension, coerceJudgeScores would silently floor
+          // every dimension to 1, which is indistinguishable from a real bottom grade and
+          // would pollute the comparison grid. Throw instead so the cell records the error.
+          const parsed = extractJson(judged.text)
+          if (gradedDimensionCount(rubric, parsed) === 0) {
+            throw new Error(
+              'The judge returned no parseable rubric scores (empty or non-JSON reply).',
+            )
+          }
+          const scores = coerceJudgeScores(rubric, parsed)
           const grade: SandboxGrade = {
             id: this.deps.idGenerator.next('sbg'),
             runId: run.id,
@@ -312,20 +324,8 @@ export class SandboxRunService {
     return inlineModelRef(resolved, this.deps.defaultModelRef ?? resolved)
   }
 
-  private async detail(
-    workspaceId: string,
-    experimentId: string,
-  ): Promise<SandboxExperimentDetail> {
-    const experiment = assertFound(
-      await this.deps.sandboxExperimentRepository.get(workspaceId, experimentId),
-      'SandboxExperiment',
-      experimentId,
-    )
-    const [runs, grades] = await Promise.all([
-      this.deps.sandboxRunRepository.listByExperiment(workspaceId, experimentId),
-      this.deps.sandboxGradeRepository.listByExperiment(workspaceId, experimentId),
-    ])
-    return { experiment, runs, grades }
+  private detail(workspaceId: string, experimentId: string): Promise<SandboxExperimentDetail> {
+    return composeExperimentDetail(this.deps, workspaceId, experimentId)
   }
 }
 

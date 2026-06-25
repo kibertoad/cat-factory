@@ -29,6 +29,15 @@ const name = ref('')
 const selectedPromptIds = ref<string[]>([])
 const selectedModelIds = ref<string[]>([])
 const selectedFixtureIds = ref<string[]>([])
+// The judge model. Empty string = the deployment's routing default (resolved server-side);
+// picking one explicitly is the recourse on a deployment that has no default model wired,
+// where leaving it on default makes every run fail at create time.
+const selectedJudgeModel = ref<string>('')
+
+const judgeModelItems = computed(() => [
+  { label: 'Deployment default', value: '' },
+  ...store.selectableModels.map((m) => ({ label: m.label, value: m.id })),
+])
 
 const kindPrompts = computed(() => store.promptsForKind(agentKind.value))
 const kindFixtures = computed(() => store.fixturesForKind(agentKind.value))
@@ -71,6 +80,7 @@ async function createAndRun() {
     const created = await store.createExperiment({
       name: name.value.trim() || `${agentKind.value} — sandbox run`,
       agentKind: agentKind.value,
+      judgeModel: selectedJudgeModel.value || undefined,
       matrix: {
         promptVersionIds: selectedPromptIds.value,
         models: selectedModelIds.value,
@@ -172,6 +182,17 @@ const fixtureName = (id: string) => store.fixtures.find((f) => f.id === id)?.nam
           It needs its own database (a dedicated <code>SANDBOX_DB</code> on Cloudflare, or the
           <code>sandbox</code> Postgres schema on Node). Provision it and reload.
         </p>
+      </div>
+
+      <div
+        v-else-if="store.error"
+        class="rounded-lg border border-rose-800 bg-rose-950/40 p-6 text-sm text-rose-200"
+      >
+        <p class="font-medium text-rose-100">The Sandbox failed to load.</p>
+        <p class="mt-1 text-rose-300">{{ store.error }}</p>
+        <UButton class="mt-3" size="xs" color="neutral" variant="subtle" @click="store.load()">
+          Retry
+        </UButton>
       </div>
 
       <div v-else class="space-y-4">
@@ -276,6 +297,10 @@ const fixtureName = (id: string) => store.fixtures.find((f) => f.id === id)?.nam
                 </p>
               </div>
             </div>
+
+            <UFormField label="Judge model" hint="grades every cell">
+              <USelect v-model="selectedJudgeModel" :items="judgeModelItems" />
+            </UFormField>
 
             <UFormField label="Name (optional)">
               <UInput v-model="name" :placeholder="`${agentKind} — sandbox run`" />

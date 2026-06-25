@@ -12,6 +12,11 @@ import {
   scoreExpectations,
 } from '@cat-factory/sandbox'
 
+// The robust LLM-reply JSON extractor lives in the kernel (one copy shared by the
+// requirements reviewer, the document planner, and the Sandbox judge). Re-exported here
+// so the run-driver imports it alongside the other judge helpers.
+export { extractJson } from '@cat-factory/kernel'
+
 // Pure helpers for the Sandbox run-driver + judge. Kept side-effect-free (no LLM/IO,
 // no clock/identity) so the candidate-input rendering, judge-prompt assembly, score
 // coercion and objective projection are deterministic and unit-testable; the service
@@ -120,17 +125,7 @@ export function buildJudgePrompt(
  * note, so the weighted mean never silently drops a dimension from its denominator.
  */
 export function coerceJudgeScores(rubric: Rubric, raw: unknown): SandboxGradeDimension[] {
-  const byKey = new Map<string, { score?: unknown; rationale?: unknown }>()
-  const scores = extractScoreArray(raw)
-  for (const entry of scores) {
-    if (
-      entry &&
-      typeof entry === 'object' &&
-      typeof (entry as { key?: unknown }).key === 'string'
-    ) {
-      byKey.set((entry as { key: string }).key, entry as { score?: unknown; rationale?: unknown })
-    }
-  }
+  const byKey = scoreEntriesByKey(raw)
   return rubric.dimensions.map((dim) => {
     const found = byKey.get(dim.key)
     const score = clampScore(found?.score)
@@ -169,44 +164,33 @@ export function objectiveFor(
 }
 
 /**
- * Extract the first JSON value (object or array) embedded in a model's reply. The
- * brace/bracket matcher is string-literal aware: braces inside a JSON string value (e.g.
- * a `rationale` containing an unbalanced `}`) are skipped, so a valid reply isn't truncated
- * into a parse failure (which would default every dimension to the lowest score).
+ * How many rubric dimensions the judge actually scored with a usable numeric value. The
+ * run-driver treats a count of 0 as a grading FAILURE (record an error on the cell) rather
+ * than letting {@link coerceJudgeScores} silently floor every dimension to 1 — an
+ * unparseable / empty / reasoning-only judge reply must not masquerade as a confident
+ * bottom-of-scale grade.
  */
-export function extractJson(text: string): unknown {
-  const trimmed = text.trim()
-  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i)
-  const candidate = fenced ? fenced[1]! : trimmed
-  const start = candidate.search(/[[{]/)
-  if (start === -1) return null
-  const open = candidate[start]
-  const close = open === '{' ? '}' : ']'
-  let depth = 0
-  let inString = false
-  let escaped = false
-  for (let i = start; i < candidate.length; i++) {
-    const ch = candidate[i]
-    if (inString) {
-      if (escaped) escaped = false
-      else if (ch === '\\') escaped = true
-      else if (ch === '"') inString = false
-      continue
-    }
-    if (ch === '"') inString = true
-    else if (ch === open) depth++
-    else if (ch === close) {
-      depth--
-      if (depth === 0) {
-        try {
-          return JSON.parse(candidate.slice(start, i + 1))
-        } catch {
-          return null
-        }
-      }
+export function gradedDimensionCount(rubric: Rubric, raw: unknown): number {
+  const byKey = scoreEntriesByKey(raw)
+  let count = 0
+  for (const dim of rubric.dimensions) {
+    if (clampScore(byKey.get(dim.key)?.score) !== null) count++
+  }
+  return count
+}
+
+function scoreEntriesByKey(raw: unknown): Map<string, { score?: unknown; rationale?: unknown }> {
+  const byKey = new Map<string, { score?: unknown; rationale?: unknown }>()
+  for (const entry of extractScoreArray(raw)) {
+    if (
+      entry &&
+      typeof entry === 'object' &&
+      typeof (entry as { key?: unknown }).key === 'string'
+    ) {
+      byKey.set((entry as { key: string }).key, entry as { score?: unknown; rationale?: unknown })
     }
   }
-  return null
+  return byKey
 }
 
 function extractScoreArray(raw: unknown): unknown[] {

@@ -45,6 +45,35 @@ export interface SandboxExperimentDetail {
   grades: SandboxGrade[]
 }
 
+/** The three repositories needed to compose an {@link SandboxExperimentDetail}. */
+export interface SandboxDetailRepositories {
+  sandboxExperimentRepository: SandboxExperimentRepository
+  sandboxRunRepository: SandboxRunRepository
+  sandboxGradeRepository: SandboxGradeRepository
+}
+
+/**
+ * Load an experiment and its result grid (cells + grades). Shared by the read endpoint
+ * (`SandboxService.getExperiment`) and the run-driver's returned grid
+ * (`SandboxRunService.launch`) so the two can never compose a divergent detail shape.
+ */
+export async function composeExperimentDetail(
+  repos: SandboxDetailRepositories,
+  workspaceId: string,
+  experimentId: string,
+): Promise<SandboxExperimentDetail> {
+  const experiment = assertFound(
+    await repos.sandboxExperimentRepository.get(workspaceId, experimentId),
+    'SandboxExperiment',
+    experimentId,
+  )
+  const [runs, grades] = await Promise.all([
+    repos.sandboxRunRepository.listByExperiment(workspaceId, experimentId),
+    repos.sandboxGradeRepository.listByExperiment(workspaceId, experimentId),
+  ])
+  return { experiment, runs, grades }
+}
+
 /** The opt-in Sandbox overview the management surface loads on open. */
 export interface SandboxOverview {
   agentKinds: readonly SandboxAgentKindMeta[]
@@ -237,16 +266,7 @@ export class SandboxService {
   /** An experiment with its result grid (cells + grades). */
   async getExperiment(workspaceId: string, id: string): Promise<SandboxExperimentDetail> {
     await requireWorkspace(this.deps.workspaceRepository, workspaceId)
-    const experiment = assertFound(
-      await this.deps.sandboxExperimentRepository.get(workspaceId, id),
-      'SandboxExperiment',
-      id,
-    )
-    const [runs, grades] = await Promise.all([
-      this.deps.sandboxRunRepository.listByExperiment(workspaceId, id),
-      this.deps.sandboxGradeRepository.listByExperiment(workspaceId, id),
-    ])
-    return { experiment, runs, grades }
+    return composeExperimentDetail(this.deps, workspaceId, id)
   }
 
   /** Create a draft experiment. Launching it (the run-driver) expands + grades the matrix. */

@@ -202,7 +202,12 @@ export const sandboxExperimentSchema = v.object({
   repeats: v.pipe(v.number(), v.integer(), v.minValue(1)),
   status: sandboxExperimentStatusSchema,
   matrix: sandboxMatrixSchema,
-  /** Optional hard token budget for the whole experiment; null = uncapped. */
+  /**
+   * Optional token budget for the whole experiment; null = uncapped. Enforced as a soft
+   * cap BETWEEN cells: once the running total reaches the budget no further cells start,
+   * but the cell already in flight (its candidate + judge calls) runs to completion, so a
+   * run may overshoot by up to one cell's spend.
+   */
   budgetTokens: v.nullable(v.pipe(v.number(), v.integer(), v.minValue(1))),
   createdAt: v.number(),
   createdBy: v.nullable(v.string()),

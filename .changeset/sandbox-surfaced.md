@@ -5,6 +5,7 @@
 '@cat-factory/node-server': minor
 '@cat-factory/contracts': minor
 '@cat-factory/kernel': minor
+'@cat-factory/integrations': minor
 '@cat-factory/sandbox': minor
 '@cat-factory/app': minor
 ---
@@ -45,11 +46,18 @@ Run-driver hardening: a relaunch clears the prior result grid first (new
 Drizzle) instead of accumulating duplicate cells; the experiment's terminal status is
 derived from the cell outcomes and always settled (`failed` when every cell failed, never
 left `running`); the token budget must be ≥ 1 (a `0` budget is rejected at create rather
-than silently failing every cell); the judge model defaults to the deployment routing
-default (no hardcoded vendor) and requires an explicit `judgeModel` when none is
-configured; the judge-reply JSON extractor is string-literal aware so an unbalanced brace
-inside a rationale no longer collapses every score to the minimum. The fixture↔kind
-mapping the UI filters by now lives on the `@cat-factory/sandbox` catalog
+than silently failing every cell) and is documented as a soft cap enforced between cells;
+the judge model defaults to the deployment routing default (no hardcoded vendor) and
+requires an explicit `judgeModel` when none is configured (the experiment builder now
+exposes a judge-model picker so a deployment with no default still has recourse); an
+unparseable / empty / reasoning-only judge reply is now recorded as a grading **error** on
+the cell rather than silently flooring every dimension to the minimum (which read as a
+confident bottom-of-scale grade); the judge-reply JSON extractor — now the single robust
+`extractJson` promoted to `@cat-factory/kernel` and shared by the requirements reviewer and
+the document planner (replacing two weaker object-only copies) — is string-literal aware
+and falls back past a leading non-JSON code fence. The Sandbox window now surfaces a
+non-503 load failure (with a retry) instead of rendering an empty, healthy-looking panel.
+The fixture↔kind mapping the UI filters by now lives on the `@cat-factory/sandbox` catalog
 (`SandboxAgentKindMeta.fixtureKinds`) instead of a parallel frontend switch. NOTE: the
 run-driver still executes the matrix inline in the launch request (bounded by the cell cap
 + token budget); a durable fan-out (Workflows / pg-boss) for large matrices remains a
