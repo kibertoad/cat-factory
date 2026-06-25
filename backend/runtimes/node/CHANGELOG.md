@@ -1,5 +1,17 @@
 # @cat-factory/node-server
 
+## 0.12.3
+
+### Patch Changes
+
+- Updated dependencies [7d1f829]
+  - @cat-factory/server@0.15.1
+  - @cat-factory/agents@0.11.8
+  - @cat-factory/consensus@0.7.18
+  - @cat-factory/orchestration@0.10.6
+  - @cat-factory/provider-bedrock@0.7.18
+  - @cat-factory/provider-cloudflare@0.7.18
+
 ## 0.12.2
 
 ### Patch Changes
