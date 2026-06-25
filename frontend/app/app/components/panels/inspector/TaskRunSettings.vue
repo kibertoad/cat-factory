@@ -2,6 +2,7 @@
 import { computed, onMounted } from 'vue'
 import type { Block } from '~/types/domain'
 import type { WritebackOverride } from '~/types/tracker'
+import { mergePresetOptionLabel, mergePresetThresholds } from '~/utils/mergePreset'
 
 const props = defineProps<{ block: Block }>()
 
@@ -61,13 +62,13 @@ const presetMenu = computed(() => [
   [
     {
       label: mergePresets.defaultPreset
-        ? `Default (${mergePresets.defaultPreset.name})`
+        ? `Default (${mergePresets.defaultPreset.name}) — ${mergePresetThresholds(mergePresets.defaultPreset)}`
         : 'Workspace default',
       icon: 'i-lucide-rotate-ccw',
       onSelect: () => setPreset(''),
     },
     ...mergePresets.presets.map((p) => ({
-      label: p.name,
+      label: mergePresetOptionLabel(p),
       icon: 'i-lucide-git-merge',
       onSelect: () => setPreset(p.id),
     })),
