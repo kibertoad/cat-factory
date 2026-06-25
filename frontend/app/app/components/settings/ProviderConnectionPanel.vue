@@ -107,13 +107,16 @@ const canSave = computed(() => {
  * `manifestTemplate` scaffold on a first connect. Native providers only (a manifest provider
  * has no template ⇒ null, and rotates secrets via the dedicated path instead).
  */
-function buildManifestPayload(): { manifest: Record<string, unknown>; secrets: Record<string, string> } | null {
+function buildManifestPayload(): {
+  manifest: Record<string, unknown>
+  secrets: Record<string, string>
+} | null {
   const template = descriptor.value?.manifestTemplate
   if (!template) return null
   const base = descriptor.value?.savedManifest ?? template
   const manifest: Record<string, unknown> = structuredClone(base)
   const providerConfig: Record<string, unknown> = {
-    ...((manifest.providerConfig as Record<string, unknown> | undefined) ?? {}),
+    ...(manifest.providerConfig as Record<string, unknown> | undefined),
   }
   const secrets: Record<string, string> = {}
   for (const f of descriptor.value?.configFields ?? []) {
@@ -249,7 +252,10 @@ function fieldHelp(key: string): string | undefined {
           </p>
           <!-- A native re-register replaces the whole manifest; secrets are write-only so they
                must be re-supplied. Non-secret config is prefilled, so it survives a save. -->
-          <p v-if="connection && canAuthor && hasSecretFields" class="text-[11px] text-amber-300/80">
+          <p
+            v-if="connection && canAuthor && hasSecretFields"
+            class="text-[11px] text-amber-300/80"
+          >
             Re-enter the secret field{{ secretFieldCount > 1 ? 's' : '' }} to save changes — stored
             secrets are write-only and aren't shown.
           </p>
@@ -257,7 +263,9 @@ function fieldHelp(key: string): string | undefined {
           <UFormField
             v-for="field in descriptor.configFields"
             :key="field.key"
-            :label="field.label + (field.required && field.default === undefined ? '' : ' (optional)')"
+            :label="
+              field.label + (field.required && field.default === undefined ? '' : ' (optional)')
+            "
             :help="fieldHelp(field.key)"
           >
             <USelect

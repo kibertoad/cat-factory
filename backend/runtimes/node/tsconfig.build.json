@@ -7,6 +7,7 @@
   "references": [
     { "path": "../../packages/kernel/tsconfig.build.json" },
     { "path": "../../packages/contracts/tsconfig.build.json" },
+    { "path": "../../packages/gates/tsconfig.build.json" },
     { "path": "../../packages/spend/tsconfig.build.json" },
     { "path": "../../packages/prompt-fragments/tsconfig.build.json" },
     { "path": "../../packages/agents/tsconfig.build.json" },
