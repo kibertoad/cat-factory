@@ -24,6 +24,10 @@ const toast = useToast()
 
 // Draft replies, keyed by item id, so editing one item doesn't disturb others.
 const drafts = ref<Record<string, string>>({})
+// The server-side reply each draft was last seeded/synced to, so the seeding watch can refresh
+// a draft when the recorded reply changes server-side (e.g. accepting a recommendation sets the
+// finding's answer) WITHOUT clobbering a reply the human is actively editing.
+const seededReply = ref<Record<string, string>>({})
 // Findings the human marked for a Requirement-Writer recommendation, batched until they
 // click "Request recommendations" (so the Writer runs once over the whole batch).
 const markedForRecommend = ref<Set<string>>(new Set())
@@ -41,6 +45,7 @@ const showRedo = ref(false)
 const { open, blockId, instanceId, stepIndex, close } = useResultView('requirements-review', {
   onOpen: (id) => {
     drafts.value = {}
+    seededReply.value = {}
     markedForRecommend.value = new Set()
     reRequestNotes.value = {}
     redoComment.value = ''
@@ -154,21 +159,44 @@ async function flushDrafts() {
 }
 
 // Seed a draft for each finding from its recorded reply so the textarea shows the current
-// answer (editing in place). New findings from a re-review get seeded; drafts the user is
-// already editing are left untouched.
+// answer (editing in place). New findings from a re-review get seeded; and when the recorded
+// reply changes server-side (e.g. accepting a recommendation writes the finding's answer) a
+// draft the user hasn't diverged from is refreshed to match. Drafts the user is actively
+// editing are left untouched.
 watch(
   review,
   (r) => {
     if (!r) return
-    const next = { ...drafts.value }
+    const nextDrafts = { ...drafts.value }
+    const nextSeeded = { ...seededReply.value }
     let changed = false
     for (const item of r.items) {
-      if (!(item.id in next)) {
-        next[item.id] = item.reply ?? ''
+      const reply = item.reply ?? ''
+      if (!(item.id in nextDrafts)) {
+        nextDrafts[item.id] = reply
+        nextSeeded[item.id] = reply
+        changed = true
+        continue
+      }
+      const draft = nextDrafts[item.id] ?? ''
+      const seeded = nextSeeded[item.id] ?? ''
+      if (draft === seeded && draft !== reply) {
+        // The user hasn't diverged from the last seeded value but the server reply changed —
+        // refresh the textarea to the new answer (e.g. an accepted recommendation).
+        nextDrafts[item.id] = reply
+        nextSeeded[item.id] = reply
+        changed = true
+      } else if (draft === reply && seeded !== reply) {
+        // The draft already matches the server (e.g. the user's answer was just persisted) —
+        // record it so a later server-side change can be detected.
+        nextSeeded[item.id] = reply
         changed = true
       }
     }
-    if (changed) drafts.value = next
+    if (changed) {
+      drafts.value = nextDrafts
+      seededReply.value = nextSeeded
+    }
   },
   { immediate: true },
 )
@@ -503,7 +531,11 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                             :disabled="frozen"
                             @click="toggleRecommend(item)"
                           >
-                            {{ isMarkedForRecommend(item) ? 'Marked for recommendation' : 'Recommend something' }}
+                            {{
+                              isMarkedForRecommend(item)
+                                ? 'Marked for recommendation'
+                                : 'Recommend something'
+                            }}
                           </UButton>
                         </div>
                       </template>
@@ -551,7 +583,9 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                     class="rounded-lg border border-indigo-900/50 bg-indigo-950/20 p-3"
                   >
                     <div class="flex flex-wrap items-center gap-1.5">
-                      <span class="text-sm font-medium text-white">{{ rec.sourceFinding.title }}</span>
+                      <span class="text-sm font-medium text-white">{{
+                        rec.sourceFinding.title
+                      }}</span>
                       <UBadge
                         v-if="rec.groundedInFragment"
                         size="xs"

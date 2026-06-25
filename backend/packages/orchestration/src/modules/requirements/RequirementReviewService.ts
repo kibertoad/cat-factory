@@ -158,27 +158,19 @@ export class RequirementReviewService extends IterativeReviewService<
     itemIds: string[],
     note?: string,
   ): Promise<RequirementReview> {
-    const review = assertFound(
-      await this.repository.get(workspaceId, reviewId),
-      this.entityName,
-      reviewId,
-    )
-    const block = assertFound(
-      await this.deps.blockRepository.get(workspaceId, review.blockId),
-      'Block',
-      review.blockId,
-    )
     const targetIds = new Set(itemIds)
-    const findings = review.items.filter((i) => targetIds.has(i.id))
-    if (findings.length === 0) return review
-
-    const now = this.deps.clock.now()
-    for (const item of review.items) {
-      if (targetIds.has(item.id) && item.status !== 'dismissed') {
-        item.status = 'recommend_requested'
-        item.updatedAt = now
-      }
-    }
+    // Mark the targeted findings `recommend_requested` up front in a fresh read-modify-write, so
+    // the marks are durable even if the Writer LLM then fails (the human can still answer manually).
+    const marked = await this.markRecommendRequested(workspaceId, reviewId, targetIds)
+    const block = assertFound(
+      await this.deps.blockRepository.get(workspaceId, marked.blockId),
+      'Block',
+      marked.blockId,
+    )
+    const findings = marked.items.filter(
+      (i) => targetIds.has(i.id) && i.status === 'recommend_requested',
+    )
+    if (findings.length === 0) return marked
 
     const { modelProvider, ref } = await this.resolveModel(workspaceId, block)
     const context = await this.gatherContext(workspaceId, block)
@@ -210,12 +202,23 @@ export class RequirementReviewService extends IterativeReviewService<
       )
     }
 
+    // Re-read fresh: the Writer call above can take several seconds, during which the human may
+    // have answered/dismissed other findings. Append our recommendations onto the LATEST review
+    // rather than upserting the pre-LLM snapshot (which would clobber those concurrent edits).
+    const review = assertFound(
+      await this.repository.get(workspaceId, reviewId),
+      this.entityName,
+      reviewId,
+    )
+    const now = this.deps.clock.now()
     const fragmentById = new Map(fragments.map((f) => [f.id, f]))
     const recommendations = [...review.recommendations]
     for (const finding of findings) {
       const suggestion = suggestions.get(finding.id)
       if (!suggestion) continue
-      const standard = suggestion.fromStandard ? fragmentById.get(suggestion.fromStandard) : undefined
+      const standard = suggestion.fromStandard
+        ? fragmentById.get(suggestion.fromStandard)
+        : undefined
       recommendations.push({
         id: this.deps.idGenerator.next('rec'),
         sourceFinding: { title: finding.title, detail: finding.detail },
@@ -230,6 +233,41 @@ export class RequirementReviewService extends IterativeReviewService<
     const updated: RequirementReview = { ...review, recommendations, updatedAt: now }
     await this.repository.upsert(workspaceId, updated)
     return updated
+  }
+
+  /**
+   * Mark the targeted, non-dismissed findings `recommend_requested` in a fresh read-modify-write.
+   * A standalone durable write (not folded into {@link recommend}'s trailing upsert) so the marks
+   * survive a subsequent Writer-LLM failure.
+   */
+  private async markRecommendRequested(
+    workspaceId: string,
+    reviewId: string,
+    targetIds: Set<string>,
+  ): Promise<RequirementReview> {
+    const review = assertFound(
+      await this.repository.get(workspaceId, reviewId),
+      this.entityName,
+      reviewId,
+    )
+    const now = this.deps.clock.now()
+    let changed = false
+    for (const item of review.items) {
+      if (
+        targetIds.has(item.id) &&
+        item.status !== 'dismissed' &&
+        item.status !== 'recommend_requested'
+      ) {
+        item.status = 'recommend_requested'
+        item.updatedAt = now
+        changed = true
+      }
+    }
+    if (changed) {
+      review.updatedAt = now
+      await this.repository.upsert(workspaceId, review)
+    }
+    return review
   }
 
   /**
@@ -276,22 +314,22 @@ export class RequirementReviewService extends IterativeReviewService<
     recId: string,
     note: string,
   ): Promise<RequirementReview> {
-    const review = assertFound(
+    const initial = assertFound(
       await this.repository.get(workspaceId, reviewId),
       this.entityName,
       reviewId,
     )
-    const rec = review.recommendations.find((r) => r.id === recId)
-    if (!rec) throw new ValidationError(`Recommendation '${recId}' not found`)
-    const item = review.items.find(
-      (i) => i.title === rec.sourceFinding.title && i.detail === rec.sourceFinding.detail,
+    const rec0 = initial.recommendations.find((r) => r.id === recId)
+    if (!rec0) throw new ValidationError(`Recommendation '${recId}' not found`)
+    const item = initial.items.find(
+      (i) => i.title === rec0.sourceFinding.title && i.detail === rec0.sourceFinding.detail,
     )
     if (!item) throw new ValidationError('The finding this recommendation answers no longer exists')
 
     const block = assertFound(
-      await this.deps.blockRepository.get(workspaceId, review.blockId),
+      await this.deps.blockRepository.get(workspaceId, initial.blockId),
       'Block',
-      review.blockId,
+      initial.blockId,
     )
     const { modelProvider, ref } = await this.resolveModel(workspaceId, block)
     const context = await this.gatherContext(workspaceId, block)
@@ -320,19 +358,30 @@ export class RequirementReviewService extends IterativeReviewService<
       )
     }
     const suggestion = suggestions.get(item.id)
+    // Re-read fresh so concurrent answer/dismiss edits made during the (multi-second) Writer call
+    // aren't clobbered — mutate only this recommendation on the LATEST review.
+    const review = assertFound(
+      await this.repository.get(workspaceId, reviewId),
+      this.entityName,
+      reviewId,
+    )
+    const rec = review.recommendations.find((r) => r.id === recId)
+    if (!rec) throw new ValidationError(`Recommendation '${recId}' not found`)
     const now = this.deps.clock.now()
     if (suggestion) {
       const fragmentById = new Map(fragments.map((f) => [f.id, f]))
-      const standard = suggestion.fromStandard ? fragmentById.get(suggestion.fromStandard) : undefined
+      const standard = suggestion.fromStandard
+        ? fragmentById.get(suggestion.fromStandard)
+        : undefined
       rec.recommendedText = suggestion.recommendation
       rec.groundedInFragment = standard ? { id: standard.id, title: standard.title } : null
     }
     rec.status = 'ready'
     rec.note = note.trim() || null
     rec.updatedAt = now
-    const updated: RequirementReview = { ...review, updatedAt: now }
-    await this.repository.upsert(workspaceId, updated)
-    return updated
+    review.updatedAt = now
+    await this.repository.upsert(workspaceId, review)
+    return review
   }
 
   private async mutateRecommendation(
