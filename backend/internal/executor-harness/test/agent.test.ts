@@ -45,6 +45,21 @@ describe('parseAgentJob', () => {
     expect(job.output).toEqual({ kind: 'structured', repair: false })
   })
 
+  it('carries failOnUnusableFinal through (document producers fail loudly on a cut-off reply)', () => {
+    const job = parseAgentJob({
+      ...base,
+      mode: 'explore',
+      output: { kind: 'structured', shapeHint: '{"service":string}', failOnUnusableFinal: true },
+    })
+    // The handler gates on `output.failOnUnusableFinal` BEFORE the structured repair, so a
+    // truncated final answer fails the run instead of being laundered into a half-baked doc.
+    expect(job.output).toEqual({
+      kind: 'structured',
+      shapeHint: '{"service":string}',
+      failOnUnusableFinal: true,
+    })
+  })
+
   it('accepts a coding job with a fresh branch + PR', () => {
     const job = parseAgentJob({
       ...base,

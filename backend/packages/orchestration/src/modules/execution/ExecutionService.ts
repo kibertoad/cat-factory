@@ -2159,9 +2159,18 @@ export class ExecutionService {
    * into `customAgentKinds` / the SPA palette. Empty for every other kind.
    */
   private builtInPostOps(agentKind: string): RepoOp[] {
-    if (agentKind === BLUEPRINTS_AGENT_KIND) return [blueprintPostOp]
-    if (agentKind === SPEC_WRITER_AGENT_KIND) return [specPostOp]
-    return []
+    return ExecutionService.BUILT_IN_POST_OPS[agentKind] ?? []
+  }
+
+  /**
+   * The built-in (NON-registry) post-ops keyed by kind. A small map rather than an
+   * `if`-chain so each migrated built-in is one entry as the strangler converts more
+   * kinds; deliberately NOT the agent-kind registry (that would leak the built-ins into
+   * `customAgentKinds` / the SPA palette).
+   */
+  private static readonly BUILT_IN_POST_OPS: Record<string, RepoOp[]> = {
+    [BLUEPRINTS_AGENT_KIND]: [blueprintPostOp],
+    [SPEC_WRITER_AGENT_KIND]: [specPostOp],
   }
 
   /**
@@ -2173,10 +2182,13 @@ export class ExecutionService {
    *    {@link ContainerAgentExecutor}'s `pr`-clone resolution (`prBranch ?? baseBranch`).
    *    Deliberately NOT {@link resolveRepoOpBranch}, whose `pr` case ensures a work branch
    *    for the no-PR case — correct for a committing CUSTOM kind, wrong for the blueprint.
-   *  - spec-writer commits onto the per-block WORK branch (the coder's branch), created
-   *    from base when absent — exactly the generic `work` clone resolution, which matches
-   *    the spec-writer's container dispatch (it clones `work`, ensuring the branch as a
-   *    writer). It runs BEFORE the coder, so it seeds the branch the coder then resumes.
+   *  - spec-writer commits onto the per-block WORK branch (`cat-factory/<blockId>`), created
+   *    from base when absent. It is a WRITER (not read-only), so its container dispatch
+   *    always ensures + clones that work branch ({@link ContainerAgentExecutor}'s
+   *    `workBranchReady ? workBranch : …` resolves to the work branch). We mirror that
+   *    DETERMINISTICALLY here — NOT via {@link resolveRepoOpBranch}'s `work` case, whose
+   *    PR-preferring branch would commit onto a divergent PR branch (read one tree, write
+   *    another) if a PR were ever open on a branch other than `cat-factory/<blockId>`.
    */
   private async builtInRepoOpBranch(
     agentKind: string,
@@ -2184,11 +2196,7 @@ export class ExecutionService {
     runRepo: RunRepoContext,
   ): Promise<string> {
     if (agentKind === SPEC_WRITER_AGENT_KIND) {
-      return this.resolveRepoOpBranch(
-        { surface: 'container-explore', clone: { branch: 'work' } },
-        block,
-        runRepo,
-      )
+      return this.ensureWorkBranch(runRepo.repo, `cat-factory/${block.id}`, runRepo.baseBranch)
     }
     return block.pullRequest?.branch ?? runRepo.baseBranch
   }

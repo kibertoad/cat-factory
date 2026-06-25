@@ -39,6 +39,15 @@ export interface AgentOutputSpec {
   shapeHint?: string
   /** Whether to attempt the one-shot structured-output repair on a malformed reply. */
   repair?: boolean
+  /**
+   * Fail the run LOUDLY when the agent's FINAL answer is unusable — cut off at the
+   * output-token ceiling, or an empty completion — instead of letting the structured
+   * repair launder a truncated reply into a half-baked document. Opt-in for the kinds
+   * whose deliverable IS the JSON they return and is handed onward to be parsed +
+   * committed (spec-writer, …): for them a truncated final turn means there is nothing
+   * trustworthy to persist. Absent ⇒ off (a prose/side-effect kind never sets it).
+   */
+  failOnUnusableFinal?: boolean
 }
 
 /** What a container agent clones (resolved to a concrete branch by the engine at dispatch). */

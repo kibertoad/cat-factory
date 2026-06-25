@@ -2,6 +2,8 @@
 '@cat-factory/agents': patch
 '@cat-factory/server': patch
 '@cat-factory/orchestration': patch
+'@cat-factory/kernel': patch
+'@cat-factory/executor-harness': patch
 ---
 
 Migrate the `spec-writer` built-in agent onto the generic, manifest-driven `agent` harness
@@ -34,7 +36,14 @@ dropped on sight. Idempotent: the spec has no `version.json` manifest, so the po
 byte-compares each rendered shard to the branch and makes NO commit when everything matches
 and there is nothing to seed or prune (durable-driver replay re-commits nothing).
 
-No image bump: the shipped harness `handleAgent` explore-structured handler already serves
-this. The dead `/spec` handler is removed in a later sweep step (image bump). Cross-runtime
-conformance asserts the post-op shards + commits the `spec/` artifact onto the work branch via
-`RepoFiles` on both runtimes.
+Because the spec doc is handed onward to be sharded + committed, the migrated kind opts into
+a new `output.failOnUnusableFinal` flag (kernel `AgentOutputSpec`) so the generic explore
+handler FAILS the run LOUDLY when the agent's final answer is cut off at the output ceiling
+(or empty) — restoring the bespoke `/spec` handler's `unusableFinalAnswerCause` gate, which
+the generic `handleAgent` path lacked, so a truncated reply can no longer be laundered into a
+half-baked spec by the structured repair. This is a harness change, so the executor-harness
+image is bumped to `1.12.0` (the `deploy/backend` `image:publish` tag + `wrangler.toml` are
+bumped to match). The dead `/spec` handler is removed in a later sweep step.
+
+Cross-runtime conformance asserts the post-op shards + commits the `spec/` artifact onto the
+work branch via `RepoFiles` on both runtimes.

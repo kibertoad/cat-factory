@@ -1011,6 +1011,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
                 kind: 'structured',
                 ...(step.output.shapeHint ? { shapeHint: step.output.shapeHint } : {}),
                 ...(step.output.repair === false ? { repair: false } : {}),
+                ...(step.output.failOnUnusableFinal ? { failOnUnusableFinal: true } : {}),
               },
             }
           : {}),
@@ -1083,7 +1084,12 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
           {
             surface: 'container-explore',
             clone: { branch: 'work' },
-            output: { kind: 'structured', shapeHint: SPEC_SHAPE_HINT },
+            // The spec doc is handed onward to be sharded + committed by `specPostOp`, so a
+            // final answer cut off at the output ceiling must FAIL LOUDLY (the bespoke `/spec`
+            // handler's `unusableFinalAnswerCause` gate) rather than be laundered into a
+            // half-baked spec by the structured repair — exactly what drove the old
+            // spec-writer ⇄ companion rework loop.
+            output: { kind: 'structured', shapeHint: SPEC_SHAPE_HINT, failOnUnusableFinal: true },
           },
           SPEC_WRITER_SYSTEM_PROMPT,
           specWriterUserPrompt(context),
@@ -1203,9 +1209,11 @@ function toRunResult(result: RunnerJobResult, agentKind?: string): AgentRunResul
       }
     }
     // The migrated spec-writer returns its complete spec doc as `custom`; coerce it into the
-    // `spec` channel the engine strict-validates + the `specPostOp` shards/commits from
-    // (exactly what the harness `/spec` handler used to return). A nameless/garbage doc
-    // coerces to null ⇒ left unset (no ingest, no commit), same as the old coercion.
+    // `spec` channel the engine strict-validates + the `specPostOp` shards/commits from. The
+    // doc must carry its OWN `service` name (the system prompt mandates it) — unlike the
+    // harness's `/spec` handler, which rescued a nameless reply with the repo name, the
+    // backend has no repo name in scope here and (backwards-compat being a non-goal) does
+    // NOT rescue: a nameless/garbage doc coerces to null ⇒ left unset (no ingest, no commit).
     if (agentKind === SPEC_WRITER_AGENT_KIND) {
       const spec = coerceSpecDoc(result.custom, '')
       return {

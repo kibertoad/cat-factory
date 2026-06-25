@@ -179,6 +179,8 @@ async function listLegacyFeatureFiles(repo: RepoFiles, branch: string): Promise<
 export const specPostOp: RepoOp = async (ctx) => {
   // The engine coerced the agent's structured output into `spec`; re-coerce to a typed doc
   // (idempotent on an already-coerced doc) so a nameless/garbage payload commits nothing.
+  // The doc must carry its own `service` name (no repo-name rescue — see `toRunResult`); an
+  // already-coerced doc that reaches here always has one, so the empty fallback never bites.
   const doc = coerceSpecDoc(ctx.result?.spec, '')
   if (!doc) return
 

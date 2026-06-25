@@ -453,6 +453,7 @@ exports[`ContainerAgentExecutor.buildJobBody (per-kind body shapes) > spec-write
     "mode": "explore",
     "model": "@cf/test/model",
     "output": {
+      "failOnUnusableFinal": true,
       "kind": "structured",
       "shapeHint": "Expected a requirements document with a two-level taxonomy — module (domain) → group (feature) — where each group carries BOTH its requirements and the domain rules scoped to it: {"service": string, "summary": string, "modules": [{"name": string, "summary": string, "groups": [{"name": string, "summary": string, "requirements": [{"id": string, "title": string, "statement": string, "kind": string, "priority": string, "sourceBlockIds": string[], "acceptance": [{"given": string, "when": string, "outcome": string}]}], "rules": [{"id": string, "rule": string, "rationale": string, "sourceBlockIds": string[]}]}]}]}.",
     },
