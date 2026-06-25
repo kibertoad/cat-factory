@@ -102,4 +102,45 @@ describe('readServiceSpec', () => {
     const groups = view.spec?.modules?.[0]?.groups ?? []
     expect(groups.map((g) => g.name)).toEqual(['Good'])
   })
+
+  it('still presents the tree when the service name is empty (degrade, not blank)', async () => {
+    const repo = fakeRepo({
+      // A present-but-empty service name must NOT blank the whole spec: the SPA falls back to
+      // the block title, so the modules should still come through.
+      'spec/service.json': JSON.stringify({ service: '' }),
+      'spec/modules/auth/_module.json': JSON.stringify({ name: 'Auth' }),
+      'spec/modules/auth/login.json': JSON.stringify({ name: 'Login', requirements: [] }),
+    })
+
+    const view = await readServiceSpec(repo, 'main')
+    expect(view.present).toBe(true)
+    expect(view.spec?.service).toBe('')
+    expect(view.spec?.modules?.[0]?.name).toBe('Auth')
+    expect(view.spec?.modules?.[0]?.groups?.[0]?.name).toBe('Login')
+  })
+
+  it('drops only a malformed module, keeping its valid siblings', async () => {
+    const repo = fakeRepo({
+      'spec/service.json': JSON.stringify({ service: 'S' }),
+      // A module whose name fails validation (empty) is dropped entirely…
+      'spec/modules/bad/_module.json': JSON.stringify({ name: '' }),
+      'spec/modules/bad/g.json': JSON.stringify({ name: 'G', requirements: [] }),
+      // …while a valid sibling survives.
+      'spec/modules/good/_module.json': JSON.stringify({ name: 'Good' }),
+      'spec/modules/good/g.json': JSON.stringify({ name: 'G', requirements: [] }),
+    })
+
+    const view = await readServiceSpec(repo, 'main')
+    expect(view.present).toBe(true)
+    expect(view.spec?.modules?.map((m) => m.name)).toEqual(['Good'])
+  })
+
+  it('never throws when a repo read fails — degrades to an empty view', async () => {
+    const repo = fakeRepo({})
+    repo.getFile = async () => {
+      throw new Error('GitHub 502')
+    }
+    const view = await readServiceSpec(repo, 'main')
+    expect(view).toEqual({ present: false, spec: null, features: [] })
+  })
 })

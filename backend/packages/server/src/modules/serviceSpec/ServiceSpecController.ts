@@ -1,10 +1,10 @@
-import type { ServiceSpecView } from '@cat-factory/contracts'
+import { EMPTY_SERVICE_SPEC_VIEW } from '@cat-factory/contracts'
 import { Hono } from 'hono'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
 import { readServiceSpec } from './readServiceSpec.js'
 
-const EMPTY: ServiceSpecView = { present: false, spec: null, features: [] }
+const EMPTY = EMPTY_SERVICE_SPEC_VIEW
 
 /**
  * Workspace-scoped service-spec read endpoint. The prescriptive spec lives sharded in the
@@ -34,7 +34,13 @@ export function serviceSpecController(): Hono<AppEnv> {
       return c.json(EMPTY)
     }
     if (!ctx) return c.json(EMPTY)
-    return c.json(await readServiceSpec(ctx.repo, ctx.baseBranch))
+    // `readServiceSpec` is total (every repo read is guarded), but keep a defensive fallback
+    // so a transient GitHub failure can never 500 the inspector — it shows an empty state.
+    try {
+      return c.json(await readServiceSpec(ctx.repo, ctx.baseBranch))
+    } catch {
+      return c.json(EMPTY)
+    }
   })
 
   return app

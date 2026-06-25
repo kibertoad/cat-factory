@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { reactive, ref } from 'vue'
 import type { ServiceSpecView } from '~/types/spec'
 import { useWorkspaceStore } from '~/stores/workspace'
 
@@ -15,28 +15,31 @@ export const useServiceSpecStore = defineStore('serviceSpec', () => {
 
   /** The fetched view per block id (undefined = not yet fetched). */
   const views = ref<Record<string, ServiceSpecView>>({})
-  /** Block ids whose view is currently being fetched. */
-  const loadingByBlock = ref<Set<string>>(new Set())
+  /**
+   * In-flight loads keyed by block id — the SINGLE source of truth for "is this block
+   * loading". A reactive Map so `isLoading` (derived from `.has`) tracks set/delete, and it
+   * also coalesces overlapping loads onto one request: no separate loading-flag Set to keep
+   * in sync.
+   */
+  const inFlight = reactive(new Map<string, Promise<void>>())
   /** Block ids whose last fetch failed (network / unexpected error). */
   const erroredByBlock = ref<Set<string>>(new Set())
-  /** Coalesce overlapping loads of the same block onto one request. */
-  const inFlight = new Map<string, Promise<void>>()
 
   function viewFor(blockId: string): ServiceSpecView | undefined {
     return views.value[blockId]
   }
   function isLoading(blockId: string): boolean {
-    return loadingByBlock.value.has(blockId)
+    return inFlight.has(blockId)
   }
   function isErrored(blockId: string): boolean {
     return erroredByBlock.value.has(blockId)
   }
 
-  function withFlag(set: typeof loadingByBlock, key: string, on: boolean) {
-    const next = new Set(set.value)
+  function setErrored(key: string, on: boolean) {
+    const next = new Set(erroredByBlock.value)
     if (on) next.add(key)
     else next.delete(key)
-    set.value = next
+    erroredByBlock.value = next
   }
 
   /** Fetch (and cache) the spec view for a service frame block. */
@@ -44,16 +47,14 @@ export const useServiceSpecStore = defineStore('serviceSpec', () => {
     if (!workspace.workspaceId) return
     const pending = inFlight.get(blockId)
     if (pending) return pending
+    setErrored(blockId, false)
     const promise = (async () => {
-      withFlag(loadingByBlock, blockId, true)
-      withFlag(erroredByBlock, blockId, false)
       try {
         const view = await api.getServiceSpec(workspace.requireId(), blockId)
         views.value = { ...views.value, [blockId]: view }
       } catch {
-        withFlag(erroredByBlock, blockId, true)
+        setErrored(blockId, true)
       } finally {
-        withFlag(loadingByBlock, blockId, false)
         inFlight.delete(blockId)
       }
     })()

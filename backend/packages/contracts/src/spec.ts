@@ -169,10 +169,15 @@ export const serviceSpecViewSchema = v.object({
   present: v.boolean(),
   /** The reassembled spec tree, or null when none is present. */
   spec: v.nullable(specDocSchema),
-  /** The rendered Gherkin feature files (empty when none present). */
-  features: v.optional(v.array(specFeatureFileSchema), []),
+  /** The rendered Gherkin feature files (empty when none present). The producer always
+   * sends this field (`[]` when there are none), and the SPA dereferences it unguarded, so
+   * it is required — not optional — to keep the wire shape and its sole consumer in lockstep. */
+  features: v.array(specFeatureFileSchema),
 })
 export type ServiceSpecView = v.InferOutput<typeof serviceSpecViewSchema>
+
+/** The canonical "no spec" view — GitHub not connected, or no spec on the default branch. */
+export const EMPTY_SERVICE_SPEC_VIEW: ServiceSpecView = { present: false, spec: null, features: [] }
 
 /**
  * Strictly parse an arbitrary value (e.g. the JSON read from `spec.json`, or a tree
@@ -187,6 +192,25 @@ export function parseSpecDoc(value: unknown): SpecDoc {
 /** Non-throwing variant: returns the parsed doc or `undefined` when invalid. */
 export function safeParseSpecDoc(value: unknown): SpecDoc | undefined {
   const result = v.safeParse(specDocSchema, value)
+  return result.success ? result.output : undefined
+}
+
+/**
+ * Non-throwing parse of a single module shard. Lets a reader validate the tree PER NODE
+ * (dropping only the offending shard) instead of letting one malformed module blank the
+ * whole spec.
+ */
+export function safeParseSpecModule(value: unknown): SpecModule | undefined {
+  const result = v.safeParse(specModuleSchema, value)
+  return result.success ? result.output : undefined
+}
+
+/**
+ * Non-throwing parse of a single feature-group shard. Lets a reader validate the tree PER
+ * NODE (dropping only the offending shard) rather than failing the whole document.
+ */
+export function safeParseRequirementGroup(value: unknown): RequirementGroup | undefined {
+  const result = v.safeParse(requirementGroupSchema, value)
   return result.success ? result.output : undefined
 }
 

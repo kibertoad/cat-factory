@@ -39,12 +39,18 @@ const present = computed(() => !!view.value?.present && !!spec.value)
 const hasGherkin = computed(() => (view.value?.features.length ?? 0) > 0)
 
 // Auto-select the first group once a present spec loads, so the main pane isn't empty.
-watch(present, (is) => {
-  if (is && !selected.value) {
-    const m = modules.value.findIndex((mod) => (mod.groups?.length ?? 0) > 0)
-    if (m >= 0) selected.value = { m, g: 0 }
-  }
-})
+// `immediate` so a re-open of a block whose view is already cached (present already true on
+// the first tick) auto-selects too — not just the first, uncached open where present flips.
+watch(
+  present,
+  (is) => {
+    if (is && !selected.value) {
+      const m = modules.value.findIndex((mod) => (mod.groups?.length ?? 0) > 0)
+      if (m >= 0) selected.value = { m, g: 0 }
+    }
+  },
+  { immediate: true },
+)
 
 const selectedModule = computed<SpecModule | null>(() =>
   selected.value ? (modules.value[selected.value.m] ?? null) : null,
@@ -54,14 +60,22 @@ const selectedGroup = computed<RequirementGroup | null>(() => {
   return selectedModule.value?.groups?.[selected.value.g] ?? null
 })
 
-// The Gherkin `.feature` content matching the selected group (by module + group name).
+// The Gherkin `.feature` content matching the selected group. Features carry display names
+// (not slugs), and the harness permits same-named groups in one module (only the on-disk
+// SLUGS are collision-suffixed), so a plain name match can cross-select. When several
+// features share the (module, group) name pair, disambiguate by the group's ordinal among
+// its same-named siblings — both lists derive from the same name-sorted walk, so the ordinals
+// line up.
 const selectedFeature = computed(() => {
-  if (!selectedModule.value || !selectedGroup.value) return null
-  return (
-    view.value?.features.find(
-      (f) => f.module === selectedModule.value!.name && f.group === selectedGroup.value!.name,
-    ) ?? null
-  )
+  const mod = selectedModule.value
+  const grp = selectedGroup.value
+  if (!mod || !grp) return null
+  const matches =
+    view.value?.features.filter((f) => f.module === mod.name && f.group === grp.name) ?? []
+  if (matches.length <= 1) return matches[0] ?? null
+  const sameNamed = (mod.groups ?? []).filter((g) => g.name === grp.name)
+  const ordinal = sameNamed.indexOf(grp)
+  return matches[ordinal] ?? matches[0] ?? null
 })
 
 function selectGroup(m: number, g: number) {
