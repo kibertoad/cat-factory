@@ -1,4 +1,8 @@
-import type { AgentRunRepository, ConsensusSessionRepository } from '@cat-factory/kernel'
+import type {
+  AgentRunRepository,
+  ConsensusSessionRepository,
+  ResolveRunRepoContext,
+} from '@cat-factory/kernel'
 import type {
   ApiKeyService,
   LocalModelEndpointService,
@@ -29,6 +33,15 @@ export interface ServerContainer extends Core {
   consensusSessionRepository?: ConsensusSessionRepository
   /** Per-facade runtime seams (real-time delivery, …) the shared controllers use. */
   gateways: RuntimeGateways
+  /**
+   * Resolve a block's run repo (installation + repo + default branch) bound to a
+   * checkout-free {@link RepoFiles}. The engine uses it to run a registered kind's
+   * pre/post-ops; the shared service-spec read controller reuses it to read the sharded
+   * `spec/` artifact off the default branch. Present only when GitHub is wired (the same
+   * composition both facades already build via `makeResolveRunRepoContext`); absent → the
+   * spec endpoint returns an empty view.
+   */
+  resolveRunRepoContext?: ResolveRunRepoContext
   /**
    * The workspace subscription-token pool (Claude Code / Codex credentials).
    * Present only when the facade wired the provider-subscription repository.

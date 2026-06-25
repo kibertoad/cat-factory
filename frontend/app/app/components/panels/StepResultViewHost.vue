@@ -17,6 +17,7 @@ import TestReportWindow from '~/components/testing/TestReportWindow.vue'
 import GateResultView from '~/components/gates/GateResultView.vue'
 import ConsensusSessionWindow from '~/components/consensus/ConsensusSessionWindow.vue'
 import GenericStructuredResultView from '~/components/panels/GenericStructuredResultView.vue'
+import ServiceSpecWindow from '~/components/spec/ServiceSpecWindow.vue'
 
 const ui = useUiStore()
 
@@ -31,6 +32,9 @@ const STEP_RESULT_VIEWS: Record<string, Component> = {
   // Default dedicated view for a registered CUSTOM kind's structured (`custom`) output —
   // a read-only JSON viewer, so a proprietary agent ships a result view with no bespoke code.
   'generic-structured': GenericStructuredResultView,
+  // The service's prescriptive spec tree (+ Gherkin), opened from the inspector's "View
+  // Requirements" button. Not a pipeline-step view — opened directly via `ui.openServiceSpec`.
+  'service-spec': ServiceSpecWindow,
 }
 
 const active = computed<Component | null>(() => {

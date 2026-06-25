@@ -336,6 +336,10 @@ export const useUiStore = defineStore('ui', () => {
   function openClarityReview(blockId: string) {
     resultView.value = { view: 'clarity-review', blockId, instanceId: null, stepIndex: null }
   }
+  // Open the service-spec window for a service frame (the inspector's "View Requirements").
+  function openServiceSpec(blockId: string) {
+    resultView.value = { view: 'service-spec', blockId, instanceId: null, stepIndex: null }
+  }
   function closeResultView() {
     resultView.value = null
   }
@@ -440,6 +444,7 @@ export const useUiStore = defineStore('ui', () => {
     closeOpenRouter,
     openRequirementReview,
     openClarityReview,
+    openServiceSpec,
     closeRequirementReview,
     openStepDetail,
     closeStepDetail,

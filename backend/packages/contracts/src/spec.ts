@@ -139,6 +139,41 @@ export const SPEC_MODULES_DIR = `${SPEC_DIR}/modules`
 /** Sub-folder holding the generated Gherkin `.feature` files (`features/<module>/<group>.feature`). */
 export const SPEC_FEATURES_DIR = `${SPEC_DIR}/features`
 
+// ---- Service-spec read view (served to the SPA) ---------------------------
+// The spec lives in the service repo, sharded under `spec/`; the SPA cannot read a
+// repo directly. The backend reassembles the tree from the repo's DEFAULT branch and
+// serves it as this view so the inspector's "View Requirements" window can navigate
+// the structured spec and (when present) show the rendered Gherkin scenarios.
+
+/** A rendered Gherkin feature file read back from `spec/features/<module>/<group>.feature`. */
+export const specFeatureFileSchema = v.object({
+  /** The owning module's display name (resolved from its `_module.json`, else the slug). */
+  module: v.string(),
+  /** The feature/group display name (resolved from the group shard, else the slug). */
+  group: v.string(),
+  /** Repo-relative path of the `.feature` file. */
+  path: v.string(),
+  /** The raw Gherkin content. */
+  content: v.string(),
+})
+export type SpecFeatureFile = v.InferOutput<typeof specFeatureFileSchema>
+
+/**
+ * The service-spec view served to the SPA: the reassembled prescriptive spec tree read
+ * from the service repo's default branch, plus its rendered Gherkin feature files.
+ * `present` is false (and `spec` null) when no spec exists on the default branch, or when
+ * GitHub isn't connected — so the window renders an empty state rather than erroring.
+ */
+export const serviceSpecViewSchema = v.object({
+  /** Whether a spec exists on the service repo's default branch (a `spec/service.json`). */
+  present: v.boolean(),
+  /** The reassembled spec tree, or null when none is present. */
+  spec: v.nullable(specDocSchema),
+  /** The rendered Gherkin feature files (empty when none present). */
+  features: v.optional(v.array(specFeatureFileSchema), []),
+})
+export type ServiceSpecView = v.InferOutput<typeof serviceSpecViewSchema>
+
 /**
  * Strictly parse an arbitrary value (e.g. the JSON read from `spec.json`, or a tree
  * returned by the spec-writer container) into a {@link SpecDoc}, enforcing the exact

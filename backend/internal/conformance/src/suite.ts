@@ -117,6 +117,26 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
       })
     })
 
+    describe('service spec read', () => {
+      it('serves an empty service-spec view when GitHub is not wired', async () => {
+        // The "View Requirements" window reads the sharded `spec/` artifact off the repo
+        // default branch via the shared controller, resolved through the same
+        // `resolveRunRepoContext` seam on both facades. With no GitHub wired (the
+        // conformance harness), the route must be mounted and return an empty (present:false)
+        // view identically — proving the symmetric wiring rather than one facade 404-ing.
+        const { call, createWorkspace } = harness.makeApp()
+        const { workspace } = await createWorkspace()
+        const res = await call<{ present: boolean; spec: unknown; features: unknown[] }>(
+          'GET',
+          `/workspaces/${workspace.id}/blocks/blk_auth/spec`,
+        )
+        expect(res.status).toBe(200)
+        expect(res.body.present).toBe(false)
+        expect(res.body.spec).toBeNull()
+        expect(res.body.features).toEqual([])
+      })
+    })
+
     describe('task types + per-service running-task limit', () => {
       it('persists a task type + per-type fields, surfaced on the snapshot identically', async () => {
         const { call, createWorkspace } = harness.makeApp()

@@ -39,6 +39,7 @@ import {
   workspaceApiKeyController,
 } from './modules/providers/ApiKeyController.js'
 import { serviceMountController } from './modules/services/ServiceMountController.js'
+import { serviceSpecController } from './modules/serviceSpec/ServiceSpecController.js'
 import { taskSourceController } from './modules/tasks/TaskSourceController.js'
 import { workspaceController } from './modules/workspaces/WorkspaceController.js'
 
@@ -99,6 +100,7 @@ export function registerCoreControllers<E extends AppEnv>(app: Hono<E>): void {
   app.route('/workspaces/:workspaceId', recurringPipelineController())
   app.route('/workspaces/:workspaceId', trackerSettingsController())
   app.route('/workspaces/:workspaceId', serviceMountController())
+  app.route('/workspaces/:workspaceId', serviceSpecController())
   app.route('/workspaces/:workspaceId', fragmentLibraryController('workspace'))
   app.route('/workspaces/:workspaceId', githubController())
   app.route('/workspaces/:workspaceId', slackController())
