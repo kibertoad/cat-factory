@@ -48,6 +48,17 @@ export interface TaskContent {
   comments: TaskComment[]
 }
 
+/**
+ * A repo coordinate a search is scoped to, for a repo-backed source (GitHub
+ * Issues). When present, the provider restricts its hits to that one repository
+ * instead of the whole installation, and can resolve a bare issue number against
+ * it. Sources with no repo notion (Jira) ignore it.
+ */
+export interface TaskSearchRepoScope {
+  owner: string
+  repo: string
+}
+
 /** The result of validating + normalizing connect credentials. */
 export interface NormalizedTaskConnection {
   /** The credential bag to persist (trimmed/normalized). */
@@ -80,11 +91,17 @@ export interface TaskSourceProvider {
    * that authenticates per-workspace out-of-band (e.g. the GitHub App, which
    * ignores `credentials`) can scope the search to that workspace's installation
    * instead of leaking across tenants.
+   *
+   * `scope` (optional) narrows a repo-backed source (GitHub Issues) to a single
+   * repository — the one the service the search runs from is linked to — so the
+   * results never leak in issues from sibling repos, and a bare issue number /
+   * issue URL resolves to that exact issue. Repo-less sources (Jira) ignore it.
    */
   search?(
     credentials: TaskCredentials,
     query: string,
     workspaceId: string,
+    scope?: TaskSearchRepoScope,
   ): Promise<TaskSearchResult[]>
   /**
    * Live "check setup" probe: actually authenticate against the source and read a

@@ -116,6 +116,28 @@ export const useModelsStore = defineStore('models', () => {
     return id ? byId.value.get(id) : undefined
   }
 
+  /** Readable label for a catalog model id: the catalog label, else the raw id. */
+  function labelForId(id: string): string {
+    return byId.value.get(id)?.label ?? id
+  }
+
+  /**
+   * Whether the workspace has at least one usable AI model source right now. The
+   * per-workspace catalog already resolves `available` from the configured keys /
+   * subscriptions / Cloudflare opt-in / local runners, so this is the single signal for
+   * "is any AI configured at all". Only meaningful once the per-workspace catalog has
+   * loaded (`loadedWorkspaceId` set); the deployment catalog leaves `available` undefined.
+   */
+  const hasUsableModel = computed(() => models.value.some((m) => m.available === true))
+
+  /**
+   * Whether a specific catalog model id is usable under the current configuration. An id
+   * absent from the catalog (e.g. a model that was removed) counts as not usable.
+   */
+  function isUsableId(id: string): boolean {
+    return byId.value.get(id)?.available === true
+  }
+
   /**
    * Friendly label for a recorded `provider:model` identifier (as carried on a
    * pipeline step). Matches it against the catalog's effective refs; falls back
@@ -130,5 +152,17 @@ export const useModelsStore = defineStore('models', () => {
     return hit ? `${hit.label} · ${hit.providerLabel}` : model || ref
   }
 
-  return { models, loaded, ensureLoaded, refresh, byId, getModel, labelForRef }
+  return {
+    models,
+    loaded,
+    loadedWorkspaceId,
+    ensureLoaded,
+    refresh,
+    byId,
+    getModel,
+    labelForId,
+    hasUsableModel,
+    isUsableId,
+    labelForRef,
+  }
 })

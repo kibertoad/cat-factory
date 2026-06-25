@@ -170,9 +170,18 @@ export const useTasksStore = defineStore('tasks', () => {
     }
   }
 
-  /** Search a connected tracker's issues by free text (title/content). */
-  async function search(source: TaskSourceKind, query: string): Promise<TaskSearchResult[]> {
-    const { results } = await api.searchTaskSource(workspace.requireId(), source, query)
+  /**
+   * Search a connected tracker's issues by free text (title/content). `blockId`
+   * (a service frame or a task/module under one) scopes a GitHub search to that
+   * service's linked repo — so hits stay in-repo and a pasted URL / bare issue
+   * number resolves to the exact issue. Omitted → an unscoped workspace search.
+   */
+  async function search(
+    source: TaskSourceKind,
+    query: string,
+    blockId?: string,
+  ): Promise<TaskSearchResult[]> {
+    const { results } = await api.searchTaskSource(workspace.requireId(), source, query, blockId)
     return results
   }
 

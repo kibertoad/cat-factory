@@ -1,5 +1,112 @@
 # @cat-factory/app
 
+## 0.17.1
+
+### Patch Changes
+
+- 8786b8c: Fix the flashing pipeline on a task stacked above another when zoomed in.
+
+  The board's expansion driver tested overlap with each card's live rect, which
+  collapses the moment a card is denied. A top task directly above another would
+  no longer overlap once collapsed, get re-granted, expand, overlap again, and get
+  denied — flashing its pipeline every frame. The driver now caches each card's
+  expanded height while it's granted and projects the footprint with it, so a
+  denied card is still tested at its expanded extent and stays compact.
+
+## 0.17.0
+
+### Minor Changes
+
+- 0ac64b8: Selecting an issue now opens the prefilled task form instead of creating the task immediately.
+
+  In the "Create task from issue" modal, clicking an issue row selects it as the task source:
+  it opens the add-task form with the title prefilled and the issue staged as linked context,
+  so the user still confirms the pipeline and presets before the task is created. The issue
+  itself is only linked (its body is not copied into the description). Viewing the issue on
+  GitHub moved to a dedicated external-link button on each row, and long issue titles now
+  truncate instead of overflowing under the status badge.
+
+- 0ac64b8: Add a "Create task from issue" button on service frames, and scope issue search to
+  the service's repo.
+
+  A service frame header now carries a ticket button (shown when a tracker is offered)
+  that opens the tracker-issue modal pinned to that service: the new task is created in
+  that frame, and the issue search is scoped to the service's linked GitHub repository
+  instead of the whole installation. The same repo scoping applies to the
+  attach-an-issue-as-context picker in the add-task form.
+
+  Within a scoped GitHub search:
+
+  - a pasted issue URL (or `owner/repo#n` / `owner/repo/issues/n`) resolves to that exact
+    issue and is offered first instead of being fuzzy-matched — but only within the
+    searching workspace's own GitHub App installation, so a URL naming another account is
+    never fetched across tenants;
+  - a bare issue number (`11`) resolves against the service's repo and is offered first;
+  - free-text hits are restricted to the service's repo (`repo:owner/name`).
+
+  A service is always created from (or with) a repo, so a GitHub search scoped to a block
+  now REQUIRES that link: if the service isn't linked to a repo the search is refused with
+  a clear error rather than silently widening to the whole installation. The
+  block→service→repo resolver (`resolveRepoTarget`) is surfaced on the request container in
+  both runtime facades so the shared task-search controller can resolve the scope.
+
+## 0.16.1
+
+### Patch Changes
+
+- a20ab54: Surface the need to configure an AI model provider in the SPA. AI only works out of the box
+  on a Cloudflare deployment with Workers AI enabled; every other deployment must onboard a
+  source (provider key, pooled/personal subscription, OpenRouter/LiteLLM proxy, Bedrock, or a
+  local runner). Previously nothing told the user this — the model picker silently showed every
+  model as unselectable and tasks failed deep in the run.
+
+  Two new prompts, both driven by a `useAiReadiness` composable that reads the existing
+  per-workspace catalog `available` flag and the workspace's model presets (no backend change):
+
+  - **No usable AI source** → an auto-opening `AiProviderOnboardingModal` plus a persistent,
+    dismissible `AiProvidersBanner`, explaining the situation and routing to each configuration
+    panel (LLM vendors, OpenRouter, local runners; Bedrock/Workers AI noted as operator-level).
+  - **Default model preset references unavailable models** → an `AiPresetMismatchDialog` (and the
+    banner's secondary state) offering to edit/switch the preset or configure vendors, plus an
+    inline warning in the task inspector's model-preset picker (`TaskRunSettings`).
+
+  The per-workspace model catalog is now loaded on workspace-ready (it was lazily loaded per
+  component) so the readiness signals are populated regardless of which picker mounts; both
+  prompts clear themselves automatically once a usable source / valid preset exists.
+
+## 0.16.0
+
+### Minor Changes
+
+- 5e8ed88: Fix attaching a context document during manual task creation.
+
+  The "Add a task" form attaches context documents through a new inline search picker
+  (`ContextDocumentPicker`) instead of opening a second modal on top of the form.
+  Stacked page-level modals don't interact here, which is why the old "Import a page…"
+  entry appeared to open something but nothing was clickable — the same latent bug that
+  was fixed for context issues. The picker searches the connected source, lists
+  already-imported documents, and accepts a pasted URL/ID, staging the choice so it
+  imports + links once the task is created. This brings the Context documents section to
+  parity with the Context issues picker.
+
+## 0.15.0
+
+### Minor Changes
+
+- 38fac0f: Make creating a task from a tracker issue (GitHub Issues / Jira) discoverable, and
+  fix attaching a context issue during manual task creation.
+
+  - The import modal now searches the tracker by title (using the existing search
+    endpoint), so you can find an issue and "Create task" from it directly — the new
+    task is seeded from the issue's title/description and linked back for writeback,
+    without having to know the issue key.
+  - The "Add a task" form attaches context issues through a new inline search picker
+    (`ContextIssuePicker`) instead of opening a second modal on top of the form.
+    Stacked page-level modals didn't interact, which is why the old "Import an issue…"
+    path appeared to open something but nothing was clickable. The picker searches,
+    lists already-imported issues, and accepts a pasted URL/key, staging the choice so
+    it links once the task is created.
+
 ## 0.14.0
 
 ### Minor Changes

@@ -1,4 +1,4 @@
-import type { TaskSourceDescriptor } from '@cat-factory/kernel'
+import type { TaskSearchRepoScope, TaskSourceDescriptor } from '@cat-factory/kernel'
 
 // GitHub-issues task-source pure logic, kept out of the worker so it is
 // unit-testable without a live API: parsing an issue reference out of user input
@@ -74,4 +74,41 @@ export function parseGitHubIssueExternalId(externalId: string): GitHubIssueExter
 /** The canonical web URL for an issue external id. */
 export function githubIssueUrl(id: GitHubIssueExternalId): string {
   return `https://github.com/${id.owner}/${id.repo}/issues/${id.number}`
+}
+
+/**
+ * Build the GitHub issue-search text, scoping it to a single repo when a service's
+ * repo is known. The `repo:owner/name` qualifier keeps hits from leaking in from
+ * sibling repositories the installation can also see; the adapter appends
+ * `is:issue`, so this returns only the user's text plus the optional scope.
+ */
+export function buildGitHubIssueSearchQuery(query: string, scope?: TaskSearchRepoScope): string {
+  const text = query.trim()
+  if (!scope) return text
+  const repoQualifier = `repo:${scope.owner}/${scope.repo}`
+  return text ? `${repoQualifier} ${text}` : repoQualifier
+}
+
+/**
+ * Resolve raw search input that names ONE specific issue (rather than free text)
+ * into its canonical `owner/repo#number` external id, so the caller can fetch it
+ * and surface it as the exact match instead of a fuzzy search hit. Two forms:
+ *   1. An explicit reference — a full issue URL, the `owner/repo/issues/n` path, or
+ *      the `owner/repo#n` shorthand — parsed verbatim (its own repo wins, even if
+ *      it differs from `scope`, so a pasted URL points at the actual issue).
+ *   2. A bare issue number (`11`) — resolved against `scope` (the service's repo),
+ *      which is the only way to know which repo a lone number belongs to.
+ * Returns null when the input is neither (treat it as free-text search).
+ */
+export function detectExactGitHubIssueRef(
+  query: string,
+  scope?: TaskSearchRepoScope,
+): string | null {
+  const trimmed = query.trim()
+  const ref = parseGitHubIssueRef(trimmed)
+  if (ref) return ref
+  if (scope && /^\d+$/.test(trimmed)) {
+    return githubIssueExternalId({ owner: scope.owner, repo: scope.repo, number: Number(trimmed) })
+  }
+  return null
 }

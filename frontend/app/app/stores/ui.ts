@@ -1,9 +1,18 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { DocumentSourceKind, TaskSourceKind, LodLevel } from '~/types/domain'
+import type { PendingContext } from '~/composables/useContextLinking'
 import { zoomToLod, lodAtLeast } from '~/composables/useSemanticZoom'
 import { useExecutionStore } from '~/stores/execution'
 import { agentKindMeta } from '~/utils/catalog'
+
+/** Values used to seed the add-task form when it is opened from another surface. */
+export interface AddTaskPrefill {
+  title?: string
+  description?: string
+  /** Context items staged on the new task (e.g. the source issue), linked once created. */
+  context?: PendingContext[]
+}
 
 /** Transient UI state: selection, panels, zoom level. */
 export const useUiStore = defineStore('ui', () => {
@@ -33,12 +42,19 @@ export const useUiStore = defineStore('ui', () => {
   // the modal pick a connected one (there is no spawn target — issues are linked
   // to a block for context, not expanded into structure).
   const taskConnect = ref<{ source: TaskSourceKind } | null>(null)
-  const taskImport = ref<{ source: TaskSourceKind | null } | null>(null)
+  // `containerId` (a service frame) scopes the modal: it preselects that frame as
+  // the create-in target AND scopes the issue search to the frame's linked repo.
+  // Null → the unscoped "import an issue" surface (workspace-wide search).
+  const taskImport = ref<{ source: TaskSourceKind | null; containerId: string | null } | null>(null)
 
   // Add-task modal: the container (service frame or module) a new task is being
   // added to, or null when closed. The user types the title + description; nothing
   // is launched until they explicitly start the created task.
   const addTaskContainerId = ref<string | null>(null)
+  // Optional values to seed the add-task form with when it is opened from another
+  // surface (e.g. "create task from issue" prefills the title + stages the issue as
+  // linked context). The user still confirms pipeline / preset before adding.
+  const addTaskPrefill = ref<AddTaskPrefill | null>(null)
 
   // Add-recurring-pipeline modal: the service frame a new recurring pipeline is
   // being added to, or null when closed (mirrors the add-task flow — a button on
@@ -87,6 +103,16 @@ export const useUiStore = defineStore('ui', () => {
   const localModelsOpen = ref(false)
   // Per-workspace settings panel: the OpenRouter dynamic catalog (browse/enable gateway models).
   const openRouterOpen = ref(false)
+
+  // AI-onboarding surfaces (driven by `useAiReadiness`). `aiProviderSetupOpen` is the
+  // "no usable AI source" dialog; `aiPresetMismatchOpen` is the "default preset points at
+  // unavailable models" dialog. The `*Dismissed` flags are per-session: they suppress the
+  // auto-open (and let the banner be dismissed) without permanently hiding the prompt — it
+  // re-evaluates on the next load. Both clear themselves once the underlying gap is closed.
+  const aiProviderSetupOpen = ref(false)
+  const aiPresetMismatchOpen = ref(false)
+  const aiSetupDismissed = ref(false)
+  const aiPresetDismissed = ref(false)
 
   // Dedicated result-view overlay: a step whose agent kind declares a bespoke
   // visualization (via the archetype's `resultView`) opens here instead of the generic
@@ -227,17 +253,19 @@ export const useUiStore = defineStore('ui', () => {
   function closeTaskConnect() {
     taskConnect.value = null
   }
-  function openTaskImport(source: TaskSourceKind | null = null) {
-    taskImport.value = { source }
+  function openTaskImport(source: TaskSourceKind | null = null, containerId: string | null = null) {
+    taskImport.value = { source, containerId }
   }
   function closeTaskImport() {
     taskImport.value = null
   }
-  function openAddTask(containerId: string) {
+  function openAddTask(containerId: string, prefill: AddTaskPrefill | null = null) {
+    addTaskPrefill.value = prefill
     addTaskContainerId.value = containerId
   }
   function closeAddTask() {
     addTaskContainerId.value = null
+    addTaskPrefill.value = null
   }
   function openAddRecurring(frameId: string) {
     addRecurringFrameId.value = frameId
@@ -330,6 +358,39 @@ export const useUiStore = defineStore('ui', () => {
   function closeOpenRouter() {
     openRouterOpen.value = false
   }
+  function openAiProviderSetup() {
+    aiProviderSetupOpen.value = true
+  }
+  function closeAiProviderSetup() {
+    aiProviderSetupOpen.value = false
+  }
+  function openAiPresetMismatch() {
+    aiPresetMismatchOpen.value = true
+  }
+  function closeAiPresetMismatch() {
+    aiPresetMismatchOpen.value = false
+  }
+  // Banner dismissal is distinct from closing the dialog: closing the dialog leaves the
+  // banner so the user can reopen it; dismissing the banner hides the whole prompt for
+  // the session (it re-evaluates on the next load).
+  function dismissAiSetup() {
+    aiProviderSetupOpen.value = false
+    aiSetupDismissed.value = true
+  }
+  function dismissAiPresetMismatch() {
+    aiPresetMismatchOpen.value = false
+    aiPresetDismissed.value = true
+  }
+  // Clear the per-session AI-onboarding state (open dialogs + dismissed flags). Called on
+  // workspace switch: dismissals are per-session-per-workspace, so a prompt dismissed in one
+  // workspace must not suppress the (independent) prompt for another workspace that also
+  // lacks a usable AI source / has a broken default preset.
+  function resetAiOnboarding() {
+    aiProviderSetupOpen.value = false
+    aiPresetMismatchOpen.value = false
+    aiSetupDismissed.value = false
+    aiPresetDismissed.value = false
+  }
   function openRequirementReview(blockId: string) {
     resultView.value = { view: 'requirements-review', blockId, instanceId: null, stepIndex: null }
   }
@@ -369,6 +430,7 @@ export const useUiStore = defineStore('ui', () => {
     taskConnect,
     taskImport,
     addTaskContainerId,
+    addTaskPrefill,
     addRecurringFrameId,
     bootstrapOpen,
     addServiceOpen,
@@ -384,6 +446,10 @@ export const useUiStore = defineStore('ui', () => {
     vendorCredentialsOpen,
     localModelsOpen,
     openRouterOpen,
+    aiProviderSetupOpen,
+    aiPresetMismatchOpen,
+    aiSetupDismissed,
+    aiPresetDismissed,
     resultView,
     closeResultView,
     stepDetail,
@@ -442,6 +508,13 @@ export const useUiStore = defineStore('ui', () => {
     closeLocalModels,
     openOpenRouter,
     closeOpenRouter,
+    openAiProviderSetup,
+    closeAiProviderSetup,
+    openAiPresetMismatch,
+    closeAiPresetMismatch,
+    dismissAiSetup,
+    dismissAiPresetMismatch,
+    resetAiOnboarding,
     openRequirementReview,
     openClarityReview,
     openServiceSpec,

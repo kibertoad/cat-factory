@@ -2,10 +2,12 @@
 // Import an issue from a connected task source (by key or URL) and review the
 // issues already imported into the workspace. An imported issue can be attached
 // to an existing task for context from the inspector (see TaskContextIssues.vue),
-// or turned directly into a new board task here — pick a container (service frame
-// or module) and "Create task", which seeds a leaf block from the issue and links
-// the issue to it for context.
-import type { Block, TaskSourceKind } from '~/types/domain'
+// or turned into a new board task here: pick a container (service frame or module),
+// then click an issue to open the prefilled add-task form (title seeded, issue
+// staged as linked context) where the user confirms the pipeline / presets before
+// creating it. A separate icon button on each row opens the issue on GitHub.
+import type { TaskSearchResult, TaskSourceKind } from '~/types/domain'
+import type { AddTaskPrefill } from '~/stores/ui'
 
 const ui = useUiStore()
 const tasks = useTasksStore()
@@ -23,10 +25,65 @@ const source = ref<TaskSourceKind | undefined>(undefined)
 const ref_ = ref('')
 const importing = ref(false)
 
+// When opened from a service frame the modal is the "create a task from an issue"
+// surface; opened standalone it's the general tracker-issue browser/importer.
+const title = computed(() =>
+  ui.taskImport?.containerId ? 'Create task from issue' : 'Tracker issues',
+)
+
 const sourceItems = computed(() =>
   tasks.offeredSources.map((s) => ({ label: s.label, value: s.source })),
 )
 const descriptor = computed(() => (source.value ? tasks.descriptorFor(source.value) : undefined))
+const searchable = computed(() => descriptor.value?.searchable ?? false)
+
+// The container (service frame or module) a new task is created in. Also the repo
+// scope for the issue search — declared up here so the search watch can read it.
+const containerId = ref<string | undefined>(undefined)
+
+// Browse the tracker by free text so an issue can be turned into a task without
+// knowing its key. Debounced; a created/imported hit also lands in the list below.
+const searchQuery = ref('')
+const searchResults = ref<TaskSearchResult[]>([])
+const searching = ref(false)
+const searchError = ref<string | null>(null)
+
+let searchTimer: ReturnType<typeof setTimeout> | undefined
+// Re-run when the chosen container changes too: a GitHub search is scoped to the
+// selected service's repo, so switching containers re-scopes the results.
+watch([searchQuery, source, () => containerId.value], () => {
+  if (searchTimer) clearTimeout(searchTimer)
+  searchResults.value = []
+  searchError.value = null
+  const q = searchQuery.value.trim()
+  if (!q || !searchable.value) return
+  searchTimer = setTimeout(runSearch, 300)
+})
+
+async function runSearch() {
+  const q = searchQuery.value.trim()
+  if (!q || !source.value) return
+  searching.value = true
+  searchError.value = null
+  try {
+    // Scope to the selected container's repo so hits stay in-repo and a pasted
+    // URL / bare issue number resolves to the exact issue.
+    searchResults.value = await tasks.search(source.value, q, containerId.value)
+  } catch (e) {
+    searchResults.value = []
+    searchError.value = e instanceof Error ? e.message : String(e)
+  } finally {
+    searching.value = false
+  }
+}
+
+// Search hits not yet imported (imported ones already render in the list below).
+const importedIds = computed(
+  () => new Set(tasks.tasks.filter((t) => t.source === source.value).map((t) => t.externalId)),
+)
+const freshHits = computed(() =>
+  searchResults.value.filter((r) => !importedIds.value.has(r.externalId)),
+)
 
 const sourceTasks = computed(() =>
   source.value ? tasks.tasks.filter((t) => t.source === source.value) : [],
@@ -34,7 +91,6 @@ const sourceTasks = computed(() =>
 
 // Containers a new task can be created in: every service frame and module on the
 // board. Modules are labelled with their parent frame so the choice is unambiguous.
-const containerId = ref<string | undefined>(undefined)
 const containerItems = computed(() =>
   board.blocks
     .filter((b) => b.level === 'frame' || b.level === 'module')
@@ -46,36 +102,45 @@ const containerItems = computed(() =>
       value: b.id,
     })),
 )
-// The issue currently being turned into a task (its row shows a spinner).
-const creatingId = ref<string | null>(null)
-
 watch(open, (isOpen) => {
   if (isOpen) {
     ref_.value = ''
+    searchQuery.value = ''
+    searchResults.value = []
+    searchError.value = null
     source.value = ui.taskImport?.source ?? tasks.offeredSources[0]?.source ?? undefined
-    containerId.value = containerItems.value[0]?.value
-    creatingId.value = null
+    // Opened from a service frame → preselect it as the create-in target (and the
+    // search's repo scope); otherwise fall back to the first container on the board.
+    containerId.value = ui.taskImport?.containerId ?? containerItems.value[0]?.value
     tasks.loadTasks().catch(() => {})
   }
 })
 
-async function createTask(externalId: string) {
+// Selecting an issue hands off to the add-task form, prefilled with the issue title
+// and the issue staged as linked context (so agents see its description + comments).
+// The user still confirms pipeline / preset there before the task is created — we do
+// NOT dump the issue body into the description; the link is enough.
+function selectIssue(
+  issue: { externalId: string; title: string; status?: string },
+  needsImport: boolean,
+) {
   if (!source.value || !containerId.value) return
-  creatingId.value = externalId
-  try {
-    const { block } = await tasks.createTaskFromIssue(source.value, externalId, containerId.value)
-    board.upsert(block as Block)
-    toast.add({ title: `Created task "${block.title}"`, icon: 'i-lucide-square-check' })
-  } catch (e) {
-    toast.add({
-      title: 'Could not create task',
-      description: e instanceof Error ? e.message : String(e),
-      icon: 'i-lucide-triangle-alert',
-      color: 'error',
-    })
-  } finally {
-    creatingId.value = null
+  const prefill: AddTaskPrefill = {
+    title: issue.title,
+    context: [
+      {
+        kind: 'task',
+        source: source.value,
+        externalId: issue.externalId,
+        title: `${issue.externalId} · ${issue.title}`,
+        subtitle: issue.status || undefined,
+        icon: descriptor.value?.icon,
+        needsImport,
+      },
+    ],
   }
+  ui.closeTaskImport()
+  ui.openAddTask(containerId.value, prefill)
 }
 
 async function doImport() {
@@ -100,7 +165,7 @@ async function doImport() {
 </script>
 
 <template>
-  <UModal v-model:open="open" title="Import from a task source">
+  <UModal v-model:open="open" :title="title">
     <template #body>
       <!-- Empty state: no source offered (none connected/installed, or all disabled) -->
       <div v-if="!tasks.anyOffered" class="space-y-3 text-center">
@@ -146,61 +211,131 @@ async function doImport() {
           </UButton>
         </div>
 
+        <!-- Browse: search the tracker by title so an issue can be turned into a
+             task without knowing its key. -->
+        <UFormField v-if="searchable" label="Search issues">
+          <UInput
+            v-model="searchQuery"
+            :icon="searching ? 'i-lucide-loader-circle' : 'i-lucide-search'"
+            :ui="{ leadingIcon: searching ? 'animate-spin' : '' }"
+            placeholder="Search by title, paste an issue URL, or type an issue number…"
+            class="w-full"
+          />
+        </UFormField>
+
+        <!-- Shared target container for every "Create task" action below. -->
+        <UFormField
+          v-if="containerItems.length && (freshHits.length || sourceTasks.length)"
+          label="Create tasks in"
+          class="w-72"
+        >
+          <USelect
+            v-model="containerId"
+            :items="containerItems"
+            placeholder="Pick a frame or module"
+            class="w-full"
+          />
+        </UFormField>
+        <p
+          v-else-if="!containerItems.length && (freshHits.length || sourceTasks.length)"
+          class="text-[11px] text-slate-500"
+        >
+          Add a service frame to the board first to create tasks from issues.
+        </p>
+
+        <!-- Search results (not yet imported): click a hit to create a task from it
+             (opens the prefilled add-task form); the icon button views it on GitHub. -->
+        <div v-if="searchError" class="text-[11px] text-amber-400">
+          Search failed: {{ searchError }}
+        </div>
+        <div v-if="freshHits.length" class="space-y-2">
+          <h3 class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+            Search results
+          </h3>
+          <div
+            v-for="hit in freshHits"
+            :key="`hit:${hit.source}:${hit.externalId}`"
+            class="flex items-start justify-between gap-2 rounded-lg border border-slate-800 bg-slate-900/60 p-3 transition-colors hover:border-primary-500/60 hover:bg-slate-900"
+          >
+            <button
+              type="button"
+              class="min-w-0 flex-1 text-left disabled:cursor-not-allowed disabled:opacity-60"
+              :disabled="!containerId"
+              :title="containerId ? 'Create a task from this issue' : 'Pick a container first'"
+              @click="selectIssue(hit, true)"
+            >
+              <span class="block truncate text-sm font-medium text-white">
+                {{ hit.externalId }} · {{ hit.title }}
+              </span>
+              <span v-if="hit.excerpt" class="mt-0.5 line-clamp-2 block text-xs text-slate-500">
+                {{ hit.excerpt }}
+              </span>
+            </button>
+            <div class="flex shrink-0 items-center gap-2">
+              <UBadge v-if="hit.status" color="neutral" variant="soft" size="xs">
+                {{ hit.status }}
+              </UBadge>
+              <UButton
+                color="neutral"
+                variant="ghost"
+                size="xs"
+                icon="i-lucide-external-link"
+                :to="hit.url"
+                target="_blank"
+                rel="noopener"
+                :aria-label="`View ${hit.externalId} on GitHub`"
+              />
+            </div>
+          </div>
+        </div>
+
         <!-- List of already-imported issues -->
         <div v-if="sourceTasks.length" class="space-y-2">
-          <div class="flex items-end justify-between gap-3">
-            <h3 class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-              Imported issues
-            </h3>
-            <UFormField v-if="containerItems.length" label="Create tasks in" size="xs" class="w-56">
-              <USelect
-                v-model="containerId"
-                :items="containerItems"
-                placeholder="Pick a frame or module"
-                class="w-full"
-              />
-            </UFormField>
-          </div>
+          <h3 class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+            Imported issues
+          </h3>
           <div
             v-for="task in sourceTasks"
             :key="`${task.source}:${task.externalId}`"
-            class="rounded-lg border border-slate-800 bg-slate-900/60 p-3"
+            class="flex items-start justify-between gap-2 rounded-lg border border-slate-800 bg-slate-900/60 p-3 transition-colors hover:border-primary-500/60 hover:bg-slate-900"
           >
-            <div class="flex items-start justify-between gap-2">
-              <div class="min-w-0">
-                <a
-                  :href="task.url"
-                  target="_blank"
-                  rel="noopener"
-                  class="truncate text-sm font-medium text-white hover:underline"
-                >
-                  {{ task.externalId }} · {{ task.title }}
-                </a>
-                <p class="mt-0.5 line-clamp-2 text-xs text-slate-500">{{ task.excerpt }}</p>
-              </div>
-              <div class="flex shrink-0 items-center gap-2">
-                <UBadge color="neutral" variant="soft" size="xs">
-                  {{ task.status }}
-                </UBadge>
-                <UButton
-                  color="primary"
-                  variant="soft"
-                  size="xs"
-                  icon="i-lucide-square-check"
-                  :loading="creatingId === task.externalId"
-                  :disabled="!containerId || creatingId !== null"
-                  @click="createTask(task.externalId)"
-                >
-                  Create task
-                </UButton>
-              </div>
+            <button
+              type="button"
+              class="min-w-0 flex-1 text-left disabled:cursor-not-allowed disabled:opacity-60"
+              :disabled="!containerId"
+              :title="containerId ? 'Create a task from this issue' : 'Pick a container first'"
+              @click="selectIssue(task, false)"
+            >
+              <span class="block truncate text-sm font-medium text-white">
+                {{ task.externalId }} · {{ task.title }}
+              </span>
+              <span class="mt-0.5 line-clamp-2 block text-xs text-slate-500">{{
+                task.excerpt
+              }}</span>
+            </button>
+            <div class="flex shrink-0 items-center gap-2">
+              <UBadge color="neutral" variant="soft" size="xs">
+                {{ task.status }}
+              </UBadge>
+              <UButton
+                color="neutral"
+                variant="ghost"
+                size="xs"
+                icon="i-lucide-external-link"
+                :to="task.url"
+                target="_blank"
+                rel="noopener"
+                :aria-label="`View ${task.externalId} on GitHub`"
+              />
             </div>
           </div>
-          <p v-if="!containerItems.length" class="text-[11px] text-slate-500">
-            Add a service frame to the board first to create tasks from issues.
-          </p>
         </div>
-        <p v-else class="text-center text-xs text-slate-500">No issues imported yet.</p>
+        <p
+          v-else-if="!freshHits.length && !searchQuery.trim()"
+          class="text-center text-xs text-slate-500"
+        >
+          No issues imported yet. Search above, or paste an issue URL/key to import one.
+        </p>
       </div>
     </template>
   </UModal>

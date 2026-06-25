@@ -1,4 +1,4 @@
-import type { Clock } from '@cat-factory/kernel'
+import type { Clock, TaskSearchRepoScope } from '@cat-factory/kernel'
 import type { TaskCredentials, TaskSourceProvider, TaskSourceRegistry } from '@cat-factory/kernel'
 import type { TaskRecord, TaskRepository } from '@cat-factory/kernel'
 import type { SourceTask, TaskSearchResult, TaskSourceKind } from '@cat-factory/kernel'
@@ -111,11 +111,16 @@ export class TaskImportService {
    * provider authenticates with the workspace's stored credentials and builds/
    * parses the source-specific query. Throws if the source can't search (no
    * provider `search`), so the controller can answer cleanly.
+   *
+   * `scope` (resolved by the controller from the search's originating block) pins
+   * a repo-backed source to one repository; the provider ignores it when the
+   * source has no repo notion.
    */
   async search(
     workspaceId: string,
     source: TaskSourceKind,
     query: string,
+    scope?: TaskSearchRepoScope,
   ): Promise<TaskSearchResult[]> {
     await requireWorkspace(this.deps.workspaceRepository, workspaceId)
     const provider = this.requireProvider(source)
@@ -123,7 +128,7 @@ export class TaskImportService {
       throw new ValidationError(`The ${source} source does not support search`)
     }
     const credentials = await this.resolveCredentials(workspaceId, source, provider)
-    return provider.search(credentials, query, workspaceId)
+    return provider.search(credentials, query, workspaceId, scope)
   }
 
   /** Every issue imported into the workspace, across sources, as wire shapes. */
