@@ -1,5 +1,11 @@
 # @cat-factory/app
 
+## 0.26.5
+
+### Patch Changes
+
+- 3671fa2: Drop the "Imported issues" list from the task-import modal — it was irrelevant noise. The modal now focuses on searching/pasting an issue to create a task from it.
+
 ## 0.26.4
 
 ### Patch Changes
