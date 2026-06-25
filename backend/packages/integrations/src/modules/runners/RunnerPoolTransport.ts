@@ -33,7 +33,7 @@ export class RunnerPoolTransport implements RunnerTransport {
   dispatch(
     ref: RunnerJobRef,
     spec: Record<string, unknown>,
-    kind: RunnerDispatchKind = 'run',
+    kind: RunnerDispatchKind = 'agent',
     options?: RunnerDispatchOptions,
   ): Promise<void> {
     const jobId = ref.jobId

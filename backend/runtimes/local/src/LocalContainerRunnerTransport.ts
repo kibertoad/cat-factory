@@ -130,7 +130,7 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
   async dispatch(
     ref: RunnerJobRef,
     spec: Record<string, unknown>,
-    kind: RunnerDispatchKind = 'run',
+    kind: RunnerDispatchKind = 'agent',
     options?: RunnerDispatchOptions,
   ): Promise<void> {
     // The container is per-RUN: a run's first step starts it, later steps re-attach to
@@ -148,9 +148,12 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
         image: this.image,
         sharedSecret: this.sharedSecret,
         // The Tester stands its infra up with `docker compose` INSIDE the job container
-        // (Docker-in-Docker), so run that one kind privileged. Runtimes without DinD
-        // ignore it (and the engine never asks them to run local-infra Tester jobs).
-        privileged: kind === 'test' && this.privilegedTestJobs,
+        // (Docker-in-Docker). The container is per-RUN and created by the run's FIRST step
+        // (not the tester), so we can't gate privileged on the dispatch kind — instead the
+        // whole run's container runs privileged whenever local DinD test jobs are enabled
+        // (the default). Runtimes without DinD set `privilegedTestJobs` false, and the engine
+        // refuses a local-infra Tester run there (the `localDind` capability gate).
+        privileged: this.privilegedTestJobs,
         network: this.network,
         env: this.extraEnv,
         instanceSize: options?.instanceSize

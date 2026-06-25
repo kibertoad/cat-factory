@@ -47,65 +47,6 @@ export interface PrSpec {
   body: string
 }
 
-export interface Job extends HarnessAuthFields {
-  /**
-   * Stable identifier for this run's job, supplied by the Worker (the execution
-   * id). The harness keys the background job on it so a re-dispatched `/run`
-   * (a Workflows replay) re-attaches to the running job instead of starting a
-   * duplicate, and the Worker polls `GET /jobs/{jobId}` with the same value.
-   */
-  jobId: string
-  /** Composed role + best-practice fragments; written to Pi's global AGENTS.md context. */
-  systemPrompt: string
-  /** The concrete task prompt handed to Pi. */
-  userPrompt: string
-  /** Upstream model id Pi should request (the proxy locks it anyway). */
-  model: string
-  /** Worker LLM proxy base URL, including /v1. */
-  proxyBaseUrl?: string
-  /** Signed, model-locked proxy session token (carries no provider key). */
-  sessionToken?: string
-  /** Short-lived GitHub installation token for clone + PR. */
-  ghToken: string
-  repo: RepoSpec
-  /** Branch Pi's work is pushed to. */
-  headBranch: string
-  pr: PrSpec
-  /** GitHub REST base (override for GitHub Enterprise / tests). Defaults to api.github.com. */
-  githubApiBase?: string
-  /**
-   * Per-kind web-search guidance composed by the backend (it knows the agent kind;
-   * the harness doesn't). Surfaced in Pi's context only when web search is configured
-   * in the container env. Optional — older dispatchers omit it and the harness falls
-   * back to a generic blurb.
-   */
-  webToolsGuidance?: string
-  /**
-   * Turn on proxy-backed web search for this run: the backend hosts a SearXNG-
-   * compatible search proxy at `${proxyBaseUrl}/web-search`, so the harness points
-   * Pi's `web_search` tool there with the session token as the bearer — no provider
-   * key in the sandbox. Off/absent ⇒ web search is enabled only if a provider key is
-   * present in the container env (the self-hosted runner-pool path).
-   */
-  webSearch?: boolean
-}
-
-/** The /run response. `error` (when set) marks a job-level failure. */
-export interface RunResult {
-  prUrl?: string
-  branch?: string
-  summary?: string
-  /** What the agent actually did this run (surfaces no-op runs on the job view). */
-  stats?: PiRunStats
-  error?: string
-  /**
-   * Token usage from a subscription harness's CLI stream (absent for the
-   * proxy-metered Pi harness). The backend folds it into the leased token's
-   * rolling-window usage for usage-aware rotation + telemetry.
-   */
-  usage?: { inputTokens: number; outputTokens: number }
-}
-
 function str(value: unknown, path: string): string {
   if (typeof value !== 'string' || value.length === 0) {
     throw new Error(`Invalid job: '${path}' must be a non-empty string`)
@@ -220,714 +161,14 @@ function assertAllowedHost(
   }
 }
 
-// ---- Bootstrap job (POST /bootstrap) --------------------------------------
+// ---- Shared repo-bootstrap target ---------------------------------------
 
-/** The reference architecture clone source. */
-export interface BootstrapReferenceSpec {
-  owner: string
-  name: string
-  baseBranch: string
-  cloneUrl: string
-}
-
-/** The new repository the bootstrapped contents are pushed to. */
+/** The new repository a repo-bootstrap run force-pushes its fresh history to. */
 export interface BootstrapTargetSpec {
   owner: string
   name: string
   cloneUrl: string
   defaultBranch: string
-}
-
-/** The job the Worker's ContainerRepoBootstrapper POSTs to /bootstrap. */
-export interface BootstrapJob extends HarnessAuthFields {
-  /**
-   * Stable identifier for this run's job, supplied by the Worker (the bootstrap
-   * job id). The harness keys the background job on it so a re-dispatched
-   * `/bootstrap` (a Workflows replay) re-attaches to the running job instead of
-   * starting a duplicate, and the Worker polls `GET /jobs/{jobId}` with it.
-   */
-  jobId: string
-  /** Bootstrapper role prompt; written to Pi's global AGENTS.md context. */
-  systemPrompt: string
-  /** Free-form instructions handed to Pi as the task prompt. */
-  instructions: string
-  model: string
-  proxyBaseUrl?: string
-  sessionToken?: string
-  ghToken: string
-  /** Reference architecture to clone + adapt; omitted for a from-scratch scaffold. */
-  reference?: BootstrapReferenceSpec
-  target: BootstrapTargetSpec
-  githubApiBase?: string
-}
-
-/** The /bootstrap response. `error` (when set) marks a job-level failure. */
-export interface BootstrapResult {
-  defaultBranch?: string
-  summary?: string
-  /** What the agent actually did this run (surfaces no-op runs on the job view). */
-  stats?: PiRunStats
-  error?: string
-}
-
-/** Validate + narrow an untrusted body into a {@link BootstrapJob}, throwing on bad input. */
-export function parseBootstrapJob(input: unknown): BootstrapJob {
-  if (typeof input !== 'object' || input === null) {
-    throw new Error('Invalid job: body must be an object')
-  }
-  const o = input as Record<string, unknown>
-  const target = (o.target ?? {}) as Record<string, unknown>
-  // `reference` is optional: present for a clone-and-adapt run, absent for a
-  // from-scratch scaffold. Only validate its shape when it is supplied.
-  const reference =
-    o.reference == null
-      ? undefined
-      : (() => {
-          const r = o.reference as Record<string, unknown>
-          return {
-            owner: str(r.owner, 'reference.owner'),
-            name: str(r.name, 'reference.name'),
-            baseBranch: str(r.baseBranch, 'reference.baseBranch'),
-            cloneUrl: str(r.cloneUrl, 'reference.cloneUrl'),
-          }
-        })()
-  const job: BootstrapJob = {
-    jobId: str(o.jobId, 'jobId'),
-    systemPrompt: str(o.systemPrompt, 'systemPrompt'),
-    instructions: str(o.instructions, 'instructions'),
-    model: str(o.model, 'model'),
-    ...parseHarnessAuth(o),
-    ghToken: str(o.ghToken, 'ghToken'),
-    ...(reference ? { reference } : {}),
-    target: {
-      owner: str(target.owner, 'target.owner'),
-      name: str(target.name, 'target.name'),
-      cloneUrl: str(target.cloneUrl, 'target.cloneUrl'),
-      defaultBranch: str(target.defaultBranch, 'target.defaultBranch'),
-    },
-    ...(typeof o.githubApiBase === 'string' ? { githubApiBase: o.githubApiBase } : {}),
-  }
-  // Only after all fields are present: refuse to send the token to a host that
-  // isn't an allowed GitHub host. `reference` is optional, so guard it.
-  if (job.reference) assertAllowedHost(job.reference.cloneUrl, 'reference.cloneUrl')
-  assertAllowedHost(job.target.cloneUrl, 'target.cloneUrl')
-  if (job.githubApiBase) assertAllowedHost(job.githubApiBase, 'githubApiBase')
-  return job
-}
-
-// ---- Blueprint job (POST /blueprint) --------------------------------------
-
-/** How a blueprint run treats any blueprint already in the repo. */
-export type BlueprintMode = 'create' | 'update'
-
-/**
- * The job the Worker's ContainerBlueprinter POSTs to /blueprint. The Blueprinter
- * agent clones `repo` at `branch`, (re)generates the `blueprints/` folder — the
- * canonical `blueprint.json` tree plus its markdown renderings — and commits the
- * result back onto `branch`. Unlike a bootstrap it never resets history or
- * force-pushes: it adds one commit to an existing branch (the repo's default
- * branch after a bootstrap, or the implementation step's PR branch in a pipeline).
- */
-export interface BlueprintJob extends HarnessAuthFields {
-  /** Stable job id (the blueprint run id); keys the background job + poll endpoint. */
-  jobId: string
-  /** Blueprinter role prompt; written to Pi's global AGENTS.md context. */
-  systemPrompt: string
-  /** Free-form guidance handed to Pi as the task prompt (focus areas, granularity). */
-  instructions: string
-  model: string
-  proxyBaseUrl?: string
-  sessionToken?: string
-  ghToken: string
-  repo: RepoSpec
-  /** Branch to clone and commit the regenerated blueprint onto. */
-  branch: string
-  /** `create` ignores any existing blueprint; `update` refines it in place. */
-  mode: BlueprintMode
-  githubApiBase?: string
-}
-
-/** The /blueprint response. `service` (when set) is the decomposition tree to ingest. */
-export interface BlueprintResult {
-  /** The service → modules tree the agent produced (for board ingest). */
-  service?: unknown
-  summary?: string
-  stats?: PiRunStats
-  error?: string
-  /** Subscription-harness CLI token usage (absent for the proxy-metered Pi harness). */
-  usage?: { inputTokens: number; outputTokens: number }
-}
-
-/** Validate + narrow an untrusted body into a {@link BlueprintJob}, throwing on bad input. */
-export function parseBlueprintJob(input: unknown): BlueprintJob {
-  if (typeof input !== 'object' || input === null) {
-    throw new Error('Invalid job: body must be an object')
-  }
-  const o = input as Record<string, unknown>
-  const repo = (o.repo ?? {}) as Record<string, unknown>
-  const mode = o.mode === 'update' ? 'update' : 'create'
-  const job: BlueprintJob = {
-    jobId: str(o.jobId, 'jobId'),
-    systemPrompt: str(o.systemPrompt, 'systemPrompt'),
-    instructions: str(o.instructions, 'instructions'),
-    model: str(o.model, 'model'),
-    ...parseHarnessAuth(o),
-    ghToken: str(o.ghToken, 'ghToken'),
-    repo: parseRepoSpec(repo),
-    branch: str(o.branch, 'branch'),
-    mode,
-    ...(typeof o.githubApiBase === 'string' ? { githubApiBase: o.githubApiBase } : {}),
-  }
-  assertAllowedHost(job.repo.cloneUrl, 'repo.cloneUrl')
-  if (job.githubApiBase) assertAllowedHost(job.githubApiBase, 'githubApiBase')
-  return job
-}
-
-// ---- Spec-writer job (POST /spec) -----------------------------------------
-
-/** The one task's collected (clarified) requirements applied as a spec increment. */
-export interface SpecTaskContext {
-  /** Board block id of the task (provenance / traceability). */
-  id: string
-  title: string
-  description: string
-}
-
-/**
- * The job the Worker's ContainerAgentExecutor POSTs to /spec. The spec-writer agent
- * clones `branch` (the implementation branch the coder will resume — created from
- * `repo.baseBranch` if it does not exist yet), reassembles any existing sharded spec
- * (the BASELINE: the spec as merged before this task), and applies the single `task`'s
- * requirements as an INCREMENT onto it — adding what the task introduces and adjusting
- * existing requirements only where the task changes their behaviour. The harness
- * deterministically renders the complete updated document into the in-repo `spec/`
- * folder (the canonical `spec.json`, the `overview.md` / `rules.md` markdown, the
- * `version.json` manifest and the Gherkin `features/*.feature` files) and commits it
- * onto `branch`. Like the blueprint it adds one commit to a branch — it never resets
- * history or force-pushes. An unmerged sibling task's work is never visible here:
- * the only inputs are this task's requirements and the baseline already on `branch`.
- */
-export interface SpecJob extends HarnessAuthFields {
-  /** Stable job id (the execution id); keys the background job + poll endpoint. */
-  jobId: string
-  /** Spec-writer role prompt; written to Pi's global AGENTS.md context. */
-  systemPrompt: string
-  /** Free-form guidance handed to Pi as the task prompt. */
-  instructions: string
-  model: string
-  proxyBaseUrl?: string
-  sessionToken?: string
-  ghToken: string
-  repo: RepoSpec
-  /** Branch to clone (or create from base) and commit the spec onto. */
-  branch: string
-  /** This task's collected (clarified) requirements, applied as an increment. */
-  task: SpecTaskContext
-  githubApiBase?: string
-}
-
-/** The /spec response. `spec` (when set) is the doc to ingest. */
-export interface SpecResult {
-  /** The unified specification document the agent produced (for board ingest). */
-  spec?: unknown
-  summary?: string
-  stats?: PiRunStats
-  error?: string
-  /** Subscription-harness CLI token usage (absent for the proxy-metered Pi harness). */
-  usage?: { inputTokens: number; outputTokens: number }
-}
-
-/** Validate + narrow an untrusted body into a {@link SpecJob}, throwing on bad input. */
-export function parseSpecJob(input: unknown): SpecJob {
-  if (typeof input !== 'object' || input === null) {
-    throw new Error('Invalid job: body must be an object')
-  }
-  const o = input as Record<string, unknown>
-  const repo = (o.repo ?? {}) as Record<string, unknown>
-  // `task` is lenient on its sub-fields (a missing title/description degrades to a
-  // thinner increment context, not a failed run) but the object itself is required.
-  const t = (typeof o.task === 'object' && o.task !== null ? o.task : {}) as Record<string, unknown>
-  const task: SpecTaskContext = {
-    id: typeof t.id === 'string' ? t.id : '',
-    title: typeof t.title === 'string' ? t.title : '',
-    description: typeof t.description === 'string' ? t.description : '',
-  }
-  const job: SpecJob = {
-    jobId: str(o.jobId, 'jobId'),
-    systemPrompt: str(o.systemPrompt, 'systemPrompt'),
-    instructions: str(o.instructions, 'instructions'),
-    model: str(o.model, 'model'),
-    ...parseHarnessAuth(o),
-    ghToken: str(o.ghToken, 'ghToken'),
-    repo: parseRepoSpec(repo),
-    branch: str(o.branch, 'branch'),
-    task,
-    ...(typeof o.githubApiBase === 'string' ? { githubApiBase: o.githubApiBase } : {}),
-  }
-  assertAllowedHost(job.repo.cloneUrl, 'repo.cloneUrl')
-  if (job.githubApiBase) assertAllowedHost(job.githubApiBase, 'githubApiBase')
-  return job
-}
-
-// ---- Read-only exploration job (POST /explore) ----------------------------
-
-/**
- * The job the Worker's ContainerAgentExecutor POSTs to /explore for the read-only
- * agents (architect, analysis). The agent clones `branch`, explores the checkout and
- * returns a prose report/proposal — it makes NO edits, opens NO branch or PR, and an
- * edit-free run is the expected outcome (NOT a failure, unlike /run). Mirrors the
- * merger's non-pushing shape; the `summary` it returns is the deliverable.
- */
-export interface ExploreJob extends HarnessAuthFields {
-  jobId: string
-  /**
-   * Short label for the temp dir + logs (e.g. the agent kind). Named `label`, not
-   * `kind`, because `kind` is the reserved dispatch discriminator the transport
-   * stamps onto every job body to route it to the right harness agent.
-   */
-  label?: string
-  /** Composed role + best-practice fragments; written to Pi's global AGENTS.md context. */
-  systemPrompt: string
-  /** The concrete task prompt handed to Pi. */
-  userPrompt: string
-  model: string
-  proxyBaseUrl?: string
-  sessionToken?: string
-  ghToken: string
-  repo: RepoSpec
-  /** Branch to clone and explore read-only (no branch is created and nothing is pushed). */
-  branch: string
-  /** Per-kind web-search guidance; surfaced only when web search is configured. */
-  webToolsGuidance?: string
-  /** Enable proxy-backed web search for this run. */
-  webSearch?: boolean
-  githubApiBase?: string
-}
-
-/** The /explore response: `summary` carries the agent's prose report/proposal. */
-export interface ExploreResult {
-  summary?: string
-  stats?: PiRunStats
-  error?: string
-  /** Subscription-harness CLI token usage (absent for the proxy-metered Pi harness). */
-  usage?: { inputTokens: number; outputTokens: number }
-}
-
-/** Validate + narrow an untrusted body into an {@link ExploreJob}, throwing on bad input. */
-export function parseExploreJob(input: unknown): ExploreJob {
-  if (typeof input !== 'object' || input === null) {
-    throw new Error('Invalid job: body must be an object')
-  }
-  const o = input as Record<string, unknown>
-  const repo = (o.repo ?? {}) as Record<string, unknown>
-  const job: ExploreJob = {
-    jobId: str(o.jobId, 'jobId'),
-    systemPrompt: str(o.systemPrompt, 'systemPrompt'),
-    userPrompt: str(o.userPrompt, 'userPrompt'),
-    model: str(o.model, 'model'),
-    ...parseHarnessAuth(o),
-    ghToken: str(o.ghToken, 'ghToken'),
-    repo: parseRepoSpec(repo),
-    branch: str(o.branch, 'branch'),
-    ...(typeof o.label === 'string' && o.label ? { label: o.label } : {}),
-    ...(typeof o.webToolsGuidance === 'string' ? { webToolsGuidance: o.webToolsGuidance } : {}),
-    ...(o.webSearch === true ? { webSearch: true } : {}),
-    ...(typeof o.githubApiBase === 'string' ? { githubApiBase: o.githubApiBase } : {}),
-  }
-  assertAllowedHost(job.repo.cloneUrl, 'repo.cloneUrl')
-  if (job.githubApiBase) assertAllowedHost(job.githubApiBase, 'githubApiBase')
-  return job
-}
-
-// ---- CI-fixer job (POST /ci-fix) ------------------------------------------
-
-/**
- * The job the Worker's ContainerAgentExecutor POSTs to /ci-fix when a PR's CI is
- * red. The fixer clones the PR head `branch`, runs the failing build/tests, fixes
- * them and pushes back onto the SAME branch (no new branch, no new PR) so CI
- * re-runs. The failing-check summary is folded into `userPrompt` by the Worker.
- */
-export interface CiFixerJob extends HarnessAuthFields {
-  jobId: string
-  systemPrompt: string
-  userPrompt: string
-  model: string
-  proxyBaseUrl?: string
-  sessionToken?: string
-  ghToken: string
-  repo: RepoSpec
-  /** The PR head branch to clone and push fixes onto. */
-  branch: string
-  githubApiBase?: string
-  /** Per-kind web-search guidance (backend-composed); surfaced only when web search is on. */
-  webToolsGuidance?: string
-  /** Enable proxy-backed web search for this run (see {@link Job.webSearch}). */
-  webSearch?: boolean
-}
-
-/** The /ci-fix response. `pushed` says whether a fix commit was pushed. */
-export interface CiFixerResult {
-  pushed?: boolean
-  summary?: string
-  stats?: PiRunStats
-  error?: string
-  /** Subscription-harness CLI token usage (absent for the proxy-metered Pi harness). */
-  usage?: { inputTokens: number; outputTokens: number }
-}
-
-/** Validate + narrow an untrusted body into a {@link CiFixerJob}, throwing on bad input. */
-export function parseCiFixerJob(input: unknown): CiFixerJob {
-  if (typeof input !== 'object' || input === null) {
-    throw new Error('Invalid job: body must be an object')
-  }
-  const o = input as Record<string, unknown>
-  const repo = (o.repo ?? {}) as Record<string, unknown>
-  const job: CiFixerJob = {
-    jobId: str(o.jobId, 'jobId'),
-    systemPrompt: str(o.systemPrompt, 'systemPrompt'),
-    userPrompt: str(o.userPrompt, 'userPrompt'),
-    model: str(o.model, 'model'),
-    ...parseHarnessAuth(o),
-    ghToken: str(o.ghToken, 'ghToken'),
-    repo: parseRepoSpec(repo),
-    branch: str(o.branch, 'branch'),
-    ...(typeof o.githubApiBase === 'string' ? { githubApiBase: o.githubApiBase } : {}),
-    ...(typeof o.webToolsGuidance === 'string' ? { webToolsGuidance: o.webToolsGuidance } : {}),
-    ...(o.webSearch === true ? { webSearch: true } : {}),
-  }
-  assertAllowedHost(job.repo.cloneUrl, 'repo.cloneUrl')
-  if (job.githubApiBase) assertAllowedHost(job.githubApiBase, 'githubApiBase')
-  return job
-}
-
-// ---- Conflict-resolver job (POST /resolve-conflicts) ----------------------
-
-/**
- * The job the Worker's ContainerAgentExecutor POSTs to /resolve-conflicts when a
- * PR cannot be merged because it conflicts with its base. The resolver clones the
- * PR head `branch` (full history), merges `repo.baseBranch` into it to surface the
- * conflicts, runs Pi to resolve them, completes the merge commit and pushes back
- * onto the SAME branch (no new branch / PR) so the PR becomes mergeable and CI
- * re-runs. Like the CI-fixer it works on the existing PR branch in place.
- */
-export interface ConflictResolverJob extends HarnessAuthFields {
-  jobId: string
-  systemPrompt: string
-  userPrompt: string
-  model: string
-  proxyBaseUrl?: string
-  sessionToken?: string
-  ghToken: string
-  repo: RepoSpec
-  /** The PR head branch to clone, merge the base into, and push the resolution onto. */
-  branch: string
-  githubApiBase?: string
-}
-
-/** The /resolve-conflicts response. `resolved` says whether the branch is now mergeable. */
-export interface ConflictResolverResult {
-  resolved?: boolean
-  summary?: string
-  stats?: PiRunStats
-  error?: string
-  /** Subscription-harness CLI token usage (absent for the proxy-metered Pi harness). */
-  usage?: { inputTokens: number; outputTokens: number }
-}
-
-/** Validate + narrow an untrusted body into a {@link ConflictResolverJob}, throwing on bad input. */
-export function parseConflictResolverJob(input: unknown): ConflictResolverJob {
-  if (typeof input !== 'object' || input === null) {
-    throw new Error('Invalid job: body must be an object')
-  }
-  const o = input as Record<string, unknown>
-  const repo = (o.repo ?? {}) as Record<string, unknown>
-  const job: ConflictResolverJob = {
-    jobId: str(o.jobId, 'jobId'),
-    systemPrompt: str(o.systemPrompt, 'systemPrompt'),
-    userPrompt: str(o.userPrompt, 'userPrompt'),
-    model: str(o.model, 'model'),
-    ...parseHarnessAuth(o),
-    ghToken: str(o.ghToken, 'ghToken'),
-    repo: parseRepoSpec(repo),
-    branch: str(o.branch, 'branch'),
-    ...(typeof o.githubApiBase === 'string' ? { githubApiBase: o.githubApiBase } : {}),
-  }
-  assertAllowedHost(job.repo.cloneUrl, 'repo.cloneUrl')
-  if (job.githubApiBase) assertAllowedHost(job.githubApiBase, 'githubApiBase')
-  return job
-}
-
-// ---- Merger job (POST /merge) ---------------------------------------------
-
-/**
- * The job the Worker's ContainerAgentExecutor POSTs to /merge. The merger clones
- * the PR head `branch`, assesses the diff vs `repo.baseBranch` (complexity / risk
- * / impact) and returns ONLY a JSON assessment — it makes NO commits (the Worker
- * performs the real merge through the GitHub API on the engine's verdict).
- */
-export interface MergerJob extends HarnessAuthFields {
-  jobId: string
-  systemPrompt: string
-  instructions: string
-  model: string
-  proxyBaseUrl?: string
-  sessionToken?: string
-  ghToken: string
-  repo: RepoSpec
-  /** The PR head branch to clone and assess against the base branch. */
-  branch: string
-  /** The PR number, for the agent's context (optional). */
-  prNumber?: number
-  githubApiBase?: string
-}
-
-/** The /merge response. `assessment` (when set) is the scores object to ingest. */
-export interface MergerResult {
-  assessment?: unknown
-  summary?: string
-  stats?: PiRunStats
-  error?: string
-  /** Subscription-harness CLI token usage (absent for the proxy-metered Pi harness). */
-  usage?: { inputTokens: number; outputTokens: number }
-}
-
-/** Validate + narrow an untrusted body into a {@link MergerJob}, throwing on bad input. */
-export function parseMergerJob(input: unknown): MergerJob {
-  if (typeof input !== 'object' || input === null) {
-    throw new Error('Invalid job: body must be an object')
-  }
-  const o = input as Record<string, unknown>
-  const repo = (o.repo ?? {}) as Record<string, unknown>
-  const job: MergerJob = {
-    jobId: str(o.jobId, 'jobId'),
-    systemPrompt: str(o.systemPrompt, 'systemPrompt'),
-    instructions: str(o.instructions, 'instructions'),
-    model: str(o.model, 'model'),
-    ...parseHarnessAuth(o),
-    ghToken: str(o.ghToken, 'ghToken'),
-    repo: parseRepoSpec(repo),
-    branch: str(o.branch, 'branch'),
-    ...(typeof o.prNumber === 'number' ? { prNumber: o.prNumber } : {}),
-    ...(typeof o.githubApiBase === 'string' ? { githubApiBase: o.githubApiBase } : {}),
-  }
-  assertAllowedHost(job.repo.cloneUrl, 'repo.cloneUrl')
-  if (job.githubApiBase) assertAllowedHost(job.githubApiBase, 'githubApiBase')
-  return job
-}
-
-// ---- On-call job (POST /on-call) ------------------------------------------
-
-/**
- * The job the backend's ContainerAgentExecutor POSTs to /on-call on a post-release
- * regression. The released PR has already merged (and its work branch was deleted), so
- * the on-call agent clones the `branch` (the BASE branch, which contains the merged
- * change) and locates the merged commit — via the PR number / the now-historical
- * `headBranch` — to correlate its diff with the Datadog regression evidence (carried in
- * `userPrompt`). It returns ONLY a JSON assessment — it makes NO commits and reverts
- * nothing (a human decides).
- */
-export interface OnCallJob extends HarnessAuthFields {
-  jobId: string
-  systemPrompt: string
-  userPrompt: string
-  model: string
-  proxyBaseUrl?: string
-  sessionToken?: string
-  ghToken: string
-  repo: RepoSpec
-  /** The branch to clone — the base branch, which contains the merged release. */
-  branch: string
-  /** The deleted PR head branch name, for locating the merged commit (optional). */
-  headBranch?: string
-  /** The PR number, for the agent's context (optional). */
-  prNumber?: number
-  githubApiBase?: string
-}
-
-/** The /on-call response. `onCallAssessment` (when set) is the assessment to ingest. */
-export interface OnCallResult {
-  onCallAssessment?: unknown
-  summary?: string
-  stats?: PiRunStats
-  error?: string
-  usage?: { inputTokens: number; outputTokens: number }
-}
-
-/** Validate + narrow an untrusted body into an {@link OnCallJob}, throwing on bad input. */
-export function parseOnCallJob(input: unknown): OnCallJob {
-  if (typeof input !== 'object' || input === null) {
-    throw new Error('Invalid job: body must be an object')
-  }
-  const o = input as Record<string, unknown>
-  const repo = (o.repo ?? {}) as Record<string, unknown>
-  const job: OnCallJob = {
-    jobId: str(o.jobId, 'jobId'),
-    systemPrompt: str(o.systemPrompt, 'systemPrompt'),
-    userPrompt: str(o.userPrompt, 'userPrompt'),
-    model: str(o.model, 'model'),
-    ...parseHarnessAuth(o),
-    ghToken: str(o.ghToken, 'ghToken'),
-    repo: parseRepoSpec(repo),
-    branch: str(o.branch, 'branch'),
-    ...(typeof o.headBranch === 'string' ? { headBranch: o.headBranch } : {}),
-    ...(typeof o.prNumber === 'number' ? { prNumber: o.prNumber } : {}),
-    ...(typeof o.githubApiBase === 'string' ? { githubApiBase: o.githubApiBase } : {}),
-  }
-  assertAllowedHost(job.repo.cloneUrl, 'repo.cloneUrl')
-  if (job.githubApiBase) assertAllowedHost(job.githubApiBase, 'githubApiBase')
-  return job
-}
-
-/** Validate + narrow an untrusted body into a {@link Job}, throwing on bad input. */
-export function parseJob(input: unknown): Job {
-  if (typeof input !== 'object' || input === null) {
-    throw new Error('Invalid job: body must be an object')
-  }
-  const o = input as Record<string, unknown>
-  const repo = (o.repo ?? {}) as Record<string, unknown>
-  const pr = (o.pr ?? {}) as Record<string, unknown>
-  const job: Job = {
-    jobId: str(o.jobId, 'jobId'),
-    systemPrompt: str(o.systemPrompt, 'systemPrompt'),
-    userPrompt: str(o.userPrompt, 'userPrompt'),
-    model: str(o.model, 'model'),
-    ...parseHarnessAuth(o),
-    ghToken: str(o.ghToken, 'ghToken'),
-    repo: parseRepoSpec(repo),
-    headBranch: str(o.headBranch, 'headBranch'),
-    pr: {
-      title: str(pr.title, 'pr.title'),
-      body: typeof pr.body === 'string' ? pr.body : '',
-    },
-    ...(typeof o.githubApiBase === 'string' ? { githubApiBase: o.githubApiBase } : {}),
-    ...(typeof o.webToolsGuidance === 'string' ? { webToolsGuidance: o.webToolsGuidance } : {}),
-    ...(o.webSearch === true ? { webSearch: true } : {}),
-  }
-  // Only after all fields are present: refuse to send the token to a host that
-  // isn't an allowed GitHub host.
-  assertAllowedHost(job.repo.cloneUrl, 'repo.cloneUrl')
-  if (job.githubApiBase) assertAllowedHost(job.githubApiBase, 'githubApiBase')
-  return job
-}
-
-// ---- Tester job (POST /test) ----------------------------------------------
-
-/** How the Tester stands up its dependencies for a run. */
-export interface TesterTestSpec {
-  /** `local` stands infra up via docker-compose; `ephemeral` tests a deployed env. */
-  environment: 'local' | 'ephemeral'
-  /** Local mode: the service declared no infra dependencies (spin nothing up). */
-  noInfraDependencies?: boolean
-  /** Local mode: repo-relative docker-compose path to stand the dependencies up. */
-  composePath?: string
-  /** Ephemeral mode: the provisioned environment URL to test against. */
-  environmentUrl?: string
-}
-
-/**
- * The job the backend's ContainerAgentExecutor POSTs to /test. The tester clones the
- * PR head `branch`, brings its dependencies up per `test` (local docker-compose infra
- * or an ephemeral env), runs the suite and returns ONLY a structured JSON report — it
- * makes NO commits (the engine loops the `fixer` on a withheld greenlight).
- */
-export interface TesterJob extends HarnessAuthFields {
-  jobId: string
-  systemPrompt: string
-  userPrompt: string
-  model: string
-  proxyBaseUrl?: string
-  sessionToken?: string
-  ghToken: string
-  repo: RepoSpec
-  /** The PR head branch to clone and test. */
-  branch: string
-  /** How to stand the dependencies up for this run. */
-  test: TesterTestSpec
-  githubApiBase?: string
-  webToolsGuidance?: string
-  webSearch?: boolean
-}
-
-/** The /test response. `report` (when set) is the structured test report to ingest. */
-export interface TesterResult {
-  report?: unknown
-  summary?: string
-  stats?: PiRunStats
-  error?: string
-  usage?: { inputTokens: number; outputTokens: number }
-}
-
-/** Parse the Tester's dependency-stand-up spec, defaulting to local mode. */
-function parseTesterTestSpec(value: unknown): TesterTestSpec {
-  const o = (typeof value === 'object' && value !== null ? value : {}) as Record<string, unknown>
-  const environment = o.environment === 'ephemeral' ? 'ephemeral' : 'local'
-  return {
-    environment,
-    ...(o.noInfraDependencies === true ? { noInfraDependencies: true } : {}),
-    ...(typeof o.composePath === 'string' && o.composePath ? { composePath: o.composePath } : {}),
-    ...(typeof o.environmentUrl === 'string' && o.environmentUrl
-      ? { environmentUrl: o.environmentUrl }
-      : {}),
-  }
-}
-
-/** Validate + narrow an untrusted body into a {@link TesterJob}, throwing on bad input. */
-export function parseTesterJob(input: unknown): TesterJob {
-  if (typeof input !== 'object' || input === null) {
-    throw new Error('Invalid job: body must be an object')
-  }
-  const o = input as Record<string, unknown>
-  const repo = (o.repo ?? {}) as Record<string, unknown>
-  const job: TesterJob = {
-    jobId: str(o.jobId, 'jobId'),
-    systemPrompt: str(o.systemPrompt, 'systemPrompt'),
-    userPrompt: str(o.userPrompt, 'userPrompt'),
-    model: str(o.model, 'model'),
-    ...parseHarnessAuth(o),
-    ghToken: str(o.ghToken, 'ghToken'),
-    repo: parseRepoSpec(repo),
-    branch: str(o.branch, 'branch'),
-    test: parseTesterTestSpec(o.test),
-    ...(typeof o.githubApiBase === 'string' ? { githubApiBase: o.githubApiBase } : {}),
-    ...(typeof o.webToolsGuidance === 'string' ? { webToolsGuidance: o.webToolsGuidance } : {}),
-    ...(o.webSearch === true ? { webSearch: true } : {}),
-  }
-  assertAllowedHost(job.repo.cloneUrl, 'repo.cloneUrl')
-  if (job.githubApiBase) assertAllowedHost(job.githubApiBase, 'githubApiBase')
-  return job
-}
-
-// ---- Fixer job (POST /fix-tests) ------------------------------------------
-
-/**
- * The job the backend's ContainerAgentExecutor POSTs to /fix-tests when a Tester
- * withholds its greenlight. The fixer clones the PR head `branch`, applies fixes for
- * the concerns (folded into `userPrompt` by the backend) and pushes back onto the
- * SAME branch (no new branch / PR) so the Tester can re-run. Mirrors the CI-fixer.
- */
-export interface FixerJob extends HarnessAuthFields {
-  jobId: string
-  systemPrompt: string
-  userPrompt: string
-  model: string
-  proxyBaseUrl?: string
-  sessionToken?: string
-  ghToken: string
-  repo: RepoSpec
-  /** The PR head branch to clone and push fixes onto. */
-  branch: string
-  githubApiBase?: string
-  webToolsGuidance?: string
-  webSearch?: boolean
-}
-
-/** The /fix-tests response. `pushed` says whether a fix commit was pushed. */
-export interface FixerResult {
-  pushed?: boolean
-  summary?: string
-  stats?: PiRunStats
-  error?: string
-  usage?: { inputTokens: number; outputTokens: number }
 }
 
 // ---- Generic agent job (POST /jobs, kind=agent) ---------------------------
@@ -957,6 +198,25 @@ export interface AgentInfraSpec {
   composePath?: string
   /** Ephemeral mode: the provisioned environment URL (echoed for context only). */
   environmentUrl?: string
+}
+
+/**
+ * Coding mode (repo bootstrap): the divergent push of a bootstrap run. Instead of pushing
+ * a work branch on the cloned repo, the agent's result is force-pushed as a fresh
+ * single-commit history to a SEPARATE, pre-created target repository's default branch.
+ * Clone-and-adapt: `job.repo` is the reference architecture to clone + adapt, `target` is
+ * the new repo. From-scratch (`fromScratch`): start from an empty directory (the agent
+ * scaffolds), `job.repo` is unused as a clone source. Absent ⇒ the ordinary coding flow.
+ */
+export interface AgentBootstrapSpec {
+  /** The new repository the bootstrapped contents are pushed to (the push target). */
+  target: BootstrapTargetSpec
+  /** Reset history to a single commit before pushing (bootstrap always sets this). */
+  reinit?: boolean
+  /** Force-push (the fresh history shares no ancestor with the target's boilerplate). */
+  forcePush?: boolean
+  /** Scaffold from an empty directory instead of cloning `job.repo` (no reference). */
+  fromScratch?: boolean
 }
 
 /** How an explore agent's reply is consumed. */
@@ -997,6 +257,19 @@ export interface AgentJob extends HarnessAuthFields {
   webSearch?: boolean
   /** Full-history clone (needed to diff against / merge the base). Default shallow. */
   full?: boolean
+  /**
+   * Coding mode (conflict-resolver): merge `origin/<mergeBase>` into the cloned PR branch
+   * to surface the Git conflicts, run the agent to resolve them, then complete the merge
+   * commit and push back onto the SAME branch (no new branch / PR). Requires `full` so the
+   * merge base + `origin/<mergeBase>` are present. Absent ⇒ the ordinary coding flow.
+   */
+  mergeBase?: string
+  /**
+   * Coding mode (repo bootstrap): force-push the agent's output as a fresh single-commit
+   * history to a separate, pre-created target repo (clone + adapt `repo`, or scaffold from
+   * scratch). Absent ⇒ the ordinary clone-edit-push-on-the-same-repo coding flow.
+   */
+  bootstrap?: AgentBootstrapSpec
   /** Explore mode: how to consume the reply. Absent ⇒ prose. */
   output?: AgentOutputSpec
   /**
@@ -1032,8 +305,32 @@ export interface AgentResult {
   pushed?: boolean
   prUrl?: string
   branch?: string
+  /** Coding mode (bootstrap): the default branch the bootstrapped contents were pushed to. */
+  defaultBranch?: string
   error?: string
   usage?: { inputTokens: number; outputTokens: number }
+}
+
+/** Parse the coding-mode bootstrap spec, or undefined when absent. Validates the target. */
+function parseAgentBootstrapSpec(value: unknown): AgentBootstrapSpec | undefined {
+  if (typeof value !== 'object' || value === null) return undefined
+  const o = value as Record<string, unknown>
+  const t = (typeof o.target === 'object' && o.target !== null ? o.target : {}) as Record<
+    string,
+    unknown
+  >
+  const target: BootstrapTargetSpec = {
+    owner: str(t.owner, 'bootstrap.target.owner'),
+    name: str(t.name, 'bootstrap.target.name'),
+    cloneUrl: str(t.cloneUrl, 'bootstrap.target.cloneUrl'),
+    defaultBranch: str(t.defaultBranch, 'bootstrap.target.defaultBranch'),
+  }
+  return {
+    target,
+    ...(o.reinit === true ? { reinit: true } : {}),
+    ...(o.forcePush === true ? { forcePush: true } : {}),
+    ...(o.fromScratch === true ? { fromScratch: true } : {}),
+  }
 }
 
 /** Parse the explore-mode infra stand-up spec, or undefined when absent/unrecognised. */
@@ -1087,6 +384,7 @@ export function parseAgentJob(input: unknown): AgentJob {
         })()
       : undefined
   const infra = parseAgentInfraSpec(o.infra)
+  const bootstrap = parseAgentBootstrapSpec(o.bootstrap)
   const job: AgentJob = {
     jobId: str(o.jobId, 'jobId'),
     mode,
@@ -1101,6 +399,8 @@ export function parseAgentJob(input: unknown): AgentJob {
     ...(typeof o.webToolsGuidance === 'string' ? { webToolsGuidance: o.webToolsGuidance } : {}),
     ...(o.webSearch === true ? { webSearch: true } : {}),
     ...(o.full === true ? { full: true } : {}),
+    ...(typeof o.mergeBase === 'string' && o.mergeBase ? { mergeBase: o.mergeBase } : {}),
+    ...(bootstrap ? { bootstrap } : {}),
     ...(output ? { output } : {}),
     ...(infra ? { infra } : {}),
     ...(typeof o.newBranch === 'string' && o.newBranch ? { newBranch: o.newBranch } : {}),
@@ -1113,30 +413,8 @@ export function parseAgentJob(input: unknown): AgentJob {
   }
   assertAllowedHost(job.repo.cloneUrl, 'repo.cloneUrl')
   if (job.githubApiBase) assertAllowedHost(job.githubApiBase, 'githubApiBase')
-  return job
-}
-
-/** Validate + narrow an untrusted body into a {@link FixerJob}, throwing on bad input. */
-export function parseFixerJob(input: unknown): FixerJob {
-  if (typeof input !== 'object' || input === null) {
-    throw new Error('Invalid job: body must be an object')
-  }
-  const o = input as Record<string, unknown>
-  const repo = (o.repo ?? {}) as Record<string, unknown>
-  const job: FixerJob = {
-    jobId: str(o.jobId, 'jobId'),
-    systemPrompt: str(o.systemPrompt, 'systemPrompt'),
-    userPrompt: str(o.userPrompt, 'userPrompt'),
-    model: str(o.model, 'model'),
-    ...parseHarnessAuth(o),
-    ghToken: str(o.ghToken, 'ghToken'),
-    repo: parseRepoSpec(repo),
-    branch: str(o.branch, 'branch'),
-    ...(typeof o.githubApiBase === 'string' ? { githubApiBase: o.githubApiBase } : {}),
-    ...(typeof o.webToolsGuidance === 'string' ? { webToolsGuidance: o.webToolsGuidance } : {}),
-    ...(o.webSearch === true ? { webSearch: true } : {}),
-  }
-  assertAllowedHost(job.repo.cloneUrl, 'repo.cloneUrl')
-  if (job.githubApiBase) assertAllowedHost(job.githubApiBase, 'githubApiBase')
+  // Bootstrap pushes the result to a SEPARATE target repo, so its clone URL must be an
+  // allowed GitHub host too (the installation token is sent to it on the force-push).
+  if (job.bootstrap) assertAllowedHost(job.bootstrap.target.cloneUrl, 'bootstrap.target.cloneUrl')
   return job
 }

@@ -180,20 +180,22 @@ describe('HttpRunnerPoolProvider', () => {
     expect(view.result?.prUrl).toBe('https://github.com/o/r/pull/9')
   })
 
-  it('forwards the whole structured result envelope via resultPath (test report, etc.)', async () => {
-    const report = {
-      greenlight: false,
-      summary: 'two checks failed',
-      tested: ['login'],
-      outcomes: [{ name: 'login', status: 'failed' }],
-      concerns: [{ title: 'bug', detail: 'x', severity: 'high' }],
-    }
+  it('forwards the slimmed result scalars via resultPath and drops legacy structured fields', async () => {
+    // The bespoke per-kind result channels (`report`/`service`/`assessment`/`resolved`/…)
+    // were removed when every built-in agent migrated onto the single `agent` kind — its
+    // structured doc now rides `custom` (covered below). A pool that still returns an old
+    // `report` field has it dropped (not a known channel); the scalars pass through.
     vi.stubGlobal('fetch', () =>
       Promise.resolve(
         new Response(
           JSON.stringify({
             state: 'succeeded',
-            result: { report, summary: 'tested', usage: { inputTokens: 10, outputTokens: 5 } },
+            result: {
+              report: { greenlight: false },
+              pushed: true,
+              summary: 'tested',
+              usage: { inputTokens: 10, outputTokens: 5 },
+            },
           }),
           { status: 200 },
         ),
@@ -210,10 +212,11 @@ describe('HttpRunnerPoolProvider', () => {
       resolveSecret: () => 't',
     })
     expect(view.state).toBe('done')
-    // The structured test report reaches the engine intact (previously dropped).
-    expect(view.result?.report).toEqual(report)
-    expect(view.result?.usage).toEqual({ inputTokens: 10, outputTokens: 5 })
     expect(view.result?.summary).toBe('tested')
+    expect(view.result?.pushed).toBe(true)
+    expect(view.result?.usage).toEqual({ inputTokens: 10, outputTokens: 5 })
+    // The legacy `report` channel no longer exists on the result, so it is dropped.
+    expect((view.result as Record<string, unknown>).report).toBeUndefined()
   })
 
   it('forwards the generic `custom` structured channel (migrated agent kinds)', async () => {

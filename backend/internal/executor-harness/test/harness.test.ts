@@ -4,7 +4,6 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { parseBootstrapJob, parseConflictResolverJob, parseJob } from '../src/job.js'
 import { readFile } from 'node:fs/promises'
 import {
   DEFAULT_PROGRESS_GUARD_LIMITS,
@@ -31,117 +30,9 @@ import {
   refreshFromBaseIfClean,
   unmergedPaths,
 } from '../src/git.js'
-import { producedRepoContent } from '../src/bootstrap.js'
+import { producedRepoContent } from '../src/agent.js'
 
 const exec = promisify(execFile)
-
-const validBootstrapBody = {
-  jobId: 'boot_123',
-  systemPrompt: 'You are a bootstrapper.',
-  instructions: 'Rename the service.',
-  model: 'qwen3-max',
-  proxyBaseUrl: 'https://w/v1',
-  sessionToken: 'sess',
-  ghToken: 'ght',
-  reference: {
-    owner: 'acme',
-    name: 'service-template',
-    baseBranch: 'main',
-    cloneUrl: 'https://github.com/acme/service-template.git',
-  },
-  target: {
-    owner: 'acme',
-    name: 'new-service',
-    cloneUrl: 'https://github.com/acme/new-service.git',
-    defaultBranch: 'main',
-  },
-}
-
-describe('parseBootstrapJob', () => {
-  it('accepts a well-formed bootstrap job', () => {
-    const job = parseBootstrapJob(validBootstrapBody)
-    expect(job.reference?.name).toBe('service-template')
-    expect(job.target.name).toBe('new-service')
-    expect(job.instructions).toBe('Rename the service.')
-  })
-
-  it('accepts a from-scratch job with no reference', () => {
-    const { reference: _reference, ...withoutReference } = validBootstrapBody
-    const job = parseBootstrapJob(withoutReference)
-    expect(job.reference).toBeUndefined()
-    expect(job.target.name).toBe('new-service')
-  })
-
-  it('rejects missing required fields', () => {
-    expect(() => parseBootstrapJob({ ...validBootstrapBody, instructions: '' })).toThrow(
-      /instructions/,
-    )
-    expect(() => parseBootstrapJob({ ...validBootstrapBody, target: { owner: 'acme' } })).toThrow(
-      /target\.name/,
-    )
-  })
-
-  it('rejects a malformed reference when one is supplied', () => {
-    expect(() =>
-      parseBootstrapJob({ ...validBootstrapBody, reference: { owner: 'acme' } }),
-    ).toThrow(/reference\.name/)
-  })
-})
-
-const validBody = {
-  jobId: 'exec-1',
-  systemPrompt: 'You are a builder.',
-  userPrompt: 'Implement the thing.',
-  model: 'qwen3-max',
-  proxyBaseUrl: 'https://w/v1',
-  sessionToken: 'sess',
-  ghToken: 'ght',
-  repo: { owner: 'o', name: 'r', baseBranch: 'main', cloneUrl: 'https://github.com/o/r.git' },
-  headBranch: 'cat-factory/blk-1',
-  pr: { title: 'T', body: 'B' },
-}
-
-describe('parseJob', () => {
-  it('accepts a well-formed job', () => {
-    const job = parseJob(validBody)
-    expect(job.jobId).toBe('exec-1')
-    expect(job.repo.owner).toBe('o')
-    expect(job.pr.title).toBe('T')
-  })
-
-  it('requires a jobId (the durable driver keys/polls the job by it)', () => {
-    expect(() => parseJob({ ...validBody, jobId: '' })).toThrow(/jobId/)
-  })
-
-  it('defaults an absent pr body to empty', () => {
-    const job = parseJob({ ...validBody, pr: { title: 'T' } })
-    expect(job.pr.body).toBe('')
-  })
-
-  it('rejects missing required fields', () => {
-    expect(() => parseJob({ ...validBody, sessionToken: '' })).toThrow(/sessionToken/)
-    expect(() => parseJob({ ...validBody, repo: { owner: 'o' } })).toThrow(/repo\.name/)
-    expect(() => parseJob(null)).toThrow(/object/)
-  })
-
-  it('omits serviceDirectory when absent (whole-repo run)', () => {
-    expect(parseJob(validBody).repo.serviceDirectory).toBeUndefined()
-  })
-
-  it('normalises a monorepo serviceDirectory to a clean relative path', () => {
-    const job = parseJob({
-      ...validBody,
-      repo: { ...validBody.repo, serviceDirectory: '/packages/api/' },
-    })
-    expect(job.repo.serviceDirectory).toBe('packages/api')
-  })
-
-  it('rejects a serviceDirectory that escapes the checkout', () => {
-    expect(() =>
-      parseJob({ ...validBody, repo: { ...validBody.repo, serviceDirectory: '../secrets' } }),
-    ).toThrow(/serviceDirectory/)
-  })
-})
 
 describe('authenticatedCloneUrl', () => {
   it('embeds only the username, never the token (token goes via GIT_ASKPASS env)', () => {
@@ -428,43 +319,6 @@ describe('commitTrackedEdits + branchHasCommitsSince', () => {
     await git('add', 'new-feature.ts')
     await git('commit', '-m', 'feat: add feature (by the agent)')
     expect(await branchHasCommitsSince(dir, base)).toBe(true)
-  })
-})
-
-const validConflictBody = {
-  jobId: 'exec-1',
-  systemPrompt: 'Resolve the conflicts.',
-  userPrompt: 'Resolve.',
-  model: 'qwen3-max',
-  proxyBaseUrl: 'https://w/v1',
-  sessionToken: 'sess',
-  ghToken: 'ght',
-  repo: { owner: 'o', name: 'r', baseBranch: 'main', cloneUrl: 'https://github.com/o/r.git' },
-  branch: 'cat-factory/blk-1',
-}
-
-describe('parseConflictResolverJob', () => {
-  it('accepts a well-formed conflict-resolver job', () => {
-    const job = parseConflictResolverJob(validConflictBody)
-    expect(job.jobId).toBe('exec-1')
-    expect(job.branch).toBe('cat-factory/blk-1')
-    expect(job.repo.baseBranch).toBe('main')
-  })
-
-  it('rejects missing required fields', () => {
-    expect(() => parseConflictResolverJob({ ...validConflictBody, branch: '' })).toThrow(/branch/)
-    expect(() => parseConflictResolverJob({ ...validConflictBody, repo: { owner: 'o' } })).toThrow(
-      /repo\.name/,
-    )
-  })
-
-  it('rejects a clone URL pointing at a non-GitHub host', () => {
-    expect(() =>
-      parseConflictResolverJob({
-        ...validConflictBody,
-        repo: { ...validConflictBody.repo, cloneUrl: 'https://evil.example/o/r.git' },
-      }),
-    ).toThrow(/not an allowed GitHub host/)
   })
 })
 

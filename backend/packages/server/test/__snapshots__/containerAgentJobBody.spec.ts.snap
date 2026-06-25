@@ -99,19 +99,24 @@ reading the code.",
 
 exports[`ContainerAgentExecutor.buildJobBody (per-kind body shapes) > conflict-resolver 1`] = `
 {
-  "kind": "resolve-conflicts",
+  "kind": "agent",
   "ref": {
     "jobId": "ex_1-conflict-resolver",
     "runId": "ex_1",
   },
   "spec": {
     "branch": "cat-factory/blk_1",
+    "full": true,
     "ghToken": "GH-TOKEN",
     "githubApiBase": "https://api.github.com",
     "harness": "pi",
     "jobId": "ex_1-conflict-resolver",
+    "mergeBase": "main",
+    "mode": "coding",
     "model": "@cf/test/model",
+    "noChangesIsError": false,
     "proxyBaseUrl": "https://proxy.test/v1",
+    "pushBranch": "cat-factory/blk_1",
     "repo": {
       "baseBranch": "main",
       "cloneUrl": "https://github.com/acme/widgets.git",
@@ -130,6 +135,15 @@ Read only the modules/features relevant to your task rather than the whole tree.
     "userPrompt": "Task: Add widget
 
 Implement the widget feature.",
+    "webSearch": true,
+    "webToolsGuidance": "
+
+## Web search (use sparingly)
+
+You have \`web_search\` (titled result snippets for a query) and \`web_fetch\` (read a URL as text). Use them mainly to verify a fact that genuinely changes — a library version, an API, a recent breaking change, a security advisory — when the repository itself can't answer it. Prefer first-party documentation, and
+cite the source URL when a decision rests on what you find. Do not search for anything
+already in the checkout or the context you were given, and don't let searching replace
+reading the code.",
   },
 }
 `;

@@ -58,7 +58,7 @@ export class CloudflareContainerTransport implements RunnerTransport {
   async dispatch(
     ref: RunnerJobRef,
     spec: Record<string, unknown>,
-    kind: RunnerDispatchKind = 'run',
+    kind: RunnerDispatchKind = 'agent',
   ): Promise<void> {
     // The container is per-RUN (one Durable Object per run id), so every step of a run
     // dispatches to the same instance; the harness keys the job by `ref.jobId` (in the

@@ -800,10 +800,8 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       workBranchReady: boolean
     },
   ): { body: Record<string, unknown>; kind: RunnerDispatchKind } {
-    // `workBranch`/`workBranchReady` are consumed by `buildRegisteredAgentBody` (via `parts`),
-    // not here — the one remaining bespoke case (conflict-resolver) uses the PR branch.
-    const { common } = parts
-    const prBranch = context.block.pullRequest?.branch
+    // `parts` (common/webTools/workBranch/workBranchReady) is consumed by
+    // `buildRegisteredAgentBody`/`buildMigratedBuiltInBody`, not directly here.
     const roleSystemPrompt = composeBlockSystemPrompt(
       systemPromptFor(context.agentKind),
       context.block,
@@ -823,43 +821,11 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     // strangler. Today: blueprints/spec-writer (structured explore + render post-op), the
     // in-place fixers (`ci-fixer` / `fixer`, coding-on-PR), the JSON-assessment producers
     // (`merger` / `on-call`, read-only structured explore whose assessment is coerced
-    // backend-side in `toRunResult`), and the `tester` (read-only structured explore with
-    // docker-compose infra stand-up). The only remaining bespoke body is conflict-resolver
-    // (needs the merge-base harness change), below; the default coder dispatches the generic
-    // coding agent at the end of this method.
+    // backend-side in `toRunResult`), the `tester` (read-only structured explore with
+    // docker-compose infra stand-up), and the conflict-resolver (coding with a `mergeBase`).
+    // The default coder dispatches the generic coding agent at the end of this method.
     const migrated = this.buildMigratedBuiltInBody(context, parts, roleSystemPrompt)
     if (migrated) return migrated
-
-    switch (context.agentKind) {
-      // The conflict-resolver clones the PR head branch, merges the base in, resolves
-      // the conflicts and pushes back to the SAME branch (no new branch / PR) so the
-      // PR becomes mergeable and CI re-runs.
-      //
-      // Unlike the CI-fixer it is deliberately NOT given `userPromptFor(context)`: that
-      // renders the full task brief + every prior agent's output (the spec-writer's whole
-      // spec, etc.), which buries the one-line "resolve a conflict" role and drifts the
-      // model onto re-implementing the feature (observed in prod: a resolver that returned
-      // a "test report is ready" answer and never touched the markers). The harness
-      // discovers the conflicted files in the container and leads the prompt with the
-      // actual hunks; the backend supplies only a compact task reference for intent.
-      case CONFLICT_RESOLVER_AGENT_KIND: {
-        if (!prBranch) {
-          throw new Error(
-            'Conflict-resolver needs the implementation PR branch to resolve conflicts on',
-          )
-        }
-        const description = context.block.description?.trim()
-        return {
-          kind: 'resolve-conflicts',
-          body: {
-            ...common,
-            systemPrompt: roleSystemPrompt,
-            userPrompt: `Task: ${context.block.title}${description ? `\n\n${description}` : ''}`,
-            branch: prBranch,
-          },
-        }
-      }
-    }
 
     // Read-only agents (architect, analysis) explore a real checkout but never edit it:
     // they clone a branch, produce a prose report/proposal and return it as `output`,
@@ -1005,6 +971,9 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
    *   - `merger` / `on-call`: read-only structured explore (full clone) that returns ONLY a
    *     JSON assessment; the conservative coercion that used to live in the harness runs
    *     backend-side in {@link toRunResult}.
+   *   - `conflict-resolver`: coding (full clone of the PR branch) with a `mergeBase` — the
+   *     harness merges the base in to surface the conflicts, the agent resolves them, and the
+   *     harness completes the merge commit + pushes back onto the same branch (no new PR).
    */
   private buildMigratedBuiltInBody(
     context: AgentRunContext,
@@ -1086,6 +1055,34 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
           { surface: 'container-coding', clone: { branch: 'pr' } },
           roleSystemPrompt,
         )
+      // The conflict-resolver clones the PR head branch (full history), merges the base in
+      // to surface the conflicts, resolves them and pushes back onto the SAME branch (no new
+      // branch / PR) so the PR becomes mergeable and CI re-runs. It dispatches the generic
+      // coding agent with a `mergeBase` (the harness merges `origin/<mergeBase>` in before the
+      // agent runs); the harness leads the prompt with the actual conflict hunks it discovers.
+      //
+      // Unlike the CI-fixer it is deliberately NOT given `userPromptFor(context)`: that renders
+      // the full task brief + every prior agent's output (the spec-writer's whole spec, etc.),
+      // which buries the one-line "resolve a conflict" role and drifts the model onto
+      // re-implementing the feature (observed in prod: a resolver that returned a "test report
+      // is ready" answer and never touched the markers). The backend supplies only a compact
+      // task reference for intent.
+      case CONFLICT_RESOLVER_AGENT_KIND: {
+        if (!prBranch) {
+          throw new Error(
+            'Conflict-resolver needs the implementation PR branch to resolve conflicts on',
+          )
+        }
+        const description = context.block.description?.trim()
+        const built = this.buildRegisteredAgentBody(
+          context,
+          parts,
+          { surface: 'container-coding', clone: { branch: 'pr', full: true } },
+          roleSystemPrompt,
+          `Task: ${context.block.title}${description ? `\n\n${description}` : ''}`,
+        )
+        return { kind: built.kind, body: { ...built.body, mergeBase: repo.baseBranch } }
+      }
       // The merger clones the PR head (full, to diff vs base) and returns ONLY the
       // complexity/risk/impact assessment JSON; the engine performs the real merge.
       case MERGER_AGENT_KIND:
@@ -1142,61 +1139,25 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
   }
 }
 
-/** Map a finished runner {@link RunnerJobResult} into the engine's {@link AgentRunResult}. */
+/**
+ * Map a finished runner {@link RunnerJobResult} into the engine's {@link AgentRunResult}.
+ * Every built-in agent now dispatches the single manifest-driven `agent` kind, so the
+ * result carries either a structured `custom` JSON (explore agents), an opened `prUrl`
+ * (the coder), or just `pushed` (the in-place fixers / conflict-resolver). No `model` here:
+ * the proxy meters tokens and the async path doesn't carry the provider ref to the poll
+ * site; `usage` is likewise omitted (metered by the proxy).
+ */
 function toRunResult(result: RunnerJobResult, agentKind?: string): AgentRunResult {
-  // A Blueprinter job carries a decomposition tree instead of a PR; surface it so
-  // the engine can strictly validate + reconcile it onto the board.
-  if (result.service !== undefined) {
-    return {
-      output: result.summary?.trim() || 'Service blueprint updated.',
-      blueprintService: result.service,
-    }
-  }
-  // A spec-writer job carries a prescriptive specification doc instead of a PR;
-  // surface it so the engine can strictly validate + persist/surface it.
-  if (result.spec !== undefined) {
-    return {
-      output: result.summary?.trim() || 'Service specification updated.',
-      spec: result.spec,
-    }
-  }
-  // A `merger` job carries a PR assessment instead of a PR; surface it so the
-  // engine can compare it to the task's thresholds and merge-or-notify.
-  if (result.assessment !== undefined) {
-    return {
-      output: result.summary?.trim() || 'Pull request assessed.',
-      mergeAssessment: result.assessment,
-    }
-  }
-  // An `on-call` job carries a release-regression assessment; surface it so the engine
-  // can raise the `release_regression` notification + enrich any open incident.
-  if (result.onCallAssessment !== undefined) {
-    return {
-      output: result.summary?.trim() || 'Release regression investigated.',
-      onCallAssessment: result.onCallAssessment,
-    }
-  }
-  // A `tester` job carries a structured test report instead of a PR; surface it so
-  // the engine can greenlight-or-loop the fixer.
-  if (result.report !== undefined) {
-    return {
-      output: result.summary?.trim() || 'Testing complete.',
-      testReport: result.report,
-    }
-  }
-  // A generic, manifest-driven `agent` (explore, structured) job carries its parsed JSON
-  // as `custom`. A built-in kind migrated onto this path has its result coerced into the
-  // well-known engine field here — the conservative coercion that used to live in the
-  // bespoke harness handler (merger `/merge`, on-call `/on-call`) now runs backend-side, so
-  // the engine's resolvers/gates see `mergeAssessment`/`onCallAssessment` exactly as before.
-  // Any other kind (a registered custom kind) surfaces the raw JSON as `custom` for its
-  // post-op to coerce/render from.
+  // A generic, structured `agent` (explore) job returns its parsed JSON as `custom`. A
+  // migrated built-in kind has it coerced into the well-known engine field here, KIND-AWARE
+  // — the conservative coercion that used to live in the bespoke harness handlers
+  // (blueprint/spec/merge/on-call/test) now runs backend-side, so the engine's
+  // resolvers/gates see `blueprintService`/`spec`/`mergeAssessment`/`onCallAssessment`/
+  // `testReport` exactly as before. Any other kind (a registered custom kind) surfaces the
+  // raw JSON as `custom` for its post-op to coerce/render from.
   if (result.custom !== undefined) {
-    // The migrated Blueprinter returns its service tree as `custom`; coerce it into the
-    // `blueprintService` channel the engine reconciles onto the board and the
-    // `blueprintPostOp` renders + commits from (exactly what the harness `/blueprint`
-    // handler used to return). A nameless/garbage tree coerces to null ⇒ left unset (no
-    // board reconcile, no commit), same as the old conservative coercion.
+    // Blueprinter: coerce into `blueprintService` (board reconcile + `blueprintPostOp`
+    // render/commit). A nameless/garbage tree coerces to null ⇒ left unset.
     if (agentKind === BLUEPRINTS_AGENT_KIND) {
       const service = coerceBlueprintService(result.custom, '')
       return {
@@ -1204,12 +1165,9 @@ function toRunResult(result: RunnerJobResult, agentKind?: string): AgentRunResul
         ...(service ? { blueprintService: service } : {}),
       }
     }
-    // The migrated spec-writer returns its complete spec doc as `custom`; coerce it into the
-    // `spec` channel the engine strict-validates + the `specPostOp` shards/commits from. The
-    // doc must carry its OWN `service` name (the system prompt mandates it) — unlike the
-    // harness's `/spec` handler, which rescued a nameless reply with the repo name, the
-    // backend has no repo name in scope here and (backwards-compat being a non-goal) does
-    // NOT rescue: a nameless/garbage doc coerces to null ⇒ left unset (no ingest, no commit).
+    // Spec-writer: coerce into `spec` (engine strict-validate + `specPostOp` shard/commit).
+    // The doc must carry its OWN `service` name (no repo-name rescue — backwards-compat is a
+    // non-goal); a nameless/garbage doc coerces to null ⇒ left unset (no ingest, no commit).
     if (agentKind === SPEC_WRITER_AGENT_KIND) {
       const spec = coerceSpecDoc(result.custom, '')
       return {
@@ -1229,10 +1187,9 @@ function toRunResult(result: RunnerJobResult, agentKind?: string): AgentRunResul
         onCallAssessment: coerceOnCallAssessment(result.custom, result.summary),
       }
     }
-    // The migrated tester returns its structured report as `custom`; coerce it into the
-    // `testReport` channel the engine's TesterController greenlights-or-loops the fixer on
-    // (the conservative greenlight/blocking rule the harness `/test` handler applied now
-    // runs in `coerceTestReport`, and TesterController re-applies it defensively).
+    // Tester: coerce into `testReport` (greenlight-or-loop the fixer; the conservative
+    // greenlight/blocking rule the harness `/test` handler applied now runs in
+    // `coerceTestReport`, re-applied defensively by the TesterController).
     if (agentKind === TESTER_AGENT_KIND) {
       return {
         output: result.summary?.trim() || 'Testing complete.',
@@ -1244,48 +1201,35 @@ function toRunResult(result: RunnerJobResult, agentKind?: string): AgentRunResul
       custom: result.custom,
     }
   }
-  // A `ci-fixer` job reports whether it pushed a fix. The engine's CI gate ignores
-  // this result (it just re-polls CI), but map it to a sensible output regardless.
-  if (result.pushed !== undefined) {
+  // A coding job that opened a PR (the coder + any PR-opening coding agent): surface the PR
+  // STRUCTURALLY so the engine records it on the block and the board links to it. Checked
+  // BEFORE `pushed` — a coding run reports BOTH `pushed:true` AND `prUrl`, so the PR must win
+  // over the in-place-fixer text below or it would be silently dropped.
+  if (result.prUrl) {
+    const summary = result.summary?.trim() || 'Implementation complete.'
     return {
-      output:
-        result.summary?.trim() ||
-        (result.pushed ? 'Pushed a CI fix to the PR branch.' : 'No CI fix was produced.'),
-    }
-  }
-  // A `conflict-resolver` job reports whether the branch is now mergeable. The
-  // engine's conflicts gate re-checks mergeability regardless; map to an output. On a
-  // partial resolution prefer `error` (it NAMES the files still conflicting) over the
-  // agent's free-text summary, so the gate can surface which files remain — detail the
-  // conflicts gate otherwise has no source for (GitHub reports mergeability as one bit).
-  if (result.resolved !== undefined) {
-    return {
-      output: result.resolved
-        ? result.summary?.trim() || 'Resolved merge conflicts and pushed to the PR branch.'
-        : result.error?.trim() ||
-          result.summary?.trim() ||
-          'Could not fully resolve the merge conflicts.',
-    }
-  }
-  const summary = result.summary?.trim() || 'Implementation complete.'
-  const output = result.prUrl ? `${summary}\n\nPR: ${result.prUrl}` : summary
-  // Surface the opened PR structurally (not just in the output text) so the
-  // engine can record it on the block and the board can link straight to it.
-  const pullRequest = result.prUrl
-    ? {
+      output: `${summary}\n\nPR: ${result.prUrl}`,
+      pullRequest: {
         url: result.prUrl,
         ...(prNumberFromUrl(result.prUrl) !== undefined
           ? { number: prNumberFromUrl(result.prUrl) }
           : {}),
         ...(result.branch ? { branch: result.branch } : {}),
-      }
-    : undefined
-  // No `model` here: the proxy meters tokens and the async path doesn't carry the
-  // provider ref to the poll site. `usage` is likewise omitted (metered by the proxy).
-  return {
-    output,
-    ...(pullRequest ? { pullRequest } : {}),
+      },
+    }
   }
+  // An in-place coding job with no PR (ci-fixer / fixer / conflict-resolver): it pushed back
+  // onto the existing branch (or was a clean no-op). The engine's CI / conflicts gate
+  // re-checks the real signal regardless; map to a sensible output. The agent's own summary
+  // is used when present (e.g. the conflict-resolver's "Resolved merge conflicts …").
+  if (result.pushed !== undefined) {
+    return {
+      output:
+        result.summary?.trim() ||
+        (result.pushed ? 'Pushed changes to the branch.' : 'No changes were produced.'),
+    }
+  }
+  return { output: result.summary?.trim() || 'Implementation complete.' }
 }
 
 /** Extract the PR number from a GitHub pull-request URL (`.../pull/42`). */

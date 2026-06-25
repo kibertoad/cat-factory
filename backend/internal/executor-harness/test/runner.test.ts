@@ -1,19 +1,19 @@
 import { describe, expect, it } from 'vitest'
 import { JobRegistry, loadRunnerLimits, type RunOptions } from '../src/runner.js'
-import type { Job, RunResult } from '../src/job.js'
 
-const job = (): Job => ({
-  jobId: 'exec-1',
-  systemPrompt: 'sys',
-  userPrompt: 'do it',
-  model: 'm',
-  proxyBaseUrl: 'https://w/v1',
-  sessionToken: 'sess',
-  ghToken: 'ght',
-  repo: { owner: 'o', name: 'r', baseBranch: 'main', cloneUrl: 'https://github.com/o/r.git' },
-  headBranch: 'cat-factory/blk-1',
-  pr: { title: 'T', body: 'B' },
-})
+// The registry is generic over the job/result shape; the lifecycle/watchdog tests only
+// need a job carrying its id and a result carrying the optional fields they assert on.
+interface TestJob {
+  jobId: string
+}
+interface TestResult {
+  prUrl?: string
+  branch?: string
+  summary?: string
+  error?: string
+}
+
+const job = (): TestJob => ({ jobId: 'exec-1' })
 
 const tick = (ms = 0): Promise<void> => new Promise((r) => setTimeout(r, ms))
 
@@ -34,7 +34,7 @@ describe('JobRegistry', () => {
   const limits = { maxDurationMs: 60_000, inactivityMs: 60_000 }
 
   it('runs a job to completion and exposes its result', async () => {
-    const result: RunResult = { prUrl: 'http://pr/1', branch: 'b', summary: 'done' }
+    const result: TestResult = { prUrl: 'http://pr/1', branch: 'b', summary: 'done' }
     const registry = new JobRegistry(limits, async () => result)
     const view = registry.start('exec-1', job())
     expect(view.state).toBe('running')
@@ -116,7 +116,7 @@ describe('JobRegistry', () => {
     const registry = new JobRegistry(tiny, (_job, opts: RunOptions) => {
       // Never produces activity and never resolves on its own — only the abort
       // signal ends it, exactly as a wedged Pi/git process would.
-      return new Promise<RunResult>((_resolve, reject) => {
+      return new Promise<TestResult>((_resolve, reject) => {
         opts.signal?.addEventListener('abort', () => reject(new Error('killed')), { once: true })
       })
     })
@@ -131,7 +131,7 @@ describe('JobRegistry', () => {
     const tiny = { maxDurationMs: 30, inactivityMs: 60_000 }
     const registry = new JobRegistry(tiny, (_job, opts: RunOptions) => {
       const beat = setInterval(() => opts.onActivity?.(), 5)
-      return new Promise<RunResult>((_resolve, reject) => {
+      return new Promise<TestResult>((_resolve, reject) => {
         opts.signal?.addEventListener(
           'abort',
           () => {
