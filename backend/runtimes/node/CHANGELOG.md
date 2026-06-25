@@ -1,5 +1,23 @@
 # @cat-factory/node-server
 
+## 0.12.2
+
+### Patch Changes
+
+- Updated dependencies [fde0437]
+  - @cat-factory/contracts@0.15.0
+  - @cat-factory/kernel@0.14.0
+  - @cat-factory/integrations@0.11.0
+  - @cat-factory/server@0.15.0
+  - @cat-factory/agents@0.11.7
+  - @cat-factory/consensus@0.7.17
+  - @cat-factory/orchestration@0.10.5
+  - @cat-factory/prompt-fragments@0.7.11
+  - @cat-factory/spend@0.8.10
+  - @cat-factory/observability-langfuse@0.7.16
+  - @cat-factory/provider-bedrock@0.7.17
+  - @cat-factory/provider-cloudflare@0.7.17
+
 ## 0.12.1
 
 ### Patch Changes

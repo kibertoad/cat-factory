@@ -1,5 +1,16 @@
 # @cat-factory/conformance
 
+## 0.7.17
+
+### Patch Changes
+
+- Updated dependencies [fde0437]
+  - @cat-factory/kernel@0.14.0
+  - @cat-factory/integrations@0.11.0
+  - @cat-factory/agents@0.11.7
+  - @cat-factory/orchestration@0.10.5
+  - @cat-factory/prompt-fragments@0.7.11
+
 ## 0.7.16
 
 ### Patch Changes
