@@ -69,6 +69,22 @@ export interface DocumentSourceProvider {
   ): Promise<DocumentSearchResult[]>
 }
 
+/**
+ * Live, read-only access to a document source's current content, scoped to a
+ * workspace. Resolves the workspace's stored connection and fetches the page —
+ * NO local persistence (unlike a document import). This is the narrow seam the
+ * execution engine depends on to re-resolve a document-backed prompt fragment at
+ * run time, so the runtime-neutral engine never imports the integrations layer.
+ */
+export interface DocumentContentResolver {
+  /** Fetch the page's current content; throws when the source is unreachable / not connected. */
+  fetch(
+    workspaceId: string,
+    source: DocumentSourceKind,
+    externalId: string,
+  ): Promise<DocumentContent>
+}
+
 /** A lookup of the providers wired for this deployment, keyed by source. */
 export interface DocumentSourceRegistry {
   /** The provider for a source, or undefined if that source isn't configured. */

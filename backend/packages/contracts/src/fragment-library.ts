@@ -1,6 +1,7 @@
 import * as v from 'valibot'
 import { agentKindSchema, blockTypeSchema } from './primitives.js'
 import { promptFragmentSchema } from './entities.js'
+import { documentSourceKindSchema } from './documents.js'
 
 // ---------------------------------------------------------------------------
 // Wire contracts for the tenant-scoped prompt-fragment library (ADR 0006). A
@@ -51,6 +52,30 @@ export const updatePromptFragmentSchema = v.object({
   version: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(40))),
 })
 export type UpdatePromptFragmentInput = v.InferOutput<typeof updatePromptFragmentSchema>
+
+/**
+ * Link an external document (a Confluence/Notion page or a GitHub file) as a
+ * **living** best-practice fragment: its title/body are fetched from the source
+ * now (to seed the catalog entry) and re-resolved at run time. The caller-facing
+ * metadata is optional; the title, summary and body are derived from the fetched
+ * document, never supplied here.
+ */
+export const createDocumentFragmentSchema = v.object({
+  source: documentSourceKindSchema,
+  /** A page id or full page/file URL, resolved by the source's provider. */
+  ref: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(500)),
+  id: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200))),
+  category: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(100))),
+  tags: v.optional(tagsSchema),
+  appliesTo: v.optional(appliesToSchema),
+  /**
+   * For an account-tier link only: the workspace whose stored connection is used
+   * to perform the initial fetch (document-source credentials are per-workspace).
+   * Ignored at the workspace scope, where the addressed workspace is used.
+   */
+  viaWorkspaceId: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1))),
+})
+export type CreateDocumentFragmentInput = v.InferOutput<typeof createDocumentFragmentSchema>
 
 /** A repo a tier links as a source of Markdown guideline files. */
 export const fragmentSourceSchema = v.object({

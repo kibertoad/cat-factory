@@ -1,4 +1,5 @@
 import type {
+  CreateDocumentFragmentInput,
   CreatePromptFragmentInput,
   FragmentOwnerKind,
   FragmentSource,
@@ -44,6 +45,20 @@ export function fragmentsApi({ http, ws, scope }: ApiContext) {
       http(`${scope(kind, id)}/prompt-fragments/${encodeURIComponent(fragmentId)}`, {
         method: 'DELETE',
       }),
+
+    // Link an external document (Confluence/Notion/GitHub) as a living fragment.
+    createDocumentFragment: (
+      kind: FragmentOwnerKind,
+      id: string,
+      body: CreateDocumentFragmentInput,
+    ) => http<PromptFragment>(`${scope(kind, id)}/document-fragments`, { method: 'POST', body }),
+
+    // Force an immediate live re-resolve of a document-backed fragment.
+    refreshFragment: (kind: FragmentOwnerKind, id: string, fragmentId: string) =>
+      http<PromptFragment>(
+        `${scope(kind, id)}/prompt-fragments/${encodeURIComponent(fragmentId)}/refresh`,
+        { method: 'POST' },
+      ),
 
     // Repo sources of guideline Markdown.
     listFragmentSources: (kind: FragmentOwnerKind, id: string) =>

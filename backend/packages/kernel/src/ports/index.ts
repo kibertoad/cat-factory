@@ -144,6 +144,7 @@ export type {
   NormalizedConnection,
   DocumentSourceProvider,
   DocumentSourceRegistry,
+  DocumentContentResolver,
 } from './document-source.js'
 export type {
   DocumentConnectionRecord,

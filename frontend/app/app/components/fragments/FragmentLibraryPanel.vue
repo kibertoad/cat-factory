@@ -4,10 +4,11 @@
 // + resync), and review the merged catalog (built-in ∪ account ∪ workspace) an
 // agent is selected from per run. Workspace-tier focused; the resolved view shows
 // every tier so the inheritance is visible.
-import type { ResolvedFragment } from '~/types/domain'
+import type { DocumentSourceKind, ResolvedFragment } from '~/types/domain'
 
 const ui = useUiStore()
 const library = useFragmentLibraryStore()
+const documents = useDocumentsStore()
 const toast = useToast()
 
 const open = computed({
@@ -18,10 +19,13 @@ const open = computed({
 })
 
 watch(open, (isOpen) => {
-  if (isOpen) void library.probe()
+  if (isOpen) {
+    void library.probe()
+    void documents.probe()
+  }
 })
 
-type Tab = 'catalog' | 'authored' | 'sources'
+type Tab = 'catalog' | 'authored' | 'documents' | 'sources'
 const tab = ref<Tab>('catalog')
 
 const tierLabel: Record<ResolvedFragment['tier'], string> = {
@@ -77,6 +81,42 @@ async function removeFragment(id: string) {
     toast.add({ title: 'Fragment removed', icon: 'i-lucide-trash-2' })
   } catch (e) {
     notifyError('Could not remove fragment', e)
+  }
+}
+
+// ---- document-backed (living) fragments -----------------------------------
+// Link a Confluence/Notion page or GitHub file as a fragment that is re-resolved
+// from the source at run time (a living source of truth, not a frozen snapshot).
+const docDraft = ref({ source: '' as DocumentSourceKind | '', ref: '', tags: '' })
+const docDraftValid = computed(() => docDraft.value.source && docDraft.value.ref.trim())
+
+/** The board's existing document-backed fragments (workspace tier). */
+const documentFragments = computed(() => library.fragments.filter((f) => f.documentRef))
+
+async function linkDocumentFragment() {
+  if (!docDraftValid.value) return
+  try {
+    await library.createDocumentFragment({
+      source: docDraft.value.source as DocumentSourceKind,
+      ref: docDraft.value.ref.trim(),
+      tags: docDraft.value.tags
+        .split(',')
+        .map((t) => t.trim())
+        .filter(Boolean),
+    })
+    docDraft.value = { source: '', ref: '', tags: '' }
+    toast.add({ title: 'Document linked as a living fragment', icon: 'i-lucide-link' })
+  } catch (e) {
+    notifyError('Could not link document', e)
+  }
+}
+
+async function refreshFragment(id: string) {
+  try {
+    await library.refreshDocumentFragment(id)
+    toast.add({ title: 'Fragment re-resolved from source', icon: 'i-lucide-refresh-cw' })
+  } catch (e) {
+    notifyError('Could not refresh fragment', e)
   }
 }
 
@@ -150,7 +190,7 @@ async function unlinkSource(id: string) {
 
         <div class="flex gap-2">
           <UButton
-            v-for="t in ['catalog', 'authored', 'sources'] as Tab[]"
+            v-for="t in ['catalog', 'authored', 'documents', 'sources'] as Tab[]"
             :key="t"
             :color="tab === t ? 'primary' : 'neutral'"
             :variant="tab === t ? 'solid' : 'ghost'"
@@ -162,7 +202,9 @@ async function unlinkSource(id: string) {
                 ? 'Resolved catalog'
                 : t === 'authored'
                   ? 'This board'
-                  : 'Repo sources'
+                  : t === 'documents'
+                    ? 'Documents'
+                    : 'Repo sources'
             }}
           </UButton>
         </div>
@@ -182,6 +224,15 @@ async function unlinkSource(id: string) {
               <span class="font-medium text-slate-100">{{ f.title }}</span>
               <UBadge size="xs" :color="tierColor[f.tier]" variant="subtle">
                 {{ tierLabel[f.tier] }}
+              </UBadge>
+              <UBadge
+                v-if="f.documentRef"
+                size="xs"
+                color="success"
+                variant="subtle"
+                icon="i-lucide-radio"
+              >
+                Live · {{ f.documentRef.source }}
               </UBadge>
               <span class="ml-auto font-mono text-[11px] text-slate-500">{{ f.id }}</span>
             </div>
@@ -244,6 +295,91 @@ async function unlinkSource(id: string) {
                 @click="createFragment"
               >
                 Add fragment
+              </UButton>
+            </div>
+          </div>
+        </div>
+
+        <!-- Document-backed (living) fragments -->
+        <div v-else-if="tab === 'documents'" class="flex flex-col gap-3">
+          <p class="text-xs text-slate-500">
+            Link a Confluence/Notion page or a GitHub file as a best-practice fragment. Its guidance
+            is re-resolved from the source at run time — edit the doc and the next agent run follows
+            the new version (no re-import).
+          </p>
+
+          <div
+            v-for="f in documentFragments"
+            :key="f.id"
+            class="flex items-start gap-2 rounded-md border border-slate-800 bg-slate-900/60 p-3"
+          >
+            <UIcon name="i-lucide-radio" class="mt-0.5 h-4 w-4 text-emerald-400" />
+            <div class="min-w-0">
+              <div class="flex items-center gap-2">
+                <span class="font-medium text-slate-100">{{ f.title }}</span>
+                <UBadge size="xs" color="success" variant="subtle">
+                  {{ f.documentRef?.source }}
+                </UBadge>
+              </div>
+              <p class="text-sm text-slate-400">{{ f.summary }}</p>
+              <p v-if="f.resolvedAt" class="text-[11px] text-slate-500">
+                last resolved {{ new Date(f.resolvedAt).toLocaleString() }}
+              </p>
+            </div>
+            <div class="ml-auto flex gap-1">
+              <UButton
+                icon="i-lucide-refresh-cw"
+                size="xs"
+                variant="ghost"
+                :loading="library.loading"
+                title="Re-resolve from source now"
+                @click="refreshFragment(f.id)"
+              />
+              <UButton
+                icon="i-lucide-trash-2"
+                size="xs"
+                color="error"
+                variant="ghost"
+                @click="removeFragment(f.id)"
+              />
+            </div>
+          </div>
+          <p v-if="!documentFragments.length" class="text-sm text-slate-500">
+            No document-backed fragments yet. Link one below.
+          </p>
+
+          <div class="rounded-md border border-slate-800 p-3">
+            <p class="mb-2 text-sm font-medium">Link a document</p>
+            <div v-if="!documents.connectedSources.length" class="text-sm text-slate-500">
+              Connect a document source (Confluence, Notion or GitHub) under Integrations first.
+            </div>
+            <div v-else class="flex flex-col gap-2">
+              <div class="flex flex-wrap gap-2">
+                <UButton
+                  v-for="s in documents.connectedSources"
+                  :key="s.source"
+                  size="xs"
+                  :color="docDraft.source === s.source ? 'primary' : 'neutral'"
+                  :variant="docDraft.source === s.source ? 'solid' : 'outline'"
+                  @click="docDraft.source = s.source"
+                >
+                  {{ s.label }}
+                </UButton>
+              </div>
+              <UInput
+                v-model="docDraft.ref"
+                placeholder="Page id or URL (e.g. a Confluence/Notion page or GitHub file URL)"
+              />
+              <UInput v-model="docDraft.tags" placeholder="Tags, comma-separated (optional)" />
+              <UButton
+                icon="i-lucide-link"
+                size="sm"
+                :disabled="!docDraftValid"
+                :loading="library.loading"
+                class="self-start"
+                @click="linkDocumentFragment"
+              >
+                Link as living fragment
               </UButton>
             </div>
           </div>

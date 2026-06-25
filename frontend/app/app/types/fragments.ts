@@ -5,6 +5,7 @@
 // ---------------------------------------------------------------------------
 
 import type { AgentKind, BlockType } from './domain'
+import type { DocumentSourceKind } from './documents'
 import type { PromptFragment } from './models'
 
 /** Which scope owns a managed fragment / source. */
@@ -27,6 +28,21 @@ export interface CreatePromptFragmentInput {
 
 /** Partial patch for editing a fragment at a tier. */
 export type UpdatePromptFragmentInput = Partial<CreatePromptFragmentInput>
+
+/**
+ * Inputs for linking an external document (Confluence/Notion page or GitHub file)
+ * as a LIVING fragment at a tier. Title/summary/body are derived from the fetched
+ * document, not supplied here. `viaWorkspaceId` is only needed at the account tier.
+ */
+export interface CreateDocumentFragmentInput {
+  source: DocumentSourceKind
+  ref: string
+  id?: string
+  category?: string
+  tags?: string[]
+  appliesTo?: { blockTypes?: BlockType[]; agentKinds?: AgentKind[] }
+  viaWorkspaceId?: string
+}
 
 /** A fragment after the three tiers are merged for a workspace. */
 export interface ResolvedFragment extends PromptFragment {

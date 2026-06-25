@@ -24,6 +24,10 @@ export {
   type DocumentConnectionServiceDependencies,
 } from './modules/documents/DocumentConnectionService.js'
 export {
+  DocumentContentResolverService,
+  type DocumentContentResolverServiceDependencies,
+} from './modules/documents/DocumentContentResolverService.js'
+export {
   DocumentImportService,
   type DocumentImportServiceDependencies,
   toSourceDocument,

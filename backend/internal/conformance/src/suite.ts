@@ -418,6 +418,43 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
           clearRegisteredPromptFragments()
         }
       })
+
+      it('resolves a managed (DB-backed) workspace fragment into a code-aware run', async () => {
+        // Unlike the previous test (a fragment in the in-memory static pool), this one
+        // is persisted in the facade's real fragment store. It asserts the engine now
+        // resolves run-time fragment ids against the merged TENANT CATALOG — so a
+        // managed fragment (the foundation document-backed fragments build on) actually
+        // reaches a `code-aware` agent, identically on D1 and Postgres. A fragment id
+        // that failed to resolve would be dropped, so a non-empty selection is the proof.
+        const app = harness.makeApp({ echoFragments: true })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        const created = await app.call('POST', `/workspaces/${wsId}/prompt-fragments`, {
+          id: 'db.managed-standard',
+          title: 'Managed standard',
+          summary: 'A DB-backed standard.',
+          body: 'MANAGED-DB-BODY',
+        })
+        expect(created.status).toBe(201)
+
+        await app.call('PATCH', `/workspaces/${wsId}/blocks/blk_auth`, {
+          serviceFragmentIds: ['db.managed-standard'],
+        })
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Code',
+          agentKinds: ['coder'],
+        })
+        const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+          pipelineId: pipeline.body.id,
+        })
+        expect(start.status).toBe(201)
+        const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+
+        const coder = exec.steps.find((s) => s.agentKind === 'coder')!
+        expect(coder.output).toContain('[frags]db.managed-standard[/frags]')
+        expect(coder.selectedFragmentIds).toEqual(['db.managed-standard'])
+      })
     })
 
     describe('registered custom kind pre/post-ops', () => {

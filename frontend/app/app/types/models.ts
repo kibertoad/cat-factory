@@ -4,6 +4,7 @@
 // ---------------------------------------------------------------------------
 
 import type { AgentKind, BlockType } from './domain'
+import type { DocumentSourceKind } from './documents'
 
 /** Subscription vendors whose pooled tokens drive the Claude Code / Codex harnesses. */
 export type SubscriptionVendor = 'claude' | 'codex' | 'glm' | 'kimi' | 'deepseek'
@@ -154,4 +155,14 @@ export interface PromptFragment {
     path: string
     sha: string
   }
+  /**
+   * Provenance when the body is a LIVING external document (Confluence/Notion/
+   * GitHub). The body is re-resolved from the source at run time, not frozen.
+   */
+  documentRef?: {
+    source: DocumentSourceKind
+    externalId: string
+  }
+  /** When the document-backed body was last resolved from the source (epoch ms). */
+  resolvedAt?: number
 }
