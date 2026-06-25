@@ -420,6 +420,66 @@ export function defineConformanceSuite(harness: ConformanceHarness): void {
       })
     })
 
+    describe('built-in blueprints post-op', () => {
+      // The migrated `blueprints` kind dispatches the generic `agent` (read-only structured
+      // explore) and returns its tree; the deterministic render + commit of the in-repo
+      // `blueprints/` artifact — which used to live in the executor-harness `/blueprint`
+      // handler — now runs as a BACKEND built-in post-op over the checkout-free RepoFiles,
+      // keyed by the engine's built-in op map (NOT the registry). This asserts the engine
+      // runs that post-op + commits identically on every runtime, so a facade that forgot to
+      // wire `resolveRunRepoContext` fails here rather than silently dropping the artifact.
+      it('renders + commits the blueprints/ artifact via RepoFiles when GitHub is wired', async () => {
+        const commits: { branch: string; files: { path: string; content: string }[] }[] = []
+        const repo: RepoFiles = {
+          getFile: async () => null,
+          listDirectory: async () => [],
+          headSha: async () => 'base-sha',
+          createBranch: async () => {},
+          commitFiles: async (input) => {
+            commits.push({ branch: input.branch, files: input.files })
+            return { sha: 'commit-sha' }
+          },
+          openPullRequest: async () => {
+            throw new Error('not exercised by this test')
+          },
+        }
+
+        const app = harness.makeApp(
+          {
+            blueprintService: {
+              name: 'Widgets',
+              summary: 'A widget service.',
+              modules: [{ name: 'Billing', summary: 'Invoices', references: ['src/billing.ts'] }],
+            },
+          },
+          { resolveRunRepoContext: async () => ({ repo, baseBranch: 'main' }) },
+        )
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Map service',
+          agentKinds: ['blueprints'],
+        })
+        const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+          pipelineId: pipeline.body.id,
+        })
+        expect(start.status).toBe(201)
+        const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+        expect(exec.status).toBe('done')
+
+        // The post-op committed the rendered artifact (no PR open ⇒ the default branch),
+        // identically on D1 and Postgres — proving the built-in post-op map is engine-side,
+        // not facade-specific.
+        expect(commits).toHaveLength(1)
+        expect(commits[0]?.branch).toBe('main')
+        const paths = commits[0]?.files.map((f) => f.path) ?? []
+        expect(paths).toContain('blueprints/blueprint.json')
+        expect(paths).toContain('blueprints/version.json')
+        expect(paths).toContain('blueprints/modules/billing.md')
+      })
+    })
+
     describe('task estimator + consensus', () => {
       it('parses a task-estimator step output onto block.estimate, persisted identically', async () => {
         const app = harness.makeApp({

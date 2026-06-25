@@ -40,6 +40,14 @@ export const BUG_INVESTIGATOR_AGENT_KIND = 'bug-investigator'
  */
 export const SPEC_WRITER_AGENT_KIND = 'spec-writer'
 
+/**
+ * The agent kind of the container agent that maps a repository into the canonical
+ * service → modules blueprint and (re)generates the in-repo `blueprints/` artifact. It
+ * runs as a read-only `container-explore` structured agent; the deterministic render +
+ * commit of the artifact is a BACKEND post-op (`blueprintPostOp`), not harness code.
+ */
+export const BLUEPRINTS_AGENT_KIND = 'blueprints'
+
 /** The agent kind of the container agent that fixes failing CI on the PR branch. */
 export const CI_FIXER_AGENT_KIND = 'ci-fixer'
 

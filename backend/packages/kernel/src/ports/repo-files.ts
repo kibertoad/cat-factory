@@ -44,9 +44,11 @@ export interface RepoFiles {
   createBranch(branch: string, fromSha: string): Promise<void>
   /**
    * Commit a set of files onto a branch via the Git Data API (blob → tree → commit →
-   * ref). Mirrors {@link GitHubClient.commitFiles}; the bound installation/repo are
-   * implicit. An empty/no-op change is the caller's concern (render is deterministic,
-   * so re-committing identical bytes is avoided by comparing the version hash).
+   * ref), optionally DELETING paths (`input.deletions`) in the same commit — so a
+   * deterministic render that drops a module/group also prunes its stale artifact file.
+   * Mirrors {@link GitHubClient.commitFiles}; the bound installation/repo are implicit.
+   * An empty/no-op change is the caller's concern (render is deterministic, so
+   * re-committing identical bytes is avoided by comparing the version hash).
    */
   commitFiles(input: CommitFilesInput): Promise<CommitFilesResult>
   /** Open a pull request (idempotent: returns the existing open PR if one matches head/base). */
