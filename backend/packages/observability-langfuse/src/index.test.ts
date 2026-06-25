@@ -24,7 +24,7 @@ function baseEvent(overrides: Partial<LlmGenerationEvent> = {}): LlmGenerationEv
 }
 
 function okFetch() {
-  return vi.fn(async () => new Response(null, { status: 200 }))
+  return vi.fn(async (..._args: Parameters<typeof fetch>) => new Response(null, { status: 200 }))
 }
 
 function parseBatch(fetchImpl: ReturnType<typeof okFetch>) {
