@@ -1,5 +1,17 @@
 # @cat-factory/app
 
+## 0.26.6
+
+### Patch Changes
+
+- ab4b9ab: fix: avoid DataCloneError when testing/saving an infrastructure provider connection
+
+  `buildManifestPayload` cloned the manifest base with `structuredClone`, but the base is a
+  Vue reactive proxy — `structuredClone` refuses proxies with a `DataCloneError`, so clicking
+  **Test connection** (or Save) in the ephemeral-environment / runner-pool provider window
+  threw immediately. Clone via a JSON round-trip instead, which unwraps the proxy and
+  deep-clones the plain-JSON manifest.
+
 ## 0.26.5
 
 ### Patch Changes
