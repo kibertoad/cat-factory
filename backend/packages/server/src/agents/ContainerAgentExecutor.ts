@@ -308,6 +308,16 @@ const MERGER_SYSTEM_PROMPT =
   '{"complexity":0.0,"risk":0.0,"impact":0.0,"rationale":"…"} — no prose, no code fences. ' +
   FINAL_ANSWER_IN_REPLY
 
+/** Compact shape hint fed to the structured-output repair call for the merger assessment. */
+const MERGE_ASSESSMENT_SHAPE_HINT =
+  'Expected a merge assessment: {"complexity": number 0..1, "risk": number 0..1, ' +
+  '"impact": number 0..1, "rationale": string}.'
+
+/** Compact shape hint fed to the structured-output repair call for the on-call assessment. */
+const ON_CALL_ASSESSMENT_SHAPE_HINT =
+  'Expected an on-call assessment: {"culpritConfidence": number 0..1, "recommendation": ' +
+  '"revert"|"hold"|"monitor", "rationale": string, "evidence": string[]}.'
+
 const ON_CALL_SYSTEM_PROMPT =
   'You are an on-call engineer investigating a possible post-release regression. A ' +
   'recently merged pull request shipped, and the evidence below (alerting Datadog ' +
@@ -452,7 +462,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       if (this.recordedUsageJobs.size >= 10_000) this.recordedUsageJobs.clear()
       this.recordedUsageJobs.add(handle.jobId)
     }
-    return { state: 'done', result: toRunResult(result) }
+    return { state: 'done', result: toRunResult(result, handle.agentKind) }
   }
 
   /**
@@ -777,6 +787,18 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       return this.buildRegisteredAgentBody(context, parts, registeredStep, roleSystemPrompt)
     }
 
+    // Built-in container kinds migrated onto the generic, manifest-driven `agent` harness
+    // kind (they dispatch `kind:'agent'` through `buildRegisteredAgentBody`, exactly like a
+    // registered custom kind, with NO bespoke per-kind harness handler) — the Task-5
+    // strangler. Today: the in-place fixers (`ci-fixer` / `fixer`, coding-on-PR) and the
+    // JSON-assessment producers (`merger` / `on-call`, read-only structured explore whose
+    // assessment is coerced backend-side in `toRunResult`). The remaining built-ins
+    // (coder/blueprints/spec-writer/tester/conflict-resolver) keep their bespoke bodies
+    // below until they migrate, since they need harness changes (branch-resume, render
+    // post-ops, infra stand-up, merge-base).
+    const migrated = this.buildMigratedBuiltInBody(context, parts, roleSystemPrompt)
+    if (migrated) return migrated
+
     switch (context.agentKind) {
       // The Blueprinter step commits the regenerated `blueprints/` folder onto an
       // existing branch (the earlier `coder` step's PR branch when present, else the
@@ -827,23 +849,6 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
           },
         }
 
-      // The CI-fixer clones the PR head branch, runs the failing build/tests, fixes
-      // them and pushes back to the SAME branch (no new branch / PR) so CI re-runs.
-      case CI_FIXER_AGENT_KIND:
-        if (!prBranch) {
-          throw new Error('CI-fixer needs the implementation PR branch to push fixes to')
-        }
-        return {
-          kind: 'ci-fix',
-          body: {
-            ...common,
-            systemPrompt: roleSystemPrompt,
-            userPrompt: userPromptFor(context),
-            branch: prBranch,
-            ...webTools,
-          },
-        }
-
       // The conflict-resolver clones the PR head branch, merges the base in, resolves
       // the conflicts and pushes back to the SAME branch (no new branch / PR) so the
       // PR becomes mergeable and CI re-runs.
@@ -872,50 +877,6 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
           },
         }
       }
-
-      // The merger clones the PR head branch to assess the diff vs base; it makes no
-      // commits (the engine performs the real merge through the GitHub API on its
-      // verdict). Returns ONLY a JSON assessment, mapped to `mergeAssessment`.
-      case MERGER_AGENT_KIND:
-        return {
-          kind: 'merge',
-          body: {
-            ...common,
-            systemPrompt: MERGER_SYSTEM_PROMPT,
-            instructions:
-              'Assess the pull request on the head branch against the base branch and ' +
-              'return the complexity / risk / impact scores + rationale as JSON.',
-            branch: prBranch ?? repo.baseBranch,
-            ...(context.block.pullRequest?.number !== undefined
-              ? { prNumber: context.block.pullRequest.number }
-              : {}),
-          },
-        }
-
-      // The on-call agent investigates a post-release regression: it correlates the
-      // RELEASED change with the Datadog regression evidence (handed in via priorOutputs)
-      // and returns ONLY a JSON assessment — it makes NO commits and reverts nothing (the
-      // engine raises a notification for a human). The gate only escalates AFTER the merger
-      // step, which merges the PR and DELETES the work branch, so the head branch is gone by
-      // now — clone the BASE branch (which always exists and contains the merged change) and
-      // hand the agent the PR number + the now-historical head branch name so it can locate
-      // the merged commit in history. Targets the harness `/on-call` endpoint.
-      case ON_CALL_AGENT_KIND:
-        return {
-          kind: 'on-call',
-          body: {
-            ...common,
-            systemPrompt: ON_CALL_SYSTEM_PROMPT,
-            userPrompt: userPromptFor(context),
-            branch: repo.baseBranch,
-            ...(context.block.pullRequest?.branch
-              ? { headBranch: context.block.pullRequest.branch }
-              : {}),
-            ...(context.block.pullRequest?.number !== undefined
-              ? { prNumber: context.block.pullRequest.number }
-              : {}),
-          },
-        }
 
       // The tester clones the PR head branch, stands up its dependencies (locally via
       // the service's docker-compose, or against the provisioned ephemeral env — the
@@ -951,24 +912,6 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
         }
       }
 
-      // The fixer clones the PR head branch, applies fixes for the concerns in the
-      // Tester's report (folded into the user prompt via the prior `tester` output) and
-      // pushes back to the SAME branch (no new branch / PR) so the Tester can re-run.
-      // Mirrors the CI-fixer's body; targets the harness `/fix-tests` endpoint.
-      case FIXER_AGENT_KIND:
-        if (!prBranch) {
-          throw new Error('Fixer needs the implementation PR branch to push fixes to')
-        }
-        return {
-          kind: 'fix-tests',
-          body: {
-            ...common,
-            systemPrompt: roleSystemPrompt,
-            userPrompt: userPromptFor(context),
-            branch: prBranch,
-            ...webTools,
-          },
-        }
     }
 
     // Read-only agents (architect, analysis) explore a real checkout but never edit it:
@@ -1038,6 +981,13 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     },
     step: AgentStepSpec,
     roleSystemPrompt: string,
+    /**
+     * The concrete task prompt. Defaults to the generic `userPromptFor` (block context +
+     * prior outputs) — the same prompt a registered custom kind gets. A migrated built-in
+     * (merger / on-call) overrides it with its bespoke, JSON-instructing prompt so its
+     * body matches the old per-kind handler's.
+     */
+    userPrompt: string = userPromptFor(context),
   ): { body: Record<string, unknown>; kind: RunnerDispatchKind } {
     const { common, webTools, repo, workBranch, workBranchReady } = parts
     const prBranch = context.block.pullRequest?.branch
@@ -1060,7 +1010,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
           ...common,
           mode: 'coding',
           systemPrompt: roleSystemPrompt,
-          userPrompt: userPromptFor(context),
+          userPrompt,
           branch: onPr ? (prBranch ?? repo.baseBranch) : repo.baseBranch,
           ...(onPr ? {} : { newBranch: workBranch }),
           pushBranch: onPr ? (prBranch ?? workBranch) : workBranch,
@@ -1085,7 +1035,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
         ...common,
         mode: 'explore',
         systemPrompt: roleSystemPrompt,
-        userPrompt: userPromptFor(context),
+        userPrompt,
         branch: exploreBranch,
         ...(step.clone?.full ? { full: true } : {}),
         ...(step.output?.kind === 'structured'
@@ -1101,10 +1051,87 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       },
     }
   }
+
+  /**
+   * Build the generic `agent` body for a BUILT-IN container kind being migrated onto the
+   * manifest-driven path (the Task-5 strangler), or undefined when `context.agentKind` is
+   * not a migrated built-in (the caller falls through to the remaining bespoke switch). Each
+   * migrated kind is expressed as a synthesized {@link AgentStepSpec} routed through
+   * {@link buildRegisteredAgentBody} — the SAME dispatch a registered custom kind takes — so
+   * there is no bespoke harness handler:
+   *   - `ci-fixer` / `fixer`: coding-on-PR (clone the PR branch, push back, no new PR; a
+   *     no-op is non-fatal). Requires the implementation PR branch.
+   *   - `merger` / `on-call`: read-only structured explore (full clone) that returns ONLY a
+   *     JSON assessment; the conservative coercion that used to live in the harness runs
+   *     backend-side in {@link toRunResult}.
+   */
+  private buildMigratedBuiltInBody(
+    context: AgentRunContext,
+    parts: {
+      common: Record<string, unknown>
+      webTools: Record<string, unknown>
+      repo: RepoTarget
+      workBranch: string
+      workBranchReady: boolean
+    },
+    roleSystemPrompt: string,
+  ): { body: Record<string, unknown>; kind: RunnerDispatchKind } | undefined {
+    const { repo } = parts
+    const prBranch = context.block.pullRequest?.branch
+    switch (context.agentKind) {
+      // In-place fixers: clone the PR head branch, push fixes back onto it (no new PR);
+      // a no-op run is a clean non-event (the gate/loop re-checks the real signal).
+      case CI_FIXER_AGENT_KIND:
+        if (!prBranch) throw new Error('CI-fixer needs the implementation PR branch to push fixes to')
+        return this.buildRegisteredAgentBody(
+          context,
+          parts,
+          { surface: 'container-coding', clone: { branch: 'pr' } },
+          roleSystemPrompt,
+        )
+      case FIXER_AGENT_KIND:
+        if (!prBranch) throw new Error('Fixer needs the implementation PR branch to push fixes to')
+        return this.buildRegisteredAgentBody(
+          context,
+          parts,
+          { surface: 'container-coding', clone: { branch: 'pr' } },
+          roleSystemPrompt,
+        )
+      // The merger clones the PR head (full, to diff vs base) and returns ONLY the
+      // complexity/risk/impact assessment JSON; the engine performs the real merge.
+      case MERGER_AGENT_KIND:
+        return this.buildRegisteredAgentBody(
+          context,
+          parts,
+          {
+            surface: 'container-explore',
+            clone: { branch: 'pr', full: true },
+            output: { kind: 'structured', shapeHint: MERGE_ASSESSMENT_SHAPE_HINT },
+          },
+          MERGER_SYSTEM_PROMPT,
+          mergerUserPrompt(context, repo),
+        )
+      // The on-call agent clones the BASE branch (full, to locate + diff the merged
+      // release commit) and returns ONLY the regression assessment JSON.
+      case ON_CALL_AGENT_KIND:
+        return this.buildRegisteredAgentBody(
+          context,
+          parts,
+          {
+            surface: 'container-explore',
+            clone: { branch: 'base', full: true },
+            output: { kind: 'structured', shapeHint: ON_CALL_ASSESSMENT_SHAPE_HINT },
+          },
+          ON_CALL_SYSTEM_PROMPT,
+          onCallUserPrompt(context, repo),
+        )
+    }
+    return undefined
+  }
 }
 
 /** Map a finished runner {@link RunnerJobResult} into the engine's {@link AgentRunResult}. */
-function toRunResult(result: RunnerJobResult): AgentRunResult {
+function toRunResult(result: RunnerJobResult, agentKind?: string): AgentRunResult {
   // A Blueprinter job carries a decomposition tree instead of a PR; surface it so
   // the engine can strictly validate + reconcile it onto the board.
   if (result.service !== undefined) {
@@ -1146,8 +1173,25 @@ function toRunResult(result: RunnerJobResult): AgentRunResult {
     }
   }
   // A generic, manifest-driven `agent` (explore, structured) job carries its parsed JSON
-  // as `custom`; surface it so the kind's post-op can coerce/validate + render from it.
+  // as `custom`. A built-in kind migrated onto this path has its result coerced into the
+  // well-known engine field here — the conservative coercion that used to live in the
+  // bespoke harness handler (merger `/merge`, on-call `/on-call`) now runs backend-side, so
+  // the engine's resolvers/gates see `mergeAssessment`/`onCallAssessment` exactly as before.
+  // Any other kind (a registered custom kind) surfaces the raw JSON as `custom` for its
+  // post-op to coerce/render from.
   if (result.custom !== undefined) {
+    if (agentKind === MERGER_AGENT_KIND) {
+      return {
+        output: result.summary?.trim() || 'Pull request assessed.',
+        mergeAssessment: coerceMergeAssessment(result.custom, result.summary),
+      }
+    }
+    if (agentKind === ON_CALL_AGENT_KIND) {
+      return {
+        output: result.summary?.trim() || 'Release regression investigated.',
+        onCallAssessment: coerceOnCallAssessment(result.custom, result.summary),
+      }
+    }
     return {
       output: result.summary?.trim() || 'Agent run complete.',
       custom: result.custom,
@@ -1221,6 +1265,104 @@ function isProxyableProvider(provider: string): boolean {
     provider === 'openai' ||
     isLocalRunner(provider)
   )
+}
+
+/** Clamp a value to a 0..1 number, defaulting to `fallback` when not finite. */
+function clamp01(value: unknown, fallback: number): number {
+  const n = typeof value === 'number' ? value : Number(value)
+  if (!Number.isFinite(n)) return fallback
+  return Math.min(1, Math.max(0, n))
+}
+
+/**
+ * Coerce a migrated `merger` agent's structured JSON into the engine's merge assessment.
+ * This is the conservative coercion the harness `/merge` handler used to do: a missing or
+ * garbage score defaults to 1 (severe → routes to human review rather than a silent
+ * auto-merge), and the rationale falls back to the agent's summary. The harness's extra
+ * container-side `diffExaminable` guard (force 1/1/1 when the base diff was unreadable) is
+ * not reproducible backend-side; the conservative-on-garbage default covers the same risk.
+ */
+function coerceMergeAssessment(raw: unknown, summary: string | undefined): unknown {
+  const o = (typeof raw === 'object' && raw !== null ? raw : {}) as Record<string, unknown>
+  return {
+    complexity: clamp01(o.complexity, 1),
+    risk: clamp01(o.risk, 1),
+    impact: clamp01(o.impact, 1),
+    rationale:
+      typeof o.rationale === 'string' && o.rationale ? o.rationale : (summary ?? '').slice(0, 2000),
+  }
+}
+
+/**
+ * Coerce a migrated `on-call` agent's structured JSON into the engine's release-regression
+ * assessment — the conservative coercion the harness `/on-call` handler used to do: a
+ * missing confidence defaults to 0 (don't imply the PR is at fault without evidence) and a
+ * missing recommendation defaults to `hold` (a human decides).
+ */
+function coerceOnCallAssessment(raw: unknown, summary: string | undefined): unknown {
+  const o = (typeof raw === 'object' && raw !== null ? raw : {}) as Record<string, unknown>
+  const evidence = Array.isArray(o.evidence)
+    ? o.evidence.filter((e): e is string => typeof e === 'string')
+    : []
+  return {
+    culpritConfidence: clamp01(o.culpritConfidence, 0),
+    recommendation:
+      o.recommendation === 'revert' || o.recommendation === 'monitor' ? o.recommendation : 'hold',
+    rationale:
+      typeof o.rationale === 'string' && o.rationale ? o.rationale : (summary ?? '').slice(0, 2000),
+    evidence,
+  }
+}
+
+/**
+ * The merger's task prompt — the instructions + diff guidance the bespoke harness `/merge`
+ * handler used to build. Kept backend-side now that the merger dispatches the generic
+ * explore agent. Names the PR/branches so the agent diffs against the right base.
+ */
+function mergerUserPrompt(context: AgentRunContext, repo: RepoTarget): string {
+  const prNumber = context.block.pullRequest?.number
+  const branch = context.block.pullRequest?.branch ?? repo.baseBranch
+  const pr = prNumber !== undefined ? ` (PR #${prNumber})` : ''
+  return [
+    'Assess the pull request on the head branch against the base branch and return the ' +
+      'complexity / risk / impact scores + rationale as JSON.',
+    '',
+    `The pull request${pr} is on branch \`${branch}\`; the base branch is ` +
+      `\`${repo.baseBranch}\`. Inspect the change (e.g. \`git fetch origin ${repo.baseBranch}\` ` +
+      `then \`git diff origin/${repo.baseBranch}...HEAD\`) and score complexity, risk and impact.`,
+    '',
+    'Respond with ONLY a JSON object {"complexity":0.0,"risk":0.0,"impact":0.0,"rationale":"…"}.',
+  ].join('\n')
+}
+
+/**
+ * The on-call agent's task prompt — the regression evidence (the generic block/prior-output
+ * prompt) plus the locate-the-merged-commit guidance the bespoke harness `/on-call` handler
+ * used to build. The released PR already merged into the base branch (its work branch is
+ * gone), so the agent is on the base branch and is told how to find the merged commit.
+ */
+function onCallUserPrompt(context: AgentRunContext, repo: RepoTarget): string {
+  const prNumber = context.block.pullRequest?.number
+  const headBranch = context.block.pullRequest?.branch
+  const pr = prNumber !== undefined ? `#${prNumber}` : ''
+  const locate = prNumber
+    ? `It merged as a commit referencing ${pr} — find it with \`git log --oneline -n 50\` ` +
+      `(squash/merge commits include \`(${pr})\`; a merge commit mentions \`#${prNumber}\`), then ` +
+      `inspect it with \`git show <sha>\`.`
+    : headBranch
+      ? `Its work branch was \`${headBranch}\` (now deleted) — find the merged commit in ` +
+        `\`git log --oneline -n 50\` and inspect it with \`git show <sha>\`.`
+      : `Find the most recent merge/feature commit with \`git log --oneline -n 50\` and inspect ` +
+        `it with \`git show <sha>\`.`
+  return [
+    userPromptFor(context),
+    '',
+    `You are on the base branch \`${repo.baseBranch}\`, which already contains the released ` +
+      `pull request ${pr}. ${locate} Correlate that change with the regression evidence above. ` +
+      `Beware correlation vs causation.`,
+    '',
+    'Respond with ONLY a JSON object {"culpritConfidence":0.0,"recommendation":"revert"|"hold"|"monitor","rationale":"…","evidence":["…"]}.',
+  ].join('\n')
 }
 
 function prBody(context: AgentRunContext): string {
